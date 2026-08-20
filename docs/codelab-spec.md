@@ -131,6 +131,93 @@ platform-specific transport selection и финальные пользовате
 - Пакеты не должны образовывать cyclic dependencies.
 - UI-код не должен проникать в pure Dart packages.
 
+### 5.3. Clean Architecture
+
+CodeLab должен следовать Clean Architecture с hexagonal boundaries
+(ports/adapters). Направление зависимостей идет снаружи внутрь:
+
+```text
+Presentation
+  Flutter / fluent_ui / Bloc-Cubit
+
+Application
+  use cases, commands, workflows
+
+Domain
+  entities, value objects, policies, domain errors
+
+Infrastructure
+  ACP codec, transports, filesystem, terminal, persistence, logging
+```
+
+Распределение по пакетам:
+
+- `packages/dart/acp_protocol`: protocol DTO, JSON-RPC codec, schema validation
+  и protocol errors на infrastructure/protocol boundary;
+- `packages/dart/acp_transports`: infrastructure transport adapters;
+- `packages/dart/acp_client_core`: domain и application layer для sessions,
+  prompt turns, approvals, cancellation и connection workflows;
+- `packages/flutter/acp_ui`: presentation components;
+- `apps/codelab_app`: composition root, dependency injection, routing и
+  platform wiring.
+
+Domain/application code не должен зависеть от Flutter, Bloc, `fluent_ui`,
+`dart:io` или concrete transports. Infrastructure реализует ports, объявленные
+core/application слоем.
+
+### 5.4. SOLID, KISS и DRY
+
+CodeLab должен соблюдать SOLID:
+
+- Single Responsibility: codec не управляет session state, transport не знает
+  UI, approval policy не рисует dialogs;
+- Open/Closed: новые transports, tool display types и update handlers
+  добавляются через ports/adapters без переписывания core workflows;
+- Liskov Substitution: fake, stdio и WebSocket transports взаимозаменяемы через
+  общий contract;
+- Interface Segregation: использовать узкие interfaces (`AcpTransport`,
+  `ApprovalPolicy`, `SessionStore`, `Logger`), не создавать god services;
+- Dependency Inversion: application/core зависит от abstractions, concrete
+  infrastructure подключается в composition root.
+
+KISS для MVP означает:
+
+- sessions хранятся in memory;
+- desktop first;
+- transports ограничены stdio и WebSocket;
+- local transcript persistence и полноценный auth workflow не входят в MVP;
+- abstractions вводятся только при явной ответственности или изменяемой границе.
+
+DRY применяется к правилам и моделям, но не должен приводить к преждевременной
+абстракции. ACP schemas/codecs централизуются в `acp_protocol`, state
+transitions централизуются в `acp_client_core`, reusable UI primitives
+централизуются в `acp_ui/atomics`.
+
+### 5.5. Разрешенные паттерны проектирования
+
+Для CodeLab разрешены и ожидаемы следующие паттерны:
+
+- Ports and Adapters для transports, filesystem, terminal, logger и persistence;
+- Use Case / Command Handler для `CreateSession`, `SendPrompt`, `CancelTurn`,
+  `RespondToPermission`;
+- State Machine для session lifecycle и prompt turn lifecycle;
+- Strategy для approval policy и transport selection;
+- Factory для создания transports, protocol clients и platform services;
+- Adapter для ACP JSON-RPC transports и client capability methods;
+- DTO Mapper для преобразования ACP DTO в domain models;
+- Repository только после появления persistence для sessions/history;
+- Observer/Stream для inbound ACP events и session updates;
+- Result/Either через `fpdart` для recoverable failures.
+
+Запрещено:
+
+- UI напрямую парсит ACP JSON;
+- transport напрямую мутирует UI state;
+- domain зависит от Flutter, Bloc, `fluent_ui` или `dart:io`;
+- protocol DTO используется как единственная domain model в core;
+- один singleton service управляет protocol, transport, session state,
+  approvals и UI side effects одновременно.
+
 ## 6. ACP-контракт
 
 Wire contract ACP определяется официальной документацией в `docs/acp/protocol/`
@@ -480,6 +567,12 @@ Change считается complete, когда:
 - implementation соответствует этой specification и активным OpenSpec changes;
 - protocol changes соответствуют `docs/acp/protocol/` и
   `docs/acp/protocol/17-Schema.md`;
+- соблюдено направление Clean Architecture dependencies: presentation зависит
+  от application/domain, а domain не зависит от infrastructure/UI;
+- concrete infrastructure подключена через ports/adapters и composition root;
+- use cases не смешаны с widgets, transports, codecs или persistence;
+- не добавлены god services, которые объединяют protocol, transport, state,
+  approvals и UI side effects;
 - pure Dart packages не импортируют Flutter;
 - Flutter UI использует `fluent_ui`, а не Material/Cupertino как базовый
   framework;
@@ -502,6 +595,8 @@ Change считается complete, когда:
 Для первого релиза CodeLab принимает следующие архитектурные решения:
 
 - first-class platform: desktop;
+- architecture style: Clean Architecture с hexagonal boundaries;
+- SOLID, KISS и DRY являются обязательными инженерными принципами;
 - transports: stdio для local agents и WebSocket для remote agents;
 - SSE transport не входит в MVP;
 - session state хранится in memory;
