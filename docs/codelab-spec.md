@@ -128,6 +128,8 @@ platform-specific transport selection и финальные пользовате
 - `fpdart` используется для typed functional primitives в pure Dart слоях.
 - `freezed` используется для immutable state, DTO и union/sealed моделей там,
   где это уменьшает boilerplate и повышает типобезопасность.
+- `cherrypick` v4.x.x используется как обязательный DI container.
+- `cherrypick_flutter` v4.x.x может использоваться только в Flutter/app слоях.
 - Пакеты не должны образовывать cyclic dependencies.
 - UI-код не должен проникать в pure Dart packages.
 
@@ -165,7 +167,34 @@ Domain/application code не должен зависеть от Flutter, Bloc, `
 `dart:io` или concrete transports. Infrastructure реализует ports, объявленные
 core/application слоем.
 
-### 5.4. SOLID, KISS и DRY
+### 5.4. Dependency Injection
+
+CodeLab должен использовать CherryPick v4.x.x как DI framework. Dependency
+injection настраивается в composition root (`apps/codelab_app`) и не должна
+проникать в domain logic.
+
+Правила DI:
+
+- root scope создается при bootstrap приложения и закрывается при shutdown;
+- feature/session scopes создаются явно, если lifecycle зависимости короче
+  lifecycle приложения;
+- bindings группируются в modules по архитектурным границам: protocol,
+  transports, core/application, UI, platform services;
+- production bindings и test bindings должны быть взаимозаменяемы через одни и
+  те же ports/interfaces;
+- `acp_client_core` объявляет abstractions и use cases, но не знает о
+  CherryPick scopes, generated modules или Flutter context;
+- `packages/flutter/acp_ui` не должен самостоятельно открывать root scope;
+- `cherrypick_flutter` допустим только как presentation/app integration layer;
+- DI не заменяет явные constructor dependencies внутри domain/application
+  классов;
+- service locator access из произвольного кода запрещен.
+
+При использовании CherryPick code generation реализация должна также подключать
+совместимые `cherrypick_annotations` v4.x.x, `cherrypick_generator` v4.x.x и
+`build_runner`.
+
+### 5.5. SOLID, KISS и DRY
 
 CodeLab должен соблюдать SOLID:
 
@@ -193,7 +222,7 @@ DRY применяется к правилам и моделям, но не до
 transitions централизуются в `acp_client_core`, reusable UI primitives
 централизуются в `acp_ui/atomics`.
 
-### 5.5. Разрешенные паттерны проектирования
+### 5.6. Разрешенные паттерны проектирования
 
 Для CodeLab разрешены и ожидаемы следующие паттерны:
 
@@ -570,6 +599,9 @@ Change считается complete, когда:
 - соблюдено направление Clean Architecture dependencies: presentation зависит
   от application/domain, а domain не зависит от infrastructure/UI;
 - concrete infrastructure подключена через ports/adapters и composition root;
+- dependency injection реализован через CherryPick v4.x.x;
+- domain/application классы получают зависимости через constructors или use
+  case factories, а не через произвольный service locator access;
 - use cases не смешаны с widgets, transports, codecs или persistence;
 - не добавлены god services, которые объединяют protocol, transport, state,
   approvals и UI side effects;
@@ -604,6 +636,7 @@ Change считается complete, когда:
   `agentCapabilities.loadSession`;
 - local transcript persistence не входит в MVP;
 - Flutter state management: Bloc/Cubit в UI-слое;
+- dependency injection: CherryPick v4.x.x;
 - Flutter UI framework: `fluent_ui`;
 - Material/Cupertino не используются как базовый design framework;
 - UI widgets организуются по слоям `atomics`, `molecules`, `organisms`;
