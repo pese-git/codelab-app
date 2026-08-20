@@ -1,4 +1,10 @@
 /// Public API for ACP JSON-RPC models, codecs, validation, and errors.
 library;
 
+export 'src/json_rpc/json_rpc_codec.dart';
+export 'src/json_rpc/json_rpc_error.dart';
+export 'src/json_rpc/json_rpc_id.dart';
+export 'src/json_rpc/json_rpc_message.dart';
+export 'src/json_rpc/protocol_error.dart';
+
 const acpProtocolPackageName = 'acp_protocol';

@@ -10,8 +10,8 @@
 
 ## 2. Implement ACP protocol package
 
-- [ ] 2.1 Создать public barrel `packages/dart/acp_protocol/lib/acp_protocol.dart`
-- [ ] 2.2 Реализовать typed JSON-RPC 2.0 request/response/notification models
+- [x] 2.1 Создать public barrel `packages/dart/acp_protocol/lib/acp_protocol.dart`
+- [x] 2.2 Реализовать typed JSON-RPC 2.0 request/response/notification models
 - [ ] 2.3 Реализовать ACP DTOs для `initialize`, capabilities, sessions, prompt turns, permissions, tool calls, content blocks и stop reasons
 - [ ] 2.4 Реализовать encode/decode codecs и runtime validation по `docs/acp/protocol/17-Schema.md`
 - [ ] 2.5 Реализовать typed protocol errors и mapping invalid JSON/invalid ACP shape
