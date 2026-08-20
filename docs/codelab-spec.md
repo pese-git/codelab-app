@@ -446,6 +446,43 @@ Transport implementations должны поддерживать:
 - mobile должен по умолчанию использовать remote transports и не должен
   выполнять shell actions локально.
 
+### 10.1. Reference stdio agent
+
+Для MVP CodeLab должен уметь работать через stdio transport с reference agent:
+`https://github.com/pese-git/codelab-agent`.
+
+Требования к интеграции:
+
+- пользователь может выбрать executable/command для `codelab-agent` в connection
+  setup;
+- CodeLab должен предоставлять built-in stdio profile:
+
+  ```json
+  {
+    "name": "Codelab Agent",
+    "type": "custom",
+    "command": "codelab",
+    "args": ["serve", "--stdio"],
+    "env": {
+      "CODELAB_LOG_LEVEL": "DEBUG"
+    }
+  }
+  ```
+
+- CodeLab запускает agent как child process и общается с ним через JSON-RPC 2.0
+  over stdio;
+- stdout используется только для ACP messages, stderr отображается как
+  diagnostics/log stream и не смешивается с protocol stream;
+- CodeLab выполняет `initialize`, `session/new`, `session/prompt`,
+  `session/update`, `session/request_permission` и `session/cancel` flows с
+  `codelab-agent`;
+- disconnect, process exit, invalid JSON и protocol errors переводятся в
+  typed transport/protocol states;
+- command, cwd, args и environment для запуска `codelab-agent` отображаются в
+  inspector/debug diagnostics с redaction secrets;
+- built-in profile можно редактировать перед запуском, но default должен
+  соответствовать Zed-compatible config: `codelab serve --stdio`.
+
 ## 11. Наблюдаемость
 
 CodeLab должен логировать protocol и connection activity в structured form.
@@ -516,6 +553,121 @@ UI должен поддерживать:
 Long transcripts должны рендериться эффективно и не должны требовать повторного
 парсинга raw ACP JSON в widgets.
 
+### 12.1. UI/UX-концепция
+
+CodeLab должен ощущаться как компактный desktop workbench для управления agent,
+а не как чат-лендинг. Интерфейс должен быть лаконичным, плотным и предсказуемым:
+главное действие всегда видно, второстепенная диагностика раскрывается по
+требованию.
+
+Базовый desktop layout:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ Command bar: agent, transport, cwd, status, cancel/reconnect │
+├───────────────┬───────────────────────────────┬──────────────┤
+│ Sessions      │ Transcript + prompt composer  │ Inspector    │
+│               │                               │              │
+│ current/list  │ streamed messages, tool calls │ approvals,   │
+│ filters       │ errors, final status          │ details, log │
+└───────────────┴───────────────────────────────┴──────────────┘
+```
+
+Левая панель отвечает за sessions и connection context. Центральная панель
+является основным рабочим потоком: transcript, streamed content, tool call
+summaries и prompt composer. Правая панель является inspector: pending approvals,
+tool call details, diffs, protocol/debug log и connection diagnostics.
+
+На узких окнах правая панель должна сворачиваться в drawer/pane overlay, а
+левая панель — в compact navigation. Prompt composer и running/cancel state
+должны оставаться доступными без горизонтального скролла.
+
+### 12.2. Основные UX-принципы
+
+- Primary workflow: connect, create/load session, send prompt, watch progress,
+  approve/reject actions, cancel when needed.
+- Интерфейс не должен требовать чтения raw protocol messages для обычной
+  работы.
+- Agent activity должна быть видна как timeline: messages, plan updates, tool
+  calls, tool call updates и final stop reason.
+- Tool calls по умолчанию показываются компактными summary rows; raw input,
+  raw output, diffs и protocol details раскрываются в inspector.
+- Pending approval всегда является фокусным состоянием: его видно в command bar,
+  transcript и inspector.
+- Cancel доступен только во время active prompt turn и визуально отделен от
+  destructive approvals.
+- Empty states должны предлагать конкретное следующее действие: connect agent,
+  create session, send prompt или reconnect.
+- Error states должны показывать user-readable summary, technical details в
+  раскрываемом блоке и возможное recovery action.
+- Debug/protocol log доступен в debug builds, но не конкурирует с transcript.
+- UI copy должен быть коротким, конкретным и без объяснения очевидных
+  возможностей приложения.
+
+### 12.3. Fluent UI правила
+
+- Использовать Fluent navigation, command bar, info bar, pane, dialog, flyout,
+  progress и badge patterns вместо Material/Cupertino equivalents.
+- Иконки использовать для status, transport, cancel, reconnect, approvals,
+  tool kinds и inspector actions; текст добавлять только там, где он снижает
+  неоднозначность.
+- Controls должны иметь stable dimensions, чтобы streamed updates и changing
+  statuses не вызывали layout shift.
+- Approval dialogs/panes должны показывать exact action и risk level до кнопок.
+- Цвет не должен быть единственным носителем статуса: использовать label/icon и
+  semantic text.
+- Длинные paths, commands и URLs должны truncation/tooltip/copy affordance, но
+  не ломать layout.
+- Keyboard ergonomics обязательна для desktop MVP: focus traversal, submit
+  prompt, cancel, approve/reject focused option, open inspector.
+
+### 12.4. Agent Workbench UX patterns
+
+CodeLab должен использовать лучшие практики desktop coding-agent tools как
+agent workbench patterns, не копируя внешний вид конкретных продуктов.
+
+Обязательные patterns:
+
+- Sessions/tasks sidebar: каждая session отображается как отдельная task с
+  title, status, transport, cwd и last activity.
+- Prompt-area control strip: рядом с composer доступны agent/environment,
+  project folder/cwd, transport, permission mode, view mode и cancel/reconnect.
+- Permission mode selector: пользователь может переключать режим контроля во
+  время session, а текущий режим всегда виден рядом с composer.
+- Plan mode: agent может исследовать проект и предложить plan без source edits;
+  выполнение начинается только после явного user approval.
+- Inline approvals: approvals отображаются в контексте активного turn и
+  дублируются в inspector; command, cwd, diff, risk и reason видны до approve.
+- View modes: `summary`, `normal`, `verbose` управляют детализацией transcript,
+  tool calls и protocol/debug information.
+- Progress checklist: long-running work отображает compact checklist или plan
+  progress, чтобы пользователь понимал текущий шаг.
+- Inspector-first details: raw input/output, diffs, command output, protocol
+  payloads и diagnostics раскрываются в inspector, а не перегружают transcript.
+- Command palette и slash commands: часто используемые действия доступны через
+  keyboard-first UI (`/new`, `/plan`, `/permissions`, `/logs`, `/compact`,
+  `/reconnect`).
+- Review-first changes: file edits и destructive actions должны иметь
+  reviewable diff до применения или подтверждения.
+- Session isolation: approvals, pending tool calls, cancellation и logs scoped
+  к конкретной session/turn.
+- Compact transcript: основной transcript оптимизирован для scanning, markdown
+  rendering и быстрых переходов между messages/tool calls.
+- Context indicators: UI показывает session context, selected agent, transport
+  state, cwd и active capabilities без открытия debug log.
+
+Permission modes для MVP:
+
+| Mode | Поведение |
+| --- | --- |
+| `readOnly` | Только анализ и read-only actions; edits, terminal и network требуют отдельного approval или недоступны |
+| `ask` | Default: read-only allowed по policy, write/terminal/network/destructive требуют approval |
+| `plan` | Только exploration и plan proposal; source edits запрещены |
+| `autoEdits` | Safe workspace edits могут выполняться по user setting; terminal/network/destructive требуют approval |
+
+`bypass`/full-access mode не входит в MVP и не должен быть доступен без
+отдельного security design.
+
 ## 13. Требования к тестированию
 
 Обязательные unit tests:
@@ -540,6 +692,16 @@ Long transcripts должны рендериться эффективно и н�
 - cancellation;
 - version mismatch;
 - invalid message recovery.
+
+Обязательные integration tests для stdio MVP:
+
+- запуск `codelab-agent` как child process через configured command;
+- успешный `initialize` через stdio;
+- `session/new` и получение `sessionId`;
+- `session/prompt` с streamed `session/update`;
+- `session/request_permission` и response выбранным option/cancelled outcome;
+- `session/cancel` и `session/prompt` response со `stopReason: cancelled`;
+- обработка agent process exit, stderr diagnostics и invalid JSON.
 
 Обязательные Flutter tests:
 
@@ -609,6 +771,19 @@ Change считается complete, когда:
 - Flutter UI использует `fluent_ui`, а не Material/Cupertino как базовый
   framework;
 - виджеты разложены по `atomics`, `molecules` и `organisms`;
+- UI соответствует desktop workbench layout: command bar, sessions pane,
+  transcript/prompt area и inspector;
+- approvals, tool call details, errors и debug/protocol log имеют progressive
+  disclosure и не перегружают основной transcript;
+- permission modes `readOnly`, `ask`, `plan` и `autoEdits` представлены в UI и
+  согласованы с approval policy;
+- inline approvals scoped к active session/turn и показывают command/cwd/diff,
+  risk и reason до approve;
+- view modes `summary`, `normal`, `verbose` управляют детализацией transcript;
+- command palette или slash commands покрывают основные agent workbench actions;
+- empty/error states показывают конкретное next action;
+- desktop keyboard ergonomics покрывает prompt submit, cancel,
+  approve/reject и inspector navigation;
 - модели и state используют `freezed`, когда нужна immutable data или union
   state;
 - pure Dart слой использует `fpdart` для typed results/options вместо
@@ -617,6 +792,8 @@ Change считается complete, когда:
 - для новых inbound messages есть validation;
 - approval policy не ослаблена без explicit specification;
 - cancellation behavior протестировано;
+- stdio transport проверен на совместимость с
+  `https://github.com/pese-git/codelab-agent`;
 - disconnect и reconnect states представлены;
 - logs редактируют secrets;
 - affected tests проходят;
@@ -630,6 +807,7 @@ Change считается complete, когда:
 - architecture style: Clean Architecture с hexagonal boundaries;
 - SOLID, KISS и DRY являются обязательными инженерными принципами;
 - transports: stdio для local agents и WebSocket для remote agents;
+- reference stdio agent: `https://github.com/pese-git/codelab-agent`;
 - SSE transport не входит в MVP;
 - session state хранится in memory;
 - `session/load` используется только если agent объявил
