@@ -2,6 +2,7 @@
 library;
 
 export 'src/acp/initialize.dart';
+export 'src/acp/session.dart';
 export 'src/json_rpc/json_rpc_codec.dart';
 export 'src/json_rpc/json_rpc_error.dart';
 export 'src/json_rpc/json_rpc_id.dart';
