@@ -3,6 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
 import 'session.dart';
+import 'tool_call.dart';
 
 part 'permission.freezed.dart';
 
@@ -80,101 +81,6 @@ sealed class PermissionOption with _$PermissionOption {
       'name': name,
       'kind': kind.toJson(),
       if (meta != null) '_meta': meta,
-    };
-  }
-}
-
-@freezed
-sealed class ToolCallId with _$ToolCallId {
-  const ToolCallId._();
-
-  const factory ToolCallId(String value) = _ToolCallId;
-
-  factory ToolCallId.fromJson(Object? value) {
-    if (value is String && value.isNotEmpty) {
-      return ToolCallId(value);
-    }
-
-    throw JsonRpcProtocolException.invalidShape(
-      'toolCallId must be a non-empty string.',
-    );
-  }
-
-  String toJson() => value;
-}
-
-enum ToolCallStatus {
-  pending('pending'),
-  inProgress('in_progress'),
-  completed('completed'),
-  failed('failed');
-
-  const ToolCallStatus(this.wireName);
-
-  final String wireName;
-
-  static ToolCallStatus fromJson(Object? value) {
-    if (value is String) {
-      for (final status in ToolCallStatus.values) {
-        if (status.wireName == value) {
-          return status;
-        }
-      }
-    }
-
-    throw JsonRpcProtocolException.invalidShape(
-      'toolCall.status has an unsupported value.',
-    );
-  }
-
-  String toJson() => wireName;
-}
-
-@freezed
-sealed class ToolCallUpdate with _$ToolCallUpdate {
-  const ToolCallUpdate._();
-
-  const factory ToolCallUpdate({
-    required ToolCallId toolCallId,
-    String? title,
-    String? kind,
-    ToolCallStatus? status,
-    JsonArray? content,
-    JsonArray? locations,
-    JsonObject? rawInput,
-    JsonObject? rawOutput,
-    @JsonKey(name: '_meta') JsonObject? meta,
-  }) = _ToolCallUpdate;
-
-  factory ToolCallUpdate.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'toolCallUpdate');
-
-    return ToolCallUpdate(
-      toolCallId: ToolCallId.fromJson(source['toolCallId']),
-      title: _optionalString(source, 'title'),
-      kind: _optionalString(source, 'kind'),
-      status: source['status'] == null
-          ? null
-          : ToolCallStatus.fromJson(source['status']),
-      content: _optionalArray(source, 'content'),
-      locations: _optionalArray(source, 'locations'),
-      rawInput: _optionalObject(source, 'rawInput'),
-      rawOutput: _optionalObject(source, 'rawOutput'),
-      meta: _optionalObject(source, '_meta'),
-    );
-  }
-
-  JsonObject toJson() {
-    return {
-      'toolCallId': toolCallId.toJson(),
-      'title': ?title,
-      'kind': ?kind,
-      if (status case final ToolCallStatus status) 'status': status.toJson(),
-      'content': ?content,
-      'locations': ?locations,
-      'rawInput': ?rawInput,
-      'rawOutput': ?rawOutput,
-      '_meta': ?meta,
     };
   }
 }
@@ -281,19 +187,6 @@ JsonObject? _optionalObject(JsonObject source, String field) {
   return requireJsonObject(source[field], path: field);
 }
 
-JsonArray? _optionalArray(JsonObject source, String field) {
-  if (!source.containsKey(field) || source[field] == null) {
-    return null;
-  }
-
-  final value = source[field];
-  if (value is JsonArray && isJsonValue(value)) {
-    return value;
-  }
-
-  throw JsonRpcProtocolException.invalidShape('$field must be a JSON array.');
-}
-
 String _requiredString(JsonObject source, String field) {
   final value = source[field];
   if (value is String) {
@@ -301,14 +194,6 @@ String _requiredString(JsonObject source, String field) {
   }
 
   throw JsonRpcProtocolException.invalidShape('$field must be a string.');
-}
-
-String? _optionalString(JsonObject source, String field) {
-  if (!source.containsKey(field) || source[field] == null) {
-    return null;
-  }
-
-  return _requiredString(source, field);
 }
 
 List<T> _objectList<T>(

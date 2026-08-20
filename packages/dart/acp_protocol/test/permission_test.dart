@@ -9,7 +9,7 @@ void main() {
         toolCall: ToolCallUpdate(
           toolCallId: ToolCallId('call-1'),
           title: 'Run tests',
-          kind: 'execute',
+          kind: ToolKind.execute,
           status: ToolCallStatus.pending,
           rawInput: {
             'command': 'fvm',
@@ -96,24 +96,71 @@ void main() {
         'completed',
         'failed',
       ]);
+      expect(ToolKind.values.map((kind) => kind.toJson()), [
+        'read',
+        'edit',
+        'delete',
+        'move',
+        'search',
+        'execute',
+        'think',
+        'fetch',
+        'other',
+      ]);
     });
 
-    test('preserves raw tool call update collections', () {
+    test('round-trips tool call and typed tool call update collections', () {
+      const call = ToolCall(
+        toolCallId: ToolCallId('call-1'),
+        title: 'Edit config',
+        kind: ToolKind.edit,
+        status: ToolCallStatus.inProgress,
+        content: [
+          ToolCallContent.diff(
+            diff: Diff(
+              path: '/workspace/config.json',
+              oldText: '{"debug": false}',
+              newText: '{"debug": true}',
+            ),
+          ),
+          ToolCallContent.terminal(terminalId: 'term-1'),
+        ],
+        locations: [ToolCallLocation(path: '/workspace/config.json', line: 4)],
+        rawInput: {'path': '/workspace/config.json'},
+      );
       const update = ToolCallUpdate(
         toolCallId: ToolCallId('call-1'),
         content: [
-          {
-            'type': 'content',
-            'content': {'type': 'text', 'text': 'done'},
-          },
+          ToolCallContent.content(
+            content: ContentBlock.text(text: 'done'),
+            meta: {'chunk': 1},
+          ),
         ],
-        locations: [
-          {'path': 'lib/main.dart', 'line': 12},
-        ],
+        locations: [ToolCallLocation(path: 'lib/main.dart', line: 12)],
         rawOutput: {'exitCode': 0},
       );
 
+      expect(ToolCall.fromJson(call.toJson()), call);
       expect(ToolCallUpdate.fromJson(update.toJson()), update);
+      expect(call.toJson(), {
+        'toolCallId': 'call-1',
+        'title': 'Edit config',
+        'kind': 'edit',
+        'status': 'in_progress',
+        'content': [
+          {
+            'type': 'diff',
+            'path': '/workspace/config.json',
+            'oldText': '{"debug": false}',
+            'newText': '{"debug": true}',
+          },
+          {'type': 'terminal', 'terminalId': 'term-1'},
+        ],
+        'locations': [
+          {'path': '/workspace/config.json', 'line': 4},
+        ],
+        'rawInput': {'path': '/workspace/config.json'},
+      });
     });
 
     test('rejects invalid permission and tool call shapes', () {
@@ -131,6 +178,36 @@ void main() {
       );
       expect(
         () => ToolCallUpdate.fromJson({'title': 'missing id'}),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => ToolKind.fromJson('mutate'),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => ToolCall.fromJson({'toolCallId': 'call-1'}),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => ToolCallContent.fromJson({'type': 'artifact'}),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => ToolCallContent.fromJson({
+          'type': 'content',
+          'content': {'type': 'text'},
+        }),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => Diff.fromJson({'path': '/workspace/file.txt'}),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => ToolCallLocation.fromJson({
+          'path': '/workspace/file.txt',
+          'line': -1,
+        }),
         throwsA(isA<JsonRpcProtocolException>()),
       );
       expect(

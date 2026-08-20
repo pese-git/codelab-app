@@ -5,6 +5,7 @@ export 'src/acp/initialize.dart';
 export 'src/acp/permission.dart';
 export 'src/acp/prompt.dart';
 export 'src/acp/session.dart';
+export 'src/acp/tool_call.dart';
 export 'src/json_rpc/json_rpc_codec.dart';
 export 'src/json_rpc/json_rpc_error.dart';
 export 'src/json_rpc/json_rpc_id.dart';
