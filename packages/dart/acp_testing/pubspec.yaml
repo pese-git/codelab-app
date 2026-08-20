@@ -1,0 +1,21 @@
+name: acp_testing
+description: ACP fixtures, fake transports, and conformance test helpers.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  acp_client_core:
+    path: ../acp_client_core
+  acp_protocol:
+    path: ../acp_protocol
+  acp_transports:
+    path: ../acp_transports
+  fpdart: ^1.2.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.3

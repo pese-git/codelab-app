@@ -1,0 +1,35 @@
+name: codelab
+
+packages:
+  - apps/*
+  - packages/dart/*
+  - packages/flutter/*
+
+scripts:
+  format:
+    description: Format all Dart and Flutter packages.
+    run: fvm dart format .
+
+  check-format:
+    description: Check Dart formatting without applying changes.
+    run: fvm dart format --output=none --set-exit-if-changed .
+
+  analyze:
+    description: Run static analysis across the workspace.
+    run: fvm dart analyze
+
+  test:
+    description: Run all Dart and Flutter tests.
+    run: fvm dart run melos exec -c 1 --dir-exists=test --fail-fast -- "fvm flutter test"
+
+  protocol-conformance:
+    description: Run ACP protocol conformance checks.
+    run: fvm dart test packages/dart/acp_protocol/test
+
+  check:
+    description: Run format, analyze, tests, and protocol conformance.
+    steps:
+      - check-format
+      - analyze
+      - test
+      - protocol-conformance

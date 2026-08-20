@@ -1,0 +1,25 @@
+name: acp_ui
+description: Fluent UI widgets for the CodeLab ACP workbench.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  fluent_ui: ^4.11.1
+  flutter:
+    sdk: flutter
+  flutter_bloc: ^9.1.1
+
+dev_dependencies:
+  build_runner: ^2.10.5
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  freezed: ^3.2.5
+
+flutter:
+  uses-material-design: true

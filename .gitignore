@@ -3,3 +3,19 @@
 .codegraph/
 .codex/        
 .opencode/
+.idea/
+*.iml
+
+# Dart / Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+coverage/
+pubspec_overrides.yaml
+
+# FVM: keep the project config tracked, ignore local SDK metadata/binaries.
+.fvm/*
+!.fvm/
+!.fvm/fvm_config.json

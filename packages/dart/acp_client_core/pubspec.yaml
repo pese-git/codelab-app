@@ -1,0 +1,23 @@
+name: acp_client_core
+description: Pure Dart ACP client domain, application state, and use cases.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  acp_protocol:
+    path: ../acp_protocol
+  acp_transports:
+    path: ../acp_transports
+  fpdart: ^1.2.0
+  freezed_annotation: ^3.1.0
+  meta: ^1.16.0
+
+dev_dependencies:
+  build_runner: ^2.10.5
+  freezed: ^3.2.5
+  lints: ^6.0.0
+  test: ^1.26.3

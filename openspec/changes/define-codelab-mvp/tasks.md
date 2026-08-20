@@ -1,12 +1,12 @@
 ## 1. Bootstrap workspace
 
-- [ ] 1.1 Создать root `pubspec.yaml`, `melos.yaml` и `analysis_options.yaml` для Dart/Flutter/FVM/Melos monorepo
-- [ ] 1.2 Настроить `.fvm/fvm_config.json` как tracked config и убедиться, что SDK binaries не попадают в git
-- [ ] 1.3 Создать package structure: `packages/dart/acp_protocol`, `packages/dart/acp_transports`, `packages/dart/acp_client_core`, `packages/dart/acp_testing`, `packages/flutter/acp_ui`
-- [ ] 1.4 Создать `apps/codelab_app` как Flutter desktop app shell
-- [ ] 1.5 Добавить Melos scripts: `format`, `check-format`, `analyze`, `test`, `protocol-conformance`, `check`
-- [ ] 1.6 Добавить базовые package `pubspec.yaml` dependencies для `fluent_ui`, Bloc/Cubit, CherryPick v4.x.x, `fpdart`, `freezed`, `build_runner`
-- [ ] 1.7 Выполнить `fvm dart run melos bootstrap`
+- [x] 1.1 Создать root `pubspec.yaml`, `melos.yaml` и `analysis_options.yaml` для Dart/Flutter/FVM/Melos monorepo
+- [x] 1.2 Настроить `.fvm/fvm_config.json` как tracked config и убедиться, что SDK binaries не попадают в git
+- [x] 1.3 Создать package structure: `packages/dart/acp_protocol`, `packages/dart/acp_transports`, `packages/dart/acp_client_core`, `packages/dart/acp_testing`, `packages/flutter/acp_ui`
+- [x] 1.4 Создать `apps/codelab_app` как Flutter desktop app shell
+- [x] 1.5 Добавить Melos scripts: `format`, `check-format`, `analyze`, `test`, `protocol-conformance`, `check`
+- [x] 1.6 Добавить базовые package `pubspec.yaml` dependencies для `fluent_ui`, Bloc/Cubit, CherryPick v4.x.x, `fpdart`, `freezed`, `build_runner`
+- [x] 1.7 Выполнить `fvm dart run melos bootstrap`
 
 ## 2. Implement ACP protocol package
 

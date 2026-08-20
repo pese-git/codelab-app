@@ -1,0 +1,47 @@
+name: codelab_workspace
+publish_to: none
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dev_dependencies:
+  lints: ^6.0.0
+  melos: ^8.3.0
+
+workspace:
+  - apps/codelab_app
+  - packages/dart/acp_client_core
+  - packages/dart/acp_protocol
+  - packages/dart/acp_testing
+  - packages/dart/acp_transports
+  - packages/flutter/acp_ui
+
+melos:
+  scripts:
+    format:
+      description: Format all Dart and Flutter packages.
+      run: fvm dart format .
+
+    check-format:
+      description: Check Dart formatting without applying changes.
+      run: fvm dart format --output=none --set-exit-if-changed .
+
+    analyze:
+      description: Run static analysis across the workspace.
+      run: fvm dart analyze
+
+    test:
+      description: Run all Dart and Flutter tests.
+      run: fvm dart run melos exec -c 1 --dir-exists=test --fail-fast -- "fvm flutter test"
+
+    protocol-conformance:
+      description: Run ACP protocol conformance checks.
+      run: fvm dart test packages/dart/acp_protocol/test
+
+    check:
+      description: Run format, analyze, tests, and protocol conformance.
+      steps:
+        - check-format
+        - analyze
+        - test
+        - protocol-conformance
