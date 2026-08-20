@@ -112,7 +112,8 @@ dependency приложения.
 
 `packages/flutter/acp_ui` предоставляет переиспользуемые Flutter-виджеты для
 chat, status, approval prompts, tool call display, errors и connection state.
-Пакет не должен напрямую парсить raw ACP JSON.
+Пакет должен использовать `fluent_ui` как обязательный UI framework и не должен
+напрямую парсить raw ACP JSON.
 
 `apps/codelab_app` собирает Flutter-приложение, dependency injection, routing,
 platform-specific transport selection и финальные пользовательские workflows.
@@ -124,6 +125,9 @@ platform-specific transport selection и финальные пользовате
 - `acp_client_core` может зависеть от `acp_protocol` и `acp_transports`.
 - `acp_ui` может зависеть от `acp_client_core` и `acp_protocol`.
 - `codelab_app` может зависеть от всех production packages.
+- `fpdart` используется для typed functional primitives в pure Dart слоях.
+- `freezed` используется для immutable state, DTO и union/sealed моделей там,
+  где это уменьшает boilerplate и повышает типобезопасность.
 - Пакеты не должны образовывать cyclic dependencies.
 - UI-код не должен проникать в pure Dart packages.
 
@@ -355,6 +359,31 @@ Logs должны редактировать:
 
 Первый экран приложения — рабочий клиент, а не marketing page.
 
+Flutter UI должен строиться на `fluent_ui`. Использование Material или
+Cupertino как базового design framework запрещено. Material/Cupertino imports
+допустимы только точечно, если Flutter или third-party package требуют
+технический compatibility wrapper, и такой import должен быть изолирован от
+публичных UI-компонентов CodeLab.
+
+Виджеты в `packages/flutter/acp_ui` должны храниться по Atomic Design слоям:
+
+```text
+lib/
+└── src/
+    ├── atomics/
+    ├── molecules/
+    └── organisms/
+```
+
+`atomics` содержит минимальные переиспользуемые элементы: buttons, badges,
+status indicators, text primitives, icons и progress indicators.
+
+`molecules` содержит составные элементы из нескольких atomics: prompt composer,
+tool call summary, connection status row, approval option group.
+
+`organisms` содержит крупные блоки workflow: transcript panel, approval panel,
+session sidebar, debug log panel, connection screen.
+
 UI должен поддерживать:
 
 - connection status;
@@ -452,6 +481,13 @@ Change считается complete, когда:
 - protocol changes соответствуют `docs/acp/protocol/` и
   `docs/acp/protocol/17-Schema.md`;
 - pure Dart packages не импортируют Flutter;
+- Flutter UI использует `fluent_ui`, а не Material/Cupertino как базовый
+  framework;
+- виджеты разложены по `atomics`, `molecules` и `organisms`;
+- модели и state используют `freezed`, когда нужна immutable data или union
+  state;
+- pure Dart слой использует `fpdart` для typed results/options вместо
+  неструктурированных nullable/error flows;
 - UI не парсит raw ACP JSON;
 - для новых inbound messages есть validation;
 - approval policy не ослаблена без explicit specification;
@@ -473,6 +509,10 @@ Change считается complete, когда:
   `agentCapabilities.loadSession`;
 - local transcript persistence не входит в MVP;
 - Flutter state management: Bloc/Cubit в UI-слое;
+- Flutter UI framework: `fluent_ui`;
+- Material/Cupertino не используются как базовый design framework;
+- UI widgets организуются по слоям `atomics`, `molecules`, `organisms`;
+- дополнительные стандартные библиотеки: `fpdart` и `freezed`;
 - `acp_client_core` остается pure Dart и не зависит от Bloc, Flutter или UI;
 - read-only operations внутри workspace могут auto-approve только после явной
   user setting;
