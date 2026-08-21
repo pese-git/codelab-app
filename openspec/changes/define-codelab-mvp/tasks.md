@@ -24,7 +24,7 @@
 - [x] 3.2 Реализовать fake transport для deterministic core/conformance tests
 - [x] 3.3 Реализовать stdio transport через child process stdout/stderr separation
 - [x] 3.4 Реализовать process lifecycle handling: start, graceful shutdown, process exit, invalid JSON, stderr diagnostics
-- [ ] 3.5 Добавить built-in editable profile `Codelab Agent` с command `codelab`, args `serve --stdio`, env `CODELAB_LOG_LEVEL=DEBUG`
+- [x] 3.5 Добавить built-in editable profile `Codelab Agent` с command `codelab`, args `serve --stdio`, env `CODELAB_LOG_LEVEL=DEBUG`
 - [ ] 3.6 Реализовать WebSocket transport для remote agents с token/header config
 - [ ] 3.7 Добавить transport unit/integration tests, включая codelab-agent-compatible stdio flow
 

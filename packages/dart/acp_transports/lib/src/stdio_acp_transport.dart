@@ -19,6 +19,30 @@ abstract class StdioAcpTransportConfig with _$StdioAcpTransportConfig {
   }) = _StdioAcpTransportConfig;
 }
 
+@freezed
+abstract class StdioAcpAgentProfile with _$StdioAcpAgentProfile {
+  const StdioAcpAgentProfile._();
+
+  const factory StdioAcpAgentProfile({
+    required String name,
+    @Default('custom') String type,
+    required String command,
+    @Default([]) List<String> args,
+    String? cwd,
+    @Default({}) Map<String, String> env,
+  }) = _StdioAcpAgentProfile;
+
+  StdioAcpTransportConfig toTransportConfig() =>
+      StdioAcpTransportConfig(command: command, args: args, cwd: cwd, env: env);
+}
+
+const codelabAgentStdioProfile = StdioAcpAgentProfile(
+  name: 'Codelab Agent',
+  command: 'codelab',
+  args: ['serve', '--stdio'],
+  env: {'CODELAB_LOG_LEVEL': 'DEBUG'},
+);
+
 final class StdioAcpTransport implements AcpTransport {
   StdioAcpTransport(this.config);
 

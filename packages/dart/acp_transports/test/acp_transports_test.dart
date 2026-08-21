@@ -10,6 +10,42 @@ void main() {
     expect(acpProtocolPackageName, 'acp_protocol');
   });
 
+  test('exports editable Codelab Agent stdio profile', () {
+    expect(codelabAgentStdioProfile.name, 'Codelab Agent');
+    expect(codelabAgentStdioProfile.type, 'custom');
+    expect(codelabAgentStdioProfile.command, 'codelab');
+    expect(codelabAgentStdioProfile.args, ['serve', '--stdio']);
+    expect(codelabAgentStdioProfile.env, {'CODELAB_LOG_LEVEL': 'DEBUG'});
+    expect(codelabAgentStdioProfile.cwd, isNull);
+
+    final edited = codelabAgentStdioProfile.copyWith(
+      command: '/opt/homebrew/bin/codelab',
+      cwd: '/workspace',
+      env: {...codelabAgentStdioProfile.env, 'CODELAB_AGENT_PROFILE': 'local'},
+    );
+
+    expect(edited.name, 'Codelab Agent');
+    expect(edited.type, 'custom');
+    expect(edited.command, '/opt/homebrew/bin/codelab');
+    expect(edited.args, ['serve', '--stdio']);
+    expect(edited.cwd, '/workspace');
+    expect(edited.env, {
+      'CODELAB_LOG_LEVEL': 'DEBUG',
+      'CODELAB_AGENT_PROFILE': 'local',
+    });
+  });
+
+  test('Codelab Agent profile creates stdio transport config', () {
+    expect(
+      codelabAgentStdioProfile.toTransportConfig(),
+      const StdioAcpTransportConfig(
+        command: 'codelab',
+        args: ['serve', '--stdio'],
+        env: {'CODELAB_LOG_LEVEL': 'DEBUG'},
+      ),
+    );
+  });
+
   test('AcpTransport exposes inbound stream and outbound send port', () async {
     final transport = _BoundaryTransport();
     addTearDown(transport.close);
