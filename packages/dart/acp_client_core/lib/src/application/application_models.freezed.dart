@@ -572,6 +572,700 @@ $SessionIdCopyWith<$Res> get sessionId {
 }
 
 /// @nodoc
+mixin _$CancelTurnCommand {
+
+ SessionId get sessionId; Map<String, Object?>? get meta;
+/// Create a copy of CancelTurnCommand
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CancelTurnCommandCopyWith<CancelTurnCommand> get copyWith => _$CancelTurnCommandCopyWithImpl<CancelTurnCommand>(this as CancelTurnCommand, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CancelTurnCommand&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other.meta, meta));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,sessionId,const DeepCollectionEquality().hash(meta));
+
+@override
+String toString() {
+  return 'CancelTurnCommand(sessionId: $sessionId, meta: $meta)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CancelTurnCommandCopyWith<$Res>  {
+  factory $CancelTurnCommandCopyWith(CancelTurnCommand value, $Res Function(CancelTurnCommand) _then) = _$CancelTurnCommandCopyWithImpl;
+@useResult
+$Res call({
+ SessionId sessionId, Map<String, Object?>? meta
+});
+
+
+$SessionIdCopyWith<$Res> get sessionId;
+
+}
+/// @nodoc
+class _$CancelTurnCommandCopyWithImpl<$Res>
+    implements $CancelTurnCommandCopyWith<$Res> {
+  _$CancelTurnCommandCopyWithImpl(this._self, this._then);
+
+  final CancelTurnCommand _self;
+  final $Res Function(CancelTurnCommand) _then;
+
+/// Create a copy of CancelTurnCommand
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? sessionId = null,Object? meta = freezed,}) {
+  return _then(_self.copyWith(
+sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
+as SessionId,meta: freezed == meta ? _self.meta : meta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
+  ));
+}
+/// Create a copy of CancelTurnCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionIdCopyWith<$Res> get sessionId {
+  
+  return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
+    return _then(_self.copyWith(sessionId: value));
+  });
+}
+}
+
+
+/// Adds pattern-matching-related methods to [CancelTurnCommand].
+extension CancelTurnCommandPatterns on CancelTurnCommand {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _CancelTurnCommand value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _CancelTurnCommand() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _CancelTurnCommand value)  $default,){
+final _that = this;
+switch (_that) {
+case _CancelTurnCommand():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _CancelTurnCommand value)?  $default,){
+final _that = this;
+switch (_that) {
+case _CancelTurnCommand() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( SessionId sessionId,  Map<String, Object?>? meta)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _CancelTurnCommand() when $default != null:
+return $default(_that.sessionId,_that.meta);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( SessionId sessionId,  Map<String, Object?>? meta)  $default,) {final _that = this;
+switch (_that) {
+case _CancelTurnCommand():
+return $default(_that.sessionId,_that.meta);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( SessionId sessionId,  Map<String, Object?>? meta)?  $default,) {final _that = this;
+switch (_that) {
+case _CancelTurnCommand() when $default != null:
+return $default(_that.sessionId,_that.meta);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class _CancelTurnCommand extends CancelTurnCommand {
+  const _CancelTurnCommand({required this.sessionId, final  Map<String, Object?>? meta}): _meta = meta,super._();
+  
+
+@override final  SessionId sessionId;
+ final  Map<String, Object?>? _meta;
+@override Map<String, Object?>? get meta {
+  final value = _meta;
+  if (value == null) return null;
+  if (_meta is EqualUnmodifiableMapView) return _meta;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(value);
+}
+
+
+/// Create a copy of CancelTurnCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$CancelTurnCommandCopyWith<_CancelTurnCommand> get copyWith => __$CancelTurnCommandCopyWithImpl<_CancelTurnCommand>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CancelTurnCommand&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other._meta, _meta));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,sessionId,const DeepCollectionEquality().hash(_meta));
+
+@override
+String toString() {
+  return 'CancelTurnCommand(sessionId: $sessionId, meta: $meta)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$CancelTurnCommandCopyWith<$Res> implements $CancelTurnCommandCopyWith<$Res> {
+  factory _$CancelTurnCommandCopyWith(_CancelTurnCommand value, $Res Function(_CancelTurnCommand) _then) = __$CancelTurnCommandCopyWithImpl;
+@override @useResult
+$Res call({
+ SessionId sessionId, Map<String, Object?>? meta
+});
+
+
+@override $SessionIdCopyWith<$Res> get sessionId;
+
+}
+/// @nodoc
+class __$CancelTurnCommandCopyWithImpl<$Res>
+    implements _$CancelTurnCommandCopyWith<$Res> {
+  __$CancelTurnCommandCopyWithImpl(this._self, this._then);
+
+  final _CancelTurnCommand _self;
+  final $Res Function(_CancelTurnCommand) _then;
+
+/// Create a copy of CancelTurnCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? sessionId = null,Object? meta = freezed,}) {
+  return _then(_CancelTurnCommand(
+sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
+as SessionId,meta: freezed == meta ? _self._meta : meta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
+  ));
+}
+
+/// Create a copy of CancelTurnCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionIdCopyWith<$Res> get sessionId {
+  
+  return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
+    return _then(_self.copyWith(sessionId: value));
+  });
+}
+}
+
+/// @nodoc
+mixin _$RespondToPermissionCommand {
+
+ SessionId get sessionId; ApprovalRequestId get approvalId; Map<String, Object?>? get meta;
+/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$RespondToPermissionCommandCopyWith<RespondToPermissionCommand> get copyWith => _$RespondToPermissionCommandCopyWithImpl<RespondToPermissionCommand>(this as RespondToPermissionCommand, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is RespondToPermissionCommand&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.approvalId, approvalId) || other.approvalId == approvalId)&&const DeepCollectionEquality().equals(other.meta, meta));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,sessionId,approvalId,const DeepCollectionEquality().hash(meta));
+
+@override
+String toString() {
+  return 'RespondToPermissionCommand(sessionId: $sessionId, approvalId: $approvalId, meta: $meta)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $RespondToPermissionCommandCopyWith<$Res>  {
+  factory $RespondToPermissionCommandCopyWith(RespondToPermissionCommand value, $Res Function(RespondToPermissionCommand) _then) = _$RespondToPermissionCommandCopyWithImpl;
+@useResult
+$Res call({
+ SessionId sessionId, ApprovalRequestId approvalId, Map<String, Object?>? meta
+});
+
+
+$SessionIdCopyWith<$Res> get sessionId;$ApprovalRequestIdCopyWith<$Res> get approvalId;
+
+}
+/// @nodoc
+class _$RespondToPermissionCommandCopyWithImpl<$Res>
+    implements $RespondToPermissionCommandCopyWith<$Res> {
+  _$RespondToPermissionCommandCopyWithImpl(this._self, this._then);
+
+  final RespondToPermissionCommand _self;
+  final $Res Function(RespondToPermissionCommand) _then;
+
+/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? sessionId = null,Object? approvalId = null,Object? meta = freezed,}) {
+  return _then(_self.copyWith(
+sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
+as SessionId,approvalId: null == approvalId ? _self.approvalId : approvalId // ignore: cast_nullable_to_non_nullable
+as ApprovalRequestId,meta: freezed == meta ? _self.meta : meta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
+  ));
+}
+/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionIdCopyWith<$Res> get sessionId {
+  
+  return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
+    return _then(_self.copyWith(sessionId: value));
+  });
+}/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$ApprovalRequestIdCopyWith<$Res> get approvalId {
+  
+  return $ApprovalRequestIdCopyWith<$Res>(_self.approvalId, (value) {
+    return _then(_self.copyWith(approvalId: value));
+  });
+}
+}
+
+
+/// Adds pattern-matching-related methods to [RespondToPermissionCommand].
+extension RespondToPermissionCommandPatterns on RespondToPermissionCommand {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( SelectPermissionCommand value)?  selected,TResult Function( CancelPermissionCommand value)?  cancelled,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case SelectPermissionCommand() when selected != null:
+return selected(_that);case CancelPermissionCommand() when cancelled != null:
+return cancelled(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( SelectPermissionCommand value)  selected,required TResult Function( CancelPermissionCommand value)  cancelled,}){
+final _that = this;
+switch (_that) {
+case SelectPermissionCommand():
+return selected(_that);case CancelPermissionCommand():
+return cancelled(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( SelectPermissionCommand value)?  selected,TResult? Function( CancelPermissionCommand value)?  cancelled,}){
+final _that = this;
+switch (_that) {
+case SelectPermissionCommand() when selected != null:
+return selected(_that);case CancelPermissionCommand() when cancelled != null:
+return cancelled(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( SessionId sessionId,  ApprovalRequestId approvalId,  PermissionOptionId optionId,  Map<String, Object?>? meta)?  selected,TResult Function( SessionId sessionId,  ApprovalRequestId approvalId,  Map<String, Object?>? meta)?  cancelled,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case SelectPermissionCommand() when selected != null:
+return selected(_that.sessionId,_that.approvalId,_that.optionId,_that.meta);case CancelPermissionCommand() when cancelled != null:
+return cancelled(_that.sessionId,_that.approvalId,_that.meta);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( SessionId sessionId,  ApprovalRequestId approvalId,  PermissionOptionId optionId,  Map<String, Object?>? meta)  selected,required TResult Function( SessionId sessionId,  ApprovalRequestId approvalId,  Map<String, Object?>? meta)  cancelled,}) {final _that = this;
+switch (_that) {
+case SelectPermissionCommand():
+return selected(_that.sessionId,_that.approvalId,_that.optionId,_that.meta);case CancelPermissionCommand():
+return cancelled(_that.sessionId,_that.approvalId,_that.meta);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( SessionId sessionId,  ApprovalRequestId approvalId,  PermissionOptionId optionId,  Map<String, Object?>? meta)?  selected,TResult? Function( SessionId sessionId,  ApprovalRequestId approvalId,  Map<String, Object?>? meta)?  cancelled,}) {final _that = this;
+switch (_that) {
+case SelectPermissionCommand() when selected != null:
+return selected(_that.sessionId,_that.approvalId,_that.optionId,_that.meta);case CancelPermissionCommand() when cancelled != null:
+return cancelled(_that.sessionId,_that.approvalId,_that.meta);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class SelectPermissionCommand extends RespondToPermissionCommand {
+  const SelectPermissionCommand({required this.sessionId, required this.approvalId, required this.optionId, final  Map<String, Object?>? meta}): _meta = meta,super._();
+  
+
+@override final  SessionId sessionId;
+@override final  ApprovalRequestId approvalId;
+ final  PermissionOptionId optionId;
+ final  Map<String, Object?>? _meta;
+@override Map<String, Object?>? get meta {
+  final value = _meta;
+  if (value == null) return null;
+  if (_meta is EqualUnmodifiableMapView) return _meta;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(value);
+}
+
+
+/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$SelectPermissionCommandCopyWith<SelectPermissionCommand> get copyWith => _$SelectPermissionCommandCopyWithImpl<SelectPermissionCommand>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SelectPermissionCommand&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.approvalId, approvalId) || other.approvalId == approvalId)&&(identical(other.optionId, optionId) || other.optionId == optionId)&&const DeepCollectionEquality().equals(other._meta, _meta));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,sessionId,approvalId,optionId,const DeepCollectionEquality().hash(_meta));
+
+@override
+String toString() {
+  return 'RespondToPermissionCommand.selected(sessionId: $sessionId, approvalId: $approvalId, optionId: $optionId, meta: $meta)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $SelectPermissionCommandCopyWith<$Res> implements $RespondToPermissionCommandCopyWith<$Res> {
+  factory $SelectPermissionCommandCopyWith(SelectPermissionCommand value, $Res Function(SelectPermissionCommand) _then) = _$SelectPermissionCommandCopyWithImpl;
+@override @useResult
+$Res call({
+ SessionId sessionId, ApprovalRequestId approvalId, PermissionOptionId optionId, Map<String, Object?>? meta
+});
+
+
+@override $SessionIdCopyWith<$Res> get sessionId;@override $ApprovalRequestIdCopyWith<$Res> get approvalId;$PermissionOptionIdCopyWith<$Res> get optionId;
+
+}
+/// @nodoc
+class _$SelectPermissionCommandCopyWithImpl<$Res>
+    implements $SelectPermissionCommandCopyWith<$Res> {
+  _$SelectPermissionCommandCopyWithImpl(this._self, this._then);
+
+  final SelectPermissionCommand _self;
+  final $Res Function(SelectPermissionCommand) _then;
+
+/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? sessionId = null,Object? approvalId = null,Object? optionId = null,Object? meta = freezed,}) {
+  return _then(SelectPermissionCommand(
+sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
+as SessionId,approvalId: null == approvalId ? _self.approvalId : approvalId // ignore: cast_nullable_to_non_nullable
+as ApprovalRequestId,optionId: null == optionId ? _self.optionId : optionId // ignore: cast_nullable_to_non_nullable
+as PermissionOptionId,meta: freezed == meta ? _self._meta : meta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
+  ));
+}
+
+/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionIdCopyWith<$Res> get sessionId {
+  
+  return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
+    return _then(_self.copyWith(sessionId: value));
+  });
+}/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$ApprovalRequestIdCopyWith<$Res> get approvalId {
+  
+  return $ApprovalRequestIdCopyWith<$Res>(_self.approvalId, (value) {
+    return _then(_self.copyWith(approvalId: value));
+  });
+}/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$PermissionOptionIdCopyWith<$Res> get optionId {
+  
+  return $PermissionOptionIdCopyWith<$Res>(_self.optionId, (value) {
+    return _then(_self.copyWith(optionId: value));
+  });
+}
+}
+
+/// @nodoc
+
+
+class CancelPermissionCommand extends RespondToPermissionCommand {
+  const CancelPermissionCommand({required this.sessionId, required this.approvalId, final  Map<String, Object?>? meta}): _meta = meta,super._();
+  
+
+@override final  SessionId sessionId;
+@override final  ApprovalRequestId approvalId;
+ final  Map<String, Object?>? _meta;
+@override Map<String, Object?>? get meta {
+  final value = _meta;
+  if (value == null) return null;
+  if (_meta is EqualUnmodifiableMapView) return _meta;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(value);
+}
+
+
+/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CancelPermissionCommandCopyWith<CancelPermissionCommand> get copyWith => _$CancelPermissionCommandCopyWithImpl<CancelPermissionCommand>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CancelPermissionCommand&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.approvalId, approvalId) || other.approvalId == approvalId)&&const DeepCollectionEquality().equals(other._meta, _meta));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,sessionId,approvalId,const DeepCollectionEquality().hash(_meta));
+
+@override
+String toString() {
+  return 'RespondToPermissionCommand.cancelled(sessionId: $sessionId, approvalId: $approvalId, meta: $meta)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CancelPermissionCommandCopyWith<$Res> implements $RespondToPermissionCommandCopyWith<$Res> {
+  factory $CancelPermissionCommandCopyWith(CancelPermissionCommand value, $Res Function(CancelPermissionCommand) _then) = _$CancelPermissionCommandCopyWithImpl;
+@override @useResult
+$Res call({
+ SessionId sessionId, ApprovalRequestId approvalId, Map<String, Object?>? meta
+});
+
+
+@override $SessionIdCopyWith<$Res> get sessionId;@override $ApprovalRequestIdCopyWith<$Res> get approvalId;
+
+}
+/// @nodoc
+class _$CancelPermissionCommandCopyWithImpl<$Res>
+    implements $CancelPermissionCommandCopyWith<$Res> {
+  _$CancelPermissionCommandCopyWithImpl(this._self, this._then);
+
+  final CancelPermissionCommand _self;
+  final $Res Function(CancelPermissionCommand) _then;
+
+/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? sessionId = null,Object? approvalId = null,Object? meta = freezed,}) {
+  return _then(CancelPermissionCommand(
+sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
+as SessionId,approvalId: null == approvalId ? _self.approvalId : approvalId // ignore: cast_nullable_to_non_nullable
+as ApprovalRequestId,meta: freezed == meta ? _self._meta : meta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
+  ));
+}
+
+/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionIdCopyWith<$Res> get sessionId {
+  
+  return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
+    return _then(_self.copyWith(sessionId: value));
+  });
+}/// Create a copy of RespondToPermissionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$ApprovalRequestIdCopyWith<$Res> get approvalId {
+  
+  return $ApprovalRequestIdCopyWith<$Res>(_self.approvalId, (value) {
+    return _then(_self.copyWith(approvalId: value));
+  });
+}
+}
+
+/// @nodoc
 mixin _$AcpClientApplicationFailure {
 
  String get message; Object? get cause;

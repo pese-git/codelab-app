@@ -2,6 +2,8 @@ import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../domain/domain_models.dart';
+
 part 'application_models.freezed.dart';
 
 @freezed
@@ -24,6 +26,34 @@ sealed class SendPromptCommand with _$SendPromptCommand {
     required List<ContentBlock> prompt,
     Map<String, Object?>? meta,
   }) = _SendPromptCommand;
+}
+
+@freezed
+sealed class CancelTurnCommand with _$CancelTurnCommand {
+  const CancelTurnCommand._();
+
+  const factory CancelTurnCommand({
+    required SessionId sessionId,
+    Map<String, Object?>? meta,
+  }) = _CancelTurnCommand;
+}
+
+@freezed
+sealed class RespondToPermissionCommand with _$RespondToPermissionCommand {
+  const RespondToPermissionCommand._();
+
+  const factory RespondToPermissionCommand.selected({
+    required SessionId sessionId,
+    required ApprovalRequestId approvalId,
+    required PermissionOptionId optionId,
+    Map<String, Object?>? meta,
+  }) = SelectPermissionCommand;
+
+  const factory RespondToPermissionCommand.cancelled({
+    required SessionId sessionId,
+    required ApprovalRequestId approvalId,
+    Map<String, Object?>? meta,
+  }) = CancelPermissionCommand;
 }
 
 @freezed

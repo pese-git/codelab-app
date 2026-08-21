@@ -144,6 +144,172 @@ void main() {
     }, (_) => fail('expected missing session failure'));
     expect(transport.sentMessages, isEmpty);
   });
+
+  test(
+    'RespondToPermission sends selected response and resumes turn',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final promptFuture = SendPrompt(client)(
+        const SendPromptCommand(
+          sessionId: SessionId('session-1'),
+          prompt: [ContentBlock.text(text: 'hello')],
+        ),
+      ).run();
+      await _pump();
+      final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+
+      transport.emitInbound(_permissionRequest());
+
+      final awaiting = client.sessionById(const SessionId('session-1'));
+      expect(awaiting?.status, SessionLifecycleStatus.awaitingApproval);
+      expect(
+        awaiting
+            ?.turns
+            .single
+            .approvals[const ApprovalRequestId('permission-42')]
+            ?.status,
+        ApprovalStatus.pending,
+      );
+      transport.drainSentMessages();
+
+      final result = await RespondToPermission(client)(
+        const RespondToPermissionCommand.selected(
+          sessionId: SessionId('session-1'),
+          approvalId: ApprovalRequestId('permission-42'),
+          optionId: PermissionOptionId('allow-once'),
+        ),
+      ).run();
+
+      final approval = result.getOrElse((failure) => fail('$failure'));
+      expect(approval.status, ApprovalStatus.selected);
+      expect(approval.selectedOptionId, const PermissionOptionId('allow-once'));
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.id, const JsonRpcId.integer(42));
+      expect(
+        RequestPermissionResponse.fromJson(response.result),
+        const RequestPermissionResponse(
+          outcome: RequestPermissionOutcome.selected(
+            optionId: PermissionOptionId('allow-once'),
+          ),
+        ),
+      );
+      expect(
+        client.sessionById(const SessionId('session-1'))?.status,
+        SessionLifecycleStatus.runningTurn,
+      );
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id,
+          result: const PromptResponse(stopReason: StopReason.endTurn).toJson(),
+        ),
+      );
+      (await promptFuture).getOrElse((failure) => fail('$failure'));
+    },
+  );
+
+  test(
+    'CancelTurn sends session/cancel and cancels pending approval',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final promptFuture = SendPrompt(client)(
+        const SendPromptCommand(
+          sessionId: SessionId('session-1'),
+          prompt: [ContentBlock.text(text: 'hello')],
+        ),
+      ).run();
+      await _pump();
+      final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+      transport.emitInbound(_permissionRequest());
+      transport.drainSentMessages();
+
+      final result = await CancelTurn(client)(
+        const CancelTurnCommand(sessionId: SessionId('session-1')),
+      ).run();
+
+      final turn = result.getOrElse((failure) => fail('$failure'));
+      expect(turn.status, PromptTurnStatus.cancelled);
+      expect(
+        turn.approvals[const ApprovalRequestId('permission-42')]?.status,
+        ApprovalStatus.cancelled,
+      );
+
+      final cancel = transport.sentMessages[0] as JsonRpcNotification;
+      expect(cancel.method, sessionCancelMethod);
+      expect(
+        CancelNotification.fromJson(cancel.params),
+        const CancelNotification(sessionId: SessionId('session-1')),
+      );
+
+      final permissionResponse = transport.sentMessages[1] as JsonRpcResponse;
+      expect(permissionResponse.id, const JsonRpcId.integer(42));
+      expect(
+        RequestPermissionResponse.fromJson(permissionResponse.result),
+        const RequestPermissionResponse(
+          outcome: RequestPermissionOutcome.cancelled(),
+        ),
+      );
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id,
+          result: const PromptResponse(
+            stopReason: StopReason.cancelled,
+          ).toJson(),
+        ),
+      );
+      final promptResult = await promptFuture;
+      expect(
+        promptResult.getOrElse((failure) => fail('$failure')).status,
+        PromptTurnStatus.cancelled,
+      );
+    },
+  );
+
+  test(
+    'RespondToPermission returns typed failure for unavailable option',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final promptFuture = SendPrompt(client)(
+        const SendPromptCommand(
+          sessionId: SessionId('session-1'),
+          prompt: [ContentBlock.text(text: 'hello')],
+        ),
+      ).run();
+      await _pump();
+      final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+      transport.emitInbound(_permissionRequest());
+      transport.drainSentMessages();
+
+      final result = await RespondToPermission(client)(
+        const RespondToPermissionCommand.selected(
+          sessionId: SessionId('session-1'),
+          approvalId: ApprovalRequestId('permission-42'),
+          optionId: PermissionOptionId('missing-option'),
+        ),
+      ).run();
+
+      expect(result.isLeft(), isTrue);
+      result.match((failure) {
+        expect(failure, isA<AcpClientStateRejectedFailure>());
+      }, (_) => fail('expected state failure'));
+      expect(transport.sentMessages, isEmpty);
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id,
+          result: const PromptResponse(
+            stopReason: StopReason.cancelled,
+          ).toJson(),
+        ),
+      );
+      await promptFuture;
+    },
+  );
 }
 
 Future<void> _createSession(
@@ -168,3 +334,26 @@ Future<void> _createSession(
 }
 
 Future<void> _pump() => Future<void>.delayed(Duration.zero);
+
+JsonRpcRequest _permissionRequest() {
+  return JsonRpcMessage.request(
+        id: const JsonRpcId.integer(42),
+        method: sessionRequestPermissionMethod,
+        params: const RequestPermissionRequest(
+          sessionId: SessionId('session-1'),
+          toolCall: ToolCallUpdate(
+            toolCallId: ToolCallId('tool-1'),
+            title: 'Run command',
+            kind: ToolKind.execute,
+          ),
+          options: [
+            PermissionOption(
+              optionId: PermissionOptionId('allow-once'),
+              name: 'Allow once',
+              kind: PermissionOptionKind.allowOnce,
+            ),
+          ],
+        ).toJson(),
+      )
+      as JsonRpcRequest;
+}
