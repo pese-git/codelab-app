@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:acp_transports/acp_transports.dart';
@@ -387,6 +388,165 @@ void main() async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     expect(inboundCount, 0);
   });
+
+  test('WebSocketAcpTransport exchanges JSON-RPC messages', () async {
+    final server = await _WebSocketTestServer.start((socket, _) {
+      socket.listen((data) {
+        final message = jsonDecode(data as String) as Map<String, Object?>;
+        socket.add(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'id': message['id'],
+            'result': {'ok': true, 'method': message['method']},
+          }),
+        );
+      });
+    });
+    addTearDown(server.close);
+
+    final transport = WebSocketAcpTransport(
+      WebSocketAcpTransportConfig(uri: server.uri),
+    );
+    addTearDown(transport.close);
+
+    final events = <AcpTransportEvent>[];
+    final subscription = transport.events.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    await transport.start();
+
+    final inbound = transport.inbound.first;
+    await transport.send(
+      JsonRpcMessage.request(
+        id: const JsonRpcId.integer(11),
+        method: 'initialize',
+        params: {'protocolVersion': 1},
+      ),
+    );
+
+    expect(
+      await inbound.timeout(const Duration(seconds: 5)),
+      JsonRpcMessage.response(
+        id: const JsonRpcId.integer(11),
+        result: {'ok': true, 'method': 'initialize'},
+      ),
+    );
+    expect(transport.state, AcpTransportState.connected);
+    expect(
+      events.whereType<AcpTransportStateChanged>().map((event) => event.state),
+      containsAllInOrder([
+        AcpTransportState.connecting,
+        AcpTransportState.connected,
+      ]),
+    );
+  });
+
+  test(
+    'WebSocketAcpTransport sends configured headers and bearer token',
+    () async {
+      final requestHeaders = Completer<HttpHeaders>();
+      final server = await _WebSocketTestServer.start((socket, request) {
+        requestHeaders.complete(request.headers);
+        socket.close();
+      });
+      addTearDown(server.close);
+
+      final config = WebSocketAcpTransportConfig(
+        uri: server.uri,
+        headers: const {'X-Agent-Workspace': 'codelab'},
+        token: 'secret-token',
+      );
+      final transport = WebSocketAcpTransport(config);
+      addTearDown(transport.close);
+
+      await transport.start();
+
+      final headers = await requestHeaders.future.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(headers.value('X-Agent-Workspace'), 'codelab');
+      expect(headers.value('Authorization'), 'Bearer secret-token');
+      expect(config.effectiveHeaders, {
+        'X-Agent-Workspace': 'codelab',
+        'Authorization': 'Bearer secret-token',
+      });
+    },
+  );
+
+  test(
+    'WebSocketAcpTransport maps invalid inbound JSON to protocol failure',
+    () async {
+      final server = await _WebSocketTestServer.start((socket, _) {
+        socket.add('{not json');
+      });
+      addTearDown(server.close);
+
+      final transport = WebSocketAcpTransport(
+        WebSocketAcpTransportConfig(uri: server.uri),
+      );
+      addTearDown(transport.close);
+
+      final failure = transport.events
+          .where((event) => event is AcpTransportFailure)
+          .cast<AcpTransportFailure>()
+          .map((event) => event.error)
+          .first;
+
+      await transport.start();
+
+      expect(
+        await failure.timeout(const Duration(seconds: 5)),
+        isA<AcpTransportException>()
+            .having(
+              (error) => error.code,
+              'code',
+              AcpTransportErrorCode.protocolViolation,
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              contains('invalid ACP JSON-RPC'),
+            ),
+      );
+      expect(transport.state, AcpTransportState.failed);
+    },
+  );
+
+  test('WebSocketAcpTransport reports unexpected disconnect', () async {
+    final server = await _WebSocketTestServer.start((socket, _) {
+      socket.close();
+    });
+    addTearDown(server.close);
+
+    final transport = WebSocketAcpTransport(
+      WebSocketAcpTransportConfig(uri: server.uri),
+    );
+    addTearDown(transport.close);
+
+    final failure = transport.events
+        .where((event) => event is AcpTransportFailure)
+        .cast<AcpTransportFailure>()
+        .map((event) => event.error)
+        .first;
+
+    await transport.start();
+
+    expect(
+      await failure.timeout(const Duration(seconds: 5)),
+      isA<AcpTransportException>()
+          .having(
+            (error) => error.code,
+            'code',
+            AcpTransportErrorCode.disconnected,
+          )
+          .having(
+            (error) => error.message,
+            'message',
+            contains('disconnected unexpectedly'),
+          ),
+    );
+    expect(transport.state, AcpTransportState.failed);
+  });
 }
 
 String _dartExecutable() {
@@ -485,4 +645,31 @@ final class _BoundaryTransport implements AcpTransport {
     _state = state;
     _eventController.add(AcpTransportEvent.stateChanged(state));
   }
+}
+
+final class _WebSocketTestServer {
+  _WebSocketTestServer._(this._server);
+
+  final HttpServer _server;
+
+  Uri get uri => Uri(
+    scheme: 'ws',
+    host: InternetAddress.loopbackIPv4.host,
+    port: _server.port,
+  );
+
+  static Future<_WebSocketTestServer> start(
+    void Function(WebSocket socket, HttpRequest request) onConnection,
+  ) async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    unawaited(
+      server.forEach((request) async {
+        final socket = await WebSocketTransformer.upgrade(request);
+        onConnection(socket, request);
+      }),
+    );
+    return _WebSocketTestServer._(server);
+  }
+
+  Future<void> close() => _server.close(force: true);
 }
