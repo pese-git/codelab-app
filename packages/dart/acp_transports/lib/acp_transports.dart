@@ -5,5 +5,6 @@ export 'package:acp_protocol/acp_protocol.dart'
     show JsonRpcId, JsonRpcMessage, acpProtocolPackageName;
 
 export 'src/acp_transport.dart';
+export 'src/stdio_acp_transport.dart';
 
 const acpTransportsPackageName = 'acp_transports';

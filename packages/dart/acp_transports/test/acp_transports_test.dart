@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:acp_transports/acp_transports.dart';
 import 'package:test/test.dart';
@@ -103,6 +104,116 @@ void main() {
       );
     },
   );
+
+  test('StdioAcpTransport exchanges JSON-RPC over stdout and stdin', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'stdio_acp_transport_test_',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+
+    final agent = File('${tempDir.path}/test_agent.dart');
+    await agent.writeAsString('''
+import 'dart:convert';
+import 'dart:io';
+
+void main() {
+  stderr.writeln('agent ready');
+  stdin.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+    final message = jsonDecode(line) as Map<String, Object?>;
+    stdout.writeln(jsonEncode({
+      'jsonrpc': '2.0',
+      'id': message['id'],
+      'result': {'ok': true, 'method': message['method']},
+    }));
+  });
+}
+''');
+
+    final transport = StdioAcpTransport(
+      StdioAcpTransportConfig(
+        command: _dartExecutable(),
+        args: [agent.path],
+        cwd: tempDir.path,
+        env: const {'TEST_AGENT_ENV': 'enabled'},
+      ),
+    );
+    addTearDown(transport.close);
+
+    final events = <AcpTransportEvent>[];
+    final subscription = transport.events.listen(events.add);
+    addTearDown(subscription.cancel);
+    final diagnostic = transport.events
+        .where((event) => event is AcpTransportDiagnostic)
+        .cast<AcpTransportDiagnostic>()
+        .firstWhere((event) => event.message == 'agent ready');
+
+    await transport.start();
+
+    final inbound = transport.inbound.first;
+    await transport.send(
+      JsonRpcMessage.request(
+        id: const JsonRpcId.integer(7),
+        method: 'initialize',
+        params: {'protocolVersion': 1},
+      ),
+    );
+
+    expect(
+      await inbound,
+      JsonRpcMessage.response(
+        id: const JsonRpcId.integer(7),
+        result: {'ok': true, 'method': 'initialize'},
+      ),
+    );
+
+    expect(
+      await diagnostic,
+      isA<AcpTransportDiagnostic>()
+          .having((event) => event.message, 'message', 'agent ready')
+          .having((event) => event.source, 'source', 'stderr'),
+    );
+
+    expect(transport.state, AcpTransportState.connected);
+    expect(
+      events.whereType<AcpTransportStateChanged>().map((event) => event.state),
+      containsAllInOrder([
+        AcpTransportState.connecting,
+        AcpTransportState.connected,
+      ]),
+    );
+  });
+}
+
+String _dartExecutable() {
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  if (flutterRoot != null) {
+    final dart = File(
+      '$flutterRoot/bin/cache/dart-sdk/bin/${Platform.isWindows ? 'dart.exe' : 'dart'}',
+    );
+    if (dart.existsSync()) {
+      return dart.path;
+    }
+  }
+
+  final resolvedExecutable = File(Platform.resolvedExecutable);
+  if (resolvedExecutable.uri.pathSegments.last == 'dart') {
+    return resolvedExecutable.path;
+  }
+
+  for (
+    var directory = Directory.current;
+    directory.parent.path != directory.path;
+    directory = directory.parent
+  ) {
+    final dart = File(
+      '${directory.path}/.fvm/flutter_sdk/bin/cache/dart-sdk/bin/${Platform.isWindows ? 'dart.exe' : 'dart'}',
+    );
+    if (dart.existsSync()) {
+      return dart.path;
+    }
+  }
+
+  throw StateError('Unable to locate Dart executable for stdio test agent.');
 }
 
 final class _BoundaryTransport implements AcpTransport {

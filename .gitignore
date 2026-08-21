@@ -15,6 +15,7 @@ build/
 coverage/
 pubspec_overrides.yaml
 *.freezed.dart
+!packages/dart/acp_transports/lib/src/stdio_acp_transport.freezed.dart
 
 # FVM: keep the project config tracked, ignore local SDK metadata/binaries.
 .fvm/*
