@@ -16,6 +16,7 @@ final class FakeAcpTransport implements AcpTransport {
     sync: true,
   );
   final _sentMessages = <JsonRpcMessage>[];
+  final _sendFailures = <AcpTransportException>[];
 
   AcpTransportState _state;
   var _isClosed = false;
@@ -57,6 +58,10 @@ final class FakeAcpTransport implements AcpTransport {
       );
     }
 
+    if (_sendFailures.isNotEmpty) {
+      throw _sendFailures.removeAt(0);
+    }
+
     _sentMessages.add(message);
     _sentController.add(message);
   }
@@ -93,6 +98,10 @@ final class FakeAcpTransport implements AcpTransport {
 
     _setState(AcpTransportState.failed);
     _eventController.add(AcpTransportEvent.failure(error));
+  }
+
+  void failNextSend(AcpTransportException error) {
+    _sendFailures.add(error);
   }
 
   List<JsonRpcMessage> drainSentMessages() {

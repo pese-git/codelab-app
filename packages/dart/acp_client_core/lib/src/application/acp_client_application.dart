@@ -155,6 +155,11 @@ final class AcpClientApplication {
     final session = _requireSession(command.sessionId);
     final activeTurn = session.activeTurn;
     if (activeTurn == null) {
+      final lastTurn = session.turns.lastOrNull;
+      if (lastTurn?.status == PromptTurnStatus.cancelled) {
+        return lastTurn!;
+      }
+
       throw const StateTransitionException(
         'session has no active prompt turn to cancel',
       );
@@ -172,13 +177,20 @@ final class AcpClientApplication {
       ),
     );
 
+    Object? permissionSendError;
+    StackTrace? permissionSendStackTrace;
     for (final approval in pendingApprovals) {
-      await _sendPermissionResponse(
-        approval.id,
-        const RequestPermissionResponse(
-          outcome: RequestPermissionOutcome.cancelled(),
-        ),
-      );
+      try {
+        await _sendPermissionResponse(
+          approval.id,
+          const RequestPermissionResponse(
+            outcome: RequestPermissionOutcome.cancelled(),
+          ),
+        );
+      } on Object catch (error, stackTrace) {
+        permissionSendError ??= error;
+        permissionSendStackTrace ??= stackTrace;
+      }
     }
 
     final cancelled = SessionStateMachine.cancelTurn(
@@ -187,6 +199,13 @@ final class AcpClientApplication {
     ).stateOrThrow;
 
     _storeSession(cancelled);
+    if (permissionSendError != null) {
+      Error.throwWithStackTrace(
+        permissionSendError,
+        permissionSendStackTrace ?? StackTrace.current,
+      );
+    }
+
     return cancelled.turns.last;
   }
 

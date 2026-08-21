@@ -421,6 +421,117 @@ void main() {
     },
   );
 
+  test(
+    'CancelTurn is idempotent after the turn is locally cancelled',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final promptFuture = SendPrompt(client)(
+        const SendPromptCommand(
+          sessionId: SessionId('session-1'),
+          prompt: [ContentBlock.text(text: 'hello')],
+        ),
+      ).run();
+      await _pump();
+      final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+      transport.drainSentMessages();
+
+      final firstResult = await CancelTurn(client)(
+        const CancelTurnCommand(sessionId: SessionId('session-1')),
+      ).run();
+      final firstTurn = firstResult.getOrElse((failure) => fail('$failure'));
+      expect(firstTurn.status, PromptTurnStatus.cancelled);
+      expect(transport.sentMessages, hasLength(1));
+
+      final secondResult = await CancelTurn(client)(
+        const CancelTurnCommand(sessionId: SessionId('session-1')),
+      ).run();
+      final secondTurn = secondResult.getOrElse((failure) => fail('$failure'));
+      expect(secondTurn, firstTurn);
+      expect(transport.sentMessages, hasLength(1));
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id,
+          result: const PromptResponse(
+            stopReason: StopReason.cancelled,
+          ).toJson(),
+        ),
+      );
+      final promptResult = await promptFuture;
+      expect(
+        promptResult.getOrElse((failure) => fail('$failure')).status,
+        PromptTurnStatus.cancelled,
+      );
+    },
+  );
+
+  test(
+    'CancelTurn keeps local cancellation when pending permission response fails',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final sentSubscription = transport.sent.listen((message) {
+        if (message case JsonRpcNotification(method: sessionCancelMethod)) {
+          transport.failNextSend(
+            const AcpTransportException(
+              code: AcpTransportErrorCode.disconnected,
+              message: 'disconnected before permission response',
+            ),
+          );
+        }
+      });
+      addTearDown(sentSubscription.cancel);
+
+      final promptFuture = SendPrompt(client)(
+        const SendPromptCommand(
+          sessionId: SessionId('session-1'),
+          prompt: [ContentBlock.text(text: 'hello')],
+        ),
+      ).run();
+      await _pump();
+      final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+      transport.emitInbound(_permissionRequest());
+      transport.drainSentMessages();
+
+      final cancelResult = await CancelTurn(client)(
+        const CancelTurnCommand(sessionId: SessionId('session-1')),
+      ).run();
+
+      expect(cancelResult.isLeft(), isTrue);
+      cancelResult.match((failure) {
+        expect(failure, isA<AcpClientTransportFailure>());
+      }, (_) => fail('expected transport failure'));
+      final session = client.sessionById(const SessionId('session-1'));
+      expect(session?.status, SessionLifecycleStatus.active);
+      expect(session?.turns.single.status, PromptTurnStatus.cancelled);
+      expect(
+        session
+            ?.turns
+            .single
+            .approvals[const ApprovalRequestId('permission-42')]
+            ?.status,
+        ApprovalStatus.cancelled,
+      );
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id,
+          result: const PromptResponse(
+            stopReason: StopReason.cancelled,
+          ).toJson(),
+        ),
+      );
+      final promptResult = await promptFuture;
+      final turn = promptResult.getOrElse((failure) => fail('$failure'));
+      expect(turn.status, PromptTurnStatus.cancelled);
+      expect(
+        client.sessionById(const SessionId('session-1'))?.status,
+        SessionLifecycleStatus.active,
+      );
+    },
+  );
+
   test('ignores interleaved updates for unknown sessions', () async {
     await _createSession(client, transport);
     final changes = <AcpSession>[];
@@ -444,52 +555,74 @@ void main() {
     await subscription.cancel();
   });
 
-  test('keeps cancelled prompt terminal when late update arrives', () async {
-    await _createSession(client, transport);
-    transport.drainSentMessages();
-    final promptFuture = SendPrompt(client)(
-      const SendPromptCommand(
-        sessionId: SessionId('session-1'),
-        prompt: [ContentBlock.text(text: 'hello')],
-      ),
-    ).run();
-    await _pump();
-    final promptRequest = transport.sentMessages.single as JsonRpcRequest;
-    transport.drainSentMessages();
-
-    final cancelResult = await CancelTurn(client)(
-      const CancelTurnCommand(sessionId: SessionId('session-1')),
-    ).run();
-    expect(
-      cancelResult.getOrElse((failure) => fail('$failure')).status,
-      PromptTurnStatus.cancelled,
-    );
-
-    transport.emitInbound(
-      JsonRpcMessage.notification(
-        method: sessionUpdateMethod,
-        params: const SessionNotification(
+  test(
+    'keeps cancelled prompt terminal through late update and final response',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final changes = <AcpSession>[];
+      final subscription = client.sessionChanges.listen(changes.add);
+      final promptFuture = SendPrompt(client)(
+        const SendPromptCommand(
           sessionId: SessionId('session-1'),
-          update: SessionUpdate.agentMessageChunk(
-            content: ContentBlock.text(text: 'late'),
-          ),
-        ).toJson(),
-      ),
-    );
+          prompt: [ContentBlock.text(text: 'hello')],
+        ),
+      ).run();
+      await _pump();
+      final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+      transport.drainSentMessages();
 
-    final afterLateUpdate = client.sessionById(const SessionId('session-1'));
-    expect(afterLateUpdate?.status, SessionLifecycleStatus.active);
-    expect(afterLateUpdate?.turns.single.status, PromptTurnStatus.cancelled);
-    expect(afterLateUpdate?.turns.single.updates, isEmpty);
+      final cancelResult = await CancelTurn(client)(
+        const CancelTurnCommand(sessionId: SessionId('session-1')),
+      ).run();
+      expect(
+        cancelResult.getOrElse((failure) => fail('$failure')).status,
+        PromptTurnStatus.cancelled,
+      );
 
-    transport.emitInbound(
-      JsonRpcMessage.response(
-        id: promptRequest.id,
-        result: const PromptResponse(stopReason: StopReason.cancelled).toJson(),
-      ),
-    );
-    await promptFuture;
-  });
+      transport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: const SessionNotification(
+            sessionId: SessionId('session-1'),
+            update: SessionUpdate.agentMessageChunk(
+              content: ContentBlock.text(text: 'late'),
+            ),
+          ).toJson(),
+        ),
+      );
+
+      final afterLateUpdate = client.sessionById(const SessionId('session-1'));
+      expect(afterLateUpdate?.status, SessionLifecycleStatus.active);
+      expect(afterLateUpdate?.turns.single.status, PromptTurnStatus.cancelled);
+      expect(afterLateUpdate?.turns.single.updates, isEmpty);
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id,
+          result: const PromptResponse(
+            stopReason: StopReason.cancelled,
+          ).toJson(),
+        ),
+      );
+      final promptResult = await promptFuture;
+      final finalTurn = promptResult.getOrElse((failure) => fail('$failure'));
+      expect(finalTurn.status, PromptTurnStatus.cancelled);
+      expect(finalTurn.stopReason, StopReason.cancelled);
+      expect(
+        client.sessionById(const SessionId('session-1'))?.turns.single,
+        finalTurn,
+      );
+      expect(changes.map((session) => session.turns.single.status), [
+        PromptTurnStatus.running,
+        PromptTurnStatus.cancelled,
+        PromptTurnStatus.cancelled,
+        PromptTurnStatus.cancelled,
+      ]);
+
+      await subscription.cancel();
+    },
+  );
 
   test(
     'RespondToPermission returns typed failure for unavailable option',
