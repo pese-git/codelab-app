@@ -6,5 +6,6 @@ export 'package:acp_transports/acp_transports.dart'
     show acpTransportsPackageName;
 
 export 'src/domain/domain_models.dart';
+export 'src/domain/state_machines.dart';
 
 const acpClientCorePackageName = 'acp_client_core';
