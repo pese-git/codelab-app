@@ -15,10 +15,12 @@ typedef CodeLabTransportFactory = AcpTransport Function();
 Scope createCodeLabRootScope({CodeLabTransportFactory? transportFactory}) {
   final scope = CherryPick.openRootScope()
     ..installModules([
-      CodeLabRuntimeModule(
+      CodeLabTransportRuntimeModule(
         transportFactory: transportFactory ?? _createDefaultTransport,
       ),
-      $CodeLabRootModuleContract(),
+      $CodeLabTransportsModuleContract(),
+      $CodeLabProtocolApplicationModuleContract(),
+      $CodeLabRootLifecycleModuleContract(),
     ]);
 
   scope.resolve<CodeLabRootLifecycle>();
@@ -30,9 +32,10 @@ Future<void> closeCodeLabRootScope() => CherryPick.closeRootScope();
 CodeLabDependencies codeLabDependenciesOf(BuildContext context) =>
     CodeLabDependenciesScope.of(context);
 
-final class CodeLabRuntimeModule extends Module {
-  CodeLabRuntimeModule({required CodeLabTransportFactory transportFactory})
-    : _transportFactory = transportFactory;
+final class CodeLabTransportRuntimeModule extends Module {
+  CodeLabTransportRuntimeModule({
+    required CodeLabTransportFactory transportFactory,
+  }) : _transportFactory = transportFactory;
 
   final CodeLabTransportFactory _transportFactory;
 
@@ -43,7 +46,7 @@ final class CodeLabRuntimeModule extends Module {
 }
 
 @module()
-abstract class CodeLabRootModuleContract extends Module {
+abstract class CodeLabTransportsModuleContract extends Module {
   @instance()
   @singleton()
   StdioAcpAgentProfile stdioAgentProfile() => codelabAgentStdioProfile;
@@ -52,7 +55,10 @@ abstract class CodeLabRootModuleContract extends Module {
   @singleton()
   AcpTransport transport(CodeLabTransportFactory transportFactory) =>
       transportFactory();
+}
 
+@module()
+abstract class CodeLabProtocolApplicationModuleContract extends Module {
   @provide()
   @singleton()
   AcpClientApplication application(
@@ -62,7 +68,10 @@ abstract class CodeLabRootModuleContract extends Module {
     transport: transport,
     reconnectTransport: transportFactory,
   );
+}
 
+@module()
+abstract class CodeLabRootLifecycleModuleContract extends Module {
   @provide()
   @singleton()
   CodeLabRootLifecycle rootLifecycle(

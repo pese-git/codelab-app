@@ -7,7 +7,8 @@ part of 'app_scope.dart';
 // ModuleGenerator
 // **************************************************************************
 
-final class $CodeLabRootModuleContract extends CodeLabRootModuleContract {
+final class $CodeLabTransportsModuleContract
+    extends CodeLabTransportsModuleContract {
   @override
   void builder(Scope currentScope) {
     bind<StdioAcpAgentProfile>().toInstance(stdioAgentProfile()).singleton();
@@ -16,6 +17,13 @@ final class $CodeLabRootModuleContract extends CodeLabRootModuleContract {
           () => transport(currentScope.resolve<AcpTransport Function()>()),
         )
         .singleton();
+  }
+}
+
+final class $CodeLabProtocolApplicationModuleContract
+    extends CodeLabProtocolApplicationModuleContract {
+  @override
+  void builder(Scope currentScope) {
     bind<AcpClientApplication>()
         .toProvide(
           () => application(
@@ -24,6 +32,13 @@ final class $CodeLabRootModuleContract extends CodeLabRootModuleContract {
           ),
         )
         .singleton();
+  }
+}
+
+final class $CodeLabRootLifecycleModuleContract
+    extends CodeLabRootLifecycleModuleContract {
+  @override
+  void builder(Scope currentScope) {
     bind<CodeLabRootLifecycle>()
         .toProvide(
           () => rootLifecycle(

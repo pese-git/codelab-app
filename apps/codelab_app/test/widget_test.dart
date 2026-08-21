@@ -1,6 +1,7 @@
 import 'package:codelab_app/main.dart';
 import 'package:codelab_app/src/app_scope.dart';
 import 'package:acp_client_core/acp_client_core.dart';
+import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_testing/acp_testing.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,8 +20,14 @@ void main() {
     expect(find.text('Sessions'), findsOneWidget);
     expect(find.text('Transcript'), findsOneWidget);
     expect(find.text('Inspector'), findsOneWidget);
+    expect(
+      scope.resolve<CodeLabTransportFactory>(),
+      isA<CodeLabTransportFactory>(),
+    );
+    expect(scope.resolve<StdioAcpAgentProfile>(), codelabAgentStdioProfile);
     expect(scope.resolve<AcpClientApplication>(), isA<AcpClientApplication>());
     expect(scope.resolve<AcpTransport>(), isA<FakeAcpTransport>());
+    expect(scope.resolve<CodeLabRootLifecycle>(), isA<CodeLabRootLifecycle>());
 
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScope();

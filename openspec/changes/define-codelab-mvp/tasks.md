@@ -43,7 +43,7 @@
 ## 5. Configure dependency injection
 
 - [x] 5.1 Настроить CherryPick v4.x.x root scope в `apps/codelab_app`
-- [ ] 5.2 Разделить DI modules по boundaries: protocol, transports, core/application, UI, platform services
+- [x] 5.2 Разделить DI modules по boundaries: protocol, transports, core/application, UI, platform services
 - [ ] 5.3 Добавить explicit feature/session scopes, если lifecycle dependencies короче app lifecycle
 - [ ] 5.4 Обеспечить, что domain/application classes получают dependencies через constructors/factories
 - [ ] 5.5 Добавить test bindings для fake transport и mock services
