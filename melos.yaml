@@ -33,3 +33,4 @@ scripts:
       - analyze
       - test
       - protocol-conformance
+sdkPath: .fvm/flutter_sdk
