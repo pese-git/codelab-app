@@ -16,6 +16,7 @@ void main() {
     expect(AcpTranscriptEntry, isA<Type>());
     expect(AcpTranscriptEntryKind.toolCall, isA<AcpTranscriptEntryKind>());
     expect(AcpTranscriptPanel, isA<Type>());
+    expect(AcpWorkbenchLayout, isA<Type>());
   });
 
   testWidgets('renders transcript entries and embedded tool summaries', (
@@ -282,6 +283,92 @@ void main() {
 
     expect(find.text('No sessions yet'), findsOneWidget);
   });
+
+  testWidgets('renders workbench desktop regions in left center right order', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 1200,
+          height: 760,
+          child: AcpWorkbenchLayout(
+            commandBar: Text('Command bar slot'),
+            sessionsPane: Text('Sessions slot'),
+            mainPane: Text('Transcript and prompt slot'),
+            inspectorPane: Text('Inspector slot'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(AcpWorkbenchLayout.commandBarKey), findsOneWidget);
+    expect(find.byKey(AcpWorkbenchLayout.sessionsPaneKey), findsOneWidget);
+    expect(find.byKey(AcpWorkbenchLayout.mainPaneKey), findsOneWidget);
+    expect(find.byKey(AcpWorkbenchLayout.inspectorPaneKey), findsOneWidget);
+    expect(find.text('Command bar slot'), findsOneWidget);
+    expect(find.text('Sessions slot'), findsOneWidget);
+    expect(find.text('Transcript and prompt slot'), findsOneWidget);
+    expect(find.text('Inspector slot'), findsOneWidget);
+
+    final sessionsLeft = tester
+        .getTopLeft(find.byKey(AcpWorkbenchLayout.sessionsPaneKey))
+        .dx;
+    final mainLeft = tester
+        .getTopLeft(find.byKey(AcpWorkbenchLayout.mainPaneKey))
+        .dx;
+    final inspectorLeft = tester
+        .getTopLeft(find.byKey(AcpWorkbenchLayout.inspectorPaneKey))
+        .dx;
+
+    expect(sessionsLeft, lessThan(mainLeft));
+    expect(mainLeft, lessThan(inspectorLeft));
+  });
+
+  testWidgets('workbench avoids horizontal overflow at desktop width', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1024, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpWorkbenchLayout(
+          commandBar: const _AcpTestPane(label: 'Command'),
+          sessionsPane: const _AcpTestPane(label: 'Sessions'),
+          mainPane: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Expanded(child: _AcpTestPane(label: 'Transcript')),
+              const SizedBox(height: 12),
+              AcpPromptComposer(onSubmit: acpTestPromptSubmitted),
+            ],
+          ),
+          inspectorPane: const _AcpTestPane(label: 'Inspector'),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
 }
 
 void acpTestSessionSelected(String sessionId) {}
+
+void acpTestPromptSubmitted(String prompt) {}
+
+class _AcpTestPane extends StatelessWidget {
+  const _AcpTestPane({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(border: Border.all(color: Colors.grey)),
+      child: Center(child: Text(label)),
+    );
+  }
+}

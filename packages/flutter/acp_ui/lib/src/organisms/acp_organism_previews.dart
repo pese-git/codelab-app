@@ -8,6 +8,7 @@ import 'acp_connection_screen.dart';
 import 'acp_debug_log_panel.dart';
 import 'acp_session_sidebar.dart';
 import 'acp_transcript_panel.dart';
+import 'acp_workbench_layout.dart';
 
 const acpOrganismPreviewGroup = 'ACP organisms';
 
@@ -167,11 +168,97 @@ Widget acpSessionSidebarPreview() {
   );
 }
 
+@Preview(name: 'Workbench layout', group: acpOrganismPreviewGroup)
+Widget acpWorkbenchLayoutPreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 1180,
+      height: 720,
+      child: AcpWorkbenchLayout(
+        commandBar: const _AcpPreviewCommandBar(),
+        sessionsPane: const AcpSessionSidebar(
+          activeSessionId: 'session-2',
+          onSessionSelected: acpPreviewSessionSelected,
+          onNewSession: acpPreviewNewSession,
+          sessions: [
+            AcpSessionListItem(
+              id: 'session-1',
+              title: 'Repository audit',
+              status: AcpSessionStatus.completed,
+              subtitle: 'Checked protocol package boundaries.',
+              updatedLabel: 'Done 10 min ago',
+            ),
+            AcpSessionListItem(
+              id: 'session-2',
+              title: 'Workbench UI',
+              status: AcpSessionStatus.awaitingApproval,
+              subtitle: 'Composing desktop scaffold.',
+              updatedLabel: 'Active',
+            ),
+          ],
+        ),
+        mainPane: const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: AcpTranscriptPanel(
+                entries: [
+                  AcpTranscriptEntry(
+                    id: 'user-1',
+                    kind: AcpTranscriptEntryKind.user,
+                    title: 'You',
+                    body: 'Create a desktop layout shell for the workbench.',
+                    timestampLabel: '12:04',
+                  ),
+                  AcpTranscriptEntry(
+                    id: 'agent-1',
+                    kind: AcpTranscriptEntryKind.agent,
+                    title: 'Codelab Agent',
+                    body: 'I will keep it slot-based for future app wiring.',
+                    timestampLabel: '12:05',
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 12),
+            AcpPromptComposer(onSubmit: acpPreviewPromptSubmitted),
+          ],
+        ),
+        inspectorPane: AcpApprovalPanel(
+          title: 'Run analyzer',
+          risk: AcpApprovalRisk.shell,
+          reason: 'Verify the package after layout changes.',
+          command: 'fvm dart run melos run analyze',
+          cwd: 'packages/flutter/acp_ui',
+          selectedOptionId: 'allow_once',
+          onOptionSelected: acpPreviewApprovalSelected,
+          options: const [
+            AcpApprovalOption(
+              id: 'allow_once',
+              label: 'Allow once',
+              description: 'Run this command for the active prompt turn.',
+              tone: AcpTone.warning,
+            ),
+            AcpApprovalOption(
+              id: 'reject',
+              label: 'Reject',
+              description: 'Return a denied outcome to the agent.',
+              tone: AcpTone.danger,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 void acpPreviewApprovalSelected(String optionId) {}
 
 void acpPreviewSessionSelected(String sessionId) {}
 
 void acpPreviewNewSession() {}
+
+void acpPreviewPromptSubmitted(String prompt) {}
 
 void acpPreviewConnect() {}
 
@@ -195,3 +282,41 @@ class _AcpOrganismPreviewSurface extends StatelessWidget {
     );
   }
 }
+
+class _AcpPreviewCommandBar extends StatelessWidget {
+  const _AcpPreviewCommandBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: FluentTheme.of(context).scaffoldBackgroundColor,
+        border: Border.all(color: Colors.grey.withAlpha(54)),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(child: AcpText('CodeLab Agent', role: AcpTextRole.title)),
+            AcpStatusIndicator(label: 'Connected', tone: AcpStatusTone.active),
+            SizedBox(width: 8),
+            AcpButton(
+              label: 'Cancel',
+              icon: FluentIcons.cancel,
+              onPressed: acpPreviewCancel,
+            ),
+            SizedBox(width: 8),
+            AcpButton(
+              label: 'Reconnect',
+              icon: FluentIcons.refresh,
+              onPressed: acpPreviewReconnect,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void acpPreviewCancel() {}
