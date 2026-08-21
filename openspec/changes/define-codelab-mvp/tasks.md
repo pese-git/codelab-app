@@ -59,7 +59,7 @@
 - [x] 6.7 Реализовать view modes `summary`, `normal`, `verbose`
 - [x] 6.8 Реализовать command palette/slash commands для `/new`, `/plan`, `/permissions`, `/logs`, `/compact`, `/reconnect`
 - [x] 6.9 Реализовать keyboard shortcuts для prompt submit, cancel, approve/reject и inspector navigation
-- [ ] 6.10 Добавить Flutter widget tests для connection states, transcript, approvals, errors и layout behavior
+- [x] 6.10 Добавить Flutter widget tests для connection states, transcript, approvals, errors и layout behavior
 
 ## 7. Integrate app shell
 

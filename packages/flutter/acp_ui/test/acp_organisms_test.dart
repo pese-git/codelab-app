@@ -64,6 +64,22 @@ void main() {
     expect(find.text('/logs'), findsNothing);
   });
 
+  testWidgets('renders command palette empty filtered state', (tester) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 520,
+          height: 260,
+          child: AcpCommandPaletteSurface(initialQuery: '/missing'),
+        ),
+      ),
+    );
+
+    expect(find.text('No matching commands'), findsOneWidget);
+    expect(find.byKey(AcpCommandPaletteSurface.emptyKey), findsOneWidget);
+    expect(find.text('/new'), findsNothing);
+  });
+
   testWidgets('selects command palette action by typed model', (tester) async {
     AcpCommandAction? selected;
 
@@ -249,6 +265,43 @@ void main() {
     expect(find.text('No transcript yet'), findsOneWidget);
   });
 
+  testWidgets('renders approval and diagnostic transcript entries', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 520,
+          height: 260,
+          child: AcpTranscriptPanel(
+            entries: [
+              AcpTranscriptEntry(
+                id: 'approval-1',
+                kind: AcpTranscriptEntryKind.approval,
+                title: 'Permission required',
+                body: 'The agent wants to run a shell command.',
+              ),
+              AcpTranscriptEntry(
+                id: 'diagnostic-1',
+                kind: AcpTranscriptEntryKind.diagnostic,
+                title: 'Protocol error',
+                body: 'invalid params',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Permission required'), findsOneWidget);
+    expect(
+      find.text('The agent wants to run a shell command.'),
+      findsOneWidget,
+    );
+    expect(find.text('Protocol error'), findsOneWidget);
+    expect(find.text('invalid params'), findsOneWidget);
+  });
+
   testWidgets('renders approval risk details and selects option', (
     tester,
   ) async {
@@ -296,6 +349,36 @@ void main() {
     expect(selected, 'reject');
   });
 
+  testWidgets('keeps disabled approvals from selecting options or shortcuts', (
+    tester,
+  ) async {
+    String? selected;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpApprovalPanel(
+          title: 'Run shell command',
+          risk: AcpApprovalRisk.shell,
+          enabled: false,
+          onOptionSelected: (optionId) => selected = optionId,
+          options: const [
+            AcpApprovalOption(id: 'allow_once', label: 'Allow once'),
+            AcpApprovalOption(id: 'reject', label: 'Reject'),
+          ],
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Allow once'));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(selected, isNull);
+  });
+
   testWidgets('renders connection details and invokes callbacks', (
     tester,
   ) async {
@@ -331,6 +414,59 @@ void main() {
     expect(connected, isTrue);
     expect(reconnected, isTrue);
     expect(edited, isTrue);
+  });
+
+  testWidgets('renders every connection state label', (tester) async {
+    for (final status in AcpConnectionStatus.values) {
+      await tester.pumpWidget(
+        FluentApp(
+          home: SizedBox(
+            width: 520,
+            height: 180,
+            child: AcpConnectionScreen(
+              status: status,
+              transportLabel: 'stdio',
+              profileLabel: 'Codelab Agent',
+              detail: 'state ${status.name}',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text(_connectionStatusLabel(status)), findsOneWidget);
+      expect(find.text('state ${status.name}'), findsOneWidget);
+    }
+  });
+
+  testWidgets('keeps busy connection actions disabled', (tester) async {
+    var connected = false;
+    var reconnected = false;
+    var edited = false;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpConnectionScreen(
+          status: AcpConnectionStatus.connecting,
+          transportLabel: 'stdio',
+          profileLabel: 'Codelab Agent',
+          isBusy: true,
+          onConnect: () => connected = true,
+          onReconnect: () => reconnected = true,
+          onEditProfile: () => edited = true,
+        ),
+      ),
+    );
+
+    expect(find.byType(ProgressRing), findsOneWidget);
+
+    await tester.tap(find.text('Connect'));
+    await tester.tap(find.text('Reconnect'));
+    await tester.tap(find.text('Edit profile'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(connected, isFalse);
+    expect(reconnected, isFalse);
+    expect(edited, isFalse);
   });
 
   testWidgets('renders debug log entries and clear callback', (tester) async {
@@ -623,11 +759,59 @@ void main() {
       );
     },
   );
+
+  testWidgets('workbench applies custom desktop pane dimensions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 1200,
+          height: 720,
+          child: AcpWorkbenchLayout(
+            sessionsPaneWidth: 240,
+            inspectorPaneWidth: 360,
+            commandBar: _AcpTestPane(label: 'Command'),
+            sessionsPane: _AcpTestPane(label: 'Sessions'),
+            mainPane: _AcpTestPane(label: 'Main'),
+            inspectorPane: _AcpTestPane(label: 'Inspector'),
+          ),
+        ),
+      ),
+    );
+
+    final sessionsSize = tester.getSize(
+      find.byKey(AcpWorkbenchLayout.sessionsPaneKey),
+    );
+    final inspectorSize = tester.getSize(
+      find.byKey(AcpWorkbenchLayout.inspectorPaneKey),
+    );
+
+    expect(sessionsSize.width, 240);
+    expect(inspectorSize.width, 360);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 void acpTestSessionSelected(String sessionId) {}
 
 void acpTestPromptSubmitted(String prompt) {}
+
+String _connectionStatusLabel(AcpConnectionStatus status) {
+  return switch (status) {
+    AcpConnectionStatus.idle => 'Idle',
+    AcpConnectionStatus.connecting => 'Connecting',
+    AcpConnectionStatus.connected => 'Connected',
+    AcpConnectionStatus.reconnecting => 'Reconnecting',
+    AcpConnectionStatus.disconnected => 'Disconnected',
+    AcpConnectionStatus.failed => 'Failed',
+  };
+}
 
 class _AcpTestPane extends StatelessWidget {
   const _AcpTestPane({required this.label});
