@@ -26,22 +26,27 @@ final class MissingAcpSessionException extends AcpClientApplicationException {
   final SessionId sessionId;
 }
 
+typedef AcpTransportFactory = FutureOr<AcpTransport> Function();
+
 final class AcpClientApplication {
-  AcpClientApplication({required AcpTransport transport})
-    : _transport = transport {
-    _inboundSubscription = _transport.inbound.listen(_handleInboundMessage);
-    _eventSubscription = _transport.events.listen(_handleTransportEvent);
+  AcpClientApplication({
+    required AcpTransport transport,
+    AcpTransportFactory? reconnectTransport,
+  }) : _transport = transport,
+       _reconnectTransport = reconnectTransport {
+    _bindTransport();
   }
 
-  final AcpTransport _transport;
+  AcpTransport _transport;
+  final AcpTransportFactory? _reconnectTransport;
   final _pendingRequests = <JsonRpcId, _PendingAcpRequest>{};
   final _pendingPermissionRequests =
       <ApprovalRequestId, _PendingPermissionRequest>{};
   final _sessions = <SessionId, AcpSession>{};
   final _sessionController = StreamController<AcpSession>.broadcast(sync: true);
 
-  late final StreamSubscription<JsonRpcMessage> _inboundSubscription;
-  late final StreamSubscription<AcpTransportEvent> _eventSubscription;
+  late StreamSubscription<JsonRpcMessage> _inboundSubscription;
+  late StreamSubscription<AcpTransportEvent> _eventSubscription;
 
   var _nextRequestId = 1;
   var _nextTurnId = 1;
@@ -183,6 +188,39 @@ final class AcpClientApplication {
     return cancelled.turns.last;
   }
 
+  Future<AcpTransportState> reconnect(ReconnectCommand command) async {
+    final createTransport = _reconnectTransport;
+    if (createTransport == null) {
+      throw const StateTransitionException(
+        'reconnect requires a replacement transport factory',
+      );
+    }
+
+    await _inboundSubscription.cancel();
+    await _eventSubscription.cancel();
+    _failPendingRequests(
+      const AcpClientApplicationException(
+        'ACP transport was replaced during reconnect.',
+      ),
+    );
+    _pendingPermissionRequests.clear();
+    await _transport.close(timeout: command.closeTimeout);
+
+    _transport = await createTransport();
+    _bindTransport();
+
+    try {
+      await _transport.start();
+    } on Object catch (error) {
+      throw AcpClientApplicationException(
+        'Failed to reconnect ACP transport.',
+        cause: error,
+      );
+    }
+
+    return _transport.state;
+  }
+
   Future<ApprovalRequest> respondToPermission(
     RespondToPermissionCommand command,
   ) async {
@@ -233,12 +271,9 @@ final class AcpClientApplication {
   Future<void> dispose() async {
     await _inboundSubscription.cancel();
     await _eventSubscription.cancel();
-    for (final pending in _pendingRequests.values) {
-      pending.completeError(
-        const AcpClientApplicationException('ACP application disposed.'),
-      );
-    }
-    _pendingRequests.clear();
+    _failPendingRequests(
+      const AcpClientApplicationException('ACP application disposed.'),
+    );
     _pendingPermissionRequests.clear();
     await _sessionController.close();
   }
@@ -287,6 +322,18 @@ final class AcpClientApplication {
         cause: error,
       );
     }
+  }
+
+  void _bindTransport() {
+    _inboundSubscription = _transport.inbound.listen(_handleInboundMessage);
+    _eventSubscription = _transport.events.listen(_handleTransportEvent);
+  }
+
+  void _failPendingRequests(Object error) {
+    for (final pending in _pendingRequests.values) {
+      pending.completeError(error);
+    }
+    _pendingRequests.clear();
   }
 
   void _handleInboundMessage(JsonRpcMessage message) {

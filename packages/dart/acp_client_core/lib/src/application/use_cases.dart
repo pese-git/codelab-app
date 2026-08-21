@@ -11,6 +11,8 @@ typedef CreateSessionResult =
 typedef LoadSessionResult = TaskEither<AcpClientApplicationFailure, AcpSession>;
 typedef SendPromptResult = TaskEither<AcpClientApplicationFailure, PromptTurn>;
 typedef CancelTurnResult = TaskEither<AcpClientApplicationFailure, PromptTurn>;
+typedef ReconnectResult =
+    TaskEither<AcpClientApplicationFailure, AcpTransportState>;
 typedef RespondToPermissionResult =
     TaskEither<AcpClientApplicationFailure, ApprovalRequest>;
 
@@ -61,6 +63,19 @@ final class CancelTurn {
   CancelTurnResult call(CancelTurnCommand command) {
     return TaskEither.tryCatch(
       () => _client.cancelTurn(command),
+      _mapApplicationFailure,
+    );
+  }
+}
+
+final class Reconnect {
+  const Reconnect(this._client);
+
+  final AcpClientApplication _client;
+
+  ReconnectResult call(ReconnectCommand command) {
+    return TaskEither.tryCatch(
+      () => _client.reconnect(command),
       _mapApplicationFailure,
     );
   }

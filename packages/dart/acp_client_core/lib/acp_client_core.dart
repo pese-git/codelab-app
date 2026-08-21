@@ -3,7 +3,12 @@ library;
 
 export 'package:acp_protocol/acp_protocol.dart' show acpProtocolPackageName;
 export 'package:acp_transports/acp_transports.dart'
-    show acpTransportsPackageName;
+    show
+        AcpTransport,
+        AcpTransportErrorCode,
+        AcpTransportException,
+        AcpTransportState,
+        acpTransportsPackageName;
 
 export 'src/application/acp_client_application.dart';
 export 'src/application/application_models.dart';

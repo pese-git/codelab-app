@@ -122,6 +122,35 @@ void main() {
     }, (_) => fail('expected transport failure'));
   });
 
+  test('Reconnect replaces transport and starts the replacement', () async {
+    await client.dispose();
+    final replacement = FakeAcpTransport();
+    client = AcpClientApplication(
+      transport: transport,
+      reconnectTransport: () => replacement,
+    );
+
+    final result = await Reconnect(client)(const ReconnectCommand()).run();
+
+    expect(
+      result.getOrElse((failure) => fail('$failure')),
+      AcpTransportState.connected,
+    );
+    expect(transport.state, AcpTransportState.closed);
+    expect(replacement.state, AcpTransportState.connected);
+
+    await replacement.close();
+  });
+
+  test('Reconnect returns typed failure without transport factory', () async {
+    final result = await Reconnect(client)(const ReconnectCommand()).run();
+
+    expect(result.isLeft(), isTrue);
+    result.match((failure) {
+      expect(failure, isA<AcpClientStateRejectedFailure>());
+    }, (_) => fail('expected state failure'));
+  });
+
   test('SendPrompt streams updates and completes from stopReason', () async {
     await _createSession(client, transport);
     transport.drainSentMessages();

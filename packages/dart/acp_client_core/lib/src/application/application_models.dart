@@ -51,6 +51,13 @@ sealed class CancelTurnCommand with _$CancelTurnCommand {
 }
 
 @freezed
+sealed class ReconnectCommand with _$ReconnectCommand {
+  const ReconnectCommand._();
+
+  const factory ReconnectCommand({Duration? closeTimeout}) = _ReconnectCommand;
+}
+
+@freezed
 sealed class RespondToPermissionCommand with _$RespondToPermissionCommand {
   const RespondToPermissionCommand._();
 

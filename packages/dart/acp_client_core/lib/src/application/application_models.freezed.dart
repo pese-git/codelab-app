@@ -1144,6 +1144,257 @@ $SessionIdCopyWith<$Res> get sessionId {
 }
 
 /// @nodoc
+mixin _$ReconnectCommand {
+
+ Duration? get closeTimeout;
+/// Create a copy of ReconnectCommand
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ReconnectCommandCopyWith<ReconnectCommand> get copyWith => _$ReconnectCommandCopyWithImpl<ReconnectCommand>(this as ReconnectCommand, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ReconnectCommand&&(identical(other.closeTimeout, closeTimeout) || other.closeTimeout == closeTimeout));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,closeTimeout);
+
+@override
+String toString() {
+  return 'ReconnectCommand(closeTimeout: $closeTimeout)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ReconnectCommandCopyWith<$Res>  {
+  factory $ReconnectCommandCopyWith(ReconnectCommand value, $Res Function(ReconnectCommand) _then) = _$ReconnectCommandCopyWithImpl;
+@useResult
+$Res call({
+ Duration? closeTimeout
+});
+
+
+
+
+}
+/// @nodoc
+class _$ReconnectCommandCopyWithImpl<$Res>
+    implements $ReconnectCommandCopyWith<$Res> {
+  _$ReconnectCommandCopyWithImpl(this._self, this._then);
+
+  final ReconnectCommand _self;
+  final $Res Function(ReconnectCommand) _then;
+
+/// Create a copy of ReconnectCommand
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? closeTimeout = freezed,}) {
+  return _then(_self.copyWith(
+closeTimeout: freezed == closeTimeout ? _self.closeTimeout : closeTimeout // ignore: cast_nullable_to_non_nullable
+as Duration?,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [ReconnectCommand].
+extension ReconnectCommandPatterns on ReconnectCommand {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _ReconnectCommand value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _ReconnectCommand() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _ReconnectCommand value)  $default,){
+final _that = this;
+switch (_that) {
+case _ReconnectCommand():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _ReconnectCommand value)?  $default,){
+final _that = this;
+switch (_that) {
+case _ReconnectCommand() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( Duration? closeTimeout)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _ReconnectCommand() when $default != null:
+return $default(_that.closeTimeout);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( Duration? closeTimeout)  $default,) {final _that = this;
+switch (_that) {
+case _ReconnectCommand():
+return $default(_that.closeTimeout);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( Duration? closeTimeout)?  $default,) {final _that = this;
+switch (_that) {
+case _ReconnectCommand() when $default != null:
+return $default(_that.closeTimeout);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class _ReconnectCommand extends ReconnectCommand {
+  const _ReconnectCommand({this.closeTimeout}): super._();
+  
+
+@override final  Duration? closeTimeout;
+
+/// Create a copy of ReconnectCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$ReconnectCommandCopyWith<_ReconnectCommand> get copyWith => __$ReconnectCommandCopyWithImpl<_ReconnectCommand>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ReconnectCommand&&(identical(other.closeTimeout, closeTimeout) || other.closeTimeout == closeTimeout));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,closeTimeout);
+
+@override
+String toString() {
+  return 'ReconnectCommand(closeTimeout: $closeTimeout)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$ReconnectCommandCopyWith<$Res> implements $ReconnectCommandCopyWith<$Res> {
+  factory _$ReconnectCommandCopyWith(_ReconnectCommand value, $Res Function(_ReconnectCommand) _then) = __$ReconnectCommandCopyWithImpl;
+@override @useResult
+$Res call({
+ Duration? closeTimeout
+});
+
+
+
+
+}
+/// @nodoc
+class __$ReconnectCommandCopyWithImpl<$Res>
+    implements _$ReconnectCommandCopyWith<$Res> {
+  __$ReconnectCommandCopyWithImpl(this._self, this._then);
+
+  final _ReconnectCommand _self;
+  final $Res Function(_ReconnectCommand) _then;
+
+/// Create a copy of ReconnectCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? closeTimeout = freezed,}) {
+  return _then(_ReconnectCommand(
+closeTimeout: freezed == closeTimeout ? _self.closeTimeout : closeTimeout // ignore: cast_nullable_to_non_nullable
+as Duration?,
+  ));
+}
+
+
+}
+
+/// @nodoc
 mixin _$RespondToPermissionCommand {
 
  SessionId get sessionId; ApprovalRequestId get approvalId; Map<String, Object?>? get meta;
