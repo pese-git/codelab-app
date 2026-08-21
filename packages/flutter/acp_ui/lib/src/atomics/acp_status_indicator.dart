@@ -1,5 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
+import 'acp_icon.dart';
+import 'acp_tone.dart';
+
 enum AcpStatusTone { idle, active, warning, danger }
 
 class AcpStatusIndicator extends StatelessWidget {
@@ -14,20 +17,22 @@ class AcpStatusIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (tone) {
-      AcpStatusTone.idle => Colors.grey,
-      AcpStatusTone.active => Colors.green,
-      AcpStatusTone.warning => Colors.warningPrimaryColor,
-      AcpStatusTone.danger => Colors.red,
-    };
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(FluentIcons.circle_fill, size: 8, color: color),
+        AcpIcon(FluentIcons.circle_fill, size: 8, tone: _toneForStatus(tone)),
         const SizedBox(width: 8),
         Text(label),
       ],
     );
   }
+}
+
+AcpTone _toneForStatus(AcpStatusTone tone) {
+  return switch (tone) {
+    AcpStatusTone.idle => AcpTone.neutral,
+    AcpStatusTone.active => AcpTone.success,
+    AcpStatusTone.warning => AcpTone.warning,
+    AcpStatusTone.danger => AcpTone.danger,
+  };
 }
