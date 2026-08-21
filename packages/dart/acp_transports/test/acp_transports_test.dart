@@ -182,6 +182,175 @@ void main() {
       ]),
     );
   });
+
+  test('StdioAcpTransport reports unexpected process exit', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'stdio_acp_transport_exit_test_',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+
+    final agent = File('${tempDir.path}/exit_agent.dart');
+    await agent.writeAsString('''
+import 'dart:io';
+
+void main() {
+  stderr.writeln('agent exiting');
+  exitCode = 42;
+}
+''');
+
+    final transport = StdioAcpTransport(
+      StdioAcpTransportConfig(command: _dartExecutable(), args: [agent.path]),
+    );
+    addTearDown(transport.close);
+
+    final failure = transport.events
+        .where((event) => event is AcpTransportFailure)
+        .cast<AcpTransportFailure>()
+        .map((event) => event.error)
+        .first;
+
+    await transport.start();
+
+    expect(
+      await failure.timeout(const Duration(seconds: 5)),
+      isA<AcpTransportException>()
+          .having(
+            (error) => error.code,
+            'code',
+            AcpTransportErrorCode.disconnected,
+          )
+          .having(
+            (error) => error.message,
+            'message',
+            contains('exited unexpectedly'),
+          ),
+    );
+    expect(transport.state, AcpTransportState.failed);
+  });
+
+  test('StdioAcpTransport closes stdin and waits for graceful exit', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'stdio_acp_transport_graceful_close_test_',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+
+    final marker = File('${tempDir.path}/stdin_closed.txt');
+    final agent = File('${tempDir.path}/graceful_agent.dart');
+    await agent.writeAsString('''
+import 'dart:convert';
+import 'dart:io';
+
+Future<void> main(List<String> args) async {
+  await stdin.transform(utf8.decoder).drain<void>();
+  await File(args.single).writeAsString('closed');
+}
+''');
+
+    final transport = StdioAcpTransport(
+      StdioAcpTransportConfig(
+        command: _dartExecutable(),
+        args: [agent.path, marker.path],
+      ),
+    );
+
+    await transport.start();
+    await transport.close(timeout: const Duration(seconds: 5));
+
+    expect(transport.state, AcpTransportState.closed);
+    expect(await marker.readAsString(), 'closed');
+  });
+
+  test(
+    'StdioAcpTransport maps invalid stdout JSON to protocol failure',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'stdio_acp_transport_invalid_json_test_',
+      );
+      addTearDown(() => tempDir.delete(recursive: true));
+
+      final agent = File('${tempDir.path}/invalid_json_agent.dart');
+      await agent.writeAsString('''
+import 'dart:io';
+
+void main() {
+  stdout.writeln('{not json');
+}
+''');
+
+      final transport = StdioAcpTransport(
+        StdioAcpTransportConfig(command: _dartExecutable(), args: [agent.path]),
+      );
+      addTearDown(transport.close);
+
+      final failure = transport.events
+          .where((event) => event is AcpTransportFailure)
+          .cast<AcpTransportFailure>()
+          .map((event) => event.error)
+          .first;
+
+      await transport.start();
+
+      expect(
+        await failure.timeout(const Duration(seconds: 5)),
+        isA<AcpTransportException>()
+            .having(
+              (error) => error.code,
+              'code',
+              AcpTransportErrorCode.protocolViolation,
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              contains('invalid ACP JSON-RPC'),
+            ),
+      );
+      expect(transport.state, AcpTransportState.failed);
+    },
+  );
+
+  test('StdioAcpTransport keeps stderr diagnostics out of inbound', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'stdio_acp_transport_stderr_test_',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+
+    final agent = File('${tempDir.path}/stderr_agent.dart');
+    await agent.writeAsString('''
+import 'dart:io';
+
+void main() async {
+  stderr.writeln('diagnostic only');
+  await Future<void>.delayed(const Duration(milliseconds: 200));
+}
+''');
+
+    final transport = StdioAcpTransport(
+      StdioAcpTransportConfig(command: _dartExecutable(), args: [agent.path]),
+    );
+    addTearDown(transport.close);
+
+    final diagnostic = transport.events
+        .where((event) => event is AcpTransportDiagnostic)
+        .cast<AcpTransportDiagnostic>()
+        .firstWhere((event) => event.message == 'diagnostic only');
+    var inboundCount = 0;
+    final inboundSubscription = transport.inbound.listen((_) {
+      inboundCount += 1;
+    });
+    addTearDown(inboundSubscription.cancel);
+
+    await transport.start();
+
+    expect(
+      await diagnostic.timeout(const Duration(seconds: 5)),
+      isA<AcpTransportDiagnostic>()
+          .having((event) => event.message, 'message', 'diagnostic only')
+          .having((event) => event.source, 'source', 'stderr'),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(inboundCount, 0);
+  });
 }
 
 String _dartExecutable() {

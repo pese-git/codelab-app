@@ -33,6 +33,7 @@ final class StdioAcpTransport implements AcpTransport {
   final _subscriptions = <StreamSubscription<void>>[];
 
   Process? _process;
+  Future<int>? _exitCode;
   AcpTransportState _state = AcpTransportState.idle;
   var _isClosed = false;
 
@@ -64,6 +65,7 @@ final class StdioAcpTransport implements AcpTransport {
         environment: config.env.isEmpty ? null : config.env,
       );
       _process = process;
+      _exitCode = process.exitCode;
       _listenToProcess(process);
       _setState(AcpTransportState.connected);
     } on Object catch (error, stackTrace) {
@@ -105,10 +107,21 @@ final class StdioAcpTransport implements AcpTransport {
     _setState(AcpTransportState.closing);
     _isClosed = true;
 
+    final process = _process;
+    final exitCode = _exitCode;
+
     try {
-      await _process?.stdin.close();
+      await process?.stdin.close();
     } on Object {
-      // The process may already have exited; lifecycle hardening follows in 3.4.
+      // The process may already have exited.
+    }
+
+    if (process != null && exitCode != null) {
+      await _waitForProcessExit(
+        process,
+        exitCode,
+        timeout ?? const Duration(seconds: 5),
+      );
     }
 
     for (final subscription in _subscriptions) {
@@ -116,8 +129,8 @@ final class StdioAcpTransport implements AcpTransport {
     }
     _subscriptions.clear();
 
-    _process?.kill();
     _process = null;
+    _exitCode = null;
 
     _setState(AcpTransportState.closed);
     await _inboundController.close();
@@ -125,6 +138,12 @@ final class StdioAcpTransport implements AcpTransport {
   }
 
   void _listenToProcess(Process process) {
+    unawaited(
+      process.exitCode.then((exitCode) {
+        _handleProcessExit(exitCode);
+      }),
+    );
+
     _subscriptions
       ..add(
         process.stdout
@@ -162,6 +181,32 @@ final class StdioAcpTransport implements AcpTransport {
               },
             ),
       );
+  }
+
+  Future<void> _waitForProcessExit(
+    Process process,
+    Future<int> exitCode,
+    Duration timeout,
+  ) async {
+    try {
+      await exitCode.timeout(timeout);
+    } on TimeoutException {
+      process.kill();
+      await exitCode;
+    }
+  }
+
+  void _handleProcessExit(int exitCode) {
+    if (_isClosed || _state == AcpTransportState.failed) {
+      return;
+    }
+
+    _fail(
+      AcpTransportException(
+        code: AcpTransportErrorCode.disconnected,
+        message: 'Stdio ACP agent exited unexpectedly with code $exitCode.',
+      ),
+    );
   }
 
   void _handleStdoutLine(String line) {
