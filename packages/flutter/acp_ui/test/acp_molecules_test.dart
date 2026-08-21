@@ -6,12 +6,43 @@ void main() {
   test('exports molecules through the public package API', () {
     expect(AcpApprovalOption, isA<Type>());
     expect(AcpApprovalOptionGroup, isA<Type>());
+    expect(AcpCommandAction, isA<Type>());
     expect(AcpConnectionStatus.connected, isA<AcpConnectionStatus>());
     expect(AcpConnectionStatusRow, isA<Type>());
     expect(AcpPromptComposer, isA<Type>());
     expect(AcpToolCallStatus.running, isA<AcpToolCallStatus>());
     expect(AcpToolCallSummary, isA<Type>());
     expect(AcpViewMode.normal, isA<AcpViewMode>());
+  });
+
+  test('filters command actions by slash command, label, and description', () {
+    expect(AcpCommandAction.defaults, hasLength(6));
+    expect(
+      AcpCommandAction.defaults.map((action) => action.slashCommand),
+      containsAll([
+        '/new',
+        '/plan',
+        '/permissions',
+        '/logs',
+        '/compact',
+        '/reconnect',
+      ]),
+    );
+
+    expect(
+      AcpCommandAction.filter(
+        AcpCommandAction.defaults,
+        '/per',
+      ).single.slashCommand,
+      '/permissions',
+    );
+    expect(
+      AcpCommandAction.filter(
+        AcpCommandAction.defaults,
+        'diagnostic',
+      ).single.slashCommand,
+      '/logs',
+    );
   });
 
   testWidgets('submits prompt text and clears the composer', (tester) async {

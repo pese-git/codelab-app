@@ -6,6 +6,7 @@ void main() {
   test('exports organisms through the public package API', () {
     expect(AcpApprovalPanel, isA<Type>());
     expect(AcpApprovalRisk.shell, isA<AcpApprovalRisk>());
+    expect(AcpCommandPaletteSurface, isA<Type>());
     expect(AcpConnectionScreen, isA<Type>());
     expect(AcpDebugLogEntry, isA<Type>());
     expect(AcpDebugLogPanel, isA<Type>());
@@ -17,6 +18,71 @@ void main() {
     expect(AcpTranscriptEntryKind.toolCall, isA<AcpTranscriptEntryKind>());
     expect(AcpTranscriptPanel, isA<Type>());
     expect(AcpWorkbenchLayout, isA<Type>());
+  });
+
+  testWidgets('renders command palette default command list', (tester) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 520,
+          height: 360,
+          child: AcpCommandPaletteSurface(),
+        ),
+      ),
+    );
+
+    expect(find.text('Command palette'), findsOneWidget);
+    expect(find.text('/new'), findsOneWidget);
+    expect(find.text('/plan'), findsOneWidget);
+    expect(find.text('/permissions'), findsOneWidget);
+    expect(find.text('/logs'), findsOneWidget);
+    expect(find.text('/compact'), findsOneWidget);
+    expect(find.text('/reconnect'), findsOneWidget);
+  });
+
+  testWidgets('filters command palette from slash input', (tester) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 520,
+          height: 360,
+          child: AcpCommandPaletteSurface(),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(AcpCommandPaletteSurface.queryFieldKey),
+      '/perm',
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('/permissions'), findsOneWidget);
+    expect(find.text('/new'), findsNothing);
+    expect(find.text('/logs'), findsNothing);
+  });
+
+  testWidgets('selects command palette action by typed model', (tester) async {
+    AcpCommandAction? selected;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 520,
+          height: 360,
+          child: AcpCommandPaletteSurface(
+            selectedActionId: 'logs',
+            onActionSelected: (action) => selected = action,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('/logs'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(selected?.id, 'logs');
+    expect(selected?.slashCommand, '/logs');
   });
 
   testWidgets('renders transcript entries and embedded tool summaries', (

@@ -50,6 +50,15 @@ void main() {
     await tester.pumpWidget(acpSessionSidebarPreview());
     expect(tester.takeException(), isNull);
 
+    await tester.pumpWidget(acpCommandPaletteEmptyQueryPreview());
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(acpCommandPaletteFilteredPreview());
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(acpCommandPaletteSelectedPreview());
+    expect(tester.takeException(), isNull);
+
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);

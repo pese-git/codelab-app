@@ -4,6 +4,7 @@ import 'package:flutter/widget_previews.dart';
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
 import 'acp_approval_panel.dart';
+import 'acp_command_palette_surface.dart';
 import 'acp_connection_screen.dart';
 import 'acp_debug_log_panel.dart';
 import 'acp_session_sidebar.dart';
@@ -266,6 +267,57 @@ Widget acpSessionSidebarPreview() {
 }
 
 @Preview(
+  name: 'Command palette empty query',
+  group: acpOrganismPreviewGroup,
+  size: Size(520, 360),
+)
+Widget acpCommandPaletteEmptyQueryPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 520,
+      height: 360,
+      child: AcpCommandPaletteSurface(onActionSelected: acpPreviewCommand),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Command palette filtered',
+  group: acpOrganismPreviewGroup,
+  size: Size(520, 260),
+)
+Widget acpCommandPaletteFilteredPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 520,
+      height: 260,
+      child: AcpCommandPaletteSurface(
+        initialQuery: '/log',
+        onActionSelected: acpPreviewCommand,
+      ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Command palette selected',
+  group: acpOrganismPreviewGroup,
+  size: Size(520, 360),
+)
+Widget acpCommandPaletteSelectedPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 520,
+      height: 360,
+      child: AcpCommandPaletteSurface(
+        selectedActionId: 'permissions',
+        onActionSelected: acpPreviewCommand,
+      ),
+    ),
+  );
+}
+
+@Preview(
   name: 'Workbench layout desktop',
   group: acpOrganismPreviewGroup,
   size: Size(1180, 720),
@@ -295,6 +347,8 @@ Widget acpWorkbenchLayoutNarrowPreview() {
 void acpPreviewApprovalSelected(String optionId) {}
 
 void acpPreviewSessionSelected(String sessionId) {}
+
+void acpPreviewCommand(AcpCommandAction action) {}
 
 void acpPreviewNewSession() {}
 
