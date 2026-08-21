@@ -188,86 +188,30 @@ Widget acpSessionSidebarPreview() {
 }
 
 @Preview(
-  name: 'Workbench layout',
+  name: 'Workbench layout desktop',
   group: acpOrganismPreviewGroup,
   size: Size(1180, 720),
 )
 Widget acpWorkbenchLayoutPreview() {
-  return _AcpOrganismPreviewSurface(
-    child: AcpWorkbenchLayout(
-      commandBar: const _AcpPreviewCommandBar(),
-      sessionsPane: const AcpSessionSidebar(
-        activeSessionId: 'session-2',
-        onSessionSelected: acpPreviewSessionSelected,
-        sessions: [
-          AcpSessionListItem(
-            id: 'session-1',
-            title: 'Repository audit',
-            status: AcpSessionStatus.completed,
-            subtitle: 'Checked protocol package boundaries.',
-            updatedLabel: 'Done 10 min ago',
-          ),
-          AcpSessionListItem(
-            id: 'session-2',
-            title: 'Workbench UI',
-            status: AcpSessionStatus.awaitingApproval,
-            subtitle: 'Composing desktop scaffold.',
-            updatedLabel: 'Active',
-          ),
-        ],
-      ),
-      mainPane: const Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: AcpTranscriptPanel(
-              entries: [
-                AcpTranscriptEntry(
-                  id: 'user-1',
-                  kind: AcpTranscriptEntryKind.user,
-                  title: 'You',
-                  body: 'Create a desktop layout shell for the workbench.',
-                  timestampLabel: '12:04',
-                ),
-                AcpTranscriptEntry(
-                  id: 'agent-1',
-                  kind: AcpTranscriptEntryKind.agent,
-                  title: 'Codelab Agent',
-                  body: 'I will keep it slot-based for future app wiring.',
-                  timestampLabel: '12:05',
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 12),
-          AcpPromptComposer(onSubmit: acpPreviewPromptSubmitted),
-        ],
-      ),
-      inspectorPane: AcpApprovalPanel(
-        title: 'Run analyzer',
-        risk: AcpApprovalRisk.shell,
-        reason: 'Verify the package after layout changes.',
-        command: 'fvm dart run melos run analyze',
-        cwd: 'packages/flutter/acp_ui',
-        selectedOptionId: 'allow_once',
-        onOptionSelected: acpPreviewApprovalSelected,
-        options: const [
-          AcpApprovalOption(
-            id: 'allow_once',
-            label: 'Allow once',
-            description: 'Run this command for the active prompt turn.',
-            tone: AcpTone.warning,
-          ),
-          AcpApprovalOption(
-            id: 'reject',
-            label: 'Reject',
-            description: 'Return a denied outcome to the agent.',
-            tone: AcpTone.danger,
-          ),
-        ],
-      ),
-    ),
-  );
+  return _AcpOrganismPreviewSurface(child: _AcpPreviewWorkbench());
+}
+
+@Preview(
+  name: 'Workbench layout medium',
+  group: acpOrganismPreviewGroup,
+  size: Size(860, 720),
+)
+Widget acpWorkbenchLayoutMediumPreview() {
+  return _AcpOrganismPreviewSurface(child: _AcpPreviewWorkbench());
+}
+
+@Preview(
+  name: 'Workbench layout narrow',
+  group: acpOrganismPreviewGroup,
+  size: Size(430, 720),
+)
+Widget acpWorkbenchLayoutNarrowPreview() {
+  return _AcpOrganismPreviewSurface(child: _AcpPreviewWorkbench());
 }
 
 void acpPreviewApprovalSelected(String optionId) {}
@@ -345,3 +289,84 @@ class _AcpPreviewCommandBar extends StatelessWidget {
 }
 
 void acpPreviewCancel() {}
+
+class _AcpPreviewWorkbench extends StatelessWidget {
+  const _AcpPreviewWorkbench();
+
+  @override
+  Widget build(BuildContext context) {
+    return AcpWorkbenchLayout(
+      commandBar: const _AcpPreviewCommandBar(),
+      sessionsPane: const AcpSessionSidebar(
+        activeSessionId: 'session-2',
+        onSessionSelected: acpPreviewSessionSelected,
+        sessions: [
+          AcpSessionListItem(
+            id: 'session-1',
+            title: 'Repository audit',
+            status: AcpSessionStatus.completed,
+            subtitle: 'Checked protocol package boundaries.',
+            updatedLabel: 'Done 10 min ago',
+          ),
+          AcpSessionListItem(
+            id: 'session-2',
+            title: 'Workbench UI',
+            status: AcpSessionStatus.awaitingApproval,
+            subtitle: 'Composing desktop scaffold.',
+            updatedLabel: 'Active',
+          ),
+        ],
+      ),
+      mainPane: const Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: AcpTranscriptPanel(
+              entries: [
+                AcpTranscriptEntry(
+                  id: 'user-1',
+                  kind: AcpTranscriptEntryKind.user,
+                  title: 'You',
+                  body: 'Create a desktop layout shell for the workbench.',
+                  timestampLabel: '12:04',
+                ),
+                AcpTranscriptEntry(
+                  id: 'agent-1',
+                  kind: AcpTranscriptEntryKind.agent,
+                  title: 'Codelab Agent',
+                  body: 'I will keep it slot-based for future app wiring.',
+                  timestampLabel: '12:05',
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 12),
+          AcpPromptComposer(onSubmit: acpPreviewPromptSubmitted),
+        ],
+      ),
+      inspectorPane: AcpApprovalPanel(
+        title: 'Run analyzer',
+        risk: AcpApprovalRisk.shell,
+        reason: 'Verify the package after layout changes.',
+        command: 'fvm dart run melos run analyze',
+        cwd: 'packages/flutter/acp_ui',
+        selectedOptionId: 'allow_once',
+        onOptionSelected: acpPreviewApprovalSelected,
+        options: const [
+          AcpApprovalOption(
+            id: 'allow_once',
+            label: 'Allow once',
+            description: 'Run this command for the active prompt turn.',
+            tone: AcpTone.warning,
+          ),
+          AcpApprovalOption(
+            id: 'reject',
+            label: 'Reject',
+            description: 'Return a denied outcome to the agent.',
+            tone: AcpTone.danger,
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -287,6 +287,11 @@ void main() {
   testWidgets('renders workbench desktop regions in left center right order', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(1200, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       const FluentApp(
         home: SizedBox(
@@ -353,6 +358,97 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'workbench compacts sessions and moves inspector below on medium width',
+    (tester) async {
+      tester.view.physicalSize = const Size(860, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpWorkbenchLayout(
+            commandBar: const _AcpTestPane(label: 'Command'),
+            sessionsPane: const _AcpTestPane(label: 'Sessions'),
+            mainPane: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Expanded(child: _AcpTestPane(label: 'Transcript')),
+                const SizedBox(height: 12),
+                AcpPromptComposer(onSubmit: acpTestPromptSubmitted),
+              ],
+            ),
+            inspectorPane: const _AcpTestPane(label: 'Inspector'),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+
+      final sessionsSize = tester.getSize(
+        find.byKey(AcpWorkbenchLayout.sessionsPaneKey),
+      );
+      final mainTop = tester
+          .getTopLeft(find.byKey(AcpWorkbenchLayout.mainPaneKey))
+          .dy;
+      final inspectorTop = tester
+          .getTopLeft(find.byKey(AcpWorkbenchLayout.inspectorPaneKey))
+          .dy;
+      final mainLeft = tester
+          .getTopLeft(find.byKey(AcpWorkbenchLayout.mainPaneKey))
+          .dx;
+      final inspectorLeft = tester
+          .getTopLeft(find.byKey(AcpWorkbenchLayout.inspectorPaneKey))
+          .dx;
+
+      expect(sessionsSize.width, 176);
+      expect(inspectorTop, greaterThan(mainTop));
+      expect(inspectorLeft, mainLeft);
+    },
+  );
+
+  testWidgets(
+    'workbench keeps narrow width focused on main pane without overflow',
+    (tester) async {
+      tester.view.physicalSize = const Size(430, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpWorkbenchLayout(
+            commandBar: const _AcpTestPane(label: 'Command'),
+            sessionsPane: const _AcpTestPane(label: 'Sessions'),
+            mainPane: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Expanded(child: _AcpTestPane(label: 'Transcript')),
+                const SizedBox(height: 12),
+                AcpPromptComposer(onSubmit: acpTestPromptSubmitted),
+              ],
+            ),
+            inspectorPane: const _AcpTestPane(label: 'Inspector'),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Transcript'), findsOneWidget);
+      expect(find.text('Sessions'), findsNothing);
+      expect(find.text('Inspector'), findsNothing);
+      expect(
+        find.byKey(AcpWorkbenchLayout.sessionsPaneKey, skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(AcpWorkbenchLayout.inspectorPaneKey, skipOffstage: false),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 void acpTestSessionSelected(String sessionId) {}

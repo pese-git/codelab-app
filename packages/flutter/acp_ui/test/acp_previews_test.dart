@@ -47,5 +47,23 @@ void main() {
       SizedBox(width: 1180, height: 720, child: acpWorkbenchLayoutPreview()),
     );
     expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(
+      SizedBox(
+        width: 860,
+        height: 720,
+        child: acpWorkbenchLayoutMediumPreview(),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(
+      SizedBox(
+        width: 430,
+        height: 720,
+        child: acpWorkbenchLayoutNarrowPreview(),
+      ),
+    );
+    expect(tester.takeException(), isNull);
   });
 }

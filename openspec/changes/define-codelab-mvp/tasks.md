@@ -55,7 +55,7 @@
 - [x] 6.3 Реализовать molecules: prompt composer, tool call summary, connection status row, approval option group
 - [x] 6.4 Реализовать organisms: transcript panel, approval panel, session sidebar, debug log panel, connection screen
 - [x] 6.5 Реализовать desktop layout: command bar, sessions pane, transcript/prompt area, inspector
-- [ ] 6.6 Реализовать responsive collapse для sessions pane и inspector без горизонтального скролла composer
+- [x] 6.6 Реализовать responsive collapse для sessions pane и inspector без горизонтального скролла composer
 - [ ] 6.7 Реализовать view modes `summary`, `normal`, `verbose`
 - [ ] 6.8 Реализовать command palette/slash commands для `/new`, `/plan`, `/permissions`, `/logs`, `/compact`, `/reconnect`
 - [ ] 6.9 Реализовать keyboard shortcuts для prompt submit, cancel, approve/reject и inspector navigation

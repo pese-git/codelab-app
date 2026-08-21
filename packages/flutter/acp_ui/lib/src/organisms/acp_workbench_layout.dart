@@ -7,7 +7,9 @@ class AcpWorkbenchLayout extends StatelessWidget {
     required this.mainPane,
     required this.inspectorPane,
     this.sessionsPaneWidth = 280,
+    this.compactSessionsPaneWidth = 176,
     this.inspectorPaneWidth = 320,
+    this.collapsedInspectorHeight = 220,
     this.gap = 12,
     this.padding = const EdgeInsets.all(16),
     super.key,
@@ -23,7 +25,9 @@ class AcpWorkbenchLayout extends StatelessWidget {
   final Widget mainPane;
   final Widget inspectorPane;
   final double sessionsPaneWidth;
+  final double compactSessionsPaneWidth;
   final double inspectorPaneWidth;
+  final double collapsedInspectorHeight;
   final double gap;
   final EdgeInsetsGeometry padding;
 
@@ -33,53 +37,186 @@ class AcpWorkbenchLayout extends StatelessWidget {
       color: FluentTheme.of(context).micaBackgroundColor,
       child: Padding(
         padding: padding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Semantics(
-              container: true,
-              label: 'Command bar',
-              child: KeyedSubtree(key: commandBarKey, child: commandBar),
-            ),
-            SizedBox(height: gap),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    key: sessionsPaneKey,
-                    width: sessionsPaneWidth,
-                    child: Semantics(
-                      container: true,
-                      label: 'Sessions pane',
-                      child: sessionsPane,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final mode = _AcpWorkbenchLayoutMode.fromWidth(
+              constraints.maxWidth,
+            );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _AcpWorkbenchSlot(
+                  slotKey: commandBarKey,
+                  label: 'Command bar',
+                  child: commandBar,
+                ),
+                SizedBox(height: gap),
+                Expanded(
+                  child: switch (mode) {
+                    _AcpWorkbenchLayoutMode.desktop => _buildDesktopBody(),
+                    _AcpWorkbenchLayoutMode.medium => _buildMediumBody(
+                      constraints,
                     ),
-                  ),
-                  SizedBox(width: gap),
-                  Expanded(
-                    key: mainPaneKey,
-                    child: Semantics(
-                      container: true,
-                      label: 'Main pane',
-                      child: mainPane,
-                    ),
-                  ),
-                  SizedBox(width: gap),
-                  SizedBox(
-                    key: inspectorPaneKey,
-                    width: inspectorPaneWidth,
-                    child: Semantics(
-                      container: true,
-                      label: 'Inspector pane',
-                      child: inspectorPane,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+                    _AcpWorkbenchLayoutMode.narrow => _buildNarrowBody(),
+                  },
+                ),
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  Widget _buildDesktopBody() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _AcpWorkbenchSlot(
+          slotKey: sessionsPaneKey,
+          label: 'Sessions pane',
+          width: sessionsPaneWidth,
+          child: sessionsPane,
+        ),
+        SizedBox(width: gap),
+        Expanded(
+          child: _AcpWorkbenchSlot(
+            slotKey: mainPaneKey,
+            label: 'Main pane',
+            expand: true,
+            child: mainPane,
+          ),
+        ),
+        SizedBox(width: gap),
+        _AcpWorkbenchSlot(
+          slotKey: inspectorPaneKey,
+          label: 'Inspector pane',
+          width: inspectorPaneWidth,
+          child: inspectorPane,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMediumBody(BoxConstraints constraints) {
+    final inspectorHeight = collapsedInspectorHeight.clamp(
+      160.0,
+      constraints.maxHeight * 0.42,
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _AcpWorkbenchSlot(
+          slotKey: sessionsPaneKey,
+          label: 'Sessions pane',
+          width: compactSessionsPaneWidth,
+          child: sessionsPane,
+        ),
+        SizedBox(width: gap),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _AcpWorkbenchSlot(
+                  slotKey: mainPaneKey,
+                  label: 'Main pane',
+                  expand: true,
+                  child: mainPane,
+                ),
+              ),
+              SizedBox(height: gap),
+              _AcpWorkbenchSlot(
+                slotKey: inspectorPaneKey,
+                label: 'Inspector pane',
+                height: inspectorHeight,
+                child: inspectorPane,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNarrowBody() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _AcpWorkbenchSlot(
+          slotKey: mainPaneKey,
+          label: 'Main pane',
+          expand: true,
+          child: mainPane,
+        ),
+        Offstage(
+          child: _AcpWorkbenchSlot(
+            slotKey: sessionsPaneKey,
+            label: 'Sessions pane',
+            child: sessionsPane,
+          ),
+        ),
+        Offstage(
+          child: _AcpWorkbenchSlot(
+            slotKey: inspectorPaneKey,
+            label: 'Inspector pane',
+            child: inspectorPane,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+enum _AcpWorkbenchLayoutMode {
+  desktop,
+  medium,
+  narrow;
+
+  static _AcpWorkbenchLayoutMode fromWidth(double width) {
+    if (width >= 1100) {
+      return desktop;
+    }
+    if (width >= 720) {
+      return medium;
+    }
+    return narrow;
+  }
+}
+
+class _AcpWorkbenchSlot extends StatelessWidget {
+  const _AcpWorkbenchSlot({
+    required this.slotKey,
+    required this.label,
+    required this.child,
+    this.width,
+    this.height,
+    this.expand = false,
+  });
+
+  final Key slotKey;
+  final String label;
+  final Widget child;
+  final double? width;
+  final double? height;
+  final bool expand;
+
+  @override
+  Widget build(BuildContext context) {
+    if (expand) {
+      return SizedBox.expand(
+        key: slotKey,
+        child: Semantics(container: true, label: label, child: child),
+      );
+    }
+
+    return SizedBox(
+      key: slotKey,
+      width: width,
+      height: height,
+      child: Semantics(container: true, label: label, child: child),
     );
   }
 }
