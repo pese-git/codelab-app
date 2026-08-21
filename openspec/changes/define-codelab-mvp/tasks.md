@@ -20,7 +20,7 @@
 
 ## 3. Implement transports
 
-- [ ] 3.1 Создать common `AcpTransport` port для inbound stream, outbound send, lifecycle и close
+- [x] 3.1 Создать common `AcpTransport` port для inbound stream, outbound send, lifecycle и close
 - [ ] 3.2 Реализовать fake transport для deterministic core/conformance tests
 - [ ] 3.3 Реализовать stdio transport через child process stdout/stderr separation
 - [ ] 3.4 Реализовать process lifecycle handling: start, graceful shutdown, process exit, invalid JSON, stderr diagnostics
