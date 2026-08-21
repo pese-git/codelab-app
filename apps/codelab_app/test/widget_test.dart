@@ -28,6 +28,12 @@ void main() {
     expect(scope.resolve<AcpClientApplication>(), isA<AcpClientApplication>());
     expect(scope.resolve<AcpTransport>(), isA<FakeAcpTransport>());
     expect(scope.resolve<CodeLabRootLifecycle>(), isA<CodeLabRootLifecycle>());
+    expect(
+      codeLabDependenciesOf(
+        tester.element(find.byType(CodeLabApp)),
+      ).application,
+      same(scope.resolve<AcpClientApplication>()),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScope();

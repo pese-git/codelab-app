@@ -104,11 +104,9 @@ final class CodeLabRootLifecycle implements Disposable {
 }
 
 final class CodeLabDependencies {
-  const CodeLabDependencies({required this.scope});
+  const CodeLabDependencies({required this.application});
 
-  final Scope scope;
-
-  AcpClientApplication get application => scope.resolve<AcpClientApplication>();
+  final AcpClientApplication application;
 }
 
 final class CodeLabDependenciesScope extends InheritedWidget {
@@ -145,7 +143,7 @@ class CodeLabBootstrap extends StatefulWidget {
 class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
   late final Scope _scope = widget.scope ?? createCodeLabRootScope();
   late final CodeLabDependencies _dependencies = CodeLabDependencies(
-    scope: _scope,
+    application: _scope.resolve<AcpClientApplication>(),
   );
 
   @override
