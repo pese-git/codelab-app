@@ -9,7 +9,11 @@ import '../atomics/atomics.dart';
 
 const acpMoleculePreviewGroup = 'ACP molecules';
 
-@Preview(name: 'Prompt composer', group: acpMoleculePreviewGroup)
+@Preview(
+  name: 'Prompt composer',
+  group: acpMoleculePreviewGroup,
+  size: Size(620, 120),
+)
 Widget acpPromptComposerPreview() {
   return _AcpPreviewSurface(
     child: AcpPromptComposer(
@@ -21,7 +25,11 @@ Widget acpPromptComposerPreview() {
   );
 }
 
-@Preview(name: 'Tool call summary', group: acpMoleculePreviewGroup)
+@Preview(
+  name: 'Tool call summary',
+  group: acpMoleculePreviewGroup,
+  size: Size(520, 120),
+)
 Widget acpToolCallSummaryPreview() {
   return const _AcpPreviewSurface(
     child: AcpToolCallSummary(
@@ -33,7 +41,11 @@ Widget acpToolCallSummaryPreview() {
   );
 }
 
-@Preview(name: 'Connection status row', group: acpMoleculePreviewGroup)
+@Preview(
+  name: 'Connection status row',
+  group: acpMoleculePreviewGroup,
+  size: Size(560, 140),
+)
 Widget acpConnectionStatusRowPreview() {
   return const _AcpPreviewSurface(
     child: AcpConnectionStatusRow(
@@ -45,7 +57,11 @@ Widget acpConnectionStatusRowPreview() {
   );
 }
 
-@Preview(name: 'Approval option group', group: acpMoleculePreviewGroup)
+@Preview(
+  name: 'Approval option group',
+  group: acpMoleculePreviewGroup,
+  size: Size(520, 180),
+)
 Widget acpApprovalOptionGroupPreview() {
   return _AcpPreviewSurface(
     child: AcpApprovalOptionGroup(
@@ -82,11 +98,18 @@ class _AcpPreviewSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FluentApp(
-      debugShowCheckedModeBanner: false,
-      home: ColoredBox(
-        color: FluentTheme.of(context).scaffoldBackgroundColor,
-        child: Padding(padding: const EdgeInsets.all(16), child: child),
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: FluentTheme(
+        data: FluentThemeData(),
+        child: Builder(
+          builder: (context) {
+            return ColoredBox(
+              color: FluentTheme.of(context).scaffoldBackgroundColor,
+              child: Padding(padding: const EdgeInsets.all(16), child: child),
+            );
+          },
+        ),
       ),
     );
   }

@@ -12,7 +12,11 @@ import 'acp_workbench_layout.dart';
 
 const acpOrganismPreviewGroup = 'ACP organisms';
 
-@Preview(name: 'Transcript panel', group: acpOrganismPreviewGroup)
+@Preview(
+  name: 'Transcript panel',
+  group: acpOrganismPreviewGroup,
+  size: Size(620, 360),
+)
 Widget acpTranscriptPanelPreview() {
   return const _AcpOrganismPreviewSurface(
     child: SizedBox(
@@ -51,7 +55,11 @@ Widget acpTranscriptPanelPreview() {
   );
 }
 
-@Preview(name: 'Approval panel', group: acpOrganismPreviewGroup)
+@Preview(
+  name: 'Approval panel',
+  group: acpOrganismPreviewGroup,
+  size: Size(520, 360),
+)
 Widget acpApprovalPanelPreview() {
   return _AcpOrganismPreviewSurface(
     child: SizedBox(
@@ -83,7 +91,11 @@ Widget acpApprovalPanelPreview() {
   );
 }
 
-@Preview(name: 'Connection screen', group: acpOrganismPreviewGroup)
+@Preview(
+  name: 'Connection screen',
+  group: acpOrganismPreviewGroup,
+  size: Size(620, 360),
+)
 Widget acpConnectionScreenPreview() {
   return const _AcpOrganismPreviewSurface(
     child: SizedBox(
@@ -103,7 +115,11 @@ Widget acpConnectionScreenPreview() {
   );
 }
 
-@Preview(name: 'Debug log panel', group: acpOrganismPreviewGroup)
+@Preview(
+  name: 'Debug log panel',
+  group: acpOrganismPreviewGroup,
+  size: Size(620, 360),
+)
 Widget acpDebugLogPanelPreview() {
   return const _AcpOrganismPreviewSurface(
     child: SizedBox(
@@ -131,7 +147,11 @@ Widget acpDebugLogPanelPreview() {
   );
 }
 
-@Preview(name: 'Session sidebar', group: acpOrganismPreviewGroup)
+@Preview(
+  name: 'Session sidebar',
+  group: acpOrganismPreviewGroup,
+  size: Size(320, 420),
+)
 Widget acpSessionSidebarPreview() {
   return const _AcpOrganismPreviewSurface(
     child: SizedBox(
@@ -140,7 +160,6 @@ Widget acpSessionSidebarPreview() {
       child: AcpSessionSidebar(
         activeSessionId: 'session-2',
         onSessionSelected: acpPreviewSessionSelected,
-        onNewSession: acpPreviewNewSession,
         sessions: [
           AcpSessionListItem(
             id: 'session-1',
@@ -168,85 +187,84 @@ Widget acpSessionSidebarPreview() {
   );
 }
 
-@Preview(name: 'Workbench layout', group: acpOrganismPreviewGroup)
+@Preview(
+  name: 'Workbench layout',
+  group: acpOrganismPreviewGroup,
+  size: Size(1180, 720),
+)
 Widget acpWorkbenchLayoutPreview() {
   return _AcpOrganismPreviewSurface(
-    child: SizedBox(
-      width: 1180,
-      height: 720,
-      child: AcpWorkbenchLayout(
-        commandBar: const _AcpPreviewCommandBar(),
-        sessionsPane: const AcpSessionSidebar(
-          activeSessionId: 'session-2',
-          onSessionSelected: acpPreviewSessionSelected,
-          onNewSession: acpPreviewNewSession,
-          sessions: [
-            AcpSessionListItem(
-              id: 'session-1',
-              title: 'Repository audit',
-              status: AcpSessionStatus.completed,
-              subtitle: 'Checked protocol package boundaries.',
-              updatedLabel: 'Done 10 min ago',
+    child: AcpWorkbenchLayout(
+      commandBar: const _AcpPreviewCommandBar(),
+      sessionsPane: const AcpSessionSidebar(
+        activeSessionId: 'session-2',
+        onSessionSelected: acpPreviewSessionSelected,
+        sessions: [
+          AcpSessionListItem(
+            id: 'session-1',
+            title: 'Repository audit',
+            status: AcpSessionStatus.completed,
+            subtitle: 'Checked protocol package boundaries.',
+            updatedLabel: 'Done 10 min ago',
+          ),
+          AcpSessionListItem(
+            id: 'session-2',
+            title: 'Workbench UI',
+            status: AcpSessionStatus.awaitingApproval,
+            subtitle: 'Composing desktop scaffold.',
+            updatedLabel: 'Active',
+          ),
+        ],
+      ),
+      mainPane: const Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: AcpTranscriptPanel(
+              entries: [
+                AcpTranscriptEntry(
+                  id: 'user-1',
+                  kind: AcpTranscriptEntryKind.user,
+                  title: 'You',
+                  body: 'Create a desktop layout shell for the workbench.',
+                  timestampLabel: '12:04',
+                ),
+                AcpTranscriptEntry(
+                  id: 'agent-1',
+                  kind: AcpTranscriptEntryKind.agent,
+                  title: 'Codelab Agent',
+                  body: 'I will keep it slot-based for future app wiring.',
+                  timestampLabel: '12:05',
+                ),
+              ],
             ),
-            AcpSessionListItem(
-              id: 'session-2',
-              title: 'Workbench UI',
-              status: AcpSessionStatus.awaitingApproval,
-              subtitle: 'Composing desktop scaffold.',
-              updatedLabel: 'Active',
-            ),
-          ],
-        ),
-        mainPane: const Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: AcpTranscriptPanel(
-                entries: [
-                  AcpTranscriptEntry(
-                    id: 'user-1',
-                    kind: AcpTranscriptEntryKind.user,
-                    title: 'You',
-                    body: 'Create a desktop layout shell for the workbench.',
-                    timestampLabel: '12:04',
-                  ),
-                  AcpTranscriptEntry(
-                    id: 'agent-1',
-                    kind: AcpTranscriptEntryKind.agent,
-                    title: 'Codelab Agent',
-                    body: 'I will keep it slot-based for future app wiring.',
-                    timestampLabel: '12:05',
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 12),
-            AcpPromptComposer(onSubmit: acpPreviewPromptSubmitted),
-          ],
-        ),
-        inspectorPane: AcpApprovalPanel(
-          title: 'Run analyzer',
-          risk: AcpApprovalRisk.shell,
-          reason: 'Verify the package after layout changes.',
-          command: 'fvm dart run melos run analyze',
-          cwd: 'packages/flutter/acp_ui',
-          selectedOptionId: 'allow_once',
-          onOptionSelected: acpPreviewApprovalSelected,
-          options: const [
-            AcpApprovalOption(
-              id: 'allow_once',
-              label: 'Allow once',
-              description: 'Run this command for the active prompt turn.',
-              tone: AcpTone.warning,
-            ),
-            AcpApprovalOption(
-              id: 'reject',
-              label: 'Reject',
-              description: 'Return a denied outcome to the agent.',
-              tone: AcpTone.danger,
-            ),
-          ],
-        ),
+          ),
+          SizedBox(height: 12),
+          AcpPromptComposer(onSubmit: acpPreviewPromptSubmitted),
+        ],
+      ),
+      inspectorPane: AcpApprovalPanel(
+        title: 'Run analyzer',
+        risk: AcpApprovalRisk.shell,
+        reason: 'Verify the package after layout changes.',
+        command: 'fvm dart run melos run analyze',
+        cwd: 'packages/flutter/acp_ui',
+        selectedOptionId: 'allow_once',
+        onOptionSelected: acpPreviewApprovalSelected,
+        options: const [
+          AcpApprovalOption(
+            id: 'allow_once',
+            label: 'Allow once',
+            description: 'Run this command for the active prompt turn.',
+            tone: AcpTone.warning,
+          ),
+          AcpApprovalOption(
+            id: 'reject',
+            label: 'Reject',
+            description: 'Return a denied outcome to the agent.',
+            tone: AcpTone.danger,
+          ),
+        ],
       ),
     ),
   );
@@ -273,11 +291,18 @@ class _AcpOrganismPreviewSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FluentApp(
-      debugShowCheckedModeBanner: false,
-      home: ColoredBox(
-        color: FluentTheme.of(context).scaffoldBackgroundColor,
-        child: Padding(padding: const EdgeInsets.all(16), child: child),
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: FluentTheme(
+        data: FluentThemeData(),
+        child: Builder(
+          builder: (context) {
+            return ColoredBox(
+              color: FluentTheme.of(context).scaffoldBackgroundColor,
+              child: Padding(padding: const EdgeInsets.all(16), child: child),
+            );
+          },
+        ),
       ),
     );
   }
