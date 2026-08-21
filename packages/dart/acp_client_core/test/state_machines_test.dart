@@ -82,6 +82,46 @@ void main() {
       expect(completed.stateOrThrow.isTerminal, isTrue);
     });
 
+    test(
+      'stays awaiting approval until every pending approval is resolved',
+      () {
+        final running = PromptTurnStateMachine.start(_pendingTurn).stateOrThrow;
+        final withFirstApproval = PromptTurnStateMachine.requestApproval(
+          running,
+          _approval,
+        ).stateOrThrow;
+        final withSecondApproval = PromptTurnStateMachine.requestApproval(
+          withFirstApproval,
+          _secondApproval,
+        ).stateOrThrow;
+        final firstResolved = PromptTurnStateMachine.selectApproval(
+          withSecondApproval,
+          approvalId: _approval.id,
+          optionId: const PermissionOptionId('allow-once'),
+        ).stateOrThrow;
+        final secondResolved = PromptTurnStateMachine.cancelApproval(
+          firstResolved,
+          approvalId: _secondApproval.id,
+        ).stateOrThrow;
+
+        expect(withSecondApproval.status, PromptTurnStatus.awaitingApproval);
+        expect(firstResolved.status, PromptTurnStatus.awaitingApproval);
+        expect(
+          firstResolved.approvals[_approval.id]?.status,
+          ApprovalStatus.selected,
+        );
+        expect(
+          firstResolved.approvals[_secondApproval.id]?.status,
+          ApprovalStatus.pending,
+        );
+        expect(secondResolved.status, PromptTurnStatus.running);
+        expect(
+          secondResolved.approvals[_secondApproval.id]?.status,
+          ApprovalStatus.cancelled,
+        );
+      },
+    );
+
     test('maps prompt stop reasons to terminal statuses', () {
       expect(
         PromptTurnStateMachine.complete(
@@ -113,6 +153,41 @@ void main() {
       );
 
       expect(result, isA<RejectedStateTransition<PromptTurn>>());
+    });
+
+    test('rejects starting a non-pending turn', () {
+      final running = PromptTurnStateMachine.start(_pendingTurn).stateOrThrow;
+      final restarted = PromptTurnStateMachine.start(running);
+
+      expect(restarted, isA<RejectedStateTransition<PromptTurn>>());
+      expect(
+        () => restarted.stateOrThrow,
+        throwsA(isA<StateTransitionException>()),
+      );
+    });
+
+    test('ignores terminal approval, completion, and failure events', () {
+      final completed = PromptTurnStateMachine.complete(
+        PromptTurnStateMachine.start(_pendingTurn).stateOrThrow,
+        stopReason: StopReason.endTurn,
+      ).stateOrThrow;
+
+      final approval = PromptTurnStateMachine.requestApproval(
+        completed,
+        _approval,
+      );
+      final completion = PromptTurnStateMachine.complete(
+        completed,
+        stopReason: StopReason.maxTokens,
+      );
+      final failure = PromptTurnStateMachine.fail(completed, message: 'boom');
+
+      expect(approval, isA<IgnoredStateTransition<PromptTurn>>());
+      expect(completion, isA<IgnoredStateTransition<PromptTurn>>());
+      expect(failure, isA<IgnoredStateTransition<PromptTurn>>());
+      expect(approval.stateOrThrow, completed);
+      expect(completion.stateOrThrow, completed);
+      expect(failure.stateOrThrow, completed);
     });
 
     test('keeps terminal prompt states stable for late updates and cancel', () {
@@ -289,6 +364,42 @@ void main() {
       expect(secondTurn, isA<RejectedStateTransition<AcpSession>>());
     });
 
+    test('rejects activating a session while a turn is running', () {
+      final running = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      ).stateOrThrow;
+
+      final activated = SessionStateMachine.activate(running);
+
+      expect(activated, isA<RejectedStateTransition<AcpSession>>());
+      expect(
+        () => activated.stateOrThrow,
+        throwsA(isA<StateTransitionException>()),
+      );
+    });
+
+    test('keeps terminal turns out of active turn selection', () {
+      final completed = SessionStateMachine.completeTurn(
+        SessionStateMachine.startTurn(
+          const AcpSession(id: _sessionId, cwd: '/workspace'),
+          _pendingTurn,
+        ).stateOrThrow,
+        stopReason: StopReason.endTurn,
+      ).stateOrThrow;
+
+      final next = SessionStateMachine.startTurn(
+        completed,
+        _secondPendingTurn,
+      ).stateOrThrow;
+
+      expect(completed.status, SessionLifecycleStatus.active);
+      expect(completed.activeTurn, isNull);
+      expect(next.turns, hasLength(2));
+      expect(next.activeTurn?.id, _secondPendingTurn.id);
+      expect(next.status, SessionLifecycleStatus.runningTurn);
+    });
+
     test('cancels pending approvals when a turn is cancelled', () {
       final running = SessionStateMachine.startTurn(
         const AcpSession(id: _sessionId, cwd: '/workspace'),
@@ -373,6 +484,25 @@ const _approval = ApprovalRequest(
       optionId: PermissionOptionId('allow-once'),
       name: 'Allow once',
       kind: PermissionOptionKind.allowOnce,
+    ),
+  ],
+);
+
+const _secondApproval = ApprovalRequest(
+  id: ApprovalRequestId('approval-2'),
+  sessionId: _sessionId,
+  turnId: PromptTurnId('turn-1'),
+  toolCall: ToolCallRecord(
+    id: ToolCallId('tool-2'),
+    title: 'Write file',
+    kind: ToolKind.edit,
+    riskLevel: ApprovalRiskLevel.localWrite,
+  ),
+  options: [
+    PermissionOption(
+      optionId: PermissionOptionId('deny'),
+      name: 'Deny',
+      kind: PermissionOptionKind.rejectOnce,
     ),
   ],
 );

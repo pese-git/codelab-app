@@ -132,6 +132,60 @@ void main() {
             .having((entry) => entry.source, 'source', 'transport'),
       ),
     );
+    expect(
+      client.diagnostics,
+      contains(
+        isA<DiagnosticEntry>()
+            .having(
+              (entry) => entry.message,
+              'message',
+              'Failed to send ACP request session/load.',
+            )
+            .having((entry) => entry.source, 'source', 'application.protocol')
+            .having(
+              (entry) => entry.context,
+              'context',
+              containsPair('method', sessionLoadMethod),
+            ),
+      ),
+    );
+  });
+
+  test('CreateSession records decode failure diagnostics', () async {
+    final future = CreateSession(client)(
+      const CreateSessionCommand(cwd: '/workspace'),
+    ).run();
+    await _pump();
+
+    final request = transport.sentMessages.single as JsonRpcRequest;
+    transport.emitInbound(
+      JsonRpcMessage.response(id: request.id, result: const {'modes': {}}),
+    );
+
+    final result = await future;
+    expect(result.isLeft(), isTrue);
+    result.match((failure) {
+      expect(failure, isA<AcpClientUnexpectedFailure>());
+    }, (_) => fail('expected decode failure'));
+    expect(
+      client.diagnostics.single,
+      isA<DiagnosticEntry>()
+          .having(
+            (entry) => entry.message,
+            'message',
+            'Failed to decode ACP response for session/new.',
+          )
+          .having((entry) => entry.source, 'source', 'application.protocol')
+          .having(
+            (entry) => entry.context,
+            'context',
+            allOf(
+              containsPair('method', sessionNewMethod),
+              containsPair('requestId', 1),
+              containsPair('result', {'modes': {}}),
+            ),
+          ),
+    );
   });
 
   test('Reconnect replaces transport and starts the replacement', () async {
@@ -230,6 +284,158 @@ void main() {
     ]);
 
     await subscription.cancel();
+  });
+
+  test(
+    'SendPrompt deduplicates and accepts interleaved running updates',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+
+      final promptFuture = SendPrompt(client)(
+        const SendPromptCommand(
+          sessionId: SessionId('session-1'),
+          prompt: [ContentBlock.text(text: 'hello')],
+        ),
+      ).run();
+      await _pump();
+      final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+
+      const messageUpdate = SessionUpdate.agentMessageChunk(
+        content: ContentBlock.text(text: 'hi'),
+      );
+      const toolUpdate = SessionUpdate.toolCallUpdate(
+        toolCallUpdate: ToolCallUpdate(
+          toolCallId: ToolCallId('tool-1'),
+          title: 'Read file',
+          kind: ToolKind.read,
+          status: ToolCallStatus.inProgress,
+        ),
+      );
+      transport.emitInbound(_sessionUpdate(messageUpdate));
+      transport.emitInbound(_sessionUpdate(toolUpdate));
+      transport.emitInbound(_sessionUpdate(messageUpdate));
+      transport.emitInbound(_sessionUpdate(toolUpdate));
+
+      final running = client.sessionById(const SessionId('session-1'));
+      expect(running?.turns.single.updates, [messageUpdate, toolUpdate]);
+      expect(running?.turns.single.toolCalls, hasLength(1));
+      expect(
+        running?.turns.single.toolCalls[const ToolCallId('tool-1')]?.title,
+        'Read file',
+      );
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id,
+          result: const PromptResponse(stopReason: StopReason.endTurn).toJson(),
+        ),
+      );
+
+      final turn = (await promptFuture).getOrElse(
+        (failure) => fail('$failure'),
+      );
+      expect(turn.status, PromptTurnStatus.completed);
+      expect(turn.updates, [messageUpdate, toolUpdate]);
+    },
+  );
+
+  test(
+    'SendPrompt maps protocol error responses to failure diagnostics',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+
+      final promptFuture = SendPrompt(client)(
+        const SendPromptCommand(
+          sessionId: SessionId('session-1'),
+          prompt: [ContentBlock.text(text: 'hello')],
+        ),
+      ).run();
+      await _pump();
+      final request = transport.sentMessages.single as JsonRpcRequest;
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: request.id,
+          error: const JsonRpcError(
+            code: -32000,
+            message: 'agent rejected prompt',
+          ),
+        ),
+      );
+
+      final result = await promptFuture;
+      expect(result.isLeft(), isTrue);
+      result.match((failure) {
+        expect(failure, isA<AcpClientUnexpectedFailure>());
+      }, (_) => fail('expected protocol error failure'));
+      expect(
+        client.sessionById(const SessionId('session-1'))?.turns.single.status,
+        PromptTurnStatus.failed,
+      );
+      expect(
+        client.diagnostics,
+        contains(
+          isA<DiagnosticEntry>()
+              .having(
+                (entry) => entry.message,
+                'message',
+                'ACP request session/prompt failed: agent rejected prompt',
+              )
+              .having((entry) => entry.source, 'source', 'application.protocol')
+              .having(
+                (entry) => entry.context,
+                'context',
+                allOf(
+                  containsPair('method', sessionPromptMethod),
+                  containsPair('requestId', request.id.toJsonValue()),
+                ),
+              ),
+        ),
+      );
+    },
+  );
+
+  test('SendPrompt maps transport failure events to diagnostics', () async {
+    await _createSession(client, transport);
+    transport.drainSentMessages();
+
+    transport.fail(
+      const AcpTransportException(
+        code: AcpTransportErrorCode.receiveFailed,
+        message: 'socket read failed',
+        cause: 'broken frame',
+      ),
+    );
+
+    final result = await SendPrompt(client)(
+      const SendPromptCommand(
+        sessionId: SessionId('session-1'),
+        prompt: [ContentBlock.text(text: 'hello')],
+      ),
+    ).run();
+
+    expect(result.isLeft(), isTrue);
+    result.match((failure) {
+      expect(failure, isA<AcpClientTransportFailure>());
+    }, (_) => fail('expected transport failure'));
+    expect(
+      client.diagnostics,
+      contains(
+        isA<DiagnosticEntry>()
+            .having((entry) => entry.message, 'message', 'socket read failed')
+            .having((entry) => entry.source, 'source', 'transport')
+            .having(
+              (entry) => entry.context,
+              'context',
+              allOf(
+                containsPair('code', AcpTransportErrorCode.receiveFailed.name),
+                containsPair('cause', 'broken frame'),
+              ),
+            ),
+      ),
+    );
   });
 
   test('SendPrompt returns typed failure when session is missing', () async {
@@ -432,6 +638,48 @@ void main() {
       );
     },
   );
+
+  test('CancelTurn responds cancelled for every pending approval', () async {
+    await _createSession(client, transport);
+    transport.drainSentMessages();
+    final promptFuture = SendPrompt(client)(
+      const SendPromptCommand(
+        sessionId: SessionId('session-1'),
+        prompt: [ContentBlock.text(text: 'hello')],
+      ),
+    ).run();
+    await _pump();
+    final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+    transport.emitInbound(_permissionRequest());
+    transport.emitInbound(_permissionRequest(id: 43, toolCallId: 'tool-2'));
+    transport.drainSentMessages();
+
+    final result = await CancelTurn(client)(
+      const CancelTurnCommand(sessionId: SessionId('session-1')),
+    ).run();
+
+    final turn = result.getOrElse((failure) => fail('$failure'));
+    expect(turn.status, PromptTurnStatus.cancelled);
+    expect(
+      turn.approvals.values.map((approval) => approval.status),
+      everyElement(ApprovalStatus.cancelled),
+    );
+    expect(transport.sentMessages, hasLength(3));
+    expect(
+      transport.sentMessages.whereType<JsonRpcResponse>().map(
+        (response) => response.id,
+      ),
+      [const JsonRpcId.integer(42), const JsonRpcId.integer(43)],
+    );
+
+    transport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id,
+        result: const PromptResponse(stopReason: StopReason.cancelled).toJson(),
+      ),
+    );
+    await promptFuture;
+  });
 
   test(
     'CancelTurn is idempotent after the turn is locally cancelled',
@@ -727,6 +975,87 @@ void main() {
       await promptFuture;
     },
   );
+
+  test(
+    'RespondToPermission keeps approval pending when response send fails',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final promptFuture = SendPrompt(client)(
+        const SendPromptCommand(
+          sessionId: SessionId('session-1'),
+          prompt: [ContentBlock.text(text: 'hello')],
+        ),
+      ).run();
+      await _pump();
+      final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+      transport.emitInbound(_permissionRequest());
+      transport.drainSentMessages();
+      transport.failNextSend(
+        const AcpTransportException(
+          code: AcpTransportErrorCode.sendFailed,
+          message: 'permission response failed',
+        ),
+      );
+
+      final result = await RespondToPermission(client)(
+        const RespondToPermissionCommand.selected(
+          sessionId: SessionId('session-1'),
+          approvalId: ApprovalRequestId('permission-42'),
+          optionId: PermissionOptionId('allow-once'),
+        ),
+      ).run();
+
+      expect(result.isLeft(), isTrue);
+      result.match((failure) {
+        expect(failure, isA<AcpClientTransportFailure>());
+      }, (_) => fail('expected transport failure'));
+      expect(
+        client
+            .sessionById(const SessionId('session-1'))
+            ?.turns
+            .single
+            .approvals[const ApprovalRequestId('permission-42')]
+            ?.status,
+        ApprovalStatus.pending,
+      );
+      expect(
+        client.diagnostics,
+        contains(
+          isA<DiagnosticEntry>()
+              .having(
+                (entry) => entry.message,
+                'message',
+                'Failed to send ACP response session/request_permission.',
+              )
+              .having(
+                (entry) => entry.source,
+                'source',
+                'application.permission',
+              )
+              .having(
+                (entry) => entry.context,
+                'context',
+                allOf(
+                  containsPair('method', sessionRequestPermissionMethod),
+                  containsPair('requestId', 42),
+                  containsPair('approvalId', 'permission-42'),
+                ),
+              ),
+        ),
+      );
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id,
+          result: const PromptResponse(
+            stopReason: StopReason.cancelled,
+          ).toJson(),
+        ),
+      );
+      await promptFuture;
+    },
+  );
 }
 
 Future<void> _createSession(
@@ -752,18 +1081,29 @@ Future<void> _createSession(
 
 Future<void> _pump() => Future<void>.delayed(Duration.zero);
 
-JsonRpcRequest _permissionRequest() {
+JsonRpcNotification _sessionUpdate(SessionUpdate update) {
+  return JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: update,
+        ).toJson(),
+      )
+      as JsonRpcNotification;
+}
+
+JsonRpcRequest _permissionRequest({int id = 42, String toolCallId = 'tool-1'}) {
   return JsonRpcMessage.request(
-        id: const JsonRpcId.integer(42),
+        id: JsonRpcId.integer(id),
         method: sessionRequestPermissionMethod,
-        params: const RequestPermissionRequest(
-          sessionId: SessionId('session-1'),
+        params: RequestPermissionRequest(
+          sessionId: const SessionId('session-1'),
           toolCall: ToolCallUpdate(
-            toolCallId: ToolCallId('tool-1'),
+            toolCallId: ToolCallId(toolCallId),
             title: 'Run command',
             kind: ToolKind.execute,
           ),
-          options: [
+          options: const [
             PermissionOption(
               optionId: PermissionOptionId('allow-once'),
               name: 'Allow once',
