@@ -50,7 +50,7 @@
 
 ## 6. Implement Fluent UI workbench
 
-- [ ] 6.1 Создать `acp_ui` widget folders `atomics`, `molecules`, `organisms`
+- [x] 6.1 Создать `acp_ui` widget folders `atomics`, `molecules`, `organisms`
 - [ ] 6.2 Реализовать Fluent atomics: buttons, badges, status indicators, text primitives, icons, progress indicators
 - [ ] 6.3 Реализовать molecules: prompt composer, tool call summary, connection status row, approval option group
 - [ ] 6.4 Реализовать organisms: transcript panel, approval panel, session sidebar, debug log panel, connection screen

@@ -3,6 +3,11 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('exports atomics through the public package API', () {
+    expect(AcpStatusIndicator, isA<Type>());
+    expect(AcpStatusTone.active, isA<AcpStatusTone>());
+  });
+
   testWidgets('renders a status label', (tester) async {
     await tester.pumpWidget(
       const FluentApp(home: AcpStatusIndicator(label: 'Ready')),
