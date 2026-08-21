@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 
 import '../atomics/atomics.dart';
 
@@ -24,6 +25,9 @@ class AcpApprovalOptionGroup extends StatelessWidget {
     required this.onSelected,
     this.selectedOptionId,
     this.enabled = true,
+    this.approveOptionId,
+    this.rejectOptionId,
+    this.shortcutsEnabled = true,
     super.key,
   });
 
@@ -31,10 +35,13 @@ class AcpApprovalOptionGroup extends StatelessWidget {
   final String? selectedOptionId;
   final AcpApprovalOptionSelected onSelected;
   final bool enabled;
+  final String? approveOptionId;
+  final String? rejectOptionId;
+  final bool shortcutsEnabled;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final option in options) ...[
@@ -48,6 +55,66 @@ class AcpApprovalOptionGroup extends StatelessWidget {
         ],
       ],
     );
+
+    if (!shortcutsEnabled) {
+      return body;
+    }
+
+    final approveId = approveOptionId ?? _defaultApproveOptionId;
+    final rejectId = rejectOptionId ?? _defaultRejectOptionId;
+
+    return CallbackShortcuts(
+      bindings: {
+        if (approveId != null)
+          const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
+              _selectIfEnabled(approveId),
+        if (approveId != null)
+          const SingleActivator(LogicalKeyboardKey.enter, meta: true): () =>
+              _selectIfEnabled(approveId),
+        if (rejectId != null)
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              _selectIfEnabled(rejectId),
+      },
+      child: Focus(autofocus: true, child: body),
+    );
+  }
+
+  String? get _defaultApproveOptionId {
+    for (final option in options) {
+      final normalizedId = option.id.toLowerCase();
+      final normalizedLabel = option.label.toLowerCase();
+      if (normalizedId.contains('allow') ||
+          normalizedId.contains('approve') ||
+          normalizedLabel.contains('allow') ||
+          normalizedLabel.contains('approve')) {
+        return option.id;
+      }
+    }
+
+    return null;
+  }
+
+  String? get _defaultRejectOptionId {
+    for (final option in options) {
+      final normalizedId = option.id.toLowerCase();
+      final normalizedLabel = option.label.toLowerCase();
+      if (normalizedId.contains('reject') ||
+          normalizedId.contains('deny') ||
+          normalizedLabel.contains('reject') ||
+          normalizedLabel.contains('deny')) {
+        return option.id;
+      }
+    }
+
+    return null;
+  }
+
+  void _selectIfEnabled(String optionId) {
+    if (!enabled) {
+      return;
+    }
+
+    onSelected(optionId);
   }
 }
 

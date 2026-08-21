@@ -1,5 +1,6 @@
 import 'package:acp_ui/acp_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -18,6 +19,7 @@ void main() {
     expect(AcpTranscriptEntryKind.toolCall, isA<AcpTranscriptEntryKind>());
     expect(AcpTranscriptPanel, isA<Type>());
     expect(AcpWorkbenchLayout, isA<Type>());
+    expect(AcpWorkbenchShortcuts, isA<Type>());
   });
 
   testWidgets('renders command palette default command list', (tester) async {
@@ -83,6 +85,38 @@ void main() {
 
     expect(selected?.id, 'logs');
     expect(selected?.slashCommand, '/logs');
+  });
+
+  testWidgets('routes workbench command palette and inspector shortcuts', (
+    tester,
+  ) async {
+    var openedPalette = false;
+    var previousInspector = false;
+    var nextInspector = false;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpWorkbenchShortcuts(
+          onOpenCommandPalette: () => openedPalette = true,
+          onInspectorPrevious: () => previousInspector = true,
+          onInspectorNext: () => nextInspector = true,
+          child: const SizedBox(width: 320, height: 200),
+        ),
+      ),
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(openedPalette, isTrue);
+    expect(previousInspector, isTrue);
+    expect(nextInspector, isTrue);
   });
 
   testWidgets('renders transcript entries and embedded tool summaries', (

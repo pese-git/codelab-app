@@ -1,5 +1,6 @@
 import 'package:acp_ui/acp_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -64,6 +65,26 @@ void main() {
     expect(find.text('inspect protocol logs'), findsNothing);
   });
 
+  testWidgets('submits prompt with desktop shortcut', (tester) async {
+    String? submittedPrompt;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpPromptComposer(
+          initialPrompt: 'keyboard submit',
+          onSubmit: (prompt) => submittedPrompt = prompt,
+        ),
+      ),
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(submittedPrompt, 'keyboard submit');
+  });
+
   testWidgets('disables submit while prompt is empty or submitting', (
     tester,
   ) async {
@@ -108,6 +129,28 @@ void main() {
     );
 
     await tester.tap(find.text('Cancel'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(cancelled, isTrue);
+  });
+
+  testWidgets('invokes cancel shortcut when cancel is available', (
+    tester,
+  ) async {
+    var cancelled = false;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpPromptComposer(
+          initialPrompt: 'long task',
+          canCancel: true,
+          onSubmit: (_) {},
+          onCancel: () => cancelled = true,
+        ),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(cancelled, isTrue);
@@ -224,5 +267,42 @@ void main() {
     expect(selected, 'reject');
     expect(find.text('Review'), findsOneWidget);
     expect(find.text('Risk'), findsOneWidget);
+  });
+
+  testWidgets('selects approval and reject options from shortcuts', (
+    tester,
+  ) async {
+    final selected = <String>[];
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpApprovalOptionGroup(
+          selectedOptionId: 'allow_once',
+          onSelected: selected.add,
+          options: const [
+            AcpApprovalOption(
+              id: 'allow_once',
+              label: 'Allow once',
+              description: 'Run once for this prompt turn.',
+              tone: AcpTone.warning,
+            ),
+            AcpApprovalOption(
+              id: 'reject',
+              label: 'Reject',
+              description: 'Deny the request.',
+              tone: AcpTone.danger,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(selected, ['allow_once', 'reject']);
   });
 }

@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 
 import '../atomics/atomics.dart';
 
@@ -13,6 +14,7 @@ class AcpPromptComposer extends StatefulWidget {
     this.isSubmitting = false,
     this.canCancel = false,
     this.enabled = true,
+    this.shortcutsEnabled = true,
     super.key,
   });
 
@@ -23,6 +25,7 @@ class AcpPromptComposer extends StatefulWidget {
   final bool isSubmitting;
   final bool canCancel;
   final bool enabled;
+  final bool shortcutsEnabled;
 
   @override
   State<AcpPromptComposer> createState() => _AcpPromptComposerState();
@@ -62,7 +65,7 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    final body = DecoratedBox(
       decoration: BoxDecoration(
         color: FluentTheme.of(context).micaBackgroundColor,
         border: Border.all(color: Colors.grey.withAlpha(64)),
@@ -103,6 +106,20 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
         ),
       ),
     );
+
+    if (!widget.shortcutsEnabled) {
+      return body;
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): _submit,
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true): _submit,
+        if (widget.onCancel != null && widget.canCancel)
+          const SingleActivator(LogicalKeyboardKey.escape): _cancel,
+      },
+      child: Focus(autofocus: true, child: body),
+    );
   }
 
   void _handleTextChanged() => setState(() {});
@@ -115,5 +132,13 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
 
     widget.onSubmit(prompt);
     _controller.clear();
+  }
+
+  void _cancel() {
+    if (!widget.enabled || !widget.canCancel) {
+      return;
+    }
+
+    widget.onCancel?.call();
   }
 }

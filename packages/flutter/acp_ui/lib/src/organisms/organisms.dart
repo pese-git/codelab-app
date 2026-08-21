@@ -7,3 +7,4 @@ export 'acp_debug_log_panel.dart';
 export 'acp_session_sidebar.dart';
 export 'acp_transcript_panel.dart';
 export 'acp_workbench_layout.dart';
+export 'acp_workbench_shortcuts.dart';

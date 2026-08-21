@@ -17,6 +17,9 @@ class AcpApprovalPanel extends StatelessWidget {
     this.diffSummary,
     this.selectedOptionId,
     this.enabled = true,
+    this.approveOptionId,
+    this.rejectOptionId,
+    this.shortcutsEnabled = true,
     super.key,
   });
 
@@ -30,6 +33,9 @@ class AcpApprovalPanel extends StatelessWidget {
   final String? selectedOptionId;
   final AcpApprovalOptionSelected onOptionSelected;
   final bool enabled;
+  final String? approveOptionId;
+  final String? rejectOptionId;
+  final bool shortcutsEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +80,9 @@ class AcpApprovalPanel extends StatelessWidget {
               options: options,
               selectedOptionId: selectedOptionId,
               enabled: enabled,
+              approveOptionId: approveOptionId,
+              rejectOptionId: rejectOptionId,
+              shortcutsEnabled: shortcutsEnabled,
               onSelected: onOptionSelected,
             ),
           ],
