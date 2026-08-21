@@ -283,6 +283,298 @@ as Map<String, Object?>?,
 }
 
 /// @nodoc
+mixin _$LoadSessionCommand {
+
+ SessionId get sessionId; String get cwd; List<McpServer> get mcpServers; Map<String, Object?>? get meta;
+/// Create a copy of LoadSessionCommand
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$LoadSessionCommandCopyWith<LoadSessionCommand> get copyWith => _$LoadSessionCommandCopyWithImpl<LoadSessionCommand>(this as LoadSessionCommand, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LoadSessionCommand&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.cwd, cwd) || other.cwd == cwd)&&const DeepCollectionEquality().equals(other.mcpServers, mcpServers)&&const DeepCollectionEquality().equals(other.meta, meta));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,sessionId,cwd,const DeepCollectionEquality().hash(mcpServers),const DeepCollectionEquality().hash(meta));
+
+@override
+String toString() {
+  return 'LoadSessionCommand(sessionId: $sessionId, cwd: $cwd, mcpServers: $mcpServers, meta: $meta)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $LoadSessionCommandCopyWith<$Res>  {
+  factory $LoadSessionCommandCopyWith(LoadSessionCommand value, $Res Function(LoadSessionCommand) _then) = _$LoadSessionCommandCopyWithImpl;
+@useResult
+$Res call({
+ SessionId sessionId, String cwd, List<McpServer> mcpServers, Map<String, Object?>? meta
+});
+
+
+$SessionIdCopyWith<$Res> get sessionId;
+
+}
+/// @nodoc
+class _$LoadSessionCommandCopyWithImpl<$Res>
+    implements $LoadSessionCommandCopyWith<$Res> {
+  _$LoadSessionCommandCopyWithImpl(this._self, this._then);
+
+  final LoadSessionCommand _self;
+  final $Res Function(LoadSessionCommand) _then;
+
+/// Create a copy of LoadSessionCommand
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? sessionId = null,Object? cwd = null,Object? mcpServers = null,Object? meta = freezed,}) {
+  return _then(_self.copyWith(
+sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
+as SessionId,cwd: null == cwd ? _self.cwd : cwd // ignore: cast_nullable_to_non_nullable
+as String,mcpServers: null == mcpServers ? _self.mcpServers : mcpServers // ignore: cast_nullable_to_non_nullable
+as List<McpServer>,meta: freezed == meta ? _self.meta : meta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
+  ));
+}
+/// Create a copy of LoadSessionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionIdCopyWith<$Res> get sessionId {
+  
+  return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
+    return _then(_self.copyWith(sessionId: value));
+  });
+}
+}
+
+
+/// Adds pattern-matching-related methods to [LoadSessionCommand].
+extension LoadSessionCommandPatterns on LoadSessionCommand {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _LoadSessionCommand value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _LoadSessionCommand() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _LoadSessionCommand value)  $default,){
+final _that = this;
+switch (_that) {
+case _LoadSessionCommand():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _LoadSessionCommand value)?  $default,){
+final _that = this;
+switch (_that) {
+case _LoadSessionCommand() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( SessionId sessionId,  String cwd,  List<McpServer> mcpServers,  Map<String, Object?>? meta)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _LoadSessionCommand() when $default != null:
+return $default(_that.sessionId,_that.cwd,_that.mcpServers,_that.meta);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( SessionId sessionId,  String cwd,  List<McpServer> mcpServers,  Map<String, Object?>? meta)  $default,) {final _that = this;
+switch (_that) {
+case _LoadSessionCommand():
+return $default(_that.sessionId,_that.cwd,_that.mcpServers,_that.meta);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( SessionId sessionId,  String cwd,  List<McpServer> mcpServers,  Map<String, Object?>? meta)?  $default,) {final _that = this;
+switch (_that) {
+case _LoadSessionCommand() when $default != null:
+return $default(_that.sessionId,_that.cwd,_that.mcpServers,_that.meta);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class _LoadSessionCommand extends LoadSessionCommand {
+  const _LoadSessionCommand({required this.sessionId, required this.cwd, final  List<McpServer> mcpServers = const [], final  Map<String, Object?>? meta}): _mcpServers = mcpServers,_meta = meta,super._();
+  
+
+@override final  SessionId sessionId;
+@override final  String cwd;
+ final  List<McpServer> _mcpServers;
+@override@JsonKey() List<McpServer> get mcpServers {
+  if (_mcpServers is EqualUnmodifiableListView) return _mcpServers;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_mcpServers);
+}
+
+ final  Map<String, Object?>? _meta;
+@override Map<String, Object?>? get meta {
+  final value = _meta;
+  if (value == null) return null;
+  if (_meta is EqualUnmodifiableMapView) return _meta;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(value);
+}
+
+
+/// Create a copy of LoadSessionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$LoadSessionCommandCopyWith<_LoadSessionCommand> get copyWith => __$LoadSessionCommandCopyWithImpl<_LoadSessionCommand>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _LoadSessionCommand&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.cwd, cwd) || other.cwd == cwd)&&const DeepCollectionEquality().equals(other._mcpServers, _mcpServers)&&const DeepCollectionEquality().equals(other._meta, _meta));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,sessionId,cwd,const DeepCollectionEquality().hash(_mcpServers),const DeepCollectionEquality().hash(_meta));
+
+@override
+String toString() {
+  return 'LoadSessionCommand(sessionId: $sessionId, cwd: $cwd, mcpServers: $mcpServers, meta: $meta)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$LoadSessionCommandCopyWith<$Res> implements $LoadSessionCommandCopyWith<$Res> {
+  factory _$LoadSessionCommandCopyWith(_LoadSessionCommand value, $Res Function(_LoadSessionCommand) _then) = __$LoadSessionCommandCopyWithImpl;
+@override @useResult
+$Res call({
+ SessionId sessionId, String cwd, List<McpServer> mcpServers, Map<String, Object?>? meta
+});
+
+
+@override $SessionIdCopyWith<$Res> get sessionId;
+
+}
+/// @nodoc
+class __$LoadSessionCommandCopyWithImpl<$Res>
+    implements _$LoadSessionCommandCopyWith<$Res> {
+  __$LoadSessionCommandCopyWithImpl(this._self, this._then);
+
+  final _LoadSessionCommand _self;
+  final $Res Function(_LoadSessionCommand) _then;
+
+/// Create a copy of LoadSessionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? sessionId = null,Object? cwd = null,Object? mcpServers = null,Object? meta = freezed,}) {
+  return _then(_LoadSessionCommand(
+sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
+as SessionId,cwd: null == cwd ? _self.cwd : cwd // ignore: cast_nullable_to_non_nullable
+as String,mcpServers: null == mcpServers ? _self._mcpServers : mcpServers // ignore: cast_nullable_to_non_nullable
+as List<McpServer>,meta: freezed == meta ? _self._meta : meta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
+  ));
+}
+
+/// Create a copy of LoadSessionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionIdCopyWith<$Res> get sessionId {
+  
+  return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
+    return _then(_self.copyWith(sessionId: value));
+  });
+}
+}
+
+/// @nodoc
 mixin _$SendPromptCommand {
 
  SessionId get sessionId; List<ContentBlock> get prompt; Map<String, Object?>? get meta;

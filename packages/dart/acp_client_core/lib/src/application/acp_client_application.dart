@@ -76,6 +76,30 @@ final class AcpClientApplication {
     return session;
   }
 
+  Future<AcpSession> loadSession(LoadSessionCommand command) async {
+    final response = await _sendRequest<LoadSessionResponse>(
+      method: sessionLoadMethod,
+      params: LoadSessionRequest(
+        sessionId: command.sessionId,
+        cwd: command.cwd,
+        mcpServers: command.mcpServers,
+        meta: command.meta,
+      ),
+    );
+    final session = AcpSession(
+      id: command.sessionId,
+      cwd: command.cwd,
+      status: SessionLifecycleStatus.active,
+      modes: response.modes,
+      configOptions: response.configOptions,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    _storeSession(session);
+    return session;
+  }
+
   Future<PromptTurn> sendPrompt(SendPromptCommand command) async {
     final session = _requireSession(command.sessionId);
     final turn = PromptTurn(

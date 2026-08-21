@@ -55,6 +55,73 @@ void main() {
     await subscription.cancel();
   });
 
+  test('LoadSession sends session/load and stores active session', () async {
+    final changes = <AcpSession>[];
+    final subscription = client.sessionChanges.listen(changes.add);
+    final loadSession = LoadSession(client);
+
+    final future = loadSession(
+      const LoadSessionCommand(
+        sessionId: SessionId('session-1'),
+        cwd: '/workspace',
+      ),
+    ).run();
+    await _pump();
+
+    final request = transport.sentMessages.single as JsonRpcRequest;
+    expect(request.method, sessionLoadMethod);
+    expect(
+      LoadSessionRequest.fromJson(request.params),
+      const LoadSessionRequest(
+        sessionId: SessionId('session-1'),
+        cwd: '/workspace',
+        mcpServers: [],
+      ),
+    );
+
+    transport.emitInbound(
+      JsonRpcMessage.response(
+        id: request.id,
+        result: const LoadSessionResponse().toJson(),
+      ),
+    );
+
+    final result = await future;
+    final session = result.getOrElse((failure) => fail('$failure'));
+    expect(session.id, const SessionId('session-1'));
+    expect(session.cwd, '/workspace');
+    expect(session.status, SessionLifecycleStatus.active);
+    expect(client.sessionById(const SessionId('session-1')), session);
+    expect(changes.single, session);
+
+    await subscription.cancel();
+  });
+
+  test('LoadSession returns typed transport failure when send fails', () async {
+    transport.fail(
+      const AcpTransportException(
+        code: AcpTransportErrorCode.disconnected,
+        message: 'disconnected',
+      ),
+    );
+
+    final result = await LoadSession(client)(
+      const LoadSessionCommand(
+        sessionId: SessionId('session-1'),
+        cwd: '/workspace',
+      ),
+    ).run();
+
+    expect(result.isLeft(), isTrue);
+    result.match((failure) {
+      expect(failure, isA<AcpClientTransportFailure>());
+      expect(
+        (failure as AcpClientTransportFailure).code,
+        AcpTransportErrorCode.disconnected,
+      );
+    }, (_) => fail('expected transport failure'));
+  });
+
   test('SendPrompt streams updates and completes from stopReason', () async {
     await _createSession(client, transport);
     transport.drainSentMessages();

@@ -18,6 +18,18 @@ sealed class CreateSessionCommand with _$CreateSessionCommand {
 }
 
 @freezed
+sealed class LoadSessionCommand with _$LoadSessionCommand {
+  const LoadSessionCommand._();
+
+  const factory LoadSessionCommand({
+    required SessionId sessionId,
+    required String cwd,
+    @Default([]) List<McpServer> mcpServers,
+    Map<String, Object?>? meta,
+  }) = _LoadSessionCommand;
+}
+
+@freezed
 sealed class SendPromptCommand with _$SendPromptCommand {
   const SendPromptCommand._();
 

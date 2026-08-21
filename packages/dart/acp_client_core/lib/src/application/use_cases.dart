@@ -8,6 +8,7 @@ import 'application_models.dart';
 
 typedef CreateSessionResult =
     TaskEither<AcpClientApplicationFailure, AcpSession>;
+typedef LoadSessionResult = TaskEither<AcpClientApplicationFailure, AcpSession>;
 typedef SendPromptResult = TaskEither<AcpClientApplicationFailure, PromptTurn>;
 typedef CancelTurnResult = TaskEither<AcpClientApplicationFailure, PromptTurn>;
 typedef RespondToPermissionResult =
@@ -21,6 +22,19 @@ final class CreateSession {
   CreateSessionResult call(CreateSessionCommand command) {
     return TaskEither.tryCatch(
       () => _client.createSession(command),
+      _mapApplicationFailure,
+    );
+  }
+}
+
+final class LoadSession {
+  const LoadSession(this._client);
+
+  final AcpClientApplication _client;
+
+  LoadSessionResult call(LoadSessionCommand command) {
+    return TaskEither.tryCatch(
+      () => _client.loadSession(command),
       _mapApplicationFailure,
     );
   }
