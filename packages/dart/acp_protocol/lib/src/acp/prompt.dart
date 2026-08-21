@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
+import 'acp_validation.dart';
 import 'session.dart';
 
 part 'prompt.freezed.dart';
@@ -71,7 +72,11 @@ sealed class Annotations with _$Annotations {
   }) = _Annotations;
 
   factory Annotations.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'annotations');
+    final source = requireAcpObject(
+      value,
+      path: 'annotations',
+      allowedKeys: {'audience', 'lastModified', 'priority', '_meta'},
+    );
 
     return Annotations(
       audience: _optionalObjectList(source, 'audience', Role.fromJson),
@@ -135,7 +140,24 @@ sealed class ContentBlock with _$ContentBlock {
   }) = EmbeddedResource;
 
   factory ContentBlock.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'contentBlock');
+    final source = requireAcpObject(
+      value,
+      path: 'contentBlock',
+      allowedKeys: {
+        'type',
+        'text',
+        'data',
+        'mimeType',
+        'uri',
+        'name',
+        'title',
+        'description',
+        'size',
+        'resource',
+        'annotations',
+        '_meta',
+      },
+    );
 
     return switch (_requiredString(source, 'type')) {
       'text' => ContentBlock.text(
@@ -263,7 +285,11 @@ sealed class EmbeddedResourceContents with _$EmbeddedResourceContents {
   }) = BlobResourceContents;
 
   factory EmbeddedResourceContents.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'embeddedResourceContents');
+    final source = requireAcpObject(
+      value,
+      path: 'embeddedResourceContents',
+      allowedKeys: {'uri', 'text', 'blob', 'mimeType', '_meta'},
+    );
 
     if (source.containsKey('text')) {
       return EmbeddedResourceContents.text(
@@ -319,7 +345,11 @@ sealed class PromptRequest with _$PromptRequest {
   }) = _PromptRequest;
 
   factory PromptRequest.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'promptRequest');
+    final source = requireAcpObject(
+      value,
+      path: 'promptRequest',
+      allowedKeys: {'sessionId', 'prompt', '_meta'},
+    );
 
     return PromptRequest(
       sessionId: SessionId.fromJson(source['sessionId']),
@@ -347,7 +377,11 @@ sealed class PromptResponse with _$PromptResponse {
   }) = _PromptResponse;
 
   factory PromptResponse.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'promptResponse');
+    final source = requireAcpObject(
+      value,
+      path: 'promptResponse',
+      allowedKeys: {'stopReason', '_meta'},
+    );
 
     return PromptResponse(
       stopReason: StopReason.fromJson(source['stopReason']),
@@ -370,7 +404,11 @@ sealed class CancelNotification with _$CancelNotification {
   }) = _CancelNotification;
 
   factory CancelNotification.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'cancelNotification');
+    final source = requireAcpObject(
+      value,
+      path: 'cancelNotification',
+      allowedKeys: {'sessionId', '_meta'},
+    );
 
     return CancelNotification(
       sessionId: SessionId.fromJson(source['sessionId']),

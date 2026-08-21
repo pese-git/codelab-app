@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
+import 'acp_validation.dart';
 import 'prompt.dart';
 import 'session.dart';
 import 'tool_call.dart';
@@ -18,7 +19,11 @@ sealed class AvailableCommandInput with _$AvailableCommandInput {
   }) = _AvailableCommandInput;
 
   factory AvailableCommandInput.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'availableCommandInput');
+    final source = requireAcpObject(
+      value,
+      path: 'availableCommandInput',
+      allowedKeys: {'hint', '_meta'},
+    );
 
     return AvailableCommandInput(
       hint: _requiredString(source, 'hint'),
@@ -43,7 +48,11 @@ sealed class AvailableCommand with _$AvailableCommand {
   }) = _AvailableCommand;
 
   factory AvailableCommand.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'availableCommand');
+    final source = requireAcpObject(
+      value,
+      path: 'availableCommand',
+      allowedKeys: {'name', 'description', 'input', '_meta'},
+    );
 
     return AvailableCommand(
       name: _requiredString(source, 'name'),
@@ -129,7 +138,11 @@ sealed class PlanEntry with _$PlanEntry {
   }) = _PlanEntry;
 
   factory PlanEntry.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'planEntry');
+    final source = requireAcpObject(
+      value,
+      path: 'planEntry',
+      allowedKeys: {'content', 'priority', 'status', '_meta'},
+    );
 
     return PlanEntry(
       content: _requiredString(source, 'content'),
@@ -202,7 +215,27 @@ sealed class SessionUpdate with _$SessionUpdate {
   }) = SessionInfoUpdate;
 
   factory SessionUpdate.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'sessionUpdate');
+    final source = requireAcpObject(
+      value,
+      path: 'sessionUpdate',
+      allowedKeys: {
+        'sessionUpdate',
+        'content',
+        'toolCallId',
+        'title',
+        'kind',
+        'status',
+        'locations',
+        'rawInput',
+        'rawOutput',
+        'entries',
+        'availableCommands',
+        'currentModeId',
+        'configOptions',
+        'updatedAt',
+        '_meta',
+      },
+    );
 
     return switch (_requiredString(source, 'sessionUpdate')) {
       'user_message_chunk' => SessionUpdate.userMessageChunk(
@@ -218,10 +251,16 @@ sealed class SessionUpdate with _$SessionUpdate {
         meta: _optionalObject(source, '_meta'),
       ),
       'tool_call' => SessionUpdate.toolCall(
-        toolCall: ToolCall.fromJson(source),
+        toolCall: parseToolCallJson(
+          source,
+          allowedExtraRootKeys: {'sessionUpdate'},
+        ),
       ),
       'tool_call_update' => SessionUpdate.toolCallUpdate(
-        toolCallUpdate: ToolCallUpdate.fromJson(source),
+        toolCallUpdate: parseToolCallUpdateJson(
+          source,
+          allowedExtraRootKeys: {'sessionUpdate'},
+        ),
       ),
       'plan' => SessionUpdate.plan(
         entries: _objectList(source, 'entries', PlanEntry.fromJson),
@@ -328,7 +367,11 @@ sealed class SessionNotification with _$SessionNotification {
   }) = _SessionNotification;
 
   factory SessionNotification.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'sessionNotification');
+    final source = requireAcpObject(
+      value,
+      path: 'sessionNotification',
+      allowedKeys: {'sessionId', 'update', '_meta'},
+    );
 
     return SessionNotification(
       sessionId: SessionId.fromJson(source['sessionId']),

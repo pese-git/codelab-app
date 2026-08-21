@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
+import 'acp_validation.dart';
 
 part 'session.freezed.dart';
 
@@ -35,7 +36,11 @@ sealed class EnvVariable with _$EnvVariable {
   }) = _EnvVariable;
 
   factory EnvVariable.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'envVariable');
+    final source = requireAcpObject(
+      value,
+      path: 'envVariable',
+      allowedKeys: {'name', 'value', '_meta'},
+    );
 
     return EnvVariable(
       name: _requiredString(source, 'name'),
@@ -60,7 +65,11 @@ sealed class HttpHeader with _$HttpHeader {
   }) = _HttpHeader;
 
   factory HttpHeader.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'httpHeader');
+    final source = requireAcpObject(
+      value,
+      path: 'httpHeader',
+      allowedKeys: {'name', 'value', '_meta'},
+    );
 
     return HttpHeader(
       name: _requiredString(source, 'name'),
@@ -101,7 +110,20 @@ sealed class McpServer with _$McpServer {
   }) = McpServerSse;
 
   factory McpServer.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'mcpServer');
+    final source = requireAcpObject(
+      value,
+      path: 'mcpServer',
+      allowedKeys: {
+        'type',
+        'name',
+        'command',
+        'args',
+        'env',
+        'url',
+        'headers',
+        '_meta',
+      },
+    );
 
     return switch (_requiredString(source, 'type')) {
       'stdio' => McpServer.stdio(
@@ -195,7 +217,11 @@ sealed class SessionMode with _$SessionMode {
   }) = _SessionMode;
 
   factory SessionMode.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'sessionMode');
+    final source = requireAcpObject(
+      value,
+      path: 'sessionMode',
+      allowedKeys: {'id', 'name', 'description', '_meta'},
+    );
 
     return SessionMode(
       id: SessionModeId.fromJson(source['id']),
@@ -226,7 +252,11 @@ sealed class SessionModeState with _$SessionModeState {
   }) = _SessionModeState;
 
   factory SessionModeState.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'sessionModeState');
+    final source = requireAcpObject(
+      value,
+      path: 'sessionModeState',
+      allowedKeys: {'availableModes', 'currentModeId', '_meta'},
+    );
 
     return SessionModeState(
       availableModes: _objectList(
@@ -298,7 +328,11 @@ sealed class SessionConfigSelectOption with _$SessionConfigSelectOption {
   }) = _SessionConfigSelectOption;
 
   factory SessionConfigSelectOption.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'sessionConfigSelectOption');
+    final source = requireAcpObject(
+      value,
+      path: 'sessionConfigSelectOption',
+      allowedKeys: {'value', 'name', 'description', '_meta'},
+    );
 
     return SessionConfigSelectOption(
       value: SessionConfigValueId.fromJson(source['value']),
@@ -333,7 +367,20 @@ sealed class SessionConfigOption with _$SessionConfigOption {
   }) = SessionConfigSelect;
 
   factory SessionConfigOption.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'sessionConfigOption');
+    final source = requireAcpObject(
+      value,
+      path: 'sessionConfigOption',
+      allowedKeys: {
+        'type',
+        'id',
+        'name',
+        'currentValue',
+        'options',
+        'category',
+        'description',
+        '_meta',
+      },
+    );
     final type = _requiredString(source, 'type');
     if (type != 'select') {
       throw JsonRpcProtocolException.invalidShape(
@@ -392,7 +439,11 @@ sealed class NewSessionRequest with _$NewSessionRequest {
   }) = _NewSessionRequest;
 
   factory NewSessionRequest.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'newSessionRequest');
+    final source = requireAcpObject(
+      value,
+      path: 'newSessionRequest',
+      allowedKeys: {'cwd', 'mcpServers', '_meta'},
+    );
 
     return NewSessionRequest(
       cwd: _requiredString(source, 'cwd'),
@@ -422,7 +473,11 @@ sealed class NewSessionResponse with _$NewSessionResponse {
   }) = _NewSessionResponse;
 
   factory NewSessionResponse.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'newSessionResponse');
+    final source = requireAcpObject(
+      value,
+      path: 'newSessionResponse',
+      allowedKeys: {'sessionId', 'modes', 'configOptions', '_meta'},
+    );
 
     return NewSessionResponse(
       sessionId: SessionId.fromJson(source['sessionId']),
@@ -463,7 +518,11 @@ sealed class LoadSessionRequest with _$LoadSessionRequest {
   }) = _LoadSessionRequest;
 
   factory LoadSessionRequest.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'loadSessionRequest');
+    final source = requireAcpObject(
+      value,
+      path: 'loadSessionRequest',
+      allowedKeys: {'sessionId', 'cwd', 'mcpServers', '_meta'},
+    );
 
     return LoadSessionRequest(
       sessionId: SessionId.fromJson(source['sessionId']),
@@ -494,7 +553,11 @@ sealed class LoadSessionResponse with _$LoadSessionResponse {
   }) = _LoadSessionResponse;
 
   factory LoadSessionResponse.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'loadSessionResponse');
+    final source = requireAcpObject(
+      value,
+      path: 'loadSessionResponse',
+      allowedKeys: {'modes', 'configOptions', '_meta'},
+    );
 
     return LoadSessionResponse(
       modes: source['modes'] == null
@@ -532,7 +595,11 @@ sealed class ListSessionsRequest with _$ListSessionsRequest {
   }) = _ListSessionsRequest;
 
   factory ListSessionsRequest.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'listSessionsRequest');
+    final source = requireAcpObject(
+      value,
+      path: 'listSessionsRequest',
+      allowedKeys: {'cwd', 'cursor', '_meta'},
+    );
 
     return ListSessionsRequest(
       cwd: _optionalString(source, 'cwd'),
@@ -563,7 +630,11 @@ sealed class SessionInfo with _$SessionInfo {
   }) = _SessionInfo;
 
   factory SessionInfo.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'sessionInfo');
+    final source = requireAcpObject(
+      value,
+      path: 'sessionInfo',
+      allowedKeys: {'sessionId', 'cwd', 'title', 'updatedAt', '_meta'},
+    );
 
     return SessionInfo(
       sessionId: SessionId.fromJson(source['sessionId']),
@@ -596,7 +667,11 @@ sealed class ListSessionsResponse with _$ListSessionsResponse {
   }) = _ListSessionsResponse;
 
   factory ListSessionsResponse.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'listSessionsResponse');
+    final source = requireAcpObject(
+      value,
+      path: 'listSessionsResponse',
+      allowedKeys: {'sessions', 'nextCursor', '_meta'},
+    );
 
     return ListSessionsResponse(
       sessions: _objectList(source, 'sessions', SessionInfo.fromJson),

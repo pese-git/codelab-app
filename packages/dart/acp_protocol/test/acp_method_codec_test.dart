@@ -252,5 +252,127 @@ void main() {
         throwsA(isA<TypeError>()),
       );
     });
+
+    test('allows _meta as the ACP extension point', () {
+      final request = decodeAcpParams(initializeMethod, {
+        'protocolVersion': 1,
+        '_meta': {
+          'traceparent': '00-abc-def-01',
+          'custom': {'feature': true},
+        },
+      });
+
+      expect(
+        request,
+        const InitializeRequest(
+          protocolVersion: ProtocolVersion(1),
+          meta: {
+            'traceparent': '00-abc-def-01',
+            'custom': {'feature': true},
+          },
+        ),
+      );
+    });
+
+    test('rejects unsupported root fields in ACP params', () {
+      expect(
+        () => decodeAcpParams(initializeMethod, {
+          'protocolVersion': 1,
+          'requestId': 'custom-outside-meta',
+        }),
+        throwsA(
+          isA<JsonRpcProtocolException>()
+              .having(
+                (error) => error.kind,
+                'kind',
+                JsonRpcProtocolErrorKind.invalidShape,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('use _meta for extensions'),
+              ),
+        ),
+      );
+    });
+
+    test('maps unsupported root fields to typed ACP protocol errors', () {
+      late final JsonRpcProtocolException exception;
+      try {
+        decodeAcpParams(sessionPromptMethod, {
+          'sessionId': 'session-1',
+          'prompt': [
+            {'type': 'text', 'text': 'hello'},
+          ],
+          'customRoot': true,
+        });
+      } on JsonRpcProtocolException catch (error) {
+        exception = error;
+      }
+
+      final error = mapJsonRpcProtocolException(
+        exception,
+        phase: AcpProtocolErrorPhase.params,
+        method: sessionPromptMethod,
+      );
+
+      expect(error.kind, AcpProtocolErrorKind.invalidAcpParams);
+      expect(error.method, sessionPromptMethod);
+      expect(error.message, contains('customRoot'));
+      expect(error.message, contains('use _meta for extensions'));
+    });
+
+    test(
+      'keeps nested JSON payloads open inside rawInput rawOutput and _meta',
+      () {
+        final update = decodeAcpNotificationParams(
+          const JsonRpcMessage.notification(
+                method: sessionUpdateMethod,
+                params: {
+                  'sessionId': 'session-1',
+                  'update': {
+                    'sessionUpdate': 'tool_call_update',
+                    'toolCallId': 'call-1',
+                    'rawInput': {
+                      'customRoot': {
+                        'deeply': ['nested', 'agent-owned'],
+                      },
+                    },
+                    'rawOutput': {
+                      'unknown': {'status': 'ok'},
+                    },
+                    '_meta': {
+                      'vendor': {'extension': true},
+                    },
+                  },
+                },
+              )
+              as JsonRpcNotification,
+        );
+
+        expect(
+          update,
+          const SessionNotification(
+            sessionId: SessionId('session-1'),
+            update: SessionUpdate.toolCallUpdate(
+              toolCallUpdate: ToolCallUpdate(
+                toolCallId: ToolCallId('call-1'),
+                rawInput: {
+                  'customRoot': {
+                    'deeply': ['nested', 'agent-owned'],
+                  },
+                },
+                rawOutput: {
+                  'unknown': {'status': 'ok'},
+                },
+                meta: {
+                  'vendor': {'extension': true},
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
   });
 }

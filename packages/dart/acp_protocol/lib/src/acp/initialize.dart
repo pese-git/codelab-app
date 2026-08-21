@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
+import 'acp_validation.dart';
 
 part 'initialize.freezed.dart';
 
@@ -36,7 +37,11 @@ sealed class Implementation with _$Implementation {
   }) = _Implementation;
 
   factory Implementation.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'implementation');
+    final source = requireAcpObject(
+      value,
+      path: 'implementation',
+      allowedKeys: {'name', 'version', 'title', '_meta'},
+    );
 
     return Implementation(
       name: _requiredString(source, 'name'),
@@ -67,7 +72,11 @@ sealed class FileSystemCapabilities with _$FileSystemCapabilities {
   }) = _FileSystemCapabilities;
 
   factory FileSystemCapabilities.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'fs');
+    final source = requireAcpObject(
+      value,
+      path: 'fs',
+      allowedKeys: {'readTextFile', 'writeTextFile', '_meta'},
+    );
 
     return FileSystemCapabilities(
       readTextFile: _optionalBool(source, 'readTextFile'),
@@ -96,7 +105,11 @@ sealed class ClientCapabilities with _$ClientCapabilities {
   }) = _ClientCapabilities;
 
   factory ClientCapabilities.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'clientCapabilities');
+    final source = requireAcpObject(
+      value,
+      path: 'clientCapabilities',
+      allowedKeys: {'fs', 'terminal', '_meta'},
+    );
 
     return ClientCapabilities(
       fs: source.containsKey('fs')
@@ -127,7 +140,11 @@ sealed class McpCapabilities with _$McpCapabilities {
   }) = _McpCapabilities;
 
   factory McpCapabilities.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'mcpCapabilities');
+    final source = requireAcpObject(
+      value,
+      path: 'mcpCapabilities',
+      allowedKeys: {'http', 'sse', '_meta'},
+    );
 
     return McpCapabilities(
       http: _optionalBool(source, 'http'),
@@ -153,7 +170,11 @@ sealed class PromptCapabilities with _$PromptCapabilities {
   }) = _PromptCapabilities;
 
   factory PromptCapabilities.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'promptCapabilities');
+    final source = requireAcpObject(
+      value,
+      path: 'promptCapabilities',
+      allowedKeys: {'audio', 'embeddedContext', 'image', '_meta'},
+    );
 
     return PromptCapabilities(
       audio: _optionalBool(source, 'audio'),
@@ -182,7 +203,11 @@ sealed class SessionListCapabilities with _$SessionListCapabilities {
   }) = _SessionListCapabilities;
 
   factory SessionListCapabilities.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'sessionCapabilities.list');
+    final source = requireAcpObject(
+      value,
+      path: 'sessionCapabilities.list',
+      allowedKeys: {'_meta'},
+    );
 
     return SessionListCapabilities(meta: _optionalObject(source, '_meta'));
   }
@@ -202,7 +227,11 @@ sealed class SessionCapabilities with _$SessionCapabilities {
   }) = _SessionCapabilities;
 
   factory SessionCapabilities.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'sessionCapabilities');
+    final source = requireAcpObject(
+      value,
+      path: 'sessionCapabilities',
+      allowedKeys: {'list', '_meta'},
+    );
 
     return SessionCapabilities(
       list: source['list'] == null
@@ -233,7 +262,17 @@ sealed class AgentCapabilities with _$AgentCapabilities {
   }) = _AgentCapabilities;
 
   factory AgentCapabilities.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'agentCapabilities');
+    final source = requireAcpObject(
+      value,
+      path: 'agentCapabilities',
+      allowedKeys: {
+        'loadSession',
+        'mcpCapabilities',
+        'promptCapabilities',
+        'sessionCapabilities',
+        '_meta',
+      },
+    );
 
     return AgentCapabilities(
       loadSession: _optionalBool(source, 'loadSession'),
@@ -273,7 +312,11 @@ sealed class AuthMethod with _$AuthMethod {
   }) = _AuthMethod;
 
   factory AuthMethod.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'authMethod');
+    final source = requireAcpObject(
+      value,
+      path: 'authMethod',
+      allowedKeys: {'type', 'id', 'name', 'description', '_meta'},
+    );
     final type = source['type'];
 
     if (type != null && type != 'agent') {
@@ -312,7 +355,16 @@ sealed class InitializeRequest with _$InitializeRequest {
   }) = _InitializeRequest;
 
   factory InitializeRequest.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'initialize request');
+    final source = requireAcpObject(
+      value,
+      path: 'initialize request',
+      allowedKeys: {
+        'protocolVersion',
+        'clientCapabilities',
+        'clientInfo',
+        '_meta',
+      },
+    );
 
     return InitializeRequest(
       protocolVersion: ProtocolVersion.fromJson(source['protocolVersion']),
@@ -349,7 +401,17 @@ sealed class InitializeResponse with _$InitializeResponse {
   }) = _InitializeResponse;
 
   factory InitializeResponse.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'initialize response');
+    final source = requireAcpObject(
+      value,
+      path: 'initialize response',
+      allowedKeys: {
+        'protocolVersion',
+        'agentCapabilities',
+        'agentInfo',
+        'authMethods',
+        '_meta',
+      },
+    );
     final authMethods = source['authMethods'];
 
     final List<Object?>? authMethodItems;

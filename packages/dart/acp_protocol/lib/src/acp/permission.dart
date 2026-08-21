@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
+import 'acp_validation.dart';
 import 'session.dart';
 import 'tool_call.dart';
 
@@ -65,7 +66,11 @@ sealed class PermissionOption with _$PermissionOption {
   }) = _PermissionOption;
 
   factory PermissionOption.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'permissionOption');
+    final source = requireAcpObject(
+      value,
+      path: 'permissionOption',
+      allowedKeys: {'optionId', 'name', 'kind', '_meta'},
+    );
 
     return PermissionOption(
       optionId: PermissionOptionId.fromJson(source['optionId']),
@@ -97,7 +102,11 @@ sealed class RequestPermissionRequest with _$RequestPermissionRequest {
   }) = _RequestPermissionRequest;
 
   factory RequestPermissionRequest.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'requestPermissionRequest');
+    final source = requireAcpObject(
+      value,
+      path: 'requestPermissionRequest',
+      allowedKeys: {'sessionId', 'toolCall', 'options', '_meta'},
+    );
 
     return RequestPermissionRequest(
       sessionId: SessionId.fromJson(source['sessionId']),
@@ -130,7 +139,11 @@ sealed class RequestPermissionOutcome with _$RequestPermissionOutcome {
   }) = SelectedPermissionOutcome;
 
   factory RequestPermissionOutcome.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'requestPermissionOutcome');
+    final source = requireAcpObject(
+      value,
+      path: 'requestPermissionOutcome',
+      allowedKeys: {'outcome', 'optionId', '_meta'},
+    );
 
     return switch (_requiredString(source, 'outcome')) {
       'cancelled' => const RequestPermissionOutcome.cancelled(),
@@ -166,7 +179,11 @@ sealed class RequestPermissionResponse with _$RequestPermissionResponse {
   }) = _RequestPermissionResponse;
 
   factory RequestPermissionResponse.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'requestPermissionResponse');
+    final source = requireAcpObject(
+      value,
+      path: 'requestPermissionResponse',
+      allowedKeys: {'outcome', '_meta'},
+    );
 
     return RequestPermissionResponse(
       outcome: RequestPermissionOutcome.fromJson(source['outcome']),

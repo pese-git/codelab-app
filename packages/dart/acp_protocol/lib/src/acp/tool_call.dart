@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
+import 'acp_validation.dart';
 import 'prompt.dart';
 
 part 'tool_call.freezed.dart';
@@ -96,14 +97,7 @@ sealed class Diff with _$Diff {
   }) = _Diff;
 
   factory Diff.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'diff');
-
-    return Diff(
-      path: _requiredString(source, 'path'),
-      oldText: _optionalString(source, 'oldText'),
-      newText: _requiredString(source, 'newText'),
-      meta: _optionalObject(source, '_meta'),
-    );
+    return parseDiffJson(value);
   }
 
   JsonObject toJson() {
@@ -127,7 +121,11 @@ sealed class ToolCallLocation with _$ToolCallLocation {
   }) = _ToolCallLocation;
 
   factory ToolCallLocation.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'toolCallLocation');
+    final source = requireAcpObject(
+      value,
+      path: 'toolCallLocation',
+      allowedKeys: {'path', 'line', '_meta'},
+    );
 
     return ToolCallLocation(
       path: _requiredString(source, 'path'),
@@ -162,14 +160,28 @@ sealed class ToolCallContent with _$ToolCallContent {
   }) = ToolCallTerminal;
 
   factory ToolCallContent.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'toolCallContent');
+    final source = requireAcpObject(
+      value,
+      path: 'toolCallContent',
+      allowedKeys: {
+        'type',
+        'content',
+        'path',
+        'oldText',
+        'newText',
+        'terminalId',
+        '_meta',
+      },
+    );
 
     return switch (_requiredString(source, 'type')) {
       'content' => ToolCallContent.content(
         content: ContentBlock.fromJson(source['content']),
         meta: _optionalObject(source, '_meta'),
       ),
-      'diff' => ToolCallContent.diff(diff: Diff.fromJson(source)),
+      'diff' => ToolCallContent.diff(
+        diff: parseDiffJson(source, allowedExtraRootKeys: {'type'}),
+      ),
       'terminal' => ToolCallContent.terminal(
         terminalId: _requiredString(source, 'terminalId'),
         meta: _optionalObject(source, '_meta'),
@@ -197,6 +209,30 @@ sealed class ToolCallContent with _$ToolCallContent {
   }
 }
 
+Diff parseDiffJson(
+  Object? value, {
+  Set<String> allowedExtraRootKeys = const {},
+}) {
+  final source = requireAcpObject(
+    value,
+    path: 'diff',
+    allowedKeys: {
+      'path',
+      'oldText',
+      'newText',
+      '_meta',
+      ...allowedExtraRootKeys,
+    },
+  );
+
+  return Diff(
+    path: _requiredString(source, 'path'),
+    oldText: _optionalString(source, 'oldText'),
+    newText: _requiredString(source, 'newText'),
+    meta: _optionalObject(source, '_meta'),
+  );
+}
+
 @freezed
 sealed class ToolCall with _$ToolCall {
   const ToolCall._();
@@ -214,27 +250,7 @@ sealed class ToolCall with _$ToolCall {
   }) = _ToolCall;
 
   factory ToolCall.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'toolCall');
-
-    return ToolCall(
-      toolCallId: ToolCallId.fromJson(source['toolCallId']),
-      title: _requiredString(source, 'title'),
-      kind: source['kind'] == null
-          ? ToolKind.other
-          : ToolKind.fromJson(source['kind']),
-      status: source['status'] == null
-          ? ToolCallStatus.pending
-          : ToolCallStatus.fromJson(source['status']),
-      content: _optionalObjectList(source, 'content', ToolCallContent.fromJson),
-      locations: _optionalObjectList(
-        source,
-        'locations',
-        ToolCallLocation.fromJson,
-      ),
-      rawInput: _optionalObject(source, 'rawInput'),
-      rawOutput: _optionalObject(source, 'rawOutput'),
-      meta: _optionalObject(source, '_meta'),
-    );
+    return parseToolCallJson(value);
   }
 
   JsonObject toJson() {
@@ -271,25 +287,7 @@ sealed class ToolCallUpdate with _$ToolCallUpdate {
   }) = _ToolCallUpdate;
 
   factory ToolCallUpdate.fromJson(Object? value) {
-    final source = requireJsonObject(value, path: 'toolCallUpdate');
-
-    return ToolCallUpdate(
-      toolCallId: ToolCallId.fromJson(source['toolCallId']),
-      title: _optionalString(source, 'title'),
-      kind: source['kind'] == null ? null : ToolKind.fromJson(source['kind']),
-      status: source['status'] == null
-          ? null
-          : ToolCallStatus.fromJson(source['status']),
-      content: _optionalObjectList(source, 'content', ToolCallContent.fromJson),
-      locations: _optionalObjectList(
-        source,
-        'locations',
-        ToolCallLocation.fromJson,
-      ),
-      rawInput: _optionalObject(source, 'rawInput'),
-      rawOutput: _optionalObject(source, 'rawOutput'),
-      meta: _optionalObject(source, '_meta'),
-    );
+    return parseToolCallUpdateJson(value);
   }
 
   JsonObject toJson() {
@@ -307,6 +305,88 @@ sealed class ToolCallUpdate with _$ToolCallUpdate {
       if (meta != null) '_meta': meta,
     };
   }
+}
+
+ToolCall parseToolCallJson(
+  Object? value, {
+  Set<String> allowedExtraRootKeys = const {},
+}) {
+  final source = requireAcpObject(
+    value,
+    path: 'toolCall',
+    allowedKeys: {
+      'toolCallId',
+      'title',
+      'kind',
+      'status',
+      'content',
+      'locations',
+      'rawInput',
+      'rawOutput',
+      '_meta',
+      ...allowedExtraRootKeys,
+    },
+  );
+
+  return ToolCall(
+    toolCallId: ToolCallId.fromJson(source['toolCallId']),
+    title: _requiredString(source, 'title'),
+    kind: source['kind'] == null
+        ? ToolKind.other
+        : ToolKind.fromJson(source['kind']),
+    status: source['status'] == null
+        ? ToolCallStatus.pending
+        : ToolCallStatus.fromJson(source['status']),
+    content: _optionalObjectList(source, 'content', ToolCallContent.fromJson),
+    locations: _optionalObjectList(
+      source,
+      'locations',
+      ToolCallLocation.fromJson,
+    ),
+    rawInput: _optionalObject(source, 'rawInput'),
+    rawOutput: _optionalObject(source, 'rawOutput'),
+    meta: _optionalObject(source, '_meta'),
+  );
+}
+
+ToolCallUpdate parseToolCallUpdateJson(
+  Object? value, {
+  Set<String> allowedExtraRootKeys = const {},
+}) {
+  final source = requireAcpObject(
+    value,
+    path: 'toolCallUpdate',
+    allowedKeys: {
+      'toolCallId',
+      'title',
+      'kind',
+      'status',
+      'content',
+      'locations',
+      'rawInput',
+      'rawOutput',
+      '_meta',
+      ...allowedExtraRootKeys,
+    },
+  );
+
+  return ToolCallUpdate(
+    toolCallId: ToolCallId.fromJson(source['toolCallId']),
+    title: _optionalString(source, 'title'),
+    kind: source['kind'] == null ? null : ToolKind.fromJson(source['kind']),
+    status: source['status'] == null
+        ? null
+        : ToolCallStatus.fromJson(source['status']),
+    content: _optionalObjectList(source, 'content', ToolCallContent.fromJson),
+    locations: _optionalObjectList(
+      source,
+      'locations',
+      ToolCallLocation.fromJson,
+    ),
+    rawInput: _optionalObject(source, 'rawInput'),
+    rawOutput: _optionalObject(source, 'rawOutput'),
+    meta: _optionalObject(source, '_meta'),
+  );
 }
 
 JsonObject? _optionalObject(JsonObject source, String field) {
