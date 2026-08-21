@@ -30,7 +30,7 @@
 
 ## 4. Implement core domain and application
 
-- [ ] 4.1 Создать domain models для session, prompt turn, tool call, approval, connection state и diagnostics
+- [x] 4.1 Создать domain models для session, prompt turn, tool call, approval, connection state и diagnostics
 - [ ] 4.2 Реализовать state machines для connection/session/prompt turn lifecycle
 - [ ] 4.3 Реализовать use cases `CreateSession`, `LoadSession`, `SendPrompt`, `CancelTurn`, `RespondToPermission`, `Reconnect`
 - [ ] 4.4 Реализовать idempotent handling для duplicate, late и interleaved `session/update`
