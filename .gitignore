@@ -13,6 +13,7 @@
 .packages
 build/
 coverage/
+.widget_preview/
 pubspec_overrides.yaml
 *.freezed.dart
 !packages/dart/acp_transports/lib/src/stdio_acp_transport.freezed.dart
