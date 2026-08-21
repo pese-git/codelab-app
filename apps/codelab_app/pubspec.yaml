@@ -11,6 +11,8 @@ environment:
 dependencies:
   acp_client_core:
     path: ../../packages/dart/acp_client_core
+  acp_transports:
+    path: ../../packages/dart/acp_transports
   acp_ui:
     path: ../../packages/flutter/acp_ui
   cherrypick: ^4.0.0-dev.3
@@ -22,6 +24,8 @@ dependencies:
   fpdart: ^1.2.0
 
 dev_dependencies:
+  acp_testing:
+    path: ../../packages/dart/acp_testing
   build_runner: ^2.10.5
   cherrypick_generator: ^4.0.0-dev.2
   flutter_lints: ^6.0.0

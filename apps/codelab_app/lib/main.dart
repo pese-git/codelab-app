@@ -1,8 +1,10 @@
 import 'package:acp_ui/acp_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
+import 'src/app_scope.dart';
+
 void main() {
-  runApp(const CodeLabApp());
+  runApp(const CodeLabBootstrap(child: CodeLabApp()));
 }
 
 class CodeLabApp extends StatelessWidget {
@@ -10,6 +12,8 @@ class CodeLabApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    codeLabDependenciesOf(context);
+
     return const FluentApp(title: 'CodeLab', home: CodeLabShell());
   }
 }

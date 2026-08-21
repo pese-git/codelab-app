@@ -1,13 +1,28 @@
 import 'package:codelab_app/main.dart';
+import 'package:codelab_app/src/app_scope.dart';
+import 'package:acp_client_core/acp_client_core.dart';
+import 'package:acp_testing/acp_testing.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('renders the desktop workbench shell', (tester) async {
-    await tester.pumpWidget(const CodeLabApp());
+    final scope = createCodeLabRootScope(
+      transportFactory: () => FakeAcpTransport(),
+    );
+
+    await tester.pumpWidget(
+      CodeLabBootstrap(scope: scope, child: const CodeLabApp()),
+    );
 
     expect(find.text('Agent Workbench'), findsOneWidget);
     expect(find.text('Sessions'), findsOneWidget);
     expect(find.text('Transcript'), findsOneWidget);
     expect(find.text('Inspector'), findsOneWidget);
+    expect(scope.resolve<AcpClientApplication>(), isA<AcpClientApplication>());
+    expect(scope.resolve<AcpTransport>(), isA<FakeAcpTransport>());
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
   });
 }

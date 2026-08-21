@@ -1,0 +1,145 @@
+import 'dart:async';
+
+import 'package:acp_client_core/acp_client_core.dart';
+import 'package:acp_transports/acp_transports.dart';
+import 'package:cherrypick/cherrypick.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+
+typedef CodeLabTransportFactory = AcpTransport Function();
+
+Scope createCodeLabRootScope({CodeLabTransportFactory? transportFactory}) {
+  final scope = CherryPick.openRootScope()
+    ..installModules([
+      CodeLabRootModule(
+        transportFactory: transportFactory ?? _createDefaultTransport,
+      ),
+    ]);
+
+  scope.resolve<CodeLabRootLifecycle>();
+  return scope;
+}
+
+Future<void> closeCodeLabRootScope() => CherryPick.closeRootScope();
+
+CodeLabDependencies codeLabDependenciesOf(BuildContext context) =>
+    CodeLabDependenciesScope.of(context);
+
+final class CodeLabRootModule extends Module {
+  CodeLabRootModule({required CodeLabTransportFactory transportFactory})
+    : _transportFactory = transportFactory;
+
+  final CodeLabTransportFactory _transportFactory;
+
+  @override
+  void builder(Scope currentScope) {
+    bind<StdioAcpAgentProfile>().toInstance(codelabAgentStdioProfile);
+    bind<AcpTransport>().toProvide(() => _transportFactory()).singleton();
+    bind<AcpClientApplication>()
+        .toProvide(
+          () => AcpClientApplication(
+            transport: currentScope.resolve<AcpTransport>(),
+            reconnectTransport: _transportFactory,
+          ),
+        )
+        .singleton();
+    bind<CodeLabRootLifecycle>()
+        .toProvide(
+          () => CodeLabRootLifecycle(
+            application: currentScope.resolve<AcpClientApplication>(),
+            transport: currentScope.resolve<AcpTransport>(),
+          ),
+        )
+        .singleton();
+  }
+}
+
+final class CodeLabRootLifecycle implements Disposable {
+  CodeLabRootLifecycle({
+    required AcpClientApplication application,
+    required AcpTransport transport,
+  }) : _application = application,
+       _transport = transport;
+
+  final AcpClientApplication _application;
+  final AcpTransport _transport;
+  var _isDisposed = false;
+
+  @override
+  Future<void> dispose() async {
+    if (_isDisposed) {
+      return;
+    }
+
+    _isDisposed = true;
+    await _transport.close();
+    await _application.dispose();
+  }
+}
+
+final class CodeLabDependencies {
+  const CodeLabDependencies({required this.scope});
+
+  final Scope scope;
+
+  AcpClientApplication get application => scope.resolve<AcpClientApplication>();
+}
+
+final class CodeLabDependenciesScope extends InheritedWidget {
+  const CodeLabDependenciesScope({
+    required this.dependencies,
+    required super.child,
+    super.key,
+  });
+
+  final CodeLabDependencies dependencies;
+
+  static CodeLabDependencies of(BuildContext context) {
+    final inherited = context
+        .dependOnInheritedWidgetOfExactType<CodeLabDependenciesScope>();
+    assert(inherited != null, 'CodeLabDependenciesScope was not found.');
+    return inherited!.dependencies;
+  }
+
+  @override
+  bool updateShouldNotify(CodeLabDependenciesScope oldWidget) =>
+      dependencies != oldWidget.dependencies;
+}
+
+class CodeLabBootstrap extends StatefulWidget {
+  const CodeLabBootstrap({required this.child, this.scope, super.key});
+
+  final Widget child;
+  final Scope? scope;
+
+  @override
+  State<CodeLabBootstrap> createState() => _CodeLabBootstrapState();
+}
+
+class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
+  late final Scope _scope = widget.scope ?? createCodeLabRootScope();
+  late final CodeLabDependencies _dependencies = CodeLabDependencies(
+    scope: _scope,
+  );
+
+  @override
+  void dispose() {
+    final providedScope = widget.scope;
+    if (providedScope == null) {
+      unawaited(closeCodeLabRootScope());
+    } else {
+      unawaited(providedScope.dispose());
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CodeLabDependenciesScope(
+      dependencies: _dependencies,
+      child: widget.child,
+    );
+  }
+}
+
+AcpTransport _createDefaultTransport() =>
+    StdioAcpTransport(codelabAgentStdioProfile.toTransportConfig());
