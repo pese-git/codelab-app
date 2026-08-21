@@ -11,6 +11,7 @@ void main() {
     expect(AcpPromptComposer, isA<Type>());
     expect(AcpToolCallStatus.running, isA<AcpToolCallStatus>());
     expect(AcpToolCallSummary, isA<Type>());
+    expect(AcpViewMode.normal, isA<AcpViewMode>());
   });
 
   testWidgets('submits prompt text and clears the composer', (tester) async {
@@ -96,6 +97,48 @@ void main() {
     expect(find.text('Failed'), findsOneWidget);
     expect(find.text('edit - lib/main.dart'), findsOneWidget);
     expect(find.text('permission denied'), findsOneWidget);
+  });
+
+  testWidgets('renders summary tool calls without target or detail', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: AcpToolCallSummary(
+          name: 'edit',
+          target: 'lib/main.dart',
+          status: AcpToolCallStatus.running,
+          detail: 'permission pending',
+          viewMode: AcpViewMode.summary,
+        ),
+      ),
+    );
+
+    expect(find.text('Running'), findsOneWidget);
+    expect(find.text('edit'), findsOneWidget);
+    expect(find.text('edit - lib/main.dart'), findsNothing);
+    expect(find.text('permission pending'), findsNothing);
+  });
+
+  testWidgets('renders verbose tool calls with target and detail rows', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: AcpToolCallSummary(
+          name: 'edit',
+          target: 'lib/main.dart',
+          status: AcpToolCallStatus.succeeded,
+          detail: 'applied patch',
+          viewMode: AcpViewMode.verbose,
+        ),
+      ),
+    );
+
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('edit'), findsOneWidget);
+    expect(find.text('lib/main.dart'), findsOneWidget);
+    expect(find.text('applied patch'), findsOneWidget);
   });
 
   testWidgets('renders connection status with transport and profile labels', (

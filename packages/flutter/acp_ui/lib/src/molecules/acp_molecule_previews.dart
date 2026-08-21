@@ -5,6 +5,7 @@ import 'acp_approval_option_group.dart';
 import 'acp_connection_status_row.dart';
 import 'acp_prompt_composer.dart';
 import 'acp_tool_call_summary.dart';
+import 'acp_view_mode.dart';
 import '../atomics/atomics.dart';
 
 const acpMoleculePreviewGroup = 'ACP molecules';
@@ -26,7 +27,7 @@ Widget acpPromptComposerPreview() {
 }
 
 @Preview(
-  name: 'Tool call summary',
+  name: 'Tool call summary normal',
   group: acpMoleculePreviewGroup,
   size: Size(520, 120),
 )
@@ -37,6 +38,40 @@ Widget acpToolCallSummaryPreview() {
       target: 'fvm dart analyze',
       status: AcpToolCallStatus.running,
       detail: 'cwd packages/flutter/acp_ui',
+    ),
+  );
+}
+
+@Preview(
+  name: 'Tool call summary summary',
+  group: acpMoleculePreviewGroup,
+  size: Size(360, 120),
+)
+Widget acpToolCallSummarySummaryPreview() {
+  return const _AcpPreviewSurface(
+    child: AcpToolCallSummary(
+      name: 'shell',
+      target: 'fvm dart analyze',
+      status: AcpToolCallStatus.running,
+      detail: 'cwd packages/flutter/acp_ui',
+      viewMode: AcpViewMode.summary,
+    ),
+  );
+}
+
+@Preview(
+  name: 'Tool call summary verbose',
+  group: acpMoleculePreviewGroup,
+  size: Size(520, 180),
+)
+Widget acpToolCallSummaryVerbosePreview() {
+  return const _AcpPreviewSurface(
+    child: AcpToolCallSummary(
+      name: 'shell',
+      target: 'fvm dart analyze',
+      status: AcpToolCallStatus.running,
+      detail: 'cwd packages/flutter/acp_ui',
+      viewMode: AcpViewMode.verbose,
     ),
   );
 }

@@ -61,6 +61,80 @@ void main() {
     expect(find.text('all tests passed'), findsOneWidget);
   });
 
+  testWidgets('renders transcript summary mode with compact details', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 360,
+          height: 240,
+          child: AcpTranscriptPanel(
+            viewMode: AcpViewMode.summary,
+            entries: [
+              AcpTranscriptEntry(
+                id: 'agent-1',
+                kind: AcpTranscriptEntryKind.agent,
+                title: 'Agent',
+                body: 'Long update that should stay compact in summary mode.',
+              ),
+              AcpTranscriptEntry(
+                id: 'tool-1',
+                kind: AcpTranscriptEntryKind.toolCall,
+                title: 'Tool call',
+                toolCall: AcpToolCallSummary(
+                  name: 'shell',
+                  target: 'fvm dart analyze',
+                  status: AcpToolCallStatus.running,
+                  detail: 'packages/flutter/acp_ui',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Agent'), findsOneWidget);
+    expect(find.text('shell'), findsOneWidget);
+    expect(find.text('shell - fvm dart analyze'), findsNothing);
+    expect(find.text('packages/flutter/acp_ui'), findsNothing);
+  });
+
+  testWidgets('renders transcript verbose mode with expanded tool details', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 520,
+          height: 320,
+          child: AcpTranscriptPanel(
+            viewMode: AcpViewMode.verbose,
+            entries: [
+              AcpTranscriptEntry(
+                id: 'tool-1',
+                kind: AcpTranscriptEntryKind.toolCall,
+                title: 'Tool call',
+                toolCall: AcpToolCallSummary(
+                  name: 'shell',
+                  target: 'fvm dart analyze',
+                  status: AcpToolCallStatus.succeeded,
+                  detail: 'packages/flutter/acp_ui',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('shell'), findsOneWidget);
+    expect(find.text('fvm dart analyze'), findsOneWidget);
+    expect(find.text('packages/flutter/acp_ui'), findsOneWidget);
+  });
+
   testWidgets('renders transcript empty state', (tester) async {
     await tester.pumpWidget(
       const FluentApp(

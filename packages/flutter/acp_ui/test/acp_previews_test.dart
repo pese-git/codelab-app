@@ -13,6 +13,12 @@ void main() {
     await tester.pumpWidget(acpToolCallSummaryPreview());
     expect(tester.takeException(), isNull);
 
+    await tester.pumpWidget(acpToolCallSummarySummaryPreview());
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(acpToolCallSummaryVerbosePreview());
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(acpConnectionStatusRowPreview());
     expect(tester.takeException(), isNull);
 
@@ -24,6 +30,12 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(acpTranscriptPanelPreview());
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(acpTranscriptPanelSummaryPreview());
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(acpTranscriptPanelVerbosePreview());
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(acpApprovalPanelPreview());

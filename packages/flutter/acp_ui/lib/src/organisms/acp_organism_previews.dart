@@ -13,7 +13,7 @@ import 'acp_workbench_layout.dart';
 const acpOrganismPreviewGroup = 'ACP organisms';
 
 @Preview(
-  name: 'Transcript panel',
+  name: 'Transcript panel normal',
   group: acpOrganismPreviewGroup,
   size: Size(620, 360),
 )
@@ -47,6 +47,84 @@ Widget acpTranscriptPanelPreview() {
               target: 'fvm dart analyze',
               status: AcpToolCallStatus.running,
               detail: 'packages/flutter/acp_ui',
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Transcript panel summary',
+  group: acpOrganismPreviewGroup,
+  size: Size(440, 320),
+)
+Widget acpTranscriptPanelSummaryPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 440,
+      height: 320,
+      child: AcpTranscriptPanel(
+        viewMode: AcpViewMode.summary,
+        entries: [
+          AcpTranscriptEntry(
+            id: 'agent-summary-1',
+            kind: AcpTranscriptEntryKind.agent,
+            title: 'Codelab Agent',
+            body:
+                'Analyzed protocol package and found one formatter-only diff.',
+            timestampLabel: '12:04',
+          ),
+          AcpTranscriptEntry(
+            id: 'tool-summary-1',
+            kind: AcpTranscriptEntryKind.toolCall,
+            title: 'Tool call',
+            toolCall: AcpToolCallSummary(
+              name: 'shell',
+              target: 'fvm dart analyze',
+              status: AcpToolCallStatus.succeeded,
+              detail: 'cwd packages/flutter/acp_ui',
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Transcript panel verbose',
+  group: acpOrganismPreviewGroup,
+  size: Size(620, 420),
+)
+Widget acpTranscriptPanelVerbosePreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      height: 420,
+      child: AcpTranscriptPanel(
+        viewMode: AcpViewMode.verbose,
+        entries: [
+          AcpTranscriptEntry(
+            id: 'agent-verbose-1',
+            kind: AcpTranscriptEntryKind.agent,
+            title: 'Codelab Agent',
+            body:
+                'Analyzed protocol package, checked generated DTO boundaries, '
+                'and kept the current session state unchanged while reporting '
+                'the formatter-only diff.',
+            timestampLabel: '12:04',
+          ),
+          AcpTranscriptEntry(
+            id: 'tool-verbose-1',
+            kind: AcpTranscriptEntryKind.toolCall,
+            title: 'Tool call',
+            toolCall: AcpToolCallSummary(
+              name: 'shell',
+              target: 'fvm dart run melos run analyze',
+              status: AcpToolCallStatus.succeeded,
+              detail: 'cwd packages/flutter/acp_ui',
             ),
           ),
         ],

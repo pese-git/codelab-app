@@ -27,11 +27,13 @@ class AcpTranscriptPanel extends StatelessWidget {
   const AcpTranscriptPanel({
     required this.entries,
     this.emptyLabel = 'No transcript yet',
+    this.viewMode = AcpViewMode.normal,
     super.key,
   });
 
   final List<AcpTranscriptEntry> entries;
   final String emptyLabel;
+  final AcpViewMode viewMode;
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +55,10 @@ class AcpTranscriptPanel extends StatelessWidget {
               itemCount: entries.length,
               separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
-                return _AcpTranscriptEntryRow(entry: entries[index]);
+                return _AcpTranscriptEntryRow(
+                  entry: entries[index],
+                  viewMode: viewMode,
+                );
               },
             ),
     );
@@ -61,9 +66,10 @@ class AcpTranscriptPanel extends StatelessWidget {
 }
 
 class _AcpTranscriptEntryRow extends StatelessWidget {
-  const _AcpTranscriptEntryRow({required this.entry});
+  const _AcpTranscriptEntryRow({required this.entry, required this.viewMode});
 
   final AcpTranscriptEntry entry;
+  final AcpViewMode viewMode;
 
   @override
   Widget build(BuildContext context) {
@@ -108,13 +114,13 @@ class _AcpTranscriptEntryRow extends StatelessWidget {
                     const SizedBox(height: 6),
                     AcpText(
                       entry.body!,
-                      maxLines: 4,
+                      maxLines: _bodyMaxLines,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                   if (entry.toolCall != null) ...[
                     const SizedBox(height: 8),
-                    entry.toolCall!,
+                    _toolCallForMode(entry.toolCall!),
                   ],
                 ],
               ),
@@ -155,5 +161,23 @@ class _AcpTranscriptEntryRow extends StatelessWidget {
       AcpTranscriptEntryKind.approval => AcpTone.warning,
       AcpTranscriptEntryKind.diagnostic => AcpTone.danger,
     };
+  }
+
+  int get _bodyMaxLines {
+    return switch (viewMode) {
+      AcpViewMode.summary => 1,
+      AcpViewMode.normal => 4,
+      AcpViewMode.verbose => 8,
+    };
+  }
+
+  Widget _toolCallForMode(AcpToolCallSummary toolCall) {
+    return AcpToolCallSummary(
+      name: toolCall.name,
+      status: toolCall.status,
+      target: toolCall.target,
+      detail: toolCall.detail,
+      viewMode: viewMode,
+    );
   }
 }
