@@ -1,18 +1,24 @@
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 
 import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:cherrypick/cherrypick.dart';
+import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+
+part 'app_scope.module.cherrypick.g.dart';
 
 typedef CodeLabTransportFactory = AcpTransport Function();
 
 Scope createCodeLabRootScope({CodeLabTransportFactory? transportFactory}) {
   final scope = CherryPick.openRootScope()
     ..installModules([
-      CodeLabRootModule(
+      CodeLabRuntimeModule(
         transportFactory: transportFactory ?? _createDefaultTransport,
       ),
+      $CodeLabRootModuleContract(),
     ]);
 
   scope.resolve<CodeLabRootLifecycle>();
@@ -24,33 +30,45 @@ Future<void> closeCodeLabRootScope() => CherryPick.closeRootScope();
 CodeLabDependencies codeLabDependenciesOf(BuildContext context) =>
     CodeLabDependenciesScope.of(context);
 
-final class CodeLabRootModule extends Module {
-  CodeLabRootModule({required CodeLabTransportFactory transportFactory})
+final class CodeLabRuntimeModule extends Module {
+  CodeLabRuntimeModule({required CodeLabTransportFactory transportFactory})
     : _transportFactory = transportFactory;
 
   final CodeLabTransportFactory _transportFactory;
 
   @override
   void builder(Scope currentScope) {
-    bind<StdioAcpAgentProfile>().toInstance(codelabAgentStdioProfile);
-    bind<AcpTransport>().toProvide(() => _transportFactory()).singleton();
-    bind<AcpClientApplication>()
-        .toProvide(
-          () => AcpClientApplication(
-            transport: currentScope.resolve<AcpTransport>(),
-            reconnectTransport: _transportFactory,
-          ),
-        )
-        .singleton();
-    bind<CodeLabRootLifecycle>()
-        .toProvide(
-          () => CodeLabRootLifecycle(
-            application: currentScope.resolve<AcpClientApplication>(),
-            transport: currentScope.resolve<AcpTransport>(),
-          ),
-        )
-        .singleton();
+    bind<CodeLabTransportFactory>().toInstance(_transportFactory);
   }
+}
+
+@module()
+abstract class CodeLabRootModuleContract extends Module {
+  @instance()
+  @singleton()
+  StdioAcpAgentProfile stdioAgentProfile() => codelabAgentStdioProfile;
+
+  @provide()
+  @singleton()
+  AcpTransport transport(CodeLabTransportFactory transportFactory) =>
+      transportFactory();
+
+  @provide()
+  @singleton()
+  AcpClientApplication application(
+    AcpTransport transport,
+    CodeLabTransportFactory transportFactory,
+  ) => AcpClientApplication(
+    transport: transport,
+    reconnectTransport: transportFactory,
+  );
+
+  @provide()
+  @singleton()
+  CodeLabRootLifecycle rootLifecycle(
+    AcpClientApplication application,
+    AcpTransport transport,
+  ) => CodeLabRootLifecycle(application: application, transport: transport);
 }
 
 final class CodeLabRootLifecycle implements Disposable {
