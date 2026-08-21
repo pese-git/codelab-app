@@ -4,6 +4,9 @@ import 'package:flutter/widget_previews.dart';
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
 import 'acp_approval_panel.dart';
+import 'acp_connection_screen.dart';
+import 'acp_debug_log_panel.dart';
+import 'acp_session_sidebar.dart';
 import 'acp_transcript_panel.dart';
 
 const acpOrganismPreviewGroup = 'ACP organisms';
@@ -79,7 +82,102 @@ Widget acpApprovalPanelPreview() {
   );
 }
 
+@Preview(name: 'Connection screen', group: acpOrganismPreviewGroup)
+Widget acpConnectionScreenPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      height: 360,
+      child: AcpConnectionScreen(
+        status: AcpConnectionStatus.disconnected,
+        transportLabel: 'stdio',
+        profileLabel: 'Codelab Agent',
+        detail: 'codelab serve --stdio',
+        description: 'Connect to a local ACP agent using the default profile.',
+        onConnect: acpPreviewConnect,
+        onReconnect: acpPreviewReconnect,
+        onEditProfile: acpPreviewEditProfile,
+      ),
+    ),
+  );
+}
+
+@Preview(name: 'Debug log panel', group: acpOrganismPreviewGroup)
+Widget acpDebugLogPanelPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      height: 360,
+      child: AcpDebugLogPanel(
+        entries: [
+          AcpDebugLogEntry(
+            id: 'log-1',
+            severity: AcpDebugLogSeverity.info,
+            source: 'transport',
+            message: 'stdio process started',
+            timestampLabel: '12:04:01',
+          ),
+          AcpDebugLogEntry(
+            id: 'log-2',
+            severity: AcpDebugLogSeverity.warning,
+            source: 'protocol',
+            message: 'stderr diagnostic: API_KEY=[REDACTED]',
+            timestampLabel: '12:04:03',
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+@Preview(name: 'Session sidebar', group: acpOrganismPreviewGroup)
+Widget acpSessionSidebarPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 320,
+      height: 420,
+      child: AcpSessionSidebar(
+        activeSessionId: 'session-2',
+        onSessionSelected: acpPreviewSessionSelected,
+        onNewSession: acpPreviewNewSession,
+        sessions: [
+          AcpSessionListItem(
+            id: 'session-1',
+            title: 'Repository audit',
+            status: AcpSessionStatus.completed,
+            subtitle: 'Checked protocol package boundaries.',
+            updatedLabel: 'Done 10 min ago',
+          ),
+          AcpSessionListItem(
+            id: 'session-2',
+            title: 'Workbench UI',
+            status: AcpSessionStatus.awaitingApproval,
+            subtitle: 'Waiting for shell command approval.',
+            updatedLabel: 'Active',
+          ),
+          AcpSessionListItem(
+            id: 'session-3',
+            title: 'Transport logs',
+            status: AcpSessionStatus.running,
+            subtitle: 'Streaming diagnostics from stdio.',
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 void acpPreviewApprovalSelected(String optionId) {}
+
+void acpPreviewSessionSelected(String sessionId) {}
+
+void acpPreviewNewSession() {}
+
+void acpPreviewConnect() {}
+
+void acpPreviewReconnect() {}
+
+void acpPreviewEditProfile() {}
 
 class _AcpOrganismPreviewSurface extends StatelessWidget {
   const _AcpOrganismPreviewSurface({required this.child});

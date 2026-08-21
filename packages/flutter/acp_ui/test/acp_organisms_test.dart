@@ -6,6 +6,13 @@ void main() {
   test('exports organisms through the public package API', () {
     expect(AcpApprovalPanel, isA<Type>());
     expect(AcpApprovalRisk.shell, isA<AcpApprovalRisk>());
+    expect(AcpConnectionScreen, isA<Type>());
+    expect(AcpDebugLogEntry, isA<Type>());
+    expect(AcpDebugLogPanel, isA<Type>());
+    expect(AcpDebugLogSeverity.warning, isA<AcpDebugLogSeverity>());
+    expect(AcpSessionListItem, isA<Type>());
+    expect(AcpSessionSidebar, isA<Type>());
+    expect(AcpSessionStatus.awaitingApproval, isA<AcpSessionStatus>());
     expect(AcpTranscriptEntry, isA<Type>());
     expect(AcpTranscriptEntryKind.toolCall, isA<AcpTranscriptEntryKind>());
     expect(AcpTranscriptPanel, isA<Type>());
@@ -113,4 +120,168 @@ void main() {
 
     expect(selected, 'reject');
   });
+
+  testWidgets('renders connection details and invokes callbacks', (
+    tester,
+  ) async {
+    var connected = false;
+    var reconnected = false;
+    var edited = false;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpConnectionScreen(
+          status: AcpConnectionStatus.disconnected,
+          transportLabel: 'stdio',
+          profileLabel: 'Codelab Agent',
+          detail: 'codelab serve --stdio',
+          description: 'Connect to a local ACP agent.',
+          onConnect: () => connected = true,
+          onReconnect: () => reconnected = true,
+          onEditProfile: () => edited = true,
+        ),
+      ),
+    );
+
+    expect(find.text('Codelab Agent'), findsWidgets);
+    expect(find.text('Disconnected'), findsOneWidget);
+    expect(find.text('stdio'), findsOneWidget);
+    expect(find.text('codelab serve --stdio'), findsOneWidget);
+
+    await tester.tap(find.text('Connect'));
+    await tester.tap(find.text('Reconnect'));
+    await tester.tap(find.text('Edit profile'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(connected, isTrue);
+    expect(reconnected, isTrue);
+    expect(edited, isTrue);
+  });
+
+  testWidgets('renders debug log entries and clear callback', (tester) async {
+    var cleared = false;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 520,
+          height: 320,
+          child: AcpDebugLogPanel(
+            onClear: () => cleared = true,
+            entries: const [
+              AcpDebugLogEntry(
+                id: 'log-1',
+                severity: AcpDebugLogSeverity.info,
+                source: 'transport',
+                message: 'stdio process started',
+                timestampLabel: '12:00:01',
+              ),
+              AcpDebugLogEntry(
+                id: 'log-2',
+                severity: AcpDebugLogSeverity.warning,
+                source: 'protocol',
+                message: 'token=[REDACTED]',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Debug log'), findsOneWidget);
+    expect(find.text('Info'), findsOneWidget);
+    expect(find.text('transport'), findsOneWidget);
+    expect(find.text('stdio process started'), findsOneWidget);
+    expect(find.text('Warning'), findsOneWidget);
+    expect(find.text('token=[REDACTED]'), findsOneWidget);
+
+    await tester.tap(find.byType(AcpIconButton));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(cleared, isTrue);
+  });
+
+  testWidgets('renders debug log empty state', (tester) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 360,
+          height: 220,
+          child: AcpDebugLogPanel(entries: []),
+        ),
+      ),
+    );
+
+    expect(find.text('No diagnostics yet'), findsOneWidget);
+  });
+
+  testWidgets('renders sessions and invokes selection/new callbacks', (
+    tester,
+  ) async {
+    String? selectedSessionId;
+    var newSessionRequested = false;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 320,
+          height: 420,
+          child: AcpSessionSidebar(
+            activeSessionId: 'session-2',
+            onSessionSelected: (sessionId) => selectedSessionId = sessionId,
+            onNewSession: () => newSessionRequested = true,
+            sessions: const [
+              AcpSessionListItem(
+                id: 'session-1',
+                title: 'Repository audit',
+                status: AcpSessionStatus.completed,
+                subtitle: 'Checked package boundaries.',
+                updatedLabel: 'Done 10 min ago',
+              ),
+              AcpSessionListItem(
+                id: 'session-2',
+                title: 'Workbench UI',
+                status: AcpSessionStatus.awaitingApproval,
+                subtitle: 'Waiting for approval.',
+                updatedLabel: 'Active',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Sessions'), findsOneWidget);
+    expect(find.text('Repository audit'), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('Workbench UI'), findsOneWidget);
+    expect(find.text('Approval'), findsOneWidget);
+    expect(find.text('Active'), findsOneWidget);
+
+    await tester.tap(find.text('Repository audit'));
+    await tester.tap(find.byType(AcpIconButton));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(selectedSessionId, 'session-1');
+    expect(newSessionRequested, isTrue);
+  });
+
+  testWidgets('renders session sidebar empty state', (tester) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 280,
+          height: 240,
+          child: AcpSessionSidebar(
+            sessions: [],
+            onSessionSelected: acpTestSessionSelected,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('No sessions yet'), findsOneWidget);
+  });
 }
+
+void acpTestSessionSelected(String sessionId) {}
