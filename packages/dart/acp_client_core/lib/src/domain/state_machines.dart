@@ -1,6 +1,7 @@
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'approval_policy.dart';
 import 'domain_models.dart';
 
 part 'state_machines.freezed.dart';
@@ -1010,7 +1011,10 @@ PromptTurn _applyUpdateToTurn(PromptTurn turn, SessionUpdate update) {
     ToolCallSessionUpdate(:final toolCall) => _applyToolCallUpdate(
       turn,
       update,
-      ToolCallRecord.fromToolCall(toolCall),
+      ToolCallRecord.fromToolCall(
+        toolCall,
+        riskLevel: ApprovalPolicy.classifyToolCall(toolCall),
+      ),
     ),
     ToolCallUpdateSessionUpdate(:final toolCallUpdate) => _applyToolCallUpdate(
       turn,
@@ -1049,7 +1053,10 @@ ToolCallRecord _mergeToolCallUpdate(
     title: update.title ?? current?.title ?? update.toolCallId.value,
     kind: update.kind ?? current?.kind ?? ToolKind.other,
     status: update.status ?? current?.status ?? ToolCallStatus.pending,
-    riskLevel: current?.riskLevel ?? ApprovalRiskLevel.readOnly,
+    riskLevel: ApprovalPolicy.max(
+      current?.riskLevel ?? ApprovalRiskLevel.readOnly,
+      ApprovalPolicy.classifyToolCallUpdate(update),
+    ),
     content: update.content ?? current?.content ?? const [],
     locations: update.locations ?? current?.locations ?? const [],
     rawInput: update.rawInput ?? current?.rawInput,

@@ -164,6 +164,39 @@ void main() {
       );
     });
 
+    test('classifies risk for streamed tool call records', () {
+      final withNetworkTool = PromptTurnStateMachine.applyUpdate(
+        PromptTurnStateMachine.start(_pendingTurn).stateOrThrow,
+        const SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: ToolCallId('tool-1'),
+            title: 'Fetch docs',
+            kind: ToolKind.fetch,
+            rawInput: {'url': 'https://example.com/docs'},
+          ),
+        ),
+      ).stateOrThrow;
+      final withDestructiveUpdate = PromptTurnStateMachine.applyUpdate(
+        withNetworkTool,
+        const SessionUpdate.toolCallUpdate(
+          toolCallUpdate: ToolCallUpdate(
+            toolCallId: ToolCallId('tool-1'),
+            title: 'Run git reset --hard',
+            kind: ToolKind.execute,
+          ),
+        ),
+      ).stateOrThrow;
+
+      expect(
+        withNetworkTool.toolCalls[const ToolCallId('tool-1')]?.riskLevel,
+        ApprovalRiskLevel.network,
+      );
+      expect(
+        withDestructiveUpdate.toolCalls[const ToolCallId('tool-1')]?.riskLevel,
+        ApprovalRiskLevel.destructive,
+      );
+    });
+
     test('ignores duplicate message chunk updates', () {
       const update = SessionUpdate.agentMessageChunk(
         content: ContentBlock.text(text: 'hi'),

@@ -34,8 +34,8 @@
 - [x] 4.2 Реализовать state machines для connection/session/prompt turn lifecycle
 - [x] 4.3 Реализовать use cases `CreateSession`, `LoadSession`, `SendPrompt`, `CancelTurn`, `RespondToPermission`, `Reconnect`
 - [x] 4.4 Реализовать idempotent handling для duplicate, late и interleaved `session/update`
-- [ ] 4.5 Реализовать approval policy с risk levels `readOnly`, `localWrite`, `network`, `shell`, `destructive`
-- [ ] 4.6 Реализовать permission modes `readOnly`, `ask`, `plan`, `autoEdits`
+- [x] 4.5 Реализовать approval policy с risk levels `readOnly`, `localWrite`, `network`, `shell`, `destructive`
+- [x] 4.6 Реализовать permission modes `readOnly`, `ask`, `plan`, `autoEdits`
 - [ ] 4.7 Реализовать cancellation behavior: `session/cancel`, pending permission outcome `cancelled`, late updates, final `stopReason: cancelled`
 - [ ] 4.8 Реализовать structured logging/diagnostics с secret redaction
 - [ ] 4.9 Добавить core tests для state transitions, approvals, cancellation, duplicate updates и failures

@@ -267,6 +267,23 @@ void main() {
             ?.status,
         ApprovalStatus.pending,
       );
+      expect(
+        awaiting
+            ?.turns
+            .single
+            .approvals[const ApprovalRequestId('permission-42')]
+            ?.riskLevel,
+        ApprovalRiskLevel.shell,
+      );
+      expect(
+        awaiting
+            ?.turns
+            .single
+            .approvals[const ApprovalRequestId('permission-42')]
+            ?.toolCall
+            .riskLevel,
+        ApprovalRiskLevel.shell,
+      );
       transport.drainSentMessages();
 
       final result = await RespondToPermission(client)(

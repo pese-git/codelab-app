@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
 
+import '../domain/approval_policy.dart';
 import '../domain/domain_models.dart';
 import '../domain/state_machines.dart';
 import 'application_models.dart';
@@ -399,12 +400,14 @@ final class AcpClientApplication {
         return;
       }
 
+      final toolCall = _toolCallRecordFromUpdate(permissionRequest.toolCall);
       final approval = ApprovalRequest(
         id: approvalId,
         sessionId: permissionRequest.sessionId,
         turnId: activeTurn.id,
-        toolCall: _toolCallRecordFromUpdate(permissionRequest.toolCall),
+        toolCall: toolCall,
         options: permissionRequest.options,
+        riskLevel: toolCall.riskLevel,
         requestedAt: DateTime.now(),
       );
       final next = SessionStateMachine.requestApproval(
@@ -517,11 +520,13 @@ final class AcpClientApplication {
   }
 
   ToolCallRecord _toolCallRecordFromUpdate(ToolCallUpdate update) {
+    final riskLevel = ApprovalPolicy.classifyToolCallUpdate(update);
     return ToolCallRecord(
       id: update.toolCallId,
       title: update.title ?? update.toolCallId.value,
       kind: update.kind ?? ToolKind.other,
       status: update.status ?? ToolCallStatus.pending,
+      riskLevel: riskLevel,
       content: update.content ?? const [],
       locations: update.locations ?? const [],
       rawInput: update.rawInput,

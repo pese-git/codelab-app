@@ -79,6 +79,110 @@ void main() {
     expect(record.locations.single.path, '/workspace/README.md');
   });
 
+  test('classifies approval risk levels for tool calls', () {
+    expect(
+      ApprovalPolicy.classifyToolCall(
+        const ToolCall(
+          toolCallId: ToolCallId('read-1'),
+          title: 'Read file',
+          kind: ToolKind.read,
+        ),
+      ),
+      ApprovalRiskLevel.readOnly,
+    );
+    expect(
+      ApprovalPolicy.classifyToolCall(
+        const ToolCall(
+          toolCallId: ToolCallId('edit-1'),
+          title: 'Patch config',
+          kind: ToolKind.edit,
+          content: [
+            ToolCallContent.diff(
+              diff: Diff(path: '/workspace/config.json', newText: '{}'),
+            ),
+          ],
+        ),
+      ),
+      ApprovalRiskLevel.localWrite,
+    );
+    expect(
+      ApprovalPolicy.classifyToolCall(
+        const ToolCall(
+          toolCallId: ToolCallId('fetch-1'),
+          title: 'Fetch API',
+          kind: ToolKind.fetch,
+          rawInput: {'url': 'https://example.com/data.json'},
+        ),
+      ),
+      ApprovalRiskLevel.network,
+    );
+    expect(
+      ApprovalPolicy.classifyToolCall(
+        const ToolCall(
+          toolCallId: ToolCallId('shell-1'),
+          title: 'Run tests',
+          kind: ToolKind.execute,
+        ),
+      ),
+      ApprovalRiskLevel.shell,
+    );
+    expect(
+      ApprovalPolicy.classifyToolCall(
+        const ToolCall(
+          toolCallId: ToolCallId('reset-1'),
+          title: 'Run git reset --hard',
+          kind: ToolKind.execute,
+        ),
+      ),
+      ApprovalRiskLevel.destructive,
+    );
+  });
+
+  test('decides permission mode behavior from risk levels', () {
+    expect(
+      ApprovalPolicy.decidePermission(
+        mode: PermissionMode.readOnly,
+        riskLevel: ApprovalRiskLevel.readOnly,
+      ),
+      PermissionModeDecision.allowWithoutApproval,
+    );
+    expect(
+      ApprovalPolicy.decidePermission(
+        mode: PermissionMode.readOnly,
+        riskLevel: ApprovalRiskLevel.localWrite,
+      ),
+      PermissionModeDecision.requireExplicitApproval,
+    );
+    expect(
+      ApprovalPolicy.decidePermission(
+        mode: PermissionMode.ask,
+        riskLevel: ApprovalRiskLevel.network,
+      ),
+      PermissionModeDecision.requireExplicitApproval,
+    );
+    expect(
+      ApprovalPolicy.decidePermission(
+        mode: PermissionMode.plan,
+        riskLevel: ApprovalRiskLevel.localWrite,
+      ),
+      PermissionModeDecision.unavailable,
+    );
+    expect(
+      ApprovalPolicy.decidePermission(
+        mode: PermissionMode.autoEdits,
+        riskLevel: ApprovalRiskLevel.localWrite,
+      ),
+      PermissionModeDecision.allowWithoutApproval,
+    );
+    expect(
+      ApprovalPolicy.requiresExplicitApproval(
+        mode: PermissionMode.autoEdits,
+        riskLevel: ApprovalRiskLevel.shell,
+      ),
+      isTrue,
+    );
+  });
+
   test('models approval request resolution and diagnostics', () {
     const approval = ApprovalRequest(
       id: ApprovalRequestId('approval-1'),
