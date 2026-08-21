@@ -204,7 +204,7 @@ void main() {
           isA<JsonRpcProtocolException>().having(
             (error) => error.kind,
             'kind',
-            JsonRpcProtocolErrorKind.invalidShape,
+            JsonRpcProtocolErrorKind.unknownMethod,
           ),
         ),
       );

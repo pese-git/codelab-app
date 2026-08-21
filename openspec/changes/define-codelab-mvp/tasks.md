@@ -14,7 +14,7 @@
 - [x] 2.2 Реализовать typed JSON-RPC 2.0 request/response/notification models
 - [x] 2.3 Реализовать ACP DTOs для `initialize`, capabilities, sessions, prompt turns, permissions, tool calls, content blocks и stop reasons
 - [x] 2.4 Реализовать encode/decode codecs и runtime validation по `docs/acp/protocol/17-Schema.md`
-- [ ] 2.5 Реализовать typed protocol errors и mapping invalid JSON/invalid ACP shape
+- [x] 2.5 Реализовать typed protocol errors и mapping invalid JSON/invalid ACP shape
 - [ ] 2.6 Поддержать `_meta` extension data и запрет custom root fields вне ACP spec
 - [ ] 2.7 Добавить unit tests для round-trip, unknown fields, invalid messages и error mapping
 

@@ -46,3 +46,13 @@ sealed class JsonRpcError with _$JsonRpcError {
     return {'code': code, 'message': message, if (data != null) 'data': data};
   }
 }
+
+extension AcpProtocolErrorJsonRpc on AcpProtocolError {
+  JsonRpcError toJsonRpcError() {
+    return JsonRpcError(
+      code: jsonRpcCode,
+      message: jsonRpcMessage,
+      data: toJson(),
+    );
+  }
+}

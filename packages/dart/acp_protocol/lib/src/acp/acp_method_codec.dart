@@ -189,9 +189,7 @@ AcpMethodDefinition<Object, Object> requireAcpMethod(String method) {
     return definition;
   }
 
-  throw JsonRpcProtocolException.invalidShape(
-    'ACP method "$method" is not registered.',
-  );
+  throw JsonRpcProtocolException.unknownMethod(method);
 }
 
 Object decodeAcpParams(String method, Object? params) {
