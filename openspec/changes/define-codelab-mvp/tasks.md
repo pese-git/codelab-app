@@ -26,7 +26,7 @@
 - [x] 3.4 Реализовать process lifecycle handling: start, graceful shutdown, process exit, invalid JSON, stderr diagnostics
 - [x] 3.5 Добавить built-in editable profile `Codelab Agent` с command `codelab`, args `serve --stdio`, env `CODELAB_LOG_LEVEL=DEBUG`
 - [x] 3.6 Реализовать WebSocket transport для remote agents с token/header config
-- [ ] 3.7 Добавить transport unit/integration tests, включая codelab-agent-compatible stdio flow
+- [x] 3.7 Добавить transport unit/integration tests, включая codelab-agent-compatible stdio flow
 
 ## 4. Implement core domain and application
 

@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:acp_transports/acp_transports.dart';
+import 'package:acp_protocol/acp_protocol.dart';
+import 'package:acp_testing/acp_testing.dart'
+    show writeCodelabCompatibleStdioAgent;
+import 'package:acp_transports/acp_transports.dart'
+    hide JsonRpcId, JsonRpcMessage, acpProtocolPackageName;
 import 'package:test/test.dart';
 
 void main() {
@@ -46,6 +50,136 @@ void main() {
       ),
     );
   });
+
+  test(
+    'StdioAcpTransport completes codelab serve --stdio compatible flow',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'codelab_compatible_stdio_flow_test_',
+      );
+      addTearDown(() => tempDir.delete(recursive: true));
+
+      final agent = await writeCodelabCompatibleStdioAgent(tempDir);
+      final transport = StdioAcpTransport(
+        StdioAcpTransportConfig(
+          command: _dartExecutable(),
+          args: [agent.path, ...codelabAgentStdioProfile.args],
+          cwd: tempDir.path,
+          env: codelabAgentStdioProfile.env,
+        ),
+      );
+      addTearDown(transport.close);
+
+      final diagnostic = transport.events
+          .where((event) => event is AcpTransportDiagnostic)
+          .cast<AcpTransportDiagnostic>()
+          .firstWhere(
+            (event) => event.message == 'codelab-compatible test agent ready',
+          );
+
+      await transport.start();
+
+      final initializeResponse = _responseWithId(
+        transport,
+        const JsonRpcId.integer(1),
+      );
+      await transport.send(
+        encodeAcpRequest(
+          id: const JsonRpcId.integer(1),
+          method: initializeMethod,
+          params: const InitializeRequest(
+            protocolVersion: ProtocolVersion(1),
+            clientInfo: Implementation(
+              name: 'codelab-transport-test',
+              version: '0.1.0',
+            ),
+          ),
+        ),
+      );
+
+      final initialized =
+          decodeAcpResponseResult(
+                method: initializeMethod,
+                response: await initializeResponse,
+              )
+              as InitializeResponse;
+      expect(initialized.protocolVersion, const ProtocolVersion(1));
+      expect(initialized.agentInfo?.name, 'codelab-compatible-test-agent');
+
+      final newSessionResponse = _responseWithId(
+        transport,
+        const JsonRpcId.integer(2),
+      );
+      await transport.send(
+        encodeAcpRequest(
+          id: const JsonRpcId.integer(2),
+          method: sessionNewMethod,
+          params: NewSessionRequest(cwd: tempDir.path, mcpServers: const []),
+        ),
+      );
+
+      final session =
+          decodeAcpResponseResult(
+                method: sessionNewMethod,
+                response: await newSessionResponse,
+              )
+              as NewSessionResponse;
+      expect(session.sessionId, const SessionId('codelab-test-session'));
+
+      final promptUpdate = transport.inbound
+          .where((message) => message is JsonRpcNotification)
+          .cast<JsonRpcNotification>()
+          .firstWhere((message) => message.method == sessionUpdateMethod);
+      final promptResponse = _responseWithId(
+        transport,
+        const JsonRpcId.integer(3),
+      );
+      await transport.send(
+        encodeAcpRequest(
+          id: const JsonRpcId.integer(3),
+          method: sessionPromptMethod,
+          params: PromptRequest(
+            sessionId: session.sessionId,
+            prompt: const [ContentBlock.text(text: 'ping')],
+          ),
+        ),
+      );
+
+      final update =
+          decodeAcpNotificationParams(await promptUpdate)
+              as SessionNotification;
+      expect(update.sessionId, session.sessionId);
+      expect(
+        update.update,
+        isA<AgentMessageChunk>().having(
+          (chunk) => chunk.content,
+          'content',
+          isA<TextContent>().having(
+            (content) => content.text,
+            'text',
+            'hello from compatible stdio agent',
+          ),
+        ),
+      );
+
+      final prompted =
+          decodeAcpResponseResult(
+                method: sessionPromptMethod,
+                response: await promptResponse,
+              )
+              as PromptResponse;
+      expect(prompted.stopReason, StopReason.endTurn);
+      expect(
+        await diagnostic.timeout(const Duration(seconds: 5)),
+        isA<AcpTransportDiagnostic>().having(
+          (event) => event.source,
+          'source',
+          'stderr',
+        ),
+      );
+      expect(transport.state, AcpTransportState.connected);
+    },
+  );
 
   test('AcpTransport exposes inbound stream and outbound send port', () async {
     final transport = _BoundaryTransport();
@@ -547,6 +681,14 @@ void main() async {
     );
     expect(transport.state, AcpTransportState.failed);
   });
+}
+
+Future<JsonRpcResponse> _responseWithId(AcpTransport transport, JsonRpcId id) {
+  return transport.inbound
+      .where((message) => message is JsonRpcResponse)
+      .cast<JsonRpcResponse>()
+      .firstWhere((message) => message.id == id)
+      .timeout(const Duration(seconds: 5));
 }
 
 String _dartExecutable() {

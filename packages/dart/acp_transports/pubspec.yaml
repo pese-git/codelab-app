@@ -16,6 +16,8 @@ dependencies:
   web_socket_channel: ^3.0.3
 
 dev_dependencies:
+  acp_testing:
+    path: ../acp_testing
   build_runner: ^2.10.5
   freezed: ^3.2.5
   lints: ^6.0.0

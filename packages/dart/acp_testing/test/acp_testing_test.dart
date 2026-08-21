@@ -9,6 +9,24 @@ void main() {
     expect(acpTransportsPackageName, 'acp_transports');
   });
 
+  test('exports codelab-compatible stdio agent source', () {
+    expect(
+      codelabCompatibleStdioAgentSource(),
+      allOf(
+        contains("args[0] != 'serve' || args[1] != '--stdio'"),
+        contains('codelab-compatible test agent ready'),
+        contains("_writeNotification('session/update'"),
+        contains("'stopReason': 'end_turn'"),
+      ),
+    );
+    expect(
+      codelabCompatibleStdioAgentSource(
+        mode: CodelabCompatibleStdioAgentMode.invalidStdout,
+      ),
+      contains("const _mode = 'invalid_stdout';"),
+    );
+  });
+
   test(
     'FakeAcpTransport captures outbound messages deterministically',
     () async {

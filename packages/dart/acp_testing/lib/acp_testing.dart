@@ -20,5 +20,6 @@ export 'package:acp_transports/acp_transports.dart'
         acpTransportsPackageName;
 
 export 'src/fake_acp_transport.dart';
+export 'src/codelab_compatible_stdio_agent.dart';
 
 const acpTestingPackageName = 'acp_testing';
