@@ -15,6 +15,7 @@ export 'src/application/application_models.dart';
 export 'src/application/use_cases.dart';
 export 'src/domain/approval_policy.dart';
 export 'src/domain/domain_models.dart';
+export 'src/domain/secret_redaction.dart';
 export 'src/domain/state_machines.dart';
 
 const acpClientCorePackageName = 'acp_client_core';

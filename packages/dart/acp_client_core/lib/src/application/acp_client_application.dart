@@ -5,6 +5,7 @@ import 'package:acp_transports/acp_transports.dart';
 
 import '../domain/approval_policy.dart';
 import '../domain/domain_models.dart';
+import '../domain/secret_redaction.dart';
 import '../domain/state_machines.dart';
 import 'application_models.dart';
 
@@ -45,7 +46,12 @@ final class AcpClientApplication {
       <ApprovalRequestId, _PendingPermissionRequest>{};
   final _handledPermissionRequests = <ApprovalRequestId>{};
   final _sessions = <SessionId, AcpSession>{};
+  final _diagnostics = <DiagnosticEntry>[];
+  final _redactor = const SecretRedactor();
   final _sessionController = StreamController<AcpSession>.broadcast(sync: true);
+  final _diagnosticController = StreamController<DiagnosticEntry>.broadcast(
+    sync: true,
+  );
 
   late StreamSubscription<JsonRpcMessage> _inboundSubscription;
   late StreamSubscription<AcpTransportEvent> _eventSubscription;
@@ -56,7 +62,11 @@ final class AcpClientApplication {
 
   Stream<AcpSession> get sessionChanges => _sessionController.stream;
 
+  Stream<DiagnosticEntry> get diagnosticChanges => _diagnosticController.stream;
+
   List<AcpSession> get sessions => List.unmodifiable(_sessions.values);
+
+  List<DiagnosticEntry> get diagnostics => List.unmodifiable(_diagnostics);
 
   AcpSession? sessionById(SessionId sessionId) => _sessions[sessionId];
 
@@ -298,6 +308,7 @@ final class AcpClientApplication {
     );
     _pendingPermissionRequests.clear();
     _handledPermissionRequests.clear();
+    await _diagnosticController.close();
     await _sessionController.close();
   }
 
@@ -315,6 +326,13 @@ final class AcpClientApplication {
       );
     } on Object catch (error) {
       _pendingRequests.remove(id);
+      _recordDiagnostic(
+        message: 'Failed to send ACP request $method.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.protocol',
+        cause: error,
+        context: {'method': method, 'requestId': id.toJsonValue()},
+      );
       throw AcpClientApplicationException(
         'Failed to send ACP request $method.',
         cause: error,
@@ -340,6 +358,13 @@ final class AcpClientApplication {
         encodeAcpNotification(method: method, params: params),
       );
     } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to send ACP notification $method.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.protocol',
+        cause: error,
+        context: {'method': method},
+      );
       throw AcpClientApplicationException(
         'Failed to send ACP notification $method.',
         cause: error,
@@ -379,6 +404,18 @@ final class AcpClientApplication {
       return;
     }
     if (response.error != null) {
+      _recordDiagnostic(
+        message:
+            'ACP request ${pending.method} failed: ${response.error?.message}',
+        severity: DiagnosticSeverity.error,
+        source: 'application.protocol',
+        cause: response.error,
+        context: {
+          'method': pending.method,
+          'requestId': response.id.toJsonValue(),
+          'error': response.error?.toJson(),
+        },
+      );
       pending.completeError(
         AcpClientApplicationException(
           'ACP request ${pending.method} failed: ${response.error?.message}',
@@ -393,6 +430,17 @@ final class AcpClientApplication {
         decodeAcpResponseResult(method: pending.method, response: response),
       );
     } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to decode ACP response for ${pending.method}.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.protocol',
+        cause: error,
+        context: {
+          'method': pending.method,
+          'requestId': response.id.toJsonValue(),
+          'result': response.result,
+        },
+      );
       pending.completeError(
         AcpClientApplicationException(
           'Failed to decode ACP response for ${pending.method}.',
@@ -439,9 +487,19 @@ final class AcpClientApplication {
       );
       _handledPermissionRequests.add(approval.id);
       _storeSession(next);
-    } on Object {
+    } on Object catch (error) {
       _sendCancelledPermissionResponse(request.id);
-      // Structured diagnostics and protocol-error surfacing arrive in task 4.8.
+      _recordDiagnostic(
+        message: 'Failed to handle ACP permission request.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.permission',
+        cause: error,
+        context: {
+          'method': request.method,
+          'requestId': request.id.toJsonValue(),
+          'params': request.params,
+        },
+      );
     }
   }
 
@@ -459,33 +517,39 @@ final class AcpClientApplication {
         sessionNotification.update,
       ).stateOrThrow;
       _storeSession(next);
-    } on Object {
-      // Structured diagnostics and protocol-error surfacing arrive in task 4.8.
+    } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to handle ACP session update.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.protocol',
+        cause: error,
+        context: {'method': notification.method, 'params': notification.params},
+      );
     }
   }
 
   void _handleTransportEvent(AcpTransportEvent event) {
-    if (event case AcpTransportDiagnostic(
-      :final message,
-      :final severity,
-      :final source,
-    )) {
-      for (final session in _sessions.values.toList(growable: false)) {
-        _storeSession(
-          session.copyWith(
-            diagnostics: [
-              ...session.diagnostics,
-              DiagnosticEntry(
-                id: DiagnosticEntryId('diagnostic-${_nextDiagnosticId++}'),
-                message: message,
-                severity: _mapDiagnosticSeverity(severity),
-                source: source,
-                createdAt: DateTime.now(),
-              ),
-            ],
-          ),
+    switch (event) {
+      case AcpTransportDiagnostic(
+        :final message,
+        :final severity,
+        :final source,
+      ):
+        _recordDiagnostic(
+          message: message,
+          severity: _mapDiagnosticSeverity(severity),
+          source: source,
         );
-      }
+      case AcpTransportFailure(:final error):
+        _recordDiagnostic(
+          message: error.message,
+          severity: DiagnosticSeverity.error,
+          source: 'transport',
+          cause: error,
+          context: {'code': error.code.name, 'cause': error.cause?.toString()},
+        );
+      case AcpTransportStateChanged():
+        break;
     }
   }
 
@@ -507,6 +571,17 @@ final class AcpClientApplication {
         ),
       );
     } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to send ACP response $sessionRequestPermissionMethod.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.permission',
+        cause: error,
+        context: {
+          'method': sessionRequestPermissionMethod,
+          'requestId': pending.requestId.toJsonValue(),
+          'approvalId': approvalId.value,
+        },
+      );
       throw AcpClientApplicationException(
         'Failed to send ACP response $sessionRequestPermissionMethod.',
         cause: error,
@@ -528,10 +603,49 @@ final class AcpClientApplication {
             ),
           ),
         )
-        .catchError((Object _) {
-          // Structured diagnostics and protocol-error surfacing arrive in task 4.8.
+        .catchError((Object error) {
+          _recordDiagnostic(
+            message:
+                'Failed to send cancelled ACP response $sessionRequestPermissionMethod.',
+            severity: DiagnosticSeverity.error,
+            source: 'application.permission',
+            cause: error,
+            context: {
+              'method': sessionRequestPermissionMethod,
+              'requestId': requestId.toJsonValue(),
+            },
+          );
         });
     unawaited(response);
+  }
+
+  void _recordDiagnostic({
+    required String message,
+    required DiagnosticSeverity severity,
+    String? source,
+    Object? cause,
+    Map<String, Object?> context = const {},
+  }) {
+    final entry = DiagnosticEntry(
+      id: DiagnosticEntryId('diagnostic-${_nextDiagnosticId++}'),
+      message: _redactor.redactText(message),
+      severity: severity,
+      source: source,
+      context: _redactor.redactMap(context),
+      cause: cause == null ? null : _redactor.redactText(cause.toString()),
+      createdAt: DateTime.now(),
+    );
+
+    _diagnostics.add(entry);
+    if (!_diagnosticController.isClosed) {
+      _diagnosticController.add(entry);
+    }
+
+    for (final session in _sessions.values.toList(growable: false)) {
+      _storeSession(
+        session.copyWith(diagnostics: [...session.diagnostics, entry]),
+      );
+    }
   }
 
   ApprovalRequestId _approvalRequestId(JsonRpcId requestId) {

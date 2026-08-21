@@ -37,7 +37,7 @@
 - [x] 4.5 Реализовать approval policy с risk levels `readOnly`, `localWrite`, `network`, `shell`, `destructive`
 - [x] 4.6 Реализовать permission modes `readOnly`, `ask`, `plan`, `autoEdits`
 - [x] 4.7 Реализовать cancellation behavior: `session/cancel`, pending permission outcome `cancelled`, late updates, final `stopReason: cancelled`
-- [ ] 4.8 Реализовать structured logging/diagnostics с secret redaction
+- [x] 4.8 Реализовать structured logging/diagnostics с secret redaction
 - [ ] 4.9 Добавить core tests для state transitions, approvals, cancellation, duplicate updates и failures
 
 ## 5. Configure dependency injection

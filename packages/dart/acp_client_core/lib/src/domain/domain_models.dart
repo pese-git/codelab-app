@@ -205,6 +205,7 @@ sealed class DiagnosticEntry with _$DiagnosticEntry {
     required String message,
     @Default(DiagnosticSeverity.info) DiagnosticSeverity severity,
     String? source,
+    @Default({}) Map<String, Object?> context,
     Object? cause,
     DateTime? createdAt,
   }) = _DiagnosticEntry;

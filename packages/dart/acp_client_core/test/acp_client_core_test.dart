@@ -235,4 +235,30 @@ void main() {
     expect(diagnostic.severity, DiagnosticSeverity.warning);
     expect(diagnostic.source, 'stderr');
   });
+
+  test('redacts secrets in maps and text', () {
+    const redactor = SecretRedactor();
+
+    final redacted = redactor.redactMap({
+      'Authorization': 'Bearer super-secret-token',
+      'safe': 'visible',
+      'env': {'OPENAI_API_KEY': 'sk-test-secret', 'CODELAB_LOG_LEVEL': 'DEBUG'},
+      'args': ['--password=secret-password', '--cwd=/workspace'],
+    });
+
+    expect(redacted['Authorization'], redactedSecret);
+    expect(redacted['safe'], 'visible');
+    expect(redacted['env'], {
+      'OPENAI_API_KEY': redactedSecret,
+      'CODELAB_LOG_LEVEL': 'DEBUG',
+    });
+    expect(redacted['args'], [
+      '--password=$redactedSecret',
+      '--cwd=/workspace',
+    ]);
+    expect(
+      redactor.redactText('Authorization: Bearer token-123'),
+      'Authorization: Bearer $redactedSecret',
+    );
+  });
 }

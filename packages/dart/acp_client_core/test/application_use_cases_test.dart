@@ -120,6 +120,18 @@ void main() {
         AcpTransportErrorCode.disconnected,
       );
     }, (_) => fail('expected transport failure'));
+    expect(
+      client.diagnostics,
+      contains(
+        isA<DiagnosticEntry>()
+            .having(
+              (entry) => entry.severity,
+              'severity',
+              DiagnosticSeverity.error,
+            )
+            .having((entry) => entry.source, 'source', 'transport'),
+      ),
+    );
   });
 
   test('Reconnect replaces transport and starts the replacement', () async {
@@ -505,6 +517,12 @@ void main() {
       final session = client.sessionById(const SessionId('session-1'));
       expect(session?.status, SessionLifecycleStatus.active);
       expect(session?.turns.single.status, PromptTurnStatus.cancelled);
+      expect(session?.diagnostics.single.severity, DiagnosticSeverity.error);
+      expect(session?.diagnostics.single.source, 'application.permission');
+      expect(
+        session?.diagnostics.single.context,
+        containsPair('method', sessionRequestPermissionMethod),
+      );
       expect(
         session
             ?.turns
@@ -531,6 +549,50 @@ void main() {
       );
     },
   );
+
+  test('records redacted transport diagnostics on sessions', () async {
+    await _createSession(client, transport);
+
+    transport.emitDiagnostic(
+      message: 'Authorization: Bearer transport-token',
+      severity: AcpTransportDiagnosticSeverity.warning,
+      source: 'stderr',
+    );
+
+    final diagnostic = client
+        .sessionById(const SessionId('session-1'))
+        ?.diagnostics
+        .single;
+    expect(client.diagnostics.single, diagnostic);
+    expect(diagnostic?.message, 'Authorization: Bearer $redactedSecret');
+    expect(diagnostic?.severity, DiagnosticSeverity.warning);
+    expect(diagnostic?.source, 'stderr');
+  });
+
+  test('records redacted diagnostics for invalid session updates', () async {
+    await _createSession(client, transport);
+
+    transport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: const {
+          'sessionId': 'session-1',
+          'update': {'session_token': 'secret-token'},
+        },
+      ),
+    );
+
+    final diagnostic = client
+        .sessionById(const SessionId('session-1'))
+        ?.diagnostics
+        .single;
+    expect(diagnostic?.message, 'Failed to handle ACP session update.');
+    expect(diagnostic?.severity, DiagnosticSeverity.error);
+    expect(diagnostic?.context['params'], {
+      'sessionId': redactedSecret,
+      'update': {'session_token': redactedSecret},
+    });
+  });
 
   test('ignores interleaved updates for unknown sessions', () async {
     await _createSession(client, transport);

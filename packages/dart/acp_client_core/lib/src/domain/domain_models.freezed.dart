@@ -2598,7 +2598,7 @@ $SessionModeStateCopyWith<$Res>? get modes {
 /// @nodoc
 mixin _$DiagnosticEntry {
 
- DiagnosticEntryId get id; String get message; DiagnosticSeverity get severity; String? get source; Object? get cause; DateTime? get createdAt;
+ DiagnosticEntryId get id; String get message; DiagnosticSeverity get severity; String? get source; Map<String, Object?> get context; Object? get cause; DateTime? get createdAt;
 /// Create a copy of DiagnosticEntry
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -2609,16 +2609,16 @@ $DiagnosticEntryCopyWith<DiagnosticEntry> get copyWith => _$DiagnosticEntryCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is DiagnosticEntry&&(identical(other.id, id) || other.id == id)&&(identical(other.message, message) || other.message == message)&&(identical(other.severity, severity) || other.severity == severity)&&(identical(other.source, source) || other.source == source)&&const DeepCollectionEquality().equals(other.cause, cause)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is DiagnosticEntry&&(identical(other.id, id) || other.id == id)&&(identical(other.message, message) || other.message == message)&&(identical(other.severity, severity) || other.severity == severity)&&(identical(other.source, source) || other.source == source)&&const DeepCollectionEquality().equals(other.context, context)&&const DeepCollectionEquality().equals(other.cause, cause)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,message,severity,source,const DeepCollectionEquality().hash(cause),createdAt);
+int get hashCode => Object.hash(runtimeType,id,message,severity,source,const DeepCollectionEquality().hash(context),const DeepCollectionEquality().hash(cause),createdAt);
 
 @override
 String toString() {
-  return 'DiagnosticEntry(id: $id, message: $message, severity: $severity, source: $source, cause: $cause, createdAt: $createdAt)';
+  return 'DiagnosticEntry(id: $id, message: $message, severity: $severity, source: $source, context: $context, cause: $cause, createdAt: $createdAt)';
 }
 
 
@@ -2629,7 +2629,7 @@ abstract mixin class $DiagnosticEntryCopyWith<$Res>  {
   factory $DiagnosticEntryCopyWith(DiagnosticEntry value, $Res Function(DiagnosticEntry) _then) = _$DiagnosticEntryCopyWithImpl;
 @useResult
 $Res call({
- DiagnosticEntryId id, String message, DiagnosticSeverity severity, String? source, Object? cause, DateTime? createdAt
+ DiagnosticEntryId id, String message, DiagnosticSeverity severity, String? source, Map<String, Object?> context, Object? cause, DateTime? createdAt
 });
 
 
@@ -2646,13 +2646,14 @@ class _$DiagnosticEntryCopyWithImpl<$Res>
 
 /// Create a copy of DiagnosticEntry
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? message = null,Object? severity = null,Object? source = freezed,Object? cause = freezed,Object? createdAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? message = null,Object? severity = null,Object? source = freezed,Object? context = null,Object? cause = freezed,Object? createdAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as DiagnosticEntryId,message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
 as String,severity: null == severity ? _self.severity : severity // ignore: cast_nullable_to_non_nullable
 as DiagnosticSeverity,source: freezed == source ? _self.source : source // ignore: cast_nullable_to_non_nullable
-as String?,cause: freezed == cause ? _self.cause : cause ,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as String?,context: null == context ? _self.context : context // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>,cause: freezed == cause ? _self.cause : cause ,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
 }
@@ -2744,10 +2745,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( DiagnosticEntryId id,  String message,  DiagnosticSeverity severity,  String? source,  Object? cause,  DateTime? createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( DiagnosticEntryId id,  String message,  DiagnosticSeverity severity,  String? source,  Map<String, Object?> context,  Object? cause,  DateTime? createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _DiagnosticEntry() when $default != null:
-return $default(_that.id,_that.message,_that.severity,_that.source,_that.cause,_that.createdAt);case _:
+return $default(_that.id,_that.message,_that.severity,_that.source,_that.context,_that.cause,_that.createdAt);case _:
   return orElse();
 
 }
@@ -2765,10 +2766,10 @@ return $default(_that.id,_that.message,_that.severity,_that.source,_that.cause,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( DiagnosticEntryId id,  String message,  DiagnosticSeverity severity,  String? source,  Object? cause,  DateTime? createdAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( DiagnosticEntryId id,  String message,  DiagnosticSeverity severity,  String? source,  Map<String, Object?> context,  Object? cause,  DateTime? createdAt)  $default,) {final _that = this;
 switch (_that) {
 case _DiagnosticEntry():
-return $default(_that.id,_that.message,_that.severity,_that.source,_that.cause,_that.createdAt);}
+return $default(_that.id,_that.message,_that.severity,_that.source,_that.context,_that.cause,_that.createdAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -2782,10 +2783,10 @@ return $default(_that.id,_that.message,_that.severity,_that.source,_that.cause,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( DiagnosticEntryId id,  String message,  DiagnosticSeverity severity,  String? source,  Object? cause,  DateTime? createdAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( DiagnosticEntryId id,  String message,  DiagnosticSeverity severity,  String? source,  Map<String, Object?> context,  Object? cause,  DateTime? createdAt)?  $default,) {final _that = this;
 switch (_that) {
 case _DiagnosticEntry() when $default != null:
-return $default(_that.id,_that.message,_that.severity,_that.source,_that.cause,_that.createdAt);case _:
+return $default(_that.id,_that.message,_that.severity,_that.source,_that.context,_that.cause,_that.createdAt);case _:
   return null;
 
 }
@@ -2797,13 +2798,20 @@ return $default(_that.id,_that.message,_that.severity,_that.source,_that.cause,_
 
 
 class _DiagnosticEntry extends DiagnosticEntry {
-  const _DiagnosticEntry({required this.id, required this.message, this.severity = DiagnosticSeverity.info, this.source, this.cause, this.createdAt}): super._();
+  const _DiagnosticEntry({required this.id, required this.message, this.severity = DiagnosticSeverity.info, this.source, final  Map<String, Object?> context = const {}, this.cause, this.createdAt}): _context = context,super._();
   
 
 @override final  DiagnosticEntryId id;
 @override final  String message;
 @override@JsonKey() final  DiagnosticSeverity severity;
 @override final  String? source;
+ final  Map<String, Object?> _context;
+@override@JsonKey() Map<String, Object?> get context {
+  if (_context is EqualUnmodifiableMapView) return _context;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(_context);
+}
+
 @override final  Object? cause;
 @override final  DateTime? createdAt;
 
@@ -2817,16 +2825,16 @@ _$DiagnosticEntryCopyWith<_DiagnosticEntry> get copyWith => __$DiagnosticEntryCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _DiagnosticEntry&&(identical(other.id, id) || other.id == id)&&(identical(other.message, message) || other.message == message)&&(identical(other.severity, severity) || other.severity == severity)&&(identical(other.source, source) || other.source == source)&&const DeepCollectionEquality().equals(other.cause, cause)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _DiagnosticEntry&&(identical(other.id, id) || other.id == id)&&(identical(other.message, message) || other.message == message)&&(identical(other.severity, severity) || other.severity == severity)&&(identical(other.source, source) || other.source == source)&&const DeepCollectionEquality().equals(other._context, _context)&&const DeepCollectionEquality().equals(other.cause, cause)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,message,severity,source,const DeepCollectionEquality().hash(cause),createdAt);
+int get hashCode => Object.hash(runtimeType,id,message,severity,source,const DeepCollectionEquality().hash(_context),const DeepCollectionEquality().hash(cause),createdAt);
 
 @override
 String toString() {
-  return 'DiagnosticEntry(id: $id, message: $message, severity: $severity, source: $source, cause: $cause, createdAt: $createdAt)';
+  return 'DiagnosticEntry(id: $id, message: $message, severity: $severity, source: $source, context: $context, cause: $cause, createdAt: $createdAt)';
 }
 
 
@@ -2837,7 +2845,7 @@ abstract mixin class _$DiagnosticEntryCopyWith<$Res> implements $DiagnosticEntry
   factory _$DiagnosticEntryCopyWith(_DiagnosticEntry value, $Res Function(_DiagnosticEntry) _then) = __$DiagnosticEntryCopyWithImpl;
 @override @useResult
 $Res call({
- DiagnosticEntryId id, String message, DiagnosticSeverity severity, String? source, Object? cause, DateTime? createdAt
+ DiagnosticEntryId id, String message, DiagnosticSeverity severity, String? source, Map<String, Object?> context, Object? cause, DateTime? createdAt
 });
 
 
@@ -2854,13 +2862,14 @@ class __$DiagnosticEntryCopyWithImpl<$Res>
 
 /// Create a copy of DiagnosticEntry
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? message = null,Object? severity = null,Object? source = freezed,Object? cause = freezed,Object? createdAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? message = null,Object? severity = null,Object? source = freezed,Object? context = null,Object? cause = freezed,Object? createdAt = freezed,}) {
   return _then(_DiagnosticEntry(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as DiagnosticEntryId,message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
 as String,severity: null == severity ? _self.severity : severity // ignore: cast_nullable_to_non_nullable
 as DiagnosticSeverity,source: freezed == source ? _self.source : source // ignore: cast_nullable_to_non_nullable
-as String?,cause: freezed == cause ? _self.cause : cause ,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as String?,context: null == context ? _self._context : context // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>,cause: freezed == cause ? _self.cause : cause ,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
 }
