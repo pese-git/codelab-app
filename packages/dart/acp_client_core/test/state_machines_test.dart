@@ -163,6 +163,48 @@ void main() {
         ToolCallStatus.completed,
       );
     });
+
+    test('ignores duplicate message chunk updates', () {
+      const update = SessionUpdate.agentMessageChunk(
+        content: ContentBlock.text(text: 'hi'),
+      );
+      final running = PromptTurnStateMachine.start(_pendingTurn).stateOrThrow;
+      final first = PromptTurnStateMachine.applyUpdate(running, update);
+      final duplicate = PromptTurnStateMachine.applyUpdate(
+        first.stateOrThrow,
+        update,
+      );
+
+      expect(first, isA<AppliedStateTransition<PromptTurn>>());
+      expect(first.stateOrThrow.updates, [update]);
+      expect(duplicate, isA<IgnoredStateTransition<PromptTurn>>());
+      expect(duplicate.stateOrThrow.updates, [update]);
+    });
+
+    test('merges duplicate tool call updates by toolCallId', () {
+      const update = SessionUpdate.toolCallUpdate(
+        toolCallUpdate: ToolCallUpdate(
+          toolCallId: ToolCallId('tool-1'),
+          title: 'Run command',
+          status: ToolCallStatus.inProgress,
+        ),
+      );
+      final running = PromptTurnStateMachine.start(_pendingTurn).stateOrThrow;
+      final first = PromptTurnStateMachine.applyUpdate(running, update);
+      final duplicate = PromptTurnStateMachine.applyUpdate(
+        first.stateOrThrow,
+        update,
+      );
+
+      expect(first.stateOrThrow.toolCalls, hasLength(1));
+      expect(
+        first.stateOrThrow.toolCalls[const ToolCallId('tool-1')]?.status,
+        ToolCallStatus.inProgress,
+      );
+      expect(duplicate, isA<IgnoredStateTransition<PromptTurn>>());
+      expect(duplicate.stateOrThrow.updates, [update]);
+      expect(duplicate.stateOrThrow.toolCalls, hasLength(1));
+    });
   });
 
   group('SessionStateMachine', () {
@@ -244,6 +286,27 @@ void main() {
       );
 
       expect(result, isA<IgnoredStateTransition<AcpSession>>());
+    });
+
+    test('keeps cancelled turn terminal when late update arrives', () {
+      final running = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      );
+      final cancelled = SessionStateMachine.cancelTurn(
+        running.stateOrThrow,
+      ).stateOrThrow;
+      final late = SessionStateMachine.applyUpdate(
+        cancelled,
+        const SessionUpdate.agentMessageChunk(
+          content: ContentBlock.text(text: 'late'),
+        ),
+      );
+
+      expect(late, isA<IgnoredStateTransition<AcpSession>>());
+      expect(late.stateOrThrow.status, SessionLifecycleStatus.active);
+      expect(late.stateOrThrow.turns.single.status, PromptTurnStatus.cancelled);
+      expect(late.stateOrThrow.turns.single.updates, isEmpty);
     });
   });
 }

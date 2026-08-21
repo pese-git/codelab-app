@@ -42,6 +42,7 @@ final class AcpClientApplication {
   final _pendingRequests = <JsonRpcId, _PendingAcpRequest>{};
   final _pendingPermissionRequests =
       <ApprovalRequestId, _PendingPermissionRequest>{};
+  final _handledPermissionRequests = <ApprovalRequestId>{};
   final _sessions = <SessionId, AcpSession>{};
   final _sessionController = StreamController<AcpSession>.broadcast(sync: true);
 
@@ -204,6 +205,7 @@ final class AcpClientApplication {
       ),
     );
     _pendingPermissionRequests.clear();
+    _handledPermissionRequests.clear();
     await _transport.close(timeout: command.closeTimeout);
 
     _transport = await createTransport();
@@ -275,6 +277,7 @@ final class AcpClientApplication {
       const AcpClientApplicationException('ACP application disposed.'),
     );
     _pendingPermissionRequests.clear();
+    _handledPermissionRequests.clear();
     await _sessionController.close();
   }
 
@@ -383,15 +386,21 @@ final class AcpClientApplication {
     try {
       final permissionRequest =
           decodeAcpRequestParams(request) as RequestPermissionRequest;
+      final approvalId = _approvalRequestId(request.id);
+      if (_handledPermissionRequests.contains(approvalId)) {
+        return;
+      }
+
       final session = _sessions[permissionRequest.sessionId];
       final activeTurn = session?.activeTurn;
       if (session == null || activeTurn == null) {
         _sendCancelledPermissionResponse(request.id);
+        _handledPermissionRequests.add(approvalId);
         return;
       }
 
       final approval = ApprovalRequest(
-        id: _approvalRequestId(request.id),
+        id: approvalId,
         sessionId: permissionRequest.sessionId,
         turnId: activeTurn.id,
         toolCall: _toolCallRecordFromUpdate(permissionRequest.toolCall),
@@ -406,6 +415,7 @@ final class AcpClientApplication {
       _pendingPermissionRequests[approval.id] = _PendingPermissionRequest(
         requestId: request.id,
       );
+      _handledPermissionRequests.add(approval.id);
       _storeSession(next);
     } on Object {
       _sendCancelledPermissionResponse(request.id);
@@ -482,6 +492,7 @@ final class AcpClientApplication {
     }
 
     _pendingPermissionRequests.remove(approvalId);
+    _handledPermissionRequests.add(approvalId);
   }
 
   void _sendCancelledPermissionResponse(JsonRpcId requestId) {

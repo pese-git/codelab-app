@@ -306,6 +306,45 @@ void main() {
     },
   );
 
+  test('ignores duplicate permission request ids', () async {
+    await _createSession(client, transport);
+    transport.drainSentMessages();
+    final changes = <AcpSession>[];
+    final subscription = client.sessionChanges.listen(changes.add);
+    final promptFuture = SendPrompt(client)(
+      const SendPromptCommand(
+        sessionId: SessionId('session-1'),
+        prompt: [ContentBlock.text(text: 'hello')],
+      ),
+    ).run();
+    await _pump();
+    final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+
+    final permissionRequest = _permissionRequest();
+    transport.emitInbound(permissionRequest);
+    transport.emitInbound(permissionRequest);
+
+    final session = client.sessionById(const SessionId('session-1'));
+    expect(session?.turns.single.approvals, hasLength(1));
+    expect(
+      session?.turns.single.approvals.keys,
+      contains(const ApprovalRequestId('permission-42')),
+    );
+    expect(changes.map((session) => session.status), [
+      SessionLifecycleStatus.runningTurn,
+      SessionLifecycleStatus.awaitingApproval,
+    ]);
+
+    transport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id,
+        result: const PromptResponse(stopReason: StopReason.cancelled).toJson(),
+      ),
+    );
+    await promptFuture;
+    await subscription.cancel();
+  });
+
   test(
     'CancelTurn sends session/cancel and cancels pending approval',
     () async {
@@ -364,6 +403,76 @@ void main() {
       );
     },
   );
+
+  test('ignores interleaved updates for unknown sessions', () async {
+    await _createSession(client, transport);
+    final changes = <AcpSession>[];
+    final subscription = client.sessionChanges.listen(changes.add);
+
+    transport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: const SessionNotification(
+          sessionId: SessionId('missing-session'),
+          update: SessionUpdate.agentMessageChunk(
+            content: ContentBlock.text(text: 'late'),
+          ),
+        ).toJson(),
+      ),
+    );
+
+    expect(changes, isEmpty);
+    expect(client.sessionById(const SessionId('session-1'))?.turns, isEmpty);
+
+    await subscription.cancel();
+  });
+
+  test('keeps cancelled prompt terminal when late update arrives', () async {
+    await _createSession(client, transport);
+    transport.drainSentMessages();
+    final promptFuture = SendPrompt(client)(
+      const SendPromptCommand(
+        sessionId: SessionId('session-1'),
+        prompt: [ContentBlock.text(text: 'hello')],
+      ),
+    ).run();
+    await _pump();
+    final promptRequest = transport.sentMessages.single as JsonRpcRequest;
+    transport.drainSentMessages();
+
+    final cancelResult = await CancelTurn(client)(
+      const CancelTurnCommand(sessionId: SessionId('session-1')),
+    ).run();
+    expect(
+      cancelResult.getOrElse((failure) => fail('$failure')).status,
+      PromptTurnStatus.cancelled,
+    );
+
+    transport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: const SessionNotification(
+          sessionId: SessionId('session-1'),
+          update: SessionUpdate.agentMessageChunk(
+            content: ContentBlock.text(text: 'late'),
+          ),
+        ).toJson(),
+      ),
+    );
+
+    final afterLateUpdate = client.sessionById(const SessionId('session-1'));
+    expect(afterLateUpdate?.status, SessionLifecycleStatus.active);
+    expect(afterLateUpdate?.turns.single.status, PromptTurnStatus.cancelled);
+    expect(afterLateUpdate?.turns.single.updates, isEmpty);
+
+    transport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id,
+        result: const PromptResponse(stopReason: StopReason.cancelled).toJson(),
+      ),
+    );
+    await promptFuture;
+  });
 
   test(
     'RespondToPermission returns typed failure for unavailable option',

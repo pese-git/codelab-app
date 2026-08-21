@@ -446,6 +446,13 @@ class PromptTurnStateMachine {
     }
 
     final next = _applyUpdateToTurn(turn, update);
+    if (next == turn) {
+      return _ignored(
+        turn,
+        'duplicate session update has no new visible effect',
+      );
+    }
+
     if (next.status == PromptTurnStatus.pending) {
       return _applied(next.copyWith(status: PromptTurnStatus.running));
     }
@@ -999,26 +1006,38 @@ StateTransitionResult<T> _rejected<T>(String reason) {
 }
 
 PromptTurn _applyUpdateToTurn(PromptTurn turn, SessionUpdate update) {
-  final next = turn.copyWith(updates: [...turn.updates, update]);
-
   return switch (update) {
-    ToolCallSessionUpdate(:final toolCall) => next.copyWith(
-      toolCalls: {
-        ...next.toolCalls,
-        toolCall.toolCallId: ToolCallRecord.fromToolCall(toolCall),
-      },
+    ToolCallSessionUpdate(:final toolCall) => _applyToolCallUpdate(
+      turn,
+      update,
+      ToolCallRecord.fromToolCall(toolCall),
     ),
-    ToolCallUpdateSessionUpdate(:final toolCallUpdate) => next.copyWith(
-      toolCalls: {
-        ...next.toolCalls,
-        toolCallUpdate.toolCallId: _mergeToolCallUpdate(
-          next.toolCalls[toolCallUpdate.toolCallId],
-          toolCallUpdate,
-        ),
-      },
+    ToolCallUpdateSessionUpdate(:final toolCallUpdate) => _applyToolCallUpdate(
+      turn,
+      update,
+      _mergeToolCallUpdate(
+        turn.toolCalls[toolCallUpdate.toolCallId],
+        toolCallUpdate,
+      ),
     ),
-    _ => next,
+    _ when turn.updates.contains(update) => turn,
+    _ => turn.copyWith(updates: [...turn.updates, update]),
   };
+}
+
+PromptTurn _applyToolCallUpdate(
+  PromptTurn turn,
+  SessionUpdate update,
+  ToolCallRecord record,
+) {
+  if (turn.toolCalls[record.id] == record) {
+    return turn;
+  }
+
+  return turn.copyWith(
+    updates: [...turn.updates, update],
+    toolCalls: {...turn.toolCalls, record.id: record},
+  );
 }
 
 ToolCallRecord _mergeToolCallUpdate(
