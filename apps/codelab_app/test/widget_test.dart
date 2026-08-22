@@ -27,6 +27,10 @@ void main() {
       find.text('Shell bootstrapped. Connection wiring starts in 7.2.'),
       findsOneWidget,
     );
+    expect(
+      scope.resolve<CodeLabShellCubit>().state.transportType,
+      CodeLabTransportType.stdio,
+    );
     expect(find.byType(AcpWorkbenchLayout), findsOneWidget);
     expect(find.byType(AcpConnectionScreen), findsOneWidget);
     expect(find.byType(AcpPromptComposer), findsOneWidget);
@@ -62,7 +66,7 @@ void main() {
 
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
 
-    await tester.enterText(find.byType(EditableText), 'hello');
+    await tester.enterText(find.byType(EditableText).last, 'hello');
     await tester.pump();
     await tester.tap(find.text('Send'));
     await tester.pump();
@@ -73,6 +77,70 @@ void main() {
       shellCubit.state.diagnostics.last.message,
       'Prompt sending is wired in task 7.5.',
     );
+    expect(binding.transport.sentMessages, isEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
+
+  testWidgets('selects WebSocket and keeps endpoint in shell state', (
+    tester,
+  ) async {
+    final binding = CodeLabTestBinding();
+
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+    expect(shellCubit.state.transportType, CodeLabTransportType.stdio);
+    expect(find.text('Codelab Agent'), findsWidgets);
+
+    await tester.tap(find.widgetWithText(AcpButton, 'WebSocket'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    const endpoint = 'wss://agent.example.test/acp';
+    await tester.enterText(
+      find.byKey(const ValueKey('transport-field-Endpoint')),
+      endpoint,
+    );
+    await tester.pump();
+
+    expect(shellCubit.state.transportType, CodeLabTransportType.webSocket);
+    expect(shellCubit.state.webSocketEndpoint, endpoint);
+    expect(shellCubit.state.connectionDetail, endpoint);
+    expect(binding.transport.state, AcpTransportState.idle);
+    expect(binding.transport.sentMessages, isEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
+
+  testWidgets('connect reads selected config without starting transport', (
+    tester,
+  ) async {
+    final binding = CodeLabTestBinding();
+
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+
+    await tester.tap(find.widgetWithText(AcpButton, 'WebSocket'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.enterText(
+      find.byKey(const ValueKey('transport-field-Endpoint')),
+      'wss://agent.example.test/acp',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('connect wiring comes in 7.3/7.7'),
+    );
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('wss://agent.example.test/acp'),
+    );
+    expect(binding.transport.state, AcpTransportState.idle);
     expect(binding.transport.sentMessages, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());

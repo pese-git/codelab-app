@@ -64,7 +64,7 @@
 ## 7. Integrate app shell
 
 - [x] 7.1 Создать `codelab_app` bootstrap с CherryPick DI, Bloc/Cubit presentation state и Fluent app shell
-- [ ] 7.2 Подключить transport selection UI для stdio/WebSocket
+- [x] 7.2 Подключить transport selection UI для stdio/WebSocket
 - [ ] 7.3 Подключить `Codelab Agent` default stdio profile в connection setup
 - [ ] 7.4 Подключить session/task sidebar и current session context indicators
 - [ ] 7.5 Подключить prompt composer к `SendPrompt` use case
