@@ -69,6 +69,11 @@ final class CodeLabPresentationModule extends Module {
           () => SendPrompt(currentScope.resolve<AcpClientApplication>()),
         )
         .singleton();
+    bind<CancelTurn>()
+        .toProvide(
+          () => CancelTurn(currentScope.resolve<AcpClientApplication>()),
+        )
+        .singleton();
     bind<CodeLabShellCubit>()
         .toProvide(
           () => CodeLabShellCubit(
@@ -76,6 +81,7 @@ final class CodeLabPresentationModule extends Module {
             application: currentScope.resolve<AcpClientApplication>(),
             createSessionUseCase: currentScope.resolve<CreateSession>(),
             sendPromptUseCase: currentScope.resolve<SendPrompt>(),
+            cancelTurnUseCase: currentScope.resolve<CancelTurn>(),
             stdioTransportFactory: currentScope
                 .resolve<CodeLabStdioTransportFactory>(),
           ),

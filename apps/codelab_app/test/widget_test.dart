@@ -4,6 +4,7 @@ import 'package:codelab_app/main.dart';
 import 'package:codelab_app/src/app_scope.dart';
 import 'package:codelab_app/src/presentation/shell_cubit.dart';
 import 'package:acp_client_core/acp_client_core.dart';
+import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_testing/acp_testing.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
@@ -21,6 +22,7 @@ void main() {
 
     expect(find.text('CodeLab'), findsOneWidget);
     expect(find.text('Sessions'), findsOneWidget);
+    expect(find.text('Inspector'), findsOneWidget);
     expect(find.text('Codelab Agent'), findsWidgets);
     expect(
       find.text('Connect an ACP agent to start a session.'),
@@ -131,6 +133,7 @@ void main() {
       application: application,
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -174,6 +177,7 @@ void main() {
       application: application,
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -241,6 +245,202 @@ void main() {
     await application.dispose();
   });
 
+  test(
+    'inspector tracks tool calls approvals raw details and protocol',
+    () async {
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final binding = CodeLabTestBinding(
+        transport: initialTransport,
+        stdioTransportFactory: (_) => agentTransport,
+      );
+      final application = binding.scope.resolve<AcpClientApplication>();
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await shellCubit.connect();
+
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest = await createRequestFuture as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: const {'sessionId': 'session-1'},
+        ),
+      );
+      await createFuture;
+
+      final promptRequestFuture = agentTransport.sent.first;
+      final submitFuture = shellCubit.submitPrompt('inspect tool');
+      final promptRequest = await promptRequestFuture as dynamic;
+
+      agentTransport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: SessionNotification(
+            sessionId: const SessionId('session-1'),
+            update: SessionUpdate.toolCallUpdate(
+              toolCallUpdate: ToolCallUpdate(
+                toolCallId: const ToolCallId('tool-1'),
+                title: 'Patch file',
+                kind: ToolKind.edit,
+                status: ToolCallStatus.inProgress,
+                content: const [
+                  ToolCallContent.diff(
+                    diff: Diff(
+                      path: '/workspace/lib/app.dart',
+                      newText: 'next',
+                    ),
+                  ),
+                ],
+                rawInput: const {'path': '/workspace/lib/app.dart'},
+              ),
+            ),
+          ).toJson(),
+        ),
+      );
+      agentTransport.emitInbound(
+        JsonRpcMessage.request(
+          id: const JsonRpcId.integer(42),
+          method: sessionRequestPermissionMethod,
+          params: RequestPermissionRequest(
+            sessionId: const SessionId('session-1'),
+            toolCall: ToolCallUpdate(
+              toolCallId: const ToolCallId('tool-1'),
+              title: 'Patch file',
+              kind: ToolKind.edit,
+              status: ToolCallStatus.inProgress,
+              rawInput: const {'path': '/workspace/lib/app.dart'},
+            ),
+            options: const [
+              PermissionOption(
+                optionId: PermissionOptionId('allow-once'),
+                name: 'Allow once',
+                kind: PermissionOptionKind.allowOnce,
+              ),
+              PermissionOption(
+                optionId: PermissionOptionId('reject-once'),
+                name: 'Reject',
+                kind: PermissionOptionKind.rejectOnce,
+              ),
+            ],
+          ).toJson(),
+        ),
+      );
+
+      final inspectorEntries = shellCubit.state.inspectorEntries;
+      expect(
+        inspectorEntries.any(
+          (entry) => entry.category == CodeLabInspectorCategory.approval,
+        ),
+        isTrue,
+      );
+      expect(
+        inspectorEntries.any(
+          (entry) =>
+              entry.category == CodeLabInspectorCategory.toolCall &&
+              entry.title == 'Patch file',
+        ),
+        isTrue,
+      );
+      expect(
+        inspectorEntries.any(
+          (entry) =>
+              entry.category == CodeLabInspectorCategory.protocol &&
+              entry.title == 'session/update tool_call_update',
+        ),
+        isTrue,
+      );
+      expect(
+        inspectorEntries
+            .expand((entry) => entry.details)
+            .map((detail) => detail.value),
+        contains('/workspace/lib/app.dart (new)'),
+      );
+      expect(
+        inspectorEntries.map((entry) => entry.rawInput).whereType<String>(),
+        anyElement(contains('/workspace/lib/app.dart')),
+      );
+
+      await application.respondToPermission(
+        const RespondToPermissionCommand.cancelled(
+          sessionId: SessionId('session-1'),
+          approvalId: ApprovalRequestId('permission-42'),
+        ),
+      );
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await submitFuture.timeout(const Duration(seconds: 2));
+
+      await closeCodeLabRootScope();
+    },
+  );
+
+  test('cancelTurn sends session cancel and clears submitting state', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      stdioTransportFactory: (_) => agentTransport,
+    );
+
+    await shellCubit.connect();
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    final promptRequestFuture = agentTransport.sent.first;
+    final submitFuture = shellCubit.submitPrompt('cancel this');
+    final promptRequest = await promptRequestFuture as dynamic;
+    expect(shellCubit.state.canCancel, isTrue);
+
+    final cancelRequestFuture = agentTransport.sent.first;
+    await shellCubit.cancelTurn();
+    final cancelRequest = await cancelRequestFuture as dynamic;
+
+    expect(cancelRequest.method, sessionCancelMethod);
+    expect(cancelRequest.params, containsPair('sessionId', 'session-1'));
+    expect(shellCubit.state.canCancel, isFalse);
+    expect(shellCubit.state.isPromptSubmitting, isFalse);
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('Cancelled prompt turn'),
+    );
+    expect(
+      shellCubit.state.inspectorEntries
+          .firstWhere((entry) => entry.title.startsWith('Prompt turn'))
+          .status,
+      PromptTurnStatus.cancelled.name,
+    );
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id as JsonRpcId,
+        result: const {'stopReason': 'cancelled'},
+      ),
+    );
+    await submitFuture.timeout(const Duration(seconds: 2));
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
   test('submitPrompt reports send failures without crashing', () async {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
@@ -250,6 +450,7 @@ void main() {
       application: application,
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -299,6 +500,7 @@ void main() {
       application: application,
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return stdioTransport;
@@ -341,6 +543,7 @@ void main() {
       application: application,
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -369,6 +572,7 @@ void main() {
       application: application,
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return _FailingStartTransport();
@@ -398,6 +602,7 @@ void main() {
       application: application,
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -430,6 +635,7 @@ void main() {
       application: application,
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 

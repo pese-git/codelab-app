@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:acp_client_core/acp_client_core.dart';
@@ -37,6 +39,7 @@ final class CodeLabShellState {
     required this.sessions,
     required this.activeSessionId,
     required this.transcriptEntries,
+    required this.inspectorEntries,
     required this.diagnostics,
     required this.viewMode,
     required this.isPromptEnabled,
@@ -65,6 +68,14 @@ final class CodeLabShellState {
         sessions: const [],
         activeSessionId: null,
         transcriptEntries: const [],
+        inspectorEntries: const [
+          CodeLabInspectorEntry(
+            id: 'inspector-empty',
+            category: CodeLabInspectorCategory.protocol,
+            title: 'Protocol log',
+            summary: 'Connect and start a session to inspect ACP activity.',
+          ),
+        ],
         diagnostics: const [
           AcpDebugLogEntry(
             id: 'bootstrap',
@@ -96,6 +107,7 @@ final class CodeLabShellState {
   final List<AcpSessionListItem> sessions;
   final String? activeSessionId;
   final List<AcpTranscriptEntry> transcriptEntries;
+  final List<CodeLabInspectorEntry> inspectorEntries;
   final List<AcpDebugLogEntry> diagnostics;
   final AcpViewMode viewMode;
   final bool isPromptEnabled;
@@ -120,6 +132,7 @@ final class CodeLabShellState {
     List<AcpSessionListItem>? sessions,
     String? activeSessionId,
     List<AcpTranscriptEntry>? transcriptEntries,
+    List<CodeLabInspectorEntry>? inspectorEntries,
     List<AcpDebugLogEntry>? diagnostics,
     AcpViewMode? viewMode,
     bool? isPromptEnabled,
@@ -144,6 +157,7 @@ final class CodeLabShellState {
       sessions: sessions ?? this.sessions,
       activeSessionId: activeSessionId ?? this.activeSessionId,
       transcriptEntries: transcriptEntries ?? this.transcriptEntries,
+      inspectorEntries: inspectorEntries ?? this.inspectorEntries,
       diagnostics: diagnostics ?? this.diagnostics,
       viewMode: viewMode ?? this.viewMode,
       isPromptEnabled: isPromptEnabled ?? this.isPromptEnabled,
@@ -201,23 +215,68 @@ final class CodeLabShellState {
   };
 }
 
+enum CodeLabInspectorCategory { approval, toolCall, protocol, diagnostic }
+
+final class CodeLabInspectorEntry {
+  const CodeLabInspectorEntry({
+    required this.id,
+    required this.category,
+    required this.title,
+    required this.summary,
+    this.risk,
+    this.status,
+    this.details = const [],
+    this.rawInput,
+    this.rawOutput,
+  });
+
+  final String id;
+  final CodeLabInspectorCategory category;
+  final String title;
+  final String summary;
+  final String? risk;
+  final String? status;
+  final List<CodeLabInspectorDetail> details;
+  final String? rawInput;
+  final String? rawOutput;
+}
+
+final class CodeLabInspectorDetail {
+  const CodeLabInspectorDetail({required this.label, required this.value});
+
+  final String label;
+  final String value;
+}
+
 final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   CodeLabShellCubit({
     required StdioAcpAgentProfile profile,
     required AcpClientApplication application,
     required CreateSession createSessionUseCase,
     required SendPrompt sendPromptUseCase,
+    required CancelTurn cancelTurnUseCase,
     required CodeLabStdioTransportFactory stdioTransportFactory,
   }) : _application = application,
        _createSessionUseCase = createSessionUseCase,
        _sendPromptUseCase = sendPromptUseCase,
+       _cancelTurnUseCase = cancelTurnUseCase,
        _stdioTransportFactory = stdioTransportFactory,
-       super(CodeLabShellState.initial(profile: profile));
+       super(CodeLabShellState.initial(profile: profile)) {
+    _sessionSubscription = _application.sessionChanges.listen(
+      _handleSessionChange,
+    );
+    _diagnosticSubscription = _application.diagnosticChanges.listen(
+      _handleApplicationDiagnostic,
+    );
+  }
 
   final AcpClientApplication _application;
   final CreateSession _createSessionUseCase;
   final SendPrompt _sendPromptUseCase;
+  final CancelTurn _cancelTurnUseCase;
   final CodeLabStdioTransportFactory _stdioTransportFactory;
+  late final StreamSubscription<AcpSession> _sessionSubscription;
+  late final StreamSubscription<DiagnosticEntry> _diagnosticSubscription;
 
   void selectTransport(CodeLabTransportType transportType) {
     emit(state.withTransportProjection(transportType: transportType));
@@ -298,7 +357,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     }
   }
 
-  void reconnect() => _recordPendingAction('Reconnect is wired in task 7.7.');
+  Future<void> reconnect() async {
+    _recordDiagnostic('Reconnecting ACP agent.', source: 'transport');
+    await connect();
+  }
 
   void editProfile() =>
       _recordPendingAction('Transport profile editing is wired in task 7.2.');
@@ -336,6 +398,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             activeSessionId: sessionItem.id,
             currentSessionLabel: sessionItem.title,
             currentSessionDetail: sessionItem.subtitle ?? session.id.value,
+            inspectorEntries: _inspectorEntriesForSession(session),
           ),
         );
         _recordDiagnostic(
@@ -425,6 +488,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         emit(
           state.copyWith(
             transcriptEntries: [...state.transcriptEntries, ...agentEntries],
+            inspectorEntries: _inspectorEntriesForTurn(turn),
             isPromptSubmitting: false,
             canCancel: false,
           ),
@@ -437,14 +501,59 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
-  void cancelTurn() =>
-      _recordPendingAction('Cancellation is wired in task 7.7.');
+  Future<void> cancelTurn() async {
+    final sessionId = state.activeSessionId;
+    if (sessionId == null) {
+      _recordDiagnostic(
+        'Select a session before cancelling a prompt turn.',
+        severity: AcpDebugLogSeverity.warning,
+        source: 'prompt',
+      );
+      return;
+    }
+
+    emit(state.copyWith(canCancel: false));
+    final result = await _cancelTurnUseCase(
+      CancelTurnCommand(sessionId: SessionId(sessionId)),
+    ).run();
+
+    result.match(
+      (failure) {
+        emit(state.copyWith(isPromptSubmitting: false, canCancel: false));
+        _recordDiagnostic(
+          'Failed to cancel prompt turn: ${_failureMessage(failure)}',
+          severity: AcpDebugLogSeverity.error,
+          source: 'prompt',
+        );
+      },
+      (turn) {
+        emit(
+          state.copyWith(
+            inspectorEntries: _inspectorEntriesForTurn(turn),
+            isPromptSubmitting: false,
+            canCancel: false,
+          ),
+        );
+        _recordDiagnostic(
+          'Cancelled prompt turn ${turn.id.value}.',
+          source: 'prompt',
+        );
+      },
+    );
+  }
 
   void openCommandPalette() =>
       _recordPendingAction('Command palette execution is wired after shell.');
 
   void clearDiagnostics() {
     emit(state.copyWith(diagnostics: const []));
+  }
+
+  @override
+  Future<void> close() async {
+    await _sessionSubscription.cancel();
+    await _diagnosticSubscription.cancel();
+    return super.close();
   }
 
   void _recordPendingAction(String message) {
@@ -464,6 +573,36 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
 
     emit(state.copyWith(diagnostics: [...state.diagnostics, nextEntry]));
+  }
+
+  void _handleSessionChange(AcpSession session) {
+    if (state.activeSessionId != null &&
+        state.activeSessionId != session.id.value) {
+      return;
+    }
+
+    final sessionItem = _sessionListItem(session);
+    final otherSessions = state.sessions
+        .where((item) => item.id != sessionItem.id)
+        .toList(growable: false);
+
+    emit(
+      state.copyWith(
+        sessions: [sessionItem, ...otherSessions],
+        activeSessionId: sessionItem.id,
+        currentSessionLabel: sessionItem.title,
+        currentSessionDetail: sessionItem.subtitle ?? session.id.value,
+        inspectorEntries: _inspectorEntriesForSession(session),
+      ),
+    );
+  }
+
+  void _handleApplicationDiagnostic(DiagnosticEntry diagnostic) {
+    _recordDiagnostic(
+      diagnostic.message,
+      severity: _debugSeverity(diagnostic.severity),
+      source: diagnostic.source ?? 'application',
+    );
   }
 
   StdioAcpTransportConfig? _stdioConfigFromState() {
@@ -556,6 +695,303 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             'Completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
       ),
     ];
+  }
+
+  List<CodeLabInspectorEntry> _inspectorEntriesForSession(AcpSession session) {
+    final turn = session.turns.lastOrNull;
+    if (turn == null) {
+      return [
+        CodeLabInspectorEntry(
+          id: 'session-${session.id.value}',
+          category: CodeLabInspectorCategory.protocol,
+          title: 'Session ${session.id.value}',
+          summary: 'Status ${session.status.name}',
+          details: [
+            CodeLabInspectorDetail(label: 'CWD', value: session.cwd),
+            CodeLabInspectorDetail(label: 'Status', value: session.status.name),
+          ],
+        ),
+      ];
+    }
+
+    return _inspectorEntriesForTurn(turn);
+  }
+
+  List<CodeLabInspectorEntry> _inspectorEntriesForTurn(PromptTurn turn) {
+    final entries = <CodeLabInspectorEntry>[];
+
+    for (final approval in turn.approvals.values) {
+      entries.add(_approvalInspectorEntry(approval));
+    }
+
+    for (final toolCall in turn.toolCalls.values) {
+      entries.add(_toolCallInspectorEntry(toolCall));
+    }
+
+    for (var index = 0; index < turn.updates.length; index += 1) {
+      entries.add(_protocolInspectorEntry(turn.updates[index], index));
+    }
+
+    entries.add(
+      CodeLabInspectorEntry(
+        id: 'turn-${turn.id.value}',
+        category: CodeLabInspectorCategory.protocol,
+        title: 'Prompt turn ${turn.id.value}',
+        summary: 'Status ${turn.status.name}',
+        status: turn.stopReason?.wireName ?? turn.status.name,
+        details: [
+          CodeLabInspectorDetail(label: 'Session', value: turn.sessionId.value),
+          CodeLabInspectorDetail(label: 'Status', value: turn.status.name),
+          if (turn.stopReason != null)
+            CodeLabInspectorDetail(
+              label: 'Stop reason',
+              value: turn.stopReason!.wireName,
+            ),
+          CodeLabInspectorDetail(
+            label: 'Updates',
+            value: turn.updates.length.toString(),
+          ),
+        ],
+      ),
+    );
+
+    return entries;
+  }
+
+  CodeLabInspectorEntry _approvalInspectorEntry(ApprovalRequest approval) {
+    final toolCall = approval.toolCall;
+    return CodeLabInspectorEntry(
+      id: 'approval-${approval.id.value}',
+      category: CodeLabInspectorCategory.approval,
+      title: 'Approval ${approval.id.value}',
+      summary: toolCall.title,
+      risk: approval.riskLevel.name,
+      status: approval.status.name,
+      details: [
+        CodeLabInspectorDetail(label: 'Tool', value: toolCall.title),
+        CodeLabInspectorDetail(label: 'Kind', value: toolCall.kind.wireName),
+        CodeLabInspectorDetail(label: 'Status', value: approval.status.name),
+        CodeLabInspectorDetail(
+          label: 'Options',
+          value: approval.options
+              .map((option) => '${option.name} (${option.kind.wireName})')
+              .join(', '),
+        ),
+        ..._toolCallContentDetails(toolCall.content),
+        ..._toolCallLocationDetails(toolCall.locations),
+      ],
+      rawInput: _prettyJson(toolCall.rawInput),
+      rawOutput: _prettyJson(toolCall.rawOutput),
+    );
+  }
+
+  CodeLabInspectorEntry _toolCallInspectorEntry(ToolCallRecord toolCall) {
+    return CodeLabInspectorEntry(
+      id: 'tool-${toolCall.id.value}',
+      category: CodeLabInspectorCategory.toolCall,
+      title: toolCall.title,
+      summary: toolCall.kind.wireName,
+      risk: toolCall.riskLevel.name,
+      status: toolCall.status.wireName,
+      details: [
+        CodeLabInspectorDetail(label: 'Tool call', value: toolCall.id.value),
+        CodeLabInspectorDetail(label: 'Kind', value: toolCall.kind.wireName),
+        CodeLabInspectorDetail(
+          label: 'Status',
+          value: toolCall.status.wireName,
+        ),
+        ..._toolCallContentDetails(toolCall.content),
+        ..._toolCallLocationDetails(toolCall.locations),
+      ],
+      rawInput: _prettyJson(toolCall.rawInput),
+      rawOutput: _prettyJson(toolCall.rawOutput),
+    );
+  }
+
+  CodeLabInspectorEntry _protocolInspectorEntry(
+    SessionUpdate update,
+    int index,
+  ) {
+    return switch (update) {
+      UserMessageChunk(:final content) => _contentInspectorEntry(
+        id: 'update-$index',
+        title: 'session/update user_message_chunk',
+        content: content,
+      ),
+      AgentMessageChunk(:final content) => _contentInspectorEntry(
+        id: 'update-$index',
+        title: 'session/update agent_message_chunk',
+        content: content,
+      ),
+      AgentThoughtChunk(:final content) => _contentInspectorEntry(
+        id: 'update-$index',
+        title: 'session/update agent_thought_chunk',
+        content: content,
+      ),
+      ToolCallSessionUpdate(:final toolCall) => CodeLabInspectorEntry(
+        id: 'update-$index',
+        category: CodeLabInspectorCategory.protocol,
+        title: 'session/update tool_call',
+        summary: toolCall.title,
+        details: [
+          CodeLabInspectorDetail(
+            label: 'Tool call',
+            value: toolCall.toolCallId.value,
+          ),
+          CodeLabInspectorDetail(label: 'Kind', value: toolCall.kind.wireName),
+          CodeLabInspectorDetail(
+            label: 'Status',
+            value: toolCall.status.wireName,
+          ),
+          ..._toolCallContentDetails(toolCall.content ?? const []),
+          ..._toolCallLocationDetails(toolCall.locations ?? const []),
+        ],
+        rawInput: _prettyJson(toolCall.rawInput),
+        rawOutput: _prettyJson(toolCall.rawOutput),
+      ),
+      ToolCallUpdateSessionUpdate(:final toolCallUpdate) =>
+        CodeLabInspectorEntry(
+          id: 'update-$index',
+          category: CodeLabInspectorCategory.protocol,
+          title: 'session/update tool_call_update',
+          summary: toolCallUpdate.title ?? toolCallUpdate.toolCallId.value,
+          details: [
+            CodeLabInspectorDetail(
+              label: 'Tool call',
+              value: toolCallUpdate.toolCallId.value,
+            ),
+            if (toolCallUpdate.kind != null)
+              CodeLabInspectorDetail(
+                label: 'Kind',
+                value: toolCallUpdate.kind!.wireName,
+              ),
+            if (toolCallUpdate.status != null)
+              CodeLabInspectorDetail(
+                label: 'Status',
+                value: toolCallUpdate.status!.wireName,
+              ),
+            ..._toolCallContentDetails(toolCallUpdate.content ?? const []),
+            ..._toolCallLocationDetails(toolCallUpdate.locations ?? const []),
+          ],
+          rawInput: _prettyJson(toolCallUpdate.rawInput),
+          rawOutput: _prettyJson(toolCallUpdate.rawOutput),
+        ),
+      PlanUpdate(:final entries) => CodeLabInspectorEntry(
+        id: 'update-$index',
+        category: CodeLabInspectorCategory.protocol,
+        title: 'session/update plan',
+        summary: '${entries.length} entries',
+        details: entries
+            .map(
+              (entry) => CodeLabInspectorDetail(
+                label: entry.status.wireName,
+                value: entry.content,
+              ),
+            )
+            .toList(growable: false),
+      ),
+      AvailableCommandsUpdate(:final availableCommands) =>
+        CodeLabInspectorEntry(
+          id: 'update-$index',
+          category: CodeLabInspectorCategory.protocol,
+          title: 'session/update available_commands_update',
+          summary: '${availableCommands.length} commands',
+        ),
+      CurrentModeUpdate(:final currentModeId) => CodeLabInspectorEntry(
+        id: 'update-$index',
+        category: CodeLabInspectorCategory.protocol,
+        title: 'session/update current_mode_update',
+        summary: currentModeId.value,
+      ),
+      ConfigOptionUpdate(:final configOptions) => CodeLabInspectorEntry(
+        id: 'update-$index',
+        category: CodeLabInspectorCategory.protocol,
+        title: 'session/update config_option_update',
+        summary: '${configOptions.length} options',
+      ),
+      SessionInfoUpdate(:final title) => CodeLabInspectorEntry(
+        id: 'update-$index',
+        category: CodeLabInspectorCategory.protocol,
+        title: 'session/update session_info_update',
+        summary: title ?? 'Session info updated',
+      ),
+    };
+  }
+
+  CodeLabInspectorEntry _contentInspectorEntry({
+    required String id,
+    required String title,
+    required ContentBlock content,
+  }) {
+    return CodeLabInspectorEntry(
+      id: id,
+      category: CodeLabInspectorCategory.protocol,
+      title: title,
+      summary: _contentSummary(content),
+    );
+  }
+
+  List<CodeLabInspectorDetail> _toolCallContentDetails(
+    List<ToolCallContent> content,
+  ) {
+    return [
+      for (final item in content)
+        switch (item) {
+          ToolCallDiff(:final diff) => CodeLabInspectorDetail(
+            label: 'Diff',
+            value: '${diff.path} (${diff.oldText == null ? 'new' : 'edit'})',
+          ),
+          ToolCallTerminal(:final terminalId) => CodeLabInspectorDetail(
+            label: 'Terminal',
+            value: terminalId,
+          ),
+          ToolCallContentBlock(:final content) => CodeLabInspectorDetail(
+            label: 'Content',
+            value: _contentSummary(content),
+          ),
+        },
+    ];
+  }
+
+  List<CodeLabInspectorDetail> _toolCallLocationDetails(
+    List<ToolCallLocation> locations,
+  ) {
+    return [
+      for (final location in locations)
+        CodeLabInspectorDetail(
+          label: 'Location',
+          value: location.line == null
+              ? location.path
+              : '${location.path}:${location.line}',
+        ),
+    ];
+  }
+
+  String _contentSummary(ContentBlock content) {
+    return switch (content) {
+      TextContent(:final text) => text,
+      ImageContent(:final mimeType) => 'Image $mimeType',
+      AudioContent(:final mimeType) => 'Audio $mimeType',
+      ResourceLink(:final uri) => uri,
+      EmbeddedResource(:final resource) => _prettyJson(resource.toJson())!,
+    };
+  }
+
+  String? _prettyJson(Object? value) {
+    if (value == null) {
+      return null;
+    }
+
+    return const JsonEncoder.withIndent('  ').convert(value);
+  }
+
+  AcpDebugLogSeverity _debugSeverity(DiagnosticSeverity severity) {
+    return switch (severity) {
+      DiagnosticSeverity.debug => AcpDebugLogSeverity.debug,
+      DiagnosticSeverity.info => AcpDebugLogSeverity.info,
+      DiagnosticSeverity.warning => AcpDebugLogSeverity.warning,
+      DiagnosticSeverity.error => AcpDebugLogSeverity.error,
+    };
   }
 
   List<String> _splitShellWords(String value) => value
