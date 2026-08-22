@@ -14,11 +14,15 @@ part 'app_scope.module.cherrypick.g.dart';
 
 typedef CodeLabTransportFactory = AcpTransport Function();
 
-Scope createCodeLabRootScope({CodeLabTransportFactory? transportFactory}) {
+Scope createCodeLabRootScope({
+  CodeLabTransportFactory? transportFactory,
+  CodeLabStdioTransportFactory? stdioTransportFactory,
+}) {
   final scope = CherryPick.openRootScope()
     ..installModules([
       CodeLabTransportRuntimeModule(
         transportFactory: transportFactory ?? _createDefaultTransport,
+        stdioTransportFactory: stdioTransportFactory ?? _createStdioTransport,
       ),
       CodeLabPresentationModule(),
       $CodeLabTransportsModuleContract(),
@@ -38,13 +42,17 @@ CodeLabDependencies codeLabDependenciesOf(BuildContext context) =>
 final class CodeLabTransportRuntimeModule extends Module {
   CodeLabTransportRuntimeModule({
     required CodeLabTransportFactory transportFactory,
-  }) : _transportFactory = transportFactory;
+    required CodeLabStdioTransportFactory stdioTransportFactory,
+  }) : _transportFactory = transportFactory,
+       _stdioTransportFactory = stdioTransportFactory;
 
   final CodeLabTransportFactory _transportFactory;
+  final CodeLabStdioTransportFactory _stdioTransportFactory;
 
   @override
   void builder(Scope currentScope) {
     bind<CodeLabTransportFactory>().toInstance(_transportFactory);
+    bind<CodeLabStdioTransportFactory>().toInstance(_stdioTransportFactory);
   }
 }
 
@@ -55,6 +63,9 @@ final class CodeLabPresentationModule extends Module {
         .toProvide(
           () => CodeLabShellCubit(
             profile: currentScope.resolve<StdioAcpAgentProfile>(),
+            application: currentScope.resolve<AcpClientApplication>(),
+            stdioTransportFactory: currentScope
+                .resolve<CodeLabStdioTransportFactory>(),
           ),
         )
         .singleton();
@@ -198,3 +209,6 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
 
 AcpTransport _createDefaultTransport() =>
     StdioAcpTransport(codelabAgentStdioProfile.toTransportConfig());
+
+AcpTransport _createStdioTransport(StdioAcpTransportConfig config) =>
+    StdioAcpTransport(config);

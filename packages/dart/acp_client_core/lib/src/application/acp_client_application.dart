@@ -70,6 +70,24 @@ final class AcpClientApplication {
 
   AcpSession? sessionById(SessionId sessionId) => _sessions[sessionId];
 
+  Future<AcpTransportState> connect(
+    AcpTransport transport, {
+    Duration? closeTimeout,
+  }) async {
+    await _replaceTransport(transport, closeTimeout: closeTimeout);
+
+    try {
+      await _transport.start();
+    } on Object catch (error) {
+      throw AcpClientApplicationException(
+        'Failed to connect ACP transport.',
+        cause: error,
+      );
+    }
+
+    return _transport.state;
+  }
+
   Future<AcpSession> createSession(CreateSessionCommand command) async {
     final response = await _sendRequest<NewSessionResponse>(
       method: sessionNewMethod,
@@ -227,19 +245,10 @@ final class AcpClientApplication {
       );
     }
 
-    await _inboundSubscription.cancel();
-    await _eventSubscription.cancel();
-    _failPendingRequests(
-      const AcpClientApplicationException(
-        'ACP transport was replaced during reconnect.',
-      ),
+    await _replaceTransport(
+      await createTransport(),
+      closeTimeout: command.closeTimeout,
     );
-    _pendingPermissionRequests.clear();
-    _handledPermissionRequests.clear();
-    await _transport.close(timeout: command.closeTimeout);
-
-    _transport = await createTransport();
-    _bindTransport();
 
     try {
       await _transport.start();
@@ -251,6 +260,23 @@ final class AcpClientApplication {
     }
 
     return _transport.state;
+  }
+
+  Future<void> _replaceTransport(
+    AcpTransport transport, {
+    Duration? closeTimeout,
+  }) async {
+    await _inboundSubscription.cancel();
+    await _eventSubscription.cancel();
+    _failPendingRequests(
+      const AcpClientApplicationException('ACP transport was replaced.'),
+    );
+    _pendingPermissionRequests.clear();
+    _handledPermissionRequests.clear();
+    await _transport.close(timeout: closeTimeout);
+
+    _transport = transport;
+    _bindTransport();
   }
 
   Future<ApprovalRequest> respondToPermission(
@@ -308,6 +334,7 @@ final class AcpClientApplication {
     );
     _pendingPermissionRequests.clear();
     _handledPermissionRequests.clear();
+    await _transport.close();
     await _diagnosticController.close();
     await _sessionController.close();
   }

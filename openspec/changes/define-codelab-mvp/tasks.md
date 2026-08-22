@@ -65,7 +65,7 @@
 
 - [x] 7.1 Создать `codelab_app` bootstrap с CherryPick DI, Bloc/Cubit presentation state и Fluent app shell
 - [x] 7.2 Подключить transport selection UI для stdio/WebSocket
-- [ ] 7.3 Подключить `Codelab Agent` default stdio profile в connection setup
+- [x] 7.3 Подключить `Codelab Agent` default stdio profile в connection setup
 - [ ] 7.4 Подключить session/task sidebar и current session context indicators
 - [ ] 7.5 Подключить prompt composer к `SendPrompt` use case
 - [ ] 7.6 Подключить inspector для approvals, tool call details, diffs, raw input/output, diagnostics и protocol log
@@ -74,7 +74,7 @@
 ## 8. Verify quality and conformance
 
 - [ ] 8.1 Добавить protocol conformance tests для initialize, session creation, prompt streaming, permissions, cancellation, version mismatch, invalid messages
-- [ ] 8.2 Добавить stdio integration test с `codelab-agent` или compatible test double using `codelab serve --stdio` semantics
+- [x] 8.2 Добавить stdio integration test с `codelab-agent` или compatible test double using `codelab serve --stdio` semantics
 - [ ] 8.3 Проверить secret redaction в logs, diagnostics и inspector
 - [ ] 8.4 Запустить `fvm dart run melos run format`
 - [ ] 8.5 Запустить `fvm dart run melos run analyze`

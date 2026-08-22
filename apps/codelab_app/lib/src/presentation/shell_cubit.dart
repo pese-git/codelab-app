@@ -1,6 +1,10 @@
+import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
+typedef CodeLabStdioTransportFactory =
+    AcpTransport Function(StdioAcpTransportConfig config);
 
 enum CodeLabTransportType {
   stdio(label: 'stdio'),
@@ -185,8 +189,16 @@ final class CodeLabShellState {
 }
 
 final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
-  CodeLabShellCubit({required StdioAcpAgentProfile profile})
-    : super(CodeLabShellState.initial(profile: profile));
+  CodeLabShellCubit({
+    required StdioAcpAgentProfile profile,
+    required AcpClientApplication application,
+    required CodeLabStdioTransportFactory stdioTransportFactory,
+  }) : _application = application,
+       _stdioTransportFactory = stdioTransportFactory,
+       super(CodeLabShellState.initial(profile: profile));
+
+  final AcpClientApplication _application;
+  final CodeLabStdioTransportFactory _stdioTransportFactory;
 
   void selectTransport(CodeLabTransportType transportType) {
     emit(state.withTransportProjection(transportType: transportType));
@@ -220,9 +232,52 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     emit(state.withTransportProjection(webSocketToken: value));
   }
 
-  void connect() => _recordPendingAction(
-    'Connect read ${state.selectedDiagnosticSummary}; connect wiring comes in 7.3/7.7.',
-  );
+  Future<void> connect() async {
+    if (state.transportType == CodeLabTransportType.webSocket) {
+      _recordPendingAction(
+        'WebSocket connect is deferred to task 7.7: ${state.selectedDiagnosticSummary}.',
+      );
+      return;
+    }
+
+    final config = _stdioConfigFromState();
+    if (config == null) {
+      _recordDiagnostic(
+        'Stdio command is required before connecting.',
+        severity: AcpDebugLogSeverity.error,
+        source: 'transport',
+      );
+      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+      return;
+    }
+
+    emit(state.copyWith(connectionStatus: AcpConnectionStatus.connecting));
+    _recordDiagnostic(
+      'Starting stdio ACP agent: ${state.selectedConnectionDetail}.',
+      source: 'transport',
+    );
+
+    try {
+      final transport = _stdioTransportFactory(config);
+      final transportState = await _application.connect(transport);
+      emit(
+        state.copyWith(
+          connectionStatus: _connectionStatusForTransport(transportState),
+        ),
+      );
+      _recordDiagnostic(
+        'Stdio ACP agent started: ${state.selectedConnectionDetail}.',
+        source: 'transport',
+      );
+    } on Object catch (error) {
+      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+      _recordDiagnostic(
+        'Failed to start stdio ACP agent: $error',
+        severity: AcpDebugLogSeverity.error,
+        source: 'transport',
+      );
+    }
+  }
 
   void reconnect() => _recordPendingAction('Reconnect is wired in task 7.7.');
 
@@ -251,13 +306,72 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   }
 
   void _recordPendingAction(String message) {
+    _recordDiagnostic(message, source: 'presentation');
+  }
+
+  void _recordDiagnostic(
+    String message, {
+    AcpDebugLogSeverity severity = AcpDebugLogSeverity.info,
+    String? source,
+  }) {
     final nextEntry = AcpDebugLogEntry(
       id: 'pending-${state.diagnostics.length + 1}',
-      severity: AcpDebugLogSeverity.info,
-      source: 'presentation',
+      severity: severity,
+      source: source,
       message: message,
     );
 
     emit(state.copyWith(diagnostics: [...state.diagnostics, nextEntry]));
   }
+
+  StdioAcpTransportConfig? _stdioConfigFromState() {
+    final command = state.stdioCommand.trim();
+    if (command.isEmpty) {
+      return null;
+    }
+
+    return StdioAcpTransportConfig(
+      command: command,
+      args: _splitShellWords(state.stdioArgs),
+      cwd: state.stdioCwd.trim().isEmpty ? null : state.stdioCwd.trim(),
+      env: _parseEnv(state.stdioEnv),
+    );
+  }
+
+  List<String> _splitShellWords(String value) => value
+      .split(RegExp(r'\s+'))
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .toList(growable: false);
+
+  Map<String, String> _parseEnv(String value) {
+    final env = <String, String>{};
+    for (final line in value.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+
+      final separator = trimmed.indexOf('=');
+      if (separator <= 0) {
+        continue;
+      }
+
+      env[trimmed.substring(0, separator).trim()] = trimmed
+          .substring(separator + 1)
+          .trim();
+    }
+    return env;
+  }
+
+  AcpConnectionStatus _connectionStatusForTransport(
+    AcpTransportState transportState,
+  ) => switch (transportState) {
+    AcpTransportState.idle => AcpConnectionStatus.idle,
+    AcpTransportState.connecting => AcpConnectionStatus.connecting,
+    AcpTransportState.connected => AcpConnectionStatus.connected,
+    AcpTransportState.closing ||
+    AcpTransportState.closed => AcpConnectionStatus.disconnected,
+    AcpTransportState.failed => AcpConnectionStatus.failed,
+  };
 }
