@@ -26,6 +26,8 @@ void main() {
       find.text('Connect an ACP agent to start a session.'),
       findsOneWidget,
     );
+    expect(find.text('No active session'), findsOneWidget);
+    expect(find.text('Create a session after connecting.'), findsOneWidget);
     expect(
       find.text('Shell bootstrapped. Connection wiring starts in 7.2.'),
       findsOneWidget,
@@ -67,9 +69,7 @@ void main() {
     await closeCodeLabRootScope();
   });
 
-  testWidgets('records shell-only actions without touching transport', (
-    tester,
-  ) async {
+  testWidgets('requires a session before sending a prompt', (tester) async {
     final binding = CodeLabTestBinding();
 
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
@@ -83,7 +83,7 @@ void main() {
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
     expect(
       shellCubit.state.diagnostics.last.message,
-      'Prompt sending is wired in task 7.5.',
+      'Create or select a session before sending a prompt.',
     );
     expect(binding.transport.sentMessages, isEmpty);
 
@@ -122,6 +122,173 @@ void main() {
     await closeCodeLabRootScope();
   });
 
+  test('creates a session and tracks it as active', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      stdioTransportFactory: (_) => agentTransport,
+    );
+
+    shellCubit.updateStdioCwd('/workspace');
+    await shellCubit.connect();
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+
+    final sentRequest = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final request = await sentRequest as dynamic;
+    expect(request.method, 'session/new');
+    expect(request.params, containsPair('cwd', '/workspace'));
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: request.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    expect(shellCubit.state.activeSessionId, 'session-1');
+    expect(shellCubit.state.sessions.single.id, 'session-1');
+    expect(shellCubit.state.currentSessionLabel, 'Session session-1');
+    expect(shellCubit.state.currentSessionDetail, '/workspace');
+    expect(
+      shellCubit.state.diagnostics.map((entry) => entry.message),
+      contains('Created ACP session session-1.'),
+    );
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test('submitPrompt sends text content and records agent response', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      stdioTransportFactory: (_) => agentTransport,
+    );
+
+    shellCubit.updateStdioCwd('/workspace');
+    await shellCubit.connect();
+
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    final promptRequestFuture = agentTransport.sent.first;
+    final submitFuture = shellCubit.submitPrompt('  hello agent  ');
+    expect(shellCubit.state.isPromptSubmitting, isTrue);
+    expect(shellCubit.state.canCancel, isTrue);
+    expect(shellCubit.state.transcriptEntries.last.title, 'You');
+    expect(shellCubit.state.transcriptEntries.last.body, 'hello agent');
+
+    final promptRequest = await promptRequestFuture as dynamic;
+    expect(promptRequest.method, 'session/prompt');
+    expect(promptRequest.params, containsPair('sessionId', 'session-1'));
+    expect(
+      promptRequest.params,
+      containsPair('prompt', [
+        {'type': 'text', 'text': 'hello agent'},
+      ]),
+    );
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: 'session/update',
+        params: const {
+          'sessionId': 'session-1',
+          'update': {
+            'sessionUpdate': 'agent_message_chunk',
+            'content': {'type': 'text', 'text': 'hi from agent'},
+          },
+        },
+      ),
+    );
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id as JsonRpcId,
+        result: const {'stopReason': 'end_turn'},
+      ),
+    );
+    await submitFuture;
+
+    expect(shellCubit.state.isPromptSubmitting, isFalse);
+    expect(shellCubit.state.canCancel, isFalse);
+    expect(shellCubit.state.transcriptEntries.last.title, 'Agent');
+    expect(shellCubit.state.transcriptEntries.last.body, 'hi from agent');
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      'Prompt completed with stopReason endTurn.',
+    );
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test('submitPrompt reports send failures without crashing', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      stdioTransportFactory: (_) => agentTransport,
+    );
+
+    await shellCubit.connect();
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    agentTransport.failNextSend(
+      const AcpTransportException(
+        code: AcpTransportErrorCode.sendFailed,
+        message: 'session/prompt send failed',
+      ),
+    );
+
+    await shellCubit.submitPrompt('hello');
+
+    expect(shellCubit.state.isPromptSubmitting, isFalse);
+    expect(shellCubit.state.canCancel, isFalse);
+    expect(
+      shellCubit.state.transcriptEntries.last.kind,
+      AcpTranscriptEntryKind.diagnostic,
+    );
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('Failed to send prompt'),
+    );
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
   test('connect starts selected stdio transport through application', () async {
     final configs = <StdioAcpTransportConfig>[];
     final initialTransport = FakeAcpTransport();
@@ -130,6 +297,8 @@ void main() {
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return stdioTransport;
@@ -170,6 +339,8 @@ void main() {
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -196,6 +367,8 @@ void main() {
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return _FailingStartTransport();
@@ -223,6 +396,8 @@ void main() {
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -240,6 +415,39 @@ void main() {
     expect(
       shellCubit.state.diagnostics.last.message,
       contains('WebSocket connect is deferred to task 7.7'),
+    );
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test('createSession reports failures without adding a session', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      stdioTransportFactory: (_) => agentTransport,
+    );
+
+    await shellCubit.connect();
+    agentTransport.failNextSend(
+      const AcpTransportException(
+        code: AcpTransportErrorCode.sendFailed,
+        message: 'session/new send failed',
+      ),
+    );
+
+    await shellCubit.createSession();
+
+    expect(shellCubit.state.sessions, isEmpty);
+    expect(shellCubit.state.activeSessionId, isNull);
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('Failed to create ACP session'),
     );
 
     await shellCubit.close();

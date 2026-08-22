@@ -66,8 +66,8 @@
 - [x] 7.1 Создать `codelab_app` bootstrap с CherryPick DI, Bloc/Cubit presentation state и Fluent app shell
 - [x] 7.2 Подключить transport selection UI для stdio/WebSocket
 - [x] 7.3 Подключить `Codelab Agent` default stdio profile в connection setup
-- [ ] 7.4 Подключить session/task sidebar и current session context indicators
-- [ ] 7.5 Подключить prompt composer к `SendPrompt` use case
+- [x] 7.4 Подключить session/task sidebar и current session context indicators
+- [x] 7.5 Подключить prompt composer к `SendPrompt` use case
 - [ ] 7.6 Подключить inspector для approvals, tool call details, diffs, raw input/output, diagnostics и protocol log
 - [ ] 7.7 Подключить cancel/reconnect actions к core use cases
 

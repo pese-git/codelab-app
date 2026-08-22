@@ -59,11 +59,23 @@ final class CodeLabTransportRuntimeModule extends Module {
 final class CodeLabPresentationModule extends Module {
   @override
   void builder(Scope currentScope) {
+    bind<CreateSession>()
+        .toProvide(
+          () => CreateSession(currentScope.resolve<AcpClientApplication>()),
+        )
+        .singleton();
+    bind<SendPrompt>()
+        .toProvide(
+          () => SendPrompt(currentScope.resolve<AcpClientApplication>()),
+        )
+        .singleton();
     bind<CodeLabShellCubit>()
         .toProvide(
           () => CodeLabShellCubit(
             profile: currentScope.resolve<StdioAcpAgentProfile>(),
             application: currentScope.resolve<AcpClientApplication>(),
+            createSessionUseCase: currentScope.resolve<CreateSession>(),
+            sendPromptUseCase: currentScope.resolve<SendPrompt>(),
             stdioTransportFactory: currentScope
                 .resolve<CodeLabStdioTransportFactory>(),
           ),

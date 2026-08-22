@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:acp_client_core/acp_client_core.dart';
+import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -29,6 +32,8 @@ final class CodeLabShellState {
     required this.transportLabel,
     required this.profileLabel,
     required this.connectionDetail,
+    required this.currentSessionLabel,
+    required this.currentSessionDetail,
     required this.sessions,
     required this.activeSessionId,
     required this.transcriptEntries,
@@ -55,6 +60,8 @@ final class CodeLabShellState {
         transportLabel: 'stdio',
         profileLabel: profile.name,
         connectionDetail: '${profile.command} ${profile.args.join(' ')}',
+        currentSessionLabel: 'No active session',
+        currentSessionDetail: 'Create a session after connecting.',
         sessions: const [],
         activeSessionId: null,
         transcriptEntries: const [],
@@ -84,6 +91,8 @@ final class CodeLabShellState {
   final String transportLabel;
   final String profileLabel;
   final String connectionDetail;
+  final String currentSessionLabel;
+  final String currentSessionDetail;
   final List<AcpSessionListItem> sessions;
   final String? activeSessionId;
   final List<AcpTranscriptEntry> transcriptEntries;
@@ -106,6 +115,8 @@ final class CodeLabShellState {
     String? transportLabel,
     String? profileLabel,
     String? connectionDetail,
+    String? currentSessionLabel,
+    String? currentSessionDetail,
     List<AcpSessionListItem>? sessions,
     String? activeSessionId,
     List<AcpTranscriptEntry>? transcriptEntries,
@@ -128,6 +139,8 @@ final class CodeLabShellState {
       transportLabel: transportLabel ?? this.transportLabel,
       profileLabel: profileLabel ?? this.profileLabel,
       connectionDetail: connectionDetail ?? this.connectionDetail,
+      currentSessionLabel: currentSessionLabel ?? this.currentSessionLabel,
+      currentSessionDetail: currentSessionDetail ?? this.currentSessionDetail,
       sessions: sessions ?? this.sessions,
       activeSessionId: activeSessionId ?? this.activeSessionId,
       transcriptEntries: transcriptEntries ?? this.transcriptEntries,
@@ -192,12 +205,18 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   CodeLabShellCubit({
     required StdioAcpAgentProfile profile,
     required AcpClientApplication application,
+    required CreateSession createSessionUseCase,
+    required SendPrompt sendPromptUseCase,
     required CodeLabStdioTransportFactory stdioTransportFactory,
   }) : _application = application,
+       _createSessionUseCase = createSessionUseCase,
+       _sendPromptUseCase = sendPromptUseCase,
        _stdioTransportFactory = stdioTransportFactory,
        super(CodeLabShellState.initial(profile: profile));
 
   final AcpClientApplication _application;
+  final CreateSession _createSessionUseCase;
+  final SendPrompt _sendPromptUseCase;
   final CodeLabStdioTransportFactory _stdioTransportFactory;
 
   void selectTransport(CodeLabTransportType transportType) {
@@ -284,15 +303,138 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   void editProfile() =>
       _recordPendingAction('Transport profile editing is wired in task 7.2.');
 
-  void createSession() =>
-      _recordPendingAction('Session creation is wired in task 7.4.');
+  Future<void> createSession() async {
+    if (state.connectionStatus != AcpConnectionStatus.connected) {
+      _recordDiagnostic(
+        'Connect an ACP agent before creating a session.',
+        severity: AcpDebugLogSeverity.warning,
+        source: 'session',
+      );
+      return;
+    }
 
-  void selectSession(String sessionId) {
-    emit(state.copyWith(activeSessionId: sessionId));
+    _recordDiagnostic('Creating ACP session.', source: 'session');
+
+    final result = await _createSessionUseCase(
+      CreateSessionCommand(cwd: _selectedCwd),
+    ).run();
+
+    result.match(
+      (failure) => _recordDiagnostic(
+        'Failed to create ACP session: ${_failureMessage(failure)}',
+        severity: AcpDebugLogSeverity.error,
+        source: 'session',
+      ),
+      (session) {
+        final sessionItem = _sessionListItem(session);
+        final otherSessions = state.sessions
+            .where((item) => item.id != sessionItem.id)
+            .toList(growable: false);
+        emit(
+          state.copyWith(
+            sessions: [sessionItem, ...otherSessions],
+            activeSessionId: sessionItem.id,
+            currentSessionLabel: sessionItem.title,
+            currentSessionDetail: sessionItem.subtitle ?? session.id.value,
+          ),
+        );
+        _recordDiagnostic(
+          'Created ACP session ${session.id.value}.',
+          source: 'session',
+        );
+      },
+    );
   }
 
-  void submitPrompt(String prompt) {
-    _recordPendingAction('Prompt sending is wired in task 7.5.');
+  void selectSession(String sessionId) {
+    final selected = state.sessions
+        .where((session) => session.id == sessionId)
+        .firstOrNull;
+    emit(
+      state.copyWith(
+        activeSessionId: sessionId,
+        currentSessionLabel: selected?.title ?? 'Session $sessionId',
+        currentSessionDetail: selected?.subtitle ?? sessionId,
+      ),
+    );
+  }
+
+  Future<void> submitPrompt(String prompt) async {
+    final text = prompt.trim();
+    if (text.isEmpty) {
+      return;
+    }
+
+    final sessionId = state.activeSessionId;
+    if (sessionId == null) {
+      _recordDiagnostic(
+        'Create or select a session before sending a prompt.',
+        severity: AcpDebugLogSeverity.warning,
+        source: 'prompt',
+      );
+      return;
+    }
+
+    final userEntry = AcpTranscriptEntry(
+      id: 'prompt-${state.transcriptEntries.length + 1}',
+      kind: AcpTranscriptEntryKind.user,
+      title: 'You',
+      body: text,
+    );
+    emit(
+      state.copyWith(
+        transcriptEntries: [...state.transcriptEntries, userEntry],
+        isPromptSubmitting: true,
+        canCancel: true,
+      ),
+    );
+
+    final result = await _sendPromptUseCase(
+      SendPromptCommand(
+        sessionId: SessionId(sessionId),
+        prompt: [ContentBlock.text(text: text)],
+      ),
+    ).run();
+
+    result.match(
+      (failure) {
+        final message = 'Failed to send prompt: ${_failureMessage(failure)}';
+        emit(
+          state.copyWith(
+            transcriptEntries: [
+              ...state.transcriptEntries,
+              AcpTranscriptEntry(
+                id: 'prompt-error-${state.transcriptEntries.length + 1}',
+                kind: AcpTranscriptEntryKind.diagnostic,
+                title: 'Prompt failed',
+                body: message,
+              ),
+            ],
+            isPromptSubmitting: false,
+            canCancel: false,
+          ),
+        );
+        _recordDiagnostic(
+          message,
+          severity: AcpDebugLogSeverity.error,
+          source: 'prompt',
+        );
+      },
+      (turn) {
+        final agentEntries = _agentTranscriptEntries(turn);
+        emit(
+          state.copyWith(
+            transcriptEntries: [...state.transcriptEntries, ...agentEntries],
+            isPromptSubmitting: false,
+            canCancel: false,
+          ),
+        );
+        _recordDiagnostic(
+          'Prompt completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
+          source: 'prompt',
+        );
+      },
+    );
   }
 
   void cancelTurn() =>
@@ -336,6 +478,84 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       cwd: state.stdioCwd.trim().isEmpty ? null : state.stdioCwd.trim(),
       env: _parseEnv(state.stdioEnv),
     );
+  }
+
+  String get _selectedCwd {
+    final cwd = state.stdioCwd.trim();
+    return cwd.isEmpty ? Directory.current.path : cwd;
+  }
+
+  AcpSessionListItem _sessionListItem(AcpSession session) {
+    final title = session.title?.trim().isNotEmpty == true
+        ? session.title!.trim()
+        : 'Session ${session.id.value}';
+    return AcpSessionListItem(
+      id: session.id.value,
+      title: title,
+      status: _sessionStatus(session.status),
+      subtitle: session.cwd,
+      updatedLabel: 'Active',
+    );
+  }
+
+  AcpSessionStatus _sessionStatus(SessionLifecycleStatus status) =>
+      switch (status) {
+        SessionLifecycleStatus.idle ||
+        SessionLifecycleStatus.active => AcpSessionStatus.idle,
+        SessionLifecycleStatus.runningTurn => AcpSessionStatus.running,
+        SessionLifecycleStatus.awaitingApproval =>
+          AcpSessionStatus.awaitingApproval,
+        SessionLifecycleStatus.failed => AcpSessionStatus.failed,
+      };
+
+  String _failureMessage(AcpClientApplicationFailure failure) =>
+      switch (failure) {
+        AcpClientTransportFailure(:final message) ||
+        AcpClientProtocolFailure(:final message) ||
+        AcpClientStateRejectedFailure(:final message) ||
+        AcpClientMissingSessionFailure(:final message) ||
+        AcpClientUnexpectedFailure(:final message) => message,
+      };
+
+  List<AcpTranscriptEntry> _agentTranscriptEntries(PromptTurn turn) {
+    final entries = <AcpTranscriptEntry>[];
+    for (final update in turn.updates) {
+      final content = switch (update) {
+        AgentMessageChunk(:final content) => content,
+        AgentThoughtChunk(:final content) => content,
+        _ => null,
+      };
+      final text = switch (content) {
+        TextContent(:final text) => text,
+        _ => null,
+      };
+      if (text == null || text.trim().isEmpty) {
+        continue;
+      }
+
+      entries.add(
+        AcpTranscriptEntry(
+          id: 'agent-${state.transcriptEntries.length + entries.length + 1}',
+          kind: AcpTranscriptEntryKind.agent,
+          title: 'Agent',
+          body: text.trim(),
+        ),
+      );
+    }
+
+    if (entries.isNotEmpty) {
+      return entries;
+    }
+
+    return [
+      AcpTranscriptEntry(
+        id: 'agent-${state.transcriptEntries.length + 1}',
+        kind: AcpTranscriptEntryKind.agent,
+        title: 'Agent',
+        body:
+            'Completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
+      ),
+    ];
   }
 
   List<String> _splitShellWords(String value) => value
