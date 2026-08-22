@@ -134,6 +134,7 @@ void main() {
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -178,6 +179,7 @@ void main() {
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -390,6 +392,7 @@ void main() {
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -451,6 +454,7 @@ void main() {
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -501,6 +505,7 @@ void main() {
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return stdioTransport;
@@ -535,6 +540,70 @@ void main() {
     await application.dispose();
   });
 
+  test(
+    'reconnect starts replacement stdio transport from editable state',
+    () async {
+      final configs = <StdioAcpTransportConfig>[];
+      final initialTransport = FakeAcpTransport();
+      final connectedTransport = FakeAcpTransport();
+      final reconnectedTransport = FakeAcpTransport();
+      final replacements = [connectedTransport, reconnectedTransport];
+      final application = AcpClientApplication(transport: initialTransport);
+      final shellCubit = CodeLabShellCubit(
+        profile: codelabAgentStdioProfile,
+        application: application,
+        createSessionUseCase: CreateSession(application),
+        sendPromptUseCase: SendPrompt(application),
+        cancelTurnUseCase: CancelTurn(application),
+        reconnectUseCase: Reconnect(application),
+        stdioTransportFactory: (config) {
+          configs.add(config);
+          return replacements.removeAt(0);
+        },
+      );
+
+      await shellCubit.connect();
+      shellCubit
+        ..updateStdioCommand('custom-agent')
+        ..updateStdioArgs('serve --stdio --profile local')
+        ..updateStdioCwd('/tmp/custom-codelab')
+        ..updateStdioEnv('CODELAB_LOG_LEVEL=TRACE\nFEATURE_FLAG=enabled');
+      await shellCubit.reconnect();
+
+      expect(configs, [
+        const StdioAcpTransportConfig(
+          command: 'codelab',
+          args: ['serve', '--stdio'],
+          env: {'CODELAB_LOG_LEVEL': 'DEBUG'},
+        ),
+        const StdioAcpTransportConfig(
+          command: 'custom-agent',
+          args: ['serve', '--stdio', '--profile', 'local'],
+          cwd: '/tmp/custom-codelab',
+          env: {'CODELAB_LOG_LEVEL': 'TRACE', 'FEATURE_FLAG': 'enabled'},
+        ),
+      ]);
+      expect(connectedTransport.state, AcpTransportState.closed);
+      expect(reconnectedTransport.state, AcpTransportState.connected);
+      expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+      expect(
+        shellCubit.state.diagnostics.map((entry) => entry.message),
+        contains(
+          'Reconnecting stdio ACP agent: custom-agent serve --stdio --profile local.',
+        ),
+      );
+      expect(
+        shellCubit.state.diagnostics.map((entry) => entry.message),
+        contains(
+          'Stdio ACP agent reconnected: custom-agent serve --stdio --profile local.',
+        ),
+      );
+
+      await shellCubit.close();
+      await application.dispose();
+    },
+  );
+
   test('connect reports missing stdio command without crashing', () async {
     final configs = <StdioAcpTransportConfig>[];
     final application = AcpClientApplication(transport: FakeAcpTransport());
@@ -544,6 +613,7 @@ void main() {
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -573,6 +643,7 @@ void main() {
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return _FailingStartTransport();
@@ -603,6 +674,7 @@ void main() {
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -619,7 +691,41 @@ void main() {
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.disconnected);
     expect(
       shellCubit.state.diagnostics.last.message,
-      contains('WebSocket connect is deferred to task 7.7'),
+      contains('WebSocket connect is deferred'),
+    );
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test('reconnect leaves WebSocket startup deferred', () async {
+    final configs = <StdioAcpTransportConfig>[];
+    final initialTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      stdioTransportFactory: (config) {
+        configs.add(config);
+        return FakeAcpTransport();
+      },
+    );
+
+    shellCubit
+      ..selectTransport(CodeLabTransportType.webSocket)
+      ..updateWebSocketEndpoint('wss://agent.example.test/acp');
+    await shellCubit.reconnect();
+
+    expect(configs, isEmpty);
+    expect(initialTransport.state, AcpTransportState.idle);
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.disconnected);
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('WebSocket reconnect is deferred'),
     );
 
     await shellCubit.close();
@@ -636,6 +742,7 @@ void main() {
       createSessionUseCase: CreateSession(application),
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 

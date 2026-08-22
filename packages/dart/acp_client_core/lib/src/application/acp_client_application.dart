@@ -28,8 +28,6 @@ final class MissingAcpSessionException extends AcpClientApplicationException {
   final SessionId sessionId;
 }
 
-typedef AcpTransportFactory = FutureOr<AcpTransport> Function();
-
 final class AcpClientApplication {
   AcpClientApplication({
     required AcpTransport transport,
@@ -238,7 +236,7 @@ final class AcpClientApplication {
   }
 
   Future<AcpTransportState> reconnect(ReconnectCommand command) async {
-    final createTransport = _reconnectTransport;
+    final createTransport = command.transportFactory ?? _reconnectTransport;
     if (createTransport == null) {
       throw const StateTransitionException(
         'reconnect requires a replacement transport factory',

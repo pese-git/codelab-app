@@ -255,11 +255,13 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required CreateSession createSessionUseCase,
     required SendPrompt sendPromptUseCase,
     required CancelTurn cancelTurnUseCase,
+    required Reconnect reconnectUseCase,
     required CodeLabStdioTransportFactory stdioTransportFactory,
   }) : _application = application,
        _createSessionUseCase = createSessionUseCase,
        _sendPromptUseCase = sendPromptUseCase,
        _cancelTurnUseCase = cancelTurnUseCase,
+       _reconnectUseCase = reconnectUseCase,
        _stdioTransportFactory = stdioTransportFactory,
        super(CodeLabShellState.initial(profile: profile)) {
     _sessionSubscription = _application.sessionChanges.listen(
@@ -274,6 +276,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final CreateSession _createSessionUseCase;
   final SendPrompt _sendPromptUseCase;
   final CancelTurn _cancelTurnUseCase;
+  final Reconnect _reconnectUseCase;
   final CodeLabStdioTransportFactory _stdioTransportFactory;
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<DiagnosticEntry> _diagnosticSubscription;
@@ -313,7 +316,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   Future<void> connect() async {
     if (state.transportType == CodeLabTransportType.webSocket) {
       _recordPendingAction(
-        'WebSocket connect is deferred to task 7.7: ${state.selectedDiagnosticSummary}.',
+        'WebSocket connect is deferred: ${state.selectedDiagnosticSummary}.',
       );
       return;
     }
@@ -358,8 +361,56 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   }
 
   Future<void> reconnect() async {
-    _recordDiagnostic('Reconnecting ACP agent.', source: 'transport');
-    await connect();
+    if (state.transportType == CodeLabTransportType.webSocket) {
+      _recordPendingAction(
+        'WebSocket reconnect is deferred: ${state.selectedDiagnosticSummary}.',
+      );
+      return;
+    }
+
+    final config = _stdioConfigFromState();
+    if (config == null) {
+      _recordDiagnostic(
+        'Stdio command is required before reconnecting.',
+        severity: AcpDebugLogSeverity.error,
+        source: 'transport',
+      );
+      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+      return;
+    }
+
+    emit(state.copyWith(connectionStatus: AcpConnectionStatus.reconnecting));
+    _recordDiagnostic(
+      'Reconnecting stdio ACP agent: ${state.selectedConnectionDetail}.',
+      source: 'transport',
+    );
+
+    final result = await _reconnectUseCase(
+      ReconnectCommand(
+        transportFactory: () async => _stdioTransportFactory(config),
+      ),
+    ).run();
+    result.match(
+      (failure) {
+        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+        _recordDiagnostic(
+          'Failed to reconnect stdio ACP agent: ${_failureMessage(failure)}',
+          severity: AcpDebugLogSeverity.error,
+          source: 'transport',
+        );
+      },
+      (transportState) {
+        emit(
+          state.copyWith(
+            connectionStatus: _connectionStatusForTransport(transportState),
+          ),
+        );
+        _recordDiagnostic(
+          'Stdio ACP agent reconnected: ${state.selectedConnectionDetail}.',
+          source: 'transport',
+        );
+      },
+    );
   }
 
   void editProfile() =>

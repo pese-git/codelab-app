@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -5,6 +7,8 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import '../domain/domain_models.dart';
 
 part 'application_models.freezed.dart';
+
+typedef AcpTransportFactory = FutureOr<AcpTransport> Function();
 
 @freezed
 sealed class CreateSessionCommand with _$CreateSessionCommand {
@@ -54,7 +58,10 @@ sealed class CancelTurnCommand with _$CancelTurnCommand {
 sealed class ReconnectCommand with _$ReconnectCommand {
   const ReconnectCommand._();
 
-  const factory ReconnectCommand({Duration? closeTimeout}) = _ReconnectCommand;
+  const factory ReconnectCommand({
+    Duration? closeTimeout,
+    AcpTransportFactory? transportFactory,
+  }) = _ReconnectCommand;
 }
 
 @freezed

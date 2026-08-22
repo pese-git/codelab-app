@@ -208,6 +208,23 @@ void main() {
     await replacement.close();
   });
 
+  test('Reconnect can use command replacement factory', () async {
+    final replacement = FakeAcpTransport();
+
+    final result = await Reconnect(client)(
+      ReconnectCommand(transportFactory: () => replacement),
+    ).run();
+
+    expect(
+      result.getOrElse((failure) => fail('$failure')),
+      AcpTransportState.connected,
+    );
+    expect(transport.state, AcpTransportState.closed);
+    expect(replacement.state, AcpTransportState.connected);
+
+    await replacement.close();
+  });
+
   test('Reconnect returns typed failure without transport factory', () async {
     final result = await Reconnect(client)(const ReconnectCommand()).run();
 

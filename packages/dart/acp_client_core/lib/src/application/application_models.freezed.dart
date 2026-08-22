@@ -1146,7 +1146,7 @@ $SessionIdCopyWith<$Res> get sessionId {
 /// @nodoc
 mixin _$ReconnectCommand {
 
- Duration? get closeTimeout;
+ Duration? get closeTimeout; AcpTransportFactory? get transportFactory;
 /// Create a copy of ReconnectCommand
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1157,16 +1157,16 @@ $ReconnectCommandCopyWith<ReconnectCommand> get copyWith => _$ReconnectCommandCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ReconnectCommand&&(identical(other.closeTimeout, closeTimeout) || other.closeTimeout == closeTimeout));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ReconnectCommand&&(identical(other.closeTimeout, closeTimeout) || other.closeTimeout == closeTimeout)&&(identical(other.transportFactory, transportFactory) || other.transportFactory == transportFactory));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,closeTimeout);
+int get hashCode => Object.hash(runtimeType,closeTimeout,transportFactory);
 
 @override
 String toString() {
-  return 'ReconnectCommand(closeTimeout: $closeTimeout)';
+  return 'ReconnectCommand(closeTimeout: $closeTimeout, transportFactory: $transportFactory)';
 }
 
 
@@ -1177,7 +1177,7 @@ abstract mixin class $ReconnectCommandCopyWith<$Res>  {
   factory $ReconnectCommandCopyWith(ReconnectCommand value, $Res Function(ReconnectCommand) _then) = _$ReconnectCommandCopyWithImpl;
 @useResult
 $Res call({
- Duration? closeTimeout
+ Duration? closeTimeout, AcpTransportFactory? transportFactory
 });
 
 
@@ -1194,10 +1194,11 @@ class _$ReconnectCommandCopyWithImpl<$Res>
 
 /// Create a copy of ReconnectCommand
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? closeTimeout = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? closeTimeout = freezed,Object? transportFactory = freezed,}) {
   return _then(_self.copyWith(
 closeTimeout: freezed == closeTimeout ? _self.closeTimeout : closeTimeout // ignore: cast_nullable_to_non_nullable
-as Duration?,
+as Duration?,transportFactory: freezed == transportFactory ? _self.transportFactory : transportFactory // ignore: cast_nullable_to_non_nullable
+as AcpTransportFactory?,
   ));
 }
 
@@ -1279,10 +1280,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( Duration? closeTimeout)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( Duration? closeTimeout,  AcpTransportFactory? transportFactory)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ReconnectCommand() when $default != null:
-return $default(_that.closeTimeout);case _:
+return $default(_that.closeTimeout,_that.transportFactory);case _:
   return orElse();
 
 }
@@ -1300,10 +1301,10 @@ return $default(_that.closeTimeout);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( Duration? closeTimeout)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( Duration? closeTimeout,  AcpTransportFactory? transportFactory)  $default,) {final _that = this;
 switch (_that) {
 case _ReconnectCommand():
-return $default(_that.closeTimeout);}
+return $default(_that.closeTimeout,_that.transportFactory);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -1317,10 +1318,10 @@ return $default(_that.closeTimeout);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( Duration? closeTimeout)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( Duration? closeTimeout,  AcpTransportFactory? transportFactory)?  $default,) {final _that = this;
 switch (_that) {
 case _ReconnectCommand() when $default != null:
-return $default(_that.closeTimeout);case _:
+return $default(_that.closeTimeout,_that.transportFactory);case _:
   return null;
 
 }
@@ -1332,10 +1333,11 @@ return $default(_that.closeTimeout);case _:
 
 
 class _ReconnectCommand extends ReconnectCommand {
-  const _ReconnectCommand({this.closeTimeout}): super._();
+  const _ReconnectCommand({this.closeTimeout, this.transportFactory}): super._();
   
 
 @override final  Duration? closeTimeout;
+@override final  AcpTransportFactory? transportFactory;
 
 /// Create a copy of ReconnectCommand
 /// with the given fields replaced by the non-null parameter values.
@@ -1347,16 +1349,16 @@ _$ReconnectCommandCopyWith<_ReconnectCommand> get copyWith => __$ReconnectComman
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ReconnectCommand&&(identical(other.closeTimeout, closeTimeout) || other.closeTimeout == closeTimeout));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ReconnectCommand&&(identical(other.closeTimeout, closeTimeout) || other.closeTimeout == closeTimeout)&&(identical(other.transportFactory, transportFactory) || other.transportFactory == transportFactory));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,closeTimeout);
+int get hashCode => Object.hash(runtimeType,closeTimeout,transportFactory);
 
 @override
 String toString() {
-  return 'ReconnectCommand(closeTimeout: $closeTimeout)';
+  return 'ReconnectCommand(closeTimeout: $closeTimeout, transportFactory: $transportFactory)';
 }
 
 
@@ -1367,7 +1369,7 @@ abstract mixin class _$ReconnectCommandCopyWith<$Res> implements $ReconnectComma
   factory _$ReconnectCommandCopyWith(_ReconnectCommand value, $Res Function(_ReconnectCommand) _then) = __$ReconnectCommandCopyWithImpl;
 @override @useResult
 $Res call({
- Duration? closeTimeout
+ Duration? closeTimeout, AcpTransportFactory? transportFactory
 });
 
 
@@ -1384,10 +1386,11 @@ class __$ReconnectCommandCopyWithImpl<$Res>
 
 /// Create a copy of ReconnectCommand
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? closeTimeout = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? closeTimeout = freezed,Object? transportFactory = freezed,}) {
   return _then(_ReconnectCommand(
 closeTimeout: freezed == closeTimeout ? _self.closeTimeout : closeTimeout // ignore: cast_nullable_to_non_nullable
-as Duration?,
+as Duration?,transportFactory: freezed == transportFactory ? _self.transportFactory : transportFactory // ignore: cast_nullable_to_non_nullable
+as AcpTransportFactory?,
   ));
 }
 

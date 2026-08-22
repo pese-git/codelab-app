@@ -69,7 +69,7 @@
 - [x] 7.4 Подключить session/task sidebar и current session context indicators
 - [x] 7.5 Подключить prompt composer к `SendPrompt` use case
 - [x] 7.6 Подключить inspector для approvals, tool call details, diffs, raw input/output, diagnostics и protocol log
-- [ ] 7.7 Подключить cancel/reconnect actions к core use cases
+- [x] 7.7 Подключить cancel/reconnect actions к core use cases
 
 ## 8. Verify quality and conformance
 
