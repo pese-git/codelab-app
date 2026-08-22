@@ -8,6 +8,8 @@ import 'package:cherrypick/cherrypick.dart';
 import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
+import 'presentation/shell_cubit.dart';
+
 part 'app_scope.module.cherrypick.g.dart';
 
 typedef CodeLabTransportFactory = AcpTransport Function();
@@ -18,6 +20,7 @@ Scope createCodeLabRootScope({CodeLabTransportFactory? transportFactory}) {
       CodeLabTransportRuntimeModule(
         transportFactory: transportFactory ?? _createDefaultTransport,
       ),
+      CodeLabPresentationModule(),
       $CodeLabTransportsModuleContract(),
       $CodeLabProtocolApplicationModuleContract(),
       $CodeLabRootLifecycleModuleContract(),
@@ -42,6 +45,19 @@ final class CodeLabTransportRuntimeModule extends Module {
   @override
   void builder(Scope currentScope) {
     bind<CodeLabTransportFactory>().toInstance(_transportFactory);
+  }
+}
+
+final class CodeLabPresentationModule extends Module {
+  @override
+  void builder(Scope currentScope) {
+    bind<CodeLabShellCubit>()
+        .toProvide(
+          () => CodeLabShellCubit(
+            profile: currentScope.resolve<StdioAcpAgentProfile>(),
+          ),
+        )
+        .singleton();
   }
 }
 
@@ -77,18 +93,26 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
   CodeLabRootLifecycle rootLifecycle(
     AcpClientApplication application,
     AcpTransport transport,
-  ) => CodeLabRootLifecycle(application: application, transport: transport);
+    CodeLabShellCubit shellCubit,
+  ) => CodeLabRootLifecycle(
+    application: application,
+    transport: transport,
+    shellCubit: shellCubit,
+  );
 }
 
 final class CodeLabRootLifecycle implements Disposable {
   CodeLabRootLifecycle({
     required AcpClientApplication application,
     required AcpTransport transport,
+    required CodeLabShellCubit shellCubit,
   }) : _application = application,
-       _transport = transport;
+       _transport = transport,
+       _shellCubit = shellCubit;
 
   final AcpClientApplication _application;
   final AcpTransport _transport;
+  final CodeLabShellCubit _shellCubit;
   var _isDisposed = false;
 
   @override
@@ -98,15 +122,20 @@ final class CodeLabRootLifecycle implements Disposable {
     }
 
     _isDisposed = true;
+    await _shellCubit.close();
     await _transport.close();
     await _application.dispose();
   }
 }
 
 final class CodeLabDependencies {
-  const CodeLabDependencies({required this.application});
+  const CodeLabDependencies({
+    required this.application,
+    required this.shellCubit,
+  });
 
   final AcpClientApplication application;
+  final CodeLabShellCubit shellCubit;
 }
 
 final class CodeLabDependenciesScope extends InheritedWidget {
@@ -144,6 +173,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
   late final Scope _scope = widget.scope ?? createCodeLabRootScope();
   late final CodeLabDependencies _dependencies = CodeLabDependencies(
     application: _scope.resolve<AcpClientApplication>(),
+    shellCubit: _scope.resolve<CodeLabShellCubit>(),
   );
 
   @override
