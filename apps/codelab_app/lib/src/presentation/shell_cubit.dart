@@ -278,6 +278,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final CancelTurn _cancelTurnUseCase;
   final Reconnect _reconnectUseCase;
   final CodeLabStdioTransportFactory _stdioTransportFactory;
+  final _redactor = const SecretRedactor();
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<DiagnosticEntry> _diagnosticSubscription;
 
@@ -627,7 +628,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       id: 'pending-${state.diagnostics.length + 1}',
       severity: severity,
       source: source,
-      message: message,
+      message: _redactor.redactText(message),
     );
 
     emit(state.copyWith(diagnostics: [...state.diagnostics, nextEntry]));
@@ -1040,7 +1041,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       return null;
     }
 
-    return const JsonEncoder.withIndent('  ').convert(value);
+    return const JsonEncoder.withIndent('  ').convert(_redactor.redact(value));
   }
 
   AcpDebugLogSeverity _debugSeverity(DiagnosticSeverity severity) {

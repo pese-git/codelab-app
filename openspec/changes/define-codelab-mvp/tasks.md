@@ -76,7 +76,7 @@
 
 - [x] 8.1 Добавить protocol conformance tests для initialize, session creation, prompt streaming, permissions, cancellation, version mismatch, invalid messages
 - [x] 8.2 Добавить stdio integration test с `codelab-agent` или compatible test double using `codelab serve --stdio` semantics
-- [ ] 8.3 Проверить secret redaction в logs, diagnostics и inspector
+- [x] 8.3 Проверить secret redaction в logs, diagnostics и inspector
 - [x] 8.4 Запустить `fvm dart run melos run format`
 - [x] 8.5 Запустить `fvm dart run melos run analyze`
 - [x] 8.6 Запустить `fvm dart run melos run test`

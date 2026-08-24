@@ -732,6 +732,108 @@ void main() {
     await application.dispose();
   });
 
+  test('inspector raw input redacts sensitive tool call fields', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      stdioTransportFactory: (_) => agentTransport,
+    );
+
+    await shellCubit.connect();
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    final promptRequestFuture = agentTransport.sent.first;
+    final submitFuture = shellCubit.submitPrompt('call the api');
+    final promptRequest = await promptRequestFuture as dynamic;
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: SessionUpdate.toolCallUpdate(
+            toolCallUpdate: ToolCallUpdate(
+              toolCallId: const ToolCallId('tool-1'),
+              title: 'Call API',
+              kind: ToolKind.fetch,
+              status: ToolCallStatus.inProgress,
+              rawInput: const {
+                'url': 'https://api.example.test',
+                'apiKey': 'sk-super-secret-value',
+              },
+            ),
+          ),
+        ).toJson(),
+      ),
+    );
+
+    final rawInputs = shellCubit.state.inspectorEntries
+        .map((entry) => entry.rawInput)
+        .whereType<String>();
+    expect(rawInputs, isNotEmpty);
+    for (final rawInput in rawInputs) {
+      expect(rawInput, isNot(contains('sk-super-secret-value')));
+    }
+    expect(rawInputs, anyElement(contains(redactedSecret)));
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id as JsonRpcId,
+        result: const {'stopReason': 'end_turn'},
+      ),
+    );
+    await submitFuture.timeout(const Duration(seconds: 2));
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test(
+    'connect redacts secrets leaked through transport factory failures',
+    () async {
+      final application = AcpClientApplication(transport: FakeAcpTransport());
+      final shellCubit = CodeLabShellCubit(
+        profile: codelabAgentStdioProfile,
+        application: application,
+        createSessionUseCase: CreateSession(application),
+        sendPromptUseCase: SendPrompt(application),
+        cancelTurnUseCase: CancelTurn(application),
+        reconnectUseCase: Reconnect(application),
+        stdioTransportFactory: (config) {
+          throw StateError('auth failed: token=sk-super-secret-value');
+        },
+      );
+
+      shellCubit.updateStdioCommand('missing-codelab');
+      await shellCubit.connect();
+
+      expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+      final message = shellCubit.state.diagnostics.last.message;
+      expect(message, contains('Failed to start stdio ACP agent'));
+      expect(message, isNot(contains('sk-super-secret-value')));
+      expect(message, contains(redactedSecret));
+
+      await shellCubit.close();
+      await application.dispose();
+    },
+  );
+
   test('createSession reports failures without adding a session', () async {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
