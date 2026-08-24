@@ -1,10 +1,12 @@
 .DS_Store
 .cocoindex_code/
 .codegraph/
-.codex/        
+.codex/
 .opencode/
 .idea/
 *.iml
+.claude/
+CLAUDE.md
 
 # Dart / Flutter
 .dart_tool/
