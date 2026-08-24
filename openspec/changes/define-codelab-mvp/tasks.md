@@ -45,7 +45,7 @@
 
 - [x] 5.1 Настроить CherryPick v4.x.x root scope в `apps/codelab_app`
 - [x] 5.2 Разделить DI modules по boundaries: protocol, transports, core/application, UI, platform services
-- [ ] 5.3 Добавить explicit feature/session scopes, если lifecycle dependencies короче app lifecycle
+- [x] 5.3 Добавить explicit feature/session scopes, если lifecycle dependencies короче app lifecycle (проверено: не требуется — приложение однооконное, все DI-зависимости живут app lifetime; session/connection lifecycle управляется внутри `AcpClientApplication`, не через DI)
 - [x] 5.4 Обеспечить, что domain/application classes получают dependencies через constructors/factories
 - [x] 5.5 Добавить test bindings для fake transport и mock services
 
@@ -82,4 +82,4 @@
 - [x] 8.6 Запустить `fvm dart run melos run test`
 - [x] 8.7 Запустить `fvm dart run melos run protocol-conformance`
 - [x] 8.8 Запустить полный `fvm dart run melos run check`
-- [ ] 8.9 Обновить документацию, если implementation behavior отличается от `docs/codelab-spec.md` или OpenSpec specs
+- [x] 8.9 Обновить документацию, если implementation behavior отличается от `docs/codelab-spec.md` или OpenSpec specs
