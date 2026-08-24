@@ -247,55 +247,47 @@ void main() {
     await replacement.close();
   });
 
-  test(
-    'SendPrompt does not overwrite turn state with a stale failure when '
-    'reconnect races the in-flight response',
-    () async {
-      await _createSession(client, transport);
-      transport.drainSentMessages();
+  test('SendPrompt does not overwrite turn state with a stale failure when '
+      'reconnect races the in-flight response', () async {
+    await _createSession(client, transport);
+    transport.drainSentMessages();
 
-      final promptFuture = client.sendPrompt(
-        const SendPromptCommand(
-          sessionId: SessionId('session-1'),
-          prompt: [ContentBlock.text(text: 'hello')],
-        ),
-      );
-      // Attach the expectation immediately so the rejection below is never
-      // briefly unhandled while the test awaits other steps in between.
-      final promptExpectation = expectLater(
-        promptFuture,
-        throwsA(isA<AcpClientApplicationException>()),
-      );
-      await _pump();
-      expect(transport.sentMessages, hasLength(1));
-      expect(
-        client
-            .sessionById(const SessionId('session-1'))
-            ?.activeTurn
-            ?.status,
-        PromptTurnStatus.running,
-      );
+    final promptFuture = client.sendPrompt(
+      const SendPromptCommand(
+        sessionId: SessionId('session-1'),
+        prompt: [ContentBlock.text(text: 'hello')],
+      ),
+    );
+    // Attach the expectation immediately so the rejection below is never
+    // briefly unhandled while the test awaits other steps in between.
+    final promptExpectation = expectLater(
+      promptFuture,
+      throwsA(isA<AcpClientApplicationException>()),
+    );
+    await _pump();
+    expect(transport.sentMessages, hasLength(1));
+    expect(
+      client.sessionById(const SessionId('session-1'))?.activeTurn?.status,
+      PromptTurnStatus.running,
+    );
 
-      final replacement = FakeAcpTransport();
-      await client.reconnect(
-        ReconnectCommand(transportFactory: () => replacement),
-      );
-      expect(client.generation, 1);
+    final replacement = FakeAcpTransport();
+    await client.reconnect(
+      ReconnectCommand(transportFactory: () => replacement),
+    );
+    expect(client.generation, 1);
 
-      // The old transport's failed pending request now resolves; a stale
-      // generation must not be allowed to mutate turn state that belongs to
-      // the superseded connection into "failed".
-      await promptExpectation;
+    // The old transport's failed pending request now resolves; a stale
+    // generation must not be allowed to mutate turn state that belongs to
+    // the superseded connection into "failed".
+    await promptExpectation;
 
-      final turn = client
-          .sessionById(const SessionId('session-1'))
-          ?.activeTurn;
-      expect(turn, isNotNull);
-      expect(turn?.status, PromptTurnStatus.running);
+    final turn = client.sessionById(const SessionId('session-1'))?.activeTurn;
+    expect(turn, isNotNull);
+    expect(turn?.status, PromptTurnStatus.running);
 
-      await replacement.close();
-    },
-  );
+    await replacement.close();
+  });
 
   test('SendPrompt streams updates and completes from stopReason', () async {
     await _createSession(client, transport);
