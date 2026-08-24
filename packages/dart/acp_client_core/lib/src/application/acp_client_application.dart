@@ -58,6 +58,18 @@ final class AcpClientApplication {
   var _nextTurnId = 1;
   var _nextDiagnosticId = 1;
 
+  /// Incremented every time the underlying transport is replaced
+  /// (initial [connect] counts as generation 0, each [reconnect] bumps it).
+  ///
+  /// In-flight operations capture the generation they started with and
+  /// discard their result instead of mutating session state if a reconnect
+  /// happened while they were awaiting a response, so a stale prompt/cancel/
+  /// permission outcome from a superseded transport can never be applied on
+  /// top of the state produced by a newer connection.
+  var _generation = 0;
+
+  int get generation => _generation;
+
   Stream<AcpSession> get sessionChanges => _sessionController.stream;
 
   Stream<DiagnosticEntry> get diagnosticChanges => _diagnosticController.stream;
@@ -134,6 +146,7 @@ final class AcpClientApplication {
   }
 
   Future<PromptTurn> sendPrompt(SendPromptCommand command) async {
+    final generation = _generation;
     final session = _requireSession(command.sessionId);
     final turn = PromptTurn(
       id: PromptTurnId('turn-${_nextTurnId++}'),
@@ -157,6 +170,7 @@ final class AcpClientApplication {
           meta: command.meta,
         ),
       );
+      _requireCurrentGeneration(generation);
       final completedSession = SessionStateMachine.completeTurn(
         _requireSession(command.sessionId),
         stopReason: response.stopReason,
@@ -166,6 +180,9 @@ final class AcpClientApplication {
       _storeSession(completedSession);
       return completedSession.turns.last;
     } on Object catch (error) {
+      if (generation != _generation) {
+        rethrow;
+      }
       final failedSession = SessionStateMachine.failTurn(
         _requireSession(command.sessionId),
         message: error.toString(),
@@ -178,6 +195,7 @@ final class AcpClientApplication {
   }
 
   Future<PromptTurn> cancelTurn(CancelTurnCommand command) async {
+    final generation = _generation;
     final session = _requireSession(command.sessionId);
     final activeTurn = session.activeTurn;
     if (activeTurn == null) {
@@ -219,6 +237,7 @@ final class AcpClientApplication {
       }
     }
 
+    _requireCurrentGeneration(generation);
     final cancelled = SessionStateMachine.cancelTurn(
       _requireSession(command.sessionId),
       completedAt: DateTime.now(),
@@ -264,6 +283,12 @@ final class AcpClientApplication {
     AcpTransport transport, {
     Duration? closeTimeout,
   }) async {
+    // Bump the generation before yielding on any await below so that
+    // operations still in flight on the old transport observe the new
+    // generation as soon as their continuation resumes, even if that
+    // continuation is scheduled while this method is still tearing down
+    // the old transport.
+    _generation++;
     await _inboundSubscription.cancel();
     await _eventSubscription.cancel();
     _failPendingRequests(
@@ -280,6 +305,7 @@ final class AcpClientApplication {
   Future<ApprovalRequest> respondToPermission(
     RespondToPermissionCommand command,
   ) async {
+    final generation = _generation;
     final session = _requireSession(command.sessionId);
     final activeTurn = session.activeTurn;
     final approval = activeTurn?.approvals[command.approvalId];
@@ -304,6 +330,7 @@ final class AcpClientApplication {
     };
 
     await _sendPermissionResponse(command.approvalId, response);
+    _requireCurrentGeneration(generation);
 
     final resolved = switch (command) {
       SelectPermissionCommand(:final optionId) =>
@@ -398,8 +425,19 @@ final class AcpClientApplication {
   }
 
   void _bindTransport() {
-    _inboundSubscription = _transport.inbound.listen(_handleInboundMessage);
-    _eventSubscription = _transport.events.listen(_handleTransportEvent);
+    final boundGeneration = _generation;
+    _inboundSubscription = _transport.inbound.listen((message) {
+      if (boundGeneration != _generation) {
+        return;
+      }
+      _handleInboundMessage(message);
+    });
+    _eventSubscription = _transport.events.listen((event) {
+      if (boundGeneration != _generation) {
+        return;
+      }
+      _handleTransportEvent(event);
+    });
   }
 
   void _failPendingRequests(Object error) {
@@ -702,6 +740,15 @@ final class AcpClientApplication {
     if (!hasOption) {
       throw const StateTransitionException(
         'permission option is not available for this request',
+      );
+    }
+  }
+
+  void _requireCurrentGeneration(int expectedGeneration) {
+    if (expectedGeneration != _generation) {
+      throw const StateTransitionException(
+        'operation is stale: ACP transport was reconnected while this '
+        'operation was in flight',
       );
     }
   }
