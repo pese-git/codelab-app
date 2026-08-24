@@ -12,7 +12,7 @@ typedef LoadSessionResult = TaskEither<AcpClientApplicationFailure, AcpSession>;
 typedef SendPromptResult = TaskEither<AcpClientApplicationFailure, PromptTurn>;
 typedef CancelTurnResult = TaskEither<AcpClientApplicationFailure, PromptTurn>;
 typedef ReconnectResult =
-    TaskEither<AcpClientApplicationFailure, AcpTransportState>;
+    TaskEither<AcpClientApplicationFailure, ClientConnectionState>;
 typedef RespondToPermissionResult =
     TaskEither<AcpClientApplicationFailure, ApprovalRequest>;
 
@@ -102,6 +102,12 @@ AcpClientApplicationFailure _mapApplicationFailure(
     if (error case MissingAcpSessionException(:final sessionId)) {
       return AcpClientApplicationFailure.missingSession(
         sessionId: sessionId,
+        message: message,
+        cause: error,
+      );
+    }
+    if (error case UnsupportedProtocolVersionException()) {
+      return AcpClientApplicationFailure.protocol(
         message: message,
         cause: error,
       );

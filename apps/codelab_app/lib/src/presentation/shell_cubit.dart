@@ -340,14 +340,21 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
     try {
       final transport = _stdioTransportFactory(config);
-      final transportState = await _application.connect(transport);
+      final connectionState = await _application.connect(transport);
       emit(
         state.copyWith(
-          connectionStatus: _connectionStatusForTransport(transportState),
+          connectionStatus: _connectionStatusForConnection(connectionState),
         ),
       );
       _recordDiagnostic(
         'Stdio ACP agent started: ${state.selectedConnectionDetail}.',
+        source: 'transport',
+      );
+    } on UnsupportedProtocolVersionException catch (error) {
+      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+      _recordDiagnostic(
+        'Incompatible ACP agent: ${error.message}',
+        severity: AcpDebugLogSeverity.error,
         source: 'transport',
       );
     } on Object catch (error) {
@@ -399,10 +406,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           source: 'transport',
         );
       },
-      (transportState) {
+      (connectionState) {
         emit(
           state.copyWith(
-            connectionStatus: _connectionStatusForTransport(transportState),
+            connectionStatus: _connectionStatusForConnection(connectionState),
           ),
         );
         _recordDiagnostic(
@@ -1071,14 +1078,13 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return env;
   }
 
-  AcpConnectionStatus _connectionStatusForTransport(
-    AcpTransportState transportState,
-  ) => switch (transportState) {
-    AcpTransportState.idle => AcpConnectionStatus.idle,
-    AcpTransportState.connecting => AcpConnectionStatus.connecting,
-    AcpTransportState.connected => AcpConnectionStatus.connected,
-    AcpTransportState.closing ||
-    AcpTransportState.closed => AcpConnectionStatus.disconnected,
-    AcpTransportState.failed => AcpConnectionStatus.failed,
+  AcpConnectionStatus _connectionStatusForConnection(
+    ClientConnectionState connectionState,
+  ) => switch (connectionState) {
+    ClientConnectionDisconnected() => AcpConnectionStatus.disconnected,
+    ClientConnectionConnecting() ||
+    ClientConnectionInitializing() => AcpConnectionStatus.connecting,
+    ClientConnectionReady() => AcpConnectionStatus.connected,
+    ClientConnectionFailed() => AcpConnectionStatus.failed,
   };
 }

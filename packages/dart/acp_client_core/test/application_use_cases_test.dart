@@ -188,6 +188,51 @@ void main() {
     );
   });
 
+  test('connect performs initialize and becomes ready on a compatible '
+      'protocol version', () async {
+    final freshTransport = FakeAcpTransport()
+      ..initializeProtocolVersion =
+          AcpClientApplication.supportedProtocolVersion
+      ..initializeAgentInfo = const Implementation(
+        name: 'test-agent',
+        version: '1.0.0',
+      );
+    final freshClient = AcpClientApplication(transport: FakeAcpTransport());
+    addTearDown(freshClient.dispose);
+
+    final result = await freshClient.connect(freshTransport);
+
+    expect(result, isA<ClientConnectionReady>());
+    final ready = result as ClientConnectionReady;
+    expect(
+      ready.protocolVersion,
+      AcpClientApplication.supportedProtocolVersion,
+    );
+    expect(ready.agentInfo?.name, 'test-agent');
+    expect(freshClient.connectionState, isA<ClientConnectionReady>());
+
+    final sentInitialize = freshTransport.sentMessages.single as JsonRpcRequest;
+    expect(sentInitialize.method, initializeMethod);
+  });
+
+  test('connect closes the transport and fails when the agent negotiates an '
+      'unsupported protocol version', () async {
+    final freshTransport = FakeAcpTransport()
+      ..initializeProtocolVersion = const ProtocolVersion(9999);
+    final freshClient = AcpClientApplication(transport: FakeAcpTransport());
+    addTearDown(freshClient.dispose);
+
+    await expectLater(
+      freshClient.connect(freshTransport),
+      throwsA(isA<UnsupportedProtocolVersionException>()),
+    );
+
+    expect(freshTransport.state, AcpTransportState.closed);
+    expect(freshClient.connectionState, isA<ClientConnectionFailed>());
+    final failed = freshClient.connectionState as ClientConnectionFailed;
+    expect(failed.reason, ConnectionFailureReason.unsupportedProtocolVersion);
+  });
+
   test('Reconnect replaces transport and starts the replacement', () async {
     await client.dispose();
     final replacement = FakeAcpTransport();
@@ -200,7 +245,7 @@ void main() {
 
     expect(
       result.getOrElse((failure) => fail('$failure')),
-      AcpTransportState.connected,
+      isA<ClientConnectionReady>(),
     );
     expect(transport.state, AcpTransportState.closed);
     expect(replacement.state, AcpTransportState.connected);
@@ -217,7 +262,7 @@ void main() {
 
     expect(
       result.getOrElse((failure) => fail('$failure')),
-      AcpTransportState.connected,
+      isA<ClientConnectionReady>(),
     );
     expect(transport.state, AcpTransportState.closed);
     expect(replacement.state, AcpTransportState.connected);

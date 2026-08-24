@@ -1,10 +1,24 @@
 import 'dart:async';
 
+import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
 
+/// Fake ACP transport for tests.
+///
+/// Automatically answers `initialize` requests with a compatible
+/// [InitializeResponse] so callers exercising [AcpClientApplication.connect]
+/// / `reconnect` don't each need to simulate the agent handshake by hand.
+/// Set [autoRespondToInitialize] to `false` or override
+/// [initializeProtocolVersion] to drive version-negotiation scenarios
+/// explicitly.
 final class FakeAcpTransport implements AcpTransport {
   FakeAcpTransport({AcpTransportState initialState = AcpTransportState.idle})
     : _state = initialState;
+
+  bool autoRespondToInitialize = true;
+  ProtocolVersion initializeProtocolVersion = const ProtocolVersion(1);
+  Implementation? initializeAgentInfo;
+  AgentCapabilities initializeAgentCapabilities = const AgentCapabilities();
 
   final _inboundController = StreamController<JsonRpcMessage>.broadcast(
     sync: true,
@@ -64,6 +78,22 @@ final class FakeAcpTransport implements AcpTransport {
 
     _sentMessages.add(message);
     _sentController.add(message);
+
+    if (autoRespondToInitialize &&
+        message is JsonRpcRequest &&
+        message.method == initializeMethod) {
+      emitInbound(
+        encodeAcpResponse(
+          id: message.id,
+          method: initializeMethod,
+          result: InitializeResponse(
+            protocolVersion: initializeProtocolVersion,
+            agentCapabilities: initializeAgentCapabilities,
+            agentInfo: initializeAgentInfo,
+          ),
+        ),
+      );
+    }
   }
 
   void emitInbound(JsonRpcMessage message) {

@@ -39,6 +39,7 @@
 - [x] 4.7 Реализовать cancellation behavior: `session/cancel`, pending permission outcome `cancelled`, late updates, final `stopReason: cancelled`
 - [x] 4.8 Реализовать structured logging/diagnostics с secret redaction
 - [x] 4.9 Добавить core tests для state transitions, approvals, cancellation, duplicate updates и failures
+- [x] 4.10 Реализовать ACP `initialize` handshake (protocol version negotiation) в `AcpClientApplication.connect`/`reconnect`, закрывать connection и возвращать typed failure при unsupported protocol version
 
 ## 5. Configure dependency injection
 
@@ -73,12 +74,12 @@
 
 ## 8. Verify quality and conformance
 
-- [ ] 8.1 Добавить protocol conformance tests для initialize, session creation, prompt streaming, permissions, cancellation, version mismatch, invalid messages
+- [x] 8.1 Добавить protocol conformance tests для initialize, session creation, prompt streaming, permissions, cancellation, version mismatch, invalid messages
 - [x] 8.2 Добавить stdio integration test с `codelab-agent` или compatible test double using `codelab serve --stdio` semantics
 - [ ] 8.3 Проверить secret redaction в logs, diagnostics и inspector
-- [ ] 8.4 Запустить `fvm dart run melos run format`
-- [ ] 8.5 Запустить `fvm dart run melos run analyze`
-- [ ] 8.6 Запустить `fvm dart run melos run test`
-- [ ] 8.7 Запустить `fvm dart run melos run protocol-conformance`
-- [ ] 8.8 Запустить полный `fvm dart run melos run check`
+- [x] 8.4 Запустить `fvm dart run melos run format`
+- [x] 8.5 Запустить `fvm dart run melos run analyze`
+- [x] 8.6 Запустить `fvm dart run melos run test`
+- [x] 8.7 Запустить `fvm dart run melos run protocol-conformance`
+- [x] 8.8 Запустить полный `fvm dart run melos run check`
 - [ ] 8.9 Обновить документацию, если implementation behavior отличается от `docs/codelab-spec.md` или OpenSpec specs

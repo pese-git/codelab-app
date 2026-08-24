@@ -28,17 +28,39 @@ final class MissingAcpSessionException extends AcpClientApplicationException {
   final SessionId sessionId;
 }
 
+final class UnsupportedProtocolVersionException
+    extends AcpClientApplicationException {
+  UnsupportedProtocolVersionException({
+    required this.requestedVersion,
+    required this.agentVersion,
+  }) : super(
+         'Agent negotiated unsupported ACP protocol version '
+         '${agentVersion.value} (client supports '
+         '${requestedVersion.value}).',
+       );
+
+  final ProtocolVersion requestedVersion;
+  final ProtocolVersion agentVersion;
+}
+
 final class AcpClientApplication {
   AcpClientApplication({
     required AcpTransport transport,
     AcpTransportFactory? reconnectTransport,
+    Implementation? clientInfo,
   }) : _transport = transport,
-       _reconnectTransport = reconnectTransport {
+       _reconnectTransport = reconnectTransport,
+       _clientInfo = clientInfo {
     _bindTransport();
   }
 
+  /// The ACP protocol version CodeLab implements and requires the agent to
+  /// negotiate during `initialize`.
+  static const supportedProtocolVersion = ProtocolVersion(1);
+
   AcpTransport _transport;
   final AcpTransportFactory? _reconnectTransport;
+  final Implementation? _clientInfo;
   final _pendingRequests = <JsonRpcId, _PendingAcpRequest>{};
   final _pendingPermissionRequests =
       <ApprovalRequestId, _PendingPermissionRequest>{};
@@ -50,6 +72,8 @@ final class AcpClientApplication {
   final _diagnosticController = StreamController<DiagnosticEntry>.broadcast(
     sync: true,
   );
+  final _connectionStateController =
+      StreamController<ClientConnectionState>.broadcast(sync: true);
 
   late StreamSubscription<JsonRpcMessage> _inboundSubscription;
   late StreamSubscription<AcpTransportEvent> _eventSubscription;
@@ -57,6 +81,9 @@ final class AcpClientApplication {
   var _nextRequestId = 1;
   var _nextTurnId = 1;
   var _nextDiagnosticId = 1;
+
+  ClientConnectionState _connectionState =
+      const ClientConnectionState.disconnected();
 
   /// Incremented every time the underlying transport is replaced
   /// (initial [connect] counts as generation 0, each [reconnect] bumps it).
@@ -74,28 +101,23 @@ final class AcpClientApplication {
 
   Stream<DiagnosticEntry> get diagnosticChanges => _diagnosticController.stream;
 
+  ClientConnectionState get connectionState => _connectionState;
+
+  Stream<ClientConnectionState> get connectionStateChanges =>
+      _connectionStateController.stream;
+
   List<AcpSession> get sessions => List.unmodifiable(_sessions.values);
 
   List<DiagnosticEntry> get diagnostics => List.unmodifiable(_diagnostics);
 
   AcpSession? sessionById(SessionId sessionId) => _sessions[sessionId];
 
-  Future<AcpTransportState> connect(
+  Future<ClientConnectionState> connect(
     AcpTransport transport, {
     Duration? closeTimeout,
   }) async {
     await _replaceTransport(transport, closeTimeout: closeTimeout);
-
-    try {
-      await _transport.start();
-    } on Object catch (error) {
-      throw AcpClientApplicationException(
-        'Failed to connect ACP transport.',
-        cause: error,
-      );
-    }
-
-    return _transport.state;
+    return _establishConnection();
   }
 
   Future<AcpSession> createSession(CreateSessionCommand command) async {
@@ -254,7 +276,7 @@ final class AcpClientApplication {
     return cancelled.turns.last;
   }
 
-  Future<AcpTransportState> reconnect(ReconnectCommand command) async {
+  Future<ClientConnectionState> reconnect(ReconnectCommand command) async {
     final createTransport = command.transportFactory ?? _reconnectTransport;
     if (createTransport == null) {
       throw const StateTransitionException(
@@ -267,16 +289,90 @@ final class AcpClientApplication {
       closeTimeout: command.closeTimeout,
     );
 
+    return _establishConnection();
+  }
+
+  /// Starts the freshly bound transport and performs the ACP `initialize`
+  /// handshake required before any session operation, per
+  /// `docs/acp/protocol/02-Initialization.md`.
+  Future<ClientConnectionState> _establishConnection() async {
+    if (_connectionState is! ClientConnectionDisconnected) {
+      _transitionConnection(const ConnectionStateEvent.disconnect());
+    }
+    _transitionConnection(const ConnectionStateEvent.connect());
+
     try {
       await _transport.start();
     } on Object catch (error) {
+      _transitionConnection(
+        ConnectionStateEvent.fail(
+          reason: ConnectionFailureReason.startFailed,
+          message: 'Failed to start ACP transport.',
+          cause: error,
+        ),
+      );
       throw AcpClientApplicationException(
-        'Failed to reconnect ACP transport.',
+        'Failed to connect ACP transport.',
         cause: error,
       );
     }
 
-    return _transport.state;
+    _transitionConnection(const ConnectionStateEvent.initialize());
+
+    final InitializeResponse response;
+    try {
+      response = await _sendRequest<InitializeResponse>(
+        method: initializeMethod,
+        params: InitializeRequest(
+          protocolVersion: supportedProtocolVersion,
+          clientInfo: _clientInfo,
+        ),
+      );
+    } on Object catch (error) {
+      _transitionConnection(
+        ConnectionStateEvent.fail(
+          reason: ConnectionFailureReason.protocolViolation,
+          message: 'Failed to negotiate ACP protocol version.',
+          cause: error,
+        ),
+      );
+      rethrow;
+    }
+
+    if (response.protocolVersion != supportedProtocolVersion) {
+      final failure = UnsupportedProtocolVersionException(
+        requestedVersion: supportedProtocolVersion,
+        agentVersion: response.protocolVersion,
+      );
+      _transitionConnection(
+        ConnectionStateEvent.fail(
+          reason: ConnectionFailureReason.unsupportedProtocolVersion,
+          message: failure.message,
+        ),
+      );
+      await _transport.close();
+      throw failure;
+    }
+
+    _transitionConnection(
+      ConnectionStateEvent.ready(
+        protocolVersion: response.protocolVersion,
+        agentInfo: response.agentInfo,
+        capabilities: response.agentCapabilities,
+      ),
+    );
+
+    return _connectionState;
+  }
+
+  void _transitionConnection(ConnectionStateEvent event) {
+    _connectionState = ConnectionStateMachine.reduce(
+      _connectionState,
+      event,
+    ).stateOrThrow;
+    if (!_connectionStateController.isClosed) {
+      _connectionStateController.add(_connectionState);
+    }
   }
 
   Future<void> _replaceTransport(
@@ -362,6 +458,7 @@ final class AcpClientApplication {
     await _transport.close();
     await _diagnosticController.close();
     await _sessionController.close();
+    await _connectionStateController.close();
   }
 
   Future<T> _sendRequest<T>({
