@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-hover:#106EBE; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --success-bg:rgba(16,124,16,0.14);
+  --warning:#D83B01; --warning-bg:rgba(216,59,1,0.16);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-subtitle{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:14px;color:var(--text-primary);cursor:pointer;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-icon{width:32px;height:32px;padding:0;justify-content:center;border:none;background:transparent;border-radius:var(--radius-sm);}
+.icon{flex:none;display:block;}
+.status-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+</style>
+</helmet>
+
+<div style="width:1280px;height:860px;background:var(--bg-app);padding:16px;display:flex;flex-direction:column;gap:12px;">
+
+  <div class="card" style="display:flex;align-items:center;padding:10px 12px;flex:none;">
+    <div class="type-subtitle" style="margin-right:16px;">CodeLab</div>
+    <div style="display:flex;align-items:center;gap:10px;flex:1;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="status-dot" style="background:var(--neutral);opacity:.5;"></span>
+        <span class="type-body">Idle</span>
+      </div>
+      <span class="badge badge-accent">stdio</span>
+      <span class="type-caption">Codelab Agent</span>
+    </div>
+    <button class="btn" title="Edit connection profile">
+      <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M13 4l3 3-8.5 8.5H4v-3.5L13 4Z"/></svg>
+      Edit profile
+    </button>
+    <button class="btn btn-primary" style="margin-left:8px;">
+      <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v4M12 4v4M6 9h8l-1 8H7L6 9Z"/></svg>
+      Connect
+    </button>
+  </div>
+
+  <div style="display:flex;gap:12px;flex:1;min-height:0;">
+    <div class="card" style="width:280px;flex:none;display:flex;align-items:center;justify-content:center;">
+      <span class="type-caption">No sessions yet</span>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;">
+      <div class="card" style="padding:12px;flex:none;display:flex;align-items:center;background:#FAFAFA;">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-primary)" stroke-width="1.6"><path d="M4 5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8l-3 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/></svg>
+        <div style="margin-left:10px;">
+          <div class="type-body-strong">No active session</div>
+          <div class="type-caption" style="margin-top:2px;">Create a session after connecting.</div>
+        </div>
+      </div>
+
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+        <div class="card" style="width:480px;padding:18px;">
+          <div style="display:flex;align-items:center;">
+            <svg class="icon" width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M8 4v4M12 4v4M6 9h8l-1 8H7L6 9Z"/></svg>
+            <div class="type-title" style="margin-left:10px;">Codelab Agent</div>
+          </div>
+          <div class="type-caption" style="margin-top:8px;">Connect an ACP agent to start a session.</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
+            <span class="status-dot" style="background:var(--neutral);opacity:.5;"></span>
+            <span class="type-body">Idle</span>
+            <span class="badge badge-accent">stdio</span>
+            <span class="type-caption">codelab serve --stdio</span>
+          </div>
+          <div class="type-caption" style="margin-top:10px;background:rgba(50,49,48,0.06);border-radius:6px;padding:8px 10px;">Command, args, working directory and environment are no longer shown inline here — open <strong>Edit profile</strong> to review or change them before connecting.</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+            <button class="btn">
+              <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M13 4l3 3-8.5 8.5H4v-3.5L13 4Z"/></svg>
+              Edit profile
+            </button>
+            <button class="btn btn-primary">
+              <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v4M12 4v4M6 9h8l-1 8H7L6 9Z"/></svg>
+              Connect
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="width:320px;flex:none;display:flex;align-items:center;justify-content:center;">
+      <span class="type-caption">Connect and start a session<br/>to inspect ACP activity.</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

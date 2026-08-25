@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --success-bg:rgba(16,124,16,0.14);
+  --danger:#E81123; --danger-bg:rgba(232,17,35,0.14);
+  --warning:#D83B01; --warning-bg:rgba(216,59,1,0.16);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+  --diff-add-bg:rgba(16,124,16,0.12); --diff-add-fg:#0E5C0E;
+  --diff-del-bg:rgba(232,17,35,0.10); --diff-del-fg:#B0121F;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.badge-warning{background:var(--warning-bg);color:var(--warning);}
+.badge-danger{background:var(--danger-bg);color:var(--danger);}
+.badge-neutral{background:var(--neutral-bg);color:var(--neutral);}
+.btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:14px;color:var(--text-primary);cursor:pointer;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-danger-outline{border-color:var(--danger);color:var(--danger);}
+.icon{flex:none;display:block;}
+.mono{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;}
+.diff-line{display:flex;font-size:12.5px;line-height:20px;white-space:pre;}
+.diff-gutter{width:34px;flex:none;text-align:right;padding-right:8px;color:var(--text-secondary);user-select:none;}
+.diff-marker{width:16px;flex:none;text-align:center;}
+.diff-add{background:var(--diff-add-bg);}
+.diff-add .diff-marker{color:var(--diff-add-fg);}
+.diff-del{background:var(--diff-del-bg);}
+.diff-del .diff-marker{color:var(--diff-del-fg);}
+.diff-ctx{color:var(--text-secondary);}
+.raw-toggle{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;border:none;background:transparent;padding:0;font-size:12px;color:var(--text-secondary);}
+</style>
+</helmet>
+
+<div style="width:560px;min-height:800px;background:#F3F3F3;padding:24px;display:flex;">
+  <div class="card" style="width:100%;padding:16px;display:flex;flex-direction:column;gap:12px;border-color:rgba(216,59,1,0.28);">
+
+    <div style="display:flex;align-items:flex-start;">
+      <svg class="icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--warning)" stroke-width="1.7" style="margin-top:2px;"><path d="M10 2 2 17h16L10 2Z"/><path d="M10 8v4M10 14.2v.1"/></svg>
+      <div style="margin-left:10px;flex:1;">
+        <div class="type-title">Approval required</div>
+        <div class="type-caption" style="margin-top:2px;">edit_file · auth_middleware.dart</div>
+      </div>
+      <span class="badge badge-warning">Risk: localWrite</span>
+    </div>
+
+    <div class="type-body">Remove the raw session token from the log statement in <span class="mono" style="font-size:13px;">_logAuthEvent()</span>.</div>
+
+    <div style="display:flex;gap:16px;">
+      <div><span class="type-caption">Command</span><div class="type-body mono" style="font-size:13px;margin-top:2px;">edit_file</div></div>
+      <div><span class="type-caption">CWD</span><div class="type-body mono" style="font-size:13px;margin-top:2px;">apps/codelab_app</div></div>
+    </div>
+
+    <button class="raw-toggle">
+      <svg class="icon" width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8l4 4 4-4"/></svg>
+      View raw input
+    </button>
+
+    <!-- Diff viewer -->
+    <div>
+      <div style="display:flex;align-items:center;margin-bottom:6px;">
+        <span class="type-caption mono" style="flex:1;">lib/features/auth/auth_middleware.dart</span>
+        <span class="badge badge-neutral" style="color:var(--success);background:transparent;padding:0;margin-right:6px;">+2</span>
+        <span class="badge badge-neutral" style="color:var(--danger);background:transparent;padding:0;">−1</span>
+      </div>
+      <div class="card mono" style="border-color:var(--border-strong);overflow:hidden;">
+        <div class="diff-line diff-ctx"><span class="diff-gutter">38</span><span class="diff-marker"> </span><span>&nbsp;&nbsp;final event = AuthEvent(userId, action);</span></div>
+        <div class="diff-line diff-ctx"><span class="diff-gutter">39</span><span class="diff-marker"> </span><span>&nbsp;&nbsp;final redacted = SecretRedactor.redact(rawContext);</span></div>
+        <div class="diff-line diff-del"><span class="diff-gutter">40</span><span class="diff-marker">−</span><span>&nbsp;&nbsp;logger.info('auth: $action token=$sessionToken');</span></div>
+        <div class="diff-line diff-add"><span class="diff-gutter">40</span><span class="diff-marker">+</span><span>&nbsp;&nbsp;logger.info('auth: $action user=$userId');</span></div>
+        <div class="diff-line diff-add"><span class="diff-gutter">41</span><span class="diff-marker">+</span><span>&nbsp;&nbsp;logger.debug('auth: token redacted for $action');</span></div>
+        <div class="diff-line diff-ctx"><span class="diff-gutter">42</span><span class="diff-marker"> </span><span>&nbsp;&nbsp;return event;</span></div>
+        <div class="diff-line diff-ctx"><span class="diff-gutter">43</span><span class="diff-marker"> </span><span>}</span></div>
+      </div>
+      <div class="type-caption" style="margin-top:6px;">Full diff has 3 more unchanged lines · <a href="#" style="color:var(--accent);text-decoration:none;">expand file</a></div>
+    </div>
+
+    <!-- Options — one per PermissionOptionKind (packages/dart/acp_protocol/lib/src/acp/permission.dart:30-34) -->
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+      <button class="btn btn-primary" style="justify-content:flex-start;">
+        <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10.5 8 14l8-9"/></svg>
+        Allow once
+        <span class="type-caption" style="margin-left:auto;color:rgba(255,255,255,0.75);">⌘⏎</span>
+      </button>
+      <button class="btn" style="justify-content:flex-start;">
+        <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 6 13l6-7.5"/><path d="M9 10.5 12 13l6-7.5"/></svg>
+        Allow always
+        <span class="type-caption" style="margin-left:auto;color:var(--text-secondary);">⌥⌘⏎</span>
+      </button>
+      <button class="btn btn-danger-outline" style="justify-content:flex-start;">
+        <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l8 8M14 6l-8 8"/></svg>
+        Reject once
+        <span class="type-caption" style="margin-left:auto;color:var(--danger);opacity:.7;">⌘⌫</span>
+      </button>
+      <button class="btn btn-danger-outline" style="justify-content:flex-start;">
+        <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l8 8M14 6l-8 8"/></svg>
+        Reject always
+        <span class="type-caption" style="margin-left:auto;color:var(--danger);opacity:.7;">⌥⌘⌫</span>
+      </button>
+    </div>
+
+    <div class="type-caption" style="border-top:1px solid var(--border);padding-top:8px;">Each button maps to a real <span class="mono">PermissionOptionKind</span> (allow_once / allow_always / reject_once / reject_always) — today's <span class="mono">AcpApprovalOption</span> has no <span class="mono">kind</span> field and guesses shortcuts by searching the label text for "allow"/"reject".</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --success-bg:rgba(16,124,16,0.14);
+  --warning:#D83B01;
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:2px 6px;border-radius:var(--radius-sm);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;}
+.badge-high{background:rgba(232,17,35,0.12);color:#C7222F;}
+.badge-medium{background:rgba(216,59,1,0.14);color:var(--warning);}
+.badge-low{background:var(--neutral-bg);color:var(--text-secondary);}
+.icon{flex:none;display:block;}
+.mono{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;font-size:12px;color:var(--text-secondary);}
+.entry{display:flex;align-items:flex-start;gap:10px;padding:9px 4px;}
+.entry-done .type-body{color:var(--text-secondary);text-decoration:line-through;}
+.progress-track{height:5px;border-radius:3px;background:rgba(0,0,0,0.08);overflow:hidden;}
+.progress-fill{height:100%;background:var(--accent);border-radius:3px;}
+</style>
+</helmet>
+
+<div style="width:640px;background:#fff;padding:32px;display:flex;flex-direction:column;gap:20px;">
+  <div>
+    <div class="type-title">Progress checklist — from PlanEntry</div>
+    <div class="type-caption" style="margin-top:6px;max-width:560px;">"Agent workbench interaction patterns" already lists "progress checklist" as a required pattern. The data for it — <span class="mono">Plan</span>/<span class="mono">PlanEntry</span> (priority + status) — is fully modeled in the protocol (<span class="mono">session_update.dart:77-150</span>) but nothing in <span class="mono">apps/codelab_app</span> or <span class="mono">acp_ui</span> reads it: zero matches for <span class="mono">PlanEntry</span> in either.</div>
+  </div>
+
+  <div class="card" style="padding:16px;">
+    <div style="display:flex;align-items:center;">
+      <span class="type-body-strong" style="flex:1;">Refactor auth module</span>
+      <span class="type-caption">3 of 5 done</span>
+    </div>
+    <div class="progress-track" style="margin-top:8px;"><div class="progress-fill" style="width:60%;"></div></div>
+
+    <div style="margin-top:6px;">
+      <div class="entry entry-done">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--success)" stroke-width="1.8" style="margin-top:2px;"><circle cx="10" cy="10" r="8"/><path d="M6.5 10.2l2.3 2.3 4.7-5"/></svg>
+        <div style="flex:1;">
+          <div class="type-body">Read auth_middleware.dart and locate log statements</div>
+        </div>
+        <span class="badge badge-low">low</span>
+      </div>
+      <div class="entry entry-done">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--success)" stroke-width="1.8" style="margin-top:2px;"><circle cx="10" cy="10" r="8"/><path d="M6.5 10.2l2.3 2.3 4.7-5"/></svg>
+        <div style="flex:1;">
+          <div class="type-body">Identify the call site logging the raw session token</div>
+        </div>
+        <span class="badge badge-low">low</span>
+      </div>
+      <div class="entry entry-done">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--success)" stroke-width="1.8" style="margin-top:2px;"><circle cx="10" cy="10" r="8"/><path d="M6.5 10.2l2.3 2.3 4.7-5"/></svg>
+        <div style="flex:1;">
+          <div class="type-body">Apply the edit removing the raw token from the log line</div>
+        </div>
+        <span class="badge badge-high">high</span>
+      </div>
+      <div class="entry">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.8" style="margin-top:2px;"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 2"/></svg>
+        <div style="flex:1;">
+          <div class="type-body-strong">Run melos analyze to confirm no new lint issues</div>
+          <div class="type-caption" style="margin-top:2px;">in progress</div>
+        </div>
+        <span class="badge badge-medium">medium</span>
+      </div>
+      <div class="entry">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.8" style="margin-top:2px;"><circle cx="10" cy="10" r="8"/></svg>
+        <div style="flex:1;">
+          <div class="type-body">Summarize the change for the approval request</div>
+        </div>
+        <span class="badge badge-low">low</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:12px;display:flex;gap:10px;align-items:flex-start;">
+    <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6" style="margin-top:1px;"><circle cx="10" cy="10" r="8"/><path d="M10 9v5M10 6v.1"/></svg>
+    <div class="type-body">Status icons map 1:1 to <span class="mono">PlanEntryStatus</span>: empty circle = <span class="mono">pending</span>, half-filled clock = <span class="mono">in_progress</span>, check = <span class="mono">completed</span>. Priority badge maps to <span class="mono">PlanEntryPriority</span> (<span class="mono">high</span>/<span class="mono">medium</span>/<span class="mono">low</span>) — no new enum invented, both come straight from the protocol.</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

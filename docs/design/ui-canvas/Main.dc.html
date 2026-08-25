@@ -1,0 +1,298 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-hover:#106EBE; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --success-bg:rgba(16,124,16,0.14);
+  --danger:#E81123; --danger-bg:rgba(232,17,35,0.14);
+  --warning:#D83B01; --warning-bg:rgba(216,59,1,0.16);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+a{color:var(--accent);} a:hover{color:var(--accent-hover);}
+.type-title{font-size:28px;font-weight:600;line-height:36px;margin:0;}
+.type-subtitle{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-neutral{background:var(--neutral-bg);color:var(--neutral);}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.badge-success{background:var(--success-bg);color:var(--success);}
+.badge-warning{background:var(--warning-bg);color:var(--warning);}
+.badge-danger{background:var(--danger-bg);color:var(--danger);}
+.btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:14px;color:var(--text-primary);cursor:pointer;white-space:nowrap;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-icon{width:32px;height:32px;padding:0;justify-content:center;border:none;background:transparent;border-radius:var(--radius-sm);}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:#fff;font-size:12.5px;color:var(--text-primary);cursor:pointer;}
+.tab-btn{height:26px;padding:0 10px;border:none;background:transparent;border-radius:4px 4px 0 0;font-size:13px;color:var(--text-secondary);}
+.tab-active{background:var(--bg-app);color:var(--text-primary);font-weight:600;border-bottom:2px solid var(--accent);}
+.attachment-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 6px 0 8px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:#fff;font-size:12.5px;color:var(--text-primary);margin-bottom:8px;}
+.attachment-remove{width:16px;height:16px;border:none;background:rgba(0,0,0,0.06);border-radius:3px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);padding:0;}
+.icon{flex:none;display:block;}
+.status-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.scroll{overflow-y:auto;}
+.scroll::-webkit-scrollbar{width:8px;}
+.scroll::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.18);border-radius:4px;}
+</style>
+</helmet>
+
+<div style="width:1280px;height:900px;background:var(--bg-app);padding:16px;display:flex;flex-direction:column;gap:12px;">
+
+  <!-- Command bar -->
+  <div class="card" style="display:flex;align-items:center;padding:10px 12px;flex:none;">
+    <div class="type-subtitle" style="margin-right:16px;">CodeLab</div>
+    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="status-dot" style="background:var(--success);"></span>
+        <span class="type-body">Connected</span>
+      </div>
+      <span class="badge badge-accent">stdio</span>
+      <span class="type-caption" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Codelab Agent</span>
+      <span class="type-caption" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">codelab serve --stdio</span>
+    </div>
+    <button class="btn" title="Edit connection profile">
+      <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M13 4l3 3-8.5 8.5H4v-3.5L13 4Z"/></svg>
+      Edit profile
+    </button>
+    <button class="btn btn-primary" style="margin-left:8px;">
+      <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v4M12 4v4M6 9h8l-1 8H7L6 9Z"/><path d="M9 2v3M11 2v3"/></svg>
+      Connect
+    </button>
+  </div>
+
+  <!-- Body -->
+  <div style="display:flex;gap:12px;flex:1;min-height:0;">
+
+    <!-- Sessions pane -->
+    <div class="card" style="width:280px;flex:none;display:flex;flex-direction:column;min-height:0;">
+      <div style="display:flex;align-items:center;padding:8px 8px 0 8px;gap:4px;">
+        <button class="tab-btn tab-active">Sessions</button>
+        <button class="tab-btn">Files</button>
+        <div style="flex:1;"></div>
+        <button class="btn-icon" title="New session">
+          <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>
+        </button>
+      </div>
+      <div class="scroll" style="flex:1;padding:8px 8px 8px;display:flex;flex-direction:column;gap:6px;">
+        <div style="background:rgba(0,120,212,0.11);border-radius:6px;padding:10px;">
+          <div style="display:flex;align-items:flex-start;">
+            <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.7" style="margin-top:2px;"><path d="M4 10a6 6 0 1 1 2 4.5L4 16l1.2-2.4A6 6 0 0 1 4 10Z"/></svg>
+            <div style="flex:1;margin-left:10px;min-width:0;">
+              <div style="display:flex;align-items:center;">
+                <span class="type-body-strong" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Refactor auth module</span>
+                <span class="badge badge-accent" style="margin-left:8px;">Running</span>
+              </div>
+              <div class="type-caption" style="margin-top:4px;">packages/dart/acp_client_core</div>
+              <div class="type-caption" style="margin-top:2px;">Updated 2m ago</div>
+            </div>
+          </div>
+        </div>
+        <div style="border-radius:6px;padding:10px;">
+          <div style="display:flex;align-items:flex-start;">
+            <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--warning)" stroke-width="1.7" style="margin-top:2px;"><path d="M10 2 2 17h16L10 2Z"/><path d="M10 8v4M10 14.2v.1"/></svg>
+            <div style="flex:1;margin-left:10px;min-width:0;">
+              <div style="display:flex;align-items:center;">
+                <span class="type-body-strong" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Add WebSocket reconnect</span>
+                <span class="badge badge-warning" style="margin-left:8px;">Approval</span>
+              </div>
+              <div class="type-caption" style="margin-top:4px;">apps/codelab_app/lib/features/workbench</div>
+              <div class="type-caption" style="margin-top:2px;">Updated 4m ago</div>
+            </div>
+          </div>
+        </div>
+        <div style="border-radius:6px;padding:10px;">
+          <div style="display:flex;align-items:flex-start;">
+            <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--success)" stroke-width="1.7" style="margin-top:2px;"><path d="M4 10.5 8 14l8-9"/></svg>
+            <div style="flex:1;margin-left:10px;min-width:0;">
+              <div style="display:flex;align-items:center;">
+                <span class="type-body-strong" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Write acp_transports tests</span>
+                <span class="badge badge-success" style="margin-left:8px;">Done</span>
+              </div>
+              <div class="type-caption" style="margin-top:4px;">packages/dart/acp_transports</div>
+              <div class="type-caption" style="margin-top:2px;">Updated 21m ago</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main pane -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;">
+
+      <div class="card" style="padding:12px;display:flex;align-items:center;flex:none;">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-primary)" stroke-width="1.6"><path d="M4 5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8l-3 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/></svg>
+        <div style="margin-left:10px;min-width:0;">
+          <div class="type-body-strong" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Refactor auth module</div>
+          <div class="type-caption" style="margin-top:2px;">Session started 09:42 · view mode: normal</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:10px 12px;display:flex;align-items:center;gap:10px;flex:none;">
+        <svg class="icon" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.8"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 2"/></svg>
+        <span class="type-body-strong" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Run melos analyze to confirm no new lint issues</span>
+        <span class="type-caption" style="white-space:nowrap;">3 of 5</span>
+        <div style="width:64px;height:5px;border-radius:3px;background:rgba(0,0,0,0.08);overflow:hidden;flex:none;"><div style="width:60%;height:100%;background:var(--accent);"></div></div>
+      </div>
+
+      <div class="card scroll" style="flex:1;min-height:0;padding:12px;display:flex;flex-direction:column;gap:10px;">
+        <div style="background:rgba(0,120,212,0.09);border-radius:6px;padding:10px;display:flex;align-items:flex-start;">
+          <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6" style="margin-top:2px;"><circle cx="10" cy="7" r="3.2"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+          <div style="flex:1;margin-left:10px;min-width:0;">
+            <div style="display:flex;"><span class="type-body-strong" style="flex:1;">You</span><span class="type-caption">09:42</span></div>
+            <div class="type-body" style="margin-top:6px;">Refactor the auth middleware to stop storing raw session tokens in logs.</div>
+          </div>
+        </div>
+        <div style="background:rgba(50,49,48,0.06);border-radius:6px;padding:10px;display:flex;align-items:flex-start;">
+          <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--neutral)" stroke-width="1.6" style="margin-top:2px;"><rect x="4" y="6" width="12" height="9" rx="2"/><path d="M10 6V3M7 10h.01M13 10h.01"/></svg>
+          <div style="flex:1;margin-left:10px;min-width:0;">
+            <div style="display:flex;"><span class="type-body-strong" style="flex:1;">Agent</span><span class="type-caption">09:43</span></div>
+            <div class="type-body" style="margin-top:6px;">Found 3 call sites logging the raw token. Reading auth_middleware.dart before editing.</div>
+            <div class="card" style="margin-top:8px;padding:8px 10px;display:flex;align-items:center;border-color:var(--border);">
+              <span class="status-dot" style="background:var(--success);margin-right:8px;"></span>
+              <span class="type-body-strong" style="flex:1;">read_file - auth_middleware.dart</span>
+              <span class="type-caption" style="margin-right:8px;">42 lines</span>
+              <button class="btn-icon" title="Preview file (read-only)">
+                <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.7"><path d="M2 10s2.8-5.5 8-5.5S18 10 18 10s-2.8 5.5-8 5.5S2 10 2 10Z"/><circle cx="10" cy="10" r="2.2"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div style="background:rgba(216,59,1,0.08);border-radius:6px;padding:10px;display:flex;align-items:flex-start;">
+          <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--warning)" stroke-width="1.6" style="margin-top:2px;"><path d="M10 4v6l4 2"/><circle cx="10" cy="10" r="7.2"/></svg>
+          <div style="flex:1;margin-left:10px;min-width:0;">
+            <div style="display:flex;"><span class="type-body-strong" style="flex:1;">Tool call</span><span class="type-caption">09:44</span></div>
+            <div class="card" style="margin-top:6px;padding:8px 10px;display:flex;align-items:center;border-color:var(--border);">
+              <span class="status-dot" style="background:var(--accent);margin-right:8px;"></span>
+              <span class="type-body-strong" style="flex:1;">edit_file - auth_middleware.dart</span>
+              <span class="type-caption">awaiting approval</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="flex:none;display:flex;flex-direction:column;background:#FAFAFA;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:6px;padding:10px 12px 0;flex-wrap:wrap;">
+          <span class="attachment-chip">
+            <svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 2h6l3 3v13H6V2Z"/><path d="M12 2v3h3"/></svg>
+            auth_middleware.dart
+            <button class="attachment-remove" title="Remove"><svg class="icon" width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 5l10 10M15 5 5 15"/></svg></button>
+          </span>
+          <span class="attachment-chip">
+            <svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="m4 13 4-4 3 3 5-5"/><circle cx="7" cy="8" r="1"/></svg>
+            error-screenshot.png
+            <button class="attachment-remove" title="Remove"><svg class="icon" width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 5l10 10M15 5 5 15"/></svg></button>
+          </span>
+        </div>
+        <div style="padding:8px 12px 6px;min-height:64px;color:var(--text-secondary);line-height:20px;" class="type-body">
+          Refactor the remaining call sites in auth_middleware.dart to use<br/>
+          the redacted logger helper instead of<span style="opacity:0;">|</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid var(--border);">
+          <button class="btn-icon" title="Add context — attach a file or image" style="border:1px solid var(--border-strong);">
+            <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4v12M4 10h12"/></svg>
+          </button>
+          <button class="chip">
+            <svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="14" height="10" rx="2"/><path d="M7 17h6"/></svg>
+            Qwen3 Coder 30B
+            <svg class="icon" width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l5 5 5-5"/></svg>
+          </button>
+          <button class="chip">
+            <svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="9" width="10" height="7" rx="1.5"/><path d="M7 9V6a3 3 0 0 1 6 0v3"/></svg>
+            Ask
+            <svg class="icon" width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l5 5 5-5"/></svg>
+          </button>
+          <div style="flex:1;"></div>
+          <button class="btn" style="height:28px;">
+            <svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 6l8 8M14 6l-8 8"/></svg>
+            Cancel
+          </button>
+          <button class="btn btn-primary" style="height:28px;">
+            <svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 17 3l-5 14-3-6-6-3Z"/></svg>
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inspector pane -->
+    <div class="card" style="width:320px;flex:none;display:flex;flex-direction:column;min-height:0;">
+      <div style="display:flex;align-items:center;padding:10px 8px 8px 12px;">
+        <div class="type-subtitle" style="flex:1;">Inspector</div>
+        <button class="btn-icon" title="Clear diagnostics">
+          <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5l10 10M15 5 5 15"/></svg>
+        </button>
+      </div>
+      <div class="scroll" style="flex:1;min-height:0;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="background:rgba(216,59,1,0.09);border:1px solid rgba(216,59,1,0.22);border-radius:6px;padding:10px;">
+          <div style="display:flex;align-items:center;"><span class="badge badge-warning">Approval</span><span class="type-body-strong" style="flex:1;margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">edit_file · auth_middleware.dart</span></div>
+          <div class="type-body" style="margin-top:6px;">Apply 1 change to remove raw token from log statement.</div>
+          <div style="display:flex;gap:6px;margin-top:8px;">
+            <span class="badge badge-warning">Risk localWrite</span>
+            <span class="badge badge-neutral">pending</span>
+          </div>
+        </div>
+        <div style="background:rgba(0,120,212,0.08);border:1px solid rgba(0,120,212,0.20);border-radius:6px;padding:10px;">
+          <div style="display:flex;align-items:center;"><span class="badge badge-accent">Tool</span><span class="type-body-strong" style="flex:1;margin-left:8px;">read_file</span></div>
+          <div class="type-body" style="margin-top:6px;">auth_middleware.dart</div>
+          <div style="display:flex;gap:6px;margin-top:8px;"><span class="badge badge-neutral">succeeded</span></div>
+        </div>
+        <div style="background:rgba(50,49,48,0.06);border:1px solid rgba(50,49,48,0.14);border-radius:6px;padding:10px;">
+          <div style="display:flex;align-items:center;"><span class="badge badge-neutral">Protocol</span><span class="type-body-strong" style="flex:1;margin-left:8px;">session/update</span></div>
+          <div class="type-body" style="margin-top:6px;">agent_message_chunk received</div>
+        </div>
+
+        <div class="card" style="height:230px;flex:none;display:flex;flex-direction:column;margin-top:2px;">
+          <div style="display:flex;align-items:center;padding:10px 8px 8px 12px;">
+            <div class="type-subtitle" style="flex:1;">Debug log</div>
+            <button class="btn-icon" title="Clear log">
+              <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5l10 10M15 5 5 15"/></svg>
+            </button>
+          </div>
+          <div class="scroll" style="flex:1;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px;">
+            <div style="background:rgba(0,120,212,0.10);border-radius:6px;padding:8px 10px;">
+              <div style="display:flex;align-items:center;"><span class="badge badge-accent">Info</span><span class="type-caption" style="margin-left:8px;flex:1;">transport</span><span class="type-caption">09:42:11</span></div>
+              <div class="type-body" style="margin-top:4px;">Starting stdio ACP agent: codelab serve --stdio.</div>
+            </div>
+            <div style="background:rgba(50,49,48,0.06);border-radius:6px;padding:8px 10px;">
+              <div style="display:flex;align-items:center;"><span class="badge badge-neutral">Debug</span><span class="type-caption" style="margin-left:8px;flex:1;">protocol</span><span class="type-caption">09:42:12</span></div>
+              <div class="type-body" style="margin-top:4px;">initialize → protocolVersion 1</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal (collapsed) -->
+  <div class="card" style="flex:none;display:flex;align-items:center;padding:6px 10px;gap:8px;">
+    <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.7"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="m6 8 3 2-3 2M11 12h3"/></svg>
+    <span class="type-body-strong">Terminal</span>
+    <span class="type-caption">zsh — codelab-agent</span>
+    <div style="flex:1;"></div>
+    <button class="btn-icon" title="Expand terminal">
+      <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.8"><path d="M5 12l5-5 5 5"/></svg>
+    </button>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

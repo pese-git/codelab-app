@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --neutral:#323130;
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-subtitle{font-size:16px;font-weight:600;line-height:22px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.icon{flex:none;display:block;}
+.status-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.handle{width:6px;flex:none;position:relative;cursor:ew-resize;}
+.handle::after{content:"";position:absolute;left:2.5px;top:0;bottom:0;width:1px;background:var(--border-strong);}
+.handle.active::after{background:var(--accent);width:2px;left:2px;}
+.handle-cursor{position:absolute;width:22px;height:22px;border-radius:50%;background:#1a1a1a;color:#fff;display:flex;align-items:center;justify-content:center;transform:translate(-50%,-50%);box-shadow:0 4px 10px rgba(0,0,0,0.3);}
+.ghost-line{position:absolute;top:0;bottom:0;width:2px;background:rgba(0,120,212,0.5);border-left:1px dashed var(--accent);}
+</style>
+</helmet>
+
+<div style="width:1280px;height:820px;background:var(--bg-app);padding:16px;display:flex;flex-direction:column;gap:12px;">
+  <div style="margin-bottom:-2px;">
+    <div class="type-subtitle">Resizable panel borders</div>
+    <div class="type-caption" style="margin-top:4px;max-width:760px;">Every divider between sessions / main / inspector is a drag handle — same pattern as Claude Code Desktop, Codex, and OpenCode. No new dependency: a plain <span style="font-family:ui-monospace,monospace;">MouseRegion</span> + <span style="font-family:ui-monospace,monospace;">GestureDetector</span>, width clamped between a min and max.</div>
+  </div>
+
+  <div class="card" style="display:flex;align-items:center;padding:10px 12px;flex:none;">
+    <div class="type-subtitle" style="margin-right:16px;">CodeLab</div>
+    <span class="status-dot" style="background:var(--success);margin-right:8px;"></span>
+    <span class="type-body">Connected</span>
+  </div>
+
+  <div style="display:flex;flex:1;min-height:0;position:relative;">
+    <!-- sessions pane, wider than default to show it was resized -->
+    <div class="card" style="width:360px;flex:none;padding:12px;">
+      <span class="type-body-strong">Sessions</span>
+      <div class="type-caption" style="margin-top:8px;">Widened past the 280px default — clamps at 480px max.</div>
+    </div>
+
+    <div class="handle active">
+      <div class="handle-cursor" style="left:0px;top:120px;">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 10h16M6 6l-4 4 4 4M14 6l4 4-4 4"/></svg>
+      </div>
+      <div class="ghost-line" style="left:0;"></div>
+    </div>
+
+    <div class="card" style="flex:1;margin-left:12px;padding:12px;display:flex;align-items:center;justify-content:center;">
+      <span class="type-caption">Main pane fills the remaining space live while dragging</span>
+    </div>
+
+    <div style="width:12px;flex:none;"></div>
+    <div class="handle">
+    </div>
+
+    <div class="card" style="width:320px;flex:none;margin-left:12px;padding:12px;">
+      <span class="type-body-strong">Inspector</span>
+      <div class="type-caption" style="margin-top:8px;">Unchanged in this example — 320px default, clamps between 260–520px.</div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start;flex:none;">
+    <svg class="icon" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6" style="margin-top:1px;"><circle cx="10" cy="10" r="8"/><path d="M10 6v5l3 2"/></svg>
+    <div class="type-body">Cursor changes to a resize icon on hover, before any drag starts. Widths live in <span style="font-family:ui-monospace,monospace;">CodeLabShellState</span> for this run of the app — not yet persisted across restarts (open question, not blocking).</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

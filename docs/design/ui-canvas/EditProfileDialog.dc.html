@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --neutral:#323130;
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-subtitle{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:14px;color:var(--text-primary);cursor:pointer;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-icon{width:28px;height:28px;padding:0;justify-content:center;border:none;background:transparent;border-radius:var(--radius-sm);}
+.icon{flex:none;display:block;}
+.status-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.field-label{font-size:12px;color:var(--text-secondary);margin-bottom:4px;display:block;}
+.field{height:32px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:#fff;padding:0 8px;font-size:14px;display:flex;align-items:center;color:var(--text-primary);}
+.field-multiline{min-height:44px;align-items:flex-start;padding-top:6px;}
+</style>
+</helmet>
+
+<div style="width:1280px;height:860px;background:var(--bg-app);padding:16px;position:relative;">
+  <!-- dimmed backdrop: connected workbench -->
+  <div style="opacity:.35;filter:blur(0.5px);display:flex;flex-direction:column;gap:12px;height:100%;pointer-events:none;">
+    <div style="background:#fff;border:1px solid var(--border);border-radius:6px;height:44px;flex:none;display:flex;align-items:center;padding:0 12px;">
+      <span class="type-subtitle">CodeLab</span>
+      <span style="margin-left:16px;display:flex;align-items:center;gap:8px;"><span class="status-dot" style="background:var(--success);"></span><span class="type-body">Connected</span></span>
+    </div>
+    <div style="display:flex;gap:12px;flex:1;">
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;width:280px;"></div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;flex:1;"></div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;width:320px;"></div>
+    </div>
+  </div>
+
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,0.22);"></div>
+
+  <!-- ContentDialog -->
+  <div style="position:absolute;left:50%;top:90px;transform:translateX(-50%);width:560px;background:#fff;border-radius:8px;box-shadow:0 20px 48px rgba(0,0,0,0.28);overflow:hidden;">
+    <div style="padding:18px 20px 4px;display:flex;align-items:center;">
+      <div class="type-title" style="flex:1;">Connection profile</div>
+      <button class="btn-icon" title="Close">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.7"><path d="M5 5l10 10M15 5 5 15"/></svg>
+      </button>
+    </div>
+    <div class="type-caption" style="padding:0 20px 16px;">Changes apply as you type — no separate save step. Close when you're done.</div>
+
+    <div style="padding:0 20px 20px;">
+      <div style="display:flex;align-items:center;">
+        <span class="type-body-strong">Transport</span>
+        <div style="display:flex;gap:8px;margin-left:12px;">
+          <button class="btn btn-primary" style="height:28px;">
+            <svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="14" height="10" rx="1.5"/><path d="M6 9h.01M9 9h.01M12 9h.01M6 12h6"/></svg>
+            stdio
+          </button>
+          <button class="btn" style="height:28px;">
+            <svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10h3M13 10h3M8.5 6l3 8"/></svg>
+            WebSocket
+          </button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <div style="flex:1;"><span class="field-label">Profile</span><div class="field">Codelab Agent</div></div>
+        <div style="flex:1;"><span class="field-label">Command</span><div class="field" style="outline:2px solid var(--accent);outline-offset:-1px;">codelab</div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <div style="flex:1;"><span class="field-label">Args</span><div class="field">serve --stdio</div></div>
+        <div style="flex:1;"><span class="field-label">Working directory</span><div class="field" style="color:var(--text-secondary);">Optional</div></div>
+      </div>
+      <div style="margin-top:10px;">
+        <span class="field-label">Environment</span>
+        <div class="field field-multiline">CODELAB_LOG_LEVEL=DEBUG</div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding:12px 20px;display:flex;justify-content:flex-end;">
+      <button class="btn btn-primary">Done</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

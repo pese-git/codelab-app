@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-hover:#106EBE; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --success-bg:rgba(16,124,16,0.14);
+  --warning:#D83B01; --warning-bg:rgba(216,59,1,0.16);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:26px;margin:0;}
+.type-subtitle{font-size:16px;font-weight:600;line-height:22px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:13.5px;font-weight:400;line-height:19px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:11.5px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.badge-success{background:var(--success-bg);color:var(--success);}
+.badge-warning{background:var(--warning-bg);color:var(--warning);}
+.badge-neutral{background:var(--neutral-bg);color:var(--neutral);}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:13px;color:var(--text-primary);}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-icon{width:26px;height:26px;padding:0;justify-content:center;border:none;background:transparent;border-radius:var(--radius-sm);}
+.icon{flex:none;display:block;}
+.status-dot{width:7px;height:7px;border-radius:50%;flex:none;}
+.split-note{position:absolute;background:#1a1a1a;color:#fff;font-size:11.5px;padding:4px 8px;border-radius:4px;}
+</style>
+</helmet>
+
+<div style="width:1520px;height:880px;background:var(--bg-app);padding:16px;display:flex;flex-direction:column;gap:12px;">
+
+  <div class="card" style="display:flex;align-items:center;padding:10px 12px;flex:none;">
+    <div class="type-subtitle" style="margin-right:16px;">CodeLab</div>
+    <span class="type-caption">2 sessions open side by side</span>
+    <div style="flex:1;"></div>
+    <button class="btn"><svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="6" height="12" rx="1"/><rect x="11" y="4" width="6" height="12" rx="1"/></svg>Split view</button>
+  </div>
+
+  <div style="display:flex;gap:12px;flex:1;min-height:0;position:relative;">
+
+    <!-- Sessions sidebar -->
+    <div class="card" style="width:260px;flex:none;display:flex;flex-direction:column;">
+      <div style="padding:10px 8px 8px 12px;"><span class="type-subtitle">Sessions</span></div>
+      <div style="padding:0 8px 8px;display:flex;flex-direction:column;gap:6px;">
+        <div style="background:rgba(0,120,212,0.11);border:1px solid var(--accent);border-radius:6px;padding:8px 10px;position:relative;">
+          <div style="display:flex;"><span class="type-body-strong" style="flex:1;">Refactor auth module</span><span class="badge badge-accent">Running</span></div>
+          <div class="type-caption" style="margin-top:2px;">⌘-click opens in split · pane A</div>
+        </div>
+        <div style="background:rgba(16,124,16,0.10);border:1px solid var(--success);border-radius:6px;padding:8px 10px;">
+          <div style="display:flex;"><span class="type-body-strong" style="flex:1;">Write acp_transports tests</span><span class="badge badge-success">Running</span></div>
+          <div class="type-caption" style="margin-top:2px;">⌘-click opens in split · pane B</div>
+        </div>
+        <div style="border-radius:6px;padding:8px 10px;">
+          <div style="display:flex;"><span class="type-body-strong" style="flex:1;">Add WebSocket reconnect</span><span class="badge badge-warning">Approval</span></div>
+        </div>
+      </div>
+      <div class="type-caption" style="margin-top:auto;padding:10px 12px;border-top:1px solid var(--border);">⌘/Ctrl-click a session to open it in a second pane — each pane keeps its own isolated context, mirroring Claude Code Desktop's split-session pattern.</div>
+    </div>
+
+    <!-- Pane A -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;">
+      <div class="card" style="padding:8px 10px;display:flex;align-items:center;flex:none;">
+        <span class="status-dot" style="background:var(--accent);margin-right:8px;"></span>
+        <span class="type-body-strong" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Refactor auth module</span>
+        <button class="btn-icon"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5l10 10M15 5 5 15"/></svg></button>
+      </div>
+      <div class="card" style="flex:1;padding:10px;display:flex;flex-direction:column;gap:8px;">
+        <div style="background:rgba(0,120,212,0.09);border-radius:6px;padding:8px;">
+          <div class="type-caption">You · 09:42</div>
+          <div class="type-body" style="margin-top:4px;">Refactor the auth middleware to stop logging raw tokens.</div>
+        </div>
+        <div style="background:rgba(50,49,48,0.06);border-radius:6px;padding:8px;">
+          <div class="type-caption">Agent · 09:44</div>
+          <div class="type-body" style="margin-top:4px;">Applying the redaction fix now, running tests next.</div>
+        </div>
+      </div>
+      <div class="card" style="flex:none;padding:8px;display:flex;gap:8px;">
+        <div style="flex:1;color:var(--text-secondary);font-size:13.5px;">Message the agent</div>
+        <button class="btn btn-primary" style="height:28px;">Send</button>
+      </div>
+    </div>
+
+    <!-- divider handle -->
+    <div style="width:2px;background:var(--border-strong);border-radius:1px;margin:0 -4px;flex:none;"></div>
+
+    <!-- Pane B -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;">
+      <div class="card" style="padding:8px 10px;display:flex;align-items:center;flex:none;">
+        <span class="status-dot" style="background:var(--success);margin-right:8px;"></span>
+        <span class="type-body-strong" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Write acp_transports tests</span>
+        <button class="btn-icon"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5l10 10M15 5 5 15"/></svg></button>
+      </div>
+      <div class="card" style="flex:1;padding:10px;display:flex;flex-direction:column;gap:8px;">
+        <div style="background:rgba(0,120,212,0.09);border-radius:6px;padding:8px;">
+          <div class="type-caption">You · 09:39</div>
+          <div class="type-body" style="margin-top:4px;">Add unit tests for the WebSocket transport reconnect path.</div>
+        </div>
+        <div style="background:rgba(50,49,48,0.06);border-radius:6px;padding:8px;">
+          <div class="type-caption">Agent · 09:45</div>
+          <div class="type-body" style="margin-top:4px;">3 of 5 test cases passing. Fixing the timeout case now.</div>
+        </div>
+      </div>
+      <div class="card" style="flex:none;padding:8px;display:flex;gap:8px;">
+        <div style="flex:1;color:var(--text-secondary);font-size:13.5px;">Message the agent</div>
+        <button class="btn btn-primary" style="height:28px;">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --neutral:#323130;
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:16px;font-weight:600;line-height:22px;margin:0;}
+.type-subtitle{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:11.5px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-neutral{background:rgba(50,49,48,0.10);color:var(--neutral);}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 10px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:13px;color:var(--text-primary);cursor:pointer;}
+.btn-active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);}
+.btn-icon{width:28px;height:28px;padding:0;justify-content:center;border:none;background:transparent;border-radius:var(--radius-sm);}
+.icon{flex:none;display:block;}
+.mono{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;}
+.code-line{display:flex;font-size:12.5px;line-height:20px;white-space:pre;}
+.code-gutter{width:40px;flex:none;text-align:right;padding-right:10px;color:var(--text-secondary);user-select:none;}
+.code-line.hit{background:rgba(0,120,212,0.10);}
+.code-line.hit .code-gutter{color:var(--accent);font-weight:600;}
+</style>
+</helmet>
+
+<div style="width:1280px;height:860px;background:var(--bg-app);padding:16px;position:relative;">
+  <!-- dimmed backdrop -->
+  <div style="opacity:.35;filter:blur(0.5px);display:flex;flex-direction:column;gap:12px;height:100%;pointer-events:none;">
+    <div style="background:#fff;border:1px solid var(--border);border-radius:6px;height:44px;flex:none;"></div>
+    <div style="display:flex;gap:12px;flex:1;">
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;width:280px;"></div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;flex:1;"></div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;width:320px;"></div>
+    </div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,0.18);"></div>
+
+  <!-- file preview panel -->
+  <div style="position:absolute;right:16px;top:16px;bottom:16px;width:640px;background:#fff;border-radius:8px;box-shadow:0 20px 48px rgba(0,0,0,0.26);display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:12px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);flex:none;">
+      <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M6 2h6l3 3v13H6V2Z"/><path d="M12 2v3h3"/></svg>
+      <div style="flex:1;min-width:0;">
+        <div class="type-title mono" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">lib/features/auth/auth_middleware.dart</div>
+        <div class="type-caption" style="margin-top:2px;">from read_file · tool call 09:43</div>
+      </div>
+      <span class="badge badge-neutral">Read-only</span>
+      <button class="btn btn-active" title="Keep this open as the agent moves">
+        <svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="3"/><path d="M10 2v3M10 15v3M2 10h3M15 10h3"/></svg>
+        Following
+      </button>
+      <button class="btn-icon" title="Close">
+        <svg class="icon" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.7"><path d="M5 5l10 10M15 5 5 15"/></svg>
+      </button>
+    </div>
+
+    <div style="flex:1;overflow:auto;padding:10px 0;" class="mono">
+      <div class="code-line"><span class="code-gutter">36</span><span></span></div>
+      <div class="code-line"><span class="code-gutter">37</span><span>class AuthMiddleware {</span></div>
+      <div class="code-line"><span class="code-gutter">38</span><span>&nbsp;&nbsp;final event = AuthEvent(userId, action);</span></div>
+      <div class="code-line"><span class="code-gutter">39</span><span>&nbsp;&nbsp;final redacted = SecretRedactor.redact(rawContext);</span></div>
+      <div class="code-line hit"><span class="code-gutter">40</span><span>&nbsp;&nbsp;logger.info('auth: $action token=$sessionToken');</span></div>
+      <div class="code-line"><span class="code-gutter">41</span><span></span></div>
+      <div class="code-line"><span class="code-gutter">42</span><span>&nbsp;&nbsp;return event;</span></div>
+      <div class="code-line"><span class="code-gutter">43</span><span>}</span></div>
+      <div class="code-line"><span class="code-gutter">44</span><span></span></div>
+      <div class="code-line"><span class="code-gutter">45</span><span>&nbsp;&nbsp;Future&lt;void&gt; _logAuthEvent(String action) async {</span></div>
+      <div class="code-line"><span class="code-gutter">46</span><span>&nbsp;&nbsp;&nbsp;&nbsp;// TODO: redact before logging</span></div>
+      <div class="code-line"><span class="code-gutter">47</span><span>&nbsp;&nbsp;}</span></div>
+    </div>
+
+    <div style="padding:10px 14px;border-top:1px solid var(--border);flex:none;">
+      <div class="type-caption">CodeLab does not read the filesystem itself — this content comes from the agent's own tool-call output (a <span class="mono">ContentBlock</span> the protocol already supports), so preview only shows what the agent has actually reported.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

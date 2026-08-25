@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:11.5px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.badge-neutral{background:var(--neutral-bg);color:var(--neutral);}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:14px;color:var(--text-primary);}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.icon{flex:none;display:block;}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:#fff;font-size:12.5px;color:var(--text-primary);}
+.suggest-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:4px;}
+.suggest-row.selected{background:rgba(0,120,212,0.10);}
+.mono{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;}
+</style>
+</helmet>
+
+<div style="width:720px;background:#F3F3F3;padding:32px;">
+  <div style="margin-bottom:16px;">
+    <div class="type-title">Inline "/" trigger in the composer</div>
+    <div class="type-caption" style="margin-top:6px;max-width:600px;">Second way to open the same command palette — no focus switch, no separate search box. Typing "/" as the first character of a new word opens this list anchored above the composer; it filters as you keep typing in the composer itself.</div>
+  </div>
+
+  <div style="position:relative;">
+    <!-- inline suggestion list -->
+    <div class="card" style="position:absolute;bottom:66px;left:0;width:320px;box-shadow:0 12px 28px rgba(0,0,0,0.18);padding:6px;">
+      <div class="suggest-row selected">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.7"><path d="M10 4v6l4 2"/><circle cx="10" cy="10" r="7.2"/></svg>
+        <div style="flex:1;"><span class="type-body-strong">Plan mode</span></div>
+        <span class="badge badge-neutral">coming soon</span>
+      </div>
+      <div class="suggest-row">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--neutral)" stroke-width="1.7"><path d="M10 4v12M4 10h12"/></svg>
+        <div style="flex:1;"><span class="type-body">New session</span></div>
+        <span class="badge badge-accent mono">/new</span>
+      </div>
+      <div class="type-caption" style="padding:6px 10px 2px;">↑↓ to navigate · Enter to select · Esc to dismiss</div>
+    </div>
+
+    <!-- composer with inline slash typed -->
+    <div class="card" style="display:flex;flex-direction:column;background:#FAFAFA;overflow:hidden;">
+      <div style="padding:10px 12px 6px;min-height:44px;line-height:20px;" class="type-body">
+        Refactor the auth module, then <span class="mono" style="background:rgba(0,120,212,0.14);color:var(--accent);border-radius:3px;padding:0 2px;">/pla</span><span style="display:inline-block;width:1px;height:16px;background:var(--text-primary);vertical-align:-3px;"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid var(--border);">
+        <span class="chip">Qwen3 Coder 30B</span>
+        <span class="chip">Ask</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-primary">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:12px;margin-top:16px;display:flex;gap:10px;align-items:flex-start;">
+    <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6" style="margin-top:1px;"><circle cx="10" cy="10" r="8"/><path d="M10 6v5l3 2"/></svg>
+    <div class="type-body">Only triggers when "/" is the first character of a word — position 0, or right after whitespace. "/" inside a word (e.g. a path being typed) does not open this. Selecting a row consumes the "/word" fragment and runs the same handler as the <span class="mono">Ctrl/Cmd+K</span> palette.</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --success-bg:rgba(16,124,16,0.14);
+  --danger:#E81123; --danger-bg:rgba(232,17,35,0.14);
+  --warning:#D83B01; --warning-bg:rgba(216,59,1,0.16);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:22px;font-weight:600;margin:0;}
+.type-body-strong{font-size:13.5px;font-weight:600;margin:0;}
+.type-caption{font-size:11.5px;font-weight:400;margin:0;color:var(--text-secondary);}
+.node{position:absolute;border-radius:8px;padding:12px 14px;box-shadow:0 1px 2px rgba(0,0,0,0.06);}
+.edge-label{position:absolute;font-size:11px;font-weight:600;color:var(--text-secondary);background:#fff;padding:1px 5px;border-radius:3px;}
+</style>
+</helmet>
+
+<div style="width:1400px;height:700px;background:#fff;padding:24px;position:relative;">
+  <div class="type-title">Session &amp; connection flow</div>
+  <div class="type-caption" style="margin-top:4px;max-width:640px;">How the screens on this canvas connect. Solid = state transition. Dashed = overlay or a responsive variant of the same state, not a navigation.</div>
+
+  <svg width="1400" height="700" style="position:absolute;left:0;top:0;pointer-events:none;">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#6b6b6b"/>
+      </marker>
+    </defs>
+    <!-- main flow -->
+    <path d="M215,320 L255,320" stroke="#6b6b6b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+    <path d="M440,320 L465,320" stroke="#6b6b6b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+    <path d="M690,320 L1140,320" stroke="#6b6b6b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+    <!-- connecting fails -> failed (curve dips below) -->
+    <path d="M335,365 C 335,470 1230,470 1230,365" stroke="#c94b4b" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+    <!-- failed -> connecting (reconnect loop, curve above) -->
+    <path d="M1220,275 C 900,150 600,150 340,275" stroke="var(--accent)" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+    <!-- connected -> split (up) -->
+    <path d="M600,275 L620,160" stroke="#6b6b6b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+    <!-- connected -> command palette (dashed, overlay) -->
+    <path d="M660,275 L980,160" stroke="#6b6b6b" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+    <path d="M990,165 L670,280" stroke="#6b6b6b" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+    <!-- connected -> approval (down) -->
+    <path d="M580,365 L570,455" stroke="var(--warning)" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+    <!-- approval -> connected (back) -->
+    <path d="M660,455 L640,365" stroke="var(--success)" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+    <!-- connected -> narrow (dashed, responsive variant) -->
+    <path d="M700,355 L820,455" stroke="#6b6b6b" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+    <!-- disconnected -> edit profile dialog (dashed, overlay, reachable from both) -->
+    <path d="M120,372 L120,568" stroke="#6b6b6b" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+    <!-- connected -> edit profile dialog (dashed, overlay) -->
+    <path d="M560,372 C 400,470 250,520 210,568" stroke="#6b6b6b" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  </svg>
+
+  <!-- nodes -->
+  <div class="node" style="left:30px;top:280px;width:185px;background:var(--neutral-bg);border:1px solid var(--border-strong);">
+    <div class="type-body-strong">Disconnected</div>
+    <div class="type-caption" style="margin-top:3px;">ConnectionStdio / ConnectionWebSocket</div>
+  </div>
+
+  <div class="node" style="left:255px;top:280px;width:185px;background:var(--warning-bg);border:1px solid rgba(216,59,1,0.3);">
+    <div class="type-body-strong">Connecting</div>
+    <div class="type-caption" style="margin-top:3px;">initialize handshake in flight</div>
+  </div>
+
+  <div class="node" style="left:465px;top:280px;width:225px;background:var(--success-bg);border:1px solid rgba(16,124,16,0.3);">
+    <div class="type-body-strong">Connected · single session</div>
+    <div class="type-caption" style="margin-top:3px;">Main — workbench</div>
+  </div>
+
+  <div class="node" style="left:1140px;top:280px;width:190px;background:var(--danger-bg);border:1px solid rgba(232,17,35,0.3);">
+    <div class="type-body-strong">Failed / disconnected</div>
+    <div class="type-caption" style="margin-top:3px;">ErrorReconnect</div>
+  </div>
+
+  <div class="node" style="left:500px;top:60px;width:230px;background:var(--accent-bg);border:1px solid rgba(0,120,212,0.3);">
+    <div class="type-body-strong">Split · multi-session</div>
+    <div class="type-caption" style="margin-top:3px;">MultiSessionSplit — north-star</div>
+  </div>
+
+  <div class="node" style="left:900px;top:60px;width:230px;border:1px dashed var(--border-strong);background:#fafafa;">
+    <div class="type-body-strong">Command palette</div>
+    <div class="type-caption" style="margin-top:3px;">CommandPalette — overlay, Ctrl/⌘K</div>
+  </div>
+
+  <div class="node" style="left:465px;top:460px;width:225px;background:var(--warning-bg);border:1px solid rgba(216,59,1,0.3);">
+    <div class="type-body-strong">Approval required</div>
+    <div class="type-caption" style="margin-top:3px;">ApprovalDiff — inline in transcript + inspector</div>
+  </div>
+
+  <div class="node" style="left:770px;top:460px;width:225px;border:1px dashed var(--border-strong);background:#fafafa;">
+    <div class="type-body-strong">Narrow layout</div>
+    <div class="type-caption" style="margin-top:3px;">NarrowResponsive — window &lt; 720px</div>
+  </div>
+
+  <div class="node" style="left:30px;top:568px;width:390px;border:1px dashed var(--border-strong);background:#fafafa;">
+    <div class="type-body-strong">Edit profile dialog</div>
+    <div class="type-caption" style="margin-top:3px;">EditProfileDialog — opened from the command bar (any state) or "Configure connection" while disconnected</div>
+  </div>
+
+  <!-- edge labels -->
+  <div class="edge-label" style="left:222px;top:308px;">Connect</div>
+  <div class="edge-label" style="left:450px;top:308px;">initialize ok</div>
+  <div class="edge-label" style="left:850px;top:308px;">connection lost</div>
+  <div class="edge-label" style="left:700px;top:200px;">Reconnect</div>
+  <div class="edge-label" style="left:200px;top:410px;">initialize fails</div>
+  <div class="edge-label" style="left:595px;top:130px;">⌘-click session</div>
+  <div class="edge-label" style="left:790px;top:130px;">Ctrl/⌘K</div>
+  <div class="edge-label" style="left:520px;top:415px;">permission needed</div>
+  <div class="edge-label" style="left:660px;top:415px;">approve / reject</div>
+  <div class="edge-label" style="left:735px;top:410px;">window resize</div>
+  <div class="edge-label" style="left:130px;top:458px;">Configure connection</div>
+  <div class="edge-label" style="left:280px;top:478px;">Edit profile</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

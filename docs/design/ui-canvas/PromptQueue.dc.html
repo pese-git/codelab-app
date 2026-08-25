@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --warning:#D83B01; --warning-bg:rgba(216,59,1,0.16);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:11.5px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-warning{background:var(--warning-bg);color:var(--warning);}
+.btn{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:12.5px;color:var(--text-primary);cursor:pointer;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-icon{width:26px;height:26px;padding:0;justify-content:center;border:none;background:transparent;border-radius:var(--radius-sm);}
+.icon{flex:none;display:block;}
+.status-dot{width:7px;height:7px;border-radius:50%;flex:none;}
+.queue-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;}
+.queue-row:hover{background:rgba(0,0,0,0.03);}
+.mono{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;}
+</style>
+</helmet>
+
+<div style="width:640px;background:#fff;padding:32px;display:flex;flex-direction:column;gap:20px;">
+  <div>
+    <div class="type-title">Prompt queue — messages sent while the session is busy</div>
+    <div class="type-caption" style="margin-top:6px;max-width:560px;"><span class="mono">SessionStateMachine._startTurn</span> already rejects a new turn while a session is <span class="mono">runningTurn</span>/<span class="mono">awaitingApproval</span> (<span class="mono">state_machines.dart:793-795</span>) — correct today. But <span class="mono">submitPrompt()</span> doesn't check this first: it adds the message to the transcript, tries to send, shows "Prompt failed" — and the composer already cleared the text. This queue avoids the failed attempt entirely.</div>
+  </div>
+
+  <!-- pending approval context -->
+  <div class="card" style="padding:12px;border-color:rgba(216,59,1,0.28);display:flex;align-items:center;gap:10px;">
+    <span class="status-dot" style="background:var(--warning);"></span>
+    <span class="type-body-strong" style="flex:1;">Awaiting approval — edit_file · auth_middleware.dart</span>
+    <span class="badge badge-warning">blocking new prompts</span>
+  </div>
+
+  <!-- queue panel -->
+  <div class="card" style="padding:0;overflow:hidden;">
+    <div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);">
+      <span class="type-body-strong" style="flex:1;">Queued messages</span>
+      <span class="type-caption" style="margin-right:10px;">2</span>
+      <button class="btn">Clear all</button>
+    </div>
+    <div style="display:flex;flex-direction:column;">
+      <div class="queue-row" style="border-bottom:1px solid var(--border);">
+        <span class="status-dot" style="background:var(--accent);"></span>
+        <span class="type-body" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">/status</span>
+        <button class="btn-icon" title="Edit"><svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.7"><path d="M13 4l3 3-8.5 8.5H4v-3.5L13 4Z"/></svg></button>
+        <button class="btn-icon" title="Delete"><svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.7"><path d="M5 6h10M8 6V4h4v2M6 6l1 10h6l1-10"/></svg></button>
+        <button class="btn btn-primary">Send now</button>
+      </div>
+      <div class="queue-row">
+        <span class="status-dot" style="background:var(--accent);"></span>
+        <span class="type-body" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Also check acp_transports tests while you're at it</span>
+        <button class="btn-icon" title="Edit"><svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.7"><path d="M13 4l3 3-8.5 8.5H4v-3.5L13 4Z"/></svg></button>
+        <button class="btn-icon" title="Delete"><svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.7"><path d="M5 6h10M8 6V4h4v2M6 6l1 10h6l1-10"/></svg></button>
+        <button class="btn btn-primary">Send now</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:12px;display:flex;gap:10px;align-items:flex-start;">
+    <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6" style="margin-top:1px;"><circle cx="10" cy="10" r="8"/><path d="M10 6v5l3 2"/></svg>
+    <div class="type-body">Once the pending approval resolves (or the running turn completes), the oldest item — <span class="mono">/status</span> — sends automatically. No action required. "Send now" jumps one item out of order; if the session is still busy at that exact moment, it quietly goes back to its place instead of erroring.</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --success-bg:rgba(16,124,16,0.14);
+  --warning:#D83B01; --warning-bg:rgba(216,59,1,0.16);
+  --danger:#E81123; --danger-bg:rgba(232,17,35,0.14);
+  --neutral:#323130;
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:11.5px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-neutral{background:rgba(50,49,48,0.10);color:var(--neutral);}
+.badge-danger{background:var(--danger-bg);color:var(--danger);}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12.5px;}
+.icon{flex:none;display:block;}
+.menu{position:absolute;bottom:44px;left:0;width:260px;background:#fff;border:1px solid var(--border-strong);border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,0.20);padding:6px;}
+.menu-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:4px;}
+.menu-item.selected{background:var(--accent-bg);}
+</style>
+</helmet>
+
+<div style="width:900px;background:#fff;padding:32px;display:flex;flex-direction:column;gap:16px;">
+  <div>
+    <div class="type-title">Session options — driven by agent capabilities</div>
+    <div class="type-caption" style="margin-top:6px;max-width:760px;">A proposal, not yet in any spec: mirrors what Zed's ACP client does — render model/mode pickers only when the connected agent actually advertises them, instead of hardcoding a fixed set in CodeLab's UI.</div>
+  </div>
+
+  <div style="display:flex;gap:32px;">
+
+    <!-- Model dropdown -->
+    <div style="position:relative;width:280px;">
+      <div class="type-caption" style="margin-bottom:52px;">Model — populated from the agent's advertised model list (not yet in any CodeLab spec)</div>
+      <div class="menu">
+        <div class="type-caption" style="padding:4px 10px 6px;">Select model</div>
+        <div class="menu-item selected">
+          <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M4 10.5 8 14l8-9"/></svg>
+          <span class="type-body" style="flex:1;">Qwen3 Coder 30B</span>
+        </div>
+        <div class="menu-item"><span class="type-body" style="flex:1;margin-left:22px;">Qwen3.6 Plus</span></div>
+        <div class="menu-item"><span class="type-body" style="flex:1;margin-left:22px;">GPT-4o</span></div>
+      </div>
+      <button class="chip" style="position:absolute;bottom:0;left:0;">
+        <svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="14" height="10" rx="2"/><path d="M7 17h6"/></svg>
+        Qwen3 Coder 30B
+        <svg class="icon" width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 12l-5-5-5 5"/></svg>
+      </button>
+    </div>
+
+    <!-- Permission mode dropdown -->
+    <div style="position:relative;width:280px;">
+      <div class="type-caption" style="margin-bottom:52px;">Permission mode — already specified in <code>approval-safety</code>, just never had a UI selector until now</div>
+      <div class="menu" style="width:260px;">
+        <div class="type-caption" style="padding:4px 10px 6px;">Permission mode</div>
+        <div class="menu-item"><span class="type-body" style="flex:1;">Read only</span></div>
+        <div class="menu-item selected">
+          <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M4 10.5 8 14l8-9"/></svg>
+          <span class="type-body" style="flex:1;">Ask</span>
+        </div>
+        <div class="menu-item"><span class="type-body" style="flex:1;margin-left:22px;">Plan</span></div>
+        <div class="menu-item"><span class="type-body" style="flex:1;margin-left:22px;">Auto edits</span></div>
+      </div>
+      <button class="chip" style="position:absolute;bottom:0;left:0;">
+        <svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="9" width="10" height="7" rx="1.5"/><path d="M7 9V6a3 3 0 0 1 6 0v3"/></svg>
+        Ask
+        <svg class="icon" width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 12l-5-5-5 5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:12px;display:flex;align-items:flex-start;gap:10px;margin-top:12px;">
+    <span class="badge badge-danger" style="flex:none;">excluded on purpose</span>
+    <div class="type-body">Zed's equivalent mode menu also lists <strong>Bypass</strong> (full-access, no approvals). CodeLab's <code>approval-safety</code> spec explicitly forbids exposing a bypass/full-access mode in the MVP UI — so this list stops at four modes, not five, even though the underlying menu pattern is the same one Zed uses.</div>
+  </div>
+
+  <div class="type-caption" style="max-width:820px;">Not shown here: Zed's third selector (agent profile — Coder / Universal / Architect / Debug / Ask) and fourth selector ("Single") have no confirmed equivalent in CodeLab's specs or the ACP protocol docs referenced by this project — including them would mean inventing a requirement, not designing to one, so they're left out until that's checked against <code>docs/acp/protocol/</code>.</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --success-bg:rgba(16,124,16,0.14);
+  --danger:#E81123; --danger-bg:rgba(232,17,35,0.14);
+  --warning:#D83B01; --warning-bg:rgba(216,59,1,0.16);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:28px;font-weight:600;line-height:36px;margin:0;}
+.type-subtitle{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-large{font-size:18px;font-weight:400;line-height:26px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.section-title{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:12px;}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-neutral{background:var(--neutral-bg);color:var(--neutral);}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.badge-success{background:var(--success-bg);color:var(--success);}
+.badge-warning{background:var(--warning-bg);color:var(--warning);}
+.badge-danger{background:var(--danger-bg);color:var(--danger);}
+.btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:14px;color:var(--text-primary);}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.icon{flex:none;display:block;}
+.status-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.swatch{width:64px;height:64px;border-radius:8px;}
+.mono{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;font-size:12px;color:var(--text-secondary);}
+</style>
+</helmet>
+
+<div style="width:1400px;min-height:1140px;background:#fff;padding:32px;display:flex;flex-direction:column;gap:32px;">
+
+  <div>
+    <div class="type-title">acp_ui — component reference</div>
+    <div class="type-caption" style="margin-top:6px;">Atomics &amp; molecules used across CodeLab, plus the spacing/radius tokens proposed to replace scattered magic numbers.</div>
+  </div>
+
+  <!-- Colors -->
+  <div>
+    <div class="section-title">AcpTone — color vocabulary</div>
+    <div style="display:flex;gap:24px;">
+      <div><div class="swatch" style="background:var(--neutral-bg);border:1px solid var(--neutral);"></div><div class="type-body-strong" style="margin-top:8px;">neutral</div><div class="mono">#323130 · 10% tint</div></div>
+      <div><div class="swatch" style="background:var(--accent-bg);border:1px solid var(--accent);"></div><div class="type-body-strong" style="margin-top:8px;">accent</div><div class="mono">#0078D4</div></div>
+      <div><div class="swatch" style="background:var(--success-bg);border:1px solid var(--success);"></div><div class="type-body-strong" style="margin-top:8px;">success</div><div class="mono">#107C10</div></div>
+      <div><div class="swatch" style="background:var(--warning-bg);border:1px solid var(--warning);"></div><div class="type-body-strong" style="margin-top:8px;">warning</div><div class="mono">#D83B01</div></div>
+      <div><div class="swatch" style="background:var(--danger-bg);border:1px solid var(--danger);"></div><div class="type-body-strong" style="margin-top:8px;">danger</div><div class="mono">#E81123</div></div>
+    </div>
+  </div>
+
+  <!-- Typography -->
+  <div>
+    <div class="section-title">AcpTextRole — type scale</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:baseline;gap:16px;"><div class="type-title">Title</div><div class="mono">28 / 600</div></div>
+      <div style="display:flex;align-items:baseline;gap:16px;"><div class="type-subtitle">Subtitle</div><div class="mono">20 / 600</div></div>
+      <div style="display:flex;align-items:baseline;gap:16px;"><div class="type-body-large">Body large</div><div class="mono">18 / 400</div></div>
+      <div style="display:flex;align-items:baseline;gap:16px;"><div class="type-body-strong">Strong body</div><div class="mono">14 / 600</div></div>
+      <div style="display:flex;align-items:baseline;gap:16px;"><div class="type-body">Body</div><div class="mono">14 / 400</div></div>
+      <div style="display:flex;align-items:baseline;gap:16px;"><div class="type-caption">Caption</div><div class="mono">12 / 400 (Fluent source token is w300; bumped for on-screen legibility)</div></div>
+    </div>
+  </div>
+
+  <!-- Buttons + Badges + Status -->
+  <div style="display:flex;gap:32px;">
+    <div style="flex:1;">
+      <div class="section-title">AcpButton</div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;">
+        <button class="btn btn-primary"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 4v4M12 4v4M6 9h8l-1 8H7L6 9Z"/></svg>Primary</button>
+        <button class="btn">Secondary</button>
+        <button class="btn btn-primary" style="opacity:.7;"><svg class="icon" width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="30 15"/></svg>Loading…</button>
+        <div class="mono">emphasis: primary · secondary — isLoading: bool</div>
+      </div>
+    </div>
+    <div style="flex:1;">
+      <div class="section-title">AcpBadge</div>
+      <div class="card" style="padding:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;">
+        <span class="badge badge-neutral">Neutral</span>
+        <span class="badge badge-accent">Accent</span>
+        <span class="badge badge-success">Success</span>
+        <span class="badge badge-warning">Warning</span>
+        <span class="badge badge-danger">Danger</span>
+      </div>
+    </div>
+    <div style="flex:1;">
+      <div class="section-title">AcpStatusIndicator</div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;align-items:center;gap:8px;"><span class="status-dot" style="background:var(--neutral);opacity:.5;"></span><span class="type-body">Idle</span></div>
+        <div style="display:flex;align-items:center;gap:8px;"><span class="status-dot" style="background:var(--success);"></span><span class="type-body">Active</span></div>
+        <div style="display:flex;align-items:center;gap:8px;"><span class="status-dot" style="background:var(--warning);"></span><span class="type-body">Warning</span></div>
+        <div style="display:flex;align-items:center;gap:8px;"><span class="status-dot" style="background:var(--danger);"></span><span class="type-body">Danger</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Spacing / radius tokens -->
+  <div>
+    <div class="section-title">Proposed spacing scale (replaces scattered 4/8/10/12/16/18/24 literals)</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:12px;"><div class="mono" style="width:60px;">space-1</div><div style="height:14px;width:4px;background:var(--accent);"></div><div class="mono">4px — tight (badge padding)</div></div>
+      <div style="display:flex;align-items:center;gap:12px;"><div class="mono" style="width:60px;">space-2</div><div style="height:14px;width:8px;background:var(--accent);"></div><div class="mono">8px — icon-to-label gap</div></div>
+      <div style="display:flex;align-items:center;gap:12px;"><div class="mono" style="width:60px;">space-3</div><div style="height:14px;width:10px;background:var(--accent);"></div><div class="mono">10px — row internal gap</div></div>
+      <div style="display:flex;align-items:center;gap:12px;"><div class="mono" style="width:60px;">space-4</div><div style="height:14px;width:12px;background:var(--accent);"></div><div class="mono">12px — panel padding, gap between panes</div></div>
+      <div style="display:flex;align-items:center;gap:12px;"><div class="mono" style="width:60px;">space-5</div><div style="height:14px;width:16px;background:var(--accent);"></div><div class="mono">16px — workbench outer padding</div></div>
+      <div style="display:flex;align-items:center;gap:12px;"><div class="mono" style="width:60px;">space-6</div><div style="height:14px;width:18px;background:var(--accent);"></div><div class="mono">18px — dialog/connection-screen padding</div></div>
+    </div>
+    <div style="display:flex;gap:24px;margin-top:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><div style="width:48px;height:48px;border:1px solid var(--border-strong);border-radius:4px;"></div><div class="mono">radius-sm — 4px<br/>badges</div></div>
+      <div style="display:flex;align-items:center;gap:10px;"><div style="width:48px;height:48px;border:1px solid var(--border-strong);border-radius:6px;"></div><div class="mono">radius-md — 6px<br/>panels, cards, buttons</div></div>
+    </div>
+  </div>
+
+  <!-- Surface tokens -->
+  <div>
+    <div class="section-title">Surface &amp; text tokens (Fluent light defaults, extracted from fluent_ui 4.16.1)</div>
+    <div style="display:flex;gap:16px;">
+      <div class="card" style="padding:12px;width:220px;"><div style="height:40px;background:var(--bg-app);border-radius:4px;"></div><div class="mono" style="margin-top:8px;">scaffold / mica<br/>#F3F3F3</div></div>
+      <div class="card" style="padding:12px;width:220px;"><div style="height:40px;background:#fff;border:1px solid var(--border);border-radius:4px;"></div><div class="mono" style="margin-top:8px;">card surface<br/>#FFFFFF, border rgba(0,0,0,.08)</div></div>
+      <div class="card" style="padding:12px;width:220px;"><div style="height:40px;display:flex;align-items:center;justify-content:center;color:var(--text-primary);font-weight:600;">Aa</div><div class="mono" style="margin-top:8px;">text primary<br/>rgba(0,0,0,.89)</div></div>
+      <div class="card" style="padding:12px;width:220px;"><div style="height:40px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-weight:600;">Aa</div><div class="mono" style="margin-top:8px;">text secondary<br/>rgba(0,0,0,.62)</div></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

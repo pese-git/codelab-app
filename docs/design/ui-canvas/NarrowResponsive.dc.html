@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --warning:#D83B01;
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-subtitle{font-size:16px;font-weight:600;line-height:22px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.badge-neutral{background:var(--neutral-bg);color:var(--neutral);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.icon{flex:none;display:block;}
+.status-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.rail-btn{width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);background:#fff;}
+.rail-btn.active{background:var(--accent-bg);border-color:var(--accent);}
+</style>
+</helmet>
+
+<div style="width:480px;height:860px;background:#111;padding:22px 10px;display:flex;flex-direction:column;align-items:center;">
+  <div class="type-caption" style="color:#ccc;margin-bottom:10px;">Narrow window (&lt; 720px)</div>
+  <div style="width:420px;height:800px;background:var(--bg-app);border-radius:8px;overflow:hidden;position:relative;display:flex;flex-direction:column;">
+    <div style="padding:12px;display:flex;flex-direction:column;gap:10px;height:100%;">
+
+      <!-- compact command bar with rail toggles -->
+      <div class="card" style="display:flex;align-items:center;padding:8px 10px;flex:none;">
+        <button class="rail-btn active" style="width:32px;height:32px;">
+          <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.7"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="M8 4v12"/></svg>
+        </button>
+        <div style="flex:1;text-align:center;">
+          <div class="type-subtitle">CodeLab</div>
+        </div>
+        <button class="rail-btn" style="width:32px;height:32px;">
+          <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.7"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="M12 4v12"/></svg>
+        </button>
+      </div>
+
+      <!-- main content -->
+      <div class="card" style="flex:1;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:0;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="status-dot" style="background:var(--success);"></span>
+          <span class="type-body">Connected</span>
+          <span class="badge badge-accent">stdio</span>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
+          <div style="background:rgba(0,120,212,0.09);border-radius:6px;padding:8px;">
+            <div class="type-caption">You · 09:42</div>
+            <div class="type-body" style="margin-top:4px;">Refactor the auth middleware.</div>
+          </div>
+          <div style="background:rgba(50,49,48,0.06);border-radius:6px;padding:8px;">
+            <div class="type-caption">Agent · 09:43</div>
+            <div class="type-body" style="margin-top:4px;">Reading auth_middleware.dart before editing.</div>
+          </div>
+        </div>
+        <div class="card" style="flex:none;padding:8px;display:flex;gap:8px;">
+          <div style="flex:1;color:var(--text-secondary);font-size:14px;">Message the agent</div>
+          <div style="width:32px;height:32px;border-radius:4px;background:var(--accent);display:flex;align-items:center;justify-content:center;">
+            <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.8"><path d="M3 10 17 3l-5 14-3-6-6-3Z"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- sessions drawer (open) -->
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,0.18);">
+      <div style="width:260px;height:100%;background:#fff;box-shadow:2px 0 16px rgba(0,0,0,0.18);padding:12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;">
+          <span class="type-subtitle" style="flex:1;">Sessions</span>
+          <button class="rail-btn" style="width:28px;height:28px;border:none;">
+            <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.8"><path d="M5 5l10 10M15 5 5 15"/></svg>
+          </button>
+        </div>
+        <div style="background:rgba(0,120,212,0.11);border-radius:6px;padding:10px;">
+          <div style="display:flex;"><span class="type-body-strong" style="flex:1;">Refactor auth module</span><span class="badge badge-accent">Running</span></div>
+        </div>
+        <div style="border-radius:6px;padding:10px;">
+          <div style="display:flex;"><span class="type-body-strong" style="flex:1;">Add WebSocket reconnect</span></div>
+        </div>
+        <div class="type-caption" style="margin-top:auto;padding-top:8px;border-top:1px solid var(--border);">Tapping the left rail icon opens this drawer over the content — it no longer disappears with no way back, like the current narrow layout does.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

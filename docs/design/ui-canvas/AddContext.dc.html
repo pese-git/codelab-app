@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --neutral:#323130;
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:11.5px;font-weight:600;white-space:nowrap;line-height:16px;background:rgba(50,49,48,0.10);color:var(--neutral);}
+.btn-icon{width:30px;height:30px;padding:0;justify-content:center;align-items:center;display:flex;border:1px solid var(--border-strong);background:#fff;border-radius:var(--radius-sm);}
+.icon{flex:none;display:block;}
+.menu{position:absolute;bottom:40px;left:0;width:260px;background:#fff;border:1px solid var(--border-strong);border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,0.20);padding:6px;}
+.menu-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:4px;}
+.menu-item:first-child{background:rgba(50,49,48,0.06);}
+.attachment-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 6px 0 8px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:#fff;font-size:12.5px;color:var(--text-primary);}
+.attachment-remove{width:16px;height:16px;border:none;background:rgba(0,0,0,0.06);border-radius:3px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);padding:0;}
+.mono{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;font-size:12px;}
+</style>
+</helmet>
+
+<div style="width:820px;background:#fff;padding:32px;display:flex;flex-direction:column;gap:20px;">
+  <div>
+    <div class="type-title">Add context — attach files or images</div>
+    <div class="type-caption" style="margin-top:6px;max-width:680px;">"+" in the composer toolbar opens a picker. Each option maps directly to a <span class="mono">ContentBlock</span> variant the protocol already implements (<span class="mono">prompt.dart:100-140</span>) — the UI has no new capability to invent, only to expose.</div>
+  </div>
+
+  <div style="position:relative;width:280px;">
+    <div class="menu">
+      <div class="menu-item">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.7"><path d="M6 2h6l3 3v13H6V2Z"/><path d="M12 2v3h3"/></svg>
+        <div>
+          <div class="type-body">Attach file</div>
+          <div class="type-caption">→ ContentBlock.resourceLink</div>
+        </div>
+      </div>
+      <div class="menu-item">
+        <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--neutral)" stroke-width="1.7"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="m4 13 4-4 3 3 5-5"/><circle cx="7" cy="8" r="1"/></svg>
+        <div>
+          <div class="type-body">Attach image</div>
+          <div class="type-caption">→ ContentBlock.image</div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-icon">
+      <svg class="icon" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4v12M4 10h12"/></svg>
+    </button>
+  </div>
+
+  <div>
+    <div class="type-body-strong" style="margin-bottom:8px;">After attaching — chips sit above the composer input</div>
+    <div class="card" style="padding:10px 12px;display:flex;flex-wrap:wrap;gap:6px;">
+      <span class="attachment-chip">
+        <svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 2h6l3 3v13H6V2Z"/><path d="M12 2v3h3"/></svg>
+        auth_middleware.dart
+        <button class="attachment-remove"><svg class="icon" width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 5l10 10M15 5 5 15"/></svg></button>
+      </span>
+      <span class="attachment-chip">
+        <svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="m4 13 4-4 3 3 5-5"/><circle cx="7" cy="8" r="1"/></svg>
+        error-screenshot.png
+        <button class="attachment-remove"><svg class="icon" width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 5l10 10M15 5 5 15"/></svg></button>
+      </span>
+    </div>
+  </div>
+
+  <div class="card" style="padding:12px;display:flex;align-items:flex-start;gap:10px;">
+    <span class="badge">application layer</span>
+    <div class="type-body">The remaining gap is purely in <span class="mono">apps/codelab_app</span>: <span class="mono">AcpPromptComposer.onSubmit</span> is <span class="mono">void Function(String prompt)</span> today — it needs to become <span class="mono">void Function(String prompt, List&lt;ContentBlock&gt; attachments)</span> (or equivalent) so attached items actually reach <span class="mono">SendPrompt</span>, not just display as chips.</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

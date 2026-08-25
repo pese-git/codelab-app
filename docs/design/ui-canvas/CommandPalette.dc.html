@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-subtitle{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.badge-neutral{background:var(--neutral-bg);color:var(--neutral);}
+.icon{flex:none;display:block;}
+.cmd-row{display:flex;align-items:flex-start;padding:10px;border-radius:6px;border:1px solid transparent;}
+.cmd-row.selected{background:rgba(0,120,212,0.09);border-color:var(--accent);}
+.cmd-row.disabled{opacity:.5;}
+</style>
+</helmet>
+
+<div style="width:1280px;height:860px;background:var(--bg-app);padding:16px;position:relative;">
+  <!-- dimmed backdrop -->
+  <div style="opacity:.35;filter:blur(0.5px);display:flex;flex-direction:column;gap:12px;height:100%;pointer-events:none;">
+    <div style="background:#fff;border:1px solid var(--border);border-radius:6px;height:44px;flex:none;"></div>
+    <div style="display:flex;gap:12px;flex:1;">
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;width:280px;"></div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;flex:1;"></div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;width:320px;"></div>
+    </div>
+  </div>
+
+  <!-- overlay scrim -->
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,0.18);"></div>
+
+  <!-- palette -->
+  <div style="position:absolute;left:50%;top:120px;transform:translateX(-50%);width:480px;background:#fff;border:1px solid rgba(0,0,0,0.12);border-radius:6px;box-shadow:0 16px 40px rgba(0,0,0,0.22);padding:12px;display:flex;flex-direction:column;gap:10px;">
+    <div class="type-subtitle">Command palette</div>
+    <div style="height:32px;border:1px solid var(--border-strong);border-radius:4px;display:flex;align-items:center;padding:0 10px;gap:8px;">
+      <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.8"><circle cx="9" cy="9" r="6"/><path d="m17 17-3.5-3.5"/></svg>
+      <span class="type-body">/</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <div class="cmd-row selected">
+        <svg class="icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.7"><path d="M10 4v12M4 10h12"/></svg>
+        <div style="margin-left:10px;flex:1;">
+          <div style="display:flex;align-items:center;"><span class="type-body-strong" style="flex:1;">New session</span><span class="badge badge-accent">/new</span></div>
+          <div class="type-caption" style="margin-top:2px;">Start a fresh session with the current transport profile</div>
+        </div>
+      </div>
+
+      <div class="cmd-row disabled">
+        <svg class="icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--neutral)" stroke-width="1.7"><path d="M4 6h12M4 10h8M4 14h5"/></svg>
+        <div style="margin-left:10px;flex:1;">
+          <div style="display:flex;align-items:center;"><span class="type-body-strong" style="flex:1;">Plan mode</span><span class="badge badge-neutral">/plan</span><span class="badge badge-neutral" style="margin-left:6px;">coming soon</span></div>
+          <div class="type-caption" style="margin-top:2px;">Switch the session into plan-first mode</div>
+        </div>
+      </div>
+
+      <div class="cmd-row disabled">
+        <svg class="icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--neutral)" stroke-width="1.7"><rect x="5" y="9" width="10" height="7" rx="1.5"/><path d="M7 9V6a3 3 0 0 1 6 0v3"/></svg>
+        <div style="margin-left:10px;flex:1;">
+          <div style="display:flex;align-items:center;"><span class="type-body-strong" style="flex:1;">Permissions</span><span class="badge badge-neutral">/permissions</span><span class="badge badge-neutral" style="margin-left:6px;">coming soon</span></div>
+          <div class="type-caption" style="margin-top:2px;">Open the permission-mode selector</div>
+        </div>
+      </div>
+
+      <div class="cmd-row">
+        <svg class="icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--neutral)" stroke-width="1.7"><rect x="4" y="4" width="12" height="12" rx="1.5"/><path d="M7 8h6M7 11h6M7 14h3"/></svg>
+        <div style="margin-left:10px;flex:1;">
+          <div style="display:flex;align-items:center;"><span class="type-body-strong" style="flex:1;">Show logs</span><span class="badge badge-neutral">/logs</span></div>
+          <div class="type-caption" style="margin-top:2px;">Reveal the debug log panel in the inspector</div>
+        </div>
+      </div>
+
+      <div class="cmd-row disabled">
+        <svg class="icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--neutral)" stroke-width="1.7"><path d="M5 10h10M8 6l-4 4 4 4M12 6l4 4-4 4"/></svg>
+        <div style="margin-left:10px;flex:1;">
+          <div style="display:flex;align-items:center;"><span class="type-body-strong" style="flex:1;">Compact transcript</span><span class="badge badge-neutral">/compact</span><span class="badge badge-neutral" style="margin-left:6px;">coming soon</span></div>
+          <div class="type-caption" style="margin-top:2px;">Summarize older messages to save context</div>
+        </div>
+      </div>
+
+      <div class="cmd-row">
+        <svg class="icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--neutral)" stroke-width="1.7"><path d="M15 5a7 7 0 1 1-2-1.6"/><path d="M15 2v4h-4"/></svg>
+        <div style="margin-left:10px;flex:1;">
+          <div style="display:flex;align-items:center;"><span class="type-body-strong" style="flex:1;">Reconnect</span><span class="badge badge-neutral">/reconnect</span></div>
+          <div class="type-caption" style="margin-top:2px;">Reconnect the active transport</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

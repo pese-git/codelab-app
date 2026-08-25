@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --danger:#E81123; --danger-bg:rgba(232,17,35,0.14);
+  --warning:#D83B01; --warning-bg:rgba(216,59,1,0.16);
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-subtitle{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.badge-danger{background:var(--danger-bg);color:var(--danger);}
+.badge-neutral{background:var(--neutral-bg);color:var(--neutral);}
+.btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:14px;color:var(--text-primary);cursor:pointer;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-icon{width:32px;height:32px;padding:0;justify-content:center;border:none;background:transparent;border-radius:var(--radius-sm);}
+.icon{flex:none;display:block;}
+.status-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+</style>
+</helmet>
+
+<div style="width:1280px;height:860px;background:var(--bg-app);padding:16px;display:flex;flex-direction:column;gap:12px;">
+
+  <div class="card" style="display:flex;align-items:center;padding:10px 12px;flex:none;">
+    <div class="type-subtitle" style="margin-right:16px;">CodeLab</div>
+    <div style="display:flex;align-items:center;gap:10px;flex:1;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="status-dot" style="background:var(--danger);"></span>
+        <span class="type-body">Failed</span>
+      </div>
+      <span class="badge badge-accent">WebSocket</span>
+      <span class="type-caption">Remote agent · ws://build.internal:8765/acp</span>
+    </div>
+    <button class="btn" title="Edit connection profile">
+      <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M13 4l3 3-8.5 8.5H4v-3.5L13 4Z"/></svg>
+      Edit profile
+    </button>
+    <button class="btn btn-primary" style="margin-left:8px;">
+      <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M15 5a7 7 0 1 1-2-1.6"/><path d="M15 2v4h-4"/></svg>
+      Reconnect
+    </button>
+  </div>
+
+  <div style="display:flex;gap:12px;flex:1;min-height:0;">
+    <div class="card" style="width:280px;flex:none;display:flex;flex-direction:column;">
+      <div style="padding:10px 8px 8px 12px;"><span class="type-subtitle">Sessions</span></div>
+      <div style="padding:0 8px 8px;">
+        <div style="border-radius:6px;padding:10px;">
+          <div style="display:flex;"><span class="type-body-strong" style="flex:1;">Refactor auth module</span><span class="badge badge-neutral">Idle</span></div>
+          <div class="type-caption" style="margin-top:4px;">Paused — connection lost</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;">
+      <div class="card" style="width:520px;padding:20px;border-color:rgba(232,17,35,0.28);">
+        <div style="display:flex;align-items:flex-start;">
+          <svg class="icon" width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="var(--danger)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 6.5v4M10 13.2v.1"/></svg>
+          <div style="margin-left:12px;">
+            <div class="type-title">Connection to remote agent lost</div>
+            <div class="type-caption" style="margin-top:4px;">ws://build.internal:8765/acp · was connected for 12m</div>
+          </div>
+        </div>
+        <div class="type-body" style="margin-top:14px;">The WebSocket connection closed unexpectedly. Your session and unsent messages are kept — reconnect to continue where you left off.</div>
+        <div class="type-caption" style="margin-top:8px;background:rgba(50,49,48,0.06);border-radius:6px;padding:8px 10px;">Diagnostic: connection closed by peer (code 1006). Not a protocol version mismatch — retrying will work.</div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+          <button class="btn">
+            <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M13 4l3 3-8.5 8.5H4v-3.5L13 4Z"/></svg>
+            Edit profile
+          </button>
+          <button class="btn btn-primary">
+            <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M15 5a7 7 0 1 1-2-1.6"/><path d="M15 2v4h-4"/></svg>
+            Reconnect
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="width:320px;flex:none;display:flex;flex-direction:column;">
+      <div style="padding:10px 8px 8px 12px;"><span class="type-subtitle">Inspector</span></div>
+      <div style="padding:0 12px 12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="background:rgba(232,17,35,0.09);border:1px solid rgba(232,17,35,0.22);border-radius:6px;padding:10px;">
+          <div style="display:flex;align-items:center;"><span class="badge badge-danger">Diagnostic</span><span class="type-body-strong" style="flex:1;margin-left:8px;">WebSocket closed</span></div>
+          <div class="type-body" style="margin-top:6px;">Connection closed unexpectedly (code 1006). Entered failed state; reconnect available.</div>
+          <div class="type-caption" style="margin-top:6px;">09:58:03 · transport</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

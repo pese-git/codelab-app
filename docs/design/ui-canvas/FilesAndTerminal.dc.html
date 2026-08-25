@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-hover:#106EBE; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --warning:#D83B01;
+  --neutral:#323130; --neutral-bg:rgba(50,49,48,0.10);
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-subtitle{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body-strong{font-size:14px;font-weight:600;line-height:20px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);font-size:14px;color:var(--text-primary);cursor:pointer;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-icon{width:32px;height:32px;padding:0;justify-content:center;border:none;background:transparent;border-radius:var(--radius-sm);}
+.icon{flex:none;display:block;}
+.status-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.tab-btn{height:26px;padding:0 10px;border:none;background:transparent;border-radius:4px 4px 0 0;font-size:13px;color:var(--text-secondary);}
+.tab-active{background:var(--bg-app);color:var(--text-primary);font-weight:600;border-bottom:2px solid var(--accent);}
+.tree-row{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;font-size:13px;}
+.tree-row:hover{background:rgba(0,0,0,0.04);}
+.tree-row.active{background:rgba(0,120,212,0.11);}
+.mono{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;}
+.term-tab{display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;font-size:12.5px;color:#c9c9c9;border-radius:5px 5px 0 0;}
+.term-tab.active{background:#1e1e1e;color:#fff;}
+</style>
+</helmet>
+
+<div style="width:1280px;height:900px;background:var(--bg-app);padding:16px;display:flex;flex-direction:column;gap:12px;">
+
+  <div class="card" style="display:flex;align-items:center;padding:10px 12px;flex:none;">
+    <div class="type-subtitle" style="margin-right:16px;">CodeLab</div>
+    <div style="display:flex;align-items:center;gap:10px;flex:1;">
+      <span class="status-dot" style="background:var(--success);"></span>
+      <span class="type-body">Connected</span>
+      <span class="badge badge-accent">stdio</span>
+      <span class="type-caption">Codelab Agent</span>
+    </div>
+    <button class="btn" style="margin-right:8px;">Edit profile</button>
+    <button class="btn btn-primary">Connect</button>
+  </div>
+
+  <div style="display:flex;gap:12px;flex:1;min-height:0;">
+
+    <!-- Sessions/Files pane -->
+    <div class="card" style="width:280px;flex:none;display:flex;flex-direction:column;min-height:0;">
+      <div style="display:flex;align-items:center;padding:8px 8px 0 8px;gap:4px;">
+        <button class="tab-btn">Sessions</button>
+        <button class="tab-btn tab-active">Files</button>
+        <div style="flex:1;"></div>
+        <button class="btn-icon" style="width:26px;height:26px;" title="Refresh"><svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M15 5a7 7 0 1 1-2-1.6"/><path d="M15 2v4h-4"/></svg></button>
+      </div>
+      <div class="type-caption mono" style="padding:6px 10px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">~/codelab-app</div>
+      <div class="scroll" style="flex:1;padding:6px 6px 8px;overflow-y:auto;">
+        <div class="tree-row"><svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="2"><path d="M6 4l6 6-6 6"/></svg><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M3 6a1 1 0 0 1 1-1h4l1.5 2H16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6Z"/></svg><span>apps</span></div>
+        <div style="margin-left:16px;">
+          <div class="tree-row"><svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="2"><path d="M6 4l6 6-6 6"/></svg><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M3 6a1 1 0 0 1 1-1h4l1.5 2H16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6Z"/></svg><span>codelab_app</span></div>
+          <div style="margin-left:16px;">
+            <div class="tree-row"><svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="2"><path d="M6 4l6 6-6 6"/></svg><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M3 6a1 1 0 0 1 1-1h4l1.5 2H16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6Z"/></svg><span>lib</span></div>
+            <div style="margin-left:16px;">
+              <div class="tree-row"><svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="2"><path d="M6 4l6 6-6 6"/></svg><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M3 6a1 1 0 0 1 1-1h4l1.5 2H16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6Z"/></svg><span>features/auth</span></div>
+              <div style="margin-left:16px;">
+                <div class="tree-row active"><span style="width:12px;"></span><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M6 2h6l3 3v13H6V2Z"/><path d="M12 2v3h3"/></svg><span class="mono">auth_middleware.dart</span></div>
+                <div class="tree-row"><span style="width:12px;"></span><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M6 2h6l3 3v13H6V2Z"/><path d="M12 2v3h3"/></svg><span class="mono">auth_state.dart</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tree-row"><svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="2"><path d="M6 4l6 6-6 6"/></svg><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M3 6a1 1 0 0 1 1-1h4l1.5 2H16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6Z"/></svg><span>packages</span></div>
+        <div class="tree-row"><svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="2"><path d="M6 4l6 6-6 6"/></svg><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M3 6a1 1 0 0 1 1-1h4l1.5 2H16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6Z"/></svg><span>openspec</span></div>
+        <div class="tree-row"><span style="width:12px;"></span><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M6 2h6l3 3v13H6V2Z"/><path d="M12 2v3h3"/></svg><span class="mono">pubspec.yaml</span></div>
+        <div class="tree-row"><span style="width:12px;"></span><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M6 2h6l3 3v13H6V2Z"/><path d="M12 2v3h3"/></svg><span class="mono">README.md</span></div>
+      </div>
+      <div class="type-caption" style="padding:8px 10px;border-top:1px solid var(--border);">Read-only. Click a file to open File Preview.</div>
+    </div>
+
+    <!-- Main + Inspector column -->
+    <div style="flex:1;min-width:0;display:flex;gap:12px;min-height:0;">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="flex:1;min-height:0;padding:12px;display:flex;flex-direction:column;">
+          <span class="type-body-strong">Refactor auth module</span>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+            <span class="type-caption">Transcript continues above — collapsed here to make room for Files + Terminal.</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="width:320px;flex:none;display:flex;align-items:center;justify-content:center;">
+        <span class="type-caption">Inspector</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal (expanded) -->
+  <div style="flex:none;height:240px;background:#1e1e1e;border-radius:6px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,0.15);">
+    <div style="display:flex;align-items:center;padding:4px 6px 0;background:#181818;">
+      <div class="term-tab active">
+        <svg class="icon" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="m6 8 3 2-3 2"/></svg>
+        zsh — codelab-agent
+      </div>
+      <div class="term-tab" style="color:#8a8a8a;">bash — scripts</div>
+      <button class="btn-icon" style="color:#8a8a8a;width:26px;height:26px;" title="New terminal">
+        <svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4v12M4 10h12"/></svg>
+      </button>
+      <div style="flex:1;"></div>
+      <button class="btn-icon" style="color:#8a8a8a;width:26px;height:26px;" title="Collapse terminal">
+        <svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 8l5 5 5-5"/></svg>
+      </button>
+    </div>
+    <div class="mono" style="flex:1;padding:10px 14px;color:#d4d4d4;font-size:12.5px;line-height:19px;overflow:auto;">
+      <div><span style="color:#4ec9b0;">(codelab)</span> <span style="color:#569cd6;">→</span> <span style="color:#dcdcaa;">codelab-agent</span> <span style="color:#808080;">git:(</span><span style="color:#ce9178;">ref/ADR-003-acp-independent-agent-core</span><span style="color:#808080;">)</span></div>
+      <div style="margin-top:4px;">$ dart run melos run analyze</div>
+      <div style="color:#8a8a8a;margin-top:2px;">Running analyze in 4 packages...</div>
+      <div style="color:#6a9955;margin-top:2px;">✓ no issues found</div>
+      <div style="margin-top:6px;"><span style="color:#4ec9b0;">(codelab)</span> <span style="color:#569cd6;">→</span> <span class="mono" style="color:#d4d4d4;">|</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>
