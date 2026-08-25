@@ -58,7 +58,7 @@
 - [x] 6.5 Реализовать desktop layout: command bar, sessions pane, transcript/prompt area, inspector
 - [x] 6.6 Реализовать responsive collapse для sessions pane и inspector без горизонтального скролла composer
 - [x] 6.7 Реализовать view modes `summary`, `normal`, `verbose`
-- [x] 6.8 Реализовать command palette/slash commands для `/new`, `/plan`, `/permissions`, `/logs`, `/compact`, `/reconnect`
+- [ ] 6.8 Реализовать command palette/slash commands для `/new`, `/plan`, `/permissions`, `/logs`, `/compact`, `/reconnect` (вынесено в отдельный change `wire-command-palette`: `AcpCommandPaletteSurface` реализован в `acp_ui`, но `CodeLabShellCubit.openCommandPalette()` — заглушка, ничего не открывает)
 - [x] 6.9 Реализовать keyboard shortcuts для prompt submit, cancel, approve/reject и inspector navigation
 - [x] 6.10 Добавить Flutter widget tests для connection states, transcript, approvals, errors и layout behavior
 
