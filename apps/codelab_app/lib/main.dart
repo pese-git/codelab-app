@@ -87,6 +87,7 @@ class _CodeLabCommandBar extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             AcpButton(
+              key: const ValueKey('command-bar-connect'),
               label: 'Connect',
               icon: FluentIcons.plug_connected,
               emphasis: AcpButtonEmphasis.primary,
@@ -378,6 +379,18 @@ class _CodeLabMainPane extends StatelessWidget {
               entries: state.transcriptEntries,
               viewMode: state.viewMode,
             ),
+          ),
+        ],
+        if (state.pendingApproval case final approval?) ...[
+          const SizedBox(height: 12),
+          AcpApprovalPanel(
+            title: approval.title,
+            risk: approval.risk,
+            options: approval.options,
+            command: approval.command,
+            cwd: approval.cwd,
+            enabled: !state.isRespondingToApproval,
+            onOptionSelected: cubit.respondToApproval,
           ),
         ],
         const SizedBox(height: 12),

@@ -135,6 +135,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -180,6 +181,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -382,6 +384,101 @@ void main() {
     },
   );
 
+  test('respondToApproval maps a pending approval and resolves it via the use '
+      'case', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final binding = CodeLabTestBinding(
+      transport: initialTransport,
+      stdioTransportFactory: (_) => agentTransport,
+    );
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    await shellCubit.connect();
+
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    final promptRequestFuture = agentTransport.sent.first;
+    final submitFuture = shellCubit.submitPrompt('run a command');
+    final promptRequest = await promptRequestFuture as dynamic;
+
+    expect(shellCubit.state.pendingApproval, isNull);
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.request(
+        id: const JsonRpcId.integer(7),
+        method: sessionRequestPermissionMethod,
+        params: RequestPermissionRequest(
+          sessionId: const SessionId('session-1'),
+          toolCall: ToolCallUpdate(
+            toolCallId: const ToolCallId('tool-1'),
+            title: 'Run command',
+            kind: ToolKind.execute,
+            status: ToolCallStatus.inProgress,
+            rawInput: const {'command': 'echo hi'},
+          ),
+          options: const [
+            PermissionOption(
+              optionId: PermissionOptionId('allow-once'),
+              name: 'Allow once',
+              kind: PermissionOptionKind.allowOnce,
+            ),
+            PermissionOption(
+              optionId: PermissionOptionId('reject-once'),
+              name: 'Reject',
+              kind: PermissionOptionKind.rejectOnce,
+            ),
+          ],
+        ).toJson(),
+      ),
+    );
+
+    final pending = shellCubit.state.pendingApproval;
+    expect(pending, isNotNull);
+    expect(pending!.title, 'Run command');
+    expect(pending.risk, AcpApprovalRisk.shell);
+    expect(pending.command, 'echo hi');
+    expect(pending.options.map((option) => option.id), [
+      'allow-once',
+      'reject-once',
+    ]);
+
+    final permissionResponseFuture = agentTransport.sent.first;
+    final respondFuture = shellCubit.respondToApproval('allow-once');
+    expect(shellCubit.state.isRespondingToApproval, isTrue);
+
+    final permissionResponse =
+        await permissionResponseFuture as JsonRpcResponse;
+    expect(permissionResponse.id, const JsonRpcId.integer(7));
+    await respondFuture;
+
+    expect(shellCubit.state.isRespondingToApproval, isFalse);
+    expect(shellCubit.state.pendingApproval, isNull);
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('Resolved approval permission-7'),
+    );
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id as JsonRpcId,
+        result: const {'stopReason': 'end_turn'},
+      ),
+    );
+    await submitFuture.timeout(const Duration(seconds: 2));
+
+    await closeCodeLabRootScope();
+  });
+
   test('cancelTurn sends session cancel and clears submitting state', () async {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
@@ -393,6 +490,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -455,6 +553,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -506,6 +605,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return stdioTransport;
@@ -556,6 +656,7 @@ void main() {
         sendPromptUseCase: SendPrompt(application),
         cancelTurnUseCase: CancelTurn(application),
         reconnectUseCase: Reconnect(application),
+        respondToPermissionUseCase: RespondToPermission(application),
         stdioTransportFactory: (config) {
           configs.add(config);
           return replacements.removeAt(0);
@@ -614,6 +715,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -644,6 +746,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return _FailingStartTransport();
@@ -675,6 +778,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -709,6 +813,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -743,6 +848,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 
@@ -815,6 +921,7 @@ void main() {
         sendPromptUseCase: SendPrompt(application),
         cancelTurnUseCase: CancelTurn(application),
         reconnectUseCase: Reconnect(application),
+        respondToPermissionUseCase: RespondToPermission(application),
         stdioTransportFactory: (config) {
           throw StateError('auth failed: token=sk-super-secret-value');
         },
@@ -845,6 +952,7 @@ void main() {
       sendPromptUseCase: SendPrompt(application),
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
     );
 

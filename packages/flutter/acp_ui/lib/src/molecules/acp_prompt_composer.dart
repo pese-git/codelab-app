@@ -78,6 +78,7 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
           children: [
             Expanded(
               child: TextBox(
+                key: const ValueKey('composer-text-box'),
                 controller: _controller,
                 enabled: widget.enabled && !widget.isSubmitting,
                 minLines: 1,
@@ -88,6 +89,7 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
             ),
             const SizedBox(width: 8),
             AcpButton(
+              key: const ValueKey('composer-send-button'),
               label: 'Send',
               icon: FluentIcons.send,
               emphasis: AcpButtonEmphasis.primary,
@@ -97,6 +99,7 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
             if (widget.onCancel != null && widget.canCancel) ...[
               const SizedBox(width: 8),
               AcpButton(
+                key: const ValueKey('composer-cancel-button'),
                 label: 'Cancel',
                 icon: FluentIcons.cancel,
                 onPressed: widget.enabled ? widget.onCancel : null,

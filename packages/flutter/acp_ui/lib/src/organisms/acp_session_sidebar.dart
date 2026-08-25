@@ -65,6 +65,7 @@ class AcpSessionSidebar extends StatelessWidget {
                 ),
                 if (onNewSession != null)
                   AcpIconButton(
+                    key: const ValueKey('new-session-button'),
                     icon: FluentIcons.add,
                     tooltip: 'New session',
                     onPressed: onNewSession,

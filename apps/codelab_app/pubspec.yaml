@@ -30,6 +30,8 @@ dev_dependencies:
     path: ../../packages/dart/acp_testing
   build_runner: ^2.10.5
   cherrypick_generator: ^4.0.0-dev.2
+  flutter_driver:
+    sdk: flutter
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter

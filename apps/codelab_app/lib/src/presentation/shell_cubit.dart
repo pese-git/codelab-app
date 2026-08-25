@@ -45,6 +45,8 @@ final class CodeLabShellState {
     required this.isPromptEnabled,
     required this.isPromptSubmitting,
     required this.canCancel,
+    this.pendingApproval,
+    this.isRespondingToApproval = false,
   });
 
   factory CodeLabShellState.initial({required StdioAcpAgentProfile profile}) =>
@@ -113,6 +115,8 @@ final class CodeLabShellState {
   final bool isPromptEnabled;
   final bool isPromptSubmitting;
   final bool canCancel;
+  final CodeLabPendingApproval? pendingApproval;
+  final bool isRespondingToApproval;
 
   CodeLabShellState copyWith({
     AcpConnectionStatus? connectionStatus,
@@ -138,6 +142,8 @@ final class CodeLabShellState {
     bool? isPromptEnabled,
     bool? isPromptSubmitting,
     bool? canCancel,
+    Object? pendingApproval = _unsetPendingApproval,
+    bool? isRespondingToApproval,
   }) {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
@@ -163,6 +169,11 @@ final class CodeLabShellState {
       isPromptEnabled: isPromptEnabled ?? this.isPromptEnabled,
       isPromptSubmitting: isPromptSubmitting ?? this.isPromptSubmitting,
       canCancel: canCancel ?? this.canCancel,
+      pendingApproval: identical(pendingApproval, _unsetPendingApproval)
+          ? this.pendingApproval
+          : pendingApproval as CodeLabPendingApproval?,
+      isRespondingToApproval:
+          isRespondingToApproval ?? this.isRespondingToApproval,
     );
   }
 
@@ -215,6 +226,36 @@ final class CodeLabShellState {
   };
 }
 
+/// Sentinel used by [CodeLabShellState.copyWith] to distinguish "leave
+/// pendingApproval unchanged" from "explicitly set pendingApproval to null"
+/// (a plain `T?` parameter can't represent that distinction).
+const Object _unsetPendingApproval = Object();
+
+/// Presentation-ready projection of the single approval request the user
+/// should currently act on. Derived exclusively from [AcpSession.activeTurn]
+/// in [CodeLabShellCubit._handleSessionChange]; never mutated locally so it
+/// always reflects the authoritative session state (see PERM-003/PERM-004 in
+/// docs/architecture/permissions.md).
+final class CodeLabPendingApproval {
+  const CodeLabPendingApproval({
+    required this.approvalId,
+    required this.sessionId,
+    required this.title,
+    required this.risk,
+    required this.options,
+    this.command,
+    this.cwd,
+  });
+
+  final ApprovalRequestId approvalId;
+  final SessionId sessionId;
+  final String title;
+  final AcpApprovalRisk risk;
+  final List<AcpApprovalOption> options;
+  final String? command;
+  final String? cwd;
+}
+
 enum CodeLabInspectorCategory { approval, toolCall, protocol, diagnostic }
 
 final class CodeLabInspectorEntry {
@@ -256,12 +297,14 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required SendPrompt sendPromptUseCase,
     required CancelTurn cancelTurnUseCase,
     required Reconnect reconnectUseCase,
+    required RespondToPermission respondToPermissionUseCase,
     required CodeLabStdioTransportFactory stdioTransportFactory,
   }) : _application = application,
        _createSessionUseCase = createSessionUseCase,
        _sendPromptUseCase = sendPromptUseCase,
        _cancelTurnUseCase = cancelTurnUseCase,
        _reconnectUseCase = reconnectUseCase,
+       _respondToPermissionUseCase = respondToPermissionUseCase,
        _stdioTransportFactory = stdioTransportFactory,
        super(CodeLabShellState.initial(profile: profile)) {
     _sessionSubscription = _application.sessionChanges.listen(
@@ -277,6 +320,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final SendPrompt _sendPromptUseCase;
   final CancelTurn _cancelTurnUseCase;
   final Reconnect _reconnectUseCase;
+  final RespondToPermission _respondToPermissionUseCase;
   final CodeLabStdioTransportFactory _stdioTransportFactory;
   final _redactor = const SecretRedactor();
   late final StreamSubscription<AcpSession> _sessionSubscription;
@@ -601,6 +645,51 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
+  /// Responds to [state.pendingApproval] by selecting [optionId] (one of the
+  /// agent-supplied options, including reject-kind options — ACP has no
+  /// separate "reject" verb, rejecting is just selecting a reject_once /
+  /// reject_always option). Correlates strictly to the currently displayed
+  /// approval request (never "whatever the active turn currently is") so a
+  /// stale/late tap can never resolve a different tool call — see PERM-003
+  /// in docs/architecture/permissions.md.
+  Future<void> respondToApproval(String optionId) async {
+    final approval = state.pendingApproval;
+    if (approval == null || state.isRespondingToApproval) {
+      return;
+    }
+
+    emit(state.copyWith(isRespondingToApproval: true));
+    final result = await _respondToPermissionUseCase(
+      RespondToPermissionCommand.selected(
+        sessionId: approval.sessionId,
+        approvalId: approval.approvalId,
+        optionId: PermissionOptionId(optionId),
+      ),
+    ).run();
+
+    // Do not touch `pendingApproval` here in either branch: the resolution
+    // (or the fact that it is still pending, e.g. after a stale/failed
+    // response) is always re-derived from the next `sessionChanges` event in
+    // `_handleSessionChange`, which stays the single source of truth.
+    result.match(
+      (failure) {
+        emit(state.copyWith(isRespondingToApproval: false));
+        _recordDiagnostic(
+          'Failed to respond to approval request: ${_failureMessage(failure)}',
+          severity: AcpDebugLogSeverity.error,
+          source: 'approval',
+        );
+      },
+      (resolved) {
+        emit(state.copyWith(isRespondingToApproval: false));
+        _recordDiagnostic(
+          'Resolved approval ${resolved.id.value} (${resolved.status.name}).',
+          source: 'approval',
+        );
+      },
+    );
+  }
+
   void openCommandPalette() =>
       _recordPendingAction('Command palette execution is wired after shell.');
 
@@ -652,6 +741,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         currentSessionLabel: sessionItem.title,
         currentSessionDetail: sessionItem.subtitle ?? session.id.value,
         inspectorEntries: _inspectorEntriesForSession(session),
+        pendingApproval: _pendingApprovalFor(session),
       ),
     );
   }
@@ -662,6 +752,71 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       severity: _debugSeverity(diagnostic.severity),
       source: diagnostic.source ?? 'application',
     );
+  }
+
+  /// Derives the single approval the user should currently act on from the
+  /// active turn. If several approvals are pending concurrently (allowed by
+  /// the domain model but not expected in normal ACP flows), they are
+  /// surfaced one at a time, oldest first (FIFO) — the next one appears
+  /// automatically once the current one resolves, since this is recomputed
+  /// from scratch on every `sessionChanges` event.
+  CodeLabPendingApproval? _pendingApprovalFor(AcpSession session) {
+    final turn = session.activeTurn;
+    if (turn == null) {
+      return null;
+    }
+
+    final pending =
+        turn.approvals.values
+            .where((approval) => approval.status == ApprovalStatus.pending)
+            .toList()
+          ..sort((a, b) {
+            final aTime = a.requestedAt;
+            final bTime = b.requestedAt;
+            if (aTime == null || bTime == null) {
+              return 0;
+            }
+            return aTime.compareTo(bTime);
+          });
+    final next = pending.firstOrNull;
+    if (next == null) {
+      return null;
+    }
+
+    return CodeLabPendingApproval(
+      approvalId: next.id,
+      sessionId: session.id,
+      title: next.toolCall.title,
+      risk: _approvalRisk(next.riskLevel),
+      options: next.options.map(_approvalOption).toList(),
+      command: _commandFromToolCall(next.toolCall),
+      cwd: session.cwd,
+    );
+  }
+
+  AcpApprovalRisk _approvalRisk(ApprovalRiskLevel risk) => switch (risk) {
+    ApprovalRiskLevel.readOnly => AcpApprovalRisk.readOnly,
+    ApprovalRiskLevel.localWrite => AcpApprovalRisk.localWrite,
+    ApprovalRiskLevel.network => AcpApprovalRisk.network,
+    ApprovalRiskLevel.shell => AcpApprovalRisk.shell,
+    ApprovalRiskLevel.destructive => AcpApprovalRisk.destructive,
+  };
+
+  AcpApprovalOption _approvalOption(PermissionOption option) =>
+      AcpApprovalOption(
+        id: option.optionId.value,
+        label: option.name,
+        tone: switch (option.kind) {
+          PermissionOptionKind.allowOnce ||
+          PermissionOptionKind.allowAlways => AcpTone.success,
+          PermissionOptionKind.rejectOnce ||
+          PermissionOptionKind.rejectAlways => AcpTone.danger,
+        },
+      );
+
+  String? _commandFromToolCall(ToolCallRecord toolCall) {
+    final command = toolCall.rawInput?['command'];
+    return command is String && command.trim().isNotEmpty ? command : null;
   }
 
   StdioAcpTransportConfig? _stdioConfigFromState() {
