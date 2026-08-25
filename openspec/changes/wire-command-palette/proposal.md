@@ -9,6 +9,7 @@
 - Команды с уже существующей опорой в кубите выполняют реальное действие: `/new` → `createSession()`, `/reconnect` → `reconnect()`, `/logs` → делает видимым `AcpDebugLogPanel` в инспекторе (в узком layout, где инспектор скрыт `Offstage`, — временно раскрывает его).
 - **Важное уточнение по факту проверки кода**: в `CodeLabShellState`/`CodeLabShellCubit` нет ни permission-mode selector, ни plan-mode, ни compact-transcript механизма — это не "не подключено", а отсутствует как фича целиком. Реализовывать их с нуля внутри этого change означало бы протащить три отдельные крупные фичи под видом "подключить палитру", что нарушает scope discipline (`AGENTS.md` §19). Поэтому `/plan`, `/permissions`, `/compact` в этом change: видны в палитре, но при выборе показывают явное состояние "недоступно, скоро" — **не** тихий no-op (это тот же анти-паттерн fake-интерактивности, который и стал причиной этого change, только теперь честно обозначенный, а не замаскированный под "готово"). Полная реализация каждой из трёх фич выносится в отдельные будущие OpenSpec changes.
 - Поиск/фильтрация команд по названию — уже поддержана `AcpCommandAction.filter()`, переиспользуется без изменений.
+- **Второй триггер палитры — inline, из поля ввода промпта.** Если пользователь вводит `/` как первый символ нового слова (в начале поля или сразу после пробела/переноса строки) в `AcpPromptComposer`, CodeLab открывает ту же палитру, привязанную по позиции к композеру (не по центру экрана, как при `Ctrl/Cmd+K`), с фильтрацией по тексту, набираемому после `/`, — без переключения фокуса на отдельное поле поиска палитры: пользователь продолжает печатать в самом композере, список фильтруется вживую.
 - Добавляются widget-тесты на открытие/закрытие палитры и на поведение каждой команды (включая "недоступно" state для трёх незавершённых), по аналогии с существующим покрытием reconnect в `apps/codelab_app/test/widget_test.dart`.
 
 ## Capabilities
@@ -24,6 +25,7 @@ _(нет — command palette уже описан в `agent-workbench-ui`)_
 ## Impact
 
 - `apps/codelab_app/lib/features/workbench/application/shell_cubit.dart` — реализация `openCommandPalette()` и обработчиков команд.
-- `apps/codelab_app/lib/features/workbench/presentation/workbench_shell.dart` — отображение `AcpCommandPaletteSurface` в дереве виджетов при активном состоянии палитры.
+- `apps/codelab_app/lib/features/workbench/presentation/workbench_shell.dart` — отображение `AcpCommandPaletteSurface` в дереве виджетов при активном состоянии палитры (по центру для `Ctrl/Cmd+K`, `Positioned` над композером для inline-триггера).
+- `apps/codelab_app/lib/features/workbench/presentation/widgets/` — детектирование "`/` в начале слова" в композере, обработка `↑`/`↓`/`Enter` в inline-режиме.
 - `apps/codelab_app/test/widget_test.dart` — новые тесты.
-- `packages/flutter/acp_ui` не меняется — переиспользуется существующий `AcpCommandPaletteSurface`/`AcpCommandAction`.
+- `packages/flutter/acp_ui/lib/src/organisms/acp_command_palette_surface.dart` — новый опциональный параметр для inline-режима (`showSearchField`/`queryOverride`), остальная логика не меняется.
