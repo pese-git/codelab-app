@@ -1,0 +1,94 @@
+import 'package:acp_ui/acp_ui.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+
+import '../../application/shell_cubit.dart';
+import 'current_session_panel.dart';
+import 'transport_setup_panel.dart';
+
+class WorkbenchMainPane extends StatelessWidget {
+  const WorkbenchMainPane({
+    required this.state,
+    required this.cubit,
+    super.key,
+  });
+
+  final CodeLabShellState state;
+  final CodeLabShellCubit cubit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (state.transcriptEntries.isEmpty)
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TransportSetupPanel(state: state, cubit: cubit),
+                      const SizedBox(height: 12),
+                      CurrentSessionPanel(state: state),
+                      const SizedBox(height: 12),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight > 180
+                              ? constraints.maxHeight - 180
+                              : 0,
+                        ),
+                        child: AcpConnectionScreen(
+                          status: state.connectionStatus,
+                          transportLabel: state.transportLabel,
+                          profileLabel: state.profileLabel,
+                          detail: state.connectionDetail,
+                          description:
+                              'Connect an ACP agent to start a session.',
+                          onConnect: cubit.connect,
+                          onReconnect: cubit.reconnect,
+                          onEditProfile: cubit.editProfile,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          )
+        else ...[
+          TransportSetupPanel(state: state, cubit: cubit),
+          const SizedBox(height: 12),
+          CurrentSessionPanel(state: state),
+          const SizedBox(height: 12),
+          Expanded(
+            child: AcpTranscriptPanel(
+              entries: state.transcriptEntries,
+              viewMode: state.viewMode,
+            ),
+          ),
+        ],
+        if (state.pendingApproval case final approval?) ...[
+          const SizedBox(height: 12),
+          AcpApprovalPanel(
+            title: approval.title,
+            risk: approval.risk,
+            options: approval.options,
+            command: approval.command,
+            cwd: approval.cwd,
+            enabled: !state.isRespondingToApproval,
+            onOptionSelected: cubit.respondToApproval,
+          ),
+        ],
+        const SizedBox(height: 12),
+        AcpPromptComposer(
+          enabled: state.isPromptEnabled,
+          isSubmitting: state.isPromptSubmitting,
+          canCancel: state.canCancel,
+          onSubmit: cubit.submitPrompt,
+          onCancel: cubit.cancelTurn,
+        ),
+      ],
+    );
+  }
+}

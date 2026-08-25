@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:codelab_app/main.dart';
-import 'package:codelab_app/src/app_scope.dart';
-import 'package:codelab_app/src/presentation/shell_cubit.dart';
+import 'package:codelab_app/app/app_scope.dart';
+import 'package:codelab_app/app/codelab_app_widget.dart';
+import 'package:codelab_app/core/platform/working_directory_provider.dart';
+import 'package:codelab_app/features/workbench/application/shell_cubit.dart';
 import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_testing/acp_testing.dart';
@@ -137,6 +138,7 @@ void main() {
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     shellCubit.updateStdioCwd('/workspace');
@@ -183,6 +185,7 @@ void main() {
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     shellCubit.updateStdioCwd('/workspace');
@@ -492,6 +495,7 @@ void main() {
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     await shellCubit.connect();
@@ -555,6 +559,7 @@ void main() {
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     await shellCubit.connect();
@@ -610,6 +615,7 @@ void main() {
         configs.add(config);
         return stdioTransport;
       },
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     shellCubit.updateStdioCwd('/tmp/codelab');
@@ -661,6 +667,7 @@ void main() {
           configs.add(config);
           return replacements.removeAt(0);
         },
+        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       );
 
       await shellCubit.connect();
@@ -720,6 +727,7 @@ void main() {
         configs.add(config);
         return FakeAcpTransport();
       },
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     shellCubit.updateStdioCommand('');
@@ -751,6 +759,7 @@ void main() {
         configs.add(config);
         return _FailingStartTransport();
       },
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     shellCubit.updateStdioCommand('missing-codelab');
@@ -783,6 +792,7 @@ void main() {
         configs.add(config);
         return FakeAcpTransport();
       },
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     shellCubit
@@ -818,6 +828,7 @@ void main() {
         configs.add(config);
         return FakeAcpTransport();
       },
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     shellCubit
@@ -850,6 +861,7 @@ void main() {
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     await shellCubit.connect();
@@ -925,6 +937,7 @@ void main() {
         stdioTransportFactory: (config) {
           throw StateError('auth failed: token=sk-super-secret-value');
         },
+        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       );
 
       shellCubit.updateStdioCommand('missing-codelab');
@@ -954,6 +967,7 @@ void main() {
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
       stdioTransportFactory: (_) => agentTransport,
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
     await shellCubit.connect();

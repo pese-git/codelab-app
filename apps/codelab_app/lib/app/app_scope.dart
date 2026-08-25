@@ -8,7 +8,8 @@ import 'package:cherrypick/cherrypick.dart';
 import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
-import 'presentation/shell_cubit.dart';
+import '../core/platform/working_directory_provider.dart';
+import '../features/workbench/application/shell_cubit.dart';
 
 part 'app_scope.module.cherrypick.g.dart';
 
@@ -24,6 +25,7 @@ Scope createCodeLabRootScope({
         transportFactory: transportFactory ?? _createDefaultTransport,
         stdioTransportFactory: stdioTransportFactory ?? _createStdioTransport,
       ),
+      CodeLabPlatformModule(),
       CodeLabPresentationModule(),
       $CodeLabTransportsModuleContract(),
       $CodeLabProtocolApplicationModuleContract(),
@@ -53,6 +55,15 @@ final class CodeLabTransportRuntimeModule extends Module {
   void builder(Scope currentScope) {
     bind<CodeLabTransportFactory>().toInstance(_transportFactory);
     bind<CodeLabStdioTransportFactory>().toInstance(_stdioTransportFactory);
+  }
+}
+
+final class CodeLabPlatformModule extends Module {
+  @override
+  void builder(Scope currentScope) {
+    bind<WorkingDirectoryProvider>().toInstance(
+      const IoWorkingDirectoryProvider(),
+    );
   }
 }
 
@@ -98,6 +109,8 @@ final class CodeLabPresentationModule extends Module {
                 .resolve<RespondToPermission>(),
             stdioTransportFactory: currentScope
                 .resolve<CodeLabStdioTransportFactory>(),
+            workingDirectoryProvider: currentScope
+                .resolve<WorkingDirectoryProvider>(),
           ),
         )
         .singleton();

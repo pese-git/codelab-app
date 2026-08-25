@@ -1,5 +1,5 @@
-import 'package:codelab_app/src/app_scope.dart';
-import 'package:codelab_app/src/presentation/shell_cubit.dart';
+import 'package:codelab_app/app/app_scope.dart';
+import 'package:codelab_app/features/workbench/application/shell_cubit.dart';
 import 'package:acp_testing/acp_testing.dart';
 import 'package:cherrypick/cherrypick.dart';
 import 'package:flutter/widgets.dart';

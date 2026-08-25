@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../core/platform/working_directory_provider.dart';
 
 typedef CodeLabStdioTransportFactory =
     AcpTransport Function(StdioAcpTransportConfig config);
@@ -299,6 +300,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required Reconnect reconnectUseCase,
     required RespondToPermission respondToPermissionUseCase,
     required CodeLabStdioTransportFactory stdioTransportFactory,
+    required WorkingDirectoryProvider workingDirectoryProvider,
   }) : _application = application,
        _createSessionUseCase = createSessionUseCase,
        _sendPromptUseCase = sendPromptUseCase,
@@ -306,6 +308,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
        _reconnectUseCase = reconnectUseCase,
        _respondToPermissionUseCase = respondToPermissionUseCase,
        _stdioTransportFactory = stdioTransportFactory,
+       _workingDirectoryProvider = workingDirectoryProvider,
        super(CodeLabShellState.initial(profile: profile)) {
     _sessionSubscription = _application.sessionChanges.listen(
       _handleSessionChange,
@@ -322,6 +325,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final Reconnect _reconnectUseCase;
   final RespondToPermission _respondToPermissionUseCase;
   final CodeLabStdioTransportFactory _stdioTransportFactory;
+  final WorkingDirectoryProvider _workingDirectoryProvider;
   final _redactor = const SecretRedactor();
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<DiagnosticEntry> _diagnosticSubscription;
@@ -835,7 +839,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   String get _selectedCwd {
     final cwd = state.stdioCwd.trim();
-    return cwd.isEmpty ? Directory.current.path : cwd;
+    return cwd.isEmpty ? _workingDirectoryProvider.currentPath : cwd;
   }
 
   AcpSessionListItem _sessionListItem(AcpSession session) {

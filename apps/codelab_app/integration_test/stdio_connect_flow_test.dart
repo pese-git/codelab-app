@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:acp_testing/acp_testing.dart';
 import 'package:acp_ui/acp_ui.dart';
-import 'package:codelab_app/main.dart';
-import 'package:codelab_app/src/app_scope.dart';
+import 'package:codelab_app/app/app_scope.dart';
+import 'package:codelab_app/app/codelab_app_widget.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
