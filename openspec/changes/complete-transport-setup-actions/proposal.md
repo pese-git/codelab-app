@@ -12,10 +12,10 @@
 - `CodeLabShellCubit` получает WebSocket transport factory (аналогично уже существующему `CodeLabStdioTransportFactory`) через DI.
 - `connect()`/`reconnect()` реализуют реальную WebSocket-ветку: используют `WebSocketAcpTransportConfig` из полей `webSocketEndpoint`/`webSocketToken` формы, обрабатывают успех/ошибку так же, как stdio-ветка (typed failures, диагностика, `connectionStatus`).
 - Существующий тест `'reconnect leaves WebSocket startup deferred'` заменяется тестами на реальное поведение (успешный reconnect, ошибка reconnect) — по аналогии со stdio-тестами в том же файле.
-- `TransportSetupPanel` перестаёт быть безусловно видимым в основном потоке `WorkbenchMainPane` (сейчас отображается всегда — и в пустом, и в непустом состоянии транскрипта, `main_pane.dart:31,60`) и переезжает в модальный `ContentDialog` (Fluent UI), открываемый действием "Edit profile"/"Configure connection". Это не новый экран/route — модальный диалог не требует роутинга, приложение остаётся однооконным.
+- `TransportSetupPanel` перестаёт быть безусловно видимым в основном потоке `WorkbenchMainPane` (сейчас отображается всегда — и в пустом, и в непустом состоянии транскрипта, `main_pane.dart:31,60`) и переезжает в модальный `ContentDialog` (Fluent UI), открываемый действием "Configure connection". Это не новый экран/route — модальный диалог не требует роутинга, приложение остаётся однооконным.
 - `editProfile()` перестаёт быть заглушкой: открывает диалог с формой профиля (те же поля/те же методы кубита `updateStdioCommand` и т.д. — переиспользуются как есть, просто рендерятся внутри диалога, а не инлайн).
-- В `WorkbenchCommandBar` добавляется постоянно видимая кнопка/иконка "Edit profile", открывающая тот же диалог — так действие доступно в любой момент (не только пока транскрипт пуст, как сейчас ограничено видимостью `AcpConnectionScreen`).
-- В пустом/disconnected-состоянии `AcpConnectionScreen` вместо полной инлайн-формы показывает компактную карточку с кнопкой "Configure connection", открывающей тот же диалог — не открывается автоматически при первом запуске.
+- В `WorkbenchCommandBar` добавляется постоянно видимая кнопка/иконка "Configure connection" (переименование текущей "Edit profile"), открывающая тот же диалог — так действие доступно в любой момент (не только пока транскрипт пуст, как сейчас ограничено видимостью `AcpConnectionScreen`).
+- В пустом/disconnected-состоянии `AcpConnectionScreen` вместо полной инлайн-формы показывает компактную карточку с кнопкой "Configure connection", открывающей тот же диалог — не открывается автоматически при первом запуске. Один и тот же лейбл используется в обеих точках входа — не два разных названия для одного действия.
 - **BREAKING**: нет — область видимости и контракты ACP не меняются, только внутреннее поведение `apps/codelab_app`.
 
 ## Capabilities
@@ -35,7 +35,7 @@ _(нет)_
 - `apps/codelab_app/lib/features/workbench/application/shell_cubit.dart` — `connect()`, `reconnect()`, `editProfile()`.
 - `apps/codelab_app/lib/app/app_scope.dart` (или аналогичный DI-модуль) — регистрация WebSocket transport factory.
 - `apps/codelab_app/lib/features/workbench/presentation/widgets/transport_setup_panel.dart` — оборачивается в новый `ConnectionSetupDialog` (или аналогичное имя), рендерится через `showDialog`/Fluent `ContentDialog`.
-- `apps/codelab_app/lib/features/workbench/presentation/widgets/command_bar.dart` — добавление постоянной кнопки "Edit profile".
+- `apps/codelab_app/lib/features/workbench/presentation/widgets/command_bar.dart` — добавление постоянной кнопки "Configure connection".
 - `apps/codelab_app/lib/features/workbench/presentation/widgets/main_pane.dart` — удаление безусловного инлайн-рендера `TransportSetupPanel`.
 - `packages/flutter/acp_ui/lib/src/organisms/acp_connection_screen.dart` — компактная карточка вместо (или в дополнение к) текущему полному описанию, если потребуется новый пропс/вариант.
 - `apps/codelab_app/test/widget_test.dart` — замена теста deferred-поведения на тесты реального WebSocket connect/reconnect и открытия/закрытия диалога.

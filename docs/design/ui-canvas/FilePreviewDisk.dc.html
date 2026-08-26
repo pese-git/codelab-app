@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{
+  --bg-app:#F3F3F3; --bg-surface:#FFFFFF;
+  --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.16);
+  --text-primary:rgba(0,0,0,0.89); --text-secondary:rgba(0,0,0,0.62);
+  --accent:#0078D4; --accent-bg:rgba(0,120,212,0.14);
+  --success:#107C10; --neutral:#323130;
+  --radius-sm:4px; --radius-md:6px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text-primary);}
+.type-title{font-size:16px;font-weight:600;line-height:22px;margin:0;}
+.type-subtitle{font-size:20px;font-weight:600;line-height:28px;margin:0;}
+.type-body{font-size:14px;font-weight:400;line-height:20px;margin:0;}
+.type-caption{font-size:12px;font-weight:400;line-height:16px;margin:0;color:var(--text-secondary);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:var(--radius-sm);font-size:11.5px;font-weight:600;white-space:nowrap;line-height:16px;}
+.badge-neutral{background:rgba(50,49,48,0.10);color:var(--neutral);}
+.badge-accent{background:var(--accent-bg);color:var(--accent);}
+.btn-icon{width:28px;height:28px;padding:0;justify-content:center;border:none;background:transparent;border-radius:var(--radius-sm);}
+.icon{flex:none;display:block;}
+.mono{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;}
+.code-line{display:flex;font-size:12.5px;line-height:20px;white-space:pre;}
+.code-gutter{width:40px;flex:none;text-align:right;padding-right:10px;color:var(--text-secondary);user-select:none;}
+.tree-row{display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:12.5px;border-radius:4px;}
+.tree-row.active{background:rgba(0,120,212,0.11);}
+</style>
+</helmet>
+
+<div style="width:1280px;height:860px;background:var(--bg-app);padding:16px;position:relative;">
+  <!-- dimmed backdrop: files tree pane stays legible to signal where this preview was opened from -->
+  <div style="opacity:.55;display:flex;gap:12px;height:100%;pointer-events:none;">
+    <div style="background:#fff;border:1px solid var(--border);border-radius:6px;width:280px;padding:10px 8px;">
+      <div class="type-caption" style="padding:0 4px 8px;text-transform:uppercase;letter-spacing:.04em;">Files</div>
+      <div class="tree-row"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M3 6h5l2 2h7v8H3V6Z"/></svg>apps</div>
+      <div class="tree-row" style="padding-left:20px;"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M3 6h5l2 2h7v8H3V6Z"/></svg>codelab_app</div>
+      <div class="tree-row" style="padding-left:32px;"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M3 6h5l2 2h7v8H3V6Z"/></svg>lib</div>
+      <div class="tree-row" style="padding-left:44px;"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M3 6h5l2 2h7v8H3V6Z"/></svg>app</div>
+      <div class="tree-row active" style="padding-left:56px;"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M6 2h6l3 3v13H6V2Z"/></svg>app_scope.dart</div>
+      <div class="tree-row" style="padding-left:44px;"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M3 6h5l2 2h7v8H3V6Z"/></svg>features</div>
+      <div class="tree-row" style="padding-left:32px;"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M6 2h6l3 3v13H6V2Z"/></svg>pubspec.yaml</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:6px;flex:1;"></div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,0.18);"></div>
+
+  <!-- file preview panel — opened from the tree, read directly from disk -->
+  <div style="position:absolute;right:16px;top:16px;bottom:16px;width:640px;background:#fff;border-radius:8px;box-shadow:0 20px 48px rgba(0,0,0,0.26);display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:12px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);flex:none;">
+      <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.6"><path d="M6 2h6l3 3v13H6V2Z"/><path d="M12 2v3h3"/></svg>
+      <div style="flex:1;min-width:0;">
+        <div class="type-title mono" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">lib/app/app_scope.dart</div>
+        <div class="type-caption" style="margin-top:2px;">read directly from disk</div>
+      </div>
+      <span class="badge badge-neutral">Read-only</span>
+      <button class="btn-icon" title="Close">
+        <svg class="icon" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="1.7"><path d="M5 5l10 10M15 5 5 15"/></svg>
+      </button>
+    </div>
+
+    <div style="flex:1;overflow:auto;padding:10px 0;" class="mono">
+      <div class="code-line"><span class="code-gutter">1</span><span>class AppScope {</span></div>
+      <div class="code-line"><span class="code-gutter">2</span><span>&nbsp;&nbsp;final GetIt locator;</span></div>
+      <div class="code-line"><span class="code-gutter">3</span><span></span></div>
+      <div class="code-line"><span class="code-gutter">4</span><span>&nbsp;&nbsp;AppScope(this.locator) {</span></div>
+      <div class="code-line"><span class="code-gutter">5</span><span>&nbsp;&nbsp;&nbsp;&nbsp;locator.registerLazySingleton&lt;CodeLabStdioTransportFactory&gt;(</span></div>
+      <div class="code-line"><span class="code-gutter">6</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;() =&gt; StdioAcpTransport.new,</span></div>
+      <div class="code-line"><span class="code-gutter">7</span><span>&nbsp;&nbsp;&nbsp;&nbsp;);</span></div>
+      <div class="code-line"><span class="code-gutter">8</span><span>&nbsp;&nbsp;&nbsp;&nbsp;locator.registerLazySingleton&lt;CodeLabWebSocketTransportFactory&gt;(</span></div>
+      <div class="code-line"><span class="code-gutter">9</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;() =&gt; WebSocketAcpTransport.new,</span></div>
+      <div class="code-line"><span class="code-gutter">10</span><span>&nbsp;&nbsp;&nbsp;&nbsp;);</span></div>
+      <div class="code-line"><span class="code-gutter">11</span><span>&nbsp;&nbsp;}</span></div>
+      <div class="code-line"><span class="code-gutter">12</span><span>}</span></div>
+    </div>
+
+    <div style="padding:10px 14px;border-top:1px solid var(--border);flex:none;">
+      <div class="type-caption">Opened from the directory tree and read directly from disk — not reported by the agent. No <span class="mono">ToolCallLocation</span> highlight and no Following toggle apply here.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

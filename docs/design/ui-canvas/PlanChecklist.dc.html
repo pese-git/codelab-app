@@ -44,7 +44,22 @@ body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-appl
     <div class="type-caption" style="margin-top:6px;max-width:560px;">"Agent workbench interaction patterns" already lists "progress checklist" as a required pattern. The data for it — <span class="mono">Plan</span>/<span class="mono">PlanEntry</span> (priority + status) — is fully modeled in the protocol (<span class="mono">session_update.dart:77-150</span>) but nothing in <span class="mono">apps/codelab_app</span> or <span class="mono">acp_ui</span> reads it: zero matches for <span class="mono">PlanEntry</span> in either.</div>
   </div>
 
+  <div class="card" style="padding:12px 16px;">
+    <div class="type-caption" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Compact summary — default, shown above the transcript</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <svg class="icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.8"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 2"/></svg>
+      <div style="flex:1;min-width:0;">
+        <div class="type-body-strong" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Run melos analyze to confirm no new lint issues</div>
+        <div class="type-caption" style="margin-top:1px;">3 of 5 done</div>
+      </div>
+      <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--text-secondary)" stroke-width="2" title="Expand"><path d="M6 8l4 4 4-4"/></svg>
+    </div>
+    <div class="progress-track" style="margin-top:8px;"><div class="progress-fill" style="width:60%;"></div></div>
+    <div class="type-caption" style="margin-top:8px;">Shows the in-progress entry (or next pending one) + completed count. Omitted entirely once every entry is <span class="mono">completed</span> — the full checklist stays reachable, but this row disappears.</div>
+  </div>
+
   <div class="card" style="padding:16px;">
+    <div class="type-caption" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Full checklist — expanded from the summary above</div>
     <div style="display:flex;align-items:center;">
       <span class="type-body-strong" style="flex:1;">Refactor auth module</span>
       <span class="type-caption">3 of 5 done</span>

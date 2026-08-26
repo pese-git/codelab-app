@@ -1,6 +1,6 @@
 # CodeLab UI/UX Canvas
 
-Визуальный референс UI/UX для CodeLab — 19 экранов/компонентов ("артбордов"), выверенных по реальным исходникам `packages/flutter/acp_ui` и `fluent_ui` (цвета, типографика, spacing взяты из кода, а не на глаз).
+Визуальный референс UI/UX для CodeLab — 21 экран/компонент ("артборд"), выверенных по реальным исходникам `packages/flutter/acp_ui` и `fluent_ui` (цвета, типографика, spacing взяты из кода, а не на глаз).
 
 ## Как смотреть
 
@@ -14,15 +14,17 @@
 |---|---|
 | `Main.dc.html` | Workbench — активная сессия: командная панель, вкладки сессий/файлов, транскрипт, progress checklist, композер с чипами модели/режима, свёрнутый терминал |
 | `ConnectionStdio.dc.html` | Подключение — stdio-профиль |
-| `ConnectionWebSocket.dc.html` | Подключение — WebSocket, замаскированный токен |
-| `EditProfileDialog.dc.html` | Диалог настройки профиля подключения |
+| `ConnectionWebSocket.dc.html` | Подключение — WebSocket, пустое/disconnected состояние (поля endpoint/token переехали в диалог) |
+| `EditProfileDialog.dc.html` | Диалог настройки профиля подключения — вкладка stdio (command/args/working dir/env) |
+| `EditProfileDialogWebSocket.dc.html` | Диалог настройки профиля подключения — вкладка WebSocket (endpoint/token, токен пока не замаскирован — отдельный change) |
 | `CommandPalette.dc.html` | Command palette — оверлей по `Ctrl/Cmd+K` |
 | `InlineCommandTrigger.dc.html` | Command palette — inline-триггер по `/` в композере |
 | `ApprovalDiff.dc.html` | Approval-панель: 4 опции по `PermissionOptionKind`, диф-вьюер, collapsible raw input |
 | `PromptQueue.dc.html` | Очередь сообщений, отправленных пока сессия занята |
-| `PlanChecklist.dc.html` | Progress checklist на основе `PlanEntry` |
+| `PlanChecklist.dc.html` | Progress checklist на основе `PlanEntry` — компактная сводка над транскриптом + полный список по клику |
 | `SessionOptionsRow.dc.html` | Селекторы модели и permission-mode (проектное предложение) |
-| `FilePreview.dc.html` | Read-only просмотр файла (из tool call или с диска) |
+| `FilePreview.dc.html` | Read-only просмотр файла — источник: tool call (`ToolCallLocation`, highlight, Following) |
+| `FilePreviewDisk.dc.html` | Read-only просмотр файла — источник: дерево каталогов, чтение с диска (без highlight и без Following) |
 | `AddContext.dc.html` | Вложение файлов/картинок в промпт (`ContentBlock`) |
 | `FilesAndTerminal.dc.html` | Дерево каталогов + развёрнутый терминал |
 | `ResizablePanels.dc.html` | Перетаскиваемые границы панелей |
@@ -37,8 +39,8 @@
 Большинство экранов здесь соответствуют конкретным `openspec/changes/*`:
 
 - `wire-command-palette` — `CommandPalette.dc.html`, `InlineCommandTrigger.dc.html`
-- `complete-transport-setup-actions` — `EditProfileDialog.dc.html`
-- `add-file-preview-and-tree` — `FilePreview.dc.html`, `FilesAndTerminal.dc.html` (дерево)
+- `complete-transport-setup-actions` — `EditProfileDialog.dc.html`, `EditProfileDialogWebSocket.dc.html`
+- `add-file-preview-and-tree` — `FilePreview.dc.html`, `FilePreviewDisk.dc.html`, `FilesAndTerminal.dc.html` (дерево)
 - `add-integrated-terminal` — `FilesAndTerminal.dc.html` (терминал)
 - `add-approval-option-kinds` — `ApprovalDiff.dc.html`
 - `add-plan-progress-checklist` — `PlanChecklist.dc.html`

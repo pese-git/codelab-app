@@ -56,3 +56,7 @@ CodeLab SHALL present `/plan`, `/permissions`, and `/compact` in the command pal
 #### Scenario: Selecting an unavailable command
 - **WHEN** command palette is open and user selects `/plan`, `/permissions`, or `/compact`
 - **THEN** CodeLab shows the command as disabled/labeled "coming soon" and does not close the palette or emit a fake diagnostic implying the action completed
+
+#### Scenario: Enter highlights an unavailable command in the inline palette
+- **WHEN** the inline command palette is open, an unavailable command (`/plan`, `/permissions`, or `/compact`) is the currently highlighted entry, and the user presses `Enter`
+- **THEN** CodeLab treats this the same as any other selection of that command — the palette stays open, no action is emitted, and the composer text is unchanged

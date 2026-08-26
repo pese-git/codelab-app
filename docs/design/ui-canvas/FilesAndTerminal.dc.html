@@ -52,8 +52,7 @@ body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-appl
       <span class="badge badge-accent">stdio</span>
       <span class="type-caption">Codelab Agent</span>
     </div>
-    <button class="btn" style="margin-right:8px;">Edit profile</button>
-    <button class="btn btn-primary">Connect</button>
+    <button class="btn">Configure connection</button>
   </div>
 
   <div style="display:flex;gap:12px;flex:1;min-height:0;">
@@ -120,6 +119,14 @@ body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-appl
       <div style="flex:1;"></div>
       <button class="btn-icon" style="color:#8a8a8a;width:26px;height:26px;" title="Collapse terminal">
         <svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 8l5 5 5-5"/></svg>
+      </button>
+    </div>
+    <!-- First-open disclosure: shown once per session when the terminal panel is first expanded -->
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:rgba(216,59,1,0.14);border-bottom:1px solid rgba(216,59,1,0.28);">
+      <svg class="icon" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="var(--warning)" stroke-width="1.7" style="margin-top:1px;"><circle cx="10" cy="10" r="7.5"/><path d="M10 6.5v4M10 13.2v.1"/></svg>
+      <div class="type-caption" style="color:#f0d9c9;flex:1;">Commands here run directly as you — they bypass the agent's approval flow and are <strong style="color:#fff;">not secret-redacted</strong>.</div>
+      <button class="btn-icon" style="color:#8a8a8a;width:22px;height:22px;" title="Dismiss">
+        <svg class="icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5l10 10M15 5 5 15"/></svg>
       </button>
     </div>
     <div class="mono" style="flex:1;padding:10px 14px;color:#d4d4d4;font-size:12.5px;line-height:19px;overflow:auto;">
