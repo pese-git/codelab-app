@@ -18,22 +18,71 @@ class CodeLabShell extends StatelessWidget {
 
         return AcpWorkbenchShortcuts(
           onOpenCommandPalette: cubit.openCommandPalette,
-          onCancel: state.canCancel ? cubit.cancelTurn : null,
+          onCancel: state.isCommandPaletteOpen
+              ? cubit.closeCommandPalette
+              : (state.canCancel ? cubit.cancelTurn : null),
           child: NavigationView(
-            content: AcpWorkbenchLayout(
-              commandBar: WorkbenchCommandBar(state: state, cubit: cubit),
-              sessionsPane: AcpSessionSidebar(
-                sessions: state.sessions,
-                activeSessionId: state.activeSessionId,
-                onSessionSelected: cubit.selectSession,
-                onNewSession: cubit.createSession,
-              ),
-              mainPane: WorkbenchMainPane(state: state, cubit: cubit),
-              inspectorPane: WorkbenchInspectorPane(state: state, cubit: cubit),
+            content: Stack(
+              children: [
+                AcpWorkbenchLayout(
+                  commandBar: WorkbenchCommandBar(state: state, cubit: cubit),
+                  sessionsPane: AcpSessionSidebar(
+                    sessions: state.sessions,
+                    activeSessionId: state.activeSessionId,
+                    onSessionSelected: cubit.selectSession,
+                    onNewSession: cubit.createSession,
+                  ),
+                  mainPane: WorkbenchMainPane(state: state, cubit: cubit),
+                  inspectorPane: WorkbenchInspectorPane(
+                    state: state,
+                    cubit: cubit,
+                  ),
+                  inspectorVisibleInNarrowMode:
+                      state.isInspectorVisibleInNarrowLayout,
+                ),
+                if (state.isCommandPaletteOpen)
+                  _CommandPaletteOverlay(state: state, cubit: cubit),
+              ],
             ),
           ),
         );
       },
     );
+  }
+}
+
+class _CommandPaletteOverlay extends StatelessWidget {
+  const _CommandPaletteOverlay({required this.state, required this.cubit});
+
+  final CodeLabShellState state;
+  final CodeLabShellCubit cubit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withAlpha(60),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 480),
+            child: AcpCommandPaletteSurface(
+              actions: state.paletteActions,
+              onActionSelected: (action) => selectPaletteCommand(cubit, action),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Routes a selected [AcpCommandAction] to the right cubit method — shared
+/// by the `Ctrl/Cmd+K` overlay and the inline composer trigger so both
+/// paths behave identically (see wire-command-palette/design.md).
+void selectPaletteCommand(CodeLabShellCubit cubit, AcpCommandAction action) {
+  if (action.source == AcpCommandSource.agent) {
+    cubit.insertAgentCommand(action);
+  } else {
+    cubit.selectCommand(action);
   }
 }

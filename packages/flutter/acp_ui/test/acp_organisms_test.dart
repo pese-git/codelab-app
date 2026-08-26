@@ -760,6 +760,32 @@ void main() {
     },
   );
 
+  testWidgets(
+    'workbench keeps the inspector on stage in narrow layout when asked to',
+    (tester) async {
+      tester.view.physicalSize = const Size(430, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpWorkbenchLayout(
+            commandBar: const _AcpTestPane(label: 'Command'),
+            sessionsPane: const _AcpTestPane(label: 'Sessions'),
+            mainPane: const _AcpTestPane(label: 'Transcript'),
+            inspectorPane: const _AcpTestPane(label: 'Inspector'),
+            inspectorVisibleInNarrowMode: true,
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Inspector'), findsOneWidget);
+      expect(find.text('Sessions'), findsNothing);
+    },
+  );
+
   testWidgets('workbench applies custom desktop pane dimensions', (
     tester,
   ) async {

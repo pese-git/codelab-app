@@ -12,6 +12,7 @@ class AcpWorkbenchLayout extends StatelessWidget {
     this.collapsedInspectorHeight = 220,
     this.gap = 12,
     this.padding = const EdgeInsets.all(16),
+    this.inspectorVisibleInNarrowMode = false,
     super.key,
   });
 
@@ -30,6 +31,11 @@ class AcpWorkbenchLayout extends StatelessWidget {
   final double collapsedInspectorHeight;
   final double gap;
   final EdgeInsetsGeometry padding;
+
+  /// Whether the narrow-layout body should keep the inspector pane on
+  /// stage instead of collapsing it (e.g. after the user explicitly asks
+  /// to see the debug log panel via the command palette's `/logs` action).
+  final bool inspectorVisibleInNarrowMode;
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +165,7 @@ class AcpWorkbenchLayout extends StatelessWidget {
           ),
         ),
         Offstage(
+          offstage: !inspectorVisibleInNarrowMode,
           child: _AcpWorkbenchSlot(
             slotKey: inspectorPaneKey,
             label: 'Inspector pane',

@@ -156,6 +156,186 @@ void main() {
     expect(cancelled, isTrue);
   });
 
+  testWidgets('slash at the start of the composer opens the inline palette', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpPromptComposer(
+          onSubmit: (_) {},
+          commandActions: AcpCommandAction.defaults,
+          onCommandSelected: (_) {},
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(EditableText), '/');
+    await tester.pump();
+
+    expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+    expect(find.text('/new'), findsOneWidget);
+  });
+
+  testWidgets('slash inside an existing word does not open the palette', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpPromptComposer(
+          onSubmit: (_) {},
+          commandActions: AcpCommandAction.defaults,
+          onCommandSelected: (_) {},
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(EditableText), 'path');
+    await tester.pump();
+    await tester.enterText(find.byType(EditableText), 'path/');
+    await tester.pump();
+
+    expect(find.byType(AcpCommandPaletteSurface), findsNothing);
+  });
+
+  testWidgets('continuing to type filters the inline command list', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpPromptComposer(
+          onSubmit: (_) {},
+          commandActions: AcpCommandAction.defaults,
+          onCommandSelected: (_) {},
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(EditableText), '/lo');
+    await tester.pump();
+
+    expect(find.text('/logs'), findsOneWidget);
+    expect(find.text('/new'), findsNothing);
+    expect(find.text('/reconnect'), findsNothing);
+  });
+
+  testWidgets(
+    'Enter selects the highlighted inline command instead of inserting a '
+    'newline',
+    (tester) async {
+      AcpCommandAction? selected;
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpPromptComposer(
+            onSubmit: (_) {},
+            commandActions: AcpCommandAction.defaults,
+            onCommandSelected: (action) => selected = action,
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(EditableText), '/ne');
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(selected?.id, 'new');
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        isEmpty,
+      );
+      expect(find.byType(AcpCommandPaletteSurface), findsNothing);
+    },
+  );
+
+  testWidgets('Enter outside the inline trigger is not hijacked', (
+    tester,
+  ) async {
+    AcpCommandAction? selected;
+    String? submitted;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpPromptComposer(
+          onSubmit: (prompt) => submitted = prompt,
+          commandActions: AcpCommandAction.defaults,
+          onCommandSelected: (action) => selected = action,
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(EditableText), 'hello');
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(selected, isNull);
+    expect(submitted, isNull);
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+      'hello',
+    );
+  });
+
+  testWidgets('selecting a command from the inline palette clears the '
+      'trigger fragment', (tester) async {
+    AcpCommandAction? selected;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpPromptComposer(
+          onSubmit: (_) {},
+          commandActions: AcpCommandAction.defaults,
+          onCommandSelected: (action) => selected = action,
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(EditableText), '/ne');
+    await tester.pump();
+
+    await tester.tap(find.text('/new'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(selected?.id, 'new');
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+      isEmpty,
+    );
+    expect(find.byType(AcpCommandPaletteSurface), findsNothing);
+  });
+
+  testWidgets('deleting the triggering slash closes the inline palette without '
+      'executing a command', (tester) async {
+    AcpCommandAction? selected;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpPromptComposer(
+          onSubmit: (_) {},
+          commandActions: AcpCommandAction.defaults,
+          onCommandSelected: (action) => selected = action,
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(EditableText), '/ne');
+    await tester.pump();
+    expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+
+    await tester.enterText(find.byType(EditableText), '/n');
+    await tester.pump();
+    expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+
+    await tester.enterText(find.byType(EditableText), '');
+    await tester.pump();
+
+    expect(find.byType(AcpCommandPaletteSurface), findsNothing);
+    expect(selected, isNull);
+  });
+
   testWidgets('renders compact tool call status details', (tester) async {
     await tester.pumpWidget(
       const FluentApp(

@@ -2,6 +2,7 @@ import 'package:acp_ui/acp_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../../application/shell_cubit.dart';
+import '../workbench_shell.dart' show selectPaletteCommand;
 import 'current_session_panel.dart';
 import 'transport_setup_panel.dart';
 
@@ -85,8 +86,11 @@ class WorkbenchMainPane extends StatelessWidget {
           enabled: state.isPromptEnabled,
           isSubmitting: state.isPromptSubmitting,
           canCancel: state.canCancel,
+          initialPrompt: state.composerDraft,
           onSubmit: cubit.submitPrompt,
           onCancel: cubit.cancelTurn,
+          commandActions: state.paletteActions,
+          onCommandSelected: (action) => selectPaletteCommand(cubit, action),
         ),
       ],
     );

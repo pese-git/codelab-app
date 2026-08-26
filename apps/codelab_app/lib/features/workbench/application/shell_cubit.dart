@@ -5,6 +5,7 @@ import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
+import 'package:fluent_ui/fluent_ui.dart' show FluentIcons;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/platform/working_directory_provider.dart';
@@ -48,6 +49,10 @@ final class CodeLabShellState {
     required this.canCancel,
     this.pendingApproval,
     this.isRespondingToApproval = false,
+    this.isCommandPaletteOpen = false,
+    this.isInspectorVisibleInNarrowLayout = false,
+    this.agentCommands = const [],
+    this.composerDraft = '',
   });
 
   factory CodeLabShellState.initial({required StdioAcpAgentProfile profile}) =>
@@ -118,6 +123,18 @@ final class CodeLabShellState {
   final bool canCancel;
   final CodeLabPendingApproval? pendingApproval;
   final bool isRespondingToApproval;
+  final bool isCommandPaletteOpen;
+  final bool isInspectorVisibleInNarrowLayout;
+
+  /// Commands the active agent declared via `SessionUpdate.availableCommandsUpdate`,
+  /// replaced wholesale on every new update and cleared on session switch/loss.
+  final List<AcpCommandAction> agentCommands;
+
+  /// Text pushed into the prompt composer as a result of selecting an
+  /// agent-declared command from the palette (`/{name} `). Consumed by
+  /// [AcpPromptComposer.initialPrompt], which only re-applies it when the
+  /// value actually changes, so it is safe to leave set between emits.
+  final String composerDraft;
 
   CodeLabShellState copyWith({
     AcpConnectionStatus? connectionStatus,
@@ -145,6 +162,10 @@ final class CodeLabShellState {
     bool? canCancel,
     Object? pendingApproval = _unsetPendingApproval,
     bool? isRespondingToApproval,
+    bool? isCommandPaletteOpen,
+    bool? isInspectorVisibleInNarrowLayout,
+    List<AcpCommandAction>? agentCommands,
+    String? composerDraft,
   }) {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
@@ -175,6 +196,12 @@ final class CodeLabShellState {
           : pendingApproval as CodeLabPendingApproval?,
       isRespondingToApproval:
           isRespondingToApproval ?? this.isRespondingToApproval,
+      isCommandPaletteOpen: isCommandPaletteOpen ?? this.isCommandPaletteOpen,
+      isInspectorVisibleInNarrowLayout:
+          isInspectorVisibleInNarrowLayout ??
+          this.isInspectorVisibleInNarrowLayout,
+      agentCommands: agentCommands ?? this.agentCommands,
+      composerDraft: composerDraft ?? this.composerDraft,
     );
   }
 
@@ -205,6 +232,14 @@ final class CodeLabShellState {
       connectionDetail: next.selectedConnectionDetail,
     );
   }
+
+  /// The full command palette list: the six client-native commands followed
+  /// by whatever the active agent has declared, in that order — the
+  /// client-native set is never removed or replaced by agent commands.
+  List<AcpCommandAction> get paletteActions => [
+    ...AcpCommandAction.defaults,
+    ...agentCommands,
+  ];
 
   String get selectedProfileLabel => switch (transportType) {
     CodeLabTransportType.stdio => stdioProfileName,
@@ -506,6 +541,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             currentSessionLabel: sessionItem.title,
             currentSessionDetail: sessionItem.subtitle ?? session.id.value,
             inspectorEntries: _inspectorEntriesForSession(session),
+            agentCommands: _agentCommandsFor(session),
           ),
         );
         _recordDiagnostic(
@@ -525,6 +561,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         activeSessionId: sessionId,
         currentSessionLabel: selected?.title ?? 'Session $sessionId',
         currentSessionDetail: selected?.subtitle ?? sessionId,
+        agentCommands: const [],
       ),
     );
   }
@@ -694,8 +731,50 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
-  void openCommandPalette() =>
-      _recordPendingAction('Command palette execution is wired after shell.');
+  void openCommandPalette() => emit(state.copyWith(isCommandPaletteOpen: true));
+
+  void closeCommandPalette() =>
+      emit(state.copyWith(isCommandPaletteOpen: false));
+
+  /// Dispatches a selected [AcpCommandAction] the same way regardless of
+  /// which trigger opened the palette (`Ctrl/Cmd+K` or the inline `/`
+  /// trigger in the composer) — see the "same handler" decision in
+  /// wire-command-palette/design.md.
+  ///
+  /// Unavailable client-native commands (`/plan`, `/permissions`,
+  /// `/compact`) leave the palette open and do nothing, so the user is
+  /// never told an action completed when it did not. Agent-declared
+  /// commands are never invoked as a protocol method — the caller is
+  /// responsible for inserting `/{name} ` into the composer before calling
+  /// this method; here they only close the palette.
+  void selectCommand(AcpCommandAction action) {
+    if (!action.isAvailable) {
+      return;
+    }
+
+    switch (action.id) {
+      case 'new':
+        unawaited(createSession());
+      case 'reconnect':
+        unawaited(reconnect());
+      case 'logs':
+        emit(state.copyWith(isInspectorVisibleInNarrowLayout: true));
+      default:
+        break;
+    }
+
+    closeCommandPalette();
+  }
+
+  /// Handles selection of an agent-declared [AcpCommandAction]. Unlike
+  /// [selectCommand], this never calls a use case: `AvailableCommand` has no
+  /// "invoke" verb in ACP, so selecting one inserts `/{name} ` into the
+  /// prompt composer (via [CodeLabShellState.composerDraft]) for the user to
+  /// complete and submit as an ordinary prompt.
+  void insertAgentCommand(AcpCommandAction action) {
+    emit(state.copyWith(composerDraft: '${action.slashCommand} '));
+    closeCommandPalette();
+  }
 
   void clearDiagnostics() {
     emit(state.copyWith(diagnostics: const []));
@@ -746,7 +825,48 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         currentSessionDetail: sessionItem.subtitle ?? session.id.value,
         inspectorEntries: _inspectorEntriesForSession(session),
         pendingApproval: _pendingApprovalFor(session),
+        agentCommands: _agentCommandsFor(session),
       ),
+    );
+  }
+
+  /// Derives the current agent-declared command list from every
+  /// `AvailableCommandsUpdate` seen across the session's turns, keeping only
+  /// the most recent one — later updates replace earlier ones wholesale,
+  /// the same "last write wins" pattern used for plan entries. Recomputed
+  /// from scratch on every `sessionChanges` event, so switching to a
+  /// session that has not (yet) declared any commands naturally yields an
+  /// empty list.
+  List<AcpCommandAction> _agentCommandsFor(AcpSession session) {
+    AvailableCommandsUpdate? latest;
+    for (final turn in session.turns) {
+      for (final update in turn.updates) {
+        if (update is AvailableCommandsUpdate) {
+          latest = update;
+        }
+      }
+    }
+
+    if (latest == null) {
+      return const [];
+    }
+
+    return latest.availableCommands
+        .map(_agentCommandAction)
+        .toList(growable: false);
+  }
+
+  AcpCommandAction _agentCommandAction(AvailableCommand command) {
+    final hint = command.input?.hint;
+    return AcpCommandAction(
+      id: 'agent-${command.name}',
+      label: command.name,
+      slashCommand: '/${command.name}',
+      description: hint == null || hint.isEmpty
+          ? command.description
+          : '${command.description} ($hint)',
+      icon: FluentIcons.robot,
+      source: AcpCommandSource.agent,
     );
   }
 

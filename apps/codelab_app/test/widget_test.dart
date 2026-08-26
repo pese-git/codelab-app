@@ -4,11 +4,14 @@ import 'package:codelab_app/app/app_scope.dart';
 import 'package:codelab_app/app/codelab_app_widget.dart';
 import 'package:codelab_app/core/platform/working_directory_provider.dart';
 import 'package:codelab_app/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_app/features/workbench/presentation/workbench_shell.dart'
+    show selectPaletteCommand;
 import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_testing/acp_testing.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -990,6 +993,518 @@ void main() {
     await shellCubit.close();
     await application.dispose();
   });
+
+  testWidgets('Ctrl+K opens the command palette and Esc closes it', (
+    tester,
+  ) async {
+    final binding = CodeLabTestBinding();
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    expect(shellCubit.state.isCommandPaletteOpen, isFalse);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(shellCubit.state.isCommandPaletteOpen, isTrue);
+    expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+
+    expect(shellCubit.state.isCommandPaletteOpen, isFalse);
+    expect(find.byType(AcpCommandPaletteSurface), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
+
+  testWidgets('selecting /new from the palette creates a session and closes '
+      'it', (tester) async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final binding = CodeLabTestBinding(
+      transport: initialTransport,
+      stdioTransportFactory: (_) => agentTransport,
+    );
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    await tester.runAsync(() => shellCubit.connect());
+    await tester.pump();
+    shellCubit.openCommandPalette();
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 50),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 5),
+    );
+
+    final createRequestFuture = agentTransport.sent.first;
+    await tester.tap(find.text('/new'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final createRequest =
+        await tester.runAsync(() => createRequestFuture) as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await tester.pump();
+
+    expect(shellCubit.state.activeSessionId, 'session-1');
+    expect(shellCubit.state.isCommandPaletteOpen, isFalse);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
+
+  testWidgets(
+    'selecting /reconnect from the palette reconnects and closes it',
+    (tester) async {
+      final initialTransport = FakeAcpTransport();
+      final connectedTransport = FakeAcpTransport();
+      final reconnectedTransport = FakeAcpTransport();
+      final replacements = [connectedTransport, reconnectedTransport];
+      final binding = CodeLabTestBinding(
+        transport: initialTransport,
+        stdioTransportFactory: (_) => replacements.removeAt(0),
+      );
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await tester.runAsync(() => shellCubit.connect());
+      await tester.pump();
+      shellCubit.openCommandPalette();
+      await tester.pump();
+      expect(shellCubit.state.isCommandPaletteOpen, isTrue);
+
+      // Select the same way the palette row's onPressed would (tap-driven
+      // UI wiring is already covered by the /new test above); reconnect()'s
+      // transport teardown/rebind chain needs the real event loop, which a
+      // tap handler running inside the fake test zone can't provide, so run
+      // it — and wait for it to actually finish — via `tester.runAsync`.
+      await tester.runAsync(() async {
+        selectPaletteCommand(
+          shellCubit,
+          AcpCommandAction.defaults.firstWhere((a) => a.id == 'reconnect'),
+        );
+        while (shellCubit.state.connectionStatus !=
+            AcpConnectionStatus.connected) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      await tester.pump();
+
+      expect(connectedTransport.state, AcpTransportState.closed);
+      expect(reconnectedTransport.state, AcpTransportState.connected);
+      expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+      expect(shellCubit.state.isCommandPaletteOpen, isFalse);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
+
+  testWidgets('selecting /logs reveals the debug log panel', (tester) async {
+    final binding = CodeLabTestBinding();
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    expect(shellCubit.state.isInspectorVisibleInNarrowLayout, isFalse);
+
+    shellCubit.openCommandPalette();
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 50),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 5),
+    );
+    await tester.tap(find.text('/logs'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // The narrow-layout Offstage toggle that this flag drives is covered
+    // directly on `AcpWorkbenchLayout` in acp_organisms_test.dart, at a
+    // width narrow enough to trigger it — the full CodeLabApp's command
+    // bar isn't adaptive at that width (a pre-existing, unrelated gap), so
+    // this test only checks the state/UI wiring this change owns.
+    expect(shellCubit.state.isInspectorVisibleInNarrowLayout, isTrue);
+    expect(shellCubit.state.isCommandPaletteOpen, isFalse);
+    expect(find.byType(AcpDebugLogPanel), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
+
+  testWidgets(
+    'selecting an unavailable command keeps the palette open without a '
+    'fake diagnostic',
+    (tester) async {
+      final binding = CodeLabTestBinding();
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      shellCubit.openCommandPalette();
+      await tester.pump();
+      final diagnosticsBefore = shellCubit.state.diagnostics.length;
+
+      await tester.tap(find.text('/plan'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(shellCubit.state.isCommandPaletteOpen, isTrue);
+      expect(shellCubit.state.diagnostics.length, diagnosticsBefore);
+      expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
+
+  testWidgets('typing / at the start of the composer opens the inline '
+      'palette with the same command set as Ctrl+K', (tester) async {
+    final binding = CodeLabTestBinding();
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+
+    await tester.enterText(find.byType(EditableText).last, '/ne');
+    await tester.pump();
+
+    expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+    expect(find.text('/new'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
+
+  testWidgets(
+    'agent-declared commands appear in a separate palette section and are '
+    'replaced by later updates',
+    (tester) async {
+      // A submitted prompt (needed below to attach the available-commands
+      // update to an active turn) grows the main pane beyond the default
+      // test surface height, so use a taller one.
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final binding = CodeLabTestBinding(
+        transport: initialTransport,
+        stdioTransportFactory: (_) => agentTransport,
+      );
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await tester.runAsync(() => shellCubit.connect());
+      await tester.pump();
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest =
+          await tester.runAsync(() => createRequestFuture) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: const {'sessionId': 'session-1'},
+        ),
+      );
+      await tester.runAsync(() => createFuture);
+
+      expect(shellCubit.state.agentCommands, isEmpty);
+
+      shellCubit.openCommandPalette();
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 50),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 5),
+      );
+      expect(find.text('From agent'), findsNothing);
+      for (final action in AcpCommandAction.defaults) {
+        expect(find.text(action.slashCommand), findsOneWidget);
+      }
+      shellCubit.closeCommandPalette();
+      await tester.pump();
+
+      // `availableCommandsUpdate` is only applied to the session's active
+      // prompt turn (see `SessionStateMachine._applyUpdate` in
+      // acp_client_core) — a bare session/update notification with no turn
+      // in flight is ignored, so a prompt must be in progress first.
+      final promptRequestFuture = agentTransport.sent.first;
+      final submitFuture = shellCubit.submitPrompt('hello');
+      final promptRequest =
+          await tester.runAsync(() => promptRequestFuture) as dynamic;
+
+      agentTransport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: SessionNotification(
+            sessionId: const SessionId('session-1'),
+            update: SessionUpdate.availableCommandsUpdate(
+              availableCommands: const [
+                AvailableCommand(name: 'deploy', description: 'Deploy the app'),
+              ],
+            ),
+          ).toJson(),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        shellCubit.state.agentCommands.map((action) => action.slashCommand),
+        ['/deploy'],
+      );
+
+      shellCubit.openCommandPalette();
+      // Not pumpAndSettle: the prompt is still in flight, so the composer's
+      // Send button is showing a perpetual busy spinner that never settles.
+      // Pump repeatedly instead to drain any one-shot transition frames.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      // '/new' is the first row, still visible without scrolling; 'From
+      // agent'/'/deploy' sit below the six client rows, so scroll the
+      // palette's list to bring them into the built/visible range.
+      expect(find.text('/new'), findsOneWidget);
+      final paletteScrollable = find.descendant(
+        of: find.byKey(AcpCommandPaletteSurface.listKey),
+        matching: find.byType(Scrollable),
+      );
+      await tester.scrollUntilVisible(
+        find.text('From agent'),
+        100,
+        scrollable: paletteScrollable,
+      );
+      expect(find.text('From agent'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('/deploy'),
+        100,
+        scrollable: paletteScrollable,
+      );
+      expect(find.text('/deploy'), findsOneWidget);
+      shellCubit.closeCommandPalette();
+      await tester.pump();
+
+      agentTransport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: SessionNotification(
+            sessionId: const SessionId('session-1'),
+            update: SessionUpdate.availableCommandsUpdate(
+              availableCommands: const [
+                AvailableCommand(
+                  name: 'rollback',
+                  description: 'Roll back the last deploy',
+                ),
+              ],
+            ),
+          ).toJson(),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        shellCubit.state.agentCommands.map((action) => action.slashCommand),
+        ['/rollback'],
+      );
+
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await tester.runAsync(() => submitFuture);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
+
+  testWidgets(
+    'selecting an agent-declared command inserts it into the composer '
+    'instead of executing it',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final binding = CodeLabTestBinding(
+        transport: initialTransport,
+        stdioTransportFactory: (_) => agentTransport,
+      );
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await tester.runAsync(() => shellCubit.connect());
+      await tester.pump();
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest =
+          await tester.runAsync(() => createRequestFuture) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: const {'sessionId': 'session-1'},
+        ),
+      );
+      await tester.runAsync(() => createFuture);
+
+      final promptRequestFuture = agentTransport.sent.first;
+      final submitFuture = shellCubit.submitPrompt('hello');
+      final promptRequest =
+          await tester.runAsync(() => promptRequestFuture) as dynamic;
+
+      agentTransport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: SessionNotification(
+            sessionId: const SessionId('session-1'),
+            update: SessionUpdate.availableCommandsUpdate(
+              availableCommands: const [
+                AvailableCommand(name: 'deploy', description: 'Deploy the app'),
+              ],
+            ),
+          ).toJson(),
+        ),
+      );
+      await tester.pump();
+
+      final sentBefore = agentTransport.sentMessages.length;
+
+      shellCubit.openCommandPalette();
+      // Not pumpAndSettle: the prompt is still in flight, so the composer's
+      // Send button is showing a perpetual busy spinner that never settles.
+      // Pump repeatedly instead to drain any one-shot transition frames.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      // `/deploy` sits below the six client-native rows in the scrollable
+      // list — likely outside the sliver's build range — so scroll toward
+      // it (rather than ensureVisible, which requires the element to
+      // already be built) before tapping it.
+      await tester.scrollUntilVisible(
+        find.text('/deploy'),
+        100,
+        scrollable: find.descendant(
+          of: find.byKey(AcpCommandPaletteSurface.listKey),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(find.text('/deploy'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(shellCubit.state.isCommandPaletteOpen, isFalse);
+      expect(shellCubit.state.composerDraft, '/deploy ');
+      expect(
+        tester
+            .widget<EditableText>(find.byType(EditableText).last)
+            .controller
+            .text,
+        '/deploy ',
+      );
+      expect(agentTransport.sentMessages.length, sentBefore);
+
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await tester.runAsync(() => submitFuture);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
+
+  testWidgets(
+    'switching the active session clears the previous agent command list',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final binding = CodeLabTestBinding(
+        transport: initialTransport,
+        stdioTransportFactory: (_) => agentTransport,
+      );
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await tester.runAsync(() => shellCubit.connect());
+      await tester.pump();
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest =
+          await tester.runAsync(() => createRequestFuture) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: const {'sessionId': 'session-1'},
+        ),
+      );
+      await tester.runAsync(() => createFuture);
+
+      final promptRequestFuture = agentTransport.sent.first;
+      final submitFuture = shellCubit.submitPrompt('hello');
+      final promptRequest =
+          await tester.runAsync(() => promptRequestFuture) as dynamic;
+
+      agentTransport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: SessionNotification(
+            sessionId: const SessionId('session-1'),
+            update: SessionUpdate.availableCommandsUpdate(
+              availableCommands: const [
+                AvailableCommand(name: 'deploy', description: 'Deploy the app'),
+              ],
+            ),
+          ).toJson(),
+        ),
+      );
+      await tester.pump();
+      expect(shellCubit.state.agentCommands, isNotEmpty);
+
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await tester.runAsync(() => submitFuture);
+
+      final createRequestFuture2 = agentTransport.sent.first;
+      final createFuture2 = shellCubit.createSession();
+      final createRequest2 =
+          await tester.runAsync(() => createRequestFuture2) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest2.id as JsonRpcId,
+          result: const {'sessionId': 'session-2'},
+        ),
+      );
+      await tester.runAsync(() => createFuture2);
+
+      expect(shellCubit.state.agentCommands, isEmpty);
+
+      shellCubit.selectSession('session-1');
+      await tester.pump();
+
+      expect(shellCubit.state.agentCommands, isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
 }
 
 final class _FailingStartTransport implements AcpTransport {
