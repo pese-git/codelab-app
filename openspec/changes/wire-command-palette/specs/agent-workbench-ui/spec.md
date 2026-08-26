@@ -60,3 +60,26 @@ CodeLab SHALL present `/plan`, `/permissions`, and `/compact` in the command pal
 #### Scenario: Enter highlights an unavailable command in the inline palette
 - **WHEN** the inline command palette is open, an unavailable command (`/plan`, `/permissions`, or `/compact`) is the currently highlighted entry, and the user presses `Enter`
 - **THEN** CodeLab treats this the same as any other selection of that command — the palette stays open, no action is emitted, and the composer text is unchanged
+
+### Requirement: Command palette presents agent-advertised commands
+CodeLab SHALL present commands the active agent has declared through `SessionUpdate.availableCommandsUpdate` in the command palette (both the `Ctrl/Cmd+K` surface and the inline `/` trigger), visually distinguished from the six client-native commands, and SHALL NOT invoke them as a protocol method — selecting one SHALL insert `/{name} ` (plus the declared input hint, if any, as placeholder text) into the prompt composer instead, leaving the user to complete and submit it as an ordinary prompt.
+
+#### Scenario: Agent declares available commands
+- **WHEN** the active session receives a `SessionUpdate.availableCommandsUpdate` with one or more entries
+- **THEN** CodeLab adds those commands to the palette in a section visually separate from the six client-native commands, without removing or replacing any client-native command
+
+#### Scenario: A later update replaces the agent command list
+- **WHEN** a new `SessionUpdate.availableCommandsUpdate` arrives for the active session
+- **THEN** CodeLab replaces the previously displayed agent-declared commands with the entries from the new update
+
+#### Scenario: No agent commands declared
+- **WHEN** the active session has not received any `availableCommandsUpdate`
+- **THEN** CodeLab shows only the six client-native commands in the palette
+
+#### Scenario: Selecting an agent-declared command
+- **WHEN** user selects a command that came from `availableCommandsUpdate`
+- **THEN** CodeLab inserts `/{name} ` (and the command's input hint as placeholder text, if the command declares one) into the prompt composer, closes the palette, and does not call any protocol method — the user submits it themselves via the normal prompt flow
+
+#### Scenario: Switching sessions clears agent-declared commands
+- **WHEN** the active session changes
+- **THEN** CodeLab clears any agent-declared commands from the previous session and shows only the six client-native commands until the new session's agent declares its own

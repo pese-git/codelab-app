@@ -43,8 +43,24 @@
 - [ ] 6.6 Widget-тест: выбор команды очищает `/word` из композера
 - [ ] 6.7 Widget-тест: удаление триггерного `/` закрывает inline-палитру без выполнения команды
 
-## 7. Проверка
+## 7. Агентские команды (`AvailableCommandsUpdate`)
 
-- [ ] 7.1 `fvm dart run melos run format`
-- [ ] 7.2 `fvm dart run melos run analyze`
-- [ ] 7.3 `fvm dart run melos run test`
+- [ ] 7.1 Добавить `source`/`isFromAgent` в `AcpCommandAction` (`acp_ui`) для визуального разделения секций "client-native"/"From agent"
+- [ ] 7.2 Добавить `agentCommands: List<AcpCommandAction>` (или аналог) в `CodeLabShellState`, маппить из `SessionUpdate.availableCommandsUpdate` вместо (или в дополнение к) текущей debug-записи в инспекторе
+- [ ] 7.3 Заменять `agentCommands` целиком на каждый новый `availableCommandsUpdate`; очищать при смене активной сессии/потере соединения
+- [ ] 7.4 Палитра (`Ctrl/Cmd+K` и inline) рендерит объединённый список: шесть client-native + `state.agentCommands`, разделённые визуально, единая фильтрация через `AcpCommandAction.filter()`
+- [ ] 7.5 Выбор агентской команды вставляет `/{name} ` (+ `input.hint` как placeholder, если есть) в композер вместо прямого вызова метода кубита; палитра закрывается, фокус остаётся в композере
+
+## 8. Тесты — агентские команды
+
+- [ ] 8.1 Widget-тест: `availableCommandsUpdate` с 1+ командами добавляет их в палитру отдельной секцией
+- [ ] 8.2 Widget-тест: повторный `availableCommandsUpdate` заменяет предыдущий список агентских команд целиком
+- [ ] 8.3 Widget-тест: без единого `availableCommandsUpdate` палитра показывает только шесть client-native команд
+- [ ] 8.4 Widget-тест: выбор агентской команды вставляет `/{name} ` в композер и закрывает палитру, не выполняя её как локальное действие
+- [ ] 8.5 Widget-тест: смена активной сессии очищает список агентских команд предыдущей сессии
+
+## 9. Проверка
+
+- [ ] 9.1 `fvm dart run melos run format`
+- [ ] 9.2 `fvm dart run melos run analyze`
+- [ ] 9.3 `fvm dart run melos run test`
