@@ -179,6 +179,12 @@ sealed class AcpSession with _$AcpSession {
     @Default([]) List<DiagnosticEntry> diagnostics,
     SessionModeState? modes,
     List<SessionConfigOption>? configOptions,
+
+    /// Commands the agent has declared via `SessionUpdate.availableCommandsUpdate`.
+    /// Session-scoped rather than turn-scoped — per ACP
+    /// (`docs/acp/protocol/14-Slash Commands.md`), agents may send this "at
+    /// any time during a session", including before any prompt turn exists.
+    @Default([]) List<AvailableCommand> availableCommands,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) = _AcpSession;

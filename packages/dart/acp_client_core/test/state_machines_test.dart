@@ -432,6 +432,99 @@ void main() {
       expect(result, isA<IgnoredStateTransition<AcpSession>>());
     });
 
+    test('applies available_commands_update even without an active turn', () {
+      final result = SessionStateMachine.applyUpdate(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        const SessionUpdate.availableCommandsUpdate(
+          availableCommands: [
+            AvailableCommand(name: 'deploy', description: 'Deploy the app'),
+          ],
+        ),
+      );
+
+      expect(result, isA<AppliedStateTransition<AcpSession>>());
+      expect(result.stateOrThrow.availableCommands.map((c) => c.name), [
+        'deploy',
+      ]);
+    });
+
+    test('replaces the available command list on a later update', () {
+      final session = const AcpSession(id: _sessionId, cwd: '/workspace');
+      final first = SessionStateMachine.applyUpdate(
+        session,
+        const SessionUpdate.availableCommandsUpdate(
+          availableCommands: [
+            AvailableCommand(name: 'deploy', description: 'Deploy the app'),
+          ],
+        ),
+      ).stateOrThrow;
+
+      final second = SessionStateMachine.applyUpdate(
+        first,
+        const SessionUpdate.availableCommandsUpdate(
+          availableCommands: [
+            AvailableCommand(
+              name: 'rollback',
+              description: 'Roll back the last deploy',
+            ),
+          ],
+        ),
+      ).stateOrThrow;
+
+      expect(second.availableCommands.map((c) => c.name), ['rollback']);
+    });
+
+    test('still records available_commands_update on the active turn while '
+        'also applying it to the session', () {
+      final running = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      ).stateOrThrow;
+
+      final result = SessionStateMachine.applyUpdate(
+        running,
+        const SessionUpdate.availableCommandsUpdate(
+          availableCommands: [
+            AvailableCommand(name: 'deploy', description: 'Deploy the app'),
+          ],
+        ),
+      ).stateOrThrow;
+
+      expect(result.availableCommands.map((c) => c.name), ['deploy']);
+      expect(result.turns.single.updates, hasLength(1));
+    });
+
+    test('applies available_commands_update that arrives just after the turn '
+        'that produced it has already completed', () {
+      // Mirrors a real agent (codelab) that appends
+      // `available_commands_update` to the same notification batch as
+      // the end of a prompt turn — by the time it reaches the client,
+      // `session/prompt`'s response may already have completed the
+      // turn, so this must not depend on `activeTurn` still being set.
+      final running = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      ).stateOrThrow;
+      final completed = SessionStateMachine.completeTurn(
+        running,
+        stopReason: StopReason.endTurn,
+      ).stateOrThrow;
+
+      final result = SessionStateMachine.applyUpdate(
+        completed,
+        const SessionUpdate.availableCommandsUpdate(
+          availableCommands: [
+            AvailableCommand(name: 'deploy', description: 'Deploy the app'),
+          ],
+        ),
+      );
+
+      expect(result, isA<AppliedStateTransition<AcpSession>>());
+      expect(result.stateOrThrow.availableCommands.map((c) => c.name), [
+        'deploy',
+      ]);
+    });
+
     test('keeps cancelled turn terminal when late update arrives', () {
       final running = SessionStateMachine.startTurn(
         const AcpSession(id: _sessionId, cwd: '/workspace'),

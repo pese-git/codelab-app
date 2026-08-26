@@ -816,6 +816,27 @@ class SessionStateMachine {
     AcpSession session,
     SessionUpdate update,
   ) {
+    // `available_commands_update` is session-scoped, not turn-scoped: per
+    // ACP (docs/acp/protocol/14-Slash Commands.md), an agent may send it
+    // "at any time during a session", including right after `session/new`
+    // and before any prompt turn exists. Record it on the session
+    // regardless of whether a turn is active, instead of silently dropping
+    // it just because no prompt is in flight yet. If a turn does happen to
+    // be active, still thread it through as a turn update too, so it stays
+    // visible in the per-turn protocol log the same way it already did.
+    if (update case AvailableCommandsUpdate(:final availableCommands)) {
+      final withCommands = session.copyWith(
+        availableCommands: availableCommands,
+      );
+      final activeTurn = withCommands.activeTurn;
+      if (activeTurn == null) {
+        return _applied(withCommands);
+      }
+
+      final turn = PromptTurnStateMachine.applyUpdate(activeTurn, update);
+      return _sessionResultFromTurnResult(withCommands, turn);
+    }
+
     final activeTurn = session.activeTurn;
     if (activeTurn == null) {
       return _ignored(session, 'session has no active prompt turn');

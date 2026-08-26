@@ -2258,7 +2258,11 @@ $ToolCallIdCopyWith<$Res> get id {
 /// @nodoc
 mixin _$AcpSession {
 
- SessionId get id; String get cwd; String? get title; SessionLifecycleStatus get status; List<PromptTurn> get turns; List<DiagnosticEntry> get diagnostics; SessionModeState? get modes; List<SessionConfigOption>? get configOptions; DateTime? get createdAt; DateTime? get updatedAt;
+ SessionId get id; String get cwd; String? get title; SessionLifecycleStatus get status; List<PromptTurn> get turns; List<DiagnosticEntry> get diagnostics; SessionModeState? get modes; List<SessionConfigOption>? get configOptions;/// Commands the agent has declared via `SessionUpdate.availableCommandsUpdate`.
+/// Session-scoped rather than turn-scoped — per ACP
+/// (`docs/acp/protocol/14-Slash Commands.md`), agents may send this "at
+/// any time during a session", including before any prompt turn exists.
+ List<AvailableCommand> get availableCommands; DateTime? get createdAt; DateTime? get updatedAt;
 /// Create a copy of AcpSession
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -2269,16 +2273,16 @@ $AcpSessionCopyWith<AcpSession> get copyWith => _$AcpSessionCopyWithImpl<AcpSess
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AcpSession&&(identical(other.id, id) || other.id == id)&&(identical(other.cwd, cwd) || other.cwd == cwd)&&(identical(other.title, title) || other.title == title)&&(identical(other.status, status) || other.status == status)&&const DeepCollectionEquality().equals(other.turns, turns)&&const DeepCollectionEquality().equals(other.diagnostics, diagnostics)&&(identical(other.modes, modes) || other.modes == modes)&&const DeepCollectionEquality().equals(other.configOptions, configOptions)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AcpSession&&(identical(other.id, id) || other.id == id)&&(identical(other.cwd, cwd) || other.cwd == cwd)&&(identical(other.title, title) || other.title == title)&&(identical(other.status, status) || other.status == status)&&const DeepCollectionEquality().equals(other.turns, turns)&&const DeepCollectionEquality().equals(other.diagnostics, diagnostics)&&(identical(other.modes, modes) || other.modes == modes)&&const DeepCollectionEquality().equals(other.configOptions, configOptions)&&const DeepCollectionEquality().equals(other.availableCommands, availableCommands)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,cwd,title,status,const DeepCollectionEquality().hash(turns),const DeepCollectionEquality().hash(diagnostics),modes,const DeepCollectionEquality().hash(configOptions),createdAt,updatedAt);
+int get hashCode => Object.hash(runtimeType,id,cwd,title,status,const DeepCollectionEquality().hash(turns),const DeepCollectionEquality().hash(diagnostics),modes,const DeepCollectionEquality().hash(configOptions),const DeepCollectionEquality().hash(availableCommands),createdAt,updatedAt);
 
 @override
 String toString() {
-  return 'AcpSession(id: $id, cwd: $cwd, title: $title, status: $status, turns: $turns, diagnostics: $diagnostics, modes: $modes, configOptions: $configOptions, createdAt: $createdAt, updatedAt: $updatedAt)';
+  return 'AcpSession(id: $id, cwd: $cwd, title: $title, status: $status, turns: $turns, diagnostics: $diagnostics, modes: $modes, configOptions: $configOptions, availableCommands: $availableCommands, createdAt: $createdAt, updatedAt: $updatedAt)';
 }
 
 
@@ -2289,7 +2293,7 @@ abstract mixin class $AcpSessionCopyWith<$Res>  {
   factory $AcpSessionCopyWith(AcpSession value, $Res Function(AcpSession) _then) = _$AcpSessionCopyWithImpl;
 @useResult
 $Res call({
- SessionId id, String cwd, String? title, SessionLifecycleStatus status, List<PromptTurn> turns, List<DiagnosticEntry> diagnostics, SessionModeState? modes, List<SessionConfigOption>? configOptions, DateTime? createdAt, DateTime? updatedAt
+ SessionId id, String cwd, String? title, SessionLifecycleStatus status, List<PromptTurn> turns, List<DiagnosticEntry> diagnostics, SessionModeState? modes, List<SessionConfigOption>? configOptions, List<AvailableCommand> availableCommands, DateTime? createdAt, DateTime? updatedAt
 });
 
 
@@ -2306,7 +2310,7 @@ class _$AcpSessionCopyWithImpl<$Res>
 
 /// Create a copy of AcpSession
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? cwd = null,Object? title = freezed,Object? status = null,Object? turns = null,Object? diagnostics = null,Object? modes = freezed,Object? configOptions = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? cwd = null,Object? title = freezed,Object? status = null,Object? turns = null,Object? diagnostics = null,Object? modes = freezed,Object? configOptions = freezed,Object? availableCommands = null,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as SessionId,cwd: null == cwd ? _self.cwd : cwd // ignore: cast_nullable_to_non_nullable
@@ -2316,7 +2320,8 @@ as SessionLifecycleStatus,turns: null == turns ? _self.turns : turns // ignore: 
 as List<PromptTurn>,diagnostics: null == diagnostics ? _self.diagnostics : diagnostics // ignore: cast_nullable_to_non_nullable
 as List<DiagnosticEntry>,modes: freezed == modes ? _self.modes : modes // ignore: cast_nullable_to_non_nullable
 as SessionModeState?,configOptions: freezed == configOptions ? _self.configOptions : configOptions // ignore: cast_nullable_to_non_nullable
-as List<SessionConfigOption>?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as List<SessionConfigOption>?,availableCommands: null == availableCommands ? _self.availableCommands : availableCommands // ignore: cast_nullable_to_non_nullable
+as List<AvailableCommand>,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
@@ -2421,10 +2426,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( SessionId id,  String cwd,  String? title,  SessionLifecycleStatus status,  List<PromptTurn> turns,  List<DiagnosticEntry> diagnostics,  SessionModeState? modes,  List<SessionConfigOption>? configOptions,  DateTime? createdAt,  DateTime? updatedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( SessionId id,  String cwd,  String? title,  SessionLifecycleStatus status,  List<PromptTurn> turns,  List<DiagnosticEntry> diagnostics,  SessionModeState? modes,  List<SessionConfigOption>? configOptions,  List<AvailableCommand> availableCommands,  DateTime? createdAt,  DateTime? updatedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _AcpSession() when $default != null:
-return $default(_that.id,_that.cwd,_that.title,_that.status,_that.turns,_that.diagnostics,_that.modes,_that.configOptions,_that.createdAt,_that.updatedAt);case _:
+return $default(_that.id,_that.cwd,_that.title,_that.status,_that.turns,_that.diagnostics,_that.modes,_that.configOptions,_that.availableCommands,_that.createdAt,_that.updatedAt);case _:
   return orElse();
 
 }
@@ -2442,10 +2447,10 @@ return $default(_that.id,_that.cwd,_that.title,_that.status,_that.turns,_that.di
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( SessionId id,  String cwd,  String? title,  SessionLifecycleStatus status,  List<PromptTurn> turns,  List<DiagnosticEntry> diagnostics,  SessionModeState? modes,  List<SessionConfigOption>? configOptions,  DateTime? createdAt,  DateTime? updatedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( SessionId id,  String cwd,  String? title,  SessionLifecycleStatus status,  List<PromptTurn> turns,  List<DiagnosticEntry> diagnostics,  SessionModeState? modes,  List<SessionConfigOption>? configOptions,  List<AvailableCommand> availableCommands,  DateTime? createdAt,  DateTime? updatedAt)  $default,) {final _that = this;
 switch (_that) {
 case _AcpSession():
-return $default(_that.id,_that.cwd,_that.title,_that.status,_that.turns,_that.diagnostics,_that.modes,_that.configOptions,_that.createdAt,_that.updatedAt);}
+return $default(_that.id,_that.cwd,_that.title,_that.status,_that.turns,_that.diagnostics,_that.modes,_that.configOptions,_that.availableCommands,_that.createdAt,_that.updatedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -2459,10 +2464,10 @@ return $default(_that.id,_that.cwd,_that.title,_that.status,_that.turns,_that.di
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( SessionId id,  String cwd,  String? title,  SessionLifecycleStatus status,  List<PromptTurn> turns,  List<DiagnosticEntry> diagnostics,  SessionModeState? modes,  List<SessionConfigOption>? configOptions,  DateTime? createdAt,  DateTime? updatedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( SessionId id,  String cwd,  String? title,  SessionLifecycleStatus status,  List<PromptTurn> turns,  List<DiagnosticEntry> diagnostics,  SessionModeState? modes,  List<SessionConfigOption>? configOptions,  List<AvailableCommand> availableCommands,  DateTime? createdAt,  DateTime? updatedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _AcpSession() when $default != null:
-return $default(_that.id,_that.cwd,_that.title,_that.status,_that.turns,_that.diagnostics,_that.modes,_that.configOptions,_that.createdAt,_that.updatedAt);case _:
+return $default(_that.id,_that.cwd,_that.title,_that.status,_that.turns,_that.diagnostics,_that.modes,_that.configOptions,_that.availableCommands,_that.createdAt,_that.updatedAt);case _:
   return null;
 
 }
@@ -2474,7 +2479,7 @@ return $default(_that.id,_that.cwd,_that.title,_that.status,_that.turns,_that.di
 
 
 class _AcpSession extends AcpSession {
-  const _AcpSession({required this.id, required this.cwd, this.title, this.status = SessionLifecycleStatus.idle, final  List<PromptTurn> turns = const [], final  List<DiagnosticEntry> diagnostics = const [], this.modes, final  List<SessionConfigOption>? configOptions, this.createdAt, this.updatedAt}): _turns = turns,_diagnostics = diagnostics,_configOptions = configOptions,super._();
+  const _AcpSession({required this.id, required this.cwd, this.title, this.status = SessionLifecycleStatus.idle, final  List<PromptTurn> turns = const [], final  List<DiagnosticEntry> diagnostics = const [], this.modes, final  List<SessionConfigOption>? configOptions, final  List<AvailableCommand> availableCommands = const [], this.createdAt, this.updatedAt}): _turns = turns,_diagnostics = diagnostics,_configOptions = configOptions,_availableCommands = availableCommands,super._();
   
 
 @override final  SessionId id;
@@ -2505,6 +2510,21 @@ class _AcpSession extends AcpSession {
   return EqualUnmodifiableListView(value);
 }
 
+/// Commands the agent has declared via `SessionUpdate.availableCommandsUpdate`.
+/// Session-scoped rather than turn-scoped — per ACP
+/// (`docs/acp/protocol/14-Slash Commands.md`), agents may send this "at
+/// any time during a session", including before any prompt turn exists.
+ final  List<AvailableCommand> _availableCommands;
+/// Commands the agent has declared via `SessionUpdate.availableCommandsUpdate`.
+/// Session-scoped rather than turn-scoped — per ACP
+/// (`docs/acp/protocol/14-Slash Commands.md`), agents may send this "at
+/// any time during a session", including before any prompt turn exists.
+@override@JsonKey() List<AvailableCommand> get availableCommands {
+  if (_availableCommands is EqualUnmodifiableListView) return _availableCommands;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_availableCommands);
+}
+
 @override final  DateTime? createdAt;
 @override final  DateTime? updatedAt;
 
@@ -2518,16 +2538,16 @@ _$AcpSessionCopyWith<_AcpSession> get copyWith => __$AcpSessionCopyWithImpl<_Acp
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AcpSession&&(identical(other.id, id) || other.id == id)&&(identical(other.cwd, cwd) || other.cwd == cwd)&&(identical(other.title, title) || other.title == title)&&(identical(other.status, status) || other.status == status)&&const DeepCollectionEquality().equals(other._turns, _turns)&&const DeepCollectionEquality().equals(other._diagnostics, _diagnostics)&&(identical(other.modes, modes) || other.modes == modes)&&const DeepCollectionEquality().equals(other._configOptions, _configOptions)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AcpSession&&(identical(other.id, id) || other.id == id)&&(identical(other.cwd, cwd) || other.cwd == cwd)&&(identical(other.title, title) || other.title == title)&&(identical(other.status, status) || other.status == status)&&const DeepCollectionEquality().equals(other._turns, _turns)&&const DeepCollectionEquality().equals(other._diagnostics, _diagnostics)&&(identical(other.modes, modes) || other.modes == modes)&&const DeepCollectionEquality().equals(other._configOptions, _configOptions)&&const DeepCollectionEquality().equals(other._availableCommands, _availableCommands)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,cwd,title,status,const DeepCollectionEquality().hash(_turns),const DeepCollectionEquality().hash(_diagnostics),modes,const DeepCollectionEquality().hash(_configOptions),createdAt,updatedAt);
+int get hashCode => Object.hash(runtimeType,id,cwd,title,status,const DeepCollectionEquality().hash(_turns),const DeepCollectionEquality().hash(_diagnostics),modes,const DeepCollectionEquality().hash(_configOptions),const DeepCollectionEquality().hash(_availableCommands),createdAt,updatedAt);
 
 @override
 String toString() {
-  return 'AcpSession(id: $id, cwd: $cwd, title: $title, status: $status, turns: $turns, diagnostics: $diagnostics, modes: $modes, configOptions: $configOptions, createdAt: $createdAt, updatedAt: $updatedAt)';
+  return 'AcpSession(id: $id, cwd: $cwd, title: $title, status: $status, turns: $turns, diagnostics: $diagnostics, modes: $modes, configOptions: $configOptions, availableCommands: $availableCommands, createdAt: $createdAt, updatedAt: $updatedAt)';
 }
 
 
@@ -2538,7 +2558,7 @@ abstract mixin class _$AcpSessionCopyWith<$Res> implements $AcpSessionCopyWith<$
   factory _$AcpSessionCopyWith(_AcpSession value, $Res Function(_AcpSession) _then) = __$AcpSessionCopyWithImpl;
 @override @useResult
 $Res call({
- SessionId id, String cwd, String? title, SessionLifecycleStatus status, List<PromptTurn> turns, List<DiagnosticEntry> diagnostics, SessionModeState? modes, List<SessionConfigOption>? configOptions, DateTime? createdAt, DateTime? updatedAt
+ SessionId id, String cwd, String? title, SessionLifecycleStatus status, List<PromptTurn> turns, List<DiagnosticEntry> diagnostics, SessionModeState? modes, List<SessionConfigOption>? configOptions, List<AvailableCommand> availableCommands, DateTime? createdAt, DateTime? updatedAt
 });
 
 
@@ -2555,7 +2575,7 @@ class __$AcpSessionCopyWithImpl<$Res>
 
 /// Create a copy of AcpSession
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? cwd = null,Object? title = freezed,Object? status = null,Object? turns = null,Object? diagnostics = null,Object? modes = freezed,Object? configOptions = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? cwd = null,Object? title = freezed,Object? status = null,Object? turns = null,Object? diagnostics = null,Object? modes = freezed,Object? configOptions = freezed,Object? availableCommands = null,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
   return _then(_AcpSession(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as SessionId,cwd: null == cwd ? _self.cwd : cwd // ignore: cast_nullable_to_non_nullable
@@ -2565,7 +2585,8 @@ as SessionLifecycleStatus,turns: null == turns ? _self._turns : turns // ignore:
 as List<PromptTurn>,diagnostics: null == diagnostics ? _self._diagnostics : diagnostics // ignore: cast_nullable_to_non_nullable
 as List<DiagnosticEntry>,modes: freezed == modes ? _self.modes : modes // ignore: cast_nullable_to_non_nullable
 as SessionModeState?,configOptions: freezed == configOptions ? _self._configOptions : configOptions // ignore: cast_nullable_to_non_nullable
-as List<SessionConfigOption>?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as List<SessionConfigOption>?,availableCommands: null == availableCommands ? _self._availableCommands : availableCommands // ignore: cast_nullable_to_non_nullable
+as List<AvailableCommand>,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));

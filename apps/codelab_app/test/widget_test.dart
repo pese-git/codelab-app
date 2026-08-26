@@ -1181,14 +1181,6 @@ void main() {
     'agent-declared commands appear in a separate palette section and are '
     'replaced by later updates',
     (tester) async {
-      // A submitted prompt (needed below to attach the available-commands
-      // update to an active turn) grows the main pane beyond the default
-      // test surface height, so use a taller one.
-      tester.view.physicalSize = const Size(1280, 900);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final binding = CodeLabTestBinding(
@@ -1227,15 +1219,10 @@ void main() {
       shellCubit.closeCommandPalette();
       await tester.pump();
 
-      // `availableCommandsUpdate` is only applied to the session's active
-      // prompt turn (see `SessionStateMachine._applyUpdate` in
-      // acp_client_core) — a bare session/update notification with no turn
-      // in flight is ignored, so a prompt must be in progress first.
-      final promptRequestFuture = agentTransport.sent.first;
-      final submitFuture = shellCubit.submitPrompt('hello');
-      final promptRequest =
-          await tester.runAsync(() => promptRequestFuture) as dynamic;
-
+      // No prompt is in flight here on purpose: ACP lets an agent send
+      // `available_commands_update` at any time, including right after
+      // `session/new` before the user has typed anything — this must not
+      // require an active turn to take effect.
       agentTransport.emitInbound(
         JsonRpcMessage.notification(
           method: sessionUpdateMethod,
@@ -1257,12 +1244,11 @@ void main() {
       );
 
       shellCubit.openCommandPalette();
-      // Not pumpAndSettle: the prompt is still in flight, so the composer's
-      // Send button is showing a perpetual busy spinner that never settles.
-      // Pump repeatedly instead to drain any one-shot transition frames.
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 50),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 5),
+      );
       // '/new' is the first row, still visible without scrolling; 'From
       // agent'/'/deploy' sit below the six client rows, so scroll the
       // palette's list to bring them into the built/visible range.
@@ -1309,14 +1295,6 @@ void main() {
         ['/rollback'],
       );
 
-      agentTransport.emitInbound(
-        JsonRpcMessage.response(
-          id: promptRequest.id as JsonRpcId,
-          result: const {'stopReason': 'end_turn'},
-        ),
-      );
-      await tester.runAsync(() => submitFuture);
-
       await tester.pumpWidget(const SizedBox.shrink());
       await closeCodeLabRootScope();
     },
@@ -1326,11 +1304,6 @@ void main() {
     'selecting an agent-declared command inserts it into the composer '
     'instead of executing it',
     (tester) async {
-      tester.view.physicalSize = const Size(1280, 900);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final binding = CodeLabTestBinding(
@@ -1354,11 +1327,6 @@ void main() {
       );
       await tester.runAsync(() => createFuture);
 
-      final promptRequestFuture = agentTransport.sent.first;
-      final submitFuture = shellCubit.submitPrompt('hello');
-      final promptRequest =
-          await tester.runAsync(() => promptRequestFuture) as dynamic;
-
       agentTransport.emitInbound(
         JsonRpcMessage.notification(
           method: sessionUpdateMethod,
@@ -1377,12 +1345,11 @@ void main() {
       final sentBefore = agentTransport.sentMessages.length;
 
       shellCubit.openCommandPalette();
-      // Not pumpAndSettle: the prompt is still in flight, so the composer's
-      // Send button is showing a perpetual busy spinner that never settles.
-      // Pump repeatedly instead to drain any one-shot transition frames.
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 50),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 5),
+      );
       // `/deploy` sits below the six client-native rows in the scrollable
       // list — likely outside the sliver's build range — so scroll toward
       // it (rather than ensureVisible, which requires the element to
@@ -1409,14 +1376,6 @@ void main() {
       );
       expect(agentTransport.sentMessages.length, sentBefore);
 
-      agentTransport.emitInbound(
-        JsonRpcMessage.response(
-          id: promptRequest.id as JsonRpcId,
-          result: const {'stopReason': 'end_turn'},
-        ),
-      );
-      await tester.runAsync(() => submitFuture);
-
       await tester.pumpWidget(const SizedBox.shrink());
       await closeCodeLabRootScope();
     },
@@ -1425,11 +1384,6 @@ void main() {
   testWidgets(
     'switching the active session clears the previous agent command list',
     (tester) async {
-      tester.view.physicalSize = const Size(1280, 900);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final binding = CodeLabTestBinding(
@@ -1453,11 +1407,6 @@ void main() {
       );
       await tester.runAsync(() => createFuture);
 
-      final promptRequestFuture = agentTransport.sent.first;
-      final submitFuture = shellCubit.submitPrompt('hello');
-      final promptRequest =
-          await tester.runAsync(() => promptRequestFuture) as dynamic;
-
       agentTransport.emitInbound(
         JsonRpcMessage.notification(
           method: sessionUpdateMethod,
@@ -1473,14 +1422,6 @@ void main() {
       );
       await tester.pump();
       expect(shellCubit.state.agentCommands, isNotEmpty);
-
-      agentTransport.emitInbound(
-        JsonRpcMessage.response(
-          id: promptRequest.id as JsonRpcId,
-          result: const {'stopReason': 'end_turn'},
-        ),
-      );
-      await tester.runAsync(() => submitFuture);
 
       final createRequestFuture2 = agentTransport.sent.first;
       final createFuture2 = shellCubit.createSession();

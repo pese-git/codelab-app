@@ -830,28 +830,17 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
-  /// Derives the current agent-declared command list from every
-  /// `AvailableCommandsUpdate` seen across the session's turns, keeping only
-  /// the most recent one — later updates replace earlier ones wholesale,
-  /// the same "last write wins" pattern used for plan entries. Recomputed
-  /// from scratch on every `sessionChanges` event, so switching to a
-  /// session that has not (yet) declared any commands naturally yields an
-  /// empty list.
+  /// Derives the current agent-declared command list from
+  /// [AcpSession.availableCommands], which the domain layer already keeps
+  /// as "last `available_commands_update` wins" — see
+  /// `SessionStateMachine._applyUpdate` in acp_client_core, which applies
+  /// this update to the session itself (not a turn), since ACP allows
+  /// agents to send it at any time, including before any prompt turn
+  /// exists. Recomputed from scratch on every `sessionChanges` event, so
+  /// switching to a session that has not (yet) declared any commands
+  /// naturally yields an empty list.
   List<AcpCommandAction> _agentCommandsFor(AcpSession session) {
-    AvailableCommandsUpdate? latest;
-    for (final turn in session.turns) {
-      for (final update in turn.updates) {
-        if (update is AvailableCommandsUpdate) {
-          latest = update;
-        }
-      }
-    }
-
-    if (latest == null) {
-      return const [];
-    }
-
-    return latest.availableCommands
+    return session.availableCommands
         .map(_agentCommandAction)
         .toList(growable: false);
   }
