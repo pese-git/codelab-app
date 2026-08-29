@@ -851,11 +851,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       id: 'agent-${command.name}',
       label: command.name,
       slashCommand: '/${command.name}',
-      description: hint == null || hint.isEmpty
-          ? command.description
-          : '${command.description} ($hint)',
+      description: command.description,
       icon: FluentIcons.robot,
       source: AcpCommandSource.agent,
+      hint: hint == null || hint.isEmpty ? null : hint,
     );
   }
 

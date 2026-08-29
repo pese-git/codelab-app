@@ -23,6 +23,12 @@ sealed class AcpCommandAction with _$AcpCommandAction {
     /// renders the command as disabled/"coming soon" instead of a silent
     /// no-op.
     @Default(true) bool isAvailable,
+
+    /// The agent-declared `AvailableCommandInput.hint`, if any. Shown as a
+    /// placeholder in the composer right after this command's `/{name} `
+    /// is inserted — never part of `description` or the submitted prompt
+    /// text itself.
+    String? hint,
   }) = _AcpCommandAction;
 
   static const List<AcpCommandAction> defaults = [

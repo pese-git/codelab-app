@@ -52,6 +52,10 @@ class AcpPromptComposer extends StatefulWidget {
 class _AcpPromptComposerState extends State<AcpPromptComposer> {
   late final TextEditingController _controller;
   late final FocusNode _textFocusNode;
+  final LayerLink _composerLayerLink = LayerLink();
+  final OverlayPortalController _paletteOverlayController =
+      OverlayPortalController();
+  bool _paletteEverShown = false;
   int? _triggerStart;
   int _selectedIndex = 0;
 
@@ -117,6 +121,7 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
                 minLines: 1,
                 maxLines: 4,
                 placeholder: widget.placeholder,
+                suffix: _buildCommandHintSuffix(),
                 onSubmitted: (_) => _submit(),
               ),
             ),
@@ -150,29 +155,58 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
           )
         : body;
 
-    if (!showInlinePalette) {
-      return shortcutBoundBody;
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: AcpCommandPaletteSurface(
-            key: AcpPromptComposer.inlineCommandPaletteKey,
-            actions: widget.commandActions,
-            showSearchField: false,
-            queryOverride: _activeQuery(),
-            selectedActionId: selectedIndex < 0
-                ? null
-                : filteredCommands[selectedIndex].id,
-            onActionSelected: _handlePaletteSelection,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return OverlayPortal(
+          controller: _paletteOverlayController,
+          overlayChildBuilder: (context) {
+            return CompositedTransformFollower(
+              link: _composerLayerLink,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.topLeft,
+              followerAnchor: Alignment.bottomLeft,
+              offset: const Offset(0, -8),
+              // The ambient `Overlay` hands its entries a *tight* constraint
+              // the size of the whole screen — plain `SizedBox`/
+              // `ConstrainedBox` can only narrow a constraint within the
+              // range the parent allows, they can't override a tight one,
+              // so on their own the palette would be forced to fill the
+              // entire screen instead of sizing to content. `Align` is the
+              // one widget here that both accepts that outer tight size
+              // (satisfying the Overlay) *and* loosens the constraint it
+              // hands to its own child, letting the child size naturally.
+              // `followerAnchor: bottomLeft` above places *this whole
+              // screen-sized box*'s bottom edge just above the composer, so
+              // aligning our actual (much smaller) content to `bottomLeft`
+              // within it is what visually lands the palette right above
+              // the composer.
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: SizedBox(
+                  width: constraints.maxWidth,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: AcpCommandPaletteSurface(
+                      key: AcpPromptComposer.inlineCommandPaletteKey,
+                      actions: widget.commandActions,
+                      showSearchField: false,
+                      queryOverride: _activeQuery(),
+                      selectedActionId: selectedIndex < 0
+                          ? null
+                          : filteredCommands[selectedIndex].id,
+                      onActionSelected: _handlePaletteSelection,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+          child: CompositedTransformTarget(
+            link: _composerLayerLink,
+            child: shortcutBoundBody,
           ),
-        ),
-        shortcutBoundBody,
-      ],
+        );
+      },
     );
   }
 
@@ -210,6 +244,23 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
       _triggerStart = detected;
     }
     setState(() {});
+    _syncPaletteOverlayVisibility();
+  }
+
+  /// Shows/hides the inline palette's `OverlayPortal` to match
+  /// `_triggerStart`. Must only run from an event handler (text/selection
+  /// change, key press) — `OverlayPortalController.show()`/`hide()` assert
+  /// if called during `build()`. `hide()` additionally asserts if `show()`
+  /// was never called first, since nothing would be registered with the
+  /// ambient `Overlay` to hide yet.
+  void _syncPaletteOverlayVisibility() {
+    final showInlinePalette = _inlineTriggerEnabled && _triggerStart != null;
+    if (showInlinePalette) {
+      _paletteOverlayController.show();
+      _paletteEverShown = true;
+    } else if (_paletteEverShown) {
+      _paletteOverlayController.hide();
+    }
   }
 
   /// Scans backward from the cursor for an active `/` trigger: a slash
@@ -249,6 +300,30 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
 
   bool _isWhitespace(String char) =>
       char == ' ' || char == '\n' || char == '\t';
+
+  /// Shows a command's `input.hint` as a muted suffix while the composer
+  /// text is exactly `/{name} ` for that command — i.e. right after it was
+  /// inserted and before the user has typed any argument. Purely derived
+  /// from the current text and `widget.commandActions`, so it needs no
+  /// extra state and disappears the moment the user types anything past
+  /// that exact prefix.
+  Widget? _buildCommandHintSuffix() {
+    final text = _controller.text;
+    for (final action in widget.commandActions) {
+      final hint = action.hint;
+      if (hint == null || hint.isEmpty) {
+        continue;
+      }
+      if (text == '${action.slashCommand} ') {
+        return Padding(
+          key: const ValueKey('composer-command-hint'),
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: AcpText(hint, role: AcpTextRole.caption),
+        );
+      }
+    }
+    return null;
+  }
 
   String _activeQuery() {
     final start = _triggerStart;
@@ -318,6 +393,7 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
     setState(() {
       _triggerStart = null;
     });
+    _syncPaletteOverlayVisibility();
   }
 
   void _submit() {

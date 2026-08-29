@@ -249,6 +249,43 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Enter on a highlighted unavailable command in the inline palette does '
+    'nothing',
+    (tester) async {
+      AcpCommandAction? selected;
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpPromptComposer(
+            onSubmit: (_) {},
+            commandActions: AcpCommandAction.defaults,
+            onCommandSelected: (action) => selected = action,
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(EditableText), '/pl');
+      await tester.pump();
+
+      // `/plan` is the only match for "pl" and it's unavailable.
+      expect(
+        AcpCommandAction.filter(AcpCommandAction.defaults, '/pl').single.id,
+        'plan',
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(selected, isNull);
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        '/pl',
+      );
+      expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+    },
+  );
+
   testWidgets('Enter outside the inline trigger is not hijacked', (
     tester,
   ) async {
@@ -285,10 +322,21 @@ void main() {
 
     await tester.pumpWidget(
       FluentApp(
-        home: AcpPromptComposer(
-          onSubmit: (_) {},
-          commandActions: AcpCommandAction.defaults,
-          onCommandSelected: (action) => selected = action,
+        // The inline palette floats above the composer via an
+        // `OverlayPortal`, so — like the real main pane, where the
+        // composer sits at the bottom of the screen with content above
+        // it — this needs room above the composer for the tap target to
+        // land on-screen.
+        home: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            AcpPromptComposer(
+              onSubmit: (_) {},
+              commandActions: AcpCommandAction.defaults,
+              onCommandSelected: (action) => selected = action,
+            ),
+          ],
         ),
       ),
     );
@@ -335,6 +383,44 @@ void main() {
     expect(find.byType(AcpCommandPaletteSurface), findsNothing);
     expect(selected, isNull);
   });
+
+  testWidgets(
+    "shows a selected agent command's input hint as a suffix until the "
+    'user types past it',
+    (tester) async {
+      const deploy = AcpCommandAction(
+        id: 'agent-deploy',
+        label: 'deploy',
+        slashCommand: '/deploy',
+        description: 'Deploy the app',
+        icon: FluentIcons.robot,
+        source: AcpCommandSource.agent,
+        hint: 'target environment',
+      );
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpPromptComposer(
+            onSubmit: (_) {},
+            commandActions: [deploy],
+            onCommandSelected: (_) {},
+          ),
+        ),
+      );
+
+      expect(find.text('target environment'), findsNothing);
+
+      await tester.enterText(find.byType(EditableText), '/deploy ');
+      await tester.pump();
+
+      expect(find.text('target environment'), findsOneWidget);
+
+      await tester.enterText(find.byType(EditableText), '/deploy prod');
+      await tester.pump();
+
+      expect(find.text('target environment'), findsNothing);
+    },
+  );
 
   testWidgets('renders compact tool call status details', (tester) async {
     await tester.pumpWidget(
