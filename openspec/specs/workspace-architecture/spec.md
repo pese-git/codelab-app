@@ -1,60 +1,60 @@
 ## Purpose
 
-The repository-wide architectural shape of CodeLab: the monorepo's package boundaries, the Clean Architecture layering within them, the SOLID/KISS/DRY discipline that keeps that layering meaningful, the CherryPick dependency-injection setup, and the standard modeling libraries (`fpdart`, `freezed`) used to keep state and results typed.
+Архитектурная форма CodeLab на уровне всего репозитория: границы пакетов monorepo, слоистая Clean Architecture внутри них, дисциплина SOLID/KISS/DRY, удерживающая эти границы осмысленными, настройка dependency injection через CherryPick и стандартные библиотеки моделирования (`fpdart`, `freezed`), которыми держится типизация состояния и результатов.
 
 ## Requirements
 
-### Requirement: Monorepo package boundaries
-CodeLab SHALL use a Dart/Flutter/FVM/Melos monorepo with separated packages for `acp_protocol`, `acp_transports`, `acp_client_core`, `acp_testing`, `acp_ui`, and `codelab_app`.
+### Requirement: Границы пакетов monorepo
+CodeLab SHALL использовать Dart/Flutter/FVM/Melos monorepo с разделёнными пакетами `acp_protocol`, `acp_transports`, `acp_client_core`, `acp_testing`, `acp_ui` и `codelab_app`.
 
-#### Scenario: Workspace packages are present
-- **WHEN** implementation bootstraps the workspace
-- **THEN** the repository contains the required packages and each package has its own `pubspec.yaml`
+#### Scenario: Пакеты workspace присутствуют
+- **WHEN** реализация разворачивает workspace
+- **THEN** репозиторий содержит все требуемые пакеты, и у каждого есть собственный `pubspec.yaml`
 
-#### Scenario: Pure Dart packages stay Flutter-free
-- **WHEN** static analysis runs for `packages/dart/*`
-- **THEN** no pure Dart package imports Flutter, `fluent_ui`, Bloc, or app UI code
+#### Scenario: Чистые Dart-пакеты остаются свободными от Flutter
+- **WHEN** запускается статический анализ для `packages/dart/*`
+- **THEN** ни один чистый Dart-пакет не импортирует Flutter, `fluent_ui`, Bloc или код UI приложения
 
-### Requirement: Clean Architecture boundaries
-CodeLab SHALL follow Clean Architecture with hexagonal boundaries where `Domain` and `Application` do not depend on `Presentation` or concrete `Infrastructure`.
+### Requirement: Границы Clean Architecture
+CodeLab SHALL следовать Clean Architecture с гексагональными границами, где `Domain` и `Application` не зависят от `Presentation` или конкретной `Infrastructure`.
 
-#### Scenario: Domain depends only on abstractions
-- **WHEN** a use case needs transport, logging, approval, or persistence behavior
-- **THEN** it depends on a port/interface rather than a concrete adapter
+#### Scenario: Domain зависит только от абстракций
+- **WHEN** use case нуждается в поведении transport, логирования, approval или persistence
+- **THEN** он зависит от порта/интерфейса, а не от конкретного адаптера
 
-#### Scenario: Infrastructure is wired at composition root
-- **WHEN** the app starts
-- **THEN** concrete adapters are connected in `apps/codelab_app` composition root
+#### Scenario: Infrastructure подключается в composition root
+- **WHEN** приложение запускается
+- **THEN** конкретные адаптеры подключаются в composition root `apps/codelab_app`
 
-### Requirement: SOLID, KISS, and DRY constraints
-CodeLab SHALL enforce SOLID, KISS, and DRY as implementation constraints without creating premature abstractions or god services.
+### Requirement: Ограничения SOLID, KISS и DRY
+CodeLab SHALL соблюдать SOLID, KISS и DRY как ограничения реализации, не создавая преждевременных абстракций или god-сервисов.
 
-#### Scenario: Service responsibility remains narrow
-- **WHEN** a service is added
-- **THEN** it has one clear responsibility and does not combine protocol, transport, state, approvals, and UI side effects
+#### Scenario: Ответственность сервиса остаётся узкой
+- **WHEN** добавляется сервис
+- **THEN** у него одна чёткая ответственность, и он не совмещает протокол, transport, состояние, approvals и побочные эффекты UI
 
-#### Scenario: Shared logic is centralized
-- **WHEN** ACP codecs, state transitions, or reusable UI primitives are implemented
-- **THEN** they are centralized in `acp_protocol`, `acp_client_core`, or `acp_ui/atomics` respectively
+#### Scenario: Общая логика централизована
+- **WHEN** реализуются кодеки ACP, переходы состояний или переиспользуемые UI-примитивы
+- **THEN** они централизованы соответственно в `acp_protocol`, `acp_client_core` или `acp_ui/atomics`
 
-### Requirement: CherryPick dependency injection
-CodeLab SHALL use CherryPick v4.x.x as the DI framework, configured at the app composition root.
+### Requirement: CherryPick как dependency injection
+CodeLab SHALL использовать CherryPick v4.x.x как DI-framework, настроенный в composition root приложения.
 
-#### Scenario: Root scope lifecycle
-- **WHEN** the Flutter app boots and shuts down
-- **THEN** CherryPick root scope is created during bootstrap and closed during shutdown
+#### Scenario: Жизненный цикл root scope
+- **WHEN** Flutter-приложение запускается и завершает работу
+- **THEN** root scope CherryPick создаётся при bootstrap и закрывается при shutdown
 
-#### Scenario: Domain avoids service locator access
-- **WHEN** a domain or application class needs dependencies
-- **THEN** it receives them through constructors or factories, not arbitrary service locator lookup
+#### Scenario: Domain избегает обращения к service locator
+- **WHEN** классу domain или application нужны зависимости
+- **THEN** он получает их через конструкторы или фабрики, а не через произвольный доступ к service locator
 
-### Requirement: Standard modeling libraries
-CodeLab SHALL use `fpdart` for typed recoverable results/options and `freezed` for immutable state, DTOs, and union models where they improve type safety.
+### Requirement: Стандартные библиотеки моделирования
+CodeLab SHALL использовать `fpdart` для типизированных восстановимых результатов/опций и `freezed` для immutable-состояния, DTO и union-моделей там, где это повышает типобезопасность.
 
-#### Scenario: Recoverable failure is modeled
-- **WHEN** a use case can fail without crashing the app
-- **THEN** it returns a typed result such as `Either` rather than throwing unstructured exceptions
+#### Scenario: Восстановимая ошибка моделируется типом
+- **WHEN** use case может завершиться неудачей без падения приложения
+- **THEN** он возвращает типизированный результат вроде `Either`, а не бросает неструктурированные исключения
 
-#### Scenario: Union state is modeled
-- **WHEN** session, prompt turn, or approval state has multiple variants
-- **THEN** it is represented with immutable typed models suitable for exhaustive handling
+#### Scenario: Union-состояние моделируется типом
+- **WHEN** состояние сессии, prompt turn или approval имеет несколько вариантов
+- **THEN** оно представлено immutable типизированными моделями, пригодными для исчерпывающей обработки

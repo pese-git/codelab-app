@@ -1,67 +1,67 @@
 ## Purpose
 
-The testing and workspace-quality bar CodeLab holds itself to: the Melos scripts every change is checked against, and the layered test coverage (protocol, core state, stdio integration, Flutter UI) that backs the Definition of Done for implementation tasks.
+Планка тестирования и качества workspace, которой CodeLab придерживается сам: Melos-скрипты, по которым проверяется каждое изменение, и многоуровневое тестовое покрытие (протокол, core state, stdio-интеграция, Flutter UI), на котором держится Definition of Done для задач реализации.
 
 ## Requirements
 
-### Requirement: Workspace checks
-CodeLab SHALL provide Melos scripts for format, analyze, test, protocol conformance, and full check.
+### Requirement: Проверки workspace
+CodeLab SHALL предоставлять Melos-скрипты для format, analyze, test, protocol conformance и полной проверки.
 
-#### Scenario: Full check runs
-- **WHEN** `fvm dart run melos run check` is executed in a bootstrapped workspace
-- **THEN** formatting, analysis, and tests pass or report actionable failures
+#### Scenario: Запускается полная проверка
+- **WHEN** в развёрнутом workspace выполняется `fvm dart run melos run check`
+- **THEN** форматирование, анализ и тесты проходят либо сообщают конкретные, действенные ошибки
 
-#### Scenario: Protocol changed
-- **WHEN** ACP protocol models, codecs, or flows change
-- **THEN** `fvm dart run melos run protocol-conformance` is run
+#### Scenario: Протокол изменился
+- **WHEN** меняются модели, кодеки или потоки протокола ACP
+- **THEN** запускается `fvm dart run melos run protocol-conformance`
 
-### Requirement: Protocol unit tests
-CodeLab SHALL test protocol encode/decode, unknown field handling, invalid message validation, and protocol error mapping.
+### Requirement: Модульные тесты протокола
+CodeLab SHALL тестировать encode/decode протокола, обработку неизвестных полей, валидацию невалидных сообщений и отображение протокольных ошибок.
 
-#### Scenario: Unknown fields are decoded
-- **WHEN** a valid ACP message includes `_meta` or future-compatible fields
-- **THEN** round-trip encode/decode preserves supported extension data
+#### Scenario: Декодируются неизвестные поля
+- **WHEN** валидное сообщение ACP включает `_meta` или совместимые с будущим поля
+- **THEN** round-trip encode/decode сохраняет поддерживаемые данные расширения
 
-#### Scenario: Invalid message is decoded
-- **WHEN** invalid ACP data is received
-- **THEN** tests verify a typed protocol error instead of an app crash
+#### Scenario: Декодируется невалидное сообщение
+- **WHEN** получены невалидные данные ACP
+- **THEN** тесты подтверждают типизированную протокольную ошибку вместо падения приложения
 
-### Requirement: Core state tests
-CodeLab SHALL test session state transitions, duplicate streaming event handling, approval policy, and cancellation paths.
+### Requirement: Тесты core state
+CodeLab SHALL тестировать переходы состояния сессии, обработку дублирующихся событий потока, политику approval и пути отмены.
 
-#### Scenario: Duplicate stream event is received
-- **WHEN** the same update is emitted twice by fake transport
-- **THEN** visible state contains one logical message/tool/approval record
+#### Scenario: Получено дублирующееся событие потока
+- **WHEN** fake transport эмитирует одно и то же обновление дважды
+- **THEN** видимое состояние содержит одну логическую запись сообщения/tool/approval
 
-#### Scenario: Cancellation has pending approvals
-- **WHEN** cancellation occurs with pending permission requests
-- **THEN** tests verify each request receives cancelled outcome
+#### Scenario: Отмена происходит при ожидающих approval
+- **WHEN** отмена происходит при наличии ожидающих запросов разрешения
+- **THEN** тесты подтверждают, что каждый запрос получает outcome cancelled
 
-### Requirement: Stdio integration tests
-CodeLab SHALL test stdio integration with `codelab-agent` or a compatible test double using the same launch/profile semantics.
+### Requirement: Интеграционные тесты stdio
+CodeLab SHALL тестировать stdio-интеграцию с `codelab-agent` либо совместимым тестовым двойником, использующим ту же семантику запуска/профиля.
 
-#### Scenario: Reference agent initializes
-- **WHEN** stdio integration test launches configured command
-- **THEN** CodeLab completes ACP `initialize`
+#### Scenario: Референсный агент инициализируется
+- **WHEN** тест stdio-интеграции запускает настроенную команду
+- **THEN** CodeLab завершает `initialize` ACP
 
-#### Scenario: Prompt turn streams
-- **WHEN** integration test sends `session/prompt`
-- **THEN** CodeLab receives streamed `session/update` and final prompt response
+#### Scenario: Prompt turn стримит
+- **WHEN** интеграционный тест отправляет `session/prompt`
+- **THEN** CodeLab получает потоковые `session/update` и финальный ответ на prompt
 
-### Requirement: Flutter UI tests
-CodeLab SHALL test connection states, prompt composer behavior, streaming transcript rendering, approvals, cancellation visibility, error states, and workbench layout.
+### Requirement: Тесты Flutter UI
+CodeLab SHALL тестировать состояния соединения, поведение prompt composer, рендеринг потокового transcript, approvals, видимость отмены, состояния ошибок и layout workbench.
 
-#### Scenario: Approval UI renders
-- **WHEN** an approval state is provided to UI
-- **THEN** inline approval and inspector details are visible with approve/reject controls
+#### Scenario: Рендерится UI approval
+- **WHEN** состояние approval передано в UI
+- **THEN** inline approval и детали инспектора видны с элементами approve/reject
 
-#### Scenario: Error state renders next action
-- **WHEN** UI receives disconnected or failed state
-- **THEN** it shows a user-readable summary and concrete recovery action
+#### Scenario: Рендерится следующее действие для состояния ошибки
+- **WHEN** UI получает состояние disconnected или failed
+- **THEN** он показывает понятную пользователю сводку и конкретное действие для восстановления
 
-### Requirement: Definition of Done enforcement
-CodeLab SHALL treat tests, architecture boundaries, safety policy, and UI/UX requirements as acceptance criteria for implementation tasks.
+### Requirement: Соблюдение Definition of Done
+CodeLab SHALL рассматривать тесты, архитектурные границы, политику безопасности и требования UI/UX как критерии приёмки для задач реализации.
 
-#### Scenario: Implementation task completes
-- **WHEN** a task is marked done
-- **THEN** relevant tests pass and the task satisfies the Definition of Done in the spec
+#### Scenario: Задача реализации завершена
+- **WHEN** задача помечена выполненной
+- **THEN** релевантные тесты проходят, и задача удовлетворяет Definition of Done из спеки

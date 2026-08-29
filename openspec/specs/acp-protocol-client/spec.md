@@ -1,71 +1,71 @@
 ## Purpose
 
-CodeLab's implementation of the Agent Client Protocol (ACP) itself — JSON-RPC 2.0 message handling, the `initialize` handshake, session setup, the prompt turn lifecycle, and idempotent handling of the resulting event stream. This capability is the wire-protocol boundary between CodeLab and any ACP-compliant agent; `docs/acp/protocol/` is its normative source.
+Реализация CodeLab самого Agent Client Protocol (ACP) — обработка сообщений JSON-RPC 2.0, handshake `initialize`, настройка сессии и жизненный цикл prompt turn, а также идемпотентная обработка получаемого потока событий. Эта capability — граница wire-протокола между CodeLab и любым ACP-совместимым агентом; её нормативный источник — `docs/acp/protocol/`.
 
 ## Requirements
 
-### Requirement: Official ACP source of truth
-CodeLab SHALL implement ACP behavior according to `docs/acp/protocol/` and `docs/acp/protocol/17-Schema.md`.
+### Requirement: Официальный источник истины ACP
+CodeLab SHALL реализовывать поведение ACP в соответствии с `docs/acp/protocol/` и `docs/acp/protocol/17-Schema.md`.
 
-#### Scenario: Protocol contract changes
-- **WHEN** ACP message models or methods are implemented
-- **THEN** they match the official protocol docs and schema files
+#### Scenario: Изменение протокольного контракта
+- **WHEN** реализуются модели или методы сообщений ACP
+- **THEN** они соответствуют официальной документации протокола и файлам схемы
 
-#### Scenario: Custom extension is needed
-- **WHEN** CodeLab adds custom protocol data or methods
-- **THEN** custom data uses `_meta` and custom method names start with `_`
+#### Scenario: Требуется собственное расширение
+- **WHEN** CodeLab добавляет собственные протокольные данные или методы
+- **THEN** собственные данные используют `_meta`, а имена собственных методов начинаются с `_`
 
-### Requirement: JSON-RPC 2.0 message handling
-CodeLab SHALL encode, decode, and validate ACP messages as JSON-RPC 2.0 requests, responses, and notifications.
+### Requirement: Обработка сообщений JSON-RPC 2.0
+CodeLab SHALL кодировать, декодировать и валидировать сообщения ACP как запросы, ответы и уведомления JSON-RPC 2.0.
 
-#### Scenario: Valid inbound message
-- **WHEN** a valid ACP JSON-RPC message is received
-- **THEN** `acp_protocol` decodes it into a typed model
+#### Scenario: Валидное входящее сообщение
+- **WHEN** получено валидное JSON-RPC сообщение ACP
+- **THEN** `acp_protocol` декодирует его в типизированную модель
 
-#### Scenario: Invalid inbound message
-- **WHEN** invalid JSON or invalid ACP shape is received
-- **THEN** CodeLab emits a typed protocol error and does not crash
+#### Scenario: Невалидное входящее сообщение
+- **WHEN** получен невалидный JSON или невалидная форма ACP
+- **THEN** CodeLab выдаёт типизированную протокольную ошибку и не падает
 
-### Requirement: Initialization and capabilities
-CodeLab SHALL perform `initialize` before session setup and SHALL honor negotiated protocol version and capabilities.
+### Requirement: Инициализация и capabilities
+CodeLab SHALL выполнять `initialize` перед настройкой сессии и SHALL учитывать согласованную версию протокола и capabilities.
 
-#### Scenario: Compatible protocol version
-- **WHEN** agent responds to `initialize` with a supported `protocolVersion`
-- **THEN** CodeLab stores agent info, capabilities, and enters ready-for-session state
+#### Scenario: Совместимая версия протокола
+- **WHEN** агент отвечает на `initialize` поддерживаемой `protocolVersion`
+- **THEN** CodeLab сохраняет информацию об агенте, capabilities и переходит в состояние готовности к созданию сессии
 
-#### Scenario: Unsupported protocol version
-- **WHEN** agent responds with an unsupported `protocolVersion`
-- **THEN** CodeLab closes the connection and shows a user-readable compatibility error
+#### Scenario: Неподдерживаемая версия протокола
+- **WHEN** агент отвечает неподдерживаемой `protocolVersion`
+- **THEN** CodeLab закрывает соединение и показывает пользователю понятную ошибку несовместимости
 
-### Requirement: Session setup
-CodeLab SHALL support `session/new` and SHALL call `session/load` only when `agentCapabilities.loadSession` is available.
+### Requirement: Настройка сессии
+CodeLab SHALL поддерживать `session/new` и SHALL вызывать `session/load` только когда доступен `agentCapabilities.loadSession`.
 
-#### Scenario: New session is created
-- **WHEN** user creates a session
-- **THEN** CodeLab sends `session/new` with absolute `cwd` and stores returned `sessionId`
+#### Scenario: Создаётся новая сессия
+- **WHEN** пользователь создаёт сессию
+- **THEN** CodeLab отправляет `session/new` с абсолютным `cwd` и сохраняет полученный `sessionId`
 
-#### Scenario: Load session is unsupported
-- **WHEN** agent does not advertise `loadSession`
-- **THEN** CodeLab does not offer or call `session/load`
+#### Scenario: Load session не поддерживается
+- **WHEN** агент не заявляет `loadSession`
+- **THEN** CodeLab не предлагает и не вызывает `session/load`
 
-### Requirement: Prompt turn lifecycle
-CodeLab SHALL support `session/prompt`, streamed `session/update`, `session/request_permission`, `session/cancel`, and final `session/prompt` response with `stopReason`.
+### Requirement: Жизненный цикл prompt turn
+CodeLab SHALL поддерживать `session/prompt`, потоковые `session/update`, `session/request_permission`, `session/cancel` и финальный ответ `session/prompt` со `stopReason`.
 
-#### Scenario: Prompt streams updates
-- **WHEN** user sends a prompt
-- **THEN** CodeLab sends `session/prompt` and renders incoming `session/update` notifications as typed timeline events
+#### Scenario: Prompt стримит обновления
+- **WHEN** пользователь отправляет prompt
+- **THEN** CodeLab отправляет `session/prompt` и рендерит входящие уведомления `session/update` как типизированные события таймлайна
 
-#### Scenario: Prompt completes
-- **WHEN** agent responds to `session/prompt` with `stopReason`
-- **THEN** CodeLab marks the active prompt turn as completed, failed, refused, maxed, or cancelled according to the stop reason
+#### Scenario: Prompt завершается
+- **WHEN** агент отвечает на `session/prompt` со `stopReason`
+- **THEN** CodeLab помечает активный prompt turn как completed, failed, refused, maxed или cancelled в соответствии со stop reason
 
-### Requirement: Idempotent state transitions
-CodeLab SHALL handle duplicate, late, or interleaved stream events without corrupting visible session state.
+### Requirement: Идемпотентные переходы состояния
+CodeLab SHALL обрабатывать дублирующиеся, запоздавшие или чередующиеся события потока, не повреждая видимое состояние сессии.
 
-#### Scenario: Duplicate update arrives
-- **WHEN** the same session update is delivered more than once
-- **THEN** CodeLab does not duplicate visible messages, approvals, or tool call records
+#### Scenario: Приходит дублирующееся обновление
+- **WHEN** одно и то же обновление сессии доставлено более одного раза
+- **THEN** CodeLab не дублирует видимые сообщения, approvals или записи tool call
 
-#### Scenario: Late update after cancel
-- **WHEN** a late `session/update` arrives after `session/cancel` but before prompt response
-- **THEN** CodeLab accepts it without moving the turn out of cancellation flow
+#### Scenario: Запоздавшее обновление после cancel
+- **WHEN** запоздавший `session/update` приходит после `session/cancel`, но до ответа на prompt
+- **THEN** CodeLab принимает его, не выводя turn из потока отмены

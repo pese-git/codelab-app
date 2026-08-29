@@ -1,60 +1,60 @@
 ## Purpose
 
-The replaceable transport layer connecting CodeLab to an ACP agent process or endpoint — a common transport port, concrete stdio and WebSocket implementations, the built-in `Codelab Agent` reference profile, and the fake/test doubles used to drive the rest of the app without a real agent.
+Заменяемый транспортный слой, соединяющий CodeLab с процессом или endpoint'ом ACP-агента — общий порт transport, конкретные реализации stdio и WebSocket, встроенный референсный профиль `Codelab Agent`, а также fake/test-двойники, используемые для проверки остального приложения без реального агента.
 
 ## Requirements
 
-### Requirement: Common transport port
-CodeLab SHALL expose a common transport abstraction for inbound messages, outbound sends, lifecycle events, graceful shutdown, and typed errors.
+### Requirement: Общий порт transport
+CodeLab SHALL предоставлять общую абстракцию transport для входящих сообщений, исходящей отправки, событий жизненного цикла, штатного завершения и типизированных ошибок.
 
-#### Scenario: Transport is replaceable
-- **WHEN** core logic sends or receives ACP messages
-- **THEN** it works through the transport port and not through stdio/WebSocket concrete classes
+#### Scenario: Transport заменяем
+- **WHEN** core-логика отправляет или получает сообщения ACP
+- **THEN** она работает через порт transport, а не через конкретные классы stdio/WebSocket
 
-#### Scenario: Transport fails
-- **WHEN** transport connection fails
-- **THEN** CodeLab maps the failure to a typed transport state and user-readable diagnostic
+#### Scenario: Transport падает
+- **WHEN** соединение transport падает
+- **THEN** CodeLab отображает сбой в типизированное состояние transport и понятную пользователю диагностику
 
 ### Requirement: Stdio transport
-CodeLab SHALL support local ACP agents over JSON-RPC 2.0 over stdio.
+CodeLab SHALL поддерживать локальных ACP-агентов через JSON-RPC 2.0 поверх stdio.
 
-#### Scenario: Child process starts
-- **WHEN** user connects through stdio
-- **THEN** CodeLab launches the configured command as a child process with configured args, cwd, and env
+#### Scenario: Дочерний процесс запускается
+- **WHEN** пользователь подключается через stdio
+- **THEN** CodeLab запускает настроенную команду как дочерний процесс с настроенными args, cwd и env
 
-#### Scenario: Protocol and diagnostics streams are separated
-- **WHEN** the child process writes to stdout and stderr
-- **THEN** stdout is parsed as ACP protocol stream and stderr is shown as diagnostics/log stream
+#### Scenario: Потоки протокола и диагностики разделены
+- **WHEN** дочерний процесс пишет в stdout и stderr
+- **THEN** stdout разбирается как протокольный поток ACP, а stderr показывается как поток диагностики/логов
 
-### Requirement: Reference codelab-agent profile
-CodeLab SHALL provide a built-in editable stdio profile for `https://github.com/pese-git/codelab-agent`.
+### Requirement: Референсный профиль codelab-agent
+CodeLab SHALL предоставлять встроенный редактируемый stdio-профиль для `https://github.com/pese-git/codelab-agent`.
 
-#### Scenario: Default profile is shown
-- **WHEN** user opens connection setup
-- **THEN** CodeLab offers `Codelab Agent` with command `codelab`, args `serve --stdio`, and env `CODELAB_LOG_LEVEL=DEBUG`
+#### Scenario: Показан профиль по умолчанию
+- **WHEN** пользователь открывает настройку соединения
+- **THEN** CodeLab предлагает `Codelab Agent` с командой `codelab`, аргументами `serve --stdio` и env `CODELAB_LOG_LEVEL=DEBUG`
 
-#### Scenario: Default profile connects
-- **WHEN** user starts the default profile in an environment with `codelab` available
-- **THEN** CodeLab launches `codelab serve --stdio` and performs ACP `initialize`
+#### Scenario: Профиль по умолчанию подключается
+- **WHEN** пользователь запускает профиль по умолчанию в окружении, где доступен `codelab`
+- **THEN** CodeLab запускает `codelab serve --stdio` и выполняет `initialize` ACP
 
 ### Requirement: WebSocket transport
-CodeLab SHALL support remote ACP agents over WebSocket for MVP remote workflows.
+CodeLab SHALL поддерживать удалённых ACP-агентов через WebSocket для MVP-сценариев удалённой работы.
 
-#### Scenario: Remote agent connects
-- **WHEN** user configures a WebSocket endpoint and token/header if required
-- **THEN** CodeLab opens the connection and performs ACP initialization over WebSocket
+#### Scenario: Удалённый агент подключается
+- **WHEN** пользователь настраивает WebSocket endpoint и токен/заголовок, если требуется
+- **THEN** CodeLab открывает соединение и выполняет инициализацию ACP через WebSocket
 
-#### Scenario: WebSocket disconnects
-- **WHEN** the WebSocket closes unexpectedly
-- **THEN** CodeLab enters disconnected state and offers reconnect
+#### Scenario: WebSocket разрывает соединение
+- **WHEN** WebSocket закрывается неожиданно
+- **THEN** CodeLab переходит в состояние disconnected и предлагает reconnect
 
-### Requirement: Transport testing
-CodeLab SHALL include fake transport and integration tests for stdio and codelab-agent compatibility.
+### Requirement: Тестирование transport
+CodeLab SHALL включать fake transport и интеграционные тесты для stdio и совместимости с codelab-agent.
 
-#### Scenario: Fake transport drives core tests
-- **WHEN** core state-machine tests run
-- **THEN** fake transport can emit inbound messages and capture outbound messages deterministically
+#### Scenario: Fake transport управляет core-тестами
+- **WHEN** запускаются тесты state machine ядра
+- **THEN** fake transport может детерминированно эмитировать входящие сообщения и перехватывать исходящие
 
-#### Scenario: Stdio integration handles process errors
-- **WHEN** codelab-agent exits, emits invalid JSON, or writes stderr diagnostics
-- **THEN** CodeLab records typed states and diagnostics without crashing
+#### Scenario: Stdio-интеграция обрабатывает ошибки процесса
+- **WHEN** codelab-agent завершается, эмитирует невалидный JSON или пишет диагностику в stderr
+- **THEN** CodeLab фиксирует типизированные состояния и диагностику, не падая

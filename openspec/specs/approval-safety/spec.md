@@ -1,60 +1,60 @@
 ## Purpose
 
-CodeLab's safety boundary around agent-initiated actions: risk classification, the MVP permission modes, how the ACP permission-request flow is answered, secret redaction, and the review-first presentation of anything an agent wants to do before it happens.
+Граница безопасности CodeLab вокруг действий, инициируемых агентом: классификация риска, режимы разрешений MVP, порядок ответа на поток запросов разрешений ACP, редактирование секретов и review-first представление всего, что агент хочет сделать, до того как это произойдёт.
 
 ## Requirements
 
-### Requirement: Risk levels
-CodeLab SHALL classify agent actions into risk levels `readOnly`, `localWrite`, `network`, `shell`, and `destructive`.
+### Requirement: Уровни риска
+CodeLab SHALL классифицировать действия агента по уровням риска `readOnly`, `localWrite`, `network`, `shell` и `destructive`.
 
-#### Scenario: Tool call is displayed
-- **WHEN** a tool call or permission request is received
-- **THEN** CodeLab displays the risk level before any approval action
+#### Scenario: Отображается tool call
+- **WHEN** получен tool call или запрос разрешения
+- **THEN** CodeLab показывает уровень риска до любого действия approval
 
-#### Scenario: Destructive action is requested
-- **WHEN** an action can delete, reset, force push, migrate, or otherwise cause irreversible change
-- **THEN** CodeLab requires explicit approval with exact command or diff when available
+#### Scenario: Запрошено деструктивное действие
+- **WHEN** действие может удалить, сбросить, force push, выполнить миграцию или иначе вызвать необратимое изменение
+- **THEN** CodeLab требует явного approval с точной командой или diff, если они доступны
 
-### Requirement: Permission modes
-CodeLab SHALL provide MVP permission modes `readOnly`, `ask`, `plan`, and `autoEdits`, and SHALL NOT expose `bypass`/full-access mode in MVP.
+### Requirement: Режимы разрешений
+CodeLab SHALL предоставлять режимы разрешений MVP `readOnly`, `ask`, `plan` и `autoEdits`, и SHALL NOT предоставлять режим `bypass`/полного доступа в MVP.
 
-#### Scenario: Plan mode is active
-- **WHEN** permission mode is `plan`
-- **THEN** agent can explore and propose a plan but source edits are not allowed
+#### Scenario: Активен режим plan
+- **WHEN** режим разрешений — `plan`
+- **THEN** агент может исследовать и предлагать план, но правки исходного кода не разрешены
 
-#### Scenario: Ask mode is active
-- **WHEN** permission mode is `ask`
-- **THEN** write, terminal, network, and destructive operations require explicit approval
+#### Scenario: Активен режим ask
+- **WHEN** режим разрешений — `ask`
+- **THEN** операции записи, terminal, сети и деструктивные операции требуют явного approval
 
-### Requirement: ACP permission flow
-CodeLab SHALL answer `session/request_permission` by selecting an agent-provided `PermissionOption` or returning outcome `cancelled`.
+### Requirement: Поток разрешений ACP
+CodeLab SHALL отвечать на `session/request_permission`, выбирая предложенный агентом `PermissionOption` либо возвращая outcome `cancelled`.
 
-#### Scenario: User approves an option
-- **WHEN** user selects an approval option
-- **THEN** CodeLab returns `selected` with the selected `optionId`
+#### Scenario: Пользователь одобряет опцию
+- **WHEN** пользователь выбирает опцию approval
+- **THEN** CodeLab возвращает `selected` с выбранным `optionId`
 
-#### Scenario: Turn is cancelled during approval
-- **WHEN** prompt turn is cancelled while permission requests are pending
-- **THEN** CodeLab responds to each pending request with outcome `cancelled`
+#### Scenario: Turn отменяется во время approval
+- **WHEN** prompt turn отменяется при наличии ожидающих запросов разрешения
+- **THEN** CodeLab отвечает на каждый ожидающий запрос с outcome `cancelled`
 
-### Requirement: Secret redaction
-CodeLab SHALL redact secrets from logs, diagnostics, inspector details, and persisted/debug state.
+### Requirement: Редактирование секретов
+CodeLab SHALL редактировать секреты в логах, диагностике, деталях инспектора и персистентном/debug-состоянии.
 
-#### Scenario: Environment variables are displayed
-- **WHEN** launch environment is shown in diagnostics
-- **THEN** values that look like tokens, passwords, API keys, or private keys are redacted
+#### Scenario: Отображаются переменные окружения
+- **WHEN** launch environment показан в диагностике
+- **THEN** значения, похожие на токены, пароли, API-ключи или приватные ключи, скрыты
 
-#### Scenario: Debug log is opened
-- **WHEN** user opens debug/protocol log
-- **THEN** sensitive prompts and secrets are hidden unless an explicit debug setting allows them
+#### Scenario: Открыт debug-лог
+- **WHEN** пользователь открывает debug/протокольный лог
+- **THEN** чувствительные prompt'ы и секреты скрыты, если явная настройка debug не разрешает их показ
 
-### Requirement: Review-first changes
-CodeLab SHALL show reviewable details before applying or approving file edits and destructive actions.
+### Requirement: Review-first изменения
+CodeLab SHALL показывать пригодные для проверки детали до применения или одобрения правок файлов и деструктивных действий.
 
-#### Scenario: File edit is requested
-- **WHEN** an edit action includes old and new content
-- **THEN** CodeLab presents a diff before approval
+#### Scenario: Запрошена правка файла
+- **WHEN** действие правки включает старое и новое содержимое
+- **THEN** CodeLab показывает diff до approval
 
-#### Scenario: Terminal command is requested
-- **WHEN** an execute action is requested
-- **THEN** CodeLab shows command, args, cwd, risk, and reason before approval
+#### Scenario: Запрошена команда terminal
+- **WHEN** запрошено действие execute
+- **THEN** CodeLab показывает команду, аргументы, cwd, риск и причину до approval
