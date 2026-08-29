@@ -1382,7 +1382,8 @@ void main() {
   );
 
   testWidgets(
-    'switching the active session clears the previous agent command list',
+    'switching sessions reloads each session\'s own agent command list '
+    'instead of clearing it unconditionally',
     (tester) async {
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
@@ -1435,9 +1436,22 @@ void main() {
       );
       await tester.runAsync(() => createFuture2);
 
+      // session-2 has not declared any commands of its own.
       expect(shellCubit.state.agentCommands, isEmpty);
 
+      // Switching back to session-1 restores *its* command list — it was
+      // never actually lost, session-1 just wasn't the active session.
       shellCubit.selectSession('session-1');
+      await tester.pump();
+
+      expect(
+        shellCubit.state.agentCommands.map((action) => action.slashCommand),
+        contains('/deploy'),
+      );
+
+      // Switching to session-2 again shows its (still empty) list, not
+      // session-1's, proving this isn't just "never clear again".
+      shellCubit.selectSession('session-2');
       await tester.pump();
 
       expect(shellCubit.state.agentCommands, isEmpty);
@@ -1446,6 +1460,133 @@ void main() {
       await closeCodeLabRootScope();
     },
   );
+
+  test('switching sessions reloads transcript, inspector and pending approval '
+      'for the newly selected session instead of leaving the previous '
+      'session\'s state visible', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final binding = CodeLabTestBinding(
+      transport: initialTransport,
+      stdioTransportFactory: (_) => agentTransport,
+    );
+    final application = binding.scope.resolve<AcpClientApplication>();
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    await shellCubit.connect();
+
+    // session-1: create it, submit a prompt, and leave an approval
+    // pending on it.
+    final createRequestFuture1 = agentTransport.sent.first;
+    final createFuture1 = shellCubit.createSession();
+    final createRequest1 = await createRequestFuture1 as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest1.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture1;
+
+    final promptRequestFuture1 = agentTransport.sent.first;
+    final submitFuture1 = shellCubit.submitPrompt('work on session one');
+    final promptRequest1 = await promptRequestFuture1 as dynamic;
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: SessionUpdate.agentMessageChunk(
+            content: const ContentBlock.text(text: 'Working on it.'),
+          ),
+        ).toJson(),
+      ),
+    );
+    agentTransport.emitInbound(
+      JsonRpcMessage.request(
+        id: const JsonRpcId.integer(42),
+        method: sessionRequestPermissionMethod,
+        params: RequestPermissionRequest(
+          sessionId: const SessionId('session-1'),
+          toolCall: ToolCallUpdate(
+            toolCallId: const ToolCallId('tool-1'),
+            title: 'Patch file',
+            kind: ToolKind.edit,
+            status: ToolCallStatus.inProgress,
+            rawInput: const {'path': '/workspace/lib/app.dart'},
+          ),
+          options: const [
+            PermissionOption(
+              optionId: PermissionOptionId('allow-once'),
+              name: 'Allow once',
+              kind: PermissionOptionKind.allowOnce,
+            ),
+            PermissionOption(
+              optionId: PermissionOptionId('reject-once'),
+              name: 'Reject',
+              kind: PermissionOptionKind.rejectOnce,
+            ),
+          ],
+        ).toJson(),
+      ),
+    );
+
+    expect(shellCubit.state.transcriptEntries, isNotEmpty);
+    expect(shellCubit.state.pendingApproval, isNotNull);
+    final session1Transcript = shellCubit.state.transcriptEntries;
+
+    // session-2: a fresh session with none of that state.
+    final createRequestFuture2 = agentTransport.sent.first;
+    final createFuture2 = shellCubit.createSession();
+    final createRequest2 = await createRequestFuture2 as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest2.id as JsonRpcId,
+        result: const {'sessionId': 'session-2'},
+      ),
+    );
+    await createFuture2;
+
+    // Creating session-2 must not leave session-1's transcript/approval
+    // visible.
+    expect(shellCubit.state.transcriptEntries, isEmpty);
+    expect(shellCubit.state.pendingApproval, isNull);
+
+    // Switching back to session-1 must restore its transcript and pending
+    // approval — not leave session-2's (empty) state showing.
+    shellCubit.selectSession('session-1');
+
+    expect(shellCubit.state.transcriptEntries, isNotEmpty);
+    expect(
+      shellCubit.state.transcriptEntries.map((entry) => entry.body),
+      containsAll(session1Transcript.map((entry) => entry.body)),
+    );
+    expect(shellCubit.state.pendingApproval, isNotNull);
+    expect(shellCubit.state.pendingApproval!.sessionId.value, 'session-1');
+
+    // Switching to session-2 again must clear session-1's state again.
+    shellCubit.selectSession('session-2');
+
+    expect(shellCubit.state.transcriptEntries, isEmpty);
+    expect(shellCubit.state.pendingApproval, isNull);
+
+    await application.respondToPermission(
+      const RespondToPermissionCommand.cancelled(
+        sessionId: SessionId('session-1'),
+        approvalId: ApprovalRequestId('permission-42'),
+      ),
+    );
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest1.id as JsonRpcId,
+        result: const {'stopReason': 'end_turn'},
+      ),
+    );
+    await submitFuture1.timeout(const Duration(seconds: 2));
+
+    await closeCodeLabRootScope();
+  });
 }
 
 final class _FailingStartTransport implements AcpTransport {

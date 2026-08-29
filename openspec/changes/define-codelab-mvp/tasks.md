@@ -58,8 +58,8 @@
 - [x] 6.5 Реализовать desktop layout: command bar, sessions pane, transcript/prompt area, inspector
 - [x] 6.6 Реализовать responsive collapse для sessions pane и inspector без горизонтального скролла composer
 - [x] 6.7 Реализовать view modes `summary`, `normal`, `verbose`
-- [ ] 6.8 Реализовать command palette/slash commands для `/new`, `/plan`, `/permissions`, `/logs`, `/compact`, `/reconnect` (вынесено в отдельный change `wire-command-palette`: `AcpCommandPaletteSurface` реализован в `acp_ui`, но `CodeLabShellCubit.openCommandPalette()` — заглушка, ничего не открывает)
-- [x] 6.9 Реализовать keyboard shortcuts для prompt submit, cancel, approve/reject и inspector navigation
+- [x] 6.8 Реализовать command palette/slash commands для `/new`, `/plan`, `/permissions`, `/logs`, `/compact`, `/reconnect` (реализовано в `wire-command-palette`, заархивирован 2026-08-29: палитра открывается по `Ctrl/Cmd+K` и inline `/`, все шесть команд видны и выбираемы; `/new`/`/reconnect`/`/logs` выполняют реальное действие, `/plan`/`/permissions`/`/compact` честно показаны как недоступные — сами эти три фичи как отдельные механизмы (plan mode, permission-mode selector, compact transcript) в кубите ещё не реализованы и не покрыты ни одним активным OpenSpec change)
+- [x] 6.9 Реализовать keyboard shortcuts для prompt submit, cancel, approve/reject и inspector navigation (уточнение по факту верификации: submit/cancel/approve/reject полностью работают — approve/reject через собственный `CallbackShortcuts` внутри `AcpApprovalOptionGroup`, Ctrl+Enter/Escape, смонтированный в `AcpApprovalPanel` в `main_pane.dart`, независимо от `AcpWorkbenchShortcuts.onApprove/onReject`, которые остаются неиспользуемыми, но не единственным механизмом. `AcpWorkbenchShortcuts.onInspectorPrevious/onInspectorNext` (Alt+Left/Right) не подключены в `workbench_shell.dart` и не могут быть подключены без нового state — в инспекторе сегодня нет понятия "текущая/выделенная запись". Это отдельная фича, вынесенная в будущий OpenSpec change, а не точечный фикс)
 - [x] 6.10 Добавить Flutter widget tests для connection states, transcript, approvals, errors и layout behavior
 
 ## 7. Integrate app shell
@@ -67,7 +67,7 @@
 - [x] 7.1 Создать `codelab_app` bootstrap с CherryPick DI, Bloc/Cubit presentation state и Fluent app shell
 - [x] 7.2 Подключить transport selection UI для stdio/WebSocket
 - [x] 7.3 Подключить `Codelab Agent` default stdio profile в connection setup
-- [x] 7.4 Подключить session/task sidebar и current session context indicators
+- [x] 7.4 Подключить session/task sidebar и current session context indicators (уточнение по факту верификации: `CodeLabShellCubit.selectSession()`/`createSession()` изначально не перезагружали transcript/inspector/pendingApproval при переключении на другую сессию — предыдущая сессия оставалась видна до первого `session/update` новой. Исправлено: оба метода теперь берут полный `AcpSession` через `AcpClientApplication.sessionById()`/из результата создания и пересобирают transcript из `session.turns` — session isolation для этих трёх полей state теперь реальна, не только для `agentCommands`)
 - [x] 7.5 Подключить prompt composer к `SendPrompt` use case
 - [x] 7.6 Подключить inspector для approvals, tool call details, diffs, raw input/output, diagnostics и protocol log
 - [x] 7.7 Подключить cancel/reconnect actions к core use cases

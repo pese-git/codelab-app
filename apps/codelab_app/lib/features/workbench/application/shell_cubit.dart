@@ -540,7 +540,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             activeSessionId: sessionItem.id,
             currentSessionLabel: sessionItem.title,
             currentSessionDetail: sessionItem.subtitle ?? session.id.value,
+            transcriptEntries: const [],
             inspectorEntries: _inspectorEntriesForSession(session),
+            pendingApproval: null,
             agentCommands: _agentCommandsFor(session),
           ),
         );
@@ -552,16 +554,41 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
+  /// Switches the active session and reloads all of its per-session state
+  /// (transcript, inspector, pending approval, agent commands) from the
+  /// application's live snapshot — without this, the previously active
+  /// session's transcript/inspector/approval would remain visible until the
+  /// newly selected session happened to emit its own `session/update`.
   void selectSession(String sessionId) {
-    final selected = state.sessions
-        .where((session) => session.id == sessionId)
-        .firstOrNull;
+    final session = _application.sessionById(SessionId(sessionId));
+    if (session == null) {
+      final selected = state.sessions
+          .where((item) => item.id == sessionId)
+          .firstOrNull;
+      emit(
+        state.copyWith(
+          activeSessionId: sessionId,
+          currentSessionLabel: selected?.title ?? 'Session $sessionId',
+          currentSessionDetail: selected?.subtitle ?? sessionId,
+          transcriptEntries: const [],
+          inspectorEntries: const [],
+          pendingApproval: null,
+          agentCommands: const [],
+        ),
+      );
+      return;
+    }
+
+    final sessionItem = _sessionListItem(session);
     emit(
       state.copyWith(
-        activeSessionId: sessionId,
-        currentSessionLabel: selected?.title ?? 'Session $sessionId',
-        currentSessionDetail: selected?.subtitle ?? sessionId,
-        agentCommands: const [],
+        activeSessionId: sessionItem.id,
+        currentSessionLabel: sessionItem.title,
+        currentSessionDetail: sessionItem.subtitle ?? session.id.value,
+        transcriptEntries: _transcriptEntriesForSession(session),
+        inspectorEntries: _inspectorEntriesForSession(session),
+        pendingApproval: _pendingApprovalFor(session),
+        agentCommands: _agentCommandsFor(session),
       ),
     );
   }
@@ -628,7 +655,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         );
       },
       (turn) {
-        final agentEntries = _agentTranscriptEntries(turn);
+        final agentEntries = _agentTranscriptEntries(
+          turn,
+          baseIndex: state.transcriptEntries.length,
+        );
         emit(
           state.copyWith(
             transcriptEntries: [...state.transcriptEntries, ...agentEntries],
@@ -982,7 +1012,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         AcpClientUnexpectedFailure(:final message) => message,
       };
 
-  List<AcpTranscriptEntry> _agentTranscriptEntries(PromptTurn turn) {
+  List<AcpTranscriptEntry> _agentTranscriptEntries(
+    PromptTurn turn, {
+    required int baseIndex,
+  }) {
     final entries = <AcpTranscriptEntry>[];
     for (final update in turn.updates) {
       final content = switch (update) {
@@ -1000,7 +1033,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
       entries.add(
         AcpTranscriptEntry(
-          id: 'agent-${state.transcriptEntries.length + entries.length + 1}',
+          id: 'agent-${baseIndex + entries.length + 1}',
           kind: AcpTranscriptEntryKind.agent,
           title: 'Agent',
           body: text.trim(),
@@ -1008,19 +1041,66 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       );
     }
 
-    if (entries.isNotEmpty) {
+    if (entries.isNotEmpty || !turn.isTerminal) {
       return entries;
     }
 
     return [
       AcpTranscriptEntry(
-        id: 'agent-${state.transcriptEntries.length + 1}',
+        id: 'agent-${baseIndex + 1}',
         kind: AcpTranscriptEntryKind.agent,
         title: 'Agent',
         body:
             'Completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
       ),
     ];
+  }
+
+  /// Reconstructs the full transcript for [session] from `session.turns` —
+  /// used when switching to a session that isn't the one incrementally
+  /// tracked in `state.transcriptEntries` (see [selectSession]). Mirrors the
+  /// incremental logic in [submitPrompt]/[_agentTranscriptEntries], but
+  /// rebuilt from domain history instead of appended live.
+  List<AcpTranscriptEntry> _transcriptEntriesForSession(AcpSession session) {
+    final entries = <AcpTranscriptEntry>[];
+    for (final turn in session.turns) {
+      final promptText = _textFrom(turn.prompt);
+      if (promptText != null && promptText.isNotEmpty) {
+        entries.add(
+          AcpTranscriptEntry(
+            id: 'prompt-${entries.length + 1}',
+            kind: AcpTranscriptEntryKind.user,
+            title: 'You',
+            body: promptText,
+          ),
+        );
+      }
+
+      entries.addAll(_agentTranscriptEntries(turn, baseIndex: entries.length));
+
+      if (turn.status == PromptTurnStatus.failed &&
+          turn.failureMessage != null) {
+        entries.add(
+          AcpTranscriptEntry(
+            id: 'prompt-error-${entries.length + 1}',
+            kind: AcpTranscriptEntryKind.diagnostic,
+            title: 'Prompt failed',
+            body: 'Failed to send prompt: ${turn.failureMessage}',
+          ),
+        );
+      }
+    }
+
+    return entries;
+  }
+
+  String? _textFrom(List<ContentBlock> blocks) {
+    final text = blocks
+        .whereType<TextContent>()
+        .map((block) => block.text)
+        .where((text) => text.trim().isNotEmpty)
+        .join('\n');
+    return text.isEmpty ? null : text;
   }
 
   List<CodeLabInspectorEntry> _inspectorEntriesForSession(AcpSession session) {
