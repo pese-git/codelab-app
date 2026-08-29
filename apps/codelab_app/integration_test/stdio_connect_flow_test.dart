@@ -74,4 +74,77 @@ void main() {
     await tester.pumpAndSettle();
     await closeCodeLabRootScope();
   });
+
+  testWidgets(
+    'creates a session and completes a prompt turn against a real stdio '
+    'process',
+    (tester) async {
+      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpAndSettle();
+
+      final agentDirectory = await Directory.systemTemp.createTemp(
+        'codelab_app_stdio_e2e_',
+      );
+      addTearDown(() async {
+        if (await agentDirectory.exists()) {
+          await agentDirectory.delete(recursive: true);
+        }
+      });
+      final agent = await writeCodelabCompatibleStdioAgent(agentDirectory);
+
+      const dartExecutable = String.fromEnvironment(
+        'CODELAB_E2E_DART',
+        defaultValue: 'dart',
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('transport-field-Command')),
+        dartExecutable,
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('transport-field-Args')),
+        '${agent.path} serve --stdio',
+      );
+      await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Connected'), findsWidgets);
+
+      await tester.tap(find.byKey(const ValueKey('new-session-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Session codelab-test-session'), findsWidgets);
+
+      final shellCubit = codeLabDependenciesOf(
+        tester.element(find.byType(CodeLabApp)),
+      ).shellCubit;
+
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-text-box')),
+        'hello from the e2e test',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pump();
+
+      // The agent reply arrives over a real stdio round trip, which does not
+      // reliably keep scheduling widget frames for `pumpAndSettle` to wait
+      // on — poll the cubit's own state instead of relying on frame timing.
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (shellCubit.state.isPromptSubmitting &&
+          DateTime.now().isBefore(deadline)) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pumpAndSettle();
+
+      expect(find.text('hello from the e2e test'), findsWidgets);
+      expect(find.text('hello from compatible stdio agent'), findsWidgets);
+      expect(shellCubit.state.isPromptSubmitting, isFalse);
+      expect(shellCubit.state.canCancel, isFalse);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await closeCodeLabRootScope();
+    },
+  );
 }
