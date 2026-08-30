@@ -585,6 +585,78 @@ sealed class LoadSessionResponse with _$LoadSessionResponse {
 }
 
 @freezed
+sealed class SetSessionConfigOptionRequest
+    with _$SetSessionConfigOptionRequest {
+  const SetSessionConfigOptionRequest._();
+
+  const factory SetSessionConfigOptionRequest({
+    required SessionId sessionId,
+    required SessionConfigId configId,
+    required SessionConfigValueId value,
+    @JsonKey(name: '_meta') JsonObject? meta,
+  }) = _SetSessionConfigOptionRequest;
+
+  factory SetSessionConfigOptionRequest.fromJson(Object? value) {
+    final source = requireAcpObject(
+      value,
+      path: 'setSessionConfigOptionRequest',
+      allowedKeys: {'sessionId', 'configId', 'value', '_meta'},
+    );
+
+    return SetSessionConfigOptionRequest(
+      sessionId: SessionId.fromJson(source['sessionId']),
+      configId: SessionConfigId.fromJson(source['configId']),
+      value: SessionConfigValueId.fromJson(source['value']),
+      meta: _optionalObject(source, '_meta'),
+    );
+  }
+
+  JsonObject toJson() {
+    return {
+      'sessionId': sessionId.toJson(),
+      'configId': configId.toJson(),
+      'value': value.toJson(),
+      if (meta != null) '_meta': meta,
+    };
+  }
+}
+
+@freezed
+sealed class SetSessionConfigOptionResponse
+    with _$SetSessionConfigOptionResponse {
+  const SetSessionConfigOptionResponse._();
+
+  const factory SetSessionConfigOptionResponse({
+    required List<SessionConfigOption> configOptions,
+    @JsonKey(name: '_meta') JsonObject? meta,
+  }) = _SetSessionConfigOptionResponse;
+
+  factory SetSessionConfigOptionResponse.fromJson(Object? value) {
+    final source = requireAcpObject(
+      value,
+      path: 'setSessionConfigOptionResponse',
+      allowedKeys: {'configOptions', '_meta'},
+    );
+
+    return SetSessionConfigOptionResponse(
+      configOptions: _objectList(
+        source,
+        'configOptions',
+        SessionConfigOption.fromJson,
+      ),
+      meta: _optionalObject(source, '_meta'),
+    );
+  }
+
+  JsonObject toJson() {
+    return {
+      'configOptions': configOptions.map((option) => option.toJson()).toList(),
+      if (meta != null) '_meta': meta,
+    };
+  }
+}
+
+@freezed
 sealed class ListSessionsRequest with _$ListSessionsRequest {
   const ListSessionsRequest._();
 

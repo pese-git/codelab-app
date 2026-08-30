@@ -55,6 +55,95 @@ void main() {
     await subscription.cancel();
   });
 
+  test('SetSessionConfigOption sends session/set_config_option and stores the '
+      "response's configOptions", () async {
+    await _createSession(client, transport);
+    transport.drainSentMessages();
+
+    final future = SetSessionConfigOption(client)(
+      const SetSessionConfigOptionCommand(
+        sessionId: SessionId('session-1'),
+        configId: SessionConfigId('model'),
+        value: SessionConfigValueId('gpt-5'),
+      ),
+    ).run();
+    await _pump();
+
+    final request = transport.sentMessages.single as JsonRpcRequest;
+    expect(request.method, sessionSetConfigOptionMethod);
+    expect(
+      SetSessionConfigOptionRequest.fromJson(request.params),
+      const SetSessionConfigOptionRequest(
+        sessionId: SessionId('session-1'),
+        configId: SessionConfigId('model'),
+        value: SessionConfigValueId('gpt-5'),
+      ),
+    );
+
+    const updatedOption = SessionConfigOption.select(
+      id: SessionConfigId('model'),
+      name: 'Model',
+      currentValue: SessionConfigValueId('gpt-5'),
+      options: [
+        SessionConfigSelectOption(
+          value: SessionConfigValueId('gpt-5'),
+          name: 'GPT-5',
+        ),
+      ],
+    );
+    transport.emitInbound(
+      JsonRpcMessage.response(
+        id: request.id,
+        result: const SetSessionConfigOptionResponse(
+          configOptions: [updatedOption],
+        ).toJson(),
+      ),
+    );
+
+    final result = await future;
+    final session = result.getOrElse((failure) => fail('$failure'));
+    expect(session.configOptions, [updatedOption]);
+    expect(client.sessionById(const SessionId('session-1'))?.configOptions, [
+      updatedOption,
+    ]);
+  });
+
+  test(
+    "SetSessionConfigOption does not change the session's configOptions when "
+    'the agent rejects the request',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+
+      final future = SetSessionConfigOption(client)(
+        const SetSessionConfigOptionCommand(
+          sessionId: SessionId('session-1'),
+          configId: SessionConfigId('model'),
+          value: SessionConfigValueId('unknown-model'),
+        ),
+      ).run();
+      await _pump();
+      final request = transport.sentMessages.single as JsonRpcRequest;
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: request.id,
+          error: const JsonRpcError(
+            code: -32000,
+            message: 'unknown config value',
+          ),
+        ),
+      );
+
+      final result = await future;
+      expect(result.isLeft(), isTrue);
+      expect(
+        client.sessionById(const SessionId('session-1'))?.configOptions,
+        isNull,
+      );
+    },
+  );
+
   test('LoadSession sends session/load and stores active session', () async {
     final changes = <AcpSession>[];
     final subscription = client.sessionChanges.listen(changes.add);

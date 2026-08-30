@@ -837,6 +837,24 @@ class SessionStateMachine {
       return _sessionResultFromTurnResult(withCommands, turn);
     }
 
+    // `config_option_update` is likewise session-scoped, not turn-scoped —
+    // per ACP (docs/acp/protocol/13-Session Config Options.md), an agent
+    // may change a config option's value "at any point during a session,
+    // whether the Agent is idle or generating a response". Same shape as
+    // `AvailableCommandsUpdate` above: apply to the session unconditionally,
+    // and additionally thread it through the active turn if one exists so
+    // it still shows up in the per-turn protocol log.
+    if (update case ConfigOptionUpdate(:final configOptions)) {
+      final withConfigOptions = session.copyWith(configOptions: configOptions);
+      final activeTurn = withConfigOptions.activeTurn;
+      if (activeTurn == null) {
+        return _applied(withConfigOptions);
+      }
+
+      final turn = PromptTurnStateMachine.applyUpdate(activeTurn, update);
+      return _sessionResultFromTurnResult(withConfigOptions, turn);
+    }
+
     final activeTurn = session.activeTurn;
     if (activeTurn == null) {
       return _ignored(session, 'session has no active prompt turn');

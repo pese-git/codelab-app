@@ -167,6 +167,27 @@ final class AcpClientApplication {
     return session;
   }
 
+  Future<AcpSession> setSessionConfigOption(
+    SetSessionConfigOptionCommand command,
+  ) async {
+    final session = _requireSession(command.sessionId);
+    final response = await _sendRequest<SetSessionConfigOptionResponse>(
+      method: sessionSetConfigOptionMethod,
+      params: SetSessionConfigOptionRequest(
+        sessionId: command.sessionId,
+        configId: command.configId,
+        value: command.value,
+        meta: command.meta,
+      ),
+    );
+    final updatedSession = session.copyWith(
+      configOptions: response.configOptions,
+    );
+
+    _storeSession(updatedSession);
+    return updatedSession;
+  }
+
   Future<PromptTurn> sendPrompt(SendPromptCommand command) async {
     final generation = _generation;
     final session = _requireSession(command.sessionId);

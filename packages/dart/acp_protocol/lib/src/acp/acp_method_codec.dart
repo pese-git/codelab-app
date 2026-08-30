@@ -14,6 +14,7 @@ const sessionLoadMethod = 'session/load';
 const sessionListMethod = 'session/list';
 const sessionPromptMethod = 'session/prompt';
 const sessionCancelMethod = 'session/cancel';
+const sessionSetConfigOptionMethod = 'session/set_config_option';
 const sessionRequestPermissionMethod = 'session/request_permission';
 const sessionUpdateMethod = 'session/update';
 
@@ -153,6 +154,18 @@ const acpSessionCancel =
       encodeParams: _encodeCancelNotification,
     );
 
+const acpSessionSetConfigOption =
+    AcpMethodDefinition<
+      SetSessionConfigOptionRequest,
+      SetSessionConfigOptionResponse
+    >.request(
+      method: sessionSetConfigOptionMethod,
+      decodeParams: SetSessionConfigOptionRequest.fromJson,
+      encodeParams: _encodeSetSessionConfigOptionRequest,
+      decodeResult: SetSessionConfigOptionResponse.fromJson,
+      encodeResult: _encodeSetSessionConfigOptionResponse,
+    );
+
 const acpSessionRequestPermission =
     AcpMethodDefinition<
       RequestPermissionRequest,
@@ -179,6 +192,7 @@ const acpMethodRegistry = <String, AcpMethodDefinition<Object, Object>>{
   sessionListMethod: acpSessionList,
   sessionPromptMethod: acpSessionPrompt,
   sessionCancelMethod: acpSessionCancel,
+  sessionSetConfigOptionMethod: acpSessionSetConfigOption,
   sessionRequestPermissionMethod: acpSessionRequestPermission,
   sessionUpdateMethod: acpSessionUpdate,
 };
@@ -311,6 +325,12 @@ JsonObject _encodePromptRequest(PromptRequest value) => value.toJson();
 JsonObject _encodePromptResponse(PromptResponse value) => value.toJson();
 JsonObject _encodeCancelNotification(CancelNotification value) =>
     value.toJson();
+JsonObject _encodeSetSessionConfigOptionRequest(
+  SetSessionConfigOptionRequest value,
+) => value.toJson();
+JsonObject _encodeSetSessionConfigOptionResponse(
+  SetSessionConfigOptionResponse value,
+) => value.toJson();
 JsonObject _encodeRequestPermissionRequest(RequestPermissionRequest value) =>
     value.toJson();
 JsonObject _encodeRequestPermissionResponse(RequestPermissionResponse value) =>

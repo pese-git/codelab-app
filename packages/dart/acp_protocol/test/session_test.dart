@@ -150,6 +150,78 @@ void main() {
       });
     });
 
+    test('round-trips set session config option request and response', () {
+      const request = SetSessionConfigOptionRequest(
+        sessionId: SessionId('session-1'),
+        configId: SessionConfigId('model'),
+        value: SessionConfigValueId('gpt-5'),
+      );
+      const response = SetSessionConfigOptionResponse(
+        configOptions: [
+          SessionConfigOption.select(
+            id: SessionConfigId('model'),
+            name: 'Model',
+            category: 'model',
+            currentValue: SessionConfigValueId('gpt-5'),
+            options: [
+              SessionConfigSelectOption(
+                value: SessionConfigValueId('gpt-5'),
+                name: 'GPT-5',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      expect(SetSessionConfigOptionRequest.fromJson(request.toJson()), request);
+      expect(request.toJson(), {
+        'sessionId': 'session-1',
+        'configId': 'model',
+        'value': 'gpt-5',
+      });
+
+      expect(
+        SetSessionConfigOptionResponse.fromJson(response.toJson()),
+        response,
+      );
+      expect(response.toJson(), {
+        'configOptions': [
+          {
+            'type': 'select',
+            'id': 'model',
+            'name': 'Model',
+            'currentValue': 'gpt-5',
+            'options': [
+              {'value': 'gpt-5', 'name': 'GPT-5'},
+            ],
+            'category': 'model',
+          },
+        ],
+      });
+    });
+
+    test('rejects invalid set session config option shapes', () {
+      expect(
+        () => SetSessionConfigOptionRequest.fromJson({
+          'sessionId': 'session-1',
+          'value': 'gpt-5',
+        }),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => SetSessionConfigOptionRequest.fromJson({
+          'sessionId': 'session-1',
+          'configId': 'model',
+          'value': 42,
+        }),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => SetSessionConfigOptionResponse.fromJson({}),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+    });
+
     test('rejects invalid session and MCP server shapes', () {
       expect(
         () => SessionId.fromJson(''),

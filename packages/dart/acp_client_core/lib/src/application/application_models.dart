@@ -65,6 +65,19 @@ sealed class ReconnectCommand with _$ReconnectCommand {
 }
 
 @freezed
+sealed class SetSessionConfigOptionCommand
+    with _$SetSessionConfigOptionCommand {
+  const SetSessionConfigOptionCommand._();
+
+  const factory SetSessionConfigOptionCommand({
+    required SessionId sessionId,
+    required SessionConfigId configId,
+    required SessionConfigValueId value,
+    Map<String, Object?>? meta,
+  }) = _SetSessionConfigOptionCommand;
+}
+
+@freezed
 sealed class RespondToPermissionCommand with _$RespondToPermissionCommand {
   const RespondToPermissionCommand._();
 

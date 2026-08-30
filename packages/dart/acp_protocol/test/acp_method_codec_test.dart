@@ -11,6 +11,7 @@ void main() {
         sessionListMethod,
         sessionPromptMethod,
         sessionCancelMethod,
+        sessionSetConfigOptionMethod,
         sessionRequestPermissionMethod,
         sessionUpdateMethod,
       });
@@ -38,6 +39,18 @@ void main() {
           sessionId: SessionId('session-1'),
           cwd: '/workspace/project',
           mcpServers: [],
+        ),
+      );
+      expect(
+        decodeAcpParams(sessionSetConfigOptionMethod, {
+          'sessionId': 'session-1',
+          'configId': 'model',
+          'value': 'gpt-5',
+        }),
+        const SetSessionConfigOptionRequest(
+          sessionId: SessionId('session-1'),
+          configId: SessionConfigId('model'),
+          value: SessionConfigValueId('gpt-5'),
         ),
       );
       expect(
@@ -146,6 +159,12 @@ void main() {
       expect(
         decodeAcpResult(sessionPromptMethod, {'stopReason': 'end_turn'}),
         const PromptResponse(stopReason: StopReason.endTurn),
+      );
+      expect(
+        decodeAcpResult(sessionSetConfigOptionMethod, {
+          'configOptions': <Object?>[],
+        }),
+        const SetSessionConfigOptionResponse(configOptions: []),
       );
       expect(
         decodeAcpResult(sessionRequestPermissionMethod, {

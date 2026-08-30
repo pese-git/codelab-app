@@ -1398,6 +1398,328 @@ as AcpTransportFactory?,
 }
 
 /// @nodoc
+mixin _$SetSessionConfigOptionCommand {
+
+ SessionId get sessionId; SessionConfigId get configId; SessionConfigValueId get value; Map<String, Object?>? get meta;
+/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$SetSessionConfigOptionCommandCopyWith<SetSessionConfigOptionCommand> get copyWith => _$SetSessionConfigOptionCommandCopyWithImpl<SetSessionConfigOptionCommand>(this as SetSessionConfigOptionCommand, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SetSessionConfigOptionCommand&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.configId, configId) || other.configId == configId)&&(identical(other.value, value) || other.value == value)&&const DeepCollectionEquality().equals(other.meta, meta));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,sessionId,configId,value,const DeepCollectionEquality().hash(meta));
+
+@override
+String toString() {
+  return 'SetSessionConfigOptionCommand(sessionId: $sessionId, configId: $configId, value: $value, meta: $meta)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $SetSessionConfigOptionCommandCopyWith<$Res>  {
+  factory $SetSessionConfigOptionCommandCopyWith(SetSessionConfigOptionCommand value, $Res Function(SetSessionConfigOptionCommand) _then) = _$SetSessionConfigOptionCommandCopyWithImpl;
+@useResult
+$Res call({
+ SessionId sessionId, SessionConfigId configId, SessionConfigValueId value, Map<String, Object?>? meta
+});
+
+
+$SessionIdCopyWith<$Res> get sessionId;$SessionConfigIdCopyWith<$Res> get configId;$SessionConfigValueIdCopyWith<$Res> get value;
+
+}
+/// @nodoc
+class _$SetSessionConfigOptionCommandCopyWithImpl<$Res>
+    implements $SetSessionConfigOptionCommandCopyWith<$Res> {
+  _$SetSessionConfigOptionCommandCopyWithImpl(this._self, this._then);
+
+  final SetSessionConfigOptionCommand _self;
+  final $Res Function(SetSessionConfigOptionCommand) _then;
+
+/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? sessionId = null,Object? configId = null,Object? value = null,Object? meta = freezed,}) {
+  return _then(_self.copyWith(
+sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
+as SessionId,configId: null == configId ? _self.configId : configId // ignore: cast_nullable_to_non_nullable
+as SessionConfigId,value: null == value ? _self.value : value // ignore: cast_nullable_to_non_nullable
+as SessionConfigValueId,meta: freezed == meta ? _self.meta : meta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
+  ));
+}
+/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionIdCopyWith<$Res> get sessionId {
+  
+  return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
+    return _then(_self.copyWith(sessionId: value));
+  });
+}/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionConfigIdCopyWith<$Res> get configId {
+  
+  return $SessionConfigIdCopyWith<$Res>(_self.configId, (value) {
+    return _then(_self.copyWith(configId: value));
+  });
+}/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionConfigValueIdCopyWith<$Res> get value {
+  
+  return $SessionConfigValueIdCopyWith<$Res>(_self.value, (value) {
+    return _then(_self.copyWith(value: value));
+  });
+}
+}
+
+
+/// Adds pattern-matching-related methods to [SetSessionConfigOptionCommand].
+extension SetSessionConfigOptionCommandPatterns on SetSessionConfigOptionCommand {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _SetSessionConfigOptionCommand value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _SetSessionConfigOptionCommand() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _SetSessionConfigOptionCommand value)  $default,){
+final _that = this;
+switch (_that) {
+case _SetSessionConfigOptionCommand():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _SetSessionConfigOptionCommand value)?  $default,){
+final _that = this;
+switch (_that) {
+case _SetSessionConfigOptionCommand() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( SessionId sessionId,  SessionConfigId configId,  SessionConfigValueId value,  Map<String, Object?>? meta)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _SetSessionConfigOptionCommand() when $default != null:
+return $default(_that.sessionId,_that.configId,_that.value,_that.meta);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( SessionId sessionId,  SessionConfigId configId,  SessionConfigValueId value,  Map<String, Object?>? meta)  $default,) {final _that = this;
+switch (_that) {
+case _SetSessionConfigOptionCommand():
+return $default(_that.sessionId,_that.configId,_that.value,_that.meta);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( SessionId sessionId,  SessionConfigId configId,  SessionConfigValueId value,  Map<String, Object?>? meta)?  $default,) {final _that = this;
+switch (_that) {
+case _SetSessionConfigOptionCommand() when $default != null:
+return $default(_that.sessionId,_that.configId,_that.value,_that.meta);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class _SetSessionConfigOptionCommand extends SetSessionConfigOptionCommand {
+  const _SetSessionConfigOptionCommand({required this.sessionId, required this.configId, required this.value, final  Map<String, Object?>? meta}): _meta = meta,super._();
+  
+
+@override final  SessionId sessionId;
+@override final  SessionConfigId configId;
+@override final  SessionConfigValueId value;
+ final  Map<String, Object?>? _meta;
+@override Map<String, Object?>? get meta {
+  final value = _meta;
+  if (value == null) return null;
+  if (_meta is EqualUnmodifiableMapView) return _meta;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(value);
+}
+
+
+/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$SetSessionConfigOptionCommandCopyWith<_SetSessionConfigOptionCommand> get copyWith => __$SetSessionConfigOptionCommandCopyWithImpl<_SetSessionConfigOptionCommand>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SetSessionConfigOptionCommand&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.configId, configId) || other.configId == configId)&&(identical(other.value, value) || other.value == value)&&const DeepCollectionEquality().equals(other._meta, _meta));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,sessionId,configId,value,const DeepCollectionEquality().hash(_meta));
+
+@override
+String toString() {
+  return 'SetSessionConfigOptionCommand(sessionId: $sessionId, configId: $configId, value: $value, meta: $meta)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$SetSessionConfigOptionCommandCopyWith<$Res> implements $SetSessionConfigOptionCommandCopyWith<$Res> {
+  factory _$SetSessionConfigOptionCommandCopyWith(_SetSessionConfigOptionCommand value, $Res Function(_SetSessionConfigOptionCommand) _then) = __$SetSessionConfigOptionCommandCopyWithImpl;
+@override @useResult
+$Res call({
+ SessionId sessionId, SessionConfigId configId, SessionConfigValueId value, Map<String, Object?>? meta
+});
+
+
+@override $SessionIdCopyWith<$Res> get sessionId;@override $SessionConfigIdCopyWith<$Res> get configId;@override $SessionConfigValueIdCopyWith<$Res> get value;
+
+}
+/// @nodoc
+class __$SetSessionConfigOptionCommandCopyWithImpl<$Res>
+    implements _$SetSessionConfigOptionCommandCopyWith<$Res> {
+  __$SetSessionConfigOptionCommandCopyWithImpl(this._self, this._then);
+
+  final _SetSessionConfigOptionCommand _self;
+  final $Res Function(_SetSessionConfigOptionCommand) _then;
+
+/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? sessionId = null,Object? configId = null,Object? value = null,Object? meta = freezed,}) {
+  return _then(_SetSessionConfigOptionCommand(
+sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
+as SessionId,configId: null == configId ? _self.configId : configId // ignore: cast_nullable_to_non_nullable
+as SessionConfigId,value: null == value ? _self.value : value // ignore: cast_nullable_to_non_nullable
+as SessionConfigValueId,meta: freezed == meta ? _self._meta : meta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
+  ));
+}
+
+/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionIdCopyWith<$Res> get sessionId {
+  
+  return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
+    return _then(_self.copyWith(sessionId: value));
+  });
+}/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionConfigIdCopyWith<$Res> get configId {
+  
+  return $SessionConfigIdCopyWith<$Res>(_self.configId, (value) {
+    return _then(_self.copyWith(configId: value));
+  });
+}/// Create a copy of SetSessionConfigOptionCommand
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SessionConfigValueIdCopyWith<$Res> get value {
+  
+  return $SessionConfigValueIdCopyWith<$Res>(_self.value, (value) {
+    return _then(_self.copyWith(value: value));
+  });
+}
+}
+
+/// @nodoc
 mixin _$RespondToPermissionCommand {
 
  SessionId get sessionId; ApprovalRequestId get approvalId; Map<String, Object?>? get meta;

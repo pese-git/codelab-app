@@ -1,16 +1,16 @@
 ## 1. Протокол (acp_protocol)
 
-- [ ] 1.1 Добавить `SetSessionConfigOptionRequest` (`sessionId`, `configId`, `value`) и `SetSessionConfigOptionResponse` (`configOptions`) в `session.dart`, по образцу `NewSessionRequest`/`NewSessionResponse`
-- [ ] 1.2 Зарегистрировать `session/set_config_option` как request-response метод в `acp_method_codec.dart` (`sessionSetConfigOptionMethod`, `acpSessionSetConfigOption`, запись в `acpMethodRegistry`)
-- [ ] 1.3 Тесты кодека: encode/decode запроса и ответа, невалидные поля (`configId`/`value` отсутствуют или не строки)
+- [x] 1.1 Добавить `SetSessionConfigOptionRequest` (`sessionId`, `configId`, `value`) и `SetSessionConfigOptionResponse` (`configOptions`) в `session.dart`, по образцу `NewSessionRequest`/`NewSessionResponse`
+- [x] 1.2 Зарегистрировать `session/set_config_option` как request-response метод в `acp_method_codec.dart` (`sessionSetConfigOptionMethod`, `acpSessionSetConfigOption`, запись в `acpMethodRegistry`)
+- [x] 1.3 Тесты кодека: encode/decode запроса и ответа, невалидные поля (`configId`/`value` отсутствуют или не строки)
 
 ## 2. Domain и application (acp_client_core)
 
-- [ ] 2.1 Добавить `case ConfigOptionUpdate(...)` в `SessionStateMachine._applyUpdate`, применяющий обновление к `AcpSession.configOptions` независимо от наличия активного turn — по образцу уже существующего `case AvailableCommandsUpdate(...)`
-- [ ] 2.2 Добавить `SetSessionConfigOptionCommand` и `Future<AcpSession> setSessionConfigOption(...)` в `AcpClientApplication`, обновляющий `configOptions` сессии из ответа (по образцу `createSession`/`loadSession`)
-- [ ] 2.3 Добавить use case `SetSessionConfigOption` в application-слое, координирующий вызов и маппинг ошибок, по образцу `CreateSession`/`SendPrompt`
-- [ ] 2.4 Тесты state machine: `configOptionUpdate` применяется без активного turn, применяется во время активного turn (и попадает в историю turn), несколько последовательных обновлений заменяют список целиком
-- [ ] 2.5 Тесты `AcpClientApplication`/use case: успешный `setSessionConfigOption`, ошибка агента не меняет `configOptions` и не оставляет сессию в неопределённом состоянии
+- [x] 2.1 Добавить `case ConfigOptionUpdate(...)` в `SessionStateMachine._applyUpdate`, применяющий обновление к `AcpSession.configOptions` независимо от наличия активного turn — по образцу уже существующего `case AvailableCommandsUpdate(...)`
+- [x] 2.2 Добавить `SetSessionConfigOptionCommand` и `Future<AcpSession> setSessionConfigOption(...)` в `AcpClientApplication`, обновляющий `configOptions` сессии из ответа (по образцу `createSession`/`loadSession`)
+- [x] 2.3 Добавить use case `SetSessionConfigOption` в application-слое, координирующий вызов и маппинг ошибок, по образцу `CreateSession`/`SendPrompt`
+- [x] 2.4 Тесты state machine: `configOptionUpdate` применяется без активного turn, применяется во время активного turn (и попадает в историю turn), несколько последовательных обновлений заменяют список целиком
+- [x] 2.5 Тесты `AcpClientApplication`/use case: успешный `setSessionConfigOption`, ошибка агента не меняет `configOptions` и не оставляет сессию в неопределённом состоянии
 
 ## 3. Приложение (codelab_app)
 

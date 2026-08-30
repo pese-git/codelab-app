@@ -525,6 +525,108 @@ void main() {
       ]);
     });
 
+    test('applies config_option_update even without an active turn', () {
+      final result = SessionStateMachine.applyUpdate(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        const SessionUpdate.configOptionUpdate(
+          configOptions: [
+            SessionConfigOption.select(
+              id: SessionConfigId('model'),
+              name: 'Model',
+              currentValue: SessionConfigValueId('gpt-5'),
+              options: [
+                SessionConfigSelectOption(
+                  value: SessionConfigValueId('gpt-5'),
+                  name: 'GPT-5',
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      expect(result, isA<AppliedStateTransition<AcpSession>>());
+      expect(
+        result.stateOrThrow.configOptions?.map((option) => option.id.value),
+        ['model'],
+      );
+    });
+
+    test('replaces the config option list on a later update', () {
+      final session = const AcpSession(id: _sessionId, cwd: '/workspace');
+      final first = SessionStateMachine.applyUpdate(
+        session,
+        const SessionUpdate.configOptionUpdate(
+          configOptions: [
+            SessionConfigOption.select(
+              id: SessionConfigId('model'),
+              name: 'Model',
+              currentValue: SessionConfigValueId('gpt-5'),
+              options: [
+                SessionConfigSelectOption(
+                  value: SessionConfigValueId('gpt-5'),
+                  name: 'GPT-5',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ).stateOrThrow;
+
+      final second = SessionStateMachine.applyUpdate(
+        first,
+        const SessionUpdate.configOptionUpdate(
+          configOptions: [
+            SessionConfigOption.select(
+              id: SessionConfigId('model'),
+              name: 'Model',
+              currentValue: SessionConfigValueId('gpt-4'),
+              options: [
+                SessionConfigSelectOption(
+                  value: SessionConfigValueId('gpt-4'),
+                  name: 'GPT-4',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ).stateOrThrow;
+
+      expect(second.configOptions?.map((option) => option.currentValue.value), [
+        'gpt-4',
+      ]);
+    });
+
+    test('still records config_option_update on the active turn while also '
+        'applying it to the session', () {
+      final running = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      ).stateOrThrow;
+
+      final result = SessionStateMachine.applyUpdate(
+        running,
+        const SessionUpdate.configOptionUpdate(
+          configOptions: [
+            SessionConfigOption.select(
+              id: SessionConfigId('model'),
+              name: 'Model',
+              currentValue: SessionConfigValueId('gpt-5'),
+              options: [
+                SessionConfigSelectOption(
+                  value: SessionConfigValueId('gpt-5'),
+                  name: 'GPT-5',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ).stateOrThrow;
+
+      expect(result.configOptions?.map((option) => option.id.value), ['model']);
+      expect(result.turns.single.updates, hasLength(1));
+    });
+
     test('keeps cancelled turn terminal when late update arrives', () {
       final running = SessionStateMachine.startTurn(
         const AcpSession(id: _sessionId, cwd: '/workspace'),

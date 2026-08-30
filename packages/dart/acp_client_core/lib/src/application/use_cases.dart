@@ -15,6 +15,8 @@ typedef ReconnectResult =
     TaskEither<AcpClientApplicationFailure, ClientConnectionState>;
 typedef RespondToPermissionResult =
     TaskEither<AcpClientApplicationFailure, ApprovalRequest>;
+typedef SetSessionConfigOptionResult =
+    TaskEither<AcpClientApplicationFailure, AcpSession>;
 
 final class CreateSession {
   const CreateSession(this._client);
@@ -50,6 +52,19 @@ final class SendPrompt {
   SendPromptResult call(SendPromptCommand command) {
     return TaskEither.tryCatch(
       () => _client.sendPrompt(command),
+      _mapApplicationFailure,
+    );
+  }
+}
+
+final class SetSessionConfigOption {
+  const SetSessionConfigOption(this._client);
+
+  final AcpClientApplication _client;
+
+  SetSessionConfigOptionResult call(SetSessionConfigOptionCommand command) {
+    return TaskEither.tryCatch(
+      () => _client.setSessionConfigOption(command),
       _mapApplicationFailure,
     );
   }
