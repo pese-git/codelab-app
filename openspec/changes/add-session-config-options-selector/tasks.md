@@ -39,6 +39,6 @@
 
 ## 7. Проверка
 
-- [ ] 7.1 `fvm dart run melos run format`
-- [ ] 7.2 `fvm dart run melos run analyze`
-- [ ] 7.3 `fvm dart run melos run test`
+- [x] 7.1 `fvm dart run melos run format`
+- [x] 7.2 `fvm dart run melos run analyze`
+- [x] 7.3 `fvm dart run melos run test`
