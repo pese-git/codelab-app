@@ -367,40 +367,14 @@ sealed class SessionConfigOption with _$SessionConfigOption {
   }) = SessionConfigSelect;
 
   factory SessionConfigOption.fromJson(Object? value) {
-    final source = requireAcpObject(
-      value,
-      path: 'sessionConfigOption',
-      allowedKeys: {
-        'type',
-        'id',
-        'name',
-        'currentValue',
-        'options',
-        'category',
-        'description',
-        '_meta',
-      },
-    );
-    final type = _requiredString(source, 'type');
-    if (type != 'select') {
+    final option = _tryParseSessionConfigOption(value);
+    if (option == null) {
       throw JsonRpcProtocolException.invalidShape(
-        'sessionConfigOption.type "$type" is not supported.',
+        'sessionConfigOption.type is not supported.',
       );
     }
 
-    return SessionConfigOption.select(
-      id: SessionConfigId.fromJson(source['id']),
-      name: _requiredString(source, 'name'),
-      currentValue: SessionConfigValueId.fromJson(source['currentValue']),
-      options: _objectList(
-        source,
-        'options',
-        SessionConfigSelectOption.fromJson,
-      ),
-      category: _optionalString(source, 'category'),
-      description: _optionalString(source, 'description'),
-      meta: _optionalObject(source, '_meta'),
-    );
+    return option;
   }
 
   JsonObject toJson() {
@@ -426,6 +400,73 @@ sealed class SessionConfigOption with _$SessionConfigOption {
         },
     };
   }
+}
+
+SessionConfigOption? _tryParseSessionConfigOption(Object? value) {
+  final source = requireAcpObject(
+    value,
+    path: 'sessionConfigOption',
+    allowedKeys: {
+      'type',
+      'id',
+      'name',
+      'currentValue',
+      'options',
+      'category',
+      'description',
+      '_meta',
+    },
+  );
+  final type = _requiredString(source, 'type');
+  if (type != 'select') {
+    // Per ACP ("Session Config Options" — Default Values and Graceful
+    // Degradation): a client that receives an option with an unrecognized
+    // `type` SHOULD ignore that option, not fail the whole configOptions
+    // list. `select` is the only type ACP currently defines; anything else
+    // is either a future type or a non-conformant agent.
+    return null;
+  }
+
+  return SessionConfigOption.select(
+    id: SessionConfigId.fromJson(source['id']),
+    name: _requiredString(source, 'name'),
+    currentValue: SessionConfigValueId.fromJson(source['currentValue']),
+    options: _objectList(source, 'options', SessionConfigSelectOption.fromJson),
+    category: _optionalString(source, 'category'),
+    description: _optionalString(source, 'description'),
+    meta: _optionalObject(source, '_meta'),
+  );
+}
+
+/// Parses a `configOptions` JSON array, skipping any entry whose `type`
+/// this client doesn't recognize instead of failing the whole list — see
+/// [_tryParseSessionConfigOption].
+List<SessionConfigOption> parseSessionConfigOptionList(
+  JsonObject source,
+  String field,
+) {
+  final value = source[field];
+  if (value is! List<Object?>) {
+    throw JsonRpcProtocolException.invalidShape('$field must be an array.');
+  }
+
+  return value
+      .map(_tryParseSessionConfigOption)
+      .whereType<SessionConfigOption>()
+      .toList(growable: false);
+}
+
+/// Nullable-field variant of [parseSessionConfigOptionList] for responses
+/// where `configOptions` itself is optional (e.g. `session/new`).
+List<SessionConfigOption>? parseOptionalSessionConfigOptionList(
+  JsonObject source,
+  String field,
+) {
+  if (!source.containsKey(field) || source[field] == null) {
+    return null;
+  }
+
+  return parseSessionConfigOptionList(source, field);
 }
 
 @freezed
@@ -484,10 +525,9 @@ sealed class NewSessionResponse with _$NewSessionResponse {
       modes: source['modes'] == null
           ? null
           : SessionModeState.fromJson(source['modes']),
-      configOptions: _optionalObjectList(
+      configOptions: parseOptionalSessionConfigOptionList(
         source,
         'configOptions',
-        SessionConfigOption.fromJson,
       ),
       meta: _optionalObject(source, '_meta'),
     );
@@ -563,10 +603,9 @@ sealed class LoadSessionResponse with _$LoadSessionResponse {
       modes: source['modes'] == null
           ? null
           : SessionModeState.fromJson(source['modes']),
-      configOptions: _optionalObjectList(
+      configOptions: parseOptionalSessionConfigOptionList(
         source,
         'configOptions',
-        SessionConfigOption.fromJson,
       ),
       meta: _optionalObject(source, '_meta'),
     );
@@ -639,11 +678,7 @@ sealed class SetSessionConfigOptionResponse
     );
 
     return SetSessionConfigOptionResponse(
-      configOptions: _objectList(
-        source,
-        'configOptions',
-        SessionConfigOption.fromJson,
-      ),
+      configOptions: parseSessionConfigOptionList(source, 'configOptions'),
       meta: _optionalObject(source, '_meta'),
     );
   }
@@ -806,16 +841,4 @@ List<T> _objectList<T>(
   }
 
   return value.map(parse).toList(growable: false);
-}
-
-List<T>? _optionalObjectList<T>(
-  JsonObject source,
-  String field,
-  T Function(Object? value) parse,
-) {
-  if (!source.containsKey(field) || source[field] == null) {
-    return null;
-  }
-
-  return _objectList(source, field, parse);
 }

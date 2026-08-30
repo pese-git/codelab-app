@@ -94,6 +94,36 @@ void main() {
       });
     });
 
+    test('ignores a config option with an unrecognized type instead of '
+        'rejecting the whole configOptions list', () {
+      final response = NewSessionResponse.fromJson({
+        'sessionId': 'session-1',
+        'configOptions': [
+          {
+            'type': 'multiselect',
+            'id': 'tags',
+            'name': 'Tags',
+            'currentValue': 'a',
+            'options': [
+              {'value': 'a', 'name': 'A'},
+            ],
+          },
+          {
+            'type': 'select',
+            'id': 'model',
+            'name': 'Model',
+            'currentValue': 'gpt-5',
+            'options': [
+              {'value': 'gpt-5', 'name': 'GPT-5'},
+            ],
+          },
+        ],
+      });
+
+      expect(response.configOptions, hasLength(1));
+      expect(response.configOptions!.single.id, SessionConfigId('model'));
+    });
+
     test('round-trips load session request and response', () {
       const request = LoadSessionRequest(
         sessionId: SessionId('session-1'),

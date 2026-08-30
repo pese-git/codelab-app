@@ -279,11 +279,7 @@ sealed class SessionUpdate with _$SessionUpdate {
         meta: _optionalObject(source, '_meta'),
       ),
       'config_option_update' => SessionUpdate.configOptionUpdate(
-        configOptions: _objectList(
-          source,
-          'configOptions',
-          SessionConfigOption.fromJson,
-        ),
+        configOptions: parseSessionConfigOptionList(source, 'configOptions'),
         meta: _optionalObject(source, '_meta'),
       ),
       'session_info_update' => SessionUpdate.sessionInfoUpdate(
