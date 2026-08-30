@@ -120,60 +120,66 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
         ? -1
         : _selectedIndex.clamp(0, filteredCommands.length - 1);
 
+    final promptRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: TextBox(
+            key: const ValueKey('composer-text-box'),
+            controller: _controller,
+            focusNode: _textFocusNode,
+            enabled: widget.enabled && !widget.isSubmitting,
+            minLines: 1,
+            maxLines: 4,
+            placeholder: widget.placeholder,
+            suffix: _buildCommandHintSuffix(),
+            onSubmitted: (_) => _submit(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        AcpButton(
+          key: const ValueKey('composer-send-button'),
+          label: 'Send',
+          icon: FluentIcons.send,
+          emphasis: AcpButtonEmphasis.primary,
+          isLoading: widget.isSubmitting,
+          onPressed: _canSubmit ? _submit : null,
+        ),
+        if (widget.onCancel != null && widget.canCancel) ...[
+          const SizedBox(width: 8),
+          AcpButton(
+            key: const ValueKey('composer-cancel-button'),
+            label: 'Cancel',
+            icon: FluentIcons.cancel,
+            onPressed: widget.enabled ? widget.onCancel : null,
+          ),
+        ],
+      ],
+    );
+
+    // When there are no config options, the child is exactly `promptRow` —
+    // structurally identical to before this widget ever grew a config
+    // options row, so that case can never pick up a width/constraint
+    // difference from the `Column` wrapper below.
+    final composerContent = widget.configOptions.isEmpty
+        ? promptRow
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildConfigOptionsRow(),
+              const SizedBox(height: 8),
+              promptRow,
+            ],
+          );
+
     final body = DecoratedBox(
       decoration: BoxDecoration(
         color: FluentTheme.of(context).micaBackgroundColor,
         border: Border.all(color: Colors.grey.withAlpha(64)),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (widget.configOptions.isNotEmpty) ...[
-              _buildConfigOptionsRow(),
-              const SizedBox(height: 8),
-            ],
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextBox(
-                    key: const ValueKey('composer-text-box'),
-                    controller: _controller,
-                    focusNode: _textFocusNode,
-                    enabled: widget.enabled && !widget.isSubmitting,
-                    minLines: 1,
-                    maxLines: 4,
-                    placeholder: widget.placeholder,
-                    suffix: _buildCommandHintSuffix(),
-                    onSubmitted: (_) => _submit(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                AcpButton(
-                  key: const ValueKey('composer-send-button'),
-                  label: 'Send',
-                  icon: FluentIcons.send,
-                  emphasis: AcpButtonEmphasis.primary,
-                  isLoading: widget.isSubmitting,
-                  onPressed: _canSubmit ? _submit : null,
-                ),
-                if (widget.onCancel != null && widget.canCancel) ...[
-                  const SizedBox(width: 8),
-                  AcpButton(
-                    key: const ValueKey('composer-cancel-button'),
-                    label: 'Cancel',
-                    icon: FluentIcons.cancel,
-                    onPressed: widget.enabled ? widget.onCancel : null,
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
+      child: Padding(padding: const EdgeInsets.all(8), child: composerContent),
     );
 
     final shortcutBoundBody = widget.shortcutsEnabled

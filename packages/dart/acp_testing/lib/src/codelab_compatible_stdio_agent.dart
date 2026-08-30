@@ -3,7 +3,8 @@ import 'dart:io';
 enum CodelabCompatibleStdioAgentMode {
   normal('normal'),
   exitOnStart('exit_on_start'),
-  invalidStdout('invalid_stdout');
+  invalidStdout('invalid_stdout'),
+  withConfigOptions('with_config_options');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -35,6 +36,7 @@ import 'dart:io';
 
 const _mode = '__CODELAB_TEST_AGENT_MODE__';
 const _sessionId = 'codelab-test-session';
+var _currentModel = 'gpt-5';
 
 Future<void> main(List<String> args) async {
   if (args.length != 2 || args[0] != 'serve' || args[1] != '--stdio') {
@@ -87,7 +89,11 @@ Future<void> main(List<String> args) async {
           'authMethods': <Object?>[],
         });
       case 'session/new':
-        _writeResponse(id, {'sessionId': _sessionId});
+        _writeResponse(id, {
+          'sessionId': _sessionId,
+          if (_mode == 'with_config_options')
+            'configOptions': [_modelConfigOption()],
+        });
       case 'session/prompt':
         _writeNotification('session/update', {
           'sessionId': _sessionId,
@@ -100,10 +106,36 @@ Future<void> main(List<String> args) async {
           },
         });
         _writeResponse(id, {'stopReason': 'end_turn'});
+      case 'session/set_config_option':
+        final params = message['params'] as Map<String, Object?>;
+        final configId = params['configId'];
+        final value = params['value'];
+        if (configId == 'model' && (value == 'gpt-5' || value == 'gpt-4')) {
+          _currentModel = value! as String;
+          _writeResponse(id, {
+            'configOptions': [_modelConfigOption()],
+          });
+        } else {
+          _writeError(id, -32602, 'Unknown config option or value');
+        }
       default:
         _writeError(id, -32601, 'Method not found');
     }
   }
+}
+
+Map<String, Object?> _modelConfigOption() {
+  return {
+    'type': 'select',
+    'id': 'model',
+    'name': 'Model',
+    'category': 'model',
+    'currentValue': _currentModel,
+    'options': [
+      {'value': 'gpt-5', 'name': 'GPT-5'},
+      {'value': 'gpt-4', 'name': 'GPT-4'},
+    ],
+  };
 }
 
 void _writeResponse(Object? id, Map<String, Object?> result) {
