@@ -91,6 +91,9 @@ class WorkbenchMainPane extends StatelessWidget {
           onCancel: cubit.cancelTurn,
           commandActions: state.paletteActions,
           onCommandSelected: (action) => selectPaletteCommand(cubit, action),
+          configOptions: state.configOptions,
+          onConfigOptionSelected: cubit.setSessionConfigOption,
+          isRespondingToConfigOption: state.isRespondingToConfigOption,
         ),
       ],
     );

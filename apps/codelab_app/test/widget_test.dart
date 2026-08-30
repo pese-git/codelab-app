@@ -1600,6 +1600,256 @@ void main() {
 
     await closeCodeLabRootScope();
   });
+
+  testWidgets(
+    'a config option the agent declared at session/new shows up as a chip '
+    'in the composer',
+    (tester) async {
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final binding = CodeLabTestBinding(
+        transport: initialTransport,
+        stdioTransportFactory: (_) => agentTransport,
+      );
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await tester.runAsync(() => shellCubit.connect());
+      await tester.pump();
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest =
+          await tester.runAsync(() => createRequestFuture) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: {
+            'sessionId': 'session-1',
+            'configOptions': [
+              {
+                'type': 'select',
+                'id': 'model',
+                'name': 'Model',
+                'currentValue': 'gpt-5',
+                'options': [
+                  {'value': 'gpt-5', 'name': 'GPT-5'},
+                  {'value': 'gpt-4', 'name': 'GPT-4'},
+                ],
+              },
+            ],
+          },
+        ),
+      );
+      await tester.runAsync(() => createFuture);
+      await tester.pump();
+
+      expect(shellCubit.state.configOptions, hasLength(1));
+      expect(shellCubit.state.configOptions.single.id, 'model');
+      expect(shellCubit.state.configOptions.single.currentValue, 'gpt-5');
+      expect(find.text('GPT-5'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
+
+  test('selecting a config option value sends session/set_config_option and '
+      "reflects the agent's response, not the tapped value directly", () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final binding = CodeLabTestBinding(
+      transport: initialTransport,
+      stdioTransportFactory: (_) => agentTransport,
+    );
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    await shellCubit.connect();
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: {
+          'sessionId': 'session-1',
+          'configOptions': [
+            {
+              'type': 'select',
+              'id': 'model',
+              'name': 'Model',
+              'currentValue': 'gpt-5',
+              'options': [
+                {'value': 'gpt-5', 'name': 'GPT-5'},
+                {'value': 'gpt-4', 'name': 'GPT-4'},
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    await createFuture;
+
+    final setRequestFuture = agentTransport.sent.first;
+    final setFuture = shellCubit.setSessionConfigOption('model', 'gpt-4');
+    final setRequest = await setRequestFuture as dynamic;
+    expect(setRequest.method, sessionSetConfigOptionMethod);
+    expect(
+      SetSessionConfigOptionRequest.fromJson(setRequest.params),
+      const SetSessionConfigOptionRequest(
+        sessionId: SessionId('session-1'),
+        configId: SessionConfigId('model'),
+        value: SessionConfigValueId('gpt-4'),
+      ),
+    );
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: setRequest.id as JsonRpcId,
+        result: {
+          'configOptions': [
+            {
+              'type': 'select',
+              'id': 'model',
+              'name': 'Model',
+              'currentValue': 'gpt-4',
+              'options': [
+                {'value': 'gpt-5', 'name': 'GPT-5'},
+                {'value': 'gpt-4', 'name': 'GPT-4'},
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    await setFuture;
+
+    expect(shellCubit.state.configOptions.single.currentValue, 'gpt-4');
+    expect(shellCubit.state.isRespondingToConfigOption, isFalse);
+
+    await closeCodeLabRootScope();
+  });
+
+  test('a config_option_update without an active turn updates the config '
+      'options shown for the session', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final binding = CodeLabTestBinding(
+      transport: initialTransport,
+      stdioTransportFactory: (_) => agentTransport,
+    );
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    await shellCubit.connect();
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    expect(shellCubit.state.configOptions, isEmpty);
+
+    // No prompt is in flight here on purpose — per ACP
+    // (docs/acp/protocol/13-Session Config Options.md), an agent may send
+    // config_option_update "at any point during a session", not just
+    // during a prompt turn.
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: SessionUpdate.configOptionUpdate(
+            configOptions: const [
+              SessionConfigOption.select(
+                id: SessionConfigId('mode'),
+                name: 'Session Mode',
+                currentValue: SessionConfigValueId('ask'),
+                options: [
+                  SessionConfigSelectOption(
+                    value: SessionConfigValueId('ask'),
+                    name: 'Ask',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ).toJson(),
+      ),
+    );
+
+    expect(shellCubit.state.configOptions, hasLength(1));
+    expect(shellCubit.state.configOptions.single.id, 'mode');
+    expect(shellCubit.state.configOptions.single.currentValue, 'ask');
+
+    await closeCodeLabRootScope();
+  });
+
+  test("switching sessions shows the newly active session's own config "
+      'options, not the previous session\'s', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final binding = CodeLabTestBinding(
+      transport: initialTransport,
+      stdioTransportFactory: (_) => agentTransport,
+    );
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    await shellCubit.connect();
+
+    final createRequestFuture1 = agentTransport.sent.first;
+    final createFuture1 = shellCubit.createSession();
+    final createRequest1 = await createRequestFuture1 as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest1.id as JsonRpcId,
+        result: {
+          'sessionId': 'session-1',
+          'configOptions': [
+            {
+              'type': 'select',
+              'id': 'model',
+              'name': 'Model',
+              'currentValue': 'gpt-5',
+              'options': [
+                {'value': 'gpt-5', 'name': 'GPT-5'},
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    await createFuture1;
+
+    expect(shellCubit.state.configOptions, hasLength(1));
+
+    final createRequestFuture2 = agentTransport.sent.first;
+    final createFuture2 = shellCubit.createSession();
+    final createRequest2 = await createRequestFuture2 as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest2.id as JsonRpcId,
+        result: const {'sessionId': 'session-2'},
+      ),
+    );
+    await createFuture2;
+
+    expect(shellCubit.state.configOptions, isEmpty);
+
+    shellCubit.selectSession('session-1');
+
+    expect(shellCubit.state.configOptions, hasLength(1));
+    expect(shellCubit.state.configOptions.single.currentValue, 'gpt-5');
+
+    shellCubit.selectSession('session-2');
+
+    expect(shellCubit.state.configOptions, isEmpty);
+
+    await closeCodeLabRootScope();
+  });
 }
 
 final class _FailingStartTransport implements AcpTransport {

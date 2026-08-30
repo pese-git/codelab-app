@@ -138,11 +138,12 @@ final class CodeLabShellState {
   /// value actually changes, so it is safe to leave set between emits.
   final String composerDraft;
 
-  /// The active session's `SessionConfigOption`s (e.g. model/mode selectors
-  /// the agent advertised), replaced wholesale on every new
-  /// `config_option_update` and cleared/restored on session switch/creation
-  /// — same "later update replaces the list" pattern as [agentCommands].
-  final List<SessionConfigOption> configOptions;
+  /// The active session's config options (e.g. model/mode selectors the
+  /// agent advertised), mapped to the `acp_ui`-facing [AcpConfigOption] and
+  /// replaced wholesale on every new `config_option_update` and
+  /// cleared/restored on session switch/creation — same "later update
+  /// replaces the list" pattern as [agentCommands].
+  final List<AcpConfigOption> configOptions;
 
   /// Guards against a second `session/set_config_option` request firing
   /// while one is already in flight, mirroring [isRespondingToApproval].
@@ -178,7 +179,7 @@ final class CodeLabShellState {
     bool? isInspectorVisibleInNarrowLayout,
     List<AcpCommandAction>? agentCommands,
     String? composerDraft,
-    List<SessionConfigOption>? configOptions,
+    List<AcpConfigOption>? configOptions,
     bool? isRespondingToConfigOption,
   }) {
     return CodeLabShellState(
@@ -924,12 +925,43 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
-  /// Derives the current `SessionConfigOption` list from
-  /// [AcpSession.configOptions] — kept in sync via `SessionStateMachine.
-  /// _applyUpdate`'s `ConfigOptionUpdate` handling (session-scoped, same
-  /// pattern as `AvailableCommandsUpdate`/[_agentCommandsFor]).
-  List<SessionConfigOption> _configOptionsFor(AcpSession session) {
-    return session.configOptions ?? const [];
+  /// Derives the current config option list from [AcpSession.configOptions]
+  /// — kept in sync via `SessionStateMachine._applyUpdate`'s
+  /// `ConfigOptionUpdate` handling (session-scoped, same pattern as
+  /// `AvailableCommandsUpdate`/[_agentCommandsFor]). Maps the protocol DTO
+  /// to the `acp_ui`-facing [AcpConfigOption] here, at the application
+  /// boundary — `acp_ui` has no dependency on `acp_protocol`.
+  List<AcpConfigOption> _configOptionsFor(AcpSession session) {
+    return (session.configOptions ?? const [])
+        .map(_configOptionUiModel)
+        .toList(growable: false);
+  }
+
+  AcpConfigOption _configOptionUiModel(SessionConfigOption option) {
+    return switch (option) {
+      SessionConfigSelect(
+        :final id,
+        :final name,
+        :final currentValue,
+        :final options,
+        :final description,
+      ) =>
+        AcpConfigOption(
+          id: id.value,
+          name: name,
+          currentValue: currentValue.value,
+          description: description,
+          values: options
+              .map(
+                (value) => AcpConfigOptionValue(
+                  value: value.value.value,
+                  name: value.name,
+                  description: value.description,
+                ),
+              )
+              .toList(growable: false),
+        ),
+    };
   }
 
   /// Derives the current agent-declared command list from

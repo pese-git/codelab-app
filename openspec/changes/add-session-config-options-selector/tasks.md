@@ -32,10 +32,10 @@
 
 ## 6. Тесты — сквозной сценарий (codelab_app)
 
-- [ ] 6.1 Widget-тест: `session/new` с `configOptions` в ответе показывает селекторы в композере
-- [ ] 6.2 Widget-тест: выбор значения отправляет `session/set_config_option` и обновляет чип из ответа
-- [ ] 6.3 Widget-тест: `configOptionUpdate`, пришедший без активного turn, обновляет селекторы
-- [ ] 6.4 Widget-тест: смена активной сессии показывает `configOptions` именно новой сессии (переиспользовать паттерн session isolation из `selectSession`/`createSession`)
+- [x] 6.1 Widget-тест: `session/new` с `configOptions` в ответе показывает селекторы в композере
+- [x] 6.2 Widget-тест: выбор значения отправляет `session/set_config_option` и обновляет чип из ответа
+- [x] 6.3 Widget-тест: `configOptionUpdate`, пришедший без активного turn, обновляет селекторы
+- [x] 6.4 Widget-тест: смена активной сессии показывает `configOptions` именно новой сессии (переиспользовать паттерн session isolation из `selectSession`/`createSession`)
 
 ## 7. Проверка
 
