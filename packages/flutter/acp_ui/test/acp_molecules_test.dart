@@ -422,6 +422,167 @@ void main() {
     },
   );
 
+  testWidgets('does not render a config options row when the list is empty', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FluentApp(home: AcpPromptComposer(onSubmit: (_) {})),
+    );
+
+    expect(
+      find.byKey(const ValueKey('composer-config-options-row')),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+    'renders one chip per config option in the declared order with its '
+    'current value',
+    (tester) async {
+      const modelOption = AcpConfigOption(
+        id: 'model',
+        name: 'Model',
+        currentValue: 'gpt-5',
+        values: [
+          AcpConfigOptionValue(value: 'gpt-5', name: 'GPT-5'),
+          AcpConfigOptionValue(value: 'gpt-4', name: 'GPT-4'),
+        ],
+      );
+      const modeOption = AcpConfigOption(
+        id: 'mode',
+        name: 'Session Mode',
+        currentValue: 'ask',
+        values: [AcpConfigOptionValue(value: 'ask', name: 'Ask')],
+      );
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpPromptComposer(
+            onSubmit: (_) {},
+            configOptions: const [modelOption, modeOption],
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('composer-config-options-row')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-config-option-model')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-config-option-mode')),
+        findsOneWidget,
+      );
+      expect(find.text('GPT-5'), findsOneWidget);
+      expect(find.text('Ask'), findsOneWidget);
+
+      final modelChip = tester.getTopLeft(
+        find.byKey(const ValueKey('composer-config-option-model')),
+      );
+      final modeChip = tester.getTopLeft(
+        find.byKey(const ValueKey('composer-config-option-mode')),
+      );
+      expect(modelChip.dx, lessThan(modeChip.dx));
+    },
+  );
+
+  testWidgets('selecting a value from a config option chip calls '
+      'onConfigOptionSelected with the configId and chosen value', (
+    tester,
+  ) async {
+    String? selectedConfigId;
+    String? selectedValue;
+    const modelOption = AcpConfigOption(
+      id: 'model',
+      name: 'Model',
+      currentValue: 'gpt-5',
+      values: [
+        AcpConfigOptionValue(value: 'gpt-5', name: 'GPT-5'),
+        AcpConfigOptionValue(value: 'gpt-4', name: 'GPT-4'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpPromptComposer(
+          onSubmit: (_) {},
+          configOptions: const [modelOption],
+          onConfigOptionSelected: (configId, value) {
+            selectedConfigId = configId;
+            selectedValue = value;
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('composer-config-option-model')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('GPT-4'));
+    await tester.pumpAndSettle();
+
+    expect(selectedConfigId, 'model');
+    expect(selectedValue, 'gpt-4');
+  });
+
+  testWidgets(
+    'replaces the config options row entirely when a new list is provided',
+    (tester) async {
+      const modelOption = AcpConfigOption(
+        id: 'model',
+        name: 'Model',
+        currentValue: 'gpt-5',
+        values: [AcpConfigOptionValue(value: 'gpt-5', name: 'GPT-5')],
+      );
+      const modeOption = AcpConfigOption(
+        id: 'mode',
+        name: 'Session Mode',
+        currentValue: 'ask',
+        values: [AcpConfigOptionValue(value: 'ask', name: 'Ask')],
+      );
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpPromptComposer(
+            onSubmit: (_) {},
+            configOptions: const [modelOption],
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('composer-config-option-model')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-config-option-mode')),
+        findsNothing,
+      );
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpPromptComposer(
+            onSubmit: (_) {},
+            configOptions: const [modeOption],
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('composer-config-option-model')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-config-option-mode')),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('renders compact tool call status details', (tester) async {
     await tester.pumpWidget(
       const FluentApp(

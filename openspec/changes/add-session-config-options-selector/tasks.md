@@ -19,16 +19,16 @@
 
 ## 4. UI-компонент (acp_ui)
 
-- [ ] 4.1 Добавить в `AcpPromptComposer` опциональные параметры `configOptions: List<...>` и `onConfigOptionSelected: void Function(String configId, String value)?`
-- [ ] 4.2 Реализовать ряд chip-виджетов с dropdown (по образцу существующих меню-паттернов в `acp_ui`, либо `fluent_ui` `MenuFlyout`), рендерящийся между текстовым полем и/или toolbar'ом; при пустом `configOptions` ряд не рендерится (`SizedBox.shrink()`), а не скрывается стилистически
-- [ ] 4.3 Название и варианты чипа берутся из `option.name`/`option.options` как есть, без сопоставления с локальными именами `readOnly`/`ask`/`plan`/`autoEdits`
+- [x] 4.1 Добавить в `AcpPromptComposer` опциональные параметры `configOptions: List<...>` и `onConfigOptionSelected: void Function(String configId, String value)?` (реализовано через новую UI-модель `AcpConfigOption`/`AcpConfigOptionValue` в `acp_ui` — `acp_ui` не зависит от `acp_protocol`, поэтому `SessionConfigOption` не может быть передан напрямую; маппинг делает `CodeLabShellCubit`, как и для `AvailableCommand` → `AcpCommandAction`)
+- [x] 4.2 Реализовать ряд chip-виджетов с dropdown (`fluent_ui` `DropDownButton`/`MenuFlyoutItem`), рендерящийся строкой над полем ввода внутри той же карточки композера; при пустом `configOptions` ряд не рендерится вообще (условие в `Column`, не `SizedBox.shrink()`)
+- [x] 4.3 Название и варианты чипа берутся из `option.name`/`option.values` как есть, без сопоставления с локальными именами `readOnly`/`ask`/`plan`/`autoEdits`
 
 ## 5. Тесты — UI
 
-- [ ] 5.1 Widget-тест: пустой `configOptions` не рендерит ряд селекторов
-- [ ] 5.2 Widget-тест: непустой `configOptions` рендерит по одному чипу на опцию, в присланном порядке, с `currentValue`
-- [ ] 5.3 Widget-тест: выбор значения из dropdown вызывает `onConfigOptionSelected` с правильными `configId`/`value`
-- [ ] 5.4 Widget-тест: обновление `configOptions` (новый список) обновляет отображаемые чипы целиком
+- [x] 5.1 Widget-тест: пустой `configOptions` не рендерит ряд селекторов
+- [x] 5.2 Widget-тест: непустой `configOptions` рендерит по одному чипу на опцию, в присланном порядке, с `currentValue`
+- [x] 5.3 Widget-тест: выбор значения из dropdown вызывает `onConfigOptionSelected` с правильными `configId`/`value`
+- [x] 5.4 Widget-тест: обновление `configOptions` (новый список) обновляет отображаемые чипы целиком
 
 ## 6. Тесты — сквозной сценарий (codelab_app)
 

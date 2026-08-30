@@ -4,8 +4,10 @@ import 'package:flutter/services.dart';
 import '../atomics/atomics.dart';
 import '../organisms/acp_command_palette_surface.dart';
 import 'acp_command_action.dart';
+import 'acp_config_option.dart';
 
 typedef AcpPromptSubmitCallback = void Function(String prompt);
+typedef AcpConfigOptionSelected = void Function(String configId, String value);
 
 class AcpPromptComposer extends StatefulWidget {
   const AcpPromptComposer({
@@ -19,6 +21,9 @@ class AcpPromptComposer extends StatefulWidget {
     this.shortcutsEnabled = true,
     this.commandActions = const [],
     this.onCommandSelected,
+    this.configOptions = const [],
+    this.onConfigOptionSelected,
+    this.isRespondingToConfigOption = false,
     super.key,
   });
 
@@ -44,6 +49,20 @@ class AcpPromptComposer extends StatefulWidget {
   /// palette. The `/word` fragment that triggered it has already been
   /// removed from the composer text by the time this fires.
   final ValueChanged<AcpCommandAction>? onCommandSelected;
+
+  /// Agent-declared session config options (e.g. model/mode selectors),
+  /// rendered as a row of chips above the composer. An empty list (the
+  /// default) renders nothing — there is no "coming soon" state here, an
+  /// agent that never declares any options simply has no row to show.
+  final List<AcpConfigOption> configOptions;
+
+  /// Called with `(configId, value)` when the user picks a new value from
+  /// one of the [configOptions] chips.
+  final AcpConfigOptionSelected? onConfigOptionSelected;
+
+  /// Disables the config option chips while a previous selection's
+  /// `session/set_config_option` round trip is still in flight.
+  final bool isRespondingToConfigOption;
 
   @override
   State<AcpPromptComposer> createState() => _AcpPromptComposerState();
@@ -109,40 +128,49 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
       ),
       child: Padding(
         padding: const EdgeInsets.all(8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: TextBox(
-                key: const ValueKey('composer-text-box'),
-                controller: _controller,
-                focusNode: _textFocusNode,
-                enabled: widget.enabled && !widget.isSubmitting,
-                minLines: 1,
-                maxLines: 4,
-                placeholder: widget.placeholder,
-                suffix: _buildCommandHintSuffix(),
-                onSubmitted: (_) => _submit(),
-              ),
-            ),
-            const SizedBox(width: 8),
-            AcpButton(
-              key: const ValueKey('composer-send-button'),
-              label: 'Send',
-              icon: FluentIcons.send,
-              emphasis: AcpButtonEmphasis.primary,
-              isLoading: widget.isSubmitting,
-              onPressed: _canSubmit ? _submit : null,
-            ),
-            if (widget.onCancel != null && widget.canCancel) ...[
-              const SizedBox(width: 8),
-              AcpButton(
-                key: const ValueKey('composer-cancel-button'),
-                label: 'Cancel',
-                icon: FluentIcons.cancel,
-                onPressed: widget.enabled ? widget.onCancel : null,
-              ),
+            if (widget.configOptions.isNotEmpty) ...[
+              _buildConfigOptionsRow(),
+              const SizedBox(height: 8),
             ],
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: TextBox(
+                    key: const ValueKey('composer-text-box'),
+                    controller: _controller,
+                    focusNode: _textFocusNode,
+                    enabled: widget.enabled && !widget.isSubmitting,
+                    minLines: 1,
+                    maxLines: 4,
+                    placeholder: widget.placeholder,
+                    suffix: _buildCommandHintSuffix(),
+                    onSubmitted: (_) => _submit(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                AcpButton(
+                  key: const ValueKey('composer-send-button'),
+                  label: 'Send',
+                  icon: FluentIcons.send,
+                  emphasis: AcpButtonEmphasis.primary,
+                  isLoading: widget.isSubmitting,
+                  onPressed: _canSubmit ? _submit : null,
+                ),
+                if (widget.onCancel != null && widget.canCancel) ...[
+                  const SizedBox(width: 8),
+                  AcpButton(
+                    key: const ValueKey('composer-cancel-button'),
+                    label: 'Cancel',
+                    icon: FluentIcons.cancel,
+                    onPressed: widget.enabled ? widget.onCancel : null,
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
@@ -323,6 +351,45 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
       }
     }
     return null;
+  }
+
+  /// A `Wrap` of `DropDownButton` chips, one per [AcpPromptComposer.configOptions]
+  /// entry, in the order the agent declared them. Only built when the list is
+  /// non-empty — see [AcpPromptComposer.configOptions].
+  Widget _buildConfigOptionsRow() {
+    return Wrap(
+      key: const ValueKey('composer-config-options-row'),
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final option in widget.configOptions)
+          _buildConfigOptionChip(option),
+      ],
+    );
+  }
+
+  Widget _buildConfigOptionChip(AcpConfigOption option) {
+    final currentValue = option.values
+        .where((value) => value.value == option.currentValue)
+        .firstOrNull;
+
+    return DropDownButton(
+      key: ValueKey('composer-config-option-${option.id}'),
+      disabled: widget.isRespondingToConfigOption,
+      title: AcpText(currentValue?.name ?? option.currentValue),
+      items: [
+        for (final value in option.values)
+          MenuFlyoutItem(
+            key: ValueKey(
+              'composer-config-option-${option.id}-value-${value.value}',
+            ),
+            text: AcpText(value.name),
+            selected: value.value == option.currentValue,
+            onPressed: () =>
+                widget.onConfigOptionSelected?.call(option.id, value.value),
+          ),
+      ],
+    );
   }
 
   String _activeQuery() {
