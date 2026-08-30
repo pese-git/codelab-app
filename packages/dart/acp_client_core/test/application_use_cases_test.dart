@@ -381,6 +381,85 @@ void main() {
     await replacement.close();
   });
 
+  test('unexpected transport failure while ready surfaces as '
+      'ClientConnectionFailed on connectionStateChanges', () async {
+    final freshTransport = FakeAcpTransport()
+      ..initializeProtocolVersion =
+          AcpClientApplication.supportedProtocolVersion;
+    final freshClient = AcpClientApplication(transport: FakeAcpTransport());
+    addTearDown(freshClient.dispose);
+    await freshClient.connect(freshTransport);
+    expect(freshClient.connectionState, isA<ClientConnectionReady>());
+
+    final states = <ClientConnectionState>[];
+    final subscription = freshClient.connectionStateChanges.listen(states.add);
+
+    freshTransport.fail(
+      const AcpTransportException(
+        code: AcpTransportErrorCode.disconnected,
+        message: 'Stdio ACP agent exited unexpectedly with code 1.',
+      ),
+    );
+
+    expect(freshClient.connectionState, isA<ClientConnectionFailed>());
+    final failed = freshClient.connectionState as ClientConnectionFailed;
+    expect(failed.reason, ConnectionFailureReason.disconnected);
+    expect(failed.message, 'Stdio ACP agent exited unexpectedly with code 1.');
+    expect(states, [isA<ClientConnectionFailed>()]);
+
+    await subscription.cancel();
+  });
+
+  test('transport failure while already disconnected does not throw or '
+      'change connection state', () async {
+    expect(client.connectionState, isA<ClientConnectionDisconnected>());
+
+    expect(
+      () => transport.fail(
+        const AcpTransportException(
+          code: AcpTransportErrorCode.disconnected,
+          message: 'late failure after disconnect',
+        ),
+      ),
+      returnsNormally,
+    );
+
+    expect(client.connectionState, isA<ClientConnectionDisconnected>());
+  });
+
+  test('transport failure from a transport replaced by reconnect does not '
+      'affect the current connection', () async {
+    final oldTransport = FakeAcpTransport()
+      ..initializeProtocolVersion =
+          AcpClientApplication.supportedProtocolVersion;
+    final newTransport = FakeAcpTransport()
+      ..initializeProtocolVersion =
+          AcpClientApplication.supportedProtocolVersion;
+    final freshClient = AcpClientApplication(
+      transport: FakeAcpTransport(),
+      reconnectTransport: () => newTransport,
+    );
+    addTearDown(freshClient.dispose);
+    await freshClient.connect(oldTransport);
+
+    final result = await Reconnect(freshClient)(const ReconnectCommand()).run();
+    expect(result.isRight(), isTrue);
+    expect(freshClient.connectionState, isA<ClientConnectionReady>());
+
+    // The old transport is no longer bound (its generation was superseded) —
+    // a late failure from it must not reach the current connection state.
+    oldTransport.fail(
+      const AcpTransportException(
+        code: AcpTransportErrorCode.disconnected,
+        message: 'stale failure from superseded transport',
+      ),
+    );
+
+    expect(freshClient.connectionState, isA<ClientConnectionReady>());
+
+    await newTransport.close();
+  });
+
   test('SendPrompt does not overwrite turn state with a stale failure when '
       'reconnect races the in-flight response', () async {
     await _createSession(client, transport);

@@ -371,6 +371,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _diagnosticSubscription = _application.diagnosticChanges.listen(
       _handleApplicationDiagnostic,
     );
+    _connectionStateSubscription = _application.connectionStateChanges.listen(
+      _handleConnectionStateChange,
+    );
   }
 
   final AcpClientApplication _application;
@@ -385,6 +388,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final _redactor = const SecretRedactor();
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<DiagnosticEntry> _diagnosticSubscription;
+  late final StreamSubscription<ClientConnectionState>
+  _connectionStateSubscription;
 
   void selectTransport(CodeLabTransportType transportType) {
     emit(state.withTransportProjection(transportType: transportType));
@@ -878,6 +883,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   Future<void> close() async {
     await _sessionSubscription.cancel();
     await _diagnosticSubscription.cancel();
+    await _connectionStateSubscription.cancel();
     return super.close();
   }
 
@@ -997,6 +1003,38 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       diagnostic.message,
       severity: _debugSeverity(diagnostic.severity),
       source: diagnostic.source ?? 'application',
+    );
+  }
+
+  /// Reacts only to a *spontaneous* connection loss — a transport failure
+  /// that happened while nobody asked for one, i.e. `connectionStatus` was
+  /// still `connected`. Explicit `connect()`/`reconnect()` already move
+  /// `connectionStatus` to `connecting`/`reconnecting` before awaiting and
+  /// fully own reporting their own outcome in their own catch/`result.match`
+  /// blocks — this handler must stay silent for those, or every explicit
+  /// failure would get a second, conflicting diagnostic entry from here.
+  void _handleConnectionStateChange(ClientConnectionState connectionState) {
+    if (connectionState is! ClientConnectionFailed) {
+      return;
+    }
+    if (state.connectionStatus != AcpConnectionStatus.connected) {
+      return;
+    }
+
+    emit(
+      state.copyWith(
+        connectionStatus: AcpConnectionStatus.failed,
+        pendingApproval: null,
+        isPromptSubmitting: false,
+        canCancel: false,
+        isRespondingToApproval: false,
+        isRespondingToConfigOption: false,
+      ),
+    );
+    _recordDiagnostic(
+      'Connection to ACP agent lost: ${connectionState.message}',
+      severity: AcpDebugLogSeverity.error,
+      source: 'transport',
     );
   }
 

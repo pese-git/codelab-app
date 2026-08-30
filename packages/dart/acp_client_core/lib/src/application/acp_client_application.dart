@@ -729,6 +729,22 @@ final class AcpClientApplication {
           cause: error,
           context: {'code': error.code.name, 'cause': error.cause?.toString()},
         );
+        // Unexpected transport loss (e.g. the stdio child process dying)
+        // must reach `connectionStateChanges`, not just diagnostics —
+        // otherwise the UI has no way to observe it and stays stuck showing
+        // a connection/turn that no longer exists. `disconnected` is the
+        // only state `ConnectionStateMachine._fail` rejects, so guard
+        // against it the same way `_establishConnection` already does
+        // before an intentional disconnect.
+        if (_connectionState is! ClientConnectionDisconnected) {
+          _transitionConnection(
+            ConnectionStateEvent.fail(
+              reason: _connectionFailureReasonFor(error.code),
+              message: error.message,
+              cause: error.cause,
+            ),
+          );
+        }
       case AcpTransportStateChanged():
         break;
     }
@@ -918,5 +934,22 @@ DiagnosticSeverity _mapDiagnosticSeverity(
     AcpTransportDiagnosticSeverity.info => DiagnosticSeverity.info,
     AcpTransportDiagnosticSeverity.warning => DiagnosticSeverity.warning,
     AcpTransportDiagnosticSeverity.error => DiagnosticSeverity.error,
+  };
+}
+
+ConnectionFailureReason _connectionFailureReasonFor(
+  AcpTransportErrorCode code,
+) {
+  return switch (code) {
+    AcpTransportErrorCode.startFailed => ConnectionFailureReason.startFailed,
+    AcpTransportErrorCode.sendFailed => ConnectionFailureReason.sendFailed,
+    AcpTransportErrorCode.receiveFailed =>
+      ConnectionFailureReason.receiveFailed,
+    AcpTransportErrorCode.protocolViolation =>
+      ConnectionFailureReason.protocolViolation,
+    AcpTransportErrorCode.closed => ConnectionFailureReason.closed,
+    AcpTransportErrorCode.timeout => ConnectionFailureReason.timeout,
+    AcpTransportErrorCode.disconnected => ConnectionFailureReason.disconnected,
+    AcpTransportErrorCode.unknown => ConnectionFailureReason.unknown,
   };
 }

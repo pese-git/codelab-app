@@ -257,6 +257,165 @@ void main() {
     await application.dispose();
   });
 
+  test('a spontaneous transport failure while a turn is running marks the '
+      'connection failed and clears the now-unreliable active-request state, '
+      'without discarding the transcript', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) => agentTransport,
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+    );
+
+    shellCubit.updateStdioCwd('/workspace');
+    await shellCubit.connect();
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    final promptRequestFuture = agentTransport.sent.first;
+    final submitFuture = shellCubit.submitPrompt('hello agent');
+    await promptRequestFuture;
+    expect(shellCubit.state.isPromptSubmitting, isTrue);
+    expect(shellCubit.state.canCancel, isTrue);
+
+    // The agent's process dies mid-turn — the transport reports it as an
+    // unexpected failure, exactly like `StdioAcpTransport._handleProcessExit`
+    // does for a real child process exit.
+    agentTransport.fail(
+      const AcpTransportException(
+        code: AcpTransportErrorCode.disconnected,
+        message: 'Stdio ACP agent exited unexpectedly with code -9.',
+      ),
+    );
+
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(shellCubit.state.isPromptSubmitting, isFalse);
+    expect(shellCubit.state.canCancel, isFalse);
+    expect(shellCubit.state.pendingApproval, isNull);
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('Connection to ACP agent lost'),
+    );
+    // The transcript up to the point of failure is history, not part of
+    // the now-untrustworthy active request — it must stay visible.
+    expect(shellCubit.state.transcriptEntries, isNotEmpty);
+    expect(shellCubit.state.transcriptEntries.last.body, 'hello agent');
+
+    // `submitFuture` itself never resolves on its own at this point — a
+    // spontaneous transport failure doesn't fail pending requests (only an
+    // explicit `_replaceTransport`/`dispose()` does), and that's fine: the
+    // UI-facing state above is already corrected by the connection-loss
+    // handler, independently of this dangling call (resuming/settling the
+    // request itself is out of scope — see design.md Non-Goals). `dispose()`
+    // is what finally fails it (same as any other pending request) — await
+    // it before closing the cubit, so its catch-driven `emit` lands while
+    // the cubit is still open rather than crashing on a closed BlocBase.
+    await application.dispose();
+    await submitFuture;
+    await shellCubit.close();
+  });
+
+  test('an explicit connect() failure is not duplicated by the spontaneous '
+      'connection-loss handler', () async {
+    final configs = <StdioAcpTransportConfig>[];
+    final application = AcpClientApplication(transport: FakeAcpTransport());
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (config) {
+        configs.add(config);
+        return _FailingStartTransport();
+      },
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+    );
+
+    shellCubit.updateStdioCommand('missing-codelab');
+    await shellCubit.connect();
+
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+    final lossMessages = shellCubit.state.diagnostics.where(
+      (entry) => entry.message.contains('Connection to ACP agent lost'),
+    );
+    expect(lossMessages, isEmpty);
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('Failed to start stdio ACP agent'),
+    );
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test('an explicit reconnect() failure is not duplicated by the spontaneous '
+      'connection-loss handler', () async {
+    final initialTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    var reconnectAttempts = 0;
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) {
+        reconnectAttempts += 1;
+        // The first call is the initial connect(); the second is the
+        // reconnect() under test, which must fail.
+        return reconnectAttempts == 1
+            ? FakeAcpTransport()
+            : _FailingStartTransport();
+      },
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+    );
+
+    shellCubit.updateStdioCwd('/workspace');
+    await shellCubit.connect();
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+
+    await shellCubit.reconnect();
+
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+    final lossMessages = shellCubit.state.diagnostics.where(
+      (entry) => entry.message.contains('Connection to ACP agent lost'),
+    );
+    expect(lossMessages, isEmpty);
+    expect(
+      shellCubit.state.diagnostics.last.message,
+      contains('Failed to reconnect stdio ACP agent'),
+    );
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
   test(
     'inspector tracks tool calls approvals raw details and protocol',
     () async {
