@@ -14,8 +14,8 @@
 
 ## 3. Приложение (codelab_app)
 
-- [ ] 3.1 Добавить `CodeLabShellCubit.setSessionConfigOption(String configId, String value)`, вызывающий use case; отражение нового `configOptions` идёт через уже существующий путь `sessionChanges` → `_handleSessionChange`, без нового поля state, если `AcpSession.configOptions` уже доступен через активную сессию в state
-- [ ] 3.2 Учесть гонку двойного клика по одному чипу, пока предыдущий `session/set_config_option` не завершился (простой флаг наподобие `isRespondingToApproval`, если понадобится по факту реализации)
+- [x] 3.1 Добавить `CodeLabShellCubit.setSessionConfigOption(String configId, String value)`, вызывающий use case; отражение нового `configOptions` идёт через уже существующий путь `sessionChanges` → `_handleSessionChange` (реализовано как отдельное поле `CodeLabShellState.configOptions`, по образцу `agentCommands` — design.md допускал оба варианта, выбран этот для консистентности с уже устоявшимся паттерном)
+- [x] 3.2 Учесть гонку двойного клика по одному чипу, пока предыдущий `session/set_config_option` не завершился (реализовано как `isRespondingToConfigOption: bool`, по образцу `isRespondingToApproval`)
 
 ## 4. UI-компонент (acp_ui)
 

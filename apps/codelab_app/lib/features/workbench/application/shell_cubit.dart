@@ -53,6 +53,8 @@ final class CodeLabShellState {
     this.isInspectorVisibleInNarrowLayout = false,
     this.agentCommands = const [],
     this.composerDraft = '',
+    this.configOptions = const [],
+    this.isRespondingToConfigOption = false,
   });
 
   factory CodeLabShellState.initial({required StdioAcpAgentProfile profile}) =>
@@ -136,6 +138,16 @@ final class CodeLabShellState {
   /// value actually changes, so it is safe to leave set between emits.
   final String composerDraft;
 
+  /// The active session's `SessionConfigOption`s (e.g. model/mode selectors
+  /// the agent advertised), replaced wholesale on every new
+  /// `config_option_update` and cleared/restored on session switch/creation
+  /// — same "later update replaces the list" pattern as [agentCommands].
+  final List<SessionConfigOption> configOptions;
+
+  /// Guards against a second `session/set_config_option` request firing
+  /// while one is already in flight, mirroring [isRespondingToApproval].
+  final bool isRespondingToConfigOption;
+
   CodeLabShellState copyWith({
     AcpConnectionStatus? connectionStatus,
     CodeLabTransportType? transportType,
@@ -166,6 +178,8 @@ final class CodeLabShellState {
     bool? isInspectorVisibleInNarrowLayout,
     List<AcpCommandAction>? agentCommands,
     String? composerDraft,
+    List<SessionConfigOption>? configOptions,
+    bool? isRespondingToConfigOption,
   }) {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
@@ -202,6 +216,9 @@ final class CodeLabShellState {
           this.isInspectorVisibleInNarrowLayout,
       agentCommands: agentCommands ?? this.agentCommands,
       composerDraft: composerDraft ?? this.composerDraft,
+      configOptions: configOptions ?? this.configOptions,
+      isRespondingToConfigOption:
+          isRespondingToConfigOption ?? this.isRespondingToConfigOption,
     );
   }
 
@@ -334,6 +351,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required CancelTurn cancelTurnUseCase,
     required Reconnect reconnectUseCase,
     required RespondToPermission respondToPermissionUseCase,
+    required SetSessionConfigOption setSessionConfigOptionUseCase,
     required CodeLabStdioTransportFactory stdioTransportFactory,
     required WorkingDirectoryProvider workingDirectoryProvider,
   }) : _application = application,
@@ -342,6 +360,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
        _cancelTurnUseCase = cancelTurnUseCase,
        _reconnectUseCase = reconnectUseCase,
        _respondToPermissionUseCase = respondToPermissionUseCase,
+       _setSessionConfigOptionUseCase = setSessionConfigOptionUseCase,
        _stdioTransportFactory = stdioTransportFactory,
        _workingDirectoryProvider = workingDirectoryProvider,
        super(CodeLabShellState.initial(profile: profile)) {
@@ -359,6 +378,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final CancelTurn _cancelTurnUseCase;
   final Reconnect _reconnectUseCase;
   final RespondToPermission _respondToPermissionUseCase;
+  final SetSessionConfigOption _setSessionConfigOptionUseCase;
   final CodeLabStdioTransportFactory _stdioTransportFactory;
   final WorkingDirectoryProvider _workingDirectoryProvider;
   final _redactor = const SecretRedactor();
@@ -544,6 +564,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             inspectorEntries: _inspectorEntriesForSession(session),
             pendingApproval: null,
             agentCommands: _agentCommandsFor(session),
+            configOptions: _configOptionsFor(session),
           ),
         );
         _recordDiagnostic(
@@ -574,6 +595,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           inspectorEntries: const [],
           pendingApproval: null,
           agentCommands: const [],
+          configOptions: const [],
         ),
       );
       return;
@@ -589,6 +611,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         inspectorEntries: _inspectorEntriesForSession(session),
         pendingApproval: _pendingApprovalFor(session),
         agentCommands: _agentCommandsFor(session),
+        configOptions: _configOptionsFor(session),
       ),
     );
   }
@@ -761,6 +784,46 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
+  /// Sends the user's chosen [value] for [configId] to the agent via
+  /// `session/set_config_option`. Guards against a second request firing
+  /// for the same chip while one is already in flight — mirrors
+  /// [respondToApproval]'s guard/re-derive pattern: the displayed
+  /// `configOptions` is always re-derived from the next `sessionChanges`
+  /// event in [_handleSessionChange], never set optimistically here.
+  Future<void> setSessionConfigOption(String configId, String value) async {
+    final sessionId = state.activeSessionId;
+    if (sessionId == null || state.isRespondingToConfigOption) {
+      return;
+    }
+
+    emit(state.copyWith(isRespondingToConfigOption: true));
+    final result = await _setSessionConfigOptionUseCase(
+      SetSessionConfigOptionCommand(
+        sessionId: SessionId(sessionId),
+        configId: SessionConfigId(configId),
+        value: SessionConfigValueId(value),
+      ),
+    ).run();
+
+    result.match(
+      (failure) {
+        emit(state.copyWith(isRespondingToConfigOption: false));
+        _recordDiagnostic(
+          'Failed to set config option $configId: ${_failureMessage(failure)}',
+          severity: AcpDebugLogSeverity.error,
+          source: 'session',
+        );
+      },
+      (_) {
+        emit(state.copyWith(isRespondingToConfigOption: false));
+        _recordDiagnostic(
+          'Set config option $configId to $value.',
+          source: 'session',
+        );
+      },
+    );
+  }
+
   void openCommandPalette() => emit(state.copyWith(isCommandPaletteOpen: true));
 
   void closeCommandPalette() =>
@@ -856,8 +919,17 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         inspectorEntries: _inspectorEntriesForSession(session),
         pendingApproval: _pendingApprovalFor(session),
         agentCommands: _agentCommandsFor(session),
+        configOptions: _configOptionsFor(session),
       ),
     );
+  }
+
+  /// Derives the current `SessionConfigOption` list from
+  /// [AcpSession.configOptions] — kept in sync via `SessionStateMachine.
+  /// _applyUpdate`'s `ConfigOptionUpdate` handling (session-scoped, same
+  /// pattern as `AvailableCommandsUpdate`/[_agentCommandsFor]).
+  List<SessionConfigOption> _configOptionsFor(AcpSession session) {
+    return session.configOptions ?? const [];
   }
 
   /// Derives the current agent-declared command list from

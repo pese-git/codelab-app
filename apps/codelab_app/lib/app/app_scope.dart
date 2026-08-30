@@ -96,6 +96,13 @@ final class CodeLabPresentationModule extends Module {
               RespondToPermission(currentScope.resolve<AcpClientApplication>()),
         )
         .singleton();
+    bind<SetSessionConfigOption>()
+        .toProvide(
+          () => SetSessionConfigOption(
+            currentScope.resolve<AcpClientApplication>(),
+          ),
+        )
+        .singleton();
     bind<CodeLabShellCubit>()
         .toProvide(
           () => CodeLabShellCubit(
@@ -107,6 +114,8 @@ final class CodeLabPresentationModule extends Module {
             reconnectUseCase: currentScope.resolve<Reconnect>(),
             respondToPermissionUseCase: currentScope
                 .resolve<RespondToPermission>(),
+            setSessionConfigOptionUseCase: currentScope
+                .resolve<SetSessionConfigOption>(),
             stdioTransportFactory: currentScope
                 .resolve<CodeLabStdioTransportFactory>(),
             workingDirectoryProvider: currentScope

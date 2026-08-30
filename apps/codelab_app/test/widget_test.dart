@@ -140,6 +140,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
@@ -187,6 +188,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
@@ -497,6 +499,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
@@ -561,6 +564,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
@@ -614,6 +618,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return stdioTransport;
@@ -666,6 +671,7 @@ void main() {
         cancelTurnUseCase: CancelTurn(application),
         reconnectUseCase: Reconnect(application),
         respondToPermissionUseCase: RespondToPermission(application),
+        setSessionConfigOptionUseCase: SetSessionConfigOption(application),
         stdioTransportFactory: (config) {
           configs.add(config);
           return replacements.removeAt(0);
@@ -726,6 +732,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -758,6 +765,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return _FailingStartTransport();
@@ -791,6 +799,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -827,6 +836,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (config) {
         configs.add(config);
         return FakeAcpTransport();
@@ -863,6 +873,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
@@ -937,6 +948,7 @@ void main() {
         cancelTurnUseCase: CancelTurn(application),
         reconnectUseCase: Reconnect(application),
         respondToPermissionUseCase: RespondToPermission(application),
+        setSessionConfigOptionUseCase: SetSessionConfigOption(application),
         stdioTransportFactory: (config) {
           throw StateError('auth failed: token=sk-super-secret-value');
         },
@@ -969,6 +981,7 @@ void main() {
       cancelTurnUseCase: CancelTurn(application),
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
