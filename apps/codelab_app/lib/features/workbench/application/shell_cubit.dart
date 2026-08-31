@@ -507,6 +507,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         transportFactory: () async => _stdioTransportFactory(config),
       ),
     ).run();
+    if (isClosed) return;
     result.match(
       (failure) {
         emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
@@ -548,6 +549,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     final result = await _createSessionUseCase(
       CreateSessionCommand(cwd: _selectedCwd),
     ).run();
+    if (isClosed) return;
 
     result.match(
       (failure) => _recordDiagnostic(
@@ -658,6 +660,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         prompt: [ContentBlock.text(text: text)],
       ),
     ).run();
+    if (isClosed) return;
 
     result.match(
       (failure) {
@@ -719,6 +722,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     final result = await _cancelTurnUseCase(
       CancelTurnCommand(sessionId: SessionId(sessionId)),
     ).run();
+    if (isClosed) return;
 
     result.match(
       (failure) {
@@ -766,6 +770,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         optionId: PermissionOptionId(optionId),
       ),
     ).run();
+    if (isClosed) return;
 
     // Do not touch `pendingApproval` here in either branch: the resolution
     // (or the fact that it is still pending, e.g. after a stale/failed
@@ -810,6 +815,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         value: SessionConfigValueId(value),
       ),
     ).run();
+    if (isClosed) return;
 
     result.match(
       (failure) {

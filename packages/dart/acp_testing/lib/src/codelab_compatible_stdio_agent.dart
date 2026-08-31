@@ -4,7 +4,8 @@ enum CodelabCompatibleStdioAgentMode {
   normal('normal'),
   exitOnStart('exit_on_start'),
   invalidStdout('invalid_stdout'),
-  withConfigOptions('with_config_options');
+  withConfigOptions('with_config_options'),
+  crashMidPrompt('crash_mid_prompt');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -95,6 +96,14 @@ Future<void> main(List<String> args) async {
             'configOptions': [_modelConfigOption()],
         });
       case 'session/prompt':
+        if (_mode == 'crash_mid_prompt') {
+          // Simulate the agent process dying unexpectedly while a turn is
+          // running — no response, no notification, just gone. `exit()`
+          // terminates the process immediately without flushing further
+          // output, matching a real crash/kill more closely than closing
+          // stdout gracefully would.
+          exit(1);
+        }
         _writeNotification('session/update', {
           'sessionId': _sessionId,
           'update': {
