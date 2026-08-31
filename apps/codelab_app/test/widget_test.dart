@@ -2009,6 +2009,170 @@ void main() {
 
     await closeCodeLabRootScope();
   });
+
+  group('resizable workbench panels', () {
+    Future<CodeLabTestBinding> pumpDesktopShell(WidgetTester tester) async {
+      final binding = CodeLabTestBinding();
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      return binding;
+    }
+
+    testWidgets(
+      'dragging the sessions/main divider live-resizes the pane before the '
+      'drag ends, without emitting to the cubit mid-drag',
+      (tester) async {
+        final binding = await pumpDesktopShell(tester);
+        final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+        final handle = find.byType(AcpResizeHandle).first;
+        final gesture = await tester.startGesture(tester.getCenter(handle));
+        await gesture.moveBy(const Offset(40, 0));
+        await tester.pump();
+
+        expect(
+          tester.getSize(find.byKey(AcpWorkbenchLayout.sessionsPaneKey)).width,
+          closeTo(320, 1),
+        );
+        expect(shellCubit.state.sessionsPaneWidth, 280);
+
+        await gesture.up();
+        await tester.pump();
+
+        expect(shellCubit.state.sessionsPaneWidth, closeTo(320, 1));
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await closeCodeLabRootScope();
+      },
+    );
+
+    testWidgets(
+      'dragging the main/inspector divider left grows the inspector pane',
+      (tester) async {
+        final binding = await pumpDesktopShell(tester);
+        final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+        await tester.drag(
+          find.byType(AcpResizeHandle).last,
+          const Offset(-40, 0),
+        );
+        await tester.pump();
+
+        expect(shellCubit.state.inspectorPaneWidth, closeTo(360, 1));
+        expect(
+          tester.getSize(find.byKey(AcpWorkbenchLayout.inspectorPaneKey)).width,
+          closeTo(360, 1),
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await closeCodeLabRootScope();
+      },
+    );
+
+    testWidgets('dragging the sessions divider past the minimum stops at the '
+        'configured floor', (tester) async {
+      final binding = await pumpDesktopShell(tester);
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await tester.drag(
+        find.byType(AcpResizeHandle).first,
+        const Offset(-1000, 0),
+      );
+      await tester.pump();
+
+      expect(shellCubit.state.sessionsPaneWidth, kSessionsPaneMinWidth);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    });
+
+    testWidgets('dragging the sessions divider past the maximum stops at the '
+        'configured ceiling', (tester) async {
+      final binding = await pumpDesktopShell(tester);
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await tester.drag(
+        find.byType(AcpResizeHandle).first,
+        const Offset(1000, 0),
+      );
+      await tester.pump();
+
+      expect(shellCubit.state.sessionsPaneWidth, kSessionsPaneMaxWidth);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    });
+
+    testWidgets('dragging the inspector divider past the minimum stops at '
+        'the configured floor', (tester) async {
+      final binding = await pumpDesktopShell(tester);
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      // Dragging right shrinks the inspector (its divider sits on its left
+      // edge) — the mirror image of the sessions-pane min test.
+      await tester.drag(
+        find.byType(AcpResizeHandle).last,
+        const Offset(1000, 0),
+      );
+      await tester.pump();
+
+      expect(shellCubit.state.inspectorPaneWidth, kInspectorPaneMinWidth);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    });
+
+    testWidgets('dragging the inspector divider past the maximum stops at '
+        'the configured ceiling', (tester) async {
+      final binding = await pumpDesktopShell(tester);
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await tester.drag(
+        find.byType(AcpResizeHandle).last,
+        const Offset(-1000, 0),
+      );
+      await tester.pump();
+
+      expect(shellCubit.state.inspectorPaneWidth, kInspectorPaneMaxWidth);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    });
+
+    testWidgets(
+      'a resized pane keeps its width across a rebuild triggered by an '
+      'unrelated state change',
+      (tester) async {
+        final binding = await pumpDesktopShell(tester);
+        final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+        await tester.drag(
+          find.byType(AcpResizeHandle).first,
+          const Offset(40, 0),
+        );
+        await tester.pump();
+
+        expect(shellCubit.state.sessionsPaneWidth, closeTo(320, 1));
+
+        // Unrelated state change: opening the command palette.
+        shellCubit.openCommandPalette();
+        await tester.pump();
+
+        expect(shellCubit.state.sessionsPaneWidth, closeTo(320, 1));
+        expect(
+          tester.getSize(find.byKey(AcpWorkbenchLayout.sessionsPaneKey)).width,
+          closeTo(320, 1),
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await closeCodeLabRootScope();
+      },
+    );
+  });
 }
 
 final class _FailingStartTransport implements AcpTransport {

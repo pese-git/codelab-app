@@ -1,5 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
+import '../atomics/acp_resize_handle.dart';
+
 class AcpWorkbenchLayout extends StatelessWidget {
   const AcpWorkbenchLayout({
     required this.commandBar,
@@ -13,6 +15,10 @@ class AcpWorkbenchLayout extends StatelessWidget {
     this.gap = 12,
     this.padding = const EdgeInsets.all(16),
     this.inspectorVisibleInNarrowMode = false,
+    this.onSessionsPaneWidthChanged,
+    this.onSessionsPaneResizeEnd,
+    this.onInspectorPaneWidthChanged,
+    this.onInspectorPaneResizeEnd,
     super.key,
   });
 
@@ -36,6 +42,28 @@ class AcpWorkbenchLayout extends StatelessWidget {
   /// stage instead of collapsing it (e.g. after the user explicitly asks
   /// to see the debug log panel via the command palette's `/logs` action).
   final bool inspectorVisibleInNarrowMode;
+
+  /// Called with the sessions pane's width delta on every pointer movement
+  /// while the sessions/main divider is being dragged (desktop layout
+  /// only) — a delta, not an absolute width, so it stays correct
+  /// regardless of when the caller's own rebuild happens to land relative
+  /// to the raw pointer events. Null keeps that divider a plain,
+  /// non-interactive gap — this layout does not decide where (or whether)
+  /// the resulting width is stored.
+  final ValueChanged<double>? onSessionsPaneWidthChanged;
+
+  /// Called once the sessions/main divider drag gesture ends. Callers use
+  /// this to commit the final accumulated width to their own state,
+  /// instead of doing so on every [onSessionsPaneWidthChanged] call.
+  final VoidCallback? onSessionsPaneResizeEnd;
+
+  /// Same as [onSessionsPaneWidthChanged] for the main/inspector divider —
+  /// the sign is already flipped so a positive value always means "grow
+  /// this pane", even though the divider sits on the inspector's left edge.
+  final ValueChanged<double>? onInspectorPaneWidthChanged;
+
+  /// Same as [onSessionsPaneResizeEnd] for the main/inspector divider.
+  final VoidCallback? onInspectorPaneResizeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +113,10 @@ class AcpWorkbenchLayout extends StatelessWidget {
           width: sessionsPaneWidth,
           child: sessionsPane,
         ),
-        SizedBox(width: gap),
+        _buildDivider(
+          onWidthChanged: onSessionsPaneWidthChanged,
+          onResizeEnd: onSessionsPaneResizeEnd,
+        ),
         Expanded(
           child: _AcpWorkbenchSlot(
             slotKey: mainPaneKey,
@@ -94,7 +125,12 @@ class AcpWorkbenchLayout extends StatelessWidget {
             child: mainPane,
           ),
         ),
-        SizedBox(width: gap),
+        _buildDivider(
+          onWidthChanged: onInspectorPaneWidthChanged == null
+              ? null
+              : (dx) => onInspectorPaneWidthChanged!(-dx),
+          onResizeEnd: onInspectorPaneResizeEnd,
+        ),
         _AcpWorkbenchSlot(
           slotKey: inspectorPaneKey,
           label: 'Inspector pane',
@@ -102,6 +138,20 @@ class AcpWorkbenchLayout extends StatelessWidget {
           child: inspectorPane,
         ),
       ],
+    );
+  }
+
+  Widget _buildDivider({
+    required ValueChanged<double>? onWidthChanged,
+    required VoidCallback? onResizeEnd,
+  }) {
+    if (onWidthChanged == null) {
+      return SizedBox(width: gap);
+    }
+    return AcpResizeHandle(
+      width: gap,
+      onDelta: onWidthChanged,
+      onDragEnd: onResizeEnd,
     );
   }
 

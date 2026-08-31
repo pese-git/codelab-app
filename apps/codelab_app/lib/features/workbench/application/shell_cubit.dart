@@ -13,6 +13,14 @@ import '../../../core/platform/working_directory_provider.dart';
 typedef CodeLabStdioTransportFactory =
     AcpTransport Function(StdioAcpTransportConfig config);
 
+/// Resizable-panel width bounds — CodeLab-specific, not baked into the
+/// reusable `acp_ui` layout/handle primitives (see
+/// openspec/changes/add-resizable-panels/design.md).
+const kSessionsPaneMinWidth = 220.0;
+const kSessionsPaneMaxWidth = 480.0;
+const kInspectorPaneMinWidth = 260.0;
+const kInspectorPaneMaxWidth = 520.0;
+
 enum CodeLabTransportType {
   stdio(label: 'stdio'),
   webSocket(label: 'WebSocket');
@@ -55,6 +63,8 @@ final class CodeLabShellState {
     this.composerDraft = '',
     this.configOptions = const [],
     this.isRespondingToConfigOption = false,
+    this.sessionsPaneWidth = 280,
+    this.inspectorPaneWidth = 320,
   });
 
   factory CodeLabShellState.initial({required StdioAcpAgentProfile profile}) =>
@@ -149,6 +159,15 @@ final class CodeLabShellState {
   /// while one is already in flight, mirroring [isRespondingToApproval].
   final bool isRespondingToConfigOption;
 
+  /// Widths the user has dragged the sessions/inspector pane dividers to
+  /// (desktop layout), clamped to [kSessionsPaneMinWidth]/
+  /// [kSessionsPaneMaxWidth] and [kInspectorPaneMinWidth]/
+  /// [kInspectorPaneMaxWidth] respectively. Survive widget rebuilds within
+  /// this run, not persisted across app restarts (see
+  /// add-resizable-panels/design.md Open Questions).
+  final double sessionsPaneWidth;
+  final double inspectorPaneWidth;
+
   CodeLabShellState copyWith({
     AcpConnectionStatus? connectionStatus,
     CodeLabTransportType? transportType,
@@ -181,6 +200,8 @@ final class CodeLabShellState {
     String? composerDraft,
     List<AcpConfigOption>? configOptions,
     bool? isRespondingToConfigOption,
+    double? sessionsPaneWidth,
+    double? inspectorPaneWidth,
   }) {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
@@ -220,6 +241,8 @@ final class CodeLabShellState {
       configOptions: configOptions ?? this.configOptions,
       isRespondingToConfigOption:
           isRespondingToConfigOption ?? this.isRespondingToConfigOption,
+      sessionsPaneWidth: sessionsPaneWidth ?? this.sessionsPaneWidth,
+      inspectorPaneWidth: inspectorPaneWidth ?? this.inspectorPaneWidth,
     );
   }
 
@@ -533,6 +556,33 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   void editProfile() =>
       _recordPendingAction('Transport profile editing is wired in task 7.2.');
+
+  /// Commits a new sessions pane width (desktop layout resize), clamped to
+  /// [kSessionsPaneMinWidth]/[kSessionsPaneMaxWidth]. Callers pass the final
+  /// width once a resize drag ends — see `AcpWorkbenchLayout`'s
+  /// `onSessionsPaneResizeEnd`.
+  void resizeSessionsPane(double width) {
+    emit(
+      state.copyWith(
+        sessionsPaneWidth: width.clamp(
+          kSessionsPaneMinWidth,
+          kSessionsPaneMaxWidth,
+        ),
+      ),
+    );
+  }
+
+  /// Same as [resizeSessionsPane] for the inspector pane.
+  void resizeInspectorPane(double width) {
+    emit(
+      state.copyWith(
+        inspectorPaneWidth: width.clamp(
+          kInspectorPaneMinWidth,
+          kInspectorPaneMaxWidth,
+        ),
+      ),
+    );
+  }
 
   Future<void> createSession() async {
     if (state.connectionStatus != AcpConnectionStatus.connected) {

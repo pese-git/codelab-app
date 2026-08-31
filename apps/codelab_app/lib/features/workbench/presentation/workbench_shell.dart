@@ -24,7 +24,11 @@ class CodeLabShell extends StatelessWidget {
           child: NavigationView(
             content: Stack(
               children: [
-                AcpWorkbenchLayout(
+                _ResizableWorkbenchLayout(
+                  sessionsPaneWidth: state.sessionsPaneWidth,
+                  inspectorPaneWidth: state.inspectorPaneWidth,
+                  onSessionsPaneResized: cubit.resizeSessionsPane,
+                  onInspectorPaneResized: cubit.resizeInspectorPane,
                   commandBar: WorkbenchCommandBar(state: state, cubit: cubit),
                   sessionsPane: AcpSessionSidebar(
                     sessions: state.sessions,
@@ -84,5 +88,83 @@ void selectPaletteCommand(CodeLabShellCubit cubit, AcpCommandAction action) {
     cubit.insertAgentCommand(action);
   } else {
     cubit.selectCommand(action);
+  }
+}
+
+/// Tracks a live, ephemeral preview of the sessions/inspector pane widths
+/// while the user is dragging a resize divider, so every pointer movement
+/// only rebuilds this small wrapper — not the whole cubit-driven workbench
+/// tree — and only commits to [CodeLabShellCubit] (a real Bloc emit) once
+/// the drag gesture ends. See add-resizable-panels/design.md Risks.
+class _ResizableWorkbenchLayout extends StatefulWidget {
+  const _ResizableWorkbenchLayout({
+    required this.sessionsPaneWidth,
+    required this.inspectorPaneWidth,
+    required this.onSessionsPaneResized,
+    required this.onInspectorPaneResized,
+    required this.commandBar,
+    required this.sessionsPane,
+    required this.mainPane,
+    required this.inspectorPane,
+    required this.inspectorVisibleInNarrowMode,
+  });
+
+  final double sessionsPaneWidth;
+  final double inspectorPaneWidth;
+  final ValueChanged<double> onSessionsPaneResized;
+  final ValueChanged<double> onInspectorPaneResized;
+  final Widget commandBar;
+  final Widget sessionsPane;
+  final Widget mainPane;
+  final Widget inspectorPane;
+  final bool inspectorVisibleInNarrowMode;
+
+  @override
+  State<_ResizableWorkbenchLayout> createState() =>
+      _ResizableWorkbenchLayoutState();
+}
+
+class _ResizableWorkbenchLayoutState extends State<_ResizableWorkbenchLayout> {
+  late double _sessionsPaneWidth = widget.sessionsPaneWidth;
+  late double _inspectorPaneWidth = widget.inspectorPaneWidth;
+
+  @override
+  void didUpdateWidget(covariant _ResizableWorkbenchLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionsPaneWidth != widget.sessionsPaneWidth) {
+      _sessionsPaneWidth = widget.sessionsPaneWidth;
+    }
+    if (oldWidget.inspectorPaneWidth != widget.inspectorPaneWidth) {
+      _inspectorPaneWidth = widget.inspectorPaneWidth;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AcpWorkbenchLayout(
+      commandBar: widget.commandBar,
+      sessionsPane: widget.sessionsPane,
+      mainPane: widget.mainPane,
+      inspectorPane: widget.inspectorPane,
+      inspectorVisibleInNarrowMode: widget.inspectorVisibleInNarrowMode,
+      sessionsPaneWidth: _sessionsPaneWidth,
+      inspectorPaneWidth: _inspectorPaneWidth,
+      onSessionsPaneWidthChanged: (dx) => setState(() {
+        _sessionsPaneWidth = (_sessionsPaneWidth + dx).clamp(
+          kSessionsPaneMinWidth,
+          kSessionsPaneMaxWidth,
+        );
+      }),
+      onSessionsPaneResizeEnd: () =>
+          widget.onSessionsPaneResized(_sessionsPaneWidth),
+      onInspectorPaneWidthChanged: (dx) => setState(() {
+        _inspectorPaneWidth = (_inspectorPaneWidth + dx).clamp(
+          kInspectorPaneMinWidth,
+          kInspectorPaneMaxWidth,
+        );
+      }),
+      onInspectorPaneResizeEnd: () =>
+          widget.onInspectorPaneResized(_inspectorPaneWidth),
+    );
   }
 }

@@ -822,6 +822,132 @@ void main() {
     expect(inspectorSize.width, 360);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('dragging the sessions/main divider reports a positive delta', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final deltas = <double>[];
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 1200,
+          height: 760,
+          child: AcpWorkbenchLayout(
+            commandBar: const _AcpTestPane(label: 'Command'),
+            sessionsPane: const _AcpTestPane(label: 'Sessions'),
+            mainPane: const _AcpTestPane(label: 'Main'),
+            inspectorPane: const _AcpTestPane(label: 'Inspector'),
+            onSessionsPaneWidthChanged: deltas.add,
+          ),
+        ),
+      ),
+    );
+
+    await tester.drag(find.byType(AcpResizeHandle).first, const Offset(30, 0));
+
+    expect(deltas, isNotEmpty);
+    expect(deltas.fold(0.0, (sum, dx) => sum + dx), closeTo(30, 0.01));
+  });
+
+  testWidgets(
+    'dragging the main/inspector divider reports a positive delta when '
+    'growing the inspector',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 760);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final deltas = <double>[];
+      await tester.pumpWidget(
+        FluentApp(
+          home: SizedBox(
+            width: 1200,
+            height: 760,
+            child: AcpWorkbenchLayout(
+              commandBar: const _AcpTestPane(label: 'Command'),
+              sessionsPane: const _AcpTestPane(label: 'Sessions'),
+              mainPane: const _AcpTestPane(label: 'Main'),
+              inspectorPane: const _AcpTestPane(label: 'Inspector'),
+              onInspectorPaneWidthChanged: deltas.add,
+            ),
+          ),
+        ),
+      );
+
+      // The inspector's divider sits on its left edge, so dragging it left
+      // (negative dx) must grow the inspector (positive reported delta).
+      await tester.drag(
+        find.byType(AcpResizeHandle).last,
+        const Offset(-30, 0),
+      );
+
+      expect(deltas, isNotEmpty);
+      expect(deltas.fold(0.0, (sum, dx) => sum + dx), closeTo(30, 0.01));
+    },
+  );
+
+  testWidgets('workbench dividers are absent without resize callbacks', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const FluentApp(
+        home: SizedBox(
+          width: 1200,
+          height: 760,
+          child: AcpWorkbenchLayout(
+            commandBar: _AcpTestPane(label: 'Command'),
+            sessionsPane: _AcpTestPane(label: 'Sessions'),
+            mainPane: _AcpTestPane(label: 'Main'),
+            inspectorPane: _AcpTestPane(label: 'Inspector'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(AcpResizeHandle), findsNothing);
+  });
+
+  testWidgets('workbench divider signals resize end after a drag completes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    var resizeEndCalls = 0;
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 1200,
+          height: 760,
+          child: AcpWorkbenchLayout(
+            commandBar: const _AcpTestPane(label: 'Command'),
+            sessionsPane: const _AcpTestPane(label: 'Sessions'),
+            mainPane: const _AcpTestPane(label: 'Main'),
+            inspectorPane: const _AcpTestPane(label: 'Inspector'),
+            onSessionsPaneWidthChanged: (_) {},
+            onSessionsPaneResizeEnd: () => resizeEndCalls++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.drag(find.byType(AcpResizeHandle).first, const Offset(30, 0));
+
+    expect(resizeEndCalls, 1);
+  });
 }
 
 void acpTestSessionSelected(String sessionId) {}
