@@ -1,9 +1,7 @@
 ## Purpose
 
 Заменяемый транспортный слой, соединяющий CodeLab с процессом или endpoint'ом ACP-агента — общий порт transport, конкретные реализации stdio и WebSocket, встроенный референсный профиль `Codelab Agent`, а также fake/test-двойники, используемые для проверки остального приложения без реального агента.
-
 ## Requirements
-
 ### Requirement: Общий порт transport
 CodeLab SHALL предоставлять общую абстракцию transport для входящих сообщений, исходящей отправки, событий жизненного цикла, штатного завершения и типизированных ошибок.
 
@@ -38,15 +36,23 @@ CodeLab SHALL предоставлять встроенный редактиру
 - **THEN** CodeLab запускает `codelab serve --stdio` и выполняет `initialize` ACP
 
 ### Requirement: WebSocket transport
-CodeLab SHALL поддерживать удалённых ACP-агентов через WebSocket для MVP-сценариев удалённой работы.
+CodeLab SHALL support remote ACP agents over WebSocket for MVP remote workflows, including user-initiated and automatic reconnect after disconnect.
 
-#### Scenario: Удалённый агент подключается
-- **WHEN** пользователь настраивает WebSocket endpoint и токен/заголовок, если требуется
-- **THEN** CodeLab открывает соединение и выполняет инициализацию ACP через WebSocket
+#### Scenario: Remote agent connects
+- **WHEN** user configures a WebSocket endpoint and token/header if required
+- **THEN** CodeLab opens the connection and performs ACP initialization over WebSocket
 
-#### Scenario: WebSocket разрывает соединение
-- **WHEN** WebSocket закрывается неожиданно
-- **THEN** CodeLab переходит в состояние disconnected и предлагает reconnect
+#### Scenario: WebSocket disconnects
+- **WHEN** the WebSocket closes unexpectedly
+- **THEN** CodeLab enters disconnected state and offers reconnect
+
+#### Scenario: User reconnects a WebSocket transport
+- **WHEN** user selects reconnect while the active transport is WebSocket
+- **THEN** CodeLab opens a new WebSocket connection using the current endpoint/token configuration and performs ACP initialization, updating connection status and diagnostics on success or failure
+
+#### Scenario: WebSocket reconnect fails
+- **WHEN** a WebSocket reconnect attempt fails (network error, auth failure, or protocol mismatch)
+- **THEN** CodeLab sets connection status to failed and records a user-readable diagnostic describing the failure, without leaving the UI in the connecting state indefinitely
 
 ### Requirement: Тестирование transport
 CodeLab SHALL включать fake transport и интеграционные тесты для stdio и совместимости с codelab-agent.
@@ -58,3 +64,4 @@ CodeLab SHALL включать fake transport и интеграционные т
 #### Scenario: Stdio-интеграция обрабатывает ошибки процесса
 - **WHEN** codelab-agent завершается, эмитирует невалидный JSON или пишет диагностику в stderr
 - **THEN** CodeLab фиксирует типизированные состояния и диагностику, не падая
+
