@@ -13,6 +13,9 @@ import '../../../core/platform/working_directory_provider.dart';
 typedef CodeLabStdioTransportFactory =
     AcpTransport Function(StdioAcpTransportConfig config);
 
+typedef CodeLabWebSocketTransportFactory =
+    AcpTransport Function(WebSocketAcpTransportConfig config);
+
 /// Resizable-panel width bounds — CodeLab-specific, not baked into the
 /// reusable `acp_ui` layout/handle primitives (see
 /// openspec/changes/add-resizable-panels/design.md).
@@ -294,13 +297,6 @@ final class CodeLabShellState {
     ].where((part) => part.trim().isNotEmpty).join(' '),
     CodeLabTransportType.webSocket => webSocketEndpoint,
   };
-
-  String get selectedDiagnosticSummary => switch (transportType) {
-    CodeLabTransportType.stdio =>
-      'stdio ${selectedConnectionDetail.trim()}'.trim(),
-    CodeLabTransportType.webSocket =>
-      'WebSocket endpoint=$webSocketEndpoint token=${webSocketToken.isEmpty ? 'empty' : 'set'}',
-  };
 }
 
 /// Sentinel used by [CodeLabShellState.copyWith] to distinguish "leave
@@ -377,6 +373,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required RespondToPermission respondToPermissionUseCase,
     required SetSessionConfigOption setSessionConfigOptionUseCase,
     required CodeLabStdioTransportFactory stdioTransportFactory,
+    required CodeLabWebSocketTransportFactory webSocketTransportFactory,
     required WorkingDirectoryProvider workingDirectoryProvider,
   }) : _application = application,
        _createSessionUseCase = createSessionUseCase,
@@ -386,6 +383,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
        _respondToPermissionUseCase = respondToPermissionUseCase,
        _setSessionConfigOptionUseCase = setSessionConfigOptionUseCase,
        _stdioTransportFactory = stdioTransportFactory,
+       _webSocketTransportFactory = webSocketTransportFactory,
        _workingDirectoryProvider = workingDirectoryProvider,
        super(CodeLabShellState.initial(profile: profile)) {
     _sessionSubscription = _application.sessionChanges.listen(
@@ -407,6 +405,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final RespondToPermission _respondToPermissionUseCase;
   final SetSessionConfigOption _setSessionConfigOptionUseCase;
   final CodeLabStdioTransportFactory _stdioTransportFactory;
+  final CodeLabWebSocketTransportFactory _webSocketTransportFactory;
   final WorkingDirectoryProvider _workingDirectoryProvider;
   final _redactor = const SecretRedactor();
   late final StreamSubscription<AcpSession> _sessionSubscription;
@@ -448,9 +447,50 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   Future<void> connect() async {
     if (state.transportType == CodeLabTransportType.webSocket) {
-      _recordPendingAction(
-        'WebSocket connect is deferred: ${state.selectedDiagnosticSummary}.',
+      final config = _webSocketConfigFromState();
+      if (config == null) {
+        _recordDiagnostic(
+          'WebSocket endpoint is required before connecting.',
+          severity: AcpDebugLogSeverity.error,
+          source: 'transport',
+        );
+        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+        return;
+      }
+
+      emit(state.copyWith(connectionStatus: AcpConnectionStatus.connecting));
+      _recordDiagnostic(
+        'Connecting WebSocket ACP agent: ${state.selectedConnectionDetail}.',
+        source: 'transport',
       );
+
+      try {
+        final transport = _webSocketTransportFactory(config);
+        final connectionState = await _application.connect(transport);
+        emit(
+          state.copyWith(
+            connectionStatus: _connectionStatusForConnection(connectionState),
+          ),
+        );
+        _recordDiagnostic(
+          'WebSocket ACP agent connected: ${state.selectedConnectionDetail}.',
+          source: 'transport',
+        );
+      } on UnsupportedProtocolVersionException catch (error) {
+        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+        _recordDiagnostic(
+          'Incompatible ACP agent: ${error.message}',
+          severity: AcpDebugLogSeverity.error,
+          source: 'transport',
+        );
+      } on Object catch (error) {
+        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+        _recordDiagnostic(
+          'Failed to connect WebSocket ACP agent: $error',
+          severity: AcpDebugLogSeverity.error,
+          source: 'transport',
+        );
+      }
       return;
     }
 
@@ -502,8 +542,49 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   Future<void> reconnect() async {
     if (state.transportType == CodeLabTransportType.webSocket) {
-      _recordPendingAction(
-        'WebSocket reconnect is deferred: ${state.selectedDiagnosticSummary}.',
+      final config = _webSocketConfigFromState();
+      if (config == null) {
+        _recordDiagnostic(
+          'WebSocket endpoint is required before reconnecting.',
+          severity: AcpDebugLogSeverity.error,
+          source: 'transport',
+        );
+        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+        return;
+      }
+
+      emit(state.copyWith(connectionStatus: AcpConnectionStatus.reconnecting));
+      _recordDiagnostic(
+        'Reconnecting WebSocket ACP agent: ${state.selectedConnectionDetail}.',
+        source: 'transport',
+      );
+
+      final result = await _reconnectUseCase(
+        ReconnectCommand(
+          transportFactory: () async => _webSocketTransportFactory(config),
+        ),
+      ).run();
+      if (isClosed) return;
+      result.match(
+        (failure) {
+          emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+          _recordDiagnostic(
+            'Failed to reconnect WebSocket ACP agent: ${_failureMessage(failure)}',
+            severity: AcpDebugLogSeverity.error,
+            source: 'transport',
+          );
+        },
+        (connectionState) {
+          emit(
+            state.copyWith(
+              connectionStatus: _connectionStatusForConnection(connectionState),
+            ),
+          );
+          _recordDiagnostic(
+            'WebSocket ACP agent reconnected: ${state.selectedConnectionDetail}.',
+            source: 'transport',
+          );
+        },
       );
       return;
     }
@@ -553,9 +634,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       },
     );
   }
-
-  void editProfile() =>
-      _recordPendingAction('Transport profile editing is wired in task 7.2.');
 
   /// Commits a new sessions pane width (desktop layout resize), clamped to
   /// [kSessionsPaneMinWidth]/[kSessionsPaneMaxWidth]. Callers pass the final
@@ -943,10 +1021,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return super.close();
   }
 
-  void _recordPendingAction(String message) {
-    _recordDiagnostic(message, source: 'presentation');
-  }
-
   void _recordDiagnostic(
     String message, {
     AcpDebugLogSeverity severity = AcpDebugLogSeverity.info,
@@ -1170,6 +1244,24 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       args: _splitShellWords(state.stdioArgs),
       cwd: state.stdioCwd.trim().isEmpty ? null : state.stdioCwd.trim(),
       env: _parseEnv(state.stdioEnv),
+    );
+  }
+
+  WebSocketAcpTransportConfig? _webSocketConfigFromState() {
+    final endpoint = state.webSocketEndpoint.trim();
+    if (endpoint.isEmpty) {
+      return null;
+    }
+
+    final uri = Uri.tryParse(endpoint);
+    if (uri == null) {
+      return null;
+    }
+
+    final token = state.webSocketToken.trim();
+    return WebSocketAcpTransportConfig(
+      uri: uri,
+      token: token.isEmpty ? null : token,
     );
   }
 

@@ -3,8 +3,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../../application/shell_cubit.dart';
 import '../workbench_shell.dart' show selectPaletteCommand;
+import 'connection_setup_dialog.dart';
 import 'current_session_panel.dart';
-import 'transport_setup_panel.dart';
 
 class WorkbenchMainPane extends StatelessWidget {
   const WorkbenchMainPane({
@@ -29,8 +29,6 @@ class WorkbenchMainPane extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TransportSetupPanel(state: state, cubit: cubit),
-                      const SizedBox(height: 12),
                       CurrentSessionPanel(state: state),
                       const SizedBox(height: 12),
                       ConstrainedBox(
@@ -48,7 +46,8 @@ class WorkbenchMainPane extends StatelessWidget {
                               'Connect an ACP agent to start a session.',
                           onConnect: cubit.connect,
                           onReconnect: cubit.reconnect,
-                          onEditProfile: cubit.editProfile,
+                          onConfigureConnection: () =>
+                              ConnectionSetupDialog.show(context),
                         ),
                       ),
                     ],
@@ -58,8 +57,6 @@ class WorkbenchMainPane extends StatelessWidget {
             ),
           )
         else ...[
-          TransportSetupPanel(state: state, cubit: cubit),
-          const SizedBox(height: 12),
           CurrentSessionPanel(state: state),
           const SizedBox(height: 12),
           Expanded(

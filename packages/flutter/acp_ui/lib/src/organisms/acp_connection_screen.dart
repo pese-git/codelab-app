@@ -12,7 +12,7 @@ class AcpConnectionScreen extends StatelessWidget {
     this.description,
     this.onConnect,
     this.onReconnect,
-    this.onEditProfile,
+    this.onConfigureConnection,
     this.isBusy = false,
     super.key,
   });
@@ -24,7 +24,7 @@ class AcpConnectionScreen extends StatelessWidget {
   final String? description;
   final VoidCallback? onConnect;
   final VoidCallback? onReconnect;
-  final VoidCallback? onEditProfile;
+  final VoidCallback? onConfigureConnection;
   final bool isBusy;
 
   @override
@@ -83,11 +83,11 @@ class AcpConnectionScreen extends StatelessWidget {
                   runSpacing: 8,
                   alignment: WrapAlignment.end,
                   children: [
-                    if (onEditProfile != null)
+                    if (onConfigureConnection != null)
                       AcpButton(
-                        label: 'Edit profile',
-                        icon: FluentIcons.edit,
-                        onPressed: isBusy ? null : onEditProfile,
+                        label: 'Configure connection',
+                        icon: FluentIcons.settings,
+                        onPressed: isBusy ? null : onConfigureConnection,
                       ),
                     if (onReconnect != null)
                       AcpButton(

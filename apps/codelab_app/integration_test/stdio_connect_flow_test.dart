@@ -9,6 +9,22 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+// The transport setup form only lives inside the modal ConnectionSetupDialog
+// (see complete-transport-setup-actions) — transport-field-* keys are not
+// reachable until it is open, and the dialog's barrier blocks taps on
+// anything behind it (e.g. the Connect button) while it is open.
+Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
+  await tester.tap(
+    find.byKey(const ValueKey('command-bar-configure-connection')),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _closeConnectionSetupDialog(WidgetTester tester) async {
+  await tester.tap(find.widgetWithText(Button, 'Close'));
+  await tester.pumpAndSettle();
+}
+
 // The stdio connect round trip spawns a real child process and waits for a
 // real `initialize` response — this can take longer than a single
 // `pumpAndSettle` reliably waits for. Poll the cubit's own state instead of
@@ -35,10 +51,12 @@ void main() {
     await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
     await tester.pumpAndSettle();
 
+    await _openConnectionSetupDialog(tester);
     await tester.enterText(
       find.byKey(const ValueKey('transport-field-Command')),
       '',
     );
+    await _closeConnectionSetupDialog(tester);
     await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
     await tester.pumpAndSettle();
 
@@ -76,6 +94,7 @@ void main() {
       tester.element(find.byType(CodeLabApp)),
     ).shellCubit;
 
+    await _openConnectionSetupDialog(tester);
     await tester.enterText(
       find.byKey(const ValueKey('transport-field-Command')),
       dartExecutable,
@@ -84,6 +103,7 @@ void main() {
       find.byKey(const ValueKey('transport-field-Args')),
       '${agent.path} serve --stdio',
     );
+    await _closeConnectionSetupDialog(tester);
     await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
     expect(find.text('Connected'), findsWidgets);
@@ -124,6 +144,7 @@ void main() {
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
 
+      await _openConnectionSetupDialog(tester);
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Command')),
         dartExecutable,
@@ -132,6 +153,7 @@ void main() {
         find.byKey(const ValueKey('transport-field-Args')),
         '${agent.path} serve --stdio',
       );
+      await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
       expect(find.text('Connected'), findsWidgets);
@@ -198,6 +220,7 @@ void main() {
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
 
+      await _openConnectionSetupDialog(tester);
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Command')),
         dartExecutable,
@@ -206,6 +229,7 @@ void main() {
         find.byKey(const ValueKey('transport-field-Args')),
         '${agent.path} serve --stdio',
       );
+      await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
       expect(find.text('Connected'), findsWidgets);
@@ -279,6 +303,7 @@ void main() {
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
 
+      await _openConnectionSetupDialog(tester);
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Command')),
         dartExecutable,
@@ -287,6 +312,7 @@ void main() {
         find.byKey(const ValueKey('transport-field-Args')),
         '${agent.path} serve --stdio',
       );
+      await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
       expect(find.text('Connected'), findsWidgets);

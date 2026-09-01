@@ -18,12 +18,15 @@ typedef CodeLabTransportFactory = AcpTransport Function();
 Scope createCodeLabRootScope({
   CodeLabTransportFactory? transportFactory,
   CodeLabStdioTransportFactory? stdioTransportFactory,
+  CodeLabWebSocketTransportFactory? webSocketTransportFactory,
 }) {
   final scope = CherryPick.openRootScope()
     ..installModules([
       CodeLabTransportRuntimeModule(
         transportFactory: transportFactory ?? _createDefaultTransport,
         stdioTransportFactory: stdioTransportFactory ?? _createStdioTransport,
+        webSocketTransportFactory:
+            webSocketTransportFactory ?? _createWebSocketTransport,
       ),
       CodeLabPlatformModule(),
       CodeLabPresentationModule(),
@@ -45,16 +48,22 @@ final class CodeLabTransportRuntimeModule extends Module {
   CodeLabTransportRuntimeModule({
     required CodeLabTransportFactory transportFactory,
     required CodeLabStdioTransportFactory stdioTransportFactory,
+    required CodeLabWebSocketTransportFactory webSocketTransportFactory,
   }) : _transportFactory = transportFactory,
-       _stdioTransportFactory = stdioTransportFactory;
+       _stdioTransportFactory = stdioTransportFactory,
+       _webSocketTransportFactory = webSocketTransportFactory;
 
   final CodeLabTransportFactory _transportFactory;
   final CodeLabStdioTransportFactory _stdioTransportFactory;
+  final CodeLabWebSocketTransportFactory _webSocketTransportFactory;
 
   @override
   void builder(Scope currentScope) {
     bind<CodeLabTransportFactory>().toInstance(_transportFactory);
     bind<CodeLabStdioTransportFactory>().toInstance(_stdioTransportFactory);
+    bind<CodeLabWebSocketTransportFactory>().toInstance(
+      _webSocketTransportFactory,
+    );
   }
 }
 
@@ -118,6 +127,8 @@ final class CodeLabPresentationModule extends Module {
                 .resolve<SetSessionConfigOption>(),
             stdioTransportFactory: currentScope
                 .resolve<CodeLabStdioTransportFactory>(),
+            webSocketTransportFactory: currentScope
+                .resolve<CodeLabWebSocketTransportFactory>(),
             workingDirectoryProvider: currentScope
                 .resolve<WorkingDirectoryProvider>(),
           ),
@@ -266,3 +277,6 @@ AcpTransport _createDefaultTransport() =>
 
 AcpTransport _createStdioTransport(StdioAcpTransportConfig config) =>
     StdioAcpTransport(config);
+
+AcpTransport _createWebSocketTransport(WebSocketAcpTransportConfig config) =>
+    WebSocketAcpTransport(config);

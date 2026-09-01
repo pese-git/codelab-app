@@ -2,6 +2,7 @@ import 'package:acp_ui/acp_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../../application/shell_cubit.dart';
+import 'connection_setup_dialog.dart';
 
 class WorkbenchCommandBar extends StatelessWidget {
   const WorkbenchCommandBar({
@@ -34,6 +35,13 @@ class WorkbenchCommandBar extends StatelessWidget {
                 profileLabel: state.profileLabel,
                 detail: state.connectionDetail,
               ),
+            ),
+            const SizedBox(width: 8),
+            AcpIconButton(
+              key: const ValueKey('command-bar-configure-connection'),
+              icon: FluentIcons.settings,
+              tooltip: 'Configure connection',
+              onPressed: () => ConnectionSetupDialog.show(context),
             ),
             const SizedBox(width: 8),
             AcpButton(

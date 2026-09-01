@@ -4,6 +4,7 @@ import 'package:codelab_app/app/app_scope.dart';
 import 'package:codelab_app/app/codelab_app_widget.dart';
 import 'package:codelab_app/core/platform/working_directory_provider.dart';
 import 'package:codelab_app/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_app/features/workbench/presentation/widgets/connection_setup_dialog.dart';
 import 'package:codelab_app/features/workbench/presentation/workbench_shell.dart'
     show selectPaletteCommand;
 import 'package:acp_client_core/acp_client_core.dart';
@@ -11,6 +12,7 @@ import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_testing/acp_testing.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
+import 'package:fluent_ui/fluent_ui.dart' show TextBox;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -108,6 +110,11 @@ void main() {
     expect(shellCubit.state.transportType, CodeLabTransportType.stdio);
     expect(find.text('Codelab Agent'), findsWidgets);
 
+    await tester.tap(
+      find.byKey(const ValueKey('command-bar-configure-connection')),
+    );
+    await tester.pumpAndSettle();
+
     await tester.tap(find.widgetWithText(AcpButton, 'WebSocket'));
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -128,6 +135,135 @@ void main() {
     await closeCodeLabRootScope();
   });
 
+  testWidgets('does not open the connection setup dialog on first run', (
+    tester,
+  ) async {
+    final binding = CodeLabTestBinding();
+
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+
+    expect(find.byType(ConnectionSetupDialog), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
+
+  testWidgets(
+    'Configure connection in the command bar opens the dialog regardless '
+    'of transcript state',
+    (tester) async {
+      final binding = CodeLabTestBinding();
+
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+
+      await tester.tap(
+        find.byKey(const ValueKey('command-bar-configure-connection')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ConnectionSetupDialog), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
+
+  testWidgets(
+    'Configure connection on the empty connection screen opens the same '
+    'dialog pre-filled with current values',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final binding = CodeLabTestBinding();
+
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      final buttonFinder = find.descendant(
+        of: find.byType(AcpConnectionScreen),
+        matching: find.text('Configure connection'),
+      );
+      await tester.tap(buttonFinder);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ConnectionSetupDialog), findsOneWidget);
+      expect(
+        tester
+            .widget<TextBox>(
+              find.byKey(const ValueKey('transport-field-Command')),
+            )
+            .controller!
+            .text,
+        shellCubit.state.stdioCommand,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
+
+  testWidgets('editing a field inside the connection setup dialog applies '
+      'immediately to shell state', (tester) async {
+    final binding = CodeLabTestBinding();
+
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    await tester.tap(
+      find.byKey(const ValueKey('command-bar-configure-connection')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('transport-field-Command')),
+      'custom-agent',
+    );
+    await tester.pump();
+
+    expect(shellCubit.state.stdioCommand, 'custom-agent');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
+
+  testWidgets(
+    'Esc closes the connection setup dialog and keeps the last-edited '
+    'field values',
+    (tester) async {
+      final binding = CodeLabTestBinding();
+
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      await tester.tap(
+        find.byKey(const ValueKey('command-bar-configure-connection')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('transport-field-Command')),
+        'custom-agent',
+      );
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ConnectionSetupDialog), findsNothing);
+      expect(shellCubit.state.stdioCommand, 'custom-agent');
+      expect(
+        shellCubit.state.connectionStatus,
+        AcpConnectionStatus.disconnected,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
+
   test('creates a session and tracks it as active', () async {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
@@ -142,6 +278,7 @@ void main() {
       respondToPermissionUseCase: RespondToPermission(application),
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -190,6 +327,7 @@ void main() {
       respondToPermissionUseCase: RespondToPermission(application),
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -273,6 +411,7 @@ void main() {
       respondToPermissionUseCase: RespondToPermission(application),
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -351,6 +490,7 @@ void main() {
         configs.add(config);
         return _FailingStartTransport();
       },
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -393,6 +533,7 @@ void main() {
             ? FakeAcpTransport()
             : _FailingStartTransport();
       },
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -660,6 +801,7 @@ void main() {
       respondToPermissionUseCase: RespondToPermission(application),
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -725,6 +867,7 @@ void main() {
       respondToPermissionUseCase: RespondToPermission(application),
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -782,6 +925,7 @@ void main() {
         configs.add(config);
         return stdioTransport;
       },
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -835,6 +979,7 @@ void main() {
           configs.add(config);
           return replacements.removeAt(0);
         },
+        webSocketTransportFactory: (_) => FakeAcpTransport(),
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       );
 
@@ -896,6 +1041,7 @@ void main() {
         configs.add(config);
         return FakeAcpTransport();
       },
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -929,6 +1075,7 @@ void main() {
         configs.add(config);
         return _FailingStartTransport();
       },
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -946,9 +1093,11 @@ void main() {
     await application.dispose();
   });
 
-  test('connect leaves WebSocket startup deferred', () async {
-    final configs = <StdioAcpTransportConfig>[];
+  test('connect starts WebSocket ACP transport with configured endpoint and '
+      'token', () async {
+    final configs = <WebSocketAcpTransportConfig>[];
     final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
@@ -959,9 +1108,124 @@ void main() {
       reconnectUseCase: Reconnect(application),
       respondToPermissionUseCase: RespondToPermission(application),
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
-      stdioTransportFactory: (config) {
+      stdioTransportFactory: (_) => FakeAcpTransport(),
+      webSocketTransportFactory: (config) {
         configs.add(config);
-        return FakeAcpTransport();
+        return agentTransport;
+      },
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+    );
+
+    shellCubit
+      ..selectTransport(CodeLabTransportType.webSocket)
+      ..updateWebSocketEndpoint('wss://agent.example.test/acp')
+      ..updateWebSocketToken('secret-token');
+    await shellCubit.connect();
+
+    expect(configs, [
+      WebSocketAcpTransportConfig(
+        uri: Uri.parse('wss://agent.example.test/acp'),
+        token: 'secret-token',
+      ),
+    ]);
+    expect(agentTransport.state, AcpTransportState.connected);
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(
+      shellCubit.state.diagnostics.map((entry) => entry.message),
+      contains('WebSocket ACP agent connected: wss://agent.example.test/acp.'),
+    );
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test(
+    'reconnect starts replacement WebSocket transport from editable state',
+    () async {
+      final configs = <WebSocketAcpTransportConfig>[];
+      final initialTransport = FakeAcpTransport();
+      final connectedTransport = FakeAcpTransport();
+      final reconnectedTransport = FakeAcpTransport();
+      final replacements = [connectedTransport, reconnectedTransport];
+      final application = AcpClientApplication(transport: initialTransport);
+      final shellCubit = CodeLabShellCubit(
+        profile: codelabAgentStdioProfile,
+        application: application,
+        createSessionUseCase: CreateSession(application),
+        sendPromptUseCase: SendPrompt(application),
+        cancelTurnUseCase: CancelTurn(application),
+        reconnectUseCase: Reconnect(application),
+        respondToPermissionUseCase: RespondToPermission(application),
+        setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+        stdioTransportFactory: (_) => FakeAcpTransport(),
+        webSocketTransportFactory: (config) {
+          configs.add(config);
+          return replacements.removeAt(0);
+        },
+        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      );
+
+      shellCubit
+        ..selectTransport(CodeLabTransportType.webSocket)
+        ..updateWebSocketEndpoint('wss://agent.example.test/acp')
+        ..updateWebSocketToken('initial-token');
+      await shellCubit.connect();
+
+      shellCubit
+        ..updateWebSocketEndpoint('wss://agent.example.test/acp-v2')
+        ..updateWebSocketToken('rotated-token');
+      await shellCubit.reconnect();
+
+      expect(configs, [
+        WebSocketAcpTransportConfig(
+          uri: Uri.parse('wss://agent.example.test/acp'),
+          token: 'initial-token',
+        ),
+        WebSocketAcpTransportConfig(
+          uri: Uri.parse('wss://agent.example.test/acp-v2'),
+          token: 'rotated-token',
+        ),
+      ]);
+      expect(connectedTransport.state, AcpTransportState.closed);
+      expect(reconnectedTransport.state, AcpTransportState.connected);
+      expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+      expect(
+        shellCubit.state.diagnostics.map((entry) => entry.message),
+        contains(
+          'Reconnecting WebSocket ACP agent: wss://agent.example.test/acp-v2.',
+        ),
+      );
+      expect(
+        shellCubit.state.diagnostics.map((entry) => entry.message),
+        contains(
+          'WebSocket ACP agent reconnected: wss://agent.example.test/acp-v2.',
+        ),
+      );
+
+      await shellCubit.close();
+      await application.dispose();
+    },
+  );
+
+  test('reconnect reports WebSocket failure without crashing', () async {
+    final initialTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    var attempts = 0;
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) => FakeAcpTransport(),
+      webSocketTransportFactory: (_) {
+        attempts += 1;
+        // The first call is the initial connect(); the second is the
+        // reconnect() under test, which must fail (e.g. auth rejected).
+        return attempts == 1 ? FakeAcpTransport() : _FailingStartTransport();
       },
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
@@ -970,50 +1234,14 @@ void main() {
       ..selectTransport(CodeLabTransportType.webSocket)
       ..updateWebSocketEndpoint('wss://agent.example.test/acp');
     await shellCubit.connect();
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
 
-    expect(configs, isEmpty);
-    expect(initialTransport.state, AcpTransportState.idle);
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.disconnected);
-    expect(
-      shellCubit.state.diagnostics.last.message,
-      contains('WebSocket connect is deferred'),
-    );
-
-    await shellCubit.close();
-    await application.dispose();
-  });
-
-  test('reconnect leaves WebSocket startup deferred', () async {
-    final configs = <StdioAcpTransportConfig>[];
-    final initialTransport = FakeAcpTransport();
-    final application = AcpClientApplication(transport: initialTransport);
-    final shellCubit = CodeLabShellCubit(
-      profile: codelabAgentStdioProfile,
-      application: application,
-      createSessionUseCase: CreateSession(application),
-      sendPromptUseCase: SendPrompt(application),
-      cancelTurnUseCase: CancelTurn(application),
-      reconnectUseCase: Reconnect(application),
-      respondToPermissionUseCase: RespondToPermission(application),
-      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
-      stdioTransportFactory: (config) {
-        configs.add(config);
-        return FakeAcpTransport();
-      },
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
-    );
-
-    shellCubit
-      ..selectTransport(CodeLabTransportType.webSocket)
-      ..updateWebSocketEndpoint('wss://agent.example.test/acp');
     await shellCubit.reconnect();
 
-    expect(configs, isEmpty);
-    expect(initialTransport.state, AcpTransportState.idle);
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.disconnected);
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
     expect(
       shellCubit.state.diagnostics.last.message,
-      contains('WebSocket reconnect is deferred'),
+      contains('Failed to reconnect WebSocket ACP agent'),
     );
 
     await shellCubit.close();
@@ -1034,6 +1262,7 @@ void main() {
       respondToPermissionUseCase: RespondToPermission(application),
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 
@@ -1111,6 +1340,7 @@ void main() {
         stdioTransportFactory: (config) {
           throw StateError('auth failed: token=sk-super-secret-value');
         },
+        webSocketTransportFactory: (_) => FakeAcpTransport(),
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       );
 
@@ -1142,6 +1372,7 @@ void main() {
       respondToPermissionUseCase: RespondToPermission(application),
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
     );
 

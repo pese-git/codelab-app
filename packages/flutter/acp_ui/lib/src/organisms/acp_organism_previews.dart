@@ -188,7 +188,7 @@ Widget acpConnectionScreenPreview() {
         description: 'Connect to a local ACP agent using the default profile.',
         onConnect: acpPreviewConnect,
         onReconnect: acpPreviewReconnect,
-        onEditProfile: acpPreviewEditProfile,
+        onConfigureConnection: acpPreviewEditProfile,
       ),
     ),
   );

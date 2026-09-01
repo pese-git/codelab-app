@@ -11,12 +11,15 @@ class CodeLabApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final dependencies = codeLabDependenciesOf(context);
 
-    return FluentApp(
-      title: 'CodeLab',
-      home: BlocProvider.value(
-        value: dependencies.shellCubit,
-        child: const CodeLabShell(),
-      ),
+    // BlocProvider wraps FluentApp (not `home`) so the cubit stays visible
+    // to every route on FluentApp's Navigator, including the modal dialog
+    // ConnectionSetupDialog pushes via showDialog — a route pushed by the
+    // same Navigator sits as a sibling of `home`'s content in the element
+    // tree, not a descendant of it, so a provider scoped inside `home`
+    // would not be reachable from the dialog.
+    return BlocProvider.value(
+      value: dependencies.shellCubit,
+      child: const FluentApp(title: 'CodeLab', home: CodeLabShell()),
     );
   }
 }

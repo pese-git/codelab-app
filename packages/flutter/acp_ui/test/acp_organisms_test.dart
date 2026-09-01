@@ -396,7 +396,7 @@ void main() {
           description: 'Connect to a local ACP agent.',
           onConnect: () => connected = true,
           onReconnect: () => reconnected = true,
-          onEditProfile: () => edited = true,
+          onConfigureConnection: () => edited = true,
         ),
       ),
     );
@@ -408,7 +408,7 @@ void main() {
 
     await tester.tap(find.text('Connect'));
     await tester.tap(find.text('Reconnect'));
-    await tester.tap(find.text('Edit profile'));
+    await tester.tap(find.text('Configure connection'));
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(connected, isTrue);
@@ -452,7 +452,7 @@ void main() {
           isBusy: true,
           onConnect: () => connected = true,
           onReconnect: () => reconnected = true,
-          onEditProfile: () => edited = true,
+          onConfigureConnection: () => edited = true,
         ),
       ),
     );
@@ -461,7 +461,7 @@ void main() {
 
     await tester.tap(find.text('Connect'));
     await tester.tap(find.text('Reconnect'));
-    await tester.tap(find.text('Edit profile'));
+    await tester.tap(find.text('Configure connection'));
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(connected, isFalse);
