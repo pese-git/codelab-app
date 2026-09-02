@@ -395,6 +395,278 @@ void main() {
     await application.dispose();
   });
 
+  test('submitPrompt coalesces consecutive agent_message_chunk updates into a '
+      'single, growing transcript entry', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+    );
+
+    await shellCubit.connect();
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    final promptRequestFuture = agentTransport.sent.first;
+    final submitFuture = shellCubit.submitPrompt('hello agent');
+    final promptRequest = await promptRequestFuture as dynamic;
+
+    void sendMessageChunk(String text) {
+      agentTransport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: SessionNotification(
+            sessionId: const SessionId('session-1'),
+            update: SessionUpdate.agentMessageChunk(
+              content: ContentBlock.text(text: text),
+            ),
+          ).toJson(),
+        ),
+      );
+    }
+
+    sendMessageChunk('hi ');
+
+    final agentEntriesAfterFirstChunk = shellCubit.state.transcriptEntries
+        .where((entry) => entry.title == 'Agent')
+        .toList();
+    expect(agentEntriesAfterFirstChunk, hasLength(1));
+    expect(agentEntriesAfterFirstChunk.single.body, 'hi');
+    expect(
+      shellCubit.state.isPromptSubmitting,
+      isTrue,
+      reason:
+          'the entry above must already be visible while the turn is '
+          'still running, not only once it completes',
+    );
+    final growingEntryId = agentEntriesAfterFirstChunk.single.id;
+
+    sendMessageChunk('from ');
+    sendMessageChunk('agent');
+
+    final agentEntriesWhileRunning = shellCubit.state.transcriptEntries
+        .where((entry) => entry.title == 'Agent')
+        .toList();
+    expect(
+      agentEntriesWhileRunning,
+      hasLength(1),
+      reason:
+          'consecutive agent_message_chunk updates must coalesce into '
+          'one entry instead of one per chunk',
+    );
+    expect(agentEntriesWhileRunning.single.body, 'hi from agent');
+    expect(
+      agentEntriesWhileRunning.single.id,
+      growingEntryId,
+      reason: 'the growing entry keeps its id stable as more chunks arrive',
+    );
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id as JsonRpcId,
+        result: const {'stopReason': 'end_turn'},
+      ),
+    );
+    await submitFuture;
+
+    final finalAgentEntries = shellCubit.state.transcriptEntries
+        .where((entry) => entry.title == 'Agent')
+        .toList();
+    expect(finalAgentEntries, hasLength(1));
+    expect(finalAgentEntries.single.body, 'hi from agent');
+    expect(finalAgentEntries.single.id, growingEntryId);
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test('a tool call update between two agent_message_chunk runs starts a new '
+      'transcript entry instead of merging their text', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+    );
+
+    await shellCubit.connect();
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    final promptRequestFuture = agentTransport.sent.first;
+    final submitFuture = shellCubit.submitPrompt('inspect tool');
+    final promptRequest = await promptRequestFuture as dynamic;
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: SessionUpdate.agentMessageChunk(
+            content: ContentBlock.text(text: 'let me check the file'),
+          ),
+        ).toJson(),
+      ),
+    );
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: SessionUpdate.toolCallUpdate(
+            toolCallUpdate: ToolCallUpdate(
+              toolCallId: const ToolCallId('tool-1'),
+              title: 'Read file',
+              kind: ToolKind.read,
+              status: ToolCallStatus.completed,
+            ),
+          ),
+        ).toJson(),
+      ),
+    );
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: SessionUpdate.agentMessageChunk(
+            content: ContentBlock.text(text: 'here is what I found'),
+          ),
+        ).toJson(),
+      ),
+    );
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id as JsonRpcId,
+        result: const {'stopReason': 'end_turn'},
+      ),
+    );
+    await submitFuture;
+
+    final agentEntries = shellCubit.state.transcriptEntries
+        .where((entry) => entry.title == 'Agent')
+        .toList();
+    expect(agentEntries, hasLength(2));
+    expect(agentEntries[0].body, 'let me check the file');
+    expect(agentEntries[1].body, 'here is what I found');
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test('switching from agent_message_chunk to agent_thought_chunk starts a new '
+      'transcript entry instead of merging their text', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+    );
+
+    await shellCubit.connect();
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    final promptRequestFuture = agentTransport.sent.first;
+    final submitFuture = shellCubit.submitPrompt('think then answer');
+    final promptRequest = await promptRequestFuture as dynamic;
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: SessionUpdate.agentThoughtChunk(
+            content: ContentBlock.text(text: 'thinking it through'),
+          ),
+        ).toJson(),
+      ),
+    );
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: SessionUpdate.agentMessageChunk(
+            content: ContentBlock.text(text: 'here is the answer'),
+          ),
+        ).toJson(),
+      ),
+    );
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id as JsonRpcId,
+        result: const {'stopReason': 'end_turn'},
+      ),
+    );
+    await submitFuture;
+
+    final agentEntries = shellCubit.state.transcriptEntries
+        .where((entry) => entry.title == 'Agent')
+        .toList();
+    expect(agentEntries, hasLength(2));
+    expect(agentEntries[0].body, 'thinking it through');
+    expect(agentEntries[1].body, 'here is the answer');
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
   test('a spontaneous transport failure while a turn is running marks the '
       'connection failed and clears the now-unreliable active-request state, '
       'without discarding the transcript', () async {

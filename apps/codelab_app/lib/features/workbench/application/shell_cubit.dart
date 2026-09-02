@@ -33,6 +33,20 @@ enum CodeLabTransportType {
   final String label;
 }
 
+/// Discriminates the two streaming `SessionUpdate` kinds that
+/// [CodeLabShellCubit._agentTranscriptEntries] coalesces runs of — kept as
+/// a small named enum (rather than comparing `update.runtimeType`) so the
+/// adjacency check reads as "same streaming kind" and stays exhaustive if
+/// `SessionUpdate` grows another chunk-like variant.
+enum _StreamingChunkKind { message, thought }
+
+_StreamingChunkKind? _streamingChunkKind(SessionUpdate update) =>
+    switch (update) {
+      AgentMessageChunk() => _StreamingChunkKind.message,
+      AgentThoughtChunk() => _StreamingChunkKind.thought,
+      _ => null,
+    };
+
 final class CodeLabShellState {
   const CodeLabShellState({
     required this.connectionStatus,
@@ -790,24 +804,16 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     ).run();
     if (isClosed) return;
 
+    // `transcriptEntries` is not touched in either branch below: it is
+    // already kept current by `_handleSessionChange`, which re-derives it
+    // from `session.turns` on every `sessionChanges` event — including the
+    // ones this very `sendPrompt` call emits as it runs (turn start, each
+    // streamed chunk, and completion/failure) — see
+    // openspec/changes/add-streaming-message-coalescing/design.md.
     result.match(
       (failure) {
         final message = 'Failed to send prompt: ${_failureMessage(failure)}';
-        emit(
-          state.copyWith(
-            transcriptEntries: [
-              ...state.transcriptEntries,
-              AcpTranscriptEntry(
-                id: 'prompt-error-${state.transcriptEntries.length + 1}',
-                kind: AcpTranscriptEntryKind.diagnostic,
-                title: 'Prompt failed',
-                body: message,
-              ),
-            ],
-            isPromptSubmitting: false,
-            canCancel: false,
-          ),
-        );
+        emit(state.copyWith(isPromptSubmitting: false, canCancel: false));
         _recordDiagnostic(
           message,
           severity: AcpDebugLogSeverity.error,
@@ -815,13 +821,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         );
       },
       (turn) {
-        final agentEntries = _agentTranscriptEntries(
-          turn,
-          baseIndex: state.transcriptEntries.length,
-        );
         emit(
           state.copyWith(
-            transcriptEntries: [...state.transcriptEntries, ...agentEntries],
             inspectorEntries: _inspectorEntriesForTurn(turn),
             isPromptSubmitting: false,
             canCancel: false,
@@ -1053,6 +1054,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         activeSessionId: sessionItem.id,
         currentSessionLabel: sessionItem.title,
         currentSessionDetail: sessionItem.subtitle ?? session.id.value,
+        transcriptEntries: _transcriptEntriesForSession(session),
         inspectorEntries: _inspectorEntriesForSession(session),
         pendingApproval: _pendingApprovalFor(session),
         agentCommands: _agentCommandsFor(session),
@@ -1302,12 +1304,72 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         AcpClientUnexpectedFailure(:final message) => message,
       };
 
+  /// `PromptTurn.failureMessage` is `error.toString()`, captured by
+  /// `AcpClientApplication.sendPrompt`'s catch block before the original
+  /// typed exception is discarded — unlike [_failureMessage] above, which
+  /// reads a clean `message` field off a still-typed
+  /// `AcpClientApplicationFailure`. Several domain exceptions
+  /// (`AcpClientApplicationException`, `AcpTransportException`,
+  /// `StateTransitionException`) override `toString()` as
+  /// `"ClassName: <message>"` / `"ClassName(code): <message>"`, so the raw
+  /// value leaks an internal exception type name into user-facing text.
+  /// Strips that prefix on a best-effort basis — the original typed error
+  /// object is gone by the time it reaches `PromptTurn`, so a string
+  /// heuristic is the only option available here (see
+  /// openspec/changes/add-streaming-message-coalescing/design.md, Open
+  /// Questions) — without needing changes to `acp_client_core`.
+  String _cleanDomainFailureMessage(String message) {
+    final prefix = RegExp(
+      r'^[A-Za-z_][A-Za-z0-9_]*(\([^)]*\))?: ',
+    ).matchAsPrefix(message);
+    return prefix == null ? message : message.substring(prefix.end);
+  }
+
+  /// Groups contiguous same-kind streaming chunks of [turn.updates] into a
+  /// single, concatenated entry instead of one entry per chunk — see
+  /// openspec/changes/add-streaming-message-coalescing/design.md ("Decisions").
+  /// Adjacency is determined by the raw update sequence, not just by which
+  /// updates contributed text: any other update kind interposed between two
+  /// same-kind chunks (e.g. a tool call) still starts a new entry, and a
+  /// switch between message and thought chunks always starts a new entry —
+  /// both stay mapped to the same `AcpTranscriptEntryKind.agent`/'Agent'
+  /// visual treatment as before, this only changes how many entries a run
+  /// of chunks produces.
   List<AcpTranscriptEntry> _agentTranscriptEntries(
     PromptTurn turn, {
     required int baseIndex,
   }) {
     final entries = <AcpTranscriptEntry>[];
+    _StreamingChunkKind? runKind;
+    var runText = StringBuffer();
+
+    void flush() {
+      final text = runText.toString().trim();
+      if (text.isNotEmpty) {
+        entries.add(
+          AcpTranscriptEntry(
+            id: 'agent-${baseIndex + entries.length + 1}',
+            kind: AcpTranscriptEntryKind.agent,
+            title: 'Agent',
+            body: text,
+          ),
+        );
+      }
+      runKind = null;
+      runText = StringBuffer();
+    }
+
     for (final update in turn.updates) {
+      final kind = _streamingChunkKind(update);
+      if (kind == null) {
+        flush();
+        continue;
+      }
+      if (kind != runKind) {
+        flush();
+        runKind = kind;
+      }
+
       final content = switch (update) {
         AgentMessageChunk(:final content) => content,
         AgentThoughtChunk(:final content) => content,
@@ -1317,19 +1379,11 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         TextContent(:final text) => text,
         _ => null,
       };
-      if (text == null || text.trim().isEmpty) {
-        continue;
+      if (text != null) {
+        runText.write(text);
       }
-
-      entries.add(
-        AcpTranscriptEntry(
-          id: 'agent-${baseIndex + entries.length + 1}',
-          kind: AcpTranscriptEntryKind.agent,
-          title: 'Agent',
-          body: text.trim(),
-        ),
-      );
     }
+    flush();
 
     if (entries.isNotEmpty || !turn.isTerminal) {
       return entries;
@@ -1346,11 +1400,13 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     ];
   }
 
-  /// Reconstructs the full transcript for [session] from `session.turns` —
-  /// used when switching to a session that isn't the one incrementally
-  /// tracked in `state.transcriptEntries` (see [selectSession]). Mirrors the
-  /// incremental logic in [submitPrompt]/[_agentTranscriptEntries], but
-  /// rebuilt from domain history instead of appended live.
+  /// Sole source of `transcriptEntries` — rebuilds the full transcript for
+  /// [session] from `session.turns` from scratch. Called from
+  /// [_handleSessionChange] on every `sessionChanges` event (including one
+  /// for each streamed chunk of an in-progress turn, since `session.turns`
+  /// already contains the active, non-terminal turn — see
+  /// openspec/changes/add-streaming-message-coalescing/design.md), not just
+  /// when switching to a different session.
   List<AcpTranscriptEntry> _transcriptEntriesForSession(AcpSession session) {
     final entries = <AcpTranscriptEntry>[];
     for (final turn in session.turns) {
@@ -1375,7 +1431,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             id: 'prompt-error-${entries.length + 1}',
             kind: AcpTranscriptEntryKind.diagnostic,
             title: 'Prompt failed',
-            body: 'Failed to send prompt: ${turn.failureMessage}',
+            body:
+                'Failed to send prompt: '
+                '${_cleanDomainFailureMessage(turn.failureMessage!)}',
           ),
         );
       }
