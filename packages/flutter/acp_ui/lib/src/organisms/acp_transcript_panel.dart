@@ -112,11 +112,14 @@ class _AcpTranscriptEntryRow extends StatelessWidget {
                   ),
                   if (entry.body != null) ...[
                     const SizedBox(height: 6),
-                    AcpText(
-                      entry.body!,
-                      maxLines: _bodyMaxLines,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    if (entry.kind == AcpTranscriptEntryKind.toolCall)
+                      AcpText(
+                        entry.body!,
+                        maxLines: _bodyMaxLines,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    else
+                      AcpText(entry.body!),
                   ],
                   if (entry.toolCall != null) ...[
                     const SizedBox(height: 8),

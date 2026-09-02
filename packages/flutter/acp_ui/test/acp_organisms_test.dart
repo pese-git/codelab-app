@@ -251,6 +251,129 @@ void main() {
     expect(find.text('packages/flutter/acp_ui'), findsOneWidget);
   });
 
+  testWidgets('renders full agent body without truncation across view modes', (
+    tester,
+  ) async {
+    final longBody = List.generate(
+      12,
+      (i) => 'Agent response line ${i + 1}.',
+    ).join('\n');
+
+    for (final viewMode in AcpViewMode.values) {
+      await tester.pumpWidget(
+        FluentApp(
+          home: SizedBox(
+            width: 360,
+            height: 480,
+            child: AcpTranscriptPanel(
+              viewMode: viewMode,
+              entries: [
+                AcpTranscriptEntry(
+                  id: 'agent-1',
+                  kind: AcpTranscriptEntryKind.agent,
+                  title: 'Agent',
+                  body: longBody,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final textWidget = tester.widget<Text>(find.text(longBody));
+      expect(
+        textWidget.maxLines,
+        isNull,
+        reason: 'viewMode: $viewMode should not limit agent body lines',
+      );
+      expect(
+        textWidget.overflow,
+        isNot(TextOverflow.ellipsis),
+        reason: 'viewMode: $viewMode should not ellipsize agent body',
+      );
+    }
+  });
+
+  testWidgets('renders full user/approval/diagnostic body without truncation', (
+    tester,
+  ) async {
+    final longBody = List.generate(
+      12,
+      (i) => 'Content line ${i + 1}.',
+    ).join('\n');
+
+    for (final kind in [
+      AcpTranscriptEntryKind.user,
+      AcpTranscriptEntryKind.approval,
+      AcpTranscriptEntryKind.diagnostic,
+    ]) {
+      await tester.pumpWidget(
+        FluentApp(
+          home: SizedBox(
+            width: 360,
+            height: 480,
+            child: AcpTranscriptPanel(
+              viewMode: AcpViewMode.summary,
+              entries: [
+                AcpTranscriptEntry(
+                  id: 'entry-1',
+                  kind: kind,
+                  title: 'Entry',
+                  body: longBody,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final textWidget = tester.widget<Text>(find.text(longBody));
+      expect(
+        textWidget.maxLines,
+        isNull,
+        reason: 'kind: $kind should not limit body lines',
+      );
+      expect(
+        textWidget.overflow,
+        isNot(TextOverflow.ellipsis),
+        reason: 'kind: $kind should not ellipsize body',
+      );
+    }
+  });
+
+  testWidgets('still truncates tool call body by view mode (regression)', (
+    tester,
+  ) async {
+    final longBody = List.generate(
+      12,
+      (i) => 'Tool call body line ${i + 1}.',
+    ).join('\n');
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 360,
+          height: 480,
+          child: AcpTranscriptPanel(
+            viewMode: AcpViewMode.summary,
+            entries: [
+              AcpTranscriptEntry(
+                id: 'tool-1',
+                kind: AcpTranscriptEntryKind.toolCall,
+                title: 'Tool call',
+                body: longBody,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final textWidget = tester.widget<Text>(find.text(longBody));
+    expect(textWidget.maxLines, 1);
+    expect(textWidget.overflow, TextOverflow.ellipsis);
+  });
+
   testWidgets('renders transcript empty state', (tester) async {
     await tester.pumpWidget(
       const FluentApp(
