@@ -85,6 +85,16 @@ Permission policy
 
 AI-agent НЕ ДОЛЖЕН придумывать новую classification самостоятельно.
 
+### Исключение: ACP client-side `fs/*` и `terminal/*` методы
+
+`fs/read_text_file`, `fs/write_text_file` и `terminal/create`/`terminal/output`/`terminal/wait_for_exit`/`terminal/kill`/`terminal/release` формально попадают в "filesystem write/delete" и "shell/process execution" из списка выше, но явно исключены из client-side approval-гейта (`AGENTS.md §10`).
+
+Причина: сама спецификация ACP делает `session/request_permission` перед этими методами опциональным (`MAY`) решением агента, а не обязательным протокольным шагом клиента — ни `docs/acp/protocol/09-File System.md`, ни `docs/acp/protocol/10-Terminal.md` не связывают эти методы с permission. Введение собственного approval-гейта для них — расширение поведения сверх протокола, а не его требование.
+
+Компенсирующий контроль вместо approval: `path`/`cwd` из этих запросов ограничены рабочей директорией активной сессии (working directory containment); выход за её пределы отклоняется как protocol/security error на уровне application, до выполнения операции.
+
+Полное обоснование и рассмотренные альтернативы — `openspec/changes/add-acp-fs-client-support/design.md`, `openspec/changes/add-acp-terminal-client-support/design.md`.
+
 ---
 
 ## 3. Security policy owner

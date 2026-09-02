@@ -331,7 +331,7 @@ Streaming updates ДОЛЖНЫ обрабатываться предсказуе
 
 ## 10. Permissions и безопасность
 
-Опасные действия agent ДОЛЖНЫ проходить через application-level permission policy.
+Опасные действия agent ДОЛЖНЫ проходить через application-level permission policy, за исключением явно перечисленных ниже ACP client-side RPC методов.
 
 Правила:
 
@@ -344,6 +344,16 @@ Streaming updates ДОЛЖНЫ обрабатываться предсказуе
 * Permission request ДОЛЖЕН быть связан с правильным session/request/tool call.
 * Решение пользователя для одного tool call НЕ ДОЛЖНО применяться к другому.
 * Secrets и tokens НЕ ДОЛЖНЫ хардкодиться или попадать в logs.
+
+### Исключение: ACP `fs/*` и `terminal/*` client-side методы
+
+`fs/read_text_file`, `fs/write_text_file` и `terminal/create`/`terminal/output`/`terminal/wait_for_exit`/`terminal/kill`/`terminal/release` — это ACP-методы agent → client, для которых сама спецификация ACP делает `session/request_permission` опциональным (`MAY`) решением агента, а не обязательным шагом клиента (`docs/acp/protocol/08-Tool Calls.md#requesting-permission`, `09-File System.md`, `10-Terminal.md`).
+
+Для этих методов CodeLab НЕ ДОЛЖЕН вводить собственный client-side approval-гейт — permission остаётся ответственностью агента. Это сознательное, явно принятое отступление от общего правила этого раздела, а не пробел.
+
+Компенсирующий контроль, обязательный вместо approval: working directory containment — `path`/`cwd` из этих запросов ДОЛЖНЫ быть ограничены рабочей директорией активной сессии; выход за её пределы ДОЛЖЕН отклоняться как protocol/security error, до выполнения операции.
+
+См. `openspec/changes/add-acp-fs-client-support/design.md` и `openspec/changes/add-acp-terminal-client-support/design.md` для полного обоснования и рассмотренных альтернатив.
 
 Перед изменением permission flow агент ОБЯЗАН прочитать:
 
