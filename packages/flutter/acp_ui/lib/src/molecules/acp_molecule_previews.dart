@@ -106,12 +106,14 @@ Widget acpApprovalOptionGroupPreview() {
         AcpApprovalOption(
           id: 'allow_once',
           label: 'Allow once',
+          kind: AcpApprovalOptionKind.allowOnce,
           description: 'Run this command for the active prompt turn.',
           tone: AcpTone.warning,
         ),
         AcpApprovalOption(
           id: 'reject',
           label: 'Reject',
+          kind: AcpApprovalOptionKind.rejectOnce,
           description: 'Return a denied outcome to the agent.',
           tone: AcpTone.danger,
         ),

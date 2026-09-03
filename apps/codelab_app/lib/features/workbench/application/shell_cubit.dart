@@ -1146,6 +1146,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       AcpApprovalOption(
         id: option.optionId.value,
         label: option.name,
+        kind: _approvalOptionKind(option.kind),
         tone: switch (option.kind) {
           PermissionOptionKind.allowOnce ||
           PermissionOptionKind.allowAlways => AcpTone.success,
@@ -1153,6 +1154,14 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           PermissionOptionKind.rejectAlways => AcpTone.danger,
         },
       );
+
+  AcpApprovalOptionKind _approvalOptionKind(PermissionOptionKind kind) =>
+      switch (kind) {
+        PermissionOptionKind.allowOnce => AcpApprovalOptionKind.allowOnce,
+        PermissionOptionKind.allowAlways => AcpApprovalOptionKind.allowAlways,
+        PermissionOptionKind.rejectOnce => AcpApprovalOptionKind.rejectOnce,
+        PermissionOptionKind.rejectAlways => AcpApprovalOptionKind.rejectAlways,
+      };
 
   String? _commandFromToolCall(ToolCallRecord toolCall) {
     final command = toolCall.rawInput?['command'];
@@ -1465,6 +1474,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       risk: _approvalRisk(approval.riskLevel),
       command: _commandFromToolCall(approval.toolCall),
       cwd: cwd,
+      rawInput: _prettyJson(approval.toolCall.rawInput),
       options: approval.options.map(_approvalOption).toList(),
       enabled: !state.isRespondingToApproval,
       shortcutsEnabled: approval.id == focusedApprovalId,

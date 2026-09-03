@@ -15,6 +15,7 @@ class AcpApprovalPanel extends StatelessWidget {
     this.command,
     this.cwd,
     this.diffSummary,
+    this.rawInput,
     this.selectedOptionId,
     this.enabled = true,
     this.approveOptionId,
@@ -34,6 +35,11 @@ class AcpApprovalPanel extends StatelessWidget {
   final String? command;
   final String? cwd;
   final String? diffSummary;
+
+  /// The tool call's raw input, shown behind a collapsed "View raw input"
+  /// disclosure — unlike the inspector's always-visible raw input, this is
+  /// opt-in since the approval panel is read on the golden path.
+  final String? rawInput;
   final List<AcpApprovalOption> options;
   final String? selectedOptionId;
   final AcpApprovalOptionSelected onOptionSelected;
@@ -83,6 +89,10 @@ class AcpApprovalPanel extends StatelessWidget {
             cwd: cwd,
             diffSummary: diffSummary,
           ),
+        ],
+        if (rawInput case final rawInput?) ...[
+          const SizedBox(height: 12),
+          _RawInputDisclosure(rawInput: rawInput),
         ],
         const SizedBox(height: 12),
         AcpApprovalOptionGroup(
@@ -184,6 +194,53 @@ class _ApprovalDetailLine extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A minimal collapsed-by-default disclosure for the tool call's raw input.
+///
+/// Not `fluent_ui`'s `Expander`: that widget reads `PageStorage.of(context)`
+/// in `initState`, which throws outside a `Navigator` ancestor — a real
+/// crash surfaced by running this panel in the widget-preview environment
+/// and in `acp_previews_test.dart`, both of which render organisms bare
+/// (no `FluentApp`/`Navigator`), matching every other preview in this file.
+class _RawInputDisclosure extends StatefulWidget {
+  const _RawInputDisclosure({required this.rawInput});
+
+  final String rawInput;
+
+  @override
+  State<_RawInputDisclosure> createState() => _RawInputDisclosureState();
+}
+
+class _RawInputDisclosureState extends State<_RawInputDisclosure> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Button(
+          onPressed: () => setState(() => _expanded = !_expanded),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _expanded ? FluentIcons.chevron_up : FluentIcons.chevron_down,
+                size: 10,
+              ),
+              const SizedBox(width: 6),
+              const AcpText('View raw input', role: AcpTextRole.caption),
+            ],
+          ),
+        ),
+        if (_expanded) ...[
+          const SizedBox(height: 6),
+          AcpText(widget.rawInput, role: AcpTextRole.caption),
+        ],
+      ],
     );
   }
 }

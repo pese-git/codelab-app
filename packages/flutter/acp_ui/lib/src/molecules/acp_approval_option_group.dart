@@ -17,16 +17,24 @@ typedef AcpApprovalOptionSelected = void Function(String optionId);
 /// see embed-approval-in-thread/design.md.
 enum AcpApprovalOptionsLayout { list, compactRow }
 
+/// Mirrors the ACP protocol's `PermissionOptionKind` — a hint for choosing
+/// keyboard shortcuts and UI treatment, independent of the option's
+/// agent-provided [AcpApprovalOption.label] text (which may be in any
+/// language and is not a reliable source for that decision).
+enum AcpApprovalOptionKind { allowOnce, allowAlways, rejectOnce, rejectAlways }
+
 class AcpApprovalOption {
   const AcpApprovalOption({
     required this.id,
     required this.label,
+    required this.kind,
     this.description,
     this.tone = AcpTone.neutral,
   });
 
   final String id;
   final String label;
+  final AcpApprovalOptionKind kind;
   final String? description;
   final AcpTone tone;
 }
@@ -55,8 +63,12 @@ class AcpApprovalOptionGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final approveId = approveOptionId ?? _defaultApproveOptionId;
-    final rejectId = rejectOptionId ?? _defaultRejectOptionId;
+    final allowOnceId =
+        approveOptionId ?? _idForKind(AcpApprovalOptionKind.allowOnce);
+    final allowAlwaysId = _idForKind(AcpApprovalOptionKind.allowAlways);
+    final rejectOnceId =
+        rejectOptionId ?? _idForKind(AcpApprovalOptionKind.rejectOnce);
+    final rejectAlwaysId = _idForKind(AcpApprovalOptionKind.rejectAlways);
     final showShortcutHints = shortcutsEnabled;
 
     final body = switch (layout) {
@@ -86,11 +98,13 @@ class AcpApprovalOptionGroup extends StatelessWidget {
                   enabled: enabled,
                   shortcutLabel: !showShortcutHints
                       ? null
-                      : option.id == approveId
-                      ? _approveShortcutLabel
-                      : option.id == rejectId
-                      ? 'Esc'
-                      : null,
+                      : _shortcutLabelFor(
+                          option.id,
+                          allowOnceId: allowOnceId,
+                          allowAlwaysId: allowAlwaysId,
+                          rejectOnceId: rejectOnceId,
+                          rejectAlwaysId: rejectAlwaysId,
+                        ),
                   onSelected: () => onSelected(option.id),
                 ),
               ),
@@ -107,31 +121,54 @@ class AcpApprovalOptionGroup extends StatelessWidget {
 
     return CallbackShortcuts(
       bindings: {
-        if (approveId != null)
-          const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
-              _selectIfEnabled(approveId),
-        if (approveId != null)
-          const SingleActivator(LogicalKeyboardKey.enter, meta: true): () =>
-              _selectIfEnabled(approveId),
-        if (rejectId != null)
-          const SingleActivator(LogicalKeyboardKey.escape): () =>
-              _selectIfEnabled(rejectId),
+        if (allowOnceId != null) ...{
+          SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
+              _selectIfEnabled(allowOnceId),
+          SingleActivator(LogicalKeyboardKey.enter, meta: true): () =>
+              _selectIfEnabled(allowOnceId),
+        },
+        if (allowAlwaysId != null) ...{
+          SingleActivator(
+            LogicalKeyboardKey.enter,
+            control: true,
+            alt: true,
+          ): () =>
+              _selectIfEnabled(allowAlwaysId),
+          SingleActivator(
+            LogicalKeyboardKey.enter,
+            meta: true,
+            alt: true,
+          ): () =>
+              _selectIfEnabled(allowAlwaysId),
+        },
+        if (rejectOnceId != null) ...{
+          SingleActivator(LogicalKeyboardKey.backspace, control: true): () =>
+              _selectIfEnabled(rejectOnceId),
+          SingleActivator(LogicalKeyboardKey.backspace, meta: true): () =>
+              _selectIfEnabled(rejectOnceId),
+        },
+        if (rejectAlwaysId != null) ...{
+          SingleActivator(
+            LogicalKeyboardKey.backspace,
+            control: true,
+            alt: true,
+          ): () =>
+              _selectIfEnabled(rejectAlwaysId),
+          SingleActivator(
+            LogicalKeyboardKey.backspace,
+            meta: true,
+            alt: true,
+          ): () =>
+              _selectIfEnabled(rejectAlwaysId),
+        },
       },
       child: Focus(autofocus: true, child: body),
     );
   }
 
-  String get _approveShortcutLabel =>
-      defaultTargetPlatform == TargetPlatform.macOS ? '⌘⏎' : 'Ctrl+⏎';
-
-  String? get _defaultApproveOptionId {
+  String? _idForKind(AcpApprovalOptionKind kind) {
     for (final option in options) {
-      final normalizedId = option.id.toLowerCase();
-      final normalizedLabel = option.label.toLowerCase();
-      if (normalizedId.contains('allow') ||
-          normalizedId.contains('approve') ||
-          normalizedLabel.contains('allow') ||
-          normalizedLabel.contains('approve')) {
+      if (option.kind == kind) {
         return option.id;
       }
     }
@@ -139,18 +176,21 @@ class AcpApprovalOptionGroup extends StatelessWidget {
     return null;
   }
 
-  String? get _defaultRejectOptionId {
-    for (final option in options) {
-      final normalizedId = option.id.toLowerCase();
-      final normalizedLabel = option.label.toLowerCase();
-      if (normalizedId.contains('reject') ||
-          normalizedId.contains('deny') ||
-          normalizedLabel.contains('reject') ||
-          normalizedLabel.contains('deny')) {
-        return option.id;
-      }
-    }
+  String? _shortcutLabelFor(
+    String optionId, {
+    required String? allowOnceId,
+    required String? allowAlwaysId,
+    required String? rejectOnceId,
+    required String? rejectAlwaysId,
+  }) {
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+    final mod = isMac ? '⌘' : 'Ctrl+';
+    final alt = isMac ? '⌥' : 'Alt+';
 
+    if (optionId == allowOnceId) return '$mod⏎';
+    if (optionId == allowAlwaysId) return '$alt$mod⏎';
+    if (optionId == rejectOnceId) return '$mod⌫';
+    if (optionId == rejectAlwaysId) return '$alt$mod⌫';
     return null;
   }
 

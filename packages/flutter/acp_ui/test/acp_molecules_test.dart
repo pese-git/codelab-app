@@ -676,12 +676,14 @@ void main() {
             AcpApprovalOption(
               id: 'allow_once',
               label: 'Allow once',
+              kind: AcpApprovalOptionKind.allowOnce,
               description: 'Run once for this prompt turn.',
               tone: AcpTone.warning,
             ),
             AcpApprovalOption(
               id: 'reject',
               label: 'Reject',
+              kind: AcpApprovalOptionKind.rejectOnce,
               description: 'Deny the request.',
               tone: AcpTone.danger,
             ),
@@ -698,7 +700,7 @@ void main() {
     expect(find.text('Risk'), findsOneWidget);
   });
 
-  testWidgets('selects approval and reject options from shortcuts', (
+  testWidgets('binds all four option kinds to their own keyboard shortcut', (
     tester,
   ) async {
     final selected = <String>[];
@@ -706,20 +708,80 @@ void main() {
     await tester.pumpWidget(
       FluentApp(
         home: AcpApprovalOptionGroup(
-          selectedOptionId: 'allow_once',
           onSelected: selected.add,
           options: const [
             AcpApprovalOption(
               id: 'allow_once',
               label: 'Allow once',
-              description: 'Run once for this prompt turn.',
-              tone: AcpTone.warning,
+              kind: AcpApprovalOptionKind.allowOnce,
             ),
             AcpApprovalOption(
-              id: 'reject',
-              label: 'Reject',
-              description: 'Deny the request.',
-              tone: AcpTone.danger,
+              id: 'allow_always',
+              label: 'Allow always',
+              kind: AcpApprovalOptionKind.allowAlways,
+            ),
+            AcpApprovalOption(
+              id: 'reject_once',
+              label: 'Reject once',
+              kind: AcpApprovalOptionKind.rejectOnce,
+            ),
+            AcpApprovalOption(
+              id: 'reject_always',
+              label: 'Reject always',
+              kind: AcpApprovalOptionKind.rejectAlways,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    Future<void> pressWithModifiers(
+      LogicalKeyboardKey trigger, {
+      bool alt = false,
+    }) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      if (alt) {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      }
+      await tester.sendKeyEvent(trigger);
+      if (alt) {
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      }
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await pressWithModifiers(LogicalKeyboardKey.enter);
+    await pressWithModifiers(LogicalKeyboardKey.enter, alt: true);
+    await pressWithModifiers(LogicalKeyboardKey.backspace);
+    await pressWithModifiers(LogicalKeyboardKey.backspace, alt: true);
+
+    expect(selected, [
+      'allow_once',
+      'allow_always',
+      'reject_once',
+      'reject_always',
+    ]);
+  });
+
+  testWidgets('a non-English label without allow/reject words still gets the '
+      'shortcut its kind implies', (tester) async {
+    final selected = <String>[];
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpApprovalOptionGroup(
+          onSelected: selected.add,
+          options: const [
+            AcpApprovalOption(
+              id: 'opt_1',
+              label: 'Разрешить',
+              kind: AcpApprovalOptionKind.allowOnce,
+            ),
+            AcpApprovalOption(
+              id: 'opt_2',
+              label: 'Отклонить',
+              kind: AcpApprovalOptionKind.rejectOnce,
             ),
           ],
         ),
@@ -727,17 +789,16 @@ void main() {
     );
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(selected, ['allow_once', 'reject']);
+    expect(selected, ['opt_2']);
   });
 
   testWidgets(
-    'compactRow layout arranges options horizontally with a real shortcut '
-    'hint on the bound options only',
+    'compactRow layout arranges options horizontally with a shortcut hint '
+    'per bound kind',
     (tester) async {
       String? selected;
 
@@ -752,16 +813,19 @@ void main() {
                 AcpApprovalOption(
                   id: 'allow_once',
                   label: 'Allow once',
+                  kind: AcpApprovalOptionKind.allowOnce,
                   tone: AcpTone.success,
                 ),
                 AcpApprovalOption(
                   id: 'allow_always',
                   label: 'Allow always',
+                  kind: AcpApprovalOptionKind.allowAlways,
                   tone: AcpTone.success,
                 ),
                 AcpApprovalOption(
                   id: 'reject',
                   label: 'Reject',
+                  kind: AcpApprovalOptionKind.rejectOnce,
                   tone: AcpTone.danger,
                 ),
               ],
@@ -777,14 +841,12 @@ void main() {
       expect(find.text('Safe'), findsNothing);
       expect(find.text('Risk'), findsNothing);
 
-      // Only the option the group actually binds Ctrl/Cmd+Enter/Escape to
-      // gets a hint — not every option, and not a fictional 4-shortcut
-      // scheme.
-      final approveHint = defaultTargetPlatform == TargetPlatform.macOS
-          ? '⌘⏎'
-          : 'Ctrl+⏎';
-      expect(find.text(approveHint), findsOneWidget);
-      expect(find.text('Esc'), findsOneWidget);
+      final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+      final mod = isMac ? '⌘' : 'Ctrl+';
+      final alt = isMac ? '⌥' : 'Alt+';
+      expect(find.text('$mod⏎'), findsOneWidget);
+      expect(find.text('$alt$mod⏎'), findsOneWidget);
+      expect(find.text('$mod⌫'), findsOneWidget);
 
       await tester.tap(find.text('Allow always'));
       await tester.pump(const Duration(milliseconds: 100));

@@ -198,7 +198,13 @@ void main() {
           title: 'Run command',
           approval: AcpTranscriptApproval.pending(
             risk: AcpApprovalRisk.shell,
-            options: const [AcpApprovalOption(id: 'allow', label: 'Allow')],
+            options: const [
+              AcpApprovalOption(
+                id: 'allow',
+                label: 'Allow',
+                kind: AcpApprovalOptionKind.allowOnce,
+              ),
+            ],
             onOptionSelected: (_) {},
           ),
         );
@@ -528,12 +534,14 @@ void main() {
             AcpApprovalOption(
               id: 'allow_once',
               label: 'Allow once',
+              kind: AcpApprovalOptionKind.allowOnce,
               description: 'Run once.',
               tone: AcpTone.warning,
             ),
             AcpApprovalOption(
               id: 'reject',
               label: 'Reject',
+              kind: AcpApprovalOptionKind.rejectOnce,
               description: 'Deny.',
               tone: AcpTone.danger,
             ),
@@ -568,8 +576,16 @@ void main() {
           enabled: false,
           onOptionSelected: (optionId) => selected = optionId,
           options: const [
-            AcpApprovalOption(id: 'allow_once', label: 'Allow once'),
-            AcpApprovalOption(id: 'reject', label: 'Reject'),
+            AcpApprovalOption(
+              id: 'allow_once',
+              label: 'Allow once',
+              kind: AcpApprovalOptionKind.allowOnce,
+            ),
+            AcpApprovalOption(
+              id: 'reject',
+              label: 'Reject',
+              kind: AcpApprovalOptionKind.rejectOnce,
+            ),
           ],
         ),
       ),
@@ -579,10 +595,42 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(selected, isNull);
+  });
+
+  testWidgets('raw input is collapsed by default and expands on tap', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FluentApp(
+        home: AcpApprovalPanel(
+          title: 'Run shell command',
+          risk: AcpApprovalRisk.shell,
+          rawInput: '{\n  "command": "rm -rf build"\n}',
+          onOptionSelected: (_) {},
+          options: const [
+            AcpApprovalOption(
+              id: 'allow_once',
+              label: 'Allow once',
+              kind: AcpApprovalOptionKind.allowOnce,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(find.text('View raw input'), findsOneWidget);
+    expect(find.textContaining('rm -rf build'), findsNothing);
+
+    await tester.tap(find.text('View raw input'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('rm -rf build'), findsOneWidget);
   });
 
   testWidgets('renders connection details and invokes callbacks', (

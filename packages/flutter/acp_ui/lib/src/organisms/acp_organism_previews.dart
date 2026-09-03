@@ -174,11 +174,13 @@ Widget acpTranscriptPanelEmbeddedApprovalPreview() {
                 AcpApprovalOption(
                   id: 'allow_once',
                   label: 'Allow once',
+                  kind: AcpApprovalOptionKind.allowOnce,
                   tone: AcpTone.success,
                 ),
                 AcpApprovalOption(
                   id: 'reject_once',
                   label: 'Reject once',
+                  kind: AcpApprovalOptionKind.rejectOnce,
                   tone: AcpTone.danger,
                 ),
               ],
@@ -205,18 +207,21 @@ Widget acpApprovalPanelPreview() {
         reason: 'The agent wants to verify the Flutter UI package.',
         command: 'fvm dart run melos run analyze',
         cwd: 'packages/flutter/acp_ui',
+        rawInput: '{\n  "command": "fvm dart run melos run analyze"\n}',
         selectedOptionId: 'allow_once',
         onOptionSelected: acpPreviewApprovalSelected,
         options: const [
           AcpApprovalOption(
             id: 'allow_once',
             label: 'Allow once',
+            kind: AcpApprovalOptionKind.allowOnce,
             description: 'Run this command for the active prompt turn.',
             tone: AcpTone.warning,
           ),
           AcpApprovalOption(
             id: 'reject',
             label: 'Reject',
+            kind: AcpApprovalOptionKind.rejectOnce,
             description: 'Return a denied outcome to the agent.',
             tone: AcpTone.danger,
           ),
@@ -544,12 +549,14 @@ class _AcpPreviewWorkbench extends StatelessWidget {
           AcpApprovalOption(
             id: 'allow_once',
             label: 'Allow once',
+            kind: AcpApprovalOptionKind.allowOnce,
             description: 'Run this command for the active prompt turn.',
             tone: AcpTone.warning,
           ),
           AcpApprovalOption(
             id: 'reject',
             label: 'Reject',
+            kind: AcpApprovalOptionKind.rejectOnce,
             description: 'Return a denied outcome to the agent.',
             tone: AcpTone.danger,
           ),

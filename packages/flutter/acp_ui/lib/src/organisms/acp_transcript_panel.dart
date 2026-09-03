@@ -20,6 +20,7 @@ sealed class AcpTranscriptApproval {
     String? command,
     String? cwd,
     String? diffSummary,
+    String? rawInput,
     String? selectedOptionId,
     bool enabled,
     String? approveOptionId,
@@ -40,6 +41,7 @@ final class AcpTranscriptApprovalPending extends AcpTranscriptApproval {
     this.command,
     this.cwd,
     this.diffSummary,
+    this.rawInput,
     this.selectedOptionId,
     this.enabled = true,
     this.approveOptionId,
@@ -54,6 +56,7 @@ final class AcpTranscriptApprovalPending extends AcpTranscriptApproval {
   final String? command;
   final String? cwd;
   final String? diffSummary;
+  final String? rawInput;
   final String? selectedOptionId;
   final bool enabled;
   final String? approveOptionId;
@@ -328,6 +331,7 @@ class _AcpTranscriptApprovalContent extends StatelessWidget {
         :final command,
         :final cwd,
         :final diffSummary,
+        :final rawInput,
         :final options,
         :final selectedOptionId,
         :final enabled,
@@ -344,6 +348,7 @@ class _AcpTranscriptApprovalContent extends StatelessWidget {
           command: command,
           cwd: cwd,
           diffSummary: diffSummary,
+          rawInput: rawInput,
           options: options,
           selectedOptionId: selectedOptionId,
           enabled: enabled,
