@@ -177,6 +177,89 @@ void main() {
     expect(find.text('all tests passed'), findsOneWidget);
   });
 
+  testWidgets(
+    'auto-scrolls to a new pending approval only when already near the '
+    'bottom',
+    (tester) async {
+      Widget buildPanel(List<AcpTranscriptEntry> entries) {
+        return FluentApp(
+          home: SizedBox(
+            width: 400,
+            height: 200,
+            child: AcpTranscriptPanel(entries: entries),
+          ),
+        );
+      }
+
+      AcpTranscriptEntry pendingApprovalEntry(String id) {
+        return AcpTranscriptEntry(
+          id: id,
+          kind: AcpTranscriptEntryKind.toolCall,
+          title: 'Run command',
+          approval: AcpTranscriptApproval.pending(
+            risk: AcpApprovalRisk.shell,
+            options: const [AcpApprovalOption(id: 'allow', label: 'Allow')],
+            onOptionSelected: (_) {},
+          ),
+        );
+      }
+
+      final baseEntries = [
+        for (var i = 0; i < 20; i += 1)
+          AcpTranscriptEntry(
+            id: 'agent-$i',
+            kind: AcpTranscriptEntryKind.agent,
+            title: 'Agent',
+            body: 'Message number $i with enough text to take vertical space.',
+          ),
+      ];
+
+      await tester.pumpWidget(buildPanel(baseEntries));
+      await tester.pumpAndSettle();
+
+      final scrollableFinder = find.byType(Scrollable);
+      ScrollPosition position() =>
+          tester.state<ScrollableState>(scrollableFinder).position;
+
+      // User scrolls to the bottom (following the live tail).
+      await tester.fling(scrollableFinder, const Offset(0, -5000), 3000);
+      await tester.pumpAndSettle();
+      expect(position().pixels, position().maxScrollExtent);
+
+      await tester.pumpWidget(
+        buildPanel([...baseEntries, pendingApprovalEntry('tool-pending-1')]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        position().pixels,
+        position().maxScrollExtent,
+        reason: 'stays pinned to the bottom, following the new approval',
+      );
+
+      // User scrolls back up to read earlier history.
+      await tester.fling(scrollableFinder, const Offset(0, 5000), 3000);
+      await tester.pumpAndSettle();
+      expect(position().pixels, 0.0);
+
+      final offsetWhileReadingHistory = position().pixels;
+      await tester.pumpWidget(
+        buildPanel([
+          ...baseEntries,
+          pendingApprovalEntry('tool-pending-1'),
+          pendingApprovalEntry('tool-pending-2'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        position().pixels,
+        offsetWhileReadingHistory,
+        reason: 'does not yank the user away from history they are reading',
+      );
+    },
+  );
+
   testWidgets('renders transcript summary mode with compact details', (
     tester,
   ) async {

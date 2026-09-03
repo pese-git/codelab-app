@@ -1,9 +1,21 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 
 import '../atomics/atomics.dart';
 
 typedef AcpApprovalOptionSelected = void Function(String optionId);
+
+/// How [AcpApprovalOptionGroup] arranges its options.
+///
+/// `list` (default) is the full-detail vertical list — selection badge
+/// column, tone badge, description — used for the standalone/docked
+/// [AcpApprovalPanel]. `compactRow` is the dense horizontal row (label +
+/// real shortcut hint, no description) used when the panel is embedded
+/// inline in a transcript entry, where vertical space is at a premium —
+/// see embed-approval-in-thread/design.md.
+enum AcpApprovalOptionsLayout { list, compactRow }
 
 class AcpApprovalOption {
   const AcpApprovalOption({
@@ -28,6 +40,7 @@ class AcpApprovalOptionGroup extends StatelessWidget {
     this.approveOptionId,
     this.rejectOptionId,
     this.shortcutsEnabled = true,
+    this.layout = AcpApprovalOptionsLayout.list,
     super.key,
   });
 
@@ -38,30 +51,59 @@ class AcpApprovalOptionGroup extends StatelessWidget {
   final String? approveOptionId;
   final String? rejectOptionId;
   final bool shortcutsEnabled;
+  final AcpApprovalOptionsLayout layout;
 
   @override
   Widget build(BuildContext context) {
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final option in options) ...[
-          _AcpApprovalOptionTile(
-            option: option,
-            selected: option.id == selectedOptionId,
-            enabled: enabled,
-            onSelected: () => onSelected(option.id),
-          ),
-          if (option != options.last) const SizedBox(height: 8),
+    final approveId = approveOptionId ?? _defaultApproveOptionId;
+    final rejectId = rejectOptionId ?? _defaultRejectOptionId;
+    final showShortcutHints = shortcutsEnabled;
+
+    final body = switch (layout) {
+      AcpApprovalOptionsLayout.list => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final option in options) ...[
+            _AcpApprovalOptionTile(
+              option: option,
+              selected: option.id == selectedOptionId,
+              enabled: enabled,
+              onSelected: () => onSelected(option.id),
+            ),
+            if (option != options.last) const SizedBox(height: 8),
+          ],
         ],
-      ],
-    );
+      ),
+      AcpApprovalOptionsLayout.compactRow => IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final option in options) ...[
+              Expanded(
+                child: _AcpApprovalCompactOptionButton(
+                  option: option,
+                  selected: option.id == selectedOptionId,
+                  enabled: enabled,
+                  shortcutLabel: !showShortcutHints
+                      ? null
+                      : option.id == approveId
+                      ? _approveShortcutLabel
+                      : option.id == rejectId
+                      ? 'Esc'
+                      : null,
+                  onSelected: () => onSelected(option.id),
+                ),
+              ),
+              if (option != options.last) const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ),
+    };
 
     if (!shortcutsEnabled) {
       return body;
     }
-
-    final approveId = approveOptionId ?? _defaultApproveOptionId;
-    final rejectId = rejectOptionId ?? _defaultRejectOptionId;
 
     return CallbackShortcuts(
       bindings: {
@@ -78,6 +120,9 @@ class AcpApprovalOptionGroup extends StatelessWidget {
       child: Focus(autofocus: true, child: body),
     );
   }
+
+  String get _approveShortcutLabel =>
+      defaultTargetPlatform == TargetPlatform.macOS ? '⌘⏎' : 'Ctrl+⏎';
 
   String? get _defaultApproveOptionId {
     for (final option in options) {
@@ -188,6 +233,78 @@ class _AcpApprovalOptionTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The dense horizontal button used by [AcpApprovalOptionsLayout.compactRow]
+/// — label, a real keyboard-shortcut hint (only for whichever option the
+/// group actually binds `Ctrl/Cmd+Enter`/`Escape` to), and the option's tone
+/// conveyed as text color rather than a separate badge (no room for one at
+/// this density).
+class _AcpApprovalCompactOptionButton extends StatelessWidget {
+  const _AcpApprovalCompactOptionButton({
+    required this.option,
+    required this.selected,
+    required this.enabled,
+    required this.onSelected,
+    this.shortcutLabel,
+  });
+
+  final AcpApprovalOption option;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onSelected;
+  final String? shortcutLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final toneColor = _toneForegroundColor(option.tone);
+
+    return Button(
+      onPressed: enabled ? onSelected : null,
+      style: ButtonStyle(
+        padding: WidgetStateProperty.all(EdgeInsets.zero),
+        shape: WidgetStateProperty.all(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
+            side: selected ? BorderSide(color: Colors.blue) : BorderSide.none,
+          ),
+        ),
+        backgroundColor: !selected
+            ? null
+            : WidgetStateProperty.all(Colors.blue.withAlpha(24)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            AcpText(
+              option.label,
+              role: AcpTextRole.strong,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              color: toneColor,
+            ),
+            if (shortcutLabel != null) ...[
+              const SizedBox(height: 3),
+              AcpText(shortcutLabel!, role: AcpTextRole.caption),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Color? _toneForegroundColor(AcpTone tone) {
+  return switch (tone) {
+    AcpTone.neutral => null,
+    AcpTone.accent => Colors.blue,
+    AcpTone.success => Colors.green,
+    AcpTone.warning => Colors.warningPrimaryColor,
+    AcpTone.danger => Colors.red,
+  };
 }
 
 class _SelectionBadge extends StatelessWidget {

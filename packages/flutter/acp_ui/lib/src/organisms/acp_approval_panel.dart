@@ -7,7 +7,7 @@ enum AcpApprovalRisk { readOnly, localWrite, network, shell, destructive }
 
 class AcpApprovalPanel extends StatelessWidget {
   const AcpApprovalPanel({
-    required this.title,
+    this.title,
     required this.risk,
     required this.options,
     required this.onOptionSelected,
@@ -20,10 +20,15 @@ class AcpApprovalPanel extends StatelessWidget {
     this.approveOptionId,
     this.rejectOptionId,
     this.shortcutsEnabled = true,
+    this.bordered = true,
+    this.optionsLayout = AcpApprovalOptionsLayout.list,
     super.key,
   });
 
-  final String title;
+  /// Omit when a host (e.g. a transcript entry) already renders an
+  /// equivalent title for the tool call this approval belongs to — showing
+  /// only the risk badge in that case.
+  final String? title;
   final AcpApprovalRisk risk;
   final String? reason;
   final String? command;
@@ -37,57 +42,72 @@ class AcpApprovalPanel extends StatelessWidget {
   final String? rejectOptionId;
   final bool shortcutsEnabled;
 
+  /// When `false`, renders without the outer border/background/padding —
+  /// for hosts (e.g. a transcript entry) that already provide their own
+  /// framing and would otherwise double it up.
+  final bool bordered;
+
+  /// See [AcpApprovalOptionsLayout] — `list` (default) for the standalone
+  /// panel, `compactRow` for an inline-embedded transcript entry.
+  final AcpApprovalOptionsLayout optionsLayout;
+
   @override
   Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            if (title case final title?) ...[
+              Expanded(
+                child: AcpText(
+                  title,
+                  role: AcpTextRole.subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            AcpBadge(label: _riskLabel, tone: _riskTone),
+          ],
+        ),
+        if (reason != null) ...[
+          const SizedBox(height: 8),
+          AcpText(reason!, maxLines: 3, overflow: TextOverflow.ellipsis),
+        ],
+        if (_hasDetails) ...[
+          const SizedBox(height: 12),
+          _ApprovalDetails(
+            command: command,
+            cwd: cwd,
+            diffSummary: diffSummary,
+          ),
+        ],
+        const SizedBox(height: 12),
+        AcpApprovalOptionGroup(
+          options: options,
+          selectedOptionId: selectedOptionId,
+          enabled: enabled,
+          approveOptionId: approveOptionId,
+          rejectOptionId: rejectOptionId,
+          shortcutsEnabled: shortcutsEnabled,
+          layout: optionsLayout,
+          onSelected: onOptionSelected,
+        ),
+      ],
+    );
+
+    if (!bordered) {
+      return content;
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.withAlpha(64)),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: AcpText(
-                    title,
-                    role: AcpTextRole.subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                AcpBadge(label: _riskLabel, tone: _riskTone),
-              ],
-            ),
-            if (reason != null) ...[
-              const SizedBox(height: 8),
-              AcpText(reason!, maxLines: 3, overflow: TextOverflow.ellipsis),
-            ],
-            if (_hasDetails) ...[
-              const SizedBox(height: 12),
-              _ApprovalDetails(
-                command: command,
-                cwd: cwd,
-                diffSummary: diffSummary,
-              ),
-            ],
-            const SizedBox(height: 12),
-            AcpApprovalOptionGroup(
-              options: options,
-              selectedOptionId: selectedOptionId,
-              enabled: enabled,
-              approveOptionId: approveOptionId,
-              rejectOptionId: rejectOptionId,
-              shortcutsEnabled: shortcutsEnabled,
-              onSelected: onOptionSelected,
-            ),
-          ],
-        ),
-      ),
+      child: Padding(padding: const EdgeInsets.all(12), child: content),
     );
   }
 

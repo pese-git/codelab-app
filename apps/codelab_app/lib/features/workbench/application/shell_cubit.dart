@@ -72,7 +72,6 @@ final class CodeLabShellState {
     required this.isPromptEnabled,
     required this.isPromptSubmitting,
     required this.canCancel,
-    this.pendingApproval,
     this.isRespondingToApproval = false,
     this.isCommandPaletteOpen = false,
     this.isInspectorVisibleInNarrowLayout = false,
@@ -150,7 +149,6 @@ final class CodeLabShellState {
   final bool isPromptEnabled;
   final bool isPromptSubmitting;
   final bool canCancel;
-  final CodeLabPendingApproval? pendingApproval;
   final bool isRespondingToApproval;
   final bool isCommandPaletteOpen;
   final bool isInspectorVisibleInNarrowLayout;
@@ -209,7 +207,6 @@ final class CodeLabShellState {
     bool? isPromptEnabled,
     bool? isPromptSubmitting,
     bool? canCancel,
-    Object? pendingApproval = _unsetPendingApproval,
     bool? isRespondingToApproval,
     bool? isCommandPaletteOpen,
     bool? isInspectorVisibleInNarrowLayout,
@@ -244,9 +241,6 @@ final class CodeLabShellState {
       isPromptEnabled: isPromptEnabled ?? this.isPromptEnabled,
       isPromptSubmitting: isPromptSubmitting ?? this.isPromptSubmitting,
       canCancel: canCancel ?? this.canCancel,
-      pendingApproval: identical(pendingApproval, _unsetPendingApproval)
-          ? this.pendingApproval
-          : pendingApproval as CodeLabPendingApproval?,
       isRespondingToApproval:
           isRespondingToApproval ?? this.isRespondingToApproval,
       isCommandPaletteOpen: isCommandPaletteOpen ?? this.isCommandPaletteOpen,
@@ -311,36 +305,6 @@ final class CodeLabShellState {
     ].where((part) => part.trim().isNotEmpty).join(' '),
     CodeLabTransportType.webSocket => webSocketEndpoint,
   };
-}
-
-/// Sentinel used by [CodeLabShellState.copyWith] to distinguish "leave
-/// pendingApproval unchanged" from "explicitly set pendingApproval to null"
-/// (a plain `T?` parameter can't represent that distinction).
-const Object _unsetPendingApproval = Object();
-
-/// Presentation-ready projection of the single approval request the user
-/// should currently act on. Derived exclusively from [AcpSession.activeTurn]
-/// in [CodeLabShellCubit._handleSessionChange]; never mutated locally so it
-/// always reflects the authoritative session state (see PERM-003/PERM-004 in
-/// docs/architecture/permissions.md).
-final class CodeLabPendingApproval {
-  const CodeLabPendingApproval({
-    required this.approvalId,
-    required this.sessionId,
-    required this.title,
-    required this.risk,
-    required this.options,
-    this.command,
-    this.cwd,
-  });
-
-  final ApprovalRequestId approvalId;
-  final SessionId sessionId;
-  final String title;
-  final AcpApprovalRisk risk;
-  final List<AcpApprovalOption> options;
-  final String? command;
-  final String? cwd;
 }
 
 enum CodeLabInspectorCategory { approval, toolCall, protocol, diagnostic }
@@ -712,7 +676,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             currentSessionDetail: sessionItem.subtitle ?? session.id.value,
             transcriptEntries: const [],
             inspectorEntries: _inspectorEntriesForSession(session),
-            pendingApproval: null,
             agentCommands: _agentCommandsFor(session),
             configOptions: _configOptionsFor(session),
           ),
@@ -743,7 +706,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           currentSessionDetail: selected?.subtitle ?? sessionId,
           transcriptEntries: const [],
           inspectorEntries: const [],
-          pendingApproval: null,
           agentCommands: const [],
           configOptions: const [],
         ),
@@ -759,7 +721,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         currentSessionDetail: sessionItem.subtitle ?? session.id.value,
         transcriptEntries: _transcriptEntriesForSession(session),
         inspectorEntries: _inspectorEntriesForSession(session),
-        pendingApproval: _pendingApprovalFor(session),
         agentCommands: _agentCommandsFor(session),
         configOptions: _configOptionsFor(session),
       ),
@@ -878,30 +839,35 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
-  /// Responds to [state.pendingApproval] by selecting [optionId] (one of the
-  /// agent-supplied options, including reject-kind options — ACP has no
-  /// separate "reject" verb, rejecting is just selecting a reject_once /
-  /// reject_always option). Correlates strictly to the currently displayed
-  /// approval request (never "whatever the active turn currently is") so a
-  /// stale/late tap can never resolve a different tool call — see PERM-003
-  /// in docs/architecture/permissions.md.
-  Future<void> respondToApproval(String optionId) async {
-    final approval = state.pendingApproval;
-    if (approval == null || state.isRespondingToApproval) {
+  /// Responds to the approval identified by [approvalId] (in [sessionId]) by
+  /// selecting [optionId] (one of the agent-supplied options, including
+  /// reject-kind options — ACP has no separate "reject" verb, rejecting is
+  /// just selecting a reject_once / reject_always option). Callers pass the
+  /// identity of the specific approval they are resolving — each transcript
+  /// entry's own `ApprovalRequest`, not a single global "current" approval —
+  /// so a stale/late tap can never resolve a different tool call than the
+  /// one the user actually acted on; see PERM-003 in
+  /// docs/architecture/permissions.md.
+  Future<void> respondToApproval({
+    required ApprovalRequestId approvalId,
+    required SessionId sessionId,
+    required String optionId,
+  }) async {
+    if (state.isRespondingToApproval) {
       return;
     }
 
     emit(state.copyWith(isRespondingToApproval: true));
     final result = await _respondToPermissionUseCase(
       RespondToPermissionCommand.selected(
-        sessionId: approval.sessionId,
-        approvalId: approval.approvalId,
+        sessionId: sessionId,
+        approvalId: approvalId,
         optionId: PermissionOptionId(optionId),
       ),
     ).run();
     if (isClosed) return;
 
-    // Do not touch `pendingApproval` here in either branch: the resolution
+    // Do not touch `transcriptEntries` here in either branch: the resolution
     // (or the fact that it is still pending, e.g. after a stale/failed
     // response) is always re-derived from the next `sessionChanges` event in
     // `_handleSessionChange`, which stays the single source of truth.
@@ -1056,7 +1022,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         currentSessionDetail: sessionItem.subtitle ?? session.id.value,
         transcriptEntries: _transcriptEntriesForSession(session),
         inspectorEntries: _inspectorEntriesForSession(session),
-        pendingApproval: _pendingApprovalFor(session),
         agentCommands: _agentCommandsFor(session),
         configOptions: _configOptionsFor(session),
       ),
@@ -1156,7 +1121,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     emit(
       state.copyWith(
         connectionStatus: AcpConnectionStatus.failed,
-        pendingApproval: null,
         isPromptSubmitting: false,
         canCancel: false,
         isRespondingToApproval: false,
@@ -1167,46 +1131,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       'Connection to ACP agent lost: ${connectionState.message}',
       severity: AcpDebugLogSeverity.error,
       source: 'transport',
-    );
-  }
-
-  /// Derives the single approval the user should currently act on from the
-  /// active turn. If several approvals are pending concurrently (allowed by
-  /// the domain model but not expected in normal ACP flows), they are
-  /// surfaced one at a time, oldest first (FIFO) — the next one appears
-  /// automatically once the current one resolves, since this is recomputed
-  /// from scratch on every `sessionChanges` event.
-  CodeLabPendingApproval? _pendingApprovalFor(AcpSession session) {
-    final turn = session.activeTurn;
-    if (turn == null) {
-      return null;
-    }
-
-    final pending =
-        turn.approvals.values
-            .where((approval) => approval.status == ApprovalStatus.pending)
-            .toList()
-          ..sort((a, b) {
-            final aTime = a.requestedAt;
-            final bTime = b.requestedAt;
-            if (aTime == null || bTime == null) {
-              return 0;
-            }
-            return aTime.compareTo(bTime);
-          });
-    final next = pending.firstOrNull;
-    if (next == null) {
-      return null;
-    }
-
-    return CodeLabPendingApproval(
-      approvalId: next.id,
-      sessionId: session.id,
-      title: next.toolCall.title,
-      risk: _approvalRisk(next.riskLevel),
-      options: next.options.map(_approvalOption).toList(),
-      command: _commandFromToolCall(next.toolCall),
-      cwd: session.cwd,
     );
   }
 
@@ -1338,8 +1262,11 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   List<AcpTranscriptEntry> _agentTranscriptEntries(
     PromptTurn turn, {
     required int baseIndex,
+    required String cwd,
   }) {
     final entries = <AcpTranscriptEntry>[];
+    final seenToolCallIds = <ToolCallId>{};
+    final focusedApprovalId = _earliestPendingApprovalId(turn);
     _StreamingChunkKind? runKind;
     var runText = StringBuffer();
 
@@ -1360,30 +1287,86 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     }
 
     for (final update in turn.updates) {
-      final kind = _streamingChunkKind(update);
-      if (kind == null) {
-        flush();
-        continue;
-      }
-      if (kind != runKind) {
-        flush();
-        runKind = kind;
-      }
+      switch (update) {
+        case ToolCallSessionUpdate(:final toolCall):
+          flush();
+          if (seenToolCallIds.add(toolCall.toolCallId)) {
+            entries.add(
+              _toolCallTranscriptEntry(
+                id: 'tool-${baseIndex + entries.length + 1}',
+                toolCallId: toolCall.toolCallId,
+                turn: turn,
+                cwd: cwd,
+                focusedApprovalId: focusedApprovalId,
+              ),
+            );
+          }
+        case ToolCallUpdateSessionUpdate():
+          // Never creates its own entry — the position was already fixed by
+          // the initial `tool_call` above (or, if that never arrived, by the
+          // defensive fallback below), and displayed content/status/approval
+          // is re-read from `turn.toolCalls`/`turn.approvals` (the live read
+          // model) at build time, not from this raw update — see
+          // embed-approval-in-thread/design.md, Decision 1. Still flushes,
+          // like any other non-message/thought update: it must not let two
+          // separate agent text runs coalesce into one entry across it.
+          flush();
+        default:
+          final kind = _streamingChunkKind(update);
+          if (kind == null) {
+            flush();
+            continue;
+          }
+          if (kind != runKind) {
+            flush();
+            runKind = kind;
+          }
 
-      final content = switch (update) {
-        AgentMessageChunk(:final content) => content,
-        AgentThoughtChunk(:final content) => content,
-        _ => null,
-      };
-      final text = switch (content) {
-        TextContent(:final text) => text,
-        _ => null,
-      };
-      if (text != null) {
-        runText.write(text);
+          final content = switch (update) {
+            AgentMessageChunk(:final content) => content,
+            AgentThoughtChunk(:final content) => content,
+            _ => null,
+          };
+          final text = switch (content) {
+            TextContent(:final text) => text,
+            _ => null,
+          };
+          if (text != null) {
+            runText.write(text);
+          }
       }
     }
     flush();
+
+    // Defensive fallback: ACP lets an agent send `session/request_permission`
+    // for a tool call it never announced via a `tool_call` update — the
+    // domain model still records the approval (`turn.approvals`), it just
+    // never went through `turn.toolCalls`/`turn.updates` above. Every
+    // approval must be visible somewhere in the transcript (that is the
+    // whole point of this capability), so append one entry per such
+    // otherwise-unseen tool call at the end of this turn's entries — a
+    // best-effort position, since no stream event told us where it belongs.
+    for (final approval in turn.approvals.values) {
+      if (seenToolCallIds.add(approval.toolCall.id)) {
+        entries.add(
+          AcpTranscriptEntry(
+            id: 'tool-${baseIndex + entries.length + 1}',
+            kind: AcpTranscriptEntryKind.toolCall,
+            title: approval.toolCall.title,
+            toolCall: AcpToolCallSummary(
+              name: approval.toolCall.kind.wireName,
+              status: _toolCallStatus(approval.toolCall.status),
+              detail: _commandFromToolCall(approval.toolCall),
+            ),
+            approval: _transcriptApproval(
+              approval,
+              cwd: cwd,
+              focusedApprovalId: focusedApprovalId,
+            ),
+          ),
+        );
+      }
+    }
 
     if (entries.isNotEmpty || !turn.isTerminal) {
       return entries;
@@ -1399,6 +1382,125 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       ),
     ];
   }
+
+  /// Builds the transcript entry for [toolCallId], embedding its live status
+  /// (from `turn.toolCalls`) and, when it has one, its approval — pending
+  /// (interactive) or resolved (compact marker) — instead of a separate
+  /// docked panel. See embed-approval-in-thread/design.md, Decisions 1–3.
+  AcpTranscriptEntry _toolCallTranscriptEntry({
+    required String id,
+    required ToolCallId toolCallId,
+    required PromptTurn turn,
+    required String cwd,
+    required ApprovalRequestId? focusedApprovalId,
+  }) {
+    final toolCall = turn.toolCalls[toolCallId];
+    final approval = _approvalForToolCall(turn, toolCallId);
+
+    return AcpTranscriptEntry(
+      id: id,
+      kind: AcpTranscriptEntryKind.toolCall,
+      title: toolCall?.title ?? toolCallId.value,
+      toolCall: toolCall == null
+          ? null
+          : AcpToolCallSummary(
+              name: toolCall.kind.wireName,
+              status: _toolCallStatus(toolCall.status),
+              detail: _commandFromToolCall(toolCall),
+            ),
+      approval: _transcriptApproval(
+        approval,
+        cwd: cwd,
+        focusedApprovalId: focusedApprovalId,
+      ),
+    );
+  }
+
+  ApprovalRequest? _approvalForToolCall(
+    PromptTurn turn,
+    ToolCallId toolCallId,
+  ) {
+    for (final approval in turn.approvals.values) {
+      if (approval.toolCall.id == toolCallId) {
+        return approval;
+      }
+    }
+    return null;
+  }
+
+  /// The pending approval of [turn] with the earliest `requestedAt` — the
+  /// only one that owns the global approve/reject keyboard shortcuts when
+  /// several approvals are pending at once (FIFO, embed-approval-in-thread/
+  /// design.md, Decision 6). Others stay mouse-only until this one resolves.
+  ApprovalRequestId? _earliestPendingApprovalId(PromptTurn turn) {
+    final pending =
+        turn.approvals.values
+            .where((approval) => approval.status == ApprovalStatus.pending)
+            .toList()
+          ..sort((a, b) {
+            final aTime = a.requestedAt;
+            final bTime = b.requestedAt;
+            if (aTime == null || bTime == null) {
+              return 0;
+            }
+            return aTime.compareTo(bTime);
+          });
+    return pending.firstOrNull?.id;
+  }
+
+  AcpTranscriptApproval? _transcriptApproval(
+    ApprovalRequest? approval, {
+    required String cwd,
+    required ApprovalRequestId? focusedApprovalId,
+  }) {
+    if (approval == null) {
+      return null;
+    }
+
+    if (approval.status != ApprovalStatus.pending) {
+      return AcpTranscriptApproval.resolved(label: _resolvedLabel(approval));
+    }
+
+    return AcpTranscriptApproval.pending(
+      risk: _approvalRisk(approval.riskLevel),
+      command: _commandFromToolCall(approval.toolCall),
+      cwd: cwd,
+      options: approval.options.map(_approvalOption).toList(),
+      enabled: !state.isRespondingToApproval,
+      shortcutsEnabled: approval.id == focusedApprovalId,
+      onOptionSelected: (optionId) => unawaited(
+        respondToApproval(
+          approvalId: approval.id,
+          sessionId: approval.sessionId,
+          optionId: optionId,
+        ),
+      ),
+    );
+  }
+
+  String _resolvedLabel(ApprovalRequest approval) {
+    if (approval.status == ApprovalStatus.cancelled) {
+      return 'Cancelled';
+    }
+
+    final selectedId = approval.selectedOptionId;
+    if (selectedId == null) {
+      return 'Resolved';
+    }
+    for (final option in approval.options) {
+      if (option.optionId == selectedId) {
+        return option.name;
+      }
+    }
+    return selectedId.value;
+  }
+
+  AcpToolCallStatus _toolCallStatus(ToolCallStatus status) => switch (status) {
+    ToolCallStatus.pending => AcpToolCallStatus.queued,
+    ToolCallStatus.inProgress => AcpToolCallStatus.running,
+    ToolCallStatus.completed => AcpToolCallStatus.succeeded,
+    ToolCallStatus.failed => AcpToolCallStatus.failed,
+  };
 
   /// Sole source of `transcriptEntries` — rebuilds the full transcript for
   /// [session] from `session.turns` from scratch. Called from
@@ -1422,7 +1524,13 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         );
       }
 
-      entries.addAll(_agentTranscriptEntries(turn, baseIndex: entries.length));
+      entries.addAll(
+        _agentTranscriptEntries(
+          turn,
+          baseIndex: entries.length,
+          cwd: session.cwd,
+        ),
+      );
 
       if (turn.status == PromptTurnStatus.failed &&
           turn.failureMessage != null) {

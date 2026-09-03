@@ -2,8 +2,70 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
+import 'acp_approval_panel.dart';
 
 enum AcpTranscriptEntryKind { user, agent, toolCall, approval, diagnostic }
+
+/// Approval state carried by a [AcpTranscriptEntry] for the tool call it
+/// belongs to — rendered inline in the entry's own row, not as a separate
+/// panel outside the transcript.
+sealed class AcpTranscriptApproval {
+  const AcpTranscriptApproval();
+
+  const factory AcpTranscriptApproval.pending({
+    required AcpApprovalRisk risk,
+    required List<AcpApprovalOption> options,
+    required AcpApprovalOptionSelected onOptionSelected,
+    String? reason,
+    String? command,
+    String? cwd,
+    String? diffSummary,
+    String? selectedOptionId,
+    bool enabled,
+    String? approveOptionId,
+    String? rejectOptionId,
+    bool shortcutsEnabled,
+  }) = AcpTranscriptApprovalPending;
+
+  const factory AcpTranscriptApproval.resolved({required String label}) =
+      AcpTranscriptApprovalResolved;
+}
+
+final class AcpTranscriptApprovalPending extends AcpTranscriptApproval {
+  const AcpTranscriptApprovalPending({
+    required this.risk,
+    required this.options,
+    required this.onOptionSelected,
+    this.reason,
+    this.command,
+    this.cwd,
+    this.diffSummary,
+    this.selectedOptionId,
+    this.enabled = true,
+    this.approveOptionId,
+    this.rejectOptionId,
+    this.shortcutsEnabled = true,
+  });
+
+  final AcpApprovalRisk risk;
+  final List<AcpApprovalOption> options;
+  final AcpApprovalOptionSelected onOptionSelected;
+  final String? reason;
+  final String? command;
+  final String? cwd;
+  final String? diffSummary;
+  final String? selectedOptionId;
+  final bool enabled;
+  final String? approveOptionId;
+  final String? rejectOptionId;
+  final bool shortcutsEnabled;
+}
+
+final class AcpTranscriptApprovalResolved extends AcpTranscriptApproval {
+  const AcpTranscriptApprovalResolved({required this.label});
+
+  final String label;
+}
 
 class AcpTranscriptEntry {
   const AcpTranscriptEntry({
@@ -13,6 +75,7 @@ class AcpTranscriptEntry {
     this.body,
     this.toolCall,
     this.timestampLabel,
+    this.approval,
   });
 
   final String id;
@@ -21,9 +84,19 @@ class AcpTranscriptEntry {
   final String? body;
   final AcpToolCallSummary? toolCall;
   final String? timestampLabel;
+
+  /// Non-null only for a [AcpTranscriptEntryKind.toolCall] entry that has an
+  /// associated `ApprovalRequest` — pending (interactive) or resolved
+  /// (compact marker).
+  final AcpTranscriptApproval? approval;
 }
 
-class AcpTranscriptPanel extends StatelessWidget {
+/// How close to the bottom (in pixels) counts as "the user is following the
+/// live tail of the transcript" — a new pending approval only auto-scrolls
+/// into view when the user was already within this distance of the bottom.
+const _autoScrollBottomThreshold = 80.0;
+
+class AcpTranscriptPanel extends StatefulWidget {
   const AcpTranscriptPanel({
     required this.entries,
     this.emptyLabel = 'No transcript yet',
@@ -36,6 +109,50 @@ class AcpTranscriptPanel extends StatelessWidget {
   final AcpViewMode viewMode;
 
   @override
+  State<AcpTranscriptPanel> createState() => _AcpTranscriptPanelState();
+}
+
+class _AcpTranscriptPanelState extends State<AcpTranscriptPanel> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant AcpTranscriptPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final newPendingApprovalIds = _pendingApprovalEntryIds(
+      widget.entries,
+    ).difference(_pendingApprovalEntryIds(oldWidget.entries));
+    if (newPendingApprovalIds.isEmpty || !_controller.hasClients) {
+      return;
+    }
+
+    final position = _controller.position;
+    final wasNearBottom =
+        position.maxScrollExtent - position.pixels <=
+        _autoScrollBottomThreshold;
+    if (!wasNearBottom) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_controller.hasClients) {
+        return;
+      }
+      _controller.animateTo(
+        _controller.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -43,26 +160,34 @@ class AcpTranscriptPanel extends StatelessWidget {
         border: Border.all(color: Colors.grey.withAlpha(54)),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: entries.isEmpty
+      child: widget.entries.isEmpty
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: AcpText(emptyLabel, role: AcpTextRole.caption),
+                child: AcpText(widget.emptyLabel, role: AcpTextRole.caption),
               ),
             )
           : ListView.separated(
+              controller: _controller,
               padding: const EdgeInsets.all(12),
-              itemCount: entries.length,
+              itemCount: widget.entries.length,
               separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 return _AcpTranscriptEntryRow(
-                  entry: entries[index],
-                  viewMode: viewMode,
+                  entry: widget.entries[index],
+                  viewMode: widget.viewMode,
                 );
               },
             ),
     );
   }
+}
+
+Set<String> _pendingApprovalEntryIds(List<AcpTranscriptEntry> entries) {
+  return {
+    for (final entry in entries)
+      if (entry.approval is AcpTranscriptApprovalPending) entry.id,
+  };
 }
 
 class _AcpTranscriptEntryRow extends StatelessWidget {
@@ -125,6 +250,10 @@ class _AcpTranscriptEntryRow extends StatelessWidget {
                     const SizedBox(height: 8),
                     _toolCallForMode(entry.toolCall!),
                   ],
+                  if (entry.approval case final approval?) ...[
+                    const SizedBox(height: 8),
+                    _AcpTranscriptApprovalContent(approval: approval),
+                  ],
                 ],
               ),
             ),
@@ -182,5 +311,58 @@ class _AcpTranscriptEntryRow extends StatelessWidget {
       detail: toolCall.detail,
       viewMode: viewMode,
     );
+  }
+}
+
+class _AcpTranscriptApprovalContent extends StatelessWidget {
+  const _AcpTranscriptApprovalContent({required this.approval});
+
+  final AcpTranscriptApproval approval;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (approval) {
+      AcpTranscriptApprovalPending(
+        :final risk,
+        :final reason,
+        :final command,
+        :final cwd,
+        :final diffSummary,
+        :final options,
+        :final selectedOptionId,
+        :final enabled,
+        :final approveOptionId,
+        :final rejectOptionId,
+        :final shortcutsEnabled,
+        :final onOptionSelected,
+      ) =>
+        AcpApprovalPanel(
+          bordered: false,
+          optionsLayout: AcpApprovalOptionsLayout.compactRow,
+          risk: risk,
+          reason: reason,
+          command: command,
+          cwd: cwd,
+          diffSummary: diffSummary,
+          options: options,
+          selectedOptionId: selectedOptionId,
+          enabled: enabled,
+          approveOptionId: approveOptionId,
+          rejectOptionId: rejectOptionId,
+          shortcutsEnabled: shortcutsEnabled,
+          onOptionSelected: onOptionSelected,
+        ),
+      AcpTranscriptApprovalResolved(:final label) => Row(
+        children: [
+          const AcpIcon(
+            FluentIcons.check_mark,
+            tone: AcpTone.success,
+            size: 13,
+          ),
+          const SizedBox(width: 6),
+          AcpText(label, role: AcpTextRole.caption),
+        ],
+      ),
+    };
   }
 }

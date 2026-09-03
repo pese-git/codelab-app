@@ -135,6 +135,62 @@ Widget acpTranscriptPanelVerbosePreview() {
 }
 
 @Preview(
+  name: 'Transcript panel with embedded approval',
+  group: acpOrganismPreviewGroup,
+  size: Size(620, 520),
+)
+Widget acpTranscriptPanelEmbeddedApprovalPreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      height: 520,
+      child: AcpTranscriptPanel(
+        entries: [
+          const AcpTranscriptEntry(
+            id: 'tool-resolved-1',
+            kind: AcpTranscriptEntryKind.toolCall,
+            title: 'Edit file — jest.config.js',
+            toolCall: AcpToolCallSummary(
+              name: 'edit',
+              status: AcpToolCallStatus.succeeded,
+            ),
+            approval: AcpTranscriptApproval.resolved(label: 'Allowed once'),
+          ),
+          AcpTranscriptEntry(
+            id: 'tool-pending-1',
+            kind: AcpTranscriptEntryKind.toolCall,
+            title: 'Run command',
+            toolCall: const AcpToolCallSummary(
+              name: 'execute',
+              status: AcpToolCallStatus.queued,
+            ),
+            approval: AcpTranscriptApproval.pending(
+              risk: AcpApprovalRisk.shell,
+              reason: 'Agent wants to execute a build script.',
+              command: 'npm test --coverage',
+              cwd: '/home/user/project',
+              onOptionSelected: acpPreviewApprovalSelected,
+              options: const [
+                AcpApprovalOption(
+                  id: 'allow_once',
+                  label: 'Allow once',
+                  tone: AcpTone.success,
+                ),
+                AcpApprovalOption(
+                  id: 'reject_once',
+                  label: 'Reject once',
+                  tone: AcpTone.danger,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+@Preview(
   name: 'Approval panel',
   group: acpOrganismPreviewGroup,
   size: Size(520, 360),

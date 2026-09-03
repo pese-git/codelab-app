@@ -66,18 +66,6 @@ class WorkbenchMainPane extends StatelessWidget {
             ),
           ),
         ],
-        if (state.pendingApproval case final approval?) ...[
-          const SizedBox(height: 12),
-          AcpApprovalPanel(
-            title: approval.title,
-            risk: approval.risk,
-            options: approval.options,
-            command: approval.command,
-            cwd: approval.cwd,
-            enabled: !state.isRespondingToApproval,
-            onOptionSelected: cubit.respondToApproval,
-          ),
-        ],
         const SizedBox(height: 12),
         AcpPromptComposer(
           enabled: state.isPromptEnabled,

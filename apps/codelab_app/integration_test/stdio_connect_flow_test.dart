@@ -348,7 +348,6 @@ void main() {
       expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
       expect(shellCubit.state.isPromptSubmitting, isFalse);
       expect(shellCubit.state.canCancel, isFalse);
-      expect(shellCubit.state.pendingApproval, isNull);
       expect(find.text('Failed'), findsWidgets);
       // The transcript up to the point of the crash is history, not part of
       // the now-untrustworthy active request — it must stay visible.

@@ -8,6 +8,7 @@ class AcpText extends StatelessWidget {
     this.role = AcpTextRole.body,
     this.maxLines,
     this.overflow,
+    this.color,
     super.key,
   });
 
@@ -16,13 +17,19 @@ class AcpText extends StatelessWidget {
   final int? maxLines;
   final TextOverflow? overflow;
 
+  /// Overrides the role's default color when set — for callers that need to
+  /// convey extra meaning (e.g. tone) through text color where there's no
+  /// room for a separate badge.
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
+    final style = _styleForRole(FluentTheme.of(context).typography, role);
     return Text(
       data,
       maxLines: maxLines,
       overflow: overflow,
-      style: _styleForRole(FluentTheme.of(context).typography, role),
+      style: color == null ? style : style?.copyWith(color: color),
     );
   }
 }

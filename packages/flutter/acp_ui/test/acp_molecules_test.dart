@@ -1,5 +1,7 @@
 import 'package:acp_ui/acp_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -732,4 +734,61 @@ void main() {
 
     expect(selected, ['allow_once', 'reject']);
   });
+
+  testWidgets(
+    'compactRow layout arranges options horizontally with a real shortcut '
+    'hint on the bound options only',
+    (tester) async {
+      String? selected;
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: SizedBox(
+            width: 400,
+            child: AcpApprovalOptionGroup(
+              layout: AcpApprovalOptionsLayout.compactRow,
+              onSelected: (optionId) => selected = optionId,
+              options: const [
+                AcpApprovalOption(
+                  id: 'allow_once',
+                  label: 'Allow once',
+                  tone: AcpTone.success,
+                ),
+                AcpApprovalOption(
+                  id: 'allow_always',
+                  label: 'Allow always',
+                  tone: AcpTone.success,
+                ),
+                AcpApprovalOption(
+                  id: 'reject',
+                  label: 'Reject',
+                  tone: AcpTone.danger,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // Horizontal, not the vertical list's "Selected" badge column.
+      expect(find.byType(Row), findsWidgets);
+      expect(find.text('Selected'), findsNothing);
+      // No description/tone-badge chips at this density.
+      expect(find.text('Safe'), findsNothing);
+      expect(find.text('Risk'), findsNothing);
+
+      // Only the option the group actually binds Ctrl/Cmd+Enter/Escape to
+      // gets a hint — not every option, and not a fictional 4-shortcut
+      // scheme.
+      final approveHint = defaultTargetPlatform == TargetPlatform.macOS
+          ? '⌘⏎'
+          : 'Ctrl+⏎';
+      expect(find.text(approveHint), findsOneWidget);
+      expect(find.text('Esc'), findsOneWidget);
+
+      await tester.tap(find.text('Allow always'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(selected, 'allow_always');
+    },
+  );
 }

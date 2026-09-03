@@ -591,6 +591,119 @@ void main() {
     await application.dispose();
   });
 
+  test(
+    'SessionUpdate.toolCall entries appear in the transcript at the '
+    'position they were created, ahead of any pending completion text',
+    () async {
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final application = AcpClientApplication(transport: initialTransport);
+      final shellCubit = CodeLabShellCubit(
+        profile: codelabAgentStdioProfile,
+        application: application,
+        createSessionUseCase: CreateSession(application),
+        sendPromptUseCase: SendPrompt(application),
+        cancelTurnUseCase: CancelTurn(application),
+        reconnectUseCase: Reconnect(application),
+        respondToPermissionUseCase: RespondToPermission(application),
+        setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+        stdioTransportFactory: (_) => agentTransport,
+        webSocketTransportFactory: (_) => FakeAcpTransport(),
+        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      );
+
+      await shellCubit.connect();
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest = await createRequestFuture as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: const {'sessionId': 'session-1'},
+        ),
+      );
+      await createFuture;
+
+      final promptRequestFuture = agentTransport.sent.first;
+      final submitFuture = shellCubit.submitPrompt('inspect two files');
+      final promptRequest = await promptRequestFuture as dynamic;
+
+      void emitToolCall(ToolCall toolCall) {
+        agentTransport.emitInbound(
+          JsonRpcMessage.notification(
+            method: sessionUpdateMethod,
+            params: SessionNotification(
+              sessionId: const SessionId('session-1'),
+              update: SessionUpdate.toolCall(toolCall: toolCall),
+            ).toJson(),
+          ),
+        );
+      }
+
+      void emitAgentText(String text) {
+        agentTransport.emitInbound(
+          JsonRpcMessage.notification(
+            method: sessionUpdateMethod,
+            params: SessionNotification(
+              sessionId: const SessionId('session-1'),
+              update: SessionUpdate.agentMessageChunk(
+                content: ContentBlock.text(text: text),
+              ),
+            ).toJson(),
+          ),
+        );
+      }
+
+      emitAgentText('before');
+      emitToolCall(
+        const ToolCall(
+          toolCallId: ToolCallId('tool-a'),
+          title: 'Read config',
+          kind: ToolKind.read,
+          status: ToolCallStatus.inProgress,
+        ),
+      );
+
+      // Several tool calls in a row, back to back.
+      emitToolCall(
+        const ToolCall(
+          toolCallId: ToolCallId('tool-b'),
+          title: 'Run build',
+          kind: ToolKind.execute,
+          status: ToolCallStatus.pending,
+        ),
+      );
+
+      // A tool call with no completion text yet, mid-turn (not terminal) —
+      // it must already be visible, not held back until the turn ends.
+      expect(shellCubit.state.canCancel, isTrue);
+      final midStreamEntries = shellCubit.state.transcriptEntries;
+      expect(midStreamEntries.last.title, 'Run build');
+      expect(midStreamEntries.last.toolCall!.status, AcpToolCallStatus.queued);
+
+      emitAgentText('after');
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await submitFuture;
+
+      final titles = shellCubit.state.transcriptEntries
+          .map((entry) => entry.title)
+          .toList();
+      expect(titles, ['You', 'Agent', 'Read config', 'Run build', 'Agent']);
+
+      final readConfigEntry = shellCubit.state.transcriptEntries[2];
+      expect(readConfigEntry.toolCall!.name, 'read');
+      expect(readConfigEntry.toolCall!.status, AcpToolCallStatus.running);
+
+      await shellCubit.close();
+      await application.dispose();
+    },
+  );
+
   test('switching from agent_message_chunk to agent_thought_chunk starts a new '
       'transcript entry instead of merging their text', () async {
     final initialTransport = FakeAcpTransport();
@@ -721,7 +834,6 @@ void main() {
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
     expect(shellCubit.state.isPromptSubmitting, isFalse);
     expect(shellCubit.state.canCancel, isFalse);
-    expect(shellCubit.state.pendingApproval, isNull);
     expect(
       shellCubit.state.diagnostics.last.message,
       contains('Connection to ACP agent lost'),
@@ -991,7 +1103,14 @@ void main() {
     final submitFuture = shellCubit.submitPrompt('run a command');
     final promptRequest = await promptRequestFuture as dynamic;
 
-    expect(shellCubit.state.pendingApproval, isNull);
+    AcpTranscriptEntry? pendingApprovalEntry() {
+      final matches = shellCubit.state.transcriptEntries
+          .where((entry) => entry.approval is AcpTranscriptApprovalPending)
+          .toList();
+      return matches.isEmpty ? null : matches.single;
+    }
+
+    expect(pendingApprovalEntry(), isNull);
 
     agentTransport.emitInbound(
       JsonRpcMessage.request(
@@ -1022,9 +1141,10 @@ void main() {
       ),
     );
 
-    final pending = shellCubit.state.pendingApproval;
-    expect(pending, isNotNull);
-    expect(pending!.title, 'Run command');
+    final pendingEntry = pendingApprovalEntry();
+    expect(pendingEntry, isNotNull);
+    expect(pendingEntry!.title, 'Run command');
+    final pending = pendingEntry.approval! as AcpTranscriptApprovalPending;
     expect(pending.risk, AcpApprovalRisk.shell);
     expect(pending.command, 'echo hi');
     expect(pending.options.map((option) => option.id), [
@@ -1033,7 +1153,14 @@ void main() {
     ]);
 
     final permissionResponseFuture = agentTransport.sent.first;
-    final respondFuture = shellCubit.respondToApproval('allow-once');
+    // Calls the cubit method directly (rather than `pending.onOptionSelected`,
+    // a `void Function` that can't be awaited) — this is what that callback
+    // invokes under the hood; see `_transcriptApproval` in shell_cubit.dart.
+    final respondFuture = shellCubit.respondToApproval(
+      approvalId: const ApprovalRequestId('permission-7'),
+      sessionId: const SessionId('session-1'),
+      optionId: 'allow-once',
+    );
     expect(shellCubit.state.isRespondingToApproval, isTrue);
 
     final permissionResponse =
@@ -1042,10 +1169,156 @@ void main() {
     await respondFuture;
 
     expect(shellCubit.state.isRespondingToApproval, isFalse);
-    expect(shellCubit.state.pendingApproval, isNull);
+    expect(pendingApprovalEntry(), isNull);
     expect(
       shellCubit.state.diagnostics.last.message,
       contains('Resolved approval permission-7'),
+    );
+
+    // The entry stays in the transcript, collapsed to a resolved marker —
+    // it does not disappear (embed-approval-in-thread/specs/
+    // agent-workbench-ui: "Approval остаётся в истории после решения").
+    final resolvedEntries = shellCubit.state.transcriptEntries
+        .where((entry) => entry.approval is AcpTranscriptApprovalResolved)
+        .toList();
+    expect(resolvedEntries, hasLength(1));
+    expect(resolvedEntries.single.title, 'Run command');
+    expect(
+      (resolvedEntries.single.approval! as AcpTranscriptApprovalResolved).label,
+      'Allow once',
+    );
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: promptRequest.id as JsonRpcId,
+        result: const {'stopReason': 'end_turn'},
+      ),
+    );
+    await submitFuture.timeout(const Duration(seconds: 2));
+
+    await closeCodeLabRootScope();
+  });
+
+  test('two parallel pending approvals are both embedded independently, and '
+      'only the earliest-requested one owns keyboard shortcuts', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final binding = CodeLabTestBinding(
+      transport: initialTransport,
+      stdioTransportFactory: (_) => agentTransport,
+    );
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    await shellCubit.connect();
+
+    final createRequestFuture = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final createRequest = await createRequestFuture as dynamic;
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: createRequest.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    final promptRequestFuture = agentTransport.sent.first;
+    final submitFuture = shellCubit.submitPrompt('run two commands');
+    final promptRequest = await promptRequestFuture as dynamic;
+
+    RequestPermissionRequest permissionRequestFor(
+      String toolCallId,
+      String title,
+    ) {
+      return RequestPermissionRequest(
+        sessionId: const SessionId('session-1'),
+        toolCall: ToolCallUpdate(
+          toolCallId: ToolCallId(toolCallId),
+          title: title,
+          kind: ToolKind.execute,
+          status: ToolCallStatus.inProgress,
+        ),
+        options: const [
+          PermissionOption(
+            optionId: PermissionOptionId('allow-once'),
+            name: 'Allow once',
+            kind: PermissionOptionKind.allowOnce,
+          ),
+          PermissionOption(
+            optionId: PermissionOptionId('reject-once'),
+            name: 'Reject',
+            kind: PermissionOptionKind.rejectOnce,
+          ),
+        ],
+      );
+    }
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.request(
+        id: const JsonRpcId.integer(1),
+        method: sessionRequestPermissionMethod,
+        params: permissionRequestFor('tool-1', 'Run first command').toJson(),
+      ),
+    );
+    agentTransport.emitInbound(
+      JsonRpcMessage.request(
+        id: const JsonRpcId.integer(2),
+        method: sessionRequestPermissionMethod,
+        params: permissionRequestFor('tool-2', 'Run second command').toJson(),
+      ),
+    );
+
+    final pendingEntries = shellCubit.state.transcriptEntries
+        .where((entry) => entry.approval is AcpTranscriptApprovalPending)
+        .toList();
+    expect(pendingEntries, hasLength(2));
+    expect(pendingEntries[0].title, 'Run first command');
+    expect(pendingEntries[1].title, 'Run second command');
+
+    final firstApproval =
+        pendingEntries[0].approval! as AcpTranscriptApprovalPending;
+    final secondApproval =
+        pendingEntries[1].approval! as AcpTranscriptApprovalPending;
+    expect(
+      firstApproval.shortcutsEnabled,
+      isTrue,
+      reason: 'the earliest-requested pending approval owns the shortcut',
+    );
+    expect(
+      secondApproval.shortcutsEnabled,
+      isFalse,
+      reason:
+          'a later pending approval stays mouse-only until the first '
+          'one resolves',
+    );
+
+    final firstResponseFuture = agentTransport.sent.first;
+    await shellCubit.respondToApproval(
+      approvalId: const ApprovalRequestId('permission-1'),
+      sessionId: const SessionId('session-1'),
+      optionId: 'allow-once',
+    );
+    await firstResponseFuture;
+
+    // The second approval — now the only one still pending — takes over
+    // the shortcut.
+    final remainingPending = shellCubit.state.transcriptEntries
+        .where((entry) => entry.approval is AcpTranscriptApprovalPending)
+        .toList();
+    expect(remainingPending, hasLength(1));
+    expect(
+      (remainingPending.single.approval! as AcpTranscriptApprovalPending)
+          .shortcutsEnabled,
+      isTrue,
+    );
+
+    // Resolve the second approval before the turn ends — a turn already
+    // terminal ignores approval selection (see `_selectApproval` in
+    // `state_machines.dart`), same as it would for a real agent.
+    await shellCubit.respondToApproval(
+      approvalId: const ApprovalRequestId('permission-2'),
+      sessionId: const SessionId('session-1'),
+      optionId: 'allow-once',
     );
 
     agentTransport.emitInbound(
@@ -2207,8 +2480,15 @@ void main() {
       ),
     );
 
+    AcpTranscriptEntry? pendingApprovalEntry() {
+      final matches = shellCubit.state.transcriptEntries
+          .where((entry) => entry.approval is AcpTranscriptApprovalPending)
+          .toList();
+      return matches.isEmpty ? null : matches.single;
+    }
+
     expect(shellCubit.state.transcriptEntries, isNotEmpty);
-    expect(shellCubit.state.pendingApproval, isNotNull);
+    expect(pendingApprovalEntry(), isNotNull);
     final session1Transcript = shellCubit.state.transcriptEntries;
 
     // session-2: a fresh session with none of that state.
@@ -2226,7 +2506,7 @@ void main() {
     // Creating session-2 must not leave session-1's transcript/approval
     // visible.
     expect(shellCubit.state.transcriptEntries, isEmpty);
-    expect(shellCubit.state.pendingApproval, isNull);
+    expect(pendingApprovalEntry(), isNull);
 
     // Switching back to session-1 must restore its transcript and pending
     // approval — not leave session-2's (empty) state showing.
@@ -2237,14 +2517,14 @@ void main() {
       shellCubit.state.transcriptEntries.map((entry) => entry.body),
       containsAll(session1Transcript.map((entry) => entry.body)),
     );
-    expect(shellCubit.state.pendingApproval, isNotNull);
-    expect(shellCubit.state.pendingApproval!.sessionId.value, 'session-1');
+    expect(pendingApprovalEntry(), isNotNull);
+    expect(pendingApprovalEntry()!.title, 'Patch file');
 
     // Switching to session-2 again must clear session-1's state again.
     shellCubit.selectSession('session-2');
 
     expect(shellCubit.state.transcriptEntries, isEmpty);
-    expect(shellCubit.state.pendingApproval, isNull);
+    expect(pendingApprovalEntry(), isNull);
 
     await application.respondToPermission(
       const RespondToPermissionCommand.cancelled(
