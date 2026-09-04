@@ -1,9 +1,11 @@
 library;
 
+export 'acp_activity_bar.dart';
 export 'acp_approval_panel.dart';
 export 'acp_command_palette_surface.dart';
 export 'acp_connection_screen.dart';
 export 'acp_debug_log_panel.dart';
+export 'acp_progress_checklist.dart';
 export 'acp_project_picker.dart';
 export 'acp_session_sidebar.dart';
 export 'acp_transcript_panel.dart';

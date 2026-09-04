@@ -18,6 +18,21 @@ class WorkbenchMainPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Hidden once every entry is completed, not shown as "All Done" — see
+    // add-plan-progress-checklist/design.md, Decisions (we don't carry
+    // Zed's transcript-snapshot-on-completion behavior, so keeping it
+    // visible would mean it stays until manually dismissed).
+    final plan = state.currentPlan;
+    final activityBarSections = <AcpActivityBarSection>[
+      if (plan != null &&
+          plan.any((entry) => entry.status != AcpPlanEntryStatus.completed))
+        AcpProgressChecklist.section(
+          id: 'plan',
+          entries: plan,
+          onDismiss: cubit.dismissPlan,
+        ),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -65,6 +80,10 @@ class WorkbenchMainPane extends StatelessWidget {
               viewMode: state.viewMode,
             ),
           ),
+        ],
+        if (activityBarSections.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          AcpActivityBar(sections: activityBarSections),
         ],
         const SizedBox(height: 12),
         AcpPromptComposer(

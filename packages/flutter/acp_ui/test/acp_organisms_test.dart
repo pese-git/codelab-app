@@ -5,6 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('exports organisms through the public package API', () {
+    expect(AcpActivityBar, isA<Type>());
+    expect(AcpActivityBarSection, isA<Type>());
+    expect(AcpProgressChecklist, isA<Type>());
+    expect(AcpPlanEntry, isA<Type>());
+    expect(AcpPlanEntryStatus.inProgress, isA<AcpPlanEntryStatus>());
+    expect(AcpPlanEntryPriority.high, isA<AcpPlanEntryPriority>());
     expect(AcpApprovalPanel, isA<Type>());
     expect(AcpApprovalRisk.shell, isA<AcpApprovalRisk>());
     expect(AcpCommandPaletteSurface, isA<Type>());
@@ -1249,6 +1255,192 @@ void main() {
     await tester.drag(find.byType(AcpResizeHandle).first, const Offset(30, 0));
 
     expect(resizeEndCalls, 1);
+  });
+
+  group('AcpActivityBar / AcpProgressChecklist', () {
+    List<AcpPlanEntry> plan() => const [
+      AcpPlanEntry(
+        content: 'Reproduce the token refresh race condition',
+        status: AcpPlanEntryStatus.completed,
+        priority: AcpPlanEntryPriority.high,
+      ),
+      AcpPlanEntry(
+        content: 'Run melos analyze to confirm no new lint issues',
+        status: AcpPlanEntryStatus.inProgress,
+        priority: AcpPlanEntryPriority.medium,
+      ),
+      AcpPlanEntry(
+        content: 'Open PR for review',
+        status: AcpPlanEntryStatus.pending,
+        priority: AcpPlanEntryPriority.low,
+      ),
+    ];
+
+    // `home:` gives its child tight, full-viewport constraints, which would
+    // force even a `SizedBox.shrink()`-backed widget to fill the test
+    // window — `Center` gives loose constraints instead, so the bar's
+    // `Column(mainAxisSize: min)` actually shrink-wraps to its content, and
+    // `SizedBox(width: 620)` keeps that width realistic without fixing a
+    // height.
+    Widget wrap(Widget child) => FluentApp(
+      home: Center(child: SizedBox(width: 620, child: child)),
+    );
+
+    testWidgets('renders nothing when there are no sections', (tester) async {
+      await tester.pumpWidget(wrap(const AcpActivityBar(sections: [])));
+
+      expect(find.byType(AcpActivityBar), findsOneWidget);
+      expect(tester.getSize(find.byType(AcpActivityBar)).height, 0);
+    });
+
+    testWidgets(
+      'collapsed header names the in-progress entry and the remaining count',
+      (tester) async {
+        await tester.pumpWidget(
+          wrap(
+            AcpActivityBar(
+              sections: [
+                AcpProgressChecklist.section(
+                  id: 'plan',
+                  entries: plan(),
+                  onDismiss: () {},
+                ),
+              ],
+            ),
+          ),
+        );
+
+        expect(find.text('Current:'), findsOneWidget);
+        expect(
+          find.text('Run melos analyze to confirm no new lint issues'),
+          findsOneWidget,
+        );
+        expect(find.text('1 left'), findsOneWidget);
+        expect(find.text('Plan'), findsNothing);
+      },
+    );
+
+    testWidgets('collapsed header shows an aggregate count once nothing is in '
+        'progress', (tester) async {
+      const allPending = [
+        AcpPlanEntry(
+          content: 'Read the module',
+          status: AcpPlanEntryStatus.pending,
+          priority: AcpPlanEntryPriority.low,
+        ),
+        AcpPlanEntry(
+          content: 'Write the fix',
+          status: AcpPlanEntryStatus.pending,
+          priority: AcpPlanEntryPriority.low,
+        ),
+      ];
+      await tester.pumpWidget(
+        wrap(
+          AcpActivityBar(
+            sections: [
+              AcpProgressChecklist.section(
+                id: 'plan',
+                entries: allPending,
+                onDismiss: () {},
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('Plan'), findsOneWidget);
+      expect(find.text('2 Tasks'), findsOneWidget);
+    });
+
+    testWidgets('expanding the section shows every entry with its status and '
+        'priority', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          AcpActivityBar(
+            sections: [
+              AcpProgressChecklist.section(
+                id: 'plan',
+                entries: plan(),
+                onDismiss: () {},
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('Open PR for review'), findsNothing);
+
+      await tester.tap(find.text('Current:'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Plan'), findsOneWidget);
+      expect(find.text('1/3'), findsOneWidget);
+      expect(find.text('Open PR for review'), findsOneWidget);
+      expect(find.text('High'), findsOneWidget);
+      expect(find.text('Medium'), findsOneWidget);
+      expect(find.text('Low'), findsOneWidget);
+    });
+
+    testWidgets('a long plan stays within a bounded height and scrolls', (
+      tester,
+    ) async {
+      final manyEntries = List.generate(
+        20,
+        (index) => AcpPlanEntry(
+          content: 'Step $index',
+          status: AcpPlanEntryStatus.pending,
+          priority: AcpPlanEntryPriority.low,
+        ),
+      );
+
+      await tester.pumpWidget(
+        wrap(
+          AcpActivityBar(
+            sections: [
+              AcpProgressChecklist.section(
+                id: 'plan',
+                entries: manyEntries,
+                onDismiss: () {},
+              ),
+            ],
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Plan'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Step 0'), findsOneWidget);
+      expect(find.text('Step 19'), findsNothing);
+
+      final barHeight = tester.getSize(find.byType(AcpActivityBar)).height;
+      expect(barHeight, lessThan(250));
+    });
+
+    testWidgets('the dismiss button clears the plan without toggling '
+        'expansion', (tester) async {
+      var dismissed = false;
+      await tester.pumpWidget(
+        wrap(
+          AcpActivityBar(
+            sections: [
+              AcpProgressChecklist.section(
+                id: 'plan',
+                entries: plan(),
+                onDismiss: () => dismissed = true,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(AcpIconButton));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(dismissed, isTrue);
+      // Still collapsed — the dismiss tap did not also toggle the section.
+      expect(find.text('Open PR for review'), findsNothing);
+    });
   });
 }
 

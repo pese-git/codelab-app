@@ -12,7 +12,8 @@ enum CodelabCompatibleStdioAgentMode {
   echoesCwd('echoes_cwd'),
   withTerminalExecution('with_terminal_execution'),
   withTerminalPathEscape('with_terminal_path_escape'),
-  withTerminalKill('with_terminal_kill');
+  withTerminalKill('with_terminal_kill'),
+  withPlan('with_plan');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -52,6 +53,7 @@ const _terminalWaitRequestId = 'terminal-wait-1';
 const _terminalOutputRequestId = 'terminal-output-1';
 const _terminalKillRequestId = 'terminal-kill-1';
 var _currentModel = 'gpt-5';
+var _planPromptCount = 0;
 Object? _pendingPromptId;
 String? _sessionCwd;
 String? _fsReadContent;
@@ -226,6 +228,43 @@ Future<void> main(List<String> args) async {
             'command': 'sleep',
             'args': ['30'],
           });
+          break;
+        }
+        if (_mode == 'with_plan') {
+          // The first two prompts report a partial plan (one entry still
+          // in_progress) so an e2e test can exercise the docked activity
+          // bar's compact summary, expansion, and dismiss-then-repopulate
+          // behavior; the third and any later prompt reports every entry
+          // completed, so the same test can also confirm the section
+          // disappears entirely once there is nothing left to show (see
+          // add-plan-progress-checklist/design.md, Decisions).
+          _planPromptCount += 1;
+          final allCompleted = _planPromptCount >= 3;
+          _writeNotification('session/update', {
+            'sessionId': _sessionId,
+            'update': {
+              'sessionUpdate': 'plan',
+              'entries': [
+                {
+                  'content':
+                      'Read auth module and locate token refresh call sites',
+                  'priority': 'medium',
+                  'status': 'completed',
+                },
+                {
+                  'content': 'Run melos analyze to confirm no new lint issues',
+                  'priority': 'high',
+                  'status': allCompleted ? 'completed' : 'in_progress',
+                },
+                {
+                  'content': 'Open PR for review',
+                  'priority': 'low',
+                  'status': allCompleted ? 'completed' : 'pending',
+                },
+              ],
+            },
+          });
+          _writeResponse(id, {'stopReason': 'end_turn'});
           break;
         }
         if (_mode == 'with_permission_request') {

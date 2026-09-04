@@ -46,6 +46,10 @@ scripts:
     description: Run codelab_app macOS terminal/* integration tests.
     run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/terminal_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
 
+  test:e2e:app:plan-checklist:
+    description: Run codelab_app macOS plan progress checklist integration test.
+    run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/plan_progress_checklist_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
+
   check:
     description: Run format, analyze, tests, and protocol conformance.
     steps:

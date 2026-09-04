@@ -3,10 +3,12 @@ import 'package:flutter/widget_previews.dart';
 
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
+import 'acp_activity_bar.dart';
 import 'acp_approval_panel.dart';
 import 'acp_command_palette_surface.dart';
 import 'acp_connection_screen.dart';
 import 'acp_debug_log_panel.dart';
+import 'acp_progress_checklist.dart';
 import 'acp_session_sidebar.dart';
 import 'acp_transcript_panel.dart';
 import 'acp_workbench_layout.dart';
@@ -230,6 +232,74 @@ Widget acpApprovalPanelPreview() {
     ),
   );
 }
+
+@Preview(
+  name: 'Activity bar — plan collapsed',
+  group: acpOrganismPreviewGroup,
+  size: Size(620, 100),
+)
+Widget acpActivityBarPlanCollapsedPreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      child: AcpActivityBar(sections: [_previewPlanSection()]),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Activity bar — plan expanded',
+  group: acpOrganismPreviewGroup,
+  size: Size(620, 320),
+)
+Widget acpActivityBarPlanExpandedPreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      child: AcpActivityBar(
+        sections: [_previewPlanSection(initiallyExpanded: true)],
+      ),
+    ),
+  );
+}
+
+AcpActivityBarSection _previewPlanSection({bool initiallyExpanded = false}) {
+  final section = AcpProgressChecklist.section(
+    id: 'plan',
+    onDismiss: acpPreviewDismissPlan,
+    entries: const [
+      AcpPlanEntry(
+        content: 'Read auth module and locate token refresh call sites',
+        status: AcpPlanEntryStatus.completed,
+        priority: AcpPlanEntryPriority.medium,
+      ),
+      AcpPlanEntry(
+        content: 'Reproduce the token refresh race condition',
+        status: AcpPlanEntryStatus.completed,
+        priority: AcpPlanEntryPriority.high,
+      ),
+      AcpPlanEntry(
+        content: 'Run melos analyze to confirm no new lint issues',
+        status: AcpPlanEntryStatus.inProgress,
+        priority: AcpPlanEntryPriority.medium,
+      ),
+      AcpPlanEntry(
+        content: 'Open PR for review',
+        status: AcpPlanEntryStatus.pending,
+        priority: AcpPlanEntryPriority.low,
+      ),
+    ],
+  );
+
+  return AcpActivityBarSection(
+    id: section.id,
+    headerBuilder: section.headerBuilder,
+    bodyBuilder: section.bodyBuilder,
+    initiallyExpanded: initiallyExpanded,
+  );
+}
+
+void acpPreviewDismissPlan() {}
 
 @Preview(
   name: 'Connection screen',

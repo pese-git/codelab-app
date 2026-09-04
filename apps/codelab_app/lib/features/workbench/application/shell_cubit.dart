@@ -85,6 +85,7 @@ final class CodeLabShellState {
     this.selectedProjectPath,
     this.runAgentFromProjectDirectory = true,
     this.recentProjects = const [],
+    this.currentPlan,
   });
 
   factory CodeLabShellState.initial({required StdioAcpAgentProfile profile}) =>
@@ -209,6 +210,23 @@ final class CodeLabShellState {
   /// design.md, Decision 4.
   final List<AcpRecentProject> recentProjects;
 
+  /// The active session's plan, from the latest `SessionUpdate.plan` seen
+  /// across its turns (last one wins — see design.md, Decisions), mapped
+  /// straight to the `acp_ui`-facing [AcpPlanEntry] (already
+  /// presentation-safe, same reasoning as [configOptions]/[agentCommands] —
+  /// no separate app-level DTO). `null` means no plan update has arrived
+  /// yet for this session, or the user dismissed it via
+  /// [CodeLabShellCubit.dismissPlan] — either way, [AcpActivityBar]'s Plan
+  /// section is hidden.
+  final List<AcpPlanEntry>? currentPlan;
+
+  /// Distinguishes "not passed" from "explicitly set to null" for
+  /// [currentPlan] in [copyWith] — an ordinary `T? param` parameter can't
+  /// tell those apart (`param ?? this.currentPlan` would keep the old plan
+  /// forever), and [CodeLabShellCubit.dismissPlan] and switching to a
+  /// session without a plan both need to actually clear it.
+  static const Object _unset = Object();
+
   CodeLabShellState copyWith({
     AcpConnectionStatus? connectionStatus,
     CodeLabTransportType? transportType,
@@ -244,6 +262,7 @@ final class CodeLabShellState {
     String? selectedProjectPath,
     bool? runAgentFromProjectDirectory,
     List<AcpRecentProject>? recentProjects,
+    Object? currentPlan = _unset,
   }) {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
@@ -285,6 +304,9 @@ final class CodeLabShellState {
       runAgentFromProjectDirectory:
           runAgentFromProjectDirectory ?? this.runAgentFromProjectDirectory,
       recentProjects: recentProjects ?? this.recentProjects,
+      currentPlan: identical(currentPlan, _unset)
+          ? this.currentPlan
+          : currentPlan as List<AcpPlanEntry>?,
     );
   }
 
@@ -760,6 +782,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             inspectorEntries: _inspectorEntriesForSession(session),
             agentCommands: _agentCommandsFor(session),
             configOptions: _configOptionsFor(session),
+            currentPlan: _currentPlanForSession(session),
           ),
         );
         _recordDiagnostic(
@@ -790,6 +813,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           inspectorEntries: const [],
           agentCommands: const [],
           configOptions: const [],
+          currentPlan: null,
         ),
       );
       return;
@@ -805,6 +829,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         inspectorEntries: _inspectorEntriesForSession(session),
         agentCommands: _agentCommandsFor(session),
         configOptions: _configOptionsFor(session),
+        currentPlan: _currentPlanForSession(session),
       ),
     );
   }
@@ -1062,6 +1087,17 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     emit(state.copyWith(diagnostics: const []));
   }
 
+  /// Clears the plan summary/checklist for the active session — a
+  /// client-side "hide it" (`AcpActivityBar`'s Plan section, "✕ Clear"),
+  /// not a protocol operation, so nothing is sent to the agent. A later
+  /// `SessionUpdate.plan` for this session repopulates
+  /// [CodeLabShellState.currentPlan] normally via [_handleSessionChange] —
+  /// dismissing does not suppress future updates. See
+  /// add-plan-progress-checklist/design.md, Decisions.
+  void dismissPlan() {
+    emit(state.copyWith(currentPlan: null));
+  }
+
   @override
   Future<void> close() async {
     await _sessionSubscription.cancel();
@@ -1138,6 +1174,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         inspectorEntries: _inspectorEntriesForSession(session),
         agentCommands: _agentCommandsFor(session),
         configOptions: _configOptionsFor(session),
+        currentPlan: _currentPlanForSession(session),
       ),
     );
   }
@@ -1194,6 +1231,44 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return session.availableCommands
         .map(_agentCommandAction)
         .toList(growable: false);
+  }
+
+  /// Derives the active session's current plan from `session.turns` — the
+  /// last `SessionUpdate.plan` seen across all of its turns wins (a plan
+  /// sent in an earlier turn stays the current one into a later turn that
+  /// hasn't sent its own), same "later update replaces the list" pattern as
+  /// [_agentCommandsFor]/[_configOptionsFor] — except the "list" here is
+  /// nullable: `null` means no `plan` update has arrived yet (or the user
+  /// dismissed it, see [dismissPlan]), which is how
+  /// [CodeLabShellState.currentPlan] signals "no plan section to show" —
+  /// there's no equivalent empty-vs-absent distinction for
+  /// `configOptions`/`agentCommands`, which just use an empty list.
+  List<AcpPlanEntry>? _currentPlanForSession(AcpSession session) {
+    List<PlanEntry>? latest;
+    for (final turn in session.turns) {
+      for (final update in turn.updates) {
+        if (update case PlanUpdate(:final entries)) {
+          latest = entries;
+        }
+      }
+    }
+    return latest?.map(_planEntryUiModel).toList(growable: false);
+  }
+
+  AcpPlanEntry _planEntryUiModel(PlanEntry entry) {
+    return AcpPlanEntry(
+      content: entry.content,
+      status: switch (entry.status) {
+        PlanEntryStatus.pending => AcpPlanEntryStatus.pending,
+        PlanEntryStatus.inProgress => AcpPlanEntryStatus.inProgress,
+        PlanEntryStatus.completed => AcpPlanEntryStatus.completed,
+      },
+      priority: switch (entry.priority) {
+        PlanEntryPriority.high => AcpPlanEntryPriority.high,
+        PlanEntryPriority.medium => AcpPlanEntryPriority.medium,
+        PlanEntryPriority.low => AcpPlanEntryPriority.low,
+      },
+    );
   }
 
   AcpCommandAction _agentCommandAction(AvailableCommand command) {

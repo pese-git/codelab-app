@@ -7,6 +7,7 @@ import 'package:codelab_app/core/platform/recent_projects_store.dart';
 import 'package:codelab_app/core/platform/working_directory_provider.dart';
 import 'package:codelab_app/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_app/features/workbench/presentation/widgets/connection_setup_dialog.dart';
+import 'package:codelab_app/features/workbench/presentation/widgets/main_pane.dart';
 import 'package:codelab_app/features/workbench/presentation/workbench_shell.dart'
     show selectPaletteCommand;
 import 'package:acp_client_core/acp_client_core.dart';
@@ -14,7 +15,7 @@ import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_testing/acp_testing.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
-import 'package:fluent_ui/fluent_ui.dart' show TextBox;
+import 'package:fluent_ui/fluent_ui.dart' show FluentApp, TextBox;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -3127,6 +3128,291 @@ void main() {
         await closeCodeLabRootScope();
       },
     );
+  });
+
+  group('plan progress checklist', () {
+    // `testWidgets` runs its body inside `AutomatedTestWidgetsFlutterBinding`,
+    // which fakes async time — a real, unresolved `Future` (from
+    // `FakeAcpTransport`'s real `Stream`s) `await`ed directly there simply
+    // never completes, hanging the test until its own timeout. `runAsync`
+    // escapes that zone for the real async gaps; a plain `test()` (no
+    // `tester`) already runs in real async and needs no such escape — see
+    // the existing "a config option the agent declared..." test above for
+    // the same pattern this mirrors.
+    Future<T> settle<T>(WidgetTester? tester, Future<T> Function() body) {
+      if (tester == null) {
+        return body();
+      }
+      return tester.runAsync(body).then((value) => value as T);
+    }
+
+    Future<
+      ({
+        CodeLabShellCubit shellCubit,
+        FakeAcpTransport agentTransport,
+        AcpClientApplication application,
+      })
+    >
+    createSessionCubit({WidgetTester? tester}) async {
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final application = AcpClientApplication(transport: initialTransport);
+      final shellCubit = CodeLabShellCubit(
+        profile: codelabAgentStdioProfile,
+        application: application,
+        createSessionUseCase: CreateSession(application),
+        sendPromptUseCase: SendPrompt(application),
+        cancelTurnUseCase: CancelTurn(application),
+        reconnectUseCase: Reconnect(application),
+        respondToPermissionUseCase: RespondToPermission(application),
+        setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+        stdioTransportFactory: (_) => agentTransport,
+        webSocketTransportFactory: (_) => FakeAcpTransport(),
+        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+        projectFolderPicker: _FakeProjectFolderPicker(),
+        recentProjectsStore: _FakeRecentProjectsStore(),
+      );
+
+      await settle(tester, shellCubit.connect);
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest =
+          await settle(tester, () => createRequestFuture) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: const {'sessionId': 'session-1'},
+        ),
+      );
+      await settle(tester, () => createFuture);
+
+      return (
+        shellCubit: shellCubit,
+        agentTransport: agentTransport,
+        application: application,
+      );
+    }
+
+    // A bare `session/update` notification with no turn to attach to is
+    // dropped by the domain (same reason every `plan` update in
+    // codelab_compatible_stdio_agent.dart is sent mid-`session/prompt`, never
+    // standalone) — so plan updates here are driven through a real prompt
+    // turn, not emitted in isolation.
+    Future<void> submitPromptWithPlan(
+      CodeLabShellCubit shellCubit,
+      FakeAcpTransport agentTransport,
+      List<Map<String, Object?>> entries, {
+      WidgetTester? tester,
+    }) async {
+      final promptRequestFuture = agentTransport.sent.first;
+      final submitFuture = shellCubit.submitPrompt('continue with the plan');
+      final promptRequest =
+          await settle(tester, () => promptRequestFuture) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.notification(
+          method: 'session/update',
+          params: {
+            'sessionId': 'session-1',
+            'update': {'sessionUpdate': 'plan', 'entries': entries},
+          },
+        ),
+      );
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await settle(tester, () => submitFuture);
+    }
+
+    const readEntry = {
+      'content': 'Read auth module and locate token refresh call sites',
+      'priority': 'medium',
+      'status': 'completed',
+    };
+    const testEntry = {
+      'content': 'Run melos analyze to confirm no new lint issues',
+      'priority': 'high',
+      'status': 'in_progress',
+    };
+
+    test('a plan update populates currentPlan with mapped statuses and '
+        'priorities; no plan update means it stays null', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      expect(harness.shellCubit.state.currentPlan, isNull);
+
+      await submitPromptWithPlan(harness.shellCubit, harness.agentTransport, [
+        readEntry,
+        testEntry,
+      ]);
+
+      final plan = harness.shellCubit.state.currentPlan;
+      expect(plan, hasLength(2));
+      expect(plan![0].content, readEntry['content']);
+      expect(plan[0].status, AcpPlanEntryStatus.completed);
+      expect(plan[0].priority, AcpPlanEntryPriority.medium);
+      expect(plan[1].content, testEntry['content']);
+      expect(plan[1].status, AcpPlanEntryStatus.inProgress);
+      expect(plan[1].priority, AcpPlanEntryPriority.high);
+    });
+
+    test('a later plan update fully replaces the previous one, not merges '
+        'it', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      await submitPromptWithPlan(harness.shellCubit, harness.agentTransport, [
+        readEntry,
+        testEntry,
+      ]);
+      expect(harness.shellCubit.state.currentPlan, hasLength(2));
+
+      const openPrEntry = {
+        'content': 'Open PR for review',
+        'priority': 'low',
+        'status': 'pending',
+      };
+      await submitPromptWithPlan(harness.shellCubit, harness.agentTransport, [
+        openPrEntry,
+      ]);
+
+      final plan = harness.shellCubit.state.currentPlan;
+      expect(plan, hasLength(1));
+      expect(plan!.single.content, 'Open PR for review');
+    });
+
+    test(
+      'dismissPlan clears currentPlan; a later plan update repopulates it',
+      () async {
+        final harness = await createSessionCubit();
+        addTearDown(harness.shellCubit.close);
+        addTearDown(harness.application.dispose);
+
+        await submitPromptWithPlan(harness.shellCubit, harness.agentTransport, [
+          readEntry,
+          testEntry,
+        ]);
+        expect(harness.shellCubit.state.currentPlan, isNotNull);
+
+        harness.shellCubit.dismissPlan();
+        expect(harness.shellCubit.state.currentPlan, isNull);
+
+        await submitPromptWithPlan(harness.shellCubit, harness.agentTransport, [
+          readEntry,
+          testEntry,
+        ]);
+        expect(harness.shellCubit.state.currentPlan, hasLength(2));
+      },
+    );
+
+    testWidgets(
+      'the activity bar shows the plan while it has an active entry, and '
+      'hides entirely once every entry is completed',
+      (tester) async {
+        final harness = await createSessionCubit(tester: tester);
+        addTearDown(harness.shellCubit.close);
+        addTearDown(harness.application.dispose);
+
+        Future<void> pumpMainPane(CodeLabShellState state) => tester.pumpWidget(
+          FluentApp(
+            home: WorkbenchMainPane(state: state, cubit: harness.shellCubit),
+          ),
+        );
+
+        final activeState = harness.shellCubit.state.copyWith(
+          transcriptEntries: const [
+            AcpTranscriptEntry(
+              id: 'user-1',
+              kind: AcpTranscriptEntryKind.user,
+              title: 'You',
+              body: 'Fix the token refresh race condition.',
+            ),
+          ],
+          currentPlan: const [
+            AcpPlanEntry(
+              content: 'Reproduce the token refresh race condition',
+              status: AcpPlanEntryStatus.completed,
+              priority: AcpPlanEntryPriority.high,
+            ),
+            AcpPlanEntry(
+              content: 'Run melos analyze to confirm no new lint issues',
+              status: AcpPlanEntryStatus.inProgress,
+              priority: AcpPlanEntryPriority.medium,
+            ),
+          ],
+        );
+        await pumpMainPane(activeState);
+
+        expect(find.byType(AcpActivityBar), findsOneWidget);
+        expect(
+          find.text('Run melos analyze to confirm no new lint issues'),
+          findsOneWidget,
+        );
+
+        final allCompletedState = activeState.copyWith(
+          currentPlan: const [
+            AcpPlanEntry(
+              content: 'Reproduce the token refresh race condition',
+              status: AcpPlanEntryStatus.completed,
+              priority: AcpPlanEntryPriority.high,
+            ),
+            AcpPlanEntry(
+              content: 'Run melos analyze to confirm no new lint issues',
+              status: AcpPlanEntryStatus.completed,
+              priority: AcpPlanEntryPriority.medium,
+            ),
+          ],
+        );
+        await pumpMainPane(allCompletedState);
+
+        expect(find.byType(AcpActivityBar), findsNothing);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets('dismissing the plan from the activity bar clears it on the '
+        'real cubit', (tester) async {
+      final harness = await createSessionCubit(tester: tester);
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      await submitPromptWithPlan(harness.shellCubit, harness.agentTransport, [
+        readEntry,
+        testEntry,
+      ], tester: tester);
+
+      final stateWithTranscript = harness.shellCubit.state.copyWith(
+        transcriptEntries: const [
+          AcpTranscriptEntry(
+            id: 'user-1',
+            kind: AcpTranscriptEntryKind.user,
+            title: 'You',
+            body: 'Fix the token refresh race condition.',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(
+            state: stateWithTranscript,
+            cubit: harness.shellCubit,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Clear plan'));
+      await tester.pumpAndSettle();
+
+      expect(harness.shellCubit.state.currentPlan, isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }
 
