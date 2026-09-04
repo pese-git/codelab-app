@@ -4,10 +4,10 @@
 
 ## What Changes
 
-- Добавляется `AcpProgressChecklist` — organism в `acp_ui`, показывающий список `PlanEntry` с индикатором статуса (empty circle=`pending`, half-clock=`in_progress`, checkmark=`completed`), бейджем приоритета (`high`/`medium`/`low`) и агрегированным прогрессом ("N of M done" + progress bar).
-- `CodeLabShellCubit` обрабатывает `SessionUpdate` варианта `plan` (если такой существует в `session_update.dart` — уточняется в design.md) и хранит текущий `Plan` в `CodeLabShellState`.
-- В `WorkbenchMainPane` добавляется компактная сводка чеклиста над транскриптом (текущий активный шаг + "N of M"), разворачиваемая в полный список.
-- Чеклист скрыт полностью, если у активной сессии нет плана (агент не прислал `plan` update) — не показываем пустой/фиктивный чеклист.
+- Добавляется `AcpActivityBar` — новый переиспользуемый organism в `acp_ui`: docked-контейнер под транскриптом, вплотную над композером, со списком секций, разделённых линией (в этом change зарегистрирована только одна секция — Plan; "Edited files"/"Queue" — зарезервированные точки расширения без реализации, см. `design.md`). Место размещения сверено с реальным кодом Zed (`crates/agent_ui/src/conversation_view/thread_view.rs`), а не придумано на глаз.
+- Добавляется `AcpProgressChecklist` — organism в `acp_ui`, показывающий список `PlanEntry` с индикатором статуса (empty circle=`pending`, half-clock=`in_progress`, checkmark=`completed`), бейджем приоритета (`high`/`medium`/`low`) и текстовой сводкой ("Current: <шаг>" + "N left", либо "N Tasks"/"N/M" — без прогресс-бара). Разворачивается по клику на всю строку сводки в список с фиксированной максимальной высотой и внутренним скроллом.
+- `CodeLabShellCubit` обрабатывает `SessionUpdate` варианта `plan` и хранит текущий `Plan` в `CodeLabShellState`; добавляется `dismissPlan()` — локальное клиентское действие "очистить план с экрана" (кнопка "✕" в сводке), не протокольная операция.
+- Чеклист (и вся секция `AcpActivityBar`) скрыт полностью, если у активной сессии нет плана (агент не прислал `plan` update, либо план был явно отклонён через `dismissPlan()`) — не показываем пустой/фиктивный чеклист.
 - **BREAKING**: нет. Contracts ACP не меняются — используется уже существующая часть протокола.
 
 ## Capabilities
@@ -22,7 +22,7 @@ _(нет)_
 
 ## Impact
 
-- `packages/flutter/acp_ui/lib/src/organisms/` — новый `AcpProgressChecklist`.
-- `apps/codelab_app/lib/features/workbench/application/shell_cubit.dart` — обработка `SessionUpdate.plan`, добавление `currentPlan` в `CodeLabShellState`.
-- `apps/codelab_app/lib/features/workbench/presentation/widgets/main_pane.dart` — интеграция компактной сводки + полного чеклиста.
-- `apps/codelab_app/test/widget_test.dart` — тесты на обновление плана, скрытие при отсутствии плана.
+- `packages/flutter/acp_ui/lib/src/organisms/` — новый `AcpActivityBar` (docked-контейнер, секции) и новый `AcpProgressChecklist` (содержимое секции Plan).
+- `apps/codelab_app/lib/features/workbench/application/shell_cubit.dart` — обработка `SessionUpdate.plan`, добавление `currentPlan` в `CodeLabShellState`, новый метод `dismissPlan()`.
+- `apps/codelab_app/lib/features/workbench/presentation/widgets/main_pane.dart` — `AcpActivityBar` вставляется между транскриптом и композером (не над транскриптом).
+- `apps/codelab_app/test/widget_test.dart` — тесты на обновление плана, скрытие при отсутствии плана, `dismissPlan()`.
