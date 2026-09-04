@@ -5,7 +5,8 @@ enum CodelabCompatibleStdioAgentMode {
   exitOnStart('exit_on_start'),
   invalidStdout('invalid_stdout'),
   withConfigOptions('with_config_options'),
-  crashMidPrompt('crash_mid_prompt');
+  crashMidPrompt('crash_mid_prompt'),
+  withPermissionRequest('with_permission_request');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -37,7 +38,9 @@ import 'dart:io';
 
 const _mode = '__CODELAB_TEST_AGENT_MODE__';
 const _sessionId = 'codelab-test-session';
+const _permissionRequestId = 'perm-1';
 var _currentModel = 'gpt-5';
+Object? _pendingPromptId;
 
 Future<void> main(List<String> args) async {
   if (args.length != 2 || args[0] != 'serve' || args[1] != '--stdio') {
@@ -68,6 +71,14 @@ Future<void> main(List<String> args) async {
     final message = jsonDecode(line) as Map<String, Object?>;
     final id = message['id'];
     final method = message['method'];
+
+    if (method == null && id == _permissionRequestId) {
+      // Not an incoming request/notification — this is the client's reply
+      // to the `session/request_permission` request we sent below, matched
+      // by id rather than dispatched through the method switch.
+      _handlePermissionResponse(message);
+      continue;
+    }
 
     switch (method) {
       case 'initialize':
@@ -103,6 +114,29 @@ Future<void> main(List<String> args) async {
           // output, matching a real crash/kill more closely than closing
           // stdout gracefully would.
           exit(1);
+        }
+        if (_mode == 'with_permission_request') {
+          // Defer the `session/prompt` response until the client answers
+          // our `session/request_permission` — a real agent waits for the
+          // permission outcome before deciding how the turn ends.
+          _pendingPromptId = id;
+          _writeRequest(_permissionRequestId, 'session/request_permission', {
+            'sessionId': _sessionId,
+            'toolCall': {
+              'toolCallId': 'test-tool-call-1',
+              'title': 'Run test command',
+              'kind': 'execute',
+              'status': 'pending',
+              'rawInput': {'command': 'echo hello', 'shell': '/bin/bash'},
+            },
+            'options': [
+              {'optionId': 'allow_once', 'name': 'Allow once', 'kind': 'allow_once'},
+              {'optionId': 'allow_always', 'name': 'Allow always', 'kind': 'allow_always'},
+              {'optionId': 'reject_once', 'name': 'Reject once', 'kind': 'reject_once'},
+              {'optionId': 'reject_always', 'name': 'Reject always', 'kind': 'reject_always'},
+            ],
+          });
+          break;
         }
         _writeNotification('session/update', {
           'sessionId': _sessionId,
@@ -145,6 +179,43 @@ Map<String, Object?> _modelConfigOption() {
       {'value': 'gpt-4', 'name': 'GPT-4'},
     ],
   };
+}
+
+void _handlePermissionResponse(Map<String, Object?> message) {
+  final promptId = _pendingPromptId;
+  if (promptId == null) {
+    return;
+  }
+  _pendingPromptId = null;
+
+  final result = message['result'] as Map<String, Object?>?;
+  final outcome = result?['outcome'] as Map<String, Object?>?;
+  final selectedOptionId = outcome?['optionId'] as String?;
+
+  _writeNotification('session/update', {
+    'sessionId': _sessionId,
+    'update': {
+      'sessionUpdate': 'agent_message_chunk',
+      'content': {
+        'type': 'text',
+        'text': selectedOptionId != null
+            ? 'approved: $selectedOptionId'
+            : 'permission request was cancelled',
+      },
+    },
+  });
+  _writeResponse(promptId, {
+    'stopReason': selectedOptionId != null ? 'end_turn' : 'cancelled',
+  });
+}
+
+void _writeRequest(Object? id, String method, Map<String, Object?> params) {
+  stdout.writeln(jsonEncode({
+    'jsonrpc': '2.0',
+    'id': id,
+    'method': method,
+    'params': params,
+  }));
 }
 
 void _writeResponse(Object? id, Map<String, Object?> result) {

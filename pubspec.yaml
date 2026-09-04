@@ -42,6 +42,10 @@ melos:
       description: Run codelab_app macOS stdio connection integration tests.
       run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/stdio_connect_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
 
+    test:e2e:app:permission:
+      description: Run codelab_app macOS permission-request (approval) integration test.
+      run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/permission_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
+
     check:
       description: Run format, analyze, tests, and protocol conformance.
       steps:
