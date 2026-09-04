@@ -8,6 +8,8 @@ import 'package:acp_ui/acp_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' show FluentIcons;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/platform/project_folder_picker.dart';
+import '../../../core/platform/recent_projects_store.dart';
 import '../../../core/platform/working_directory_provider.dart';
 
 typedef CodeLabStdioTransportFactory =
@@ -54,7 +56,6 @@ final class CodeLabShellState {
     required this.stdioProfileName,
     required this.stdioCommand,
     required this.stdioArgs,
-    required this.stdioCwd,
     required this.stdioEnv,
     required this.webSocketEndpoint,
     required this.webSocketToken,
@@ -81,6 +82,9 @@ final class CodeLabShellState {
     this.isRespondingToConfigOption = false,
     this.sessionsPaneWidth = 280,
     this.inspectorPaneWidth = 320,
+    this.selectedProjectPath,
+    this.runAgentFromProjectDirectory = true,
+    this.recentProjects = const [],
   });
 
   factory CodeLabShellState.initial({required StdioAcpAgentProfile profile}) =>
@@ -90,7 +94,6 @@ final class CodeLabShellState {
         stdioProfileName: profile.name,
         stdioCommand: profile.command,
         stdioArgs: profile.args.join(' '),
-        stdioCwd: profile.cwd ?? '',
         stdioEnv: profile.env.entries
             .map((entry) => '${entry.key}=${entry.value}')
             .join('\n'),
@@ -131,7 +134,6 @@ final class CodeLabShellState {
   final String stdioProfileName;
   final String stdioCommand;
   final String stdioArgs;
-  final String stdioCwd;
   final String stdioEnv;
   final String webSocketEndpoint;
   final String webSocketToken;
@@ -183,13 +185,36 @@ final class CodeLabShellState {
   final double sessionsPaneWidth;
   final double inspectorPaneWidth;
 
+  /// The working directory ("project") selected via "Open Project" —
+  /// independent of [transportType], applied to the next session created
+  /// (`session/new`'s `cwd`) for both stdio and WebSocket. `null` means no
+  /// project has been explicitly selected yet, in which case
+  /// [CodeLabShellCubit.createSession] falls back to
+  /// `WorkingDirectoryProvider.currentPath`, as it always has. See
+  /// add-open-project-picker/design.md, Decision 1.
+  final String? selectedProjectPath;
+
+  /// Whether a stdio agent process is spawned with [selectedProjectPath] as
+  /// its OS-level working directory (`Process.start(workingDirectory:)`).
+  /// Defaults to `true` so the pre-existing implicit "spawn cwd == project"
+  /// behavior is preserved without any user action; turning it off decouples
+  /// spawn cwd from the selected project without un-selecting the project
+  /// itself. Stdio-only — has no effect over WebSocket. See design.md,
+  /// Decision 2.
+  final bool runAgentFromProjectDirectory;
+
+  /// Recently opened projects, most-recently-opened first — reloaded from
+  /// [RecentProjectsStore] on cubit construction and after every
+  /// [CodeLabShellCubit.selectProject], so it survives app restarts. See
+  /// design.md, Decision 4.
+  final List<AcpRecentProject> recentProjects;
+
   CodeLabShellState copyWith({
     AcpConnectionStatus? connectionStatus,
     CodeLabTransportType? transportType,
     String? stdioProfileName,
     String? stdioCommand,
     String? stdioArgs,
-    String? stdioCwd,
     String? stdioEnv,
     String? webSocketEndpoint,
     String? webSocketToken,
@@ -216,6 +241,9 @@ final class CodeLabShellState {
     bool? isRespondingToConfigOption,
     double? sessionsPaneWidth,
     double? inspectorPaneWidth,
+    String? selectedProjectPath,
+    bool? runAgentFromProjectDirectory,
+    List<AcpRecentProject>? recentProjects,
   }) {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
@@ -223,7 +251,6 @@ final class CodeLabShellState {
       stdioProfileName: stdioProfileName ?? this.stdioProfileName,
       stdioCommand: stdioCommand ?? this.stdioCommand,
       stdioArgs: stdioArgs ?? this.stdioArgs,
-      stdioCwd: stdioCwd ?? this.stdioCwd,
       stdioEnv: stdioEnv ?? this.stdioEnv,
       webSocketEndpoint: webSocketEndpoint ?? this.webSocketEndpoint,
       webSocketToken: webSocketToken ?? this.webSocketToken,
@@ -254,6 +281,10 @@ final class CodeLabShellState {
           isRespondingToConfigOption ?? this.isRespondingToConfigOption,
       sessionsPaneWidth: sessionsPaneWidth ?? this.sessionsPaneWidth,
       inspectorPaneWidth: inspectorPaneWidth ?? this.inspectorPaneWidth,
+      selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
+      runAgentFromProjectDirectory:
+          runAgentFromProjectDirectory ?? this.runAgentFromProjectDirectory,
+      recentProjects: recentProjects ?? this.recentProjects,
     );
   }
 
@@ -262,7 +293,6 @@ final class CodeLabShellState {
     String? stdioProfileName,
     String? stdioCommand,
     String? stdioArgs,
-    String? stdioCwd,
     String? stdioEnv,
     String? webSocketEndpoint,
     String? webSocketToken,
@@ -272,7 +302,6 @@ final class CodeLabShellState {
       stdioProfileName: stdioProfileName,
       stdioCommand: stdioCommand,
       stdioArgs: stdioArgs,
-      stdioCwd: stdioCwd,
       stdioEnv: stdioEnv,
       webSocketEndpoint: webSocketEndpoint,
       webSocketToken: webSocketToken,
@@ -353,6 +382,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required CodeLabStdioTransportFactory stdioTransportFactory,
     required CodeLabWebSocketTransportFactory webSocketTransportFactory,
     required WorkingDirectoryProvider workingDirectoryProvider,
+    required ProjectFolderPicker projectFolderPicker,
+    required RecentProjectsStore recentProjectsStore,
   }) : _application = application,
        _createSessionUseCase = createSessionUseCase,
        _sendPromptUseCase = sendPromptUseCase,
@@ -363,6 +394,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
        _stdioTransportFactory = stdioTransportFactory,
        _webSocketTransportFactory = webSocketTransportFactory,
        _workingDirectoryProvider = workingDirectoryProvider,
+       _projectFolderPicker = projectFolderPicker,
+       _recentProjectsStore = recentProjectsStore,
        super(CodeLabShellState.initial(profile: profile)) {
     _sessionSubscription = _application.sessionChanges.listen(
       _handleSessionChange,
@@ -373,6 +406,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _connectionStateSubscription = _application.connectionStateChanges.listen(
       _handleConnectionStateChange,
     );
+    unawaited(_loadRecentProjects());
   }
 
   final AcpClientApplication _application;
@@ -385,6 +419,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final CodeLabStdioTransportFactory _stdioTransportFactory;
   final CodeLabWebSocketTransportFactory _webSocketTransportFactory;
   final WorkingDirectoryProvider _workingDirectoryProvider;
+  final ProjectFolderPicker _projectFolderPicker;
+  final RecentProjectsStore _recentProjectsStore;
   final _redactor = const SecretRedactor();
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<DiagnosticEntry> _diagnosticSubscription;
@@ -407,10 +443,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     emit(state.withTransportProjection(stdioArgs: value));
   }
 
-  void updateStdioCwd(String value) {
-    emit(state.withTransportProjection(stdioCwd: value));
-  }
-
   void updateStdioEnv(String value) {
     emit(state.withTransportProjection(stdioEnv: value));
   }
@@ -421,6 +453,56 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   void updateWebSocketToken(String value) {
     emit(state.withTransportProjection(webSocketToken: value));
+  }
+
+  /// Selects [path] as the current project — applied to the next session
+  /// created, independent of [CodeLabShellState.transportType] (see
+  /// add-open-project-picker/design.md, Decision 1). Also records it via
+  /// [RecentProjectsStore] and refreshes [CodeLabShellState.recentProjects],
+  /// so the "Open Project" picker reflects the new entry immediately rather
+  /// than waiting for the next app start.
+  Future<void> selectProject(String path) async {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+
+    emit(state.copyWith(selectedProjectPath: trimmed));
+    _recordDiagnostic('Selected project: $trimmed.', source: 'project');
+
+    try {
+      await _recentProjectsStore.record(trimmed);
+      if (isClosed) return;
+      await _loadRecentProjects();
+    } on Object catch (error) {
+      if (isClosed) return;
+      _recordDiagnostic(
+        'Failed to record recent project: $error',
+        severity: AcpDebugLogSeverity.warning,
+        source: 'project',
+      );
+    }
+  }
+
+  /// Opens the native OS folder-selection dialog via [ProjectFolderPicker]
+  /// and, if the user picks a folder, selects it the same way
+  /// [selectProject] does. Does nothing if the dialog is dismissed without a
+  /// selection.
+  Future<void> browseForProject() async {
+    final path = await _projectFolderPicker.pickFolder(
+      initialDirectory: state.selectedProjectPath,
+    );
+    if (isClosed || path == null) {
+      return;
+    }
+    await selectProject(path);
+  }
+
+  /// Stdio-only: whether the agent process is spawned with the selected
+  /// project's directory as its OS-level working directory. See
+  /// [CodeLabShellState.runAgentFromProjectDirectory].
+  void toggleRunAgentFromProjectDirectory(bool value) {
+    emit(state.copyWith(runAgentFromProjectDirectory: value));
   }
 
   Future<void> connect() async {
@@ -653,7 +735,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _recordDiagnostic('Creating ACP session.', source: 'session');
 
     final result = await _createSessionUseCase(
-      CreateSessionCommand(cwd: _selectedCwd),
+      CreateSessionCommand(cwd: _selectedProjectPath),
     ).run();
     if (isClosed) return;
 
@@ -1003,6 +1085,38 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     emit(state.copyWith(diagnostics: [...state.diagnostics, nextEntry]));
   }
 
+  /// Reloads [CodeLabShellState.recentProjects] from [RecentProjectsStore],
+  /// sorted most-recently-opened first — ordering is an application-layer
+  /// concern (the store's own contract makes no ordering guarantee), so it
+  /// is applied here, once, right before mapping to the `acp_ui`-facing
+  /// [AcpRecentProject]. Called once at construction (so recents from a
+  /// prior run are visible before the user ever opens the picker) and again
+  /// after every [selectProject]. Failures are non-fatal — surfaced as a
+  /// diagnostic, leaving the previous [CodeLabShellState.recentProjects] in
+  /// place, since a corrupt/unavailable store must not block using the app.
+  Future<void> _loadRecentProjects() async {
+    try {
+      final recents = await _recentProjectsStore.load();
+      if (isClosed) return;
+      final sorted = recents.toList()
+        ..sort((a, b) => b.lastOpenedAt.compareTo(a.lastOpenedAt));
+      emit(
+        state.copyWith(
+          recentProjects: sorted
+              .map((entry) => AcpRecentProject(path: entry.path))
+              .toList(growable: false),
+        ),
+      );
+    } on Object catch (error) {
+      if (isClosed) return;
+      _recordDiagnostic(
+        'Failed to load recent projects: $error',
+        severity: AcpDebugLogSeverity.warning,
+        source: 'project',
+      );
+    }
+  }
+
   void _handleSessionChange(AcpSession session) {
     if (state.activeSessionId != null &&
         state.activeSessionId != session.id.value) {
@@ -1177,7 +1291,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return StdioAcpTransportConfig(
       command: command,
       args: _splitShellWords(state.stdioArgs),
-      cwd: state.stdioCwd.trim().isEmpty ? null : state.stdioCwd.trim(),
+      cwd: state.runAgentFromProjectDirectory ? _selectedProjectPath : null,
       env: _parseEnv(state.stdioEnv),
     );
   }
@@ -1200,9 +1314,15 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
-  String get _selectedCwd {
-    final cwd = state.stdioCwd.trim();
-    return cwd.isEmpty ? _workingDirectoryProvider.currentPath : cwd;
+  /// The project directory to use for a session/spawn `cwd` — the selected
+  /// project if one exists, falling back to the CodeLab process's own
+  /// current directory otherwise (unchanged fallback behavior — see
+  /// add-open-project-picker/design.md, Goals).
+  String get _selectedProjectPath {
+    final selected = state.selectedProjectPath?.trim();
+    return selected == null || selected.isEmpty
+        ? _workingDirectoryProvider.currentPath
+        : selected;
   }
 
   AcpSessionListItem _sessionListItem(AcpSession session) {

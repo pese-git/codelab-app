@@ -75,6 +75,16 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
     tester.element(find.byType(CodeLabApp)),
   ).shellCubit;
 
+  // "Working directory" is no longer a connection-dialog field — it is the
+  // independently-selected "project" (add-open-project-picker), applied to
+  // both the session's `cwd` and (by default, via
+  // `runAgentFromProjectDirectory`) the stdio spawn cwd. Selecting it via
+  // the cubit directly, rather than through the "Open Project" UI, mirrors
+  // the other e2e tests here that also drive connection state via
+  // `enterText` on the dialog's fields rather than pixel-perfect UI
+  // interactions for every input.
+  await shellCubit.selectProject(workingDirectory);
+
   await _openConnectionSetupDialog(tester);
   await tester.enterText(
     find.byKey(const ValueKey('transport-field-Command')),
@@ -83,10 +93,6 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   await tester.enterText(
     find.byKey(const ValueKey('transport-field-Args')),
     '${agent.path} serve --stdio',
-  );
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Working directory')),
-    workingDirectory,
   );
   await _closeConnectionSetupDialog(tester);
   await _tapConnectAndWaitUntilSettled(tester, shellCubit);

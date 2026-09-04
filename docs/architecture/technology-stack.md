@@ -29,6 +29,8 @@
 | Functional primitives      | `fpdart`                |
 | Immutable/generated models | Freezed                 |
 | Code generation            | `build_runner`          |
+| Platform folder picker     | `file_selector`         |
+| Local persistence          | `shared_preferences`    |
 | Monorepo                   | Dart Workspace + Melos  |
 | Flutter SDK management     | FVM                     |
 | Specifications             | OpenSpec                |
@@ -354,7 +356,65 @@ Generated files НЕ ДОЛЖНЫ редактироваться вручную.
 
 ---
 
-## 12. Code generation
+## 12. Platform file access и local persistence
+
+Технологии:
+
+* `file_selector` — нативный OS folder/file picker;
+* `shared_preferences` — простой local key-value persistence.
+
+Обе введены впервые в рамках `add-open-project-picker` (см.
+`openspec/changes/add-open-project-picker/design.md`, Decisions 3-4) как
+единственные технологии для своих задач на момент введения.
+
+### 12.1. `file_selector`
+
+Официальный Flutter-team plugin, предоставляет нативный OS folder/file
+picker (`NSOpenPanel` на macOS, common file dialog на Windows, GTK/portal на
+Linux).
+
+Использовать:
+
+* для выбора файлов/директорий пользователем (например, project folder).
+
+НЕ использовать:
+
+* для программного чтения/записи файлов (это ответственность `dart:io` /
+  `acp_client_core`'s `fs/*` handling) — `file_selector` отвечает только за
+  UI-диалог выбора пути, не за файловый I/O.
+
+Изолируется за узким application-level port (например,
+`ProjectFolderPicker`) в `apps/codelab_app/lib/core/platform/` — widgets и
+domain НЕ ДОЛЖНЫ импортировать `file_selector` напрямую (см. §11
+`AGENTS.md`).
+
+### 12.2. `shared_preferences`
+
+Официальный Flutter-team plugin для простого key-value persistence,
+переживающего перезапуск приложения. Первая persistence-технология проекта.
+
+Использовать:
+
+* для небольших, некритичных для целостности данных (например, recents,
+  UI preferences) — не для session/domain state, не для secrets/tokens.
+
+НЕ использовать:
+
+* как замену structured storage (SQL/NoSQL) для больших/реляционных данных
+  — если возникает такая потребность, требуется отдельное ADR (см. §26);
+* для secrets/tokens (см. `AGENTS.md` §10 — "Secrets и tokens НЕ ДОЛЖНЫ
+  хардкодиться или попадать в logs").
+
+Изолируется за application-level port (например, `RecentProjectsStore`) в
+`apps/codelab_app/lib/core/platform/` — по тому же паттерну, что
+`WorkingDirectoryProvider`.
+
+Добавление второй persistence-технологии (SQL, NoSQL, файловый store и
+т.п.) для той же категории задач требует ADR (см. §26).
+
+---
+
+## 13. Code generation
 
 Основной code-generation stack:
 
@@ -372,7 +432,7 @@ AI-agent НЕ ДОЛЖЕН вручную исправлять generated Dart fi
 
 ---
 
-## 13. ACP package architecture
+## 14. ACP package architecture
 
 ACP functionality разделена на специализированные packages:
 
@@ -392,7 +452,7 @@ packages/
 
 ---
 
-## 14. `acp_protocol`
+## 15. `acp_protocol`
 
 Package:
 
@@ -428,7 +488,7 @@ Package:
 
 ---
 
-## 15. `acp_transports`
+## 16. `acp_transports`
 
 Package:
 
@@ -459,7 +519,7 @@ Transport должен предоставлять API, пригодный для
 
 ---
 
-## 16. `acp_client_core`
+## 17. `acp_client_core`
 
 Package:
 
@@ -495,7 +555,7 @@ Package:
 
 ---
 
-## 17. `acp_ui`
+## 18. `acp_ui`
 
 Package:
 
@@ -531,7 +591,7 @@ Package:
 
 ---
 
-## 18. `acp_testing`
+## 19. `acp_testing`
 
 Package:
 
@@ -556,7 +616,7 @@ Flutter-specific testing helpers при значительном объёме с
 
 ---
 
-## 19. `codelab_app`
+## 20. `codelab_app`
 
 Application:
 
@@ -589,7 +649,7 @@ Architectural dependency rules важнее технической доступ�
 
 ---
 
-## 20. Направление package dependencies
+## 21. Направление package dependencies
 
 Целевая модель ACP subsystem:
 
@@ -628,7 +688,7 @@ Architectural dependency rules важнее технической доступ�
 
 ---
 
-## 21. Testing stack
+## 22. Testing stack
 
 Используются:
 
@@ -666,7 +726,7 @@ Reusable ACP test infrastructure следует размещать в `acp_testi
 
 ---
 
-## 22. Static analysis
+## 23. Static analysis
 
 Проект использует:
 
@@ -680,7 +740,7 @@ Source of truth — фактическая конфигурация analyzer, а
 
 ---
 
-## 23. Desktop dependencies
+## 24. Desktop dependencies
 
 Любая новая desktop-specific dependency должна быть проверена минимум по следующим критериям:
 
@@ -714,7 +774,7 @@ Platform plugin
 
 ---
 
-## 24. Новые dependencies
+## 25. Новые dependencies
 
 Перед добавлением новой dependency агент ОБЯЗАН проверить:
 
@@ -739,7 +799,7 @@ Platform plugin
 
 ---
 
-## 25. Когда требуется ADR
+## 26. Когда требуется ADR
 
 Architecture Decision Record требуется при значимом изменении технологического направления.
 
@@ -763,7 +823,7 @@ Architecture Decision Record требуется при значимом изме
 
 ---
 
-## 26. Добавление технологии в стек
+## 27. Добавление технологии в стек
 
 При утверждении новой технологии этот документ должен быть обновлён.
 

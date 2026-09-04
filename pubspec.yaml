@@ -50,6 +50,10 @@ melos:
       description: Run codelab_app macOS fs/read_text_file + fs/write_text_file integration test.
       run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/fs_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
 
+    test:e2e:app:open-project:
+      description: Run codelab_app macOS "Open Project" picker integration tests.
+      run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/open_project_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
+
     check:
       description: Run format, analyze, tests, and protocol conformance.
       steps:

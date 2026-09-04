@@ -12,6 +12,8 @@ void main() {
     expect(AcpDebugLogEntry, isA<Type>());
     expect(AcpDebugLogPanel, isA<Type>());
     expect(AcpDebugLogSeverity.warning, isA<AcpDebugLogSeverity>());
+    expect(AcpProjectPicker, isA<Type>());
+    expect(AcpRecentProject, isA<Type>());
     expect(AcpSessionListItem, isA<Type>());
     expect(AcpSessionSidebar, isA<Type>());
     expect(AcpSessionStatus.awaitingApproval, isA<AcpSessionStatus>());
@@ -829,6 +831,52 @@ void main() {
 
     expect(selectedSessionId, 'session-1');
     expect(newSessionRequested, isTrue);
+  });
+
+  testWidgets('shows recents, selects a recent project, and requests browse', (
+    tester,
+  ) async {
+    String? selectedPath;
+    var browseRequested = false;
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 280,
+          height: 80,
+          child: AcpProjectPicker(
+            currentProjectPath: '/Users/dev/codelab-app',
+            recentProjects: const [
+              AcpRecentProject(path: '/Users/dev/codelab-app'),
+              AcpRecentProject(path: '/Users/dev/another-project'),
+            ],
+            onProjectSelected: (path) => selectedPath = path,
+            onBrowseRequested: () => browseRequested = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('codelab-app'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('open-project-picker')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Browse for folder…'), findsOneWidget);
+    expect(find.text('/Users/dev/another-project'), findsOneWidget);
+
+    await tester.tap(find.text('/Users/dev/another-project'));
+    await tester.pumpAndSettle();
+
+    expect(selectedPath, '/Users/dev/another-project');
+    expect(browseRequested, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('open-project-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Browse for folder…'));
+    await tester.pumpAndSettle();
+
+    expect(browseRequested, isTrue);
   });
 
   testWidgets('renders session sidebar empty state', (tester) async {

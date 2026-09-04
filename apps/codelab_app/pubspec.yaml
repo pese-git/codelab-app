@@ -19,11 +19,13 @@ dependencies:
     path: ../../packages/flutter/acp_ui
   cherrypick: ^4.0.0-dev.3
   cherrypick_annotations: ^4.0.0-dev.0
+  file_selector: ^1.1.0
   fluent_ui: ^4.11.1
   flutter:
     sdk: flutter
   flutter_bloc: ^9.1.1
   fpdart: ^1.2.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   acp_testing:

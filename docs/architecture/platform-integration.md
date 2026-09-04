@@ -474,7 +474,41 @@ Secrets должны:
 
 ---
 
-## 28. Clipboard
+## 28. Local preferences storage
+
+В отличие от secure storage (§25-27), которое предназначено исключительно
+для secrets, ordinary non-sensitive local data (например, recently opened
+projects, UI preferences), пережившие перезапуск приложения, следует
+хранить через отдельный, столь же узкий application-level port:
+
+```dart
+abstract interface class RecentProjectsStore {
+  Future<List<RecentProject>> load();
+  Future<void> record(String path);
+}
+```
+
+Правила:
+
+* Application layer работает с semantic API (как в §26), а не напрямую с
+  `SharedPreferences`/эквивалентным plugin.
+* Данные одного логического concern (например, recents) следует хранить как
+  один сериализованный документ под одним ключом, а не как россыпь
+  отдельных ключей — упрощает атомарную замену и будущее версионирование
+  формата.
+* Local preferences storage НЕ ДОЛЖЕН использоваться для secrets/tokens
+  (см. §25) и не заменяет structured storage для больших/реляционных
+  данных (см. `docs/architecture/technology-stack.md` §12.2).
+* Failures на чтении/записи (например, corrupt/unavailable store) должны
+  деградировать некритично — например, "recents недоступны в этой сессии",
+  а не блокировать application flow.
+
+См. `openspec/changes/add-open-project-picker/design.md`, Decision 4, для
+первого конкретного применения этого паттерна.
+
+---
+
+## 29. Clipboard
 
 Clipboard является platform capability.
 
@@ -484,7 +518,7 @@ Clipboard является platform capability.
 
 ---
 
-## 29. Notifications
+## 30. Notifications
 
 System notifications являются presentation/platform concern.
 
@@ -498,7 +532,7 @@ NotifyUser
 
 ---
 
-## 30. Window management
+## 31. Window management
 
 Window management может включать:
 
@@ -515,7 +549,7 @@ Feature domain не должен зависеть от window API.
 
 ---
 
-## 31. Close interception
+## 32. Close interception
 
 Desktop app может перехватывать close для:
 
@@ -527,7 +561,7 @@ Close flow должен быть application-controlled, а не случайн�
 
 ---
 
-## 32. Window state persistence
+## 33. Window state persistence
 
 Если сохраняются:
 
@@ -541,7 +575,7 @@ Close flow должен быть application-controlled, а не случайн�
 
 ---
 
-## 33. Multi-window
+## 34. Multi-window
 
 Если в будущем появится multi-window, window-scoped dependencies должны иметь корректный scope.
 
@@ -549,7 +583,7 @@ Close flow должен быть application-controlled, а не случайн�
 
 ---
 
-## 34. Open external URL
+## 35. Open external URL
 
 Открытие внешнего URL является platform action.
 
@@ -559,7 +593,7 @@ Close flow должен быть application-controlled, а не случайн�
 
 ---
 
-## 35. Deep links
+## 36. Deep links
 
 Если application поддерживает deep links, parsing должен быть отделён от navigation.
 
@@ -577,7 +611,7 @@ navigation
 
 ---
 
-## 36. Drag and drop
+## 37. Drag and drop
 
 Drag-and-drop является presentation/platform interaction.
 
@@ -585,7 +619,7 @@ Dropped files следует преобразовывать в normalized applic
 
 ---
 
-## 37. Native dialogs
+## 38. Native dialogs
 
 Native file dialog или system dialog — implementation detail.
 
@@ -593,7 +627,7 @@ Application layer должен получать typed result, а не завис
 
 ---
 
-## 38. Platform errors
+## 39. Platform errors
 
 Platform-specific exceptions следует преобразовывать в typed infrastructure/application failures.
 
@@ -617,7 +651,7 @@ UI не должен показывать raw `PlatformException.toString()`.
 
 ---
 
-## 39. Unsupported platform capability
+## 40. Unsupported platform capability
 
 Если capability недоступна на конкретной platform, это должно быть explicit state/error.
 
@@ -625,7 +659,7 @@ UI не должен показывать raw `PlatformException.toString()`.
 
 ---
 
-## 40. Feature detection
+## 41. Feature detection
 
 Предпочтительнее проверять capability:
 
@@ -639,7 +673,7 @@ supportsWindowControl
 
 ---
 
-## 41. Capability facade
+## 42. Capability facade
 
 Для сложных desktop integrations может быть полезен facade:
 
@@ -654,7 +688,7 @@ abstract interface class DesktopCapabilities {
 
 ---
 
-## 42. Configuration
+## 43. Configuration
 
 Platform-specific configuration должна быть локализована.
 
@@ -669,7 +703,7 @@ Platform-specific configuration должна быть локализована.
 
 ---
 
-## 43. macOS permissions
+## 44. macOS permissions
 
 macOS может требовать:
 
@@ -683,7 +717,7 @@ Application security policy не должна путать OS-level permission �
 
 ---
 
-## 44. Windows specifics
+## 45. Windows specifics
 
 Windows-specific behavior может включать:
 
@@ -697,7 +731,7 @@ Windows-specific behavior может включать:
 
 ---
 
-## 45. Linux specifics
+## 46. Linux specifics
 
 Linux desktop environment может отличаться по:
 
@@ -710,7 +744,7 @@ Linux desktop environment может отличаться по:
 
 ---
 
-## 46. Cross-platform invariant
+## 47. Cross-platform invariant
 
 Business/application behavior должно быть максимально одинаковым между platforms.
 
@@ -718,7 +752,7 @@ Platform differences должны влиять только там, где capab
 
 ---
 
-## 47. Platform branching в tests
+## 48. Platform branching в tests
 
 Platform-specific code следует тестировать отдельно.
 
@@ -726,7 +760,7 @@ Pure application tests не должны зависеть от host OS CI runner
 
 ---
 
-## 48. Fake platform adapters
+## 49. Fake platform adapters
 
 Для tests следует использовать fakes:
 
@@ -741,7 +775,7 @@ FakeProcessRunner
 
 ---
 
-## 49. Integration tests
+## 50. Integration tests
 
 Real platform integrations следует проверять integration tests там, где это оправдано.
 
@@ -754,7 +788,7 @@ Real platform integrations следует проверять integration tests �
 
 ---
 
-## 50. Permissions и platform APIs
+## 51. Permissions и platform APIs
 
 Если platform action инициирована AI agent, architecture должна разделять:
 
@@ -772,7 +806,7 @@ Platform adapter НЕ ДОЛЖЕН сам решать, разрешено ли 
 
 ---
 
-## 51. Shell execution
+## 52. Shell execution
 
 Shell execution — high-risk capability.
 
@@ -788,7 +822,7 @@ Shell execution — high-risk capability.
 
 ---
 
-## 52. Environment variables
+## 53. Environment variables
 
 Sensitive environment variables не должны попадать в logs.
 
@@ -798,7 +832,7 @@ Sensitive environment variables не должны попадать в logs.
 
 ---
 
-## 53. Working directory
+## 54. Working directory
 
 Process working directory должен быть explicit.
 
@@ -806,7 +840,7 @@ Process working directory должен быть explicit.
 
 ---
 
-## 54. Executable resolution
+## 55. Executable resolution
 
 Executable path следует разрешать предсказуемо.
 
@@ -814,7 +848,7 @@ Executable path следует разрешать предсказуемо.
 
 ---
 
-## 55. External executable trust
+## 56. External executable trust
 
 Если application запускает external agent binary, следует определить:
 
@@ -827,7 +861,7 @@ Executable path следует разрешать предсказуемо.
 
 ---
 
-## 56. App resources
+## 57. App resources
 
 Bundled resources должны использовать Flutter-approved resource mechanism.
 
@@ -835,7 +869,7 @@ Bundled resources должны использовать Flutter-approved resourc
 
 ---
 
-## 57. Workspace files
+## 58. Workspace files
 
 Workspace/project files отличаются от application internal files.
 
@@ -852,7 +886,7 @@ arbitrary filesystem
 
 ---
 
-## 58. Backup и recovery
+## 59. Backup и recovery
 
 Если application пишет важные local data, следует определить:
 
@@ -865,7 +899,7 @@ arbitrary filesystem
 
 ---
 
-## 59. Platform adapter naming
+## 60. Platform adapter naming
 
 Adapters следует называть по responsibility.
 
@@ -887,7 +921,7 @@ NativeUtils
 
 ---
 
-## 60. Не создавать `PlatformService`
+## 61. Не создавать `PlatformService`
 
 Generic `PlatformService` с десятками несвязанных методов обычно нарушает SRP.
 
@@ -895,7 +929,7 @@ Generic `PlatformService` с десятками несвязанных мето�
 
 ---
 
-## 61. Dependency Injection
+## 62. Dependency Injection
 
 Concrete platform adapters создаются в composition root через Cherrypick.
 
@@ -913,7 +947,7 @@ Application code зависит от abstraction.
 
 ---
 
-## 62. Scope platform resources
+## 63. Scope platform resources
 
 Platform resources должны иметь подходящий lifecycle:
 
@@ -929,7 +963,7 @@ operation-scoped
 
 ---
 
-## 63. Hot restart / debug
+## 64. Hot restart / debug
 
 Development lifecycle Flutter может отличаться от production.
 
@@ -939,7 +973,7 @@ Agent process и subscriptions должны корректно пережива�
 
 ---
 
-## 64. Observability
+## 65. Observability
 
 Platform integration должна логировать:
 
@@ -952,7 +986,7 @@ Platform integration должна логировать:
 
 ---
 
-## 65. Performance
+## 66. Performance
 
 Platform I/O не должно блокировать rendering.
 
@@ -960,7 +994,7 @@ Platform I/O не должно блокировать rendering.
 
 ---
 
-## 66. Large filesystem operations
+## 67. Large filesystem operations
 
 Для больших directory scans следует рассмотреть:
 
@@ -974,7 +1008,7 @@ Platform I/O не должно блокировать rendering.
 
 ---
 
-## 67. File encoding
+## 68. File encoding
 
 Text file operations должны явно учитывать encoding, если это важно.
 
@@ -982,7 +1016,7 @@ Text file operations должны явно учитывать encoding, если
 
 ---
 
-## 68. Line endings
+## 69. Line endings
 
 Windows/macOS/Linux могут иметь разные line ending conventions.
 
@@ -990,7 +1024,7 @@ Windows/macOS/Linux могут иметь разные line ending conventions.
 
 ---
 
-## 69. Case sensitivity
+## 70. Case sensitivity
 
 Filesystem case sensitivity различается между platforms.
 
@@ -998,7 +1032,7 @@ Path identity logic должна учитывать это, если она вл
 
 ---
 
-## 70. Path comparison
+## 71. Path comparison
 
 Для security-sensitive path comparison нельзя использовать простое:
 
@@ -1010,7 +1044,7 @@ path.startsWith(root)
 
 ---
 
-## 71. Network boundary
+## 72. Network boundary
 
 Если desktop integration включает network access вне ACP transport, оно должно быть отдельным infrastructure concern.
 
@@ -1018,7 +1052,7 @@ path.startsWith(root)
 
 ---
 
-## 72. Native FFI
+## 73. Native FFI
 
 Если используется FFI, его следует изолировать в отдельном adapter/package.
 
@@ -1026,7 +1060,7 @@ Application code не должен напрямую работать с pointers
 
 ---
 
-## 73. FFI lifecycle
+## 74. FFI lifecycle
 
 Native resources должны иметь explicit cleanup.
 
@@ -1040,7 +1074,7 @@ dispose
 
 ---
 
-## 74. Platform channel
+## 75. Platform channel
 
 Если используется custom platform channel, его API должен быть typed и узким.
 
@@ -1054,7 +1088,7 @@ invokeMethod("doAnything", map)
 
 ---
 
-## 75. Error normalization
+## 76. Error normalization
 
 Platform layer должен нормализовать implementation-specific errors до понятных typed failures.
 
@@ -1062,7 +1096,7 @@ Platform layer должен нормализовать implementation-specific e
 
 ---
 
-## 76. Checklist перед platform integration
+## 77. Checklist перед platform integration
 
 Перед добавлением platform-specific functionality агент ОБЯЗАН определить:
 
@@ -1081,7 +1115,7 @@ Platform layer должен нормализовать implementation-specific e
 
 ---
 
-## 77. Главные invariants
+## 78. Главные invariants
 
 ### PLATFORM-001 — Platform APIs изолированы
 
@@ -1109,7 +1143,7 @@ Widgets не создают process/filesystem/native adapters напрямую.
 
 ---
 
-## 78. Основная модель
+## 79. Основная модель
 
 Предпочтительная архитектура:
 

@@ -8,7 +8,8 @@ enum CodelabCompatibleStdioAgentMode {
   crashMidPrompt('crash_mid_prompt'),
   withPermissionRequest('with_permission_request'),
   withFsAccess('with_fs_access'),
-  withFsPathEscape('with_fs_path_escape');
+  withFsPathEscape('with_fs_path_escape'),
+  echoesCwd('echoes_cwd');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -140,6 +141,22 @@ Future<void> main(List<String> args) async {
             'sessionId': _sessionId,
             'path': '$_sessionCwd/input.txt',
           });
+          break;
+        }
+        if (_mode == 'echoes_cwd') {
+          // Reports the `cwd` this agent process actually received in
+          // `session/new` back to the client, in-band — the only way an e2e
+          // test can confirm a real wire round trip carried the selected
+          // project's path, since `session.cwd` in the client's own domain
+          // model just echoes what it sent, not what the agent received.
+          _writeNotification('session/update', {
+            'sessionId': _sessionId,
+            'update': {
+              'sessionUpdate': 'agent_message_chunk',
+              'content': {'type': 'text', 'text': 'cwd was: $_sessionCwd'},
+            },
+          });
+          _writeResponse(id, {'stopReason': 'end_turn'});
           break;
         }
         if (_mode == 'with_fs_path_escape') {

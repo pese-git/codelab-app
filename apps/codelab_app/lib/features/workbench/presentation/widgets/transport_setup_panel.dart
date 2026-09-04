@@ -97,25 +97,10 @@ class _StdioTransportFields extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _TransportTextField(
-                label: 'Args',
-                value: state.stdioArgs,
-                onChanged: cubit.updateStdioArgs,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _TransportTextField(
-                label: 'Working directory',
-                value: state.stdioCwd,
-                placeholder: 'Optional',
-                onChanged: cubit.updateStdioCwd,
-              ),
-            ),
-          ],
+        _TransportTextField(
+          label: 'Args',
+          value: state.stdioArgs,
+          onChanged: cubit.updateStdioArgs,
         ),
         const SizedBox(height: 8),
         _TransportTextField(
@@ -124,6 +109,22 @@ class _StdioTransportFields extends StatelessWidget {
           minLines: 1,
           maxLines: 2,
           onChanged: cubit.updateStdioEnv,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Run agent from project directory',
+                style: FluentTheme.of(context).typography.body,
+              ),
+            ),
+            ToggleSwitch(
+              key: const ValueKey('run-agent-from-project-directory-toggle'),
+              checked: state.runAgentFromProjectDirectory,
+              onChanged: cubit.toggleRunAgentFromProjectDirectory,
+            ),
+          ],
         ),
       ],
     );

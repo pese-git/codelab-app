@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:acp_ui/acp_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -30,11 +32,27 @@ class CodeLabShell extends StatelessWidget {
                   onSessionsPaneResized: cubit.resizeSessionsPane,
                   onInspectorPaneResized: cubit.resizeInspectorPane,
                   commandBar: WorkbenchCommandBar(state: state, cubit: cubit),
-                  sessionsPane: AcpSessionSidebar(
-                    sessions: state.sessions,
-                    activeSessionId: state.activeSessionId,
-                    onSessionSelected: cubit.selectSession,
-                    onNewSession: cubit.createSession,
+                  sessionsPane: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AcpProjectPicker(
+                        currentProjectPath: state.selectedProjectPath,
+                        recentProjects: state.recentProjects,
+                        onProjectSelected: (path) =>
+                            unawaited(cubit.selectProject(path)),
+                        onBrowseRequested: () =>
+                            unawaited(cubit.browseForProject()),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: AcpSessionSidebar(
+                          sessions: state.sessions,
+                          activeSessionId: state.activeSessionId,
+                          onSessionSelected: cubit.selectSession,
+                          onNewSession: cubit.createSession,
+                        ),
+                      ),
+                    ],
                   ),
                   mainPane: WorkbenchMainPane(state: state, cubit: cubit),
                   inspectorPane: WorkbenchInspectorPane(

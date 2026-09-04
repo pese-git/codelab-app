@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:codelab_app/app/app_scope.dart';
 import 'package:codelab_app/app/codelab_app_widget.dart';
+import 'package:codelab_app/core/platform/project_folder_picker.dart';
+import 'package:codelab_app/core/platform/recent_projects_store.dart';
 import 'package:codelab_app/core/platform/working_directory_provider.dart';
 import 'package:codelab_app/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_app/features/workbench/presentation/widgets/connection_setup_dialog.dart';
@@ -280,9 +282,11 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
-    shellCubit.updateStdioCwd('/workspace');
+    await shellCubit.selectProject('/workspace');
     await shellCubit.connect();
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
 
@@ -313,6 +317,133 @@ void main() {
     await application.dispose();
   });
 
+  test('createSession sends the selected project as cwd over WebSocket too, '
+      'the same as it does for stdio', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) => FakeAcpTransport(),
+      webSocketTransportFactory: (_) => agentTransport,
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
+    );
+
+    shellCubit
+      ..selectTransport(CodeLabTransportType.webSocket)
+      ..updateWebSocketEndpoint('wss://agent.example.test/acp');
+    await shellCubit.selectProject('/remote/workspace');
+    await shellCubit.connect();
+    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+
+    final sentRequest = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final request = await sentRequest as dynamic;
+    expect(request.method, 'session/new');
+    expect(request.params, containsPair('cwd', '/remote/workspace'));
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: request.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test('createSession falls back to the process cwd when no project is '
+      'selected', () async {
+    final initialTransport = FakeAcpTransport();
+    final agentTransport = FakeAcpTransport();
+    final application = AcpClientApplication(transport: initialTransport);
+    const workingDirectoryProvider = IoWorkingDirectoryProvider();
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) => agentTransport,
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
+      workingDirectoryProvider: workingDirectoryProvider,
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
+    );
+
+    await shellCubit.connect();
+    final sentRequest = agentTransport.sent.first;
+    final createFuture = shellCubit.createSession();
+    final request = await sentRequest as dynamic;
+    expect(
+      request.params,
+      containsPair('cwd', workingDirectoryProvider.currentPath),
+    );
+
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: request.id as JsonRpcId,
+        result: const {'sessionId': 'session-1'},
+      ),
+    );
+    await createFuture;
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
+  test("_stdioConfigFromState's cwd follows runAgentFromProjectDirectory: on "
+      'matches the selected project, off is null', () async {
+    final configs = <StdioAcpTransportConfig>[];
+    final application = AcpClientApplication(transport: FakeAcpTransport());
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (config) {
+        configs.add(config);
+        return FakeAcpTransport();
+      },
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
+    );
+
+    await shellCubit.selectProject('/workspace');
+    expect(shellCubit.state.runAgentFromProjectDirectory, isTrue);
+    await shellCubit.connect();
+    expect(configs.single.cwd, '/workspace');
+
+    shellCubit.toggleRunAgentFromProjectDirectory(false);
+    await shellCubit.reconnect();
+    expect(configs[1].cwd, isNull);
+    // The selected project itself is untouched by the toggle.
+    expect(shellCubit.state.selectedProjectPath, '/workspace');
+
+    await shellCubit.close();
+    await application.dispose();
+  });
+
   test('submitPrompt sends text content and records agent response', () async {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
@@ -329,9 +460,11 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
-    shellCubit.updateStdioCwd('/workspace');
+    await shellCubit.selectProject('/workspace');
     await shellCubit.connect();
 
     final createRequestFuture = agentTransport.sent.first;
@@ -412,6 +545,8 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     await shellCubit.connect();
@@ -516,6 +651,8 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     await shellCubit.connect();
@@ -610,6 +747,8 @@ void main() {
         stdioTransportFactory: (_) => agentTransport,
         webSocketTransportFactory: (_) => FakeAcpTransport(),
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+        projectFolderPicker: _FakeProjectFolderPicker(),
+        recentProjectsStore: _FakeRecentProjectsStore(),
       );
 
       await shellCubit.connect();
@@ -721,6 +860,8 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     await shellCubit.connect();
@@ -798,9 +939,11 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
-    shellCubit.updateStdioCwd('/workspace');
+    await shellCubit.selectProject('/workspace');
     await shellCubit.connect();
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
 
@@ -876,6 +1019,8 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     shellCubit.updateStdioCommand('missing-codelab');
@@ -919,9 +1064,11 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
-    shellCubit.updateStdioCwd('/workspace');
+    await shellCubit.selectProject('/workspace');
     await shellCubit.connect();
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
 
@@ -1348,6 +1495,8 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     await shellCubit.connect();
@@ -1414,6 +1563,8 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     await shellCubit.connect();
@@ -1472,9 +1623,11 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
-    shellCubit.updateStdioCwd('/tmp/codelab');
+    await shellCubit.selectProject('/tmp/codelab');
     shellCubit.updateStdioEnv('CODELAB_LOG_LEVEL=DEBUG\nEXTRA=value');
     await shellCubit.connect();
 
@@ -1526,21 +1679,24 @@ void main() {
         },
         webSocketTransportFactory: (_) => FakeAcpTransport(),
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+        projectFolderPicker: _FakeProjectFolderPicker(),
+        recentProjectsStore: _FakeRecentProjectsStore(),
       );
 
       await shellCubit.connect();
       shellCubit
         ..updateStdioCommand('custom-agent')
         ..updateStdioArgs('serve --stdio --profile local')
-        ..updateStdioCwd('/tmp/custom-codelab')
         ..updateStdioEnv('CODELAB_LOG_LEVEL=TRACE\nFEATURE_FLAG=enabled');
+      await shellCubit.selectProject('/tmp/custom-codelab');
       await shellCubit.reconnect();
 
       expect(configs, [
-        const StdioAcpTransportConfig(
+        StdioAcpTransportConfig(
           command: 'codelab',
-          args: ['serve', '--stdio'],
-          env: {'CODELAB_LOG_LEVEL': 'DEBUG'},
+          args: const ['serve', '--stdio'],
+          cwd: const IoWorkingDirectoryProvider().currentPath,
+          env: const {'CODELAB_LOG_LEVEL': 'DEBUG'},
         ),
         const StdioAcpTransportConfig(
           command: 'custom-agent',
@@ -1588,6 +1744,8 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     shellCubit.updateStdioCommand('');
@@ -1622,6 +1780,8 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     shellCubit.updateStdioCommand('missing-codelab');
@@ -1659,6 +1819,8 @@ void main() {
         return agentTransport;
       },
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     shellCubit
@@ -1708,6 +1870,8 @@ void main() {
           return replacements.removeAt(0);
         },
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+        projectFolderPicker: _FakeProjectFolderPicker(),
+        recentProjectsStore: _FakeRecentProjectsStore(),
       );
 
       shellCubit
@@ -1773,6 +1937,8 @@ void main() {
         return attempts == 1 ? FakeAcpTransport() : _FailingStartTransport();
       },
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     shellCubit
@@ -1809,6 +1975,8 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     await shellCubit.connect();
@@ -1887,6 +2055,8 @@ void main() {
         },
         webSocketTransportFactory: (_) => FakeAcpTransport(),
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+        projectFolderPicker: _FakeProjectFolderPicker(),
+        recentProjectsStore: _FakeRecentProjectsStore(),
       );
 
       shellCubit.updateStdioCommand('missing-codelab');
@@ -1919,6 +2089,8 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
     await shellCubit.connect();
@@ -2986,5 +3158,30 @@ final class _FailingStartTransport implements AcpTransport {
   Future<void> close({Duration? timeout}) async {
     await _inboundController.close();
     await _eventController.close();
+  }
+}
+
+/// Always resolves with no selection — sufficient for tests that only need
+/// [CodeLabShellCubit] to construct; browse-flow tests set [nextResult].
+final class _FakeProjectFolderPicker implements ProjectFolderPicker {
+  String? nextResult;
+
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) async => nextResult;
+}
+
+/// In-memory stand-in for [RecentProjectsStore] — avoids touching the real
+/// `shared_preferences` plugin (unavailable without platform-channel mocking)
+/// in plain `test()`/`testWidgets()` runs.
+final class _FakeRecentProjectsStore implements RecentProjectsStore {
+  final List<RecentProject> _entries = [];
+
+  @override
+  Future<List<RecentProject>> load() async => List.unmodifiable(_entries);
+
+  @override
+  Future<void> record(String path) async {
+    _entries.removeWhere((entry) => entry.path == path);
+    _entries.insert(0, RecentProject(path: path, lastOpenedAt: DateTime.now()));
   }
 }

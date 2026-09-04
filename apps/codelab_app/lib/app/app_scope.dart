@@ -8,6 +8,9 @@ import 'package:cherrypick/cherrypick.dart';
 import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
+import '../core/platform/project_folder_picker.dart';
+import '../core/platform/recent_projects_store.dart';
+import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/text_file_io.dart';
 import '../core/platform/working_directory_provider.dart';
 import '../features/workbench/application/shell_cubit.dart';
@@ -77,6 +80,12 @@ final class CodeLabPlatformModule extends Module {
     const textFileIo = IoTextFileIo();
     bind<TextFileReader>().toInstance(textFileIo);
     bind<TextFileWriter>().toInstance(textFileIo);
+    bind<ProjectFolderPicker>().toInstance(
+      const FileSelectorProjectFolderPicker(),
+    );
+    bind<RecentProjectsStore>().toInstance(
+      const SharedPreferencesRecentProjectsStore(),
+    );
   }
 }
 
@@ -135,6 +144,8 @@ final class CodeLabPresentationModule extends Module {
                 .resolve<CodeLabWebSocketTransportFactory>(),
             workingDirectoryProvider: currentScope
                 .resolve<WorkingDirectoryProvider>(),
+            projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
+            recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
           ),
         )
         .singleton();
