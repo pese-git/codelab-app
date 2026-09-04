@@ -18,5 +18,6 @@ export 'src/domain/domain_models.dart';
 export 'src/domain/fs_access.dart';
 export 'src/domain/secret_redaction.dart';
 export 'src/domain/state_machines.dart';
+export 'src/domain/terminal_access.dart';
 
 const acpClientCorePackageName = 'acp_client_core';

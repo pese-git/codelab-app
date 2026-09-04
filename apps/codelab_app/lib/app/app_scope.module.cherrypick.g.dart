@@ -31,6 +31,7 @@ final class $CodeLabProtocolApplicationModuleContract
             currentScope.resolve<AcpTransport Function()>(),
             currentScope.resolve<TextFileReader>(),
             currentScope.resolve<TextFileWriter>(),
+            currentScope.resolve<TerminalProcessRunner>(),
           ),
         )
         .singleton();

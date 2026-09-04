@@ -8,6 +8,7 @@ import 'permission.dart';
 import 'prompt.dart';
 import 'session.dart';
 import 'session_update.dart';
+import 'terminal.dart';
 
 const initializeMethod = 'initialize';
 const sessionNewMethod = 'session/new';
@@ -20,6 +21,11 @@ const sessionRequestPermissionMethod = 'session/request_permission';
 const sessionUpdateMethod = 'session/update';
 const fsReadTextFileMethod = 'fs/read_text_file';
 const fsWriteTextFileMethod = 'fs/write_text_file';
+const terminalCreateMethod = 'terminal/create';
+const terminalOutputMethod = 'terminal/output';
+const terminalWaitForExitMethod = 'terminal/wait_for_exit';
+const terminalKillMethod = 'terminal/kill';
+const terminalReleaseMethod = 'terminal/release';
 
 typedef AcpDecoder<T> = T Function(Object? value);
 typedef AcpEncoder<T> = JsonObject Function(T value);
@@ -206,6 +212,60 @@ const acpFsWriteTextFile =
       encodeResult: _encodeWriteTextFileResponse,
     );
 
+const acpTerminalCreate =
+    AcpMethodDefinition<CreateTerminalRequest, CreateTerminalResponse>.request(
+      method: terminalCreateMethod,
+      decodeParams: CreateTerminalRequest.fromJson,
+      encodeParams: _encodeCreateTerminalRequest,
+      decodeResult: CreateTerminalResponse.fromJson,
+      encodeResult: _encodeCreateTerminalResponse,
+    );
+
+const acpTerminalOutput =
+    AcpMethodDefinition<TerminalOutputRequest, TerminalOutputResponse>.request(
+      method: terminalOutputMethod,
+      decodeParams: TerminalOutputRequest.fromJson,
+      encodeParams: _encodeTerminalOutputRequest,
+      decodeResult: TerminalOutputResponse.fromJson,
+      encodeResult: _encodeTerminalOutputResponse,
+    );
+
+const acpTerminalWaitForExit =
+    AcpMethodDefinition<
+      WaitForTerminalExitRequest,
+      WaitForTerminalExitResponse
+    >.request(
+      method: terminalWaitForExitMethod,
+      decodeParams: WaitForTerminalExitRequest.fromJson,
+      encodeParams: _encodeWaitForTerminalExitRequest,
+      decodeResult: WaitForTerminalExitResponse.fromJson,
+      encodeResult: _encodeWaitForTerminalExitResponse,
+    );
+
+const acpTerminalKill =
+    AcpMethodDefinition<
+      KillTerminalCommandRequest,
+      KillTerminalCommandResponse
+    >.request(
+      method: terminalKillMethod,
+      decodeParams: KillTerminalCommandRequest.fromJson,
+      encodeParams: _encodeKillTerminalCommandRequest,
+      decodeResult: KillTerminalCommandResponse.fromJson,
+      encodeResult: _encodeKillTerminalCommandResponse,
+    );
+
+const acpTerminalRelease =
+    AcpMethodDefinition<
+      ReleaseTerminalRequest,
+      ReleaseTerminalResponse
+    >.request(
+      method: terminalReleaseMethod,
+      decodeParams: ReleaseTerminalRequest.fromJson,
+      encodeParams: _encodeReleaseTerminalRequest,
+      decodeResult: ReleaseTerminalResponse.fromJson,
+      encodeResult: _encodeReleaseTerminalResponse,
+    );
+
 const acpMethodRegistry = <String, AcpMethodDefinition<Object, Object>>{
   initializeMethod: acpInitialize,
   sessionNewMethod: acpSessionNew,
@@ -218,6 +278,11 @@ const acpMethodRegistry = <String, AcpMethodDefinition<Object, Object>>{
   sessionUpdateMethod: acpSessionUpdate,
   fsReadTextFileMethod: acpFsReadTextFile,
   fsWriteTextFileMethod: acpFsWriteTextFile,
+  terminalCreateMethod: acpTerminalCreate,
+  terminalOutputMethod: acpTerminalOutput,
+  terminalWaitForExitMethod: acpTerminalWaitForExit,
+  terminalKillMethod: acpTerminalKill,
+  terminalReleaseMethod: acpTerminalRelease,
 };
 
 AcpMethodDefinition<Object, Object> requireAcpMethod(String method) {
@@ -367,4 +432,28 @@ JsonObject _encodeReadTextFileResponse(ReadTextFileResponse value) =>
 JsonObject _encodeWriteTextFileRequest(WriteTextFileRequest value) =>
     value.toJson();
 JsonObject _encodeWriteTextFileResponse(WriteTextFileResponse value) =>
+    value.toJson();
+JsonObject _encodeCreateTerminalRequest(CreateTerminalRequest value) =>
+    value.toJson();
+JsonObject _encodeCreateTerminalResponse(CreateTerminalResponse value) =>
+    value.toJson();
+JsonObject _encodeTerminalOutputRequest(TerminalOutputRequest value) =>
+    value.toJson();
+JsonObject _encodeTerminalOutputResponse(TerminalOutputResponse value) =>
+    value.toJson();
+JsonObject _encodeWaitForTerminalExitRequest(
+  WaitForTerminalExitRequest value,
+) => value.toJson();
+JsonObject _encodeWaitForTerminalExitResponse(
+  WaitForTerminalExitResponse value,
+) => value.toJson();
+JsonObject _encodeKillTerminalCommandRequest(
+  KillTerminalCommandRequest value,
+) => value.toJson();
+JsonObject _encodeKillTerminalCommandResponse(
+  KillTerminalCommandResponse value,
+) => value.toJson();
+JsonObject _encodeReleaseTerminalRequest(ReleaseTerminalRequest value) =>
+    value.toJson();
+JsonObject _encodeReleaseTerminalResponse(ReleaseTerminalResponse value) =>
     value.toJson();

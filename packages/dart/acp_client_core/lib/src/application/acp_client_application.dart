@@ -8,6 +8,7 @@ import '../domain/domain_models.dart';
 import '../domain/fs_access.dart';
 import '../domain/secret_redaction.dart';
 import '../domain/state_machines.dart';
+import '../domain/terminal_access.dart';
 import 'application_models.dart';
 
 final class AcpClientApplicationException implements Exception {
@@ -51,11 +52,13 @@ final class AcpClientApplication {
     Implementation? clientInfo,
     TextFileReader? textFileReader,
     TextFileWriter? textFileWriter,
+    TerminalProcessRunner? terminalProcessRunner,
   }) : _transport = transport,
        _reconnectTransport = reconnectTransport,
        _clientInfo = clientInfo,
        _textFileReader = textFileReader,
-       _textFileWriter = textFileWriter {
+       _textFileWriter = textFileWriter,
+       _terminalProcessRunner = terminalProcessRunner {
     _bindTransport();
   }
 
@@ -73,6 +76,21 @@ final class AcpClientApplication {
   /// answered with a protocol error rather than acted on.
   final TextFileReader? _textFileReader;
   final TextFileWriter? _textFileWriter;
+
+  /// `null` when the composition root did not wire a terminal adapter — in
+  /// that case `initialize` honestly announces `clientCapabilities.terminal`
+  /// as `false` and any inbound `terminal/*` request is answered with a
+  /// protocol error rather than acted on. Same reasoning as
+  /// [_textFileReader]/[_textFileWriter].
+  final TerminalProcessRunner? _terminalProcessRunner;
+
+  /// Session-scoped registry of terminal processes started via
+  /// `terminal/create`, keyed first by the owning [SessionId] then by
+  /// [TerminalId] — see `add-acp-terminal-client-support/design.md`,
+  /// Decision 3. A [TerminalId] absent from its session's map is
+  /// indistinguishable from one that was never created or already released
+  /// via `terminal/release` (both surface as [UnknownTerminalFailure]).
+  final _terminals = <SessionId, Map<TerminalId, TerminalProcessHandle>>{};
   final _pendingRequests = <JsonRpcId, _PendingAcpRequest>{};
   final _pendingPermissionRequests =
       <ApprovalRequestId, _PendingPermissionRequest>{};
@@ -364,6 +382,7 @@ final class AcpClientApplication {
               readTextFile: _textFileReader != null,
               writeTextFile: _textFileWriter != null,
             ),
+            terminal: _terminalProcessRunner != null,
           ),
         ),
       );
@@ -411,6 +430,15 @@ final class AcpClientApplication {
     ).stateOrThrow;
     if (!_connectionStateController.isClosed) {
       _connectionStateController.add(_connectionState);
+    }
+    // Any terminal process left running belongs to a connection that is
+    // now gone or about to be replaced — kill it here rather than at each
+    // individual call site that can reach disconnected/failed (spontaneous
+    // failure, the defensive reset `_establishConnection` performs before
+    // every connect()/reconnect(), ...), see design.md, Decision 6.
+    if (_connectionState is ClientConnectionDisconnected ||
+        _connectionState is ClientConnectionFailed) {
+      unawaited(_killAllTerminalProcesses());
     }
   }
 
@@ -494,6 +522,7 @@ final class AcpClientApplication {
     );
     _pendingPermissionRequests.clear();
     _handledPermissionRequests.clear();
+    await _killAllTerminalProcesses();
     await _transport.close();
     await _diagnosticController.close();
     await _sessionController.close();
@@ -593,6 +622,16 @@ final class AcpClientApplication {
         unawaited(_handleReadTextFileRequest(message));
       case JsonRpcRequest(method: fsWriteTextFileMethod):
         unawaited(_handleWriteTextFileRequest(message));
+      case JsonRpcRequest(method: terminalCreateMethod):
+        unawaited(_handleCreateTerminalRequest(message));
+      case JsonRpcRequest(method: terminalOutputMethod):
+        unawaited(_handleTerminalOutputRequest(message));
+      case JsonRpcRequest(method: terminalWaitForExitMethod):
+        unawaited(_handleWaitForTerminalExitRequest(message));
+      case JsonRpcRequest(method: terminalKillMethod):
+        unawaited(_handleKillTerminalCommandRequest(message));
+      case JsonRpcRequest(method: terminalReleaseMethod):
+        unawaited(_handleReleaseTerminalRequest(message));
       case JsonRpcNotification(method: sessionUpdateMethod):
         _handleSessionUpdate(message);
       case JsonRpcNotification():
@@ -712,7 +751,7 @@ final class AcpClientApplication {
   Future<void> _handleReadTextFileRequest(JsonRpcRequest request) async {
     final reader = _textFileReader;
     if (reader == null) {
-      await _sendFsError(
+      await _sendAcpMethodError(
         request.id,
         method: fsReadTextFileMethod,
         error: const AcpProtocolError.internalError(
@@ -727,7 +766,7 @@ final class AcpClientApplication {
           decodeAcpRequestParams(request) as ReadTextFileRequest;
       final session = _sessions[readRequest.sessionId];
       if (session == null) {
-        await _sendFsError(
+        await _sendAcpMethodError(
           request.id,
           method: fsReadTextFileMethod,
           error: AcpProtocolError.invalidAcpParams(
@@ -761,7 +800,7 @@ final class AcpClientApplication {
         source: 'application.fs',
         context: {'requestId': request.id.toJsonValue()},
       );
-      await _sendFsError(
+      await _sendAcpMethodError(
         request.id,
         method: fsReadTextFileMethod,
         error: AcpProtocolError.invalidAcpParams(
@@ -770,7 +809,7 @@ final class AcpClientApplication {
         ),
       );
     } on FsIoFailure catch (error) {
-      await _sendFsError(
+      await _sendAcpMethodError(
         request.id,
         method: fsReadTextFileMethod,
         error: AcpProtocolError.internalError(error.message),
@@ -783,7 +822,7 @@ final class AcpClientApplication {
         cause: error,
         context: {'requestId': request.id.toJsonValue()},
       );
-      await _sendFsError(
+      await _sendAcpMethodError(
         request.id,
         method: fsReadTextFileMethod,
         error: AcpProtocolError.internalError('Failed to read file: $error'),
@@ -796,7 +835,7 @@ final class AcpClientApplication {
   Future<void> _handleWriteTextFileRequest(JsonRpcRequest request) async {
     final writer = _textFileWriter;
     if (writer == null) {
-      await _sendFsError(
+      await _sendAcpMethodError(
         request.id,
         method: fsWriteTextFileMethod,
         error: const AcpProtocolError.internalError(
@@ -811,7 +850,7 @@ final class AcpClientApplication {
           decodeAcpRequestParams(request) as WriteTextFileRequest;
       final session = _sessions[writeRequest.sessionId];
       if (session == null) {
-        await _sendFsError(
+        await _sendAcpMethodError(
           request.id,
           method: fsWriteTextFileMethod,
           error: AcpProtocolError.invalidAcpParams(
@@ -850,7 +889,7 @@ final class AcpClientApplication {
         source: 'application.fs',
         context: {'requestId': request.id.toJsonValue()},
       );
-      await _sendFsError(
+      await _sendAcpMethodError(
         request.id,
         method: fsWriteTextFileMethod,
         error: AcpProtocolError.invalidAcpParams(
@@ -859,7 +898,7 @@ final class AcpClientApplication {
         ),
       );
     } on FsIoFailure catch (error) {
-      await _sendFsError(
+      await _sendAcpMethodError(
         request.id,
         method: fsWriteTextFileMethod,
         error: AcpProtocolError.internalError(error.message),
@@ -872,7 +911,7 @@ final class AcpClientApplication {
         cause: error,
         context: {'requestId': request.id.toJsonValue()},
       );
-      await _sendFsError(
+      await _sendAcpMethodError(
         request.id,
         method: fsWriteTextFileMethod,
         error: AcpProtocolError.internalError('Failed to write file: $error'),
@@ -880,7 +919,436 @@ final class AcpClientApplication {
     }
   }
 
-  Future<void> _sendFsError(
+  /// Handles an incoming `terminal/create` request — no approval step (see
+  /// `openspec/changes/add-acp-terminal-client-support/design.md`,
+  /// Decision 1): working-directory containment is the only gate, same
+  /// position as `fs/*` (see [_handleReadTextFileRequest]). The process is
+  /// started and its [TerminalId] returned immediately, without waiting for
+  /// completion — per ACP, `terminal/wait_for_exit` is a separate call.
+  Future<void> _handleCreateTerminalRequest(JsonRpcRequest request) async {
+    final runner = _terminalProcessRunner;
+    if (runner == null) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalCreateMethod,
+        error: const AcpProtocolError.internalError(
+          'terminal/create is not supported by this client.',
+        ),
+      );
+      return;
+    }
+
+    try {
+      final createRequest =
+          decodeAcpRequestParams(request) as CreateTerminalRequest;
+      final session = _sessions[createRequest.sessionId];
+      if (session == null) {
+        await _sendAcpMethodError(
+          request.id,
+          method: terminalCreateMethod,
+          error: AcpProtocolError.invalidAcpParams(
+            method: terminalCreateMethod,
+            message: 'Unknown session "${createRequest.sessionId.value}".',
+          ),
+        );
+        return;
+      }
+
+      final resolvedCwd = createRequest.cwd == null
+          ? session.cwd
+          : resolveWithinWorkingDirectory(
+              path: createRequest.cwd!,
+              workingDirectory: session.cwd,
+            );
+
+      final handle = await runner.start(
+        command: createRequest.command,
+        args: createRequest.args,
+        env: {
+          for (final variable in createRequest.env)
+            variable.name: variable.value,
+        },
+        cwd: resolvedCwd,
+        outputByteLimit: createRequest.outputByteLimit,
+      );
+
+      final terminalId = _newTerminalId(request.id);
+      (_terminals[createRequest.sessionId] ??= {})[terminalId] = handle;
+
+      _recordDiagnostic(
+        message: 'Started terminal process via terminal/create.',
+        severity: DiagnosticSeverity.info,
+        source: 'application.terminal',
+        context: {
+          'sessionId': createRequest.sessionId.value,
+          'terminalId': terminalId.value,
+          'command': createRequest.command,
+          'args': createRequest.args,
+          'cwd': resolvedCwd,
+        },
+      );
+
+      await _transport.send(
+        encodeAcpResponse(
+          id: request.id,
+          method: terminalCreateMethod,
+          result: CreateTerminalResponse(terminalId: terminalId),
+        ),
+      );
+    } on PathOutsideWorkingDirectoryFailure catch (error) {
+      _recordDiagnostic(
+        message: 'Rejected terminal/create outside working directory.',
+        severity: DiagnosticSeverity.warning,
+        source: 'application.terminal',
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalCreateMethod,
+        error: AcpProtocolError.invalidAcpParams(
+          method: terminalCreateMethod,
+          message: error.toString(),
+        ),
+      );
+    } on TerminalStartFailure catch (error) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalCreateMethod,
+        error: AcpProtocolError.internalError(error.message),
+      );
+    } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to handle ACP terminal/create request.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.terminal',
+        cause: error,
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalCreateMethod,
+        error: AcpProtocolError.internalError(
+          'Failed to start terminal: $error',
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleTerminalOutputRequest(JsonRpcRequest request) async {
+    if (_terminalProcessRunner == null) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalOutputMethod,
+        error: const AcpProtocolError.internalError(
+          'terminal/output is not supported by this client.',
+        ),
+      );
+      return;
+    }
+
+    try {
+      final outputRequest =
+          decodeAcpRequestParams(request) as TerminalOutputRequest;
+      final handle = _requireTerminal(
+        outputRequest.sessionId,
+        outputRequest.terminalId,
+      );
+
+      await _transport.send(
+        encodeAcpResponse(
+          id: request.id,
+          method: terminalOutputMethod,
+          result: TerminalOutputResponse(
+            output: handle.output,
+            truncated: handle.truncated,
+            exitStatus: _terminalExitStatus(handle.state),
+          ),
+        ),
+      );
+    } on UnknownTerminalFailure catch (error) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalOutputMethod,
+        error: AcpProtocolError.invalidAcpParams(
+          method: terminalOutputMethod,
+          message: error.toString(),
+        ),
+      );
+    } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to handle ACP terminal/output request.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.terminal',
+        cause: error,
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalOutputMethod,
+        error: AcpProtocolError.internalError(
+          'Failed to read terminal output: $error',
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleWaitForTerminalExitRequest(JsonRpcRequest request) async {
+    if (_terminalProcessRunner == null) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalWaitForExitMethod,
+        error: const AcpProtocolError.internalError(
+          'terminal/wait_for_exit is not supported by this client.',
+        ),
+      );
+      return;
+    }
+
+    try {
+      final waitRequest =
+          decodeAcpRequestParams(request) as WaitForTerminalExitRequest;
+      final handle = _requireTerminal(
+        waitRequest.sessionId,
+        waitRequest.terminalId,
+      );
+
+      final exited = await handle.waitForExit();
+      final status = switch (exited) {
+        TerminalProcessExited(:final exitCode, :final signal) => (
+          exitCode: exitCode,
+          signal: signal,
+        ),
+        // A conformant TerminalProcessRunner.waitForExit() never resolves
+        // before the process exits — a `running()` result here is an
+        // adapter bug, not a normal outcome, so it is reported like any
+        // other unexpected failure rather than silently coerced.
+        TerminalProcessRunning() => throw const AcpClientApplicationException(
+          'terminal process runner resolved waitForExit() while still '
+          'running.',
+        ),
+      };
+      await _transport.send(
+        encodeAcpResponse(
+          id: request.id,
+          method: terminalWaitForExitMethod,
+          result: WaitForTerminalExitResponse(
+            exitCode: status.exitCode,
+            signal: status.signal,
+          ),
+        ),
+      );
+    } on UnknownTerminalFailure catch (error) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalWaitForExitMethod,
+        error: AcpProtocolError.invalidAcpParams(
+          method: terminalWaitForExitMethod,
+          message: error.toString(),
+        ),
+      );
+    } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to handle ACP terminal/wait_for_exit request.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.terminal',
+        cause: error,
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalWaitForExitMethod,
+        error: AcpProtocolError.internalError(
+          'Failed to wait for terminal exit: $error',
+        ),
+      );
+    }
+  }
+
+  /// Handles an incoming `terminal/kill` request. Killing an already-exited
+  /// process is a no-op, not an error (`TerminalProcessHandle.kill` itself
+  /// guarantees the atomicity — see design.md, Risks) — the `terminalId`
+  /// remains valid afterwards for `output`/`wait_for_exit`/`release`.
+  Future<void> _handleKillTerminalCommandRequest(JsonRpcRequest request) async {
+    if (_terminalProcessRunner == null) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalKillMethod,
+        error: const AcpProtocolError.internalError(
+          'terminal/kill is not supported by this client.',
+        ),
+      );
+      return;
+    }
+
+    try {
+      final killRequest =
+          decodeAcpRequestParams(request) as KillTerminalCommandRequest;
+      final handle = _requireTerminal(
+        killRequest.sessionId,
+        killRequest.terminalId,
+      );
+
+      await handle.kill();
+
+      await _transport.send(
+        encodeAcpResponse(
+          id: request.id,
+          method: terminalKillMethod,
+          result: const KillTerminalCommandResponse(),
+        ),
+      );
+    } on UnknownTerminalFailure catch (error) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalKillMethod,
+        error: AcpProtocolError.invalidAcpParams(
+          method: terminalKillMethod,
+          message: error.toString(),
+        ),
+      );
+    } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to handle ACP terminal/kill request.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.terminal',
+        cause: error,
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalKillMethod,
+        error: AcpProtocolError.internalError(
+          'Failed to kill terminal: $error',
+        ),
+      );
+    }
+  }
+
+  /// Handles an incoming `terminal/release` request. Unlike `kill`, this
+  /// removes the [TerminalId] from the session's registry entirely — every
+  /// later `terminal/*` call with this id, including another `release`,
+  /// then sees it as [UnknownTerminalFailure] (design.md, Decision 3).
+  Future<void> _handleReleaseTerminalRequest(JsonRpcRequest request) async {
+    if (_terminalProcessRunner == null) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalReleaseMethod,
+        error: const AcpProtocolError.internalError(
+          'terminal/release is not supported by this client.',
+        ),
+      );
+      return;
+    }
+
+    try {
+      final releaseRequest =
+          decodeAcpRequestParams(request) as ReleaseTerminalRequest;
+      final handle = _requireTerminal(
+        releaseRequest.sessionId,
+        releaseRequest.terminalId,
+      );
+
+      await handle.kill();
+      _terminals[releaseRequest.sessionId]?.remove(releaseRequest.terminalId);
+
+      await _transport.send(
+        encodeAcpResponse(
+          id: request.id,
+          method: terminalReleaseMethod,
+          result: const ReleaseTerminalResponse(),
+        ),
+      );
+    } on UnknownTerminalFailure catch (error) {
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalReleaseMethod,
+        error: AcpProtocolError.invalidAcpParams(
+          method: terminalReleaseMethod,
+          message: error.toString(),
+        ),
+      );
+    } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to handle ACP terminal/release request.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.terminal',
+        cause: error,
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendAcpMethodError(
+        request.id,
+        method: terminalReleaseMethod,
+        error: AcpProtocolError.internalError(
+          'Failed to release terminal: $error',
+        ),
+      );
+    }
+  }
+
+  TerminalProcessHandle _requireTerminal(
+    SessionId sessionId,
+    TerminalId terminalId,
+  ) {
+    final handle = _terminals[sessionId]?[terminalId];
+    if (handle == null) {
+      throw UnknownTerminalFailure(terminalId);
+    }
+    return handle;
+  }
+
+  TerminalExitStatus? _terminalExitStatus(TerminalProcessState state) {
+    return switch (state) {
+      TerminalProcessRunning() => null,
+      TerminalProcessExited(:final exitCode, :final signal) =>
+        TerminalExitStatus(exitCode: exitCode, signal: signal),
+    };
+  }
+
+  /// Derives a [TerminalId] from the agent's own JSON-RPC request id for
+  /// this `terminal/create` call — same "derive from the triggering
+  /// request" approach as [_approvalRequestId], avoiding a new ID-generation
+  /// dependency for what is already a unique-per-request value.
+  TerminalId _newTerminalId(JsonRpcId requestId) {
+    return TerminalId('term-${requestId.toJsonValue()}');
+  }
+
+  /// Kills every terminal process across every session, without releasing
+  /// their registry entries — mirrors `terminal/kill`'s own semantics
+  /// (design.md, Decision 6): this is a connection-teardown safety net
+  /// (spontaneous disconnect/failure, a fresh `connect()`/`reconnect()`
+  /// tearing down the previous connection, or [dispose]), not a graceful
+  /// `terminal/release` on the agent's behalf.
+  Future<void> _killAllTerminalProcesses() async {
+    if (_terminals.isEmpty) {
+      return;
+    }
+
+    final handles = _terminals.values
+        .expand((session) => session.values)
+        .toList(growable: false);
+    _terminals.clear();
+
+    // Each kill is isolated so one adapter failure can't stop the rest from
+    // being attempted, and so this fire-and-forget cleanup (called via
+    // `unawaited` from `_transitionConnection`) never surfaces an unhandled
+    // async error.
+    await Future.wait(
+      handles.map((handle) async {
+        try {
+          await handle.kill();
+        } on Object catch (error) {
+          _recordDiagnostic(
+            message: 'Failed to kill a terminal process during teardown.',
+            severity: DiagnosticSeverity.warning,
+            source: 'application.terminal',
+            cause: error,
+          );
+        }
+      }),
+    );
+  }
+
+  Future<void> _sendAcpMethodError(
     JsonRpcId id, {
     required String method,
     required AcpProtocolError error,
@@ -893,7 +1361,7 @@ final class AcpClientApplication {
       _recordDiagnostic(
         message: 'Failed to send ACP error response for $method.',
         severity: DiagnosticSeverity.error,
-        source: 'application.fs',
+        source: 'application.protocol',
         cause: sendError,
         context: {'method': method, 'requestId': id.toJsonValue()},
       );

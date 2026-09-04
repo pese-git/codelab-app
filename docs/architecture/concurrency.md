@@ -770,7 +770,45 @@ State machine должна воспринимать expected exit как intenti
 
 ---
 
-## 44. App shutdown
+## 44. Terminal process lifecycle (`terminal/*`)
+
+`terminal/create` управляет отдельным session-scoped реестром процессов
+(`SessionId → Map<TerminalId, TerminalProcessHandle>`), независимым от
+собственного child-процесса ACP transport (§42-43) и от
+`TerminalProcessFactory` локальной интерактивной terminal-панели
+(`add-integrated-terminal`) — два разных owner'а, два разных lifecycle
+(`add-acp-terminal-client-support/design.md`, Decision 6).
+
+Правила:
+
+* `TerminalId` — owner: сессия, в рамках которой он был создан
+  (`terminal/create`'s `sessionId`), а не connection в целом.
+* `kill` (`terminal/kill`) переводит процесс в terminal state (`exited`),
+  но НЕ удаляет `TerminalId` из реестра — `output`/`wait_for_exit`/
+  `release` остаются валидными после него.
+* `release` (`terminal/release`) убивает процесс, если он ещё работает, И
+  удаляет `TerminalId` из реестра — с этого момента id неотличим от
+  никогда не существовавшего (единая "unknown terminal" ошибка для обоих
+  случаев).
+* И `kill`, и connection-level teardown ДОЛЖНЫ быть идемпотентны
+  относительно уже завершившегося процесса — race между естественным
+  exit и `kill` не должен менять уже зафиксированный exit-статус
+  (см. §24 Completion/cancel race).
+* При переходе connection в disconnected/failed или при dispose
+  приложения ВСЕ активные terminal-процессы всех сессий убиваются
+  (`kill`-семантика, не `release`) — это connection-level safety net, а
+  не graceful `terminal/release` от имени агента; реестр при этом
+  очищается полностью (§57 State after dispose).
+* Буферизация output (`outputByteLimit`, truncation с начала буфера по
+  границе UTF-8 символа) — ответственность infrastructure adapter, не
+  application layer, аналогично разделению для ACP transport's
+  stdout/stderr (§42).
+
+Полное обоснование: `openspec/changes/add-acp-terminal-client-support/design.md`.
+
+---
+
+## 45. App shutdown
 
 При закрытии приложения новые user/application intents должны перестать приниматься до destruction resources.
 
@@ -797,7 +835,7 @@ dispose containers
 
 ---
 
-## 45. Shutdown timeout
+## 46. Shutdown timeout
 
 Если external process не завершается, application может иметь bounded shutdown timeout.
 
@@ -807,7 +845,7 @@ dispose containers
 
 ---
 
-## 46. Persistence concurrency
+## 47. Persistence concurrency
 
 Concurrent writes должны иметь определённую strategy.
 
@@ -822,7 +860,7 @@ Concurrent writes должны иметь определённую strategy.
 
 ---
 
-## 47. Revision guard
+## 48. Revision guard
 
 Для persistence useful pattern:
 
@@ -837,7 +875,7 @@ Late revision 10 не должна становиться authoritative.
 
 ---
 
-## 48. Autosave
+## 49. Autosave
 
 Autosave следует проектировать как отдельный lifecycle.
 
@@ -852,7 +890,7 @@ Autosave следует проектировать как отдельный lif
 
 ---
 
-## 49. Immutable snapshots
+## 50. Immutable snapshots
 
 Перед передачей state в async operation следует предпочитать immutable snapshot.
 
@@ -860,7 +898,7 @@ Autosave следует проектировать как отдельный lif
 
 ---
 
-## 50. Locks и mutex
+## 51. Locks и mutex
 
 Locks следует использовать только при реальной shared mutable concurrency.
 
@@ -875,7 +913,7 @@ Locks следует использовать только при реально
 
 ---
 
-## 51. Deadlocks
+## 52. Deadlocks
 
 Если появляются locks, необходимо документировать lock ordering.
 
@@ -885,7 +923,7 @@ Locks следует использовать только при реально
 
 ---
 
-## 52. Reentrancy
+## 53. Reentrancy
 
 Event handler не должен случайно re-enter state transition до завершения текущего transition.
 
@@ -901,7 +939,7 @@ State machine должна быть устойчива к такому behavior 
 
 ---
 
-## 53. Completer
+## 54. Completer
 
 `Completer` полезен для bridge callback/event API к `Future`.
 
@@ -917,7 +955,7 @@ state machine должна гарантировать, что duplicate completi
 
 ---
 
-## 54. Cached Future
+## 55. Cached Future
 
 Для single-flight operation допустимо хранить current Future:
 
@@ -931,7 +969,7 @@ _connectFuture
 
 ---
 
-## 55. Backoff loop
+## 56. Backoff loop
 
 Reconnect loop должен проверять актуальность intent после каждого `await`.
 
@@ -949,7 +987,7 @@ attempt
 
 ---
 
-## 56. Manual override
+## 57. Manual override
 
 Manual user intent может инвалидировать background operation.
 
@@ -964,7 +1002,7 @@ Disconnect должен отменить/инвалидировать reconnect 
 
 ---
 
-## 57. State after dispose
+## 58. State after dispose
 
 После dispose объект не должен:
 
@@ -978,7 +1016,7 @@ Late callbacks должны иметь guard.
 
 ---
 
-## 58. Mounted checks
+## 59. Mounted checks
 
 `context.mounted` полезен только на Flutter presentation boundary.
 
@@ -988,7 +1026,7 @@ Late callbacks должны иметь guard.
 
 ---
 
-## 59. BLoC event transformers
+## 60. BLoC event transformers
 
 Если используются BLoC event transformers, их semantics должны соответствовать operation.
 
@@ -1005,7 +1043,7 @@ Late callbacks должны иметь guard.
 
 ---
 
-## 60. Restartable semantics
+## 61. Restartable semantics
 
 Restartable подходит для операций, где новый intent полностью заменяет старый.
 
@@ -1025,7 +1063,7 @@ send ACP prompt
 
 ---
 
-## 61. Droppable semantics
+## 62. Droppable semantics
 
 Droppable может подходить для duplicate UI intents:
 
@@ -1039,7 +1077,7 @@ Connect button pressed repeatedly
 
 ---
 
-## 62. Sequential semantics
+## 63. Sequential semantics
 
 Sequential processing хорошо подходит для events, мутирующих один state machine.
 
@@ -1049,7 +1087,7 @@ Sequential processing хорошо подходит для events, мутиру�
 
 ---
 
-## 63. Concurrent semantics
+## 64. Concurrent semantics
 
 Concurrent handler допустим только если operations действительно независимы или имеют безопасную correlation model.
 
@@ -1057,7 +1095,7 @@ Concurrent handler допустим только если operations дейст�
 
 ---
 
-## 64. Error recovery
+## 65. Error recovery
 
 После async failure state должен оказаться в defined состоянии.
 
@@ -1073,7 +1111,7 @@ isLoading = true forever
 
 ---
 
-## 65. Diagnostics
+## 66. Diagnostics
 
 Для complex concurrency issues полезно логировать:
 
@@ -1094,7 +1132,7 @@ request=42 generation=8 result=ignored reason=stale_generation
 
 ---
 
-## 66. Не логировать task identity через object hash
+## 67. Не логировать task identity через object hash
 
 Не следует использовать runtime object hash как единственный correlation identifier.
 
@@ -1102,7 +1140,7 @@ request=42 generation=8 result=ignored reason=stale_generation
 
 ---
 
-## 67. Deterministic testing
+## 68. Deterministic testing
 
 Concurrency tests должны по возможности избегать реального времени.
 
@@ -1124,7 +1162,7 @@ sleep 500 ms and hope
 
 ---
 
-## 68. Race tests
+## 69. Race tests
 
 Обязательные категории:
 
@@ -1140,7 +1178,7 @@ sleep 500 ms and hope
 
 ---
 
-## 69. Forced ordering tests
+## 70. Forced ordering tests
 
 Полезно вручную управлять последовательностью:
 
@@ -1155,7 +1193,7 @@ complete A
 
 ---
 
-## 70. Stress tests
+## 71. Stress tests
 
 Для сложных lifecycle полезно периодически запускать stress scenarios с разным ordering events.
 
@@ -1163,7 +1201,7 @@ complete A
 
 ---
 
-## 71. Нежелательные patterns
+## 72. Нежелательные patterns
 
 ### Async callback без lifecycle
 
@@ -1229,7 +1267,7 @@ await Future.delayed(const Duration(milliseconds: 500));
 
 ---
 
-## 72. Checklist перед async реализацией
+## 73. Checklist перед async реализацией
 
 Перед добавлением нетривиальной async operation агент ОБЯЗАН определить:
 
@@ -1249,7 +1287,7 @@ await Future.delayed(const Duration(milliseconds: 500));
 
 ---
 
-## 73. Главные invariants
+## 74. Главные invariants
 
 ### CON-001 — Long-lived operation имеет owner
 
@@ -1281,7 +1319,7 @@ Heavy work выносится за пределы rendering-critical execution.
 
 ---
 
-## 74. Основная модель
+## 75. Основная модель
 
 Предпочтительная mental model:
 

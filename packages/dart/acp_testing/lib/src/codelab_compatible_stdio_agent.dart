@@ -9,7 +9,10 @@ enum CodelabCompatibleStdioAgentMode {
   withPermissionRequest('with_permission_request'),
   withFsAccess('with_fs_access'),
   withFsPathEscape('with_fs_path_escape'),
-  echoesCwd('echoes_cwd');
+  echoesCwd('echoes_cwd'),
+  withTerminalExecution('with_terminal_execution'),
+  withTerminalPathEscape('with_terminal_path_escape'),
+  withTerminalKill('with_terminal_kill');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -44,10 +47,15 @@ const _sessionId = 'codelab-test-session';
 const _permissionRequestId = 'perm-1';
 const _fsReadRequestId = 'fs-read-1';
 const _fsWriteRequestId = 'fs-write-1';
+const _terminalCreateRequestId = 'terminal-create-1';
+const _terminalWaitRequestId = 'terminal-wait-1';
+const _terminalOutputRequestId = 'terminal-output-1';
+const _terminalKillRequestId = 'terminal-kill-1';
 var _currentModel = 'gpt-5';
 Object? _pendingPromptId;
 String? _sessionCwd;
 String? _fsReadContent;
+String? _terminalId;
 
 Future<void> main(List<String> args) async {
   if (args.length != 2 || args[0] != 'serve' || args[1] != '--stdio') {
@@ -92,6 +100,22 @@ Future<void> main(List<String> args) async {
     }
     if (method == null && id == _fsWriteRequestId) {
       _handleFsWriteResponse(message);
+      continue;
+    }
+    if (method == null && id == _terminalCreateRequestId) {
+      _handleTerminalCreateResponse(message);
+      continue;
+    }
+    if (method == null && id == _terminalWaitRequestId) {
+      _handleTerminalWaitResponse(message);
+      continue;
+    }
+    if (method == null && id == _terminalKillRequestId) {
+      _handleTerminalKillResponse(message);
+      continue;
+    }
+    if (method == null && id == _terminalOutputRequestId) {
+      _handleTerminalOutputResponse(message);
       continue;
     }
 
@@ -166,6 +190,41 @@ Future<void> main(List<String> args) async {
           _writeRequest(_fsReadRequestId, 'fs/read_text_file', {
             'sessionId': _sessionId,
             'path': '$_sessionCwd/../escape.txt',
+          });
+          break;
+        }
+        if (_mode == 'with_terminal_execution') {
+          // Runs a real command via terminal/create, waits for it to exit,
+          // then fetches its output — the real terminal/* round trip, no
+          // approval step (see add-acp-terminal-client-support/design.md).
+          _pendingPromptId = id;
+          _writeRequest(_terminalCreateRequestId, 'terminal/create', {
+            'sessionId': _sessionId,
+            'command': 'sh',
+            'args': ['-c', 'echo hello-from-terminal; exit 3'],
+          });
+          break;
+        }
+        if (_mode == 'with_terminal_path_escape') {
+          // Attempt to run a command outside the working directory — the
+          // client MUST reject this before starting any process.
+          _pendingPromptId = id;
+          _writeRequest(_terminalCreateRequestId, 'terminal/create', {
+            'sessionId': _sessionId,
+            'command': 'echo',
+            'args': ['should not run'],
+            'cwd': '$_sessionCwd/../escape',
+          });
+          break;
+        }
+        if (_mode == 'with_terminal_kill') {
+          // Starts a long-running process, then kills it immediately —
+          // terminalId must stay valid afterwards for terminal/output.
+          _pendingPromptId = id;
+          _writeRequest(_terminalCreateRequestId, 'terminal/create', {
+            'sessionId': _sessionId,
+            'command': 'sleep',
+            'args': ['30'],
           });
           break;
         }
@@ -334,6 +393,84 @@ void _handleFsWriteResponse(Map<String, Object?> message) {
         'text': error != null
             ? 'fs/write_text_file failed: ${error['message']}'
             : 'fs roundtrip complete: $_fsReadContent',
+      },
+    },
+  });
+  _writeResponse(promptId, {'stopReason': 'end_turn'});
+}
+
+void _handleTerminalCreateResponse(Map<String, Object?> message) {
+  final promptId = _pendingPromptId;
+  if (promptId == null) {
+    return;
+  }
+
+  final error = message['error'] as Map<String, Object?>?;
+  if (error != null) {
+    // Expected outcome for with_terminal_path_escape — the client rejected
+    // the out-of-bounds cwd before starting any process.
+    _pendingPromptId = null;
+    _writeNotification('session/update', {
+      'sessionId': _sessionId,
+      'update': {
+        'sessionUpdate': 'agent_message_chunk',
+        'content': {
+          'type': 'text',
+          'text': 'terminal/create rejected: ${error['message']}',
+        },
+      },
+    });
+    _writeResponse(promptId, {'stopReason': 'end_turn'});
+    return;
+  }
+
+  final result = message['result'] as Map<String, Object?>;
+  _terminalId = result['terminalId'] as String;
+
+  if (_mode == 'with_terminal_kill') {
+    _writeRequest(_terminalKillRequestId, 'terminal/kill', {
+      'sessionId': _sessionId,
+      'terminalId': _terminalId,
+    });
+  } else {
+    _writeRequest(_terminalWaitRequestId, 'terminal/wait_for_exit', {
+      'sessionId': _sessionId,
+      'terminalId': _terminalId,
+    });
+  }
+}
+
+void _handleTerminalWaitResponse(Map<String, Object?> message) {
+  _writeRequest(_terminalOutputRequestId, 'terminal/output', {
+    'sessionId': _sessionId,
+    'terminalId': _terminalId,
+  });
+}
+
+void _handleTerminalKillResponse(Map<String, Object?> message) {
+  _writeRequest(_terminalOutputRequestId, 'terminal/output', {
+    'sessionId': _sessionId,
+    'terminalId': _terminalId,
+  });
+}
+
+void _handleTerminalOutputResponse(Map<String, Object?> message) {
+  final promptId = _pendingPromptId;
+  if (promptId == null) {
+    return;
+  }
+  _pendingPromptId = null;
+
+  final result = message['result'] as Map<String, Object?>;
+  final output = result['output'];
+  final exitStatus = result['exitStatus'];
+  _writeNotification('session/update', {
+    'sessionId': _sessionId,
+    'update': {
+      'sessionUpdate': 'agent_message_chunk',
+      'content': {
+        'type': 'text',
+        'text': 'terminal output: $output exitStatus: $exitStatus',
       },
     },
   });

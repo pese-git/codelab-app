@@ -16,6 +16,11 @@ void main() {
         sessionUpdateMethod,
         fsReadTextFileMethod,
         fsWriteTextFileMethod,
+        terminalCreateMethod,
+        terminalOutputMethod,
+        terminalWaitForExitMethod,
+        terminalKillMethod,
+        terminalReleaseMethod,
       });
     });
 

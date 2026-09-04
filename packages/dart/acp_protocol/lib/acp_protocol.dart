@@ -8,6 +8,7 @@ export 'src/acp/permission.dart';
 export 'src/acp/prompt.dart';
 export 'src/acp/session.dart';
 export 'src/acp/session_update.dart';
+export 'src/acp/terminal.dart';
 export 'src/acp/tool_call.dart';
 export 'src/json_rpc/json_rpc_codec.dart';
 export 'src/json_rpc/json_rpc_error.dart';

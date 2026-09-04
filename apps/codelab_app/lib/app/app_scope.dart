@@ -11,6 +11,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/recent_projects_store.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
+import '../core/platform/terminal_process_runner.dart';
 import '../core/platform/text_file_io.dart';
 import '../core/platform/working_directory_provider.dart';
 import '../features/workbench/application/shell_cubit.dart';
@@ -86,6 +87,7 @@ final class CodeLabPlatformModule extends Module {
     bind<RecentProjectsStore>().toInstance(
       const SharedPreferencesRecentProjectsStore(),
     );
+    bind<TerminalProcessRunner>().toInstance(const IoTerminalProcessRunner());
   }
 }
 
@@ -173,11 +175,13 @@ abstract class CodeLabProtocolApplicationModuleContract extends Module {
     CodeLabTransportFactory transportFactory,
     TextFileReader textFileReader,
     TextFileWriter textFileWriter,
+    TerminalProcessRunner terminalProcessRunner,
   ) => AcpClientApplication(
     transport: transport,
     reconnectTransport: transportFactory,
     textFileReader: textFileReader,
     textFileWriter: textFileWriter,
+    terminalProcessRunner: terminalProcessRunner,
   );
 }
 
