@@ -1,9 +1,7 @@
 ## Purpose
 
 Реализация CodeLab самого Agent Client Protocol (ACP) — обработка сообщений JSON-RPC 2.0, handshake `initialize`, настройка сессии и жизненный цикл prompt turn, а также идемпотентная обработка получаемого потока событий. Эта capability — граница wire-протокола между CodeLab и любым ACP-совместимым агентом; её нормативный источник — `docs/acp/protocol/`.
-
 ## Requirements
-
 ### Requirement: Официальный источник истины ACP
 CodeLab SHALL реализовывать поведение ACP в соответствии с `docs/acp/protocol/` и `docs/acp/protocol/17-Schema.md`.
 
@@ -113,3 +111,15 @@ CodeLab SHALL транслировать `AcpTransportEvent.failure` от акт
 #### Scenario: Событие от заменённого транспорта не влияет на текущее соединение
 - **WHEN** транспорт был заменён (например, в рамках `reconnect()`), и старый (уже отвязанный) транспорт присылает запоздавшее `AcpTransportEvent.failure`
 - **THEN** CodeLab не изменяет текущее состояние соединения, установленное новым транспортом
+
+### Requirement: Заявление реальных client capabilities при initialize
+CodeLab SHALL отправлять в `InitializeRequest.clientCapabilities.fs` значения `readTextFile`/`writeTextFile`, соответствующие фактически реализованным и зарегистрированным в `acpMethodRegistry` обработчикам `fs/read_text_file`/`fs/write_text_file`, вместо неявного значения по умолчанию `false`.
+
+#### Scenario: Клиент поддерживает fs-методы
+- **WHEN** CodeLab выполняет `initialize`, и обработчики `fs/read_text_file`/`fs/write_text_file` реализованы и зарегистрированы
+- **THEN** `InitializeRequest.clientCapabilities.fs.readTextFile` и `writeTextFile` отправляются как `true`
+
+#### Scenario: Метод не реализован
+- **WHEN** CodeLab выполняет `initialize`, и обработчик `fs/write_text_file` (или `fs/read_text_file`) не зарегистрирован в `acpMethodRegistry`
+- **THEN** соответствующее поле `clientCapabilities.fs` отправляется как `false`, и агент не должен вызывать этот метод
+
