@@ -29,6 +29,8 @@ final class $CodeLabProtocolApplicationModuleContract
           () => application(
             currentScope.resolve<AcpTransport>(),
             currentScope.resolve<AcpTransport Function()>(),
+            currentScope.resolve<TextFileReader>(),
+            currentScope.resolve<TextFileWriter>(),
           ),
         )
         .singleton();

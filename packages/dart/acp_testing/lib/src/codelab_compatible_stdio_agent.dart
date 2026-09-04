@@ -6,7 +6,9 @@ enum CodelabCompatibleStdioAgentMode {
   invalidStdout('invalid_stdout'),
   withConfigOptions('with_config_options'),
   crashMidPrompt('crash_mid_prompt'),
-  withPermissionRequest('with_permission_request');
+  withPermissionRequest('with_permission_request'),
+  withFsAccess('with_fs_access'),
+  withFsPathEscape('with_fs_path_escape');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -39,8 +41,12 @@ import 'dart:io';
 const _mode = '__CODELAB_TEST_AGENT_MODE__';
 const _sessionId = 'codelab-test-session';
 const _permissionRequestId = 'perm-1';
+const _fsReadRequestId = 'fs-read-1';
+const _fsWriteRequestId = 'fs-write-1';
 var _currentModel = 'gpt-5';
 Object? _pendingPromptId;
+String? _sessionCwd;
+String? _fsReadContent;
 
 Future<void> main(List<String> args) async {
   if (args.length != 2 || args[0] != 'serve' || args[1] != '--stdio') {
@@ -79,6 +85,14 @@ Future<void> main(List<String> args) async {
       _handlePermissionResponse(message);
       continue;
     }
+    if (method == null && id == _fsReadRequestId) {
+      _handleFsReadResponse(message);
+      continue;
+    }
+    if (method == null && id == _fsWriteRequestId) {
+      _handleFsWriteResponse(message);
+      continue;
+    }
 
     switch (method) {
       case 'initialize':
@@ -101,6 +115,8 @@ Future<void> main(List<String> args) async {
           'authMethods': <Object?>[],
         });
       case 'session/new':
+        final params = message['params'] as Map<String, Object?>;
+        _sessionCwd = params['cwd'] as String?;
         _writeResponse(id, {
           'sessionId': _sessionId,
           if (_mode == 'with_config_options')
@@ -114,6 +130,27 @@ Future<void> main(List<String> args) async {
           // output, matching a real crash/kill more closely than closing
           // stdout gracefully would.
           exit(1);
+        }
+        if (_mode == 'with_fs_access') {
+          // Read a file the test placed in the session's working directory,
+          // then write a derived file back — a real fs/* round trip, no
+          // approval step (see add-acp-fs-client-support/design.md).
+          _pendingPromptId = id;
+          _writeRequest(_fsReadRequestId, 'fs/read_text_file', {
+            'sessionId': _sessionId,
+            'path': '$_sessionCwd/input.txt',
+          });
+          break;
+        }
+        if (_mode == 'with_fs_path_escape') {
+          // Attempt to read outside the working directory — the client
+          // MUST reject this before touching the filesystem.
+          _pendingPromptId = id;
+          _writeRequest(_fsReadRequestId, 'fs/read_text_file', {
+            'sessionId': _sessionId,
+            'path': '$_sessionCwd/../escape.txt',
+          });
+          break;
         }
         if (_mode == 'with_permission_request') {
           // Defer the `session/prompt` response until the client answers
@@ -207,6 +244,83 @@ void _handlePermissionResponse(Map<String, Object?> message) {
   _writeResponse(promptId, {
     'stopReason': selectedOptionId != null ? 'end_turn' : 'cancelled',
   });
+}
+
+void _handleFsReadResponse(Map<String, Object?> message) {
+  final promptId = _pendingPromptId;
+  if (promptId == null) {
+    return;
+  }
+
+  final error = message['error'] as Map<String, Object?>?;
+  if (error != null) {
+    // Expected outcome for with_fs_path_escape — the client rejected the
+    // out-of-bounds read before touching the filesystem.
+    _pendingPromptId = null;
+    _writeNotification('session/update', {
+      'sessionId': _sessionId,
+      'update': {
+        'sessionUpdate': 'agent_message_chunk',
+        'content': {
+          'type': 'text',
+          'text': 'fs/read_text_file rejected: ${error['message']}',
+        },
+      },
+    });
+    _writeResponse(promptId, {'stopReason': 'end_turn'});
+    return;
+  }
+
+  final result = message['result'] as Map<String, Object?>;
+  _fsReadContent = result['content'] as String;
+
+  if (_mode == 'with_fs_path_escape') {
+    // The read should have been rejected — reaching here (a successful
+    // read of an out-of-bounds path) is itself the test failure; report it
+    // in-band so the integration test's assertions catch it clearly.
+    _pendingPromptId = null;
+    _writeNotification('session/update', {
+      'sessionId': _sessionId,
+      'update': {
+        'sessionUpdate': 'agent_message_chunk',
+        'content': {
+          'type': 'text',
+          'text': 'SECURITY FAILURE: escaped read succeeded: $_fsReadContent',
+        },
+      },
+    });
+    _writeResponse(promptId, {'stopReason': 'end_turn'});
+    return;
+  }
+
+  _writeRequest(_fsWriteRequestId, 'fs/write_text_file', {
+    'sessionId': _sessionId,
+    'path': '$_sessionCwd/output.txt',
+    'content': 'echo: $_fsReadContent',
+  });
+}
+
+void _handleFsWriteResponse(Map<String, Object?> message) {
+  final promptId = _pendingPromptId;
+  if (promptId == null) {
+    return;
+  }
+  _pendingPromptId = null;
+
+  final error = message['error'] as Map<String, Object?>?;
+  _writeNotification('session/update', {
+    'sessionId': _sessionId,
+    'update': {
+      'sessionUpdate': 'agent_message_chunk',
+      'content': {
+        'type': 'text',
+        'text': error != null
+            ? 'fs/write_text_file failed: ${error['message']}'
+            : 'fs roundtrip complete: $_fsReadContent',
+      },
+    },
+  });
+  _writeResponse(promptId, {'stopReason': 'end_turn'});
 }
 
 void _writeRequest(Object? id, String method, Map<String, Object?> params) {

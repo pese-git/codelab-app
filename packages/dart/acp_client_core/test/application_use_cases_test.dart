@@ -304,6 +304,42 @@ void main() {
     expect(sentInitialize.method, initializeMethod);
   });
 
+  test('initialize announces clientCapabilities.fs matching the fs adapters '
+      'actually wired in — full, partial, and none', () async {
+    Future<InitializeRequest> initializeWith({
+      TextFileReader? textFileReader,
+      TextFileWriter? textFileWriter,
+    }) async {
+      final freshTransport = FakeAcpTransport();
+      final freshClient = AcpClientApplication(
+        transport: FakeAcpTransport(),
+        textFileReader: textFileReader,
+        textFileWriter: textFileWriter,
+      );
+      addTearDown(freshClient.dispose);
+      await freshClient.connect(freshTransport);
+      final sent = freshTransport.sentMessages.single as JsonRpcRequest;
+      return InitializeRequest.fromJson(sent.params);
+    }
+
+    final none = await initializeWith();
+    expect(none.clientCapabilities.fs.readTextFile, isFalse);
+    expect(none.clientCapabilities.fs.writeTextFile, isFalse);
+
+    final readOnly = await initializeWith(
+      textFileReader: _FakeTextFileReader(),
+    );
+    expect(readOnly.clientCapabilities.fs.readTextFile, isTrue);
+    expect(readOnly.clientCapabilities.fs.writeTextFile, isFalse);
+
+    final both = await initializeWith(
+      textFileReader: _FakeTextFileReader(),
+      textFileWriter: _FakeTextFileWriter(),
+    );
+    expect(both.clientCapabilities.fs.readTextFile, isTrue);
+    expect(both.clientCapabilities.fs.writeTextFile, isTrue);
+  });
+
   test('connect closes the transport and fails when the agent negotiates an '
       'unsupported protocol version', () async {
     final freshTransport = FakeAcpTransport()
@@ -1341,6 +1377,18 @@ void main() {
       await promptFuture;
     },
   );
+}
+
+final class _FakeTextFileReader implements TextFileReader {
+  @override
+  Future<String> readText({required String path, int? line, int? limit}) =>
+      Future.value('');
+}
+
+final class _FakeTextFileWriter implements TextFileWriter {
+  @override
+  Future<void> writeText({required String path, required String content}) =>
+      Future.value();
 }
 
 Future<void> _createSession(

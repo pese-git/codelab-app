@@ -2,6 +2,7 @@ import '../json_rpc/json_rpc_message.dart';
 import '../json_rpc/json_rpc_id.dart';
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
+import 'fs.dart';
 import 'initialize.dart';
 import 'permission.dart';
 import 'prompt.dart';
@@ -17,6 +18,8 @@ const sessionCancelMethod = 'session/cancel';
 const sessionSetConfigOptionMethod = 'session/set_config_option';
 const sessionRequestPermissionMethod = 'session/request_permission';
 const sessionUpdateMethod = 'session/update';
+const fsReadTextFileMethod = 'fs/read_text_file';
+const fsWriteTextFileMethod = 'fs/write_text_file';
 
 typedef AcpDecoder<T> = T Function(Object? value);
 typedef AcpEncoder<T> = JsonObject Function(T value);
@@ -185,6 +188,24 @@ const acpSessionUpdate =
       encodeParams: _encodeSessionNotification,
     );
 
+const acpFsReadTextFile =
+    AcpMethodDefinition<ReadTextFileRequest, ReadTextFileResponse>.request(
+      method: fsReadTextFileMethod,
+      decodeParams: ReadTextFileRequest.fromJson,
+      encodeParams: _encodeReadTextFileRequest,
+      decodeResult: ReadTextFileResponse.fromJson,
+      encodeResult: _encodeReadTextFileResponse,
+    );
+
+const acpFsWriteTextFile =
+    AcpMethodDefinition<WriteTextFileRequest, WriteTextFileResponse>.request(
+      method: fsWriteTextFileMethod,
+      decodeParams: WriteTextFileRequest.fromJson,
+      encodeParams: _encodeWriteTextFileRequest,
+      decodeResult: WriteTextFileResponse.fromJson,
+      encodeResult: _encodeWriteTextFileResponse,
+    );
+
 const acpMethodRegistry = <String, AcpMethodDefinition<Object, Object>>{
   initializeMethod: acpInitialize,
   sessionNewMethod: acpSessionNew,
@@ -195,6 +216,8 @@ const acpMethodRegistry = <String, AcpMethodDefinition<Object, Object>>{
   sessionSetConfigOptionMethod: acpSessionSetConfigOption,
   sessionRequestPermissionMethod: acpSessionRequestPermission,
   sessionUpdateMethod: acpSessionUpdate,
+  fsReadTextFileMethod: acpFsReadTextFile,
+  fsWriteTextFileMethod: acpFsWriteTextFile,
 };
 
 AcpMethodDefinition<Object, Object> requireAcpMethod(String method) {
@@ -336,4 +359,12 @@ JsonObject _encodeRequestPermissionRequest(RequestPermissionRequest value) =>
 JsonObject _encodeRequestPermissionResponse(RequestPermissionResponse value) =>
     value.toJson();
 JsonObject _encodeSessionNotification(SessionNotification value) =>
+    value.toJson();
+JsonObject _encodeReadTextFileRequest(ReadTextFileRequest value) =>
+    value.toJson();
+JsonObject _encodeReadTextFileResponse(ReadTextFileResponse value) =>
+    value.toJson();
+JsonObject _encodeWriteTextFileRequest(WriteTextFileRequest value) =>
+    value.toJson();
+JsonObject _encodeWriteTextFileResponse(WriteTextFileResponse value) =>
     value.toJson();

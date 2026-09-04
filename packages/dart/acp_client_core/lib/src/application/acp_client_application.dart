@@ -5,6 +5,7 @@ import 'package:acp_transports/acp_transports.dart';
 
 import '../domain/approval_policy.dart';
 import '../domain/domain_models.dart';
+import '../domain/fs_access.dart';
 import '../domain/secret_redaction.dart';
 import '../domain/state_machines.dart';
 import 'application_models.dart';
@@ -48,9 +49,13 @@ final class AcpClientApplication {
     required AcpTransport transport,
     AcpTransportFactory? reconnectTransport,
     Implementation? clientInfo,
+    TextFileReader? textFileReader,
+    TextFileWriter? textFileWriter,
   }) : _transport = transport,
        _reconnectTransport = reconnectTransport,
-       _clientInfo = clientInfo {
+       _clientInfo = clientInfo,
+       _textFileReader = textFileReader,
+       _textFileWriter = textFileWriter {
     _bindTransport();
   }
 
@@ -61,6 +66,13 @@ final class AcpClientApplication {
   AcpTransport _transport;
   final AcpTransportFactory? _reconnectTransport;
   final Implementation? _clientInfo;
+
+  /// `null` when the composition root did not wire an fs adapter — in that
+  /// case `initialize` honestly announces `clientCapabilities.fs.*` as
+  /// `false` (see `_establishConnection`) and any inbound `fs/*` request is
+  /// answered with a protocol error rather than acted on.
+  final TextFileReader? _textFileReader;
+  final TextFileWriter? _textFileWriter;
   final _pendingRequests = <JsonRpcId, _PendingAcpRequest>{};
   final _pendingPermissionRequests =
       <ApprovalRequestId, _PendingPermissionRequest>{};
@@ -347,6 +359,12 @@ final class AcpClientApplication {
         params: InitializeRequest(
           protocolVersion: supportedProtocolVersion,
           clientInfo: _clientInfo,
+          clientCapabilities: ClientCapabilities(
+            fs: FileSystemCapabilities(
+              readTextFile: _textFileReader != null,
+              writeTextFile: _textFileWriter != null,
+            ),
+          ),
         ),
       );
     } on Object catch (error) {
@@ -571,6 +589,10 @@ final class AcpClientApplication {
         _completePendingRequest(message);
       case JsonRpcRequest(method: sessionRequestPermissionMethod):
         _handlePermissionRequest(message);
+      case JsonRpcRequest(method: fsReadTextFileMethod):
+        unawaited(_handleReadTextFileRequest(message));
+      case JsonRpcRequest(method: fsWriteTextFileMethod):
+        unawaited(_handleWriteTextFileRequest(message));
       case JsonRpcNotification(method: sessionUpdateMethod):
         _handleSessionUpdate(message);
       case JsonRpcNotification():
@@ -680,6 +702,200 @@ final class AcpClientApplication {
           'requestId': request.id.toJsonValue(),
           'params': request.params,
         },
+      );
+    }
+  }
+
+  /// Handles an incoming `fs/read_text_file` request — no approval step (see
+  /// `openspec/changes/add-acp-fs-client-support/design.md`, Decision 1):
+  /// working-directory containment is the only gate.
+  Future<void> _handleReadTextFileRequest(JsonRpcRequest request) async {
+    final reader = _textFileReader;
+    if (reader == null) {
+      await _sendFsError(
+        request.id,
+        method: fsReadTextFileMethod,
+        error: const AcpProtocolError.internalError(
+          'fs/read_text_file is not supported by this client.',
+        ),
+      );
+      return;
+    }
+
+    try {
+      final readRequest =
+          decodeAcpRequestParams(request) as ReadTextFileRequest;
+      final session = _sessions[readRequest.sessionId];
+      if (session == null) {
+        await _sendFsError(
+          request.id,
+          method: fsReadTextFileMethod,
+          error: AcpProtocolError.invalidAcpParams(
+            method: fsReadTextFileMethod,
+            message: 'Unknown session "${readRequest.sessionId.value}".',
+          ),
+        );
+        return;
+      }
+
+      final resolvedPath = resolveWithinWorkingDirectory(
+        path: readRequest.path,
+        workingDirectory: session.cwd,
+      );
+      final content = await reader.readText(
+        path: resolvedPath,
+        line: readRequest.line,
+        limit: readRequest.limit,
+      );
+      await _transport.send(
+        encodeAcpResponse(
+          id: request.id,
+          method: fsReadTextFileMethod,
+          result: ReadTextFileResponse(content: content),
+        ),
+      );
+    } on PathOutsideWorkingDirectoryFailure catch (error) {
+      _recordDiagnostic(
+        message: 'Rejected fs/read_text_file outside working directory.',
+        severity: DiagnosticSeverity.warning,
+        source: 'application.fs',
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendFsError(
+        request.id,
+        method: fsReadTextFileMethod,
+        error: AcpProtocolError.invalidAcpParams(
+          method: fsReadTextFileMethod,
+          message: error.toString(),
+        ),
+      );
+    } on FsIoFailure catch (error) {
+      await _sendFsError(
+        request.id,
+        method: fsReadTextFileMethod,
+        error: AcpProtocolError.internalError(error.message),
+      );
+    } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to handle ACP fs/read_text_file request.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.fs',
+        cause: error,
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendFsError(
+        request.id,
+        method: fsReadTextFileMethod,
+        error: AcpProtocolError.internalError('Failed to read file: $error'),
+      );
+    }
+  }
+
+  /// Handles an incoming `fs/write_text_file` request — see
+  /// [_handleReadTextFileRequest] for why there is no approval step.
+  Future<void> _handleWriteTextFileRequest(JsonRpcRequest request) async {
+    final writer = _textFileWriter;
+    if (writer == null) {
+      await _sendFsError(
+        request.id,
+        method: fsWriteTextFileMethod,
+        error: const AcpProtocolError.internalError(
+          'fs/write_text_file is not supported by this client.',
+        ),
+      );
+      return;
+    }
+
+    try {
+      final writeRequest =
+          decodeAcpRequestParams(request) as WriteTextFileRequest;
+      final session = _sessions[writeRequest.sessionId];
+      if (session == null) {
+        await _sendFsError(
+          request.id,
+          method: fsWriteTextFileMethod,
+          error: AcpProtocolError.invalidAcpParams(
+            method: fsWriteTextFileMethod,
+            message: 'Unknown session "${writeRequest.sessionId.value}".',
+          ),
+        );
+        return;
+      }
+
+      final resolvedPath = resolveWithinWorkingDirectory(
+        path: writeRequest.path,
+        workingDirectory: session.cwd,
+      );
+      await writer.writeText(path: resolvedPath, content: writeRequest.content);
+      _recordDiagnostic(
+        message: 'Wrote file via fs/write_text_file.',
+        severity: DiagnosticSeverity.info,
+        source: 'application.fs',
+        context: {
+          'sessionId': writeRequest.sessionId.value,
+          'requestId': request.id.toJsonValue(),
+        },
+      );
+      await _transport.send(
+        encodeAcpResponse(
+          id: request.id,
+          method: fsWriteTextFileMethod,
+          result: const WriteTextFileResponse(),
+        ),
+      );
+    } on PathOutsideWorkingDirectoryFailure catch (error) {
+      _recordDiagnostic(
+        message: 'Rejected fs/write_text_file outside working directory.',
+        severity: DiagnosticSeverity.warning,
+        source: 'application.fs',
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendFsError(
+        request.id,
+        method: fsWriteTextFileMethod,
+        error: AcpProtocolError.invalidAcpParams(
+          method: fsWriteTextFileMethod,
+          message: error.toString(),
+        ),
+      );
+    } on FsIoFailure catch (error) {
+      await _sendFsError(
+        request.id,
+        method: fsWriteTextFileMethod,
+        error: AcpProtocolError.internalError(error.message),
+      );
+    } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to handle ACP fs/write_text_file request.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.fs',
+        cause: error,
+        context: {'requestId': request.id.toJsonValue()},
+      );
+      await _sendFsError(
+        request.id,
+        method: fsWriteTextFileMethod,
+        error: AcpProtocolError.internalError('Failed to write file: $error'),
+      );
+    }
+  }
+
+  Future<void> _sendFsError(
+    JsonRpcId id, {
+    required String method,
+    required AcpProtocolError error,
+  }) async {
+    try {
+      await _transport.send(
+        JsonRpcMessage.response(id: id, error: error.toJsonRpcError()),
+      );
+    } on Object catch (sendError) {
+      _recordDiagnostic(
+        message: 'Failed to send ACP error response for $method.',
+        severity: DiagnosticSeverity.error,
+        source: 'application.fs',
+        cause: sendError,
+        context: {'method': method, 'requestId': id.toJsonValue()},
       );
     }
   }

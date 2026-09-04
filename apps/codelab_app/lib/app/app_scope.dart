@@ -8,6 +8,7 @@ import 'package:cherrypick/cherrypick.dart';
 import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
+import '../core/platform/text_file_io.dart';
 import '../core/platform/working_directory_provider.dart';
 import '../features/workbench/application/shell_cubit.dart';
 
@@ -73,6 +74,9 @@ final class CodeLabPlatformModule extends Module {
     bind<WorkingDirectoryProvider>().toInstance(
       const IoWorkingDirectoryProvider(),
     );
+    const textFileIo = IoTextFileIo();
+    bind<TextFileReader>().toInstance(textFileIo);
+    bind<TextFileWriter>().toInstance(textFileIo);
   }
 }
 
@@ -156,9 +160,13 @@ abstract class CodeLabProtocolApplicationModuleContract extends Module {
   AcpClientApplication application(
     AcpTransport transport,
     CodeLabTransportFactory transportFactory,
+    TextFileReader textFileReader,
+    TextFileWriter textFileWriter,
   ) => AcpClientApplication(
     transport: transport,
     reconnectTransport: transportFactory,
+    textFileReader: textFileReader,
+    textFileWriter: textFileWriter,
   );
 }
 

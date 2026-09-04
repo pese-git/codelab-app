@@ -14,7 +14,42 @@ void main() {
         sessionSetConfigOptionMethod,
         sessionRequestPermissionMethod,
         sessionUpdateMethod,
+        fsReadTextFileMethod,
+        fsWriteTextFileMethod,
       });
+    });
+
+    test('decodes and encodes fs method params/results by method name', () {
+      expect(
+        decodeAcpParams(fsReadTextFileMethod, {
+          'sessionId': 'session-1',
+          'path': '/workspace/main.py',
+        }),
+        const ReadTextFileRequest(
+          sessionId: SessionId('session-1'),
+          path: '/workspace/main.py',
+        ),
+      );
+      expect(
+        decodeAcpResult(fsReadTextFileMethod, {'content': 'print(1)'}),
+        const ReadTextFileResponse(content: 'print(1)'),
+      );
+      expect(
+        decodeAcpParams(fsWriteTextFileMethod, {
+          'sessionId': 'session-1',
+          'path': '/workspace/config.json',
+          'content': '{}',
+        }),
+        const WriteTextFileRequest(
+          sessionId: SessionId('session-1'),
+          path: '/workspace/config.json',
+          content: '{}',
+        ),
+      );
+      expect(
+        decodeAcpResult(fsWriteTextFileMethod, null),
+        const WriteTextFileResponse(),
+      );
     });
 
     test('decodes request params by method name', () {

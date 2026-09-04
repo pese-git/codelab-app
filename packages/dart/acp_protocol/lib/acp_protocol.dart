@@ -2,6 +2,7 @@
 library;
 
 export 'src/acp/acp_method_codec.dart';
+export 'src/acp/fs.dart';
 export 'src/acp/initialize.dart';
 export 'src/acp/permission.dart';
 export 'src/acp/prompt.dart';
