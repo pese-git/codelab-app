@@ -35,6 +35,11 @@ class AcpPromptComposer extends StatefulWidget {
   final VoidCallback? onCancel;
   final String initialPrompt;
   final String placeholder;
+
+  /// Shows the Send button's loading spinner. Purely visual — it does not
+  /// disable typing or submitting: [onSubmit] must stay reachable while a
+  /// turn is running, so the caller can queue instead of sending (see
+  /// add-prompt-queue/design.md, Goals).
   final bool isSubmitting;
   final bool canCancel;
   final bool enabled;
@@ -78,10 +83,13 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
   int? _triggerStart;
   int _selectedIndex = 0;
 
-  bool get _canSubmit =>
-      widget.enabled &&
-      !widget.isSubmitting &&
-      _controller.text.trim().isNotEmpty;
+  // Deliberately not gated on `!widget.isSubmitting`: submitting while a
+  // turn is already running (or an approval is pending) is exactly the
+  // case `onSubmit` must still accept — the caller queues it instead of
+  // sending, per add-prompt-queue/design.md, Goals ("композер... не
+  // блокируется целиком"). `isSubmitting` only drives the loading spinner
+  // below, never whether input/submission is possible.
+  bool get _canSubmit => widget.enabled && _controller.text.trim().isNotEmpty;
 
   bool get _inlineTriggerEnabled =>
       widget.commandActions.isNotEmpty && widget.onCommandSelected != null;
@@ -128,7 +136,7 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
             key: const ValueKey('composer-text-box'),
             controller: _controller,
             focusNode: _textFocusNode,
-            enabled: widget.enabled && !widget.isSubmitting,
+            enabled: widget.enabled,
             minLines: 1,
             maxLines: 4,
             placeholder: widget.placeholder,
@@ -471,7 +479,7 @@ class _AcpPromptComposerState extends State<AcpPromptComposer> {
 
   void _submit() {
     final prompt = _controller.text.trim();
-    if (prompt.isEmpty || widget.isSubmitting || !widget.enabled) {
+    if (prompt.isEmpty || !widget.enabled) {
       return;
     }
 

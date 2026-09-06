@@ -19,6 +19,14 @@ class AcpButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final AcpButtonEmphasis emphasis;
   final IconData? icon;
+
+  /// Shows the spinner in place of [icon]. Purely visual — it does not
+  /// disable the button; pass `onPressed: null` explicitly for that. A
+  /// caller that needs a spinner while still accepting presses (e.g. the
+  /// prompt composer's Send button, which must stay pressable — to queue,
+  /// not send — while a turn is running; see add-prompt-queue/design.md,
+  /// Goals) can now do so, which an implicit "loading implies disabled"
+  /// coupling here would have ruled out.
   final bool isLoading;
 
   @override
@@ -28,14 +36,13 @@ class AcpButton extends StatelessWidget {
       icon: icon,
       isLoading: isLoading,
     );
-    final callback = isLoading ? null : onPressed;
 
     return switch (emphasis) {
       AcpButtonEmphasis.primary => FilledButton(
-        onPressed: callback,
+        onPressed: onPressed,
         child: child,
       ),
-      AcpButtonEmphasis.secondary => Button(onPressed: callback, child: child),
+      AcpButtonEmphasis.secondary => Button(onPressed: onPressed, child: child),
     };
   }
 }

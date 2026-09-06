@@ -101,7 +101,7 @@ class AcpConnectionScreen extends StatelessWidget {
                         icon: FluentIcons.plug_connected,
                         emphasis: AcpButtonEmphasis.primary,
                         isLoading: isBusy,
-                        onPressed: onConnect,
+                        onPressed: isBusy ? null : onConnect,
                       ),
                   ],
                 ),

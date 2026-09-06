@@ -87,9 +87,7 @@ void main() {
     expect(submittedPrompt, 'keyboard submit');
   });
 
-  testWidgets('disables submit while prompt is empty or submitting', (
-    tester,
-  ) async {
+  testWidgets('disables submit while the prompt is empty', (tester) async {
     var submitted = false;
 
     await tester.pumpWidget(
@@ -100,18 +98,32 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(submitted, isFalse);
+  });
+
+  testWidgets('isSubmitting only shows the loading spinner — it never disables '
+      'typing or submitting, since the caller must still be able to queue a '
+      'message while a turn is already running (add-prompt-queue/design.md, '
+      'Goals)', (tester) async {
+    String? submittedPrompt;
 
     await tester.pumpWidget(
       FluentApp(
         home: AcpPromptComposer(
           initialPrompt: 'run',
           isSubmitting: true,
-          onSubmit: (_) => submitted = true,
+          onSubmit: (prompt) => submittedPrompt = prompt,
         ),
       ),
     );
 
     expect(find.byType(ProgressRing), findsOneWidget);
+    expect(tester.widget<TextBox>(find.byType(TextBox)).enabled, isTrue);
+
+    await tester.enterText(find.byType(EditableText), 'queue me too');
+    await tester.tap(find.text('Send'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(submittedPrompt, 'queue me too');
   });
 
   testWidgets('invokes cancel callback when cancel is available', (

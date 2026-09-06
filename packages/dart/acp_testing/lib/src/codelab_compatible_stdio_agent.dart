@@ -13,7 +13,8 @@ enum CodelabCompatibleStdioAgentMode {
   withTerminalExecution('with_terminal_execution'),
   withTerminalPathEscape('with_terminal_path_escape'),
   withTerminalKill('with_terminal_kill'),
-  withPlan('with_plan');
+  withPlan('with_plan'),
+  withQueuedPromptDrain('with_queued_prompt_drain');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -54,6 +55,7 @@ const _terminalOutputRequestId = 'terminal-output-1';
 const _terminalKillRequestId = 'terminal-kill-1';
 var _currentModel = 'gpt-5';
 var _planPromptCount = 0;
+var _queuedPromptDrainRequestCount = 0;
 Object? _pendingPromptId;
 String? _sessionCwd;
 String? _fsReadContent;
@@ -288,6 +290,42 @@ Future<void> main(List<String> args) async {
               {'optionId': 'reject_always', 'name': 'Reject always', 'kind': 'reject_always'},
             ],
           });
+          break;
+        }
+        if (_mode == 'with_queued_prompt_drain') {
+          // The first prompt only — defers its response behind a permission
+          // request, so the client's session stays busy long enough for an
+          // e2e test to submit a second prompt through the real composer
+          // and see it queue. Any later prompt (the queue's own auto-drained
+          // entry, or a manual Send Now) needs no approval and completes
+          // immediately with distinguishable text, so the test can confirm
+          // it was actually delivered — not merely removed from the queue.
+          _queuedPromptDrainRequestCount += 1;
+          if (_queuedPromptDrainRequestCount == 1) {
+            _pendingPromptId = id;
+            _writeRequest(_permissionRequestId, 'session/request_permission', {
+              'sessionId': _sessionId,
+              'toolCall': {
+                'toolCallId': 'test-tool-call-1',
+                'title': 'Run test command',
+                'kind': 'execute',
+                'status': 'pending',
+                'rawInput': {'command': 'echo hello', 'shell': '/bin/bash'},
+              },
+              'options': [
+                {'optionId': 'allow_once', 'name': 'Allow once', 'kind': 'allow_once'},
+              ],
+            });
+            break;
+          }
+          _writeNotification('session/update', {
+            'sessionId': _sessionId,
+            'update': {
+              'sessionUpdate': 'agent_message_chunk',
+              'content': {'type': 'text', 'text': 'queued message delivered'},
+            },
+          });
+          _writeResponse(id, {'stopReason': 'end_turn'});
           break;
         }
         _writeNotification('session/update', {

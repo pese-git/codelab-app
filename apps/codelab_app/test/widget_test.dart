@@ -3414,6 +3414,563 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   });
+
+  group('prompt queue', () {
+    // Same `runAsync` escape as the "plan progress checklist" group above —
+    // `FakeAcpTransport`'s real `Stream`s never resolve inside
+    // `AutomatedTestWidgetsFlutterBinding`'s fake async zone.
+    Future<T> settle<T>(WidgetTester? tester, Future<T> Function() body) {
+      if (tester == null) {
+        return body();
+      }
+      return tester.runAsync(body).then((value) => value as T);
+    }
+
+    Future<
+      ({
+        CodeLabShellCubit shellCubit,
+        FakeAcpTransport agentTransport,
+        AcpClientApplication application,
+      })
+    >
+    createSessionCubit({WidgetTester? tester}) async {
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final application = AcpClientApplication(transport: initialTransport);
+      final shellCubit = CodeLabShellCubit(
+        profile: codelabAgentStdioProfile,
+        application: application,
+        createSessionUseCase: CreateSession(application),
+        sendPromptUseCase: SendPrompt(application),
+        cancelTurnUseCase: CancelTurn(application),
+        reconnectUseCase: Reconnect(application),
+        respondToPermissionUseCase: RespondToPermission(application),
+        setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+        stdioTransportFactory: (_) => agentTransport,
+        webSocketTransportFactory: (_) => FakeAcpTransport(),
+        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+        projectFolderPicker: _FakeProjectFolderPicker(),
+        recentProjectsStore: _FakeRecentProjectsStore(),
+      );
+
+      await settle(tester, shellCubit.connect);
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest =
+          await settle(tester, () => createRequestFuture) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: const {'sessionId': 'session-1'},
+        ),
+      );
+      await settle(tester, () => createFuture);
+
+      return (
+        shellCubit: shellCubit,
+        agentTransport: agentTransport,
+        application: application,
+      );
+    }
+
+    // Starts a turn and leaves it mid-flight with an unresolved permission
+    // request, so `_isSessionBusy()` reports true via the pending-approval
+    // path (not `isPromptSubmitting`) — mirrors the `session/request_permission`
+    // simulation in "respondToApproval maps a pending approval..." above.
+    Future<({dynamic promptRequest, Future<void> submitFuture})>
+    startTurnWithPendingApproval(
+      CodeLabShellCubit shellCubit,
+      FakeAcpTransport agentTransport, {
+      WidgetTester? tester,
+      String prompt = 'run a command',
+    }) async {
+      final promptRequestFuture = agentTransport.sent.first;
+      final submitFuture = shellCubit.submitPrompt(prompt);
+      final promptRequest =
+          await settle(tester, () => promptRequestFuture) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.request(
+          id: const JsonRpcId.integer(7),
+          method: sessionRequestPermissionMethod,
+          params: RequestPermissionRequest(
+            sessionId: const SessionId('session-1'),
+            toolCall: ToolCallUpdate(
+              toolCallId: const ToolCallId('tool-1'),
+              title: 'Run command',
+              kind: ToolKind.execute,
+              status: ToolCallStatus.inProgress,
+              rawInput: const {'command': 'echo hi'},
+            ),
+            options: const [
+              PermissionOption(
+                optionId: PermissionOptionId('allow-once'),
+                name: 'Allow once',
+                kind: PermissionOptionKind.allowOnce,
+              ),
+            ],
+          ).toJson(),
+        ),
+      );
+      return (promptRequest: promptRequest, submitFuture: submitFuture);
+    }
+
+    Future<void> resolvePendingApproval(
+      CodeLabShellCubit shellCubit,
+      FakeAcpTransport agentTransport,
+      dynamic promptRequest,
+      Future<void> submitFuture, {
+      WidgetTester? tester,
+    }) async {
+      final permissionResponseFuture = agentTransport.sent.first;
+      final respondFuture = shellCubit.respondToApproval(
+        approvalId: const ApprovalRequestId('permission-7'),
+        sessionId: const SessionId('session-1'),
+        optionId: 'allow-once',
+      );
+      await settle(tester, () => permissionResponseFuture);
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await settle(tester, () => respondFuture);
+      await settle(tester, () => submitFuture);
+    }
+
+    test('submit while an approval is pending queues the prompt instead of '
+        'sending it, without a "Prompt failed" diagnostic', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final turn = await startTurnWithPendingApproval(
+        harness.shellCubit,
+        harness.agentTransport,
+      );
+
+      await harness.shellCubit.submitPrompt('second prompt while busy');
+
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(1));
+      expect(
+        harness.shellCubit.state.queuedPrompts.single.content,
+        'second prompt while busy',
+      );
+      expect(
+        harness.shellCubit.state.diagnostics.any(
+          (entry) => entry.message.contains('Prompt failed'),
+        ),
+        isFalse,
+      );
+
+      // Cleanup only — resolving the approval below would otherwise
+      // auto-drain this queued entry into a second `session/prompt` this
+      // test never mocks a response for.
+      harness.shellCubit.clearQueuedPrompts();
+
+      await resolvePendingApproval(
+        harness.shellCubit,
+        harness.agentTransport,
+        turn.promptRequest,
+        turn.submitFuture,
+      );
+    });
+
+    test('submit while a prompt round trip is already in flight (no approval '
+        'involved) queues the prompt', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final promptRequestFuture = harness.agentTransport.sent.first;
+      final firstSubmit = harness.shellCubit.submitPrompt('first prompt');
+      final promptRequest = await promptRequestFuture as dynamic;
+      expect(harness.shellCubit.state.isPromptSubmitting, isTrue);
+
+      await harness.shellCubit.submitPrompt('queued while in flight');
+
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(1));
+      expect(
+        harness.shellCubit.state.queuedPrompts.single.content,
+        'queued while in flight',
+      );
+
+      // Cleanup only — completing the turn below would otherwise auto-drain
+      // this queued entry into a second `session/prompt` this test never
+      // mocks a response for.
+      harness.shellCubit.clearQueuedPrompts();
+
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await firstSubmit;
+    });
+
+    test('submit while the session is free sends immediately, unchanged from '
+        'before the queue existed', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final promptRequestFuture = harness.agentTransport.sent.first;
+      final submitFuture = harness.shellCubit.submitPrompt(
+        'send me right away',
+      );
+      final promptRequest = await promptRequestFuture as dynamic;
+
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+      expect(harness.shellCubit.state.isPromptSubmitting, isTrue);
+
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await submitFuture;
+
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+    });
+
+    test('editQueuedPrompt moves the entry back into the composer draft and '
+        'removes it from the queue', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final turn = await startTurnWithPendingApproval(
+        harness.shellCubit,
+        harness.agentTransport,
+      );
+      await harness.shellCubit.submitPrompt('edit me later');
+      final id = harness.shellCubit.state.queuedPrompts.single.id;
+
+      harness.shellCubit.editQueuedPrompt(id);
+
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+      expect(harness.shellCubit.state.composerDraft, 'edit me later');
+
+      await resolvePendingApproval(
+        harness.shellCubit,
+        harness.agentTransport,
+        turn.promptRequest,
+        turn.submitFuture,
+      );
+    });
+
+    test(
+      'deleteQueuedPrompt removes the entry without ever sending it',
+      () async {
+        final harness = await createSessionCubit();
+        addTearDown(harness.shellCubit.close);
+        addTearDown(harness.application.dispose);
+
+        final turn = await startTurnWithPendingApproval(
+          harness.shellCubit,
+          harness.agentTransport,
+        );
+        await harness.shellCubit.submitPrompt('delete me');
+        final id = harness.shellCubit.state.queuedPrompts.single.id;
+
+        harness.shellCubit.deleteQueuedPrompt(id);
+
+        expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+
+        await resolvePendingApproval(
+          harness.shellCubit,
+          harness.agentTransport,
+          turn.promptRequest,
+          turn.submitFuture,
+        );
+
+        // The deleted entry never reached the agent as a second prompt —
+        // only the original "run a command" ever went out as `session/
+        // prompt` (the sent log also carries `initialize`/`session/new`).
+        final promptSends = harness.agentTransport.sentMessages
+            .whereType<JsonRpcRequest>()
+            .where((message) => message.method == sessionPromptMethod);
+        expect(promptSends, hasLength(1));
+      },
+    );
+
+    test('sendQueuedPromptNow on an id no longer in the queue is a safe '
+        'no-op — the actual free-session dispatch it shares with auto-drain '
+        'is exercised end-to-end by the "resolving the pending approval '
+        'automatically drains..." test below', () async {
+      // Every path that frees the session (`_dispatchPrompt`'s own
+      // completion, `cancelTurn`, `respondToApproval`) drains the whole
+      // queue in the very same continuation before returning control —
+      // see design.md, Decisions. So "free session + still-queued id" is
+      // never externally observable to call `sendQueuedPromptNow`
+      // against: by the time anything can see the session as free, the
+      // queue has already been drained. What *is* independently worth
+      // covering here is the id-not-found guard on an otherwise idle,
+      // fully free session (e.g. a stale "Send Now" tap firing after the
+      // entry already left the queue).
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      await harness.shellCubit.sendQueuedPromptNow('not-a-real-id');
+
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+      expect(
+        harness.agentTransport.sentMessages.whereType<JsonRpcRequest>().where(
+          (message) => message.method == sessionPromptMethod,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('sendQueuedPromptNow during a race where the session is still busy '
+        'leaves the entry in the queue without an error, and it is still '
+        'delivered once the session frees up', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final turn = await startTurnWithPendingApproval(
+        harness.shellCubit,
+        harness.agentTransport,
+      );
+      await harness.shellCubit.submitPrompt('stuck behind the approval');
+      final id = harness.shellCubit.state.queuedPrompts.single.id;
+
+      // The session is still busy (pending approval unresolved) at this
+      // point — Send Now must be a no-op, not an error.
+      await harness.shellCubit.sendQueuedPromptNow(id);
+
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(1));
+      expect(harness.shellCubit.state.queuedPrompts.single.id, id);
+      expect(
+        harness.shellCubit.state.diagnostics.any(
+          (entry) => entry.message.contains('Prompt failed'),
+        ),
+        isFalse,
+      );
+
+      // Once the session frees up, the entry Send Now couldn't claim is
+      // still delivered via auto-drain — not lost. Answering the
+      // permission alone doesn't free the session (the turn itself is
+      // still in flight), so drain only fires once the turn's own
+      // response arrives below — same sequencing as the "resolving the
+      // pending approval automatically drains..." test.
+      final permissionResponseFuture = harness.agentTransport.sent.first;
+      final respondFuture = harness.shellCubit.respondToApproval(
+        approvalId: const ApprovalRequestId('permission-7'),
+        sessionId: const SessionId('session-1'),
+        optionId: 'allow-once',
+      );
+      await permissionResponseFuture;
+      await respondFuture;
+
+      final drainedRequestFuture = harness.agentTransport.sent.first;
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: turn.promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      final drainedRequest = await drainedRequestFuture as dynamic;
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: drainedRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await turn.submitFuture;
+    });
+
+    test('clearQueuedPrompts empties the whole queue at once', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final turn = await startTurnWithPendingApproval(
+        harness.shellCubit,
+        harness.agentTransport,
+      );
+      await harness.shellCubit.submitPrompt('first queued');
+      await harness.shellCubit.submitPrompt('second queued');
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(2));
+
+      harness.shellCubit.clearQueuedPrompts();
+
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+
+      await resolvePendingApproval(
+        harness.shellCubit,
+        harness.agentTransport,
+        turn.promptRequest,
+        turn.submitFuture,
+      );
+    });
+
+    test('resolving the pending approval automatically drains and sends the '
+        'oldest queued prompt', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final turn = await startTurnWithPendingApproval(
+        harness.shellCubit,
+        harness.agentTransport,
+      );
+      await harness.shellCubit.submitPrompt('oldest queued');
+      await harness.shellCubit.submitPrompt('newest queued');
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(2));
+
+      // Answering the permission request only resolves the *approval* —
+      // the turn itself (and thus `_isSessionBusy()`) stays busy until the
+      // original `session/prompt` request below also gets its response, so
+      // draining does not start yet.
+      final permissionResponseFuture = harness.agentTransport.sent.first;
+      final respondFuture = harness.shellCubit.respondToApproval(
+        approvalId: const ApprovalRequestId('permission-7'),
+        sessionId: const SessionId('session-1'),
+        optionId: 'allow-once',
+      );
+      await permissionResponseFuture;
+      await respondFuture;
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(2));
+
+      // Completing the original turn frees the session, so auto-drain
+      // fires as part of it and sends the oldest queued entry next.
+      final drainedRequestFuture = harness.agentTransport.sent.first;
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: turn.promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      final drainedRequest = await drainedRequestFuture as dynamic;
+
+      // Only the oldest entry auto-drained; the second stays queued until
+      // this turn also frees up.
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(1));
+      expect(
+        harness.shellCubit.state.queuedPrompts.single.content,
+        'newest queued',
+      );
+      expect(harness.shellCubit.state.isPromptSubmitting, isTrue);
+
+      // Draining recurses, so completing this turn sends the second entry
+      // automatically too — settle it the same way to avoid a pending
+      // completer.
+      final secondRequestFuture = harness.agentTransport.sent.first;
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: drainedRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      final secondRequest = await secondRequestFuture as dynamic;
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: secondRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await turn.submitFuture;
+    });
+
+    test("switching sessions shows each session's own queue, never mixed "
+        "with another session's — queuedPrompts is per-session, not flat "
+        '(design.md, Non-Goals/Risks)', () async {
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      await startTurnWithPendingApproval(
+        harness.shellCubit,
+        harness.agentTransport,
+      );
+      await harness.shellCubit.submitPrompt('queued on session-1');
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(1));
+
+      final createRequestFuture = harness.agentTransport.sent.first;
+      final createFuture = harness.shellCubit.createSession();
+      final createRequest = await createRequestFuture as dynamic;
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: const {'sessionId': 'session-2'},
+        ),
+      );
+      await createFuture;
+      expect(harness.shellCubit.state.activeSessionId, 'session-2');
+
+      // A brand-new session must not inherit session-1's queue.
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+
+      harness.shellCubit.selectSession('session-1');
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(1));
+      expect(
+        harness.shellCubit.state.queuedPrompts.single.content,
+        'queued on session-1',
+      );
+
+      harness.shellCubit.selectSession('session-2');
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+    });
+
+    testWidgets(
+      'the activity bar shows both the plan and the queue sections at once '
+      'when both are non-empty',
+      (tester) async {
+        final harness = await createSessionCubit(tester: tester);
+        addTearDown(harness.shellCubit.close);
+        addTearDown(harness.application.dispose);
+
+        final state = harness.shellCubit.state.copyWith(
+          transcriptEntries: const [
+            AcpTranscriptEntry(
+              id: 'user-1',
+              kind: AcpTranscriptEntryKind.user,
+              title: 'You',
+              body: 'Fix the token refresh race condition.',
+            ),
+          ],
+          currentPlan: const [
+            AcpPlanEntry(
+              content: 'Run melos analyze to confirm no new lint issues',
+              status: AcpPlanEntryStatus.inProgress,
+              priority: AcpPlanEntryPriority.medium,
+            ),
+          ],
+          queuedPrompts: const [
+            AcpQueuedPrompt(id: 'queued-0', content: 'do the next thing'),
+          ],
+        );
+
+        await tester.pumpWidget(
+          FluentApp(
+            home: WorkbenchMainPane(state: state, cubit: harness.shellCubit),
+          ),
+        );
+
+        expect(find.byType(AcpActivityBar), findsOneWidget);
+        // Plan's collapsed header shows the in-progress entry directly.
+        expect(
+          find.text('Run melos analyze to confirm no new lint issues'),
+          findsOneWidget,
+        );
+        // Queue's collapsed header shows its own title and count — both
+        // sections are present at once, not just one of them.
+        expect(find.text('Queue'), findsOneWidget);
+        expect(find.text('1 queued'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  });
 }
 
 final class _FailingStartTransport implements AcpTransport {

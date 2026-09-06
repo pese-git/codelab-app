@@ -31,6 +31,15 @@ class WorkbenchMainPane extends StatelessWidget {
           entries: plan,
           onDismiss: cubit.dismissPlan,
         ),
+      if (state.queuedPrompts.isNotEmpty)
+        AcpPromptQueuePanel.section(
+          id: 'queue',
+          items: state.queuedPrompts,
+          onEdit: cubit.editQueuedPrompt,
+          onDelete: cubit.deleteQueuedPrompt,
+          onSendNow: cubit.sendQueuedPromptNow,
+          onClearAll: cubit.clearQueuedPrompts,
+        ),
     ];
 
     return Column(

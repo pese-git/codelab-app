@@ -35,26 +35,44 @@ void main() {
     expect(pressed, isTrue);
   });
 
-  testWidgets('renders loading button as disabled progress state', (
-    tester,
-  ) async {
-    var pressed = false;
+  testWidgets(
+    'isLoading shows the progress spinner without disabling the button — '
+    'a caller that wants it disabled while loading (e.g. "Connecting…") '
+    'passes onPressed: null itself, rather than relying on isLoading to '
+    'imply that (see acp_prompt_composer.dart\'s Send button, which relies '
+    'on the opposite: staying pressable while isLoading is true)',
+    (tester) async {
+      var pressed = false;
 
-    await tester.pumpWidget(
-      FluentApp(
-        home: AcpButton(
-          label: 'Connecting',
-          isLoading: true,
-          onPressed: () => pressed = true,
+      await tester.pumpWidget(
+        FluentApp(
+          home: AcpButton(
+            label: 'Connecting',
+            isLoading: true,
+            onPressed: () => pressed = true,
+          ),
         ),
+      );
+
+      expect(find.byType(ProgressRing), findsOneWidget);
+
+      await tester.tap(find.text('Connecting'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(pressed, isTrue);
+    },
+  );
+
+  testWidgets('a caller that passes onPressed: null while isLoading renders a '
+      'genuinely disabled button', (tester) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: AcpButton(label: 'Connecting', isLoading: true, onPressed: null),
       ),
     );
 
-    await tester.tap(find.text('Connecting'));
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(find.byType(ProgressRing), findsOneWidget);
-    expect(pressed, isFalse);
+    final button = tester.widget<Button>(find.byType(Button));
+    expect(button.onPressed, isNull);
   });
 
   testWidgets('renders badge, icon button, text, and progress atomics', (
