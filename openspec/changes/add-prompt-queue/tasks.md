@@ -1,6 +1,6 @@
 ## 1. State и постановка в очередь
 
-- [ ] 1.1 Добавить `CodeLabQueuedPrompt {id, text}` и `queuedPrompts: List<CodeLabQueuedPrompt>` в `CodeLabShellState`
+- [ ] 1.1 Добавить `AcpQueuedPrompt {id, content}` в `packages/flutter/acp_ui` (presentation-тип, без промежуточного app-level DTO — см. `design.md`) и `queuedPrompts: List<AcpQueuedPrompt>` в `CodeLabShellState`
 - [ ] 1.2 В `submitPrompt()` — проверка `isPromptSubmitting || pendingApproval != null` до попытки отправки; при true — добавить в `queuedPrompts`, не вызывать `_sendPromptUseCase`, не трогать `transcriptEntries`
 - [ ] 1.3 Убедиться, что при false (сессия свободна) поведение не меняется — прямая отправка как сегодня
 
@@ -12,10 +12,10 @@
 - [ ] 2.4 Реализовать `clearQueuedPrompts()`
 - [ ] 2.5 Реализовать авто-drain: при переходе `isPromptSubmitting: false` и `pendingApproval: null` одновременно и непустой очереди — отправить самый старый элемент
 
-## 3. AcpPromptQueuePanel (acp_ui)
+## 3. AcpPromptQueuePanel — секция AcpActivityBar (acp_ui)
 
-- [ ] 3.1 Реализовать organism: список элементов, Edit/Delete/Send Now на элемент, Clear All для всей панели
-- [ ] 3.2 Панель не рендерится (или родитель её не монтирует), когда очередь пуста
+- [ ] 3.1 Реализовать `AcpPromptQueuePanel.section(...)` — статическая фабрика `AcpActivityBarSection` (тот же паттерн, что `AcpProgressChecklist.section(...)`): заголовок "Queue" + счётчик, кнопка Clear All в заголовке (аналогично "✕ Clear" у Plan); тело — список элементов с Edit/Delete/Send Now на каждый
+- [ ] 3.2 Секция не включается в список `sections`, передаваемый в `AcpActivityBar`, когда очередь пуста (тот же принцип, что и для Plan — не рендерится вообще, не пустой заглушкой)
 
 ## 4. Композер
 
@@ -23,7 +23,7 @@
 
 ## 5. Интеграция в main pane
 
-- [ ] 5.1 Добавить `AcpPromptQueuePanel` между транскриптом и композером в `WorkbenchMainPane`
+- [ ] 5.1 В `WorkbenchMainPane` добавить секцию Queue в тот же список `sections`, что уже строится для `AcpActivityBar` (Plan) — не новый слот layout, не второй контейнер
 
 ## 6. Тесты
 
@@ -36,6 +36,7 @@
 - [ ] 6.7 Widget-тест: Send Now в момент гонки (сессия ещё занята) возвращает элемент в очередь без ошибки
 - [ ] 6.8 Widget-тест: Clear All очищает всю очередь
 - [ ] 6.9 Widget-тест: снятие блокировки автоматически отправляет самый старый элемент очереди
+- [ ] 6.10 Widget-тест: когда есть и активный план, и непустая очередь — `AcpActivityBar` показывает обе секции одновременно (не только одну из них)
 
 ## 7. Проверка
 

@@ -7,9 +7,9 @@
 ## What Changes
 
 - `CodeLabShellCubit` получает клиентскую очередь сообщений (`queuedPrompts` в `CodeLabShellState`): если на момент `submitPrompt()` сессия не может принять новый turn (`isPromptSubmitting` или `pendingApproval != null`), сообщение **не пытается отправиться** и не добавляется в транскрипт как отправленное — вместо этого попадает в очередь.
-- Появляется панель "Queued messages" между транскриптом и композером, видимая только при непустой очереди: на каждый элемент — текст сообщения, действия **Edit** (возвращает текст в композер, убирает из очереди), **Delete** (удаляет), **Send Now** (немедленная попытка отправки вне очереди — если сессия всё ещё занята, сообщение возвращается в очередь с тем же местом); плюс **Clear All** для всей очереди.
+- Очередь отображается как **секция "Queue" в уже существующем `AcpActivityBar`** (докнутый контейнер под транскриптом, вплотную над композером, введённый в `add-plan-progress-checklist` специально расширяемым под будущие секции) — не отдельная плавающая панель. Секция видна, только пока очередь не пуста: на каждый элемент — текст сообщения, действия **Edit** (возвращает текст в композер, убирает из очереди), **Delete** (удаляет), **Send Now** (немедленная попытка отправки вне очереди — если сессия всё ещё занята, сообщение возвращается в очередь с тем же местом); плюс **Clear All** для всей секции. Когда одновременно есть и план, и очередь, `AcpActivityBar` показывает обе секции рядом, разделённые линией — не два независимых блока.
 - Когда блокирующее состояние снимается (turn завершается или approval разрешается), самое старое сообщение в очереди отправляется автоматически, по порядку (FIFO) — без необходимости вручную нажимать "Send Now".
-- **BREAKING**: нет. `SessionStateMachine`/ACP contracts не меняются — очередь строится поверх уже существующего, корректного guard'а, а не заменяет его.
+- **BREAKING**: нет. `SessionStateMachine`/ACP contracts не меняются — очередь строится поверх уже существующего, корректного guard'а, а не заменяет его. `AcpActivityBar` тоже не меняется — он уже принимает произвольный список секций.
 
 ## Capabilities
 
@@ -24,8 +24,8 @@ _(нет)_
 ## Impact
 
 - `apps/codelab_app/lib/features/workbench/application/shell_cubit.dart` — `submitPrompt()` проверяет, может ли сессия принять turn, прежде чем отправлять; новые методы `editQueuedPrompt`/`deleteQueuedPrompt`/`sendQueuedPromptNow`/`clearQueuedPrompts`; авто-drain очереди при снятии блокировки.
-- `apps/codelab_app/lib/features/workbench/application/shell_cubit.dart` (state) — новое поле `queuedPrompts: List<CodeLabQueuedPrompt>`.
-- `packages/flutter/acp_ui/lib/src/organisms/` — новый `AcpPromptQueuePanel`.
+- `apps/codelab_app/lib/features/workbench/application/shell_cubit.dart` (state) — новое поле `queuedPrompts: List<AcpQueuedPrompt>` (presentation-тип из `acp_ui`, без промежуточного app-level DTO — та же причина, что и для `currentPlan`/`AcpPlanEntry` в `add-plan-progress-checklist`).
+- `packages/flutter/acp_ui/lib/src/organisms/acp_prompt_queue_panel.dart` — новый `AcpPromptQueuePanel`, фабрика `AcpActivityBarSection` (тот же паттерн, что `AcpProgressChecklist.section(...)`), не отдельный самостоятельный виджет-панель.
 - `packages/flutter/acp_ui/lib/src/molecules/acp_prompt_composer.dart` — `initialPrompt` уже поддержан для возврата текста при Edit, изменений не требует (переиспользуется как есть).
-- `apps/codelab_app/lib/features/workbench/presentation/widgets/main_pane.dart` — интеграция панели очереди.
+- `apps/codelab_app/lib/features/workbench/presentation/widgets/main_pane.dart` — секция очереди добавляется в тот же список `sections`, что уже передаётся в `AcpActivityBar` для Plan (не новый слот в layout).
 - `apps/codelab_app/test/widget_test.dart` — тесты на постановку в очередь, edit/delete/send-now/clear-all, авто-drain.
