@@ -839,6 +839,44 @@ void main() {
     expect(newSessionRequested, isTrue);
   });
 
+  testWidgets(
+    'renders a live status badge for a background (non-active) session, '
+    'independent of the active one',
+    (tester) async {
+      await tester.pumpWidget(
+        FluentApp(
+          home: SizedBox(
+            width: 320,
+            height: 420,
+            child: AcpSessionSidebar(
+              activeSessionId: 'session-2',
+              onSessionSelected: acpTestSessionSelected,
+              sessions: const [
+                AcpSessionListItem(
+                  id: 'session-1',
+                  title: 'Background refactor',
+                  status: AcpSessionStatus.running,
+                ),
+                AcpSessionListItem(
+                  id: 'session-2',
+                  title: 'Active session',
+                  status: AcpSessionStatus.idle,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // session-1's "Running" badge reflects its own live turn even though
+      // it is not the active session — see
+      // add-multi-session-concurrency/specs/agent-workbench-ui/spec.md,
+      // "Sessions sidebar shows live status for background sessions".
+      expect(find.text('Running'), findsOneWidget);
+      expect(find.text('Idle'), findsOneWidget);
+    },
+  );
+
   testWidgets('shows recents, selects a recent project, and requests browse', (
     tester,
   ) async {

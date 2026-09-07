@@ -54,6 +54,10 @@ scripts:
     description: Run codelab_app macOS prompt queue integration test.
     run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/prompt_queue_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
 
+  test:e2e:app:multi-session:
+    description: Run codelab_app macOS multi-session concurrency integration test.
+    run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/multi_session_concurrency_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
+
   check:
     description: Run format, analyze, tests, and protocol conformance.
     steps:

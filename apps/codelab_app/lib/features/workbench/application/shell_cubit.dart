@@ -814,6 +814,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             configOptions: _configOptionsFor(session),
             currentPlan: _currentPlanForSession(session),
             queuedPrompts: _queueFor(sessionItem.id),
+            isPromptSubmitting: false,
+            canCancel: false,
           ),
         );
         _recordDiagnostic(
@@ -825,10 +827,11 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   }
 
   /// Switches the active session and reloads all of its per-session state
-  /// (transcript, inspector, pending approval, agent commands) from the
-  /// application's live snapshot — without this, the previously active
-  /// session's transcript/inspector/approval would remain visible until the
-  /// newly selected session happened to emit its own `session/update`.
+  /// (transcript, inspector, pending approval, agent commands,
+  /// `isPromptSubmitting`/`canCancel`) from the application's live
+  /// snapshot — without this, the previously active session's transcript/
+  /// inspector/approval/busy state would remain visible until the newly
+  /// selected session happened to emit its own `session/update`.
   void selectSession(String sessionId) {
     final session = _application.sessionById(SessionId(sessionId));
     if (session == null) {
@@ -846,6 +849,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           configOptions: const [],
           currentPlan: null,
           queuedPrompts: _queueFor(sessionId),
+          isPromptSubmitting: false,
+          canCancel: false,
         ),
       );
       return;
@@ -863,6 +868,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         configOptions: _configOptionsFor(session),
         currentPlan: _currentPlanForSession(session),
         queuedPrompts: _queueFor(sessionItem.id),
+        isPromptSubmitting: _isBusyLifecycleStatus(session.status),
+        canCancel: _isBusyLifecycleStatus(session.status),
       ),
     );
   }
@@ -902,24 +909,23 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// The actual `session/prompt` round trip, shared by [submitPrompt]'s
   /// direct-send path, [sendQueuedPromptNow], and the queue's auto-drain —
   /// all three reach a real send exactly the way [submitPrompt] always has.
+  ///
+  /// Deliberately emits nothing itself for `transcriptEntries`,
+  /// `inspectorEntries`, `isPromptSubmitting` or `canCancel`: the domain
+  /// stores the running turn synchronously, before this `await` yields
+  /// (`AcpClientApplication.sendPrompt`'s `_storeSession(runningSession)`),
+  /// so `_handleSessionChange` already picks up the busy status, the
+  /// reconstructed user entry (from `turn.prompt`) and every subsequent
+  /// streamed/terminal update on its own `sessionChanges` events — for
+  /// *whichever* session `sessionId` is, not necessarily the one still
+  /// active by the time this future resolves. Emitting presentation state
+  /// here directly would risk overwriting a *different*, now-active
+  /// session's view — see add-multi-session-concurrency/design.md,
+  /// Decisions.
   Future<void> _dispatchPrompt({
     required String sessionId,
     required String text,
   }) async {
-    final userEntry = AcpTranscriptEntry(
-      id: 'prompt-${state.transcriptEntries.length + 1}',
-      kind: AcpTranscriptEntryKind.user,
-      title: 'You',
-      body: text,
-    );
-    emit(
-      state.copyWith(
-        transcriptEntries: [...state.transcriptEntries, userEntry],
-        isPromptSubmitting: true,
-        canCancel: true,
-      ),
-    );
-
     final result = await _sendPromptUseCase(
       SendPromptCommand(
         sessionId: SessionId(sessionId),
@@ -928,30 +934,15 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     ).run();
     if (isClosed) return;
 
-    // `transcriptEntries` is not touched in either branch below: it is
-    // already kept current by `_handleSessionChange`, which re-derives it
-    // from `session.turns` on every `sessionChanges` event — including the
-    // ones this very `sendPrompt` call emits as it runs (turn start, each
-    // streamed chunk, and completion/failure) — see
-    // openspec/changes/add-streaming-message-coalescing/design.md.
     result.match(
       (failure) {
-        final message = 'Failed to send prompt: ${_failureMessage(failure)}';
-        emit(state.copyWith(isPromptSubmitting: false, canCancel: false));
         _recordDiagnostic(
-          message,
+          'Failed to send prompt: ${_failureMessage(failure)}',
           severity: AcpDebugLogSeverity.error,
           source: 'prompt',
         );
       },
       (turn) {
-        emit(
-          state.copyWith(
-            inspectorEntries: _inspectorEntriesForTurn(turn),
-            isPromptSubmitting: false,
-            canCancel: false,
-          ),
-        );
         _recordDiagnostic(
           'Prompt completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
           source: 'prompt',
@@ -1065,28 +1056,23 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     await _dispatchPrompt(sessionId: sessionId, text: next.content);
   }
 
-  /// The presentation-level proxy of the same invariant
-  /// `SessionStateMachine._startTurn` enforces authoritatively: a turn is
-  /// running ([isPromptSubmitting], set for the whole lifetime of a
-  /// `session/prompt` round trip, approval waits included) or [sessionId]'s
-  /// latest turn has an unresolved approval. Checking the session's actual
-  /// turn (not just the local flag) catches cases where [isPromptSubmitting]
-  /// could otherwise be stale — see add-prompt-queue/design.md, Decisions.
-  /// [isPromptSubmitting] itself stays a single cubit-wide flag, not
-  /// per-session — only one `session/prompt` round trip is ever in flight
-  /// through this cubit at a time regardless of [sessionId] (multi-session
-  /// concurrent turns are an explicit Non-Goal).
-  bool _isSessionBusy(String sessionId) {
-    if (state.isPromptSubmitting) {
-      return true;
-    }
-    final session = _application.sessionById(SessionId(sessionId));
-    final turn = session?.turns.lastOrNull;
-    if (turn == null) {
-      return false;
-    }
-    return _earliestPendingApprovalId(turn) != null;
-  }
+  /// Whether [sessionId] can currently accept a new prompt turn — a pure
+  /// read of that session's own domain status
+  /// (`_application.sessionById(sessionId)?.status`), independent of which
+  /// session is active or of any other session's state. `runningTurn`/
+  /// `awaitingApproval` are busy; `idle`/`active`/`failed` (including an
+  /// unknown session) are free. This is also the single source
+  /// [CodeLabShellState.isPromptSubmitting]/[CodeLabShellState.canCancel]
+  /// for the active session are derived from, in [_handleSessionChange] and
+  /// [selectSession] — see add-multi-session-concurrency/design.md,
+  /// Decisions.
+  bool _isSessionBusy(String sessionId) => _isBusyLifecycleStatus(
+    _application.sessionById(SessionId(sessionId))?.status,
+  );
+
+  bool _isBusyLifecycleStatus(SessionLifecycleStatus? status) =>
+      status == SessionLifecycleStatus.runningTurn ||
+      status == SessionLifecycleStatus.awaitingApproval;
 
   String _newQueuedPromptId() => 'queued-${_nextQueuedPromptId++}';
 
@@ -1101,34 +1087,26 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       return;
     }
 
-    emit(state.copyWith(canCancel: false));
     final result = await _cancelTurnUseCase(
       CancelTurnCommand(sessionId: SessionId(sessionId)),
     ).run();
     if (isClosed) return;
 
+    // As in `_dispatchPrompt`, `isPromptSubmitting`/`canCancel`/
+    // `inspectorEntries` are not touched here — the cancellation itself
+    // updates the session's domain status, which `_handleSessionChange`
+    // picks up on the resulting `sessionChanges` event for whichever
+    // session this is, active or not.
     result.match(
-      (failure) {
-        emit(state.copyWith(isPromptSubmitting: false, canCancel: false));
-        _recordDiagnostic(
-          'Failed to cancel prompt turn: ${_failureMessage(failure)}',
-          severity: AcpDebugLogSeverity.error,
-          source: 'prompt',
-        );
-      },
-      (turn) {
-        emit(
-          state.copyWith(
-            inspectorEntries: _inspectorEntriesForTurn(turn),
-            isPromptSubmitting: false,
-            canCancel: false,
-          ),
-        );
-        _recordDiagnostic(
-          'Cancelled prompt turn ${turn.id.value}.',
-          source: 'prompt',
-        );
-      },
+      (failure) => _recordDiagnostic(
+        'Failed to cancel prompt turn: ${_failureMessage(failure)}',
+        severity: AcpDebugLogSeverity.error,
+        source: 'prompt',
+      ),
+      (turn) => _recordDiagnostic(
+        'Cancelled prompt turn ${turn.id.value}.',
+        source: 'prompt',
+      ),
     );
     await _drainQueueIfFree(sessionId);
   }
@@ -1341,20 +1319,33 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     }
   }
 
+  /// Handles a `sessionChanges` event for *any* session, active or in the
+  /// background. [state.sessions] (which feeds the sidebar's live status
+  /// badge) is always refreshed for the changed session — a background
+  /// session's turn progressing must not require switching to it first, see
+  /// add-multi-session-concurrency/design.md, Decisions. Everything else
+  /// (transcript, inspector, agent commands/config options, current plan,
+  /// and the derived `isPromptSubmitting`/`canCancel`) is only recomputed
+  /// when [session] is the active one — a background session's own updates
+  /// must never overwrite what the user is currently looking at.
   void _handleSessionChange(AcpSession session) {
-    if (state.activeSessionId != null &&
-        state.activeSessionId != session.id.value) {
-      return;
-    }
-
     final sessionItem = _sessionListItem(session);
     final otherSessions = state.sessions
         .where((item) => item.id != sessionItem.id)
         .toList(growable: false);
+    final sessions = [sessionItem, ...otherSessions];
+
+    final isActiveSession =
+        state.activeSessionId == null ||
+        state.activeSessionId == session.id.value;
+    if (!isActiveSession) {
+      emit(state.copyWith(sessions: sessions));
+      return;
+    }
 
     emit(
       state.copyWith(
-        sessions: [sessionItem, ...otherSessions],
+        sessions: sessions,
         activeSessionId: sessionItem.id,
         currentSessionLabel: sessionItem.title,
         currentSessionDetail: sessionItem.subtitle ?? session.id.value,
@@ -1363,6 +1354,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         agentCommands: _agentCommandsFor(session),
         configOptions: _configOptionsFor(session),
         currentPlan: _currentPlanForSession(session),
+        isPromptSubmitting: _isBusyLifecycleStatus(session.status),
+        canCancel: _isBusyLifecycleStatus(session.status),
       ),
     );
   }

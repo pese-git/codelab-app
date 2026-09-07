@@ -3971,6 +3971,353 @@ void main() {
       },
     );
   });
+
+  group('multi-session concurrency', () {
+    Future<
+      ({
+        CodeLabShellCubit shellCubit,
+        FakeAcpTransport agentTransport,
+        AcpClientApplication application,
+      })
+    >
+    createConnectedCubit() async {
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final application = AcpClientApplication(transport: initialTransport);
+      final shellCubit = CodeLabShellCubit(
+        profile: codelabAgentStdioProfile,
+        application: application,
+        createSessionUseCase: CreateSession(application),
+        sendPromptUseCase: SendPrompt(application),
+        cancelTurnUseCase: CancelTurn(application),
+        reconnectUseCase: Reconnect(application),
+        respondToPermissionUseCase: RespondToPermission(application),
+        setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+        stdioTransportFactory: (_) => agentTransport,
+        webSocketTransportFactory: (_) => FakeAcpTransport(),
+        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+        projectFolderPicker: _FakeProjectFolderPicker(),
+        recentProjectsStore: _FakeRecentProjectsStore(),
+      );
+
+      await shellCubit.connect();
+      return (
+        shellCubit: shellCubit,
+        agentTransport: agentTransport,
+        application: application,
+      );
+    }
+
+    Future<void> createSessionWithId(
+      CodeLabShellCubit shellCubit,
+      FakeAcpTransport agentTransport,
+      String sessionId,
+    ) async {
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest = await createRequestFuture as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: {'sessionId': sessionId},
+        ),
+      );
+      await createFuture;
+    }
+
+    // Same pattern as the "prompt queue" group's `startTurnWithPendingApproval`
+    // above, parametrized by session/tool-call/request id so two sessions on
+    // the same transport never collide on those ids.
+    Future<({dynamic promptRequest, Future<void> submitFuture})>
+    startTurnWithPendingApproval({
+      required CodeLabShellCubit shellCubit,
+      required FakeAcpTransport agentTransport,
+      required String sessionId,
+      required JsonRpcId permissionRequestId,
+      required String toolCallId,
+      String prompt = 'run a command',
+    }) async {
+      final promptRequestFuture = agentTransport.sent.first;
+      final submitFuture = shellCubit.submitPrompt(prompt);
+      final promptRequest = await promptRequestFuture as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.request(
+          id: permissionRequestId,
+          method: sessionRequestPermissionMethod,
+          params: RequestPermissionRequest(
+            sessionId: SessionId(sessionId),
+            toolCall: ToolCallUpdate(
+              toolCallId: ToolCallId(toolCallId),
+              title: 'Run command',
+              kind: ToolKind.execute,
+              status: ToolCallStatus.inProgress,
+              rawInput: const {'command': 'echo hi'},
+            ),
+            options: const [
+              PermissionOption(
+                optionId: PermissionOptionId('allow-once'),
+                name: 'Allow once',
+                kind: PermissionOptionKind.allowOnce,
+              ),
+            ],
+          ).toJson(),
+        ),
+      );
+      return (promptRequest: promptRequest, submitFuture: submitFuture);
+    }
+
+    // Session A is created first and starts a turn that immediately hangs on
+    // a pending approval; session B is created afterward (so it becomes
+    // active) while A's turn is still in flight in the background — the
+    // exact setup the "Starting a second session while the first is still
+    // running" scenario in specs/agent-workbench-ui/spec.md describes.
+    Future<
+      ({
+        CodeLabShellCubit shellCubit,
+        FakeAcpTransport agentTransport,
+        AcpClientApplication application,
+        dynamic promptRequestA,
+        Future<void> submitFutureA,
+      })
+    >
+    setUpBackgroundSessionAWithActiveSessionB() async {
+      final harness = await createConnectedCubit();
+      await createSessionWithId(
+        harness.shellCubit,
+        harness.agentTransport,
+        'session-a',
+      );
+      final turnA = await startTurnWithPendingApproval(
+        shellCubit: harness.shellCubit,
+        agentTransport: harness.agentTransport,
+        sessionId: 'session-a',
+        permissionRequestId: const JsonRpcId.integer(701),
+        toolCallId: 'tool-a',
+      );
+      await createSessionWithId(
+        harness.shellCubit,
+        harness.agentTransport,
+        'session-b',
+      );
+
+      return (
+        shellCubit: harness.shellCubit,
+        agentTransport: harness.agentTransport,
+        application: harness.application,
+        promptRequestA: turnA.promptRequest,
+        submitFutureA: turnA.submitFuture,
+      );
+    }
+
+    Future<void> resolveSessionATurn(
+      CodeLabShellCubit shellCubit,
+      FakeAcpTransport agentTransport,
+      dynamic promptRequestA,
+      Future<void> submitFutureA,
+    ) async {
+      final permissionResponseFuture = agentTransport.sent.first;
+      final respondFuture = shellCubit.respondToApproval(
+        approvalId: const ApprovalRequestId('permission-701'),
+        sessionId: const SessionId('session-a'),
+        optionId: 'allow-once',
+      );
+      await permissionResponseFuture;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequestA.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await respondFuture;
+      await submitFutureA;
+    }
+
+    test('starting a second session while the first is still running lets the '
+        'user submit a prompt in the newly active session immediately, '
+        'without queuing it', () async {
+      final setup = await setUpBackgroundSessionAWithActiveSessionB();
+      addTearDown(setup.shellCubit.close);
+      addTearDown(setup.application.dispose);
+
+      expect(setup.shellCubit.state.activeSessionId, 'session-b');
+      expect(setup.shellCubit.state.isPromptSubmitting, isFalse);
+      expect(setup.shellCubit.state.canCancel, isFalse);
+
+      final promptRequestBFuture = setup.agentTransport.sent.first;
+      final submitFutureB = setup.shellCubit.submitPrompt('hello from B');
+      final promptRequestB = await promptRequestBFuture as dynamic;
+
+      // Sent right away, not queued — session A being busy must not
+      // affect session B, the active one.
+      expect(setup.shellCubit.state.queuedPrompts, isEmpty);
+      expect(setup.shellCubit.state.isPromptSubmitting, isTrue);
+
+      setup.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequestB.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await submitFutureB;
+      expect(setup.shellCubit.state.isPromptSubmitting, isFalse);
+
+      await resolveSessionATurn(
+        setup.shellCubit,
+        setup.agentTransport,
+        setup.promptRequestA,
+        setup.submitFutureA,
+      );
+    });
+
+    test("a background session's turn completing while another session is "
+        'active does not alter the transcript, submitting or cancel state '
+        'the active session shows', () async {
+      final setup = await setUpBackgroundSessionAWithActiveSessionB();
+      addTearDown(setup.shellCubit.close);
+      addTearDown(setup.application.dispose);
+
+      final transcriptBeforeCompletion =
+          setup.shellCubit.state.transcriptEntries;
+      expect(transcriptBeforeCompletion, isEmpty);
+      expect(setup.shellCubit.state.isPromptSubmitting, isFalse);
+      expect(setup.shellCubit.state.canCancel, isFalse);
+
+      await resolveSessionATurn(
+        setup.shellCubit,
+        setup.agentTransport,
+        setup.promptRequestA,
+        setup.submitFutureA,
+      );
+
+      // Session B (still active) is untouched by A's completion.
+      expect(setup.shellCubit.state.activeSessionId, 'session-b');
+      expect(setup.shellCubit.state.transcriptEntries, isEmpty);
+      expect(setup.shellCubit.state.isPromptSubmitting, isFalse);
+      expect(setup.shellCubit.state.canCancel, isFalse);
+
+      // Session A's own transcript did get updated, in the background.
+      final sessionA = setup.application.sessionById(
+        const SessionId('session-a'),
+      );
+      expect(sessionA!.turns.single.status, PromptTurnStatus.completed);
+    });
+
+    test("a background session's own queue drains when its own turn completes, "
+        'even while a different session stays active throughout — no need to '
+        'switch back to it first', () async {
+      final harness = await createConnectedCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      await createSessionWithId(
+        harness.shellCubit,
+        harness.agentTransport,
+        'session-a',
+      );
+      final turnA = await startTurnWithPendingApproval(
+        shellCubit: harness.shellCubit,
+        agentTransport: harness.agentTransport,
+        sessionId: 'session-a',
+        permissionRequestId: const JsonRpcId.integer(701),
+        toolCallId: 'tool-a',
+      );
+      // Still active on session A here — queues behind A's own pending
+      // approval, exactly like the single-session prompt-queue behavior.
+      await harness.shellCubit.submitPrompt('queued for A');
+      expect(harness.shellCubit.state.queuedPrompts, hasLength(1));
+
+      // Switching to B leaves A's queue in place, attached to A.
+      await createSessionWithId(
+        harness.shellCubit,
+        harness.agentTransport,
+        'session-b',
+      );
+      expect(harness.shellCubit.state.activeSessionId, 'session-b');
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+
+      // Resolving A's turn while B stays active must still auto-drain
+      // A's queue — the drained request is A's queued content going out
+      // as a real `session/prompt`, without switching back to A first.
+      final permissionResponseFuture = harness.agentTransport.sent.first;
+      final respondFuture = harness.shellCubit.respondToApproval(
+        approvalId: const ApprovalRequestId('permission-701'),
+        sessionId: const SessionId('session-a'),
+        optionId: 'allow-once',
+      );
+      await permissionResponseFuture;
+
+      final drainedRequestFuture = harness.agentTransport.sent.first;
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: turnA.promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await respondFuture;
+      final drainedRequest = await drainedRequestFuture as dynamic;
+
+      // B is untouched the whole time — the drain happened purely
+      // in the background.
+      expect(harness.shellCubit.state.activeSessionId, 'session-b');
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: drainedRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await turnA.submitFuture;
+
+      // A's own queue, checked by switching to it, is empty — the
+      // drained prompt actually left it, it was not silently dropped.
+      harness.shellCubit.selectSession('session-a');
+      expect(harness.shellCubit.state.queuedPrompts, isEmpty);
+    });
+
+    test("a non-active session's sidebar status stays live — running, "
+        'awaiting-approval, then idle — as its turn progresses, without the '
+        'user ever switching to it', () async {
+      final setup = await setUpBackgroundSessionAWithActiveSessionB();
+      addTearDown(setup.shellCubit.close);
+      addTearDown(setup.application.dispose);
+
+      AcpSessionStatus statusOf(String sessionId) => setup
+          .shellCubit
+          .state
+          .sessions
+          .firstWhere((item) => item.id == sessionId)
+          .status;
+
+      expect(setup.shellCubit.state.activeSessionId, 'session-b');
+      expect(statusOf('session-a'), AcpSessionStatus.awaitingApproval);
+
+      final permissionResponseFuture = setup.agentTransport.sent.first;
+      final respondFuture = setup.shellCubit.respondToApproval(
+        approvalId: const ApprovalRequestId('permission-701'),
+        sessionId: const SessionId('session-a'),
+        optionId: 'allow-once',
+      );
+      await permissionResponseFuture;
+      await respondFuture;
+
+      // Still active on B — the resolved approval alone must already be
+      // reflected in A's sidebar entry.
+      expect(setup.shellCubit.state.activeSessionId, 'session-b');
+      expect(statusOf('session-a'), AcpSessionStatus.running);
+
+      setup.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: setup.promptRequestA.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await setup.submitFutureA;
+
+      expect(setup.shellCubit.state.activeSessionId, 'session-b');
+      expect(statusOf('session-a'), AcpSessionStatus.idle);
+    });
+  });
 }
 
 final class _FailingStartTransport implements AcpTransport {

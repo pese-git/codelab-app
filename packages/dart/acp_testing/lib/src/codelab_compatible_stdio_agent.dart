@@ -14,7 +14,8 @@ enum CodelabCompatibleStdioAgentMode {
   withTerminalPathEscape('with_terminal_path_escape'),
   withTerminalKill('with_terminal_kill'),
   withPlan('with_plan'),
-  withQueuedPromptDrain('with_queued_prompt_drain');
+  withQueuedPromptDrain('with_queued_prompt_drain'),
+  withConcurrentSessions('with_concurrent_sessions');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -45,7 +46,6 @@ import 'dart:convert';
 import 'dart:io';
 
 const _mode = '__CODELAB_TEST_AGENT_MODE__';
-const _sessionId = 'codelab-test-session';
 const _permissionRequestId = 'perm-1';
 const _fsReadRequestId = 'fs-read-1';
 const _fsWriteRequestId = 'fs-write-1';
@@ -56,10 +56,36 @@ const _terminalKillRequestId = 'terminal-kill-1';
 var _currentModel = 'gpt-5';
 var _planPromptCount = 0;
 var _queuedPromptDrainRequestCount = 0;
-Object? _pendingPromptId;
+var _sessionCounter = 0;
+// Creation order matters for `with_concurrent_sessions` ("the first session"
+// vs. "a later one") — a `Set` would lose it.
+final _sessionIds = <String>[];
+// Independently tracks each session's own deferred `session/prompt` id, so
+// two sessions on the same process (e.g. one hung on a permission request
+// while another sends its own prompt) never clobber each other's pending
+// response the way a single shared variable would.
+final _pendingPromptIds = <String, Object?>{};
+// Which session the *current* single-flight side-request (permission/fs/
+// terminal) belongs to — set right before issuing it, read by that
+// side-request's response handler, which has no session context of its own
+// (the client's JSON-RPC response carries no `sessionId`). None of today's
+// modes ever have two such side-requests outstanding at once, so one slot
+// is enough — see codelab_compatible_stdio_agent.dart's per-mode branches.
+String? _pendingSessionId;
 String? _sessionCwd;
 String? _fsReadContent;
 String? _terminalId;
+
+String _createSessionId() {
+  _sessionCounter += 1;
+  // The first session keeps the exact, unsuffixed id existing single-session
+  // tests already assert on; only a second/third/... session gets a suffix.
+  final sessionId = _sessionCounter == 1
+      ? 'codelab-test-session'
+      : 'codelab-test-session-$_sessionCounter';
+  _sessionIds.add(sessionId);
+  return sessionId;
+}
 
 Future<void> main(List<String> args) async {
   if (args.length != 2 || args[0] != 'serve' || args[1] != '--stdio') {
@@ -145,13 +171,16 @@ Future<void> main(List<String> args) async {
         });
       case 'session/new':
         final params = message['params'] as Map<String, Object?>;
+        final sessionId = _createSessionId();
         _sessionCwd = params['cwd'] as String?;
         _writeResponse(id, {
-          'sessionId': _sessionId,
+          'sessionId': sessionId,
           if (_mode == 'with_config_options')
             'configOptions': [_modelConfigOption()],
         });
       case 'session/prompt':
+        final promptParams = message['params'] as Map<String, Object?>;
+        final sessionId = promptParams['sessionId'] as String;
         if (_mode == 'crash_mid_prompt') {
           // Simulate the agent process dying unexpectedly while a turn is
           // running — no response, no notification, just gone. `exit()`
@@ -164,9 +193,10 @@ Future<void> main(List<String> args) async {
           // Read a file the test placed in the session's working directory,
           // then write a derived file back — a real fs/* round trip, no
           // approval step (see add-acp-fs-client-support/design.md).
-          _pendingPromptId = id;
+          _pendingSessionId = sessionId;
+          _pendingPromptIds[sessionId] = id;
           _writeRequest(_fsReadRequestId, 'fs/read_text_file', {
-            'sessionId': _sessionId,
+            'sessionId': sessionId,
             'path': '$_sessionCwd/input.txt',
           });
           break;
@@ -178,7 +208,7 @@ Future<void> main(List<String> args) async {
           // project's path, since `session.cwd` in the client's own domain
           // model just echoes what it sent, not what the agent received.
           _writeNotification('session/update', {
-            'sessionId': _sessionId,
+            'sessionId': sessionId,
             'update': {
               'sessionUpdate': 'agent_message_chunk',
               'content': {'type': 'text', 'text': 'cwd was: $_sessionCwd'},
@@ -190,9 +220,10 @@ Future<void> main(List<String> args) async {
         if (_mode == 'with_fs_path_escape') {
           // Attempt to read outside the working directory — the client
           // MUST reject this before touching the filesystem.
-          _pendingPromptId = id;
+          _pendingSessionId = sessionId;
+          _pendingPromptIds[sessionId] = id;
           _writeRequest(_fsReadRequestId, 'fs/read_text_file', {
-            'sessionId': _sessionId,
+            'sessionId': sessionId,
             'path': '$_sessionCwd/../escape.txt',
           });
           break;
@@ -201,9 +232,10 @@ Future<void> main(List<String> args) async {
           // Runs a real command via terminal/create, waits for it to exit,
           // then fetches its output — the real terminal/* round trip, no
           // approval step (see add-acp-terminal-client-support/design.md).
-          _pendingPromptId = id;
+          _pendingSessionId = sessionId;
+          _pendingPromptIds[sessionId] = id;
           _writeRequest(_terminalCreateRequestId, 'terminal/create', {
-            'sessionId': _sessionId,
+            'sessionId': sessionId,
             'command': 'sh',
             'args': ['-c', 'echo hello-from-terminal; exit 3'],
           });
@@ -212,9 +244,10 @@ Future<void> main(List<String> args) async {
         if (_mode == 'with_terminal_path_escape') {
           // Attempt to run a command outside the working directory — the
           // client MUST reject this before starting any process.
-          _pendingPromptId = id;
+          _pendingSessionId = sessionId;
+          _pendingPromptIds[sessionId] = id;
           _writeRequest(_terminalCreateRequestId, 'terminal/create', {
-            'sessionId': _sessionId,
+            'sessionId': sessionId,
             'command': 'echo',
             'args': ['should not run'],
             'cwd': '$_sessionCwd/../escape',
@@ -224,9 +257,10 @@ Future<void> main(List<String> args) async {
         if (_mode == 'with_terminal_kill') {
           // Starts a long-running process, then kills it immediately —
           // terminalId must stay valid afterwards for terminal/output.
-          _pendingPromptId = id;
+          _pendingSessionId = sessionId;
+          _pendingPromptIds[sessionId] = id;
           _writeRequest(_terminalCreateRequestId, 'terminal/create', {
-            'sessionId': _sessionId,
+            'sessionId': sessionId,
             'command': 'sleep',
             'args': ['30'],
           });
@@ -243,7 +277,7 @@ Future<void> main(List<String> args) async {
           _planPromptCount += 1;
           final allCompleted = _planPromptCount >= 3;
           _writeNotification('session/update', {
-            'sessionId': _sessionId,
+            'sessionId': sessionId,
             'update': {
               'sessionUpdate': 'plan',
               'entries': [
@@ -273,9 +307,10 @@ Future<void> main(List<String> args) async {
           // Defer the `session/prompt` response until the client answers
           // our `session/request_permission` — a real agent waits for the
           // permission outcome before deciding how the turn ends.
-          _pendingPromptId = id;
+          _pendingSessionId = sessionId;
+          _pendingPromptIds[sessionId] = id;
           _writeRequest(_permissionRequestId, 'session/request_permission', {
-            'sessionId': _sessionId,
+            'sessionId': sessionId,
             'toolCall': {
               'toolCallId': 'test-tool-call-1',
               'title': 'Run test command',
@@ -302,9 +337,10 @@ Future<void> main(List<String> args) async {
           // it was actually delivered — not merely removed from the queue.
           _queuedPromptDrainRequestCount += 1;
           if (_queuedPromptDrainRequestCount == 1) {
-            _pendingPromptId = id;
+            _pendingSessionId = sessionId;
+            _pendingPromptIds[sessionId] = id;
             _writeRequest(_permissionRequestId, 'session/request_permission', {
-              'sessionId': _sessionId,
+              'sessionId': sessionId,
               'toolCall': {
                 'toolCallId': 'test-tool-call-1',
                 'title': 'Run test command',
@@ -319,7 +355,7 @@ Future<void> main(List<String> args) async {
             break;
           }
           _writeNotification('session/update', {
-            'sessionId': _sessionId,
+            'sessionId': sessionId,
             'update': {
               'sessionUpdate': 'agent_message_chunk',
               'content': {'type': 'text', 'text': 'queued message delivered'},
@@ -328,8 +364,45 @@ Future<void> main(List<String> args) async {
           _writeResponse(id, {'stopReason': 'end_turn'});
           break;
         }
+        if (_mode == 'with_concurrent_sessions') {
+          // Only the very first session ever created hangs on a permission
+          // request; every other session (created afterwards, on the same
+          // process) always responds immediately — proving a later session's
+          // `session/prompt` is never blocked by an earlier one's pending
+          // approval. See add-multi-session-concurrency/design.md.
+          if (_sessionIds.first == sessionId) {
+            _pendingSessionId = sessionId;
+            _pendingPromptIds[sessionId] = id;
+            _writeRequest(_permissionRequestId, 'session/request_permission', {
+              'sessionId': sessionId,
+              'toolCall': {
+                'toolCallId': 'test-tool-call-1',
+                'title': 'Run test command',
+                'kind': 'execute',
+                'status': 'pending',
+                'rawInput': {'command': 'echo hello', 'shell': '/bin/bash'},
+              },
+              'options': [
+                {'optionId': 'allow_once', 'name': 'Allow once', 'kind': 'allow_once'},
+              ],
+            });
+            break;
+          }
+          _writeNotification('session/update', {
+            'sessionId': sessionId,
+            'update': {
+              'sessionUpdate': 'agent_message_chunk',
+              'content': {
+                'type': 'text',
+                'text': 'hello from $sessionId',
+              },
+            },
+          });
+          _writeResponse(id, {'stopReason': 'end_turn'});
+          break;
+        }
         _writeNotification('session/update', {
-          'sessionId': _sessionId,
+          'sessionId': sessionId,
           'update': {
             'sessionUpdate': 'agent_message_chunk',
             'content': {
@@ -372,18 +445,19 @@ Map<String, Object?> _modelConfigOption() {
 }
 
 void _handlePermissionResponse(Map<String, Object?> message) {
-  final promptId = _pendingPromptId;
-  if (promptId == null) {
+  final sessionId = _pendingSessionId;
+  final promptId = sessionId == null ? null : _pendingPromptIds.remove(sessionId);
+  if (sessionId == null || promptId == null) {
     return;
   }
-  _pendingPromptId = null;
+  _pendingSessionId = null;
 
   final result = message['result'] as Map<String, Object?>?;
   final outcome = result?['outcome'] as Map<String, Object?>?;
   final selectedOptionId = outcome?['optionId'] as String?;
 
   _writeNotification('session/update', {
-    'sessionId': _sessionId,
+    'sessionId': sessionId,
     'update': {
       'sessionUpdate': 'agent_message_chunk',
       'content': {
@@ -400,8 +474,9 @@ void _handlePermissionResponse(Map<String, Object?> message) {
 }
 
 void _handleFsReadResponse(Map<String, Object?> message) {
-  final promptId = _pendingPromptId;
-  if (promptId == null) {
+  final sessionId = _pendingSessionId;
+  final promptId = sessionId == null ? null : _pendingPromptIds[sessionId];
+  if (sessionId == null || promptId == null) {
     return;
   }
 
@@ -409,9 +484,10 @@ void _handleFsReadResponse(Map<String, Object?> message) {
   if (error != null) {
     // Expected outcome for with_fs_path_escape — the client rejected the
     // out-of-bounds read before touching the filesystem.
-    _pendingPromptId = null;
+    _pendingSessionId = null;
+    _pendingPromptIds.remove(sessionId);
     _writeNotification('session/update', {
-      'sessionId': _sessionId,
+      'sessionId': sessionId,
       'update': {
         'sessionUpdate': 'agent_message_chunk',
         'content': {
@@ -431,9 +507,10 @@ void _handleFsReadResponse(Map<String, Object?> message) {
     // The read should have been rejected — reaching here (a successful
     // read of an out-of-bounds path) is itself the test failure; report it
     // in-band so the integration test's assertions catch it clearly.
-    _pendingPromptId = null;
+    _pendingSessionId = null;
+    _pendingPromptIds.remove(sessionId);
     _writeNotification('session/update', {
-      'sessionId': _sessionId,
+      'sessionId': sessionId,
       'update': {
         'sessionUpdate': 'agent_message_chunk',
         'content': {
@@ -447,22 +524,23 @@ void _handleFsReadResponse(Map<String, Object?> message) {
   }
 
   _writeRequest(_fsWriteRequestId, 'fs/write_text_file', {
-    'sessionId': _sessionId,
+    'sessionId': sessionId,
     'path': '$_sessionCwd/output.txt',
     'content': 'echo: $_fsReadContent',
   });
 }
 
 void _handleFsWriteResponse(Map<String, Object?> message) {
-  final promptId = _pendingPromptId;
-  if (promptId == null) {
+  final sessionId = _pendingSessionId;
+  final promptId = sessionId == null ? null : _pendingPromptIds.remove(sessionId);
+  if (sessionId == null || promptId == null) {
     return;
   }
-  _pendingPromptId = null;
+  _pendingSessionId = null;
 
   final error = message['error'] as Map<String, Object?>?;
   _writeNotification('session/update', {
-    'sessionId': _sessionId,
+    'sessionId': sessionId,
     'update': {
       'sessionUpdate': 'agent_message_chunk',
       'content': {
@@ -477,8 +555,9 @@ void _handleFsWriteResponse(Map<String, Object?> message) {
 }
 
 void _handleTerminalCreateResponse(Map<String, Object?> message) {
-  final promptId = _pendingPromptId;
-  if (promptId == null) {
+  final sessionId = _pendingSessionId;
+  final promptId = sessionId == null ? null : _pendingPromptIds[sessionId];
+  if (sessionId == null || promptId == null) {
     return;
   }
 
@@ -486,9 +565,10 @@ void _handleTerminalCreateResponse(Map<String, Object?> message) {
   if (error != null) {
     // Expected outcome for with_terminal_path_escape — the client rejected
     // the out-of-bounds cwd before starting any process.
-    _pendingPromptId = null;
+    _pendingSessionId = null;
+    _pendingPromptIds.remove(sessionId);
     _writeNotification('session/update', {
-      'sessionId': _sessionId,
+      'sessionId': sessionId,
       'update': {
         'sessionUpdate': 'agent_message_chunk',
         'content': {
@@ -506,12 +586,12 @@ void _handleTerminalCreateResponse(Map<String, Object?> message) {
 
   if (_mode == 'with_terminal_kill') {
     _writeRequest(_terminalKillRequestId, 'terminal/kill', {
-      'sessionId': _sessionId,
+      'sessionId': sessionId,
       'terminalId': _terminalId,
     });
   } else {
     _writeRequest(_terminalWaitRequestId, 'terminal/wait_for_exit', {
-      'sessionId': _sessionId,
+      'sessionId': sessionId,
       'terminalId': _terminalId,
     });
   }
@@ -519,30 +599,31 @@ void _handleTerminalCreateResponse(Map<String, Object?> message) {
 
 void _handleTerminalWaitResponse(Map<String, Object?> message) {
   _writeRequest(_terminalOutputRequestId, 'terminal/output', {
-    'sessionId': _sessionId,
+    'sessionId': _pendingSessionId,
     'terminalId': _terminalId,
   });
 }
 
 void _handleTerminalKillResponse(Map<String, Object?> message) {
   _writeRequest(_terminalOutputRequestId, 'terminal/output', {
-    'sessionId': _sessionId,
+    'sessionId': _pendingSessionId,
     'terminalId': _terminalId,
   });
 }
 
 void _handleTerminalOutputResponse(Map<String, Object?> message) {
-  final promptId = _pendingPromptId;
-  if (promptId == null) {
+  final sessionId = _pendingSessionId;
+  final promptId = sessionId == null ? null : _pendingPromptIds.remove(sessionId);
+  if (sessionId == null || promptId == null) {
     return;
   }
-  _pendingPromptId = null;
+  _pendingSessionId = null;
 
   final result = message['result'] as Map<String, Object?>;
   final output = result['output'];
   final exitStatus = result['exitStatus'];
   _writeNotification('session/update', {
-    'sessionId': _sessionId,
+    'sessionId': sessionId,
     'update': {
       'sessionUpdate': 'agent_message_chunk',
       'content': {
