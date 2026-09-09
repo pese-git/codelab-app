@@ -38,7 +38,7 @@
 
 `session_id` → уже есть session-scoping в `_sessions`/`SessionId`; `connection_generation` → уже есть `AcpClientApplication.generation`; `request_id`/`tool_call_id` → уже присутствуют в ACP application-моделях (request/tool-call identifiers, использующихся в `_recordDiagnostic`'s `context`).
 
-`structured_log` дорабатывается (силами автора пакета, апстрим) типизированным API context-binding под эти поля — единственная задача этого change со стороны пакета: принять уже существующие значения как параметры, не изобретать новую схему идентификаторов.
+Типизированный API появился в `structured_log` 0.2.0-dev.1: `LogCorrelation` + `BoundLogger.withCorrelation({sessionId, requestId, connectionGeneration, toolCallId, messageId, operationId})` — ровно набор полей, запрошенный в ТЗ пакету. Задача этого change со стороны интеграции — принять уже существующие значения (`AcpClientApplication.generation` и т.д.) как параметры `withCorrelation`, не изобретать новую схему идентификаторов.
 
 ### 3. `DiagnosticEntry` не заменяется, а получает второй output
 
@@ -56,36 +56,42 @@
 
 Logger-инстансы конструируются и настраиваются в новом `CodeLabLoggingModule` в `app_scope.dart`, по аналогии с уже существующим `CodeLabPlatformModule`. Presentation (`CodeLabShellCubit` и другие Cubit'ы, которым нужно логировать значимые user intents/UI failures) получают `Logger` через constructor injection из CherryPick-scope — так же, как сейчас получают use case'ы (`CreateSession`, `SendPrompt` и т.д.). Ни один widget не создаёт и не резолвит `Logger` напрямую (§6/§10 AGENTS.md, §36 `layers-and-dependencies.md`).
 
-### 6. Маршрутизация "одна запись → несколько outputs": upstream multiplexing в `structured_log`, с fallback на два инстанса
+### 6. Маршрутизация "одна запись → несколько outputs": native multiplexing в `structured_log` 0.2.0-dev.1
 
-На момент проектирования `structured_log` не поддерживает мультиплексирование одной записи на несколько outputs и не имеет встроенной per-category маршрутизации — у одной конфигурации/`Logger` один `output`. Поскольку `structured_log` — пакет, разрабатываемый автором этого change, предпочтительное решение — расширить сам пакет нативной поддержкой multi-output вместо того, чтобы реализовывать маршрутизацию как обходной путь на стороне `acp_client_core`.
+Начиная с `structured_log` 0.2.0-dev.1 пакет нативно поддерживает multi-output: `StructlogConfiguration(sinks: [...])` + `LogSink(name, output, minLevel, categories, enabled)`, с изоляцией ошибки одного sink от остальных ("per-sink error isolation" — закрывает ровно тот риск, который раньше был отдельным пунктом в Risks). Обходной путь с двумя независимыми `Logger`-инстансами и ручной маршрутизацией на стороне `acp_client_core`, ранее описанный как fallback, **не требуется**.
 
-Предлагаемая форма upstream API (уточняется автором пакета при реализации):
+Конфигурация в `CodeLabLoggingModule`:
 
 ```dart
-Logger(
+StructlogConfiguration(
   sinks: [
-    LogSink(output: coloredConsoleOutput, minLevel: Level.debug, categories: {'application'}),
-    LogSink(output: rotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …),
-        minLevel: Level.trace, categories: {'protocol'}, enabled: false),
+    LogSink(
+      name: 'application',
+      output: coloredConsoleOutput,
+      minLevel: Level.debug,
+      categories: {'application'},
+    ),
+    LogSink(
+      name: 'protocol',
+      output: rotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …),
+      minLevel: Level.trace,
+      categories: {'protocol'},
+      enabled: false, // включается явным runtime-действием, см. Decision 4
+    ),
   ],
 )
 ```
 
-Одна запись эмитится один раз через единый `Logger`, а пакет сам решает, в какие `LogSink` она попадает — по `minLevel` и `categories` каждого sink. Это закрывает сразу две вещи: и multiplexing (одна запись → N outputs), и per-output фильтрацию (которой сегодня тоже нет), которая нужна, чтобы protocol-trace не утекал в консоль, а обычные application-события не писались в `protocol.log`.
+Одна запись эмитится один раз через единый `Logger`, а пакет сам решает, в какие `LogSink` она попадает — по `minLevel` и `categories` каждого sink. Runtime-toggle protocol-trace sink выполняется через `StructlogConfiguration.setSinkEnabled('protocol', enabled: ...)`.
 
-**Fallback, если upstream-доработка не готова к моменту реализации этого change:** временно завести в `CodeLabLoggingModule` два independent `Logger`-инстанса (console-логгер и file-логгер для protocol trace) за одним и тем же портом `acp_client_core`, и маршрутизировать вызовы по `category` вручную в адаптере. Это чисто internal-деталь composition root — публичный Logger-порт, которым пользуется остальной код (`acp_client_application.dart`, presentation), не меняется ни в основном, ни в fallback-варианте, поэтому переход на нативный multiplexing после его появления в `structured_log` — замена реализации адаптера, а не изменение вызывающего кода.
-
-Альтернатива (отклонена): держать логику маршрутизации только в `acp_client_core` навсегда, не расширяя `structured_log`. Отклонено — per-output фильтрация является общей потребностью логирования (не специфичной для CodeLab), поэтому естественнее решить её один раз в самой библиотеке, а не дублировать в каждом consumer'е пакета.
+Альтернатива (отклонена, актуальна только исторически): держать логику маршрутизации в `acp_client_core` через два отдельных `Logger`-инстанса. Отклонено теперь, когда пакет сам решает задачу — дублировать её в consumer'е больше нет смысла.
 
 ## Risks / Trade-offs
 
-- [`structured_log` v0.1.0 — API для типизированных correlation-полей ещё не существует, дорабатывается апстрим силами автора пакета в отдельном репозитории] → пин на точную версию в `pubspec.yaml`; пока типизированного API нет, correlation-поля передаются как обычный `Map<String, Object?>` context (пакет уже это поддерживает) — не блокирует эту итерацию.
+- [`structured_log` 0.2.0-dev.1 — prerelease (`-dev`), API `LogCorrelation`/`LogSink`/`StructlogConfiguration(sinks:...)` может ещё измениться до стабильного 0.2.0] → пин на точную dev-версию в `pubspec.yaml` (не caret-диапазон); при выходе стабильного 0.2.0 — точечно свериться с changelog и обновить пин, не откладывая надолго, т.к. пакет полностью подконтролен команде.
 - [Ring buffer теряет старые `DiagnosticEntry` в очень долгих сессиях] → не теряет данные безвозвратно: полный structured-вывод продолжает идти в `Logger`-sink (stdout/файл) независимо от bounded in-memory списка для UI; ring buffer ограничивает только память инспектора.
 - [Confining `structured_log` только к `acp_client_core` означает, что `acp_protocol`/`acp_transports`, используемые отдельно от `acp_client_core` (гипотетически), не получат structured-вывод напрямую] → приемлемо: сегодня оба пакета потребляются только через `acp_client_core`; если появится независимый consumer, это отдельное архитектурное решение, а не часть этого change.
-- [Ошибка конфигурации sink (например, недоступный путь для лог-файла на диске) может тихо потерять логи] → Logger-адаптер обязан иметь безопасный fallback (например, no-op/stdout-only при ошибке инициализации файлового sink), не должен ронять приложение.
-- [Upstream multi-output/per-category-filtering API в `structured_log` (Decision 6) может не поспеть к реализации этого change] → используется fallback с двумя independent Logger-инстансами внутри `CodeLabLoggingModule`, за тем же публичным портом; переход на нативный multiplexing позже не требует изменений в вызывающем коде.
-- [В fallback-варианте два независимых Logger-инстанса (application/protocol) могут разойтись в masking/correlation-логике, если их конфигурировать по отдельности] → оба инстанса создаются одной фабрикой в `acp_client_core` с общим `SecretRedactor`-processor и общей correlation-обвязкой (Decision 2/3); различается только `output`, не остальная конфигурация.
+- [Ошибка конфигурации sink (например, недоступный путь для лог-файла на диске) может тихо потерять логи] → покрыто "per-sink error isolation" пакета (Decision 6) плюс собственный safe-fallback адаптера (no-op/stdout-only), не должен ронять приложение.
 
 ## Open Questions
 
