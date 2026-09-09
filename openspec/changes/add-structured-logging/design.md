@@ -48,13 +48,24 @@
 
 Альтернатива (отклонена): полностью заменить `DiagnosticEntry` на события, читаемые напрямую из `Logger`. Отклонено — ломает существующий, покрытый тестами контракт `AcpClientApplication.diagnostics`/`inspector_pane.dart` без необходимости; Non-Goal этого change — не трогать UI debug-панель.
 
-### 4. Protocol tracing — отдельная категория/level, не отдельная подсистема
+### 4. Protocol tracing — отдельная категория/level, с собственным file sink
 
-Полный ACP payload логируется только на `trace`-уровне (§8 `observability.md`), который по умолчанию выключен и не активируется автоматически при ошибке (§49) — включается явным debug/runtime действием. Не вводится отдельный subsystem/буфер сверху `Logger` — это остаётся тем же портом с другим `category`/level, что проще существующей архитектуры и не создаёт лишней абстракции (§13 AGENTS.md).
+Полный ACP payload логируется только на `trace`-уровне (§8 `observability.md`), который по умолчанию выключен и не активируется автоматически при ошибке (§49) — включается явным debug/runtime действием. Логически это тот же Logger-порт с другим `category`/level (не отдельная подсистема) — но физически protocol trace (`category=protocol`) пишется в собственный ротируемый файл, отдельно от человекочитаемого application-лога в консоли (см. Decision 6 — technical reason: `structured_log` не умеет сам маршрутизировать одну запись на несколько outputs).
 
 ### 5. Композиция и конфигурация — в composition root `codelab_app`, по образцу существующих модулей
 
-`Logger` конструируется и настраивается (sink: stdout в debug / файл в app-data-dir в release, минимальный level) в новом `CodeLabLoggingModule` в `app_scope.dart`, по аналогии с уже существующим `CodeLabPlatformModule`. Presentation (`CodeLabShellCubit` и другие Cubit'ы, которым нужно логировать значимые user intents/UI failures) получают `Logger` через constructor injection из CherryPick-scope — так же, как сейчас получают use case'ы (`CreateSession`, `SendPrompt` и т.д.). Ни один widget не создаёт и не резолвит `Logger` напрямую (§6/§10 AGENTS.md, §36 `layers-and-dependencies.md`).
+Logger-инстансы конструируются и настраиваются в новом `CodeLabLoggingModule` в `app_scope.dart`, по аналогии с уже существующим `CodeLabPlatformModule`. Presentation (`CodeLabShellCubit` и другие Cubit'ы, которым нужно логировать значимые user intents/UI failures) получают `Logger` через constructor injection из CherryPick-scope — так же, как сейчас получают use case'ы (`CreateSession`, `SendPrompt` и т.д.). Ни один widget не создаёт и не резолвит `Logger` напрямую (§6/§10 AGENTS.md, §36 `layers-and-dependencies.md`).
+
+### 6. Два Logger-инстанса вместо одного multi-output: application-консоль и protocol-файл
+
+`structured_log` не поддерживает мультиплексирование одной записи на несколько outputs и не имеет встроенной per-category маршрутизации — у одной конфигурации/`Logger` один `output` (проверено по документации пакета). Поэтому композиция в `CodeLabLoggingModule` создаёт **два independent Logger-инстанса** за одним и тем же портом:
+
+- **application-логгер** — `output: coloredConsoleOutput` в debug (человекочитаемый, с ANSI-цветами, как просил пользователь для stdio/terminal) и JSON/`fileOutput` в release; получает события `component=client|transport|protocol-error` (см. Decision 1) и presentation-события;
+- **protocol-trace-логгер** — `output: rotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …)`, включается только явным toggle (Decision 4), получает исключительно `category=protocol` trace-события полного ACP payload.
+
+`AcpClientApplication`/адаptер сам решает, в какой из двух инстансов писать конкретное событие — маршрутизация по category реализуется на нашей стороне (в `acp_client_core`), а не средствами `structured_log`. Это не создаёт нового публичного API поверх Logger-порта — вызывающий код обращается к одному и тому же порту, выбор физического sink инкапсулирован в адаптере/composition root.
+
+Альтернатива (отклонена): один `Logger`-инстанс с кастомным composite `Output`, который сам решает, писать ли запись в консоль или в файл. Отклонено на этом этапе — требует писать и поддерживать собственную реализацию `Output` внутри проекта вместо простой композиции двух готовых, уже задокументированных output-функций пакета; можно пересмотреть, если понадобится больше двух sinks одновременно.
 
 ## Risks / Trade-offs
 
@@ -62,8 +73,9 @@
 - [Ring buffer теряет старые `DiagnosticEntry` в очень долгих сессиях] → не теряет данные безвозвратно: полный structured-вывод продолжает идти в `Logger`-sink (stdout/файл) независимо от bounded in-memory списка для UI; ring buffer ограничивает только память инспектора.
 - [Confining `structured_log` только к `acp_client_core` означает, что `acp_protocol`/`acp_transports`, используемые отдельно от `acp_client_core` (гипотетически), не получат structured-вывод напрямую] → приемлемо: сегодня оба пакета потребляются только через `acp_client_core`; если появится независимый consumer, это отдельное архитектурное решение, а не часть этого change.
 - [Ошибка конфигурации sink (например, недоступный путь для лог-файла на диске) может тихо потерять логи] → Logger-адаптер обязан иметь безопасный fallback (например, no-op/stdout-only при ошибке инициализации файлового sink), не должен ронять приложение.
+- [Два независимых Logger-инстанса (application/protocol) могут разойтись в masking/correlation-логике, если их конфигурировать по отдельности] → оба инстанса создаются одной фабрикой в `acp_client_core` с общим `SecretRedactor`-processor и общей correlation-обвязкой (Decision 2/3); различается только `output`, не остальная конфигурация.
 
 ## Open Questions
 
-- Точный путь и rotation policy для лог-файла на macOS/Windows/Linux — решается в рамках `docs/architecture/platform-integration.md` при реализации `CodeLabLoggingModule`, не фиксируется в этом design.
-- Нужен ли отдельный `category=protocol` sink (иной файл) от `category=application`, или единый sink с полем `category` — оставлено на этап `tasks`/имплементации, не блокирует архитектурное решение.
+- Точный путь и rotation policy для лог-файла на macOS/Windows/Linux (включая `protocol.log`) — решается в рамках `docs/architecture/platform-integration.md` при реализации `CodeLabLoggingModule`, не фиксируется в этом design.
+- Точные значения `maxSizeBytes`/`maxBackups` для `rotatingFileOutput` protocol-trace-логгера — оставлено на этап `tasks`/имплементации.

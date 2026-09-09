@@ -8,14 +8,15 @@
 
 - [ ] 2.1 Определить абстрактный Logger-порт в `acp_client_core` (методы уровней trace/debug/info/warning/error/fatal, context-binding/`child()`, category/component).
 - [ ] 2.2 Реализовать `structured_log`-адаптер порта внутри `acp_client_core` (единственное место с прямой зависимостью на `structured_log`).
-- [ ] 2.3 Экспортировать Logger-порт и фабрику адаптера через публичный API пакета (`lib/acp_client_core.dart`).
+- [ ] 2.3 Реализовать фабрику, создающую **два** Logger-инстанса за одним портом — application (`coloredConsoleOutput` в debug) и protocol-trace (`rotatingFileOutput`, изначально выключен) — и маршрутизирующую вызовы по `category` на нашей стороне, т.к. `structured_log` не поддерживает multi-output/routing в одной конфигурации (design.md Decision 6).
+- [ ] 2.4 Экспортировать Logger-порт и фабрику адаптера через публичный API пакета (`lib/acp_client_core.dart`).
 
 ## 3. Маскирование и correlation
 
 - [ ] 3.1 Подключить существующий `SecretRedactor` (`packages/dart/acp_client_core/lib/src/domain/secret_redaction.dart`) как processor Logger-адаптера — без новых правил редактирования.
 - [ ] 3.2 Прокинуть `AcpClientApplication.generation` в structured-события как `connection_generation`.
 - [ ] 3.3 Прокинуть существующие session/request/tool-call identifiers в structured-события как `session_id`/`request_id`/`tool_call_id`.
-- [ ] 3.4 Тест: секрет в context-поле и в свободном тексте сообщения замаскирован в structured-выводе (см. спеку "Маскирование секретов в structured-выводе").
+- [ ] 3.4 Тест: секрет в context-поле и в свободном тексте сообщения замаскирован как в консольном (человекочитаемом), так и в файловом/protocol-trace выводе (см. спеку "Маскирование секретов в structured-выводе").
 - [ ] 3.5 Тест: reconnect-событие содержит актуальный `connection_generation`; событие из устаревшего generation логируется с `reason=stale_generation` и не применяется к текущему state.
 
 ## 4. Bounded diagnostics buffer
@@ -31,17 +32,18 @@
 - [ ] 5.3 Пометить structured-события собственного application-lifecycle (session/request/reconnect/cancellation/permission) как `component=client`.
 - [ ] 5.4 Тест: transport diagnostic-событие и protocol-ошибка помечены соответствующим `component` (см. спеку "Логирование по слоям согласно ownership").
 
-## 6. Protocol tracing (developer-only)
+## 6. Protocol tracing в отдельный файл (developer-only)
 
-- [ ] 6.1 Ввести `trace`-уровень/категорию Logger для полного ACP payload, выключенную по умолчанию.
-- [ ] 6.2 Реализовать explicit toggle включения protocol tracing (debug/runtime-настройка), не активируемый автоматически при ошибке.
-- [ ] 6.3 Гарантировать, что release-сборка не включает protocol tracing по умолчанию независимо от toggle default.
-- [ ] 6.4 Тест: release-конфигурация не пишет полный payload по умолчанию; явное включение раскрывает полный payload до явного выключения.
+- [ ] 6.1 Ввести `trace`-уровень/категорию `category=protocol` для полного ACP payload обмена client↔agent, выключенную по умолчанию.
+- [ ] 6.2 Настроить protocol-trace-логгер на `rotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …)` (путь — в app-data-dir, см. задачу 7.1) — отдельно от application-лога в консоли.
+- [ ] 6.3 Реализовать explicit toggle включения protocol tracing (debug/runtime-настройка), не активируемый автоматически при ошибке.
+- [ ] 6.4 Гарантировать, что release-сборка не включает protocol tracing по умолчанию независимо от toggle default.
+- [ ] 6.5 Тест: release-конфигурация не пишет `protocol.log` по умолчанию; явное включение начинает писать в него полный payload до явного выключения.
 
 ## 7. Composition root (`codelab_app`)
 
-- [ ] 7.1 Добавить `CodeLabLoggingModule` в `apps/codelab_app/lib/app/app_scope.dart` по образцу `CodeLabPlatformModule`: конфигурация sink (stdout в debug / файл в app-data-dir в release), минимальный level.
-- [ ] 7.2 Обеспечить безопасный fallback адаптера при ошибке инициализации файлового sink (no-op/stdout-only, без падения приложения).
+- [ ] 7.1 Добавить `CodeLabLoggingModule` в `apps/codelab_app/lib/app/app_scope.dart` по образцу `CodeLabPlatformModule`: application-логгер на `coloredConsoleOutput` (человекочитаемый вывод в терминал) в debug / JSON `fileOutput` в app-data-dir в release; protocol-trace-логгер отдельно, per задачу 6.2.
+- [ ] 7.2 Обеспечить безопасный fallback обоих Logger-инстансов при ошибке инициализации файлового sink (no-op/stdout-only, без падения приложения).
 - [ ] 7.3 Прокинуть `Logger` через constructor injection в `CodeLabShellCubit` (и другие presentation-компоненты, которым нужны significant user intents/UI failures), не резолвя его внутри widgets.
 - [ ] 7.4 Добавить `structured_log` в `apps/codelab_app/pubspec.yaml`, если конкретная конфигурация sink требует типов пакета в composition root; выполнить `melos bootstrap`.
 
