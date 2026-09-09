@@ -50,22 +50,33 @@
 
 ### 4. Protocol tracing — отдельная категория/level, с собственным file sink
 
-Полный ACP payload логируется только на `trace`-уровне (§8 `observability.md`), который по умолчанию выключен и не активируется автоматически при ошибке (§49) — включается явным debug/runtime действием. Логически это тот же Logger-порт с другим `category`/level (не отдельная подсистема) — но физически protocol trace (`category=protocol`) пишется в собственный ротируемый файл, отдельно от человекочитаемого application-лога в консоли (см. Decision 6 — technical reason: `structured_log` не умеет сам маршрутизировать одну запись на несколько outputs).
+Полный ACP payload логируется только на `trace`-уровне (§8 `observability.md`), который по умолчанию выключен и не активируется автоматически при ошибке (§49) — включается явным debug/runtime действием. Логически это тот же Logger-порт с другим `category`/level (не отдельная подсистема) — но физически protocol trace (`category=protocol`) пишется в собственный ротируемый файл, отдельно от человекочитаемого application-лога в консоли (см. Decision 6 — конкретный механизм маршрутизации на несколько outputs).
 
 ### 5. Композиция и конфигурация — в composition root `codelab_app`, по образцу существующих модулей
 
 Logger-инстансы конструируются и настраиваются в новом `CodeLabLoggingModule` в `app_scope.dart`, по аналогии с уже существующим `CodeLabPlatformModule`. Presentation (`CodeLabShellCubit` и другие Cubit'ы, которым нужно логировать значимые user intents/UI failures) получают `Logger` через constructor injection из CherryPick-scope — так же, как сейчас получают use case'ы (`CreateSession`, `SendPrompt` и т.д.). Ни один widget не создаёт и не резолвит `Logger` напрямую (§6/§10 AGENTS.md, §36 `layers-and-dependencies.md`).
 
-### 6. Два Logger-инстанса вместо одного multi-output: application-консоль и protocol-файл
+### 6. Маршрутизация "одна запись → несколько outputs": upstream multiplexing в `structured_log`, с fallback на два инстанса
 
-`structured_log` не поддерживает мультиплексирование одной записи на несколько outputs и не имеет встроенной per-category маршрутизации — у одной конфигурации/`Logger` один `output` (проверено по документации пакета). Поэтому композиция в `CodeLabLoggingModule` создаёт **два independent Logger-инстанса** за одним и тем же портом:
+На момент проектирования `structured_log` не поддерживает мультиплексирование одной записи на несколько outputs и не имеет встроенной per-category маршрутизации — у одной конфигурации/`Logger` один `output`. Поскольку `structured_log` — пакет, разрабатываемый автором этого change, предпочтительное решение — расширить сам пакет нативной поддержкой multi-output вместо того, чтобы реализовывать маршрутизацию как обходной путь на стороне `acp_client_core`.
 
-- **application-логгер** — `output: coloredConsoleOutput` в debug (человекочитаемый, с ANSI-цветами, как просил пользователь для stdio/terminal) и JSON/`fileOutput` в release; получает события `component=client|transport|protocol-error` (см. Decision 1) и presentation-события;
-- **protocol-trace-логгер** — `output: rotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …)`, включается только явным toggle (Decision 4), получает исключительно `category=protocol` trace-события полного ACP payload.
+Предлагаемая форма upstream API (уточняется автором пакета при реализации):
 
-`AcpClientApplication`/адаptер сам решает, в какой из двух инстансов писать конкретное событие — маршрутизация по category реализуется на нашей стороне (в `acp_client_core`), а не средствами `structured_log`. Это не создаёт нового публичного API поверх Logger-порта — вызывающий код обращается к одному и тому же порту, выбор физического sink инкапсулирован в адаптере/composition root.
+```dart
+Logger(
+  sinks: [
+    LogSink(output: coloredConsoleOutput, minLevel: Level.debug, categories: {'application'}),
+    LogSink(output: rotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …),
+        minLevel: Level.trace, categories: {'protocol'}, enabled: false),
+  ],
+)
+```
 
-Альтернатива (отклонена): один `Logger`-инстанс с кастомным composite `Output`, который сам решает, писать ли запись в консоль или в файл. Отклонено на этом этапе — требует писать и поддерживать собственную реализацию `Output` внутри проекта вместо простой композиции двух готовых, уже задокументированных output-функций пакета; можно пересмотреть, если понадобится больше двух sinks одновременно.
+Одна запись эмитится один раз через единый `Logger`, а пакет сам решает, в какие `LogSink` она попадает — по `minLevel` и `categories` каждого sink. Это закрывает сразу две вещи: и multiplexing (одна запись → N outputs), и per-output фильтрацию (которой сегодня тоже нет), которая нужна, чтобы protocol-trace не утекал в консоль, а обычные application-события не писались в `protocol.log`.
+
+**Fallback, если upstream-доработка не готова к моменту реализации этого change:** временно завести в `CodeLabLoggingModule` два independent `Logger`-инстанса (console-логгер и file-логгер для protocol trace) за одним и тем же портом `acp_client_core`, и маршрутизировать вызовы по `category` вручную в адаптере. Это чисто internal-деталь composition root — публичный Logger-порт, которым пользуется остальной код (`acp_client_application.dart`, presentation), не меняется ни в основном, ни в fallback-варианте, поэтому переход на нативный multiplexing после его появления в `structured_log` — замена реализации адаптера, а не изменение вызывающего кода.
+
+Альтернатива (отклонена): держать логику маршрутизации только в `acp_client_core` навсегда, не расширяя `structured_log`. Отклонено — per-output фильтрация является общей потребностью логирования (не специфичной для CodeLab), поэтому естественнее решить её один раз в самой библиотеке, а не дублировать в каждом consumer'е пакета.
 
 ## Risks / Trade-offs
 
@@ -73,7 +84,8 @@ Logger-инстансы конструируются и настраиваютс
 - [Ring buffer теряет старые `DiagnosticEntry` в очень долгих сессиях] → не теряет данные безвозвратно: полный structured-вывод продолжает идти в `Logger`-sink (stdout/файл) независимо от bounded in-memory списка для UI; ring buffer ограничивает только память инспектора.
 - [Confining `structured_log` только к `acp_client_core` означает, что `acp_protocol`/`acp_transports`, используемые отдельно от `acp_client_core` (гипотетически), не получат structured-вывод напрямую] → приемлемо: сегодня оба пакета потребляются только через `acp_client_core`; если появится независимый consumer, это отдельное архитектурное решение, а не часть этого change.
 - [Ошибка конфигурации sink (например, недоступный путь для лог-файла на диске) может тихо потерять логи] → Logger-адаптер обязан иметь безопасный fallback (например, no-op/stdout-only при ошибке инициализации файлового sink), не должен ронять приложение.
-- [Два независимых Logger-инстанса (application/protocol) могут разойтись в masking/correlation-логике, если их конфигурировать по отдельности] → оба инстанса создаются одной фабрикой в `acp_client_core` с общим `SecretRedactor`-processor и общей correlation-обвязкой (Decision 2/3); различается только `output`, не остальная конфигурация.
+- [Upstream multi-output/per-category-filtering API в `structured_log` (Decision 6) может не поспеть к реализации этого change] → используется fallback с двумя independent Logger-инстансами внутри `CodeLabLoggingModule`, за тем же публичным портом; переход на нативный multiplexing позже не требует изменений в вызывающем коде.
+- [В fallback-варианте два независимых Logger-инстанса (application/protocol) могут разойтись в masking/correlation-логике, если их конфигурировать по отдельности] → оба инстанса создаются одной фабрикой в `acp_client_core` с общим `SecretRedactor`-processor и общей correlation-обвязкой (Decision 2/3); различается только `output`, не остальная конфигурация.
 
 ## Open Questions
 
