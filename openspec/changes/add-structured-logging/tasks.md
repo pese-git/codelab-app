@@ -5,9 +5,9 @@
 
 ## 2. Logger-порт и адаптер (`acp_client_core`)
 
-- [ ] 2.1 Определить абстрактный Logger-порт в `acp_client_core` (методы уровней trace/debug/info/warning/error/fatal, context-binding/`child()`, category/component).
-- [ ] 2.2 Реализовать `structured_log`-адаптер порта внутри `acp_client_core` (единственное место с прямой зависимостью на `structured_log`).
-- [ ] 2.3 Реализовать фабрику, конструирующую `StructlogConfiguration(sinks: [...])` согласно design.md Decision 6: `LogSink(name: 'application', output: coloredConsoleOutput, categories: {'application'})` + `LogSink(name: 'protocol', output: rotatingFileOutput(...), categories: {'protocol'}, enabled: false)`.
+- [ ] 2.1 Определить абстрактный Logger-порт в `acp_client_core` (методы уровней debug/info/warning/error/critical — по факту сверки с `structured_log` 0.2.0-dev.1 `LogLevel` в пакете нет `trace`/`fatal`, порт следует этому набору; context-binding/`child()`, `withCorrelation`-эквивалент, `category`/`component`).
+- [ ] 2.2 Реализовать `structured_log`-адаптер порта внутри `acp_client_core` (единственное место с прямой зависимостью на `structured_log`) поверх `BoundLogger`, с собственным `StructlogConfiguration`-инстансом, переданным явно в конструктор `BoundLogger(config, ...)` — не через глобальный `StructlogConfiguration.configure()`/`getLogger()` (design.md Decision 7).
+- [ ] 2.3 Реализовать фабрику, конструирующую `StructlogConfiguration(sinks: [...])` согласно design.md Decision 6: `LogSink(name: 'application', output: coloredConsoleOutput, categories: {'application'})` + `LogSink(name: 'protocol', output: rotatingFileOutput(...), categories: {'protocol'}, enabled: false)`. Адаптер обязан выставлять `context: {'category': ...}` (или `bind({'category': ...})`) на каждый вызов, иначе `LogSink.categories`-фильтрация не сработает.
 - [ ] 2.4 Экспортировать Logger-порт и фабрику адаптера через публичный API пакета (`lib/acp_client_core.dart`).
 
 ## 3. Маскирование и correlation
@@ -33,17 +33,18 @@
 
 ## 6. Protocol tracing в отдельный файл (developer-only)
 
-- [ ] 6.1 Ввести `trace`-уровень/категорию `category=protocol` для полного ACP payload обмена client↔agent, выключенную по умолчанию.
+- [ ] 6.1 Ввести `category=protocol` для полного ACP payload обмена client↔agent — gating идёт через `LogSink.enabled` (пакет не имеет `trace`-уровня, см. design.md Decision 4), выключено по умолчанию.
 - [ ] 6.2 Настроить protocol-trace `LogSink` на `rotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …)` (путь — в app-data-dir, см. задачу 7.1) — отдельно от application-sink в консоли (задача 2.3).
 - [ ] 6.3 Реализовать explicit toggle включения protocol tracing через `StructlogConfiguration.setSinkEnabled('protocol', enabled: ...)` (debug/runtime-настройка), не активируемый автоматически при ошибке.
 - [ ] 6.4 Гарантировать, что release-сборка не включает protocol tracing по умолчанию независимо от toggle default.
 - [ ] 6.5 Тест: release-конфигурация не пишет `protocol.log` по умолчанию; явное включение начинает писать в него полный payload до явного выключения.
+- [ ] 6.6 Замерить влияние на UI isolate при включённом protocol-trace под потоковыми ACP-событиями (`rotatingFileOutput` пишет синхронно, `File.writeAsStringSync` — design.md Risks) — если заметный лаг, завести отдельную upstream-задачу пакету на async/буферизованный `OutputFunction`.
 
 ## 7. Composition root (`codelab_app`)
 
 - [ ] 7.1 Добавить `CodeLabLoggingModule` в `apps/codelab_app/lib/app/app_scope.dart` по образцу `CodeLabPlatformModule`: application-sink на `coloredConsoleOutput` (человекочитаемый вывод в терминал) в debug / JSON `fileOutput` в app-data-dir в release; protocol-trace sink отдельно, per задачу 6.2.
 - [ ] 7.2 Проверить/задействовать per-sink error isolation пакета для protocol-trace sink (ошибка инициализации/записи файлового sink не должна ронять приложение и не должна мешать application-sink в консоли); добавить собственный safe-fallback в адаптере, если встроенной изоляции недостаточно.
-- [ ] 7.3 Прокинуть `Logger` через constructor injection в `CodeLabShellCubit` (и другие presentation-компоненты, которым нужны significant user intents/UI failures), не резолвя его внутри widgets.
+- [ ] 7.3 Прокинуть Logger-порт (адаптер поверх `BoundLogger`) через constructor injection в `CodeLabShellCubit` (и другие presentation-компоненты, которым нужны significant user intents/UI failures), не резолвя его внутри widgets.
 - [ ] 7.4 Добавить `structured_log` в `apps/codelab_app/pubspec.yaml`, если конкретная конфигурация sink требует типов пакета в composition root; выполнить `melos bootstrap`.
 
 ## 8. Регресс существующего контракта

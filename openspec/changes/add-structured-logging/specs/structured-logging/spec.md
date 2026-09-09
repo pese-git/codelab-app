@@ -56,7 +56,7 @@ CodeLab SHALL держать полный ACP payload tracing выключенн
 
 #### Scenario: Явное включение раскрывает полный payload
 - **WHEN** пользователь или разработчик явно включает protocol tracing (debug/runtime-настройка)
-- **THEN** CodeLab начинает включать полный ACP payload в trace-уровневые structured-события, пока настройка не выключена явно
+- **THEN** CodeLab начинает включать полный ACP payload в protocol-trace structured-события (отдельный канал полного трейсинга, помеченный как `protocol`), пока настройка не выключена явно
 
 ### Requirement: Существующий контракт diagnostics-потока не меняется
 CodeLab SHALL сохранять неизменной внешнюю форму существующего diagnostics-потока (`AcpClientApplication.diagnostics`, используемого `inspector_pane.dart`) при добавлении structured-логирования — новый Logger-вывод является дополнительным output к тому же, уже отредактированному через `SecretRedactor`, набору полей, а не заменой этого потока.
