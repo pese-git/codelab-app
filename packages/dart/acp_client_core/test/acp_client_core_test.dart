@@ -261,4 +261,39 @@ void main() {
       'Authorization: Bearer $redactedSecret',
     );
   });
+
+  test('redacts session-secret-shaped keys but not the plain sessionId '
+      'correlation identifier', () {
+    const redactor = SecretRedactor();
+
+    final redacted = redactor.redactMap({
+      'sessionId': 'session-1',
+      'session_id': 'session-1',
+      'session_token': 'abc123',
+      'sessionToken': 'abc123',
+      'session-cookie': 'abc123',
+      'X-Session-Token': 'abc123',
+      'sessionSecret': 'abc123',
+      'sessionKey': 'abc123',
+    });
+
+    expect(redacted['sessionId'], 'session-1');
+    expect(redacted['session_id'], 'session-1');
+    expect(redacted['session_token'], redactedSecret);
+    expect(redacted['sessionToken'], redactedSecret);
+    expect(redacted['session-cookie'], redactedSecret);
+    expect(redacted['X-Session-Token'], redactedSecret);
+    expect(redacted['sessionSecret'], redactedSecret);
+    expect(redacted['sessionKey'], redactedSecret);
+
+    expect(
+      redactor.redactText('"sessionId": "session-1"'),
+      '"sessionId": "session-1"',
+    );
+    expect(redactor.redactText('session_id=session-1'), 'session_id=session-1');
+    expect(
+      redactor.redactText('session_token: abc123'),
+      'session_token: $redactedSecret',
+    );
+  });
 }

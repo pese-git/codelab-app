@@ -1157,8 +1157,10 @@ void main() {
         .single;
     expect(diagnostic?.message, 'Failed to handle ACP session update.');
     expect(diagnostic?.severity, DiagnosticSeverity.error);
+    // sessionId is a plain correlation identifier, not a secret — only
+    // session_token (an actual credential-shaped key) gets redacted.
     expect(diagnostic?.context['params'], {
-      'sessionId': redactedSecret,
+      'sessionId': 'session-1',
       'update': {'session_token': redactedSecret},
     });
   });

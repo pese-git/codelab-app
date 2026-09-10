@@ -161,6 +161,15 @@ void main() {
               )['payload']
               as Map;
       expect(outboundPayload['method'], sessionNewMethod);
+
+      // sessionId is a plain correlation identifier, not a secret — the
+      // masking processor must not redact it (see SecretRedactor's
+      // session[_-]?(token|cookie|secret|key) narrowing).
+      final inboundPayload =
+          traceEntries.firstWhere((e) => e['direction'] == 'inbound')['payload']
+              as Map;
+      final result = inboundPayload['result'] as Map;
+      expect(result['sessionId'], 'session-1');
     },
   );
 }

@@ -1,7 +1,12 @@
 const redactedSecret = '<redacted>';
 
+// `session` alone is intentionally NOT a bare alternative here — ACP's
+// `sessionId`/`session_id` is a plain correlation identifier
+// (`docs/architecture/observability.md` §4), not a secret, and this
+// pattern is used to redact values wholesale. Only session keys shaped
+// like an actual credential (session_token, sessionCookie, ...) match.
 final _sensitiveKeyPattern = RegExp(
-  r'(api[_-]?key|auth|authorization|bearer|cookie|credential|jwt|pass(word)?|private[_-]?key|secret|session|token)',
+  r'(api[_-]?key|auth|authorization|bearer|cookie|credential|jwt|pass(word)?|private[_-]?key|secret|session[_-]?(?:token|cookie|secret|key)|token)',
   caseSensitive: false,
 );
 final _authorizationPattern = RegExp(
@@ -9,7 +14,7 @@ final _authorizationPattern = RegExp(
   caseSensitive: false,
 );
 final _assignmentSecretPattern = RegExp(
-  r'([A-Za-z0-9_.-]*(?:api[_-]?key|cookie|credential|jwt|pass(?:word)?|private[_-]?key|secret|session|token)[A-Za-z0-9_.-]*\s*[:=]\s*)([^\s,;]+)',
+  r'([A-Za-z0-9_.-]*(?:api[_-]?key|cookie|credential|jwt|pass(?:word)?|private[_-]?key|secret|session[_-]?(?:token|cookie|secret|key)|token)[A-Za-z0-9_.-]*\s*[:=]\s*)([^\s,;]+)',
   caseSensitive: false,
 );
 final _privateKeyPattern = RegExp(
