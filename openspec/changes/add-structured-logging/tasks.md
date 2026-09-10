@@ -1,11 +1,11 @@
 ## 1. Подготовка технологии
 
-- [ ] 1.1 Утвердить `structured_log` как технологию логирования в `docs/architecture/technology-stack.md` — версия `0.2.0-dev.3` (pub.dev), с пометкой, что это prerelease и пин будет обновлён при выходе стабильного `0.2.0`.
-- [ ] 1.2 Добавить `structured_log: 0.2.0-dev.3` (точный pin, без caret) в `dependencies` `packages/dart/acp_client_core/pubspec.yaml`, выполнить `melos bootstrap`.
+- [ ] 1.1 Утвердить `structured_log` как технологию логирования в `docs/architecture/technology-stack.md` — версия `0.2.0-dev.4` (pub.dev), с пометкой, что это prerelease и пин будет обновлён при выходе стабильного `0.2.0`.
+- [ ] 1.2 Добавить `structured_log: 0.2.0-dev.4` (точный pin, без caret) в `dependencies` `packages/dart/acp_client_core/pubspec.yaml`, выполнить `melos bootstrap`.
 
 ## 2. Logger-порт и адаптер (`acp_client_core`)
 
-- [ ] 2.1 Определить абстрактный Logger-порт в `acp_client_core` (методы уровней trace/debug/info/warning/error/critical — по факту сверки с `structured_log` 0.2.0-dev.3 `LogLevel` в пакете есть все, кроме отдельного `fatal` — маппится на `critical`; context-binding/`child()`, `withCorrelation`-эквивалент, `category`/`component`).
+- [ ] 2.1 Определить абстрактный Logger-порт в `acp_client_core` (методы уровней trace/debug/info/warning/error/critical — по факту сверки с `structured_log` 0.2.0-dev.4 `LogLevel` в пакете есть все, кроме отдельного `fatal` — маппится на `critical`; context-binding/`child()`, `withCorrelation`-эквивалент, `category`/`component`).
 - [ ] 2.2 Реализовать `structured_log`-адаптер порта внутри `acp_client_core` (единственное место с прямой зависимостью на `structured_log`) поверх `BoundLogger`, с собственным `StructlogConfiguration`-инстансом, переданным явно в конструктор `BoundLogger(config, ...)` — не через глобальный `StructlogConfiguration.configure()`/`getLogger()` (design.md Decision 7).
 - [ ] 2.3 Реализовать фабрику, конструирующую `StructlogConfiguration(sinks: [...])` согласно design.md Decision 6: `LogSink(name: 'application', output: coloredConsoleOutput, categories: {'application'})` + `LogSink(name: 'protocol', output: AsyncRotatingFileOutput(...), minLevel: LogLevel.trace, categories: {'protocol'}, enabled: false)`. Адаптер обязан выставлять `context: {'category': ...}` (или `bind({'category': ...})`) на каждый вызов, иначе `LogSink.categories`-фильтрация не сработает.
 - [ ] 2.4 Экспортировать Logger-порт и фабрику адаптера через публичный API пакета (`lib/acp_client_core.dart`).
@@ -33,7 +33,7 @@
 
 ## 6. Protocol tracing в отдельный файл (developer-only)
 
-- [ ] 6.1 Использовать `logger.trace(...)` (`LogLevel.trace`, `structured_log` 0.2.0-dev.3+) с `category=protocol` для полного ACP payload обмена client↔agent — runtime on/off идёт через `LogSink.enabled` (не через `minLevel`, он `final`/немутируем), выключено по умолчанию (design.md Decision 4).
+- [ ] 6.1 Использовать `logger.trace(...)` (`LogLevel.trace`, `structured_log` 0.2.0-dev.4+) с `category=protocol` для полного ACP payload обмена client↔agent — runtime on/off идёт через `LogSink.enabled` (не через `minLevel`, он `final`/немутируем), выключено по умолчанию (design.md Decision 4).
 - [ ] 6.2 Настроить protocol-trace `LogSink` на `AsyncRotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …)` с `minLevel: LogLevel.trace` (иначе default `minLevel: debug` отфильтрует trace-записи) — путь в app-data-dir, см. задачу 7.1, отдельно от application-sink в консоли (задача 2.3).
 - [ ] 6.3 Реализовать explicit toggle включения protocol tracing через `StructlogConfiguration.setSinkEnabled('protocol', enabled: ...)` (debug/runtime-настройка), не активируемый автоматически при ошибке.
 - [ ] 6.4 Гарантировать, что release-сборка не включает protocol tracing по умолчанию независимо от toggle default.

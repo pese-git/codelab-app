@@ -68,7 +68,7 @@ Protocol-trace sink по умолчанию выключен (`enabled: false`) 
 
 Начиная с `structured_log` 0.2.0-dev.1 пакет нативно поддерживает multi-output: `StructlogConfiguration(sinks: [...])` + `LogSink(name, output, minLevel, categories, enabled)`, с изоляцией ошибки одного sink от остальных (`BoundLogger.tryLog` оборачивает `sink.output(...)` в try/catch и пишет ошибку в `stderr`, не пробрасывая её дальше — закрывает ровно тот риск, который раньше был отдельным пунктом в Risks). Обходной путь с двумя независимыми Logger-инстансами и ручной маршрутизацией на стороне `acp_client_core`, ранее описанный как fallback, **не требуется**.
 
-Конфигурация в `CodeLabLoggingModule` (сигнатуры сверены с реальным `lib/src/sink.dart`/`lib/src/configuration.dart`/`lib/src/async_file_output.dart`/`lib/src/logger.dart` на `develop`, версия пакета `0.2.0-dev.3`):
+Конфигурация в `CodeLabLoggingModule` (сигнатуры сверены с реальным `lib/src/sink.dart`/`lib/src/configuration.dart`/`lib/src/async_file_output.dart`/`lib/src/logger.dart` на `develop`, версия пакета `0.2.0-dev.4`):
 
 ```dart
 final protocolTraceOutput = AsyncRotatingFileOutput(
@@ -109,13 +109,15 @@ final loggingConfig = StructlogConfiguration(
 
 Решение: `CodeLabLoggingModule` создаёт один `StructlogConfiguration`-инстанс и передаёт его явно в `BoundLogger(...)` при биндинге Logger-порта, не вызывая `StructlogConfiguration.configure()`/`getLogger()`. Это соответствует §23 `layers-and-dependencies.md` (DI через composition root, не через global service locator) и не даёт нескольким `AcpClientApplication` (например, в параллельных тестах) непреднамеренно делить и мутировать один и тот же глобальный logging state.
 
+**Нюанс, подтверждённый по коду 0.2.0-dev.4:** `StructlogConfiguration.initialContext` реально сидируется в контекст только внутри `getLogger()` (`context = Map.from(config.initialContext)` перед созданием `BoundLogger`) — сам конструктор `BoundLogger(config, [context, correlation])` этого не делает. Раз наш адаптер обходит `getLogger()`, `initialContext` конфигурации (если когда-нибудь понадобится, например для `app_version`/`platform` на каждой записи, §51 `observability.md`) придётся сидировать в `context` вручную при создании корневого `BoundLogger`, повторяя то, что иначе делает `getLogger()`. Сегодня в design.md `initialContext` не используется (correlation/category выставляются явно per-layer), так что это просто задокументированная ловушка на будущее, не блокер.
+
 ### 8. Graceful shutdown ждёт `flushed` async-sinks
 
 `AsyncFileOutput`/`AsyncRotatingFileOutput` (Decision 6) буферизуют записи во внутренней очереди — на момент вызова `dispose()` часть записей может быть ещё не сброшена на диск. `CodeLabLoggingModule` обязан сохранить ссылки на оба async-output инстанса (application-в-release и protocol-trace) и дождаться их `flushed`-future при остановке приложения — по аналогии с уже существующим `CodeLabRootLifecycle.dispose()` (`app_scope.dart:203`), который последовательно закрывает `shellCubit`/`transport`/`application`. Без этого шага последние diagnostic/protocol-trace записи перед закрытием (в т.ч. потенциально самые информативные — про причину завершения, §40 `observability.md`) рискуют не попасть в файл.
 
 ## Risks / Trade-offs
 
-- [`structured_log` 0.2.0-dev.3 — всё ещё prerelease (`-dev`), API продолжает меняться между dev-версиями (например, `LogLevel.trace` появился только в dev.3) вплоть до стабильного 0.2.0] → пин на точную dev-версию в `pubspec.yaml` (не caret-диапазон); при выходе стабильного 0.2.0 — точечно свериться с changelog и обновить пин, не откладывая надолго, т.к. пакет полностью подконтролен команде.
+- [`structured_log` 0.2.0-dev.4 — всё ещё prerelease (`-dev`), API/поведение продолжает меняться между dev-версиями (например, `LogLevel.trace` — dev.3, фикс `initialContext` — dev.4) вплоть до стабильного 0.2.0] → пин на точную dev-версию в `pubspec.yaml` (не caret-диапазон); при выходе стабильного 0.2.0 — точечно свериться с changelog и обновить пин, не откладывая надолго, т.к. пакет полностью подконтролен команде.
 - [Ring buffer теряет старые `DiagnosticEntry` в очень долгих сессиях] → не теряет данные безвозвратно: полный structured-вывод продолжает идти в `Logger`-sink (stdout/файл) независимо от bounded in-memory списка для UI; ring buffer ограничивает только память инспектора.
 - [Confining `structured_log` только к `acp_client_core` означает, что `acp_protocol`/`acp_transports`, используемые отдельно от `acp_client_core` (гипотетически), не получат structured-вывод напрямую] → приемлемо: сегодня оба пакета потребляются только через `acp_client_core`; если появится независимый consumer, это отдельное архитектурное решение, а не часть этого change.
 - [Ошибка конфигурации sink (например, недоступный путь для лог-файла на диске) может тихо потерять логи] → покрыто "per-sink error isolation" пакета (Decision 6) плюс собственный safe-fallback адаптера (no-op/stdout-only), не должен ронять приложение.
