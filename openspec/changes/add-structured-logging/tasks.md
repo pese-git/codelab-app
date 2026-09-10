@@ -6,7 +6,7 @@
 ## 2. Logger-порт и адаптер (`acp_client_core`)
 
 - [ ] 2.1 Определить абстрактный Logger-порт в `acp_client_core` (методы уровней trace/debug/info/warning/error/critical — по факту сверки с `structured_log` 0.2.0-dev.4 `LogLevel` в пакете есть все, кроме отдельного `fatal` — маппится на `critical`; context-binding/`child()`, `withCorrelation`-эквивалент, `category`/`component`).
-- [ ] 2.2 Реализовать `structured_log`-адаптер порта внутри `acp_client_core` (единственное место с прямой зависимостью на `structured_log`) поверх `BoundLogger`, с собственным `StructlogConfiguration`-инстансом, переданным явно в конструктор `BoundLogger(config, ...)` — не через глобальный `StructlogConfiguration.configure()`/`getLogger()` (design.md Decision 7).
+- [ ] 2.2 Реализовать `structured_log`-адаптер порта внутри `acp_client_core` (единственное место с прямой зависимостью на `structured_log`) поверх `getLogger([name])` — используя глобальный `StructlogConfiguration`, сознательно без собственного explicit-instance (design.md Decision 7).
 - [ ] 2.3 Реализовать фабрику, конструирующую `StructlogConfiguration(sinks: [...])` согласно design.md Decision 6: `LogSink(name: 'application', output: coloredConsoleOutput, categories: {'application'})` + `LogSink(name: 'protocol', output: AsyncRotatingFileOutput(...), minLevel: LogLevel.trace, categories: {'protocol'}, enabled: false)`. Адаптер обязан выставлять `context: {'category': ...}` (или `bind({'category': ...})`) на каждый вызов, иначе `LogSink.categories`-фильтрация не сработает.
 - [ ] 2.4 Экспортировать Logger-порт и фабрику адаптера через публичный API пакета (`lib/acp_client_core.dart`).
 
@@ -52,6 +52,7 @@
 
 - [ ] 8.1 Тест: `AcpClientApplication.diagnostics`/`inspector_pane.dart` получают `DiagnosticEntry` той же формы, что и до этого change (см. спеку "Существующий контракт diagnostics-потока не меняется").
 - [ ] 8.2 Прогнать существующие тесты `acp_client_core_test.dart`, затрагивающие `SecretRedactor`/diagnostics, убедиться в отсутствии регрессии.
+- [ ] 8.3 В тестах, создающих несколько `AcpClientApplication`/Logger-конфигураций в одном файле, вызывать `StructlogConfiguration.reset()`/`.configure(...)` явно в `setUp`/`tearDown`, чтобы избежать утечки глобального logging state между тестами одного файла (design.md Decision 7 — остаточный риск).
 
 ## 9. Проверка
 
