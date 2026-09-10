@@ -48,13 +48,17 @@
 
 Альтернатива (отклонена): полностью заменить `DiagnosticEntry` на события, читаемые напрямую из `Logger`. Отклонено — ломает существующий, покрытый тестами контракт `AcpClientApplication.diagnostics`/`inspector_pane.dart` без необходимости; Non-Goal этого change — не трогать UI debug-панель.
 
-### 4. Protocol tracing — отдельная `category`, gated через sink, не через level
+### 4. Protocol tracing — `LogLevel.trace` + отдельная `category`, gated через sink `enabled`
 
-**Уточнение по факту сверки с исходниками `structured_log` 0.2.0-dev.1 (`develop`-ветка, `lib/src/logger.dart`):** пакет определяет `enum LogLevel { debug, info, warning, error, critical }` — пяти уровней, без `trace` и без отдельного `fatal` (ближайший аналог `fatal` из `observability.md` §8 — `critical`). Поэтому "выключен по умолчанию, включается explicit действием" для protocol tracing реализуется **не через уровень**, а через `category` + `LogSink.enabled` (см. Decision 6): protocol-trace sink с `categories: {'protocol'}` создаётся с `enabled: false` и живёт независимо от `minLevel`.
+**Уточнение по факту сверки с исходниками:** в 0.2.0-dev.1 пакет определял `LogLevel` без `trace`; начиная с **0.2.0-dev.3** добавлен `LogLevel.trace` (ниже `debug`) и `BoundLogger.trace(event, {context})` — ровно то, что нужно для семантики §8 `observability.md` ("очень подробные internal events"). Ближайший аналог `fatal` из §8 — по-прежнему `critical` (отдельного `fatal` пакет не вводит).
 
-`category` — это не отдельный параметр вызова `debug()`/`info()`/... , а обычный ключ `'category'` в context-map записи (`LogSink.accepts` читает `entry['category']`). Чтобы событие маршрутизировалось в protocol-sink, вызывающий код обязан выставить `context: {'category': 'protocol', ...}` либо заранее забиндить его: `logger.bind({'category': 'protocol'})`.
+Полный ACP payload логируется вызовом `logger.trace(...)`. Sink, принимающий эти записи, получает `minLevel: LogLevel.trace` (иначе default `minLevel: LogLevel.debug` их отфильтрует — подтверждено `LogSink.accepts`: `level.index < minLevel.index`).
 
-Полный ACP payload логируется только через этот protocol-sink, который по умолчанию выключен и не активируется автоматически при ошибке (§49 `observability.md`) — включается явным debug/runtime-действием через `StructlogConfiguration.setSinkEnabled('protocol', enabled: true)`.
+Но `LogSink.minLevel` — `final`, немутируемое поле: уровнем нельзя переключить protocol tracing в runtime. Поэтому "выключен по умолчанию, включается explicit действием" (§49 `observability.md`, не автоматически при ошибке) реализуется через **runtime-mutable** `LogSink.enabled` (см. Decision 6), а `category`/`minLevel: trace` — как раз тот фильтр, который решает, какие записи вообще могут в этот sink попасть, когда он включён.
+
+`category` — это не отдельный параметр вызова `trace()`/`debug()`/..., а обычный ключ `'category'` в context-map записи (`LogSink.accepts` читает `entry['category']`). Чтобы событие маршрутизировалось в protocol-sink, вызывающий код обязан выставить `context: {'category': 'protocol', ...}` либо заранее забиндить его: `logger.bind({'category': 'protocol'})`.
+
+Protocol-trace sink по умолчанию выключен (`enabled: false`) — включается явным debug/runtime-действием через `StructlogConfiguration.setSinkEnabled('protocol', enabled: true)`.
 
 ### 5. Композиция и конфигурация — в composition root `codelab_app`, по образцу существующих модулей
 
@@ -64,7 +68,7 @@
 
 Начиная с `structured_log` 0.2.0-dev.1 пакет нативно поддерживает multi-output: `StructlogConfiguration(sinks: [...])` + `LogSink(name, output, minLevel, categories, enabled)`, с изоляцией ошибки одного sink от остальных (`BoundLogger.tryLog` оборачивает `sink.output(...)` в try/catch и пишет ошибку в `stderr`, не пробрасывая её дальше — закрывает ровно тот риск, который раньше был отдельным пунктом в Risks). Обходной путь с двумя независимыми Logger-инстансами и ручной маршрутизацией на стороне `acp_client_core`, ранее описанный как fallback, **не требуется**.
 
-Конфигурация в `CodeLabLoggingModule` (сигнатуры сверены с реальным `lib/src/sink.dart`/`lib/src/configuration.dart`/`lib/src/async_file_output.dart` на `develop`, версия пакета `0.2.0-dev.2`):
+Конфигурация в `CodeLabLoggingModule` (сигнатуры сверены с реальным `lib/src/sink.dart`/`lib/src/configuration.dart`/`lib/src/async_file_output.dart`/`lib/src/logger.dart` на `develop`, версия пакета `0.2.0-dev.3`):
 
 ```dart
 final protocolTraceOutput = AsyncRotatingFileOutput(
@@ -79,12 +83,13 @@ final loggingConfig = StructlogConfiguration(
     LogSink(
       name: 'application',
       output: coloredConsoleOutput,
-      minLevel: LogLevel.debug,
+      minLevel: LogLevel.debug, // default — trace остаётся вне этого sink
       categories: {'application'},
     ),
     LogSink(
       name: 'protocol',
       output: protocolTraceOutput,
+      minLevel: LogLevel.trace, // иначе default minLevel:debug отфильтрует logger.trace(...)
       categories: {'protocol'},
       enabled: false, // включается через setSinkEnabled, см. Decision 4
     ),
@@ -110,7 +115,7 @@ final loggingConfig = StructlogConfiguration(
 
 ## Risks / Trade-offs
 
-- [`structured_log` 0.2.0-dev.2 — всё ещё prerelease (`-dev`), API может измениться до стабильного 0.2.0] → пин на точную dev-версию в `pubspec.yaml` (не caret-диапазон); при выходе стабильного 0.2.0 — точечно свериться с changelog и обновить пин, не откладывая надолго, т.к. пакет полностью подконтролен команде.
+- [`structured_log` 0.2.0-dev.3 — всё ещё prerelease (`-dev`), API продолжает меняться между dev-версиями (например, `LogLevel.trace` появился только в dev.3) вплоть до стабильного 0.2.0] → пин на точную dev-версию в `pubspec.yaml` (не caret-диапазон); при выходе стабильного 0.2.0 — точечно свериться с changelog и обновить пин, не откладывая надолго, т.к. пакет полностью подконтролен команде.
 - [Ring buffer теряет старые `DiagnosticEntry` в очень долгих сессиях] → не теряет данные безвозвратно: полный structured-вывод продолжает идти в `Logger`-sink (stdout/файл) независимо от bounded in-memory списка для UI; ring buffer ограничивает только память инспектора.
 - [Confining `structured_log` только к `acp_client_core` означает, что `acp_protocol`/`acp_transports`, используемые отдельно от `acp_client_core` (гипотетически), не получат structured-вывод напрямую] → приемлемо: сегодня оба пакета потребляются только через `acp_client_core`; если появится независимый consumer, это отдельное архитектурное решение, а не часть этого change.
 - [Ошибка конфигурации sink (например, недоступный путь для лог-файла на диске) может тихо потерять логи] → покрыто "per-sink error isolation" пакета (Decision 6) плюс собственный safe-fallback адаптера (no-op/stdout-only), не должен ронять приложение.
