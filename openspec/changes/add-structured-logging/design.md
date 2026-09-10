@@ -60,13 +60,19 @@
 
 `BoundLogger`-инстансы (через `getLogger()`/прямое конструирование, см. Decision 7) настраиваются в новом `CodeLabLoggingModule` в `app_scope.dart`, по аналогии с уже существующим `CodeLabPlatformModule`. Presentation (`CodeLabShellCubit` и другие Cubit'ы, которым нужно логировать значимые user intents/UI failures) получают Logger-порт через constructor injection из CherryPick-scope — так же, как сейчас получают use case'ы (`CreateSession`, `SendPrompt` и т.д.). Ни один widget не создаёт и не резолвит Logger-порт напрямую (§6/§10 AGENTS.md, §36 `layers-and-dependencies.md`).
 
-### 6. Маршрутизация "одна запись → несколько outputs": native multiplexing в `structured_log` 0.2.0-dev.1
+### 6. Маршрутизация "одна запись → несколько outputs": native multiplexing в `structured_log` 0.2.0-dev.1+
 
 Начиная с `structured_log` 0.2.0-dev.1 пакет нативно поддерживает multi-output: `StructlogConfiguration(sinks: [...])` + `LogSink(name, output, minLevel, categories, enabled)`, с изоляцией ошибки одного sink от остальных (`BoundLogger.tryLog` оборачивает `sink.output(...)` в try/catch и пишет ошибку в `stderr`, не пробрасывая её дальше — закрывает ровно тот риск, который раньше был отдельным пунктом в Risks). Обходной путь с двумя независимыми Logger-инстансами и ручной маршрутизацией на стороне `acp_client_core`, ранее описанный как fallback, **не требуется**.
 
-Конфигурация в `CodeLabLoggingModule` (сигнатуры сверены с реальным `lib/src/sink.dart`/`lib/src/configuration.dart`):
+Конфигурация в `CodeLabLoggingModule` (сигнатуры сверены с реальным `lib/src/sink.dart`/`lib/src/configuration.dart`/`lib/src/async_file_output.dart` на `develop`, версия пакета `0.2.0-dev.2`):
 
 ```dart
+final protocolTraceOutput = AsyncRotatingFileOutput(
+  'protocol.log',
+  maxSizeBytes: …,
+  maxBackups: …,
+);
+
 final loggingConfig = StructlogConfiguration(
   processors: [secretRedactionProcessor, dropNullValues],
   sinks: [
@@ -78,13 +84,15 @@ final loggingConfig = StructlogConfiguration(
     ),
     LogSink(
       name: 'protocol',
-      output: rotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …),
+      output: protocolTraceOutput,
       categories: {'protocol'},
       enabled: false, // включается через setSinkEnabled, см. Decision 4
     ),
   ],
 );
 ```
+
+`AsyncRotatingFileOutput`/`AsyncFileOutput` (появились в `structured_log` 0.2.0-dev.2) — неблокирующие аналоги `rotatingFileOutput`/`fileOutput`: пишут через async `dart:io` API вместо `writeAsStringSync`, сериализуют записи через внутреннюю очередь (порядок гарантирован), а ошибка одной записи не останавливает очередь. Используются вместо sync-вариантов для **обоих** файловых sinks (protocol-trace и application-лог в release) — закрывает риск блокировки UI isolate, который раньше был явным пунктом в Risks (см. ниже).
 
 Одна запись эмитится один раз через `BoundLogger.tryLog`, а пакет сам решает, в какие `LogSink` она попадает — по `minLevel` (default `LogLevel.debug`, т.е. sink без явного `minLevel` принимает все уровни) и `categories` каждого sink. Runtime-toggle protocol-trace sink — `StructlogConfiguration.setSinkEnabled('protocol', enabled: ...)` (мутирует `enabled` существующих `LogSink` **на месте**, без пересборки конфигурации/логгеров — подтверждено исходником).
 
@@ -96,13 +104,17 @@ final loggingConfig = StructlogConfiguration(
 
 Решение: `CodeLabLoggingModule` создаёт один `StructlogConfiguration`-инстанс и передаёт его явно в `BoundLogger(...)` при биндинге Logger-порта, не вызывая `StructlogConfiguration.configure()`/`getLogger()`. Это соответствует §23 `layers-and-dependencies.md` (DI через composition root, не через global service locator) и не даёт нескольким `AcpClientApplication` (например, в параллельных тестах) непреднамеренно делить и мутировать один и тот же глобальный logging state.
 
+### 8. Graceful shutdown ждёт `flushed` async-sinks
+
+`AsyncFileOutput`/`AsyncRotatingFileOutput` (Decision 6) буферизуют записи во внутренней очереди — на момент вызова `dispose()` часть записей может быть ещё не сброшена на диск. `CodeLabLoggingModule` обязан сохранить ссылки на оба async-output инстанса (application-в-release и protocol-trace) и дождаться их `flushed`-future при остановке приложения — по аналогии с уже существующим `CodeLabRootLifecycle.dispose()` (`app_scope.dart:203`), который последовательно закрывает `shellCubit`/`transport`/`application`. Без этого шага последние diagnostic/protocol-trace записи перед закрытием (в т.ч. потенциально самые информативные — про причину завершения, §40 `observability.md`) рискуют не попасть в файл.
+
 ## Risks / Trade-offs
 
-- [`structured_log` 0.2.0-dev.1 — prerelease (`-dev`), API `LogCorrelation`/`LogSink`/`StructlogConfiguration(sinks:...)` может ещё измениться до стабильного 0.2.0] → пин на точную dev-версию в `pubspec.yaml` (не caret-диапазон); при выходе стабильного 0.2.0 — точечно свериться с changelog и обновить пин, не откладывая надолго, т.к. пакет полностью подконтролен команде.
+- [`structured_log` 0.2.0-dev.2 — всё ещё prerelease (`-dev`), API может измениться до стабильного 0.2.0] → пин на точную dev-версию в `pubspec.yaml` (не caret-диапазон); при выходе стабильного 0.2.0 — точечно свериться с changelog и обновить пин, не откладывая надолго, т.к. пакет полностью подконтролен команде.
 - [Ring buffer теряет старые `DiagnosticEntry` в очень долгих сессиях] → не теряет данные безвозвратно: полный structured-вывод продолжает идти в `Logger`-sink (stdout/файл) независимо от bounded in-memory списка для UI; ring buffer ограничивает только память инспектора.
 - [Confining `structured_log` только к `acp_client_core` означает, что `acp_protocol`/`acp_transports`, используемые отдельно от `acp_client_core` (гипотетически), не получат structured-вывод напрямую] → приемлемо: сегодня оба пакета потребляются только через `acp_client_core`; если появится независимый consumer, это отдельное архитектурное решение, а не часть этого change.
 - [Ошибка конфигурации sink (например, недоступный путь для лог-файла на диске) может тихо потерять логи] → покрыто "per-sink error isolation" пакета (Decision 6) плюс собственный safe-fallback адаптера (no-op/stdout-only), не должен ронять приложение.
-- [`fileOutput`/`rotatingFileOutput` пишут синхронно (`File.writeAsStringSync`) на том же isolate, откуда вызван `logger.debug()/.../critical()` — по коду `lib/src/formatters.dart` подтверждено, что async-варианта нет] → при высокочастотном protocol-trace (например, потоковые ACP-события, §19 `observability.md`) синхронная запись на диск может заметно тормозить UI isolate, если `AcpClientApplication` работает на нём. Смягчение: protocol-trace sink по умолчанию выключен (Decision 4) — риск актуален только пока разработчик явно включил трейсинг; если после реализации замеры покажут заметный лаг, рассмотреть sampling (§59 `observability.md`) или собственный `OutputFunction`, буферизующий запись асинхронно, отдельной upstream-задачей пакету.
+- [~~`fileOutput`/`rotatingFileOutput` пишут синхронно и могут тормозить UI isolate при высокочастотном protocol-trace~~ — **устранено в 0.2.0-dev.2**: `AsyncFileOutput`/`AsyncRotatingFileOutput` пишут асинхронно, не блокируя вызывающий isolate (Decision 6).] → остаточный риск — очередь async-записей не сброшена на shutdown, покрыт Decision 8 (`flushed`-await при `dispose()`).
 
 ## Open Questions
 

@@ -1,7 +1,7 @@
 ## 1. Подготовка технологии
 
-- [ ] 1.1 Утвердить `structured_log` как технологию логирования в `docs/architecture/technology-stack.md` — версия `0.2.0-dev.1` (pub.dev), с пометкой, что это prerelease и пин будет обновлён при выходе стабильного `0.2.0`.
-- [ ] 1.2 Добавить `structured_log: 0.2.0-dev.1` (точный pin, без caret) в `dependencies` `packages/dart/acp_client_core/pubspec.yaml`, выполнить `melos bootstrap`.
+- [ ] 1.1 Утвердить `structured_log` как технологию логирования в `docs/architecture/technology-stack.md` — версия `0.2.0-dev.2` (pub.dev), с пометкой, что это prerelease и пин будет обновлён при выходе стабильного `0.2.0`.
+- [ ] 1.2 Добавить `structured_log: 0.2.0-dev.2` (точный pin, без caret) в `dependencies` `packages/dart/acp_client_core/pubspec.yaml`, выполнить `melos bootstrap`.
 
 ## 2. Logger-порт и адаптер (`acp_client_core`)
 
@@ -34,18 +34,19 @@
 ## 6. Protocol tracing в отдельный файл (developer-only)
 
 - [ ] 6.1 Ввести `category=protocol` для полного ACP payload обмена client↔agent — gating идёт через `LogSink.enabled` (пакет не имеет `trace`-уровня, см. design.md Decision 4), выключено по умолчанию.
-- [ ] 6.2 Настроить protocol-trace `LogSink` на `rotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …)` (путь — в app-data-dir, см. задачу 7.1) — отдельно от application-sink в консоли (задача 2.3).
+- [ ] 6.2 Настроить protocol-trace `LogSink` на `AsyncRotatingFileOutput('protocol.log', maxSizeBytes: …, maxBackups: …)` (неблокирующий вывод, `structured_log` 0.2.0-dev.2+; путь — в app-data-dir, см. задачу 7.1) — отдельно от application-sink в консоли (задача 2.3).
 - [ ] 6.3 Реализовать explicit toggle включения protocol tracing через `StructlogConfiguration.setSinkEnabled('protocol', enabled: ...)` (debug/runtime-настройка), не активируемый автоматически при ошибке.
 - [ ] 6.4 Гарантировать, что release-сборка не включает protocol tracing по умолчанию независимо от toggle default.
 - [ ] 6.5 Тест: release-конфигурация не пишет `protocol.log` по умолчанию; явное включение начинает писать в него полный payload до явного выключения.
-- [ ] 6.6 Замерить влияние на UI isolate при включённом protocol-trace под потоковыми ACP-событиями (`rotatingFileOutput` пишет синхронно, `File.writeAsStringSync` — design.md Risks) — если заметный лаг, завести отдельную upstream-задачу пакету на async/буферизованный `OutputFunction`.
+- [ ] 6.6 Тест: `flushed` protocol-trace sink дожидается всех поставленных в очередь записей (см. задачу 7.5 — graceful shutdown).
 
 ## 7. Composition root (`codelab_app`)
 
-- [ ] 7.1 Добавить `CodeLabLoggingModule` в `apps/codelab_app/lib/app/app_scope.dart` по образцу `CodeLabPlatformModule`: application-sink на `coloredConsoleOutput` (человекочитаемый вывод в терминал) в debug / JSON `fileOutput` в app-data-dir в release; protocol-trace sink отдельно, per задачу 6.2.
-- [ ] 7.2 Проверить/задействовать per-sink error isolation пакета для protocol-trace sink (ошибка инициализации/записи файлового sink не должна ронять приложение и не должна мешать application-sink в консоли); добавить собственный safe-fallback в адаптере, если встроенной изоляции недостаточно.
+- [ ] 7.1 Добавить `CodeLabLoggingModule` в `apps/codelab_app/lib/app/app_scope.dart` по образцу `CodeLabPlatformModule`: application-sink на `coloredConsoleOutput` (человекочитаемый вывод в терминал) в debug / `AsyncFileOutput` в app-data-dir в release (неблокирующий, не `fileOutput`); protocol-trace sink отдельно, per задачу 6.2.
+- [ ] 7.2 Проверить/задействовать per-sink error isolation пакета для protocol-trace и application-file sink (ошибка инициализации/записи файлового sink не должна ронять приложение и не должна мешать другим sink'ам); добавить собственный safe-fallback в адаптере, если встроенной изоляции недостаточно.
 - [ ] 7.3 Прокинуть Logger-порт (адаптер поверх `BoundLogger`) через constructor injection в `CodeLabShellCubit` (и другие presentation-компоненты, которым нужны significant user intents/UI failures), не резолвя его внутри widgets.
 - [ ] 7.4 Добавить `structured_log` в `apps/codelab_app/pubspec.yaml`, если конкретная конфигурация sink требует типов пакета в composition root; выполнить `melos bootstrap`.
+- [ ] 7.5 В `CodeLabRootLifecycle.dispose()` дождаться `flushed` обоих async file-output инстансов (application-в-release и protocol-trace) перед возвратом, аналогично уже существующей последовательности `shellCubit.close() → transport.close() → application.dispose()` (design.md Decision 8).
 
 ## 8. Регресс существующего контракта
 
