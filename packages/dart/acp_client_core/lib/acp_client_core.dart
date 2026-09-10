@@ -16,8 +16,10 @@ export 'src/application/use_cases.dart';
 export 'src/domain/approval_policy.dart';
 export 'src/domain/domain_models.dart';
 export 'src/domain/fs_access.dart';
+export 'src/domain/logger.dart';
 export 'src/domain/secret_redaction.dart';
 export 'src/domain/state_machines.dart';
 export 'src/domain/terminal_access.dart';
+export 'src/infrastructure/structured_log_logger.dart';
 
 const acpClientCorePackageName = 'acp_client_core';

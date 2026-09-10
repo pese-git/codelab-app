@@ -1,12 +1,16 @@
 // ignore_for_file: experimental_member_use
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:cherrypick/cherrypick.dart';
 import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:path/path.dart' as p;
+import 'package:structured_log/structured_log.dart' as structured_log;
 
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/recent_projects_store.dart';
@@ -24,9 +28,16 @@ Scope createCodeLabRootScope({
   CodeLabTransportFactory? transportFactory,
   CodeLabStdioTransportFactory? stdioTransportFactory,
   CodeLabWebSocketTransportFactory? webSocketTransportFactory,
+  String? logDirectoryPath,
 }) {
   final scope = CherryPick.openRootScope()
     ..installModules([
+      CodeLabLoggingModule(
+        // `path_provider`'s app-support directory is resolved async, before
+        // `runApp()`, in `main.dart` — this fallback only covers callers
+        // that skip that step (tests constructing the scope directly).
+        logDirectoryPath: logDirectoryPath ?? Directory.systemTemp.path,
+      ),
       CodeLabTransportRuntimeModule(
         transportFactory: transportFactory ?? _createDefaultTransport,
         stdioTransportFactory: stdioTransportFactory ?? _createStdioTransport,
@@ -41,6 +52,10 @@ Scope createCodeLabRootScope({
     ]);
 
   scope.resolve<CodeLabRootLifecycle>();
+  // Resolved once so CherryPick's Scope.dispose() tracks it as a
+  // Disposable and awaits its flush on shutdown — see
+  // CodeLabLoggingLifecycle's doc comment.
+  scope.resolve<CodeLabLoggingLifecycle>();
   return scope;
 }
 
@@ -70,6 +85,68 @@ final class CodeLabTransportRuntimeModule extends Module {
       _webSocketTransportFactory,
     );
   }
+}
+
+/// Configures the project's structured-logging technology
+/// (`openspec/changes/add-structured-logging/design.md`, Decision 5):
+/// human-readable console output for application-level events in debug
+/// builds, non-blocking file sinks in release/for protocol tracing.
+final class CodeLabLoggingModule extends Module {
+  CodeLabLoggingModule({required String logDirectoryPath})
+    : _logDirectoryPath = logDirectoryPath;
+
+  final String _logDirectoryPath;
+
+  @override
+  void builder(Scope currentScope) {
+    final protocolTraceOutput = structured_log.AsyncRotatingFileOutput(
+      p.join(_logDirectoryPath, 'protocol.log'),
+      maxSizeBytes: 10 * 1024 * 1024,
+      maxBackups: 5,
+    );
+    // Debug: human-readable console only. Release: also write JSON lines to
+    // a file, non-blocking (design.md Decision 6/8) — console output alone
+    // isn't durable for a desktop app nobody is watching a terminal for.
+    final applicationFileOutput = kDebugMode
+        ? null
+        : structured_log.AsyncFileOutput(
+            p.join(_logDirectoryPath, 'application.log'),
+          );
+
+    configureCodeLabLogging(
+      applicationOutput:
+          applicationFileOutput?.call ?? structured_log.coloredConsoleOutput,
+      protocolTraceOutput: protocolTraceOutput.call,
+    );
+
+    bind<CodeLabLoggingLifecycle>().toInstance(
+      CodeLabLoggingLifecycle(
+        applicationOutput: applicationFileOutput,
+        protocolTraceOutput: protocolTraceOutput,
+      ),
+    );
+  }
+}
+
+/// Awaits pending writes on both async logging sinks before the scope
+/// finishes disposing (design.md Decision 8) — resolved once via
+/// [createCodeLabRootScope] so CherryPick's own `Scope.dispose()` (which
+/// disposes every resolved [Disposable] automatically) picks it up, rather
+/// than threading it through [CodeLabRootLifecycle]'s constructor.
+final class CodeLabLoggingLifecycle implements Disposable {
+  CodeLabLoggingLifecycle({
+    required this.applicationOutput,
+    required this.protocolTraceOutput,
+  });
+
+  final structured_log.AsyncFileOutput? applicationOutput;
+  final structured_log.AsyncRotatingFileOutput protocolTraceOutput;
+
+  @override
+  Future<void> dispose() => Future.wait([
+    if (applicationOutput != null) applicationOutput!.flushed,
+    protocolTraceOutput.flushed,
+  ]);
 }
 
 final class CodeLabPlatformModule extends Module {
@@ -259,17 +336,31 @@ final class CodeLabDependenciesScope extends InheritedWidget {
 }
 
 class CodeLabBootstrap extends StatefulWidget {
-  const CodeLabBootstrap({required this.child, this.scope, super.key});
+  const CodeLabBootstrap({
+    required this.child,
+    this.scope,
+    this.logDirectoryPath,
+    super.key,
+  });
 
   final Widget child;
   final Scope? scope;
+
+  /// Directory for logging sinks (`design.md` Decision 6) — resolved via
+  /// `path_provider` in `main.dart` before `runApp()`, since that call is
+  /// async and this widget's constructor must stay `const`-compatible.
+  /// `null` (e.g. in tests that don't pass it) falls back to a temp
+  /// directory, see [createCodeLabRootScope].
+  final String? logDirectoryPath;
 
   @override
   State<CodeLabBootstrap> createState() => _CodeLabBootstrapState();
 }
 
 class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
-  late final Scope _scope = widget.scope ?? createCodeLabRootScope();
+  late final Scope _scope =
+      widget.scope ??
+      createCodeLabRootScope(logDirectoryPath: widget.logDirectoryPath);
   late final CodeLabDependencies _dependencies = CodeLabDependencies(
     application: _scope.resolve<AcpClientApplication>(),
     shellCubit: _scope.resolve<CodeLabShellCubit>(),

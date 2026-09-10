@@ -412,6 +412,28 @@ domain НЕ ДОЛЖНЫ импортировать `file_selector` напрям
 Добавление второй persistence-технологии (SQL, NoSQL, файловый store и
 т.п.) для той же категории задач требует ADR (см. §26).
 
+### 12.3. `path_provider`
+
+Официальный Flutter-team plugin, даёт OS-корректный путь к
+application-support-directory (`~/Library/Application Support/...` на
+macOS, `%APPDATA%`-based на Windows, XDG-based на Linux). Введён в рамках
+`add-structured-logging` (см. `openspec/changes/add-structured-logging/
+design.md`) — единственный потребитель на момент введения:
+`CodeLabLoggingModule` резолвит директорию для файловых logging sinks
+(application-лог в release, protocol-trace) до вызова
+`createCodeLabRootScope()` в `main()`.
+
+Использовать:
+
+* только для получения platform-appropriate directory paths, не для
+  файлового I/O самого по себе (это `dart:io`/`structured_log`'s file
+  outputs).
+
+Путь резолвится асинхронно в `main()` до `runApp()` (platform channel
+call, требует `WidgetsFlutterBinding.ensureInitialized()`) и передаётся
+вниз как простой `String`, а не как прямая зависимость widgets/domain на
+`path_provider` — соответствует §11 `AGENTS.md`.
+
 ---
 
 ## 13. Code generation
@@ -552,6 +574,18 @@ Package:
 Если behavior может быть реализовано без Flutter и является общим для ACP client, следует сначала рассмотреть размещение в `acp_client_core`, а не в `codelab_app`.
 
 При этом `acp_client_core` НЕ ДОЛЖЕН превращаться в dumping ground для любой application logic.
+
+### 17.1. Structured logging — `structured_log`
+
+Технология: [`structured_log`](https://pub.dev/packages/structured_log) — pure Dart structured-logging библиотека (JSON output, context binding, processor pipeline, multi-sink routing, typed correlation fields).
+
+Введена в рамках `add-structured-logging` (см. `openspec/changes/add-structured-logging/design.md`) как единственная технология логирования проекта — заменяет ad hoc `print`/`debugPrint` и служит backend для существующего `DiagnosticEntry`-потока `acp_client_core`.
+
+Версия на момент введения: `0.2.0-dev.4` (prerelease, `-dev`) — пин на точную версию в `pubspec.yaml`, без caret-диапазона. При выходе стабильного `0.2.0` пин следует обновить, сверившись с changelog пакета.
+
+Зависимость подключена **только** в `acp_client_core` (единственный владелец Logger-порта и `structured_log`-адаптера) и `codelab_app` (composition root, конкретная конфигурация sinks). `acp_protocol`/`acp_transports` эту зависимость не получают — они продолжают сигнализировать о своих событиях через уже существующие typed errors/`AcpTransportEvent.diagnostic`, которые `acp_client_core` транслирует в structured-события с сохранением correlation-контекста (см. `design.md` Decision 1).
+
+Конфигурация (sinks, processors) идёт через глобальный `StructlogConfiguration.configure()`/`getLogger()` пакета — осознанное исключение из общего запрета на global service locator (§23 `layers-and-dependencies.md`), обоснование см. `design.md` Decision 7.
 
 ---
 

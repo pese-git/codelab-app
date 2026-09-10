@@ -131,5 +131,7 @@ final loggingConfig = StructlogConfiguration(
 
 ## Open Questions
 
-- Точный путь и rotation policy для лог-файла на macOS/Windows/Linux (включая `protocol.log`) — решается в рамках `docs/architecture/platform-integration.md` при реализации `CodeLabLoggingModule`, не фиксируется в этом design.
-- Точные значения `maxSizeBytes`/`maxBackups` для `rotatingFileOutput` protocol-trace-логгера — оставлено на этап `tasks`/имплементации.
+Обе закрыты при реализации:
+
+- Путь и rotation policy для лог-файлов — `path_provider`'s `getApplicationSupportDirectory()` (§12.3 `technology-stack.md`), резолвится асинхронно в `main()` до `runApp()`, передаётся вниз как `String` (`CodeLabBootstrap.logDirectoryPath` → `createCodeLabRootScope` → `CodeLabLoggingModule`). Тестовый/fallback-путь (когда `logDirectoryPath` не передан, например в integration-тестах, конструирующих `CodeLabBootstrap` без него) — `Directory.systemTemp.path`.
+- `maxSizeBytes`/`maxBackups` для `AsyncRotatingFileOutput` protocol-trace sink — оставлены на дефолтах самого пакета (10MB / 5 backups), явно не переопределены отдельным ADR-уровня решением — недостаточно данных на этом этапе, чтобы обоснованно отклониться от дефолта.

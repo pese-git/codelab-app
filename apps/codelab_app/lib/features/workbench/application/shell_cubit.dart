@@ -421,6 +421,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
+    Logger? logger,
   }) : _application = application,
        _createSessionUseCase = createSessionUseCase,
        _sendPromptUseCase = sendPromptUseCase,
@@ -433,6 +434,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
        _workingDirectoryProvider = workingDirectoryProvider,
        _projectFolderPicker = projectFolderPicker,
        _recentProjectsStore = recentProjectsStore,
+       _logger = (logger ?? StructuredLogLogger('codelab_app.shell')).bind({
+         logCategoryKey: applicationLogCategory,
+         logComponentKey: presentationComponent,
+       }),
        super(CodeLabShellState.initial(profile: profile)) {
     _sessionSubscription = _application.sessionChanges.listen(
       _handleSessionChange,
@@ -473,6 +478,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final WorkingDirectoryProvider _workingDirectoryProvider;
   final ProjectFolderPicker _projectFolderPicker;
   final RecentProjectsStore _recentProjectsStore;
+  final Logger _logger;
   final _redactor = const SecretRedactor();
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<DiagnosticEntry> _diagnosticSubscription;
@@ -660,6 +666,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           'WebSocket endpoint is required before reconnecting.',
           severity: AcpDebugLogSeverity.error,
           source: 'transport',
+          logSource: 'transport',
         );
         emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
         return;
@@ -669,6 +676,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       _recordDiagnostic(
         'Reconnecting WebSocket ACP agent: ${state.selectedConnectionDetail}.',
         source: 'transport',
+        logSource: 'transport',
       );
 
       final result = await _reconnectUseCase(
@@ -684,6 +692,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             'Failed to reconnect WebSocket ACP agent: ${_failureMessage(failure)}',
             severity: AcpDebugLogSeverity.error,
             source: 'transport',
+            logSource: 'transport',
           );
         },
         (connectionState) {
@@ -695,6 +704,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           _recordDiagnostic(
             'WebSocket ACP agent reconnected: ${state.selectedConnectionDetail}.',
             source: 'transport',
+            logSource: 'transport',
           );
         },
       );
@@ -707,6 +717,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         'Stdio command is required before reconnecting.',
         severity: AcpDebugLogSeverity.error,
         source: 'transport',
+        logSource: 'transport',
       );
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
       return;
@@ -716,6 +727,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _recordDiagnostic(
       'Reconnecting stdio ACP agent: ${state.selectedConnectionDetail}.',
       source: 'transport',
+      logSource: 'transport',
     );
 
     final result = await _reconnectUseCase(
@@ -731,6 +743,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           'Failed to reconnect stdio ACP agent: ${_failureMessage(failure)}',
           severity: AcpDebugLogSeverity.error,
           source: 'transport',
+          logSource: 'transport',
         );
       },
       (connectionState) {
@@ -742,6 +755,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         _recordDiagnostic(
           'Stdio ACP agent reconnected: ${state.selectedConnectionDetail}.',
           source: 'transport',
+          logSource: 'transport',
         );
       },
     );
@@ -780,11 +794,16 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         'Connect an ACP agent before creating a session.',
         severity: AcpDebugLogSeverity.warning,
         source: 'session',
+        logSource: 'session',
       );
       return;
     }
 
-    _recordDiagnostic('Creating ACP session.', source: 'session');
+    _recordDiagnostic(
+      'Creating ACP session.',
+      source: 'session',
+      logSource: 'session',
+    );
 
     final result = await _createSessionUseCase(
       CreateSessionCommand(cwd: _selectedProjectPath),
@@ -796,6 +815,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         'Failed to create ACP session: ${_failureMessage(failure)}',
         severity: AcpDebugLogSeverity.error,
         source: 'session',
+        logSource: 'session',
       ),
       (session) {
         final sessionItem = _sessionListItem(session);
@@ -821,6 +841,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         _recordDiagnostic(
           'Created ACP session ${session.id.value}.',
           source: 'session',
+          logSource: 'session',
         );
       },
     );
@@ -1272,19 +1293,42 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return super.close();
   }
 
+  /// [logSource] identifies this diagnostic to the structured Logger and is
+  /// `null` for diagnostics forwarded from [_handleApplicationDiagnostic] —
+  /// those already went through `AcpClientApplication`'s own Logger call
+  /// with the correct `component` (transport/protocol/client); logging them
+  /// again here under `component=presentation` would duplicate the same
+  /// event (`docs/architecture/observability.md` §55).
   void _recordDiagnostic(
     String message, {
     AcpDebugLogSeverity severity = AcpDebugLogSeverity.info,
     String? source,
+    String? logSource,
   }) {
+    final redactedMessage = _redactor.redactText(message);
     final nextEntry = AcpDebugLogEntry(
       id: 'pending-${state.diagnostics.length + 1}',
       severity: severity,
       source: source,
-      message: _redactor.redactText(message),
+      message: redactedMessage,
     );
 
     emit(state.copyWith(diagnostics: [...state.diagnostics, nextEntry]));
+
+    if (logSource == null) {
+      return;
+    }
+    final logContext = {'source': logSource};
+    switch (severity) {
+      case AcpDebugLogSeverity.debug:
+        _logger.debug(redactedMessage, context: logContext);
+      case AcpDebugLogSeverity.info:
+        _logger.info(redactedMessage, context: logContext);
+      case AcpDebugLogSeverity.warning:
+        _logger.warning(redactedMessage, context: logContext);
+      case AcpDebugLogSeverity.error:
+        _logger.error(redactedMessage, context: logContext);
+    }
   }
 
   /// Reloads [CodeLabShellState.recentProjects] from [RecentProjectsStore],

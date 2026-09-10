@@ -6,9 +6,11 @@ import 'package:acp_transports/acp_transports.dart';
 import '../domain/approval_policy.dart';
 import '../domain/domain_models.dart';
 import '../domain/fs_access.dart';
+import '../domain/logger.dart';
 import '../domain/secret_redaction.dart';
 import '../domain/state_machines.dart';
 import '../domain/terminal_access.dart';
+import '../infrastructure/structured_log_logger.dart';
 import 'application_models.dart';
 
 final class AcpClientApplicationException implements Exception {
@@ -53,12 +55,14 @@ final class AcpClientApplication {
     TextFileReader? textFileReader,
     TextFileWriter? textFileWriter,
     TerminalProcessRunner? terminalProcessRunner,
+    Logger? logger,
   }) : _transport = transport,
        _reconnectTransport = reconnectTransport,
        _clientInfo = clientInfo,
        _textFileReader = textFileReader,
        _textFileWriter = textFileWriter,
-       _terminalProcessRunner = terminalProcessRunner {
+       _terminalProcessRunner = terminalProcessRunner,
+       _rawLogger = logger ?? StructuredLogLogger('acp_client_core') {
     _bindTransport();
   }
 
@@ -96,8 +100,29 @@ final class AcpClientApplication {
       <ApprovalRequestId, _PendingPermissionRequest>{};
   final _handledPermissionRequests = <ApprovalRequestId>{};
   final _sessions = <SessionId, AcpSession>{};
+
+  /// Bounded ring buffer — see `docs/architecture/observability.md` §28.
+  /// Only bounds this in-memory list (used by the UI inspector); the full
+  /// structured-logging output is unaffected, see `_logDiagnosticEntry`.
+  static const _maxDiagnostics = 500;
   final _diagnostics = <DiagnosticEntry>[];
   final _redactor = const SecretRedactor();
+
+  /// Unbound base logger, injected or defaulted to the `structured_log`
+  /// adapter (`design.md` Decision 7 — global singleton, deliberately not
+  /// an injected `StructlogConfiguration` instance).
+  final Logger _rawLogger;
+
+  /// Application-level structured events (`category=application`).
+  late final Logger _logger = _rawLogger.bind({
+    logCategoryKey: applicationLogCategory,
+  });
+
+  /// Developer-only full ACP payload tracing (`category=protocol`),
+  /// off by default — see `design.md` Decision 4.
+  late final Logger _protocolTraceLogger = _rawLogger.bind({
+    logCategoryKey: protocolTraceLogCategory,
+  });
   final _sessionController = StreamController<AcpSession>.broadcast(sync: true);
   final _diagnosticController = StreamController<DiagnosticEntry>.broadcast(
     sync: true,
@@ -254,6 +279,7 @@ final class AcpClientApplication {
       return completedSession.turns.last;
     } on Object catch (error) {
       if (generation != _generation) {
+        _logStaleEvent('send_prompt_result', generation);
         rethrow;
       }
       final failedSession = SessionStateMachine.failTurn(
@@ -424,10 +450,28 @@ final class AcpClientApplication {
   }
 
   void _transitionConnection(ConnectionStateEvent event) {
+    final previousState = _connectionState;
     _connectionState = ConnectionStateMachine.reduce(
       _connectionState,
       event,
     ).stateOrThrow;
+
+    // Structured lifecycle event (OBS-001) — single choke point for every
+    // connection state transition, see `docs/architecture/observability.md`
+    // §6.
+    final connectionLogger = _logger
+        .bind({logComponentKey: clientComponent})
+        .withCorrelation(connectionGeneration: _generation);
+    final logContext = {
+      'from': previousState.runtimeType.toString(),
+      'to': _connectionState.runtimeType.toString(),
+    };
+    if (_connectionState is ClientConnectionFailed) {
+      connectionLogger.warning('connection_state_changed', context: logContext);
+    } else {
+      connectionLogger.info('connection_state_changed', context: logContext);
+    }
+
     if (!_connectionStateController.isClosed) {
       _connectionStateController.add(_connectionState);
     }
@@ -538,7 +582,7 @@ final class AcpClientApplication {
     _pendingRequests[id] = pending;
 
     try {
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpRequest(id: id, method: method, params: params),
       );
     } on Object catch (error) {
@@ -571,7 +615,7 @@ final class AcpClientApplication {
     required Object params,
   }) async {
     try {
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpNotification(method: method, params: params),
       );
     } on Object catch (error) {
@@ -589,20 +633,57 @@ final class AcpClientApplication {
     }
   }
 
+  /// Sends [message] over the transport, tracing its full raw payload to
+  /// the developer-only protocol-trace channel first — a single choke
+  /// point covering every outbound ACP wire message (`design.md`
+  /// Decision 4/6), used in place of `_transport.send(...)` everywhere in
+  /// this class.
+  Future<void> _sendTracedMessage(JsonRpcMessage message) {
+    _traceProtocolMessage('outbound', message);
+    return _transport.send(message);
+  }
+
+  void _traceProtocolMessage(String direction, JsonRpcMessage message) {
+    _protocolTraceLogger
+        .withCorrelation(connectionGeneration: _generation)
+        .trace(
+          'protocol_message',
+          context: {'direction': direction, 'payload': message.toJson()},
+        );
+  }
+
   void _bindTransport() {
     final boundGeneration = _generation;
     _inboundSubscription = _transport.inbound.listen((message) {
       if (boundGeneration != _generation) {
+        _logStaleEvent('inbound_message', boundGeneration);
         return;
       }
+      _traceProtocolMessage('inbound', message);
       _handleInboundMessage(message);
     });
     _eventSubscription = _transport.events.listen((event) {
       if (boundGeneration != _generation) {
+        _logStaleEvent('transport_event', boundGeneration);
         return;
       }
       _handleTransportEvent(event);
     });
+  }
+
+  /// Logs an event discarded because it belongs to a superseded transport
+  /// generation — see `docs/architecture/observability.md` §20. Tagged
+  /// with [eventGeneration] (the stale event's own generation), not the
+  /// current one, so it can be told apart from the connection that
+  /// superseded it.
+  void _logStaleEvent(String kind, int eventGeneration) {
+    _logger
+        .bind({logComponentKey: transportComponent})
+        .withCorrelation(connectionGeneration: eventGeneration)
+        .debug(
+          'event_ignored',
+          context: {'reason': 'stale_generation', 'kind': kind},
+        );
   }
 
   void _failPendingRequests(Object error) {
@@ -652,6 +733,7 @@ final class AcpClientApplication {
         severity: DiagnosticSeverity.error,
         source: 'application.protocol',
         cause: response.error,
+        requestId: response.id.toJsonValue().toString(),
         context: {
           'method': pending.method,
           'requestId': response.id.toJsonValue(),
@@ -677,6 +759,7 @@ final class AcpClientApplication {
         severity: DiagnosticSeverity.error,
         source: 'application.protocol',
         cause: error,
+        requestId: response.id.toJsonValue().toString(),
         context: {
           'method': pending.method,
           'requestId': response.id.toJsonValue(),
@@ -786,7 +869,7 @@ final class AcpClientApplication {
         line: readRequest.line,
         limit: readRequest.limit,
       );
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpResponse(
           id: request.id,
           method: fsReadTextFileMethod,
@@ -875,7 +958,7 @@ final class AcpClientApplication {
           'requestId': request.id.toJsonValue(),
         },
       );
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpResponse(
           id: request.id,
           method: fsWriteTextFileMethod,
@@ -988,7 +1071,7 @@ final class AcpClientApplication {
         },
       );
 
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpResponse(
           id: request.id,
           method: terminalCreateMethod,
@@ -1054,7 +1137,7 @@ final class AcpClientApplication {
         outputRequest.terminalId,
       );
 
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpResponse(
           id: request.id,
           method: terminalOutputMethod,
@@ -1127,7 +1210,7 @@ final class AcpClientApplication {
           'running.',
         ),
       };
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpResponse(
           id: request.id,
           method: terminalWaitForExitMethod,
@@ -1190,7 +1273,7 @@ final class AcpClientApplication {
 
       await handle.kill();
 
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpResponse(
           id: request.id,
           method: terminalKillMethod,
@@ -1251,7 +1334,7 @@ final class AcpClientApplication {
       await handle.kill();
       _terminals[releaseRequest.sessionId]?.remove(releaseRequest.terminalId);
 
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpResponse(
           id: request.id,
           method: terminalReleaseMethod,
@@ -1354,7 +1437,7 @@ final class AcpClientApplication {
     required AcpProtocolError error,
   }) async {
     try {
-      await _transport.send(
+      await _sendTracedMessage(
         JsonRpcMessage.response(id: id, error: error.toJsonRpcError()),
       );
     } on Object catch (sendError) {
@@ -1404,12 +1487,14 @@ final class AcpClientApplication {
           message: message,
           severity: _mapDiagnosticSeverity(severity),
           source: source,
+          component: transportComponent,
         );
       case AcpTransportFailure(:final error):
         _recordDiagnostic(
           message: error.message,
           severity: DiagnosticSeverity.error,
           source: 'transport',
+          component: transportComponent,
           cause: error,
           context: {'code': error.code.name, 'cause': error.cause?.toString()},
         );
@@ -1444,7 +1529,7 @@ final class AcpClientApplication {
     }
 
     try {
-      await _transport.send(
+      await _sendTracedMessage(
         encodeAcpResponse(
           id: pending.requestId,
           method: sessionRequestPermissionMethod,
@@ -1457,6 +1542,7 @@ final class AcpClientApplication {
         severity: DiagnosticSeverity.error,
         source: 'application.permission',
         cause: error,
+        requestId: pending.requestId.toJsonValue().toString(),
         context: {
           'method': sessionRequestPermissionMethod,
           'requestId': pending.requestId.toJsonValue(),
@@ -1491,6 +1577,7 @@ final class AcpClientApplication {
             severity: DiagnosticSeverity.error,
             source: 'application.permission',
             cause: error,
+            requestId: requestId.toJsonValue().toString(),
             context: {
               'method': sessionRequestPermissionMethod,
               'requestId': requestId.toJsonValue(),
@@ -1506,6 +1593,10 @@ final class AcpClientApplication {
     String? source,
     Object? cause,
     Map<String, Object?> context = const {},
+    String? component,
+    String? sessionId,
+    String? requestId,
+    String? toolCallId,
   }) {
     final entry = DiagnosticEntry(
       id: DiagnosticEntryId('diagnostic-${_nextDiagnosticId++}'),
@@ -1518,6 +1609,9 @@ final class AcpClientApplication {
     );
 
     _diagnostics.add(entry);
+    while (_diagnostics.length > _maxDiagnostics) {
+      _diagnostics.removeAt(0);
+    }
     if (!_diagnosticController.isClosed) {
       _diagnosticController.add(entry);
     }
@@ -1527,6 +1621,62 @@ final class AcpClientApplication {
         session.copyWith(diagnostics: [...session.diagnostics, entry]),
       );
     }
+
+    _logDiagnosticEntry(
+      entry,
+      component: component ?? _componentForSource(source),
+      sessionId: sessionId,
+      requestId: requestId,
+      toolCallId: toolCallId,
+    );
+  }
+
+  /// Emits [entry] (already redacted by [_recordDiagnostic] — reused as-is,
+  /// not re-derived, so both `DiagnosticEntry` and this structured event
+  /// come from a single redaction pass, see `design.md` Decision 3) through
+  /// the structured Logger, tagged with layer ownership and correlation.
+  void _logDiagnosticEntry(
+    DiagnosticEntry entry, {
+    required String component,
+    String? sessionId,
+    String? requestId,
+    String? toolCallId,
+  }) {
+    final logger = _logger
+        .bind({logComponentKey: component})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: sessionId,
+          requestId: requestId,
+          toolCallId: toolCallId,
+        );
+    final logContext = {
+      if (entry.source != null) 'source': entry.source,
+      ...entry.context,
+      if (entry.cause != null) 'cause': entry.cause,
+    };
+
+    switch (entry.severity) {
+      case DiagnosticSeverity.debug:
+        logger.debug(entry.message, context: logContext);
+      case DiagnosticSeverity.info:
+        logger.info(entry.message, context: logContext);
+      case DiagnosticSeverity.warning:
+        logger.warning(entry.message, context: logContext);
+      case DiagnosticSeverity.error:
+        logger.error(entry.message, context: logContext);
+    }
+  }
+
+  /// Derives layer ownership from the existing `source` naming convention
+  /// (`application.protocol` → protocol decode/encode failures) when the
+  /// call site did not pass an explicit `component` — see `design.md`
+  /// Decision "Логирование по слоям согласно ownership".
+  String _componentForSource(String? source) {
+    if (source == 'application.protocol') {
+      return protocolComponent;
+    }
+    return clientComponent;
   }
 
   ApprovalRequestId _approvalRequestId(JsonRpcId requestId) {
@@ -1564,6 +1714,7 @@ final class AcpClientApplication {
 
   void _requireCurrentGeneration(int expectedGeneration) {
     if (expectedGeneration != _generation) {
+      _logStaleEvent('operation_result', expectedGeneration);
       throw const StateTransitionException(
         'operation is stale: ACP transport was reconnected while this '
         'operation was in flight',
