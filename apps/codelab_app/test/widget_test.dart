@@ -7,6 +7,7 @@ import 'package:codelab_app/core/platform/recent_projects_store.dart';
 import 'package:codelab_app/core/platform/working_directory_provider.dart';
 import 'package:codelab_app/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_app/features/workbench/presentation/widgets/connection_setup_dialog.dart';
+import 'package:codelab_app/features/workbench/presentation/widgets/debug_log_viewer_dialog.dart';
 import 'package:codelab_app/features/workbench/presentation/widgets/main_pane.dart';
 import 'package:codelab_app/features/workbench/presentation/workbench_shell.dart'
     show selectPaletteCommand;
@@ -19,6 +20,10 @@ import 'package:fluent_ui/fluent_ui.dart' show FluentApp, TextBox;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:structured_log_flutter/structured_log_flutter.dart'
+    show LogBuffer;
+import 'package:structured_log_fluent/structured_log_fluent.dart'
+    show FluentLogViewerPage;
 
 import 'support/test_app_scope.dart';
 
@@ -39,10 +44,6 @@ void main() {
     );
     expect(find.text('No active session'), findsOneWidget);
     expect(find.text('Create a session after connecting.'), findsOneWidget);
-    expect(
-      find.text('Shell bootstrapped. Connection wiring starts in 7.2.'),
-      findsOneWidget,
-    );
     expect(
       scope.resolve<CodeLabShellCubit>().state.transportType,
       CodeLabTransportType.stdio,
@@ -91,9 +92,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
     expect(
-      shellCubit.state.diagnostics.last.message,
+      binding.scope.resolve<LogBuffer>().entries.value.last['event'],
       'Create or select a session before sending a prompt.',
     );
     expect(binding.transport.sentMessages, isEmpty);
@@ -271,6 +271,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -285,6 +286,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     await shellCubit.selectProject('/workspace');
@@ -310,7 +312,7 @@ void main() {
     expect(shellCubit.state.currentSessionLabel, 'Session session-1');
     expect(shellCubit.state.currentSessionDetail, '/workspace');
     expect(
-      shellCubit.state.diagnostics.map((entry) => entry.message),
+      logger.entries.map((entry) => entry['event']),
       contains('Created ACP session session-1.'),
     );
 
@@ -449,6 +451,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -463,6 +466,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     await shellCubit.selectProject('/workspace');
@@ -521,7 +525,7 @@ void main() {
     expect(shellCubit.state.transcriptEntries.last.title, 'Agent');
     expect(shellCubit.state.transcriptEntries.last.body, 'hi from agent');
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       'Prompt completed with stopReason endTurn.',
     );
 
@@ -928,6 +932,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -942,6 +947,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     await shellCubit.selectProject('/workspace');
@@ -979,7 +985,7 @@ void main() {
     expect(shellCubit.state.isPromptSubmitting, isFalse);
     expect(shellCubit.state.canCancel, isFalse);
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       contains('Connection to ACP agent lost'),
     );
     // The transcript up to the point of failure is history, not part of
@@ -1005,6 +1011,7 @@ void main() {
       'connection-loss handler', () async {
     final configs = <StdioAcpTransportConfig>[];
     final application = AcpClientApplication(transport: FakeAcpTransport());
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -1022,18 +1029,19 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     shellCubit.updateStdioCommand('missing-codelab');
     await shellCubit.connect();
 
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
-    final lossMessages = shellCubit.state.diagnostics.where(
-      (entry) => entry.message.contains('Connection to ACP agent lost'),
+    final lossMessages = logger.entries.where(
+      (entry) => (entry['event'] as String? ?? '').contains('Connection to ACP agent lost'),
     );
     expect(lossMessages, isEmpty);
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       contains('Failed to start stdio ACP agent'),
     );
 
@@ -1046,6 +1054,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
     var reconnectAttempts = 0;
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -1067,6 +1076,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     await shellCubit.selectProject('/workspace');
@@ -1076,12 +1086,12 @@ void main() {
     await shellCubit.reconnect();
 
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
-    final lossMessages = shellCubit.state.diagnostics.where(
-      (entry) => entry.message.contains('Connection to ACP agent lost'),
+    final lossMessages = logger.entries.where(
+      (entry) => (entry['event'] as String? ?? '').contains('Connection to ACP agent lost'),
     );
     expect(lossMessages, isEmpty);
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       contains('Failed to reconnect stdio ACP agent'),
     );
 
@@ -1319,7 +1329,7 @@ void main() {
     expect(shellCubit.state.isRespondingToApproval, isFalse);
     expect(pendingApprovalEntry(), isNull);
     expect(
-      shellCubit.state.diagnostics.last.message,
+      binding.scope.resolve<LogBuffer>().entries.value.last['event'],
       contains('Resolved approval permission-7'),
     );
 
@@ -1484,6 +1494,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -1498,6 +1509,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     await shellCubit.connect();
@@ -1526,7 +1538,7 @@ void main() {
     expect(shellCubit.state.canCancel, isFalse);
     expect(shellCubit.state.isPromptSubmitting, isFalse);
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       contains('Cancelled prompt turn'),
     );
     expect(
@@ -1552,6 +1564,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -1566,6 +1579,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     await shellCubit.connect();
@@ -1596,7 +1610,7 @@ void main() {
       AcpTranscriptEntryKind.diagnostic,
     );
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       contains('Failed to send prompt'),
     );
 
@@ -1609,6 +1623,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final stdioTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -1626,6 +1641,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     await shellCubit.selectProject('/tmp/codelab');
@@ -1644,11 +1660,11 @@ void main() {
     expect(stdioTransport.state, AcpTransportState.connected);
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
     expect(
-      shellCubit.state.diagnostics.map((entry) => entry.message),
+      logger.entries.map((entry) => entry['event']),
       contains('Starting stdio ACP agent: codelab serve --stdio.'),
     );
     expect(
-      shellCubit.state.diagnostics.map((entry) => entry.message),
+      logger.entries.map((entry) => entry['event']),
       contains('Stdio ACP agent started: codelab serve --stdio.'),
     );
 
@@ -1665,6 +1681,7 @@ void main() {
       final reconnectedTransport = FakeAcpTransport();
       final replacements = [connectedTransport, reconnectedTransport];
       final application = AcpClientApplication(transport: initialTransport);
+      final logger = _RecordingLogger();
       final shellCubit = CodeLabShellCubit(
         profile: codelabAgentStdioProfile,
         application: application,
@@ -1682,6 +1699,7 @@ void main() {
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
+        logger: logger,
       );
 
       await shellCubit.connect();
@@ -1710,13 +1728,13 @@ void main() {
       expect(reconnectedTransport.state, AcpTransportState.connected);
       expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
       expect(
-        shellCubit.state.diagnostics.map((entry) => entry.message),
+        logger.entries.map((entry) => entry['event']),
         contains(
           'Reconnecting stdio ACP agent: custom-agent serve --stdio --profile local.',
         ),
       );
       expect(
-        shellCubit.state.diagnostics.map((entry) => entry.message),
+        logger.entries.map((entry) => entry['event']),
         contains(
           'Stdio ACP agent reconnected: custom-agent serve --stdio --profile local.',
         ),
@@ -1730,6 +1748,7 @@ void main() {
   test('connect reports missing stdio command without crashing', () async {
     final configs = <StdioAcpTransportConfig>[];
     final application = AcpClientApplication(transport: FakeAcpTransport());
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -1747,6 +1766,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     shellCubit.updateStdioCommand('');
@@ -1755,7 +1775,7 @@ void main() {
     expect(configs, isEmpty);
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       'Stdio command is required before connecting.',
     );
 
@@ -1766,6 +1786,7 @@ void main() {
   test('connect reports stdio start failure without crashing', () async {
     final configs = <StdioAcpTransportConfig>[];
     final application = AcpClientApplication(transport: FakeAcpTransport());
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -1783,6 +1804,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     shellCubit.updateStdioCommand('missing-codelab');
@@ -1791,7 +1813,7 @@ void main() {
     expect(configs.single.command, 'missing-codelab');
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       contains('Failed to start stdio ACP agent'),
     );
 
@@ -1805,6 +1827,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -1822,6 +1845,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     shellCubit
@@ -1839,7 +1863,7 @@ void main() {
     expect(agentTransport.state, AcpTransportState.connected);
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
     expect(
-      shellCubit.state.diagnostics.map((entry) => entry.message),
+      logger.entries.map((entry) => entry['event']),
       contains('WebSocket ACP agent connected: wss://agent.example.test/acp.'),
     );
 
@@ -1856,6 +1880,7 @@ void main() {
       final reconnectedTransport = FakeAcpTransport();
       final replacements = [connectedTransport, reconnectedTransport];
       final application = AcpClientApplication(transport: initialTransport);
+      final logger = _RecordingLogger();
       final shellCubit = CodeLabShellCubit(
         profile: codelabAgentStdioProfile,
         application: application,
@@ -1873,6 +1898,7 @@ void main() {
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
+        logger: logger,
       );
 
       shellCubit
@@ -1900,13 +1926,13 @@ void main() {
       expect(reconnectedTransport.state, AcpTransportState.connected);
       expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
       expect(
-        shellCubit.state.diagnostics.map((entry) => entry.message),
+        logger.entries.map((entry) => entry['event']),
         contains(
           'Reconnecting WebSocket ACP agent: wss://agent.example.test/acp-v2.',
         ),
       );
       expect(
-        shellCubit.state.diagnostics.map((entry) => entry.message),
+        logger.entries.map((entry) => entry['event']),
         contains(
           'WebSocket ACP agent reconnected: wss://agent.example.test/acp-v2.',
         ),
@@ -1921,6 +1947,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
     var attempts = 0;
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -1940,6 +1967,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     shellCubit
@@ -1952,7 +1980,7 @@ void main() {
 
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       contains('Failed to reconnect WebSocket ACP agent'),
     );
 
@@ -2042,6 +2070,7 @@ void main() {
     'connect redacts secrets leaked through transport factory failures',
     () async {
       final application = AcpClientApplication(transport: FakeAcpTransport());
+      final logger = _RecordingLogger();
       final shellCubit = CodeLabShellCubit(
         profile: codelabAgentStdioProfile,
         application: application,
@@ -2058,13 +2087,14 @@ void main() {
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
+        logger: logger,
       );
 
       shellCubit.updateStdioCommand('missing-codelab');
       await shellCubit.connect();
 
       expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
-      final message = shellCubit.state.diagnostics.last.message;
+      final message = logger.entries.last['event'];
       expect(message, contains('Failed to start stdio ACP agent'));
       expect(message, isNot(contains('sk-super-secret-value')));
       expect(message, contains(redactedSecret));
@@ -2078,6 +2108,7 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -2092,6 +2123,7 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      logger: logger,
     );
 
     await shellCubit.connect();
@@ -2107,7 +2139,7 @@ void main() {
     expect(shellCubit.state.sessions, isEmpty);
     expect(shellCubit.state.activeSessionId, isNull);
     expect(
-      shellCubit.state.diagnostics.last.message,
+      logger.entries.last['event'],
       contains('Failed to create ACP session'),
     );
 
@@ -2210,6 +2242,7 @@ void main() {
       // it — and wait for it to actually finish — via `tester.runAsync`.
       await tester.runAsync(() async {
         selectPaletteCommand(
+          tester.element(find.byType(CodeLabApp)),
           shellCubit,
           AcpCommandAction.defaults.firstWhere((a) => a.id == 'reconnect'),
         );
@@ -2230,7 +2263,9 @@ void main() {
     },
   );
 
-  testWidgets('selecting /logs reveals the debug log panel', (tester) async {
+  testWidgets('selecting /logs opens the full-screen log viewer', (
+    tester,
+  ) async {
     final binding = CodeLabTestBinding();
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
@@ -2244,7 +2279,7 @@ void main() {
       const Duration(seconds: 5),
     );
     await tester.tap(find.text('/logs'));
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
 
     // The narrow-layout Offstage toggle that this flag drives is covered
     // directly on `AcpWorkbenchLayout` in acp_organisms_test.dart, at a
@@ -2253,7 +2288,15 @@ void main() {
     // this test only checks the state/UI wiring this change owns.
     expect(shellCubit.state.isInspectorVisibleInNarrowLayout, isTrue);
     expect(shellCubit.state.isCommandPaletteOpen, isFalse);
-    expect(find.byType(AcpDebugLogPanel), findsOneWidget);
+    expect(find.byType(DebugLogViewerDialog), findsOneWidget);
+    expect(find.byType(FluentLogViewerPage), findsOneWidget);
+
+    // Esc closes the dialog without touching workbench state underneath
+    // (spec: "Закрытие возвращает к workbench без изменений").
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(DebugLogViewerDialog), findsNothing);
+    expect(shellCubit.state.activeSessionId, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScope();
@@ -2269,13 +2312,13 @@ void main() {
 
       shellCubit.openCommandPalette();
       await tester.pump();
-      final diagnosticsBefore = shellCubit.state.diagnostics.length;
+      final diagnosticsBefore = binding.scope.resolve<LogBuffer>().entries.value.length;
 
       await tester.tap(find.text('/plan'));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(shellCubit.state.isCommandPaletteOpen, isTrue);
-      expect(shellCubit.state.diagnostics.length, diagnosticsBefore);
+      expect(binding.scope.resolve<LogBuffer>().entries.value.length, diagnosticsBefore);
       expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -3431,12 +3474,14 @@ void main() {
         CodeLabShellCubit shellCubit,
         FakeAcpTransport agentTransport,
         AcpClientApplication application,
+        _RecordingLogger logger,
       })
     >
     createSessionCubit({WidgetTester? tester}) async {
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final application = AcpClientApplication(transport: initialTransport);
+      final logger = _RecordingLogger();
       final shellCubit = CodeLabShellCubit(
         profile: codelabAgentStdioProfile,
         application: application,
@@ -3451,6 +3496,7 @@ void main() {
         workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
+        logger: logger,
       );
 
       await settle(tester, shellCubit.connect);
@@ -3470,6 +3516,7 @@ void main() {
         shellCubit: shellCubit,
         agentTransport: agentTransport,
         application: application,
+        logger: logger,
       );
     }
 
@@ -3557,8 +3604,8 @@ void main() {
         'second prompt while busy',
       );
       expect(
-        harness.shellCubit.state.diagnostics.any(
-          (entry) => entry.message.contains('Prompt failed'),
+        harness.logger.entries.any(
+          (entry) => (entry['event'] as String? ?? '').contains('Prompt failed'),
         ),
         isFalse,
       );
@@ -3746,8 +3793,8 @@ void main() {
       expect(harness.shellCubit.state.queuedPrompts, hasLength(1));
       expect(harness.shellCubit.state.queuedPrompts.single.id, id);
       expect(
-        harness.shellCubit.state.diagnostics.any(
-          (entry) => entry.message.contains('Prompt failed'),
+        harness.logger.entries.any(
+          (entry) => (entry['event'] as String? ?? '').contains('Prompt failed'),
         ),
         isFalse,
       );
@@ -4374,4 +4421,70 @@ final class _FakeRecentProjectsStore implements RecentProjectsStore {
     _entries.removeWhere((entry) => entry.path == path);
     _entries.insert(0, RecentProject(path: path, lastOpenedAt: DateTime.now()));
   }
+}
+
+/// In-memory [Logger] used by the `plan progress checklist` group's
+/// bespoke `createSessionCubit()` harness — that harness builds
+/// [CodeLabShellCubit] directly (not via `createCodeLabRootScope`), so it
+/// has no `LogBuffer` from `configureCodeLabLogging()` to assert against.
+/// [entries] records every call as a plain map, `event`/`level` alongside
+/// bound context — enough for the harness's diagnostic assertions without
+/// touching the global `structured_log` singleton other tests configure.
+final class _RecordingLogger implements Logger {
+  _RecordingLogger([Map<String, Object?> context = const {}, List<Map<String, Object?>>? sink])
+    : _context = context,
+      entries = sink ?? [];
+
+  final Map<String, Object?> _context;
+  final List<Map<String, Object?>> entries;
+
+  @override
+  Logger bind(Map<String, Object?> context) =>
+      _RecordingLogger({..._context, ...context}, entries);
+
+  @override
+  Logger withCorrelation({
+    String? sessionId,
+    String? requestId,
+    int? connectionGeneration,
+    String? toolCallId,
+    String? messageId,
+    String? operationId,
+  }) => bind({
+    if (sessionId != null) 'session_id': sessionId,
+    if (requestId != null) 'request_id': requestId,
+    if (connectionGeneration != null)
+      'connection_generation': connectionGeneration,
+    if (toolCallId != null) 'tool_call_id': toolCallId,
+    if (messageId != null) 'message_id': messageId,
+    if (operationId != null) 'operation_id': operationId,
+  });
+
+  void _log(String level, String? event, Map<String, Object?>? context) {
+    entries.add({..._context, ...?context, 'event': event, 'level': level});
+  }
+
+  @override
+  void trace(String? event, {Map<String, Object?>? context}) =>
+      _log('trace', event, context);
+
+  @override
+  void debug(String? event, {Map<String, Object?>? context}) =>
+      _log('debug', event, context);
+
+  @override
+  void info(String? event, {Map<String, Object?>? context}) =>
+      _log('info', event, context);
+
+  @override
+  void warning(String? event, {Map<String, Object?>? context}) =>
+      _log('warning', event, context);
+
+  @override
+  void error(String? event, {Map<String, Object?>? context}) =>
+      _log('error', event, context);
+
+  @override
+  void critical(String? event, {Map<String, Object?>? context}) =>
+      _log('critical', event, context);
 }

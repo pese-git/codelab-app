@@ -42,6 +42,12 @@ enum CodeLabTransportType {
 /// `SessionUpdate` grows another chunk-like variant.
 enum _StreamingChunkKind { message, thought }
 
+/// Selects which [Logger] method [CodeLabShellCubit._recordDiagnostic]
+/// calls — a local concept, not a UI type (see
+/// `replace-debug-log-panel-with-fluent/design.md`, Decision 5: this cubit
+/// no longer keeps a displayable diagnostics list of its own).
+enum _DiagnosticSeverity { debug, info, warning, error }
+
 _StreamingChunkKind? _streamingChunkKind(SessionUpdate update) =>
     switch (update) {
       AgentMessageChunk() => _StreamingChunkKind.message,
@@ -68,7 +74,6 @@ final class CodeLabShellState {
     required this.activeSessionId,
     required this.transcriptEntries,
     required this.inspectorEntries,
-    required this.diagnostics,
     required this.viewMode,
     required this.isPromptEnabled,
     required this.isPromptSubmitting,
@@ -117,14 +122,6 @@ final class CodeLabShellState {
             summary: 'Connect and start a session to inspect ACP activity.',
           ),
         ],
-        diagnostics: const [
-          AcpDebugLogEntry(
-            id: 'bootstrap',
-            severity: AcpDebugLogSeverity.info,
-            source: 'app',
-            message: 'Shell bootstrapped. Connection wiring starts in 7.2.',
-          ),
-        ],
         viewMode: AcpViewMode.normal,
         isPromptEnabled: true,
         isPromptSubmitting: false,
@@ -148,7 +145,6 @@ final class CodeLabShellState {
   final String? activeSessionId;
   final List<AcpTranscriptEntry> transcriptEntries;
   final List<CodeLabInspectorEntry> inspectorEntries;
-  final List<AcpDebugLogEntry> diagnostics;
   final AcpViewMode viewMode;
   final bool isPromptEnabled;
   final bool isPromptSubmitting;
@@ -258,7 +254,6 @@ final class CodeLabShellState {
     String? activeSessionId,
     List<AcpTranscriptEntry>? transcriptEntries,
     List<CodeLabInspectorEntry>? inspectorEntries,
-    List<AcpDebugLogEntry>? diagnostics,
     AcpViewMode? viewMode,
     bool? isPromptEnabled,
     bool? isPromptSubmitting,
@@ -296,7 +291,6 @@ final class CodeLabShellState {
       activeSessionId: activeSessionId ?? this.activeSessionId,
       transcriptEntries: transcriptEntries ?? this.transcriptEntries,
       inspectorEntries: inspectorEntries ?? this.inspectorEntries,
-      diagnostics: diagnostics ?? this.diagnostics,
       viewMode: viewMode ?? this.viewMode,
       isPromptEnabled: isPromptEnabled ?? this.isPromptEnabled,
       isPromptSubmitting: isPromptSubmitting ?? this.isPromptSubmitting,
@@ -442,9 +436,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _sessionSubscription = _application.sessionChanges.listen(
       _handleSessionChange,
     );
-    _diagnosticSubscription = _application.diagnosticChanges.listen(
-      _handleApplicationDiagnostic,
-    );
     _connectionStateSubscription = _application.connectionStateChanges.listen(
       _handleConnectionStateChange,
     );
@@ -481,7 +472,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final Logger _logger;
   final _redactor = const SecretRedactor();
   late final StreamSubscription<AcpSession> _sessionSubscription;
-  late final StreamSubscription<DiagnosticEntry> _diagnosticSubscription;
   late final StreamSubscription<ClientConnectionState>
   _connectionStateSubscription;
 
@@ -536,7 +526,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       if (isClosed) return;
       _recordDiagnostic(
         'Failed to record recent project: $error',
-        severity: AcpDebugLogSeverity.warning,
+        severity: _DiagnosticSeverity.warning,
         source: 'project',
       );
     }
@@ -569,7 +559,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       if (config == null) {
         _recordDiagnostic(
           'WebSocket endpoint is required before connecting.',
-          severity: AcpDebugLogSeverity.error,
+          severity: _DiagnosticSeverity.error,
           source: 'transport',
         );
         emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
@@ -598,14 +588,14 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
         _recordDiagnostic(
           'Incompatible ACP agent: ${error.message}',
-          severity: AcpDebugLogSeverity.error,
+          severity: _DiagnosticSeverity.error,
           source: 'transport',
         );
       } on Object catch (error) {
         emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
         _recordDiagnostic(
           'Failed to connect WebSocket ACP agent: $error',
-          severity: AcpDebugLogSeverity.error,
+          severity: _DiagnosticSeverity.error,
           source: 'transport',
         );
       }
@@ -616,7 +606,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (config == null) {
       _recordDiagnostic(
         'Stdio command is required before connecting.',
-        severity: AcpDebugLogSeverity.error,
+        severity: _DiagnosticSeverity.error,
         source: 'transport',
       );
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
@@ -645,14 +635,14 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
       _recordDiagnostic(
         'Incompatible ACP agent: ${error.message}',
-        severity: AcpDebugLogSeverity.error,
+        severity: _DiagnosticSeverity.error,
         source: 'transport',
       );
     } on Object catch (error) {
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
       _recordDiagnostic(
         'Failed to start stdio ACP agent: $error',
-        severity: AcpDebugLogSeverity.error,
+        severity: _DiagnosticSeverity.error,
         source: 'transport',
       );
     }
@@ -664,9 +654,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       if (config == null) {
         _recordDiagnostic(
           'WebSocket endpoint is required before reconnecting.',
-          severity: AcpDebugLogSeverity.error,
+          severity: _DiagnosticSeverity.error,
           source: 'transport',
-          logSource: 'transport',
         );
         emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
         return;
@@ -676,7 +665,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       _recordDiagnostic(
         'Reconnecting WebSocket ACP agent: ${state.selectedConnectionDetail}.',
         source: 'transport',
-        logSource: 'transport',
       );
 
       final result = await _reconnectUseCase(
@@ -690,9 +678,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
           _recordDiagnostic(
             'Failed to reconnect WebSocket ACP agent: ${_failureMessage(failure)}',
-            severity: AcpDebugLogSeverity.error,
+            severity: _DiagnosticSeverity.error,
             source: 'transport',
-            logSource: 'transport',
           );
         },
         (connectionState) {
@@ -704,7 +691,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           _recordDiagnostic(
             'WebSocket ACP agent reconnected: ${state.selectedConnectionDetail}.',
             source: 'transport',
-            logSource: 'transport',
           );
         },
       );
@@ -715,9 +701,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (config == null) {
       _recordDiagnostic(
         'Stdio command is required before reconnecting.',
-        severity: AcpDebugLogSeverity.error,
+        severity: _DiagnosticSeverity.error,
         source: 'transport',
-        logSource: 'transport',
       );
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
       return;
@@ -727,7 +712,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _recordDiagnostic(
       'Reconnecting stdio ACP agent: ${state.selectedConnectionDetail}.',
       source: 'transport',
-      logSource: 'transport',
     );
 
     final result = await _reconnectUseCase(
@@ -741,9 +725,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
         _recordDiagnostic(
           'Failed to reconnect stdio ACP agent: ${_failureMessage(failure)}',
-          severity: AcpDebugLogSeverity.error,
+          severity: _DiagnosticSeverity.error,
           source: 'transport',
-          logSource: 'transport',
         );
       },
       (connectionState) {
@@ -755,7 +738,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         _recordDiagnostic(
           'Stdio ACP agent reconnected: ${state.selectedConnectionDetail}.',
           source: 'transport',
-          logSource: 'transport',
         );
       },
     );
@@ -792,9 +774,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (state.connectionStatus != AcpConnectionStatus.connected) {
       _recordDiagnostic(
         'Connect an ACP agent before creating a session.',
-        severity: AcpDebugLogSeverity.warning,
+        severity: _DiagnosticSeverity.warning,
         source: 'session',
-        logSource: 'session',
       );
       return;
     }
@@ -802,7 +783,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _recordDiagnostic(
       'Creating ACP session.',
       source: 'session',
-      logSource: 'session',
     );
 
     final result = await _createSessionUseCase(
@@ -813,9 +793,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     result.match(
       (failure) => _recordDiagnostic(
         'Failed to create ACP session: ${_failureMessage(failure)}',
-        severity: AcpDebugLogSeverity.error,
+        severity: _DiagnosticSeverity.error,
         source: 'session',
-        logSource: 'session',
       ),
       (session) {
         final sessionItem = _sessionListItem(session);
@@ -841,7 +820,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         _recordDiagnostic(
           'Created ACP session ${session.id.value}.',
           source: 'session',
-          logSource: 'session',
         );
       },
     );
@@ -905,7 +883,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (sessionId == null) {
       _recordDiagnostic(
         'Create or select a session before sending a prompt.',
-        severity: AcpDebugLogSeverity.warning,
+        severity: _DiagnosticSeverity.warning,
         source: 'prompt',
       );
       return;
@@ -959,7 +937,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       (failure) {
         _recordDiagnostic(
           'Failed to send prompt: ${_failureMessage(failure)}',
-          severity: AcpDebugLogSeverity.error,
+          severity: _DiagnosticSeverity.error,
           source: 'prompt',
         );
       },
@@ -1102,7 +1080,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (sessionId == null) {
       _recordDiagnostic(
         'Select a session before cancelling a prompt turn.',
-        severity: AcpDebugLogSeverity.warning,
+        severity: _DiagnosticSeverity.warning,
         source: 'prompt',
       );
       return;
@@ -1121,7 +1099,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     result.match(
       (failure) => _recordDiagnostic(
         'Failed to cancel prompt turn: ${_failureMessage(failure)}',
-        severity: AcpDebugLogSeverity.error,
+        severity: _DiagnosticSeverity.error,
         source: 'prompt',
       ),
       (turn) => _recordDiagnostic(
@@ -1169,7 +1147,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         emit(state.copyWith(isRespondingToApproval: false));
         _recordDiagnostic(
           'Failed to respond to approval request: ${_failureMessage(failure)}',
-          severity: AcpDebugLogSeverity.error,
+          severity: _DiagnosticSeverity.error,
           source: 'approval',
         );
       },
@@ -1211,7 +1189,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         emit(state.copyWith(isRespondingToConfigOption: false));
         _recordDiagnostic(
           'Failed to set config option $configId: ${_failureMessage(failure)}',
-          severity: AcpDebugLogSeverity.error,
+          severity: _DiagnosticSeverity.error,
           source: 'session',
         );
       },
@@ -1270,10 +1248,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     closeCommandPalette();
   }
 
-  void clearDiagnostics() {
-    emit(state.copyWith(diagnostics: const []));
-  }
-
   /// Clears the plan summary/checklist for the active session — a
   /// client-side "hide it" (`AcpActivityBar`'s Plan section, "✕ Clear"),
   /// not a protocol operation, so nothing is sent to the agent. A later
@@ -1288,45 +1262,31 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   @override
   Future<void> close() async {
     await _sessionSubscription.cancel();
-    await _diagnosticSubscription.cancel();
     await _connectionStateSubscription.cancel();
     return super.close();
   }
 
-  /// [logSource] identifies this diagnostic to the structured Logger and is
-  /// `null` for diagnostics forwarded from [_handleApplicationDiagnostic] —
-  /// those already went through `AcpClientApplication`'s own Logger call
-  /// with the correct `component` (transport/protocol/client); logging them
-  /// again here under `component=presentation` would duplicate the same
-  /// event (`docs/architecture/observability.md` §55).
+  /// Records a diagnostic through the structured [Logger] — the in-app log
+  /// viewer's [LogBuffer] and console/file sinks are its only observers
+  /// (`replace-debug-log-panel-with-fluent/design.md`, Decision 5); this
+  /// cubit keeps no diagnostics list of its own. [source] identifies the
+  /// originating area (`transport`, `session`, `project`, ...) under the
+  /// `source` context key.
   void _recordDiagnostic(
     String message, {
-    AcpDebugLogSeverity severity = AcpDebugLogSeverity.info,
-    String? source,
-    String? logSource,
+    _DiagnosticSeverity severity = _DiagnosticSeverity.info,
+    required String source,
   }) {
     final redactedMessage = _redactor.redactText(message);
-    final nextEntry = AcpDebugLogEntry(
-      id: 'pending-${state.diagnostics.length + 1}',
-      severity: severity,
-      source: source,
-      message: redactedMessage,
-    );
-
-    emit(state.copyWith(diagnostics: [...state.diagnostics, nextEntry]));
-
-    if (logSource == null) {
-      return;
-    }
-    final logContext = {'source': logSource};
+    final logContext = {'source': source};
     switch (severity) {
-      case AcpDebugLogSeverity.debug:
+      case _DiagnosticSeverity.debug:
         _logger.debug(redactedMessage, context: logContext);
-      case AcpDebugLogSeverity.info:
+      case _DiagnosticSeverity.info:
         _logger.info(redactedMessage, context: logContext);
-      case AcpDebugLogSeverity.warning:
+      case _DiagnosticSeverity.warning:
         _logger.warning(redactedMessage, context: logContext);
-      case AcpDebugLogSeverity.error:
+      case _DiagnosticSeverity.error:
         _logger.error(redactedMessage, context: logContext);
     }
   }
@@ -1357,7 +1317,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       if (isClosed) return;
       _recordDiagnostic(
         'Failed to load recent projects: $error',
-        severity: AcpDebugLogSeverity.warning,
+        severity: _DiagnosticSeverity.warning,
         source: 'project',
       );
     }
@@ -1509,14 +1469,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
-  void _handleApplicationDiagnostic(DiagnosticEntry diagnostic) {
-    _recordDiagnostic(
-      diagnostic.message,
-      severity: _debugSeverity(diagnostic.severity),
-      source: diagnostic.source ?? 'application',
-    );
-  }
-
   /// Reacts only to a *spontaneous* connection loss — a transport failure
   /// that happened while nobody asked for one, i.e. `connectionStatus` was
   /// still `connected`. Explicit `connect()`/`reconnect()` already move
@@ -1543,7 +1495,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
     _recordDiagnostic(
       'Connection to ACP agent lost: ${connectionState.message}',
-      severity: AcpDebugLogSeverity.error,
+      severity: _DiagnosticSeverity.error,
       source: 'transport',
     );
   }
@@ -2275,15 +2227,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     }
 
     return const JsonEncoder.withIndent('  ').convert(_redactor.redact(value));
-  }
-
-  AcpDebugLogSeverity _debugSeverity(DiagnosticSeverity severity) {
-    return switch (severity) {
-      DiagnosticSeverity.debug => AcpDebugLogSeverity.debug,
-      DiagnosticSeverity.info => AcpDebugLogSeverity.info,
-      DiagnosticSeverity.warning => AcpDebugLogSeverity.warning,
-      DiagnosticSeverity.error => AcpDebugLogSeverity.error,
-    };
   }
 
   List<String> _splitShellWords(String value) => value

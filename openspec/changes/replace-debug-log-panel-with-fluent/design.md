@@ -59,13 +59,20 @@ void configureCodeLabLogging({
 
 `inAppViewerOutput` — тот же `categories: {applicationLogCategory}`, что и консольный/файловый application-sink (не `protocolTraceLogCategory`) — см. Non-Goals. `CodeLabLoggingModule` (`app_scope.dart`) создаёт один `LogBuffer` (bounded ring buffer — свой собственный лимит записей, независимый от `_diagnostics`' 500 из `add-structured-logging`), передаёt `buffer.capture` как `inAppViewerOutput`, и биндит `LogBuffer`/`LogViewerController` в CherryPick-scope, откуда их резолвят `WorkbenchDebugLogPane` и полноэкранный viewer — один и тот же инстанс, не два независимых стрима.
 
-### 4. Докнутая панель — по возможности переиспользует `LogEntryTile`, полноэкранная — оборачивает `FluentLogViewerPage`
+### 4. Докнутая панель напрямую переиспользует `LogEntryTile`/`LogEntryDetailPane`/`LogViewerEmptyState`, полноэкранная — оборачивает `FluentLogViewerPage`
 
-Докнутая компактная панель (320px) реализуется как можно ближе к `structured_log_fluent`'s `LogEntryTile` (per README пакета — компонент строки мастер-списка, уже используемый в его собственном 340px master-detail, то есть рассчитан на похожую ширину). Полноэкранный viewer — тонкая обёртка вокруг `FluentLogViewerPage`, открываемая как `showDialog`/full-screen route поверх текущего workbench (не push в навигационный стек — состояние workbench под ним не должно теряться при закрытии, см. спека "Закрытие возвращает к workbench без изменений").
+**Подтверждено чтением реального исходника** (`pese-git/structured_log`, ветка `develop`, монорепозиторий — `structured_log_flutter`/`structured_log_fluent` публикуются из него, а не из отдельных репозиториев с такими же именами):
+
+- `LogBuffer.capture(Map<String, dynamic>, LogLevel)` — сигнатура совпадает с `structured_log`'s `OutputFunction` один в один; `buffer.capture` можно передавать в `LogSink.output` напрямую, без обёрток.
+- `LogViewerController` — `ChangeNotifier` поверх `LogBuffer` с `levelFilter`/`categoryFilter`/`searchQuery`/`paused`/`clear()`/`visibleEntries` (oldest-first) — подтверждает Decision 3 as-is.
+- `LogEntryTile(entry, selected, onTap)`, `LogEntryDetailPane(entry)`, `LogViewerEmptyState(hasLogs, onClearFilters)`, а также свободные функции `logLevelOf(entry)`, `formatEntryTime(raw)`, `logLevelColor(level, brightness)`, `logLevelAbbreviation(level)` — все экспортированы из `structured_log_fluent` и не зависят от `FluentLogViewerPage`. Докнутая панель (`WorkbenchDebugLogPane`) переиспользует их буквально: `ListView.builder` из `LogEntryTile` + `LogViewerEmptyState`, со своим заголовком/поиском/level-фильтром поверх собственного `LogViewerController`.
+- `FluentLogViewerPage(controller)` — `ScaffoldPage` с фиксированным 340px мастер-списком и `Expanded` detail-панелью; это full-page widget, не параметризуется под меньшую ширину/embedding-режим — значит, он используется только для полноэкранного viewer'а, не для докнутой панели (что и предполагалось). Back-button в его заголовке показывается автоматически по `Navigator.canPop(context)` и скрыт, если этот widget — корень своего Navigator'а.
+
+Отсюда — полноэкранный viewer открывается через route/dialog, при котором `Navigator.canPop(context)` истинен (например, `showDialog` — сам по себе пушит route), тогда `FluentLogViewerPage` сам покажет back-button без дополнительной обёртки поверх заголовка; обработка `Esc` как альтернативного способа закрытия — на уровне обёртки (route/dialog), не самого `FluentLogViewerPage`.
+
+**Два независимых `LogViewerController` поверх одного `LogBuffer`, не один общий** — уточнение к Decision 3: докнутая панель и полноэкранный viewer держат каждый свой `LogViewerController` (своё состояние `searchQuery`/`levelFilter`/`paused` — фильтры одной панели не должны навязываться другой), но оба instance строятся над одним и тем же `LogBuffer` singleton из CherryPick-scope — это и есть "один источник данных, не два независимых стрима" из Goals (единство данных, не единство UI-состояния фильтра).
 
 И `/logs` (командная палитра), и кнопка "Expand" докнутой панели вызывают один и тот же application-level метод открытия viewer'а (например, `CodeLabShellCubit`-сосед или прямой widget-level `showDialog` — конкретика на этапе tasks) — не два независимых пути с разным поведением.
-
-**Уточнить на этапе tasks/имплементации** (в отличие от `structured_log` самого по себе, `structured_log_flutter`/`structured_log_fluent`'s исходники ещё не сверялись с их реальным API так, как это было сделано для `structured_log` — см. Open Questions): достаточна ли ширина `LogEntryTile` для 320px докнутой панели без переполнения, и какие параметры принимает `FluentLogViewerPage` для встраивания в overlay (а не как единственный экран приложения).
 
 ## Risks / Trade-offs
 
@@ -75,5 +82,5 @@ void configureCodeLabLogging({
 
 ## Open Questions
 
-- Точный API `LogEntryTile`/`LogViewerController`/`FluentLogViewerPage` (конструкторы, обязательные параметры, поддержка кастомной ширины/embedding-режима) — не сверен с реальным исходником пакетов в рамках этого design (в отличие от `structured_log`, для которого исходник уже читался). Сверить перед реализацией конкретных виджетов.
-- Способ показа полноэкранного viewer'а как overlay (custom `OverlayEntry`/`showDialog` с `barrierDismissible`/собственный route без добавления в history) — конкретный Flutter-механизм выбирается на этапе tasks, ограничение только одно: закрытие не должно терять state workbench под ним (см. спеку).
+- ~~Точный API `LogEntryTile`/`LogViewerController`/`FluentLogViewerPage`~~ — снято: сверено с реальным исходником `pese-git/structured_log` (develop), см. Decision 4.
+- Способ показа полноэкранного viewer'а как overlay (`showDialog` — простейший вариант, раз он сам пушит route и тем самым включает автоматический back-button `FluentLogViewerPage`, — либо кастомный full-screen route) и способ перехвата `Esc` поверх него — конкретный Flutter-механизм выбирается на этапе реализации (tasks §6.1), ограничение только одно: закрытие не должно терять state workbench под ним (см. спеку).

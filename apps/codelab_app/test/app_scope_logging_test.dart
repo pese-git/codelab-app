@@ -1,11 +1,38 @@
 import 'dart:io';
 
+import 'package:cherrypick/cherrypick.dart';
 import 'package:codelab_app/app/app_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:structured_log/structured_log.dart';
+import 'package:structured_log_flutter/structured_log_flutter.dart';
+
+import 'support/test_app_scope.dart';
 
 void main() {
   tearDown(StructlogConfiguration.reset);
+
+  test(
+    'LogBuffer resolves from the root scope and captures application-level '
+    'events (replace-debug-log-panel-with-fluent/design.md, Decision 3)',
+    () async {
+      final binding = CodeLabTestBinding();
+      addTearDown(binding.scope.dispose);
+
+      final buffer = binding.scope.resolve<LogBuffer>();
+      expect(buffer.entries.value, isEmpty);
+
+      binding.transport.emitDiagnostic(
+        message: 'stderr line',
+        source: 'stderr',
+      );
+
+      expect(buffer.entries.value, isNotEmpty);
+      expect(
+        buffer.entries.value.every((e) => e['category'] == 'application'),
+        isTrue,
+      );
+    },
+  );
 
   test('CodeLabLoggingLifecycle.dispose() awaits pending writes on both sinks '
       '(design.md Decision 8 — graceful shutdown)', () async {

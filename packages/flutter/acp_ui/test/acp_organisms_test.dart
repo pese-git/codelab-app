@@ -15,9 +15,6 @@ void main() {
     expect(AcpApprovalRisk.shell, isA<AcpApprovalRisk>());
     expect(AcpCommandPaletteSurface, isA<Type>());
     expect(AcpConnectionScreen, isA<Type>());
-    expect(AcpDebugLogEntry, isA<Type>());
-    expect(AcpDebugLogPanel, isA<Type>());
-    expect(AcpDebugLogSeverity.warning, isA<AcpDebugLogSeverity>());
     expect(AcpProjectPicker, isA<Type>());
     expect(AcpRecentProject, isA<Type>());
     expect(AcpSessionListItem, isA<Type>());
@@ -729,63 +726,6 @@ void main() {
     expect(connected, isFalse);
     expect(reconnected, isFalse);
     expect(edited, isFalse);
-  });
-
-  testWidgets('renders debug log entries and clear callback', (tester) async {
-    var cleared = false;
-
-    await tester.pumpWidget(
-      FluentApp(
-        home: SizedBox(
-          width: 520,
-          height: 320,
-          child: AcpDebugLogPanel(
-            onClear: () => cleared = true,
-            entries: const [
-              AcpDebugLogEntry(
-                id: 'log-1',
-                severity: AcpDebugLogSeverity.info,
-                source: 'transport',
-                message: 'stdio process started',
-                timestampLabel: '12:00:01',
-              ),
-              AcpDebugLogEntry(
-                id: 'log-2',
-                severity: AcpDebugLogSeverity.warning,
-                source: 'protocol',
-                message: 'token=[REDACTED]',
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('Debug log'), findsOneWidget);
-    expect(find.text('Info'), findsOneWidget);
-    expect(find.text('transport'), findsOneWidget);
-    expect(find.text('stdio process started'), findsOneWidget);
-    expect(find.text('Warning'), findsOneWidget);
-    expect(find.text('token=[REDACTED]'), findsOneWidget);
-
-    await tester.tap(find.byType(AcpIconButton));
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(cleared, isTrue);
-  });
-
-  testWidgets('renders debug log empty state', (tester) async {
-    await tester.pumpWidget(
-      const FluentApp(
-        home: SizedBox(
-          width: 360,
-          height: 220,
-          child: AcpDebugLogPanel(entries: []),
-        ),
-      ),
-    );
-
-    expect(find.text('No diagnostics yet'), findsOneWidget);
   });
 
   testWidgets('renders sessions and invokes selection/new callbacks', (

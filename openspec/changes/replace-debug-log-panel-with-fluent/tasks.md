@@ -1,28 +1,28 @@
 ## 1. Сверка реального API пакетов
 
-- [ ] 1.1 Прочитать реальный исходник `structured_log_flutter` (`pese-git/structured_log_flutter` на GitHub, ветка `develop`, версия `0.1.0-dev.2`): точные конструкторы/API `LogBuffer` (capacity, `capture`/output-совместимость, `ValueListenable`-интерфейс) и `LogViewerController` (фильтры по level/category/search, pause, clear)
-- [ ] 1.2 Прочитать реальный исходник `structured_log_fluent` (тот же автор, `0.1.0-dev.2`): точные конструкторы/параметры `FluentLogViewerPage`, `LogEntryTile`, `LogEntryDetailPane`, `LogViewerEmptyState` — обязательные параметры, поддержка embedding/кастомной ширины, светлая/тёмная тема
-- [ ] 1.3 Зафиксировать в design.md (Open Questions → снять или уточнить) фактические расхождения с предположениями design.md, если найдены; при расхождении — скорректировать план разделов 4-6 ниже до начала реализации
+- [x] 1.1 Прочитать реальный исходник `structured_log_flutter` (`pese-git/structured_log` на GitHub — монорепозиторий, `structured_log_flutter`/`structured_log_fluent` публикуются из него, ветка `develop`, версия `0.1.0-dev.2`): точные конструкторы/API `LogBuffer` (capacity, `capture`/output-совместимость, `ValueListenable`-интерфейс) и `LogViewerController` (фильтры по level/category/search, pause, clear)
+- [x] 1.2 Прочитать реальный исходник `structured_log_fluent` (тот же репозиторий, `0.1.0-dev.2`): точные конструкторы/параметры `FluentLogViewerPage`, `LogEntryTile`, `LogEntryDetailPane`, `LogViewerEmptyState` — обязательные параметры, поддержка embedding/кастомной ширины, светлая/тёмная тема
+- [x] 1.3 Зафиксировать в design.md (Open Questions → снять или уточнить) фактические расхождения с предположениями design.md, если найдены; при расхождении — скорректировать план разделов 4-6 ниже до начала реализации
 
 ## 2. Зависимости и расширение logging-инфраструктуры
 
-- [ ] 2.1 Добавить `structured_log_flutter` и `structured_log_fluent` в `apps/codelab_app/pubspec.yaml` (не в `packages/flutter/acp_ui/pubspec.yaml` — Decision 1)
-- [ ] 2.2 Выполнить `melos bootstrap`
-- [ ] 2.3 Добавить опциональный параметр `inAppViewerOutput` в `configureCodeLabLogging()` (`packages/dart/acp_client_core/lib/src/infrastructure/structured_log_logger.dart`) и третий `LogSink` (`name: 'debug-panel'`, `categories: {applicationLogCategory}`) — по образцу Decision 3 design.md, без изменения контракта двух существующих sink'ов
-- [ ] 2.4 Обновить/добавить тесты в `packages/dart/acp_client_core/test/structured_logging_test.dart`: новый sink получает те же `application`-события, что и `application`-sink, и не получает `protocol`-события
+- [x] 2.1 Добавить `structured_log_flutter` и `structured_log_fluent` в `apps/codelab_app/pubspec.yaml` (не в `packages/flutter/acp_ui/pubspec.yaml` — Decision 1)
+- [x] 2.2 Выполнить `melos bootstrap`
+- [x] 2.3 Добавить опциональный параметр `inAppViewerOutput` в `configureCodeLabLogging()` (`packages/dart/acp_client_core/lib/src/infrastructure/structured_log_logger.dart`) и третий `LogSink` (`name: 'debug-panel'`, `categories: {applicationLogCategory}`) — по образцу Decision 3 design.md, без изменения контракта двух существующих sink'ов
+- [x] 2.4 Обновить/добавить тесты в `packages/dart/acp_client_core/test/structured_logging_test.dart`: новый sink получает те же `application`-события, что и `application`-sink, и не получает `protocol`-события
 
 ## 3. Wiring `LogBuffer` в `codelab_app`
 
-- [ ] 3.1 В `CodeLabLoggingModule` (`apps/codelab_app/lib/app/app_scope.dart`) создать один `LogBuffer` (bounded ring buffer, независимый лимит от `_maxDiagnostics=500`), передать `buffer.capture` как `inAppViewerOutput` в `configureCodeLabLogging()`
-- [ ] 3.2 Забиндить `LogBuffer` и один `LogViewerController` (построенный поверх этого `LogBuffer`) в CherryPick-scope как singleton — единый источник для докнутой панели и полноэкранного viewer'а (Decision 3)
-- [ ] 3.3 Добавить/обновить тест в `apps/codelab_app/test/app_scope_logging_test.dart`, проверяющий, что `LogBuffer`/`LogViewerController` резолвятся из scope и что событие, залогированное через `Logger`, попадает в `LogBuffer`
+- [x] 3.1 В `CodeLabLoggingModule` (`apps/codelab_app/lib/app/app_scope.dart`) создать один `LogBuffer` (bounded ring buffer, независимый лимит от `_maxDiagnostics=500`), передать `buffer.capture` как `inAppViewerOutput` в `configureCodeLabLogging()`
+- [x] 3.2 Забиндить `LogBuffer` в CherryPick-scope как singleton (`CodeLabDependencies.logBuffer`) — единый источник данных для докнутой панели и полноэкранного viewer'а; **уточнение к первоначальной формулировке** (см. design.md Decision 4, скорректирован после сверки реального API §1): не единый `LogViewerController`, а два независимых `LogViewerController` instance, каждый со своим фильтром/pause-состоянием, оба построены поверх этого общего `LogBuffer` — создаются на месте потребления (§5.2, §6), а не биндятся в DI
+- [x] 3.3 Добавить/обновить тест в `apps/codelab_app/test/app_scope_logging_test.dart`, проверяющий, что `LogBuffer` резолвится из scope и что событие, залогированное через `Logger`, попадает в него
 
 ## 4. Удаление `AcpDebugLogPanel`/`AcpDebugLogEntry` из `acp_ui`
 
-- [ ] 4.1 Удалить `packages/flutter/acp_ui/lib/src/organisms/acp_debug_log_panel.dart` и его экспорт из `acp_ui.dart`
-- [ ] 4.2 Убрать usage/preview из `packages/flutter/acp_ui/lib/src/organisms/acp_organism_previews.dart:338`
-- [ ] 4.3 Убрать/обновить тесты в `packages/flutter/acp_ui/test/acp_organisms_test.dart` (строки ~19, 742, 783), ссылающиеся на `AcpDebugLogPanel`
-- [ ] 4.4 Прогнать `melos analyze`/`melos test` для `acp_ui`, убедиться, что пакет собирается без ссылок на удалённый organism
+- [x] 4.1 Удалить `packages/flutter/acp_ui/lib/src/organisms/acp_debug_log_panel.dart` и его экспорт из `acp_ui.dart` (через `organisms.dart`)
+- [x] 4.2 Убрать usage/preview из `packages/flutter/acp_ui/lib/src/organisms/acp_organism_previews.dart` и её вызов в `test/acp_previews_test.dart`
+- [x] 4.3 Убрать/обновить тесты в `packages/flutter/acp_ui/test/acp_organisms_test.dart`, ссылающиеся на `AcpDebugLogPanel`
+- [x] 4.4 Прогнать `dart analyze`/`flutter test` для `acp_ui` — 81/81 тестов проходят, пакет собирается без ссылок на удалённый organism
 
 ## 5. Разделение `WorkbenchInspectorPane` на два sibling-виджета
 

@@ -4,8 +4,11 @@ import 'package:acp_ui/acp_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../app/app_scope.dart';
 import '../application/shell_cubit.dart';
 import 'widgets/command_bar.dart';
+import 'widgets/debug_log_pane.dart';
+import 'widgets/debug_log_viewer_dialog.dart';
 import 'widgets/inspector_pane.dart';
 import 'widgets/main_pane.dart';
 
@@ -17,6 +20,7 @@ class CodeLabShell extends StatelessWidget {
     return BlocBuilder<CodeLabShellCubit, CodeLabShellState>(
       builder: (context, state) {
         final cubit = context.read<CodeLabShellCubit>();
+        final logBuffer = codeLabDependenciesOf(context).logBuffer;
 
         return AcpWorkbenchShortcuts(
           onOpenCommandPalette: cubit.openCommandPalette,
@@ -55,9 +59,21 @@ class CodeLabShell extends StatelessWidget {
                     ],
                   ),
                   mainPane: WorkbenchMainPane(state: state, cubit: cubit),
-                  inspectorPane: WorkbenchInspectorPane(
-                    state: state,
-                    cubit: cubit,
+                  inspectorPane: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: WorkbenchInspectorPane(state: state)),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 280,
+                        child: WorkbenchDebugLogPane(
+                          logBuffer: logBuffer,
+                          onExpand: () => unawaited(
+                            DebugLogViewerDialog.show(context, logBuffer),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   inspectorVisibleInNarrowMode:
                       state.isInspectorVisibleInNarrowLayout,
@@ -89,7 +105,8 @@ class _CommandPaletteOverlay extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 520, maxHeight: 480),
             child: AcpCommandPaletteSurface(
               actions: state.paletteActions,
-              onActionSelected: (action) => selectPaletteCommand(cubit, action),
+              onActionSelected: (action) =>
+                  selectPaletteCommand(context, cubit, action),
             ),
           ),
         ),
@@ -101,12 +118,30 @@ class _CommandPaletteOverlay extends StatelessWidget {
 /// Routes a selected [AcpCommandAction] to the right cubit method — shared
 /// by the `Ctrl/Cmd+K` overlay and the inline composer trigger so both
 /// paths behave identically (see wire-command-palette/design.md).
-void selectPaletteCommand(CodeLabShellCubit cubit, AcpCommandAction action) {
+///
+/// `/logs` additionally opens the full-screen [DebugLogViewerDialog] — the
+/// same dialog [WorkbenchDebugLogPane]'s "Expand" button opens
+/// (`replace-debug-log-panel-with-fluent/design.md`, Decision 4) — on top of
+/// [CodeLabShellCubit.selectCommand]'s existing narrow-layout Inspector
+/// reveal, which stays unrelated to logging and untouched.
+void selectPaletteCommand(
+  BuildContext context,
+  CodeLabShellCubit cubit,
+  AcpCommandAction action,
+) {
   if (action.source == AcpCommandSource.agent) {
     cubit.insertAgentCommand(action);
-  } else {
-    cubit.selectCommand(action);
+    return;
   }
+  if (action.id == 'logs') {
+    unawaited(
+      DebugLogViewerDialog.show(
+        context,
+        codeLabDependenciesOf(context).logBuffer,
+      ),
+    );
+  }
+  cubit.selectCommand(action);
 }
 
 /// Tracks a live, ephemeral preview of the sessions/inspector pane widths

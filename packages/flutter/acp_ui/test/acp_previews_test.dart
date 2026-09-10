@@ -44,9 +44,6 @@ void main() {
     await tester.pumpWidget(acpConnectionScreenPreview());
     expect(tester.takeException(), isNull);
 
-    await tester.pumpWidget(acpDebugLogPanelPreview());
-    expect(tester.takeException(), isNull);
-
     await tester.pumpWidget(acpSessionSidebarPreview());
     expect(tester.takeException(), isNull);
 
