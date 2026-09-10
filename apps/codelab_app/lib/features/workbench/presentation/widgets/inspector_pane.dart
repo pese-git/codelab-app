@@ -4,14 +4,9 @@ import 'package:fluent_ui/fluent_ui.dart';
 import '../../application/shell_cubit.dart';
 
 class WorkbenchInspectorPane extends StatelessWidget {
-  const WorkbenchInspectorPane({
-    required this.state,
-    required this.cubit,
-    super.key,
-  });
+  const WorkbenchInspectorPane({required this.state, super.key});
 
   final CodeLabShellState state;
-  final CodeLabShellCubit cubit;
 
   @override
   Widget build(BuildContext context) {
@@ -26,20 +21,9 @@ class WorkbenchInspectorPane extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: AcpText('Inspector', role: AcpTextRole.subtitle),
-                ),
-                AcpIconButton(
-                  icon: FluentIcons.clear,
-                  tooltip: 'Clear diagnostics',
-                  onPressed: cubit.clearDiagnostics,
-                ),
-              ],
-            ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(12, 10, 8, 8),
+            child: AcpText('Inspector', role: AcpTextRole.subtitle),
           ),
           Expanded(
             child: ListView(
@@ -49,13 +33,6 @@ class WorkbenchInspectorPane extends StatelessWidget {
                   _InspectorEntryCard(entry: entry),
                   const SizedBox(height: 8),
                 ],
-                SizedBox(
-                  height: 260,
-                  child: AcpDebugLogPanel(
-                    entries: state.diagnostics,
-                    onClear: cubit.clearDiagnostics,
-                  ),
-                ),
               ],
             ),
           ),

@@ -172,6 +172,39 @@ void main() {
       expect(result['sessionId'], 'session-1');
     },
   );
+
+  test(
+    'in-app viewer sink receives application events but not protocol trace',
+    () async {
+      // BoundLogger reads the config once at construction — reconfigure
+      // before building a client so its loggers pick up the new sink.
+      final viewerCaptured = <Map<String, dynamic>>[];
+      configureCodeLabLogging(
+        applicationOutput: (entry, level) => captured.add(entry),
+        protocolTraceOutput: (entry, level) => captured.add(entry),
+        inAppViewerOutput: (entry, level) => viewerCaptured.add(entry),
+        protocolTracingEnabledByDefault: true,
+      );
+
+      final viewerTransport = FakeAcpTransport();
+      await viewerTransport.start();
+      final viewerClient = AcpClientApplication(transport: viewerTransport);
+      addTearDown(() async {
+        await viewerClient.dispose();
+        await viewerTransport.close();
+      });
+
+      viewerTransport.emitDiagnostic(message: 'stderr line', source: 'stderr');
+      await _createSession(viewerClient, viewerTransport);
+
+      expect(viewerCaptured, isNotEmpty);
+      expect(
+        viewerCaptured.every((e) => e['category'] == 'application'),
+        isTrue,
+      );
+      expect(viewerCaptured.any((e) => e['category'] == 'protocol'), isFalse);
+    },
+  );
 }
 
 Future<void> _createSession(

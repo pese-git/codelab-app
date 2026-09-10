@@ -22,6 +22,9 @@ const protocolTraceSinkName = 'protocol';
 
 const _applicationSinkName = 'application';
 
+/// Name of the optional in-app log viewer sink, for reference in tests.
+const inAppViewerSinkName = 'debug-panel';
+
 /// Component tag for events originating in `acp_transports`.
 const transportComponent = 'transport';
 
@@ -109,8 +112,13 @@ Map<String, dynamic>? secretRedactionProcessor(Map<String, dynamic> entry) {
 
 /// Configures the global `structured_log` singleton for CodeLab
 /// (`design.md` Decision 6/7): an [applicationOutput] sink for
-/// human-readable/application-level events, and a developer-only,
-/// off-by-default [protocolTraceOutput] sink for full ACP payload tracing.
+/// human-readable/application-level events, a developer-only,
+/// off-by-default [protocolTraceOutput] sink for full ACP payload tracing,
+/// and an optional [inAppViewerOutput] sink feeding the in-app log viewer
+/// (`replace-debug-log-panel-with-fluent` `design.md` Decision 3) — it
+/// receives the same `category=application` events as [applicationOutput],
+/// never `category=protocol`, so the in-app viewer can never surface raw
+/// protocol payload tracing.
 ///
 /// The composition root supplies concrete outputs (console vs file per
 /// build mode, platform-specific paths) — this pure-Dart function only
@@ -120,6 +128,7 @@ Map<String, dynamic>? secretRedactionProcessor(Map<String, dynamic> entry) {
 void configureCodeLabLogging({
   required structured_log.OutputFunction applicationOutput,
   required structured_log.OutputFunction protocolTraceOutput,
+  structured_log.OutputFunction? inAppViewerOutput,
   bool protocolTracingEnabledByDefault = false,
 }) {
   structured_log.StructlogConfiguration.configure(
@@ -130,6 +139,12 @@ void configureCodeLabLogging({
         output: applicationOutput,
         categories: const {applicationLogCategory},
       ),
+      if (inAppViewerOutput != null)
+        structured_log.LogSink(
+          name: inAppViewerSinkName,
+          output: inAppViewerOutput,
+          categories: const {applicationLogCategory},
+        ),
       structured_log.LogSink(
         name: protocolTraceSinkName,
         output: protocolTraceOutput,

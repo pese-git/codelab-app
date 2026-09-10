@@ -349,10 +349,10 @@ packages:
     dependency: transitive
     description:
       name: fluent_ui
-      sha256: "64c2b9dd208f8e3134d3e38db107235ee30c1dd9b792843274687a7ecc063590"
+      sha256: ccddccb8256f2d7c93838be8e01021cfe337070bb6b880d0f005c137d3e29224
       url: "https://pub.dev"
     source: hosted
-    version: "4.16.1"
+    version: "4.15.1"
   flutter:
     dependency: transitive
     description: flutter
@@ -1001,6 +1001,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.0-dev.4"
+  structured_log_fluent:
+    dependency: transitive
+    description:
+      name: structured_log_fluent
+      sha256: d678c50a94f4980631433e61bce8e959face705f6219b51b207cbf8a2823d57b
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0-dev.2"
+  structured_log_flutter:
+    dependency: transitive
+    description:
+      name: structured_log_flutter
+      sha256: "4490ac24f7a07b5121c47643c76a676c308744ca77f91fd2bbf82046dd7f938e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0-dev.2"
   sync_http:
     dependency: transitive
     description:

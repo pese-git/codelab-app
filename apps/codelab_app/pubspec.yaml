@@ -29,6 +29,8 @@ dependencies:
   path_provider: ^2.1.5
   shared_preferences: ^2.5.5
   structured_log: 0.2.0-dev.4
+  structured_log_flutter: 0.1.0-dev.2
+  structured_log_fluent: 0.1.0-dev.2
 
 dev_dependencies:
   acp_testing:

@@ -11,6 +11,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:path/path.dart' as p;
 import 'package:structured_log/structured_log.dart' as structured_log;
+import 'package:structured_log_flutter/structured_log_flutter.dart'
+    show LogBuffer;
 
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/recent_projects_store.dart';
@@ -90,7 +92,9 @@ final class CodeLabTransportRuntimeModule extends Module {
 /// Configures the project's structured-logging technology
 /// (`openspec/changes/add-structured-logging/design.md`, Decision 5):
 /// human-readable console output for application-level events in debug
-/// builds, non-blocking file sinks in release/for protocol tracing.
+/// builds, non-blocking file sinks in release/for protocol tracing, plus an
+/// in-memory [LogBuffer] feeding the in-app log viewer
+/// (`replace-debug-log-panel-with-fluent/design.md`, Decision 3).
 final class CodeLabLoggingModule extends Module {
   CodeLabLoggingModule({required String logDirectoryPath})
     : _logDirectoryPath = logDirectoryPath;
@@ -113,10 +117,16 @@ final class CodeLabLoggingModule extends Module {
             p.join(_logDirectoryPath, 'application.log'),
           );
 
+    // Independent capacity from AcpClientApplication's own 500-entry
+    // diagnostics ring buffer — this one backs the in-app log viewer only.
+    final logBuffer = LogBuffer();
+    bind<LogBuffer>().toInstance(logBuffer);
+
     configureCodeLabLogging(
       applicationOutput:
           applicationFileOutput?.call ?? structured_log.coloredConsoleOutput,
       protocolTraceOutput: protocolTraceOutput.call,
+      inAppViewerOutput: logBuffer.capture,
     );
 
     bind<CodeLabLoggingLifecycle>().toInstance(
@@ -308,10 +318,17 @@ final class CodeLabDependencies {
   const CodeLabDependencies({
     required this.application,
     required this.shellCubit,
+    required this.logBuffer,
   });
 
   final AcpClientApplication application;
   final CodeLabShellCubit shellCubit;
+
+  /// Backs the in-app log viewer (docked panel and full-screen master-detail
+  /// — `replace-debug-log-panel-with-fluent/design.md`, Decision 3/4).
+  /// Consumers build their own `LogViewerController` over this shared
+  /// buffer, each with independent filter/pause state.
+  final LogBuffer logBuffer;
 }
 
 final class CodeLabDependenciesScope extends InheritedWidget {
@@ -364,6 +381,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
   late final CodeLabDependencies _dependencies = CodeLabDependencies(
     application: _scope.resolve<AcpClientApplication>(),
     shellCubit: _scope.resolve<CodeLabShellCubit>(),
+    logBuffer: _scope.resolve<LogBuffer>(),
   );
 
   @override

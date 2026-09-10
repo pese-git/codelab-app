@@ -7,7 +7,6 @@ import 'acp_activity_bar.dart';
 import 'acp_approval_panel.dart';
 import 'acp_command_palette_surface.dart';
 import 'acp_connection_screen.dart';
-import 'acp_debug_log_panel.dart';
 import 'acp_progress_checklist.dart';
 import 'acp_session_sidebar.dart';
 import 'acp_transcript_panel.dart';
@@ -320,38 +319,6 @@ Widget acpConnectionScreenPreview() {
         onConnect: acpPreviewConnect,
         onReconnect: acpPreviewReconnect,
         onConfigureConnection: acpPreviewEditProfile,
-      ),
-    ),
-  );
-}
-
-@Preview(
-  name: 'Debug log panel',
-  group: acpOrganismPreviewGroup,
-  size: Size(620, 360),
-)
-Widget acpDebugLogPanelPreview() {
-  return const _AcpOrganismPreviewSurface(
-    child: SizedBox(
-      width: 620,
-      height: 360,
-      child: AcpDebugLogPanel(
-        entries: [
-          AcpDebugLogEntry(
-            id: 'log-1',
-            severity: AcpDebugLogSeverity.info,
-            source: 'transport',
-            message: 'stdio process started',
-            timestampLabel: '12:04:01',
-          ),
-          AcpDebugLogEntry(
-            id: 'log-2',
-            severity: AcpDebugLogSeverity.warning,
-            source: 'protocol',
-            message: 'stderr diagnostic: API_KEY=[REDACTED]',
-            timestampLabel: '12:04:03',
-          ),
-        ],
       ),
     ),
   );
