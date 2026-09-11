@@ -7,6 +7,7 @@ import 'package:codelab_app/core/platform/recent_projects_store.dart';
 import 'package:codelab_app/core/platform/working_directory_provider.dart';
 import 'package:codelab_app/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_app/features/workbench/presentation/widgets/connection_setup_dialog.dart';
+import 'package:codelab_app/features/workbench/presentation/widgets/debug_log_pane.dart';
 import 'package:codelab_app/features/workbench/presentation/widgets/debug_log_viewer_dialog.dart';
 import 'package:codelab_app/features/workbench/presentation/widgets/main_pane.dart';
 import 'package:codelab_app/features/workbench/presentation/workbench_shell.dart'
@@ -16,7 +17,7 @@ import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_testing/acp_testing.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
-import 'package:fluent_ui/fluent_ui.dart' show FluentApp, TextBox;
+import 'package:fluent_ui/fluent_ui.dart' show ComboBox, FluentApp, TextBox;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,6 +38,8 @@ void main() {
     expect(find.text('CodeLab'), findsOneWidget);
     expect(find.text('Sessions'), findsOneWidget);
     expect(find.text('Inspector'), findsOneWidget);
+    expect(find.text('Debug log'), findsOneWidget);
+    expect(find.byType(WorkbenchDebugLogPane), findsOneWidget);
     expect(find.text('Codelab Agent'), findsWidgets);
     expect(
       find.text('Connect an ACP agent to start a session.'),
@@ -2301,6 +2304,63 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScope();
   });
+
+  testWidgets(
+    'the docked Debug log panel is structured_log_fluent\'s FluentLogViewer '
+    '— its category selector appears once protocol-trace events start '
+    'arriving alongside application ones, filtering is a view concern, not '
+    'a capture toggle',
+    (tester) async {
+      final initialTransport = FakeAcpTransport();
+      final agentTransport = FakeAcpTransport();
+      final binding = CodeLabTestBinding(
+        transport: initialTransport,
+        stdioTransportFactory: (_) => agentTransport,
+      );
+      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      // LogCategoryComboBox hides itself below 2 distinct categories — the
+      // buffer is empty at this point, so no selector yet.
+      expect(find.text('All types'), findsNothing);
+
+      final logBuffer = binding.scope.resolve<LogBuffer>();
+
+      await tester.runAsync(() => shellCubit.connect());
+      await tester.pump();
+      final createRequestFuture = agentTransport.sent.first;
+      final createFuture = shellCubit.createSession();
+      final createRequest =
+          await tester.runAsync(() => createRequestFuture) as dynamic;
+      agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: createRequest.id as JsonRpcId,
+          result: const {'sessionId': 'session-1'},
+        ),
+      );
+      await tester.runAsync(() => createFuture);
+      await tester.pump();
+
+      // Session creation always traces its protocol request/response — the
+      // in-app viewer captures it unconditionally now (no capture toggle).
+      expect(
+        logBuffer.entries.value.any((e) => e['category'] == 'protocol'),
+        isTrue,
+      );
+      expect(
+        logBuffer.entries.value.any((e) => e['category'] == 'application'),
+        isTrue,
+      );
+
+      // Two distinct categories are now present — the docked panel's
+      // FluentLogViewer shows its category selector.
+      expect(find.text('All types'), findsWidgets);
+      expect(find.byType(ComboBox<String?>), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    },
+  );
 
   testWidgets(
     'selecting an unavailable command keeps the palette open without a '

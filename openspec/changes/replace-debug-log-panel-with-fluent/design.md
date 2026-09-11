@@ -13,9 +13,10 @@
 - Удалить `AcpDebugLogPanel`/`AcpDebugLogEntry` из `acp_ui` — заменяются полностью, не остаются как мёртвый код.
 
 **Non-Goals:**
-- Показ `category=protocol` (raw ACP payload tracing) в докнутой панели/полноэкранном viewer'е по умолчанию — protocol-trace остаётся developer-only, off-by-default, file-only каналом (`add-structured-logging`, Decision 4/6). In-app viewer показывает только `category=application` (это покрывает все layer-owned события: `component=client/transport/protocol/presentation` — включая protocol-ошибки, но не сырой payload). Раскрытие protocol-trace в UI — отдельный будущий follow-up, если понадобится.
-- Изменение самого `CodeLabShellCubit._recordDiagnostic`/Logger-эмиссии из `add-structured-logging` — тот механизм не трогается, `LogBuffer` — независимый, дополнительный consumer тех же structured-событий.
+- ~~Показ `category=protocol` в in-app viewer'е~~ — **отменено пользователем после первичной реализации, см. Decision 5**: in-app viewer теперь безусловно захватывает и protocol-trace тоже (не только `application`); видимость — через category-селектор (view-фильтр), не через capture-toggle. Файловый `protocol.log`-sink сохраняет свой отдельный, независимый off-by-default toggle.
 - Перестройка Inspector'а (approval/tool/protocol карточки) — контент и поведение этой части не меняются, меняется только то, что раньше было её частью (Debug log), а теперь стало соседом.
+
+Изначально в эту секцию также входил пункт "не трогать `CodeLabShellCubit._recordDiagnostic`/`state.diagnostics`" — по факту реализации выяснилось, что `AcpDebugLogEntry`/`AcpDebugLogSeverity` были не только UI-типом панели, но и внутренним diagnostics-стейтом кубита (~30 call sites, ~25 test-assertions в `codelab_app/test/widget_test.dart`), поэтому Non-Goal пришлось снять — см. Decision 2's дополнение "Удаление diagnostics-стейта из `CodeLabShellCubit`" ниже.
 
 ## Decisions
 
@@ -36,9 +37,13 @@
 
 Альтернатива (отклонена): оставить `AcpDebugLogPanel` в `acp_ui` "на будущее". Отклонено — мёртвый, неиспользуемый reusable-компонент нарушает §13 AGENTS.md (пропорциональность); если понадобится generic debug-panel снова, его проще написать заново под актуальные требования, чем поддерживать неиспользуемый код.
 
-### 3. Единый `LogBuffer` — третий sink `configureCodeLabLogging()`, `category=application`
+**Дополнение, обнаруженное при реализации: удаление diagnostics-стейта из `CodeLabShellCubit`.** `AcpDebugLogEntry`/`AcpDebugLogSeverity` оказались не только UI-типом `AcpDebugLogPanel`, но и внутренним состоянием кубита: `CodeLabShellState.diagnostics`, `_recordDiagnostic()`, `clearDiagnostics()` — ~30 call sites, единственный UI-потребитель которых был тот же `AcpDebugLogPanel` в `inspector_pane.dart`. Оставить их означало бы либо мёртвый, неиспользуемый стейт (нарушает ту же §13, что и альтернатива выше), либо тихую потерю части существующей диагностируемости — 25 из 37 вызовов `_recordDiagnostic` НЕ логировались через `Logger` вообще (только копились в `state.diagnostics` для старой панели), и просто выбросить их означало бы регресс по приоритету 5 AGENTS.md (наблюдаемость).
 
-`configureCodeLabLogging()` (`packages/dart/acp_client_core/lib/src/infrastructure/structured_log_logger.dart`, уже реализован в `add-structured-logging`) получает новый опциональный параметр, например:
+Решение (подтверждено пользователем при выборе между тремя вариантами — таблица плюсов/минусов обсуждена в чате): `state.diagnostics`/`AcpDebugLogEntry`/`clearDiagnostics()`/подписка на `AcpClientApplication.diagnosticChanges` (`_handleApplicationDiagnostic`) удаляются из `CodeLabShellCubit` полностью; ВСЕ 37 вызовов `_recordDiagnostic` (не только прежние 12) теперь безусловно логируются через `Logger` — `logSource`-параметр убран, `source` (уже присутствующий на каждом call site) используется как context для Logger напрямую. Так `LogBuffer` становится единственным, полным источником diagnostics-событий (ничего не теряется), без параллельного, ныне бесполезного списка в состоянии кубита.
+
+### 3. Единый `LogBuffer` — третий sink `configureCodeLabLogging()`, обе категории
+
+`configureCodeLabLogging()` (`packages/dart/acp_client_core/lib/src/infrastructure/structured_log_logger.dart`, уже реализован в `add-structured-logging`) получает новый опциональный параметр. **Итоговая форма** (после ревизии Decision 5 — изначально `inAppViewerOutput` принимал только `category=application`, затем добавлялся условный второй sink для protocol, затем оба слились в один безусловный):
 
 ```dart
 void configureCodeLabLogging({
@@ -51,34 +56,53 @@ void configureCodeLabLogging({
   sinks: [
     LogSink(name: 'application', output: applicationOutput, categories: const {applicationLogCategory}),
     if (inAppViewerOutput != null)
-      LogSink(name: 'debug-panel', output: inAppViewerOutput, categories: const {applicationLogCategory}),
+      LogSink(
+        name: 'debug-panel',
+        output: inAppViewerOutput,
+        minLevel: LogLevel.trace,
+        categories: const {applicationLogCategory, protocolTraceLogCategory},
+      ),
     LogSink(name: 'protocol', output: protocolTraceOutput, minLevel: LogLevel.trace, categories: const {protocolTraceLogCategory}, enabled: protocolTracingEnabledByDefault),
   ],
 }
 ```
 
-`inAppViewerOutput` — тот же `categories: {applicationLogCategory}`, что и консольный/файловый application-sink (не `protocolTraceLogCategory`) — см. Non-Goals. `CodeLabLoggingModule` (`app_scope.dart`) создаёт один `LogBuffer` (bounded ring buffer — свой собственный лимит записей, независимый от `_diagnostics`' 500 из `add-structured-logging`), передаёt `buffer.capture` как `inAppViewerOutput`, и биндит `LogBuffer`/`LogViewerController` в CherryPick-scope, откуда их резолвят `WorkbenchDebugLogPane` и полноэкранный viewer — один и тот же инстанс, не два независимых стрима.
+`inAppViewerOutput`'s sink принимает ОБЕ категории безусловно (`enabled` не выставлен → всегда `true`) — см. Decision 5 для обоснования. `CodeLabLoggingModule` (`app_scope.dart`) создаёт один `LogBuffer` (bounded ring buffer — свой собственный лимит записей, независимый от `_diagnostics`' 500 из `add-structured-logging`), передаёт `buffer.capture` как `inAppViewerOutput`, и биндит `LogBuffer` в CherryPick-scope, откуда его резолвят `WorkbenchDebugLogPane` и полноэкранный viewer — один и тот же инстанс, не два независимых стрима (каждый строит свой `LogViewerController` поверх него — см. Decision 4).
 
-### 4. Докнутая панель напрямую переиспользует `LogEntryTile`/`LogEntryDetailPane`/`LogViewerEmptyState`, полноэкранная — оборачивает `FluentLogViewerPage`
+### 4. Докнутая панель встраивает `FluentLogViewer` как есть, полноэкранная — оборачивает `FluentLogViewerPage` (тонкую обёртку над тем же `FluentLogViewer`)
 
-**Подтверждено чтением реального исходника** (`pese-git/structured_log`, ветка `develop`, монорепозиторий — `structured_log_flutter`/`structured_log_fluent` публикуются из него, а не из отдельных репозиториев с такими же именами):
+**История ревизий этого решения** (снизу вверх — но актуально только последнее состояние):
 
-- `LogBuffer.capture(Map<String, dynamic>, LogLevel)` — сигнатура совпадает с `structured_log`'s `OutputFunction` один в один; `buffer.capture` можно передавать в `LogSink.output` напрямую, без обёрток.
-- `LogViewerController` — `ChangeNotifier` поверх `LogBuffer` с `levelFilter`/`categoryFilter`/`searchQuery`/`paused`/`clear()`/`visibleEntries` (oldest-first) — подтверждает Decision 3 as-is.
-- `LogEntryTile(entry, selected, onTap)`, `LogEntryDetailPane(entry)`, `LogViewerEmptyState(hasLogs, onClearFilters)`, а также свободные функции `logLevelOf(entry)`, `formatEntryTime(raw)`, `logLevelColor(level, brightness)`, `logLevelAbbreviation(level)` — все экспортированы из `structured_log_fluent` и не зависят от `FluentLogViewerPage`. Докнутая панель (`WorkbenchDebugLogPane`) переиспользует их буквально: `ListView.builder` из `LogEntryTile` + `LogViewerEmptyState`, со своим заголовком/поиском/level-фильтром поверх собственного `LogViewerController`.
-- `FluentLogViewerPage(controller)` — `ScaffoldPage` с фиксированным 340px мастер-списком и `Expanded` detail-панелью; это full-page widget, не параметризуется под меньшую ширину/embedding-режим — значит, он используется только для полноэкранного viewer'а, не для докнутой панели (что и предполагалось). Back-button в его заголовке показывается автоматически по `Navigator.canPop(context)` и скрыт, если этот widget — корень своего Navigator'а.
+1. Изначально (после сверки `structured_log_fluent` `0.1.0-dev.2`): докнутая панель переиспользовала только низкоуровневые примитивы (`LogEntryTile`, `LogViewerEmptyState`) внутри собственноручно написанного `ListView.builder` + заголовка/поиска/level-фильтра — потому что `FluentLogViewerPage` тогда была монолитной `ScaffoldPage`, не параметризуемой под меньшую ширину/embedding.
+2. По ТЗ, отправленному пользователем (как автором `structured_log_fluent`) в апстрим: `structured_log_fluent` `0.1.0-dev.3` вынес мастер-detail UI `FluentLogViewerPage` в отдельный **переиспользуемый embeddable widget `FluentLogViewer`** (`fluent_log_viewer.dart`) — search + category-selector (`LogCategoryComboBox`, см. Decision 5) + level-фильтр + pause/clear + responsive master-detail (адаптируется к собственной ширине через `LayoutBuilder`, а не ширине окна — подходит и для узкой докнутой панели, и для full-screen). `FluentLogViewerPage` теперь — тонкий `ScaffoldPage`-wrapper вокруг него (заголовок "Logs" + back-button, без своей копии toolbar-логики).
 
-Отсюда — полноэкранный viewer открывается через route/dialog, при котором `Navigator.canPop(context)` истинен (например, `showDialog` — сам по себе пушит route), тогда `FluentLogViewerPage` сам покажет back-button без дополнительной обёртки поверх заголовка; обработка `Esc` как альтернативного способа закрытия — на уровне обёртки (route/dialog), не самого `FluentLogViewerPage`.
+**Итоговое решение (`0.1.0-dev.4`)**: `WorkbenchDebugLogPane` больше не переопределяет ни поиск, ни фильтры, ни список — это `DecoratedBox` с собственным заголовком CodeLab ("Debug log" + кнопка "Expand", своя докинг-хрома) и `Expanded(child: FluentLogViewer(controller: _controller))` как тело. Весь toolbar/список/detail/пустое состояние — из пакета, ничего не задублировано. `WorkbenchDebugLogPane` теряет собственные `TextEditingController`/`ComboBox`-поля поиска и уровня — они инкапсулированы внутри `FluentLogViewer`.
 
-**Два независимых `LogViewerController` поверх одного `LogBuffer`, не один общий** — уточнение к Decision 3: докнутая панель и полноэкранный viewer держат каждый свой `LogViewerController` (своё состояние `searchQuery`/`levelFilter`/`paused` — фильтры одной панели не должны навязываться другой), но оба instance строятся над одним и тем же `LogBuffer` singleton из CherryPick-scope — это и есть "один источник данных, не два независимых стрима" из Goals (единство данных, не единство UI-состояния фильтра).
+Полноэкранный viewer не меняется по сути (`DebugLogViewerDialog` → `FluentLogViewerPage`), просто теперь наследует все улучшения `FluentLogViewer` (category-селектор, pause/clear-кнопки) автоматически, без отдельной реализации.
 
-И `/logs` (командная палитра), и кнопка "Expand" докнутой панели вызывают один и тот же application-level метод открытия viewer'а (например, `CodeLabShellCubit`-сосед или прямой widget-level `showDialog` — конкретика на этапе tasks) — не два независимых пути с разным поведением.
+**Два независимых `LogViewerController` поверх одного `LogBuffer`, не один общий** — докнутая панель и полноэкранный viewer держат каждый свой `LogViewerController` (своё состояние `searchQuery`/`levelFilter`/`categoryFilter`/`paused` — фильтры одной панели не должны навязываться другой), но оба instance строятся над одним и тем же `LogBuffer` singleton из CherryPick-scope — это и есть "один источник данных, не два независимых стрима" из Goals (единство данных, не единство UI-состояния фильтра).
+
+Полноэкранный viewer открывается через `showDialog` (сам пушит route → `Navigator.canPop(context)` истинен → `FluentLogViewerPage` сам показывает back-button без дополнительной обёртки); `dismissWithEsc: true`/тёмный `barrierColor` — дефолты `showDialog`, закрывают требования Esc/затемнения без дополнительного кода.
+
+И `/logs` (командная палитра), и кнопка "Expand" докнутой панели вызывают один и тот же метод — `DebugLogViewerDialog.show(context, logBuffer)` — не два независимых пути с разным поведением.
+
+### 5. Protocol-trace в in-app viewer'е — всегда захватывается, видимость — через category-селектор, не toggle
+
+Пользователь явно запросил видеть `protocol.log` "аналогичным образом" в Debug Log — то есть в том же `LogBuffer`/viewer'е, что и `application`-события, а не только в отдельном файле. Пересматривает Non-Goal design.md, отклонённый изначально из-за объёма/verbosity сырых ACP-payload'ов (не из-за секретов — маскирование и так общее для всей `StructlogConfiguration`, не per-sink, см. Risks).
+
+**История ревизий**: первая реализация добавляла второй, условный in-app sink (`debug-panel-protocol`), включаемый/выключаемый ЧЕРЕЗ ТОТ ЖЕ toggle, что и файловый `protocol`-sink (`setProtocolTracingEnabled`), плюс `ToggleSwitch` "Protocol" в заголовке докнутой панели. Пользователь предложил заменить toggle на **селектор по типу** — итоговое решение:
+
+- `configureCodeLabLogging()`'s in-app viewer sink — **один** sink (`debug-panel`), безусловно (`enabled: true`, не привязан к `protocolTracingEnabledByDefault`) принимающий ОБЕ категории: `categories: {applicationLogCategory, protocolTraceLogCategory}`, `minLevel: LogLevel.trace` (чтобы trace-уровневые protocol-события проходили). `LogBuffer` — bounded/in-memory и проходит через тот же `secretRedactionProcessor`, что и остальные sinks, поэтому нет capture-side причины держать его отдельно gated — единственная причина исходного off-by-default была verbosity/шум, а не секреты.
+- Файловый `protocol.log`-sink остаётся отдельным, со своим независимым `enabled`/`setProtocolTracingEnabled`/`isProtocolTracingEnabled` (developer opt-in для файлового трейсинга, не связан с in-app viewer'ом).
+- Видимость protocol-событий в UI — не capture-toggle, а **view-фильтр**: `LogCategoryComboBox` (новый виджет `structured_log_fluent` `0.1.0-dev.3`, добавлен по ТЗ CodeLab) — динамически перечисляет distinct `category`-значения из `controller.buffer`, рендерит себя ТОЛЬКО когда их 2+ (иначе `SizedBox.shrink()` — один вариант нечего фильтровать), пишет в `controller.categoryFilter`. Встроен в `FluentLogViewer`'s toolbar, поэтому CodeLab не пишет собственный ComboBox для этого — получает его "из коробки" вместе с переходом на Decision 4.
+
+Альтернатива (отклонена, реализовывалась первой, затем отменена по прямому запросу пользователя): единый on/off toggle, гейтящий capture И file-sink одновременно. Отклонено — переключатель гейтил СБОР данных, а не то, что видно; после отказа от toggle в пользу селектора это стало избыточным усложнением — сбор всегда включён (дёшево, bounded, redacted), а что показывать — решает `categoryFilter`, для которого инфраструктура (`LogViewerController.categoryFilter`) уже существовала и раньше просто не имела готового UI.
 
 ## Risks / Trade-offs
 
 - [`structured_log_flutter`/`structured_log_fluent` — тот же автор/контроль roadmap, что и `structured_log`, но ещё более ранний prerelease (`0.1.0-dev.2`, `dev.1` не публиковался) — риск: API компонентов может не совпасть с тем, что описано в дизайн-референсе.] → перед реализацией (tasks) свериться с реальным исходником пакетов тем же способом, что и для `structured_log` (GitHub-репозиторий автора), а не полагаться только на текстовое описание; при расхождении — адаптировать докнутую панель под реальный API, оставаясь на согласованном визуальном направлении.
 - [Удаление `AcpDebugLogPanel` из `acp_ui` — breaking change для внутренних consumers пакета (его собственные preview/test файлы).] → затронутые файлы перечислены в Decision 2, входят в scope этого change, не забыты.
-- [Два независимых sink'а (`application` console/file и `debug-panel` LogBuffer) должны оставаться синхронными по содержимому — иначе докнутая панель покажет не то же самое, что консоль/лог-файл.] → оба читают один и тот же `category=application` фильтр и оба проходят через тот же `secretRedactionProcessor` (общий для всей `StructlogConfiguration`, не per-sink) — расхождения по маскированию невозможны.
+- [Несколько независимых sink'ов (`application` console/file, `debug-panel` LogBuffer, `protocol` file) должны оставаться синхронными по маскированию.] → все проходят через тот же `secretRedactionProcessor` (общий для всей `StructlogConfiguration`, не per-sink) — расхождения по маскированию невозможны, независимо от того, какие категории читает каждый конкретный sink.
 
 ## Open Questions
 

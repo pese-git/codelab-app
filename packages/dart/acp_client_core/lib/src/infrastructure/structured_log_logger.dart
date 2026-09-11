@@ -17,7 +17,7 @@ const applicationLogCategory = 'application';
 /// Category routing an entry to the developer-only protocol-trace sink.
 const protocolTraceLogCategory = 'protocol';
 
-/// Name of the protocol-trace sink, for [setProtocolTracingEnabled].
+/// Name of the protocol-trace file sink, for [setProtocolTracingEnabled].
 const protocolTraceSinkName = 'protocol';
 
 const _applicationSinkName = 'application';
@@ -115,10 +115,16 @@ Map<String, dynamic>? secretRedactionProcessor(Map<String, dynamic> entry) {
 /// human-readable/application-level events, a developer-only,
 /// off-by-default [protocolTraceOutput] sink for full ACP payload tracing,
 /// and an optional [inAppViewerOutput] sink feeding the in-app log viewer
-/// (`replace-debug-log-panel-with-fluent` `design.md` Decision 3) — it
-/// receives the same `category=application` events as [applicationOutput],
-/// never `category=protocol`, so the in-app viewer can never surface raw
-/// protocol payload tracing.
+/// (`replace-debug-log-panel-with-fluent` `design.md` Decision 3).
+///
+/// [inAppViewerOutput] always receives both `category=application` and
+/// `category=protocol` events, unconditionally — [protocolTraceOutput]'s
+/// file sink keeps its own independent, off-by-default toggle
+/// ([setProtocolTracingEnabled]), but the in-app viewer's `LogBuffer` is
+/// bounded/in-memory and redacted like every other sink, so there is no
+/// capture-side reason to gate it too; which events are actually shown is a
+/// view concern, left to `LogViewerController.categoryFilter` in the UI
+/// (`design.md` Decision 5, revised) rather than an enable/disable toggle.
 ///
 /// The composition root supplies concrete outputs (console vs file per
 /// build mode, platform-specific paths) — this pure-Dart function only
@@ -143,7 +149,8 @@ void configureCodeLabLogging({
         structured_log.LogSink(
           name: inAppViewerSinkName,
           output: inAppViewerOutput,
-          categories: const {applicationLogCategory},
+          minLevel: structured_log.LogLevel.trace,
+          categories: const {applicationLogCategory, protocolTraceLogCategory},
         ),
       structured_log.LogSink(
         name: protocolTraceSinkName,
@@ -156,12 +163,24 @@ void configureCodeLabLogging({
   );
 }
 
-/// Toggles the developer-only protocol-trace sink at runtime
+/// Toggles the developer-only `protocol.log` file sink at runtime
 /// (`design.md` Decision 4) — callers must never invoke this automatically
-/// on error, only on explicit debug/developer action.
+/// on error, only on explicit debug/developer action. Does not affect the
+/// in-app viewer, which always captures protocol-trace events (see
+/// [configureCodeLabLogging]) — filtering what's shown there is a UI
+/// concern (`LogViewerController.categoryFilter`), not a capture toggle.
 void setProtocolTracingEnabled(bool enabled) {
   structured_log.StructlogConfiguration.setSinkEnabled(
     protocolTraceSinkName,
     enabled: enabled,
   );
+}
+
+/// Whether the `protocol.log` file sink is currently enabled — reflects the
+/// state [setProtocolTracingEnabled] last set (or [configureCodeLabLogging]'s
+/// `protocolTracingEnabledByDefault`).
+bool isProtocolTracingEnabled() {
+  return structured_log.StructlogConfiguration.current.sinks
+      .firstWhere((sink) => sink.name == protocolTraceSinkName)
+      .enabled;
 }
