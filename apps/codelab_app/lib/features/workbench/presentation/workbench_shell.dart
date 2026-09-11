@@ -62,10 +62,13 @@ class CodeLabShell extends StatelessWidget {
                   inspectorPane: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(child: WorkbenchInspectorPane(state: state)),
+                      Expanded(
+                        flex: 3,
+                        child: WorkbenchInspectorPane(state: state),
+                      ),
                       const SizedBox(height: 8),
-                      SizedBox(
-                        height: 280,
+                      Expanded(
+                        flex: 2,
                         child: WorkbenchDebugLogPane(
                           logBuffer: logBuffer,
                           onExpand: () => unawaited(

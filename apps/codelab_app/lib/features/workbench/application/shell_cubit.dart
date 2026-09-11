@@ -780,10 +780,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       return;
     }
 
-    _recordDiagnostic(
-      'Creating ACP session.',
-      source: 'session',
-    );
+    _recordDiagnostic('Creating ACP session.', source: 'session');
 
     final result = await _createSessionUseCase(
       CreateSessionCommand(cwd: _selectedProjectPath),

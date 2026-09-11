@@ -174,7 +174,8 @@ void main() {
   );
 
   test(
-    'in-app viewer sink receives application events but not protocol trace',
+    'in-app viewer sink always captures both application and protocol-trace '
+    'events, independent of the file sink\'s own off-by-default toggle',
     () async {
       // BoundLogger reads the config once at construction — reconfigure
       // before building a client so its loggers pick up the new sink.
@@ -183,7 +184,6 @@ void main() {
         applicationOutput: (entry, level) => captured.add(entry),
         protocolTraceOutput: (entry, level) => captured.add(entry),
         inAppViewerOutput: (entry, level) => viewerCaptured.add(entry),
-        protocolTracingEnabledByDefault: true,
       );
 
       final viewerTransport = FakeAcpTransport();
@@ -194,15 +194,20 @@ void main() {
         await viewerTransport.close();
       });
 
+      // File sink stays off by default — its own, independent toggle.
+      expect(isProtocolTracingEnabled(), isFalse);
+
       viewerTransport.emitDiagnostic(message: 'stderr line', source: 'stderr');
       await _createSession(viewerClient, viewerTransport);
 
-      expect(viewerCaptured, isNotEmpty);
       expect(
-        viewerCaptured.every((e) => e['category'] == 'application'),
+        viewerCaptured.any((e) => e['category'] == 'application'),
         isTrue,
       );
-      expect(viewerCaptured.any((e) => e['category'] == 'protocol'), isFalse);
+      // Protocol-trace events reach the in-app viewer unconditionally —
+      // no capture-side toggle — even though the file sink is still off.
+      expect(viewerCaptured.any((e) => e['category'] == 'protocol'), isTrue);
+      expect(captured.any((e) => e['category'] == 'protocol'), isFalse);
     },
   );
 }
