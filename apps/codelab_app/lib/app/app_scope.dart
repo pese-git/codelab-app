@@ -13,6 +13,8 @@ import 'package:path/path.dart' as p;
 import 'package:structured_log/structured_log.dart' as structured_log;
 import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
+import 'package:structured_log_http/structured_log_http.dart'
+    show HttpLogOutput;
 
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/recent_projects_store.dart';
@@ -101,6 +103,18 @@ final class CodeLabLoggingModule extends Module {
 
   final String _logDirectoryPath;
 
+  /// Local-dev-only opt-in for shipping `category=application` events to a
+  /// `structured_log_server` instance (viewable in `structured_log_admin_ui`
+  /// while working on CodeLab itself) — never set for end users, see
+  /// `docs/architecture/technology-stack.md` §17.2. Both must be non-empty
+  /// or the sink is not created at all.
+  static const _httpServerUrl = String.fromEnvironment(
+    'CODELAB_LOG_SERVER_URL',
+  );
+  static const _httpProjectKey = String.fromEnvironment(
+    'CODELAB_LOG_SERVER_KEY',
+  );
+
   @override
   void builder(Scope currentScope) {
     final protocolTraceOutput = structured_log.AsyncRotatingFileOutput(
@@ -122,23 +136,32 @@ final class CodeLabLoggingModule extends Module {
     final logBuffer = LogBuffer();
     bind<LogBuffer>().toInstance(logBuffer);
 
+    final httpOutput = _httpServerUrl.isEmpty || _httpProjectKey.isEmpty
+        ? null
+        : HttpLogOutput(
+            serverUrl: _httpServerUrl,
+            projectSecretKey: _httpProjectKey,
+          );
+
     configureCodeLabLogging(
       applicationOutput:
           applicationFileOutput?.call ?? structured_log.coloredConsoleOutput,
       protocolTraceOutput: protocolTraceOutput.call,
       inAppViewerOutput: logBuffer.capture,
+      httpOutput: httpOutput?.call,
     );
 
     bind<CodeLabLoggingLifecycle>().toInstance(
       CodeLabLoggingLifecycle(
         applicationOutput: applicationFileOutput,
         protocolTraceOutput: protocolTraceOutput,
+        httpOutput: httpOutput,
       ),
     );
   }
 }
 
-/// Awaits pending writes on both async logging sinks before the scope
+/// Awaits pending writes on all async logging sinks before the scope
 /// finishes disposing (design.md Decision 8) — resolved once via
 /// [createCodeLabRootScope] so CherryPick's own `Scope.dispose()` (which
 /// disposes every resolved [Disposable] automatically) picks it up, rather
@@ -147,15 +170,18 @@ final class CodeLabLoggingLifecycle implements Disposable {
   CodeLabLoggingLifecycle({
     required this.applicationOutput,
     required this.protocolTraceOutput,
+    this.httpOutput,
   });
 
   final structured_log.AsyncFileOutput? applicationOutput;
   final structured_log.AsyncRotatingFileOutput protocolTraceOutput;
+  final HttpLogOutput? httpOutput;
 
   @override
   Future<void> dispose() => Future.wait([
     if (applicationOutput != null) applicationOutput!.flushed,
     protocolTraceOutput.flushed,
+    if (httpOutput != null) httpOutput!.close(),
   ]);
 }
 

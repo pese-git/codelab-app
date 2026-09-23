@@ -210,6 +210,36 @@ void main() {
       expect(captured.any((e) => e['category'] == 'protocol'), isFalse);
     },
   );
+
+  test(
+    'httpOutput sink (local-dev-only structured_log_http) receives '
+    'application events like the console/file sink, and is absent when '
+    'not supplied',
+    () async {
+      final httpCaptured = <Map<String, dynamic>>[];
+      configureCodeLabLogging(
+        applicationOutput: (entry, level) => captured.add(entry),
+        protocolTraceOutput: (entry, level) => captured.add(entry),
+        httpOutput: (entry, level) => httpCaptured.add(entry),
+      );
+
+      final httpTransport = FakeAcpTransport();
+      await httpTransport.start();
+      final httpClient = AcpClientApplication(transport: httpTransport);
+      addTearDown(() async {
+        await httpClient.dispose();
+        await httpTransport.close();
+      });
+
+      httpTransport.emitDiagnostic(message: 'stderr line', source: 'stderr');
+
+      expect(httpCaptured, isNotEmpty);
+      expect(
+        httpCaptured.every((e) => e['category'] == 'application'),
+        isTrue,
+      );
+    },
+  );
 }
 
 Future<void> _createSession(

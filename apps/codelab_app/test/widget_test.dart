@@ -29,6 +29,24 @@ import 'package:structured_log_fluent/structured_log_fluent.dart'
 import 'support/test_app_scope.dart';
 
 void main() {
+  setUp(() {
+    // Default test surface (800x600) is narrower than
+    // FluentLogViewer's toolbar breakpoint (820) and too short for its
+    // compact-toolbar minimum height, causing a RenderFlex overflow that
+    // never shows up in the real app (windows are opened much larger).
+    // Match the size other tests in this file already use for the same
+    // reason (see the explicit per-test overrides below) so every test
+    // renders the shell at a realistic desktop window size.
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .views
+        .single;
+    view.physicalSize = const Size(1400, 900);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+  });
+
   testWidgets('renders the desktop workbench shell', (tester) async {
     final binding = CodeLabTestBinding();
     final scope = binding.scope;
@@ -1040,7 +1058,9 @@ void main() {
 
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
     final lossMessages = logger.entries.where(
-      (entry) => (entry['event'] as String? ?? '').contains('Connection to ACP agent lost'),
+      (entry) => (entry['event'] as String? ?? '').contains(
+        'Connection to ACP agent lost',
+      ),
     );
     expect(lossMessages, isEmpty);
     expect(
@@ -1090,7 +1110,9 @@ void main() {
 
     expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
     final lossMessages = logger.entries.where(
-      (entry) => (entry['event'] as String? ?? '').contains('Connection to ACP agent lost'),
+      (entry) => (entry['event'] as String? ?? '').contains(
+        'Connection to ACP agent lost',
+      ),
     );
     expect(lossMessages, isEmpty);
     expect(
@@ -1540,10 +1562,7 @@ void main() {
     expect(cancelRequest.params, containsPair('sessionId', 'session-1'));
     expect(shellCubit.state.canCancel, isFalse);
     expect(shellCubit.state.isPromptSubmitting, isFalse);
-    expect(
-      logger.entries.last['event'],
-      contains('Cancelled prompt turn'),
-    );
+    expect(logger.entries.last['event'], contains('Cancelled prompt turn'));
     expect(
       shellCubit.state.inspectorEntries
           .firstWhere((entry) => entry.title.startsWith('Prompt turn'))
@@ -1612,10 +1631,7 @@ void main() {
       shellCubit.state.transcriptEntries.last.kind,
       AcpTranscriptEntryKind.diagnostic,
     );
-    expect(
-      logger.entries.last['event'],
-      contains('Failed to send prompt'),
-    );
+    expect(logger.entries.last['event'], contains('Failed to send prompt'));
 
     await shellCubit.close();
     await application.dispose();
@@ -2372,13 +2388,20 @@ void main() {
 
       shellCubit.openCommandPalette();
       await tester.pump();
-      final diagnosticsBefore = binding.scope.resolve<LogBuffer>().entries.value.length;
+      final diagnosticsBefore = binding.scope
+          .resolve<LogBuffer>()
+          .entries
+          .value
+          .length;
 
       await tester.tap(find.text('/plan'));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(shellCubit.state.isCommandPaletteOpen, isTrue);
-      expect(binding.scope.resolve<LogBuffer>().entries.value.length, diagnosticsBefore);
+      expect(
+        binding.scope.resolve<LogBuffer>().entries.value.length,
+        diagnosticsBefore,
+      );
       expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -3665,7 +3688,8 @@ void main() {
       );
       expect(
         harness.logger.entries.any(
-          (entry) => (entry['event'] as String? ?? '').contains('Prompt failed'),
+          (entry) =>
+              (entry['event'] as String? ?? '').contains('Prompt failed'),
         ),
         isFalse,
       );
@@ -3854,7 +3878,8 @@ void main() {
       expect(harness.shellCubit.state.queuedPrompts.single.id, id);
       expect(
         harness.logger.entries.any(
-          (entry) => (entry['event'] as String? ?? '').contains('Prompt failed'),
+          (entry) =>
+              (entry['event'] as String? ?? '').contains('Prompt failed'),
         ),
         isFalse,
       );
@@ -4491,9 +4516,11 @@ final class _FakeRecentProjectsStore implements RecentProjectsStore {
 /// bound context — enough for the harness's diagnostic assertions without
 /// touching the global `structured_log` singleton other tests configure.
 final class _RecordingLogger implements Logger {
-  _RecordingLogger([Map<String, Object?> context = const {}, List<Map<String, Object?>>? sink])
-    : _context = context,
-      entries = sink ?? [];
+  _RecordingLogger([
+    Map<String, Object?> context = const {},
+    List<Map<String, Object?>>? sink,
+  ]) : _context = context,
+       entries = sink ?? [];
 
   final Map<String, Object?> _context;
   final List<Map<String, Object?>> entries;
