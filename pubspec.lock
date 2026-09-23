@@ -997,10 +997,10 @@ packages:
     dependency: transitive
     description:
       name: structured_log
-      sha256: ee60a752cba61cdad0db14be7e92a98f2c354041a9aae32fe5aed5655bebc52b
+      sha256: bdbd9047dba688d8dc7e986c0fc57c6d43371c8aea63b18f3e51d59359b94349
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0-dev.4"
+    version: "0.2.1-dev.0"
   structured_log_fluent:
     dependency: transitive
     description:
@@ -1017,6 +1017,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.0-dev.3"
+  structured_log_http:
+    dependency: transitive
+    description:
+      name: structured_log_http
+      sha256: "1930dee50b9c283a9c42e9e7c8765cb9e18dfcf304360137b3179d6bb2919569"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0-dev.1"
   sync_http:
     dependency: transitive
     description:

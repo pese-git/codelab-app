@@ -581,11 +581,19 @@ Package:
 
 Введена в рамках `add-structured-logging` (см. `openspec/changes/add-structured-logging/design.md`) как единственная технология логирования проекта — заменяет ad hoc `print`/`debugPrint` и служит backend для существующего `DiagnosticEntry`-потока `acp_client_core`.
 
-Версия на момент введения: `0.2.0-dev.4` (prerelease, `-dev`) — пин на точную версию в `pubspec.yaml`, без caret-диапазона. При выходе стабильного `0.2.0` пин следует обновить, сверившись с changelog пакета.
+Версия на момент введения: `0.2.0-dev.4` (prerelease, `-dev`) — пин на точную версию в `pubspec.yaml`, без caret-диапазона. Пакет с тех пор дошёл до стабильного `0.2.0`; пин поднят до `0.2.1-dev.0` (без breaking changes с `0.2.0-dev.4`, см. changelog пакета) — потребовалось `structured_log_http` (§17.2), которому нужен `^0.2.1-dev.0`.
 
 Зависимость подключена **только** в `acp_client_core` (единственный владелец Logger-порта и `structured_log`-адаптера) и `codelab_app` (composition root, конкретная конфигурация sinks). `acp_protocol`/`acp_transports` эту зависимость не получают — они продолжают сигнализировать о своих событиях через уже существующие typed errors/`AcpTransportEvent.diagnostic`, которые `acp_client_core` транслирует в structured-события с сохранением correlation-контекста (см. `design.md` Decision 1).
 
 Конфигурация (sinks, processors) идёт через глобальный `StructlogConfiguration.configure()`/`getLogger()` пакета — осознанное исключение из общего запрета на global service locator (§23 `layers-and-dependencies.md`), обоснование см. `design.md` Decision 7.
+
+### 17.2. Локальная пересылка логов на dev-сервер — `structured_log_http`
+
+Технология: [`structured_log_http`](https://pub.dev/packages/structured_log_http) — батчащий/ретраящий `OutputFunction` (`HttpLogOutput`), пересылающий записи по HTTP (`POST /v1/logs`) в `structured_log_server` для просмотра в `structured_log_admin_ui`. Версия: `0.1.0-dev.1`, точный пин.
+
+**Только для локальной разработки самого CodeLab, не end-user-функциональность.** `CodeLabLoggingModule` (`apps/codelab_app/lib/app/app_scope.dart`) конструирует `HttpLogOutput` исключительно если ОБЕ compile-time-константы `CODELAB_LOG_SERVER_URL`/`CODELAB_LOG_SERVER_KEY` (`String.fromEnvironment`, передаются через `--dart-define` при `flutter run`) непустые — по умолчанию (без `--dart-define`) sink не создаётся вовсе, нулевая стоимость и нулевой риск. `projectSecretKey` — секрет; НЕ ДОЛЖЕН попадать в репозиторий (`.env`/shell-профиль разработчика, не committed файл) — см. AGENTS.md §10.
+
+Sink получает те же `category=application` события, что уже идут в консоль/файл — никакой отдельной категории. Ships через `configureCodeLabLogging()`'s опциональный параметр `httpOutput` (`packages/dart/acp_client_core/lib/src/infrastructure/structured_log_logger.dart`) — `acp_client_core` не получает зависимость на `structured_log_http` (только на `structured_log`'s `OutputFunction`-тип), пакет подключён исключительно в `codelab_app`, тем же паттерном, что `structured_log_flutter`/`structured_log_fluent` (Decision 1 `replace-debug-log-panel-with-fluent/design.md`). `CodeLabLoggingLifecycle.dispose()` закрывает `HttpLogOutput` (флашит буфер) наравне с остальными sinks.
 
 ---
 

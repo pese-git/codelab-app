@@ -25,6 +25,10 @@ const _applicationSinkName = 'application';
 /// Name of the optional in-app log viewer sink, for reference in tests.
 const inAppViewerSinkName = 'debug-panel';
 
+/// Name of the optional `structured_log_http`-backed sink, for reference in
+/// tests — local-dev-only, see [configureCodeLabLogging]'s [httpOutput].
+const httpSinkName = 'http';
+
 /// Component tag for events originating in `acp_transports`.
 const transportComponent = 'transport';
 
@@ -131,10 +135,20 @@ Map<String, dynamic>? secretRedactionProcessor(Map<String, dynamic> entry) {
 /// wires sinks/processors/filtering, since `acp_client_core` must not
 /// depend on Flutter to detect debug/release builds itself
 /// (`layers-and-dependencies.md` §7).
+///
+/// [httpOutput] is a local-development convenience — ships `category=
+/// application` events to a locally-run `structured_log_server` instance
+/// (via `structured_log_http`'s `HttpLogOutput`) for viewing in
+/// `structured_log_admin_ui` while working on CodeLab itself. `null` (the
+/// default) disables it entirely; the composition root only constructs an
+/// `HttpLogOutput` when a developer explicitly opts in (see
+/// `docs/architecture/technology-stack.md` §17.2) — this is not an
+/// end-user telemetry feature.
 void configureCodeLabLogging({
   required structured_log.OutputFunction applicationOutput,
   required structured_log.OutputFunction protocolTraceOutput,
   structured_log.OutputFunction? inAppViewerOutput,
+  structured_log.OutputFunction? httpOutput,
   bool protocolTracingEnabledByDefault = false,
 }) {
   structured_log.StructlogConfiguration.configure(
@@ -151,6 +165,12 @@ void configureCodeLabLogging({
           output: inAppViewerOutput,
           minLevel: structured_log.LogLevel.trace,
           categories: const {applicationLogCategory, protocolTraceLogCategory},
+        ),
+      if (httpOutput != null)
+        structured_log.LogSink(
+          name: httpSinkName,
+          output: httpOutput,
+          categories: const {applicationLogCategory},
         ),
       structured_log.LogSink(
         name: protocolTraceSinkName,
