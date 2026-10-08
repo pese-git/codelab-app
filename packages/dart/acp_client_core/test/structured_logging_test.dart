@@ -212,7 +212,7 @@ void main() {
   );
 
   test(
-    'httpOutput sink (local-dev-only structured_log_http) receives '
+    'httpOutput sink (local-dev-only structured_log_remote_sync) receives '
     'application events like the console/file sink, and is absent when '
     'not supplied',
     () async {

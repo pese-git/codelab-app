@@ -107,9 +107,9 @@ void main() {
     await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
     expect(find.text('Connected'), findsWidgets);
-    final diagnostics = shellCubit.state.diagnostics.map(
-      (entry) => entry.message,
-    );
+    final diagnostics = codeLabDependenciesOf(
+      tester.element(find.byType(CodeLabApp)),
+    ).logBuffer.entries.value.map((entry) => entry['event'] as String? ?? '');
     expect(diagnostics, contains(contains('Starting stdio ACP agent:')));
     expect(diagnostics, contains(contains('Stdio ACP agent started:')));
 

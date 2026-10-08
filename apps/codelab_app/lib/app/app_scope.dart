@@ -10,11 +10,12 @@ import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:path/path.dart' as p;
+import 'package:structured_log/io.dart' as structured_log_io;
 import 'package:structured_log/structured_log.dart' as structured_log;
 import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
-import 'package:structured_log_http/structured_log_http.dart'
-    show HttpLogOutput;
+import 'package:structured_log_remote_sync/structured_log_remote_sync.dart'
+    show RemoteSyncLogOutput;
 
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/recent_projects_store.dart';
@@ -117,7 +118,7 @@ final class CodeLabLoggingModule extends Module {
 
   @override
   void builder(Scope currentScope) {
-    final protocolTraceOutput = structured_log.AsyncRotatingFileOutput(
+    final protocolTraceOutput = structured_log_io.AsyncRotatingFileOutput(
       p.join(_logDirectoryPath, 'protocol.log'),
       maxSizeBytes: 10 * 1024 * 1024,
       maxBackups: 5,
@@ -127,7 +128,7 @@ final class CodeLabLoggingModule extends Module {
     // isn't durable for a desktop app nobody is watching a terminal for.
     final applicationFileOutput = kDebugMode
         ? null
-        : structured_log.AsyncFileOutput(
+        : structured_log_io.AsyncFileOutput(
             p.join(_logDirectoryPath, 'application.log'),
           );
 
@@ -138,7 +139,7 @@ final class CodeLabLoggingModule extends Module {
 
     final httpOutput = _httpServerUrl.isEmpty || _httpProjectKey.isEmpty
         ? null
-        : HttpLogOutput(
+        : RemoteSyncLogOutput(
             serverUrl: _httpServerUrl,
             projectSecretKey: _httpProjectKey,
           );
@@ -173,9 +174,9 @@ final class CodeLabLoggingLifecycle implements Disposable {
     this.httpOutput,
   });
 
-  final structured_log.AsyncFileOutput? applicationOutput;
-  final structured_log.AsyncRotatingFileOutput protocolTraceOutput;
-  final HttpLogOutput? httpOutput;
+  final structured_log_io.AsyncFileOutput? applicationOutput;
+  final structured_log_io.AsyncRotatingFileOutput protocolTraceOutput;
+  final RemoteSyncLogOutput? httpOutput;
 
   @override
   Future<void> dispose() => Future.wait([

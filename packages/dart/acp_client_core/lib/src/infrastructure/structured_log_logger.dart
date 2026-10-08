@@ -25,7 +25,7 @@ const _applicationSinkName = 'application';
 /// Name of the optional in-app log viewer sink, for reference in tests.
 const inAppViewerSinkName = 'debug-panel';
 
-/// Name of the optional `structured_log_http`-backed sink, for reference in
+/// Name of the optional `structured_log_remote_sync`-backed sink, for reference in
 /// tests — local-dev-only, see [configureCodeLabLogging]'s [httpOutput].
 const httpSinkName = 'http';
 
@@ -138,10 +138,10 @@ Map<String, dynamic>? secretRedactionProcessor(Map<String, dynamic> entry) {
 ///
 /// [httpOutput] is a local-development convenience — ships `category=
 /// application` events to a locally-run `structured_log_server` instance
-/// (via `structured_log_http`'s `HttpLogOutput`) for viewing in
+/// (via `structured_log_remote_sync`'s `RemoteSyncLogOutput`) for viewing in
 /// `structured_log_admin_ui` while working on CodeLab itself. `null` (the
 /// default) disables it entirely; the composition root only constructs an
-/// `HttpLogOutput` when a developer explicitly opts in (see
+/// `RemoteSyncLogOutput` when a developer explicitly opts in (see
 /// `docs/architecture/technology-stack.md` §17.2) — this is not an
 /// end-user telemetry feature.
 void configureCodeLabLogging({
