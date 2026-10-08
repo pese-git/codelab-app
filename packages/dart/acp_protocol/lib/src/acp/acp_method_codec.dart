@@ -329,11 +329,26 @@ Object decodeAcpRequestParams(JsonRpcRequest request) {
   return definition.decodeParams(request.params);
 }
 
+/// Decodes the params of an agent notification.
+///
+/// `session/update` ignores unknown root fields of every object it decodes
+/// (see [tolerateUnknownRootFields]): it is a one-way stream from an external
+/// process, and dropping a whole update over an extra field (e.g.
+/// `messageId` on `agent_message_chunk`) loses the agent's reply while
+/// protecting nothing. Requests the agent initiates (`session/request_permission`,
+/// `fs/*`, `terminal/*`) need an answer and touch security, so they keep the
+/// strict [decodeAcpRequestParams]; [decodeAcpParams] stays strict as well.
 Object decodeAcpNotificationParams(JsonRpcNotification notification) {
   final definition = requireAcpMethod(notification.method);
   if (definition is! AcpNotificationMethod<Object>) {
     throw JsonRpcProtocolException.invalidShape(
       '${notification.method} must be a request.',
+    );
+  }
+
+  if (notification.method == sessionUpdateMethod) {
+    return tolerateUnknownRootFields(
+      () => definition.decodeParams(notification.params),
     );
   }
 
