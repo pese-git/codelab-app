@@ -72,11 +72,7 @@ sealed class FileSystemCapabilities with _$FileSystemCapabilities {
   }) = _FileSystemCapabilities;
 
   factory FileSystemCapabilities.fromJson(Object? value) {
-    final source = requireAcpObject(
-      value,
-      path: 'fs',
-      allowedKeys: {'readTextFile', 'writeTextFile', '_meta'},
-    );
+    final source = requireAcpCapabilityObject(value, path: 'fs');
 
     return FileSystemCapabilities(
       readTextFile: _optionalBool(source, 'readTextFile'),
@@ -105,10 +101,9 @@ sealed class ClientCapabilities with _$ClientCapabilities {
   }) = _ClientCapabilities;
 
   factory ClientCapabilities.fromJson(Object? value) {
-    final source = requireAcpObject(
+    final source = requireAcpCapabilityObject(
       value,
       path: 'clientCapabilities',
-      allowedKeys: {'fs', 'terminal', '_meta'},
     );
 
     return ClientCapabilities(
@@ -140,11 +135,7 @@ sealed class McpCapabilities with _$McpCapabilities {
   }) = _McpCapabilities;
 
   factory McpCapabilities.fromJson(Object? value) {
-    final source = requireAcpObject(
-      value,
-      path: 'mcpCapabilities',
-      allowedKeys: {'http', 'sse', '_meta'},
-    );
+    final source = requireAcpCapabilityObject(value, path: 'mcpCapabilities');
 
     return McpCapabilities(
       http: _optionalBool(source, 'http'),
@@ -170,10 +161,9 @@ sealed class PromptCapabilities with _$PromptCapabilities {
   }) = _PromptCapabilities;
 
   factory PromptCapabilities.fromJson(Object? value) {
-    final source = requireAcpObject(
+    final source = requireAcpCapabilityObject(
       value,
       path: 'promptCapabilities',
-      allowedKeys: {'audio', 'embeddedContext', 'image', '_meta'},
     );
 
     return PromptCapabilities(
@@ -203,10 +193,9 @@ sealed class SessionListCapabilities with _$SessionListCapabilities {
   }) = _SessionListCapabilities;
 
   factory SessionListCapabilities.fromJson(Object? value) {
-    final source = requireAcpObject(
+    final source = requireAcpCapabilityObject(
       value,
       path: 'sessionCapabilities.list',
-      allowedKeys: {'_meta'},
     );
 
     return SessionListCapabilities(meta: _optionalObject(source, '_meta'));
@@ -227,10 +216,9 @@ sealed class SessionCapabilities with _$SessionCapabilities {
   }) = _SessionCapabilities;
 
   factory SessionCapabilities.fromJson(Object? value) {
-    final source = requireAcpObject(
+    final source = requireAcpCapabilityObject(
       value,
       path: 'sessionCapabilities',
-      allowedKeys: {'list', '_meta'},
     );
 
     return SessionCapabilities(
@@ -262,17 +250,7 @@ sealed class AgentCapabilities with _$AgentCapabilities {
   }) = _AgentCapabilities;
 
   factory AgentCapabilities.fromJson(Object? value) {
-    final source = requireAcpObject(
-      value,
-      path: 'agentCapabilities',
-      allowedKeys: {
-        'loadSession',
-        'mcpCapabilities',
-        'promptCapabilities',
-        'sessionCapabilities',
-        '_meta',
-      },
-    );
+    final source = requireAcpCapabilityObject(value, path: 'agentCapabilities');
 
     return AgentCapabilities(
       loadSession: _optionalBool(source, 'loadSession'),

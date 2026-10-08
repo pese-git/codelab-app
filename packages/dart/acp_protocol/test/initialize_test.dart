@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:test/test.dart';
 
@@ -93,6 +95,96 @@ void main() {
           },
         ],
       });
+    });
+
+    test('ignores unknown flags inside sessionCapabilities, as announced by a '
+        'real agent (@zed-industries/claude-code-acp)', () {
+      final response = InitializeResponse.fromJson(
+        jsonDecode(
+          '{"protocolVersion":1,"agentCapabilities":'
+          '{"sessionCapabilities":{"fork":{},"list":{},"resume":{}}}}',
+        ),
+      );
+
+      expect(
+        response.agentCapabilities.sessionCapabilities.list,
+        const SessionListCapabilities(),
+      );
+    });
+
+    test('ignores unknown fields at every level of agentCapabilities', () {
+      final response = InitializeResponse.fromJson({
+        'protocolVersion': 1,
+        'agentCapabilities': {
+          'loadSession': true,
+          'futureFlag': {'nested': true},
+          'mcpCapabilities': {'http': true, 'websocket': true},
+          'promptCapabilities': {'image': true, 'video': true},
+          'sessionCapabilities': {
+            'list': {'pagination': true},
+          },
+        },
+      });
+
+      final capabilities = response.agentCapabilities;
+      expect(capabilities.loadSession, isTrue);
+      expect(capabilities.mcpCapabilities.http, isTrue);
+      expect(capabilities.promptCapabilities.image, isTrue);
+      expect(capabilities.sessionCapabilities.list, isNotNull);
+    });
+
+    test('still rejects a capability object that is not a JSON object', () {
+      expect(
+        () => InitializeResponse.fromJson({
+          'protocolVersion': 1,
+          'agentCapabilities': {'sessionCapabilities': 'fork'},
+        }),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+    });
+
+    test('still rejects unknown root fields outside capability objects', () {
+      void expectInvalidShape(void Function() decode) {
+        expect(
+          decode,
+          throwsA(
+            isA<JsonRpcProtocolException>().having(
+              (error) => error.kind,
+              'kind',
+              JsonRpcProtocolErrorKind.invalidShape,
+            ),
+          ),
+        );
+      }
+
+      expectInvalidShape(
+        () => InitializeResponse.fromJson({
+          'protocolVersion': 1,
+          'customRoot': true,
+        }),
+      );
+      expectInvalidShape(
+        () => InitializeRequest.fromJson({
+          'protocolVersion': 1,
+          'customRoot': true,
+        }),
+      );
+      expectInvalidShape(
+        () => Implementation.fromJson({
+          'name': 'agent',
+          'version': '1',
+          'customRoot': true,
+        }),
+      );
+      expectInvalidShape(
+        () => decodeAcpParams(sessionPromptMethod, {
+          'sessionId': 'session-1',
+          'prompt': [
+            {'type': 'text', 'text': 'hello'},
+          ],
+          'customRoot': true,
+        }),
+      );
     });
 
     test('rejects invalid protocol versions', () {
