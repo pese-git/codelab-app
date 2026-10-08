@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
 
@@ -29,11 +31,41 @@ JsonObject requireAcpCapabilityObject(Object? value, {required String path}) {
   return requireJsonObject(value, path: path);
 }
 
+/// Zone key marking a decode that must ignore unknown root fields.
+///
+/// A zone value rather than a global flag or a parameter threaded through
+/// every `fromJson`: it is scoped to one call, exception-safe, needs no
+/// cleanup, and reaches nested value objects without touching their
+/// (generated) factory signatures.
+const _tolerateUnknownRootFieldsKey = #acpTolerateUnknownRootFields;
+
+/// Runs [decode] so that [requireOnlyRootKeys] ignores unknown root fields of
+/// every object it decodes, at any nesting depth.
+///
+/// Used for the `result` of an agent's response: the agent is an external
+/// process, so rejecting the whole response over a field this client has not
+/// modelled yet (e.g. `session/new` -> `models`) costs a valid, already
+/// created session and protects nothing. Only extra root keys are tolerated;
+/// a non-object, a missing required field, a wrong type or an unknown
+/// discriminator is still an `invalidShape`.
+///
+/// Requests this client sends and the requests/notifications the agent
+/// initiates are not wrapped by this, so they stay strict.
+T tolerateUnknownRootFields<T>(T Function() decode) {
+  return Zone.current
+      .fork(zoneValues: {_tolerateUnknownRootFieldsKey: true})
+      .run(decode);
+}
+
 void requireOnlyRootKeys(
   JsonObject source, {
   required String path,
   required Set<String> allowedKeys,
 }) {
+  if (Zone.current[_tolerateUnknownRootFieldsKey] == true) {
+    return;
+  }
+
   for (final key in source.keys) {
     if (!allowedKeys.contains(key)) {
       throw JsonRpcProtocolException.invalidShape(

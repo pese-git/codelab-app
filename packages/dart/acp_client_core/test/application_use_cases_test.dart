@@ -55,6 +55,42 @@ void main() {
     await subscription.cancel();
   });
 
+  test(
+    'CreateSession succeeds when the agent adds a field this client does '
+    'not model (claude-code-acp answers session/new with `models`)',
+    () async {
+      final future = CreateSession(client)(
+        const CreateSessionCommand(cwd: '/workspace'),
+      ).run();
+      await _pump();
+
+      final request = transport.sentMessages.single as JsonRpcRequest;
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: request.id,
+          result: {
+            'sessionId': 'session-1',
+            'models': {
+              'availableModels': [
+                {
+                  'modelId': 'default',
+                  'name': 'Default',
+                  'description': 'Opus',
+                },
+              ],
+              'currentModelId': 'default',
+            },
+          },
+        ),
+      );
+
+      final session = (await future).getOrElse((failure) => fail('$failure'));
+      expect(session.id, const SessionId('session-1'));
+      expect(session.status, SessionLifecycleStatus.active);
+      expect(client.sessionById(const SessionId('session-1')), session);
+    },
+  );
+
   test('SetSessionConfigOption sends session/set_config_option and stores the '
       "response's configOptions", () async {
     await _createSession(client, transport);
