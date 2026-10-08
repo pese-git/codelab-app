@@ -14,7 +14,7 @@
 | Пакет (npm) | Версия | Статус |
 |---|---|---|
 | `@zed-industries/claude-code-acp` | 0.16.2 | **Устарел**, переименован в `@agentclientprotocol/claude-agent-acp` (npm: *deprecated*). Проверено: `initialize`, `session/new`, prompt turn (`stopReason endTurn`). |
-| `@agentclientprotocol/claude-agent-acp` | 0.88.0 | Актуальный. Проверено: `initialize`, `session/new`, селекторы Mode / Model / Effort. Prompt turn на этой версии не прогонялся. |
+| `@agentclientprotocol/claude-agent-acp` | 0.88.0 | Актуальный. Проверено: `initialize`, `session/new`, селекторы Mode / Model / Effort, prompt turn (`stopReason end_turn`, ответ доходит до таймлайна; см. 3.5). |
 
 Рекомендуется актуальный пакет: он объявляет настройки сессии через `configOptions` (разд. 3.3), и CodeLab показывает их селекторами в композере.
 
@@ -91,7 +91,14 @@
 
 ### 3.5. `session/update`
 
-Использованный агентом `available_commands_update` — штатный (`14-Slash Commands.md`), расхождений нет.
+`available_commands_update` — штатный (`14-Slash Commands.md`), расхождений нет. В prompt turn на 0.88.0 агент присылает два нестандартных элемента:
+
+| Что | Где | CodeLab |
+|---|---|---|
+| поле `messageId` | корень `update` у `agent_message_chunk` | игнорируется; текст чанка применяется как обычно |
+| вид обновления `usage_update` (`used`, `size`, `cost`) | `update.sessionUpdate` | пропускается: состояние сессии не меняется, ошибки нет, в журнал пишется одна запись DEBUG (вид и `sessionId`, без содержимого) |
+
+Раньше оба случая отвергались строгой валидацией: текст ответа модели терялся с диагностикой `unsupported root field "messageId"` (OpenSpec: `tolerate-unknown-session-updates`). Поддержки `messageId` и индикатора использования контекста по `usage_update` в CodeLab **нет**: эти поля не входят в вендоренную спеку, семантику не придумываем.
 
 ### 3.6. Поведение вне протокола: отказ внутри другой сессии Claude Code
 
@@ -112,15 +119,16 @@
 | `result` ответов агента (любая вложенность) | неизвестные корневые поля игнорируются |
 | Структура ответа: не объект, нет обязательного поля, неверный тип, неизвестный discriminator | `invalidShape` — ответ отвергается |
 | Параметры запросов, которые отправляет CodeLab | строго |
-| Запросы и уведомления агента (`session/update`, `session/request_permission`, `fs/*`, `terminal/*`) | строго по эталону |
+| Уведомление `session/update` (любая вложенность) | неизвестные корневые поля игнорируются; неизвестный вид обновления пропускается; структура известных видов проверяется строго |
+| Запросы агента (`session/request_permission`, `fs/*`, `terminal/*`) | строго по эталону (на них нужен ответ, они относятся к безопасности) |
 
-Терпимость реализована централизованно в `acp_protocol` (`decodeAcpResult` → `tolerateUnknownRootFields`), а не в каждой модели.
+Терпимость реализована централизованно в `acp_protocol` (`decodeAcpResult` и `decodeAcpNotificationParams` для `session/update` → `tolerateUnknownRootFields`), а не в каждой модели; пропуск неизвестного вида обновления — `unsupportedSessionUpdateKind` в клиенте.
 
 ---
 
 ## 5. Известные ограничения
 
-1. **`session/update` и запросы агента остаются строгими.** Агент, присылающий в них нестандартные поля, может быть отвергнут. На 0.16.2 prompt turn прошёл штатно; на 0.88.0 prompt turn не проверялся.
+1. **Запросы агента (`session/request_permission`, `fs/*`, `terminal/*`) остаются строгими.** Агент, присылающий в них нестандартные поля, получит ошибку. Prompt turn без запросов агента проверен на 0.16.2 и 0.88.0; сценарий с запросом разрешения на 0.88.0 не прогонялся.
 2. `models` (0.16.2), `fork`, `resume`, `close`, `delete`, `subagents`, `additionalDirectories` игнорируются — как функциональность не поддерживаются.
 3. Нет UI для `modes` без `configOptions`.
 4. Версии пакетов быстро меняются (0.16 → 0.88): при обновлении агента повторите проверку (разд. 7) и дополните таблицы.

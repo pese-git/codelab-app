@@ -214,6 +214,22 @@ sealed class SessionUpdate with _$SessionUpdate {
     @JsonKey(name: '_meta') JsonObject? meta,
   }) = SessionInfoUpdate;
 
+  /// Values of `sessionUpdate` that [SessionUpdate.fromJson] understands.
+  ///
+  /// Must match the `switch` in [SessionUpdate.fromJson]; a test guards it.
+  static const knownKinds = {
+    'user_message_chunk',
+    'agent_message_chunk',
+    'agent_thought_chunk',
+    'tool_call',
+    'tool_call_update',
+    'plan',
+    'available_commands_update',
+    'current_mode_update',
+    'config_option_update',
+    'session_info_update',
+  };
+
   factory SessionUpdate.fromJson(Object? value) {
     final source = requireAcpObject(
       value,
@@ -421,4 +437,26 @@ List<T> _objectList<T>(
   }
 
   return value.map(parse).toList(growable: false);
+}
+
+/// The `sessionUpdate` value of a `session/update` notification whose kind
+/// this client does not know (e.g. `usage_update`), or `null` when the kind is
+/// known or the params are not shaped like an update at all.
+///
+/// Such an update carries nothing the client can apply, so it is skipped
+/// rather than reported as an error. Malformed params return `null` and go
+/// through the regular, strict decode, which reports them.
+String? unsupportedSessionUpdateKind(Object? params) {
+  if (params is! Map<String, dynamic>) {
+    return null;
+  }
+  final update = params['update'];
+  if (update is! Map<String, dynamic>) {
+    return null;
+  }
+  final kind = update['sessionUpdate'];
+  if (kind is! String || SessionUpdate.knownKinds.contains(kind)) {
+    return null;
+  }
+  return kind;
 }

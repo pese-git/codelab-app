@@ -1477,6 +1477,12 @@ final class AcpClientApplication {
   }
 
   void _handleSessionUpdate(JsonRpcNotification notification) {
+    final unsupportedKind = unsupportedSessionUpdateKind(notification.params);
+    if (unsupportedKind != null) {
+      _skipUnsupportedSessionUpdate(notification, unsupportedKind);
+      return;
+    }
+
     try {
       final sessionNotification =
           decodeAcpNotificationParams(notification) as SessionNotification;
@@ -1499,6 +1505,32 @@ final class AcpClientApplication {
         context: {'method': notification.method, 'params': notification.params},
       );
     }
+  }
+
+  /// A `session/update` of a kind this client does not model (e.g.
+  /// `usage_update`) has nothing to apply, so it is dropped, not reported as an
+  /// error. It goes to the structured log only: [_recordDiagnostic] would add
+  /// an entry to every session and to the Debug log panel on each such update,
+  /// and some agents send them several times per turn. Only the kind and the
+  /// session id are logged — the payload may contain user text.
+  void _skipUnsupportedSessionUpdate(
+    JsonRpcNotification notification,
+    String kind,
+  ) {
+    final params = notification.params;
+    final sessionId = params is Map<String, dynamic>
+        ? params['sessionId']
+        : null;
+    _logger
+        .bind({logComponentKey: protocolComponent})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: sessionId is String ? sessionId : null,
+        )
+        .debug(
+          'Skipped unsupported ACP session update.',
+          context: {'source': 'application.protocol', 'sessionUpdate': kind},
+        );
   }
 
   void _handleTransportEvent(AcpTransportEvent event) {
