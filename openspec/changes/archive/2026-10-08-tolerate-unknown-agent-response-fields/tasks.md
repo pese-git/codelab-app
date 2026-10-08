@@ -29,4 +29,4 @@
 - [x] 5.1 (выполнено интеграционным тестом на macOS с настоящим агентом, `env -u CLAUDECODE`: Connect → создание сессии, сессия `c1fc7e0e-…` создана, ошибки про `models` нет; prompt не отправлялся) Ручная проверка в приложении с настоящим `@zed-industries/claude-code-acp` (запуск без `CLAUDECODE`: `env -u CLAUDECODE fvm flutter run -d macos`): Connect → открыть проект → `/new` — сессия создаётся, ошибки `unsupported root field "models"` нет
 - [x] 5.2 `fvm dart format`, `fvm dart analyze`, `fvm dart test` для `acp_protocol`, `acp_client_core`, `acp_transports`; `fvm flutter test` для `codelab_app`
 - [x] 5.3 `openspec validate tolerate-unknown-agent-response-fields --strict`
-- [ ] 5.4 Дождаться мёржа `fix-acp-capability-forward-compat` (PR #2) и архивировать change после него (см. design.md, Migration Plan)
+- [x] 5.4 Дождаться мёржа `fix-acp-capability-forward-compat` (PR #2) и архивировать change после него (PR #2 и #3 смержены, change заархивирован) (см. design.md, Migration Plan)
