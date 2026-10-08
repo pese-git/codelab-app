@@ -997,34 +997,34 @@ packages:
     dependency: transitive
     description:
       name: structured_log
-      sha256: bdbd9047dba688d8dc7e986c0fc57c6d43371c8aea63b18f3e51d59359b94349
+      sha256: "70d887a247b24c6533b47a72a63cc768c266b0c0886eac2e96fe88988af5eb8a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.1-dev.0"
+    version: "0.3.1"
   structured_log_fluent:
     dependency: transitive
     description:
       name: structured_log_fluent
-      sha256: e2a1909d3b189d127ce0fdaaca38f7c134c4f14cb12e59a0cf4d77085fe85f62
+      sha256: b3651f96df5f2a727f61ab6eae796250a6d22c9550fc4672cf1c10d5064e6b3e
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-dev.4"
+    version: "0.1.2+1"
   structured_log_flutter:
     dependency: transitive
     description:
       name: structured_log_flutter
-      sha256: "733ce4e55deec6721cdb0b8057e4d273b6e1898391e6d2ffb8263d5683e4f81a"
+      sha256: "18a121c66cd237cc85d52b2d89a6c111668d9f38e0420d5eec7282ee6f68f106"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-dev.3"
-  structured_log_http:
+    version: "0.1.3"
+  structured_log_remote_sync:
     dependency: transitive
     description:
-      name: structured_log_http
-      sha256: "1930dee50b9c283a9c42e9e7c8765cb9e18dfcf304360137b3179d6bb2919569"
+      name: structured_log_remote_sync
+      sha256: bcc9777de89200368c717b6f58034f2f0b6bdd65c1d66465a42d39ca48353810
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-dev.1"
+    version: "0.2.1"
   sync_http:
     dependency: transitive
     description:

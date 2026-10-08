@@ -2,9 +2,10 @@ import 'dart:io';
 
 import 'package:codelab_app/app/app_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:structured_log/io.dart';
 import 'package:structured_log/structured_log.dart';
 import 'package:structured_log_flutter/structured_log_flutter.dart';
-import 'package:structured_log_http/structured_log_http.dart';
+import 'package:structured_log_remote_sync/structured_log_remote_sync.dart';
 
 import 'support/test_app_scope.dart';
 
@@ -79,37 +80,34 @@ void main() {
     await expectLater(lifecycle.dispose(), completes);
   });
 
-  test(
-    'CodeLabLoggingLifecycle.dispose() also closes the local-dev-only '
-    'HttpLogOutput when one was configured',
-    () async {
-      final tempDir = await Directory.systemTemp.createTemp(
-        'codelab-logging-test-',
-      );
-      addTearDown(() => tempDir.delete(recursive: true));
+  test('CodeLabLoggingLifecycle.dispose() also closes the local-dev-only '
+      'RemoteSyncLogOutput when one was configured', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'codelab-logging-test-',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
 
-      final protocolTraceOutput = AsyncRotatingFileOutput(
-        '${tempDir.path}/protocol.log',
-      );
-      var delivered = <Map<String, dynamic>>[];
-      final httpOutput = HttpLogOutput(
-        serverUrl: 'http://localhost:0',
-        projectSecretKey: 'test-key',
-        sender: (entries) async {
-          delivered = entries;
-          return const BatchResult.delivered();
-        },
-      );
-      final lifecycle = CodeLabLoggingLifecycle(
-        applicationOutput: null,
-        protocolTraceOutput: protocolTraceOutput,
-        httpOutput: httpOutput,
-      );
+    final protocolTraceOutput = AsyncRotatingFileOutput(
+      '${tempDir.path}/protocol.log',
+    );
+    var delivered = <Map<String, dynamic>>[];
+    final httpOutput = RemoteSyncLogOutput(
+      serverUrl: 'http://localhost:0',
+      projectSecretKey: 'test-key',
+      sender: (entries) async {
+        delivered = entries;
+        return const BatchResult.delivered();
+      },
+    );
+    final lifecycle = CodeLabLoggingLifecycle(
+      applicationOutput: null,
+      protocolTraceOutput: protocolTraceOutput,
+      httpOutput: httpOutput,
+    );
 
-      httpOutput({'event': 'queued'}, LogLevel.info);
-      await lifecycle.dispose();
+    httpOutput({'event': 'queued'}, LogLevel.info);
+    await lifecycle.dispose();
 
-      expect(delivered, isNotEmpty);
-    },
-  );
+    expect(delivered, isNotEmpty);
+  });
 }

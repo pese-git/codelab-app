@@ -39,7 +39,14 @@ final class CodeLabTestBinding {
 /// completes. Alternate real event-loop turns with explicit flushes until
 /// the scope is closed.
 Future<void> closeCodeLabRootScopeInTest() async {
-  final binding = TestWidgetsFlutterBinding.instance;
+  final TestWidgetsFlutterBinding binding;
+  try {
+    binding = TestWidgetsFlutterBinding.instance;
+  } on FlutterError {
+    // A plain `test()` has no widget binding, hence no fake zone to flush.
+    await closeCodeLabRootScope();
+    return;
+  }
   var closed = false;
   final closing = closeCodeLabRootScope().whenComplete(() => closed = true);
   while (!closed && binding.inTest) {
