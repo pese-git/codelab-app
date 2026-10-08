@@ -1,6 +1,19 @@
+import 'dart:math' as math;
+
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:structured_log_flutter/structured_log_flutter.dart';
 import 'package:structured_log_fluent/structured_log_fluent.dart';
+
+/// Height below which the docked panel scrolls instead of shrinking further.
+///
+/// `FluentLogViewer`'s toolbar cannot compress: at the panel's possible
+/// widths (always below its master-detail breakpoint) the viewer needs
+/// ~100px of height, and the panel's own header another ~44px. Measured
+/// against `structured_log_fluent` 0.1.2+1 with some headroom; a widget test
+/// fails if a newer version needs more, so this cannot silently drift.
+/// Without it a short window (or the transient first frame, before the
+/// real window size is known) paints a RenderFlex overflow.
+const kDebugLogPaneMinHeight = 170.0;
 
 /// Docked, always-visible debug log panel — a sibling of
 /// [WorkbenchInspectorPane], not nested inside it
@@ -64,28 +77,41 @@ class _WorkbenchDebugLogPaneState extends State<WorkbenchDebugLogPane> {
         border: Border.all(color: Colors.grey.withAlpha(54)),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 8, 4),
-            child: Row(
+      // One tree whether or not the panel is short: switching between
+      // layouts at a threshold would rebuild the viewer and drop its state.
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: SizedBox(
+            height: math.max(constraints.maxHeight, kDebugLogPaneMinHeight),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Text('Debug log', style: theme.typography.subtitle),
-                ),
-                Tooltip(
-                  message: 'Expand',
-                  child: IconButton(
-                    icon: const Icon(FluentIcons.full_screen),
-                    onPressed: widget.onExpand,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 8, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Debug log',
+                          style: theme.typography.subtitle,
+                        ),
+                      ),
+                      Tooltip(
+                        message: 'Expand',
+                        child: IconButton(
+                          icon: const Icon(FluentIcons.full_screen),
+                          onPressed: widget.onExpand,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                Expanded(child: FluentLogViewer(controller: _controller)),
               ],
             ),
           ),
-          Expanded(child: FluentLogViewer(controller: _controller)),
-        ],
+        ),
       ),
     );
   }
