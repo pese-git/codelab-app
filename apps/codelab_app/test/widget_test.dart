@@ -17,7 +17,8 @@ import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_testing/acp_testing.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
-import 'package:fluent_ui/fluent_ui.dart' show ComboBox, FluentApp, TextBox;
+import 'package:fluent_ui/fluent_ui.dart'
+    show ComboBox, FluentApp, FluentIcons, TextBox;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -2325,6 +2326,35 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byType(DebugLogViewerDialog), findsNothing);
+    expect(shellCubit.state.activeSessionId, isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
+
+  testWidgets('the docked Debug log panel\'s Expand button opens the same '
+      'full-screen log viewer as /logs', (tester) async {
+    final binding = CodeLabTestBinding();
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    expect(find.byType(DebugLogViewerDialog), findsNothing);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(WorkbenchDebugLogPane),
+        matching: find.byIcon(FluentIcons.full_screen),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DebugLogViewerDialog), findsOneWidget);
+    expect(find.byType(FluentLogViewerPage), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(DebugLogViewerDialog), findsNothing);
+    expect(find.byType(WorkbenchDebugLogPane), findsOneWidget);
     expect(shellCubit.state.activeSessionId, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());

@@ -200,10 +200,7 @@ void main() {
       viewerTransport.emitDiagnostic(message: 'stderr line', source: 'stderr');
       await _createSession(viewerClient, viewerTransport);
 
-      expect(
-        viewerCaptured.any((e) => e['category'] == 'application'),
-        isTrue,
-      );
+      expect(viewerCaptured.any((e) => e['category'] == 'application'), isTrue);
       // Protocol-trace events reach the in-app viewer unconditionally —
       // no capture-side toggle — even though the file sink is still off.
       expect(viewerCaptured.any((e) => e['category'] == 'protocol'), isTrue);
@@ -211,35 +208,29 @@ void main() {
     },
   );
 
-  test(
-    'httpOutput sink (local-dev-only structured_log_remote_sync) receives '
-    'application events like the console/file sink, and is absent when '
-    'not supplied',
-    () async {
-      final httpCaptured = <Map<String, dynamic>>[];
-      configureCodeLabLogging(
-        applicationOutput: (entry, level) => captured.add(entry),
-        protocolTraceOutput: (entry, level) => captured.add(entry),
-        httpOutput: (entry, level) => httpCaptured.add(entry),
-      );
+  test('httpOutput sink (local-dev-only structured_log_remote_sync) receives '
+      'application events like the console/file sink, and is absent when '
+      'not supplied', () async {
+    final httpCaptured = <Map<String, dynamic>>[];
+    configureCodeLabLogging(
+      applicationOutput: (entry, level) => captured.add(entry),
+      protocolTraceOutput: (entry, level) => captured.add(entry),
+      httpOutput: (entry, level) => httpCaptured.add(entry),
+    );
 
-      final httpTransport = FakeAcpTransport();
-      await httpTransport.start();
-      final httpClient = AcpClientApplication(transport: httpTransport);
-      addTearDown(() async {
-        await httpClient.dispose();
-        await httpTransport.close();
-      });
+    final httpTransport = FakeAcpTransport();
+    await httpTransport.start();
+    final httpClient = AcpClientApplication(transport: httpTransport);
+    addTearDown(() async {
+      await httpClient.dispose();
+      await httpTransport.close();
+    });
 
-      httpTransport.emitDiagnostic(message: 'stderr line', source: 'stderr');
+    httpTransport.emitDiagnostic(message: 'stderr line', source: 'stderr');
 
-      expect(httpCaptured, isNotEmpty);
-      expect(
-        httpCaptured.every((e) => e['category'] == 'application'),
-        isTrue,
-      );
-    },
-  );
+    expect(httpCaptured, isNotEmpty);
+    expect(httpCaptured.every((e) => e['category'] == 'application'), isTrue);
+  });
 }
 
 Future<void> _createSession(

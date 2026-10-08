@@ -48,11 +48,11 @@
 
 ## 9. Финальная проверка
 
-- [ ] 9.1 `melos format`
-- [ ] 9.2 `melos analyze`
-- [ ] 9.3 `melos test`
-- [ ] 9.4 Ручной прогон `fvm flutter run -d macos` из `apps/codelab_app`: проверить, что Inspector и Debug log — видимые sibling-панели, докнутая панель фильтрует/ищет (в том числе category-селектор после §11), кнопка Expand и команда `/logs` открывают один и тот же полноэкранный viewer, закрытие не теряет state workbench
-- [ ] 9.5 `openspec validate replace-debug-log-panel-with-fluent --strict`
+- [x] 9.1 `melos format` (глобальный `melos` в окружении сломан — Dart kernel mismatch; эквивалент: `fvm dart format` по `acp_ui`/`acp_client_core`/`codelab_app`)
+- [x] 9.2 `melos analyze` (эквивалент: `fvm dart analyze` по тем же пакетам — ошибок нет, остались старые info `use_null_aware_elements` в `widget_test.dart`)
+- [x] 9.3 `melos test` (эквивалент: `fvm flutter test`/`fvm dart test` по пакетам — `acp_ui` 81, `acp_client_core` 96, `codelab_app` 86 тестов, все проходят)
+- [x] 9.4 Ручной прогон `fvm flutter run -d macos` из `apps/codelab_app`: проверить, что Inspector и Debug log — видимые sibling-панели, докнутая панель фильтрует/ищет (в том числе category-селектор после §11), кнопка Expand и команда `/logs` открывают один и тот же полноэкранный viewer, закрытие не теряет state workbench (приложение запущено и просмотрено вручную; Expand, `/logs` и закрытие по `Esc` дополнительно закреплены widget-тестами — см. §12.1)
+- [x] 9.5 `openspec validate replace-debug-log-panel-with-fluent --strict`
 
 ## 10. Protocol-trace в in-app viewer'е — первая итерация, toggle-based (СУПЕРСЕДЕНА §11)
 
@@ -74,3 +74,9 @@
 - [x] 11.3 Зависимости подняты до `structured_log_flutter: 0.1.0-dev.3`, `structured_log_fluent: 0.1.0-dev.4`; `WorkbenchDebugLogPane` переписан — весь toolbar/список/пустое состояние делегированы `FluentLogViewer` (embeddable-виджет пакета), собственный код панели сведён к заголовку ("Debug log" + кнопка "Expand")
 - [x] 11.4 design.md (Decisions 3-5) и spec.md (сценарий "Селектор типа фильтрует записи по категории, когда их несколько") переписаны под итоговое поведение; `openspec validate` проходит
 - [x] 11.5 Widget-тест: `LogCategoryComboBox` скрыт при одной категории, появляется и содержит "All types" после того как в буфере оказались обе категории (`application`+`protocol`)
+
+## 12. Закрытие замечаний `openspec-verify-change`
+
+- [x] 12.1 Widget-тест "the docked Debug log panel's Expand button opens the same full-screen log viewer as /logs" (`apps/codelab_app/test/widget_test.dart`) — сценарий спеки "Кнопка Expand открывает полноэкранный log viewer"
+- [x] 12.2 Сценарии "Докнутая панель даёт поиск и фильтр по уровню" и "Detail-панель показывает correlation-поля" в `codelab_app` отдельно НЕ тестируются осознанно: это поведение самого `structured_log_fluent` (`FluentLogViewer`/`LogEntryDetailPane`), оно покрыто тестами пакета (`fluent_log_viewer_test.dart`, `fluent_log_viewer_responsive_test.dart`); CodeLab проверяет только свою обвязку (панель, Expand, `/logs`, Esc, category-селектор)
+- [x] 12.3 Стек `structured_log*` поднят: `structured_log 0.3.1`, `structured_log_flutter 0.1.3`, `structured_log_fluent 0.1.2+1` (в нём исправлено переполнение `LogViewerEmptyState` в узкой докнутой панели — 26 падений `widget_test.dart`), `structured_log_http` заменён на `structured_log_remote_sync 0.2.1` — см. `docs/architecture/technology-stack.md` §17
