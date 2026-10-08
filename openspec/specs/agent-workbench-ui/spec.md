@@ -129,9 +129,9 @@ CodeLab SHALL открывать `AcpCommandPaletteSurface` при вызове 
 - **WHEN** командная палитра открыта, и пользователь выбирает `/reconnect`
 - **THEN** CodeLab вызывает существующий флоу reconnect для активного transport и закрывает палитру
 
-#### Scenario: Выбор /logs раскрывает панель debug-логов
+#### Scenario: Выбор /logs открывает полноэкранный log viewer
 - **WHEN** командная палитра открыта, и пользователь выбирает `/logs`
-- **THEN** CodeLab делает панель debug-логов видимой (раскрывая инспектор, если он свёрнут узким layout) и закрывает палитру
+- **THEN** CodeLab открывает полноэкранный log viewer (master-detail, поверх притемнённого workbench) и закрывает палитру
 
 ### Requirement: Командная палитра открывается inline из prompt composer
 CodeLab SHALL открывать командную палитру inline, привязанную над prompt composer и без переноса фокуса клавиатуры с него, когда пользователь вводит `/` как первый символ нового слова в поле ввода composer, и SHALL фильтровать видимые команды вживую по мере того, как пользователь продолжает печатать в composer.
@@ -469,3 +469,40 @@ CodeLab SHALL automatically send the oldest queued message once the active sessi
 - **WHEN** a non-active session's turn completes or its pending approval is resolved while a different session is active, and that non-active session's own queue is non-empty
 - **THEN** CodeLab automatically sends that session's oldest queued message, without requiring the user to switch to it first
 
+### Requirement: Debug log — отдельная докнутая панель, не вложенная в Inspector
+CodeLab SHALL отображать debug log как самостоятельную, персистентно видимую панель workbench, стоящую рядом с Inspector как sibling, а не как секция внутри карточки Inspector.
+
+#### Scenario: Debug log панель видна без явного действия пользователя
+- **WHEN** workbench открыт (вне зависимости от того, вызывалась ли команда `/logs`)
+- **THEN** докнутая панель "Debug log" видна в правой колонке рядом с Inspector, как отдельная карточка со своим заголовком
+
+#### Scenario: Docked-панель не дублирует содержимое Inspector
+- **WHEN** пользователь просматривает докнутую Debug log панель и панель Inspector одновременно
+- **THEN** Inspector показывает только approval/tool-call/protocol-записи текущей сессии, а Debug log — только structured-log события; ни одна запись не показана в обеих панелях одновременно
+
+#### Scenario: Докнутая панель даёт поиск и фильтр по уровню
+- **WHEN** пользователь вводит текст в поле поиска или выбирает минимальный уровень в докнутой Debug log панели
+- **THEN** список записей в этой панели ограничивается совпадающими по тексту и/или не ниже выбранного уровня
+
+#### Scenario: Кнопка Expand открывает полноэкранный log viewer
+- **WHEN** пользователь нажимает кнопку "Expand" в заголовке докнутой Debug log панели
+- **THEN** CodeLab открывает тот же полноэкранный log viewer, что и по команде `/logs`
+
+#### Scenario: Селектор типа фильтрует записи по категории, когда их несколько
+- **WHEN** в Debug log панели одновременно присутствуют записи двух и более категорий (например, `application` и `protocol`)
+- **THEN** CodeLab показывает в панели селектор по типу записи, позволяющий ограничить список одной категорией или снять ограничение; протокольные события при этом всегда попадают в панель — видимость регулируется этим селектором, а не отдельным переключателем захвата
+
+### Requirement: Полноэкранный log viewer — master-detail
+CodeLab SHALL открывать полноэкранный log viewer (список записей слева, detail-панель выбранной записи справа) поверх притемнённого workbench при вызове через `/logs` или кнопку "Expand" докнутой панели, и SHALL закрывать его без потери состояния workbench под ним.
+
+#### Scenario: Detail-панель показывает correlation-поля выбранной записи
+- **WHEN** пользователь выбирает запись в списке полноэкранного log viewer
+- **THEN** detail-панель показывает событие целиком, включая доступные correlation-поля (`component`, `category`, `connection_generation`, и где применимо `session_id`/`request_id`/`tool_call_id`) в виде key/value
+
+#### Scenario: Закрытие возвращает к workbench без изменений
+- **WHEN** полноэкранный log viewer открыт, и пользователь нажимает кнопку закрытия либо `Esc`
+- **THEN** CodeLab скрывает log viewer и возвращает workbench к состоянию, в котором он был до открытия (активная сессия, transcript, docked-панели не меняются)
+
+#### Scenario: Секреты замаскированы и в списке, и в detail-панели
+- **WHEN** запись, отображаемая в полноэкранном log viewer (в списке или в detail-панели), содержит значение, подпадающее под существующее правило редактирования секретов
+- **THEN** это значение показано замаскированным — то же самое правило, что уже действует для docked debug-лога (см. `approval-safety`, требование "Редактирование секретов"), не дублируется отдельным набором правил
