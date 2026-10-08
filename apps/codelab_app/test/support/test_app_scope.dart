@@ -3,7 +3,8 @@ import 'package:codelab_app/features/workbench/application/shell_cubit.dart';
 import 'package:acp_testing/acp_testing.dart';
 import 'package:cherrypick/cherrypick.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_test/flutter_test.dart' show addTearDown;
+import 'package:flutter_test/flutter_test.dart'
+    show TestWidgetsFlutterBinding, addTearDown;
 
 final class CodeLabTestBinding {
   CodeLabTestBinding({
@@ -14,18 +15,11 @@ final class CodeLabTestBinding {
       transportFactory: () => this.transport,
       stdioTransportFactory: stdioTransportFactory,
     );
-    // `CherryPick.openRootScope()` is `_rootScope ??= Scope(...)` — a
-    // process-global singleton that silently REUSES whatever root scope is
-    // still open if a test forgets to close it, instead of creating a
-    // fresh one. In a file this large, one missed manual
-    // `closeCodeLabRootScope()` call anywhere leaves every later test
-    // silently resolving the previous test's already-disposed
-    // dependencies (closed streams, torn-down transports) — which
-    // manifests as later tests hanging/timing out, not as an obvious
-    // failure at the actual missed-call site. Guaranteeing closure here,
-    // regardless of whether the test body also does it, removes that
-    // whole class of cross-test corruption.
-    addTearDown(closeCodeLabRootScope);
+    // `CherryPick.openRootScope()` is a process-global singleton that
+    // silently REUSES an unclosed scope, so a test that fails before its own
+    // `closeCodeLabRootScope()` would corrupt every later test. Close it
+    // here regardless.
+    addTearDown(closeCodeLabRootScopeInTest);
   }
 
   final FakeAcpTransport transport;
@@ -33,4 +27,26 @@ final class CodeLabTestBinding {
 
   Widget bootstrap({required Widget child}) =>
       CodeLabBootstrap(scope: scope, child: child);
+}
+
+/// Closes the root scope from teardown, where a plain `await` can hang.
+///
+/// The scope is built inside the test's fake-async zone, so the file log
+/// outputs' write queues (`AsyncRotatingFileOutput.flushed`) are fake-zone
+/// futures that are resumed by *real* file I/O. `flutter_test` flushes the
+/// fake microtask queue only inside `pump`/`idle`, so once the test body
+/// has ended (or threw) nothing resumes them and `await flushed` never
+/// completes. Alternate real event-loop turns with explicit flushes until
+/// the scope is closed.
+Future<void> closeCodeLabRootScopeInTest() async {
+  final binding = TestWidgetsFlutterBinding.instance;
+  var closed = false;
+  final closing = closeCodeLabRootScope().whenComplete(() => closed = true);
+  while (!closed) {
+    await binding.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await binding.idle();
+  }
+  await closing;
 }
