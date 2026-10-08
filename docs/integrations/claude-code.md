@@ -85,7 +85,9 @@
 
 ### 3.4. Нестандартные уведомления
 
-Агент 0.88.0 шлёт `_auth/status_update` сразу после `initialize`. Имя с `_` — допустимое расширение по эталону (`15-Extensibility.md`: «Custom Notifications»). CodeLab такие уведомления **молча игнорирует** (`acp_client_application.dart`, ветка `JsonRpcNotification()`).
+Агент 0.88.0 шлёт `_auth/status_update` сразу после `initialize`. Имя с `_` — допустимое расширение по эталону (`15-Extensibility.md`: «Custom Notifications»). CodeLab такие уведомления **молча игнорирует** (`acp_client_application.dart`, ветка `JsonRpcNotification()`): на notification по JSON-RPC не отвечают.
+
+Если агент пришлёт неподдерживаемый **запрос** (в том числе кастомный `_vendor/...`), CodeLab отвечает на него стандартной ошибкой `-32601 Method not found` с тем же `id` и пишет WARNING (только метод и `requestId`, без параметров). Так предписывает эталон (`15-Extensibility.md`, «Custom Requests»); агент не остаётся в ожидании ответа.
 
 ### 3.5. `session/update`
 
@@ -119,10 +121,9 @@
 ## 5. Известные ограничения
 
 1. **`session/update` и запросы агента остаются строгими.** Агент, присылающий в них нестандартные поля, может быть отвергнут. На 0.16.2 prompt turn прошёл штатно; на 0.88.0 prompt turn не проверялся.
-2. **Неизвестный запрос от агента остаётся без ответа** (ветка `JsonRpcRequest()` в `acp_client_application.dart` просто игнорирует его). По JSON-RPC агент ожидает ошибку `method not found`; агент, который ждёт ответа, может зависнуть. Для Claude Code на проверенных версиях не наблюдалось.
-3. `models` (0.16.2), `fork`, `resume`, `close`, `delete`, `subagents`, `additionalDirectories` игнорируются — как функциональность не поддерживаются.
-4. Нет UI для `modes` без `configOptions`.
-5. Версии пакетов быстро меняются (0.16 → 0.88): при обновлении агента повторите проверку (разд. 7) и дополните таблицы.
+2. `models` (0.16.2), `fork`, `resume`, `close`, `delete`, `subagents`, `additionalDirectories` игнорируются — как функциональность не поддерживаются.
+3. Нет UI для `modes` без `configOptions`.
+4. Версии пакетов быстро меняются (0.16 → 0.88): при обновлении агента повторите проверку (разд. 7) и дополните таблицы.
 
 ---
 

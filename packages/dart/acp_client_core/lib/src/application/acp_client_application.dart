@@ -716,9 +716,34 @@ final class AcpClientApplication {
       case JsonRpcNotification(method: sessionUpdateMethod):
         _handleSessionUpdate(message);
       case JsonRpcNotification():
-      case JsonRpcRequest():
+        // A notification gets no reply, so an unknown one (e.g. a custom
+        // `_vendor/...` extension) is simply not our concern.
         break;
+      case JsonRpcRequest():
+        unawaited(_rejectUnsupportedRequest(message));
     }
+  }
+
+  /// Answers a request this client does not handle with `-32601 Method not
+  /// found`. JSON-RPC requires a reply to every request, and ACP spells this
+  /// out for unrecognized custom methods (`15-Extensibility.md`); staying
+  /// silent would leave the agent waiting forever. Only the method and id are
+  /// logged: the params of an unknown request may carry secrets.
+  Future<void> _rejectUnsupportedRequest(JsonRpcRequest request) async {
+    _recordDiagnostic(
+      message: 'Rejected unsupported agent request ${request.method}.',
+      severity: DiagnosticSeverity.warning,
+      source: 'application.protocol',
+      context: {
+        'method': request.method,
+        'requestId': request.id.toJsonValue(),
+      },
+    );
+    await _sendAcpMethodError(
+      request.id,
+      method: request.method,
+      error: AcpProtocolError.unknownMethod(request.method),
+    );
   }
 
   void _completePendingRequest(JsonRpcResponse response) {
