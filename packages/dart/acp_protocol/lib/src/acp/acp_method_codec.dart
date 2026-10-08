@@ -2,6 +2,7 @@ import '../json_rpc/json_rpc_message.dart';
 import '../json_rpc/json_rpc_id.dart';
 import '../json_rpc/json_value.dart';
 import '../json_rpc/protocol_error.dart';
+import 'acp_validation.dart';
 import 'fs.dart';
 import 'initialize.dart';
 import 'permission.dart';
@@ -302,8 +303,15 @@ JsonObject encodeAcpParams(String method, Object params) {
   return requireAcpMethod(method).encodeParams(params);
 }
 
+/// Decodes the `result` of a response, ignoring unknown root fields of every
+/// object in it (see [tolerateUnknownRootFields]).
+///
+/// Tolerance is tied to decoding a result: [decodeAcpParams],
+/// [decodeAcpRequestParams], [decodeAcpNotificationParams] and a direct
+/// `Model.fromJson(...)` stay strict.
 Object decodeAcpResult(String method, Object? result) {
-  return requireAcpMethod(method).decodeResult(result);
+  final definition = requireAcpMethod(method);
+  return tolerateUnknownRootFields(() => definition.decodeResult(result));
 }
 
 JsonObject encodeAcpResult(String method, Object result) {
