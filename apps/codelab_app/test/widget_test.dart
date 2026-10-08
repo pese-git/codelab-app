@@ -28,6 +28,16 @@ import 'package:structured_log_fluent/structured_log_fluent.dart'
 
 import 'support/test_app_scope.dart';
 
+/// The prompt composer's text field. `find.byType(EditableText).last` is
+/// ambiguous now: the docked `FluentLogViewer` has its own search box, which
+/// comes after the composer in the tree.
+Finder _composerField() => find
+    .descendant(
+      of: find.byType(AcpPromptComposer),
+      matching: find.byType(EditableText),
+    )
+    .last;
+
 void main() {
   setUp(() {
     // Default test surface (800x600) is narrower than
@@ -107,7 +117,7 @@ void main() {
 
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
 
-    await tester.enterText(find.byType(EditableText).last, 'hello');
+    await tester.enterText(_composerField(), 'hello');
     await tester.pump();
     await tester.tap(find.text('Send'));
     await tester.pump();
@@ -2414,7 +2424,7 @@ void main() {
     final binding = CodeLabTestBinding();
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
 
-    await tester.enterText(find.byType(EditableText).last, '/ne');
+    await tester.enterText(_composerField(), '/ne');
     await tester.pump();
 
     expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
@@ -2615,10 +2625,7 @@ void main() {
       expect(shellCubit.state.isCommandPaletteOpen, isFalse);
       expect(shellCubit.state.composerDraft, '/deploy ');
       expect(
-        tester
-            .widget<EditableText>(find.byType(EditableText).last)
-            .controller
-            .text,
+        tester.widget<EditableText>(_composerField()).controller.text,
         '/deploy ',
       );
       expect(agentTransport.sentMessages.length, sentBefore);

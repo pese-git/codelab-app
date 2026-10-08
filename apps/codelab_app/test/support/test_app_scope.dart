@@ -42,11 +42,13 @@ Future<void> closeCodeLabRootScopeInTest() async {
   final binding = TestWidgetsFlutterBinding.instance;
   var closed = false;
   final closing = closeCodeLabRootScope().whenComplete(() => closed = true);
-  while (!closed) {
+  while (!closed && binding.inTest) {
     await binding.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 5)),
     );
-    await binding.idle();
+    if (binding.inTest) {
+      await binding.idle();
+    }
   }
   await closing;
 }
