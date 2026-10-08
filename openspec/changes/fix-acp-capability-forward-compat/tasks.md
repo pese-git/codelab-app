@@ -25,7 +25,7 @@
 ## 4. Проверка против реального агента
 
 - [x] 4.1 (на уровне протокола: настоящий `initialize`-ответ кэшированного `@zed-industries/claude-code-acp` — `sessionCapabilities: {fork, list, resume}` — декодируется новым кодом без ошибки; сквозное подключение через UI CodeLab не проверялось) Вручную подключиться к `@zed-industries/claude-code-acp` через CodeLab (stdio, `npx --yes @zed-industries/claude-code-acp` или закешированный бинарь) и убедиться, что `initialize` больше не падает, соединение переходит в `Connected`
-- [ ] 4.2 Создать сессию и отправить простой read-only запрос реальному агенту, убедиться, что turn проходит штатно (см. add-multi-session-concurrency для похожего протокола ручной проверки)
+- [x] 4.2 (проверено вручную в приложении с настоящим `@zed-industries/claude-code-acp` 0.16.2, запуск без `CLAUDECODE`: Connect → проект → сессия создана → prompt завершился `stopReason endTurn`; для `session/new` потребовалось ещё и `tolerate-unknown-agent-response-fields` — агент отвечает полем `models`) Создать сессию и отправить простой read-only запрос реальному агенту, убедиться, что turn проходит штатно (см. add-multi-session-concurrency для похожего протокола ручной проверки)
 
 ## 5. Проверка
 
