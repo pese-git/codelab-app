@@ -30,7 +30,7 @@ dependencies:
   shared_preferences: ^2.5.5
   structured_log: 0.3.1
   structured_log_flutter: 0.1.3
-  structured_log_fluent: 0.1.2+1
+  structured_log_fluent: 0.1.2+2
   structured_log_remote_sync: 0.2.1
 
 dev_dependencies:
