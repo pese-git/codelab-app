@@ -96,7 +96,7 @@
 | Что | Где | CodeLab |
 |---|---|---|
 | поле `messageId` | корень `update` у `agent_message_chunk` | игнорируется; текст чанка применяется как обычно |
-| вид обновления `usage_update` (`used`, `size`, `cost`) | `update.sessionUpdate` | пропускается: состояние сессии не меняется, ошибки нет, в журнал пишется одна запись DEBUG (вид и `sessionId`, без содержимого) |
+| вид обновления `usage_update` (`used`, `size`, `cost`) | `update.sessionUpdate` | пропускается: состояние сессии не меняется, ошибки нет, в application-журнал пишется одна запись DEBUG (вид и `sessionId`, без содержимого); полный payload (секреты замаскированы) пишется отдельной записью с тем же текстом `Skipped unsupported ACP session update.` в журнал `category=protocol` — его видно в Debug log приложения, а в `protocol.log` он попадает при включённой трассировке. В release-журналы и на сервер логов payload не уходит |
 
 Раньше оба случая отвергались строгой валидацией: текст ответа модели терялся с диагностикой `unsupported root field "messageId"` (OpenSpec: `tolerate-unknown-session-updates`). Поддержки `messageId` и индикатора использования контекста по `usage_update` в CodeLab **нет**: эти поля не входят в вендоренную спеку, семантику не придумываем.
 

@@ -1511,25 +1511,48 @@ final class AcpClientApplication {
   /// `usage_update`) has nothing to apply, so it is dropped, not reported as an
   /// error. It goes to the structured log only: [_recordDiagnostic] would add
   /// an entry to every session and to the Debug log panel on each such update,
-  /// and some agents send them several times per turn. Only the kind and the
-  /// session id are logged — the payload may contain user text.
+  /// and some agents send them several times per turn.
+  ///
+  /// Two records with the same text: the application one (console,
+  /// `application.log`, remote log server) carries only the kind and the
+  /// session id, because the payload may contain user text and raw protocol
+  /// dumps must not reach release logs by default
+  /// (`observability.md` §11). The payload goes to the developer-only
+  /// protocol-trace channel, secrets masked by the shared redaction processor.
   void _skipUnsupportedSessionUpdate(
     JsonRpcNotification notification,
     String kind,
   ) {
+    const message = 'Skipped unsupported ACP session update.';
     final params = notification.params;
     final sessionId = params is Map<String, dynamic>
         ? params['sessionId']
         : null;
+    final sessionIdValue = sessionId is String ? sessionId : null;
+
     _logger
         .bind({logComponentKey: protocolComponent})
         .withCorrelation(
           connectionGeneration: _generation,
-          sessionId: sessionId is String ? sessionId : null,
+          sessionId: sessionIdValue,
         )
         .debug(
-          'Skipped unsupported ACP session update.',
+          message,
           context: {'source': 'application.protocol', 'sessionUpdate': kind},
+        );
+    _protocolTraceLogger
+        .bind({logComponentKey: protocolComponent})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: sessionIdValue,
+        )
+        .debug(
+          message,
+          context: {
+            'source': 'application.protocol',
+            'sessionUpdate': kind,
+            'payload': params,
+          },
         );
   }
 

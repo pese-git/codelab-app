@@ -20,6 +20,7 @@ void main() {
     configureCodeLabLogging(
       applicationOutput: (entry, level) => captured.add(entry),
       protocolTraceOutput: (entry, level) => captured.add(entry),
+      protocolTracingEnabledByDefault: true,
     );
     transport = FakeAcpTransport();
     await transport.start();
@@ -111,31 +112,70 @@ void main() {
     );
   });
 
-  test('an unsupported update kind changes nothing and is logged once '
-      'at DEBUG without its content', () async {
-    final before = client.sessionById(_sessionId);
+  const skippedEvent = 'Skipped unsupported ACP session update.';
 
-    emitUpdate({
-      'sessionUpdate': 'usage_update',
-      'used': 1,
-      'size': 2,
-      'secret': 'sk-secret-value',
-    });
-    await _pump();
+  test(
+    'an unsupported update kind changes nothing and adds no diagnostics',
+    () async {
+      final before = client.sessionById(_sessionId);
 
-    expect(client.sessionById(_sessionId), before);
-    expect(client.diagnostics, isEmpty);
-    expect(client.sessionById(_sessionId)?.diagnostics, isEmpty);
+      emitUpdate({'sessionUpdate': 'usage_update', 'used': 1, 'size': 2});
+      await _pump();
 
-    final entry = captured.singleWhere(
-      (e) => e['event'] == 'Skipped unsupported ACP session update.',
-    );
-    expect(entry['level'], 'debug');
-    expect(entry['component'], 'protocol');
-    expect(entry['sessionUpdate'], 'usage_update');
-    expect(entry['session_id'], 'session-1');
-    expect(jsonEncode(captured), isNot(contains('sk-secret-value')));
-  });
+      expect(client.sessionById(_sessionId), before);
+      expect(client.diagnostics, isEmpty);
+      expect(client.sessionById(_sessionId)?.diagnostics, isEmpty);
+    },
+  );
+
+  test(
+    'the application record names the kind but carries no payload',
+    () async {
+      emitUpdate({
+        'sessionUpdate': 'usage_update',
+        'used': 1,
+        'size': 2,
+        'note': 'user-visible-text',
+      });
+      await _pump();
+
+      final entry = captured.singleWhere(
+        (e) => e['event'] == skippedEvent && e['category'] == 'application',
+      );
+      expect(entry['level'], 'debug');
+      expect(entry['component'], 'protocol');
+      expect(entry['sessionUpdate'], 'usage_update');
+      expect(entry['session_id'], 'session-1');
+      expect(entry.containsKey('payload'), isFalse);
+      expect(jsonEncode(entry), isNot(contains('user-visible-text')));
+    },
+  );
+
+  test(
+    'the protocol-trace record carries the payload with secrets masked',
+    () async {
+      emitUpdate({
+        'sessionUpdate': 'usage_update',
+        'used': 37758,
+        'size': 1000000,
+        'secret': 'sk-secret-value',
+      });
+      await _pump();
+
+      final entry = captured.singleWhere(
+        (e) => e['event'] == skippedEvent && e['category'] == 'protocol',
+      );
+      expect(entry['sessionUpdate'], 'usage_update');
+      expect(entry['session_id'], 'session-1');
+      final payload = entry['payload'] as Map<String, dynamic>;
+      expect(payload['sessionId'], 'session-1');
+      final update = payload['update'] as Map<String, dynamic>;
+      expect(update['used'], 37758);
+      expect(update['size'], 1000000);
+      expect(update['secret'], redactedSecret);
+      expect(jsonEncode(captured), isNot(contains('sk-secret-value')));
+    },
+  );
 
   test('a structurally invalid update of a known kind is still an error '
       'and is not applied', () async {
