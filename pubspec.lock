@@ -1005,10 +1005,10 @@ packages:
     dependency: transitive
     description:
       name: structured_log_fluent
-      sha256: b3651f96df5f2a727f61ab6eae796250a6d22c9550fc4672cf1c10d5064e6b3e
+      sha256: bfc7f88fde5c3a02bf99765dc27c5959b26251a69591abf90c85b73c3e8c4eb8
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.2+1"
+    version: "0.1.2+2"
   structured_log_flutter:
     dependency: transitive
     description:
