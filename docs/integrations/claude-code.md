@@ -5,7 +5,7 @@
 * **Эталон (reference)** — вендоренный снапшот официальной спецификации в `docs/acp/protocol/` (схема — `17-Schema.md`). Это источник истины ACP для проекта (AGENTS.md §3.4).
 * **Агент** — отдельный процесс, который CodeLab запускает по stdio. Claude Code напрямую ACP не говорит: его оборачивает ACP-совместимый адаптер.
 
-Последняя проверка: 2026-10-08 (macOS, stdio). Снимок ответов агента, на котором основаны таблицы ниже, воспроизводится рецептом из раздела 7.
+Последняя проверка: 2026-10-09 (macOS, stdio). Снимок ответов агента, на котором основаны таблицы ниже, воспроизводится рецептом из раздела 7.
 
 ---
 
@@ -14,7 +14,7 @@
 | Пакет (npm) | Версия | Статус |
 |---|---|---|
 | `@zed-industries/claude-code-acp` | 0.16.2 | **Устарел**, переименован в `@agentclientprotocol/claude-agent-acp` (npm: *deprecated*). Проверено: `initialize`, `session/new`, prompt turn (`stopReason endTurn`). |
-| `@agentclientprotocol/claude-agent-acp` | 0.88.0 | Актуальный. Проверено: `initialize`, `session/new`, селекторы Mode / Model / Effort, prompt turn (`stopReason end_turn`, ответ доходит до таймлайна; см. 3.5). |
+| `@agentclientprotocol/claude-agent-acp` | 0.88.0 | Актуальный. Проверено: `initialize`, `session/new`, селекторы Mode / Model / Effort, prompt turn (`stopReason end_turn`, ответ доходит до таймлайна; см. 3.5). Сквозной прогон через UI CodeLab (2026-10-09): Connect → проект → `/new` → смена модели селектором → prompt → `Prompt completed with stopReason endTurn`, ошибок нет. |
 
 Рекомендуется актуальный пакет: он объявляет настройки сессии через `configOptions` (разд. 3.3), и CodeLab показывает их селекторами в композере.
 
@@ -109,6 +109,14 @@
 ```
 
 Настоящая причина приходит только в **stderr** агента (`Claude Code cannot be launched inside another Claude Code session… unset the CLAUDECODE environment variable`). CodeLab пишет stderr агента в лог уровнем INFO (`component=transport`, `source=stderr`) — искать причину нужно там, а не в тексте ошибки.
+
+### 3.7. Служебные строки в stderr агента
+
+Агент 0.88.0 пишет в stderr, помимо прогресса создания сессии (`[session/create] … phase=…`), строки `Unexpected case: {"type":"system","subtype":"dev_intent"|"post_turn_summary", …}`. Это внутренние служебные сообщения его SDK, не ошибки протокола и не сбой CodeLab. CodeLab пишет stderr агента в лог уровнем INFO (`component=transport`, `source=stderr`), как и остальное (см. 3.6). Реагировать на них не нужно.
+
+### 3.8. Стоимость первого prompt
+
+Даже короткий prompt без инструментов (`Reply with exactly the word: pong`) на 0.88.0 дал ~37,8 тыс. токенов контекста (практически все — запись в кэш, `cachedWriteTokens`; собственно ввод — 2 токена) и ~$0,76 по оценке агента (`cost` в `usage_update`). Вероятно, в контекст сессии попадают системные инструкции и окружение Claude Code пользователя (в `available_commands_update` приходят его команды и скиллы). Учитывайте это при ручных проверках и автоматизации: каждая новая сессия расходует лимиты аккаунта, а не только сам prompt.
 
 ---
 
