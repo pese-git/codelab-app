@@ -64,13 +64,15 @@
     `session-hot-cold-split` и другие — каталог `../codelab-agent/openspec/changes/` соседнего
     репозитория `codelab-agent`, путь от корня `codelab-app`): по каждому — «закрыть» или
     «перенести в backlog Dart-агента», список фиксируется в `proposal.md` change этапа 0.
-11. **0.11. `AGENTS.md`: правила агентских пакетов и TDD.** В корневом `AGENTS.md` — раздел §5
+11. **0.11. `AGENTS.md`: правила агентских пакетов, TDD и готовность итерации.** В корневом `AGENTS.md` — раздел §5
     (структура monorepo) дополняется агентскими пакетами и ссылкой на
     [документ ядра](../agent-core-architecture.md) как источник архитектуры агента, правилом
     стороннего кода §7а. Вложенные `AGENTS.md` в `packages/dart/codelab_agent_*`, созданных на этом
     этапе (`codelab_agent_core`): правила ядра PKG-1…PKG-6 (agent-core-architecture §1), сторож
     импортов (задача 0.4), TDD по §9.0, правило 3 (красный тест из критерия матрицы → минимальный
-    код → рефакторинг). Новые пакеты следующих этапов получают вложенный `AGENTS.md` в своём
+    код → рефакторинг), и определение завершённой итерации по §9.0, правило 8 (feature first,
+    unit- и интеграционные тесты, готовность к следующей итерации, расширение через точки
+    расширения документа ядра). Новые пакеты следующих этапов получают вложенный `AGENTS.md` в своём
     этапе; задача 9.7 дописывает корневой `AGENTS.md` окончательно, а не создаёт его.
 
 **OpenSpec change.** `add-workspace-ci-and-architecture-guards` (задачи 0.1–0.6, 0.9, 0.11; scope:
@@ -93,7 +95,7 @@ scope: формат и корпус фикстур с полем `roles`, кли
 * `fvm dart test packages/dart/acp_client_core/test/fixtures` проходит на 12 фикстурах
   (клиентский драйвер; агентского драйвера на этапе 0 нет — задача 4.8).
 * Корневой `AGENTS.md` §5 ссылается на документ ядра; `packages/dart/codelab_agent_core/AGENTS.md`
-  есть и перечисляет PKG-1…PKG-6, сторож импортов и правило TDD (задача 0.11).
+  есть и перечисляет PKG-1…PKG-6, сторож импортов, правило TDD и определение завершённой итерации (задача 0.11).
 * `grep -rn "dart:io" packages/dart/acp_transports/lib/acp_transports.dart packages/dart/acp_transports/lib/src/transport_configs.dart` — пусто.
 * 8 интеграционных тестов app проходят (`melos run test:e2e:app:stdio` и остальные).
 
@@ -307,7 +309,7 @@ void main() {
 
 Allowlist зависимостей — отдельный тест `codelab_architecture_tests/test/pubspec_allowlist_test.dart`
 (agent-core-architecture §1.4, §1.7): ключи секции `dependencies:` в `pubspec.yaml` ядра — подмножество
-`{http, meta, collection, async}` (PKG-2). Сторож разбирает директивы регулярным выражением, без
+`{http, meta, collection, async, crypto}` (PKG-2; `crypto` подключается, когда понадобится SHA-256, — agent-core-architecture §1.2). Сторож разбирает директивы регулярным выражением, без
 анализатора: это быстро и без тяжёлых зависимостей. Если в коде появятся директивы, которые
 выражение не распознаёт, сканер переводится на `package:analyzer` (`parseString`).
 
