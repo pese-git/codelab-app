@@ -170,20 +170,32 @@ AI-agent обязан интерпретировать эти формулиро
 ├── apps/
 │   └── codelab_app/
 └── packages/
-    ├── acp_protocol/
-    ├── core/
-    └── ui_kit/
+    ├── dart/
+    │   ├── acp_protocol/
+    │   ├── acp_transports/
+    │   ├── acp_client_core/
+    │   └── acp_testing/
+    └── flutter/
+        └── acp_ui/
 ```
+
+Назначение пакетов:
+
+* `acp_protocol` — типизированные модели ACP JSON-RPC, codecs и validation.
+* `acp_transports` — заменяемые ACP transports (stdio, WebSocket, тестовые).
+* `acp_client_core` — domain, application state и use cases ACP-клиента.
+* `acp_testing` — fixtures, fake transports и helpers для conformance-тестов.
+* `acp_ui` — Fluent UI widgets рабочего места CodeLab.
 
 Правила:
 
 * `apps/*` МОГУТ зависеть от `packages/*`.
 * Пакеты НЕ ДОЛЖНЫ зависеть от приложений.
 * Циклические зависимости между пакетами запрещены.
-* `acp_protocol` ДОЛЖЕН оставаться pure Dart.
-* `core` СЛЕДУЕТ сохранять pure Dart.
-* `ui_kit` МОЖЕТ зависеть от Flutter.
-* `ui_kit` НЕ ДОЛЖЕН содержать application/business logic.
+* Пакеты в `packages/dart/` ДОЛЖНЫ оставаться pure Dart и НЕ ДОЛЖНЫ зависеть от Flutter.
+* Пакеты в `packages/flutter/` МОГУТ зависеть от Flutter.
+* `acp_ui` НЕ ДОЛЖЕН содержать application/business logic.
+* `acp_testing` МОЖЕТ использоваться другими пакетами только как `dev_dependency`.
 
 ---
 
@@ -655,6 +667,12 @@ melos bootstrap
 melos format
 melos analyze
 melos test
+```
+
+Полная проверка monorepo (format, analyze, tests и protocol conformance) — одной командой:
+
+```bash
+melos run check
 ```
 
 Для локальных изменений МОЖНО использовать targeted FVM/Melos commands.
