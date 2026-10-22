@@ -63,8 +63,8 @@ Could / Won't и сценариями приёмки: [agent-parity-goals.md](ag
 | 6 | [Режимы работы и потоки](dart-agent-and-clients/06-modes-and-flows.md) | `dart-agent-and-clients/06-modes-and-flows.md` | 91 |
 | 7 | [Источники решений](dart-agent-and-clients/07-decision-sources.md) | `dart-agent-and-clients/07-decision-sources.md` | 79 |
 | 8 | [Сквозные аспекты](dart-agent-and-clients/08-cross-cutting.md) | `dart-agent-and-clients/08-cross-cutting.md` | 21 |
-| 9 | [План миграции](dart-agent-and-clients/09-00-migration-plan.md) | `dart-agent-and-clients/09-00-migration-plan.md` | 159 |
-| 9.5 | [Этап 0 — Фундамент](dart-agent-and-clients/09-05-stage-0-foundation.md) | `dart-agent-and-clients/09-05-stage-0-foundation.md` | 365 |
+| 9 | [План миграции](dart-agent-and-clients/09-00-migration-plan.md) | `dart-agent-and-clients/09-00-migration-plan.md` | 199 |
+| 9.5 | [Этап 0 — Фундамент](dart-agent-and-clients/09-05-stage-0-foundation.md) | `dart-agent-and-clients/09-05-stage-0-foundation.md` | 367 |
 | 9.6 | [Этап 1 — LLM](dart-agent-and-clients/09-06-stage-1-llm.md) | `dart-agent-and-clients/09-06-stage-1-llm.md` | 109 |
 | 9.7 | [Этап 2 — Цикл, инструменты, разрешения](dart-agent-and-clients/09-07-stage-2-loop-tools-permissions.md) | `dart-agent-and-clients/09-07-stage-2-loop-tools-permissions.md` | 86 |
 | 9.8 | [Этап 3 — Сессии и сжатие](dart-agent-and-clients/09-08-stage-3-sessions.md) | `dart-agent-and-clients/09-08-stage-3-sessions.md` | 89 |
@@ -73,7 +73,7 @@ Could / Won't и сценариями приёмки: [agent-parity-goals.md](ag
 | 9.11 | [Этап 6 — codelab_cli MVP](dart-agent-and-clients/09-11-stage-6-cli-mvp.md) | `dart-agent-and-clients/09-11-stage-6-cli-mvp.md` | 401 |
 | 9.12 | [Этап 7 — Встроенный режим в обоих клиентах](dart-agent-and-clients/09-12-stage-7-embedded.md) | `dart-agent-and-clients/09-12-stage-7-embedded.md` | 319 |
 | 9.13 | [Этап 8 — MCP, конфигурация, AGENTS.md](dart-agent-and-clients/09-13-stage-8-mcp-config.md) | `dart-agent-and-clients/09-13-stage-8-mcp-config.md` | 150 |
-| 9.14 | [Этап 9 — Цели Must и переключение по умолчанию](dart-agent-and-clients/09-14-stage-9-switch-default.md) | `dart-agent-and-clients/09-14-stage-9-switch-default.md` | 144 |
+| 9.14 | [Этап 9 — Цели Must и переключение по умолчанию](dart-agent-and-clients/09-14-stage-9-switch-default.md) | `dart-agent-and-clients/09-14-stage-9-switch-default.md` | 145 |
 | 9.15 | [Этап 10 — Мобильные и web](dart-agent-and-clients/09-15-stage-10-mobile-web.md) | `dart-agent-and-clients/09-15-stage-10-mobile-web.md` | 52 |
 | 10 | [Риски](dart-agent-and-clients/10-risks.md) | `dart-agent-and-clients/10-risks.md` | 30 |
 | 11 | [Допущения и открытые вопросы](dart-agent-and-clients/11-assumptions-and-open-questions.md) | `dart-agent-and-clients/11-assumptions-and-open-questions.md` | 61 |
