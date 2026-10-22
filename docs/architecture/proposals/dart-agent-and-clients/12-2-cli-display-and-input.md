@@ -651,6 +651,7 @@ keys:
 | `display.diff_max_lines` | целое ≥ 0 | `40` |
 | `display.ascii` | `true`/`false` | `false` (авто: `true` без UTF-8 в локали) |
 | `display.markdown` | `true`/`false` (`false` — ответ как текст на любой поверхности) | `true` |
+| `display.language` | `auto`, `en`, `ru` — язык строк CLI (ниже, «Язык строк CLI») | `auto` |
 | `status_line.after_turn` | `true`/`false` | `true` |
 | `status_line.segments` | список из `mode`, `model`, `context`, `tokens`, `cost`, `branch`, `queue` | все в этом порядке |
 | `keys.<действие>` | список сочетаний | таблица §12.2.9 |
@@ -679,8 +680,40 @@ keys:
 CLI сам пишет только файлы состояния (`~/.codelab/cli_state.json` — модели папок, U-27, §12.6.9;
 `update_state.json` — §12.6.4); `cli.yaml` он по-прежнему только читает.
 
-Флаги командной строки побеждают файл: `--ui`, `--no-color`; новый флаг `--attach <файл>`
+Флаги командной строки побеждают файл: `--ui`, `--no-color`, `--lang`; новый флаг `--attach <файл>`
 (повторяемый).
+
+**Язык строк CLI.** Правило то же, что у app (D-19): строки, которые codelab_cli показывает
+человеку, по умолчанию английские, русский — через слой локализации. Это статус-строка, строки
+инструментов и мыслей, зона одобрения, подсказки клавиш и `/help`, вопросы мастера §12.4,
+предупреждения и ошибки клиента.
+
+1. Строки берутся из каталога `lib/src/l10n/` (`CliStrings`: ключ → шаблон с параметрами), а не
+   из литералов в коде рендера. Языки — `en` (по умолчанию и запасной) и `ru`.
+2. Выбор: флаг `--lang en|ru`, затем `display.language`. При `auto` CLI смотрит `LC_ALL`,
+   `LC_MESSAGES` и `LANG` по порядку; первая непустая переменная с языком `ru` даёт русский,
+   любая другая или ни одной — английский. Нет строки в каталоге `ru` — выводится английская
+   строка, а не ключ.
+3. Не переводятся: тексты, которые видит модель, и строки ядра (agent-core-architecture
+   §12.2) — CLI печатает их как есть; ответ и мысли агента, вывод инструментов, пути и команды;
+   машинные форматы — stream-json §12.5, коды выхода, имена команд, флагов, ключей `cli.yaml` и
+   клавиш.
+4. Примеры строк в этом разделе и в §9.11 записаны по-русски: это вид каталога `ru`. Тексты
+   мастера в §12.4 записаны по-английски: это каталог `en`. Основные строки в обоих языках:
+
+| Ключ | `en` (по умолчанию) | `ru` |
+|---|---|---|
+| `thoughts.done` / `thoughts.running` | `▸ thought 12s` / `… thinking 4s` | `▸ думал 12s` / `… думает 4s` |
+| `tool.rejected` | `Rejected by user` | `Отклонено пользователем` |
+| `diff.more` | `… 120 more lines (/inspect call_7)` | `… ещё 120 строк (/inspect call_7)` |
+| `diff.binary` | `binary file changed` | `бинарный файл изменён` |
+| `diff.too_large` | `file rewritten: +N -M lines (diff not shown)` | `файл переписан: +N -M строк (diff не показан)` |
+| `diff.simplified` | `diff simplified: shown as a full replacement` | `diff упрощён: показана замена целиком` |
+| `status.queue` / `status.steered` | `queued: 2` · `steered: 1` | `в очереди: 2` · `направлено: 1` |
+| `approval.title` / `approval.risk` | `Permission: exec npm test` · `risk: medium` | `Разрешение: exec npm test` · `риск: средний` |
+| `approval.command` / `approval.folder` | `command:` / `folder:` | `команда:` / `папка:` |
+| `approval.keys` | `[y] allow once  [a] always allow  [n] reject  [N] always reject  [?] details` | `[y] разрешить один раз  [a] разрешить всегда  [n] отклонить  [N] отклонить всегда  [?] подробнее` |
+| `md.image` | `[image: alt]` | `[картинка: alt]` |
 
 ## 12.2.11. Инварианты
 
@@ -715,6 +748,9 @@ CLI сам пишет только файлы состояния (`~/.codelab/cl
     C1, в том числе `ESC`, вырезаются до построения кадра. Управляющие последовательности в кадре
     — только те, что создал сам рендер (SGR, OSC 8 по TUI-10); dart_tui пишет содержимое `View`
     без фильтрации.
+12. **TUI-12.** Язык меняет только человекочитаемые строки клиента. При `en` в выводе нет строк
+    каталога `ru`; строка без перевода выводится по-английски, а не ключом. Stdout headless,
+    stream-json и коды выхода при `--lang en` и `--lang ru` совпадают байт в байт.
 
 ## 12.2.12. Обоснование
 
@@ -767,7 +803,15 @@ CLI сам пишет только файлы состояния (`~/.codelab/cl
 
 Модульные тесты — `apps/codelab_cli/test/`; E2E — `apps/codelab_cli/test/e2e/` через PTY
 (§9.11, задача 6.10) против scripted stdio-агента из `acp_testing`. Имена E2E = id строк
-матрицы.
+матрицы. Тесты, которые сверяют текст строк ниже по-русски, запускают CLI с `--lang ru`; без
+флага ожидается каталог `en`.
+
+* **`cli/strings-localized`** (`test/e2e/strings_localized_test.dart`, «Язык строк CLI»,
+  TUI-12): одобрение `exec` и отклонённый `edit` в PTY с `LANG=en_US.UTF-8` — `Permission:` и
+  `Rejected by user`; с `LANG=ru_RU.UTF-8` — `Разрешение:` и `Отклонено пользователем`; с
+  `LANG=ru_RU.UTF-8 --lang en` — снова английские. Headless `-p --output-format stream-json`
+  при `--lang en` и `--lang ru` даёт одинаковые байты. Модульно —
+  `test/l10n/cli_strings_test.dart`: у каждого ключа есть `en`, нет ключа в `ru` → `en`.
 
 * **`cli/thought-rendered-dimmed`** (`test/e2e/thought_rendered_dimmed_test.dart`, U-08):
   агент шлёт три `agent_thought_chunk`, затем ответ; в PTY текст мыслей окружён `ESC[2m`
