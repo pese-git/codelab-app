@@ -197,7 +197,7 @@ apps/codelab_agent      → codelab_agent_acp, codelab_agent_io, codelab_agent_m
 * до удаления читателя `codelab.toml` агент поддерживает два входных формата конфига (YAML и устаревший TOML только для чтения) и зависимость `package:toml`.
 
 * после принятия ADR нужно обновить:
-  * `AGENTS.md` — §5 структура monorepo уже устарела: указаны `core/` и `ui_kit/` вместо `acp_client_core` и `acp_ui`;
+  * `AGENTS.md` — §5 структура monorepo дополняется агентскими пакетами и правилами ядра (задача 0.11);
   * `docs/architecture/technology-stack.md`;
   * `docs/architecture/layers-and-dependencies.md`;
   * `docs/architecture/state-management.md`.
