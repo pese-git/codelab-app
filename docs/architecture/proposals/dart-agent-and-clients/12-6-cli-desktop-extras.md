@@ -419,24 +419,30 @@ flowchart TD
 
 ```dart
 // apps/codelab_cli/lib/src/tui/tui_model.dart
-final class MouseMsg extends TuiMsg {
+final class MouseMsg extends TuiMsg {   // TuiInput переводит из MouseWheelMsg/MouseClickMsg/MouseReleaseMsg dart_tui
   final MouseKind kind;                 // wheelUp | wheelDown | press | release
   final int column, row;                // 1-based, как в SGR 1006
   final Set<KeyModifier> modifiers;
 }
-final class SetMouseCmd extends TuiCmd { final bool enabled; }   // TuiLoop пишет последовательности
+// TuiModel.mouse: bool — захват мыши; render кладёт его в View.mouseMode
+//   (MouseMode.cellMotion или MouseMode.none), последовательности пишет Program dart_tui
 // ScrollState (§12.2.7): offsetFromBottom, follow, newSinceHold — без изменений
 ```
 
 **Алгоритм.**
 
-1. Включение при старте TUI, если `tui.mouse: true` (по умолчанию): `ESC[?1000h` (нажатия и
-   колесо) и `ESC[?1006h` (кодировка SGR); выключение — `ESC[?1006l ESC[?1000l`, в том же
-   `finally`, что TUI-4. Режимы перемещения (`?1002`, `?1003`) не включаются: они не нужны и
-   засыпают поток событиями.
-2. Декодер §12.2.9 получает правило: `ESC [ < b ; x ; y M|m` → `MouseMsg`; `b & 64` с `b & 1 = 0`
-   — колесо вверх, `= 1` — вниз; биты 4/8/16 — Shift/Alt/Ctrl. Старая кодировка X10
-   (`ESC [ M`) не включается и игнорируется.
+1. Включение при старте TUI, если `tui.mouse: true` (по умолчанию): начальная `TuiModel.mouse =
+   true`, и `View.mouseMode = MouseMode.cellMotion`; `Program` dart_tui пишет `ESC[?1002h`
+   (нажатия, колесо и перемещение только с нажатой кнопкой) и `ESC[?1006h` (кодировка SGR).
+   Выключение — `ESC[?1000l ESC[?1002l ESC[?1003l ESC[?1006l`: при смене поля и в `finally`
+   `Program`, затем повторно в `finally` `TuiRunner` (TUI-4). Режим `?1003` (`allMotion`,
+   перемещение без кнопки) не включается: он засыпает поток событиями. Отдельного режима
+   `?1000` в dart_tui 3.0.0 нет; события перемещения с нажатой кнопкой (`MouseMotionMsg`)
+   `TuiInput` отбрасывает.
+2. Разбор отчётов SGR `ESC [ < b ; x ; y M|m` делает dart_tui (`MouseWheelMsg`,
+   `MouseClickMsg`, `MouseReleaseMsg` с кнопкой, координатами и модификаторами); `TuiInput`
+   переводит их в `MouseMsg`: колесо вверх и вниз, нажатие и отпускание, Shift/Alt/Ctrl. Наш
+   декодер §12.2.9 мышь не разбирает: в построчном REPL она не включается.
 3. Колесо над транскриптом: вверх — `offsetFromBottom += tui.scroll_lines` (по умолчанию 3),
    `follow = false`; вниз — `offsetFromBottom -= scroll_lines`; дошли до 0 → `follow = true`
    (как PgDn до низа, §12.2.7). Колесо над композером прокручивает композер, над открытым
@@ -445,7 +451,8 @@ final class SetMouseCmd extends TuiCmd { final bool enabled; }   // TuiLoop пи
    `offsetFromBottom` и счётчик строки «↓ N новых» (§12.2.7); `follow` = `true` возвращают End,
    PgDn или колесо до низа, отправка промпта (`SubmitCmd`) и ответ на одобрение (зона одобрения
    всегда видна). Новые дельты сами `follow` не включают.
-5. `/mouse on|off` меняет режим до конца процесса (`SetMouseCmd`); `/mouse` без аргумента
+5. `/mouse on|off` меняет режим до конца процесса (`reduce` меняет `TuiModel.mouse`, следующий
+   кадр несёт новый `View.mouseMode`); `/mouse` без аргумента
    печатает состояние. После `off` строка подсказок один раз показывает
    `mouse off: select text with the terminal`, после `on` —
    `mouse on: Shift+drag selects text in most terminals`. В построчном REPL —
@@ -459,8 +466,9 @@ final class SetMouseCmd extends TuiCmd { final bool enabled; }   // TuiLoop пи
 выделение текста); ручная прокрутка вверх останавливает автопрокрутку, End или новый промпт
 возвращают её»): PTY 100×30, агент стримит 200 строк; подаётся `ESC[<64;10;5M` трижды — видимая
 область перестала двигаться, есть «↓ N новых»; End → последняя строка видна; снова вверх, затем
-промпт → следование; `/mouse off` → в выводе `ESC[?1000l`; выход → `ESC[?1006l` (TUI-4). Модульно
-— `test/input/key_decoder_test.dart` (SGR-мышь, модификаторы, обрывки последовательностей) и
+промпт → следование; `/mouse off` → в выводе `ESC[?1002l`; выход → `ESC[?1006l` (TUI-4). Модульно
+— `test/tui/tui_input_test.dart` (сообщения мыши dart_tui → `MouseMsg`, модификаторы,
+`MouseMotionMsg` отброшено), `test/tui/tui_view_golden_test.dart` (`mouse` → `View.mouseMode`) и
 `test/tui/tui_update_test.dart` (`MouseMsg` → `ScrollState`).
 
 ## 12.6.6. Запрет сна системы во время хода (U-25)
@@ -990,7 +998,9 @@ abstract interface class ClipboardWriter { Future<CopyOutcome> copy(String text)
      последовательности больше `clipboard.osc52_max_bytes` (100 000 байт, около 74 КиБ текста:
      типичный предел терминалов и tmux).
 4. **OSC 52.** Последовательность `ESC ] 52 ; c ; <base64 от UTF-8> BEL`. В TUI она пишется
-   `TerminalIo` отдельной записью между кадрами (не внутри `ESC[?2026h … l`), в REPL — в stdout.
+   `TuiEffects` между кадрами (не внутри `ESC[?2026h … l`; §12.2.7, шаг 8): без обёртки tmux и
+   screen — командой `setClipboard` dart_tui, с обёрткой — записью в `terminalSink` из `Cmd`; в
+   REPL — в stdout.
    * tmux: при первом копировании в процессе CLI запускает `tmux show-options -gv set-clipboard`
      и `tmux show-options -gv allow-passthrough` (таймаут 500 мс). `set-clipboard on` →
      последовательность как есть (tmux сам передаёт её внешнему терминалу); иначе, если
@@ -1388,7 +1398,7 @@ U-27, U-28, H-08 не добавляют; D-17 добавляет `sessions.sear
    обновляются сами.
 9. **UX-9.** Обновление не устанавливается без явной команды пользователя (`codelab update`,
    `/update`).
-10. **UX-10.** Выход из TUI любым путём выключает отчёты мыши (`ESC[?1006l`, `ESC[?1000l`) — часть
+10. **UX-10.** Выход из TUI любым путём выключает отчёты мыши (`ESC[?1006l`, `ESC[?1002l`) — часть
     TUI-4.
 11. **UX-11.** Новые дельты не включают следование за выводом; его включают только End, PgDn или
     колесо до низа, отправка промпта и ответ на одобрение.
@@ -1457,9 +1467,10 @@ U-27, U-28, H-08 не добавляют; D-17 добавляет `sessions.sear
 * **Перезапуск дочерним процессом.** В Dart нет `exec` с заменой процесса; дочерний процесс с
   унаследованным stdio и выход с его кодом — переносимо на все ОС, а сессия продолжается через
   обычный `--resume`.
-* **Мышь: только нажатия и колесо, SGR 1006.** Режимы перемещения не нужны; X10 ломается на
-  широких терминалах. По умолчанию включено, потому что TUI без колеса неудобен, а
-  `/mouse off` возвращает выделение одной командой.
+* **Мышь: нажатия и колесо, SGR 1006.** Перемещение без кнопки (`?1003`) не нужно; из режимов
+  dart_tui ближе всего `cellMotion` (`?1002`), лишние события перетаскивания отбрасываются в
+  `TuiInput`; X10 ломается на широких терминалах. По умолчанию включено, потому что TUI без
+  колеса неудобен, а `/mouse off` возвращает выделение одной командой.
 * **Запрет сна через помощника.** `caffeinate -w`, `systemd-inhibit … tail --pid` и
   `Wait-Process` привязывают запрет к жизни CLI: упавший CLI не оставит машину бессонной. FFI в
   процессе CLI этого не гарантирует, а на Windows вызов привязан к потоку ОС, который изолят Dart
@@ -1537,12 +1548,12 @@ U-27, U-28, H-08 не добавляют; D-17 добавляет `sessions.sear
    * §12.2.2 после таблицы: «Цвета («акцентный», «приглушённый», зелёный, красный, жёлтый,
      голубой, фоны diff) — токены темы §12.6.3.»;
    * §12.2.7: в `sealed class TuiMsg` добавить `final class MouseMsg extends TuiMsg { … }`, в
-     `TuiCmd` — `SetMouseCmd`, `RunShellCmd { final String command; }`, `RestartAgentCmd`; в
-     «Цикл `TuiLoop`», шаг 1 — «отчёты мыши `ESC[?1000h ESC[?1006h` при `tui.mouse`»; в
+     `TuiModel` — поле `mouse`, в `TuiCmd` — `RunShellCmd { final String command; }`,
+     `RestartAgentCmd`; в «Цикл `Program`», шаг 1 — «отчёты мыши по `View.mouseMode` (§12.6.5)»; в
      «Транскрипт и прокрутка» — «колесо вниз до низа → `follow = true`; новые дельты `follow` не
      включают (UX-11)»;
-   * §12.2.9, «Декодер», новый шаг между 6 и 7: «SGR-мышь `ESC [ < b ; x ; y M|m` → `MouseMsg`
-     (§12.6.5)»;
+   * §12.2.9, «Декодер», новый шаг между 6 и 7: SGR-мышь в REPL не разбирается, в TUI её
+     разбирает dart_tui и переводит `TuiInput` в `MouseMsg` (§12.6.5);
    * §12.2.11, TUI-4 дополнить: «и отчёты мыши выключены».
 6. **`12-1-view-model.md` §12.1.1**: в раздел «Вложения» добавить класс `ShellOutputAttachment`
    (§12.6.2, контракт) и значение `inlineText` в `AttachmentKindView` с комментарием
