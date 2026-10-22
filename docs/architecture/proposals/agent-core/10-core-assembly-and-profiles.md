@@ -1,6 +1,6 @@
 # 10. Сборка ядра и профили хостов
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [9. Сжатие контекста](09-compaction.md) · [Оглавление ядра](../agent-core-architecture.md) · [11. Промпты](11-prompts.md) →
 

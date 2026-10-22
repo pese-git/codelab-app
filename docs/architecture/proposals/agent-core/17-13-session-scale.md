@@ -1,6 +1,6 @@
 # 17.13. Масштаб сессий
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [17.12. Цикл и безопасность](17-12-loop-and-security.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.14. Расширения](17-14-extensions.md) →
 

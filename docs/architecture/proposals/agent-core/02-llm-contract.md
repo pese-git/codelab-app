@@ -1,6 +1,6 @@
 # 2. LLM-контракт
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [1. Слои и пакеты](01-layers-and-packages.md) · [Оглавление ядра](../agent-core-architecture.md) · [3. Отмена](03-cancellation.md) →
 

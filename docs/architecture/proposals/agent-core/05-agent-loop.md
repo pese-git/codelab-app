@@ -1,6 +1,6 @@
 # 5. Цикл агента
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [4. ExecutionEnv](04-execution-env.md) · [Оглавление ядра](../agent-core-architecture.md) · [6. Инструменты](06-tools.md) →
 

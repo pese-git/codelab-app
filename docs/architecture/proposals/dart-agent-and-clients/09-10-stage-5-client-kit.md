@@ -1,6 +1,6 @@
 # 9.10. Этап 5 — Общий клиентский слой
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [9.9. Этап 4 — ACP-адаптер и codelab-agent](09-09-stage-4-acp-adapter.md) · [Оглавление](../dart-agent-and-clients.md) · [9.11. Этап 6 — codelab_cli MVP](09-11-stage-6-cli-mvp.md) →
 

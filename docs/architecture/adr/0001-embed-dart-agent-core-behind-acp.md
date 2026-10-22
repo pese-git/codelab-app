@@ -1,6 +1,6 @@
 # ADR-0001: Embed a pure-Dart agent core behind ACP for codelab-app and codelab_cli
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-10-21
 

@@ -1,6 +1,6 @@
 # 9.9. Этап 4 — ACP-адаптер и codelab-agent
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [9.8. Этап 3 — Сессии и сжатие](09-08-stage-3-sessions.md) · [Оглавление](../dart-agent-and-clients.md) · [9.10. Этап 5 — Общий клиентский слой](09-10-stage-5-client-kit.md) →
 

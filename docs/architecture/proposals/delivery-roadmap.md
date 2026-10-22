@@ -1,6 +1,6 @@
 # Дорожная карта: PoC → MVP → Продукт
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-10-22
 

@@ -1,6 +1,6 @@
 # 8. Сквозные аспекты
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [7. Источники решений](07-decision-sources.md) · [Оглавление](../dart-agent-and-clients.md) · [9. План миграции](09-00-migration-plan.md) →
 

@@ -1,6 +1,6 @@
 # 17. Спецификации после MVP
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [16. Что не входит в MVP и открытые вопросы](16-non-mvp-and-open-questions.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.1. Web-инструменты: `web_fetch` и `web_search`](17-1-web-tools.md) →
 

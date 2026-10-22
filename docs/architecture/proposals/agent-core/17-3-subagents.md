@@ -1,6 +1,6 @@
 # 17.3. Субагенты: инструмент `task`
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [17.2. Skills и шаблоны промптов](17-2-skills-and-templates.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.4. Вынос огромного результата инструмента в файл (T-28)](17-4-output-spill.md) →
 

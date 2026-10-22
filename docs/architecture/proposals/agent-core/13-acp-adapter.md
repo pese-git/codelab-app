@@ -1,6 +1,6 @@
 # 13. ACP-адаптер
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [12. Наблюдаемость и модель ошибок](12-observability-and-errors.md) · [Оглавление ядра](../agent-core-architecture.md) · [14. Формат golden ACP-фикстур](14-golden-fixtures.md) →
 

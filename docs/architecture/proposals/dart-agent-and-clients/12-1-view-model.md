@@ -1,6 +1,6 @@
 # 12.1. Общая модель отображения в `acp_client_kit`
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [12. Отображение и настройка в клиентах: спецификации после MVP](12-0-clients-post-mvp.md) · [Оглавление](../dart-agent-and-clients.md) · [12.2. CLI: отображение и ввод](12-2-cli-display-and-input.md) →
 

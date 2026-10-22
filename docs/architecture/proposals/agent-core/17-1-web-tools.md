@@ -1,6 +1,6 @@
 # 17.1. Web-инструменты: `web_fetch` и `web_search`
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [17. Спецификации после MVP](17-0-post-mvp.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.2. Skills и шаблоны промптов](17-2-skills-and-templates.md) →
 

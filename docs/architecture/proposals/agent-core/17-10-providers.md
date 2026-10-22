@@ -1,6 +1,6 @@
 # 17.10. Провайдеры и устойчивость LLM
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [17.9. Фоновые команды](17-9-background-commands.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.11. Дополнительные инструменты](17-11-extra-tools.md) →
 

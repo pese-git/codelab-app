@@ -1,6 +1,6 @@
 # 4. Целевая архитектура
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [3. Рассмотренные варианты](03-options-considered.md) · [Оглавление](../dart-agent-and-clients.md) · [5. Контракты ядра](05-core-contracts.md) →
 

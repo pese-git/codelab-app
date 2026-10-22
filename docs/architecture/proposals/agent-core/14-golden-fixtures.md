@@ -1,6 +1,6 @@
 # 14. Формат golden ACP-фикстур
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [13. ACP-адаптер](13-acp-adapter.md) · [Оглавление ядра](../agent-core-architecture.md) · [15. Конфигурация](15-configuration.md) →
 

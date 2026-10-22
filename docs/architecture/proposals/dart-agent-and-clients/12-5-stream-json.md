@@ -1,6 +1,6 @@
 # 12.5. Headless-формат stream-json
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [12.4. Первый запуск и настройки](12-4-first-run-and-settings.md) · [Оглавление](../dart-agent-and-clients.md) · [12.6. Удобства CLI и десктопа](12-6-cli-desktop-extras.md) →
 

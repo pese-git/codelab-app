@@ -1,6 +1,6 @@
 # 9. План миграции
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [8. Сквозные аспекты](08-cross-cutting.md) · [Оглавление](../dart-agent-and-clients.md) · [9.5. Этап 0 — Фундамент](09-05-stage-0-foundation.md) →
 

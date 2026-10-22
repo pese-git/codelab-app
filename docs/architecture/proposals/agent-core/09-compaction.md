@@ -1,6 +1,6 @@
 # 9. Сжатие контекста
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [8. Сессии](08-sessions.md) · [Оглавление ядра](../agent-core-architecture.md) · [10. Сборка ядра и профили хостов](10-core-assembly-and-profiles.md) →
 

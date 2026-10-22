@@ -1,6 +1,6 @@
 # 12. Отображение и настройка в клиентах: спецификации после MVP
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [11. Допущения и открытые вопросы](11-assumptions-and-open-questions.md) · [Оглавление](../dart-agent-and-clients.md) · [12.1. Общая модель отображения в `acp_client_kit`](12-1-view-model.md) →
 

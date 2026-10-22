@@ -1,6 +1,6 @@
 # Целевые возможности агента и клиентов
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-10-21
 
