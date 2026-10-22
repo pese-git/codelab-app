@@ -160,6 +160,16 @@ void main() {
       // Resolving the approval completes the first turn and, once it does,
       // auto-drains the queued message as a second real `session/prompt`
       // round trip — with no further action from the test beyond this tap.
+      //
+      // The app opens at its default 800x600 window — the medium layout,
+      // with the Inspector docked below the main pane — so expanding the
+      // Queue section above leaves the transcript only a few dozen pixels
+      // of viewport, and the approval's option row, brought into view when
+      // the approval arrived, is now partly scrolled past. Scroll it back
+      // into view first, as a user would, so the tap lands on the option
+      // instead of whatever covers its center.
+      await tester.ensureVisible(find.text('Allow once'));
+      await tester.pump();
       await tester.tap(find.text('Allow once'));
       await tester.pump();
 
@@ -170,7 +180,6 @@ void main() {
       }
       await tester.pumpAndSettle();
 
-      expect(find.text('approved: allow_once'), findsWidgets);
       // The agent's reply to the *second*, auto-drained `session/prompt` —
       // proof the queued message was actually delivered, not just dropped
       // from the queue.
@@ -178,6 +187,21 @@ void main() {
       expect(shellCubit.state.queuedPrompts, isEmpty);
       expect(find.text('Queue'), findsNothing);
       expect(find.byType(AcpActivityBar), findsNothing);
+
+      // The reply to the approval sits above both later turns' entries —
+      // out of the small default window's transcript viewport, which the
+      // lazily built list does not even build. Scroll back up to it.
+      await tester.scrollUntilVisible(
+        find.text('approved: allow_once'),
+        -100,
+        scrollable: find
+            .descendant(
+              of: find.byType(AcpTranscriptPanel),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(find.text('approved: allow_once'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
