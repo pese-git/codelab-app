@@ -720,8 +720,7 @@ workspace orchestrator.
 Обязательные root files:
 
 - `.fvm/fvm_config.json`;
-- `pubspec.yaml`;
-- `melos.yaml`;
+- `pubspec.yaml` (pub workspace и секция `melos:`);
 - `analysis_options.yaml`;
 - `.gitignore`;
 - `docs/codelab-spec.md`;

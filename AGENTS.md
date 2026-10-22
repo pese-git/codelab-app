@@ -146,7 +146,6 @@ AI-agent обязан интерпретировать эти формулиро
 * `.fvm/fvm_config.json`
 * `pubspec.yaml`
 * `pubspec.lock`
-* `melos.yaml`
 
 Версии НЕ СЛЕДУЕТ дублировать в `AGENTS.md`.
 
@@ -159,7 +158,7 @@ AI-agent обязан интерпретировать эти формулиро
 ```text id="52u0iq"
 .
 ├── AGENTS.md
-├── melos.yaml
+├── pubspec.yaml          # pub workspace и секция melos:
 ├── .fvm/
 │   └── fvm_config.json
 ├── docs/

@@ -9,7 +9,7 @@
 * `.fvm/fvm_config.json` — используемая версия Flutter SDK;
 * `pubspec.yaml` — ограничения версий и declared dependencies;
 * `pubspec.lock` — разрешённые версии зависимостей;
-* `melos.yaml` — monorepo orchestration.
+* секция `melos:` корневого `pubspec.yaml` — monorepo orchestration (отдельного `melos.yaml` нет).
 
 Общие обязательные правила для AI-agents находятся в корневом `AGENTS.md`.
 
@@ -154,7 +154,7 @@ Melos используется для управления repository-wide opera
 * code generation;
 * выполнение команд по packages.
 
-Основные команды определяются `melos.yaml`.
+Основные команды определяются секцией `melos:` корневого `pubspec.yaml`.
 
 Типовые операции:
 

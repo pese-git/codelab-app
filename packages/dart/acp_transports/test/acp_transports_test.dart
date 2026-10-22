@@ -7,6 +7,7 @@ import 'package:acp_testing/acp_testing.dart'
     show writeCodelabCompatibleStdioAgent;
 import 'package:acp_transports/acp_transports.dart'
     hide JsonRpcId, JsonRpcMessage, acpProtocolPackageName;
+import 'package:acp_transports/io.dart';
 import 'package:test/test.dart';
 
 void main() {
