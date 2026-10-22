@@ -651,9 +651,10 @@ stateDiagram-v2
    ожидания.
 6. `FluentApp(home: CodeLabShell)`.
 
-Автоподключения сейчас нет. Оно появляется вместе с `ProfileStore` kit (восстановление
-последнего профиля, §9.10) и встроенным профилем по умолчанию — именно его зависание описывает
-D-15.
+Автоподключения сейчас нет. Оно появляется вместе с `ProfileStore` kit и восстановлением после
+перезапуска (последний профиль, проект и сессии из снимка `codelab.workspace.snapshot` —
+«Алгоритм восстановления после перезапуска app» §9.10, задача 5.12, D-03) и встроенным профилем по
+умолчанию — именно его зависание описывает D-15.
 
 Новый порядок. `main` вызывает `runApp(BootHost(...))` сразу после `ensureInitialized`. Всё
 остальное — шаги сторожа:
@@ -664,7 +665,7 @@ D-15.
 | `services` | `createCodeLabRootScope` без файлового логирования: транспорты, платформа, `ClientWorkspace`, Cubit-ы | 10 с | critical | — |
 | `stores` | `ProfileStore` (`~/.codelab/profiles.json`), недавние проекты (`shared_preferences`), `SettingsAccess` и снимок конфига для профиля по умолчанию, проверка доступности `SecretStore` (`names()`) | 5 с | degradable | профили и проекты в памяти, настройки только для чтения с баннером `storeUnavailable` |
 | `logging` | `configureCodeLabLogging`: файловые приёмники в `<support>/logs`, перенос событий `BootLog` в лог | 5 с | degradable | консоль и `LogBuffer` без файлов, баннер «File logging is off» |
-| `routes` | начальный экран: последний проект и профиль; при `autoConnect` — `ClientWorkspace.connect` до ответа `initialize` | 20 с | degradable | экран workbench без подключения |
+| `routes` | начальный экран: последний проект и профиль из снимка; при `autoConnect` — `WorkspaceRestorer` (§9.10, задача 5.12): `ClientWorkspace.connect` до ответа `initialize` (под таймаутом шага); `session/list` и `session/load` активной сессии продолжаются после `BootReady` | 20 с | degradable | экран workbench без подключения; снимок не удаляется |
 
 ```mermaid
 sequenceDiagram

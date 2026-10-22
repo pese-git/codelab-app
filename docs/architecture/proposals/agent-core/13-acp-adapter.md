@@ -80,6 +80,9 @@ final class AcpServerConfig {
 3. `clientCapabilities` сохраняются **на соединение**; сессии, созданные в нём, получают
    `AcpClientExecutionEnv` с возможностями из них (§13.9). Отсутствие поля логируется
    `acp.client_capabilities.absent` — иначе пропажа инструментов выглядит как поведение модели.
+   Если хост передал серверу `localListing` (бинарь по stdio, §10.4), env сессии —
+   `ListingOverlayEnv(AcpClientExecutionEnv, localListing(cwd))`: `listDir` — локальная ФС под тем
+   же `BoundedEnv`, чтение, запись и `exec` — через клиента.
    После MVP вместе с ними на соединение сохраняется `clientCapabilities._meta.codelab.ask`
    (`{"version": 1}`): клиент показывает вопросы `ask`, capability `userQuestions` включается
    для сессий этого соединения (§17.11.7).
@@ -121,7 +124,9 @@ final class AcpServerConfig {
    сессия; инструменты появляются на границе шага после первого успешного подключения (§17.5.7).
 5. Ответ `NewSessionResponse(sessionId, modes, configOptions)`.
 6. **После** ответа — уведомление `available_commands_update` (до ответа клиент не знает
-   `sessionId`, ранние уведомления он отбросил бы).
+   `sessionId`, ранние уведомления он отбросил бы). На этапе 4 встроенных команд ещё нет и
+   список пуст (`availableCommands: []`); встроенные команды и порядок ниже появляются на
+   этапе 8 (dart-agent-and-clients §9.13), фикстуры этапов 0 и 4 сверяют список через `$any` (§14.2).
 
 ```json
 {"jsonrpc":"2.0","id":1,"result":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","modes":{"currentModeId":"standard","availableModes":[{"id":"plan","name":"Plan","description":"Read and plan only, no changes"},{"id":"ask","name":"Ask","description":"Approve every call, including reads"},{"id":"standard","name":"Standard","description":"Reads without asking, edits and commands with approval"},{"id":"accept-edits","name":"Accept edits","description":"Reads and edits without asking, commands and network with approval"},{"id":"bypass","name":"Bypass","description":"No approval except for critical commands, agent config edits and network access"}]},"configOptions":[{"id":"mode","name":"Mode","category":"mode","type":"select","currentValue":"standard","options":[{"value":"plan","name":"Plan"},{"value":"ask","name":"Ask"},{"value":"standard","name":"Standard"},{"value":"accept-edits","name":"Accept edits"},{"value":"bypass","name":"Bypass"}]},{"id":"model","name":"Model","category":"model","type":"select","currentValue":"openai/gpt-4o","options":[{"value":"openai/gpt-4o","name":"GPT-4o"},{"value":"anthropic/claude-sonnet-4","name":"Claude Sonnet 4"}]}]}}

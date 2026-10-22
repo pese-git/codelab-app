@@ -21,9 +21,13 @@
    `fs`/`terminal`.
 5. **7.5. codelab-app:** `EmbeddedProfile` в диалоге подключения («Встроенный агент»),
    `EmbeddedTransportResolver` в composition root (`apps/codelab_app/lib/app/app_scope.dart`),
-   настройки провайдера и модели; ключ API — из env, конфигурации или хранилища секретов ОС
-   (§15 и §17.5.4 документа ядра). Страница провайдеров, мастер и статус ключа — §12.4.5, §12.4.4;
-   пакет `codelab_setup` создаётся в этой задаче (§12.4.2).
+   выбор провайдера и модели из конфигурации; конфигурация — загрузчик задачи 8.5
+   (`config_loader.dart`), ключ API — `SecretResolver` задачи 8.9 (переменная
+   `CODELAB_SECRET_<…>` или связка ключей ОС; §15 и §17.5.4 документа ядра). Это часть MVP.
+   **Should — не блокирует MVP:** пакет `codelab_setup` (§12.4.2), страница провайдеров app
+   (D-05, §12.4.5), мастер и статус ключа (§12.4.4) — запись конфига идёт через `ConfigWriter`
+   задачи 8.10, тоже Should. Без них встроенный профиль настраивается файлом `config.yaml` и
+   `codelab secret set`.
 6. **7.6. codelab_cli:** `--agent embedded` по умолчанию; тот же резолвер в
    `apps/codelab_cli/lib/src/composition_root.dart`; `codelab config check` показывает план
    сборки (что включено и почему выключено).
@@ -35,9 +39,10 @@
    в сборке с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true` (только для тестов; §12.4.13,
    agent-core-architecture §15.6).
 8. **7.8. Замер нагрузки на UI:** `packages/dart/codelab_embedded/benchmark/stream_latency_benchmark.dart`
-   — 10 000 чанков ответа через встроенного агента, измеряется задержка цикла событий. Если p99
-   больше 8 мс — ядро переносится в отдельный isolate (`IsolateAcpLink` с тем же контрактом
-   `AcpTransport` поверх `SendPort`); решение фиксируется в `design.md`.
+   — 10 000 чанков ответа через встроенного агента, измеряется задержка цикла событий. Это
+   разведка (исключение (д) правила TDD §9.0 п.3): замер без тестов, ограничен двумя днями.
+   Решение об isolate принимается в этой задаче по критериям ниже («Решение 7.8: ядро в
+   isolate») и фиксируется в `design.md` change с числами замера.
 9. **7.9. E2E CLI во встроенном режиме:** те же `cli/*` с `--agent embedded` и scripted-провайдером;
    `codelab test-scenario packages/dart/acp_testing/fixtures/acp --agent embedded` — в CI-джобе
    `conformance`.
@@ -196,12 +201,13 @@ Future<EmbeddedAgent> createEmbeddedAgent({required EmbeddedAgentConfig config, 
 AgentCoreServices memoryHostServices({required http.Client http, Logger? logger});
 
 // packages/dart/codelab_embedded/lib/io.dart — десктоп и CLI; мобильные — с этапа 10
-/// LocalExecutionEnv, JsonlSessionStore в $CODELAB_HOME/sessions, секреты из env, MCP stdio (этап 8).
+/// LocalExecutionEnv, JsonlSessionStore в $CODELAB_HOME/sessions, секреты — SecretResolver (8.9), MCP stdio (8.1–8.4).
 Future<AgentCoreServices> desktopHostServices({String? codelabHome, http.Client? http, Logger? logger});
 /// Этап 10 (§9.15): LocalExecutionEnv с корнем в папке документов приложения, без процессов (exec off),
 /// JsonlSessionStore там же, MCP только по HTTP (agent-core-architecture §4, §10).
 Future<AgentCoreServices> mobileHostServices({required String documentsDir, http.Client? http, Logger? logger});
-/// Загрузка и валидация конфигурации (документ ядра §15); ошибки — с путём ключа.
+/// Загрузка и валидация конфигурации поверх config_loader задачи 8.5 (документ ядра §15); ошибки — с путём ключа.
+/// Ссылки на секреты разрешает SecretResolver задачи 8.9; своего загрузчика у codelab_embedded нет.
 Future<EmbeddedAgentConfig> loadEmbeddedAgentConfig({required String cwd, required String hostProfile, String? configPath});
 ```
 
@@ -242,7 +248,46 @@ final class EmbeddedTransportResolver implements TransportResolver {
 **OpenSpec change.** `add-in-process-acp-transport` (задачи 7.1–7.2; scope: публичный API
 `acp_transports`, правила копирования и закрытия) и `add-embedded-agent-mode` (задачи 7.3–7.9;
 scope: `codelab_embedded`, профили `embedded-*`, профиль подключения в app и CLI, scripted-провайдер
-только для тестов).
+только для тестов; часть 7.5 про `codelab_setup` и D-05 — отдельный change
+`add-provider-setup-ui`, Should). `tasks.md` — пары "тест → реализация" со ссылкой на критерий
+(§9.0, правило 3); замер 7.8 — разведка без пары (исключение (д)).
+
+**Решение 7.8: ядро в isolate.** Критерии (замер на эталонной машине, записанной в `design.md`):
+p99 задержки цикла событий UI-isolate больше 8 мс или максимум больше 50 мс на 10 000 чанков —
+ядро переносится в `IsolateAcpLink`; иначе остаётся `InProcessAcpLink`, а тяжёлые операции
+(разбор журнала, сжатие) уходят в `Isolate.run` в любом случае. На web isolate нет — там всегда
+`InProcessAcpLink`. Эскиз контракта на случай переноса:
+
+```dart
+// packages/dart/codelab_embedded/lib/src/isolate_acp_link.dart (только io.dart)
+final class IsolateAcpLink {
+  /// В isolate передаются только сериализуемые данные: конфиг как JSON и описание сервисов
+  /// (codelabHome, hostProfile). http.Client, Logger и SecretResolver создаются внутри isolate.
+  static Future<IsolateAcpLink> spawn({required Map<String, Object?> configJson,
+      required DesktopServicesSpec services});
+  AcpTransport get client;                    // тот же контракт, что у InProcessAcpTransport
+  Future<void> dispose({Duration grace = const Duration(seconds: 3)});
+}
+```
+
+1. `spawn` вызывает `Isolate.spawn(_agentMain, boot)` с `SendPort` клиента и портами `onError`,
+   `onExit`. Внутри isolate `_agentMain` собирает агента как `createEmbeddedAgent` поверх
+   `InProcessAcpLink` и соединяет его клиентскую сторону с портом.
+2. Сообщения — конверты-Map: `{"k":"msg","m":<JSON-RPC>}`, `{"k":"log",…}`, `{"k":"close"}`,
+   `{"k":"closed"}`, `{"k":"fatal","error":…}`. JSON-RPC кадр проходит те же правила
+   `_copyJson`: не-JSON значение — `sendFailed` на отправляющей стороне. Порядок сохраняется
+   (порт — очередь FIFO).
+3. Отмена хода — обычное уведомление ACP `session/cancel` в конверте `msg`; отдельного канала
+   нет, поэтому семантика отмены та же, что во встроенном режиме без isolate.
+4. `close()`/`dispose()` клиента шлёт `close`; isolate вызывает `EmbeddedAgent.dispose`
+   (ожидающие разрешения → отказ, журнал дописан) и отвечает `closed`. Нет ответа за `grace` —
+   `Isolate.kill(priority: Isolate.immediate)`.
+5. Падение isolate (`onError`, `onExit` без `closed`) переводит клиентский транспорт в `failed` с
+   `disconnected` и пишет диагностику; kit показывает это как обрыв соединения (переподключение
+   §9.10).
+6. Тесты при переносе: те же случаи, что у `in_process_acp_transport_test.dart` (порядок 1000
+   сообщений, `close` → `failed` у другой стороны, `DateTime` → `sendFailed`), плюс `kill` после
+   `grace` и падение isolate → `failed`; `melos run test:e2e:app:embedded` с isolate.
 
 **Что прочитать.** Документ ядра §10, §13 (`shutdown`), §4 (выбор env); §4.5 и §6 этого документа;
 `docs/architecture/concurrency.md` (isolate).
@@ -255,9 +300,15 @@ scope: `codelab_embedded`, профили `embedded-*`, профиль подк�
 * `codelab test-scenario packages/dart/acp_testing/fixtures/acp --agent embedded` — все `PASS`.
 * `melos run guard`: основной барель `codelab_embedded` не импортирует `dart:io`; app и CLI не
   импортируют `codelab_agent_*` напрямую.
-* Замер 7.8 выполнен, решение об isolate записано.
+* Замер 7.8 выполнен, решение об isolate записано в `design.md` с числами и критериями.
+* Встроенный профиль в app и CLI берёт конфиг через загрузчик 8.5 и ключ через `SecretResolver`
+  8.9 (тест резолвера с `CODELAB_TEST_SECRET_STORE`).
+* Если сделано (Should — не блокирует MVP): `codelab_setup`, страница провайдеров app (D-05) и
+  мастер — тесты §12.4.13 зелёные.
 
-**Зависимости.** Этапы 4 и 6 (для CLI), 5 (для app).
+**Зависимости.** Этапы 6 и 8 (порядок D3: `{6, 8} → 7`): CLI-клиент этапа 6, загрузка
+конфигурации 8.5 и хранилище секретов 8.9; через них — этапы 4 (агент) и 5 (kit для app). От
+8.10 (запись конфига) зависит только Should-часть 7.5.
 
 **Риски.** Тяжёлые операции ядра в UI-isolate (разбор журнала, сжатие) — `Isolate.run` для
 разбора и сжатия, при плохом замере — ядро в отдельном isolate. Общие изменяемые `Map` между

@@ -50,16 +50,54 @@
    промпта с `$ARGUMENTS`) → `available_commands_update` после `session/new`; вызов `/имя
    аргументы` разворачивается в промпт.
 8. **8.8. Определения агентов в Markdown** (R-15, Must): загрузчик `$CODELAB_HOME/agents/*.md` и `<cwd>/.codelab/agents/*.md` (только для доверенного проекта), разбор YAML-frontmatter пакетом `yaml`, опция конфигурации `agent`, применение промпта, модели, режима и списка инструментов; `config migrate` переносит `[agents.definitions.*]` в Markdown-файлы. Спецификация — agent-core-architecture §15.8; тесты `agent_definition_parse_test.dart`, `agent_definition_trust_test.dart`, `agent_select_test.dart`, фикстура `acp/set-config-option-agent`.
-9. **8.9. Настройка агента** (L-25, P-12, E-15, E-04, P-17; agent-core-architecture §17.5):
-   `SecretResolver` и бэкенды секретов, предконфигурация провайдера из окружения, `ConfigWriter`
-   и подкоманды `config`/`provider`/`mcp`/`secret`, `ConfigWatcher` и живая перезагрузка,
-   `McpSupervisor` с переподключением, `SettingsRegistry` с тестом полноты; агентские команды
-   `/config` и `/mcp`. Клиентская часть (мастер, страницы настроек) — §12.4.
+9. **8.9. Хранилище секретов** (P-12, P-17; agent-core-architecture §17.5.4) — нужна MVP:
+   встроенный агент этапа 7 берёт ключ провайдера отсюда. `SecretResolver` (порядок разрешения
+   §17.5.4: кэш → переменная `CODELAB_SECRET_<…>` → хранилище ОС), бэкенды `keychain-macos`
+   (`security`), `secret-service` (`secret-tool`), `wincred`; значение секрета передаётся утилите
+   только через stdin, никогда в argv; подкоманды `codelab secret set|delete|list`;
+   `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` пишет обращения без
+   значений. Тесты (agent-core-architecture §17.5.13): `secret_resolver_test.dart`,
+   `secret_store_backends_test.dart` (fake `ProcessRunner`), `debug_secrets_test.dart`
+   (`core/debug-secrets-never-logs-value`); настоящие связки ключей — отдельный интеграционный
+   тест на macOS и Linux (исключение (г) правила TDD).
+10. **8.10. Запись конфига, живая перезагрузка, реестр настроек, переподключение MCP**
+    (L-25, E-04, E-15; agent-core-architecture §17.5.3, §17.5.5–§17.5.8) — **Should — не блокирует
+    MVP**: `ConfigWriter` (`yaml_edit`, атомарная запись) и подкоманды `codelab config set|unset`,
+    `provider add|list|remove`, `mcp add|list|remove`; `ConfigWatcher` и живая перезагрузка;
+    `McpSupervisor` с переподключением; `SettingsRegistry` с тестом полноты; предконфигурация
+    провайдера из окружения (L-25); агентские команды `/config` и `/mcp`. Клиентская часть
+    (мастер, страницы настроек) — §12.4. Без 8.10 конфиг правится вручную, а `config check`
+    (8.5) его проверяет.
 
 **OpenSpec change.** `add-agent-mcp-client` (8.1–8.4; scope: протокол MCP, транспорты, имена и
-виды MCP-инструментов, проверка разрешений), `add-agent-configuration` (8.5; scope: файлы,
-порядок слоёв, формат YAML и его профиль, чтение `codelab.toml` только для чтения, новые
-зависимости `yaml_edit` и `toml` как решение о технологии по `AGENTS.md` §4), `add-project-instructions-and-commands` (8.6–8.8).
+виды MCP-инструментов, проверка разрешений; решение о библиотеке MCP — в его `design.md`),
+`add-agent-configuration` (8.5; scope: файлы, порядок слоёв, формат YAML и его профиль, чтение
+`codelab.toml` только для чтения, новые зависимости `yaml_edit` и `toml` как решение о
+технологии по `AGENTS.md` §4), `add-project-instructions-and-commands` (8.6–8.8),
+`add-agent-secret-store` (8.9; scope: имена секретов, порядок разрешения, бэкенды ОС, команды
+`secret`, диагностика без значений) и `add-config-writer-and-reload` (8.10, Should; scope:
+запись конфига, наблюдатель и перезагрузка, реестр настроек, `McpSupervisor`, команды
+`config`/`provider`/`mcp` на запись). `tasks.md` — пары "тест → реализация" со ссылкой на
+критерий (§9.0, правило 3).
+
+**Решение о библиотеке MCP** — чек-лист, который заполняется в `design.md` change
+`add-agent-mcp-client` в начале этапа, до кода (разведка не дольше двух дней, исключение (д)
+правила TDD). Пакет pub.dev берётся, только если отмечены все пункты; хотя бы один «нет» — свой
+минимальный клиент в `codelab_agent_mcp` (протокол небольшой: `initialize`, `tools/list`,
+`tools/call`, `notifications/tools/list_changed`, `notifications/cancelled`):
+
+- [ ] чистый Dart без Flutter; протокольная часть без `dart:io` (сторож: `codelab_agent_mcp`
+  без `dart:io`), транспорты отделимы;
+- [ ] клиент stdio и streamable HTTP; legacy SSE не требуется (E-03);
+- [ ] транспорт и `http.Client` подставляются снаружи: нужен свой
+  `stdio_process_transport.dart` с `env` по allowlist (8.2) и `MockClient` в тестах;
+- [ ] отмена вызова (`notifications/cancelled`) и таймауты управляются вызывающим кодом;
+- [ ] лицензия MIT, BSD или Apache-2.0;
+- [ ] выпуск за последние 6 месяцев, нет открытых критических ошибок протокола;
+- [ ] зависимости не конфликтуют с `pubspec.lock` и не тянут второй фреймворк (`AGENTS.md` §4).
+
+В `design.md` записываются: кандидаты, отметки по каждому пункту, решение и версия пакета (если
+выбран).
 
 **Что прочитать.** Документ ядра §6, §7, §10 (capability `mcp`), §11, §15; спецификация MCP
 (стандарт протокола, раздел о транспортах); `docs/acp/protocol/03-Session Setup.md`,
@@ -72,11 +110,39 @@
 * `packages/dart/codelab_agent_io/test/config/config_loader_test.dart: invalid config reports key path and line` — битый конфиг даёт ошибку с путём ключа, а не исключение при первом ходе.
 * Фикстуры `acp/session-new-with-mcp`, `acp/available-commands-no-tools` зелёные.
 * `melos run guard`: `codelab_agent_mcp` без `dart:io`.
+* Чек-лист библиотеки MCP заполнен в `design.md`, решение записано.
+* Все Must-строки матрицы этапа 8 зелёные; критерий — сценарий строки в матрице:
 
-**Зависимости.** Этап 4; задачи 8.5–8.7 не зависят от MCP и идут параллельно.
+  | Строка | Проверка | Критерий (кратко) |
+  |---|---|---|
+  | P-01 | `core/no-tool-bypasses-gate`, `acp/mcp-tool-permission` | `session/request_permission` приходит до обращения к MCP-серверу; после отказа сервер вызова не получил |
+  | P-16 | `acp/mcp-result-fenced`, `core/mcp-tool-cannot-declare-trusted` | весь результат MCP-инструмента внутри одной ограды, поддельный маркер экранирован; «доверенный» MCP-инструмент регистрируется как недоверенный |
+  | E-01 | `core/project-context-agents-md-leaf-first` | системный промпт содержит правила `AGENTS.md` от корня репозитория к `cwd` |
+  | E-02 | `acp/mcp-stdio-tool-call` | вызов `mcp__fake__echo` после одобрения — `completed` с «hi»; после закрытия сессии процесс сервера завершён |
+  | E-03 | `acp/mcp-http-tool-call` | HTTP-инструмент вызывается; сервер неподдерживаемого типа пропущен с `mcp.server.skipped`, сессия создана |
+  | E-05 | `core/mcp-tool-name-sanitized` | `mcp__my_srv__get_issue`; длинное имя — ровно 64 символа и уникально; коллизия имён — ошибка сборки с обоими серверами |
+  | K-02 | `acp/slash-compact` | `/compact` даёт отчёт «сжато: X → Y токенов» и запись сжатия в журнале (сценарий палитры app — R-20, этап 5) |
+  | R-07 | `acp/available-commands-no-tools` | в `available_commands_update` только команды, без инструментов модели |
+  | R-08 | `acp/slash-help`, `acp/slash-mode-plan`, `acp/mcp-prompt-command` | встроенные команды агента и команды из MCP-промптов выполняются |
+  | R-14 | `core/litellm-proxy-base-url` | LiteLLM Proxy как OpenAI-совместимый `baseUrl` из конфигурации |
+  | R-15 | `core/agent-definition-markdown-frontmatter`, `acp/set-config-option-agent` | опция `agent` содержит определение из `.codelab/agents/*.md`, многострочный `tools` разобран, битый YAML — диагностика с именем файла |
+  | R-16 | `core/config-reads-legacy-codelab-toml`, `cli/config-legacy-read-only` | `codelab.toml` читается без `config.yaml`; неизвестный провайдер — ошибка, не mock; рядом с `config.yaml` — одно предупреждение `config.legacy_ignored`; `config migrate` пишет `config.yaml`. Отказ записи при активном `codelab.toml` проверяется, когда есть команды записи (8.10); до 8.10 команд записи нет |
+* 8.9 (MVP): `secret_resolver_test.dart`, `secret_store_backends_test.dart`,
+  `debug_secrets_test.dart` зелёные; `codelab secret set codelab/openai` с ключом из stdin, затем
+  `codelab -p` во встроенном режиме (этап 7) использует ключ; значение секрета не встречается в
+  логах, trace и argv дочерних процессов.
+* Если сделано (8.10, Should — не блокирует MVP): `config_writer_test.dart`,
+  `config_writer_atomic_test.dart`, `config_watcher_test.dart`, `config_reload_test.dart`,
+  `mcp_reconnect_test.dart` (`core/mcp-reconnect-after-crash`, E-04), `mcp_apply_config_test.dart`,
+  `settings_registry_complete_test.dart` (`core/settings-registry-complete`, E-15),
+  `provider_preconfig_env_test.dart` (`core/provider-preconfig-from-env`, L-25),
+  `cli_config_commands_test.dart` и фикстура `acp/slash-mcp-list` зелёные.
+
+**Зависимости.** Этап 4; задачи 8.5–8.9 не зависят от MCP и идут параллельно. Этап 7 ждёт
+8.5 и 8.9 (порядок D3: `{6, 8} → 7`); 8.10 его не блокирует.
 
 **Риски.** Нет зрелого MCP SDK на Dart — свой клиент (протокол небольшой); готовые пакеты pub.dev
-проверяются в начале этапа. MCP-серверы с побочными эффектами — вид инструмента по аннотациям,
+проверяются в начале этапа по чек-листу выше. MCP-серверы с побочными эффектами — вид инструмента по аннотациям,
 неизвестный вид требует одобрения всегда.
 
 ---

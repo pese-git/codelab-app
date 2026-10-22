@@ -46,13 +46,32 @@
     `cli/headless-stream-json-errors`, `cli/headless-stream-json-redaction`,
     `cli/headless-stream-json-flags`, `cli/headless-stream-json-flush`,
     `cli/headless-json-single-object` (§12.5.8). Интерактивные сценарии идут через псевдотерминал
-    (`script -q /dev/null` на macOS и Linux) с вводом клавиш из файла. После MVP: `cli/bang-command`,
+    (обвязка PTY ниже) с вводом клавиш из файла. После MVP: `cli/bang-command`,
     `cli/theme-user-json`, `cli/update-rejects-bad-signature`, `cli/update-replaces-and-resumes`,
     `cli/tui-scroll-follow`, `cli/power-assertion-released-after-turn`, `cli/restart-reloads-session`,
     `cli/model-remembered-per-folder`, `cli/tui-copy-osc52`, `cli/headless-stream-thinking-stderr`,
     `cli/sessions-filter` (§12.6); `cli/login-openrouter-pkce` (agent-core-architecture §17.10.6);
     `cli/trajectory-export-atif` (agent-core-architecture §17.13.3); `cli/config-export-no-secrets`,
     `cli/config-import-providers-merge` (agent-core-architecture §17.14.4).
+
+**Обвязка PTY для e2e.** `apps/codelab_cli/test/e2e/support/pty_process.dart` —
+`PtyProcess.start(executable, args, {columns, rows, environment})`: `Process.start` системной
+утилиты `script`, которая даёт дочернему процессу псевдотерминал; stdin обвязки — клавиши,
+stdout — вывод терминала. Своего FFI-пакета PTY в репозитории нет, и для MVP он не добавляется
+(новая зависимость — решение по `AGENTS.md` §4). У утилиты разный синтаксис, поэтому команда
+собирается по ОС в одном месте — в этой обвязке:
+
+| ОС | Вызов | Примечание |
+|---|---|---|
+| macOS (BSD `script`) | `script -q /dev/null sh -c 'stty cols 100 rows 30; exec "$0" "$@"' <codelab> <args…>` | команда идёт сразу после файла записи; код выхода — код дочернего процесса |
+| Linux (util-linux `script`) | `script -q -e -f -c "stty cols 100 rows 30; exec <codelab> <args…>" /dev/null` | команда — одной строкой в `-c` (аргументы экранируются обвязкой); `-e` — вернуть код дочернего процесса, `-f` — сбрасывать вывод сразу |
+| Windows | — | PTY-тесты не запускаются (пропуск с сообщением); ручная проверка перед релизом (см. «Риски») |
+
+Обвязка при старте проверяет, что `script` есть в `PATH`, и разбирает вывод `script --version`
+(есть только у util-linux) — так выбирается вариант; нет утилиты — тест пропускается с
+сообщением, а не падает. Переводы строк PTY (`\r\n`) нормализуются перед сравнением. Тест самой
+обвязки — `test/e2e/support/pty_process_test.dart`: `sh -c 'test -t 0 && test -t 1; exit 3'`
+возвращает код `3` и `tput cols` печатает `100` на обеих ОС.
 
 ## Спецификация CLI
 
@@ -77,8 +96,13 @@ codelab trajectory export [<id>|--last] [флаги]   траектория се
 codelab --version | --help
 ```
 
-Подкоманды `config`, `provider`, `mcp` и `secret` (`config check` — этап 7, задача 7.6; остальные —
-этап 8, мастер `provider add` — 9) — общая реализация ядра
+Подкоманды `config`, `provider`, `mcp` и `secret` по этапам: `config get|path|check` и
+`config migrate` — этап 8, задача 8.5 (чтение и проверка; план сборки встроенного агента в
+`config check` — этап 7, задача 7.6); `secret set|delete|list` — этап 8, задача 8.9 (нужна MVP);
+`config set|unset`, `provider add|list|remove`, `mcp add|list|remove` — этап 8, задача 8.10
+(Should — не блокирует MVP); мастер `provider add` — этап 9 (задача 9.6, Should);
+`config export-providers|import-providers` — после MVP (E-14). До своего этапа подкоманда не
+регистрируется (`codelab <команда>` → код 64 `Unknown command`). Это общая реализация ядра
 (agent-core-architecture §17.5.4, §17.5.5: флаги `--project`/`--local`, тексты, коды выхода
 0/1/2); CLI вызывает её через `codelab_setup/io.dart` и добавляет только мастер и проверку
 адреса к `provider add` (§12.4.4, §12.4.8). Они работают без запуска агента. Пока конфиг
@@ -116,16 +140,19 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 работает без запуска агента, как `codelab config`; для внешнего агента (`--agent`) не
 применяется.
 
+Этап флага указан в начале столбца «Значение»; флаг без пометки — этап 6. Флаг более позднего
+этапа до своего этапа не регистрируется (код 64 `Unknown flag`); «после MVP» — цель вне MVP.
+
 | Флаг | Сокращение | Значение | По умолчанию |
 |---|---|---|---|
-| `--agent <профиль>` | `-a` | `embedded`; id профиля из `profiles.json`; `stdio:<команда> [аргументы]`; `ws://…` или `wss://…` | `embedded` (с этапа 7); до этапа 7 — профиль `default` из `profiles.json` |
+| `--agent <профиль>` | `-a` | `embedded`; id профиля из `profiles.json`; `stdio:<команда> [аргументы]`; `ws://…` или `wss://…` | `embedded` (с этапа 7); до этапа 7 — профиль `default` из `profiles.json`; если файла или профиля `default` нет — код 64 и `No default agent profile. Pass --agent or run "codelab profiles add default stdio:<command>".` (агент не запускается, `embedded` до этапа 7 → код 64 `Embedded agent is not available in this build.`) |
 | `--cwd <dir>` | `-C` | рабочая папка сессии | текущая папка |
 | `--model <id>` | `-m` | значение опции конфигурации `model` после создания сессии; после MVP сильнее модели, запомненной для папки (U-27, §12.6.9), и не запоминается | из агента |
 | `--mode <id>` | | значение опции конфигурации `mode` | из агента |
 | `--resume <sessionId>` | `-r` | загрузить сессию (`session/load`) вместо новой; после MVP сессия, открытая на запись другим процессом (`sessionLocked`, agent-core-architecture §17.6.10), → сообщение `Session <id> is open for writing in <profile> (pid <pid>). Use --read-only to watch it or /fork to continue in a copy.` и код выхода `1` | — |
 | `--read-only` | | после MVP: с `--resume` — открыть сессию только для чтения (`_meta.codelab.openMode: "readOnly"`); статус-строка получает сегмент `read-only` (agent-core-architecture §17.6.11) | выключено |
 | `--continue` | `-c` | загрузить последнюю сессию этой папки (`session/list`) | — |
-| `--session <name>` | | открыть сессию с заголовком `<name>` в рабочей папке или создать новую с этим заголовком (S-14, agent-core-architecture §8.10.2); несколько совпадений — в headless код 1 со списком id, в REPL — выбор; вместе с `--resume`/`--continue` → код 64 | — |
+| `--session <name>` | | этап 6, Should — не блокирует MVP (S-14): открыть сессию с заголовком `<name>` в рабочей папке или создать новую с этим заголовком (S-14, agent-core-architecture §8.10.2); несколько совпадений — в headless код 1 со списком id, в REPL — выбор; вместе с `--resume`/`--continue` → код 64 | — |
 | `--print <промпт>` | `-p` | headless-режим | — |
 | `--prompt-file <файл>` | `-f` | headless: промпт из файла; `-` — из stdin | — |
 | `--output-format text\|json\|stream-json` | | только headless: `text` — ответ как есть; `json` — один итоговый объект в конце; `stream-json` — NDJSON v1 (§12.5.3); в REPL → код 64 | `text` |
@@ -135,24 +162,24 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 | `--include-acp` | | только с `--output-format stream-json`: строки `acp` с исходными кадрами после редакции (§12.5.3); иначе код 64 | выключено |
 | `--input-format text\|stream-json` | | `text` — промпт из `-p`, `-f` или stdin; `stream-json` зарезервирован → код 64 (§12.5.2) | `text` |
 | `--approve <политика>` | | headless: `reject` (отклонять всё), `read-only` (разрешать once только вызовы вида `read`, остальное отклонять), `allow-all` (разрешать once всё, кроме запросов с `_meta.codelab.critical: true`; печатает предупреждение в stderr) | `reject` |
-| `--permission-mode <режим>` | | режим встроенного агента: `plan`, `ask`, `standard`, `accept-edits`, `bypass`, `autopilot` (только с `-p`) (agent-core-architecture §7.7, §13.6); на внешнего агента не влияет | `standard` |
+| `--permission-mode <режим>` | | этап 7 (нужен встроенный агент; у `codelab-agent serve` тот же флаг — этап 4); `accept-edits` — после MVP (P-06). Режим встроенного агента: `plan`, `ask`, `standard`, `accept-edits`, `bypass`, `autopilot` (только с `-p`) (agent-core-architecture §7.7, §13.6); на внешнего агента не влияет | `standard` |
 | `--timeout <длительность>` | | headless: предел на ход (`90s`, `10m`); по истечении — `session/cancel` | без предела |
 | `--deadline <длительность\|время>` | | после MVP (C-15): дедлайн сессии; `90s`, `45m`, `1h30m`, ISO-8601 или `HH:MM`; CLI отправляет `/timer until <ISO>` до первого промпта; агент без `/timer` — предупреждение и `session/cancel` в срок (agent-core-architecture §17.12.5) | без срока |
-| `--drain-timeout <длительность>` | | headless (H-05, после переключения): сколько ждать фоновую работу агента (субагенты, фоновые команды — agent-core-architecture §17.9) после ответа на `session/prompt`; `0` — не ждать (agent-core-architecture §17.3.9) | `60s` (`subagents.drain_timeout`) |
-| `--max-wakes <n>` | | headless (H-05, после переключения): сколько раз разбудить агента для доставки отчётов фоновых субагентов (`_meta.codelab.wake`, через OpenSpec); `0` — не будить (agent-core-architecture §17.3.9) | `3` (`subagents.max_wakes`) |
+| `--drain-timeout <длительность>` | | после MVP (H-05, этап 9+); headless: сколько ждать фоновую работу агента (субагенты, фоновые команды — agent-core-architecture §17.9) после ответа на `session/prompt`; `0` — не ждать (agent-core-architecture §17.3.9) | `60s` (`subagents.drain_timeout`) |
+| `--max-wakes <n>` | | после MVP (H-05, этап 9+); headless: сколько раз разбудить агента для доставки отчётов фоновых субагентов (`_meta.codelab.wake`, через OpenSpec); `0` — не будить (agent-core-architecture §17.3.9) | `3` (`subagents.max_wakes`) |
 | `--role <роль>=<provider/model>` | | после MVP (L-10): модель роли на прогон; `default`, `smol`, `slow`, `plan`, `subagent`, после MVP `vision` (T-18, agent-core-architecture §17.11.5); флаг можно повторять (agent-core-architecture §15.4, §15.6; алгоритм — §17.10.5) | из `llm.roles.*` |
-| `--tools <tool>=on\|off,…` | | встроенный агент: выключить или вернуть инструменты (agent-core-architecture §6.3.8, T-26); можно повторять; неизвестное имя → код 64; на внешнего агента не влияет; имена — список §6.3.8, после MVP с `memory`, `inspect_image`, `checkpoint`, `ask`, `session_history`, `discover_tools` (agent-core-architecture §17.11) и `context_expand` (§17.13.4) | из конфига (`tools.disabled`) |
-| `--system-prompt <text>` | | встроенный агент: заменить базовый системный промпт (agent-core-architecture §11.6.1, E-08); вместе с `--system-prompt-file` → код 64 | из конфига |
-| `--system-prompt-file <файл>` | | то же из файла (UTF-8, ≤ 64 КиБ) | из конфига |
-| `--append-system-prompt <text>` | | дополнение после базового промпта (agent-core-architecture §11.6.1) | из конфига |
+| `--tools <tool>=on\|off,…` | | этап 8, Should (T-26); встроенный агент: выключить или вернуть инструменты (agent-core-architecture §6.3.8, T-26); можно повторять; неизвестное имя → код 64; на внешнего агента не влияет; имена — список §6.3.8, после MVP с `memory`, `inspect_image`, `checkpoint`, `ask`, `session_history`, `discover_tools` (agent-core-architecture §17.11) и `context_expand` (§17.13.4) | из конфига (`tools.disabled`) |
+| `--system-prompt <text>` | | этап 8, Should (E-08); встроенный агент: заменить базовый системный промпт (agent-core-architecture §11.6.1, E-08); вместе с `--system-prompt-file` → код 64 | из конфига |
+| `--system-prompt-file <файл>` | | этап 8, Should (E-08); то же из файла (UTF-8, ≤ 64 КиБ) | из конфига |
+| `--append-system-prompt <text>` | | этап 8, Should (E-08); дополнение после базового промпта (agent-core-architecture §11.6.1) | из конфига |
 | `--no-color` | | без ANSI | цвет, если TTY и нет `NO_COLOR` |
 | `--ui line\|tui` | | построчный REPL или полноэкранный TUI (U-12, после MVP, §12.2.1, §12.2.7); `tui` требует TTY на stdin и stdout | `line` (`ui.mode` в `cli.yaml`) |
 | `--attach <файл>` | | вложение к первому промпту (REPL) или к промпту `-p`; флаг можно повторять (U-14, после MVP, §12.2.8) | — |
 | `--trace-file <файл>` | | protocol trace (JSON-RPC кадры с редакцией секретов) в файл | выключено |
-| `--log-file <файл>` | | лог встроенного агента (JSON Lines, с редакцией секретов) дописывается в файл; переменная `CODELAB_LOG_FILE`; флаг сильнее переменной, переменная сильнее `logging.file` (agent-core-architecture §12.3.1) | `logging.file` (`~/.codelab/logs/agent.log`) |
+| `--log-file <файл>` | | этап 7, Should (E-16; встроенного агента в CLI до этапа 7 нет, у `codelab-agent serve` флаг — этап 4); лог встроенного агента (JSON Lines, с редакцией секретов) дописывается в файл; переменная `CODELAB_LOG_FILE`; флаг сильнее переменной, переменная сильнее `logging.file` (agent-core-architecture §12.3.1) | `logging.file` (`~/.codelab/logs/agent.log`) |
 | `--verbose` | `-v` | диагностика соединения в stderr | выключено |
 | `--debug-llm-snapshot[=headers\|body]` | | после MVP (L-27): встроенный агент пишет снимки зависших запросов к LLM (`logging.llm_snapshot`, agent-core-architecture §17.10.10) | выключено |
-| `--config <файл>` | | конфигурация встроенного агента, `.yaml` или `.yml` | `~/.codelab/config.yaml` + `.codelab/config.yaml` |
+| `--config <файл>` | | этап 7 (загрузчик 8.5); конфигурация встроенного агента, `.yaml` или `.yml` | `~/.codelab/config.yaml` + `.codelab/config.yaml` |
 
 Headless (`-p`, `-f`) передаёт `_meta.codelab.sealOnClose: true` в `session/new`/`session/load` и объявляет `clientCapabilities._meta.codelab.jobBoard: true`; после итоговой строки закрывает соединение — сессия запечатывается (S-15, agent-core-architecture §8.5.1).
 
@@ -336,6 +363,9 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
 одобрения, коды выхода, формат stream-json v1 по §12.5 (схема в apps/codelab_cli/schema/), драйвер фикстур. Отдельно, если
 понадобится расширение ACP для статус-строки (usage) — свой change `add-usage-extension` после
 этапа 9 (§12.1.5).
+`tasks.md` — пары "тест → реализация" со ссылкой на критерий (§9.0, правило 3); PTY-e2e
+`cli/*` — приёмочные ворота этапа (исключение (б)), модульные тесты REPL, рендера и headless
+пишутся первыми.
 
 **Что прочитать.** Этот раздел; §9.10 (API kit); документ ядра §13 (правило «коды выхода — из
 событий»), §14; матрица целей, блоки «Headless» и «CLI/TUI»; `docs/architecture/permissions.md`.
@@ -343,7 +373,10 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
 **Definition of Done.**
 
 * `melos run build:cli` даёт `build/bin/codelab`.
-* `melos run test:e2e:cli` — все `cli/*` из задачи 6.10 зелёные против scripted stdio-агента.
+* `melos run test:e2e:cli` — все `cli/*` из задачи 6.10 зелёные против scripted stdio-агента на
+  macOS и Linux; `test/e2e/support/pty_process_test.dart` зелёный на обеих ОС.
+* `codelab -p hi` с пустым `CODELAB_HOME` (нет `profiles.json`) — код 64 и подсказка
+  `codelab profiles add default …`; агент не запускается.
 * `cli/headless-exit-codes`: ошибка провайдера → `1`, `session/cancel` по `--timeout` → `130`,
   неизвестный флаг → `64`, SIGTERM → `143`.
 * `cli/headless-stream-json-golden`: вывод совпадает с golden-файлом `test/e2e/golden/stream_json_basic.ndjson`.

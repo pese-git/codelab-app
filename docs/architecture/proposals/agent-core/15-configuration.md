@@ -648,6 +648,10 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | `CODELAB_HOME` | — | корень состояния |
 | `CODELAB_CONFIG` | `--config <path>` | дополнительный файл с приоритетом выше слоя 4; расширение `.yaml` или `.yml`, иначе ошибка использования (для `.toml` — с подсказкой `codelab config migrate <path>`, §15.7) |
 | `CODELAB_MODEL` | `--model <provider/model>` | `agent.default_model` |
+| — | `--provider <openai-compatible\|anthropic>` (с этапа 4) | провайдер из флагов с id `cli`: `providers.cli.kind`; с ним `--model <model>` — id модели этого провайдера (`agent.default_model = "cli/<model>"`), флаг можно повторять: первое значение — модель по умолчанию, все — модели `providers.cli.models` |
+| — | `--base-url <url>` (с этапа 4) | `providers.cli.base_url` |
+| `CODELAB_API_KEY` | — (с этапа 4) | ключ провайдера `cli`: `providers.cli.api_key_env = "CODELAB_API_KEY"`; значение в флаги и логи не попадает |
+| — | `--llm-script <file.json>` (с этапа 4, только тесты) | вместо провайдера — `ScriptedStreamFunction` из файла `{"llm": {...}}` формата §14.7; провайдер `scripted`, `--model` — его модели; в справке бинаря скрыт |
 | `CODELAB_PERMISSION_MODE` | `--permission-mode <mode>` | `permissions.mode` (`plan`, `ask`, `standard`, `accept-edits`, `bypass`); флаг допускает `autopilot` |
 | `CODELAB_PROFILE` | `--profile <name>` | профиль хоста (`agent-serve` у бинаря) |
 | `CODELAB_LOG_LEVEL` | `--log-level <level>` | `logging.level` |
@@ -669,6 +673,14 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` (после MVP, P-17) | лог каждого обращения к секретам без значений |
 | — | `--debug-llm-snapshot[=headers\|body]` (после MVP, L-27) | `logging.llm_snapshot` |
 | `CODELAB_DEBUG_LLM_SNAPSHOT` | — | `logging.llm_snapshot` |
+
+**До этапа 8 действуют только флаги и переменные этой таблицы.** Бинарь `codelab-agent` этапа 4
+файлы конфига (§15.2) не читает: провайдер, модель и ключ задаются `--provider`, `--base-url`,
+`--model` и `CODELAB_API_KEY`, режим — `--permission-mode`, остальные ключи — значения по
+умолчанию §15.4 (dart-agent-and-clients §9.9, задача 4.6). На этапе 8 YAML-конфиг (§15.2–§15.5)
+заменяет этот минимум, а флаги остаются переопределениями слоя 6. Флаги `--provider` и
+`--provider-type`/`--provider-config` (после MVP, §17.5.3) взаимоисключающие: оба сразу — ошибка
+использования.
 
 Других переменных `CODELAB_*` ядро не читает; неизвестная переменная с префиксом `CODELAB_`
 даёт предупреждение (опечатка не должна молча игнорироваться). Переменные семейства

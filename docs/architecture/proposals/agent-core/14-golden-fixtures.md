@@ -9,7 +9,8 @@
 Эталон поведения агента и клиентов — спецификация ACP. Корпус golden-фикстур закрепляет её
 прочтение в исполняемом виде: одна фикстура — один сценарий, упорядоченные кадры с
 направлением, ссылка на раздел спецификации. Один корпус проверяет и Dart-агента (драйвер
-играет роль клиента), и клиентов (драйвер играет роль агента). Каждая цель Must из матрицы
+играет роль клиента), и клиентов (драйвер играет роль агента); поле `roles` (§14.4) говорит, какие
+стороны проверяет фикстура. Каждая цель Must из матрицы
 паритета ссылается на id фикстуры.
 
 ## 14.2. Раскладка и именование
@@ -73,11 +74,11 @@ packages/dart/codelab_agent_core/
   фоновые команды — `acp/tool-exec-background-terminal`, `acp/tool-exec-background-local`,
   `acp/session-load-background-job`, `acp/jobs-board` (§17.9.16). Режим `accept-edits` —
   `acp/set-mode-accept-edits` (P-06, область `set-mode`, §7.11).
-* Корпус MVP по этапам (этап — когда фикстура входит в корпус; агентский прогон всех фикстур — с этапа 4, §14.9):
+* Корпус MVP по этапам (этап — когда фикстура входит в корпус; агентский прогон фикстур с ролью `agent` — с этапа 4, §14.9; клиентский прогон фикстур с ролью `client` — с этапа 0, §14.10). Итого к этапу 4 — 49 фикстур (12 + 37), к этапу 8 — 63 (+ 14):
   * этап 0 — ровно 12 фикстур с клиентским прогоном (dart-agent-and-clients §9.5): `acp/initialize-capabilities`, `acp/session-new-modes-config`, `acp/prompt-text-end-turn`, `acp/prompt-cancel-mid-tool`, `acp/prompt-tool-permission-allow`, `acp/prompt-tool-permission-reject-continues`, `acp/tool-status-lifecycle`, `acp/tool-read-range`, `acp/tool-exec-terminal-embed`, `acp/prompt-update-plan`, `acp/set-config-option-model`, `acp/errors-unknown-session-update-tolerated`;
-  * этап 4 — возможности этапов 1–4, проверяемые через ACP-адаптер: `acp/session-load-replay`, `acp/session-list-cwd-filter`, `acp/prompt-max-turn-requests`, `acp/prompt-failed-provider-auth`, `acp/errors-bad-frame-survives`, `acp/config-effort-option`, `acp/slash-help`, `acp/slash-mode-plan`, `acp/prompt-streaming-text`, `acp/prompt-thought-chunk`, `acp/prompt-anthropic-tool-call`, `acp/prompt-network-drop`, `acp/prompt-provider-error`, `acp/prompt-cancel-mid-stream`, `acp/prompt-usage-meta`, `acp/prompt-parallel-tool-calls`, `acp/prompt-turn-budget-exceeded`, `acp/prompt-cancel-during-terminal`, `acp/tool-write-permission-diff`, `acp/tool-edit-exact-replace`, `acp/tool-edit-ambiguous-match-error`, `acp/tool-list-dir`, `acp/tool-search-content`, `acp/tool-invalid-args-error`, `acp/tool-exec-terminal-env-array`, `acp/permission-allow-always-scoped`, `acp/permission-critical-pattern-in-bypass`, `acp/permission-options-all-four`, `acp/permission-outcome-cancelled`, `acp/set-mode-bypass-no-prompt`, `acp/set-mode-plan-rejects-edit`, `acp/set-mode-updates-current-mode`, `acp/session-info-title`, `acp/session-load-interrupted-turn`, `acp/compaction-long-session-continues`, `acp/multi-session-concurrent-prompts`, `acp/ws-auth-bearer-required`, `acp/stdio-framing-large-line`, `acp/usage-and-redact-commands`; вынос результата в файл (сам вынос — этап 3, §17.4; фикстуры — с ACP-адаптером) — `acp/tool-exec-spill`, `acp/agent-serve-spill-local-read`;
-  * этап 8 — MCP, конфигурация, команды: `acp/session-new-with-mcp`, `acp/mcp-stdio-tool-call`, `acp/mcp-http-tool-call`, `acp/mcp-tool-permission`, `acp/mcp-result-fenced`, `acp/mcp-prompt-command`, `acp/set-mode-plan-rejects-mcp-write`, `acp/available-commands-no-tools`, `acp/config-model-options-from-endpoint`, `acp/set-config-option-agent`, `acp/slash-compact`, `acp/prompt-template-command`.
-* После 9 (§17.10–§17.14) — ещё:
+  * этап 4 — ровно 37 фикстур, возможности этапов 1–4, проверяемые через ACP-адаптер (dart-agent-and-clients §9.9, задача 4.8): `acp/session-load-replay`, `acp/session-list-cwd-filter`, `acp/prompt-max-turn-requests`, `acp/prompt-failed-provider-auth`, `acp/errors-bad-frame-survives`, `acp/config-effort-option` (опция `effort` — часть `configOptions` этапа 4, §13.6), `acp/prompt-streaming-text`, `acp/prompt-thought-chunk`, `acp/prompt-anthropic-tool-call`, `acp/prompt-network-drop`, `acp/prompt-provider-error`, `acp/prompt-cancel-mid-stream`, `acp/prompt-parallel-tool-calls`, `acp/prompt-turn-budget-exceeded`, `acp/prompt-cancel-during-terminal`, `acp/tool-write-permission-diff`, `acp/tool-edit-exact-replace`, `acp/tool-edit-ambiguous-match-error`, `acp/tool-list-dir`, `acp/tool-search-content`, `acp/tool-invalid-args-error`, `acp/tool-exec-terminal-env-array`, `acp/permission-allow-always-scoped`, `acp/permission-critical-pattern-in-bypass`, `acp/permission-options-all-four`, `acp/permission-outcome-cancelled`, `acp/set-mode-bypass-no-prompt`, `acp/set-mode-plan-rejects-edit`, `acp/set-mode-updates-current-mode`, `acp/session-info-title`, `acp/session-load-interrupted-turn`, `acp/compaction-long-session-continues`, `acp/multi-session-concurrent-prompts`, `acp/ws-auth-bearer-required`, `acp/stdio-framing-large-line`; вынос результата в файл (сам вынос — этап 3, §17.4; фикстуры — с ACP-адаптером) — `acp/tool-exec-spill`, `acp/agent-serve-spill-local-read`. Встроенных slash-команд на этапе 4 нет (они — этап 8): `available_commands_update` после `session/new` уходит с `availableCommands: []`, и фикстуры этапов 0 и 4 сверяют этот список матчером `{"$any": true}`; состав списка проверяют фикстуры этапа 8. Фикстуры этапа 4, которые ожидают `_meta.codelab.outcome` (например, `acp/permission-outcome-cancelled`, `acp/session-load-interrupted-turn`), объявляют `"extensions": ["outcome"]` (FIX-4); так же `acp/prompt-max-turn-requests` — `"extensions": ["budgetExceeded"]`, `acp/prompt-failed-provider-auth` — `"extensions": ["errorData"]` (`data.codelab`, §13.8). Базовые фикстуры этапа 0 (`acp/prompt-cancel-mid-tool`, `acp/prompt-tool-permission-reject-continues`) `_meta.codelab` в ожидаемых кадрах не пишут: `_meta` сравнивается через `$partial` (§14.6), поэтому агент, который его добавляет, их проходит;
+  * этап 8 — ровно 14 фикстур, MCP, конфигурация, команды: `acp/slash-help`, `acp/slash-mode-plan` (встроенные slash-команды — этап 8), `acp/session-new-with-mcp`, `acp/mcp-stdio-tool-call`, `acp/mcp-http-tool-call`, `acp/mcp-tool-permission`, `acp/mcp-result-fenced`, `acp/mcp-prompt-command`, `acp/set-mode-plan-rejects-mcp-write`, `acp/available-commands-no-tools`, `acp/config-model-options-from-endpoint`, `acp/set-config-option-agent`, `acp/slash-compact`, `acp/prompt-template-command`.
+* После 9 — `acp/prompt-usage-meta` (`"extensions": ["usage"]`, OpenSpec `add-usage-extension`, §13.12, §16.3), `acp/usage-and-redact-commands` (команды `/usage` и `/redact` — после MVP, §13.4); из §17.10–§17.14 — ещё:
   * провайдеры (§17.10): `acp/authenticate-oauth`, `acp/slash-model-role`; сценарий CLI `cli/login-openrouter-pkce`;
     SSE-фикстуры адаптеров (не ACP, в тестах `codelab_agent_core`) — `gemini/stream-text-thought.sse`,
     `gemini/stream-function-call.sse`, `gemini/error-schema-400.json`, `kimi/think-tags.sse`,
@@ -126,19 +127,20 @@ packages/dart/codelab_agent_core/
 | `spec` | string[] | да, непустой | ссылки на разделы спецификации: `"05-Prompt Turn.md#5-tool-invocation-and-status-reporting"` (путь относительно `docs/acp/protocol/`) |
 | `description` | string | да | что проверяется, одним абзацем |
 | `goals` | string[] | нет | id целей паритета (`P-02`, `C-01`) |
-| `extensions` | string[] | нет | используемые расширения (§13.12) |
+| `extensions` | string[] | нет | используемые расширения (§13.12): имя — ключ после `codelab.` (`outcome`, `budgetExceeded`, `usage`, …), для `data.codelab` — `errorData` |
+| `roles` | string[] | нет, по умолчанию `["agent", "client"]` | какие проверки берут фикстуру: `agent` — conformance агента (§14.9), `client` — проверка клиента (§14.10). Только `client` — сценарии, которые агент не порождает (`acp/errors-unknown-session-update-tolerated`); только `agent` — сценарии, которые клиент не принимает от агента (`acp/errors-bad-frame-survives`: мусор шлёт клиент) |
 | `setup` | object | да | начальные условия (ниже) |
 | `llm` | object | нет | scripted-модель для conformance агента (§14.7); клиентская проверка его игнорирует |
 | `frames` | array | да | упорядоченные кадры (ниже) |
 | `normalize` | object | нет | дополнительные правила нормализации сверх стандартных (§14.5) |
-| `after` | object | нет | состояние после сценария: `files` — ожидаемое содержимое файлов env (только для агента) |
+| `after` | object | нет | состояние после сценария: `files` — ожидаемое содержимое файлов рабочей папки; агентская проверка сверяет его с последним `content` кадра `fs/write_text_file` на этот путь, клиентская — с файловой системой клиента |
 
 `setup`:
 
 | Поле | Смысл |
 |---|---|
 | `cwd` | рабочая папка сценария; в кадрах пишется как `${cwd}` |
-| `files` | `{ "относительный путь": "содержимое" }` — файлы до начала (для агента — в `MemoryExecutionEnv` или во временном каталоге) |
+| `files` | `{ "относительный путь": "содержимое" }` — файлы рабочей папки до начала. Клиентская проверка кладёт их в файловую систему клиента. Агентская проверка создаёт их во временном каталоге `cwd` (нужен локальному листингу `ls`/`search`, §10.4), но содержимое агент получает только кадрами `fs/read_text_file`, ответы на которые записаны в фикстуре; загрузчик проверяет, что такой ответ совпадает с `files` (с учётом `line`/`limit`) |
 | `profile` | профиль агента (`agent-serve` по умолчанию) |
 | `mode` | режим сессии на старте (`standard` по умолчанию) |
 | `config` | фрагмент конфига (§15) в виде JSON-объекта с той же структурой, что дерево YAML после разбора |
@@ -157,6 +159,16 @@ packages/dart/codelab_agent_core/
 | `optional` | `true` — кадр может отсутствовать (например, `agent_thought_chunk` у модели без рассуждений) |
 | `repeat` | `"+"` — кадр повторяется один или более раз подряд (дельты текста); проверяется склейка `text` (§14.6) |
 | `match` | проверка склейки для `repeat`: `{"$text": "…"}` — конкатенация `content.text` всех повторов |
+
+`_schema.json` описывает эти поля (JSON Schema draft 2020-12, `additionalProperties: false` на
+верхнем уровне, в `setup` и в кадре). Поле `roles`:
+
+```json
+"roles": {"type": "array", "items": {"enum": ["agent", "client"]}, "minItems": 1, "uniqueItems": true, "default": ["agent", "client"]}
+```
+
+Фикстура, в которой есть кадры `fs/*` или `terminal/*`, — обычная фикстура обеих ролей: агент
+обязан отправить эти запросы, клиент — ответить на них (§14.9, §14.10).
 
 ## 14.5. Нормализация
 
@@ -227,8 +239,20 @@ packages/dart/codelab_agent_core/
 | `waitForCancel` | `true` — шаг не отвечает, пока токен не отменён, затем `ErrorEvent(aborted)` |
 | `usage` | usage ответа |
 
-Шагов в запросах должно быть ровно столько, сколько в `steps`: лишний запрос к модели или
-неиспользованный шаг — провал фикстуры.
+Шаги отдаются строго по порядку: n-й запрос к модели получает n-й шаг, выбора шага по условию
+нет. `expect` — утверждение о запросе, а не условие: несовпадение — провал (в тесте — исключение
+с diff ожидаемого и фактического запроса; в бинаре с `--llm-script` — `ErrorEvent` класса
+`badRequest` с текстом расхождения, ход завершается `failed`). Шагов в запросах должно быть ровно
+столько, сколько в `steps`: лишний запрос к модели или неиспользованный шаг — провал фикстуры
+(бинарь неиспользованные шаги не проверяет; лишний запрос — `ErrorEvent(badRequest)`).
+
+В строках `text` и `thinking` блока `reply` допустимы переменные `${cwd}` и `${sessionId}`
+(§14.5): `ScriptedStreamFunction` подставляет `cwd` и id сессии запроса. Так интеграционные тесты
+клиентов получают ответ, зависящий от сессии, без логики в сценарии.
+
+Тот же блок — формат файла сценария для бинаря: `codelab-agent serve --stdio --llm-script <файл>`
+читает JSON-объект `{"llm": {...}}` с полями этого раздела (dart-agent-and-clients §9.9, задача
+4.6). `llm.model` необязателен: без него модель берётся из `--model`, иначе `scripted/scripted-1`.
 
 ## 14.8. Пример: `acp/prompt-tool-permission-allow`
 
@@ -238,10 +262,13 @@ packages/dart/codelab_agent_core/
   "spec": [
     "05-Prompt Turn.md#5-tool-invocation-and-status-reporting",
     "08-Tool Calls.md#requesting-permission",
-    "05-Prompt Turn.md#4-check-for-completion"
+    "05-Prompt Turn.md#4-check-for-completion",
+    "09-File System.md#reading-files",
+    "09-File System.md#writing-files"
   ],
-  "description": "Модель правит файл; агент сообщает tool_call, запрашивает разрешение с rawInput, locations и diff, после allow_once исполняет правку, отправляет in_progress и completed с diff, продолжает ход и отвечает end_turn после всех уведомлений.",
+  "description": "Модель правит файл; агент читает его через fs/read_text_file, сообщает tool_call, запрашивает разрешение с rawInput, locations и diff, после allow_once перечитывает файл и пишет его через fs/write_text_file, отправляет in_progress и completed с diff, продолжает ход и отвечает end_turn после всех уведомлений.",
   "goals": ["P-01", "P-02", "C-01"],
+  "roles": ["agent", "client"],
   "setup": {
     "cwd": "/work/demo",
     "files": {"README.md": "# foo\n"},
@@ -272,6 +299,10 @@ packages/dart/codelab_agent_core/
     {"dir": "a2c", "repeat": "+", "frame": {"jsonrpc": "2.0", "method": "session/update",
       "params": {"sessionId": "${sessionId}", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": {"$any": true}}}}},
       "match": {"$text": "Заменю слово."}},
+    {"dir": "a2c", "note": "present() строит diff для запроса разрешения: файл читается через клиента",
+      "frame": {"jsonrpc": "2.0", "id": {"$capture": "read1"}, "method": "fs/read_text_file",
+      "params": {"sessionId": "${sessionId}", "path": "${cwd}/README.md"}}},
+    {"dir": "c2a", "frame": {"jsonrpc": "2.0", "id": "${read1}", "result": {"content": "# foo\n"}}},
     {"dir": "a2c", "frame": {"jsonrpc": "2.0", "method": "session/update",
       "params": {"sessionId": "${sessionId}", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_1",
         "title": {"$contains": "README.md"}, "kind": "edit", "status": "pending",
@@ -293,6 +324,13 @@ packages/dart/codelab_agent_core/
       "result": {"outcome": {"outcome": "selected", "optionId": "${allowOnce}"}}}},
     {"dir": "a2c", "frame": {"jsonrpc": "2.0", "method": "session/update",
       "params": {"sessionId": "${sessionId}", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_1", "status": "in_progress"}}}},
+    {"dir": "a2c", "note": "edit перечитывает файл под блокировкой пути (§6.4)",
+      "frame": {"jsonrpc": "2.0", "id": {"$capture": "read2"}, "method": "fs/read_text_file",
+      "params": {"sessionId": "${sessionId}", "path": "${cwd}/README.md"}}},
+    {"dir": "c2a", "frame": {"jsonrpc": "2.0", "id": "${read2}", "result": {"content": "# foo\n"}}},
+    {"dir": "a2c", "frame": {"jsonrpc": "2.0", "id": {"$capture": "write1"}, "method": "fs/write_text_file",
+      "params": {"sessionId": "${sessionId}", "path": "${cwd}/README.md", "content": "# bar\n"}}},
+    {"dir": "c2a", "frame": {"jsonrpc": "2.0", "id": "${write1}", "result": null}},
     {"dir": "a2c", "frame": {"jsonrpc": "2.0", "method": "session/update",
       "params": {"sessionId": "${sessionId}", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_1", "status": "completed",
         "content": [
@@ -310,41 +348,64 @@ packages/dart/codelab_agent_core/
 }
 ```
 
-`after.files` — проверка состояния env после сценария (только для агента).
+`after.files` — проверка состояния файлов после сценария: у агента — по последнему кадру
+`fs/write_text_file` на путь, у клиента — по его файловой системе. Кадры `fs/*` в фикстуре
+— не подробность реализации, а часть контракта `agent-serve`: файлы читаются и пишутся через
+клиента (§4.7, §10.4).
 
 ## 14.9. Алгоритм: conformance агента
 
+Агентская проверка запускает агента так же, как его видит настоящий клиент: профиль
+`agent-serve`, транспорт в памяти, файлы и команды — через ACP (`AcpClientExecutionEnv`, §4.7).
+Поэтому кадры `fs/*` и `terminal/*` — часть фикстуры, а ответы клиента на них берутся из её
+кадров `c2a`. `MemoryExecutionEnv` здесь не используется: он — env тестов ядра `core/*` через
+прямой API, без ACP. Драйвер `agent_conformance.dart` не зависит от пакетов агента: тест
+`codelab_agent_acp/test/conformance_test.dart` передаёт ему фабрику, которая по `fx.setup`
+поднимает `AcpAgentServer` на агентском конце `InProcessAcpLink`.
+
 ```text
-runAgentFixture(fx):
+runAgentFixture(fx, startAgent):
 1. загрузить и провалидировать фикстуру по _schema.json; id == путь; spec не пуст;
    неполная фикстура → громкий провал загрузчика, а не пропуск
-2. env := MemoryExecutionEnv(cwd: fx.setup.cwd, files: fx.setup.files)
-   (для профилей с shellExec — LocalExecutionEnv во временном каталоге)
+   fx.roles не содержит "agent" → фикстура в этом прогоне не участвует (строка в отчёте, не провал)
+2. cwd := временный каталог; записать в него fx.setup.files — только для локального листинга
+   ls/search (fileListing transport local, §10.4); содержимое файлов агент получает кадрами fs/*
 3. stream := ScriptedStreamFunction(fx.llm); clock := FakeClock; ids := SequentialIdGenerator
-4. core := buildAgentCore(profile: HostProfile.of(fx.setup.profile),
-          services: AgentCoreServices(baseEnv: env, sessions: MemorySessionStore, clock, ids, ...),
-          config: defaults + fx.setup.config, streamFunction: stream)   (§10.3)
-5. link := InProcessAcpLink() (копирование сообщений, §13.11); client := link.client;
-   server.serve(link.agent)
+4. link := InProcessAcpLink() (копирование сообщений, §13.11; на этапе 4 — тестовая копия из
+   contract test, dart-agent-and-clients §9.9, задача 4.7); client := link.client
+5. startAgent(link.agent, AgentFixtureSetup(profile: fx.setup.profile ?? "agent-serve", cwd,
+          config: defaults + fx.setup.config, streamFunction: stream, clock, ids)):
+     core := buildAgentCore(profile: HostProfile.of(profile),
+          services: AgentCoreServices(sessions: MemorySessionStore, clock, ids, ...),
+          config, streamFunction: stream)                                        (§10.7)
+     server := AcpAgentServer(core, localListing: (root) => LocalExecutionEnv(root))  // как бинарь по stdio
+     server.serve(link.agent)
+   env сессии создаёт сервер по clientCapabilities из initialize: BoundedEnv над
+   ListingOverlayEnv(AcpClientExecutionEnv, localListing) (§4.7, §10.4); gate — AcpPermissionGate
 6. если не skipInitialize: отправить initialize с setup.clientCapabilities, session/new;
    проверить ответы по фикстуре-шаблону acp/initialize-capabilities; vars.sessionId := ответ
 7. для каждого кадра f в fx.frames по порядку:
-   c2a → подставить vars, отправить client.send(frame)
+   c2a → подставить vars, отправить client.send(frame); это и промпты, и ответы клиента на
+         запросы агента (fs/*, terminal/*, session/request_permission)
    a2c → получить следующий кадр client.inbound (таймаут 5 с по реальным часам);
          нормализовать (§14.5); сравнить (§14.6); repeat "+": читать, пока кадры совпадают
          с шаблоном, затем проверить $text; optional: при несовпадении не потреблять кадр
          и перейти к следующему ожидаемому; unordered: собрать N кадров, найти паросочетание
          расхождение → провал с diff ожидаемого и фактического кадра и индексом f
-8. тишина: 200 мс без новых кадров (лишний кадр — провал)
+8. тишина: 200 мс без новых кадров (лишний кадр — провал; лишний запрос fs/* или terminal/* —
+   тоже провал: агент сделал больше, чем закреплено)
 9. ScriptedStreamFunction: все шаги использованы, лишних запросов не было
-10. после: env.files ⊇ fx.after.files
+10. после: для каждого пути из fx.after.files — content последнего кадра fs/write_text_file
+    на ${cwd}/<путь> равен ожидаемому
 ```
 
 ## 14.10. Алгоритм: проверка клиента
 
 ```text
 runClientFixture(fx, clientFactory):
-1. загрузка как в 14.9, блок llm игнорируется
+1. загрузка как в 14.9, блок llm игнорируется; fx.roles не содержит "client" → фикстура в
+   этом прогоне не участвует; fx.setup.files — файловая система клиента (fake fs-порт или
+   временный каталог)
 2. transport := FakeAcpTransport(autoRespondToInitialize: false); client := clientFactory(transport)
    (AcpClientApplication или ClientWorkspace из acp_client_kit; в UI-тестах — app целиком)
 3. для каждого кадра f по порядку (роли зеркальны):
@@ -365,9 +426,9 @@ runClientFixture(fx, clientFactory):
 ## 14.11. Инварианты корпуса
 
 1. **FIX-1.** У каждой фикстуры есть непустой `spec`, и каждая ссылка указывает на существующий файл `docs/acp/protocol/` (тест загрузчика).
-2. **FIX-2.** Каждый вид `sessionUpdate` из `acp_protocol` и каждый метод из `acp_method_codec.dart` встречается хотя бы в одной фикстуре (тест покрытия).
+2. **FIX-2.** Каждый вид `sessionUpdate` из `acp_protocol` и каждый метод из `acp_method_codec.dart`, включая запросы агента `fs/*`, `terminal/*` и `session/request_permission`, встречается хотя бы в одной фикстуре с ролью `agent` и хотя бы в одной с ролью `client` (тест покрытия; вид, который агент не порождает, — только в `client`). `available_commands_update` закрывает `acp/session-new-modes-config` (этап 0, список — `$any`).
 3. **FIX-3.** Каждая цель Must матрицы паритета с ACP-проявлением ссылается на существующий id фикстуры.
-4. **FIX-4.** Фикстуры без `extensions` не содержат `_meta.codelab`, `data.codelab` и методов `_codelab/*`.
+4. **FIX-4.** Фикстуры без `extensions` не содержат `_meta.codelab`, `data.codelab` и методов `_codelab/*`. Фикстура, ожидающая `_meta.codelab.outcome`, объявляет `"extensions": ["outcome"]` (§14.2, этап 4); агент шлёт `outcome` всегда, а фикстуры без расширения его не проверяют (`_meta` — `$partial`, §14.6).
 
 ## 14.12. Обоснование решения
 
@@ -384,7 +445,7 @@ runClientFixture(fx, clientFactory):
 * `acp_testing/test/fixtures_load_test.dart`: все фикстуры проходят схему, FIX-1, FIX-4.
 * `acp_testing/test/fixtures_coverage_test.dart`: FIX-2, FIX-3.
 * `codelab_agent_acp/test/conformance_test.dart`: `runAgentFixture` на каждой фикстуре.
-* Тесты codelab-app и `acp_client_kit`: `runClientFixture` на фикстурах, относящихся к клиенту.
+* Тесты codelab-app и `acp_client_kit`: `runClientFixture` на фикстурах с ролью `client`.
 * Тест самого матчера: мутации кадра (лишний ключ, другой статус, другой порядок) дают провал с понятным diff.
 
 ---
