@@ -31,8 +31,15 @@
    запись в один путь при параллельных вызовах).
 6. **2.6. Встроенные инструменты:** `lib/src/tools/builtin/read.dart`, `write.dart`,
    `edit.dart` (точное совпадение фрагмента, ошибка при нуле или нескольких совпадениях),
-   `ls.dart`, `search.dart`, `exec.dart`, `update_plan.dart`. Имена
-   инструментов фиксируются в `design.md` change (открытый вопрос документа ядра).
+   `ls.dart`, `search.dart`, `exec.dart`, `update_plan.dart`. Имена инструментов решены
+   (agent-core-architecture §16.2): `read`, `write`, `edit`, `ls`, `search`, `exec`, `update_plan`;
+   `design.md` change только ссылается на решение. В MVP ни один встроенный инструмент не
+   переопределяет `preflight`, проверки `redact.block` нет (она — после MVP, §6.3.1 шаг 3a,
+   §17.12.7). `ls` и `search` требуют `DirectoryListing`: здесь они работают на
+   `MemoryExecutionEnv` и `LocalExecutionEnv`; в `agent-serve` по stdio — на
+   `ListingOverlayEnv` (`lib/src/env/listing_overlay_env.dart`: `listDir` — от локального env,
+   чтение, запись и `exec` — от `AcpClientExecutionEnv`; agent-core-architecture §4.7, §10.4),
+   который появляется в задаче 4.3.
 7. **2.7. Разрешения:** `lib/src/permissions/gate.dart` (порт),
    `policy.dart` (первый хук `beforeToolCall`), `pattern.dart` (ключ
    «инструмент + шаблон аргументов»), `shell_lexer.dart`, `critical_patterns.dart`, `modes.dart`. Тест
@@ -53,7 +60,8 @@
 
 **OpenSpec change.** `add-agent-core-loop-and-tools` (задачи 2.1–2.6, 2.8–2.10) и
 `add-agent-core-permission-policy` (задача 2.7; scope: уровни и режимы, ключ «разрешить
-всегда», критические шаблоны, режим по умолчанию для каждого профиля хоста).
+всегда», критические шаблоны, режим по умолчанию для каждого профиля хоста). `tasks.md` — пары
+«тест → реализация» со ссылкой на критерий (§9.0, правило 3).
 
 **Что прочитать.** Документ ядра §4, §5, §6, §7, §10, §11.
 

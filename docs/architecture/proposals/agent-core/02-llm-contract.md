@@ -963,6 +963,11 @@ usage сессии суммирует их отдельно (§12.6.1).
 рассуждение). Источники: конфиг, endpoint провайдера `/models`, удалённый каталог метаданных,
 встроенный каталог.
 
+Этапы: порт, `StaticModelCatalog` и источники без сети (конфиг или флаги бинаря, встроенный
+каталог, безопасные значения) — этап 1 (dart-agent-and-clients §9.6, задача 1.12), их используют
+`buildAgentCore` (§10.7, шаг 3) и опции `model`/`effort` этапа 4; endpoint `/models`, удалённый
+каталог, кэш на диске и фоновое `refresh()` — этап 8 (L-15).
+
 ```dart
 extension type const ModelId(String value) {     // "<provider>/<model>"; model может содержать '/'
   String get provider => value.substring(0, value.indexOf('/'));

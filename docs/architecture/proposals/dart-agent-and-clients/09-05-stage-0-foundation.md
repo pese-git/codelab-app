@@ -18,7 +18,12 @@
    (`StdioAcpTransportConfig`, `StdioAcpAgentProfile`, `WebSocketAcpTransportConfig`) перенести в
    новый файл `lib/src/transport_configs.dart` без `dart:io` и экспортировать из основного бареля.
    Обновить импорты в `apps/codelab_app` (`shell_cubit.dart`, `app_scope.dart`), `acp_testing` и
-   тестах. Изменение публичного API → OpenSpec.
+   тестах. Классы конфигурации объявлены через `freezed` (сейчас — в `stdio_acp_transport.dart` и
+   `websocket_acp_transport.dart` с `part '*.freezed.dart'`): после переноса сгенерированный код
+   пересобирается — `fvm dart run build_runner build --delete-conflicting-outputs` в
+   `packages/dart/acp_transports` (появляется `lib/src/transport_configs.freezed.dart`, старые
+   `*.freezed.dart` теряют перенесённые классы); сгенерированные файлы коммитятся, как сейчас.
+   Изменение публичного API → OpenSpec.
 3. **0.3. Создать пакет `packages/dart/codelab_agent_core`** с `pubspec.yaml` по скелету ниже,
    `lib/codelab_agent_core.dart` (пока только `const codelabAgentCorePackageName`) и
    `test/web_smoke/main.dart`, который импортирует барель и печатает имя пакета. Добавить пакет в
@@ -35,9 +40,13 @@
 7. **0.7. Корпус фикстур.** Создать `packages/dart/acp_testing/fixtures/acp/` (файлы плоско,
    `<id>.json`, раскладка — agent-core-architecture §14.2) и в `packages/dart/acp_testing/lib/src/fixtures/`:
    `fixture.dart` (модель фикстуры и загрузчик, громко падает на неполной фикстуре), `matcher.dart`
-   (сравнение с нормализацией: id запросов, время, абсолютные пути → плейсхолдеры),
-   `agent_conformance.dart` (драйвер для агента) и `client_conformance.dart` (проигрывает кадры
-   агента в `FakeAcpTransport` и сверяет ответы клиента). Первые 12 фикстур: `acp/initialize-capabilities` (R-01), `acp/session-new-modes-config`,
+   (сравнение с нормализацией: id запросов, время, абсолютные пути → плейсхолдеры) и
+   `client_conformance.dart` (проигрывает кадры агента в `FakeAcpTransport` и сверяет ответы
+   клиента). На этапе 0 — только клиентский драйвер: агента ещё нет, драйвер агентской проверки
+   `agent_conformance.dart` создаётся в задаче 4.8 (§9.9). Модель фикстуры сразу знает поле
+   `roles` (agent-core-architecture §14.4; по умолчанию `["agent", "client"]`), а кадры `fs/*` и
+   `terminal/*` в фикстурах — часть сценария (§14.9): клиентский драйвер отвечает на них из
+   `setup.files` через fake-порты клиента. Первые 12 фикстур: `acp/initialize-capabilities` (R-01), `acp/session-new-modes-config`,
    `acp/prompt-text-end-turn`, `acp/prompt-cancel-mid-tool`, `acp/prompt-tool-permission-allow` (P-02),
    `acp/prompt-tool-permission-reject-continues` (P-04), `acp/tool-status-lifecycle`,
    `acp/tool-read-range` (T-01), `acp/tool-exec-terminal-embed` (T-08), `acp/prompt-update-plan` (C-05),
@@ -46,19 +55,29 @@
    для корпуса. Каждая ссылается на раздел `docs/acp/protocol/*`.
 8. **0.8. Клиентский прогон корпуса**:
    `packages/dart/acp_client_core/test/fixtures/client_fixture_conformance_test.dart` — для каждой
-   фикстуры с ролью «проверка клиента» поднимает `AcpClientApplication` на `FakeAcpTransport` и
+   фикстуры, у которой `roles` содержит `client`, поднимает `AcpClientApplication` на `FakeAcpTransport` и
    проверяет ответы и итоговое состояние сессии.
 9. **0.9. Лицензия.** Лицензия — MIT (§11); добавить в корень `LICENSE` (текст MIT с правообладателем репозитория),
    `THIRD_PARTY_NOTICES.md` (заголовок и пустой список с форматом записи из §7а) и раздел о
    лицензиях в `README`.
 10. **0.10. Незавершённые OpenSpec changes Python-агента** (`context-manager-implementation`,
-    `session-hot-cold-split` и другие): по каждому — «закрыть» или «перенести в backlog
-    Dart-агента», список фиксируется в `proposal.md` change этапа 0.
+    `session-hot-cold-split` и другие — каталог `../codelab-agent/openspec/changes/` соседнего
+    репозитория `codelab-agent`, путь от корня `codelab-app`): по каждому — «закрыть» или
+    «перенести в backlog Dart-агента», список фиксируется в `proposal.md` change этапа 0.
+11. **0.11. `AGENTS.md`: правила агентских пакетов и TDD.** В корневом `AGENTS.md` — раздел §5
+    (структура monorepo) дополняется агентскими пакетами и ссылкой на
+    [документ ядра](../agent-core-architecture.md) как источник архитектуры агента, правилом
+    стороннего кода §7а. Вложенные `AGENTS.md` в `packages/dart/codelab_agent_*`, созданных на этом
+    этапе (`codelab_agent_core`): правила ядра PKG-1…PKG-6 (agent-core-architecture §1), сторож
+    импортов (задача 0.4), TDD по §9.0, правило 3 (красный тест из критерия матрицы → минимальный
+    код → рефакторинг). Новые пакеты следующих этапов получают вложенный `AGENTS.md` в своём
+    этапе; задача 9.7 дописывает корневой `AGENTS.md` окончательно, а не создаёт его.
 
-**OpenSpec change.** `add-workspace-ci-and-architecture-guards` (задачи 0.1–0.6, 0.9; scope:
-CI, сторож, разделение `acp_transports` как изменение публичного API пакета) и
-`add-acp-golden-fixture-corpus` (задачи 0.7–0.8; scope: формат и корпус фикстур, правила их
-изменения).
+**OpenSpec change.** `add-workspace-ci-and-architecture-guards` (задачи 0.1–0.6, 0.9, 0.11; scope:
+CI, сторож, разделение `acp_transports` как изменение публичного API пакета, правила
+`AGENTS.md` для агентских пакетов и TDD) и `add-acp-golden-fixture-corpus` (задачи 0.7–0.8;
+scope: формат и корпус фикстур с полем `roles`, клиентский драйвер, правила изменения фикстур).
+`tasks.md` — пары «тест → реализация» со ссылкой на критерий (§9.0, правило 3).
 
 **Что прочитать.** Документ ядра §1 (пакеты и инварианты PKG-1…PKG-6), §14 (формат фикстур);
 `docs/architecture/testing.md` §6, §12, §15; `docs/architecture/layers-and-dependencies.md`.
@@ -71,7 +90,10 @@ CI, сторож, разделение `acp_transports` как изменени�
   нарушение ловится.
 * `fvm dart compile js packages/dart/codelab_agent_core/test/web_smoke/main.dart -o build/web_smoke/core.js`
   и `fvm dart compile wasm ... -o build/web_smoke/core.wasm` проходят.
-* `fvm dart test packages/dart/acp_client_core/test/fixtures` проходит на 12 фикстурах.
+* `fvm dart test packages/dart/acp_client_core/test/fixtures` проходит на 12 фикстурах
+  (клиентский драйвер; агентского драйвера на этапе 0 нет — задача 4.8).
+* Корневой `AGENTS.md` §5 ссылается на документ ядра; `packages/dart/codelab_agent_core/AGENTS.md`
+  есть и перечисляет PKG-1…PKG-6, сторож импортов и правило TDD (задача 0.11).
 * `grep -rn "dart:io" packages/dart/acp_transports/lib/acp_transports.dart packages/dart/acp_transports/lib/src/transport_configs.dart` — пусто.
 * 8 интеграционных тестов app проходят (`melos run test:e2e:app:stdio` и остальные).
 
@@ -96,9 +118,11 @@ CI, сторож, разделение `acp_transports` как изменени�
     build:agent: fvm dart compile exe apps/codelab_agent/bin/codelab_agent.dart -o build/bin/codelab-agent  # этап 4
     build:cli: fvm dart compile exe apps/codelab_cli/bin/codelab.dart -o build/bin/codelab              # этап 6
     test:e2e:cli: fvm dart test apps/codelab_cli/test/e2e                                              # этап 6
-    test:e2e:app:dart-agent: >-                                                                        # этап 4
+    test:e2e:app:dart-agent: >-                                                                        # этап 4, контракт — §9.9, задача 4.9
+      fvm dart run melos run build:agent &&
       fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test -d macos
-      --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart --dart-define=CODELAB_E2E_AGENT=dart-stdio"
+      --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=dart
+      --dart-define=CODELAB_E2E_AGENT_BIN=../../build/bin/codelab-agent"
     test:e2e:app:embedded: >-                                                                          # этап 7
       fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test -d macos
       --dart-define=CODELAB_E2E_AGENT=embedded --dart-define=CODELAB_ALLOW_SCRIPTED_LLM=true"

@@ -98,13 +98,15 @@ packages/dart/codelab_agent_core/
                                    после MVP — SseDecoder и ServerSentEvent (§2.6) для codelab_agent_a2a
   lib/testing.dart                 только для тестов: ScriptedStreamFunction, FakeClock, … (§14.2)
   lib/src/
-    util/      clock.dart ids.dart canonical_json.dart posix_path.dart result.dart
+    util/      clock.dart ids.dart logger.dart canonical_json.dart posix_path.dart result.dart
     llm/       messages.dart model_ref.dart events.dart event_stream.dart stream_function.dart
                errors.dart sse.dart stream_state.dart usage.dart overflow.dart
+               model_catalog.dart builtin_models.dart (§2.12.2)
                decorators/ watchdog.dart retry.dart fallback.dart
                providers/  openai_compatible.dart anthropic.dart provider_factory.dart
     cancel/    cancel_token.dart
     env/       execution_env.dart bounded_env.dart env_vars_env.dart memory_env.dart
+               listing_overlay_env.dart (ListingOverlayEnv: listDir — от второго env, §10.4)
                process_port.dart (после MVP: ByteProcessLauncher, §4.2, §17.8.2)
     loop/      agent_loop.dart agent.dart agent_events.dart loop_config.dart turn_budget.dart
                payload_builder.dart
@@ -122,7 +124,8 @@ packages/dart/codelab_agent_core/
     config/    core_config.dart config_tree.dart validate.dart (CoreConfig.fromLayers, §15)
     prompts/   prompts.g.dart compose.dart template.dart
     runtime/   agent_runtime.dart agent_session.dart
-    testing/   scripted_stream_function.dart fake_clock.dart (экспорт только через lib/testing.dart)
+    testing/   scripted_stream_function.dart fake_clock.dart sequential_id_generator.dart
+               (экспорт только через lib/testing.dart)
 
 packages/dart/codelab_agent_io/
   lib/codelab_agent_io.dart

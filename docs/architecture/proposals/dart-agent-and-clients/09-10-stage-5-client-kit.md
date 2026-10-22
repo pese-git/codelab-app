@@ -9,18 +9,59 @@
 Этот же слой затем использует codelab_cli.
 
 **Подход — «душитель» (strangler).** Интеграционные тесты app читают
-`codeLabDependenciesOf(...).shellCubit.state` и ищут виджеты по ключам. Поэтому этап идёт в два
-шага: сначала публичный API и `CodeLabShellState` сохраняются, а реализация методов переносится в
-kit (каждая задача — отдельный PR под защитой 8 тестов). Разделение на несколько Cubit-ов
-(`ConnectionCubit`, `SessionsCubit`, `ActiveSessionCubit`, `SettingsCubit`, `LayoutCubit`) — после
-переноса логики, отдельной задачей 5.9, с обновлением тестов.
+`codeLabDependenciesOf(...).shellCubit.state` и ищут виджеты по ключам. Поэтому сначала
+поведение фиксируется характеризационными тестами (задача 5.0), затем реализация методов
+переносится в kit (каждая задача — отдельный PR под защитой 8 интеграционных тестов и тестов 5.0).
+Разделение на несколько Cubit-ов (`ConnectionCubit`, `SessionsCubit`, `ActiveSessionCubit`,
+`SettingsCubit`, `LayoutCubit`) — после переноса логики, задачей 5.9.
+
+**Что остаётся неизменным.** Этап меняет код app (перенос логики в kit), но сохраняет публичную
+поверхность `CodeLabShellCubit`: публичные методы, поля `CodeLabShellState`, которые читают тесты
+и виджеты (`connectionStatus`, `sessions`, `activeSessionId`, `transcriptEntries`,
+`isPromptSubmitting`, `canCancel`, `isRespondingToConfigOption`), ключи виджетов и доступ
+`codeLabDependenciesOf(...).shellCubit`. Поэтому тексты 8 интеграционных тестов и тестов 5.0 на
+этапе 5 не меняются — ни при переносе (5.1–5.8), ни при разделении (5.9: `CodeLabShellCubit`
+остаётся фасадом, который собирает `CodeLabShellState` из новых Cubit-ов). Перевод тестов на новые
+Cubit-ы и удаление фасада — после этапа 9, отдельным change. Это же условие — «без изменений кода
+app» для контракта e2e этапа 4 (D6, задача 4.9): параметризация тестов по
+`CODELAB_E2E_AGENT` — работа этапа 4, этап 5 её не трогает.
 
 **Задачи.**
 
+0. **5.0. Характеризационные тесты `CodeLabShellCubit`** (исключение (а) правила TDD §9.0 п.3:
+   рефакторинг существующего кода начинается с тестов на текущее поведение, а не с красного
+   теста). Делается до первого переноса, отдельным PR, код app не меняется. Тесты проверяют только
+   публичную поверхность (методы и поля `CodeLabShellState`), а не приватные методы — поэтому
+   переживают перенос в kit без правок. Cubit создаётся через настоящий граф cherrypick:
+   `CodeLabTestBinding` (`apps/codelab_app/test/support/test_app_scope.dart`) вызывает
+   `createCodeLabRootScope` с `FakeAcpTransport` из `acp_testing`, а `CodeLabShellCubit`
+   разрешается из привязки `bind<CodeLabShellCubit>()` в `lib/app/app_scope.dart` (~строка 244).
+   Так тесты закрывают и проводку DI: на этапе 5 меняются аргументы этой привязки (`ClientWorkspace`
+   вместо use case-ов), и тесты должны остаться зелёными. Инструмент — `flutter_test`
+   (`expectLater(cubit.stream, emitsInOrder(...))`); `bloc_test` сейчас нет в `dev_dependencies`,
+   его добавление — решение в `design.md` change. Файлы в
+   `apps/codelab_app/test/features/workbench/application/shell_cubit_characterization/`:
+
+   | Файл | Что утверждает |
+   |---|---|
+   | `connection_test.dart` | `connect()`: `connectionStatus` проходит `connecting` → `connected`; сбой транспорта (закрытие `FakeAcpTransport`) → `failed` с сообщением после редакции секретов; `close()` отписывается, поздние события не вызывают `emit` |
+   | `sessions_test.dart` | `createSession()`: `session/new` с `cwd` выбранного проекта, новая сессия в `sessions` и активна; `selectSession(id)`: меняется `activeSessionId`, флаги `isPromptSubmitting`/`canCancel` пересчитываются по статусу выбранной сессии; очередь промптов у каждой сессии своя |
+   | `prompt_test.dart` | `submitPrompt()`: во время хода `isPromptSubmitting == true` и `canCancel == true` (в том числе при ожидании одобрения), после `stopReason` — оба `false`; промпт во время хода попадает в очередь; `editQueuedPrompt`, `deleteQueuedPrompt`, `sendQueuedPromptNow` (отмена хода и отправка), `clearQueuedPrompts`; очередь сливается после конца хода |
+   | `cancel_test.dart` | `cancelTurn()`: уходит `session/cancel`, ход завершается `stopReason: cancelled`, `canCancel` и `isPromptSubmitting` становятся `false` только по событию сессии (а не сразу после вызова); после отмены очередь сливается; без активной сессии — диагностика и ни одного запроса |
+   | `config_option_test.dart` | `setSessionConfigOption()`: `isRespondingToConfigOption == true` на время запроса и `false` после успеха и после ошибки; второй вызов во время запроса игнорируется; `configOptions` берутся из следующего `sessionChanges`, а не выставляются заранее |
+   | `permission_test.dart` | запрос `session/request_permission` даёт запись с ожидающим одобрением в `transcriptEntries`, привязанную к `toolCallId`; `respondToApproval` отправляет выбранный `optionId`; ответ в одной сессии не меняет другую (как в `multi_session_concurrency_flow_test`) |
+   | `reconnect_test.dart` | `reconnect()` увеличивает `AcpClientApplication.generation`; поздние `session/update` старого поколения не меняют `CodeLabShellState`; подписки не дублируются (одно событие — один `emit`) |
+
+   Загрузки и списка сессий в Cubit сейчас нет (есть только `createSession`/`selectSession`), поэтому
+   `session/list` и `session/load` — новое поведение задач 5.2, 5.10 и 5.12, они идут по обычному
+   TDD, а не характеризацией.
 1. **5.1. Пакет `packages/dart/acp_client_kit`** с публичным API ниже, `AcpClientBackend` поверх
    `AcpClientApplication` и правилом в стороже (без Flutter и `dart:io`).
-2. **5.2. Дополнения `acp_client_core`:** `listSessions({String? cwd})` (`session/list`, только
-   если агент объявил возможность); таймаут на JSON-RPC запрос (`requestTimeout`, по умолчанию
+2. **5.2. Дополнения `acp_client_core`:** `listSessions({String? cwd, String? cursor})`
+   (`session/list`, только если агент объявил `sessionCapabilities.list`) возвращает страницу
+   `SessionListPage(sessions, nextCursor)`; курсор непрозрачен, не разбирается и не сохраняется
+   между запусками (`docs/acp/protocol/04-Session List.md`, «Pagination»), отсутствие `nextCursor` —
+   конец списка; таймаут на JSON-RPC запрос (`requestTimeout`, по умолчанию
    60 с, кроме `session/prompt`); при сбое транспорта все ожидающие запросы завершаются
    типизированной ошибкой. Тесты в `packages/dart/acp_client_core/test/application/`.
 3. **5.3. Проекция транскрипта** `acp_client_kit/lib/src/transcript/transcript_projector.dart` —
@@ -34,7 +75,13 @@ kit (каждая задача — отдельный PR под защитой 8
    переподключение с `session/load`, алгоритм ниже), `lib/src/profiles/profile_store.dart` (порт).
 6. **5.6. Команды и опции:** `lib/src/commands/command_catalog.dart` (клиентские команды +
    `available_commands_update`, нечёткий поиск по подпоследовательности),
-   `lib/src/config/config_option_view.dart`.
+   `lib/src/config/config_option_view.dart`. Здесь же создаётся интеграционный тест R-20 (Must,
+   этап 5) `apps/codelab_app/integration_test/command_palette_flow_test.dart` и режим
+   scripted-агента `withAvailableCommands` в `acp_testing` (объявляет `/compact` и `/plan` через
+   `available_commands_update`): Cmd/Ctrl+K открывает палитру с командами app и агента; выбор
+   `/compact` отправляет `session/prompt` с текстом `/compact` и показывает ответ агента в
+   транскрипте; выбор клиентской команды выполняет её без `session/prompt`. Тест пишется первым,
+   до переноса палитры в `CommandCatalog` (критерий матрицы R-20).
 7. **5.7. Инспектор и диагностика:** `lib/src/inspector/inspector_projection.dart` (перенос
    `_inspectorEntriesFor*`), `lib/src/diagnostics/`.
 8. **5.8. Пакет `packages/dart/acp_client_io`:** перенос `IoTextFileIo`, `IoTerminalProcessRunner`,
@@ -54,9 +101,21 @@ kit (каждая задача — отдельный PR под защитой 8
     `BootWatchdog`, шаги `window` → `services` → `stores` → `logging` → `routes` с таймаутами и
     экран диагностики с кнопкой «запустить без автоподключения» (алгоритм — §12.4.7); новый
     интеграционный тест `apps/codelab_app/integration_test/boot_watchdog_flow_test.dart`.
+12. **5.12. Восстановление после перезапуска app** (D-03, Must): `lib/src/restore/` в kit
+    (`WorkspaceRestorer`, порт `WorkspaceSnapshotStore`) и реализация порта на
+    `shared_preferences` в app; алгоритм — «Алгоритм восстановления после перезапуска app» ниже.
+    Сценарий «перезапуск» добавляется в `session_list_load_flow_test.dart` (5.10).
 
 **Артефакт: публичный API `acp_client_kit`.** Эскиз: конструкторы, `==` и `copyWith` опущены;
 неизменяемые модели — freezed, как в `acp_client_core`.
+
+**Правило для членов «после MVP».** Члены с комментарием «после MVP» (`restart`, `RestartOutcome`,
+`TerminatingTransportResolver`, `openSessionSearch`, `AgentBackend.searchSessions`,
+`SessionHandle.steer`, `PromptQueue.steer`, `SteerSubmission`, `SessionView.pendingSteers`,
+`TranscriptItem.recordId`) после MVP — не реализуются на этапе 5; в интерфейсе появляются вместе
+со своими целями (U-26, D-17, C-03, S-06…S-09) в change соответствующей цели. В эскизе они
+показаны, чтобы форма API этапа 5 не мешала их добавлению; в коде этапа 5 их нет, заглушек
+`UnimplementedError` тоже нет.
 
 ```dart
 // packages/dart/acp_client_kit/lib/acp_client_kit.dart
@@ -104,7 +163,8 @@ abstract interface class ClientWorkspace {
 
   Future<SessionHandle> newSession({String? cwd});  // по умолчанию cwd = projectDirectory
   Future<SessionHandle> loadSession(SessionId id, {required String cwd});
-  Future<List<SessionSummaryView>> listSessions({String? cwd});
+  /// Одна страница session/list; nextCursor == null — конец списка (курсор не сохраняется).
+  Future<SessionPage> listSessions({String? cwd, String? cursor});
   // после MVP (D-17, §12.6.12): фильтр по заголовку и дате над session/list и поиск по тексту
   SessionSearch openSessionSearch();
   SessionHandle? session(SessionId id);
@@ -169,6 +229,12 @@ final class SessionView {
   final List<QueuedPrompt> queue;                   // QueuedPrompt с attachments (§12.1.1)
   final List<PendingApproval> pendingApprovals;
   final List<PendingSteerView> pendingSteers;       // после MVP (C-03): принятые, не доставленные (§12.1.1)
+  final String? configOptionInFlight;               // configId запроса session/set_config_option в полёте
+}
+
+final class SessionPage {
+  final List<SessionSummaryView> sessions;
+  final String? nextCursor;                         // непрозрачный курсор ACP; null — страниц больше нет
 }
 
 sealed class TranscriptItem {
@@ -218,7 +284,7 @@ abstract interface class AgentBackend {
   Future<ClientConnectionState> reconnect(ReconnectCommand command);  // transportFactory — поле команды, как в acp_client_core
   Future<AcpSession> createSession(CreateSessionCommand command);
   Future<AcpSession> loadSession(LoadSessionCommand command);
-  Future<List<SessionInfo>> listSessions({String? cwd});          // новый метод ядра клиента (5.2)
+  Future<SessionListPage> listSessions({String? cwd, String? cursor}); // новый метод ядра клиента (5.2)
   // после MVP (D-17): _codelab/session/search, только при agentCapabilities._meta.codelab.sessionSearch
   Future<SessionSearchResultDto> searchSessions(SessionSearchParamsDto params);
   Future<PromptTurn> sendPrompt(SendPromptCommand command);
@@ -249,6 +315,7 @@ agent-core-architecture §17.7.4: ожидающее steering — в `SessionVie
 | Сессии: `createSession`, `selectSession`, `_handleSessionChange`, `_sessionListItem`, `_sessionStatus` | kit: `newSession`, `activate`, `SessionSummaryView`, `SessionStatusView` | маппинг в `AcpSessionListItem` |
 | Очередь промптов: `submitPrompt`, `_dispatchPrompt`, `_queueFor`, `_setQueueFor`, `editQueuedPrompt`, `deleteQueuedPrompt`, `sendQueuedPromptNow`, `clearQueuedPrompts`, `_drainQueueIfFree`, `_isSessionBusy`, `_isBusyLifecycleStatus`, `_newQueuedPromptId`, поле `_queuedPromptsBySession` | kit: `SessionHandle.send`, `PromptQueue` | — |
 | Отмена: `cancelTurn` | kit: `SessionHandle.cancel` | — |
+| Флаги состояния `CodeLabShellState`: `isPromptSubmitting`, `canCancel` (сегодня оба = `_isBusyLifecycleStatus`: `runningTurn` или `awaitingApproval`), `isRespondingToConfigOption` (защита от повторного `setSessionConfigOption`) | kit: `SessionView.status` активной сессии — `running` (в том числе с непустым `pendingApprovals`) и `cancelling` считаются «занята»; `SessionView.configOptionInFlight != null` — запрос опции в полёте, повторный `SessionHandle.setConfigOption` в это время — no-op, как сейчас | производные поля для совместимости: `isPromptSubmitting = canCancel = status is running или cancelling`; `isRespondingToConfigOption = configOptionInFlight != null`; тесты 5.0 проверяют, что значения совпадают с прежними |
 | Одобрения: `respondToApproval`, `_approvalRisk`, `_approvalOption`, `_approvalOptionKind`, `_approvalForToolCall`, `_earliestPendingApprovalId`, `_transcriptApproval`, `_resolvedLabel` | kit: `PendingApproval`, `ApprovalStateView`, `SessionHandle.respond` | маппинг в `AcpApprovalOption`, `AcpTranscriptApproval` |
 | Опции конфигурации: `setSessionConfigOption`, `_configOptionsFor`, `_configOptionUiModel` | kit: `ConfigOptionView`, `SessionHandle.setConfigOption` | маппинг в `AcpConfigOption` |
 | Палитра и команды: `openCommandPalette`, `closeCommandPalette`, `selectCommand`, `insertAgentCommand`, `paletteActions`, `_agentCommandsFor`, `_agentCommandAction` | kit: `CommandCatalog` (поиск, слияние, разрешение конфликтов имён), `SessionHandle.runCommand` | флаг «палитра открыта», вставка текста в композер |
@@ -298,11 +365,71 @@ agent-core-architecture §17.7.4: ожидающее steering — в `SessionVie
 
 Перезапуск агента — §12.6.7.
 
-**OpenSpec change.** `extract-acp-client-kit` (задачи 5.1, 5.3–5.9; scope: новый пакет и его
-публичный API, переход app на kit без изменения поведения) и `add-session-list-and-reload`
-(задачи 5.2, 5.10; scope: `session/list`, таймауты запросов, `session/load` после reconnect —
-меняет наблюдаемое поведение app); сторож запуска (задача 5.11) — отдельный change
-`add-app-boot-watchdog`.
+**Алгоритм восстановления после перезапуска app (D-03, задача 5.12).** Переподключение выше
+работает внутри одного запуска; после перезапуска app открытые сессии в памяти потеряны, поэтому
+kit сохраняет снимок и восстанавливает по нему.
+
+*Что сохраняется.* Порт `WorkspaceSnapshotStore` в kit; в app — реализация на
+`shared_preferences`, ключ `codelab.workspace.snapshot` (значение — JSON с версией формата):
+
+```json
+{"version": 1, "windows": {"main": {
+  "profileId": "codelab-agent-local",
+  "projectDirectory": "/work/app",
+  "activeSessionId": "sess_42",
+  "openSessions": [{"id": "sess_42", "cwd": "/work/app"}, {"id": "sess_17", "cwd": "/work/app"}]
+}}}
+```
+
+Ключ `windows` — по окну; сейчас окно одно (`main`), несколько окон (§12.3) добавляют свои ключи.
+Не сохраняются: курсоры `session/list` (ACP запрещает их сохранять), транскрипт (его источник —
+реплей агента), очередь промптов, секреты и сам профиль (он в `ProfileStore`, в снимке — только
+`profileId`). Запись — после успешных `session/new`, `session/load`, `activate`, смены проекта и
+закрытия сессии, со склейкой не чаще раза в секунду; ошибка записи — диагностика, а не отказ
+операции.
+
+*Когда запускается.* Один раз при старте app — шаг `routes` сторожа запуска (§12.4.7), если
+включено автоподключение: шаги 1–3 идут внутри шага `routes` под его таймаутом, шаги 4–7 — после
+`BootReady`. «Start without auto-connect» восстановление пропускает, снимок при этом
+не удаляется. CLI снимок не читает (у него `--resume`/`--continue`, §9.11).
+
+1. Прочитать снимок окна. Нет ключа — обычный старт. Неизвестная версия или битый JSON —
+   диагностика `app.restore.snapshot_invalid`, ключ удаляется, обычный старт.
+2. Найти профиль `profileId` в `ProfileStore`. Нет профиля — старт без подключения и баннер
+   `The last connection profile no longer exists.`; проект `projectDirectory` всё равно выбран.
+3. `ClientWorkspace.connect(profile, projectDirectory)`. Агент не запускается или не отвечает на
+   `initialize` (бинарь удалён, процесс упал, таймаут шага `routes`) — `ConnectionFailed` и
+   состояние ошибки workbench с кнопками «Retry» (повтор с шага 3 по тому же снимку) и «Choose
+   another profile»; снимок не удаляется.
+4. После `initialize`: если агент объявил `sessionCapabilities.list` — первая страница
+   `listSessions(cwd: projectDirectory)` в сайдбар (дальше — по `nextCursor` при прокрутке).
+5. Если агент объявил `loadSession` — `loadSession(id, cwd)` для активной сессии с тем же `cwd` и
+   теми же `mcpServers`, что при `session/new` по этому профилю; реплей `session/update` приходит
+   до ответа и проходит через проектор с нуля (как шаг 3 переподключения). Остальные
+   `openSessions` загружаются лениво — при выборе в сайдбаре.
+6. Агент без `loadSession` — `newSession(cwd)` и `NoticeItem(kind: reconnected)`
+   `The agent cannot restore sessions; a new session was started.`. Ошибка `session/load`
+   (агент не знает этот id) — то же с текстом `Session <id> could not be restored; a new session was
+   started.`, id удаляется из снимка.
+7. Ничего не отправляется автоматически: восстановление не повторяет промпты и не отвечает на
+   одобрения.
+
+Тесты: kit — `test/restore/workspace_restorer_test.dart` (по одному случаю на шаги 1–7: нет
+снимка, битый снимок, нет профиля, агент не запустился и «Retry», агент с `loadSession`, без
+`loadSession`, ошибка `session/load`, курсор в снимок не попадает); app — сценарий перезапуска в
+`session_list_load_flow_test.dart`: две сессии, закрыть корневой scope, создать заново с теми же
+значениями `SharedPreferences.setMockInitialValues`, после подключения активная сессия загружена,
+её транскрипт совпадает с транскриптом до перезапуска, сайдбар показывает обе сессии (критерий
+D-03).
+
+**OpenSpec change.** `extract-acp-client-kit` (задачи 5.0, 5.1, 5.3–5.9; scope: новый пакет и
+его публичный API, переход app на kit без изменения поведения) и `add-session-list-and-reload`
+(задачи 5.2, 5.10, 5.12; scope: `session/list` с курсором, таймауты запросов, `session/load` после
+reconnect и после перезапуска app — меняет наблюдаемое поведение app); палитра с командами агента
+(R-20, тест из 5.6 и исправление поведения, если тест красный) — change
+`add-command-palette-agent-commands`; сторож запуска (задача 5.11) — отдельный change
+`add-app-boot-watchdog`. `tasks.md` — пары "тест → реализация" со ссылкой на критерий (§9.0,
+правило 3); в `extract-acp-client-kit` первая пара — характеризационные тесты 5.0 (исключение (а)).
 
 **Что прочитать.** `docs/architecture/state-management.md` §61, §80–§82;
 `docs/architecture/session-lifecycle.md`; `docs/architecture/streaming.md`;
@@ -311,7 +438,10 @@ agent-core-architecture §17.7.4: ожидающее steering — в `SessionVie
 
 **Definition of Done.**
 
-* Все 8 интеграционных тестов app проходят без изменений (`melos run test:e2e:app:*`).
+* Все 8 существующих интеграционных тестов app проходят, тексты тестов этапом 5 не изменены
+  (`melos run test:e2e:app:*`); публичная поверхность `CodeLabShellCubit` сохранена (см. «Что
+  остаётся неизменным»).
+* Характеризационные тесты 5.0 зелёные до первого переноса и после каждого PR этапа без правок.
 * `fvm dart test packages/dart/acp_client_kit` зелёный; среди тестов:
   `transcript_projector_test.dart: incremental projection equals full rebuild for every fixture`,
   `prompt_queue_test.dart: queued prompt is sent after the turn ends`,
@@ -320,7 +450,10 @@ agent-core-architecture §17.7.4: ожидающее steering — в `SessionVie
 * `melos run guard`: `acp_client_kit` не импортирует Flutter и `dart:io` (в том числе транзитивно).
 * `shell_cubit.dart` не содержит логики из левого столбца таблицы (проверка на ревью; цель —
   меньше 600 строк после 5.9).
-* Новые тесты `session_list_load_flow_test.dart` и `boot_watchdog_flow_test.dart` зелёные.
+* Новые тесты `session_list_load_flow_test.dart` (включая сценарий перезапуска D-03),
+  `command_palette_flow_test.dart` (R-20) и `boot_watchdog_flow_test.dart` зелёные;
+  `workspace_restorer_test.dart` зелёный.
+* В коде kit нет членов «после MVP» (правило над эскизом API).
 
 **Зависимости.** Этап 0 (разделение `acp_transports`, сторож). Не зависит от агентской ветки.
 

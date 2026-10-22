@@ -24,6 +24,7 @@ Date: 2026-10-21
 
 * [`dart-agent-and-clients.md`](dart-agent-and-clients.md) — proposal: пакеты, клиенты, этапы миграции (§9.1), публичный API (§5).
 * [`agent-parity-goals.md`](agent-parity-goals.md) — матрица целей паритета (идентификаторы C-, T-, P-, S-, K-).
+* [`delivery-roadmap.md`](delivery-roadmap.md) — дорожная карта PoC → MVP → продукт 1.0: вехи и единственное определение MVP.
 * [ADR-0001](../adr/0001-embed-dart-agent-core-behind-acp.md) — решение о встраиваемом ядре за ACP.
 * [`../acp-boundary.md`](../acp-boundary.md) — граница ACP на стороне клиента; ACP-адаптер агента соблюдает те же правила.
 * [`../permissions.md`](../permissions.md) — модель разрешений клиента; **не меняется** (§7 этого документа).
@@ -85,8 +86,8 @@ Date: 2026-10-21
 | § | Раздел | Файл | Строк |
 |---|---|---|---|
 | 0 | [Соответствие шести базовым понятиям обвязки агента](agent-core/00-six-concepts.md) | `agent-core/00-six-concepts.md` | 34 |
-| 1 | [Слои и пакеты](agent-core/01-layers-and-packages.md) | `agent-core/01-layers-and-packages.md` | 269 |
-| 2 | [LLM-контракт](agent-core/02-llm-contract.md) | `agent-core/02-llm-contract.md` | 1253 |
+| 1 | [Слои и пакеты](agent-core/01-layers-and-packages.md) | `agent-core/01-layers-and-packages.md` | 272 |
+| 2 | [LLM-контракт](agent-core/02-llm-contract.md) | `agent-core/02-llm-contract.md` | 1258 |
 | 3 | [Отмена](agent-core/03-cancellation.md) | `agent-core/03-cancellation.md` | 172 |
 | 4 | [ExecutionEnv](agent-core/04-execution-env.md) | `agent-core/04-execution-env.md` | 344 |
 | 5 | [Цикл агента](agent-core/05-agent-loop.md) | `agent-core/05-agent-loop.md` | 615 |
@@ -97,9 +98,9 @@ Date: 2026-10-21
 | 10 | [Сборка ядра и профили хостов](agent-core/10-core-assembly-and-profiles.md) | `agent-core/10-core-assembly-and-profiles.md` | 404 |
 | 11 | [Промпты](agent-core/11-prompts.md) | `agent-core/11-prompts.md` | 525 |
 | 12 | [Наблюдаемость и модель ошибок](agent-core/12-observability-and-errors.md) | `agent-core/12-observability-and-errors.md` | 654 |
-| 13 | [ACP-адаптер](agent-core/13-acp-adapter.md) | `agent-core/13-acp-adapter.md` | 916 |
-| 14 | [Формат golden ACP-фикстур](agent-core/14-golden-fixtures.md) | `agent-core/14-golden-fixtures.md` | 392 |
-| 15 | [Конфигурация](agent-core/15-configuration.md) | `agent-core/15-configuration.md` | 1132 |
+| 13 | [ACP-адаптер](agent-core/13-acp-adapter.md) | `agent-core/13-acp-adapter.md` | 921 |
+| 14 | [Формат golden ACP-фикстур](agent-core/14-golden-fixtures.md) | `agent-core/14-golden-fixtures.md` | 453 |
+| 15 | [Конфигурация](agent-core/15-configuration.md) | `agent-core/15-configuration.md` | 1144 |
 | 16 | [Что не входит в MVP и открытые вопросы](agent-core/16-non-mvp-and-open-questions.md) | `agent-core/16-non-mvp-and-open-questions.md` | 75 |
 | 17 | [Спецификации после MVP](agent-core/17-0-post-mvp.md) | `agent-core/17-0-post-mvp.md` | 49 |
 | 17.1 | [Web-инструменты: `web_fetch` и `web_search`](agent-core/17-1-web-tools.md) | `agent-core/17-1-web-tools.md` | 703 |

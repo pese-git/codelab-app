@@ -206,7 +206,7 @@ apps/codelab_agent      → codelab_agent_acp, codelab_agent_io, codelab_agent_m
 
 ### Risks
 
-* объём работ недооценён. Снижение: MVP ограничен первой рабочей версией Dart-агента и CLI (этапы 4 и 6 плана);
+* объём работ недооценён. Снижение: работа разбита на ступени с проверяемыми критериями выхода ([дорожная карта](../proposals/delivery-roadmap.md)): PoC — срез P0 за 2–3 недели; первый полезный результат — первая рабочая версия Dart-агента и CLI (этапы 4 и 6 плана); MVP — все Must-строки матрицы целей зелёные и переключение по умолчанию (этап 9), без публичного релиза;
 * выделение `acp_client_kit` ломает поведение app. Снижение: чистый рефакторинг под защитой 8 интеграционных тестов;
 * «чистота» ядра и kit нарушится ради удобства. Снижение: тест-сторож импортов и сборка ядра под web в CI;
 * перенос лишней сложности (супервизоры, большое число возможностей профиля, структурное сжатие) раньше, чем она нужна. Снижение: в MVP — только подсистемы с пометкой MVP (proposal §4.0);
@@ -217,22 +217,26 @@ apps/codelab_agent      → codelab_agent_acp, codelab_agent_io, codelab_agent_m
 
 ## Migration
 
+ADR принимается (Status: Accepted) **до начала этапа 0**: по `docs/architecture/adr/README.md` §8 реализация начинается только после принятого решения. Порядок ступеней и вех — в [дорожной карте](../proposals/delivery-roadmap.md).
+
 1. **Этап 0.**
    * Melos-монорепо расширяется только пакетами `codelab_agent_core` (нужен сторожу и web-сборке) и `codelab_architecture_tests`; остальные пакеты создаются на этапе, где в них появляется код.
    * Появляется CI, которого сейчас нет.
    * Тест-сторож импортов.
    * Корпус golden ACP-фикстур (`packages/dart/acp_testing/fixtures/acp/`) и первые фикстуры по спецификации.
    * Лицензия репозитория — MIT (`LICENSE` в корне) и `THIRD_PARTY_NOTICES.md`.
-2. **Этапы 1–4** (агентская ветка): LLM-слой и scripted `StreamFunction` на Dart (задача 1.4), цикл и инструменты, сессии и сжатие, ACP-адаптер и `codelab-agent`. После этапа 4 codelab-app без изменений работает с Dart-агентом по stdio.
+   * `AGENTS.md`: правила агентских пакетов и TDD (задача 0.11) — раздел §5 корневого `AGENTS.md` и вложенные `AGENTS.md` в `packages/dart/codelab_agent_*`; окончательно дописывается в задаче 9.7.
+2. **Этапы 1–4** (агентская ветка; до их полного объёма допускается срез P0 — PoC по stdio без этапа 3): LLM-слой и scripted `StreamFunction` на Dart (задача 1.4), цикл и инструменты, сессии и сжатие, ACP-адаптер и `codelab-agent`. После этапа 4 codelab-app без изменений работает с Dart-агентом по stdio.
 3. **Этапы 5–6** (клиентская ветка, параллельно):
    * выделение `acp_client_kit` и `acp_client_io`;
    * первая версия `codelab_cli`, которая работает с Python-агентом.
-4. **Этап 7.** `codelab_embedded` и `InProcessAcpLink` в обоих клиентах.
-5. **Этап 8.** MCP, единая конфигурация (`config.yaml`; `codelab.toml` — только чтение до `codelab config migrate`), `AGENTS.md`.
-6. **Этап 9.** Цели уровня Must закрыты:
+4. **Этап 8** (после этапа 4). MCP, единая конфигурация (`config.yaml`; `codelab.toml` — только чтение до `codelab config migrate`), хранилище секретов, `AGENTS.md`.
+5. **Этап 7** (после этапов 6 и 8: нужны загрузка конфига и хранилище секретов). `codelab_embedded` и `InProcessAcpLink` в обоих клиентах.
+6. **Этап 9 (MVP).** Цели уровня Must закрыты:
    * профиль по умолчанию в обоих клиентах — Dart-агент;
    * Python-агент и Python TUI замораживаются, затем удаляются;
-   * сохранённые сессии Python-агента не переносятся (agent-core-architecture §16.1).
+   * сохранённые сессии Python-агента не переносятся (agent-core-architecture §16.1);
+   * публичный релиз (задача 9.4) в MVP не входит — он открывает продукт 1.0.
 7. **Этап 10.** Сборки для iOS, Android и web.
 
 Совместимость: на протяжении миграции оба клиента работают с Python-агентом. Откат: профиль
@@ -248,7 +252,7 @@ apps/codelab_agent      → codelab_agent_acp, codelab_agent_io, codelab_agent_m
 * применимые из 8 интеграционных тестов codelab-app проходят во внешнем и встроенном режимах (таблица применимости — dart-agent-and-clients §9.9, §9.12);
 * тест: ни один инструмент не исполняется в обход проверки разрешений, включая MCP;
 * тест: `/proj_evil` не проходит при `cwd=/proj`;
-* ручная проверка с Zed и Claude Code ACP на этапе 9.
+* ручная проверка с Zed на этапе 9 по чек-листу задачи 9.8 (11 шагов, правило «прошёл / не прошёл», ACP-трасса как доказательство).
 
 ---
 
@@ -259,6 +263,7 @@ apps/codelab_agent      → codelab_agent_acp, codelab_agent_io, codelab_agent_m
 * `docs/architecture/proposals/dart-agent-and-clients.md` — подробный design
 * `docs/architecture/proposals/agent-core-architecture.md` — архитектура ядра агента
 * `docs/architecture/proposals/agent-parity-goals.md` — цели паритета
+* [`docs/architecture/proposals/delivery-roadmap.md`](../proposals/delivery-roadmap.md) — дорожная карта PoC → MVP → продукт
 * `docs/architecture/acp-boundary.md`
 * `docs/architecture/layers-and-dependencies.md`
 * `docs/architecture/permissions.md`
