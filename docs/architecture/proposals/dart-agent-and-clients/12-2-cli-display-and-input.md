@@ -200,15 +200,46 @@ TTY: вывод headless — данные для скриптов.
 
 ## 12.2.7. Полноэкранный TUI
 
-**Архитектура Model–Update–View.** Состояние экрана — неизменяемая `TuiModel`; `update(model,
-msg)` — чистая функция, возвращающая новую модель и список команд; `view(model, size)` — чистая
-функция, возвращающая кадр (список строк ширины `size.columns`). Ввод-вывод — только в
-`TuiLoop` (`lib/src/tui/tui_loop.dart`) и `TerminalIo` (`lib/src/tui/terminal_io.dart`, единственный
-файл TUI с `dart:io`). Логика kit не дублируется: `TuiModel` хранит последний `SessionView` и
-локальное состояние экрана (композер, прокрутка, раскрытые элементы, открытое меню).
+**Технология.** Полноэкранный режим построен на пакете
+[`dart_tui`](https://pub.dev/packages/dart_tui) (MIT, `^3.0.0`; [технологический стек](../../technology-stack.md),
+§20а) — каркас Model–Update–View в духе Elm и Bubble Tea: `Model` с `init()`, `update(Msg)` и
+`view()`, асинхронные команды `Cmd`, `Program`, который владеет циклом событий и терминалом.
+Пакет импортируется только из `apps/codelab_cli/lib/src/tui/` (правило сторожа, §9.5);
+построчный REPL, headless, рендеры `lib/src/render/` и декодер `lib/src/input/key_decoder.dart`
+о нём не знают и пишут в stdout сами. Возможности, которые проверяет разведка этапа 6
+(задача 6.11), — «Чек-лист разведки» ниже.
+
+**Архитектура Model–Update–View.** Два слоя.
+
+1. **Чистое ядро экрана** (`tui_model.dart`, `tui_update.dart`, `tui_view.dart`) — без
+   `package:dart_tui` и `dart:io`. Состояние экрана — неизменяемая `TuiModel`; `reduce(model,
+   msg)` — чистая функция, возвращающая новую модель и список команд-данных `TuiCmd`;
+   `render(model)` — чистая функция, возвращающая кадр (`Frame`: строки ширины `size.columns`
+   и позиция курсора). Ядро тестируется без терминала и без пакета (TUI-5).
+2. **Адаптер к `dart_tui`** (`tui_app.dart`, `tui_input.dart`, `tui_effects.dart`,
+   `tui_runner.dart`). `TuiApp implements Model` (dart_tui): `update(Msg)` переводит сообщение
+   dart_tui в `TuiMsg` (`TuiInput`: `KeyPressMsg` — через реестр клавиш §12.2.9, `PasteMsg`,
+   `WindowSizeMsg`, после MVP — мышь), вызывает `reduce` и переводит `List<TuiCmd>` в один `Cmd`
+   dart_tui (`TuiEffects.toDartTuiCmd`, несколько команд — `batch`); `view()` вызывает `render` и
+   заворачивает `Frame` в `View`. Режимы терминала (альтернативный экран, мышь, расширенные
+   клавиши, bracketed paste) объявляются полями `View`, а не командами: `Program` сам включает и
+   выключает их по разнице между кадрами.
+
+Ввод-вывод TUI — только в `Program` dart_tui (цикл событий, raw-режим, альтернативный экран,
+размер, мышь, вывод кадров, сигналы) и в функциях `Cmd`, которые строит `TuiEffects`
+(единственный владелец `SessionHandle`, процессов и буфера обмена в TUI); запуск `Program`,
+подписка на kit и гарантия восстановления терминала — `TuiRunner`. Логика kit не дублируется:
+`TuiModel` хранит последний `SessionView` и локальное состояние экрана (композер, прокрутка,
+раскрытые элементы, открытое меню).
+
+`TuiCmd` остаётся запечатанным классом данных, а не замыканием dart_tui: тесты `reduce`
+сравнивают команды по значению; весь ввод-вывод собран в одном файле `tui_effects.dart`; новая
+команда — новый подкласс и ветка `switch` в `toDartTuiCmd`, анализатор находит пропущенную ветку.
+Если разведка 6.11 отвергнет пакет, запасной рендер (§12.2.12) встаёт за тот же `reduce` и
+`render`, а ядро и его тесты не меняются.
 
 ```dart
-// apps/codelab_cli/lib/src/tui/tui_model.dart
+// apps/codelab_cli/lib/src/tui/tui_model.dart — без package:dart_tui и dart:io
 final class TuiModel {
   final SessionView? session;          // из SessionHandle.view
   final WorkspaceState workspace;
@@ -218,81 +249,193 @@ final class TuiModel {
   final PendingApproval? approval;     // зона одобрения вместо композера
   final TerminalSize size;
   final Set<String> expanded;          // id элементов, раскрытых пользователем
+  final bool mouse;                    // после MVP: tui.mouse и /mouse (§12.6.5) → View.mouseMode
+  final int errorStreak;               // ошибок reduce/render подряд (шаг 7 цикла)
 }
 
 sealed class TuiMsg {}
-final class KeyMsg extends TuiMsg { final KeyEvent key; }
-final class PasteMsg extends TuiMsg { final String text; }
-final class ResizeMsg extends TuiMsg { final TerminalSize size; }
+final class KeyMsg extends TuiMsg { final KeyEvent key; }       // из KeyPressMsg dart_tui
+final class PasteMsg extends TuiMsg { final String text; }      // из PasteMsg dart_tui
+final class ResizeMsg extends TuiMsg { final TerminalSize size; } // из WindowSizeMsg
 final class SessionViewMsg extends TuiMsg { final SessionView view; }
 final class WorkspaceMsg extends TuiMsg { final WorkspaceState state; }
 final class ApprovalMsg extends TuiMsg { final PendingApproval approval; }
 final class TickMsg extends TuiMsg {}               // 100 мс, только пока есть running-элементы
 final class ClipboardImageMsg extends TuiMsg { final ImageAttachment? image; final String? error; }
-final class MouseMsg extends TuiMsg { … }           // после MVP: отчёт SGR-мыши (§12.6.5)
+final class EffectFailedMsg extends TuiMsg { final TuiCmd cmd; final Object error; }
+final class MouseMsg extends TuiMsg { … }           // после MVP: из MouseMsg dart_tui (§12.6.5)
 final class CopyResultMsg extends TuiMsg { final CopyOutcome outcome; }  // после MVP (§12.6.10)
 
-sealed class TuiCmd {}                              // исполняет TuiLoop
+sealed class TuiCmd {}                              // данные; исполняет TuiEffects
 final class SubmitCmd extends TuiCmd { final String text; final List<PromptAttachment> attachments; }
 final class CancelTurnCmd extends TuiCmd {}
 final class RespondCmd extends TuiCmd { final ApprovalRequestId id; final PermissionOptionId option; }
 final class RunCommandCmd extends TuiCmd { final String input; }
 final class ReadClipboardImageCmd extends TuiCmd {}
 final class QuitCmd extends TuiCmd {}
-final class SetMouseCmd extends TuiCmd { final bool enabled; }   // после MVP (§12.6.5)
 final class RunShellCmd extends TuiCmd { final String command; } // после MVP: `!<cmd>` (§12.6.2)
 final class RestartAgentCmd extends TuiCmd {}                    // после MVP: `/restart` (§12.6.7)
 final class CopyCmd extends TuiCmd { final String text; }        // после MVP: копирование (U-28, §12.6.10)
 
-(TuiModel, List<TuiCmd>) update(TuiModel model, TuiMsg msg);
-Frame view(TuiModel model);
+(TuiModel, List<TuiCmd>) reduce(TuiModel model, TuiMsg msg);    // tui_update.dart
+Frame render(TuiModel model);                                   // tui_view.dart
+```
+
+```dart
+// apps/codelab_cli/lib/src/tui/tui_app.dart — единственный тип, который видит Program
+import 'package:dart_tui/dart_tui.dart' as tea;
+
+/// Результат команды или событие kit, уже переведённое в язык ядра экрана.
+final class DomainMsg extends tea.Msg {
+  DomainMsg(this.msg);
+  final TuiMsg msg;
+}
+
+final class TuiApp implements tea.Model {
+  TuiApp(this.state, this.input, this.effects);
+  final TuiModel state;
+  final TuiInput input;        // сообщения dart_tui → TuiMsg; null — сообщение не нужно ядру
+  final TuiEffects effects;    // TuiCmd → tea.Cmd; сам ввод-вывод — только внутри Cmd
+
+  @override
+  tea.Cmd? init() => effects.startup(state);   // опрос размера на Windows (шаг 5)
+
+  @override
+  (tea.Model, tea.Cmd?) update(tea.Msg msg) {
+    final m = msg is DomainMsg ? msg.msg : input.translate(msg, state);
+    if (m == null) return (this, null);
+    final (next, cmds) = reduceGuarded(state, m);         // шаг 7: ошибка → прежняя модель
+    return (TuiApp(next, input, effects), effects.toDartTuiCmd(cmds));
+  }
+
+  @override
+  tea.View view() => frameToView(renderGuarded(state), state);  // altScreen, cursor, mouseMode
+}
 ```
 
 ```mermaid
 sequenceDiagram
     participant T as "Терминал"
-    participant D as "KeyDecoder"
-    participant L as "TuiLoop"
-    participant U as "update()"
+    participant P as "Program (dart_tui)"
+    participant A as "TuiApp.update()"
+    participant R as "reduce()"
+    participant E as "TuiEffects (Cmd)"
+    participant W as "TuiRunner"
     participant K as "SessionHandle"
-    participant V as "view() + FrameRenderer"
-    T->>D: "байты stdin"
-    D->>L: "KeyMsg или PasteMsg"
-    K->>L: "SessionViewMsg(revision)"
-    T->>L: "ResizeMsg (SIGWINCH)"
-    L->>U: "(Model, Msg)"
-    U-->>L: "(Model', команды)"
-    L->>K: "send, cancel, respond, runCommand"
-    Note over L: "склейка: не чаще 60 кадров в секунду"
-    L->>V: "Model'"
-    V->>T: "только изменённые строки, DEC 2026"
+    participant V as "view(): render() + View"
+    T->>P: "байты stdin, SIGWINCH"
+    P->>A: "KeyPressMsg, PasteMsg, WindowSizeMsg"
+    K->>W: "SessionView(revision)"
+    W->>P: "Program.send(DomainMsg)"
+    P->>A: "DomainMsg(SessionViewMsg)"
+    A->>R: "(TuiModel, TuiMsg)"
+    R-->>A: "(TuiModel', List of TuiCmd)"
+    A-->>P: "(TuiApp', Cmd)"
+    P->>E: "выполнить Cmd"
+    E->>K: "send, cancel, respond, runCommand"
+    E-->>P: "DomainMsg(результат)"
+    Note over P: "очередь вычерпывается, кадр не чаще 60 в секунду"
+    P->>V: "view()"
+    V-->>P: "View"
+    P->>T: "изменённые строки, DEC 2026 при поддержке"
 ```
 
 **Раскладка кадра** (сверху вниз): транскрипт (всё оставшееся место); строка «↓ N новых» (только
 в режиме удержания); зона одобрения или композер (1–10 строк, дальше композер прокручивается
 внутри); строка подсказок клавиш (скрывается при высоте < 15 строк); статус-строка.
 
-**Цикл `TuiLoop`.**
+**Цикл `Program`.** В каждом шаге сказано, что делает dart_tui и что — наш код.
 
-1. Старт: raw-режим stdin (`echoMode = false`, `lineMode = false`), альтернативный экран
-   `ESC[?1049h`, скрыть курсор `ESC[?25l`, bracketed paste `ESC[?2004h`, расширенные клавиши
-   (§12.2.9), после MVP — отчёты мыши `ESC[?1000h ESC[?1006h` при `tui.mouse` (§12.6.5).
-   Запоминается всё включённое.
-2. Завершение — в `finally`, по `QuitCmd`, SIGINT вне хода (двойной Ctrl+C за 1 с, §9.11), SIGTERM и
-   необработанном исключении: выключить включённое в обратном порядке, `ESC[?1049l`, показать
-   курсор, вернуть режим stdin. После выхода в обычный экран печатается последний ответ агента
-   и статус-строка, чтобы результат остался в scrollback.
-3. Сообщения склеиваются: `SessionViewMsg` с меньшей ревизией, чем последняя полученная,
-   отбрасывается; кадр строится не чаще раза в 16 мс, по последней модели.
-4. `FrameRenderer` сравнивает новый кадр с предыдущим построчно и переписывает только
-   изменившиеся строки (`ESC[<row>;1H`, строка, `ESC[K`); весь вывод кадра обёрнут в
-   synchronized output `ESC[?2026h … ESC[?2026l` (терминал без поддержки игнорирует).
-5. Размер: `ProcessSignal.sigwinch` на macOS и Linux; на Windows — опрос
-   `stdout.terminalColumns/Lines` раз в 250 мс. `ResizeMsg` сбрасывает кэш переносов и
-   предыдущий кадр (полная перерисовка).
-6. Ошибка внутри `update` или `view` логируется в диагностику, кадр не меняется, цикл
-   продолжается; три ошибки подряд — аварийный выход с восстановлением терминала и печатью
-   ошибки.
+1. **Старт.** Наш `TuiRunner.run`: собирает `Program(options: [withAltScreen(), withFps(60),
+   withOutput(terminalSink)])` (`terminalSink` — наша обёртка `IOSink` над stdout, шаг 8),
+   начальную `TuiApp` из текущего значения `SessionHandle.view` и вызывает `run`. dart_tui:
+   raw-режим stdin (`echoMode`, `lineMode`; на macOS и Linux — termios через `dart:ffi`, сброс
+   ISIG, IEXTEN, IXON; на Windows — `SetConsoleMode` с `ENABLE_VIRTUAL_TERMINAL_INPUT`),
+   альтернативный экран `ESC[?1049h`, скрытый курсор, bracketed paste `ESC[?2004h`, расширенные
+   клавиши (kitty `ESC[=<флаги>;1u` и xterm modifyOtherKeys `ESC[>4;2m`, §12.2.9), после MVP —
+   отчёты мыши по `View.mouseMode` (§12.6.5). Запоминает включённое сам.
+2. **События kit.** Наш `TuiRunner` — владелец подписок на `SessionHandle.view`, одобрения и
+   состояние workspace: каждое событие → `program.send(DomainMsg(…))`. Подписки открываются сразу
+   после вызова `run` (до запуска `send` отбрасывает сообщение, но начальное состояние уже в
+   модели) и отменяются в `finally` шага 6. Если `Program.send` в будущей версии пакета исчезнет,
+   запасной путь — команда-«слушатель»: `Cmd`, который ждёт следующего события потока kit и
+   возвращает его как `DomainMsg`; `reduce` выпускает её заново после каждого такого события.
+3. **Склейка.** dart_tui вычерпывает всю очередь сообщений перед кадром и строит кадр не чаще
+   `withFps` (60 в секунду, раз в 16 мс) по последней модели. Наш `reduce` отбрасывает
+   `SessionViewMsg` с ревизией меньше последней полученной.
+4. **Кадр.** dart_tui (`AnsiRenderer` по умолчанию) сравнивает кадр с предыдущим построчно,
+   переписывает только изменённые строки и оборачивает вывод в synchronized output
+   `ESC[?2026h … ESC[?2026l`, если терминал подтвердил режим 2026 на запрос DECRQM; иначе пишет
+   без обёртки (выбор `withCellRenderer()` для таких терминалов — пункт чек-листа). Содержимое
+   `View` пакет пишет как есть, поэтому за него отвечает наш `render`: каждая строка не шире
+   `size.columns` (ширина символов — §12.2.2), кончается сбросом атрибутов (TUI-9), а текст
+   агента и инструментов проходит санитизацию до попадания в кадр (TUI-11).
+5. **Размер.** dart_tui на macOS и Linux слушает `ProcessSignal.sigwinch` и присылает
+   `WindowSizeMsg`; на Windows сигнала нет и пакет размер не опрашивает, поэтому
+   `TuiEffects.startup` раз в 250 мс выпускает `requestWindowSize()` (`Program` отвечает
+   `WindowSizeMsg` из `stdout.terminalColumns/Lines`). `TuiInput` отбрасывает неизменившийся
+   размер; `ResizeMsg` сбрасывает кэш переносов и предыдущий кадр (полная перерисовка).
+6. **Завершение.** `QuitCmd` → `quit` dart_tui; SIGTERM dart_tui превращает в `QuitMsg`, внешний
+   `kill -INT` — в `InterruptMsg`. Ctrl+C и Ctrl+Z в raw-режиме 3.x приходят клавишами, поэтому
+   двойной Ctrl+C за 1 с (§9.11) — действие `exit` реестра клавиш, а не сигнал. Выход из `run`
+   любым путём, включая исключение из `update` или `view`: dart_tui в своём `finally` выключает
+   включённое (мышь `ESC[?1000l ESC[?1002l ESC[?1003l ESC[?1006l`, фокус, `ESC[?2004l`,
+   клавиши `ESC[>4m ESC[=0;1u`, курсор `ESC[?25h`, `ESC[?1049l`) и возвращает режим stdin. Наш
+   `TuiRunner` поверх этого держит `try/finally`: отменяет подписки шага 2, повторно пишет те же
+   последовательности выключения (повтор безвреден) и возвращает `echoMode`/`lineMode` stdin, —
+   так TUI-4 не зависит от версии пакета. После выхода в обычный экран печатается последний
+   ответ агента и статус-строка, чтобы результат остался в scrollback.
+7. **Ошибки.** Исключение в `reduce` или `render` ловит `TuiApp` (`reduceGuarded`,
+   `renderGuarded`): запись в диагностику, модель и кадр не меняются, цикл продолжается; три
+   ошибки подряд (`errorStreak`) — `QuitCmd`, и `TuiRunner` печатает ошибку после восстановления
+   терминала. Каждая функция `Cmd` из `TuiEffects` сама ловит исключение и возвращает
+   `DomainMsg(EffectFailedMsg)`: обработчик dart_tui для исключений команд печатает в stderr
+   поверх кадра и завершает программу, поэтому до него ошибка не доходит.
+8. **Последовательности вне кадра.** OSC 8 (ссылки, §12.2.2) — часть содержимого `View`: рендер
+   dart_tui отслеживает открытую ссылку и закрывает её на границе строки. OSC 52 (копирование,
+   §12.6.10) — команда `setClipboard` dart_tui, если обёртка tmux или screen не нужна; с
+   обёрткой — запись `TuiEffects` в `terminalSink` из `Cmd`. Кадр dart_tui пишет синхронно, без
+   `await` между частями, поэтому запись из команды не попадает внутрь кадра и внутрь
+   `ESC[?2026h … l`. Команда `raw()` dart_tui не используется: в 3.0.0 `Program` не пишет
+   `RawMsg` в терминал.
+
+**Компоненты dart_tui.** Используются: `SpinnerModel` — значок хода в статус-строке и значок
+`running` строк инструментов (кадры `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 100 мс, §12.2.4); `ViewportModel` —
+оверлеи со статичным длинным текстом (подробности `/inspect` и Enter на строке инструмента,
+`/help keys`, полный diff по `?` в зоне одобрения); `ListModel` (с фильтром) и
+`SelectListModel` — пикеры (`/model`, `/sessions`, `/resume`, после MVP — `/theme`); `HelpModel`
+— строка подсказок клавиш, построенная из реестра §12.2.9 через адаптер `RegistryKeyMap
+implements KeyMap` (таблица действий остаётся одна, TUI-7). Не используются: `TextAreaModel` и
+`TextInputModel` (клавиши зашиты в компонент, нет реестра, чипов вложений, истории и `@`),
+транскрипт на `ViewportModel` (компонент переносит весь текст при каждом изменении, а стрим
+меняет только последний элемент), стили `Style` для markdown, формы и разовые помощники
+(`promptSelect`, `spin`, `pager`).
+
+Свои, общие с построчным режимом или только для TUI: ANSI-рендер markdown §12.2.2 вместе с
+OSC 8 и санитизацией, строки инструментов §12.2.4, diff §12.2.5, статус-строка §12.2.6,
+композер, транскрипт с кэшем переносов, slash-меню и дополнение путей §12.2.8 (нечёткий поиск
+`CommandCatalog`, семантика Tab U-24), реестр клавиш §12.2.9, темы §12.6.3.
+
+**Чек-лист разведки** (задача 6.11, исключение (д) §9.0; итог — таблица в `design.md` change
+`add-codelab-cli`, по строке на пункт: «да», «нет → запасной путь», ссылка на файл спайка).
+Пункты 1–6 по исходникам 3.0.0 поддерживаются и подтверждаются запуском в терминалах из
+таблицы §12.2.9; 7–10 по исходникам не установлены и проверяются впервые.
+
+| № | Возможность | Что показал разбор 3.0.0 | Запасной путь, если «нет» |
+|---|---|---|---|
+| 1 | внешние сообщения | `Program.send(Msg)` есть | команда-«слушатель» (шаг 2) |
+| 2 | bracketed paste | `PasteMsg`, `View.disableBracketedPasteMode = false` по умолчанию | — (без него U-23 не выполняется → отказ от пакета) |
+| 3 | Shift+Enter, Ctrl+Enter | kitty CSI u и modifyOtherKeys включаются, ответ — `KeyboardEnhancementsMsg` | `\` + Enter, Alt+Enter, Ctrl+J (§12.2.9, шаг 5) |
+| 4 | synchronized output | DECRQM `?2026`, обёртка кадра только при подтверждении | `withCellRenderer()` |
+| 5 | восстановление терминала | `finally` в `run`, SIGTERM → `QuitMsg` | повторная запись `TuiRunner` (шаг 6) |
+| 6 | тестовый ввод-вывод | `withInput(Stream)`, `withOutput(IOSink)`, `withWindowSize`, `withoutSignalHandler` | — |
+| 7 | Windows Terminal и conhost | ввод VT через `SetConsoleMode`; вывод VT и размер — не проверены | опрос размера (шаг 5); при поломке вывода `--ui tui` на Windows отключён, остаётся REPL |
+| 8 | ширина символов | у пакета своя таблица ширины графем, у рендера §12.2.2 — своя | строки кадра режутся по нашей ширине с запасом в одну колонку для спорных символов |
+| 9 | tmux и SSH | не проверено | `withCellRenderer()`; без исправления — известное ограничение в `/terminal-setup` |
+| 10 | запись вне кадра | синхронная запись кадра по исходникам | OSC 52 только командой `setClipboard`, без обёрток tmux и screen |
+
+Пункт 2 обязателен: без него разведка отвергает пакет, и TUI строится запасным рендером
+(§12.2.12).
 
 **Транскрипт и прокрутка.** Каждый `TranscriptItem` рендерится в строки отдельно; кэш переносов
 по ключу `(item.id, ревизия элемента, ширина, раскрыт ли)`: при дельте перерисовывается только
@@ -371,8 +514,19 @@ Enter — подробности, Esc — назад; другой печатн�
 
 ## 12.2.9. Ввод с клавиатуры
 
-**Декодер** (`lib/src/input/key_decoder.dart`, чистый Dart, тестируется на байтах): конечный
-автомат над потоком байт stdin.
+**Два источника клавиш, один реестр.** В построчном REPL байты stdin разбирает наш декодер
+(ниже). В TUI их разбирает dart_tui: `KeyPressMsg` (код клавиши, модификаторы, текст), `PasteMsg`,
+после MVP — сообщения мыши; `TuiInput` (`lib/src/tui/tui_input.dart`) переводит `KeyPressMsg` в
+тот же `KeyEvent`, что даёт наш декодер, и дальше оба режима идут через один реестр клавиш. Тест
+`test/tui/tui_input_test.dart` сверяет перевод с декодером на одних и тех же последовательностях
+(таблица шагов 3–6). Чего dart_tui не умеет (по итогам чек-листа §12.2.7), добавляется без
+правки пакета: перевод или подавление сообщения — `withFilter` или `TuiInput`; своя разборка
+байт — `withInput` с потоком, прошедшим через наш фильтр; своя управляющая последовательность —
+запись в `terminalSink` из `Cmd` (§12.2.7, шаг 8). Если нужная возможность невозможна и так,
+действует запасной путь из чек-листа, а не обход пакета в обычном коде.
+
+**Декодер** (`lib/src/input/key_decoder.dart`, чистый Dart, тестируется на байтах; построчный
+REPL): конечный автомат над потоком байт stdin.
 
 1. UTF-8 собирается в символы; неполная последовательность ждёт следующих байт.
 2. `ESC` один: если за 50 мс нет следующего байта — клавиша Esc; иначе начало
@@ -387,10 +541,15 @@ Enter — подробности, Esc — назад; другой печатн�
    `\r\n` и `\r` нормализуются в `\n`; управляющие символы, кроме `\n` и `\t`, удаляются.
    Вставка никогда не отправляет промпт и не исполняет команд (U-23). Незакрытая вставка через
    1 с — завершается принудительно.
-6а. После MVP: SGR-мышь `ESC [ < b ; x ; y M|m` → `MouseMsg` (§12.6.5).
+6а. SGR-мышь `ESC [ < b ; x ; y M|m` в REPL не включается и этим декодером не разбирается; в TUI
+   её разбирает dart_tui (`MouseWheelMsg`, `MouseClickMsg`, `MouseReleaseMsg`), `TuiInput`
+   переводит в `MouseMsg` (после MVP, §12.6.5).
 7. Неизвестная последовательность игнорируется и пишется в диагностику (`--verbose`).
 
-**Включение расширенных клавиш** при старте TTY-сессии (и REPL, и TUI):
+**Включение расширенных клавиш** при старте TTY-сессии REPL (в TUI то же делает dart_tui: он
+сразу включает kitty `ESC[=<флаги>;1u` и modifyOtherKeys `ESC[>4;2m`, запрашивает `ESC[?u` и
+сообщает ответ `KeyboardEnhancementsMsg`; выключение — `ESC[>4m ESC[=0;1u`; шаг 5 ниже
+действует в обоих режимах):
 
 1. `ESC[?2004h` — bracketed paste (выключение `ESC[?2004l`).
 2. Запрос kitty-протокола `ESC[?u`; ответ `ESC[?<флаги>u` в течение 100 мс → включить
@@ -532,9 +691,13 @@ CLI сам пишет только файлы состояния (`~/.codelab/cl
    строк попадает в композер целиком.
 4. **TUI-4.** После выхода из TUI любым путём (команда, сигнал, исключение) терминал
    восстановлен: основной экран, курсор виден, bracketed paste и расширенные клавиши выключены,
-   stdin в исходном режиме, и отчёты мыши выключены.
-5. **TUI-5.** `update` и `view` не выполняют ввод-вывод; весь ввод-вывод TUI — в `TuiLoop` и
-   `TerminalIo`.
+   stdin в исходном режиме, и отчёты мыши выключены. Восстановление делает `Program` dart_tui
+   в своём `finally`, а `TuiRunner` повторяет его в своём `finally` независимо от пакета
+   (§12.2.7, шаг 6).
+5. **TUI-5.** `reduce`, `render` и `TuiApp.update`/`TuiApp.view` не выполняют ввод-вывод: они
+   только строят модель, кадр и описания команд. Весь ввод-вывод TUI — в `Program` dart_tui и в
+   функциях `Cmd`, которые строит `TuiEffects`. Файлы ядра экрана (`tui_model.dart`,
+   `tui_update.dart`, `tui_view.dart`) не импортируют ни `dart:io`, ни `package:dart_tui/`.
 6. **TUI-6.** Ни одна строка вывода CLI (строки инструментов, статус, предупреждения) не
    содержит сериализованного `rawInput`; полный `rawInput` печатают только `/inspect` и `?` в
    одобрении.
@@ -546,21 +709,52 @@ CLI сам пишет только файлы состояния (`~/.codelab/cl
 10. **TUI-10.** Последовательность OSC 8 выводится только для адреса со схемой `http`, `https`
     или `file`, и ни адрес, ни текст ссылки не несут в терминал управляющих символов C0, DEL и C1
     (§12.2.2, «Ссылки (OSC 8)»).
+11. **TUI-11.** Текст из сессии (ответ и мысли агента, вывод и заголовки инструментов, имена
+    файлов, сообщения об ошибках) попадает в `View` только через наш рендер: управляющие
+    символы C0 (кроме `\t`, который раскрывается в пробелы, и `\n`, который делит строки), DEL и
+    C1, в том числе `ESC`, вырезаются до построения кадра. Управляющие последовательности в кадре
+    — только те, что создал сам рендер (SGR, OSC 8 по TUI-10); dart_tui пишет содержимое `View`
+    без фильтрации.
 
 ## 12.2.12. Обоснование
 
 * **Построчный режим по умолчанию до приёмки TUI.** REPL уже закрывает замену Python TUI (U-12 —
   Should); полноэкранный режим включается флагом и становится умолчанием только после PTY-тестов,
   чтобы различия терминалов не сломали основной путь.
-* **Свой рендер TUI, без библиотеки** (закрывает открытый вопрос §11 «чем рисовать TUI»). Нужны
-  три вещи: альтернативный экран, построчный diff кадра и декодер клавиш — это несколько сотен
-  строк. Готовые Dart-библиотеки TUI либо не поддерживают kitty-протокол и bracketed paste, либо
-  тянут собственную модель виджетов, конфликтующую с моделью kit; новая зависимость потребовала
-  бы проверки по §7а.
-* **Model–Update–View.** Чистые `update`/`view` тестируются без PTY на тысячах сценариев (клавиши →
-  кадр), PTY-тест остаётся дымовым; так же устроены Cubit-ы app поверх того же `SessionView`.
+* **TUI на `dart_tui`** (решение владельца продукта; закрывает вопрос §11 «чем рисовать TUI»).
+  Почему: та же архитектура Model–Update–View, что задумана для TUI, поэтому пакет не навязывает
+  чужой модели виджетов и не конфликтует с `SessionView` kit; поддерживаемые компоненты (список с
+  фильтром, viewport, spinner, help) и готовый терминальный слой — raw-режим с termios и
+  консолью Windows, альтернативный экран, построчный diff кадра с DEC 2026, kitty-протокол и
+  modifyOtherKeys, bracketed paste, мышь, сигналы, восстановление терминала; своего
+  терминального кода в CLI становится меньше, и он не дублирует пакет. Лицензия MIT совместима
+  с репозиторием (§7а, п. 4–5); ограничение SDK пакета `>=3.5.0` покрывает наш `>=3.8.0`.
+* **Риски `dart_tui`** (§10): пакет молодой — 3.0.0 вышел 2026-10-17, при этом уже три мажорные
+  версии (2.0 и 3.0 с заметками о миграции; 3.0 поменял обработку Ctrl+C и событий клавиш);
+  на Windows проверен только ввод VT, а вывод VT, размер окна и conhost не подтверждены;
+  своего тестового стенда (аналога `teatest`) нет; нативная часть — `dart:ffi` (termios, kernel32)
+  и зависимость `ffi`; один издатель.
+* **Меры.** (1) Изоляция: `package:dart_tui/` разрешён только в `apps/codelab_cli/lib/src/tui/`
+  (сторож §9.5), а ядро экрана внутри `tui/` не импортирует его вовсе (TUI-5) — замена пакета
+  затрагивает четыре файла адаптера. (2) Версия `^3.0.0` в `pubspec.yaml`, точная — в
+  `pubspec.lock`; переход на новую мажорную версию — отдельный PR с прогоном PTY-тестов и
+  чек-листа §12.2.7. (3) Разведка в начале этапа 6 (задача 6.11, исключение (д) §9.0) по
+  чек-листу §12.2.7; итог — в `design.md` `add-codelab-cli`. (4) Модульные тесты чистых
+  `reduce`/`render` не зависят от dart_tui; адаптер тестируется через `withInput`/`withOutput`
+  (`test/tui/tui_app_test.dart`); PTY-e2e (`cli/tui-smoke` и после MVP `cli/tui-*`) не
+  меняются. (5) Запасной путь: если разведка отвергнет пакет (нет пункта 2 чек-листа или
+  неустранимая поломка на macOS или Linux), за тем же `reduce`/`render` встаёт свой рендер —
+  `Frame` в построчный diff, свой цикл и наш декодер §12.2.9; это меняет только адаптер и
+  оформляется правкой этого раздела и `design.md`.
+* **Model–Update–View.** Чистые `reduce`/`render` тестируются без PTY и без dart_tui на тысячах
+  сценариев (клавиши → кадр), PTY-тест остаётся дымовым; так же устроены Cubit-ы app поверх
+  того же `SessionView`.
+* **`TuiCmd` — данные, а не `Cmd` dart_tui.** Замыкание нельзя сравнить в тесте и нельзя
+  перечислить анализатором; данные сравниваются по значению, а их исполнение собрано в одном
+  `TuiEffects`. Цена — одна функция перевода `toDartTuiCmd`.
 * **Построчный diff кадра, а не перерисовка экрана.** Стрим даёт десятки дельт в секунду; полная
-  перерисовка мерцает и грузит медленные SSH-соединения.
+  перерисовка мерцает и грузит медленные SSH-соединения. Diff делает рендер dart_tui; наш кэш
+  переносов по элементам транскрипта избавляет от переноса всего текста на каждом кадре.
 * **Markdown в построчном режиме по закреплённым блокам.** Перерисовать напечатанное нельзя,
   поэтому печатается только то, что уже не изменится; строки кода и обычного текста идут сразу,
   чтобы стрим не «замирал» до конца абзаца.
@@ -604,9 +798,16 @@ CLI сам пишет только файлы состояния (`~/.codelab/cl
 * **`cli/tui-smoke`** (`test/e2e/tui_smoke_test.dart`, U-12): `codelab --ui tui` в PTY 100×30;
   вывод содержит `ESC[?1049h`; промпт → ответ появляется в области транскрипта, статус-строка
   в последней строке; Ctrl+D → `ESC[?1049l`, `ESC[?2004l`, курсор виден (TUI-4); SIGTERM во время
-  хода — то же восстановление. Модульно — `test/tui/tui_update_test.dart` (клавиши → модель и
-  команды), `test/tui/tui_view_golden_test.dart` (кадры), `test/tui/frame_renderer_test.dart`
-  (переписываются только изменённые строки).
+  хода — то же восстановление. Модульно, без dart_tui — `test/tui/tui_update_test.dart` (клавиши
+  → модель и команды `TuiCmd`), `test/tui/tui_view_golden_test.dart` (кадры; строки не шире
+  терминала, сброс атрибутов в конце, TUI-9; `ESC` из текста агента вырезан, TUI-11). Адаптер —
+  `test/tui/tui_app_test.dart`: `Program` с `withInput` (поток байт), `withOutput` (буфер),
+  `withWindowSize(100, 30)` и `withoutSignalHandler()`; Shift+Enter в kitty и modifyOtherKeys →
+  `newline`, вставка → одно `PasteMsg`, `Program.send(DomainMsg(SessionViewMsg))` → строка в
+  буфере вывода; исключение в `reduce` → кадр прежний, три подряд → выход и последовательности
+  восстановления в буфере (TUI-4). `test/tui/tui_effects_test.dart` — каждая ветка
+  `toDartTuiCmd` на фальшивом `SessionHandle`; исключение команды → `EffectFailedMsg`.
+  `test/tui/tui_input_test.dart` — §12.2.9, «Два источника клавиш».
 * **`cli/status-line-usage`** (`test/e2e/status_line_usage_test.dart`, U-13): scripted-агент
   отвечает с usage в форме, утверждённой OpenSpec; после хода строка содержит модель, режим,
   `ctx 9%`, `↑…k ↓…`, `$0.04`, ветку временного git-репозитория; тот же сценарий без usage — нет

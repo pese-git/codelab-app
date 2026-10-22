@@ -37,6 +37,7 @@
 | Flutter tests              | `flutter_test`          |
 | Integration tests          | `integration_test`      |
 | Lints                      | `flutter_lints`         |
+| Terminal UI (`codelab_cli`) | `dart_tui`             |
 
 Технологии из этой таблицы считаются **утверждёнными решениями проекта**.
 
@@ -688,6 +689,36 @@ Application:
 Например, widget не должен обращаться к `acp_transports` только потому, что package объявлен в `codelab_app/pubspec.yaml`.
 
 Architectural dependency rules важнее технической доступности dependency.
+
+---
+
+## 20а. `codelab_cli`: терминальный UI — `dart_tui`
+
+Технология: [`dart_tui`](https://pub.dev/packages/dart_tui) ([репозиторий](https://github.com/codenameakshay/dart_tui)) — pure Dart каркас терминального UI в духе Elm и Bubble Tea: `Model` с `init()`, `update(Msg)` и `view()` (возвращает `View`), асинхронные команды `Cmd` (функция, которая доставляет одно сообщение; помощники `tick`, `every`, `batch`, `sequence`, `execProcess`), `Program(options: [...]).run(model)` — владелец цикла событий, raw-режима, альтернативного экрана, рендера (построчный diff, synchronized output `?2026` при поддержке терминала, не чаще `withFps`, по умолчанию 60 кадров в секунду) и сигналов. В пакете 27+ компонентов (spinner, viewport, список с фильтром, select list, help, text area и др.) и стили в духе Lipgloss.
+
+Решение принято владельцем продукта для полноэкранного режима нового приложения `apps/codelab_cli` (терминальный ACP-клиент `codelab`, план — [`proposals/dart-agent-and-clients.md`](proposals/dart-agent-and-clients.md), этап 6). Архитектура TUI поверх пакета — [§12.2.7](proposals/dart-agent-and-clients/12-2-cli-display-and-input.md), обоснование и риски — §12.2.12 того же раздела.
+
+1. **Назначение.** Терминальный слой и цикл Model–Update–View полноэкранного режима `codelab --ui tui`: ввод клавиш (kitty keyboard protocol, xterm modifyOtherKeys, bracketed paste), мышь, размер окна, вывод кадров, восстановление терминала при выходе.
+2. **Где используется.** Только полноэкранный режим `--ui tui`, только код `apps/codelab_cli/lib/src/tui/`, и внутри него — только адаптер (`TuiApp`, `TuiInput`, `TuiEffects`, `TuiRunner`); чистое ядро экрана (`TuiModel`, `reduce`, `render`) пакет не импортирует.
+3. **Где не используется.** Построчный REPL и headless (`-p`, `stream-json`; proposals §12.2.1) пишут в stdout сами и пакет не используют. `acp_client_kit`, `acp_client_core`, `acp_client_io`, пакеты агента и `codelab_app` от него не зависят. Компоненты-редакторы пакета (`TextAreaModel`, `TextInputModel`) и стили `Style` для markdown не используются: у CLI свой композер с реестром клавиш и свой ANSI-рендер markdown, общий с REPL.
+4. **Какую проблему решает.** Не писать и не сопровождать свой терминальный слой (raw-режим через termios и консоль Windows, построчный diff кадра, декодер kitty и modifyOtherKeys, bracketed paste, мышь, сигналы и восстановление терминала) и получить поддерживаемые компоненты (список с фильтром, viewport, spinner, help) в той же архитектуре Model–Update–View, что задумана для TUI.
+5. **Влияние на architecture boundaries.** `package:dart_tui/` импортируется только из `apps/codelab_cli/lib/src/tui/**`; остальной CLI и kit о нём не знают — правило тест-сторожа импортов (proposals §9.5, `PackageRule` над `apps/codelab_cli/lib/src` с `exclude: ['tui/']`). Модель отображения kit (`SessionView`) остаётся источником состояния; пакет её не заменяет и не дублирует.
+6. **Заменяет ли существующую технологию.** Нет. Заменяет только запланированный в proposals собственный рендер TUI (прежний вариант §12.2.7); кода TUI ещё нет.
+7. **Требуется ли migration.** Нет: заменять нечего.
+8. **Требуется ли ADR.** Нет. Технология затрагивает только presentation нового приложения и не меняет архитектуру ACP-клиента, state management `codelab_app` и границы пакетов (§26). Решение фиксируется в proposals §12.2.12 и в `design.md` OpenSpec change этапа 6 `add-codelab-cli` вместе с итогом разведки (задача 6.11).
+
+Проверка по §25:
+
+* **Существующие dependency и SDK.** Ни одна утверждённая технология не решает задачу терминального UI; `flutter_bloc` и `fluent_ui` — Flutter и к CLI неприменимы. Средствами `dart:io` задача решается только своим терминальным слоем — от него и отказались.
+* **Competing framework.** Нет: state management `codelab_app` (`flutter_bloc`) не затрагивается; MVU пакета живёт только внутри CLI и только в presentation.
+* **Desktop platforms.** Заявлены Linux, macOS и Windows (на pub.dev также Android и iOS — для CLI не важны). На Windows по исходникам 3.0.0 включается ввод VT (`SetConsoleMode`); вывод VT, размер окна и conhost не подтверждены — пункт чек-листа разведки; до подтверждения на Windows остаётся построчный REPL.
+* **SDK constraints.** Пакет требует Dart `>=3.5.0 <4.0.0`; наш диапазон пакетов `>=3.8.0 <4.0.0` в него входит.
+* **Native configuration.** Отдельной нет, но пакет использует `dart:ffi` (termios libc на macOS и Linux, kernel32 на Windows) и зависит от `ffi`; прочие зависимости — `characters`, `path`. AOT-сборка `dart compile exe` это поддерживает; веб-сборка CLI не нужна.
+* **Testing.** Специального тестового стенда у пакета нет. Чистые `reduce`/`render` тестируются без пакета; адаптер — через опции `withInput` (поток байт вместо stdin), `withOutput` (свой `IOSink`), `withWindowSize`, `withoutSignalHandler`; PTY-e2e CLI не меняются.
+* **Security.** Raw-режим и управляющие последовательности: пакет пишет содержимое `View` в терминал без фильтрации, поэтому текст из LLM и инструментов (недоверенный) проходит санитизацию нашим рендером до попадания в `View` — вырезаются C0 (кроме `\t` и `\n`), DEL и C1, в том числе `ESC`; OSC 8 — только для `http`, `https`, `file` (proposals §12.2.11, TUI-10, TUI-11). Восстановление терминала при исключении и сигнале — `Program` пакета и наш `TuiRunner` (TUI-4). Сеть, файлы и секреты пакет не трогает.
+* **Лицензия и сопровождение.** MIT (совместима, proposals §7а); verified publisher `hashstudios.dev`. На 2026-10-22: 3.0.0 от 2026-10-17, мажорные версии 2.0 и 3.0 вышли с заметками о миграции, 4 лайка, 160 pub points, около 8,4 тыс. загрузок. Пакет молодой — риск и меры в proposals §10 и §12.2.12.
+
+Версия: `^3.0.0` в `apps/codelab_cli/pubspec.yaml`, точная — в `pubspec.lock`. Переход на новую мажорную версию — отдельный PR с прогоном PTY-тестов и чек-листа разведки (proposals §12.2.7).
 
 ---
 

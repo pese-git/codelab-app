@@ -219,11 +219,14 @@ const webUnsafe = ['dart:io', 'dart:isolate', 'dart:ffi', 'dart:html', 'dart:js_
     'package:web/', 'package:flutter/', 'package:acp_transports/io.dart'];
 
 final class PackageRule {
-  const PackageRule(this.dir, {required this.forbidden, this.exclude = const []});
+  const PackageRule(this.dir,
+      {required this.forbidden, this.exclude = const [], this.sealExclude = true});
   final String dir;             // пакет (сканируется его lib/) или каталог внутри lib/
   final List<String> forbidden; // префиксы URI
   final List<String> exclude;   // вне правила: путь файла или префикс каталога с '/' (IO-точка входа и её реализация)
-  // файлы вне exclude не должны ссылаться на файлы из exclude (agent-core-architecture §1.4) — отдельная проверка
+  // sealExclude: файлы вне exclude не должны ссылаться на файлы из exclude (agent-core-architecture §1.4) —
+  // отдельная проверка; false — exclude только снимает запреты (каталог, которому разрешён один пакет)
+  final bool sealExclude;
 }
 
 const rules = [
@@ -234,7 +237,9 @@ const rules = [
   // этап 2: codelab_agent_io — ['package:flutter/', 'package:acp_']
   // этап 4: codelab_agent_acp — webUnsafe; этап 8: codelab_agent_mcp — webUnsafe
   // этап 5: acp_client_kit — webUnsafe; acp_client_io — ['package:flutter/']
-  // этап 6: apps/codelab_cli — ['package:flutter/', 'package:codelab_agent_']
+  // этап 6: apps/codelab_cli — ['package:flutter/', 'package:codelab_agent_'];
+  //   apps/codelab_cli/lib/src — ['package:dart_tui/'], exclude: ['tui/'], sealExclude: false
+  //   (dart_tui — только в lib/src/tui/, §12.2.7; остальной CLI вызывает tui/ через TuiRunner)
   // этап 7: codelab_embedded — webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/']; apps/codelab_app — ['package:codelab_agent_']
   // этап 7: codelab_setup — [...webUnsafe, 'package:codelab_agent_io/', 'package:acp_', 'package:flutter/'],
   //   exclude: ['lib/io.dart', 'lib/src/io/'];
@@ -329,7 +334,7 @@ Allowlist зависимостей — отдельный тест `codelab_arch
 | `apps/codelab_agent` (4) | codelab-agent binary — serves the Dart agent over ACP stdio and WebSocket. | `acp_transports`, `codelab_agent_acp`, `codelab_agent_core`, `codelab_agent_io`, `args: ^2.6.0`; этап 8 — `codelab_agent_mcp` | `executables: {codelab-agent: codelab_agent}` |
 | `acp_client_kit` (5) | UI-agnostic ACP client workspace shared by codelab_app and codelab_cli. | `../acp_client_core`, `../acp_protocol`, `meta: ^1.16.0` | `dev_dependencies`: `../acp_testing` |
 | `acp_client_io` (5) | dart:io implementations of ACP client ports — fs, terminal, profile and project stores. | `../acp_client_core`, `../acp_client_kit`, `path: ^1.9.0` | — |
-| `apps/codelab_cli` (6) | codelab — terminal ACP client with REPL and headless modes. | `acp_client_core`, `acp_client_io`, `acp_client_kit`, `acp_transports`, `args: ^2.6.0`, `structured_log: 0.3.1`; этап 7 — `codelab_embedded` | `executables: {codelab: codelab}` |
+| `apps/codelab_cli` (6) | codelab — terminal ACP client with REPL and headless modes. | `acp_client_core`, `acp_client_io`, `acp_client_kit`, `acp_transports`, `args: ^2.6.0`, `dart_tui: ^3.0.0` (импортируется только из `lib/src/tui/`, §12.2.7), `structured_log: 0.3.1`; этап 7 — `codelab_embedded` | `executables: {codelab: codelab}` |
 | `codelab_embedded` (7) | Builds the in-process CodeLab agent for ACP clients. | `../acp_transports`, `../codelab_agent_acp`, `../codelab_agent_core`, `../codelab_agent_io` (импортируется только из `lib/io.dart`); этап 8 — `../codelab_agent_mcp` | — |
 | `codelab_setup` (7) | Provider setup wizard, settings view models and config access shared by codelab_app and codelab_cli. | `../codelab_agent_core`, `http: ^1.2.0`, `meta: ^1.16.0`, `../codelab_agent_io` (импортируется только из `lib/io.dart`) | — |
 | `codelab_agent_mcp` (8) | MCP client for the CodeLab agent core — streamable HTTP and stdio via host port. | `../codelab_agent_core`, `http: ^1.2.0` | — |

@@ -53,6 +53,18 @@
     `cli/sessions-filter` (§12.6); `cli/login-openrouter-pkce` (agent-core-architecture §17.10.6);
     `cli/trajectory-export-atif` (agent-core-architecture §17.13.3); `cli/config-export-no-secrets`,
     `cli/config-import-providers-merge` (agent-core-architecture §17.14.4).
+11. **6.11. Разведка TUI на `dart_tui`** (исключение (д) §9.0: spike с ограничением по времени —
+    не больше трёх рабочих дней, без тестов): в начале этапа, параллельно с 6.1. Зависимость
+    `dart_tui: ^3.0.0` добавляется в `apps/codelab_cli/pubspec.yaml` и правило сторожа (только
+    `lib/src/tui/`, §9.5); спайк в `apps/codelab_cli/tool/tui_spike/` (вне `lib/`, удаляется после
+    решения) — пустой `TuiApp` с композером и стримом scripted-агента. Проходится чек-лист
+    §12.2.7 (внешние сообщения, bracketed paste, Shift+Enter, DEC 2026, восстановление при
+    исключении и SIGTERM, ввод-вывод через `withInput`/`withOutput`, Windows Terminal, ширина
+    символов, tmux и SSH, запись вне кадра) в терминалах таблицы §12.2.9 на macOS и Linux и в
+    Windows Terminal. Итог — таблица в `design.md` change `add-codelab-cli`: по пункту «да» или
+    «нет → запасной путь», версия пакета из `pubspec.lock`, решение «пакет подтверждён» или
+    «отвергнут → свой рендер» (§12.2.12). Сам полноэкранный режим (U-12) по-прежнему после MVP;
+    код по итогам разведки пишется по TDD.
 
 **Обвязка PTY для e2e.** `apps/codelab_cli/test/e2e/support/pty_process.dart` —
 `PtyProcess.start(executable, args, {columns, rows, environment})`: `Process.start` системной
@@ -360,7 +372,10 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
 `1` — есть `FAIL`, `64` — ошибка использования.
 
 **OpenSpec change.** `add-codelab-cli` — scope: команды и флаги, REPL-команды и клавиши, UX
-одобрения, коды выхода, формат stream-json v1 по §12.5 (схема в apps/codelab_cli/schema/), драйвер фикстур. Отдельно, если
+одобрения, коды выхода, формат stream-json v1 по §12.5 (схема в apps/codelab_cli/schema/), драйвер фикстур;
+зависимость `dart_tui` для будущего `--ui tui` и итог разведки 6.11 (технология затрагивает только
+presentation нового приложения, поэтому решение фиксируется в `design.md` этого change и §12.2.12,
+без ADR; technology-stack §20а). Отдельно, если
 понадобится расширение ACP для статус-строки (usage) — свой change `add-usage-extension` после
 этапа 9 (§12.1.5).
 `tasks.md` — пары "тест → реализация" со ссылкой на критерий (§9.0, правило 3); PTY-e2e
@@ -385,7 +400,10 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
   (агент, который отвечает ожидаемыми кадрами самой фикстуры) весь корпус даёт `PASS`, а фикстура
   с испорченным ожидаемым кадром — `FAIL` с диффом и код выхода `1`. Прогон против настоящего
   агента — с этапа 7 (`--agent embedded`) и этапа 4 (`--agent 'stdio:codelab-agent serve --stdio'`).
-* `melos run guard`: CLI не импортирует Flutter и агентские пакеты.
+* `melos run guard`: CLI не импортирует Flutter и агентские пакеты; `package:dart_tui/` — только из
+  `apps/codelab_cli/lib/src/tui/`.
+* Разведка 6.11 завершена: таблица чек-листа §12.2.7 и решение по `dart_tui` записаны в
+  `design.md` `add-codelab-cli`; каталог спайка удалён.
 * Ручная проверка: сессия с Python-агентом (`codelab -a 'stdio:codelab serve --stdio'`) —
   промпт, одобрение, `/mode`, `/sessions`, `/resume`.
 
@@ -394,7 +412,9 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
 **Риски.** Различия терминалов (Windows Console, tmux) ломают raw-режим — построчный режим как
 запасной, PTY-тесты на macOS и Linux, ручная проверка на Windows перед релизом. Команда `codelab`
 сейчас занята Python-агентом — до этапа 9 бинарь CLI ставится под именем `codelab` только в
-`build/bin`, переименование установленной команды — на этапе 9 (§11, допущение 5).
+`build/bin`, переименование установленной команды — на этапе 9 (§11, допущение 5). Молодой пакет
+`dart_tui` не подтвердит нужные возможности — разведка 6.11 в начале этапа, запасной путь
+§12.2.12; MVP от этого не зависит: REPL и headless пакет не используют.
 
 ---
 
