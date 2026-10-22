@@ -57,10 +57,10 @@
    `packages/dart/acp_client_core/test/fixtures/client_fixture_conformance_test.dart` — для каждой
    фикстуры, у которой `roles` содержит `client`, поднимает `AcpClientApplication` на `FakeAcpTransport` и
    проверяет ответы и итоговое состояние сессии.
-9. **0.9. Лицензия.** Лицензия — MIT (§11); добавить в корень `LICENSE` (текст MIT с правообладателем репозитория),
+9. **0.9. Лицензия.** Лицензия — MIT (§11); добавить в корень `LICENSE` (текст MIT, правообладатель — Sergey Penkovsky),
    `THIRD_PARTY_NOTICES.md` (заголовок и пустой список с форматом записи из §7а) и раздел о
    лицензиях в `README`.
-10. **0.10. Незавершённые OpenSpec changes Python-агента** (`context-manager-implementation`,
+10. **0.10. Незавершённые OpenSpec changes Python-агента** — *отложена: этап 0 затрагивает только Flutter/Dart-проект, решение принимается отдельно и этап 0 не блокирует* (`context-manager-implementation`,
     `session-hot-cold-split` и другие — каталог `../codelab-agent/openspec/changes/` соседнего
     репозитория `codelab-agent`, путь от корня `codelab-app`): по каждому — «закрыть» или
     «перенести в backlog Dart-агента», список фиксируется в `proposal.md` change этапа 0.
