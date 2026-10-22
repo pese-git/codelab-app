@@ -271,6 +271,141 @@ void main() {
     },
   );
 
+  testWidgets(
+    'auto-scrolls to a new pending approval when the transcript outgrew the '
+    'viewport without the user ever scrolling it',
+    (tester) async {
+      Widget buildPanel(List<AcpTranscriptEntry> entries) {
+        return FluentApp(
+          home: SizedBox(
+            width: 400,
+            height: 200,
+            child: AcpTranscriptPanel(entries: entries),
+          ),
+        );
+      }
+
+      AcpTranscriptEntry agentEntry(int i) {
+        return AcpTranscriptEntry(
+          id: 'agent-$i',
+          kind: AcpTranscriptEntryKind.agent,
+          title: 'Agent',
+          body: 'Message number $i with enough text to take vertical space.',
+        );
+      }
+
+      await tester.pumpWidget(buildPanel([agentEntry(0)]));
+      await tester.pumpAndSettle();
+
+      // The agent streams far more than fits, while the user never touches
+      // the scroll position — it stays at the top.
+      final grownEntries = [for (var i = 0; i < 20; i += 1) agentEntry(i)];
+      await tester.pumpWidget(buildPanel(grownEntries));
+      await tester.pumpAndSettle();
+
+      final scrollableFinder = find.byType(Scrollable);
+      ScrollPosition position() =>
+          tester.state<ScrollableState>(scrollableFinder).position;
+      expect(position().pixels, 0.0);
+      expect(position().maxScrollExtent, greaterThan(200));
+
+      await tester.pumpWidget(
+        buildPanel([
+          ...grownEntries,
+          AcpTranscriptEntry(
+            id: 'tool-pending-1',
+            kind: AcpTranscriptEntryKind.toolCall,
+            title: 'Run command',
+            approval: AcpTranscriptApproval.pending(
+              risk: AcpApprovalRisk.shell,
+              options: const [
+                AcpApprovalOption(
+                  id: 'allow',
+                  label: 'Allow',
+                  kind: AcpApprovalOptionKind.allowOnce,
+                ),
+              ],
+              onOptionSelected: (_) {},
+            ),
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        position().pixels,
+        position().maxScrollExtent,
+        reason:
+            'the user has not scrolled up to read history, so the new '
+            'approval is brought into view',
+      );
+      expect(find.text('Allow'), findsOneWidget);
+      expect(
+        tester.getRect(find.text('Allow')).bottom,
+        lessThanOrEqualTo(tester.getRect(scrollableFinder).bottom),
+      );
+    },
+  );
+
+  testWidgets(
+    'auto-scrolls to a pending approval that is already present when the '
+    'transcript is first shown',
+    (tester) async {
+      // The host swaps an empty-state screen for the transcript panel only
+      // once the first entries arrive — over a fast stdio round trip those
+      // can already include the pending approval, so there is no earlier
+      // build for `didUpdateWidget` to diff against.
+      await tester.pumpWidget(
+        FluentApp(
+          home: SizedBox(
+            width: 400,
+            height: 200,
+            child: AcpTranscriptPanel(
+              entries: [
+                for (var i = 0; i < 20; i += 1)
+                  AcpTranscriptEntry(
+                    id: 'agent-$i',
+                    kind: AcpTranscriptEntryKind.agent,
+                    title: 'Agent',
+                    body:
+                        'Message number $i with enough text to take '
+                        'vertical space.',
+                  ),
+                AcpTranscriptEntry(
+                  id: 'tool-pending-1',
+                  kind: AcpTranscriptEntryKind.toolCall,
+                  title: 'Run command',
+                  approval: AcpTranscriptApproval.pending(
+                    risk: AcpApprovalRisk.shell,
+                    options: const [
+                      AcpApprovalOption(
+                        id: 'allow',
+                        label: 'Allow',
+                        kind: AcpApprovalOptionKind.allowOnce,
+                      ),
+                    ],
+                    onOptionSelected: (_) {},
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scrollableFinder = find.byType(Scrollable);
+      final position = tester.state<ScrollableState>(scrollableFinder).position;
+      expect(position.maxScrollExtent, greaterThan(0));
+      expect(position.pixels, position.maxScrollExtent);
+      expect(find.text('Allow'), findsOneWidget);
+      expect(
+        tester.getRect(find.text('Allow')).bottom,
+        lessThanOrEqualTo(tester.getRect(scrollableFinder).bottom),
+      );
+    },
+  );
+
   testWidgets('renders transcript summary mode with compact details', (
     tester,
   ) async {
