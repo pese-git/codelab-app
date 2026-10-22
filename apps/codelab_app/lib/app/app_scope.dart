@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_transports/acp_transports.dart';
+import 'package:acp_transports/io.dart';
 import 'package:cherrypick/cherrypick.dart';
 import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
