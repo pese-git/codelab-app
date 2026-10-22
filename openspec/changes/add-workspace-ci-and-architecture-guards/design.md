@@ -8,6 +8,8 @@
 - `docs/architecture/proposals/dart-agent-and-clients/07-decision-sources.md` §7а — политика стороннего кода;
 - `AGENTS.md` §5 (структура), §21 (проверки), §22 (git flow).
 
+Scope — только Flutter/Dart-проект этого репозитория; соседний репозиторий `codelab-agent` (Python) не затрагивается.
+
 Текущее состояние: шесть пакетов в `workspace:` корневого `pubspec.yaml`; скрипты melos продублированы в `melos.yaml` и секции `melos:` (в `melos.yaml` на три e2e-скрипта больше); `.github/` нет; `acp_transports.dart` экспортирует `stdio_acp_transport.dart` и `websocket_acp_transport.dart`, которые импортируют `dart:io`; `LICENSE` и корневого `README.md` нет. На GitHub `develop` — ветка по умолчанию, ruleset на `master` и `develop` требует pull request, обязательных проверок пока нет.
 
 ## Goals / Non-Goals
@@ -75,7 +77,7 @@ Change выполняется тремя итерациями feature first (§9
 
 1. melos (0.1) и разделение `acp_transports` (0.2) — существующий код, зелёные тесты app;
 2. пакеты `codelab_agent_core`, `codelab_architecture_tests`, скрипты (0.3–0.5), `AGENTS.md` (0.11);
-3. CI (0.6), лицензия (0.9), решение по Python-changes (0.10).
+3. CI (0.6), лицензия (0.9).
 
 После каждой итерации `fvm dart run melos run check` зелёный.
 
@@ -94,5 +96,4 @@ Change выполняется тремя итерациями feature first (§9
 
 ## Open Questions
 
-- Правообладатель в `LICENSE`: предлагается «Sergey Penkovsky» (автор истории репозитория) — подтвердить при задаче 0.9.
-- Решения по четырём Python-changes в `proposal.md` — подтвердить при задаче 0.10.
+- Нет. Правообладатель в `LICENSE` — Sergey Penkovsky (подтверждено владельцем репозитория). Задача 0.10 отложена и в change не входит.
