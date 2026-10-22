@@ -1,6 +1,6 @@
 # 6. Инструменты
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [5. Цикл агента](05-agent-loop.md) · [Оглавление ядра](../agent-core-architecture.md) · [7. Разрешения](07-permissions.md) →
 

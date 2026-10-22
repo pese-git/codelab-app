@@ -1,6 +1,6 @@
 # 9.14. Этап 9 — Цели Must и переключение по умолчанию
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [9.13. Этап 8 — MCP, конфигурация, AGENTS.md](09-13-stage-8-mcp-config.md) · [Оглавление](../dart-agent-and-clients.md) · [9.15. Этап 10 — Мобильные и web](09-15-stage-10-mobile-web.md) →
 

@@ -1,6 +1,6 @@
 # 9.5. Этап 0 — Фундамент
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [9. План миграции](09-00-migration-plan.md) · [Оглавление](../dart-agent-and-clients.md) · [9.6. Этап 1 — LLM](09-06-stage-1-llm.md) →
 

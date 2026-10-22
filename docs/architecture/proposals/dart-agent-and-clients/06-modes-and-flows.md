@@ -1,6 +1,6 @@
 # 6. Режимы работы и потоки
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [5. Контракты ядра](05-core-contracts.md) · [Оглавление](../dart-agent-and-clients.md) · [7. Источники решений](07-decision-sources.md) →
 

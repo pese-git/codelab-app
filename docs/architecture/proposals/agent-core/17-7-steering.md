@@ -1,6 +1,6 @@
 # 17.7. Steering: сообщение посреди хода
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [17.6. Управление сессиями: переименование, ветки, перемотка, lease](17-6-session-management.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.8. LSP: языковые серверы](17-8-lsp.md) →
 

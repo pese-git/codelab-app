@@ -1,6 +1,6 @@
 # 12. Наблюдаемость и модель ошибок
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [11. Промпты](11-prompts.md) · [Оглавление ядра](../agent-core-architecture.md) · [13. ACP-адаптер](13-acp-adapter.md) →
 

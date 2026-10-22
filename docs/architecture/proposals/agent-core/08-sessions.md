@@ -1,6 +1,6 @@
 # 8. Сессии
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [7. Разрешения](07-permissions.md) · [Оглавление ядра](../agent-core-architecture.md) · [9. Сжатие контекста](09-compaction.md) →
 

@@ -1,6 +1,6 @@
 # 9.8. Этап 3 — Сессии и сжатие
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [9.7. Этап 2 — Цикл, инструменты, разрешения](09-07-stage-2-loop-tools-permissions.md) · [Оглавление](../dart-agent-and-clients.md) · [9.9. Этап 4 — ACP-адаптер и codelab-agent](09-09-stage-4-acp-adapter.md) →
 

@@ -1,6 +1,6 @@
 # 17.11. Дополнительные инструменты
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [17.10. Провайдеры и устойчивость LLM](17-10-providers.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.12. Цикл и безопасность](17-12-loop-and-security.md) →
 

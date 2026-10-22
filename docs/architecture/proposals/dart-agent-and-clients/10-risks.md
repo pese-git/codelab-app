@@ -1,6 +1,6 @@
 # 10. Риски
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [9.15. Этап 10 — Мобильные и web](09-15-stage-10-mobile-web.md) · [Оглавление](../dart-agent-and-clients.md) · [11. Допущения и открытые вопросы](11-assumptions-and-open-questions.md) →
 

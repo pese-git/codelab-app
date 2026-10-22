@@ -1,6 +1,6 @@
 # 9.12. Этап 7 — Встроенный режим в обоих клиентах
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [9.11. Этап 6 — codelab_cli MVP](09-11-stage-6-cli-mvp.md) · [Оглавление](../dart-agent-and-clients.md) · [9.13. Этап 8 — MCP, конфигурация, AGENTS.md](09-13-stage-8-mcp-config.md) →
 

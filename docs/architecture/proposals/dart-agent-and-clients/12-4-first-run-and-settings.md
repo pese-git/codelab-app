@@ -1,6 +1,6 @@
 # 12.4. Первый запуск и настройки
 
-> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Proposed. Исходные решения, связанные документы и порядок чтения — в оглавлении.
+> Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
 ← [12.3. Десктоп-приложение: отображение](12-3-desktop-display.md) · [Оглавление](../dart-agent-and-clients.md) · [12.5. Headless-формат stream-json](12-5-stream-json.md) →
 

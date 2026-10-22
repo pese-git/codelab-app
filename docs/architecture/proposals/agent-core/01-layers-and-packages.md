@@ -1,6 +1,6 @@
 # 1. Слои и пакеты
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [0. Соответствие шести базовым понятиям обвязки агента](00-six-concepts.md) · [Оглавление ядра](../agent-core-architecture.md) · [2. LLM-контракт](02-llm-contract.md) →
 

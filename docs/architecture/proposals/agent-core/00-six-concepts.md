@@ -1,6 +1,6 @@
 # 0. Соответствие шести базовым понятиям обвязки агента
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed. Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 [Оглавление ядра](../agent-core-architecture.md) · [1. Слои и пакеты](01-layers-and-packages.md) →
 

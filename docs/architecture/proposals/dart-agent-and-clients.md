@@ -1,6 +1,6 @@
 # Proposal: CodeLab Agent на Dart — встраиваемое ядро + ACP-клиенты
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-10-21
 

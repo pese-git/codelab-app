@@ -1,6 +1,6 @@
 # Архитектура ядра агента CodeLab
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-10-21
 
