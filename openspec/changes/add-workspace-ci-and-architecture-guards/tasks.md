@@ -46,18 +46,20 @@
 
 ## 7. CI (0.6)
 
-- [ ] 7.1 `.github/actions/prepare/action.yml` по `09-05` «Артефакт: CI» и после `pub get` — `build_runner build --delete-conflicting-outputs` в пакетах с `build_runner` (сгенерированный код не в git, design.md D3); проверка: чистый `git clone` + `prepare` → `melos run check` зелёный
-- [ ] 7.2 `.github/workflows/ci.yml`: триггеры `push` в `master` и `develop`, `pull_request`, ночной `schedule`; матрица `format`, `analyze`, `test`, `conformance` (`protocol-conformance`), `guard`, `web-compile`; `e2e-macos` с восемью `test:e2e:app:*` (design.md D6)
-- [ ] 7.3 `.github/pull_request_template.md`: чек-лист OpenSpec change, тесты (красный тест до кода или ссылка на критерий), `melos run check`, сторонний код (§7а, пункт 6)
-- [ ] 7.4 Проверка (testing-quality «Pull request с нарушением»): pull request этой итерации — шесть джобов зелёные; временный коммит с нарушением формата даёт красный `format`, затем откатывается
-- [ ] 7.5 Проверка (testing-quality «Pull request без метки e2e»): `e2e-macos` пропущен без метки; с меткой `e2e` — запущен и зелёный
+- [x] 7.1 `.github/actions/prepare/action.yml` по `09-05` «Артефакт: CI» и после `pub get` — `build_runner build --delete-conflicting-outputs` в пакетах с `build_runner` (сгенерированный код не в git, design.md D3); проверка: чистый `git clone` + `prepare` → `melos run check` зелёный
+- [x] 7.2 `.github/workflows/ci.yml`: триггеры `push` в `master` и `develop`, `pull_request`, ночной `schedule`; матрица `format`, `analyze`, `test`, `conformance` (`protocol-conformance`), `guard`, `web-compile`; интеграционные тесты — только на Dart VM, Flutter-тесты app в CI не запускаются (design.md D6)
+- [x] 7.3 `.github/pull_request_template.md`: чек-лист OpenSpec change, тесты (красный тест до кода или ссылка на критерий), `melos run check`, сторонний код (§7а, пункт 6)
+  - Проверка 7.1 выполнена локально (2026-10-23): чистый `git clone` `develop` → `fvm install --skip-pub-get` → `fvm dart pub get` → `build_runner` в пяти пакетах с `build_runner` → `melos run check` зелёный; закоммиченные сгенерированные файлы не изменились. `actionlint` по `ci.yml` — без замечаний. Прогон на GitHub — задачи 7.4–7.5.
+- [x] 7.4 Проверка (testing-quality «Pull request с нарушением»): pull request этой итерации — шесть джобов зелёные; временный коммит с нарушением формата даёт красный `format`, затем откатывается
+- [x] 7.5 Проверка (testing-quality «Интеграционные тесты на Dart VM»): интеграционные тесты `acp_transports` (stdio-процессы, WebSocket) проходят в джобе `test` на `ubuntu-latest`; джоба на macOS в workflow нет. Временно добавленный `e2e-macos` прошёл на PR pese-git/codelab-app#27 и убран решением владельца репозитория (design.md D6)
+  - Итог на PR pese-git/codelab-app#27 (2026-10-23): первые два прогона упали в `prepare` — problem matcher `setup-dart` не находится внутри составного действия (отключён) и `dart pub get` на свежем SDK не находит `sky_engine` (заменён на `flutter pub get`). Далее: `333c510` — шесть джобов зелёные; временный `f016ff1` с нарушением формата — красный только `format` («Changed packages/dart/codelab_agent_core/lib/codelab_agent_core.dart»); откат `828f87c` с меткой `e2e` — шесть джобов и `e2e-macos` (восемь `test:e2e:app:*`, 13 мин) зелёные. Метка `e2e` создана в репозитории. Событие `labeled` workflow не запускает — метку ставят до push.
 - [ ] 7.6 После первого зелёного прогона на `develop`: добавить шесть джобов как обязательные проверки в ruleset `master`/`develop` (настройка GitHub, с подтверждения владельца репозитория)
 
 ## 8. Лицензия (0.9)
 
-- [ ] 8.1 `LICENSE` — текст MIT, год 2026, правообладатель Sergey Penkovsky
-- [ ] 8.2 `THIRD_PARTY_NOTICES.md` — заголовок, формат записи (название, URL, лицензия, уведомление, файлы), пустой список (licensing-and-attribution «Пустой реестр с форматом»)
-- [ ] 8.3 Корневой `README.md`: назначение репозитория, ссылки на `AGENTS.md` и `docs/architecture/`, раздел о лицензии (licensing-and-attribution «Лицензия на месте»)
+- [x] 8.1 `LICENSE` — текст MIT, год 2026, правообладатель Sergey Penkovsky
+- [x] 8.2 `THIRD_PARTY_NOTICES.md` — заголовок, формат записи (название, URL, лицензия, уведомление, файлы), пустой список (licensing-and-attribution «Пустой реестр с форматом»)
+- [x] 8.3 Корневой `README.md`: назначение репозитория, ссылки на `AGENTS.md` и `docs/architecture/`, раздел о лицензии (licensing-and-attribution «Лицензия на месте»)
 
 ## 9. Завершение этапа
 

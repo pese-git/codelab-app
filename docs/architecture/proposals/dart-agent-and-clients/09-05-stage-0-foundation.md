@@ -133,8 +133,15 @@ scope: формат и корпус фикстур с полем `roles`, кли
       steps: [check-format, analyze, guard, test, protocol-conformance, conformance:client, web-compile]
 ```
 
-`conformance:agent` добавляется в `check` на этапе 4; `test:e2e:*` в `check` не входят (нужен
-macOS и реальные процессы) и запускаются отдельным джобом CI.
+`conformance:agent` добавляется в `check` на этапе 4; `test:e2e:*` в `check` не входят.
+
+**Интеграционные тесты в CI — только на Dart VM.** GitHub CI запускает интеграционные тесты
+чистых Dart-пакетов: реальные процессы и сокеты (`acp_transports`), прогон корпуса фикстур
+(`conformance:client`, с этапа 4 — `conformance:agent`), PTY-e2e CLI (`test:e2e:cli`, этап 6,
+отдельный джоб матрицы). Flutter-тесты приложения на macOS (`test:e2e:app:*`, в том числе
+`dart-agent` и `embedded`) в GitHub CI не запускаются: это локальные приёмочные ворота этапа
+(§9.0, правило 3, исключение (б)), их прогон перед закрытием этапа фиксируется в `proposal.md`
+его change.
 
 ## Артефакт: CI
 
@@ -157,14 +164,14 @@ runs:
       run: dart pub global activate fvm && fvm install && fvm dart pub get
 ```
 
-`.github/workflows/ci.yml` — шесть обязательных джобов из одной матрицы и отдельный macOS-джоб:
+`.github/workflows/ci.yml` — шесть обязательных джобов из одной матрицы на `ubuntu-latest`:
 
 ```yaml
 name: ci
 on:
-  push: {branches: [main]}
+  push: {branches: [master, develop]}
   pull_request:
-  schedule: [{cron: "0 3 * * *"}]          # ночной прогон e2e
+  schedule: [{cron: "0 3 * * *"}]          # ночной прогон Dart VM-наборов
 concurrency: {group: "ci-${{ github.ref }}", cancel-in-progress: true}
 
 jobs:
@@ -181,27 +188,15 @@ jobs:
           - {job: conformance, scripts: "protocol-conformance conformance:client"}   # + conformance:agent с этапа 4
           - {job: guard, scripts: "guard"}
           - {job: web-compile, scripts: "web-compile"}                                # + flutter build web с этапа 10
+          # с этапа 6: {job: e2e-cli, scripts: "build:cli test:e2e:cli"} — PTY-e2e CLI на Dart VM
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/prepare
       - run: for s in ${{ matrix.scripts }}; do fvm dart run melos run "$s" || exit 1; done
-
-  e2e-macos:                                 # ночью, на main и по метке PR "e2e"
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e')
-    needs: checks
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/prepare
-      - run: |
-          for s in stdio permission fs terminal plan-checklist prompt-queue multi-session open-project; do
-            fvm dart run melos run "test:e2e:app:$s" || exit 1
-          done
-      # с этапа 4: test:e2e:app:dart-agent; с этапа 6: test:e2e:cli; с этапа 7: test:e2e:app:embedded
 ```
 
 Джобы `format`, `analyze`, `test`, `conformance`, `guard`, `web-compile` обязательны для слияния
-(branch protection). `e2e-macos` не блокирует PR без метки, но блокирует релиз. Сценарий
+(ruleset `master`/`develop`); с этапа 6 к ним добавляется `e2e-cli`. Сценарий
 выпуска — отдельный `.github/workflows/release.yml` (по тегу `v*`, окружение `release` с
 ручным одобрением для подписи и публикации) — §12.7.8; этап 0 его не создаёт.
 

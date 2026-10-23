@@ -210,8 +210,10 @@ macOS и Linux, ручная проверка Windows откладывается
 
 * `parity_evidence_test.dart` зелёный: у каждой строки Must есть доказательство (задача 9.1);
 * выполнены все шесть условий критерия матрицы [§6](agent-parity-goals.md#6-критерий-вывода-python-агента-и-переключения-по-умолчанию);
-* `test:e2e:app:*`, `test:e2e:app:dart-agent`, `test:e2e:app:embedded`, `test:e2e:cli` зелёные в
-  ночном прогоне три ночи подряд;
+* `test:e2e:cli` и остальные Dart VM-наборы зелёные в ночном прогоне CI три ночи подряд;
+  Flutter-тесты приложения `test:e2e:app:*`, `test:e2e:app:dart-agent`, `test:e2e:app:embedded`
+  в GitHub CI не запускаются — три последовательных зелёных локальных прогона на macOS
+  ([CL §9.14](dart-agent-and-clients/09-14-stage-9-switch-default.md));
 * профиль по умолчанию в app и CLI — Dart-агент (задача 9.3); чек-лист Zed заполнен (9.8).
 
 **Блокирует.** Публичный релиз и всё содержимое 1.0.
