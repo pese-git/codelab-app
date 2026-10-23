@@ -5,11 +5,13 @@
 library;
 
 export 'src/cancel/cancel_token.dart';
+export 'src/llm/decorators/retry.dart';
 export 'src/llm/errors.dart';
 export 'src/llm/event_stream.dart';
 export 'src/llm/events.dart';
 export 'src/llm/messages.dart';
 export 'src/llm/model_ref.dart';
+export 'src/llm/provider_config.dart';
 export 'src/llm/stream_function.dart';
 export 'src/llm/usage.dart';
 export 'src/util/clock.dart' show Clock, ClockTimer, SystemClock;

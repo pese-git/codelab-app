@@ -76,6 +76,12 @@ final class ProviderStreamState {
 
   Usage get usage => _usage;
 
+  /// The provider finish or stop reason remembered so far.
+  String? get rawStopReason => _rawStopReason;
+
+  /// Number of blocks opened since [start].
+  int get blockCount => _blocks.length;
+
   void start() {
     if (_terminated) {
       return;
@@ -128,6 +134,12 @@ final class ProviderStreamState {
   String nameOf(int index) => _blocks[index].name;
 
   String idOf(int index) => _blocks[index].id;
+
+  void setId(int index, String id) {
+    if (!_terminated) {
+      _blocks[index].id = id;
+    }
+  }
 
   void setName(int index, String name) {
     if (!_terminated) {
@@ -269,7 +281,7 @@ final class _Block {
   });
 
   final BlockKind kind;
-  final String id;
+  String id;
   String name;
   final ProviderApi? api;
   final bool redacted;
@@ -282,6 +294,7 @@ final class _Block {
   _BlockSnapshot snapshot(int length) => _BlockSnapshot(
     this,
     length,
+    id,
     name,
     signature,
     closed ? arguments : const {},
@@ -292,6 +305,7 @@ final class _BlockSnapshot {
   _BlockSnapshot(
     this.block,
     this.length,
+    this.id,
     this.name,
     this.signature,
     this.arguments,
@@ -299,6 +313,7 @@ final class _BlockSnapshot {
 
   final _Block block;
   final int length;
+  final String id;
   final String name;
   final String? signature;
   final Map<String, Object?> arguments;
@@ -314,7 +329,7 @@ final class _BlockSnapshot {
         api: block.api,
       ),
       BlockKind.toolCall => ToolCall(
-        id: block.id,
+        id: id,
         name: name,
         arguments: arguments,
         signature: signature,
