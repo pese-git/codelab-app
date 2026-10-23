@@ -163,7 +163,10 @@ void main() {
       // approval — its transcript reflects the resolution correctly even
       // though the whole wait happened while B was active.
       await tester.tap(find.text('Session $sessionAId'));
-      await tester.pumpAndSettle();
+      // Not `pumpAndSettle()`: A's turn is still waiting on its approval, so
+      // the composer now shows A's send-button loading spinner again — the
+      // same indeterminate animation as above.
+      await tester.pump(const Duration(milliseconds: 300));
       expect(shellCubit.state.activeSessionId, sessionAId);
       expect(hasPendingApproval(), isTrue);
 
