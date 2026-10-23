@@ -102,8 +102,9 @@ packages/dart/codelab_agent_core/
     llm/       messages.dart model_ref.dart events.dart event_stream.dart stream_function.dart
                errors.dart sse.dart stream_state.dart usage.dart overflow.dart
                model_catalog.dart builtin_models.dart (§2.12.2)
+               provider_config.dart provider_factory.dart (вне providers/: барель их экспортирует, PKG-5)
                decorators/ watchdog.dart retry.dart fallback.dart
-               providers/  openai_compatible.dart anthropic.dart provider_factory.dart
+               providers/  openai_compatible.dart anthropic.dart http_support.dart
     cancel/    cancel_token.dart
     env/       execution_env.dart bounded_env.dart env_vars_env.dart memory_env.dart
                listing_overlay_env.dart (ListingOverlayEnv: listDir — от второго env, §10.4)

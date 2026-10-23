@@ -10,7 +10,7 @@ environment:
 dependencies: # allowlist PKG-2; расширение — только через OpenSpec
   async: ^2.12.0
   collection: ^1.19.0
-  http: ^1.2.0
+  http: ^1.5.0
   meta: ^1.16.0
 
 dev_dependencies:

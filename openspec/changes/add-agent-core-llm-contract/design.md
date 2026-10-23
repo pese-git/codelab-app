@@ -44,7 +44,8 @@
 - `lib/src/cancel/cancel_token.dart`;
 - `lib/src/util/` — `clock.dart`, `ids.dart`, `logger.dart` (канонический JSON payload — `jsonEncode` с порядком вставки ключей, §2.7 шаг 5: отдельный модуль не нужен);
 - `lib/src/llm/` — `messages.dart`, `model_ref.dart`, `events.dart`, `event_stream.dart`, `stream_function.dart`, `errors.dart`, `sse.dart`, `stream_state.dart`, `usage.dart`, `overflow.dart`, `model_catalog.dart`, `builtin_models.dart`;
-- `lib/src/llm/decorators/` и `lib/src/llm/providers/`;
+- `lib/src/llm/decorators/` и `lib/src/llm/providers/` (адаптеры и HTTP-слой `http_support.dart`);
+- `lib/src/llm/provider_config.dart` и `lib/src/llm/provider_factory.dart` — вне `providers/`: барель экспортирует `ProviderConfig` и `createStreamFunction`, а проверка PKG-5 запрещает в бареле любой `export 'src/llm/providers/` (§1.7). Раскладка §1.3, где фабрика лежит в `providers/`, уточняется здесь;
 - `lib/src/testing/`.
 
 Основной барель `lib/codelab_agent_core.dart` экспортирует:
@@ -153,7 +154,7 @@ Change делится на три итерации, каждая — отдел�
 ## Risks / Trade-offs
 
 - **[Совместимые серверы отличаются от OpenAI в мелочах]** → фикстура на каждый известный вариант (`reasoning_content` и `reasoning`, `prompt_cache_hit_tokens`, повтор кадра аргументов, индекс 0 для последовательных вызовов); кварки — после MVP.
-- **[Фикстуры, написанные по документации, расходятся с реальным потоком]** → ручной `tool/llm_smoke.dart` на реальном провайдере перед закрытием итерации 2; расхождение исправляет фикстуру со ссылкой на документацию провайдера.
+- **[Фикстуры, написанные по документации, расходятся с реальным потоком]** → ручной `tool/llm_smoke.dart` на реальном провайдере перед архивированием change (задача 13.6); расхождение исправляет фикстуру со ссылкой на документацию провайдера.
 - **[`MockClient` не моделирует прерывание соединения]** → тест проверяет сработавший `abortTrigger` и отменённую подписку на тело (D5); реальное закрытие соединения видно в ручном smoke.
 - **[Ручные модели без генерации кода — больше рутинного кода]** → тест сериализации на каждую форму §2.2 и тест равенства; моделей немного.
 - **[Значения встроенного каталога устаревают]** → безопасные значения по умолчанию и предупреждение `llm.catalog.default_used`; сетевой каталог этапа 8 перекрывает встроенные данные.
