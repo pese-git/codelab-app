@@ -13,9 +13,10 @@ final class ExecutorHarness {
   static Future<ExecutorHarness> create(
     List<AgentTool> tools, {
     MemoryExecutionEnv? memory,
+    ExecutionEnv? base,
   }) async {
     final clock = FakeClock();
-    final base = memory ?? MemoryExecutionEnv(cwd: '/proj', clock: clock);
+    base ??= memory ?? MemoryExecutionEnv(cwd: '/proj', clock: clock);
     final env = await BoundedEnv.wrap(base, base.cwd);
     final registry = ToolRegistry();
     tools.forEach(registry.register);

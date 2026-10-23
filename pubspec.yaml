@@ -15,6 +15,7 @@ workspace:
   - packages/dart/acp_testing
   - packages/dart/acp_transports
   - packages/dart/codelab_agent_core
+  - packages/dart/codelab_agent_io
   - packages/dart/codelab_architecture_tests
   - packages/flutter/acp_ui
 

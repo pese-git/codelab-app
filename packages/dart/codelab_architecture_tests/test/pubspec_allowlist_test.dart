@@ -10,6 +10,18 @@ import 'support/repo_root.dart';
 /// change.
 const coreAllowlist = {'http', 'meta', 'collection', 'async', 'crypto'};
 
+/// Dependencies of the IO package of the agent (agent-core-architecture
+/// §1.2).
+const ioAllowlist = {
+  'codelab_agent_core',
+  'path',
+  'meta',
+  'async',
+  'yaml',
+  'yaml_edit',
+  'toml',
+};
+
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
 
@@ -38,6 +50,16 @@ void main() {
     ).readAsStringSync();
 
     final extra = dependencyKeys(pubspec).difference(coreAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('codelab_agent_io depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_agent_io/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(ioAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });
