@@ -1,0 +1,8 @@
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1767225600,"model":"gpt-fixture","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1767225600,"model":"gpt-fixture","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1767225600,"model":"gpt-fixture","choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":5,"prompt_cache_hit_tokens":600,"prompt_cache_miss_tokens":400}}
+
+data: [DONE]
+
