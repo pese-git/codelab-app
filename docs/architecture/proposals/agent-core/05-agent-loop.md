@@ -19,7 +19,20 @@
 
 ```dart
 typedef AgentEventSink = FutureOr<void> Function(AgentEvent event);   // цикл ждёт каждый emit
-typedef ToolExecutor = Future<ToolExecutionOutcome> Function(ToolCall call, ToolContext ctx);
+
+/// Единая точка исполнения (§6.3.1) в две фазы: параллельный пакет сначала объявляет все вызовы
+/// в порядке ответа (ToolCallStarted), потом исполняет их одновременно (§5.5).
+abstract interface class ToolExecutor {
+  Future<ToolCallHandle> announce(ToolCall call, ToolInvocation invocation);   // шаг 1: present, ToolCallStarted
+  Future<ToolExecutionOutcome> complete(ToolCallHandle handle);                // шаги 1a–10
+  Future<ToolExecutionOutcome> abandon(ToolCallHandle handle);                 // отмена до старта (§5.5, шаг 3)
+}
+final class ToolInvocation {             // что цикл передаёт точке исполнения на один вызов
+  final SessionId sessionId; final CancelToken cancel;
+  final List<String> stepTools;          // имена схем текущего шага
+  final AgentEventSink emit;
+  final List<BeforeToolCallHook> beforeToolCall; final List<AfterToolCallHook> afterToolCall;
+}
 
 Future<List<Message>> runAgentLoop({
   required List<Message> prompts,          // пусто = продолжение без новых сообщений
@@ -224,7 +237,7 @@ final class SlashCommand {
 | `TurnStarted` | первым событием хода | `turnId`, входные сообщения |
 | `StepStarted` | перед каждым запросом к модели | `stepIndex` (с 0) |
 | `ModelRequested` | непосредственно перед вызовом `StreamFunction` (диагностика) | модель, оценка токенов, число сообщений |
-| `MessageStarted` | сообщение вошло в транскрипт: промпт, steering, первый снимок ответа, результат инструмента, служебное сообщение цикла (§5.4.1) | `message`, `origin?` (`LoopNudgeOrigin`, `LoopNoteOrigin`; после MVP: `SteerOrigin`, `SubagentNoticeOrigin`, `JobNoticeOrigin` (§17.9.6) или `DeadlineNoticeOrigin` (§17.12.5), §17.7.2.1) |
+| `MessageStarted` | сообщение вошло в транскрипт: промпт, steering, первый снимок ответа с блоком (ответ без блоков — на терминальном событии), результат инструмента, служебное сообщение цикла (§5.4.1) | `message`, `origin?` (`LoopNudgeOrigin`, `LoopNoteOrigin`; после MVP: `SteerOrigin`, `SubagentNoticeOrigin`, `JobNoticeOrigin` (§17.9.6) или `DeadlineNoticeOrigin` (§17.12.5), §17.7.2.1) |
 | `MessageDelta` | каждое текстовое `BlockDeltaEvent` | `delta`, `partial` |
 | `ThoughtDelta` | каждое `BlockDeltaEvent` рассуждения | `delta`, `partial` |
 | `MessageEnded` | сообщение завершено (точка сохранения) | финальное `message` |
@@ -275,7 +288,8 @@ runAgentLoop(prompts, context, config, emit, cancel):
 13    consume(stream):                                    # первый снимок → transcript + MessageStarted,
                                                           # дальше замена последнего элемента на partial,
                                                           # MessageDelta / ThoughtDelta; уникализация id (LOOP-11)
-14    if провайдер вернул 400 с ошибкой парности и ремонт ещё не повторялся: goto 11
+14    if провайдер до первого блока вернул 400 с ошибкой парности и ремонт ещё не повторялся:
+        пересобрать payload, ModelRequested, повторить запрос того же шага (без второго StepStarted)
 14a   if response.stopReason == error and response.errorClass == overflow:   # §2.11, §9.5
         if not emergencyUsed and emergencyCompact != null:  # общий с preflight (§5.2, шаг 4) флаг: один раз за ход (CMP-8)
           emergencyUsed = true; ctx = emergencyCompact(cancel)
@@ -439,7 +453,8 @@ payload шага 2 — `[user, user(nudge 1), user(nudge 2)]`. Если и ша�
 
 ```dart
 final class Agent {
-  Agent({required AgentLoopConfig config, List<Message> history = const []});
+  Agent({required AgentLoopConfig config, required String systemPrompt,
+      required List<AgentTool> tools, List<Message> history = const []});
   Future<void> prompt(List<Message> messages);     // StateError, если ход уже идёт (LOOP-10)
   /// Уведомления субагентов (§17.3.8, origin — SubagentNoticeOrigin); без хода — в начало следующего.
   void steer(Message m, {MessageOrigin? origin});
