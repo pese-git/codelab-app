@@ -4,4 +4,4 @@
 /// Flutter imports (invariant PKG-1, checked by `melos run guard`).
 library;
 
-const codelabAgentCorePackageName   =   'codelab_agent_core';
+const codelabAgentCorePackageName = 'codelab_agent_core';
