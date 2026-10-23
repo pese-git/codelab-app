@@ -48,8 +48,14 @@
 2. `FakeAcpTransport(autoRespondToInitialize: false)`; если `skipInitialize` не задан, драйвер сам проигрывает стандартный handshake (`initialize`, `session/new`): ответы агента — стандартные ответы драйвера с учётом `setup.mode` и `setup.config`, `${sessionId}` берётся из ответа `session/new`;
 3. кадр `a2c` → подстановка переменных и `emitInbound`; кадр `c2a` → ожидание следующего сообщения в `sentMessages` (таймаут 5 с), нормализация и сравнение;
 4. кадры `c2a`, которые клиент шлёт по действию пользователя (`session/prompt`, ответ на `session/request_permission`, `session/cancel`), требуют вызова API клиента: драйвер вызывает `onBeforeExpect(frame)` до ожидания, тест выполняет действие (например, выбирает вариант разрешения);
-5. `fs/*` клиент обслуживает через `TextFileReader`/`TextFileWriter` поверх временного каталога, заполненного из `setup.files`; `terminal/*` — через `FakeTerminalProcessRunner`, сценарий процесса берётся из фикстуры (`setup.terminal`: команда → вывод и код выхода);
-6. после кадров — сверка `after.files` с файловой системой клиента; проверки состояния клиента пишет тест, а не фикстура.
+5. `fs/*` клиент обслуживает через `TextFileReader`/`TextFileWriter` поверх fake fs-порта в памяти (`InMemoryFixtureFileSystem`, §14.10 допускает fake fs-порт), заполненного из `setup.files`; нарезка `line`/`limit` — как у адаптера приложения `text_file_io.dart`. `terminal/*` — через `FixtureTerminalProcessRunner` на `FakeTerminalProcessHandle`, сценарий процесса берётся из фикстуры (`setup.terminal`: строка команды `command args…` или только `command` → вывод и код выхода, процесс завершается сразу);
+6. после кадров драйвер дожидается действий пользователя, зарегистрированных в хуке (`step.track`), проверяет тишину (лишний кадр клиента в течение 100 мс — провал) и сверяет `after.files` с файловой системой клиента; проверки состояния клиента пишет тест, а не фикстура.
+
+Уточнения, найденные при реализации:
+
+- **Кадр `a2c` превращается в конкретное значение** (`FrameMatcher.materialize`): переменные подставляются, `$capture` генерирует id `fixture-<имя>` и сохраняет его в переменную, `$contains`, `$partial` и `$oneOf` (первый вариант) дают своё значение, `$any` — строку `fixture-any`, `$absent` убирает ключ, `<ts>` — фиксированное время; `repeat: "+"` с `match.$text` отправляется одним кадром со всем текстом. `$regex` в кадре `a2c` для клиентской роли — ошибка фикстуры.
+- **Стандартный handshake**: `initialize` сверяется по `$partial` с `protocolVersion: 1` (и `clientCapabilities`, если задан `setup.clientCapabilities`), ответ — версия 1 и пустые `agentCapabilities`; `session/new` — по `$partial` с `cwd`, ответ — `sessionId: fixture-session-1` и при `setup.mode` блок `modes` из одного режима. `setup.config` — конфиг агента (§15), клиентский прогон его не читает: фикстура, которой нужен конкретный ответ `session/new` (например, `configOptions`), пишет handshake сама с `skipInitialize`.
+- Хук `onBeforeExpect` вызывается и для кадров handshake (`step.isHandshake`): тест выполняет там `connect` и `createSession`.
 
 `setup.terminal` — расширение схемы §14.4 для клиентской роли: агентская проверка его не читает (вывод команды там приходит кадрами `terminal/output`). Поле описано в agent-core-architecture §14.4 (внесено вместе с этим change) и добавляется в `_schema.json`.
 
