@@ -591,6 +591,7 @@ REPL): конечный автомат над потоком байт stdin.
 | `line_start` / `line_end` / `kill_line` / `kill_word` | Ctrl+A / Ctrl+E / Ctrl+K / Ctrl+W | композер | REPL, TUI |
 | ответы одобрения | `y`, `a`, `n`, `N`, `?` (§9.11) | одобрение | REPL, TUI |
 | `steer` | Ctrl+Enter (после MVP, C-03) | композер, идёт ход | REPL, TUI |
+| `toggle_tasks` | Ctrl+T (после MVP, U-21) | любая; вид `tasks` — доска субагентов и фоновых задач при capability `subagentBoard` или `jobBoard` (§12.3, A15); без неё — подсказка `/tasks` | TUI |
 
 **Steering** (после MVP, C-03, agent-core-architecture §17.7.6). Enter во время хода по-прежнему
 ставит сообщение в очередь (U-15); действие `steer` направляет его в идущий ход через
