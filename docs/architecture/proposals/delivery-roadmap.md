@@ -212,7 +212,8 @@ macOS и Linux, ручная проверка Windows откладывается
 * выполнены все шесть условий критерия матрицы [§6](agent-parity-goals.md#6-критерий-вывода-python-агента-и-переключения-по-умолчанию);
 * `test:e2e:cli` и остальные Dart VM-наборы зелёные в ночном прогоне CI три ночи подряд;
   Flutter-тесты приложения `test:e2e:app:*`, `test:e2e:app:dart-agent`, `test:e2e:app:embedded`
-  в GitHub CI не запускаются — три последовательных зелёных локальных прогона на macOS
+  в GitHub CI не запускаются — три последовательных зелёных прогона на macOS в ветке
+  `release/<version>` (`AGENTS.md` §21)
   ([CL §9.14](dart-agent-and-clients/09-14-stage-9-switch-default.md));
 * профиль по умолчанию в app и CLI — Dart-агент (задача 9.3); чек-лист Zed заполнен (9.8).
 

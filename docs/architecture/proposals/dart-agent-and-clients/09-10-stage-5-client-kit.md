@@ -438,9 +438,10 @@ reconnect и после перезапуска app — меняет наблюд
 
 **Definition of Done.**
 
-* Все 8 существующих интеграционных тестов app проходят, тексты тестов этапом 5 не изменены
-  (`melos run test:e2e:app:*`); публичная поверхность `CodeLabShellCubit` сохранена (см. «Что
-  остаётся неизменным»).
+* Тексты 8 существующих интеграционных тестов app этапом 5 не изменены, тесты собираются;
+  публичная поверхность `CodeLabShellCubit` сохранена (см. «Что остаётся неизменным»). Их прогон
+  на устройстве (`melos run test:e2e:app:*`) — в ветке `release/<version>` (`AGENTS.md` §21);
+  в ветке этапа поведение подтверждают характеризационные тесты 5.0 на Dart VM.
 * Характеризационные тесты 5.0 зелёные до первого переноса и после каждого PR этапа без правок.
 * `fvm dart test packages/dart/acp_client_kit` зелёный; среди тестов:
   `transcript_projector_test.dart: incremental projection equals full rebuild for every fixture`,

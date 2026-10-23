@@ -287,7 +287,8 @@ final class IsolateAcpLink {
    §9.10).
 6. Тесты при переносе: те же случаи, что у `in_process_acp_transport_test.dart` (порядок 1000
    сообщений, `close` → `failed` у другой стороны, `DateTime` → `sendFailed`), плюс `kill` после
-   `grace` и падение isolate → `failed`; `melos run test:e2e:app:embedded` с isolate.
+   `grace` и падение isolate → `failed`; `melos run test:e2e:app:embedded` с isolate — в ветке
+  `release/<version>` (`AGENTS.md` §21).
 
 **Что прочитать.** Документ ядра §10, §13 (`shutdown`), §4 (выбор env); §4.5 и §6 этого документа;
 `docs/architecture/concurrency.md` (isolate).
@@ -295,8 +296,9 @@ final class IsolateAcpLink {
 **Definition of Done.**
 
 * `fvm dart test packages/dart/acp_transports/test/in_process_acp_transport_test.dart` зелёный.
-* `melos run test:e2e:app:embedded` — все применимые интеграционные тесты app (таблица этапа 4)
-  зелёные во встроенном режиме.
+* Интеграционные тесты app для встроенного режима (таблица этапа 4) собираются; прогон на
+  устройстве `melos run test:e2e:app:embedded` — все применимые тесты зелёные — выполняется в
+  ветке `release/<version>` (`AGENTS.md` §21).
 * `codelab test-scenario packages/dart/acp_testing/fixtures/acp --agent embedded` — все `PASS`.
 * `melos run guard`: основной барель `codelab_embedded` не импортирует `dart:io`; app и CLI не
   импортируют `codelab_agent_*` напрямую.
