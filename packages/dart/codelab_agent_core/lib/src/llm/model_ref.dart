@@ -8,6 +8,13 @@ enum ProviderApi { openaiChat, anthropicMessages, gemini }
 
 enum ReasoningEffort { low, medium, high }
 
+/// How an Anthropic model takes the reasoning level (§2.8, §2.12.3):
+/// `adaptive` — `thinking: {"type": "adaptive"}` and `output_config.effort`
+/// (Claude 4.6 and later; Claude 5.x answer `budget_tokens` with 400);
+/// `budget` — `thinking: {"type": "enabled", "budget_tokens": B}` (Claude
+/// 4.5 and earlier). Other dialects ignore it.
+enum ThinkingMode { adaptive, budget }
+
 /// Dollars per 1 000 000 tokens.
 final class ModelCost {
   const ModelCost({
@@ -44,6 +51,7 @@ final class ModelRef {
     this.supportsReasoning = false,
     this.reasoningEffort,
     this.hiddenReasoning = false,
+    this.thinkingMode = ThinkingMode.adaptive,
     this.supportsTools = true,
   });
 
@@ -67,6 +75,8 @@ final class ModelRef {
   /// (§2.10.5).
   final bool hiddenReasoning;
 
+  final ThinkingMode thinkingMode;
+
   /// After MVP: `false` — tool calls through the prompt (§17.10.11).
   final bool supportsTools;
 
@@ -84,6 +94,7 @@ final class ModelRef {
       other.supportsReasoning == supportsReasoning &&
       other.reasoningEffort == reasoningEffort &&
       other.hiddenReasoning == hiddenReasoning &&
+      other.thinkingMode == thinkingMode &&
       other.supportsTools == supportsTools;
 
   @override
@@ -99,6 +110,7 @@ final class ModelRef {
     supportsReasoning,
     reasoningEffort,
     hiddenReasoning,
+    thinkingMode,
     supportsTools,
   );
 

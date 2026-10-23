@@ -45,5 +45,5 @@ CODELAB_SMOKE_API_KEY="$OPENAI_API_KEY" \
 fvm dart run tool/llm_smoke.dart
 ```
 
-`CODELAB_SMOKE_PROVIDER=anthropic` с `CODELAB_SMOKE_BASE_URL=https://api.anthropic.com` проверяет адаптер Anthropic; `CODELAB_SMOKE_REASONING=low|medium|high` включает рассуждение. Для локальных серверов (Ollama, LM Studio) ключ не нужен. Если поток провайдера расходится с фикстурой, фикстура исправляется со ссылкой на документацию провайдера.
+`CODELAB_SMOKE_PROVIDER=anthropic` с `CODELAB_SMOKE_BASE_URL=https://api.anthropic.com` проверяет адаптер Anthropic; `CODELAB_SMOKE_REASONING=low|medium|high` включает рассуждение; `CODELAB_SMOKE_THINKING=budget` нужен моделям Claude 4.5 и старше (по умолчанию `adaptive` — для Claude 4.6 и новее). Для локальных серверов (Ollama, LM Studio) ключ не нужен. Если поток провайдера расходится с фикстурой, фикстура исправляется со ссылкой на документацию провайдера.
 

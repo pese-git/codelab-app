@@ -34,7 +34,7 @@ const _ephemeral = {'type': 'ephemeral'};
 const _imageOmitted =
     '[image omitted: the current model does not accept images]';
 
-/// Reasoning budgets of §2.8 and §2.12.3.
+/// Reasoning budgets of §2.8 and §2.12.3 for [ThinkingMode.budget].
 const _thinkingBudget = {
   ReasoningEffort.low: 2048,
   ReasoningEffort.medium: 8192,
@@ -237,7 +237,8 @@ int _int(Object? value) => value is num ? value.toInt() : 0;
 /// tool, the last block of the last user message of the transcript).
 Map<String, Object?> buildAnthropicBody(ModelRef model, LlmContext context) {
   final effort = model.supportsReasoning ? model.reasoningEffort : null;
-  final budget = effort == null
+  final adaptive = model.thinkingMode == ThinkingMode.adaptive;
+  final budget = effort == null || adaptive
       ? null
       : min(_thinkingBudget[effort]!, model.maxOutputTokens - 1024);
   return {
@@ -265,6 +266,10 @@ Map<String, Object?> buildAnthropicBody(ModelRef model, LlmContext context) {
       'tool_choice': {'type': 'auto'},
     },
     'stream': true,
+    if (effort != null && adaptive) ...{
+      'thinking': {'type': 'adaptive', 'display': 'summarized'},
+      'output_config': {'effort': effort.name},
+    },
     if (budget != null && budget >= 1024)
       'thinking': {'type': 'enabled', 'budget_tokens': budget},
   };
