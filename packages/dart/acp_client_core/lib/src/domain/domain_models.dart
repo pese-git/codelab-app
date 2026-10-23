@@ -63,6 +63,10 @@ enum PromptTurnStatus {
   pending,
   running,
   awaitingApproval,
+
+  /// `session/cancel` was sent; the turn still accepts its updates until the
+  /// agent answers its `session/prompt` (05-Prompt Turn.md#cancellation).
+  cancelling,
   completed,
   failed,
   refused,
@@ -136,6 +140,11 @@ sealed class ToolCallRecord with _$ToolCallRecord {
     @Default([]) List<ToolCallLocation> locations,
     Map<String, Object?>? rawInput,
     Map<String, Object?>? rawOutput,
+
+    /// The call was unfinished when the client sent `session/cancel`. ACP
+    /// has no `cancelled` tool call status, so such a call is kept as
+    /// [ToolCallStatus.failed] with this flag set.
+    @Default(false) bool cancelledByClient,
     DateTime? startedAt,
     DateTime? completedAt,
   }) = _ToolCallRecord;
@@ -163,6 +172,10 @@ enum SessionLifecycleStatus {
   active,
   runningTurn,
   awaitingApproval,
+
+  /// The active turn is [PromptTurnStatus.cancelling]; no new turn starts
+  /// until the agent answers the cancelled `session/prompt`.
+  cancellingTurn,
   failed,
 }
 

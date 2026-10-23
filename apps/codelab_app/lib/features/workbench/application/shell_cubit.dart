@@ -865,7 +865,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         currentPlan: _currentPlanForSession(session),
         queuedPrompts: _queueFor(sessionItem.id),
         isPromptSubmitting: _isBusyLifecycleStatus(session.status),
-        canCancel: _isBusyLifecycleStatus(session.status),
+        canCancel: _isCancellableLifecycleStatus(session.status),
       ),
     );
   }
@@ -1056,8 +1056,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// read of that session's own domain status
   /// (`_application.sessionById(sessionId)?.status`), independent of which
   /// session is active or of any other session's state. `runningTurn`/
-  /// `awaitingApproval` are busy; `idle`/`active`/`failed` (including an
-  /// unknown session) are free. This is also the single source
+  /// `awaitingApproval`/`cancellingTurn` are busy (a cancelled turn holds the
+  /// session until the agent answers its `session/prompt`, see
+  /// fix-prompt-cancel-tool-calls/design.md, D2); `idle`/`active`/`failed`
+  /// (including an unknown session) are free. This is also the single source
   /// [CodeLabShellState.isPromptSubmitting]/[CodeLabShellState.canCancel]
   /// for the active session are derived from, in [_handleSessionChange] and
   /// [selectSession] — see add-multi-session-concurrency/design.md,
@@ -1067,6 +1069,11 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   );
 
   bool _isBusyLifecycleStatus(SessionLifecycleStatus? status) =>
+      _isCancellableLifecycleStatus(status) ||
+      status == SessionLifecycleStatus.cancellingTurn;
+
+  /// Busy and not already cancelling: the cancel has been sent once.
+  bool _isCancellableLifecycleStatus(SessionLifecycleStatus? status) =>
       status == SessionLifecycleStatus.runningTurn ||
       status == SessionLifecycleStatus.awaitingApproval;
 
@@ -1356,7 +1363,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         configOptions: _configOptionsFor(session),
         currentPlan: _currentPlanForSession(session),
         isPromptSubmitting: _isBusyLifecycleStatus(session.status),
-        canCancel: _isBusyLifecycleStatus(session.status),
+        canCancel: _isCancellableLifecycleStatus(session.status),
       ),
     );
   }
@@ -1591,7 +1598,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       switch (status) {
         SessionLifecycleStatus.idle ||
         SessionLifecycleStatus.active => AcpSessionStatus.idle,
-        SessionLifecycleStatus.runningTurn => AcpSessionStatus.running,
+        SessionLifecycleStatus.runningTurn ||
+        SessionLifecycleStatus.cancellingTurn => AcpSessionStatus.running,
         SessionLifecycleStatus.awaitingApproval =>
           AcpSessionStatus.awaitingApproval,
         SessionLifecycleStatus.failed => AcpSessionStatus.failed,
@@ -1733,7 +1741,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             title: approval.toolCall.title,
             toolCall: AcpToolCallSummary(
               name: approval.toolCall.kind.wireName,
-              status: _toolCallStatus(approval.toolCall.status),
+              status: _toolCallStatus(approval.toolCall),
               detail: _commandFromToolCall(approval.toolCall),
             ),
             approval: _transcriptApproval(
@@ -1783,7 +1791,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           ? null
           : AcpToolCallSummary(
               name: toolCall.kind.wireName,
-              status: _toolCallStatus(toolCall.status),
+              status: _toolCallStatus(toolCall),
               detail: _commandFromToolCall(toolCall),
             ),
       approval: _transcriptApproval(
@@ -1874,12 +1882,17 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return selectedId.value;
   }
 
-  AcpToolCallStatus _toolCallStatus(ToolCallStatus status) => switch (status) {
-    ToolCallStatus.pending => AcpToolCallStatus.queued,
-    ToolCallStatus.inProgress => AcpToolCallStatus.running,
-    ToolCallStatus.completed => AcpToolCallStatus.succeeded,
-    ToolCallStatus.failed => AcpToolCallStatus.failed,
-  };
+  /// ACP has no `cancelled` tool call status: a call the client cancelled is
+  /// `failed` with [ToolCallRecord.cancelledByClient] and shows as Cancelled
+  /// (fix-prompt-cancel-tool-calls/design.md, D3).
+  AcpToolCallStatus _toolCallStatus(ToolCallRecord toolCall) =>
+      switch (toolCall.status) {
+        _ when toolCall.cancelledByClient => AcpToolCallStatus.cancelled,
+        ToolCallStatus.pending => AcpToolCallStatus.queued,
+        ToolCallStatus.inProgress => AcpToolCallStatus.running,
+        ToolCallStatus.completed => AcpToolCallStatus.succeeded,
+        ToolCallStatus.failed => AcpToolCallStatus.failed,
+      };
 
   /// Sole source of `transcriptEntries` — rebuilds the full transcript for
   /// [session] from `session.turns` from scratch. Called from

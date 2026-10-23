@@ -297,6 +297,9 @@ final class AcpClientApplication {
     final generation = _generation;
     final session = _requireSession(command.sessionId);
     final activeTurn = session.activeTurn;
+    if (activeTurn?.status == PromptTurnStatus.cancelling) {
+      return activeTurn!;
+    }
     if (activeTurn == null) {
       final lastTurn = session.turns.lastOrNull;
       if (lastTurn?.status == PromptTurnStatus.cancelled) {
@@ -811,7 +814,11 @@ final class AcpClientApplication {
 
       final session = _sessions[permissionRequest.sessionId];
       final activeTurn = session?.activeTurn;
-      if (session == null || activeTurn == null) {
+      // A cancelling turn answers late permission requests `cancelled` like
+      // a missing turn (05-Prompt Turn.md#cancellation).
+      if (session == null ||
+          activeTurn == null ||
+          activeTurn.status == PromptTurnStatus.cancelling) {
         _sendCancelledPermissionResponse(request.id);
         _handledPermissionRequests.add(approvalId);
         return;

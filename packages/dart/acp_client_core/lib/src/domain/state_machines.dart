@@ -476,6 +476,9 @@ class PromptTurnStateMachine {
         turn,
         'terminal prompt turn ignores approval requests',
       ),
+      PromptTurnStatus.cancelling => _rejected(
+        'cancelling prompt turn cannot request approval',
+      ),
       _ => _rejected('prompt turn cannot request approval before running'),
     };
   }
@@ -487,8 +490,8 @@ class PromptTurnStateMachine {
     DateTime? resolvedAt,
   }) {
     final approval = turn.approvals[approvalId];
-    if (turn.isTerminal) {
-      return _ignored(turn, 'terminal prompt turn ignores approval selection');
+    if (turn.isTerminal || turn.status == PromptTurnStatus.cancelling) {
+      return _ignored(turn, 'ended prompt turn ignores approval selection');
     }
     if (approval == null) {
       return _ignored(turn, 'approval request is not active on this turn');
@@ -512,11 +515,8 @@ class PromptTurnStateMachine {
     DateTime? resolvedAt,
   }) {
     final approval = turn.approvals[approvalId];
-    if (turn.isTerminal) {
-      return _ignored(
-        turn,
-        'terminal prompt turn ignores approval cancellation',
-      );
+    if (turn.isTerminal || turn.status == PromptTurnStatus.cancelling) {
+      return _ignored(turn, 'ended prompt turn ignores approval cancellation');
     }
     if (approval == null) {
       return _ignored(turn, 'approval request is not active on this turn');
@@ -576,11 +576,25 @@ class PromptTurnStateMachine {
     if (turn.isTerminal) {
       return _ignored(turn, 'terminal prompt turn ignores cancellation');
     }
+    if (turn.status == PromptTurnStatus.cancelling) {
+      return _ignored(turn, 'prompt turn is already cancelling');
+    }
 
+    // The turn stays open until the agent answers its `session/prompt`
+    // (05-Prompt Turn.md#cancellation): updates sent before that answer still
+    // belong to it, and the answer's stop reason settles it in `_complete`.
     return _applied(
       turn.copyWith(
-        status: PromptTurnStatus.cancelled,
-        stopReason: StopReason.cancelled,
+        status: PromptTurnStatus.cancelling,
+        toolCalls: {
+          for (final entry in turn.toolCalls.entries)
+            entry.key: _isUnfinished(entry.value.status)
+                ? entry.value.copyWith(
+                    status: ToolCallStatus.failed,
+                    cancelledByClient: true,
+                  )
+                : entry.value,
+        },
         approvals: {
           for (final entry in turn.approvals.entries)
             entry.key: entry.value.isResolved
@@ -590,7 +604,6 @@ class PromptTurnStateMachine {
                     resolvedAt: completedAt ?? entry.value.resolvedAt,
                   ),
         },
-        completedAt: completedAt ?? turn.completedAt,
       ),
     );
   }
@@ -996,7 +1009,7 @@ class SessionStateMachine {
       IgnoredStateTransition<PromptTurn>(:final state, :final reason) =>
         _ignored(_replaceTurn(session, state), reason),
       AppliedStateTransition<PromptTurn>(:final state) => _applied(
-        _replaceTurn(session, state, status: SessionLifecycleStatus.active),
+        _replaceTurn(session, state),
       ),
     };
   }
@@ -1087,11 +1100,18 @@ ToolCallRecord _mergeToolCallUpdate(
   ToolCallRecord? current,
   ToolCallUpdate update,
 ) {
+  // A call the client cancelled stays ended unless the agent reports how it
+  // actually ended: a late non-final status does not put it back to work.
+  final cancelledByClient = current?.cancelledByClient ?? false;
+  final status = cancelledByClient && _isUnfinished(update.status)
+      ? current!.status
+      : update.status ?? current?.status ?? ToolCallStatus.pending;
   return ToolCallRecord(
     id: update.toolCallId,
     title: update.title ?? current?.title ?? update.toolCallId.value,
     kind: update.kind ?? current?.kind ?? ToolKind.other,
-    status: update.status ?? current?.status ?? ToolCallStatus.pending,
+    status: status,
+    cancelledByClient: cancelledByClient && status != ToolCallStatus.completed,
     riskLevel: ApprovalPolicy.max(
       current?.riskLevel ?? ApprovalRiskLevel.readOnly,
       ApprovalPolicy.classifyToolCallUpdate(update),
@@ -1104,6 +1124,11 @@ ToolCallRecord _mergeToolCallUpdate(
     completedAt: current?.completedAt,
   );
 }
+
+bool _isUnfinished(ToolCallStatus? status) => switch (status) {
+  ToolCallStatus.pending || ToolCallStatus.inProgress => true,
+  ToolCallStatus.completed || ToolCallStatus.failed || null => false,
+};
 
 PromptTurnStatus _statusForStopReason(StopReason stopReason) {
   return switch (stopReason) {
@@ -1121,6 +1146,7 @@ SessionLifecycleStatus _sessionStatusForTurn(PromptTurn turn) {
       SessionLifecycleStatus.awaitingApproval,
     PromptTurnStatus.pending ||
     PromptTurnStatus.running => SessionLifecycleStatus.runningTurn,
+    PromptTurnStatus.cancelling => SessionLifecycleStatus.cancellingTurn,
     PromptTurnStatus.failed => SessionLifecycleStatus.failed,
     PromptTurnStatus.completed ||
     PromptTurnStatus.refused ||
