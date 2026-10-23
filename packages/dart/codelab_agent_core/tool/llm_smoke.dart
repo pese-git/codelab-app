@@ -1,5 +1,6 @@
-// Manual smoke of a provider adapter against a real provider: one request,
-// the events and the usage are printed. Not run in CI; used to check that
+// Manual smoke of a provider against a real server: one request through
+// `createStreamFunction` (adapter, watchdogs, retry), the events and the
+// usage are printed. Not run in CI; used to check that
 // the hand-written SSE fixtures match real streams (design.md, D9).
 //
 //   CODELAB_SMOKE_PROVIDER=openai-compatible|anthropic
@@ -13,8 +14,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
-import 'package:codelab_agent_core/src/llm/providers/anthropic.dart';
-import 'package:codelab_agent_core/src/llm/providers/openai_compatible.dart';
 import 'package:http/http.dart' as http;
 
 Future<void> main() async {
@@ -55,10 +54,7 @@ Future<void> main() async {
     random: Random(),
     logger: _StderrLogger(),
   );
-  final stream = switch (api) {
-    ProviderApi.anthropicMessages => anthropicStreamFunction(config, services),
-    _ => openAiCompatibleStreamFunction(config, services),
-  };
+  final stream = createStreamFunction(config, services);
 
   final context = LlmContext(
     systemPrompt: 'You are a terse assistant. Use the tool when asked.',

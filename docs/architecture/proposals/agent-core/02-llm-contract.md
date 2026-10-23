@@ -423,6 +423,7 @@ final class ProviderConfig {
       this.reasoningFormat = ReasoningFormat.openai, this.systemRole = 'system',
       this.anthropicVersion = '2023-06-01', this.anthropicBeta = const [],
       this.promptCacheKey = false, this.listModels = true,
+      this.timeouts = LlmTimeouts.defaults, this.retry = const RetryPolicy(),
       this.quirks = ProviderQuirks.none, this.credentials});
   final String name;
   final ProviderApi api;
@@ -438,6 +439,8 @@ final class ProviderConfig {
   final List<String> anthropicBeta;
   final bool promptCacheKey;        // отправлять prompt_cache_key (§2.12.1); только openaiChat
   final bool listModels;            // запрашивать список моделей endpoint (§2.12.2)
+  final LlmTimeouts timeouts;       // connect / idle / idleReasoning провайдера (§2.10.1, §2.10.5, §15.4)
+  final RetryPolicy retry;          // бюджеты повторов провайдера (§2.10.2, §15.4)
   final ProviderQuirks quirks;      // после MVP: особенности сервера, задаёт пресет (§17.10.2)
   final CredentialSource? credentials;   // после MVP: пул ключей или OAuth-токен (§17.10.4, §17.10.6)
 }

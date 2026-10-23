@@ -2,6 +2,8 @@
 /// §2.12).
 library;
 
+import 'model_ref.dart';
+
 final class Usage {
   const Usage({
     this.input = 0,
@@ -130,3 +132,28 @@ final class UsageCost {
 int _int(Object? value) => value is num ? value.toInt() : 0;
 
 double _double(Object? value) => value is num ? value.toDouble() : 0;
+
+/// [usage] with its cost by the rates of [cost] per 10⁶ tokens; unknown
+/// prices give zero cost (§2.12). Reasoning is part of `output` and is not
+/// charged separately.
+Usage calculateCost(Usage usage, ModelCost? cost) => cost == null
+    ? Usage(
+        input: usage.input,
+        output: usage.output,
+        cacheRead: usage.cacheRead,
+        cacheWrite: usage.cacheWrite,
+        reasoning: usage.reasoning,
+      )
+    : Usage(
+        input: usage.input,
+        output: usage.output,
+        cacheRead: usage.cacheRead,
+        cacheWrite: usage.cacheWrite,
+        reasoning: usage.reasoning,
+        cost: UsageCost(
+          input: usage.input * cost.input / 1e6,
+          output: usage.output * cost.output / 1e6,
+          cacheRead: usage.cacheRead * cost.cacheRead / 1e6,
+          cacheWrite: usage.cacheWrite * cost.cacheWrite / 1e6,
+        ),
+      );

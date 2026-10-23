@@ -8,6 +8,7 @@ import 'event_stream.dart';
 import 'events.dart';
 import 'messages.dart';
 import 'model_ref.dart';
+import 'overflow.dart';
 import 'usage.dart';
 
 /// Common frame of a provider adapter (`agent-core-architecture` §2.5).
@@ -197,8 +198,18 @@ final class ProviderStreamState {
     if (note != null) {
       _notes.add(note);
     }
+    _usage = calculateCost(_usage, model.cost);
+    final message = _snapshot(reason)();
+    final overflow = silentOverflow(
+      message,
+      contextWindow: model.contextWindow,
+    );
+    if (overflow != null) {
+      fail(LlmErrorClass.overflow, overflow);
+      return;
+    }
     _terminated = true;
-    _out.push(DoneEvent(_snapshot(reason)()));
+    _out.push(DoneEvent(message));
   }
 
   /// Emits [ErrorEvent]; open blocks stay as they are.
@@ -212,6 +223,7 @@ final class ProviderStreamState {
       return;
     }
     _terminated = true;
+    _usage = calculateCost(_usage, model.cost);
     final error = _snapshot(
       aborted ? StopReason.aborted : StopReason.error,
     )().copyWith(errorMessage: _joinNotes(message), errorClass: errorClass);

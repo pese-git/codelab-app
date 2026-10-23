@@ -6,6 +6,7 @@ import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
 import '../support/models.dart';
+import '../support/package_dir.dart';
 
 final _time = DateTime.utc(2026);
 
@@ -360,7 +361,9 @@ void main() {
     final fixture =
         jsonDecode(
               File(
-                '../acp_testing/fixtures/acp/prompt-tool-permission-allow.json',
+                corePath(
+                  '../acp_testing/fixtures/acp/prompt-tool-permission-allow.json',
+                ),
               ).readAsStringSync(),
             )
             as Map<String, Object?>;

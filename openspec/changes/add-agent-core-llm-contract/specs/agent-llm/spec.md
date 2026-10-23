@@ -307,7 +307,7 @@
 - **THEN** `resolve` даёт безопасные значения, и `Logger` получает ровно одно предупреждение `llm.catalog.default_used` (`static_model_catalog_test.dart: unknown model resolves to safe defaults with one warning`)
 
 #### Scenario: Префикс встроенного каталога
-- **WHEN** разрешается модель `anthropic/claude-sonnet-4-5-20250929`, а во встроенной таблице есть ключ `claude-sonnet-4-5`
+- **WHEN** разрешается модель `anthropic/claude-opus-5-5-20260101`, а во встроенной таблице есть ключ `claude-opus-5-5`
 - **THEN** окно и лимит ответа берутся из этой записи
 
 #### Scenario: Корректность встроенной таблицы
