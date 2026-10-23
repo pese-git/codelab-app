@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *" # nightly e2e
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: ${{ matrix.job }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { job: format, scripts: "check-format" }
+          - { job: analyze, scripts: "analyze" }
+          - { job: test, scripts: "test" }
+          - { job: conformance, scripts: "protocol-conformance" } # + conformance:client (add-acp-golden-fixture-corpus), + conformance:agent (stage 4)
+          - { job: guard, scripts: "guard" }
+          - { job: web-compile, scripts: "web-compile" } # + flutter build web (stage 10)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+      - run: for s in ${{ matrix.scripts }}; do fvm dart run melos run "$s" || exit 1; done
+
+  # Nightly, on push to master/develop and on pull requests labelled "e2e".
+  e2e-macos:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e')
+    needs: checks
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+      - run: |
+          for s in stdio permission fs terminal plan-checklist prompt-queue multi-session open-project; do
+            fvm dart run melos run "test:e2e:app:$s" || exit 1
+          done
+      # stage 4: test:e2e:app:dart-agent; stage 6: test:e2e:cli; stage 7: test:e2e:app:embedded

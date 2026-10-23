@@ -1,0 +1,30 @@
+name: prepare
+description: Install the FVM-pinned Flutter SDK, resolve the pub workspace and generate code.
+runs:
+  using: composite
+  steps:
+    - uses: dart-lang/setup-dart@v1
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/fvm
+          ~/.pub-cache
+        key: fvm-${{ runner.os }}-${{ hashFiles('.fvmrc', 'pubspec.lock') }}
+        restore-keys: fvm-${{ runner.os }}-
+    - name: Activate FVM
+      shell: bash
+      run: |
+        dart pub global activate fvm
+        echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+    - name: Install Flutter SDK and resolve workspace
+      shell: bash
+      run: |
+        fvm install --skip-pub-get
+        fvm dart pub get
+    # Generated code (*.freezed.dart and friends) is not tracked in git, so a
+    # clean checkout does not compile without it.
+    - name: Generate code
+      shell: bash
+      run: >-
+        fvm dart run melos exec -c 1 --depends-on=build_runner --
+        "fvm dart run build_runner build --delete-conflicting-outputs"
