@@ -8,6 +8,8 @@
 //   CODELAB_SMOKE_MODEL=gpt-4.1-mini
 //   CODELAB_SMOKE_API_KEY=...            (optional for local servers)
 //   CODELAB_SMOKE_REASONING=low|medium|high   (optional)
+//   CODELAB_SMOKE_THINKING=adaptive|budget    (optional, Anthropic;
+//                                              default adaptive)
 //   fvm dart run tool/llm_smoke.dart
 // ignore_for_file: avoid_print
 import 'dart:io';
@@ -31,6 +33,9 @@ Future<void> main() async {
   final baseUrl = Uri.parse(required('CODELAB_SMOKE_BASE_URL'));
   final effort = ReasoningEffort.values
       .asNameMap()[env['CODELAB_SMOKE_REASONING']];
+  final thinking =
+      ThinkingMode.values.asNameMap()[env['CODELAB_SMOKE_THINKING']] ??
+      ThinkingMode.adaptive;
   final config = ProviderConfig(
     name: 'smoke',
     api: api,
@@ -46,6 +51,7 @@ Future<void> main() async {
     maxOutputTokens: 4096,
     supportsReasoning: effort != null,
     reasoningEffort: effort,
+    thinkingMode: thinking,
   );
   final client = http.Client();
   final services = CoreLlmServices(

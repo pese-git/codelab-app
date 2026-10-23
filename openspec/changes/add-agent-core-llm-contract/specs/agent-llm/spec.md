@@ -275,7 +275,8 @@
 
 ### Requirement: Параметр уровня рассуждения
 Адаптер SHALL отправлять параметр рассуждения только модели с `supportsReasoning` и непустым `ModelRef.reasoningEffort` (LLM-15). Форма параметра:
-- Anthropic: `thinking` с бюджетом 2048 / 8192 / 16384 для `low` / `medium` / `high`, ограниченным `max_tokens − 1024`; бюджет меньше 1024 рассуждение не включает;
+- Anthropic, `ModelRef.thinkingMode: adaptive`: `thinking: {"type": "adaptive", "display": "summarized"}` и `output_config: {"effort": <уровень>}`, без `budget_tokens`;
+- Anthropic, `ModelRef.thinkingMode: budget`: `thinking` с бюджетом 2048 / 8192 / 16384 для `low` / `medium` / `high`, ограниченным `max_tokens − 1024`; бюджет меньше 1024 рассуждение не включает;
 - `reasoningFormat: openai`: `reasoning_effort`;
 - `reasoningFormat: openrouter`: `reasoning.effort`;
 - `reasoningFormat: none`: ничего.
@@ -284,10 +285,14 @@
 
 #### Scenario: Модель без рассуждения
 - **WHEN** запрос собирается для модели без `supportsReasoning`
-- **THEN** тело не содержит ни `thinking`, ни `reasoning_effort`, ни `reasoning`
+- **THEN** тело не содержит ни `thinking`, ни `output_config`, ни `reasoning_effort`, ни `reasoning`
+
+#### Scenario: Адаптивное рассуждение Anthropic
+- **WHEN** модель Anthropic с `thinkingMode: adaptive` и `maxOutputTokens: 1800` получает `reasoningEffort: high`
+- **THEN** тело содержит `"thinking": {"type": "adaptive", "display": "summarized"}` и `"output_config": {"effort": "high"}` и не содержит `budget_tokens`
 
 #### Scenario: Бюджет ограничен лимитом ответа
-- **WHEN** модель Anthropic с `maxOutputTokens: 4096` получает `reasoningEffort: high`
+- **WHEN** модель Anthropic с `thinkingMode: budget` и `maxOutputTokens: 4096` получает `reasoningEffort: high`
 - **THEN** `budget_tokens` равен 3072
 
 ### Requirement: Статический каталог моделей
@@ -295,12 +300,12 @@
 
 **Список моделей:** модели конфига или флагов бинаря в порядке объявления, дубликаты `ModelId` отбрасываются.
 
-**`resolve`.** Каждое поле `ModelRef` (`contextWindow`, `maxOutputTokens`, `cost`, `supportsImages`, `supportsReasoning`, `hiddenReasoning`) SHALL разрешаться первым непустым значением по порядку источников:
+**`resolve`.** Каждое поле `ModelRef` (`contextWindow`, `maxOutputTokens`, `cost`, `supportsImages`, `supportsReasoning`, `hiddenReasoning`, `thinkingMode`) SHALL разрешаться первым непустым значением по порядку источников:
 1. явное значение конфига;
 2. встроенный каталог (точный id, затем самый длинный префикс-ключ до `-` или конца, затем то же для части после последнего `/`);
-3. безопасные значения: окно 32 000, лимит ответа 4 096, без картинок и рассуждения, цены неизвестны.
+3. безопасные значения: окно 32 000, лимит ответа 4 096, без картинок и рассуждения, `thinkingMode: adaptive`, цены неизвестны.
 
-Затем `maxOutputTokens := min(maxOutputTokens, contextWindow − 1024)`, но не меньше 256. Использование безопасного значения SHALL давать одну запись `llm.catalog.default_used` на модель за процесс. Модель вне списка SHALL давать `null`. `refresh()` статического каталога SHALL ничего не делать.
+Затем `maxOutputTokens := min(maxOutputTokens, contextWindow − 1024)`, но не меньше 256. Использование безопасного значения, кроме цен и `thinkingMode`, SHALL давать одну запись `llm.catalog.default_used` на модель за процесс. Модель вне списка SHALL давать `null`. `refresh()` статического каталога SHALL ничего не делать.
 
 #### Scenario: Неизвестная модель
 - **WHEN** модель из конфига отсутствует во встроенном каталоге и не имеет явных полей
@@ -312,7 +317,7 @@
 
 #### Scenario: Корректность встроенной таблицы
 - **WHEN** проверяется каждая запись встроенного каталога
-- **THEN** окно больше 0, а лимит ответа меньше окна
+- **THEN** окно больше 0, а лимит ответа меньше окна, а у моделей Claude 5.x `thinkingMode: adaptive`
 
 ### Requirement: Фабрика и закрытые адаптеры
 Хост SHALL получать функцию модели только через `createStreamFunction(ProviderConfig, CoreLlmServices)`. Фабрика собирает цепочку §2.10: адаптер → `withWatchdogs` → `withTransientRetry` → `withFallback`. `CoreLlmServices` несёт `http.Client`, `Clock`, `Random` и `Logger` хоста. Публичный барель ядра НЕ SHALL экспортировать `lib/src/llm/providers/*` (PKG-5).

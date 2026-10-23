@@ -28,12 +28,14 @@ final class ModelInfo {
     this.supportsImages,
     this.supportsReasoning,
     this.hiddenReasoning,
+    this.thinkingMode,
   });
 
   final String? displayName;
   final int? contextWindow, maxOutputTokens;
   final ModelCost? cost;
   final bool? supportsImages, supportsReasoning, hiddenReasoning;
+  final ThinkingMode? thinkingMode;
 }
 
 /// Where a field of a resolved model came from.
@@ -95,8 +97,8 @@ final class CatalogProvider {
 
 /// Catalog of the models from the config or the binary flags, resolved by
 /// the explicit values, then the built-in table, then the safe defaults
-/// (window 32 000, max output 4 096, no images, no reasoning, unknown
-/// prices). No network; [refresh] does nothing.
+/// (window 32 000, max output 4 096, no images, no reasoning, adaptive
+/// thinking, unknown prices). No network; [refresh] does nothing.
 final class StaticModelCatalog implements ModelCatalog {
   StaticModelCatalog(
     List<CatalogProvider> providers, {
@@ -147,10 +149,14 @@ final class StaticModelCatalog implements ModelCatalog {
     }
     final (config, info) = known;
     final fields = _resolveFields(id, info);
-    // Unknown prices are not warned about: a local model has none.
+    // Unknown prices are not warned about: a local model has none; the
+    // thinking mode matters only to Anthropic.
     final defaults = [
       for (final MapEntry(:key, :value) in fields.provenance.entries)
-        if (value == ModelInfoSource.safeDefault && key != 'cost') key,
+        if (value == ModelInfoSource.safeDefault &&
+            key != 'cost' &&
+            key != 'thinkingMode')
+          key,
     ];
     if (defaults.isNotEmpty && _warned.add(id)) {
       _logger.log(
@@ -173,6 +179,7 @@ final class StaticModelCatalog implements ModelCatalog {
       supportsReasoning: reasoning,
       reasoningEffort: reasoning ? effort : null,
       hiddenReasoning: fields.hiddenReasoning,
+      thinkingMode: fields.thinkingMode,
     );
   }
 
@@ -208,6 +215,11 @@ final class StaticModelCatalog implements ModelCatalog {
         false,
       ),
       hiddenReasoning: pick('hiddenReasoning', (i) => i.hiddenReasoning, false),
+      thinkingMode: pick(
+        'thinkingMode',
+        (i) => i.thinkingMode,
+        ThinkingMode.adaptive,
+      ),
       provenance: provenance,
     );
   }
@@ -248,11 +260,13 @@ final class _Fields {
     required this.supportsImages,
     required this.supportsReasoning,
     required this.hiddenReasoning,
+    required this.thinkingMode,
     required this.provenance,
   });
 
   final int contextWindow, maxOutputTokens;
   final ModelCost? cost;
   final bool supportsImages, supportsReasoning, hiddenReasoning;
+  final ThinkingMode thinkingMode;
   final Map<String, ModelInfoSource> provenance;
 }

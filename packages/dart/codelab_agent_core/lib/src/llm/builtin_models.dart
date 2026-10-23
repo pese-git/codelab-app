@@ -13,7 +13,9 @@ import 'model_ref.dart';
 /// * Anthropic — https://platform.claude.com/docs/en/models/overview and
 ///   https://platform.claude.com/docs/en/about-claude/pricing (cache write
 ///   is the 5-minute rate; Claude Haiku 5.5 — the rate for prompts up to
-///   100 000 tokens).
+///   100 000 tokens); adaptive thinking — the thinking table of
+///   https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking
+///   (`budget_tokens` is rejected with 400 on Claude 5.x).
 ///
 /// The table changes as an ordinary code change with
 /// `builtin_models_test.dart`.
@@ -53,6 +55,7 @@ const builtinModels = <String, ModelInfo>{
     cost: ModelCost(input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5),
     supportsImages: true,
     supportsReasoning: true,
+    thinkingMode: ThinkingMode.adaptive,
   ),
   'claude-opus-5-5': ModelInfo(
     contextWindow: 1000000,
@@ -60,6 +63,7 @@ const builtinModels = <String, ModelInfo>{
     cost: ModelCost(input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5),
     supportsImages: true,
     supportsReasoning: true,
+    thinkingMode: ThinkingMode.adaptive,
   ),
   'claude-sonnet-5-5': ModelInfo(
     contextWindow: 1000000,
@@ -67,6 +71,7 @@ const builtinModels = <String, ModelInfo>{
     cost: ModelCost(input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5),
     supportsImages: true,
     supportsReasoning: true,
+    thinkingMode: ThinkingMode.adaptive,
   ),
   'claude-haiku-5-5': ModelInfo(
     contextWindow: 1000000,
@@ -79,5 +84,6 @@ const builtinModels = <String, ModelInfo>{
     ),
     supportsImages: true,
     supportsReasoning: true,
+    thinkingMode: ThinkingMode.adaptive,
   ),
 };
