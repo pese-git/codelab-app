@@ -15,8 +15,8 @@
 
 ## 4. Conformance и документация
 
-- [ ] 4.1 Снять `skip` (`_cancelledToolCallSkip`) с теста `acp/prompt-cancel-mid-tool: the cancelled tool call ends failed` в `client_fixture_conformance_test.dart`; тест зелёный (после слияния итерации 2 `add-acp-golden-fixture-corpus`)
-- [ ] 4.2 Убрать запись о расхождении из раздела «Найденные расхождения клиента» `add-acp-golden-fixture-corpus/design.md` (или из его архива)
+- [x] 4.1 Снять `skip` (`_cancelledToolCallSkip`) с теста `acp/prompt-cancel-mid-tool: the cancelled tool call ends failed` в `client_fixture_conformance_test.dart`; тест зелёный (после слияния итерации 2 `add-acp-golden-fixture-corpus`) — сделано при архивировании `add-acp-golden-fixture-corpus`: отдельный тест со `skip` удалён, проверка `call_1 → failed` вошла в проверку состояния фикстуры
+- [x] 4.2 Убрать запись о расхождении из раздела «Найденные расхождения клиента» `add-acp-golden-fixture-corpus/design.md` (или из его архива) — запись заменена историей «найдено и исправлено этим change» (архив `2026-10-23-add-acp-golden-fixture-corpus/design.md`)
 - [x] 4.3 Фикстура `prompt-cancel-mid-tool.json` не меняется
 
 ## 5. Проверка
