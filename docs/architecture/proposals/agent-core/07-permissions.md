@@ -33,7 +33,7 @@ final class PermissionRequest {
   final ToolKind kind; final ToolTier tier;      // tool.kindOf(args), tool.tierOf(args) (§6.2)
   final Map<String, Object?> rawInput;             // приведённые аргументы (PERM-6)
   final List<Location> locations;
-  final List<FileDiff> diffs;                      // по одному на файл; из ToolPrepared.presentation или present(args)
+  final List<FileDiff> diffs;                      // по одному на файл; из ToolPrepared.presentation или present(args, ctx)
   final String? reason;                            // например, 'critical command: recursive delete of /'
   final bool allowAlwaysOffered;                   // false для критических шаблонов
   final String? criticalLabel;                     // после MVP: метка критического шаблона §7.6 или
@@ -161,7 +161,7 @@ ask(reason, allowAlwaysOffered = true):
   if gate == null: return Denied('no approval interface is available')
   t0 = clock.now()
   d = await gate.request(PermissionRequest(kind: tool.kindOf(args), tier: tool.tierOf(args),
-        title, locations, diffs из ToolPrepared.presentation ?? present(args), allowAlwaysOffered, ...), cancel)
+        title, locations, diffs из ToolPrepared.presentation ?? present(args, ctx), allowAlwaysOffered, ...), cancel)
   budget.excludeWait(clock.now() - t0)
   switch d:
     allowOnce   → Allowed('user')

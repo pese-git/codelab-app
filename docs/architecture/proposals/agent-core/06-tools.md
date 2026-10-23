@@ -32,7 +32,12 @@ abstract base class AgentTool {
   bool get spillable => false;
   SpillDirection get spillDirection => SpillDirection.head;
   bool get redactResult => true;   // false — результат не редактируется (код модели, §12.4.2)
-  ToolPresentation present(Map<String, Object?> args);     // title, locations, diffs (может читать env)
+  /// true — инструмент усекает вывод сам со своим уведомлением (§6.3.5); иначе точка исполнения
+  /// усекает голову с общим уведомлением `[Output truncated: showing the first N lines of M.]` (TOOL-9).
+  bool get truncatesOutput => false;
+  /// title, locations, diffs; читает env из ctx (edit строит diff заранее). args могут быть сырыми
+  /// (до валидации): исключение — title = имя инструмента.
+  Future<ToolPresentation> present(Map<String, Object?> args, ToolContext ctx);
   String permissionPattern(Map<String, Object?> args);      // шаблон для allow_always (§7.5)
   /// Проверка аргументов до разрешений: английский текст ошибки для модели или null.
   /// Отклонённый вызов не доходит до PermissionPolicy и не порождает вопрос человеку (§6.3.1, шаг 3a).
@@ -47,7 +52,7 @@ abstract base class AgentTool {
   bool offersAllowAlways(Map<String, Object?> args) => true;   // false → вариант allow_always не предлагается
   String get permissionKeyName => name;   // после MVP (§17.3.8.1): task_send, task_resume → 'task'; ключ PermissionKey и PolicyRules (§7.3)
   /// Асинхронная подготовка после preflight и до разрешений (§6.3.1, шаг 3b). Ошибка — текст для
-  /// модели, вопрос человеку не задаётся. presentation заменяет present(args) в запросе разрешения.
+  /// модели, вопрос человеку не задаётся. presentation заменяет present(args, ctx) в запросе разрешения.
   Future<ToolPreparation> prepare(Map<String, Object?> args, ToolContext ctx) async => const ToolPrepared();
   Future<ToolExecutionResult> execute(Map<String, Object?> args, ToolContext ctx);
   ArgsRewrite? rewriteArgs(Map<String, Object?> rawArgs) => null;   // после MVP, P-14 (§17.12.6): только exec
@@ -71,8 +76,9 @@ final class ArgsRewrite {                       // после MVP (§17.12.6)
 final class ToolContext {
   const ToolContext({required this.env, required this.cancel, required this.yieldToken,
       required this.onUpdate, required this.toolCallId, required this.services, this.prepared,
-      this.misuse, this.rewrite});
+      this.misuse, this.rewrite, this.stepTools = const []});
   final ExecutionEnv env;                       // всегда BoundedEnv (ENV-2)
+  final List<String> stepTools;                 // имена схем текущего шага: текст упоминает только их (§6.4)
   final CancelToken cancel, yieldToken;
   final void Function(ToolExecutionResult partial) onUpdate;
   final String toolCallId;
@@ -121,12 +127,12 @@ final class ToolRegistry {
 `AgentTool.execute` (TOOL-1):
 
 0. После MVP (§17.12.6): найти инструмент; `rewrite := tool.rewriteArgs(call.arguments)`; не `null` → шаги 1–10 используют `rewrite.args`, `ctx.rewrite = rewrite`; исключение → без перезаписи, лог `exec.secret_rewrite.error`.
-1. `emit ToolCallStarted` (title и locations — из `present(args)`, kind — `kindOf(args)`; если `present` бросил — title = имя инструмента).
+1. `emit ToolCallStarted` (title и locations — из `present(args, ctx)`, kind — `kindOf(args)`; если `present` бросил — title = имя инструмента).
 1a. Предохранитель (§6.3.7): `key = MisuseBreaker.keyOf(call.name, call.arguments)` по сырым аргументам (после MVP — после перезаписи шага 0) ответа модели; `ctx.misuse?.isBlocked(key)` → результат-ошибка с текстом блокировки §6.3.7, outcome `failed`; шаги 2–9 не выполняются (ни валидации, ни разрешений, ни исполнения), сразу шаг 10.
 2. Найти инструмент в реестре **и** в схемах текущего шага. Нет → результат-ошибка `Tool "<name>" is not available. Available tools: <список>.`, outcome `failed`. В режиме `tools.load: essential` к тексту дописывается ` Use discover_tools to mount more tools.` (§17.11.9).
 3. Валидация и приведение аргументов (§6.3.2). Ошибка → результат-ошибка с перечнем нарушений, outcome `failed`.
 3a. `preflight(args)` с приведёнными аргументами. Не `null` → результат-ошибка с этим текстом, outcome `failed`; разрешения не проверяются, вопрос человеку не задаётся. Исключение в `preflight` — как в шаге 7. Встроенные инструменты MVP `preflight` не переопределяют, и в MVP проверки `redact.block` нет. После MVP: `web_fetch` проверяет в нём синтаксис и схему URL (§17.1.3, шаги 1–6); `read` и `exec` переопределяют `preflight` и проверяют в нём запрет `redact.block` (§17.12.7).
-3b. После MVP (§17.8.2): `prepare(args, ctx)`. `ToolPrepareFailed(message)` → результат-ошибка с этим текстом, outcome `failed`; разрешения не проверяются, вопрос человеку не задаётся (LSP-1). `ToolPrepared.presentation` (если есть) заменяет `present(args)` в запросе разрешения, `state` передаётся в `ToolContext.prepared` шага 7. Исключение в `prepare` — как в шаге 7; `CancelledException` → `cancelled`. Встроенные инструменты MVP `prepare` не переопределяют; `lsp rename` строит в нём план правки всех файлов (§17.8.8). Шаги 0–3b идут до проверки разрешений (PERM-1), поэтому `rewriteArgs`, `preflight` и `prepare` НЕ ДОЛЖНЫ иметь побочных эффектов: они только читают (`ExecutionEnv`, языковой сервер) и не пишут файлы, не запускают команд и не ходят в сеть. Исключение (PERM-1) — `prepare` инструмента `lsp`: ленивый запуск языкового сервера из доверенной конфигурации (LSP-11) и синхронизация документов (`didOpen`/`didChange`, §17.8.5); на диск он не пишет.
+3b. После MVP (§17.8.2): `prepare(args, ctx)`. `ToolPrepareFailed(message)` → результат-ошибка с этим текстом, outcome `failed`; разрешения не проверяются, вопрос человеку не задаётся (LSP-1). `ToolPrepared.presentation` (если есть) заменяет `present(args, ctx)` в запросе разрешения, `state` передаётся в `ToolContext.prepared` шага 7. Исключение в `prepare` — как в шаге 7; `CancelledException` → `cancelled`. Встроенные инструменты MVP `prepare` не переопределяют; `lsp rename` строит в нём план правки всех файлов (§17.8.8). Шаги 0–3b идут до проверки разрешений (PERM-1), поэтому `rewriteArgs`, `preflight` и `prepare` НЕ ДОЛЖНЫ иметь побочных эффектов: они только читают (`ExecutionEnv`, языковой сервер) и не пишут файлы, не запускают команд и не ходят в сеть. Исключение (PERM-1) — `prepare` инструмента `lsp`: ленивый запуск языкового сервера из доверенной конфигурации (LSP-11) и синхронизация документов (`didOpen`/`didChange`, §17.8.5); на диск он не пишет.
 4. Цепочка `beforeToolCall` с приведёнными аргументами; первой — проверка разрешений (§7). `Block(reason)` → результат-ошибка с текстом `reason`, outcome из `Block` (`rejected`). После MVP вторым звеном цепочки идут пользовательские хуки `before_tool` (§17.14.2.3): ненулевой код → `Block` с текстом `Blocked by hook "<name>" …`.
 5. `cancel.isCancelled` → outcome `cancelled`, текст `Tool call was cancelled`.
 6. Для `write`/`edit` — захват блокировки пути (§6.3.4); после захвата повторная проверка отмены. Инструмент, меняющий набор файлов (`lsp rename`, §17.8.8), захватывает все пути сам через `PathLock.runAll` и после захвата тоже проверяет отмену.
