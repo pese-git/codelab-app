@@ -5,13 +5,18 @@
 library;
 
 export 'src/cancel/cancel_token.dart';
-export 'src/llm/decorators/retry.dart';
+export 'src/llm/decorators/fallback.dart';
+export 'src/llm/decorators/retry.dart' show RetryPolicy, withTransientRetry;
+export 'src/llm/decorators/watchdog.dart';
 export 'src/llm/errors.dart';
 export 'src/llm/event_stream.dart';
 export 'src/llm/events.dart';
 export 'src/llm/messages.dart';
+export 'src/llm/model_catalog.dart';
 export 'src/llm/model_ref.dart';
+export 'src/llm/overflow.dart' show isContextOverflow;
 export 'src/llm/provider_config.dart';
+export 'src/llm/provider_factory.dart';
 export 'src/llm/stream_function.dart';
 export 'src/llm/usage.dart';
 export 'src/util/clock.dart' show Clock, ClockTimer, SystemClock;

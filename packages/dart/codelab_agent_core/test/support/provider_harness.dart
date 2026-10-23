@@ -8,11 +8,13 @@ import 'package:codelab_agent_core/testing.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package_dir.dart';
+
 /// How a fixture body is cut into chunks of the HTTP response.
 enum Chunking { whole, byChar, random }
 
 String readSseFixture(String path) =>
-    File('test/fixtures/sse/$path').readAsStringSync();
+    File(corePath('test/fixtures/sse/$path')).readAsStringSync();
 
 List<List<int>> chunkBody(String body, Chunking chunking) {
   final bytes = utf8.encode(body);

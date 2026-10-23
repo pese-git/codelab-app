@@ -213,7 +213,7 @@ Future<http.StreamedResponse> sendStreaming(
           ..body = body;
     final http.StreamedResponse response;
     try {
-      response = await client.send(request);
+      response = await _sendCancellable(client, request, cancel);
     } on http.RequestAbortedException {
       throw CancelledException(cancel?.reason);
     }
@@ -241,6 +241,26 @@ Future<http.StreamedResponse> sendStreaming(
     }
     target = next;
   }
+}
+
+/// [http.Client.send] raced against [cancel]: the cancel wins within one
+/// event loop turn even with a client that ignores `abortTrigger` (LLM-7);
+/// a late response is drained so its connection is released.
+Future<http.StreamedResponse> _sendCancellable(
+  http.Client client,
+  http.BaseRequest request,
+  CancelToken? cancel,
+) {
+  final sent = client.send(request);
+  if (cancel == null) {
+    return sent;
+  }
+  sent.then((response) {
+    if (cancel.isCancelled) {
+      unawaited(response.stream.drain<void>().catchError((_) {}));
+    }
+  }, onError: (Object _) {});
+  return raceCancel(sent, cancel);
 }
 
 /// The response body as UTF-8 text that ends with [CancelledException] as
