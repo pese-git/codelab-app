@@ -194,8 +194,9 @@ final class FrameMatcher {
 
   /// Turns an `a2c` template into a concrete frame for the client driver:
   /// variables are substituted, `$capture` generates and stores an id,
-  /// `$contains`/`$partial`/`$oneOf` give their own value, `$any` a
-  /// placeholder string, `$absent` drops the key, `<ts>` a fixed time.
+  /// `$contains`/`$partial`/`$oneOf` give their own value, `$any` its
+  /// sample (`{"$any": []}`) or a placeholder string for `{"$any": true}`,
+  /// `$absent` drops the key, `<ts>` a fixed time.
   Object? materialize(Object? template, [String path = r'$']) {
     switch (template) {
       case final String s:
@@ -205,7 +206,7 @@ final class FrameMatcher {
       case final Map<String, Object?> m when _isMatcher(m):
         final MapEntry(:key, :value) = m.entries.single;
         return switch (key) {
-          r'$any' => 'fixture-any',
+          r'$any' => value == true ? 'fixture-any' : materialize(value, path),
           r'$capture' =>
             variables[_captureName(value, path)] =
                 'fixture-${_captureName(value, path)}',

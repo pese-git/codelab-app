@@ -473,4 +473,78 @@ void main() {
       );
     });
   });
+
+  group('materialize: a2c template to a concrete frame', () {
+    test('matchers give concrete values', () {
+      final frame = matcher.materialize({
+        'id': {r'$capture': 'permId'},
+        'path': r'${cwd}/README.md',
+        'sessionId': r'${sessionId}',
+        'title': {r'$contains': 'README.md'},
+        'kind': {
+          r'$oneOf': ['edit', 'read'],
+        },
+        'name': {r'$any': true},
+        'availableCommands': {r'$any': <Object?>[]},
+        'meta': {
+          r'$partial': {'a': 1},
+        },
+        'gone': {r'$absent': true},
+        'updatedAt': '<ts>',
+      });
+
+      expect(frame, {
+        'id': 'fixture-permId',
+        'path': '/work/demo/README.md',
+        'sessionId': 'sess-1',
+        'title': 'README.md',
+        'kind': 'edit',
+        'name': 'fixture-any',
+        'availableCommands': <Object?>[],
+        'meta': {'a': 1},
+        'updatedAt': fixtureTimestamp,
+      });
+      expect(matcher.variables['permId'], 'fixture-permId');
+    });
+
+    test(r'the $any sample is materialized with variables', () {
+      expect(
+        matcher.materialize({
+          'content': {
+            r'$any': [
+              {'terminalId': r'${sessionId}'},
+            ],
+          },
+        }),
+        {
+          'content': [
+            {'terminalId': 'sess-1'},
+          ],
+        },
+      );
+    });
+
+    test(r'$any with a sample still matches any value', () {
+      expect(
+        matcher.match(
+          {
+            'list': {r'$any': <Object?>[]},
+          },
+          {
+            'list': ['x'],
+          },
+        ),
+        isEmpty,
+      );
+    });
+
+    test(r'$regex cannot be materialized', () {
+      expect(
+        () => matcher.materialize({
+          'a': {r'$regex': 'x'},
+        }),
+        throwsA(isA<FixtureMatchException>()),
+      );
+    });
+  });
 }

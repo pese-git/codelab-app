@@ -1,0 +1,244 @@
+{
+  "id": "acp/tool-read-range",
+  "spec": [
+    "09-File System.md#reading-files",
+    "09-File System.md#checking-support",
+    "08-Tool Calls.md#following-the-agent"
+  ],
+  "description": "Файл из 100 строк; модель вызывает read с offset 10 и limit 5; агент читает через клиента fs/read_text_file с line 10, tool_call имеет kind read и locations со строкой 10, результат — строки 10–14 с номерами. limit запроса — 5 по цели T-01 или 6 по алгоритму read (agent-core §6.4, лишняя строка показывает продолжение); расхождение документов решается в задаче 4.8.",
+  "goals": [
+    "T-01"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "files": {
+      "a.txt": "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20\nline 21\nline 22\nline 23\nline 24\nline 25\nline 26\nline 27\nline 28\nline 29\nline 30\nline 31\nline 32\nline 33\nline 34\nline 35\nline 36\nline 37\nline 38\nline 39\nline 40\nline 41\nline 42\nline 43\nline 44\nline 45\nline 46\nline 47\nline 48\nline 49\nline 50\nline 51\nline 52\nline 53\nline 54\nline 55\nline 56\nline 57\nline 58\nline 59\nline 60\nline 61\nline 62\nline 63\nline 64\nline 65\nline 66\nline 67\nline 68\nline 69\nline 70\nline 71\nline 72\nline 73\nline 74\nline 75\nline 76\nline 77\nline 78\nline 79\nline 80\nline 81\nline 82\nline 83\nline 84\nline 85\nline 86\nline 87\nline 88\nline 89\nline 90\nline 91\nline 92\nline 93\nline 94\nline 95\nline 96\nline 97\nline 98\nline 99\nline 100\n"
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "a.txt"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "read",
+              "arguments": {
+                "path": "a.txt",
+                "offset": 10,
+                "limit": 5
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Прочитал строки 10–14."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "пользователь отправляет промпт",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Покажи строки 10–14 файла a.txt"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "a.txt"
+            },
+            "kind": "read",
+            "status": "pending",
+            "rawInput": {
+              "path": "a.txt",
+              "offset": 10,
+              "limit": 5
+            },
+            "locations": [
+              {
+                "path": "${cwd}/a.txt",
+                "line": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read1"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "sessionId": "${sessionId}",
+          "path": "${cwd}/a.txt",
+          "line": 10,
+          "limit": {
+            "$oneOf": [
+              5,
+              6
+            ]
+          }
+        }
+      },
+      "note": "диапазон читает клиент"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read1}",
+        "result": {
+          "content": "line 10\nline 11\nline 12\nline 13\nline 14"
+        }
+      },
+      "note": "клиент отдаёт строки 10–14"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "10| line 10\n11| line 11\n12| line 12\n13| line 13\n14| line 14"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Прочитал строки 10–14."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "note": "агент может назвать сессию после первого хода",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

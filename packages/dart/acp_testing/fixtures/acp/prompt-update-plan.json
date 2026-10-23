@@ -1,0 +1,407 @@
+{
+  "id": "acp/prompt-update-plan",
+  "spec": [
+    "11-Agent Plan.md#creating-plans",
+    "11-Agent Plan.md#plan-entries",
+    "11-Agent Plan.md#updating-plans"
+  ],
+  "description": "Модель вызывает update_plan с тремя пунктами pending, затем с тем же списком, где первый пункт completed; агент присылает два обновления plan, каждое со всем списком, затем модель отвечает текстом и ход завершается end_turn.",
+  "goals": [
+    "C-05"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard"
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "план"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "update_plan",
+              "arguments": {
+                "entries": [
+                  {
+                    "content": "Прочитать тесты",
+                    "priority": "high",
+                    "status": "pending"
+                  },
+                  {
+                    "content": "Исправить ошибку",
+                    "priority": "high",
+                    "status": "pending"
+                  },
+                  {
+                    "content": "Запустить тесты",
+                    "priority": "medium",
+                    "status": "pending"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_2",
+              "name": "update_plan",
+              "arguments": {
+                "entries": [
+                  {
+                    "content": "Прочитать тесты",
+                    "priority": "high",
+                    "status": "completed"
+                  },
+                  {
+                    "content": "Исправить ошибку",
+                    "priority": "high",
+                    "status": "pending"
+                  },
+                  {
+                    "content": "Запустить тесты",
+                    "priority": "medium",
+                    "status": "pending"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_2",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "План обновлён."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "пользователь отправляет промпт",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Составь план исправления теста"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$any": "Update plan"
+            },
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "entries": [
+                {
+                  "content": "Прочитать тесты",
+                  "priority": "high",
+                  "status": "pending"
+                },
+                {
+                  "content": "Исправить ошибку",
+                  "priority": "high",
+                  "status": "pending"
+                },
+                {
+                  "content": "Запустить тесты",
+                  "priority": "medium",
+                  "status": "pending"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "pending"
+              },
+              {
+                "content": "Исправить ошибку",
+                "priority": "high",
+                "status": "pending"
+              },
+              {
+                "content": "Запустить тесты",
+                "priority": "medium",
+                "status": "pending"
+              }
+            ]
+          }
+        }
+      },
+      "note": "план целиком"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "Plan updated: 3 entries"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_2",
+            "title": {
+              "$any": "Update plan"
+            },
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "entries": [
+                {
+                  "content": "Прочитать тесты",
+                  "priority": "high",
+                  "status": "completed"
+                },
+                {
+                  "content": "Исправить ошибку",
+                  "priority": "high",
+                  "status": "pending"
+                },
+                {
+                  "content": "Запустить тесты",
+                  "priority": "medium",
+                  "status": "pending"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_2",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "completed"
+              },
+              {
+                "content": "Исправить ошибку",
+                "priority": "high",
+                "status": "pending"
+              },
+              {
+                "content": "Запустить тесты",
+                "priority": "medium",
+                "status": "pending"
+              }
+            ]
+          }
+        }
+      },
+      "note": "клиент заменяет план целиком"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_2",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "Plan updated: 3 entries"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "План обновлён."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "note": "агент может назвать сессию после первого хода",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

@@ -56,13 +56,17 @@
 - **Кадр `a2c` превращается в конкретное значение** (`FrameMatcher.materialize`): переменные подставляются, `$capture` генерирует id `fixture-<имя>` и сохраняет его в переменную, `$contains`, `$partial` и `$oneOf` (первый вариант) дают своё значение, `$any` — строку `fixture-any`, `$absent` убирает ключ, `<ts>` — фиксированное время; `repeat: "+"` с `match.$text` отправляется одним кадром со всем текстом. `$regex` в кадре `a2c` для клиентской роли — ошибка фикстуры.
 - **Стандартный handshake**: `initialize` сверяется по `$partial` с `protocolVersion: 1` (и `clientCapabilities`, если задан `setup.clientCapabilities`), ответ — версия 1 и пустые `agentCapabilities`; `session/new` — по `$partial` с `cwd`, ответ — `sessionId: fixture-session-1` и при `setup.mode` блок `modes` из одного режима. `setup.config` — конфиг агента (§15), клиентский прогон его не читает: фикстура, которой нужен конкретный ответ `session/new` (например, `configOptions`), пишет handshake сама с `skipInitialize`.
 - Хук `onBeforeExpect` вызывается и для кадров handshake (`step.isHandshake`): тест выполняет там `connect` и `createSession`.
+- **`$any` с примером** (итерация 2, §14.6): `{"$any": <пример>}` совпадает с любым значением, как `{"$any": true}`, а клиентский драйвер отправляет клиенту пример (с подстановкой переменных) вместо строки-заглушки. Нужно там, где клиент декодирует значение: `availableCommands` (`{"$any": []}`), `content` вызова, результат `wait_for_exit`.
+- **Значения, которые спецификация не фиксирует**, сверяются через `$partial` по параметрам (`terminal/create` без `env` и `outputByteLimit`, `fs/read_text_file` без `line`/`limit` вне `acp/tool-read-range`): агентская проверка допускает лишние поля, клиент получает только перечисленные.
+- **Пустые ответы** `fs/write_text_file`, `terminal/kill` и `terminal/release` сверяются как `{"$oneOf": [null, {}]}`: пример `09-File System.md` — `"result": null`, а `17-Schema.md` описывает ответы объектами; принимаются оба прочтения (решение пользователя, итерация 2).
+- **Сценарий `setup.terminal` без `exitCode`** — процесс работает до `terminal/kill` или `terminal/release` (`acp/prompt-cancel-mid-tool`); описано в §14.4.
 
 `setup.terminal` — расширение схемы §14.4 для клиентской роли: агентская проверка его не читает (вывод команды там приходит кадрами `terminal/output`). Поле описано в agent-core-architecture §14.4 (внесено вместе с этим change) и добавляется в `_schema.json`.
 
 ### D5. Инварианты корпуса на этапе 0
 
 - FIX-1 (непустой `spec`, ссылки на существующие файлы `docs/acp/protocol/`, якорь существует в файле) и FIX-4 (без `extensions` нет `_meta.codelab`, `data.codelab`, `_codelab/*`) — в `fixtures_load_test.dart` с этапа 0 полностью.
-- FIX-2 (каждый вид `sessionUpdate` и каждый метод `acp_method_codec.dart` есть в фикстуре каждой роли) — `fixtures_coverage_test.dart` с явным списком `pendingCoverage`: виды и методы, для которых фикстуры появятся на этапе 4 (`session/load`, `session/list`, `fs/write_text_file`, `terminal/kill`, `user_message_chunk`, `current_mode_update`, `session_info_update` и т. п.). Тест падает и на непокрытом элементе вне списка, и на элементе из списка, который уже покрыт, — список только сокращается. Агентская роль в FIX-2 проверяется с задачи 4.8; до неё тест проверяет клиентскую роль.
+- FIX-2 (каждый вид `sessionUpdate` и каждый метод `acp_method_codec.dart` есть в фикстуре каждой роли) — `fixtures_coverage_test.dart` с явным списком `pendingCoverage`: виды и методы, для которых фикстуры появятся на этапе 4. После итерации 2 в списке — `session/load`, `session/list`, `user_message_chunk`, `agent_thought_chunk`, `current_mode_update`, `config_option_update`; `fs/write_text_file`, `terminal/kill` и `session_info_update` уже покрыты фикстурами этапа 0 (`acp/prompt-tool-permission-allow`, `acp/prompt-cancel-mid-tool`, необязательный кадр `session_info_update`). Виды `sessionUpdate` тест берёт из декодера `session_update.dart`, методы — из `acpMethodRegistry`. Тест падает и на непокрытом элементе вне списка, и на элементе из списка, который уже покрыт, — список только сокращается. Агентская роль в FIX-2 проверяется с задачи 4.8; до неё тест проверяет клиентскую роль.
 - FIX-3 — с агентским прогоном (задача 4.8).
 
 ### D6. Блок `llm` пишется сразу
@@ -86,6 +90,10 @@
 - [Клиент расходится со спецификацией на одной из 12 фикстур] → фикстура не подгоняется; расхождение фиксируется отдельным change, фикстура временно `skip` с id этого change — только с явной пометкой в `tasks.md`.
 - [Тайм-ауты ожидания делают тест медленным или нестабильным] → таймаут 5 с только на ожидание кадра `c2a`, fake-транспорт синхронен; CI не ретраит упавшие тесты.
 - [Схема и загрузчик расходятся] → `fixtures_schema_sync_test.dart` (D2).
+
+## Найденные расхождения клиента
+
+- `acp/prompt-cancel-mid-tool`: кадры совпадают, но после `session/cancel` `AcpClientApplication` оставляет вызов `call_1` в `in_progress` — не помечает незавершённые вызовы отменёнными и отбрасывает поздний `tool_call_update` со `status: failed` (`05-Prompt Turn.md#cancellation`, оба требования — SHOULD). Фикстура не меняется (D7); проверка статуса вызова — отдельный тест со `skip` в `client_fixture_conformance_test.dart`; исправление клиента — отдельный OpenSpec change.
 
 ## Migration Plan
 

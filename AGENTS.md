@@ -679,7 +679,7 @@ melos analyze
 melos test
 ```
 
-Полная проверка monorepo (format, analyze, tests и protocol conformance) — одной командой:
+Полная проверка monorepo (format, analyze, tests, protocol conformance и клиентский прогон golden-фикстур ACP) — одной командой:
 
 ```bash
 melos run check
