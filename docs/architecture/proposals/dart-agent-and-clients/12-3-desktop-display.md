@@ -31,6 +31,12 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `acp_clie
 (R-19), палитру Cmd+K (R-20), вкладки сессий со статусом (R-21), выбор проекта (R-22), инспектор
 и лог-вьюер (R-23), а также встроенные одобрения с автопрокруткой (D-01, D-02).
 
+Раздел также задаёт карту экранов app и правила навигации между ними (A13), хронологию хода
+(A14, D-22) и доску субагентов и фоновых задач (A15, D-25). Макет всех экранов и граф навигации —
+холст Claude Design «CodeLab Desktop — Feature UI/UX» (страница «Навигация и покрытие»); номера
+экранов 01–27 ниже совпадают с номерами артбордов. Холст иллюстрирует этот раздел и §12.4; при
+расхождении действует текст.
+
 ## 12.3.2. Контракт
 
 **Размещение компонентов.** `acp_ui` (ui_kit) содержит виджеты и собственные
@@ -58,6 +64,11 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `acp_clie
 | `ProjectFilesTab` (после MVP, §12.6.8) | `.../project_files/presentation/` | presentation | вкладка сайдбара рядом с `AcpSessionSidebar`, связь с `ComposerCubit` |
 | `SessionSearchCubit` (после MVP, D-17, A12) | `.../workbench/application/` | application | владеет `SessionSearch` kit (§12.6.12): склейка ввода, фильтр даты, область, строки результатов |
 | `AcpSessionSearchField`, `AcpSessionSearchResults`, `AcpSessionSearchRowData` (после MVP, A12) | `acp_ui/lib/src/molecules/`, `organisms/`, `models/` | ui_kit | поле поиска с фильтрами даты и области; список результатов с подсветкой и сниппетами |
+| `AppDestination`, `NavigationCubit` (A13) | `apps/codelab_app/lib/app/navigation/` | application | закрытый список экранов, текущий экран и вкладка инспектора, последняя страница настроек; переходы — только через Cubit |
+| `CommandPaletteCubit` (A13, R-20) | `.../workbench/application/` | application | группы палитры: команды агента из `available_commands_update`, действия сессии, переходы, действия app; нечёткий поиск |
+| `AcpTurnTimeline`, `AcpTurnStepData` (после MVP, D-22, A14) | `acp_ui/lib/src/organisms/`, `models/` | ui_kit | вкладка инспектора «Timeline»: шаги хода, раскрытие шага до его вызовов |
+| `SubagentBoardCubit`, `JobBoardCubit` (после MVP, D-25, A15) | `.../workbench/application/` | application | снимки `_codelab/subagents/*` и `_codelab/jobs/*` через kit, действия «Stop», «Kill», «Output» |
+| `AcpTaskBoard`, `AcpTaskRowData` (после MVP, D-25, A15) | `acp_ui/lib/src/organisms/`, `models/` | ui_kit | таблицы субагентов и фоновых задач, панель транскрипта ребёнка только для чтения |
 
 **Поток состояния.**
 
@@ -614,6 +625,112 @@ final class SessionSearchState {
 6. Запрос, фильтр и область — UI-состояние окна: в `shared_preferences` и в kit они не
    сохраняются.
 
+**A13. Карта экранов и навигация.** Экраны переключает состояние приложения, а не пакет
+маршрутизации: навигация — часть application state (AGENTS.md §8), а новая библиотека для
+задачи, которую решает существующий state management, не добавляется (AGENTS.md §4). Текущий
+экран выбирает `NavigationCubit`, `CodeLabAppWidget` рисует экран по его состоянию.
+
+```dart
+// apps/codelab_app/lib/app/navigation/app_destination.dart
+sealed class AppDestination {}
+final class BootDestination extends AppDestination {}              // 08, §12.4.7
+final class OnboardingDestination extends AppDestination {}        // 07, D-11
+final class ProjectPickerDestination extends AppDestination {}     // 11, R-22
+final class WorkbenchDestination extends AppDestination {          // 01 — единственный хаб
+  final WorkbenchPanel panel;            // sessions | files (03) — вкладка сайдбара
+  final InspectorTab inspector;          // plan | timeline | usage | agents | branches
+  final WorkbenchOverlay? overlay;       // palette (12) | sessionHistory (14) | protocolInspector (18) | shortcuts (27)
+}
+final class SettingsDestination extends AppDestination { final SettingsPage page; }  // §12.4.9
+```
+
+1. **Хаб.** Рабочее место (01) — единственный хаб. Любой экран открывается из него одним
+   действием: пунктом сайдбара, вкладкой инспектора, палитрой Cmd/Ctrl+K или сочетанием клавиш.
+   Любая страница настроек — двумя: «Settings» в подвале сайдбара (или Cmd/Ctrl+,) → пункт
+   навигации настроек. Esc и «Back» возвращают на рабочее место, на ту вкладку сессии, с которой
+   ушли. На самом рабочем месте без открытого оверлея Esc сохраняет смысл A9 — отмена хода.
+2. **Экраны.**
+
+   | № | Экран | Цели | Вход |
+   |---|---|---|---|
+   | 01 | рабочее место: сайдбар сессий, вкладки, лента, инспектор, композер | D-01…D-09, R-18…R-21 | хаб |
+   | 02 | идущий ход: мысли, очередь, steering | D-08, R-18, C-03 | состояние 01 |
+   | 03 | файлы проекта | D-13 | вкладка сайдбара «Files», Cmd/Ctrl+Shift+E |
+   | 04 | поиск и фильтр сессий | D-17, D-10 | поле над сайдбаром, Cmd/Ctrl+Shift+F (A12) |
+   | 05, 05b, 10, 20–27 | страницы настроек | §12.4.9 | Cmd/Ctrl+, , подвал сайдбара |
+   | 06 | мастер провайдера (`ContentDialog`) | L-24, U-17 | «Add provider», onboarding |
+   | 07 | onboarding | D-11 | первый запуск |
+   | 08 | сторож запуска | D-15 | старт app |
+   | 09 | узкий макет (< 900 px) | D-21 | ширина окна |
+   | 11 | выбор проекта и профиля подключения | R-22, U-06 | старт без проекта, переключатель проекта в app bar, Cmd/Ctrl+O |
+   | 12 | палитра команд | R-20, U-26, S-21 | Cmd/Ctrl+K, поле в app bar |
+   | 13 | меню композера: режим, модель, effort, профиль агента, `/`, `@`, вложения, Queue / Steer | U-05, L-16, P-05, C-04, D-12, C-03 | кнопки строки композера |
+   | 14 | история сессии: rename, fork, ветки, rewind, экспорт | S-06…S-08, S-21 | заголовок сессии, контекстное меню сайдбара (A10) |
+   | 15 | вопрос агента и одобрения `web_fetch` и критических шаблонов | T-22, T-13, P-07 | запрос агента |
+   | 16 | доска субагентов и фоновых задач | D-25, T-10, E-22 | вкладка инспектора «Agents», чип в статус-баре (A15) |
+   | 17 | usage и стоимость | D-09, L-29, C-13, C-15 | клик по статус-бару, вкладка инспектора «Usage» |
+   | 18 | инспектор протокола и лог | R-23, E-16 | Cmd/Ctrl+Shift+I, палитра |
+   | 19 | состояния соединения и ошибок хода | L-04, L-32, L-08, K-04, S-09 | значок соединения в app bar, уведомления ленты |
+
+3. **Сочетания.** Новые: Cmd/Ctrl+N — новая сессия; Cmd/Ctrl+O — выбор проекта;
+   Cmd/Ctrl+Shift+E — файлы проекта; Cmd/Ctrl+Shift+I — инспектор протокола; Cmd/Ctrl+/ —
+   список сочетаний (страница 27). Существующие по DSK-18 не меняются.
+4. **Палитра (R-20).** `CommandPaletteCubit` строит четыре группы: «Agent commands» — команды из
+   `available_commands_update` с меткой источника (агент, MCP-prompt, skill, шаблон); выбор
+   отправляет `session/prompt`, а `/compact` и `/plan` выполняют действие; «Session» — Rename,
+   Fork, Rewind…, Export to Markdown, Copy as Markdown (S-21); «Go to» — каждый экран таблицы
+   шага 2 с его сочетанием; «App» — Restart agent (U-26), Keyboard shortcuts, смена темы (D-20).
+   Палитра не дублирует логику экранов: пункт «Go to» вызывает тот же переход `NavigationCubit`,
+   что и сайдбар.
+5. **Диалоги не накладываются.** Одновременно открыт не больше одного модального окна. Второй
+   вопрос агента (T-22) или запрос разрешения ждут в ленте строкой «Question pending» или
+   карточкой одобрения; модальное окно поверх модального не открывается.
+6. **Инспектор.** Вкладки Plan (R-19), Timeline (A14), Usage (D-09), Agents (A15), Branches (A10).
+   Вкладка без данных скрыта: Timeline и Agents — без соответствующего расширения агента,
+   Branches — без `sessionTree`. Выбранная вкладка — UI-состояние окна (`shared_preferences`
+   ключ `codelab.inspector.tab`).
+7. **Узкий макет (D-21).** Граф тот же; сайдбар и инспектор становятся выдвижными панелями, лента
+   и композер занимают всю ширину.
+8. **Ключи тестов:** `nav-<destination>`, `palette-item-<id>`, `inspector-tab-<tab>`,
+   `settings-nav-<page>`.
+
+**A14. Хронология хода (после MVP, D-22, Could).** Вкладка инспектора «Timeline» показывает шаги
+цикла последнего или выбранного хода. Границы шагов и usage шага приходят в
+`_meta.codelab.*` по OpenSpec change вместе с расширением usage (`add-usage-extension`, L-11);
+форма полей задаётся этим change, не здесь.
+
+1. Строка шага: номер, модель, токены входа и выхода, время, заполненность контекста после шага,
+   число вызовов инструментов; сжатие (K-01, K-02) — отдельная строка между шагами.
+2. Раскрытие шага показывает его вызовы (`AcpToolRowData`, §12.1.6); клик по вызову прокручивает
+   ленту к строке вызова и кратковременно подсвечивает её.
+3. Без расширения вкладка скрыта (A13, шаг 6): границы шагов из одного `tool_call` не
+   восстанавливаются, и app их не угадывает.
+4. Данные строит kit (`TurnTimelineView`, вводится тем же change); app только рисует.
+
+**A15. Доска субагентов и фоновых задач (после MVP, D-25, Could; agent-core-architecture
+§17.3.7, §17.9.11).** App объявляет `clientCapabilities._meta.codelab.subagentBoard: true` и
+`jobBoard: true`. Доска есть, только если агент объявил ту же capability; иначе дети и задачи
+видны только как строки `tool_call` ленты и как ответ команды агента `/tasks` из палитры.
+
+1. **Субагенты.** Строка — снимок `_codelab/subagents/update`: `agent` (A2A — тип
+   `a2a:<name>`, E-22), `description`, `state`, время по `startedAt`/`endedAt`, `steps`,
+   `toolCalls`, `tokens`, `cost`, `lastActivity`, номер запуска `run` (C-17); фоновые дети
+   (`background: true`) остаются на доске вне хода.
+2. **Действия ребёнка.** «Open transcript» — `_codelab/subagents/history`; реплей рисуется в
+   отдельной панели `AcpTranscriptPanel` только для чтения и в ленту сессии не попадает. «Stop» —
+   `_codelab/subagents/cancel`. Отправить сообщение ребёнку (C-17, D-25) в §17.3.7 метода нет:
+   кнопка «Message» появляется только после OpenSpec change, который его вводит.
+3. **Фоновые задачи (T-10).** Строка — снимок `_codelab/jobs/update`: `command`, `state`,
+   `exitCode`, время; хвост вывода — `_codelab/jobs/output` с `tail`; «Kill» —
+   `_codelab/jobs/kill`.
+4. **Запрос разрешения ребёнка** приходит обычным `session/request_permission` родителя с
+   префиксом в `title` и рисуется карточкой одобрения в ленте (§17.3.7). Строка ребёнка на доске
+   получает пометку «needs you», клик по ней прокручивает ленту к карточке.
+5. Статус-бар показывает чип «N running» при работающих детях или задачах; клик открывает
+   вкладку «Agents».
+6. CLI (U-21): те же данные kit рисует полноэкранный вид `tasks` (действие реестра клавиш
+   `toggle_tasks`, §12.2); без capability — только текст `/tasks`.
+
 ## 12.3.4. Примеры
 
 Ответ агента «Исправил:\n\n```dart\nfinal a = 1;\n```\nГотово.» во время стрима, сразу после
@@ -698,6 +815,18 @@ final class SessionSearchState {
     обычным списком сессий.
 23. **DSK-23.** Сессия из результата другой папки ДОЛЖНА открываться с `cwd` этой сессии; подсветка
     совпадений ДОЛЖНА различаться не только цветом.
+24. **DSK-24.** Переход между экранами ДОЛЖЕН идти только через `NavigationCubit` (A13). Виджеты НЕ
+    ДОЛЖНЫ открывать экраны в обход него. Каждый экран таблицы A13 ДОЛЖЕН быть доступен из рабочего
+    места одним действием и из палитры; Esc и «Back» ДОЛЖНЫ возвращать на ту вкладку сессии, с
+    которой ушли.
+25. **DSK-25.** Модальное окно НЕ ДОЛЖНО открываться поверх другого модального окна. Второй вопрос
+    агента и второй запрос разрешения ДОЛЖНЫ ждать в ленте.
+26. **DSK-26.** Вкладки Timeline и Agents и действия доски ДОЛЖНЫ появляться только при
+    согласованной capability агента (A14, A15). App НЕ ДОЛЖЕН восстанавливать шаги хода или
+    состояние детей из строк `tool_call` и НЕ ДОЛЖЕН показывать действие, для которого нет метода
+    расширения.
+27. **DSK-27.** Транскрипт ребёнка с доски ДОЛЖЕН открываться только для чтения и НЕ ДОЛЖЕН
+    попадать в ленту сессии родителя.
 
 ## 12.3.6. Обоснование
 
@@ -773,6 +902,8 @@ macOS. Пакет-виджет markdown не добавляется.
 | `acp_transcript_panel_test.dart: inserting rows above keeps state of rows below` | DSK-4 |
 | `acp_session_search_test.dart: highlights terms with bold and selection, shows snippets and titles-only caption` (после MVP) | D-17, DSK-23 |
 | `acp_session_search_test.dart: Esc clears focused field and empty field returns focus` (после MVP) | D-17, DSK-18 |
+| `acp_turn_timeline_test.dart: step rows show model tokens time and context, expanding a step lists its tool calls` (после MVP) | D-22 |
+| `acp_task_board_test.dart: subagent and job rows render snapshot fields, needs-you mark and no Message button without method` (после MVP) | D-25, DSK-26 |
 | существующие `acp_organisms_test.dart`, `acp_molecules_test.dart`, `acp_previews_test.dart` | DSK-17 |
 
 **Unit-тесты app** (`apps/codelab_app/test/features/workbench/application/`,
@@ -786,6 +917,12 @@ macOS. Пакет-виджет markdown не добавляется.
 * `session_search_cubit_test.dart` (после MVP, D-17): ввод склеивается 250 мс; `inactive` при пустом
   тексте и `All`; смена текста отбрасывает итог прежнего поколения; `close()` закрывает
   `SessionSearch` (DSK-21, DSK-22);
+* `navigation_cubit_test.dart` (A13): каждый `AppDestination` достижим из рабочего места одним
+  переходом; Esc и «Back» возвращают на исходную вкладку сессии; второй запрос модального окна
+  при открытом первом ставится в очередь (DSK-24, DSK-25);
+* `command_palette_cubit_test.dart` (R-20): группы и метки источника команд; «Go to» вызывает тот
+  же переход, что и сайдбар; `/compact` и `/plan` выполняются, остальные команды агента уходят
+  `session/prompt`;
 * `composer_cubit_test.dart: oversize file is downgraded to link and keeps warnings` (DSK-15);
 * `composer_cubit_test.dart: outside cwd attachment asks confirmation and cancel keeps draft` (DSK-15);
 * `composer_cubit_test.dart: queued prompt keeps attachments after text edit` (R-18);
@@ -835,6 +972,15 @@ macOS. Пакет-виджет markdown не добавляется.
 * `app:transcript_rendering_flow_test.dart` (новый, D-06/D-07/D-08 сквозь весь стек): scripted
   агент стримит мысли, markdown с блоком кода и правку файла → блок мыслей свёрнут после конца,
   код подсвечен, diff показан и открывается полностью, одобрение правки показывает diff.
+* `app:navigation_flow_test.dart` (новый, A13): из рабочего места по сочетаниям и из палитры
+  открываются файлы, поиск сессий, инспектор протокола, настройки и список сочетаний; Esc
+  возвращает на исходную вкладку; при ожидающем одобрении вопрос агента ждёт в ленте (DSK-25).
+* `app:subagent_board_flow_test.dart` (после MVP, D-25): scripted-агент с `subagentBoard` и
+  `jobBoard` запускает ребёнка и фоновую команду → строки на вкладке «Agents»; «Open transcript»
+  показывает реплей только для чтения, лента родителя не меняется; «Stop» и «Kill» шлют
+  `_codelab/subagents/cancel` и `_codelab/jobs/kill`; агент без capability — вкладки нет.
+* `app:turn_timeline_flow_test.dart` (после MVP, D-22, после `add-usage-extension`): шаги хода с
+  usage, раскрытие шага и прокрутка ленты к вызову.
 * Все существующие `app:*` (`permission_flow_test.dart`, `prompt_queue_flow_test.dart`,
   `plan_progress_checklist_flow_test.dart`, `multi_session_concurrency_flow_test.dart`,
   `open_project_flow_test.dart` и остальные) проходят без правок сценариев (DSK-17). Единственное

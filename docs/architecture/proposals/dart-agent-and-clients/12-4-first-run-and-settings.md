@@ -18,6 +18,8 @@
 | E-13 | страница «MCP servers» в app: добавить, изменить, удалить, переподключить | 9+ | app (+ команды агента `/mcp`) |
 | U-19 (Could) | экран настроек CLI `/settings` | 9+ | CLI |
 | D-11 (Could) | onboarding app: первые экраны поверх того же мастера | 9+ | app |
+| — | единая навигация настроек app: группы Agent и App, порядок страниц, доступ по профилю (§12.4.9) | 7 (с первой страницей настроек) | app |
+| D-24 (Could) | страница «Redaction»: слои, белый список, исключения, проверка на примере текста (§12.4.9) | 9+ | app |
 
 Префикс инвариантов — `SETUP-`.
 
@@ -775,6 +777,54 @@ sequenceDiagram
 настройки `codelab.sidebar.tab` и `codelab.file_browser.show_ignored` (`shared_preferences`,
 §12.6.8); `SettingsRegistry` их не содержит.
 
+**Навигация настроек app.** Все страницы настроек живут в одном `NavigationView` с поиском
+сверху и двумя группами (§12.3, A13: `SettingsDestination`). Открываются по Cmd/Ctrl+, и пунктом
+«Settings» в подвале сайдбара; открывается последняя страница (`shared_preferences`
+`codelab.settings.last_page`), при первом открытии — «Connection». Порядок страниц фиксирован:
+
+| Группа | Страница | Цели | Что на ней | Куда пишет |
+|---|---|---|---|---|
+| Agent | Connection (20) | U-06, D-04, D-10, R-12, U-26 | профили `ProfileStore` (`~/.codelab/profiles.json`, общий с CLI): встроенный, stdio (команда и аргументы), WebSocket (URL, имя секрета токена); «Test connection», «Connect on start», «Restart agent» | `ProfileStore`, `SecretStore` |
+| Agent | Providers (05) | D-05, L-17, L-24 | §12.4.5 | `ConfigWriter` |
+| Agent | MCP servers (05b) | E-02…E-05, E-13 | §12.4.6 | `ConfigWriter` |
+| Agent | Agents & modes (21) | P-05, P-06, C-04, R-15, U-31, L-10, L-16, U-27, U-30, E-22 | режим новой сессии `permissions.mode` (без `autopilot`: только флаг); определения агентов из `.codelab/agents/*.md` и `~/.codelab/agents/` с ошибками загрузки; роли моделей, переопределение окна и лимита ответа, удалённые A2A-агенты — по ключам ядра этих целей | `ConfigWriter` |
+| Agent | Permissions & tools (22) | P-03, P-07, P-08, T-26, T-35 | `permissions.tools` (allow, ask, deny по инструменту, включая `mcp__<server>__<tool>`), `permissions.deny`, `tools.disabled` (agent-core-architecture §6.3.8); критические шаблоны §7.6 — только для чтения; граница рабочей папки — справка; «Always allow» не показывается: решение живёт до закрытия сессии (P-03), в конфиг не пишется; запрет чтения файлов учётных данных (P-18) — строка-ссылка на «Redaction» | `ConfigWriter` |
+| Agent | Redaction (23) | D-24, P-10, P-14, P-18, P-19 | ниже | `ConfigWriter` |
+| Agent | Skills & extensions (24) | E-01, E-06…E-10, E-17…E-19 | откуда загружены файлы контекста, skills, шаблоны, хуки, плагины и переопределение системного промпта; «Open» открывает файл; включение — ключами ядра этих целей | `ConfigWriter` |
+| Agent | Code & web (25) | T-13, T-14, T-15, T-17, T-31, E-12 | языковые серверы, память, web-инструменты | `ConfigWriter` |
+| App | General (26) | E-15, D-18, D-19 | `SettingsRegistry` `scope: shared` (как `/settings`), `codelab.sidebar.tab`, `codelab.file_browser.show_ignored`, `codelab.input.enter_while_running` (§12.3, A11); язык — после слоя локализации (D-19); «About»: версия, канал, лицензия, сторонние уведомления, политика конфиденциальности (§12.7.7). App не обновляет себя сам: строка «Updates come from the installer or your package manager» | `ConfigWriter` (shared), `shared_preferences` |
+| App | Appearance (10) | D-20 | §12.6.3 | `shared_preferences`, файлы тем |
+| App | Keyboard (27) | — | сочетания app по группам, только для чтения, с поиском; переназначение в app не вводится | — |
+
+Страницы группы Agent подчиняются `SettingsAccess` (§12.4.8): для `RemoteReadOnly` и
+`NotManaged` каждая показывает баннер только для чтения и не пишет ничего (SETUP-2). Цели с
+этапом позже текущей сборки не дают пустых страниц: страница без единого доступного ключа скрыта
+из навигации (SETUP-17). Ключи тестов — `settings-nav-<page>`; существующие `settings-providers` и
+`settings-mcp` сохраняются.
+
+**Страница «Redaction» (D-24, Could).** Читает и пишет `redact.*` (agent-core-architecture
+§12.4.3) только в `ConfigTarget.user()` и `ConfigTarget.projectLocal(cwd)` (SETUP-3).
+
+1. **Слои** в порядке приоритета: `exact` (включён всегда, переключатель неактивен),
+   `credential_files`, `formats`, `pem`, `connection_strings`, `key_values`, `entropy` (по
+   умолчанию выключен). Общий выключатель — `redact.enabled`; при `false` активен только `exact`.
+2. **Белый список**: `redact.allowlist.builtin` (`git_sha`, `uuid`) и `redact.allowlist.patterns`
+   — регулярные выражения, совпадение только полное; невалидное выражение показывается ошибкой под
+   полем до сохранения. **Исключения**: `redact.exempt_tools` (к `write` и `edit`). После MVP:
+   `redact.block` (P-18) и `redact.command_rewrite` (P-14).
+3. **Проверка на примере.** Поле с текстом примера; `RedactionPreview` (порт `codelab_setup`)
+   собирает `Redactor` ядра из черновика и показывает найденные участки с тегом слоя
+   (`findSecrets`) и итог `redact`. Пример не сохраняется, не пишется в логи и не уходит из
+   процесса (SETUP-18).
+4. **Ослабление** — то же множество правок, что недоверенному проекту запрещено (§15.3 ядра):
+   `enabled: false`, выключение слоя, новая запись `allowlist.patterns`, новый `exempt_tools`,
+   `block: false`, `command_rewrite: false`. Перед записью — подтверждение с перечнем
+   ослаблений (SETUP-16).
+5. **Счётчики** — встроенный агент: `Redactor.stats`; агент вне процесса: текст ответа
+   `/redact stats` без разбора (как SETUP-11). Значения и позиции секретов не показываются.
+6. Значение, заданное проектным слоем (только ужесточение), показывается с пометкой
+   «set by project» и не редактируется здесь.
+
 **Onboarding app (D-11, Could)**: при первом запуске (флаг `onboarding_done` в
 `shared_preferences`) экраны «What CodeLab does» → «Permissions» (что агент может делать и где
 спрашивает) → «Choose a model» (тот же `ProviderSetupFlow` в `ProviderWizardDialog`; шаг
@@ -938,6 +988,13 @@ deleted.`, кнопки записи активны.
     подкоманды записи CLI НЕ ДОЛЖНЫ менять конфиг: страницы показывают значения только для
     чтения с действием «Migrate to config.yaml», CLI печатает подсказку `codelab config
     migrate`. Миграция НЕ ДОЛЖНА удалять или менять `codelab.toml`.
+16. **SETUP-16.** Ослабление редакции (§12.4.9, страница «Redaction», шаг 4) НЕ ДОЛЖНО
+    записываться без подтверждения пользователя, перечисляющего каждое ослабление. Слой `exact`
+    НЕ ДОЛЖЕН выключаться из UI.
+17. **SETUP-17.** Навигация настроек app ДОЛЖНА быть одна, с фиксированным порядком страниц
+    (§12.4.9). Страница без доступного ключа в текущей сборке ДОЛЖНА быть скрыта, а не пуста.
+18. **SETUP-18.** Текст примера на странице «Redaction» НЕ ДОЛЖЕН сохраняться, попадать в логи,
+    в состояние после закрытия страницы и в запросы за пределы процесса.
 
 ## 12.4.12. Обоснование
 
@@ -1076,6 +1133,13 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
   4. удалить → запись и секреты `codelab/mcp/github/*` удалены;
   5. сервер из проектного слоя — только «Disable here», запись `enabled: false` в
      `config.local.yaml` (SETUP-3).
+* `app:settings_navigation_flow_test.dart` (новый, SETUP-17): Cmd/Ctrl+, открывает «Connection»
+  при первом запуске и последнюю страницу после; порядок пунктов навигации совпадает с таблицей
+  §12.4.9; WebSocket-профиль — баннер только для чтения на каждой странице группы Agent.
+* `app:redaction_settings_flow_test.dart` (после MVP, D-24): выключение `entropy` → без
+  подтверждения файл не изменён, после подтверждения в `config.yaml` новый `redact.layers`;
+  невалидный шаблон белого списка — ошибка под полем, запись недоступна; пример с `sk-…`
+  показывает участок слоя `formats`, и текст примера не появляется в логе (SETUP-16, SETUP-18).
 * `app:boot_watchdog_flow_test.dart` (D-15). Шаги подменяются через параметр
   `CodeLabBootstrap(bootSteps: …)` с короткими таймаутами:
   1. `stores` зависает → `boot-diagnostics` с `Step: stores` и `Timed out` → «Start without
