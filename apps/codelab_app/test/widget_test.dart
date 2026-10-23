@@ -1526,7 +1526,8 @@ void main() {
     await closeCodeLabRootScope();
   });
 
-  test('cancelTurn sends session cancel and clears submitting state', () async {
+  test('cancelTurn sends session cancel and stays busy until the agent '
+      'answers', () async {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
@@ -1564,6 +1565,21 @@ void main() {
     final submitFuture = shellCubit.submitPrompt('cancel this');
     final promptRequest = await promptRequestFuture as dynamic;
     expect(shellCubit.state.canCancel, isTrue);
+    agentTransport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: const {
+          'sessionId': 'session-1',
+          'update': {
+            'sessionUpdate': 'tool_call',
+            'toolCallId': 'call_1',
+            'title': 'dart test',
+            'kind': 'execute',
+            'status': 'in_progress',
+          },
+        },
+      ),
+    );
 
     final cancelRequestFuture = agentTransport.sent.first;
     await shellCubit.cancelTurn();
@@ -1572,19 +1588,56 @@ void main() {
     expect(cancelRequest.method, sessionCancelMethod);
     expect(cancelRequest.params, containsPair('sessionId', 'session-1'));
     expect(shellCubit.state.canCancel, isFalse);
-    expect(shellCubit.state.isPromptSubmitting, isFalse);
+    expect(shellCubit.state.isPromptSubmitting, isTrue);
     expect(logger.entries.last['event'], contains('Cancelled prompt turn'));
     expect(
       shellCubit.state.inspectorEntries
           .firstWhere((entry) => entry.title.startsWith('Prompt turn'))
           .status,
-      PromptTurnStatus.cancelled.name,
+      PromptTurnStatus.cancelling.name,
+    );
+    expect(
+      shellCubit.state.transcriptEntries
+          .singleWhere((entry) => entry.toolCall != null)
+          .toolCall
+          ?.status,
+      AcpToolCallStatus.cancelled,
     );
 
+    // The queue waits for the agent's answer to the cancelled prompt.
+    final sentWhileCancelling = <Object>[];
+    final sentSubscription = agentTransport.sent.listen(
+      sentWhileCancelling.add,
+    );
+    await shellCubit.submitPrompt('next');
+    expect(shellCubit.state.queuedPrompts, hasLength(1));
+    expect(sentWhileCancelling, isEmpty);
+    await sentSubscription.cancel();
+
+    final nextPromptFuture = agentTransport.sent.first;
     agentTransport.emitInbound(
       JsonRpcMessage.response(
         id: promptRequest.id as JsonRpcId,
         result: const {'stopReason': 'cancelled'},
+      ),
+    );
+    final nextPrompt =
+        await nextPromptFuture.timeout(const Duration(seconds: 2)) as dynamic;
+    expect(nextPrompt.method, sessionPromptMethod);
+    expect(shellCubit.state.queuedPrompts, isEmpty);
+    expect(
+      application
+          .sessionById(const SessionId('session-1'))
+          ?.turns
+          .map((turn) => turn.status),
+      [PromptTurnStatus.cancelled, PromptTurnStatus.running],
+    );
+
+    // `submitFuture` drains the queue, so it completes with the next turn.
+    agentTransport.emitInbound(
+      JsonRpcMessage.response(
+        id: nextPrompt.id as JsonRpcId,
+        result: const {'stopReason': 'end_turn'},
       ),
     );
     await submitFuture.timeout(const Duration(seconds: 2));

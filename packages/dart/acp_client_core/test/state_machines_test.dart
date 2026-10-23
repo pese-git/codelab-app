@@ -413,8 +413,8 @@ void main() {
         awaitingApproval.stateOrThrow,
       ).stateOrThrow;
 
-      expect(cancelled.status, SessionLifecycleStatus.active);
-      expect(cancelled.turns.single.status, PromptTurnStatus.cancelled);
+      expect(cancelled.status, SessionLifecycleStatus.cancellingTurn);
+      expect(cancelled.turns.single.status, PromptTurnStatus.cancelling);
       expect(
         cancelled.turns.single.approvals[_approval.id]?.status,
         ApprovalStatus.cancelled,
@@ -632,8 +632,12 @@ void main() {
         const AcpSession(id: _sessionId, cwd: '/workspace'),
         _pendingTurn,
       );
-      final cancelled = SessionStateMachine.cancelTurn(
+      final cancelling = SessionStateMachine.cancelTurn(
         running.stateOrThrow,
+      ).stateOrThrow;
+      final cancelled = SessionStateMachine.completeTurn(
+        cancelling,
+        stopReason: StopReason.cancelled,
       ).stateOrThrow;
       final late = SessionStateMachine.applyUpdate(
         cancelled,
@@ -646,6 +650,211 @@ void main() {
       expect(late.stateOrThrow.status, SessionLifecycleStatus.active);
       expect(late.stateOrThrow.turns.single.status, PromptTurnStatus.cancelled);
       expect(late.stateOrThrow.turns.single.updates, isEmpty);
+    });
+  });
+
+  group('Prompt turn cancellation', () {
+    AcpSession runningWithToolCalls() {
+      var session = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      ).stateOrThrow;
+      for (final toolCall in const [
+        ToolCall(toolCallId: ToolCallId('pending'), title: 'Queued'),
+        ToolCall(
+          toolCallId: ToolCallId('running'),
+          title: 'Run tests',
+          kind: ToolKind.execute,
+          status: ToolCallStatus.inProgress,
+        ),
+        ToolCall(
+          toolCallId: ToolCallId('done'),
+          title: 'Read file',
+          kind: ToolKind.read,
+          status: ToolCallStatus.completed,
+        ),
+        ToolCall(
+          toolCallId: ToolCallId('broken'),
+          title: 'Write file',
+          kind: ToolKind.edit,
+          status: ToolCallStatus.failed,
+        ),
+      ]) {
+        session = SessionStateMachine.applyUpdate(
+          session,
+          SessionUpdate.toolCall(toolCall: toolCall),
+        ).stateOrThrow;
+      }
+      return session;
+    }
+
+    AcpSession cancelling() =>
+        SessionStateMachine.cancelTurn(runningWithToolCalls()).stateOrThrow;
+
+    ToolCallRecord toolCall(AcpSession session, String id) =>
+        session.turns.last.toolCalls[ToolCallId(id)]!;
+
+    AcpSession update(AcpSession session, ToolCallUpdate update) =>
+        SessionStateMachine.applyUpdate(
+          session,
+          SessionUpdate.toolCallUpdate(toolCallUpdate: update),
+        ).stateOrThrow;
+
+    test('keeps the turn active as cancelling until the prompt response', () {
+      final session = cancelling();
+
+      expect(session.status, SessionLifecycleStatus.cancellingTurn);
+      expect(session.turns.single.status, PromptTurnStatus.cancelling);
+      expect(session.turns.single.isTerminal, isFalse);
+      expect(session.activeTurn?.id, _pendingTurn.id);
+    });
+
+    test('marks unfinished tool calls cancelled and leaves finished ones', () {
+      final session = cancelling();
+
+      for (final id in ['pending', 'running']) {
+        expect(toolCall(session, id).status, ToolCallStatus.failed);
+        expect(toolCall(session, id).cancelledByClient, isTrue);
+      }
+      expect(toolCall(session, 'done').status, ToolCallStatus.completed);
+      expect(toolCall(session, 'done').cancelledByClient, isFalse);
+      expect(toolCall(session, 'broken').status, ToolCallStatus.failed);
+      expect(toolCall(session, 'broken').cancelledByClient, isFalse);
+    });
+
+    test('accepts updates of the cancelling turn', () {
+      final result = SessionStateMachine.applyUpdate(
+        cancelling(),
+        const SessionUpdate.agentMessageChunk(
+          content: ContentBlock.text(text: 'stopping'),
+        ),
+      );
+
+      expect(result, isA<AppliedStateTransition<AcpSession>>());
+      expect(
+        result.stateOrThrow.turns.single.updates.last,
+        isA<AgentMessageChunk>(),
+      );
+      expect(
+        result.stateOrThrow.turns.single.status,
+        PromptTurnStatus.cancelling,
+      );
+    });
+
+    test('applies a late failed update and keeps the call cancelled', () {
+      final session = update(
+        cancelling(),
+        const ToolCallUpdate(
+          toolCallId: ToolCallId('running'),
+          status: ToolCallStatus.failed,
+          content: [ToolCallContent.terminal(terminalId: 'term-1')],
+        ),
+      );
+
+      expect(toolCall(session, 'running').status, ToolCallStatus.failed);
+      expect(toolCall(session, 'running').cancelledByClient, isTrue);
+      expect(toolCall(session, 'running').content, hasLength(1));
+    });
+
+    test('does not return a cancelled call to work on a non-final status', () {
+      final session = update(
+        cancelling(),
+        const ToolCallUpdate(
+          toolCallId: ToolCallId('running'),
+          status: ToolCallStatus.inProgress,
+          rawOutput: {'partial': true},
+        ),
+      );
+
+      expect(toolCall(session, 'running').status, ToolCallStatus.failed);
+      expect(toolCall(session, 'running').cancelledByClient, isTrue);
+      expect(toolCall(session, 'running').rawOutput, {'partial': true});
+    });
+
+    test('a completed update means the call finished before the cancel', () {
+      final session = update(
+        cancelling(),
+        const ToolCallUpdate(
+          toolCallId: ToolCallId('running'),
+          status: ToolCallStatus.completed,
+        ),
+      );
+
+      expect(toolCall(session, 'running').status, ToolCallStatus.completed);
+      expect(toolCall(session, 'running').cancelledByClient, isFalse);
+    });
+
+    test('the prompt response settles the turn by its stop reason', () {
+      final cancelled = SessionStateMachine.completeTurn(
+        cancelling(),
+        stopReason: StopReason.cancelled,
+      ).stateOrThrow;
+      final ended = SessionStateMachine.completeTurn(
+        cancelling(),
+        stopReason: StopReason.endTurn,
+      ).stateOrThrow;
+
+      expect(cancelled.status, SessionLifecycleStatus.active);
+      expect(cancelled.turns.single.status, PromptTurnStatus.cancelled);
+      expect(cancelled.activeTurn, isNull);
+      expect(ended.turns.single.status, PromptTurnStatus.completed);
+    });
+
+    test('ignores updates after the prompt response', () {
+      final cancelled = SessionStateMachine.completeTurn(
+        cancelling(),
+        stopReason: StopReason.cancelled,
+      ).stateOrThrow;
+      final late = SessionStateMachine.applyUpdate(
+        cancelled,
+        const SessionUpdate.toolCallUpdate(
+          toolCallUpdate: ToolCallUpdate(
+            toolCallId: ToolCallId('running'),
+            status: ToolCallStatus.completed,
+          ),
+        ),
+      );
+
+      expect(late, isA<IgnoredStateTransition<AcpSession>>());
+      expect(
+        toolCall(late.stateOrThrow, 'running').status,
+        ToolCallStatus.failed,
+      );
+    });
+
+    test('rejects a new turn while the cancel is unanswered', () {
+      final result = SessionStateMachine.startTurn(
+        cancelling(),
+        _secondPendingTurn,
+      );
+
+      expect(result, isA<RejectedStateTransition<AcpSession>>());
+    });
+
+    test('rejects approval requests while cancelling', () {
+      final result = SessionStateMachine.requestApproval(
+        cancelling(),
+        _approval,
+      );
+
+      expect(result, isA<RejectedStateTransition<AcpSession>>());
+    });
+
+    test('a repeated cancel is ignored', () {
+      final session = cancelling();
+      final again = SessionStateMachine.cancelTurn(session);
+
+      expect(again, isA<IgnoredStateTransition<AcpSession>>());
+      expect(again.stateOrThrow, session);
+    });
+
+    test('a failed prompt response fails the cancelling turn', () {
+      final failed = SessionStateMachine.failTurn(
+        cancelling(),
+        message: 'boom',
+      ).stateOrThrow;
+
+      expect(failed.turns.single.status, PromptTurnStatus.failed);
     });
   });
 }
