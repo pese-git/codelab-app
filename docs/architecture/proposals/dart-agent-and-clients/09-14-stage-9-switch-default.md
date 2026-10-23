@@ -18,7 +18,8 @@
    (JUnit XML `codelab test-scenario --junit` и `dart test --reporter json` всех Dart VM-наборов,
    артефакт `parity-results/`), а для `app:` — отчёт локального прогона Flutter-тестов
    приложения (`flutter test --reporter json`, каталог `parity-results/app/`, приложен к
-   `proposal.md` change `switch-default-agent-to-dart`; в GitHub CI они не запускаются, §9.5), и требует для каждого доказательства статус `pass`; `skip`
+   `proposal.md` change `switch-default-agent-to-dart`; в GitHub CI они не запускаются, прогон —
+   в ветке `release/<version>`, §9.5, `AGENTS.md` §21), и требует для каждого доказательства статус `pass`; `skip`
    (в том числе тег `scripted-only` в режиме `dart`) и отсутствие в отчёте считаются
    незакрытой строкой. Падает со списком строк и причиной: `missing` (нет файла или теста),
    `not-run` (нет в отчёте), `failed`, `skipped`.
@@ -127,8 +128,8 @@ Python-агента; `docs/architecture/adr/README.md`.
   заданий; любой красный или пропущенный запуск обнуляет счёт. Ссылки на три запуска — в
   `proposal.md`.
 * Flutter-тесты приложения (`test:e2e:app:*`, `test:e2e:app:dart-agent`, `test:e2e:app:embedded`)
-  в GitHub CI не запускаются (§9.5): три последовательных зелёных локальных прогона на macOS на
-  одном коммите без перезапуска упавших тестов; отчёты (`flutter test --reporter json`), версия
+  в GitHub CI не запускаются (§9.5): три последовательных зелёных прогона на устройстве (macOS)
+  на одном коммите ветки `release/<version>` без перезапуска упавших тестов (`AGENTS.md` §21); отчёты (`flutter test --reporter json`), версия
   macOS и хэш коммита — в `proposal.md`.
 * Чек-лист Zed (9.8) пройден по всем 11 шагам, версия Zed и доказательства записаны в
   `design.md`, подписан ответственным за релиз.

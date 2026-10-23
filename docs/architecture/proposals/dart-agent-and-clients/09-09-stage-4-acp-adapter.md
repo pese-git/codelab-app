@@ -193,9 +193,11 @@ e2e app). `tasks.md` — пары «тест → реализация» со с�
 * `every_agent_event_is_projected_test.dart` (ACP-6); `bad_frames_test.dart` (ACP-4).
 * `melos run build:agent` даёт `build/bin/codelab-agent`, и он отвечает на `initialize`:
   `echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}' | build/bin/codelab-agent serve --stdio --llm-script apps/codelab_agent/test/llm_scripts/hello.json`.
-* `melos run test:e2e:app:dart-agent` — все тесты без тега `scripted-only` зелёные (таблица
-  контракта); `melos run test:e2e:app:stdio` и остальные scripted-прогоны тоже зелёные; код
-  `apps/codelab_app/lib` в изменениях этапа не тронут.
+* Интеграционные тесты app по таблице контракта написаны и собираются; код
+  `apps/codelab_app/lib` в изменениях этапа не тронут. Прогон на устройстве —
+  `melos run test:e2e:app:dart-agent` (все тесты без тега `scripted-only` зелёные),
+  `melos run test:e2e:app:stdio` и остальные scripted-прогоны — выполняется в ветке
+  `release/<version>` (`AGENTS.md` §21).
 * `serve_flags_test.dart` (задача 4.6): ключ из `CODELAB_API_KEY` не попадает в лог, `--provider`
   вместе с `--llm-script` — ошибка использования.
 * Чек-лист Zed заполнен.

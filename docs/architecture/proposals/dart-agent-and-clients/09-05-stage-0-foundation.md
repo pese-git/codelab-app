@@ -97,7 +97,9 @@ scope: формат и корпус фикстур с полем `roles`, кли
 * Корневой `AGENTS.md` §5 ссылается на документ ядра; `packages/dart/codelab_agent_core/AGENTS.md`
   есть и перечисляет PKG-1…PKG-6, сторож импортов, правило TDD и определение завершённой итерации (задача 0.11).
 * `grep -rn "dart:io" packages/dart/acp_transports/lib/acp_transports.dart packages/dart/acp_transports/lib/src/transport_configs.dart` — пусто.
-* 8 интеграционных тестов app проходят (`melos run test:e2e:app:stdio` и остальные).
+* 8 интеграционных тестов app не изменены и собираются (`fvm flutter analyze apps/codelab_app`);
+  их прогон на устройстве (`melos run test:e2e:app:stdio` и остальные) — в ветке `release/<version>`
+  (`AGENTS.md` §21).
 
 **Зависимости.** Нет. Этап блокирует все остальные.
 
