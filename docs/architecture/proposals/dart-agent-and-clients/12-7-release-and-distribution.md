@@ -2,7 +2,7 @@
 
 > Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
-← [12.6. Удобства CLI и десктопа](12-6-cli-desktop-extras.md) · [Оглавление](../dart-agent-and-clients.md)
+← [12.6. Удобства CLI и десктопа](12-6-cli-desktop-extras.md) · [Оглавление](../dart-agent-and-clients.md) · [12.8. Смартфон и планшет](12-8-phone-and-tablet.md) →
 
 ## 12.7.1. Назначение и охват
 
@@ -400,4 +400,4 @@ Actions из тега, подписанное происхождение, кот
 
 ---
 
-← [12.6. Удобства CLI и десктопа](12-6-cli-desktop-extras.md) · [Оглавление](../dart-agent-and-clients.md)
+← [12.6. Удобства CLI и десктопа](12-6-cli-desktop-extras.md) · [Оглавление](../dart-agent-and-clients.md) · [12.8. Смартфон и планшет](12-8-phone-and-tablet.md) →
