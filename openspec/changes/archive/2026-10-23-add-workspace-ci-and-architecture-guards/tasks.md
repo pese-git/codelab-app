@@ -64,5 +64,6 @@
 
 ## 9. Завершение этапа
 
-- [ ] 9.1 Definition of Done `09-05` в части этого change: `melos run check` зелёный; шесть джобов CI зелёные; негативный тест сторожа проходит; web-компиляция js и wasm проходит; `AGENTS.md` ядра на месте; `grep` по `acp_transports` пуст; восемь интеграционных тестов app проходят
-- [ ] 9.2 `openspec validate add-workspace-ci-and-architecture-guards --strict`; архивировать change после слияния последней итерации (§9.0, правило 6)
+- [x] 9.1 Definition of Done `09-05` в части этого change: `melos run check` зелёный; шесть джобов CI зелёные; негативный тест сторожа проходит; web-компиляция js и wasm проходит; `AGENTS.md` ядра на месте; `grep` по `acp_transports` пуст; восемь интеграционных тестов app проходят
+  - 2026-10-23, `develop` `cc14ce3`: `melos run check` зелёный локально; шесть джобов CI зелёные; негативный тест сторожа проходит; web-компиляция js и wasm проходит; `packages/dart/codelab_agent_core/AGENTS.md` на месте; `grep dart:io` по основному бареллю `acp_transports` пуст. Восемь `test:e2e:app:*` локально на macOS: семь зелёные с первого раза; `stdio` в первом прогоне — 4 из 5 (не дождался текста ответа в ленте при параллельной нагрузке на машину), два повторных прогона — 5 из 5. Нестабильность `stdio` под нагрузкой наблюдалась и раньше (итерация 1).
+- [x] 9.2 `openspec validate add-workspace-ci-and-architecture-guards --strict`; архивировать change после слияния последней итерации (§9.0, правило 6)
