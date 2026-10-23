@@ -141,6 +141,7 @@ String describe(AgentEvent e) => switch (e) {
   ToolPairingRepaired() => 'ToolPairingRepaired',
   StepEnded(:final result) => 'StepEnded(${result.stepIndex})',
   PlanUpdated() => 'PlanUpdated',
+  ModeChanged(:final mode) => 'ModeChanged(${mode.value})',
   AgentError(:final cls, :final errorClass) =>
     'AgentError(${cls.name}${errorClass == null ? '' : ' ${errorClass.name}'})',
   TurnEnded(:final reason, :final budgetExceeded) =>

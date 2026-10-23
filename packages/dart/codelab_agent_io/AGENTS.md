@@ -1,0 +1,32 @@
+# AGENTS.md — codelab_agent_io
+
+Правила этого пакета дополняют корневой `AGENTS.md` и `packages/dart/codelab_agent_core/AGENTS.md`.
+
+Источник архитектуры — `docs/architecture/proposals/agent-core-architecture.md`:
+- §1 — пакеты и allowlist зависимостей;
+- §4 — `ExecutionEnv`, `LocalExecutionEnv`.
+
+Код пишется по этим документам и `design.md` OpenSpec change этапа. Если документов не хватает, сначала дополняется документация, потом пишется код.
+
+## 1. Назначение
+
+`codelab_agent_io` — реализации портов ядра на `dart:io` для настольных хостов (`apps/codelab_agent`, `codelab_embedded`, `codelab_cli`):
+- `LocalExecutionEnv` — файлы и процессы (с этапа 2);
+- журнал сессий (этап 3);
+- конфигурация и хранилища секретов (этапы 4 и 8).
+
+Ядро от пакета не зависит. Хост передаёт реализации в `AgentCoreServices`.
+
+## 2. Границы
+
+* Пакет НЕ ДОЛЖЕН импортировать `package:flutter/` и `package:acp_*`: правило `packages/dart/codelab_architecture_tests/test/support/rules.dart`, проверка — `melos run guard`.
+* `dependencies` — только подмножество allowlist §1.2 документа ядра: `codelab_agent_core`, `path`, `meta`, `async`, `yaml`, `yaml_edit`, `toml`. Расширение — только через OpenSpec change. Проверка — `pubspec_allowlist_test.dart`.
+* Из ядра используется только публичный барель `package:codelab_agent_core/codelab_agent_core.dart`. Тест может импортировать `src/` ядра только с `// ignore: implementation_imports` и причиной в комментарии.
+* Пути ядра — POSIX. Пути Windows приводятся к виду ядра и обратно функциями `toCorePath` / `toHostPath` (design.md change `add-agent-core-loop-and-tools`, D3).
+
+## 3. Тесты
+
+* TDD — по `packages/dart/codelab_agent_core/AGENTS.md` §2.
+* `LocalExecutionEnv` проверяется на реальных файлах во временном каталоге и на реальных процессах `/bin/sh`. Это интеграционные тесты на Dart VM, они входят в `melos run check`. В ветках `feature/*` и `hotfix/*` другие прогоны не нужны (корневой `AGENTS.md` §21).
+* Общий контракт env — `packages/dart/codelab_agent_core/test/env/execution_env_contract.dart`; тесты пакета прогоняют его на `LocalExecutionEnv`.
+* Тесты времени (таймаут, завершение дерева процессов) задают пределы с запасом («не позже N с»), а не точное время. CI работает на Linux; ветка Windows (`taskkill`) проверяется вручную.

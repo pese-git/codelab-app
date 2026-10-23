@@ -33,4 +33,25 @@ void main() {
 
     expect(violations.single, endsWith('lib/src/x.dart:1 -> dart:io'));
   });
+
+  test('reports ACP imported by the IO package of the agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_io_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'src', 'env.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("import 'package:acp_protocol/acp_protocol.dart';\n");
+    final rule = rules.firstWhere(
+      (r) => r.dir == 'packages/dart/codelab_agent_io',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    expect(
+      violations.single,
+      endsWith('lib/src/env.dart:1 -> package:acp_protocol/acp_protocol.dart'),
+    );
+  });
 }
