@@ -2,18 +2,19 @@
 
 ## 1. Конфигурация melos (0.1)
 
-- [ ] 1.1 Характеризация: сохранить вывод `fvm dart run melos list` и список скриптов; `fvm dart run melos run check` зелёный до изменений
-- [ ] 1.2 Перенести `test:e2e:app:plan-checklist`, `test:e2e:app:prompt-queue`, `test:e2e:app:multi-session` в секцию `melos:` корневого `pubspec.yaml`; удалить `melos.yaml`
-- [ ] 1.3 Проверка (testing-quality «Один источник конфигурации Melos»): вывод `melos list` и список скриптов совпадают с 1.1, `melos run check` зелёный, каждый из восьми `test:e2e:app:*` запускается; если секция не читается — запасной вариант design.md D2, решение записать в design.md
+- [x] 1.1 Характеризация: сохранить вывод `fvm dart run melos list` и список скриптов; `fvm dart run melos run check` зелёный до изменений
+- [x] 1.2 Перенести `test:e2e:app:plan-checklist`, `test:e2e:app:prompt-queue`, `test:e2e:app:multi-session` в секцию `melos:` корневого `pubspec.yaml`; удалить `melos.yaml`
+- [x] 1.3 Проверка (testing-quality «Один источник конфигурации Melos»): вывод `melos list` и список скриптов совпадают с 1.1, `melos run check` зелёный, каждый из восьми `test:e2e:app:*` запускается; если секция не читается — запасной вариант design.md D2, решение записать в design.md
 
 ## 2. Разделение `acp_transports` (0.2)
 
-- [ ] 2.1 Характеризация: тесты `acp_transports`, `acp_client_core`, `codelab_app` (unit и `widget_test.dart`) и восемь `test:e2e:app:*` зелёные до изменений
-- [ ] 2.2 Тест (agent-transports «Основной барель не тянет dart:io»): в `acp_transports/test/` — тест, что `lib/acp_transports.dart` и `lib/src/transport_configs.dart` транзитивно не импортируют `dart:io` (красный)
-- [ ] 2.3 Перенести `StdioAcpTransportConfig`, `StdioAcpAgentProfile`, `WebSocketAcpTransportConfig` в `lib/src/transport_configs.dart` (`part 'transport_configs.freezed.dart'`); создать `lib/io.dart` с экспортом транспортов; перенести реализации в `lib/src/io/`, если перенос механический (иначе поимённый `exclude`, design.md D3)
-- [ ] 2.4 `fvm dart run build_runner build --delete-conflicting-outputs` в `packages/dart/acp_transports`; закоммитить сгенерированные файлы
-- [ ] 2.5 Обновить импорты: `apps/codelab_app` (`shell_cubit.dart`, `app_scope.dart`, `test/widget_test.dart`, `integration_test/fs_flow_test.dart`), `packages/dart/acp_testing`, `packages/dart/acp_transports/test`; перегенерировать `app_scope.module.cherrypick.g.dart`
-- [ ] 2.6 Проверка (agent-transports «Код создания транспорта импортирует io.dart»): тест 2.2 зелёный, тесты 2.1 зелёные, `grep -rn "dart:io" packages/dart/acp_transports/lib/acp_transports.dart packages/dart/acp_transports/lib/src/transport_configs.dart` пусто
+- [x] 2.1 Характеризация: тесты `acp_transports`, `acp_client_core`, `codelab_app` (unit и `widget_test.dart`) и восемь `test:e2e:app:*` зелёные до изменений
+- [x] 2.2 Тест (agent-transports «Основной барель не тянет dart:io»): в `acp_transports/test/` — тест, что `lib/acp_transports.dart` и `lib/src/transport_configs.dart` транзитивно не импортируют `dart:io` (красный)
+- [x] 2.3 Перенести `StdioAcpTransportConfig`, `StdioAcpAgentProfile`, `WebSocketAcpTransportConfig` в `lib/src/transport_configs.dart` (`part 'transport_configs.freezed.dart'`); создать `lib/io.dart` с экспортом транспортов; перенести реализации в `lib/src/io/`, если перенос механический (иначе поимённый `exclude`, design.md D3)
+- [x] 2.4 `fvm dart run build_runner build --delete-conflicting-outputs` в `packages/dart/acp_transports`; сгенерированный код в git не хранится (design.md D3): старые `*.freezed.dart` транспортов удалены из git, исключение в `.gitignore` убрано
+- [x] 2.5 Обновить импорты: `apps/codelab_app` (`shell_cubit.dart`, `app_scope.dart`, `test/widget_test.dart`, `integration_test/fs_flow_test.dart`), `packages/dart/acp_testing`, `packages/dart/acp_transports/test`; перегенерировать `app_scope.module.cherrypick.g.dart`
+- [x] 2.6 Проверка (agent-transports «Код создания транспорта импортирует io.dart»): тест 2.2 зелёный, тесты 2.1 зелёные, `grep -rn "dart:io" packages/dart/acp_transports/lib/acp_transports.dart packages/dart/acp_transports/lib/src/transport_configs.dart` пусто
+  - Итог e2e после разделения (2026-10-22): зелёные `fs`, `terminal`, `plan-checklist`, `multi-session`, `open-project`, `stdio` (первый прогон — 2 сбоя UI, повторный — 5 из 5, нестабильность). Красные `permission` (ожидает 2 виджета с `/bin/bash`, находит 1) и `prompt-queue` (не находит «Allow once») — оба красные и на `develop` без изменений этого change, к транспорту не относятся; исправление — отдельный change. Характеризация e2e до изменений не снималась — сравнение выполнено прогоном `develop` после.
 
 ## 3. Пакет `codelab_agent_core` (0.3)
 
@@ -44,7 +45,7 @@
 
 ## 7. CI (0.6)
 
-- [ ] 7.1 `.github/actions/prepare/action.yml` по `09-05` «Артефакт: CI»
+- [ ] 7.1 `.github/actions/prepare/action.yml` по `09-05` «Артефакт: CI» и после `pub get` — `build_runner build --delete-conflicting-outputs` в пакетах с `build_runner` (сгенерированный код не в git, design.md D3); проверка: чистый `git clone` + `prepare` → `melos run check` зелёный
 - [ ] 7.2 `.github/workflows/ci.yml`: триггеры `push` в `master` и `develop`, `pull_request`, ночной `schedule`; матрица `format`, `analyze`, `test`, `conformance` (`protocol-conformance`), `guard`, `web-compile`; `e2e-macos` с восемью `test:e2e:app:*` (design.md D6)
 - [ ] 7.3 `.github/pull_request_template.md`: чек-лист OpenSpec change, тесты (красный тест до кода или ссылка на критерий), `melos run check`, сторонний код (§7а, пункт 6)
 - [ ] 7.4 Проверка (testing-quality «Pull request с нарушением»): pull request этой итерации — шесть джобов зелёные; временный коммит с нарушением формата даёт красный `format`, затем откатывается

@@ -1,36 +1,11 @@
 import 'dart:async';
 
 import 'package:acp_protocol/acp_protocol.dart';
-import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import 'acp_transport.dart';
-
-part 'websocket_acp_transport.freezed.dart';
-
-@freezed
-abstract class WebSocketAcpTransportConfig with _$WebSocketAcpTransportConfig {
-  const WebSocketAcpTransportConfig._();
-
-  const factory WebSocketAcpTransportConfig({
-    required Uri uri,
-    @Default({}) Map<String, String> headers,
-    String? token,
-    @Default('Authorization') String tokenHeader,
-    @Default('Bearer') String tokenPrefix,
-  }) = _WebSocketAcpTransportConfig;
-
-  Map<String, String> get effectiveHeaders {
-    final token = this.token;
-    if (token == null || token.isEmpty) {
-      return headers;
-    }
-
-    final value = tokenPrefix.isEmpty ? token : '$tokenPrefix $token';
-    return {...headers, tokenHeader: value};
-  }
-}
+import '../acp_transport.dart';
+import '../transport_configs.dart';
 
 final class WebSocketAcpTransport implements AcpTransport {
   WebSocketAcpTransport(this.config);

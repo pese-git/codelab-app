@@ -22,7 +22,7 @@
    `websocket_acp_transport.dart` с `part '*.freezed.dart'`): после переноса сгенерированный код
    пересобирается — `fvm dart run build_runner build --delete-conflicting-outputs` в
    `packages/dart/acp_transports` (появляется `lib/src/transport_configs.freezed.dart`, старые
-   `*.freezed.dart` теряют перенесённые классы); сгенерированные файлы коммитятся, как сейчас.
+   `*.freezed.dart` теряют перенесённые классы); сгенерированный код в git не хранится (`.gitignore`: `*.freezed.dart`), CI генерирует его в `prepare`.
    Изменение публичного API → OpenSpec.
 3. **0.3. Создать пакет `packages/dart/codelab_agent_core`** с `pubspec.yaml` по скелету ниже,
    `lib/codelab_agent_core.dart` (пока только `const codelabAgentCorePackageName`) и

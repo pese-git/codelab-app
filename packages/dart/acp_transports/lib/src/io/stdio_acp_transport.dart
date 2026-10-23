@@ -3,45 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:acp_protocol/acp_protocol.dart';
-import 'package:freezed_annotation/freezed_annotation.dart';
 
-import 'acp_transport.dart';
-
-part 'stdio_acp_transport.freezed.dart';
-
-@freezed
-abstract class StdioAcpTransportConfig with _$StdioAcpTransportConfig {
-  const factory StdioAcpTransportConfig({
-    required String command,
-    @Default([]) List<String> args,
-    String? cwd,
-    @Default({}) Map<String, String> env,
-  }) = _StdioAcpTransportConfig;
-}
-
-@freezed
-abstract class StdioAcpAgentProfile with _$StdioAcpAgentProfile {
-  const StdioAcpAgentProfile._();
-
-  const factory StdioAcpAgentProfile({
-    required String name,
-    @Default('custom') String type,
-    required String command,
-    @Default([]) List<String> args,
-    String? cwd,
-    @Default({}) Map<String, String> env,
-  }) = _StdioAcpAgentProfile;
-
-  StdioAcpTransportConfig toTransportConfig() =>
-      StdioAcpTransportConfig(command: command, args: args, cwd: cwd, env: env);
-}
-
-const codelabAgentStdioProfile = StdioAcpAgentProfile(
-  name: 'Codelab Agent',
-  command: 'codelab',
-  args: ['serve', '--stdio'],
-  env: {'CODELAB_LOG_LEVEL': 'DEBUG'},
-);
+import '../acp_transport.dart';
+import '../transport_configs.dart';
 
 final class StdioAcpTransport implements AcpTransport {
   StdioAcpTransport(this.config);
