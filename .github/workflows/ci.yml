@@ -5,12 +5,16 @@ on:
     branches: [master, develop]
   pull_request:
   schedule:
-    - cron: "0 3 * * *" # nightly e2e
+    - cron: "0 3 * * *" # nightly run of the Dart VM suites
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Integration tests run on the Dart VM only: real processes and sockets in the
+# package tests, the ACP fixture corpus, and (stage 6) the CLI PTY e2e. The
+# Flutter macOS app tests (`melos run test:e2e:app:*`) are a local acceptance
+# gate and are not run in GitHub CI.
 jobs:
   checks:
     name: ${{ matrix.job }}
@@ -25,21 +29,8 @@ jobs:
           - { job: conformance, scripts: "protocol-conformance" } # + conformance:client (add-acp-golden-fixture-corpus), + conformance:agent (stage 4)
           - { job: guard, scripts: "guard" }
           - { job: web-compile, scripts: "web-compile" } # + flutter build web (stage 10)
+          # stage 6: { job: e2e-cli, scripts: "build:cli test:e2e:cli" } — CLI PTY e2e on the Dart VM
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/prepare
       - run: for s in ${{ matrix.scripts }}; do fvm dart run melos run "$s" || exit 1; done
-
-  # Nightly, on push to master/develop and on pull requests labelled "e2e".
-  e2e-macos:
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e')
-    needs: checks
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/prepare
-      - run: |
-          for s in stdio permission fs terminal plan-checklist prompt-queue multi-session open-project; do
-            fvm dart run melos run "test:e2e:app:$s" || exit 1
-          done
-      # stage 4: test:e2e:app:dart-agent; stage 6: test:e2e:cli; stage 7: test:e2e:app:embedded
