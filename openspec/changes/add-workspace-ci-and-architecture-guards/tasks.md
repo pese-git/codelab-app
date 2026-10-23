@@ -53,7 +53,8 @@
 - [x] 7.4 Проверка (testing-quality «Pull request с нарушением»): pull request этой итерации — шесть джобов зелёные; временный коммит с нарушением формата даёт красный `format`, затем откатывается
 - [x] 7.5 Проверка (testing-quality «Интеграционные тесты на Dart VM»): интеграционные тесты `acp_transports` (stdio-процессы, WebSocket) проходят в джобе `test` на `ubuntu-latest`; джоба на macOS в workflow нет. Временно добавленный `e2e-macos` прошёл на PR pese-git/codelab-app#27 и убран решением владельца репозитория (design.md D6)
   - Итог на PR pese-git/codelab-app#27 (2026-10-23): первые два прогона упали в `prepare` — problem matcher `setup-dart` не находится внутри составного действия (отключён) и `dart pub get` на свежем SDK не находит `sky_engine` (заменён на `flutter pub get`). Далее: `333c510` — шесть джобов зелёные; временный `f016ff1` с нарушением формата — красный только `format` («Changed packages/dart/codelab_agent_core/lib/codelab_agent_core.dart»); откат `828f87c` с меткой `e2e` — шесть джобов и `e2e-macos` (восемь `test:e2e:app:*`, 13 мин) зелёные. Метка `e2e` создана в репозитории. Событие `labeled` workflow не запускает — метку ставят до push.
-- [ ] 7.6 После первого зелёного прогона на `develop`: добавить шесть джобов как обязательные проверки в ruleset `master`/`develop` (настройка GitHub, с подтверждения владельца репозитория)
+- [x] 7.6 После первого зелёного прогона на `develop`: добавить шесть джобов как обязательные проверки в ruleset `master`/`develop` (настройка GitHub, с подтверждения владельца репозитория)
+  - 2026-10-23: после зелёного прогона на `develop` (`cc14ce3`, шесть джобов) в ruleset `git-flow: master и develop` добавлено правило `required_status_checks` — `format`, `analyze`, `test`, `conformance`, `guard`, `web-compile` (без требования обновлять ветку от целевой); метка `e2e` удалена.
 
 ## 8. Лицензия (0.9)
 
