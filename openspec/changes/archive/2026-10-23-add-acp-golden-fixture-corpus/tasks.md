@@ -33,7 +33,7 @@
 - [x] 5.1 `acp/initialize-capabilities` (R-01) — `02-Initialization.md`
 - [x] 5.2 `acp/session-new-modes-config` — `03-Session Setup.md`, `13-Session Config Options.md`; `available_commands_update` со списком `{"$any": []}`
 - [x] 5.3 `acp/prompt-text-end-turn` — `05-Prompt Turn.md`
-- [x] 5.4 `acp/prompt-cancel-mid-tool` — `05-Prompt Turn.md` (отмена), без `_meta.codelab` в ожидаемых кадрах; клиент расходится со спецификацией в состоянии вызова после отмены — проверка статуса вызова `skip` до отдельного change (design.md, «Найденные расхождения клиента»)
+- [x] 5.4 `acp/prompt-cancel-mid-tool` — `05-Prompt Turn.md` (отмена), без `_meta.codelab` в ожидаемых кадрах; найденное расхождение клиента исправлено change `fix-prompt-cancel-tool-calls` (design.md, «Найденные расхождения клиента»)
 - [x] 5.5 `acp/prompt-tool-permission-allow` (P-02) — `08-Tool Calls.md#requesting-permission`
 - [x] 5.6 `acp/prompt-tool-permission-reject-continues` (P-04) — `08-Tool Calls.md`
 - [x] 5.7 `acp/tool-status-lifecycle` — `08-Tool Calls.md`
@@ -55,4 +55,4 @@
 ## 7. Завершение
 
 - [x] 7.1 Definition of Done `09-05` в части этого change: `fvm dart test packages/dart/acp_client_core/test/fixtures` проходит на 12 фикстурах
-- [ ] 7.2 `openspec validate add-acp-golden-fixture-corpus --strict`; архивировать change после слияния последней итерации (§9.0, правило 6)
+- [x] 7.2 `openspec validate add-acp-golden-fixture-corpus --strict`; архивировать change после слияния последней итерации (§9.0, правило 6)

@@ -29,37 +29,6 @@ void main() {
       check!(user, result);
     });
   }
-
-  group('known divergences', _knownDivergences);
-}
-
-/// Known divergence of the client from the specification, found by the
-/// corpus (design.md D7): the fixture stays, the client is fixed by a
-/// separate change.
-const _cancelledToolCallSkip =
-    'AcpClientApplication leaves call_1 in_progress after session/cancel: it '
-    'neither marks unfinished tool calls cancelled nor accepts the later '
-    'tool_call_update (05-Prompt Turn.md#cancellation, SHOULD); fix in a '
-    'separate OpenSpec change';
-
-void _knownDivergences() {
-  test(
-    'acp/prompt-cancel-mid-tool: the cancelled tool call ends failed',
-    () async {
-      final fixture = loadFixtureCorpus().singleWhere(
-        (f) => f.id == 'acp/prompt-cancel-mid-tool',
-      );
-      late _User user;
-      await runClientFixture<AcpClientApplication>(fixture, (env) {
-        user = _User(env);
-        return user.app;
-      }, onBeforeExpect: (step) => user.act(step));
-      addTearDown(user.app.dispose);
-
-      expect(_toolCall(user, 'call_1').status, ToolCallStatus.failed);
-    },
-    skip: _cancelledToolCallSkip,
-  );
 }
 
 /// Drives the client the way a user does in the UI.
@@ -178,8 +147,8 @@ final _stateChecks = <String, _StateCheck>{
   },
   'acp/prompt-cancel-mid-tool': (user, result) {
     expect(_lastTurn(user).status, PromptTurnStatus.cancelled);
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.failed);
     expect(result.environment!.terminal.started.single.command, '/bin/sh');
-    // The status of call_1 is checked by the skipped test below.
   },
   'acp/prompt-tool-permission-allow': (user, _) {
     final turn = _lastTurn(user);

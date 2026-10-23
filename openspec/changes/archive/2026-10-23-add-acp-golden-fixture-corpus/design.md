@@ -93,7 +93,7 @@
 
 ## Найденные расхождения клиента
 
-- `acp/prompt-cancel-mid-tool`: кадры совпадают, но после `session/cancel` `AcpClientApplication` оставляет вызов `call_1` в `in_progress` — не помечает незавершённые вызовы отменёнными и отбрасывает поздний `tool_call_update` со `status: failed` (`05-Prompt Turn.md#cancellation`, оба требования — SHOULD). Фикстура не меняется (D7); проверка статуса вызова — отдельный тест со `skip` в `client_fixture_conformance_test.dart`; исправление клиента — отдельный OpenSpec change.
+- `acp/prompt-cancel-mid-tool` нашёл, что после `session/cancel` клиент оставлял вызов в `in_progress` (`05-Prompt Turn.md#cancellation`). Фикстура не менялась (D7); клиент исправлен отдельным change `fix-prompt-cancel-tool-calls`, после чего проверка статуса вызова вернулась в клиентский прогон.
 
 ## Migration Plan
 
