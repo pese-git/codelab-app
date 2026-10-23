@@ -1,7 +1,8 @@
 # acp-fs-client Specification
 
 ## Purpose
-TBD - created by archiving change add-acp-fs-client-support. Update Purpose after archive.
+Клиентская сторона ACP-методов `fs/read_text_file` и `fs/write_text_file`: CodeLab читает и пишет текстовые файлы по запросу агента. Отдельного подтверждения клиент не запрашивает — разрешение остаётся решением агента (`AGENTS.md` §10, исключение для `fs/*`); компенсирующий контроль — ограничение путей рабочей директорией сессии. Файловый ввод-вывод изолирован за platform-boundary. Нормативный источник — `docs/acp/protocol/09-File System.md`.
+
 ## Requirements
 ### Requirement: Поддержка fs/read_text_file
 CodeLab SHALL реализовывать входящий ACP-метод `fs/read_text_file`, если и только если `ClientCapabilities.fs.readTextFile` заявлена как `true` при `initialize`, и SHALL возвращать содержимое файла по абсолютному пути с учётом опциональных `line`/`limit`.
