@@ -50,8 +50,9 @@
 - [x] 7.2 `.github/workflows/ci.yml`: триггеры `push` в `master` и `develop`, `pull_request`, ночной `schedule`; матрица `format`, `analyze`, `test`, `conformance` (`protocol-conformance`), `guard`, `web-compile`; `e2e-macos` с восемью `test:e2e:app:*` (design.md D6)
 - [x] 7.3 `.github/pull_request_template.md`: чек-лист OpenSpec change, тесты (красный тест до кода или ссылка на критерий), `melos run check`, сторонний код (§7а, пункт 6)
   - Проверка 7.1 выполнена локально (2026-10-23): чистый `git clone` `develop` → `fvm install --skip-pub-get` → `fvm dart pub get` → `build_runner` в пяти пакетах с `build_runner` → `melos run check` зелёный; закоммиченные сгенерированные файлы не изменились. `actionlint` по `ci.yml` — без замечаний. Прогон на GitHub — задачи 7.4–7.5.
-- [ ] 7.4 Проверка (testing-quality «Pull request с нарушением»): pull request этой итерации — шесть джобов зелёные; временный коммит с нарушением формата даёт красный `format`, затем откатывается
-- [ ] 7.5 Проверка (testing-quality «Pull request без метки e2e»): `e2e-macos` пропущен без метки; с меткой `e2e` — запущен и зелёный
+- [x] 7.4 Проверка (testing-quality «Pull request с нарушением»): pull request этой итерации — шесть джобов зелёные; временный коммит с нарушением формата даёт красный `format`, затем откатывается
+- [x] 7.5 Проверка (testing-quality «Pull request без метки e2e»): `e2e-macos` пропущен без метки; с меткой `e2e` — запущен и зелёный
+  - Итог на PR pese-git/codelab-app#27 (2026-10-23): первые два прогона упали в `prepare` — problem matcher `setup-dart` не находится внутри составного действия (отключён) и `dart pub get` на свежем SDK не находит `sky_engine` (заменён на `flutter pub get`). Далее: `333c510` — шесть джобов зелёные; временный `f016ff1` с нарушением формата — красный только `format` («Changed packages/dart/codelab_agent_core/lib/codelab_agent_core.dart»); откат `828f87c` с меткой `e2e` — шесть джобов и `e2e-macos` (восемь `test:e2e:app:*`, 13 мин) зелёные. Метка `e2e` создана в репозитории. Событие `labeled` workflow не запускает — метку ставят до push.
 - [ ] 7.6 После первого зелёного прогона на `develop`: добавить шесть джобов как обязательные проверки в ruleset `master`/`develop` (настройка GitHub, с подтверждения владельца репозитория)
 
 ## 8. Лицензия (0.9)
