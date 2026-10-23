@@ -2,24 +2,24 @@
 
 ## 1. Модель и загрузчик фикстуры (0.7)
 
-- [ ] 1.1 Тест (acp-golden-fixtures «Неполная фикстура падает громко»): `acp_testing/test/fixture_loader_test.dart` — нет обязательного поля, `id` не совпадает с файлом, неизвестный ключ, неверный `dir`, неверный `roles`, неверное поле шага `llm` (красный)
-- [ ] 1.2 Тест (acp-golden-fixtures «Полная фикстура загружается»): минимальная фикстура во временном каталоге; `roles` по умолчанию `["agent", "client"]` (красный)
-- [ ] 1.3 Реализовать `lib/src/fixtures/fixture.dart`: модель (`AcpFixture`, `FixtureSetup` с `cwd`, `files`, `profile`, `mode`, `config`, `clientCapabilities`, `terminal`, `skipInitialize`; `FixtureFrame`; `llm` — структура по §14.7 без выполнения, design.md D6), загрузчик каталога корпуса (design.md D1) — 1.1 и 1.2 зелёные
-- [ ] 1.4 `fixtures/acp/_schema.json` по §14.4 (с `setup.terminal`); тест (acp-golden-fixtures «Схема и загрузчик согласованы») `fixtures_schema_sync_test.dart` — сначала красный, затем зелёный
+- [x] 1.1 Тест (acp-golden-fixtures «Неполная фикстура падает громко»): `acp_testing/test/fixture_loader_test.dart` — нет обязательного поля, `id` не совпадает с файлом, неизвестный ключ, неверный `dir`, неверный `roles`, неверное поле шага `llm` (красный)
+- [x] 1.2 Тест (acp-golden-fixtures «Полная фикстура загружается»): минимальная фикстура во временном каталоге; `roles` по умолчанию `["agent", "client"]` (красный)
+- [x] 1.3 Реализовать `lib/src/fixtures/fixture.dart`: модель (`AcpFixture`, `FixtureSetup` с `cwd`, `files`, `profile`, `mode`, `config`, `clientCapabilities`, `terminal`, `skipInitialize`; `FixtureFrame`; `llm` — структура по §14.7 без выполнения, design.md D6), загрузчик каталога корпуса (design.md D1) — 1.1 и 1.2 зелёные
+- [x] 1.4 `fixtures/acp/_schema.json` по §14.4 (с `setup.terminal`); тест (acp-golden-fixtures «Схема и загрузчик согласованы») `fixtures_schema_sync_test.dart` — сначала красный, затем зелёный
 
 ## 2. Нормализация и матчер (0.7)
 
-- [ ] 2.1 Тест (acp-golden-fixtures «Мутация кадра ловится»): `matcher_test.dart` — лишний ключ, другой статус, другой порядок массива, отсутствующий ключ; каждый случай — провал с путём JSON (красный)
-- [ ] 2.2 Тесты матчеров `$any`, `$absent`, `$capture`, `$regex`, `$contains`, `$partial`, `$oneOf`, `$text` с `repeat: "+"`, `unordered`, `optional`; `_meta` как `$partial` (красные)
-- [ ] 2.3 Тесты нормализации: `${cwd}`, `${sessionId}`, `<ts>`, префикс `cwd` и разделители путей, `normalize.replace` (красные)
-- [ ] 2.4 Реализовать `lib/src/fixtures/matcher.dart` (нормализация и сравнение, список расхождений) — 2.1–2.3 зелёные; тест (acp-golden-fixtures «Захват id запроса агента») зелёный
+- [x] 2.1 Тест (acp-golden-fixtures «Мутация кадра ловится»): `matcher_test.dart` — лишний ключ, другой статус, другой порядок массива, отсутствующий ключ; каждый случай — провал с путём JSON (красный)
+- [x] 2.2 Тесты матчеров `$any`, `$absent`, `$capture`, `$regex`, `$contains`, `$partial`, `$oneOf`, `$text` с `repeat: "+"`, `unordered`, `optional`; `_meta` как `$partial` (красные)
+- [x] 2.3 Тесты нормализации: `${cwd}`, `${sessionId}`, `<ts>`, префикс `cwd` и разделители путей, `normalize.replace` (красные)
+- [x] 2.4 Реализовать `lib/src/fixtures/matcher.dart` (нормализация и сравнение, список расхождений) — 2.1–2.3 зелёные; тест (acp-golden-fixtures «Захват id запроса агента») зелёный
 
 ## 3. Клиентский драйвер (0.7)
 
-- [ ] 3.1 Тест (acp-golden-fixtures «Фикстура только для агента»): фикстура с `roles: ["agent"]` пропускается с причиной (красный)
-- [ ] 3.2 Тест драйвера на минимальной фикстуре «prompt → текст → `end_turn`» во временном каталоге (красный)
-- [ ] 3.3 Реализовать `lib/src/fixtures/client_conformance.dart`: `runClientFixture(fixture, clientFactory, {onBeforeExpect})`, стандартный handshake, `a2c` → `emitInbound`, `c2a` → ожидание в `sentMessages` (таймаут 5 с), fs через `TextFileReader`/`TextFileWriter` поверх временного каталога из `setup.files`, terminal через `FakeTerminalProcessRunner` по `setup.terminal`, сверка `after.files` (design.md D4) — 3.1 и 3.2 зелёные
-- [ ] 3.4 Экспорт модели, загрузчика, матчера и драйвера из `package:acp_testing/acp_testing.dart`
+- [x] 3.1 Тест (acp-golden-fixtures «Фикстура только для агента»): фикстура с `roles: ["agent"]` пропускается с причиной (красный)
+- [x] 3.2 Тест драйвера на минимальной фикстуре «prompt → текст → `end_turn`» во временном каталоге (красный)
+- [x] 3.3 Реализовать `lib/src/fixtures/client_conformance.dart`: `runClientFixture(fixture, clientFactory, {onBeforeExpect})`, стандартный handshake, `a2c` → `emitInbound`, `c2a` → ожидание в `sentMessages` (таймаут 5 с), fs через `TextFileReader`/`TextFileWriter` поверх временного каталога из `setup.files`, terminal через `FakeTerminalProcessRunner` по `setup.terminal`, сверка `after.files` (design.md D4) — 3.1 и 3.2 зелёные
+- [x] 3.4 Экспорт модели, загрузчика, матчера и драйвера из `package:acp_testing/acp_testing.dart`
 
 ## 4. Инварианты корпуса (0.7)
 
