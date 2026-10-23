@@ -9,7 +9,7 @@ ADR-0001 принят: в этот монорепозиторий добавля
 - **Пакет `codelab_agent_core` (0.3)** — пустой каркас ядра с allowlist зависимостей PKG-2 и web-smoke точкой входа.
 - **Пакет `codelab_architecture_tests` (0.4)** — сторож импортов по таблице правил (PKG-1, PKG-3, PKG-4, правила клиентов) и allowlist зависимостей ядра (PKG-2), с негативным тестом.
 - **Скрипты melos `guard`, `web-compile`, `test:dart` (0.5)** и их включение в `check`.
-- **CI (0.6).** `.github/workflows/ci.yml` (джобы `format`, `analyze`, `test`, `conformance`, `guard`, `web-compile` и ночной `e2e-macos`), `.github/actions/prepare`, `.github/pull_request_template.md` с чек-листом (OpenSpec change, тесты, сторонний код §7а). Триггеры — под git flow (`AGENTS.md` §22): push в `master` и `develop`, все pull request.
+- **CI (0.6).** `.github/workflows/ci.yml` (джобы `format`, `analyze`, `test`, `conformance`, `guard`, `web-compile` на `ubuntu-latest`; интеграционные тесты — только на Dart VM, Flutter-тесты приложения на macOS в GitHub CI не запускаются), `.github/actions/prepare`, `.github/pull_request_template.md` с чек-листом (OpenSpec change, тесты, сторонний код §7а). Триггеры — под git flow (`AGENTS.md` §22): push в `master` и `develop`, все pull request.
 - **Лицензия (0.9).** `LICENSE` (MIT, правообладатель — Sergey Penkovsky), `THIRD_PARTY_NOTICES.md` с форматом записи, раздел о лицензиях в `README.md` (в корне его ещё нет — создаётся).
 - **`AGENTS.md` (0.11).** Корневой §5 дополняется агентскими пакетами, ссылкой на документ ядра и политикой стороннего кода; вложенный `packages/dart/codelab_agent_core/AGENTS.md` — PKG-1…PKG-6, сторож, TDD (§9.0, правило 3) и определение завершённой итерации (§9.0, правило 8).
 

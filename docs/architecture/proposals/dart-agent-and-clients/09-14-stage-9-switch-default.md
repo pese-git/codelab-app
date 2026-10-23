@@ -15,8 +15,10 @@
    `acp/<id>` — файл фикстуры; `cli/<id>` — тест с таким именем в `apps/codelab_cli/test/e2e`;
    `app:<файл>` — файл в `apps/codelab_app/integration_test`; `core/<id>` — тест в агентских
    пакетах. Существования мало: тест читает машинные отчёты последнего ночного прогона CI
-   (JUnit XML `codelab test-scenario --junit` и `dart test --reporter json` всех наборов,
-   артефакт `parity-results/`) и требует для каждого доказательства статус `pass`; `skip`
+   (JUnit XML `codelab test-scenario --junit` и `dart test --reporter json` всех Dart VM-наборов,
+   артефакт `parity-results/`), а для `app:` — отчёт локального прогона Flutter-тестов
+   приложения (`flutter test --reporter json`, каталог `parity-results/app/`, приложен к
+   `proposal.md` change `switch-default-agent-to-dart`; в GitHub CI они не запускаются, §9.5), и требует для каждого доказательства статус `pass`; `skip`
    (в том числе тег `scripted-only` в режиме `dart`) и отсутствие в отчёте считаются
    незакрытой строкой. Падает со списком строк и причиной: `missing` (нет файла или теста),
    `not-run` (нет в отчёте), `failed`, `skipped`.
@@ -119,11 +121,15 @@ Python-агента; `docs/architecture/adr/README.md`.
   условий с доказательствами в `proposal.md` change `switch-default-agent-to-dart` подписана
   владельцем продукта (решение о переключении) и ответственным за релиз (доказательства и
   сборка).
-* «Три ночи подряд»: ночной CI-прогон (`schedule` в `.github/workflows/ci.yml`, §9.5) наборов `test:e2e:app:*`,
-  `test:e2e:app:dart-agent`, `test:e2e:app:embedded`, `test:e2e:cli` и `parity_evidence_test`
-  зелёный в трёх последовательных запусках по расписанию на одной ветке `main` без ручного
-  перезапуска упавших заданий; любой красный или пропущенный запуск обнуляет счёт. Ссылки на
-  три запуска — в `proposal.md`.
+* «Три ночи подряд»: ночной CI-прогон (`schedule` в `.github/workflows/ci.yml`, §9.5) Dart VM-наборов —
+  обязательные джобы, `conformance:agent`, `test:e2e:cli` и `parity_evidence_test` — зелёный в
+  трёх последовательных запусках по расписанию на ветке `develop` без ручного перезапуска упавших
+  заданий; любой красный или пропущенный запуск обнуляет счёт. Ссылки на три запуска — в
+  `proposal.md`.
+* Flutter-тесты приложения (`test:e2e:app:*`, `test:e2e:app:dart-agent`, `test:e2e:app:embedded`)
+  в GitHub CI не запускаются (§9.5): три последовательных зелёных локальных прогона на macOS на
+  одном коммите без перезапуска упавших тестов; отчёты (`flutter test --reporter json`), версия
+  macOS и хэш коммита — в `proposal.md`.
 * Чек-лист Zed (9.8) пройден по всем 11 шагам, версия Zed и доказательства записаны в
   `design.md`, подписан ответственным за релиз.
 * Профили по умолчанию переключены (9.3), Python-агент заморожен (9.9), предупреждение о
