@@ -3,7 +3,11 @@ description: Install the FVM-pinned Flutter SDK, resolve the pub workspace and g
 runs:
   using: composite
   steps:
+    # The analyzer problem matcher is resolved relative to the composite
+    # action and fails here; analysis output is read from the job log.
     - uses: dart-lang/setup-dart@v1
+      with:
+        problem-matcher: false
     - uses: actions/cache@v4
       with:
         path: |
