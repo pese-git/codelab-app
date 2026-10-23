@@ -14,6 +14,8 @@ workspace:
   - packages/dart/acp_protocol
   - packages/dart/acp_testing
   - packages/dart/acp_transports
+  - packages/dart/codelab_agent_core
+  - packages/dart/codelab_architecture_tests
   - packages/flutter/acp_ui
 
 melos:
@@ -37,6 +39,20 @@ melos:
     protocol-conformance:
       description: Run ACP protocol conformance checks.
       run: fvm dart test packages/dart/acp_protocol/test
+
+    test:dart:
+      description: Run tests of pure Dart packages with the Dart test runner.
+      run: fvm dart run melos exec -c 4 --no-flutter --dir-exists=test --fail-fast -- "fvm dart test"
+
+    guard:
+      description: Run architecture guards — forbidden imports and the core dependency allowlist.
+      run: fvm dart test packages/dart/codelab_architecture_tests
+
+    web-compile:
+      description: Compile the agent core web-smoke entry point to JavaScript and WebAssembly.
+      run: >-
+        fvm dart compile js -O1 -o build/web_smoke/core.js packages/dart/codelab_agent_core/test/web_smoke/main.dart &&
+        fvm dart compile wasm -o build/web_smoke/core.wasm packages/dart/codelab_agent_core/test/web_smoke/main.dart
 
     test:e2e:app:stdio:
       description: Run codelab_app macOS stdio connection integration tests.
@@ -71,9 +87,11 @@ melos:
       run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/multi_session_concurrency_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
 
     check:
-      description: Run format, analyze, tests, and protocol conformance.
+      description: Run format, analyze, guard, tests, protocol conformance, and web compile.
       steps:
         - check-format
         - analyze
+        - guard
         - test
         - protocol-conformance
+        - web-compile

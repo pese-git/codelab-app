@@ -18,30 +18,31 @@
 
 ## 3. Пакет `codelab_agent_core` (0.3)
 
-- [ ] 3.1 Тест (workspace-architecture «Ядро агента собирается для web»): `test/web_smoke/main.dart` импортирует барель и печатает `codelabAgentCorePackageName`; `fvm dart compile js` падает, пока пакета нет (красный)
-- [ ] 3.2 Создать `packages/dart/codelab_agent_core`: `pubspec.yaml` по скелету `09-05` (зависимости `async`, `collection`, `http`, `meta` — PKG-2), `lib/codelab_agent_core.dart` с `const codelabAgentCorePackageName`, `analysis_options.yaml` как в соседних пакетах; добавить в `workspace:`
-- [ ] 3.3 Проверка: `fvm dart compile js -O1 ...` и `fvm dart compile wasm ...` в `build/web_smoke/` проходят
+- [x] 3.1 Тест (workspace-architecture «Ядро агента собирается для web»): `test/web_smoke/main.dart` импортирует барель и печатает `codelabAgentCorePackageName`; `fvm dart compile js` падает, пока пакета нет (красный)
+- [x] 3.2 Создать `packages/dart/codelab_agent_core`: `pubspec.yaml` по скелету `09-05` (зависимости `async`, `collection`, `http`, `meta` — PKG-2), `lib/codelab_agent_core.dart` с `const codelabAgentCorePackageName`, `analysis_options.yaml` как в соседних пакетах; добавить в `workspace:`
+- [x] 3.3 Проверка: `fvm dart compile js -O1 ...` и `fvm dart compile wasm ...` в `build/web_smoke/` проходят
 
 ## 4. Сторож архитектуры (0.4)
 
-- [ ] 4.1 Создать `packages/dart/codelab_architecture_tests` (`pubspec.yaml` по скелету `09-05`, добавить в `workspace:`)
-- [ ] 4.2 Тест (workspace-architecture «Сторож сам проверен на нарушении»): `import_guard_test.dart: reports dart:io imported by a core library` на временном пакете (красный — сканера нет)
-- [ ] 4.3 Реализовать `test/support/import_scanner.dart` (import/export/part, каждая альтернатива условного импорта, `exclude`, `sealExclude`) — 4.2 зелёный
-- [ ] 4.4 Тесты сканера: `part`, `export`, `sealExclude` (файл вне `exclude` ссылается на исключённый → нарушение), `sealExclude: false` (каталог с разрешённым пакетом)
-- [ ] 4.5 `test/support/rules.dart`: правила `codelab_agent_core`, `acp_transports` (с исключением IO-точки входа), `acp_client_core`, `apps/codelab_app` (`package:codelab_agent_`); комментарии с правилами будущих этапов; цикл «пакет → тест» в `import_guard_test.dart` зелёный на текущем коде
-- [ ] 4.6 Тест (workspace-architecture «Зависимость вне allowlist»): `pubspec_allowlist_test.dart` — `dependencies` ядра ⊆ `{http, meta, collection, async, crypto}`; негативный случай на временном `pubspec.yaml`
-- [ ] 4.7 Проверка (workspace-architecture «Клиент импортирует ядро напрямую»): временное нарушение в рабочей копии ловится, затем откатывается — не коммитится
+- [x] 4.1 Создать `packages/dart/codelab_architecture_tests` (`pubspec.yaml` по скелету `09-05`, добавить в `workspace:`)
+- [x] 4.2 Тест (workspace-architecture «Сторож сам проверен на нарушении»): `import_guard_test.dart: reports dart:io imported by a core library` на временном пакете (красный — сканера нет)
+- [x] 4.3 Реализовать `test/support/import_scanner.dart` (import/export/part, каждая альтернатива условного импорта, `exclude`, `sealExclude`) — 4.2 зелёный
+- [x] 4.4 Тесты сканера: `part`, `export`, `sealExclude` (файл вне `exclude` ссылается на исключённый → нарушение), `sealExclude: false` (каталог с разрешённым пакетом)
+- [x] 4.5 `test/support/rules.dart`: правила `codelab_agent_core`, `acp_transports` (с исключением IO-точки входа), `acp_client_core`, `apps/codelab_app` (`package:codelab_agent_`); комментарии с правилами будущих этапов; цикл «пакет → тест» в `import_guard_test.dart` зелёный на текущем коде
+- [x] 4.6 Тест (workspace-architecture «Зависимость вне allowlist»): `pubspec_allowlist_test.dart` — `dependencies` ядра ⊆ `{http, meta, collection, async, crypto}`; негативный случай на временном `pubspec.yaml`
+- [x] 4.7 Проверка (workspace-architecture «Клиент импортирует ядро напрямую»): временное нарушение в рабочей копии ловится, затем откатывается — не коммитится
+  - Корень репозитория тесты сторожа находят вверх по каталогам до `pubspec.yaml` с `workspace:` (`test/support/repo_root.dart`): `guard` запускается из корня, `melos run test` — из каталога пакета. Проверка 4.7: временные `import 'dart:io'` в ядре и `import 'package:codelab_agent_core/...'` в `apps/codelab_app/lib/main.dart` дали два нарушения, затем откатаны.
 
 ## 5. Скрипты melos (0.5)
 
-- [ ] 5.1 Добавить `test:dart`, `guard`, `web-compile` с `description` в секцию `melos:`; `check` — `check-format, analyze, guard, test, protocol-conformance, web-compile` (design.md D5)
-- [ ] 5.2 Проверка (testing-quality «Запускается полная проверка»): `fvm dart run melos run check` зелёный; `build/` в `.gitignore`
+- [x] 5.1 Добавить `test:dart`, `guard`, `web-compile` с `description` в секцию `melos:`; `check` — `check-format, analyze, guard, test, protocol-conformance, web-compile` (design.md D5)
+- [x] 5.2 Проверка (testing-quality «Запускается полная проверка»): `fvm dart run melos run check` зелёный; `build/` в `.gitignore`
 
 ## 6. `AGENTS.md` (0.11)
 
-- [ ] 6.1 Корневой `AGENTS.md` §5: в дерево и назначение пакетов — `codelab_agent_core`, `codelab_architecture_tests`; ссылка на `docs/architecture/proposals/agent-core-architecture.md` как источник архитектуры агента; правило: сторонний код не копируется, атрибуция по `dart-agent-and-clients/07-decision-sources.md` §7а
-- [ ] 6.2 `packages/dart/codelab_agent_core/AGENTS.md`: PKG-1…PKG-6 (agent-core-architecture §1), сторож (`melos run guard`), TDD (§9.0, правило 3, исключения (а)–(д)), определение завершённой итерации (§9.0, правило 8)
-- [ ] 6.3 Проверка: ссылки из обоих файлов ведут на существующие документы
+- [x] 6.1 Корневой `AGENTS.md` §5: в дерево и назначение пакетов — `codelab_agent_core`, `codelab_architecture_tests`; ссылка на `docs/architecture/proposals/agent-core-architecture.md` как источник архитектуры агента; правило: сторонний код не копируется, атрибуция по `dart-agent-and-clients/07-decision-sources.md` §7а
+- [x] 6.2 `packages/dart/codelab_agent_core/AGENTS.md`: PKG-1…PKG-6 (agent-core-architecture §1), сторож (`melos run guard`), TDD (§9.0, правило 3, исключения (а)–(д)), определение завершённой итерации (§9.0, правило 8)
+- [x] 6.3 Проверка: ссылки из обоих файлов ведут на существующие документы
 
 ## 7. CI (0.6)
 
