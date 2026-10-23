@@ -21,6 +21,7 @@ const _builtIn = {
     cost: ModelCost(input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5),
     supportsImages: true,
     supportsReasoning: true,
+    thinkingMode: ThinkingMode.adaptive,
   ),
   'claude-opus': ModelInfo(contextWindow: 100, maxOutputTokens: 50),
   'tiny': ModelInfo(contextWindow: 1100, maxOutputTokens: 4096),
@@ -96,6 +97,38 @@ void main() {
     expect(entry.provenance['contextWindow'], ModelInfoSource.builtIn);
     expect(entry.provenance['maxOutputTokens'], ModelInfoSource.override);
     expect(entry.provenance['hiddenReasoning'], ModelInfoSource.safeDefault);
+    expect(model.thinkingMode, ThinkingMode.adaptive);
+    expect(entry.provenance['thinkingMode'], ModelInfoSource.builtIn);
+  });
+
+  test('thinkingMode: config override wins, safe default is adaptive', () {
+    final catalog = _catalog([
+      CatalogProvider(
+        _anthropic,
+        models: const {
+          'claude-haiku-4-5': ModelInfo(thinkingMode: ThinkingMode.budget),
+          'claude-next-1': ModelInfo(),
+        },
+      ),
+    ]);
+
+    expect(
+      catalog
+          .resolve(const ModelId('anthropic/claude-haiku-4-5'))!
+          .thinkingMode,
+      ThinkingMode.budget,
+    );
+    expect(
+      catalog.resolve(const ModelId('anthropic/claude-next-1'))!.thinkingMode,
+      ThinkingMode.adaptive,
+    );
+    final provenance = {
+      for (final e in catalog.models) e.id.model: e.provenance['thinkingMode'],
+    };
+    expect(provenance, {
+      'claude-haiku-4-5': ModelInfoSource.override,
+      'claude-next-1': ModelInfoSource.safeDefault,
+    });
   });
 
   test('built-in lookup by the longest prefix before "-" or the end', () {
