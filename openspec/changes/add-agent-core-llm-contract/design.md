@@ -42,7 +42,7 @@
 Файлы — по §1.3:
 
 - `lib/src/cancel/cancel_token.dart`;
-- `lib/src/util/` — `clock.dart`, `ids.dart`, `logger.dart`, `canonical_json.dart`;
+- `lib/src/util/` — `clock.dart`, `ids.dart`, `logger.dart` (канонический JSON payload — `jsonEncode` с порядком вставки ключей, §2.7 шаг 5: отдельный модуль не нужен);
 - `lib/src/llm/` — `messages.dart`, `model_ref.dart`, `events.dart`, `event_stream.dart`, `stream_function.dart`, `errors.dart`, `sse.dart`, `stream_state.dart`, `usage.dart`, `overflow.dart`, `model_catalog.dart`, `builtin_models.dart`;
 - `lib/src/llm/decorators/` и `lib/src/llm/providers/`;
 - `lib/src/testing/`.
@@ -61,6 +61,8 @@
 ### D2. Модели — вручную, без генерации кода
 
 Allowlist PKG-2 не содержит `freezed` и `json_serializable`. Поэтому типы ядра — `final`/`sealed` классы с ручными `toJson`/`fromJson`, `==` и `hashCode`. Равенство нужно тестам сериализации; `collection` даёт сравнение списков и отображений. Списки внутри — `List.unmodifiable`.
+
+JSON сообщения ассистента хранит только `{provider, id}` модели (§2.2). Поэтому `Message.fromJson` принимает функцию `ModelResolver(provider, id) → ModelRef`: журнал этапа 3 передаёт в неё каталог моделей, тесты — фиксированную модель.
 
 Альтернатива — расширить allowlist генераторами кода. Отклонено: каждая сборка ядра (CI, web, бинарь агента) получила бы шаг `build_runner`, а моделей мало, и они стабильны.
 
