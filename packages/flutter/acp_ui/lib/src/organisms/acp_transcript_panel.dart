@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
@@ -118,6 +120,31 @@ class AcpTranscriptPanel extends StatefulWidget {
 class _AcpTranscriptPanelState extends State<AcpTranscriptPanel> {
   final _controller = ScrollController();
 
+  /// Whether the user has scrolled up, away from the bottom, to read earlier
+  /// history. Only the user's own scrolling changes it: content growing
+  /// below an untouched viewport does not mean the user stopped following
+  /// the live tail, so it must not suppress the auto-scroll to a new
+  /// approval.
+  bool _isReadingHistory = false;
+  bool _isUserScrolling = false;
+
+  /// Set while a new pending approval should be kept in view: the lazily
+  /// built list only estimates the extent of entries it has not laid out
+  /// yet, so the real bottom can move after the scroll to it has finished.
+  bool _isKeepingApprovalInView = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // The panel can be created with a pending approval already in its first
+    // entries (a host typically swaps in the transcript only once entries
+    // exist) — there is no earlier build for `didUpdateWidget` to diff.
+    if (_pendingApprovalEntryIds(widget.entries).isNotEmpty) {
+      _bringApprovalIntoView();
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -128,30 +155,71 @@ class _AcpTranscriptPanelState extends State<AcpTranscriptPanel> {
   void didUpdateWidget(covariant AcpTranscriptPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final newPendingApprovalIds = _pendingApprovalEntryIds(
-      widget.entries,
-    ).difference(_pendingApprovalEntryIds(oldWidget.entries));
-    if (newPendingApprovalIds.isEmpty || !_controller.hasClients) {
+    final pendingApprovalIds = _pendingApprovalEntryIds(widget.entries);
+    if (pendingApprovalIds.isEmpty) {
+      _isKeepingApprovalInView = false;
       return;
     }
 
-    final position = _controller.position;
-    final wasNearBottom =
-        position.maxScrollExtent - position.pixels <=
-        _autoScrollBottomThreshold;
-    if (!wasNearBottom) {
-      return;
+    final newPendingApprovalIds = pendingApprovalIds.difference(
+      _pendingApprovalEntryIds(oldWidget.entries),
+    );
+    if (newPendingApprovalIds.isNotEmpty && !_isReadingHistory) {
+      _bringApprovalIntoView();
     }
+  }
 
+  void _bringApprovalIntoView() {
+    _isKeepingApprovalInView = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_controller.hasClients) {
+      if (!mounted || !_controller.hasClients) {
         return;
       }
-      _controller.animateTo(
-        _controller.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
+      unawaited(
+        _controller.animateTo(
+          _controller.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        ),
       );
+    });
+  }
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is UserScrollNotification) {
+      _isUserScrolling = true;
+      _isKeepingApprovalInView = false;
+    } else if (notification is ScrollEndNotification) {
+      if (_isUserScrolling) {
+        _isUserScrolling = false;
+        final metrics = notification.metrics;
+        _isReadingHistory =
+            metrics.maxScrollExtent - metrics.pixels >
+            _autoScrollBottomThreshold;
+      } else {
+        _followMovedBottom(notification.metrics);
+      }
+    }
+    return false;
+  }
+
+  bool _onScrollMetricsNotification(ScrollMetricsNotification notification) {
+    if (!_controller.position.isScrollingNotifier.value) {
+      _followMovedBottom(notification.metrics);
+    }
+    return false;
+  }
+
+  void _followMovedBottom(ScrollMetrics metrics) {
+    if (!_isKeepingApprovalInView ||
+        _isReadingHistory ||
+        metrics.extentAfter <= 0) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _controller.hasClients && _isKeepingApprovalInView) {
+        _controller.jumpTo(_controller.position.maxScrollExtent);
+      }
     });
   }
 
@@ -170,17 +238,24 @@ class _AcpTranscriptPanelState extends State<AcpTranscriptPanel> {
                 child: AcpText(widget.emptyLabel, role: AcpTextRole.caption),
               ),
             )
-          : ListView.separated(
-              controller: _controller,
-              padding: const EdgeInsets.all(12),
-              itemCount: widget.entries.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                return _AcpTranscriptEntryRow(
-                  entry: widget.entries[index],
-                  viewMode: widget.viewMode,
-                );
-              },
+          : NotificationListener<ScrollMetricsNotification>(
+              onNotification: _onScrollMetricsNotification,
+              child: NotificationListener<ScrollNotification>(
+                onNotification: _onScrollNotification,
+                child: ListView.separated(
+                  controller: _controller,
+                  padding: const EdgeInsets.all(12),
+                  itemCount: widget.entries.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    return _AcpTranscriptEntryRow(
+                      entry: widget.entries[index],
+                      viewMode: widget.viewMode,
+                    );
+                  },
+                ),
+              ),
             ),
     );
   }
