@@ -8,6 +8,7 @@ import '../loop/loop_config.dart';
 import '../util/logger.dart';
 import '../util/result.dart';
 import 'agent_tool.dart';
+import 'fence.dart';
 import 'registry.dart';
 import 'truncate.dart';
 import 'validator.dart';
@@ -197,6 +198,11 @@ final class ToolCallExecutor implements ToolExecutor {
     ToolExecutionResult result;
     try {
       result = await tool.execute(args, handle.context);
+    } on ToolCancelled catch (cancelled) {
+      return (
+        ToolExecutionResult(cancelled.content, isError: true),
+        ToolOutcome.cancelled,
+      );
     } on CancelledException {
       return _error(cancelledText, ToolOutcome.cancelled);
     } on Object catch (error) {
@@ -204,6 +210,9 @@ final class ToolCallExecutor implements ToolExecutor {
     }
     if (!tool.truncatesOutput) {
       result = _limit(result);
+    }
+    if (tool.outputTrust(args) == ContentTrust.untrusted) {
+      result = _fence(result, tool.name);
     }
     for (final hook in invocation.afterToolCall) {
       try {
@@ -284,6 +293,22 @@ final class ToolCallExecutor implements ToolExecutor {
           )
         : result;
   }
+
+  /// Step 8d: every text block of untrusted output is fenced separately;
+  /// images are kept (§6.3.6).
+  static ToolExecutionResult _fence(
+    ToolExecutionResult result,
+    String source,
+  ) => ToolExecutionResult(
+    [
+      for (final block in result.content)
+        block is TextContent
+            ? TextContent(fenceUntrusted(block.text, source: source))
+            : block,
+    ],
+    diffs: result.diffs,
+    isError: result.isError,
+  );
 
   static (ToolExecutionResult, ToolOutcome) _error(
     String text,

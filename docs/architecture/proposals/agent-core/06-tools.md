@@ -38,7 +38,7 @@ abstract base class AgentTool {
   /// title, locations, diffs; читает env из ctx (edit строит diff заранее). args могут быть сырыми
   /// (до валидации): исключение — title = имя инструмента.
   Future<ToolPresentation> present(Map<String, Object?> args, ToolContext ctx);
-  String permissionPattern(Map<String, Object?> args);      // шаблон для allow_always (§7.5)
+  String permissionPattern(Map<String, Object?> args, String cwd);   // шаблон для allow_always (§7.5); пути — относительно cwd
   /// Проверка аргументов до разрешений: английский текст ошибки для модели или null.
   /// Отклонённый вызов не доходит до PermissionPolicy и не порождает вопрос человеку (§6.3.1, шаг 3a).
   /// preflight, prepare и rewriteArgs идут до разрешений и не имеют побочных эффектов (PERM-1),
@@ -92,6 +92,10 @@ final class ToolContext {
   final MisuseBreaker? misuse;                  // один на ход, создаёт цикл (§5.5, шаг 0; §6.3.7); null — выключен
   final ArgsRewrite? rewrite;                   // после MVP (§17.12.6)
 }
+
+/// Инструмент остановился по отмене и сам формулирует текст для модели (exec:
+/// `[Command was cancelled after <t> s]`): outcome `cancelled` с этим content.
+final class ToolCancelled implements Exception { const ToolCancelled(this.content); final List<ContentBlock> content; }
 
 final class ToolExecutionResult {
   const ToolExecutionResult(this.content, {this.diffs = const [], this.isError = false});

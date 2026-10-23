@@ -38,6 +38,18 @@ String fileErrorText(FileError error, ToolContext ctx, String raw) {
   };
 }
 
+/// The pattern of a path for «allow always» (§7.5): normalized and
+/// relative to [cwd] when inside it; `.` for the root. Without [cwd] the
+/// path is normalized as relative.
+String pathPattern(String raw, String cwd) {
+  final root = cwd.isEmpty ? '/' : cwd;
+  final abs = normalizePath(root, raw);
+  if (abs == null) {
+    return raw;
+  }
+  return isInside(root, abs) ? relativeTo(root, abs) : abs;
+}
+
 ToolExecutionResult errorResult(String text) =>
     ToolExecutionResult([TextContent(text)], isError: true);
 

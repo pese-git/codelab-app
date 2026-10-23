@@ -4,6 +4,7 @@ import '../../env/execution_env.dart';
 import '../../llm/messages.dart';
 import '../../util/result.dart';
 import '../agent_tool.dart';
+import '../fence.dart';
 import '../truncate.dart';
 import 'common.dart';
 
@@ -47,8 +48,17 @@ final class ReadTool extends AgentTool {
   @override
   ToolKind get kind => ToolKind.read;
 
+  /// Third-party files (`node_modules`, `.dart_tool`, `vendor`) are data
+  /// the model must not obey (§6.3.6).
   @override
-  ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.trusted;
+  ContentTrust outputTrust(Map<String, Object?> args) =>
+      isUntrustedPath(pathPattern('${args['path']}', ''))
+      ? ContentTrust.untrusted
+      : ContentTrust.trusted;
+
+  @override
+  String permissionPattern(Map<String, Object?> args, String cwd) =>
+      pathPattern('${args['path'] ?? '.'}', cwd);
 
   @override
   bool get truncatesOutput => true;
