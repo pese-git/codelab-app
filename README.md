@@ -23,7 +23,7 @@ Flutter SDK закреплён в `.fvmrc` и ставится через [FVM](
 
 ```bash
 fvm install
-fvm dart pub get
+fvm flutter pub get
 fvm dart run melos exec -c 1 --depends-on=build_runner -- "fvm dart run build_runner build --delete-conflicting-outputs"
 fvm dart run melos run check
 ```

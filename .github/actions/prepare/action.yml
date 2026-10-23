@@ -24,7 +24,9 @@ runs:
       shell: bash
       run: |
         fvm install --skip-pub-get
-        fvm dart pub get
+        # flutter pub get (not dart pub get) also fetches engine artifacts such as
+        # sky_engine that a fresh SDK does not have yet.
+        fvm flutter pub get
     # Generated code (*.freezed.dart and friends) is not tracked in git, so a
     # clean checkout does not compile without it.
     - name: Generate code
