@@ -2,28 +2,28 @@
 
 ## 1. Порты детерминизма и логирования (1.11)
 
-- [ ] 1.1 Тест (agent-core-ports «Порты детерминизма от хоста»): `test/util/determinism_ports_test.dart` — `FakeClock` не двигается сам, `advance` срабатывает таймерами по порядку сроков, `delay` завершается только после продвижения; два `SequentialIdGenerator` дают `id-1…id-3`; `Random(42)` повторяем (красный)
-- [ ] 1.2 Реализовать `lib/src/util/clock.dart` (`Clock`, `ClockTimer`, `SystemClock`), `lib/src/util/ids.dart` (`IdGenerator`), `lib/src/util/logger.dart` (`Logger`, `LogLevel`, `LogRecord`), `lib/src/testing/fake_clock.dart`, `sequential_id_generator.dart`, `recording_logger.dart` (design.md, D6) — 1.1 зелёный
-- [ ] 1.3 `lib/testing.dart` — экспорт тестовых реализаций; основной барель их не экспортирует
+- [x] 1.1 Тест (agent-core-ports «Порты детерминизма от хоста»): `test/util/determinism_ports_test.dart` — `FakeClock` не двигается сам, `advance` срабатывает таймерами по порядку сроков, `delay` завершается только после продвижения; два `SequentialIdGenerator` дают `id-1…id-3`; `Random(42)` повторяем (красный)
+- [x] 1.2 Реализовать `lib/src/util/clock.dart` (`Clock`, `ClockTimer`, `SystemClock`), `lib/src/util/ids.dart` (`IdGenerator`), `lib/src/util/logger.dart` (`Logger`, `LogLevel`, `LogRecord`), `lib/src/testing/fake_clock.dart`, `sequential_id_generator.dart`, `recording_logger.dart` (design.md, D6) — 1.1 зелёный
+- [x] 1.3 `lib/testing.dart` — экспорт тестовых реализаций; основной барель их не экспортирует
 
 ## 2. Отмена (1.1)
 
-- [ ] 2.1 Тест (agent-cancellation, все сценарии): `test/cancel/cancel_token_test.dart` — слушатель в microtask (CAN-1), первая причина выигрывает, `UserCancel` по умолчанию, `throwIfCancelled`, иерархия родитель → внук и обратное направление (CAN-3), потомок отменённого родителя, `dispose`; `raceCancel` без необработанной ошибки; `delayCancellable` по `FakeClock` (красный)
-- [ ] 2.2 Реализовать `lib/src/cancel/cancel_token.dart` по §3.2 — 2.1 зелёный
+- [x] 2.1 Тест (agent-cancellation, все сценарии): `test/cancel/cancel_token_test.dart` — слушатель в microtask (CAN-1), первая причина выигрывает, `UserCancel` по умолчанию, `throwIfCancelled`, иерархия родитель → внук и обратное направление (CAN-3), потомок отменённого родителя, `dispose`; `raceCancel` без необработанной ошибки; `delayCancellable` по `FakeClock` (красный)
+- [x] 2.2 Реализовать `lib/src/cancel/cancel_token.dart` по §3.2 — 2.1 зелёный
 
 ## 3. Модель сообщений, события и поток (1.2, 1.3)
 
-- [ ] 3.1 Тест (agent-llm «Модель сообщений и каноническая JSON-форма»): `test/llm/messages_test.dart` — круговая сериализация каждой формы таблицы §2.2, опускание `null`, игнор неизвестного поля, неизменяемые списки, `Usage +` и `UsageCost +` (красный)
-- [ ] 3.2 Реализовать `lib/src/llm/messages.dart`, `usage.dart`, `model_ref.dart` (`ModelRef`, `ModelCost`, `ReasoningEffort`, `ProviderApi`), `errors.dart` (`LlmErrorClass`), `lib/src/util/canonical_json.dart` (design.md, D2) — 3.1 зелёный
-- [ ] 3.3 Тест (agent-llm «Контракт StreamFunction», «Грамматика событий и снимки»): `test/llm/event_stream_test.dart` — `end() without terminal completes result with StateError` без необработанной ошибки (LLM-3), события до подписки не теряются, `push` после терминала игнорируется, второй `listen` — `StateError`; `test/llm/stream_state_test.dart` — `ProviderStreamState`: парность блоков, ленивые снимки `partial` без копирования на каждую дельту, `closeBlock` с неразбираемым JSON → `{}` и заметка (LLM-4…LLM-6) (красные)
-- [ ] 3.4 Реализовать `lib/src/llm/events.dart`, `event_stream.dart`, `stream_function.dart` (`StreamFunction`, `LlmContext`, `ToolSchema`), `stream_state.dart` (`ProviderStreamState`, `runProvider` §2.5) — 3.3 зелёные
-- [ ] 3.5 Экспорт модели, событий, потока, отмены и портов из `lib/codelab_agent_core.dart`
+- [x] 3.1 Тест (agent-llm «Модель сообщений и каноническая JSON-форма»): `test/llm/messages_test.dart` — круговая сериализация каждой формы таблицы §2.2, опускание `null`, игнор неизвестного поля, неизменяемые списки, `Usage +` и `UsageCost +` (красный)
+- [x] 3.2 Реализовать `lib/src/llm/messages.dart`, `usage.dart`, `model_ref.dart` (`ModelRef`, `ModelCost`, `ReasoningEffort`, `ProviderApi`), `errors.dart` (`LlmErrorClass`); `Message.fromJson` с `ModelResolver` (design.md, D1, D2) — 3.1 зелёный
+- [x] 3.3 Тест (agent-llm «Контракт StreamFunction», «Грамматика событий и снимки»): `test/llm/event_stream_test.dart` — `end() without terminal completes result with StateError` без необработанной ошибки (LLM-3), события до подписки не теряются, `push` после терминала игнорируется, второй `listen` — `StateError`; `test/llm/stream_state_test.dart` — `ProviderStreamState`: парность блоков, ленивые снимки `partial` без копирования на каждую дельту, `closeBlock` с неразбираемым JSON → `{}` и заметка (LLM-4…LLM-6) (красные)
+- [x] 3.4 Реализовать `lib/src/llm/events.dart`, `event_stream.dart`, `stream_function.dart` (`StreamFunction`, `LlmContext`, `ToolSchema`), `stream_state.dart` (`ProviderStreamState`, `runProvider` §2.5) — 3.3 зелёные
+- [x] 3.5 Экспорт модели, событий, потока, отмены и портов из `lib/codelab_agent_core.dart`
 
 ## 4. ScriptedStreamFunction и web-smoke (1.4)
 
-- [ ] 4.1 Тест (agent-llm «Детерминированная модель для тестов»): `test/testing/scripted_stream_function_test.dart` — `steps are served strictly in order`, `expect mismatch fails with request diff`, лишний запрос и неиспользованный шаг в `verify()`, дельты по 16 символов, `toolCall` и `thinking` в ответе, `error` с классом, `delayMs` по `FakeClock`, `waitForCancel` → `ErrorEvent(aborted)`, подстановка `${cwd}` и `${sessionId}`, разбор блока `llm` фикстуры `acp/prompt-tool-permission-allow` (красный)
-- [ ] 4.2 Реализовать `lib/src/testing/scripted_stream_function.dart` (`ScriptedStreamFunction.fromJson`, `verify()`, `ScriptedLlmFailure`; design.md, D8) и экспорт из `lib/testing.dart` — 4.1 зелёный
-- [ ] 4.3 `test/web_smoke/main.dart` выполняет один шаг на `ScriptedStreamFunction` и печатает текст ответа (workspace-architecture «Web-smoke выполняет шаг модели»); `fvm dart run melos run web-compile` зелёный, `fvm dart run packages/dart/codelab_agent_core/test/web_smoke/main.dart` печатает текст ответа
+- [x] 4.1 Тест (agent-llm «Детерминированная модель для тестов»): `test/testing/scripted_stream_function_test.dart` — `steps are served strictly in order`, `expect mismatch fails with request diff`, лишний запрос и неиспользованный шаг в `verify()`, дельты по 16 символов, `toolCall` и `thinking` в ответе, `error` с классом, `delayMs` по `FakeClock`, `waitForCancel` → `ErrorEvent(aborted)`, подстановка `${cwd}` и `${sessionId}`, разбор блока `llm` фикстуры `acp/prompt-tool-permission-allow` (красный)
+- [x] 4.2 Реализовать `lib/src/testing/scripted_stream_function.dart` (`ScriptedStreamFunction.fromJson`, `verify()`, `ScriptedLlmFailure`; design.md, D8) и экспорт из `lib/testing.dart` — 4.1 зелёный
+- [x] 4.3 `test/web_smoke/main.dart` выполняет один шаг на `ScriptedStreamFunction` и печатает текст ответа (workspace-architecture «Web-smoke выполняет шаг модели»); `fvm dart run melos run web-compile` зелёный, `fvm dart run packages/dart/codelab_agent_core/test/web_smoke/main.dart` печатает текст ответа
 - [ ] 4.4 Проверка итерации 1: `fvm dart run melos run check` зелёный; PR итерации 1
 
 ## 5. SSE-декодер (1.5)

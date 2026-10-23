@@ -4,4 +4,16 @@
 /// Flutter imports (invariant PKG-1, checked by `melos run guard`).
 library;
 
+export 'src/cancel/cancel_token.dart';
+export 'src/llm/errors.dart';
+export 'src/llm/event_stream.dart';
+export 'src/llm/events.dart';
+export 'src/llm/messages.dart';
+export 'src/llm/model_ref.dart';
+export 'src/llm/stream_function.dart';
+export 'src/llm/usage.dart';
+export 'src/util/clock.dart' show Clock, ClockTimer, SystemClock;
+export 'src/util/ids.dart';
+export 'src/util/logger.dart';
+
 const codelabAgentCorePackageName = 'codelab_agent_core';
