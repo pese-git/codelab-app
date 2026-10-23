@@ -40,6 +40,10 @@ melos:
       description: Run ACP protocol conformance checks.
       run: fvm dart test packages/dart/acp_protocol/test
 
+    conformance:client:
+      description: Play the golden ACP fixture corpus against AcpClientApplication (client role).
+      run: fvm dart test packages/dart/acp_client_core/test/fixtures
+
     test:dart:
       description: Run tests of pure Dart packages with the Dart test runner.
       run: fvm dart run melos exec -c 4 --no-flutter --dir-exists=test --fail-fast -- "fvm dart test"
@@ -87,11 +91,12 @@ melos:
       run: fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test/multi_session_concurrency_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
 
     check:
-      description: Run format, analyze, guard, tests, protocol conformance, and web compile.
+      description: Run format, analyze, guard, tests, protocol and client fixture conformance, and web compile.
       steps:
         - check-format
         - analyze
         - guard
         - test
         - protocol-conformance
+        - conformance:client
         - web-compile

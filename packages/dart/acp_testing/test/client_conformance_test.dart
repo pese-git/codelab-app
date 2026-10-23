@@ -436,4 +436,47 @@ void main() {
     expect(result.client!.connectionState, isA<ClientConnectionReady>());
     expect(result.client!.sessions, isEmpty);
   });
+
+  group('FixtureTerminalProcessRunner', () {
+    test('a script with exitCode exits at once with its output', () async {
+      final runner = FixtureTerminalProcessRunner({
+        '/bin/sh -c echo hi': const FixtureTerminalCommand(
+          output: 'hi\n',
+          exitCode: 0,
+        ),
+      });
+      final handle = await runner.start(
+        command: '/bin/sh',
+        args: ['-c', 'echo hi'],
+        env: const {},
+        cwd: '/work/demo',
+      );
+
+      expect(handle.output, 'hi\n');
+      expect(await handle.waitForExit(), isA<TerminalProcessExited>());
+    });
+
+    test('a script without exitCode runs until killed', () async {
+      final runner = FixtureTerminalProcessRunner({
+        'dart test': const FixtureTerminalCommand(output: 'Running...\n'),
+      });
+      final handle = await runner.start(
+        command: 'dart',
+        args: ['test'],
+        env: const {},
+        cwd: '/work/demo',
+      );
+
+      expect(handle.state, isA<TerminalProcessRunning>());
+      await handle.kill();
+      expect(
+        await handle.waitForExit(),
+        isA<TerminalProcessExited>().having(
+          (s) => s.signal,
+          'signal',
+          'SIGTERM',
+        ),
+      );
+    });
+  });
 }

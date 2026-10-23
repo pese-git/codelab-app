@@ -1,0 +1,345 @@
+{
+  "id": "acp/tool-exec-terminal-embed",
+  "spec": [
+    "10-Terminal.md#checking-support",
+    "10-Terminal.md#executing-commands",
+    "10-Terminal.md#embedding-in-tool-calls",
+    "10-Terminal.md#waiting-for-exit",
+    "10-Terminal.md#getting-output",
+    "10-Terminal.md#releasing-terminals",
+    "08-Tool Calls.md#terminals",
+    "17-Schema.md#terminal-release"
+  ],
+  "description": "В режиме bypass модель вызывает exec \"echo hi\"; агент создаёт терминал клиента через /bin/sh -c, встраивает его в tool_call, ждёт выхода, забирает вывод, освобождает терминал и завершает вызов completed; модель отвечает текстом, ход завершается end_turn.",
+  "goals": [
+    "T-08"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "bypass",
+    "terminal": {
+      "/bin/sh -c echo hi": {
+        "output": "hi\n",
+        "exitCode": 0
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "hi"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "echo hi"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Команда вывела hi."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "пользователь отправляет промпт",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Выполни echo hi"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "echo hi"
+            },
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "echo hi"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      },
+      "note": "режим bypass: без запроса разрешения"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "createId"
+        },
+        "method": "terminal/create",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "command": "/bin/sh",
+            "args": [
+              "-c",
+              "echo hi"
+            ],
+            "cwd": "${cwd}"
+          }
+        }
+      },
+      "note": "env и outputByteLimit задаёт агент (agent-core §4.7)"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${createId}",
+        "result": {
+          "terminalId": {
+            "$capture": "terminalId"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "terminal",
+                "terminalId": "${terminalId}"
+              }
+            ]
+          }
+        }
+      },
+      "note": "терминал встраивается в вызов"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "waitId"
+        },
+        "method": "terminal/wait_for_exit",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${waitId}",
+        "result": {
+          "$partial": {
+            "exitCode": 0
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "outputId"
+        },
+        "method": "terminal/output",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${outputId}",
+        "result": {
+          "$partial": {
+            "output": "hi\n",
+            "truncated": false
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "releaseId"
+        },
+        "method": "terminal/release",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      },
+      "note": "release всегда в конце (ACP-9)"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${releaseId}",
+        "result": {
+          "$oneOf": [
+            null,
+            {}
+          ]
+        }
+      },
+      "note": "09-File System.md показывает \"result\": null, 17-Schema.md описывает ответ объектом — принимаются оба прочтения"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": {
+              "$any": [
+                {
+                  "type": "terminal",
+                  "terminalId": "${terminalId}"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Команда вывела hi."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "note": "агент может назвать сессию после первого хода",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

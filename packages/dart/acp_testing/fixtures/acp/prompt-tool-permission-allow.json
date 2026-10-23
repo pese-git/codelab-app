@@ -1,0 +1,427 @@
+{
+  "id": "acp/prompt-tool-permission-allow",
+  "spec": [
+    "05-Prompt Turn.md#5-tool-invocation-and-status-reporting",
+    "08-Tool Calls.md#requesting-permission",
+    "08-Tool Calls.md#permission-options",
+    "08-Tool Calls.md#diffs",
+    "05-Prompt Turn.md#4-check-for-completion",
+    "09-File System.md#reading-files",
+    "09-File System.md#writing-files",
+    "17-Schema.md#fs-write_text_file"
+  ],
+  "description": "Модель правит файл; агент читает его через fs/read_text_file, сообщает tool_call, запрашивает разрешение с rawInput, locations и diff, после allow_once перечитывает файл и пишет его через fs/write_text_file, отправляет in_progress и completed с diff, продолжает ход и отвечает end_turn после всех уведомлений.",
+  "goals": [
+    "P-01",
+    "P-02",
+    "C-01"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "files": {
+      "README.md": "# foo\n"
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "README"
+          }
+        },
+        "reply": [
+          {
+            "text": "Заменю слово."
+          },
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "edit",
+              "arguments": {
+                "path": "README.md",
+                "oldText": "foo",
+                "newText": "bar"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Готово: README.md обновлён."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "пользователь отправляет промпт",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Замени в README.md слово foo на bar"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Заменю слово."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read1"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "sessionId": "${sessionId}",
+          "path": "${cwd}/README.md"
+        }
+      },
+      "note": "present() строит diff для запроса разрешения: файл читается через клиента"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read1}",
+        "result": {
+          "content": "# foo\n"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "README.md"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "README.md",
+              "oldText": "foo",
+              "newText": "bar"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/README.md",
+                "line": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "permId"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "README.md"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "README.md",
+              "oldText": "foo",
+              "newText": "bar"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/README.md",
+                "line": 1
+              }
+            ],
+            "content": [
+              {
+                "type": "diff",
+                "path": "${cwd}/README.md",
+                "oldText": "# foo\n",
+                "newText": "# bar\n"
+              }
+            ]
+          },
+          "options": [
+            {
+              "optionId": {
+                "$capture": "permAllowOnce"
+              },
+              "name": {
+                "$any": true
+              },
+              "kind": "allow_once"
+            },
+            {
+              "optionId": {
+                "$capture": "permAllowAlways"
+              },
+              "name": {
+                "$contains": "README.md"
+              },
+              "kind": "allow_always"
+            },
+            {
+              "optionId": {
+                "$capture": "permRejectOnce"
+              },
+              "name": {
+                "$any": true
+              },
+              "kind": "reject_once"
+            },
+            {
+              "optionId": {
+                "$capture": "permRejectAlways"
+              },
+              "name": {
+                "$contains": "README.md"
+              },
+              "kind": "reject_always"
+            }
+          ]
+        }
+      },
+      "note": "запрос разрешения: rawInput, locations и diff обязательны (P-02, PERM-6)"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${permId}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "${permAllowOnce}"
+          }
+        }
+      },
+      "note": "пользователь выбирает «разрешить один раз»"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read2"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "sessionId": "${sessionId}",
+          "path": "${cwd}/README.md"
+        }
+      },
+      "note": "edit перечитывает файл под блокировкой пути (agent-core §6.4)"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read2}",
+        "result": {
+          "content": "# foo\n"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "write1"
+        },
+        "method": "fs/write_text_file",
+        "params": {
+          "sessionId": "${sessionId}",
+          "path": "${cwd}/README.md",
+          "content": "# bar\n"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${write1}",
+        "result": {
+          "$oneOf": [
+            null,
+            {}
+          ]
+        }
+      },
+      "note": "09-File System.md показывает \"result\": null, 17-Schema.md описывает ответ объектом — принимаются оба прочтения"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$any": true
+                  }
+                }
+              },
+              {
+                "type": "diff",
+                "path": "${cwd}/README.md",
+                "oldText": "# foo\n",
+                "newText": "# bar\n"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Готово: README.md обновлён."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "note": "агент может назвать сессию после первого хода",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ],
+  "after": {
+    "files": {
+      "README.md": "# bar\n"
+    }
+  }
+}

@@ -635,7 +635,8 @@ final class InMemoryFixtureFileSystem
 
 /// `terminal/*` port of the client scripted by `setup.terminal`: a command
 /// line (`command` and `args` joined by spaces, or just `command`) gets its
-/// output and exits at once with its exit code.
+/// output and exits at once with its exit code; a script without
+/// `exitCode` keeps running until `terminal/kill` or `terminal/release`.
 final class FixtureTerminalProcessRunner implements TerminalProcessRunner {
   FixtureTerminalProcessRunner(this.commands);
 
@@ -667,9 +668,12 @@ final class FixtureTerminalProcessRunner implements TerminalProcessRunner {
         outputByteLimit: outputByteLimit,
       ),
     );
-    return FakeTerminalProcessHandle(outputByteLimit: outputByteLimit)
-      ..appendOutput(script.output)
-      ..exit(exitCode: script.exitCode ?? 0);
+    final handle = FakeTerminalProcessHandle(outputByteLimit: outputByteLimit)
+      ..appendOutput(script.output);
+    if (script.exitCode case final exitCode?) {
+      handle.exit(exitCode: exitCode);
+    }
+    return handle;
   }
 }
 

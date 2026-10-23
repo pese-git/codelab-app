@@ -28,7 +28,7 @@ fvm dart run melos exec -c 1 --depends-on=build_runner -- "fvm dart run build_ru
 fvm dart run melos run check
 ```
 
-Сгенерированный код (`*.freezed.dart`) в git не хранится — третья команда создаёт его после checkout. `check` запускает формат, анализ, сторож архитектуры, тесты, protocol conformance и web-компиляцию ядра; интеграционные тесты в `feature/*` и `hotfix/*` идут только на Dart VM. Прогон приложения на устройстве или симуляторе — `fvm dart run melos run test:e2e:app:<имя>` (список — `fvm dart run melos run --list`) — выполняется только в ветке `release/<version>` (`AGENTS.md` §21).
+Сгенерированный код (`*.freezed.dart`) в git не хранится — третья команда создаёт его после checkout. `check` запускает формат, анализ, сторож архитектуры, тесты, protocol conformance, клиентский прогон golden-фикстур ACP (`conformance:client`) и web-компиляцию ядра; интеграционные тесты в `feature/*` и `hotfix/*` идут только на Dart VM. Прогон приложения на устройстве или симуляторе — `fvm dart run melos run test:e2e:app:<имя>` (список — `fvm dart run melos run --list`) — выполняется только в ветке `release/<version>` (`AGENTS.md` §21).
 
 ## Правила разработки
 

@@ -23,36 +23,36 @@
 
 ## 4. Инварианты корпуса (0.7)
 
-- [ ] 4.1 Тест (acp-golden-fixtures «Битая ссылка на спецификацию», «Расширение без объявления»): `fixtures_load_test.dart` — все фикстуры корпуса загружаются, FIX-1 (файл и якорь в `docs/acp/protocol/`), FIX-4; негативные случаи на временном каталоге
-- [ ] 4.2 Тест (acp-golden-fixtures «Покрытие расширилось»): `fixtures_coverage_test.dart` — клиентская часть FIX-2 со списком `pendingCoverage` (design.md D5); падает и на непокрытом элементе вне списка, и на покрытом элементе из списка
+- [x] 4.1 Тест (acp-golden-fixtures «Битая ссылка на спецификацию», «Расширение без объявления»): `fixtures_load_test.dart` — все фикстуры корпуса загружаются, FIX-1 (файл и якорь в `docs/acp/protocol/`), FIX-4; негативные случаи на временном каталоге
+- [x] 4.2 Тест (acp-golden-fixtures «Покрытие расширилось»): `fixtures_coverage_test.dart` — клиентская часть FIX-2 со списком `pendingCoverage` (design.md D5); падает и на непокрытом элементе вне списка, и на покрытом элементе из списка
 
 ## 5. Фикстуры этапа 0 (0.7)
 
 Для каждой фикстуры: написать кадры по разделу спецификации (ссылка в `spec`), `goals` — id строки матрицы, блок `llm` для роли `agent` (design.md D6) → загрузка и FIX-1/FIX-4 зелёные → клиентский прогон (группа 6); при расхождении с клиентом — design.md D7, без правки кадров под клиента.
 
-- [ ] 5.1 `acp/initialize-capabilities` (R-01) — `02-Initialization.md`
-- [ ] 5.2 `acp/session-new-modes-config` — `03-Session Setup.md`, `13-Session Config Options.md`; `available_commands_update` со списком `{"$any": true}`
-- [ ] 5.3 `acp/prompt-text-end-turn` — `05-Prompt Turn.md`
-- [ ] 5.4 `acp/prompt-cancel-mid-tool` — `05-Prompt Turn.md` (отмена), без `_meta.codelab` в ожидаемых кадрах
-- [ ] 5.5 `acp/prompt-tool-permission-allow` (P-02) — `08-Tool Calls.md#requesting-permission`
-- [ ] 5.6 `acp/prompt-tool-permission-reject-continues` (P-04) — `08-Tool Calls.md`
-- [ ] 5.7 `acp/tool-status-lifecycle` — `08-Tool Calls.md`
-- [ ] 5.8 `acp/tool-read-range` (T-01) — `09-File System.md`
-- [ ] 5.9 `acp/tool-exec-terminal-embed` (T-08) — `10-Terminal.md`, `setup.terminal`
-- [ ] 5.10 `acp/prompt-update-plan` (C-05) — `11-Agent Plan.md`
-- [ ] 5.11 `acp/set-config-option-model` (R-06) — `13-Session Config Options.md`
-- [ ] 5.12 `acp/errors-unknown-session-update-tolerated` — `roles: ["client"]`; спецификация совместимости (`15-Extensibility.md`) и требование `acp-protocol-client` о незнакомом виде `session/update`
-- [ ] 5.13 Проверка: в корпусе ровно 12 фикстур (кроме `_schema.json`); список `pendingCoverage` соответствует 4.2
+- [x] 5.1 `acp/initialize-capabilities` (R-01) — `02-Initialization.md`
+- [x] 5.2 `acp/session-new-modes-config` — `03-Session Setup.md`, `13-Session Config Options.md`; `available_commands_update` со списком `{"$any": []}`
+- [x] 5.3 `acp/prompt-text-end-turn` — `05-Prompt Turn.md`
+- [x] 5.4 `acp/prompt-cancel-mid-tool` — `05-Prompt Turn.md` (отмена), без `_meta.codelab` в ожидаемых кадрах; клиент расходится со спецификацией в состоянии вызова после отмены — проверка статуса вызова `skip` до отдельного change (design.md, «Найденные расхождения клиента»)
+- [x] 5.5 `acp/prompt-tool-permission-allow` (P-02) — `08-Tool Calls.md#requesting-permission`
+- [x] 5.6 `acp/prompt-tool-permission-reject-continues` (P-04) — `08-Tool Calls.md`
+- [x] 5.7 `acp/tool-status-lifecycle` — `08-Tool Calls.md`
+- [x] 5.8 `acp/tool-read-range` (T-01) — `09-File System.md`
+- [x] 5.9 `acp/tool-exec-terminal-embed` (T-08) — `10-Terminal.md`, `setup.terminal`
+- [x] 5.10 `acp/prompt-update-plan` (C-05) — `11-Agent Plan.md`
+- [x] 5.11 `acp/set-config-option-model` (R-06) — `13-Session Config Options.md`
+- [x] 5.12 `acp/errors-unknown-session-update-tolerated` — `roles: ["client"]`; спецификация совместимости (`15-Extensibility.md`) и требование `acp-protocol-client` о незнакомом виде `session/update`
+- [x] 5.13 Проверка: в корпусе ровно 12 фикстур (кроме `_schema.json`); список `pendingCoverage` соответствует 4.2
 
 ## 6. Клиентский прогон корпуса (0.8)
 
-- [ ] 6.1 Тест (testing-quality «Корпус этапа 0 проходит»): `packages/dart/acp_client_core/test/fixtures/client_fixture_conformance_test.dart` — для каждой фикстуры с ролью `client` поднимает `AcpClientApplication` на `FakeAcpTransport` с fs- и terminal-портами драйвера; хуки `onBeforeExpect` для `session/prompt`, выбора варианта разрешения и `session/cancel`; проверки итогового состояния сессии (вызов `completed`, план, опция конфигурации, ход завершён)
-- [ ] 6.2 Скрипт melos `conformance:client` с `description`; добавить в `check` после `protocol-conformance`
-- [ ] 6.3 `.github/workflows/ci.yml`: джоб `conformance` — `protocol-conformance conformance:client`
-- [ ] 6.4 Шаблон pull request: пункт «Фикстуры изменены только со ссылкой на раздел спецификации» (acp-golden-fixtures «Правила изменения фикстур»)
-- [ ] 6.5 Проверка (testing-quality «Полная проверка включает клиентский прогон»): `fvm dart run melos run check` зелёный; джоб CI `conformance` зелёный и запускает оба скрипта
+- [x] 6.1 Тест (testing-quality «Корпус этапа 0 проходит»): `packages/dart/acp_client_core/test/fixtures/client_fixture_conformance_test.dart` — для каждой фикстуры с ролью `client` поднимает `AcpClientApplication` на `FakeAcpTransport` с fs- и terminal-портами драйвера; хуки `onBeforeExpect` для `session/prompt`, выбора варианта разрешения и `session/cancel`; проверки итогового состояния сессии (вызов `completed`, план, опция конфигурации, ход завершён)
+- [x] 6.2 Скрипт melos `conformance:client` с `description`; добавить в `check` после `protocol-conformance`
+- [x] 6.3 `.github/workflows/ci.yml`: джоб `conformance` — `protocol-conformance conformance:client`
+- [x] 6.4 Шаблон pull request: пункт «Фикстуры изменены только со ссылкой на раздел спецификации» (acp-golden-fixtures «Правила изменения фикстур»)
+- [x] 6.5 Проверка (testing-quality «Полная проверка включает клиентский прогон»): `fvm dart run melos run check` зелёный; джоб CI `conformance` зелёный и запускает оба скрипта
 
 ## 7. Завершение
 
-- [ ] 7.1 Definition of Done `09-05` в части этого change: `fvm dart test packages/dart/acp_client_core/test/fixtures` проходит на 12 фикстурах
+- [x] 7.1 Definition of Done `09-05` в части этого change: `fvm dart test packages/dart/acp_client_core/test/fixtures` проходит на 12 фикстурах
 - [ ] 7.2 `openspec validate add-acp-golden-fixture-corpus --strict`; архивировать change после слияния последней итерации (§9.0, правило 6)
