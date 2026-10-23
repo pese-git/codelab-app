@@ -27,6 +27,7 @@ ModelRef _model({
   bool reasoning = false,
   ReasoningEffort? effort,
   int maxOutputTokens = 16384,
+  ThinkingMode thinking = ThinkingMode.budget,
 }) => ModelRef(
   provider: 'anthropic',
   id: 'claude-sonnet-4-5',
@@ -37,6 +38,7 @@ ModelRef _model({
   supportsImages: images,
   supportsReasoning: reasoning,
   reasoningEffort: effort,
+  thinkingMode: thinking,
 );
 
 final _readSchema = ToolSchema(
@@ -635,6 +637,52 @@ void main() {
         isNull,
         reason: 'B < 1024',
       );
+    });
+
+    test('adaptive thinking: effort in output_config, summarized display, '
+        'no budget', () async {
+      Future<Map<String, Object?>> body(
+        ReasoningEffort effort,
+        int maxTokens,
+      ) async => (await _send(
+        _context([_user('a')]),
+        model: _model(
+          reasoning: true,
+          effort: effort,
+          maxOutputTokens: maxTokens,
+          thinking: ThinkingMode.adaptive,
+        ),
+      )).json;
+
+      for (final effort in ReasoningEffort.values) {
+        final json = await body(effort, 128000);
+        expect(json['thinking'], {'type': 'adaptive', 'display': 'summarized'});
+        expect(json['output_config'], {'effort': effort.name});
+        expect(json['max_tokens'], 128000);
+      }
+      final small = await body(ReasoningEffort.high, 1800);
+      expect(small['thinking'], {'type': 'adaptive', 'display': 'summarized'});
+      expect(jsonEncode(small), isNot(contains('budget_tokens')));
+    });
+
+    test('adaptive model without effort or reasoning: neither thinking nor '
+        'output_config (LLM-15)', () async {
+      for (final model in [
+        _model(reasoning: true, thinking: ThinkingMode.adaptive),
+        _model(effort: ReasoningEffort.high, thinking: ThinkingMode.adaptive),
+      ]) {
+        final json = (await _send(_context([_user('a')]), model: model)).json;
+        expect(json.containsKey('thinking'), isFalse);
+        expect(json.containsKey('output_config'), isFalse);
+      }
+    });
+
+    test('budget thinking sends no output_config', () async {
+      final json = (await _send(
+        _context([_user('a')]),
+        model: _model(reasoning: true, effort: ReasoningEffort.low),
+      )).json;
+      expect(json.containsKey('output_config'), isFalse);
     });
 
     test('a model without reasoning gets no thinking (LLM-15)', () async {

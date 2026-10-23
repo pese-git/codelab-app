@@ -1,3 +1,4 @@
+import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/llm/builtin_models.dart';
 import 'package:test/test.dart';
 
@@ -17,4 +18,12 @@ void main() {
       expect(info.cost!.output, greaterThan(0));
     });
   }
+
+  test('Claude 5.x models use adaptive thinking (budget_tokens is a 400)', () {
+    for (final MapEntry(key: id, value: info) in builtinModels.entries) {
+      if (id.startsWith('claude-')) {
+        expect(info.thinkingMode, ThinkingMode.adaptive, reason: id);
+      }
+    }
+  });
 }
