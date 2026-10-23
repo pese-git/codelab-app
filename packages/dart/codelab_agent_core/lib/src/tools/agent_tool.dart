@@ -45,8 +45,9 @@ abstract base class AgentTool {
   ) async => ToolPresentation(title: name);
 
   /// The pattern of «allow always» (§7.5); by default the canonical JSON of
-  /// the arguments.
-  String permissionPattern(Map<String, Object?> args) => canonicalJson(args);
+  /// the arguments. [cwd] is the session root: paths are relative to it.
+  String permissionPattern(Map<String, Object?> args, String cwd) =>
+      canonicalJson(args);
 
   /// A check of the arguments before permissions: an English error text
   /// for the model or `null`. Has no side effects (PERM-1).
@@ -98,10 +99,29 @@ final class ToolContext {
 
 /// Services of the session for tools; later stages add fields.
 final class ToolServices {
-  const ToolServices({required this.clock, required this.logger});
+  ToolServices({
+    required this.clock,
+    required this.logger,
+    ApprovalWaitMeter? approvalWait,
+  }) : approvalWait = approvalWait ?? ApprovalWaitMeter();
 
   final Clock clock;
   final Logger logger;
+
+  /// Time spent waiting for the user: kept out of the turn time (§5.2).
+  final ApprovalWaitMeter approvalWait;
+}
+
+/// Sum of the waits for `PermissionGate` in the current turn.
+final class ApprovalWaitMeter {
+  var _total = Duration.zero;
+
+  Duration get total => _total;
+
+  void add(Duration wait) => _total += wait;
+
+  /// Called by the loop at the start of a turn.
+  void reset() => _total = Duration.zero;
 }
 
 final class ToolExecutionResult {
@@ -200,6 +220,15 @@ final class ToolCallTerminal extends ToolCallContent {
   const ToolCallTerminal(this.terminalId);
 
   final String terminalId;
+}
+
+/// Thrown by a tool that stopped on cancel and has its own text for the
+/// model (`exec`: `[Command was cancelled after <t> s]`): outcome
+/// `cancelled` with [content].
+final class ToolCancelled implements Exception {
+  const ToolCancelled(this.content);
+
+  final List<ContentBlock> content;
 }
 
 final class ToolExecutionOutcome {

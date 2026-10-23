@@ -2,6 +2,7 @@ import '../llm/errors.dart';
 import '../llm/messages.dart';
 import '../llm/model_ref.dart';
 import '../llm/usage.dart';
+import '../permissions/modes.dart';
 import '../tools/agent_tool.dart';
 import '../tools/pairing.dart';
 import 'loop_config.dart';
@@ -184,6 +185,14 @@ final class PlanUpdated extends AgentEvent {
     : entries = List.unmodifiable(entries);
 
   final List<PlanEntry> entries;
+}
+
+/// The mode of the session changed (level of `AgentSession`); it applies
+/// from the next tool call.
+final class ModeChanged extends AgentEvent {
+  const ModeChanged(super.sessionId, {required this.mode});
+
+  final ModeId mode;
 }
 
 enum AgentErrorClass { provider, fallback, compaction, hook, storage }

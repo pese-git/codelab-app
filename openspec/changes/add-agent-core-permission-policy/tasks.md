@@ -6,19 +6,19 @@
 
 ## 1. Режимы, уровни и gate (2.7)
 
-- [ ] 1.1 Тест («Режимы и уровни»): `test/permissions/modes_test.dart` — порядок мягкости пяти режимов; таблица `mode × tier` для каждой пары; `ModeId` → `PermissionMode` по §13.6; `ModeId.parse` для неизвестного id → `ArgumentError`; `autopilot` не выражается через `ModeId` (красный)
-- [ ] 1.2 Реализовать `lib/src/permissions/modes.dart` и `lib/src/permissions/gate.dart` (`PermissionGate`, `PermissionRequest`, `PermissionDecision`) — 1.1 зелёный
+- [x] 1.1 Тест («Режимы и уровни»): `test/permissions/modes_test.dart` — порядок мягкости пяти режимов; таблица `mode × tier` для каждой пары; `ModeId` → `PermissionMode` по §13.6; `ModeId.parse` для неизвестного id → `ArgumentError`; `autopilot` не выражается через `ModeId` (красный)
+- [x] 1.2 Реализовать `lib/src/permissions/modes.dart` и `lib/src/permissions/gate.dart` (`PermissionGate`, `PermissionRequest`, `PermissionDecision`) — 1.1 зелёный
 
 ## 2. Ключ «разрешить всегда» и алгоритм решения (2.7)
 
-- [ ] 2.1 Тест («Разрешить всегда по инструменту и шаблону»): `test/permissions/pattern_test.dart` — `permissionPattern` встроенных инструментов по §7.5 (`./lib//a.dart` → `lib/a.dart`, `  dart test ` → `dart test`, `update_plan` → `*`, канонический JSON для прочих); `test/permissions/allow_always_scope_test.dart` и `allow_always_key_test.dart` — «всегда» для `write lib/a.dart` и `exec npm test` не распространяется на другие ключи (PERM-3, P-03) (красные)
-- [ ] 2.2 Тест («Порядок правил решения», «Запрос одобрения и порт PermissionGate»): `test/permissions/policy_order_test.dart` — каждое правило против следующего (PERM-2); режим `plan` запрещает `write` и `exec` без вопроса; `headless_test.dart` — без gate отказ `no approval interface is available` (PERM-5); `turn_grants_test.dart` (PERM-8); состав `PermissionRequest` для `edit` с `rawInput`, `locations` и diff (PERM-6); отмена во время ожидания → `cancelled`, поздний ответ игнорируется (PERM-4); ожидание не входит во время хода (design.md, D4); логи без значений аргументов (design.md, D5) (красные)
-- [ ] 2.3 Реализовать `lib/src/permissions/pattern.dart`, `policy.dart` (`decide`, `asHook`, `grantForTurn`, `clearTurnGrants`; `findCritical` пока возвращает `null`, design.md, D7) и `permissionPattern` встроенных инструментов; экспорт из барели — 2.1, 2.2 зелёные
+- [x] 2.1 Тест («Разрешить всегда по инструменту и шаблону»): `test/permissions/pattern_test.dart` — `permissionPattern` встроенных инструментов по §7.5 (`./lib//a.dart` → `lib/a.dart`, `  dart test ` → `dart test`, `update_plan` → `*`, канонический JSON для прочих); `test/permissions/allow_always_scope_test.dart` и `allow_always_key_test.dart` — «всегда» для `write lib/a.dart` и `exec npm test` не распространяется на другие ключи (PERM-3, P-03) (красные)
+- [x] 2.2 Тест («Порядок правил решения», «Запрос одобрения и порт PermissionGate»): `test/permissions/mode_table_test.dart` — таблица `mode × tier` на вызовах; `test/permissions/policy_order_test.dart` — каждое правило против следующего (PERM-2); режим `plan` запрещает `write` и `exec` без вопроса; `headless_test.dart` — без gate отказ `no approval interface is available` (PERM-5); `turn_grants_test.dart` (PERM-8); состав `PermissionRequest` для `edit` с `rawInput`, `locations` и diff (PERM-6); отмена во время ожидания → `cancelled`, поздний ответ игнорируется (PERM-4); ожидание не входит во время хода (design.md, D4); логи без значений аргументов (design.md, D5) (красные)
+- [x] 2.3 Реализовать `lib/src/permissions/pattern.dart`, `policy.dart` (`decide`, `asHook`, `grantForTurn`, `clearTurnGrants`; `findCritical` пока возвращает `null`, design.md, D7) и `permissionPattern` встроенных инструментов; экспорт из барели — 2.1, 2.2 зелёные
 
 ## 3. Политика первым хуком (2.7)
 
-- [ ] 3.1 Тест («Политика — первый хук перед исполнением»): `test/permissions/policy_is_first_hook_test.dart: no tool executes without a policy decision` — через `buildAgentCore` все встроенные и fake-инструмент хоста, режим `ask`, gate `rejectOnce`; отказ не отменяет ход (PERM-1, PERM-7, P-04) (красный)
-- [ ] 3.2 `buildAgentCore` ставит `PermissionPolicy.asHook()` первым звеном `beforeToolCall`, режим новой сессии берётся из `CoreConfig.permissions.modeOverride ?? ModeId` сессии (design.md, D3), `AgentSession.prompt` вызывает `clearTurnGrants` — 3.1 зелёный
+- [x] 3.1 Тест («Политика — первый хук перед исполнением»): `test/permissions/policy_is_first_hook_test.dart: no tool executes without a policy decision` — через `buildAgentCore` все встроенные и fake-инструмент хоста, режим `ask`, gate `rejectOnce`; отказ не отменяет ход (PERM-1, PERM-7, P-04) (красный)
+- [x] 3.2 `buildAgentCore` ставит `PermissionPolicy.asHook()` первым звеном `beforeToolCall`, режим новой сессии берётся из `CoreConfig.permissions.modeOverride ?? ModeId` сессии (design.md, D3), `AgentSession.prompt` вызывает `clearTurnGrants` — 3.1 зелёный
 - [ ] 3.3 Проверка итерации 1: `fvm dart run melos run check` зелёный; PR вместе с итерацией 2 change `add-agent-core-loop-and-tools`
 
 ## 4. Лексер и критические шаблоны (2.7, P-07)

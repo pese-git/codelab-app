@@ -72,10 +72,11 @@ final class PermissionPolicy {
   final PermissionGate? gate;
   final PolicyRules rules;
   final PermissionDecisionStore decisions;          // allowAlways и rejectAlways
-  Future<PolicyOutcome> decide(AgentTool tool, Map<String, Object?> args, String toolCallId, CancelToken cancel);
+  /// toolCallId, токен отмены, env (для present и шаблона пути) и счётчик ожидания — из ctx.
+  Future<PolicyOutcome> decide(AgentTool tool, Map<String, Object?> args, ToolContext ctx);
   void grantForTurn({Set<String> allow = const {}, Set<String> deny = const {}});   // по именам инструментов
   void clearTurnGrants();                           // в начале каждого prompt() (PERM-8)
-  BeforeToolCallHook asHook();                      // Denied → Block(reason, outcome: rejected)
+  BeforeToolCallHook asHook(AgentTool? Function(String name) lookup);   // Denied → Block(reason, outcome: rejected)
 }
 ```
 
@@ -162,7 +163,7 @@ ask(reason, allowAlwaysOffered = true):
   t0 = clock.now()
   d = await gate.request(PermissionRequest(kind: tool.kindOf(args), tier: tool.tierOf(args),
         title, locations, diffs из ToolPrepared.presentation ?? present(args, ctx), allowAlwaysOffered, ...), cancel)
-  budget.excludeWait(clock.now() - t0)
+  ctx.services.approvalWait.add(clock.now() - t0)   # исключается из maxDuration хода (§5.2)
   switch d:
     allowOnce   → Allowed('user')
     allowAlways → allowAlways.add(key) (если allowAlwaysOffered, иначе как allowOnce); Allowed('user')

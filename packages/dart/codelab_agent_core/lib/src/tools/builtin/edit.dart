@@ -42,6 +42,10 @@ final class EditTool extends AgentTool {
   ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.trusted;
 
   @override
+  String permissionPattern(Map<String, Object?> args, String cwd) =>
+      pathPattern('${args['path']}', cwd);
+
+  @override
   Future<ToolPresentation> present(
     Map<String, Object?> args,
     ToolContext ctx,
