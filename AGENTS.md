@@ -173,7 +173,9 @@ AI-agent обязан интерпретировать эти формулиро
     │   ├── acp_protocol/
     │   ├── acp_transports/
     │   ├── acp_client_core/
-    │   └── acp_testing/
+    │   ├── acp_testing/
+    │   ├── codelab_agent_core/
+    │   └── codelab_architecture_tests/
     └── flutter/
         └── acp_ui/
 ```
@@ -184,6 +186,8 @@ AI-agent обязан интерпретировать эти формулиро
 * `acp_transports` — заменяемые ACP transports (stdio, WebSocket, тестовые).
 * `acp_client_core` — domain, application state и use cases ACP-клиента.
 * `acp_testing` — fixtures, fake transports и helpers для conformance-тестов.
+* `codelab_agent_core` — встраиваемое ядро Dart-агента на чистом Dart (LLM, цикл, инструменты, разрешения, сессии); правила — во вложенном `AGENTS.md` пакета.
+* `codelab_architecture_tests` — только тесты: сторож импортов и allowlist зависимостей ядра (`melos run guard`).
 * `acp_ui` — Fluent UI widgets рабочего места CodeLab.
 
 Правила:
@@ -195,6 +199,13 @@ AI-agent обязан интерпретировать эти формулиро
 * Пакеты в `packages/flutter/` МОГУТ зависеть от Flutter.
 * `acp_ui` НЕ ДОЛЖЕН содержать application/business logic.
 * `acp_testing` МОЖЕТ использоваться другими пакетами только как `dev_dependency`.
+* `package:acp_transports/acp_transports.dart` ДОЛЖЕН оставаться web-безопасным; IO-транспорты (`StdioAcpTransport`, `WebSocketAcpTransport`) импортируются из `package:acp_transports/io.dart` только composition root и тестами.
+* Клиенты (`apps/*`) НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` напрямую.
+* Границы пакетов проверяет тест-сторож `packages/dart/codelab_architecture_tests` (`melos run guard`): правило нового пакета добавляется в `test/support/rules.dart` вместе с пакетом.
+
+Архитектура Dart-агента — `docs/architecture/proposals/agent-core-architecture.md` (принята ADR-0001); план по этапам — `docs/architecture/proposals/dart-agent-and-clients.md`, дорожная карта — `docs/architecture/proposals/delivery-roadmap.md`.
+
+Сторонний код НЕ ДОЛЖЕН копироваться — ни файлы, ни функции, ни тесты, ни промпты, ни фикстуры, в том числе из проектов с разрешительной лицензией. Если реализация близко воспроизводит внешний алгоритм, список или таблицу, источник указывается в документе и в комментарии кода, а запись добавляется в `THIRD_PARTY_NOTICES.md` (`docs/architecture/proposals/dart-agent-and-clients/07-decision-sources.md` §7а).
 
 ---
 
