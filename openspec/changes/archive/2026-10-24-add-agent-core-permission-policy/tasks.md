@@ -32,4 +32,4 @@
 - [x] 5.2 Реализовать проверку критических путей в `policy.dart` и шаблон `write to agent configuration` — 5.1 зелёный
 - [x] 5.3 Документ ядра §13.6: причина режима `plan` — `plan mode: changes are not allowed` (design.md, D2)
 - [x] 5.4 Проверка итерации 2: `fvm dart run melos run check` зелёный; строки матрицы P-01 (ядро), P-02 (ядро), P-03, P-04 (ядро), P-05 (ядро), P-07 имеют доказательства; PR вместе с итерацией 4 change `add-agent-core-loop-and-tools`
-- [ ] 5.5 Перед архивированием: `openspec validate add-agent-core-permission-policy --strict`; архивировать вместе с `add-agent-core-loop-and-tools`; заполнить Purpose спецификации `agent-permissions`
+- [x] 5.5 Перед архивированием: `openspec validate add-agent-core-permission-policy --strict`; архивировать вместе с `add-agent-core-loop-and-tools`; заполнить Purpose спецификации `agent-permissions`
