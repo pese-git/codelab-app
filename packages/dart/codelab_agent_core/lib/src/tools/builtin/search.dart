@@ -4,6 +4,7 @@ import '../../env/execution_env.dart';
 import '../../llm/messages.dart';
 import '../../util/posix_path.dart';
 import '../../util/result.dart';
+import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
 import '../fence.dart';
 import '../glob.dart';
@@ -46,10 +47,7 @@ final class SearchTool extends AgentTool {
   String get name => 'search';
 
   @override
-  String get description =>
-      'Search file contents of the workspace with a regular expression (Dart '
-      'syntax) or literal text. Prints "<path>:<line>: <text>". Skips VCS, '
-      'build and hidden directories and binary files.';
+  String get description => Prompts.toolDescriptionsSearch.render(const {});
 
   @override
   Map<String, Object?> get parameters => const {

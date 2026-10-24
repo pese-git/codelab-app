@@ -272,7 +272,7 @@ final class AcpServerConfig {
 
 | `modeId` | `PermissionMode` | Дополнительно | Устаревшие синонимы (принимаются на входе) |
 |---|---|---|---|
-| `plan` | `write` + запрет tier `write` и `exec` с причиной «режим plan: изменения запрещены»; tier `network` (после MVP) не запрещён — спрашивается (§7.3, §17.1.5) | секция промпта `modes/plan` | `architect` |
+| `plan` | `write` + запрет tier `write` и `exec` с причиной `plan mode: changes are not allowed` (текст уходит модели, поэтому английский, §11.7); tier `network` (после MVP) не запрещён — спрашивается (§7.3, §17.1.5) | секция промпта `modes/plan` | `architect` |
 | `ask` | `alwaysAsk` | — | — |
 | `standard` | `write` | — | `debug` |
 | `accept-edits` | `acceptEdits` | чтение и правки (tier `read`, `write`) без вопроса; `exec`, MCP-инструменты и `network` спрашиваются; критические шаблоны спрашиваются (§7.3.1, P-06) | `acceptEdits` |

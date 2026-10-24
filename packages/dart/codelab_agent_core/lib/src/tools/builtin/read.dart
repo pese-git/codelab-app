@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import '../../env/execution_env.dart';
 import '../../llm/messages.dart';
 import '../../util/result.dart';
+import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
 import '../fence.dart';
 import '../truncate.dart';
@@ -40,10 +41,13 @@ final class ReadTool extends AgentTool {
   @override
   String get name => 'read';
 
+  /// Текст — в `prompts/tool_descriptions/read.md` (PR-2); лимиты
+  /// подставляются из констант усечения.
   @override
-  String get description =>
-      'Read a text file of the workspace. Lines are numbered "<n>| <text>". '
-      'Use offset and limit to read a part of a long file.';
+  String get description => Prompts.toolDescriptionsRead.render({
+    'maxLines': '$defaultMaxLines',
+    'maxKb': '${defaultMaxBytes ~/ 1024}',
+  });
 
   @override
   Map<String, Object?> get parameters => const {

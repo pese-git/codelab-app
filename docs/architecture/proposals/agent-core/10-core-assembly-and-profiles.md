@@ -100,6 +100,7 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final List<CodelabPlugin> plugins;               // после MVP (§17.14.3.2): собранные в бинарь, по умолчанию const []
   final RemoteAgentConnector? remoteAgents;        // после MVP (§17.15.2): A2aRemoteAgentConnector; null → типов a2a:* в task нет
   final Logger logger; final Clock clock; final IdGenerator ids;
+  final String platform;                           // для system/base (§11.5): ядро не читает dart:io; хост — Platform.operatingSystem
   final Random random;                             // PKG-6: случайность (джиттер повторов) даёт хост; в тестах Random(42)
 }
 

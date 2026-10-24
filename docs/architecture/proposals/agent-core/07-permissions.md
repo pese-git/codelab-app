@@ -149,7 +149,10 @@ decide(tool, args, id):
   1  if rules.toolPolicies[tool] == deny or key in rules.denyPatterns or key in rejectAlways:
          return Denied('denied by configuration' | 'previously rejected by the user')
   2  if tool.name in turnDeny: return Denied('not allowed in this turn')
-  3  if critical != null:
+  3  if configPath(tool, args) != null:                                    # §7.6.1: цель lockPath(args) в списке путей
+         if mode == autopilot or gate == null: return Denied('Editing agent configuration requires a human: ' + path)
+         return ask(reason: 'agent configuration: ' + path, allowAlwaysOffered: false)
+     if critical != null:
          if mode == autopilot: return Denied('critical command blocked in autopilot: ' + critical.label)
          return ask(reason: 'critical command: ' + critical.label, allowAlwaysOffered: false)
   4  switch rules.toolPolicies[tool]: allow → Allowed('tool policy'); ask → return ask()
@@ -275,7 +278,14 @@ flowchart TD
 final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
 ```
 
-Если в одной команде несколько совпадений, `reason` перечисляет все метки через `; `.
+Если в одной команде несколько совпадений, `reason` перечисляет все метки через `; ` в порядке
+строк таблицы.
+
+Реализация (`critical_patterns.dart`) нормализует цели без переменных относительно корня сессии
+(`//` и `/usr/../` — это `/`; корень сессии и его родители защищены как `.` и `..`), сравнивает
+пути §7.6.1 без учёта регистра и считает критичными сами каталоги `.codelab/agents`, `skills`,
+`prompts`, `hooks`. Полный перечень уточнений и известных пределов разбора — design.md change
+`add-agent-core-permission-policy`, D9.
 
 
 ### 7.6.1. Критические пути правок: конфигурация агента в проекте

@@ -19,17 +19,17 @@
 
 - [x] 3.1 Тест («Политика — первый хук перед исполнением»): `test/permissions/policy_is_first_hook_test.dart: no tool executes without a policy decision` — через `buildAgentCore` все встроенные и fake-инструмент хоста, режим `ask`, gate `rejectOnce`; отказ не отменяет ход (PERM-1, PERM-7, P-04) (красный)
 - [x] 3.2 `buildAgentCore` ставит `PermissionPolicy.asHook()` первым звеном `beforeToolCall`, режим новой сессии берётся из `CoreConfig.permissions.modeOverride ?? ModeId` сессии (design.md, D3), `AgentSession.prompt` вызывает `clearTurnGrants` — 3.1 зелёный
-- [ ] 3.3 Проверка итерации 1: `fvm dart run melos run check` зелёный; PR вместе с итерацией 2 change `add-agent-core-loop-and-tools`
+- [x] 3.3 Проверка итерации 1: `fvm dart run melos run check` зелёный; PR вместе с итерацией 2 change `add-agent-core-loop-and-tools`
 
 ## 4. Лексер и критические шаблоны (2.7, P-07)
 
-- [ ] 4.1 Тест («Критические шаблоны команд»): `test/permissions/shell_lexer_test.dart` — сегменты, кавычки, подстановки, `sh -c`, `eval`, here-document, лаунчеры, перенаправления слитно и отдельно, глубина 4, незакрытая кавычка; `test/permissions/critical_patterns_test.dart` — все примеры столбцов «Срабатывает» и «Не срабатывает» §7.6, несколько меток через `; `, fork-бомба; `autopilot_test.dart` — `bypass` с `allowAlways` → вопрос без `allow_always`, `autopilot` → отказ без gate (PERM-2, PERM-9) (красные)
-- [ ] 4.2 Реализовать `lib/src/permissions/shell_lexer.dart`, `critical_patterns.dart` (design.md, D6) и подключить `findCritical` в шаге 3 `decide` — 4.1 зелёные
+- [x] 4.1 Тест («Критические шаблоны команд»): `test/permissions/shell_lexer_test.dart` — сегменты, кавычки, подстановки, `sh -c`, `eval`, here-document, лаунчеры, перенаправления слитно и отдельно, глубина 4, незакрытая кавычка; `test/permissions/critical_patterns_test.dart` — все примеры столбцов «Срабатывает» и «Не срабатывает» §7.6, несколько меток через `; `, fork-бомба; `autopilot_test.dart` — `bypass` с `allowAlways` → вопрос без `allow_always`, `autopilot` → отказ без gate (PERM-2, PERM-9) (красные)
+- [x] 4.2 Реализовать `lib/src/permissions/shell_lexer.dart`, `critical_patterns.dart` (design.md, D6) и подключить `findCritical` в шаге 3 `decide` — 4.1 зелёные
 
 ## 5. Критические пути правок (2.7, PERM-11)
 
-- [ ] 5.1 Тест («Критические пути правок конфигурации агента»): `test/permissions/agent_config_paths_test.dart` — `write`/`edit` в каждый путь §7.6.1 спрашивают в `bypass` и `accept-edits` без `allow_always`, «всегда» на путь не действует, без gate и в `autopilot` — отказ `Editing agent configuration requires a human: <path>`, `read` не ограничен; `exec` с `>>`, `tee`, `cp`, `ln`, `sed -i` в эти пути — шаблон `write to agent configuration` (красный)
-- [ ] 5.2 Реализовать проверку критических путей в `policy.dart` и шаблон `write to agent configuration` — 5.1 зелёный
-- [ ] 5.3 Документ ядра §13.6: причина режима `plan` — `plan mode: changes are not allowed` (design.md, D2)
-- [ ] 5.4 Проверка итерации 2: `fvm dart run melos run check` зелёный; строки матрицы P-01 (ядро), P-02 (ядро), P-03, P-04 (ядро), P-05 (ядро), P-07 имеют доказательства; PR вместе с итерацией 4 change `add-agent-core-loop-and-tools`
+- [x] 5.1 Тест («Критические пути правок конфигурации агента»): `test/permissions/agent_config_paths_test.dart` — `write`/`edit` в каждый путь §7.6.1 спрашивают в `bypass` и `accept-edits` без `allow_always`, «всегда» на путь не действует, без gate и в `autopilot` — отказ `Editing agent configuration requires a human: <path>`, `read` не ограничен; `exec` с `>>`, `tee`, `cp`, `ln`, `sed -i` в эти пути — шаблон `write to agent configuration` (красный)
+- [x] 5.2 Реализовать проверку критических путей в `policy.dart` и шаблон `write to agent configuration` — 5.1 зелёный
+- [x] 5.3 Документ ядра §13.6: причина режима `plan` — `plan mode: changes are not allowed` (design.md, D2)
+- [x] 5.4 Проверка итерации 2: `fvm dart run melos run check` зелёный; строки матрицы P-01 (ядро), P-02 (ядро), P-03, P-04 (ядро), P-05 (ядро), P-07 имеют доказательства; PR вместе с итерацией 4 change `add-agent-core-loop-and-tools`
 - [ ] 5.5 Перед архивированием: `openspec validate add-agent-core-permission-policy --strict`; архивировать вместе с `add-agent-core-loop-and-tools`; заполнить Purpose спецификации `agent-permissions`
