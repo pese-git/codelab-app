@@ -10,25 +10,41 @@ import '../permissions/gate.dart';
 import '../permissions/modes.dart';
 import '../util/logger.dart';
 
-/// The public API of a session (`agent-core-architecture` §5.6, the part of
-/// stage 2 — design.md, D4). Later stages add members without changing
-/// these.
+/// Публичный API сессии (`agent-core-architecture` §5.6).
+///
+/// Почему интерфейс: хосты и ACP-адаптер работают только через него, а
+/// цикл, инструменты и журнал остаются внутренними (PKG-5).
+///
+/// Как использовать: сессию создаёт или открывает `AgentRuntime`; ходы
+/// запускает [prompt], события читаются из [events]. С этапа 3 сессия пишет
+/// журнал, [replay] отдаёт его события для `session/load`, а [close]
+/// дожидается записи (design.md change `add-agent-core-sessions-and-
+/// compaction`, D4). Следующие этапы добавляют члены, не меняя этих.
 abstract interface class AgentSession {
   SessionId get id;
 
-  /// Broadcast; a late subscriber gets the events of the current turn from
-  /// its start.
+  /// Широковещательный поток; поздний подписчик получает события текущего
+  /// хода с его начала.
   Stream<AgentEvent> get events;
 
   ModeId get mode;
 
-  /// Runs a turn; a second call during a turn is a [StateError] (LOOP-10).
+  /// Запускает ход; второй вызов во время хода — [StateError] (LOOP-10).
+  /// Возвращается после `TurnEnded` и записи журнала.
   Future<TurnResult> prompt(List<ContentBlock> content, {CancelToken? cancel});
 
   Future<void> cancel();
 
-  /// Applies from the next tool call; emits [ModeChanged].
+  /// Действует со следующего вызова инструмента; пишет `mode_change` и
+  /// эмитит [ModeChanged].
   Future<void> setMode(ModeId mode);
+
+  /// События журнала активной ветки для `session/load` (§8.3, D4).
+  Iterable<AgentEvent> replay();
+
+  /// Отменяет идущий ход, дожидается очереди записи журнала и закрывает
+  /// поток событий; журнал остаётся в хранилище.
+  Future<void> close();
 }
 
 /// The fields of `TurnEnded`.
@@ -81,11 +97,4 @@ final class SessionSpec {
 
   /// Host hooks; they go first in `afterToolCall`.
   final List<AfterToolCallHook> extraAfterToolCall;
-}
-
-final class SessionSummary {
-  const SessionSummary({required this.id, required this.cwd});
-
-  final SessionId id;
-  final String cwd;
 }

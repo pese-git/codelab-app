@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
-import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
 import '../host/core_harness.dart';

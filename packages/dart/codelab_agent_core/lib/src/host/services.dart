@@ -4,18 +4,25 @@ import '../loop/turn_budget.dart';
 import '../permissions/gate.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
+import '../session/session_store.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
 import '../util/logger.dart';
 
-/// Everything external the host passes to the core (`agent-core-architecture`
-/// §10.3); later stages add services.
+/// Всё внешнее, что хост передаёт ядру (`agent-core-architecture` §10.3).
+///
+/// Почему одним объектом: ядро не создаёт порты само (PKG-6), а сборка
+/// проверяет, что у каждой включённой capability есть её сервис (HOST-3).
+///
+/// Как использовать: хост заполняет поля и передаёт объект в
+/// `buildAgentCore`; следующие этапы добавляют сервисы.
 final class AgentCoreServices {
   const AgentCoreServices({
     required this.baseEnv,
     required this.logger,
     required this.clock,
     required this.ids,
+    required this.sessions,
     this.gate,
     this.platform = 'unknown',
   });
@@ -28,6 +35,11 @@ final class AgentCoreServices {
   final Logger logger;
   final Clock clock;
   final IdGenerator ids;
+
+  /// Хранилище журналов (§8.3). Обязательно: журнал пишется всегда, а
+  /// выключенная `sessionPersistence` означает лишь «не на постоянном
+  /// носителе» (design.md этапа 3, D12).
+  final SessionStore sessions;
 
   /// Платформа хоста для системного промпта (`linux`, `macos`, `windows`,
   /// `web`). Почему сервис: ядро web-безопасно и не читает

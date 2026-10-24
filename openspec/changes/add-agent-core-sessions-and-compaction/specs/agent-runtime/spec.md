@@ -65,8 +65,8 @@
 - **THEN** вызов бросает `HostWiringException`, называющий `fileListing`
 
 #### Scenario: Журнал в памяти для тестов
-- **WHEN** профиль `agent-serve` сужается до `sessionPersistence: transport(memory)`
-- **THEN** сужение принято, а сборка над `MemorySessionStore` не бросает исключения
+- **WHEN** профиль `agent-serve` сужается до `sessionPersistence: off` и собирается над `MemorySessionStore`
+- **THEN** сборка не бросает исключения, а `CorePlan.offReasons` содержит причину для `sessionPersistence`
 
 ### Requirement: Минимальная сборка buildAgentCore
 Хост SHALL собирать ядро только через `buildAgentCore(profile, services, config, streamFunction)` (HOST-6). Функция выполняет шаги §10.7 документа ядра в объёме этапов 2 и 3 (design.md change `add-agent-core-loop-and-tools`, D12; design.md этого change, D12):
@@ -76,7 +76,7 @@
    - env без `DirectoryListing` → `fileListing` выключается;
    - `CoreConfig.compaction.enabled == false` → `compaction` выключается с причиной «выключено конфигом»;
    - включённый `shellExec` над `MemoryExecutionEnv` → `HostWiringException`.
-2. **Проверка сервисов** включённых capability (HOST-3): `sessionPersistence` с transport не `memory` над `MemorySessionStore` → `HostWiringException`, называющий `sessionPersistence`.
+2. **Проверка сервисов** включённых capability (HOST-3): включённая `sessionPersistence` над `MemorySessionStore` → `HostWiringException`, называющий `sessionPersistence`; журнал в памяти — только при выключенной capability (тесты, хост без постоянного носителя).
 3. **Env-цепочка** `BoundedEnv(baseEnv, root: cwd)` на сессию. Все инструменты получают один экземпляр внешнего `BoundedEnv` (ENV-2).
 4. **Реестр инструментов:**
    - `read`, `write`, `edit`, `update_plan` — всегда;
@@ -91,8 +91,8 @@
 Выключенная capability НЕ SHALL оставлять на поверхности модели ни схемы, ни секции промпта (HOST-4).
 
 #### Scenario: Матрица профиля
-- **WHEN** ядро собирается для `agent-serve` на `MemoryExecutionEnv` и `MemorySessionStore` с `shellExec` выключенным и `sessionPersistence` суженной до `memory` через `narrowed`
-- **THEN** схемы запроса — `read`, `write`, `edit`, `update_plan`, `ls`, `search` в этом порядке, в промпте нет `tools/exec`, а `CorePlan.offReasons` содержит причину для `shellExec`
+- **WHEN** ядро собирается для `agent-serve` на `MemoryExecutionEnv` и `MemorySessionStore` с `shellExec` и `sessionPersistence`, выключенными через `narrowed`
+- **THEN** схемы запроса — `read`, `write`, `edit`, `update_plan`, `ls`, `search` в этом порядке, в промпте нет `tools/exec`, а `CorePlan.offReasons` содержит причины для `shellExec` и `sessionPersistence`
 
 #### Scenario: Включено без сервиса
 - **WHEN** профиль с включённым `shellExec` собирается над `MemoryExecutionEnv`

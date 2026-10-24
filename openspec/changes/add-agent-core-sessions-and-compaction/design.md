@@ -164,7 +164,7 @@ Future<SessionPage> listSessions({String? cwd, String? cursor, int pageSize = 50
   `null` в любом поле — «сжатия нет», поведение этапа 2 не меняется.
 - **`emergencyCompact` сессии** вызывает `compact` с триггером `preflight` или `overflow` по снимку журнала. После `Compacted` возвращает `LoopContext` с сообщениями проекции, после `NothingToCompact` и `CompactionFailed` — `null`. Цикл заменяет контекст шага, транскрипт `Agent` после шага — сообщения проекции плюс сообщения шага.
 - **`afterTurn`.** После `TurnEnded(completed | maxTokens)` сессия проверяет `shouldCompact` и запускает сжатие в фоне. Следующий `prompt()` ждёт его завершения. После `cancelled` и `failed` сжатие не запускается. Ошибка фонового сжатия — `AgentError(cls: compaction)` в `events` и лог; журнал не меняется (CMP-3).
-- **Транскрипт после сжатия** := `buildLlmContext(snapshot + rec).messages` (§9.8, шаг 11). `Agent` получает метод `replaceMessages` (только когда хода нет), аварийный путь — через `LoopContext`.
+- **Транскрипт после сжатия** := `buildLlmContext(snapshot + rec).messages` (§9.8, шаг 11). Между ходами — существующий `Agent.replaceTranscript`, аварийный путь — через `LoopContext`.
 - **`manual`.** `compact` принимает `CompactionTrigger.manual` и `focus`; тесты зовут компактор напрямую. Метод сессии для `/compact` добавляет этап 4 вместе с командой.
 - **Резюме моделью** — алгоритм §9.7, разрезанный ход — §9.6. Ошибка модели → `CompactionFailed`, отмена → `CancelledException` наружу (CMP-4).
 
@@ -193,9 +193,9 @@ Python-агент хранил JSON-сессии в `$CODELAB_HOME/data/sessions
 - **`HostCapability`** получает `compaction` и `sessionPersistence`.
 - **Профили** (§10.4):
   - `agent-serve` и `embedded-cli`: `sessionPersistence` — transport `jsonl-file`, `compaction` — on.
-  - Тесты сужают `sessionPersistence` до transport `memory` через `narrowed`.
-- **`AgentCoreServices.sessions`** — обязательный `SessionStore`.
-- **Проверка сервисов** (§10.8, HOST-3): transport `jsonl-file` над `MemorySessionStore` → `HostWiringException`, называющий `sessionPersistence`. Ядро не знает `JsonlSessionStore`, поэтому проверяется только «не `MemorySessionStore`».
+  - Тесты выключают `sessionPersistence` через `narrowed` и работают на `MemorySessionStore`. Сузить transport `{jsonl-file}` до `{memory}` нельзя: это не подмножество (HOST-2).
+- **`AgentCoreServices.sessions`** — обязательный `SessionStore`: журнал пишется всегда, выключенная `sessionPersistence` означает только «не на постоянном носителе».
+- **Проверка сервисов** (§10.8, HOST-3): включённая `sessionPersistence` над `MemorySessionStore` → `HostWiringException`, называющий `sessionPersistence`. Ядро не знает `JsonlSessionStore`, поэтому проверяется только «не `MemorySessionStore`».
 - **`CoreConfig.compaction: false`** (`enabled`) → `compaction` off с причиной «выключено конфигом»; сжатие не запускается ни после хода, ни аварийно.
 - `CorePlan` и лог `host.plan` показывают состояние обеих capability.
 
@@ -217,6 +217,20 @@ Python-агент хранил JSON-сессии в `$CODELAB_HOME/data/sessions
 Задача 3.7 — решение D10, закрывается в итерации 1.
 
 Каждая итерация — отдельный PR в `develop` из `feature/add-agent-core-sessions-and-compaction`. Ветка удаляется после слияния и создаётся заново от `develop` для следующей итерации.
+
+### D14. Уточнения контракта, найденные в итерации 1
+
+Реализация уточнила контракт документа ядра. Документ правится в том же PR:
+
+- **`SessionStore.flush(id)`.** Конец хода сбрасывает журнал на носитель без новой записи (таблица §8.3, строка `TurnEnded`); в эскизе порта §8.3 такого метода не было.
+- **`summarize(snapshot)` в отдельной библиотеке `summary.dart`.** Сводку строят хранилища, в том числе `JsonlSessionStore` другого пакета, поэтому она экспортируется вместе с портом и `pageOf` (сортировка и курсор §8.10, шаги 4–6). Остальные проекции остаются внутренними.
+- **`ParsedJournal`.** `parseSessionLines` возвращает снимок, строки карантина, `onlyTailBroken`, `missingFinalNewline` и исходные строки уцелевших записей `keptLines`. Хранилище переписывает файл этими строками как были, без повторного кодирования: запись новой версии с полями в другом порядке не меняется.
+- **`journalModelRef(provider, id)`.** JSON сообщения хранит только провайдера и id модели (§2.2), а разбору журнала каталог недоступен. Сессия после загрузки заменяет такие ссылки моделью сессии при совпадении пары.
+- **`findInterruptedCalls` и `meta` у `healInterruptedTurn`.** Заголовок прерванного вызова даёт `present()` инструмента, а он асинхронный и требует `ToolContext`. Сессия находит вызовы, получает заголовки и передаёт их чистой функции.
+- **`StorageFailure` — причина отмены.** Писатель журнала — подписчик, и исключение подписчика цикл принял бы за ошибку хука. Отмена этой причиной останавливает ход на границе, цикл отображает её в `TurnEnded(failed)`.
+- **`SessionTitleChanged` — после `TurnEnded`.** Заголовок — событие уровня сессии: `TurnEnded` остаётся последним событием хода (LOOP-1), а заголовок приходит следом, до возврата `prompt()`.
+- **`sessionPersistence: off` в тестах** (D12): сузить transport `{jsonl-file}` до `{memory}` нельзя (HOST-2).
+- **FNV-1a в dart2js.** Формула §8.9 «произведение помещается в 53 бита» неверна: оно доходит до 2^56. Множитель раскладывается на `0x193` и `0x01000000`; §8.9 исправлен.
 
 ## Risks / Trade-offs
 

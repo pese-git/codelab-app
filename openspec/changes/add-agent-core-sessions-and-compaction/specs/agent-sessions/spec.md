@@ -67,6 +67,7 @@
 Хранилище журнала SHALL реализовывать порт `SessionStore` (§8.3):
 - `create(header)` — новый журнал с заголовком; существующий id → `StateError`;
 - `append(id, record, {durable})` — одна полная строка за операцию;
+- `flush(id)` — сброс записанного на носитель без новой записи (конец хода);
 - `open(id)` — чтение, ремонт и снимок `SessionSnapshot`; нет журнала → `SessionNotFound`;
 - `list({cwd, cursor, pageSize})` — страница сводок;
 - `close(id)` — дождаться очереди записи и закрыть дескриптор.
@@ -77,7 +78,7 @@
 
 #### Scenario: Контрактный набор
 - **WHEN** общий набор `session_store_contract.dart` прогоняется на `MemorySessionStore`
-- **THEN** `create`, `append`, `open`, `list` и `close` ведут себя по контракту, а повторный `create` с тем же id даёт `StateError`
+- **THEN** `create`, `append`, `flush`, `open`, `list` и `close` ведут себя по контракту, а повторный `create` с тем же id даёт `StateError`
 
 ### Requirement: Запись журнала из событий
 `SessionWriter` SHALL быть первым подписчиком `Agent` сессии и писать журнал по таблице §8.3 в объёме этапа 3 (design.md, D2, D4):

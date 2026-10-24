@@ -34,4 +34,9 @@ final class PlanService {
     _entries = List.unmodifiable(entries);
     await publish?.call(_entries);
   }
+
+  /// План из журнала при загрузке сессии: без публикации, потому что
+  /// `PlanUpdated` уже есть в журнале и придёт клиенту через реплей.
+  void restore(List<PlanEntry> entries) =>
+      _entries = List.unmodifiable(entries);
 }

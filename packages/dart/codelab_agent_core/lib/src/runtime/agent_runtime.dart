@@ -2,7 +2,9 @@ import 'dart:async';
 
 import '../cancel/cancel_token.dart';
 import '../env/bounded_env.dart';
+import '../env/execution_env.dart';
 import '../llm/messages.dart';
+import '../llm/model_ref.dart';
 import '../llm/stream_function.dart';
 import '../loop/agent.dart';
 import '../loop/agent_events.dart';
@@ -10,28 +12,61 @@ import '../loop/loop_config.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
 import '../prompts/compose.dart';
+import '../session/ids.dart';
+import '../session/projections.dart';
+import '../session/records.dart';
+import '../session/session_store.dart';
+import '../session/session_writer.dart';
+import '../session/summary.dart';
+import '../session/tree.dart';
 import '../tools/agent_tool.dart';
 import '../tools/executor.dart';
 import '../tools/registry.dart';
+import '../util/logger.dart';
 import '../host/host_profile.dart';
 import '../host/services.dart';
 import 'agent_session.dart';
 
-/// The runtime of the core (`agent-core-architecture` §5.6): creates and
-/// keeps the sessions of this process. Stage 2 keeps sessions in memory;
-/// the journal, `loadSession` and the list from the store arrive at stage
-/// 3 (design.md, D4).
+/// Кто пишет журналы этого ядра (поле `agent` заголовка, §8.2.1).
+const coreAgentInfo = AgentInfo(name: 'codelab-agent', version: '0.1.0');
+
+/// Среда выполнения ядра (`agent-core-architecture` §5.6): создаёт,
+/// открывает и перечисляет сессии этого процесса.
+///
+/// Почему отдельный объект: сессии делят сервисы хоста (хранилище журнала,
+/// часы, id, модель), а хост и ACP-адаптер получают их через одну точку —
+/// `buildAgentCore` (HOST-6).
+///
+/// Как использовать: [createSession] — новая сессия с журналом;
+/// [loadSession] — продолжение сохранённой; [listSessions] — страница
+/// сводок из хранилища; [dispose] — при выходе хоста (design.md change
+/// `add-agent-core-sessions-and-compaction`, D4, D5).
 abstract interface class AgentRuntime {
   Future<AgentSession> createSession(SessionSpec spec);
 
-  /// Sessions of this process in creation order.
-  Future<List<SessionSummary>> listSessions();
+  /// Открывает журнал, дописывает синтетические результаты прерванных
+  /// вызовов и восстанавливает транскрипт, режим и план. [model] — модель
+  /// сессии; `null` — модель по умолчанию конфигурации: каталог моделей для
+  /// восстановления из журнала приходит на этапе 4 (D4).
+  Future<AgentSession> loadSession(
+    SessionId id,
+    SessionHostPorts ports, {
+    ModelRef? model,
+  });
 
-  /// Cancels running turns and closes the event streams.
+  /// Страница сводок хранилища; неверный курсор — `InvalidCursor`.
+  Future<SessionPage> listSessions({
+    String? cwd,
+    String? cursor,
+    int pageSize = 50,
+  });
+
+  /// Отменяет идущие ходы, дожидается записи журналов и закрывает потоки
+  /// событий.
   Future<void> dispose();
 }
 
-/// Created only by `buildAgentCore` (HOST-6).
+/// Реализация среды выполнения; создаётся только `buildAgentCore` (HOST-6).
 final class AgentRuntimeImpl implements AgentRuntime {
   AgentRuntimeImpl({
     required this.profile,
@@ -48,20 +83,119 @@ final class AgentRuntimeImpl implements AgentRuntime {
   final StreamFunction stream;
   final _sessions = <_Session>[];
 
+  SessionStore get _store => services.sessions;
+
   @override
   Future<AgentSession> createSession(SessionSpec spec) async {
-    final id = SessionId(services.ids.nextId());
-    final env = await BoundedEnv.wrap(
-      spec.ports.env ?? services.baseEnv,
-      spec.cwd,
+    final header = SessionHeader(
+      id: newSessionId(services.clock, services.ids),
+      cwd: spec.cwd,
+      created: services.clock.now(),
+      agent: coreAgentInfo,
+      metadata: {'profile': profile.name},
     );
-    final logger = spec.ports.logger ?? services.logger;
+    await _store.create(header);
+    final model = spec.model ?? config.defaultModel;
+    final session = await _open(
+      snapshot: SessionSnapshot.empty(header),
+      mode: spec.mode ?? config.permissions.mode ?? profile.defaultMode,
+      model: model,
+      ports: spec.ports,
+      extraBeforeToolCall: spec.extraBeforeToolCall,
+      extraAfterToolCall: spec.extraAfterToolCall,
+    );
+    await session._writer.append(
+      (id, parent, at) => _modelChange(id, parent, at, model),
+    );
+    return session;
+  }
+
+  @override
+  Future<AgentSession> loadSession(
+    SessionId id,
+    SessionHostPorts ports, {
+    ModelRef? model,
+  }) async {
+    final snapshot = await _store.open(id);
+    final chosen = model ?? config.defaultModel;
+    final restored = buildLlmContext(snapshot);
+    final session = await _open(
+      snapshot: snapshot,
+      mode:
+          ModeId.values.where((m) => m.value == restored.modeId).firstOrNull ??
+          config.permissions.mode ??
+          profile.defaultMode,
+      model: chosen,
+      ports: ports,
+    );
+    await session._heal();
+    if (restored.model case final journal?
+        when journal.provider != chosen.provider ||
+            journal.modelId != chosen.id) {
+      session._logger.log(
+        LogLevel.warning,
+        'session.model.not_restored',
+        fields: {
+          'session_id': id.value,
+          'journal': '${journal.provider}/${journal.modelId}',
+          'model': '${chosen.provider}/${chosen.id}',
+        },
+      );
+      await session._writer.append(
+        (id, parent, at) => _modelChange(id, parent, at, chosen),
+      );
+    }
+    session._restoreHistory();
+    return session;
+  }
+
+  @override
+  Future<SessionPage> listSessions({
+    String? cwd,
+    String? cursor,
+    int pageSize = 50,
+  }) => _store.list(cwd: cwd, cursor: cursor, pageSize: pageSize);
+
+  @override
+  Future<void> dispose() async {
+    for (final session in _sessions) {
+      await session.close();
+    }
+    _sessions.clear();
+  }
+
+  static ModelChangeRecord _modelChange(
+    String id,
+    String? parent,
+    DateTime at,
+    ModelRef model,
+  ) => ModelChangeRecord(
+    id: id,
+    parentId: parent,
+    timestamp: at,
+    provider: model.provider,
+    modelId: model.id,
+    baseUrl: model.baseUrl.toString(),
+  );
+
+  /// Общая сборка новой и загруженной сессии: env, политика, агент,
+  /// писатель журнала.
+  Future<_Session> _open({
+    required SessionSnapshot snapshot,
+    required ModeId mode,
+    required ModelRef model,
+    required SessionHostPorts ports,
+    List<BeforeToolCallHook> extraBeforeToolCall = const [],
+    List<AfterToolCallHook> extraAfterToolCall = const [],
+  }) async {
+    final id = snapshot.header.id;
+    final cwd = snapshot.header.cwd;
+    final env = await BoundedEnv.wrap(ports.env ?? services.baseEnv, cwd);
+    final logger = ports.logger ?? services.logger;
     final tools = ToolServices(clock: services.clock, logger: logger);
-    final plan = tools.plan;
     final gate = profile.isOn(HostCapability.interactiveApproval)
-        ? spec.ports.gate ?? services.gate
+        ? ports.gate ?? services.gate
         : null;
-    final mode = spec.mode ?? config.permissions.mode ?? profile.defaultMode;
     final policy = PermissionPolicy(
       mode: mode,
       modeOverride: config.permissions.modeOverride,
@@ -72,7 +206,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     final agent = Agent(
       config: AgentLoopConfig(
         sessionId: id,
-        model: spec.model ?? config.defaultModel,
+        model: model,
         stream: stream,
         executor: ToolCallExecutor(
           registry: registry,
@@ -84,34 +218,41 @@ final class AgentRuntimeImpl implements AgentRuntime {
         budget: config.budget,
         beforeToolCall: [
           policy.asHook(registry.lookup),
-          ...spec.extraBeforeToolCall,
+          ...extraBeforeToolCall,
         ],
-        afterToolCall: spec.extraAfterToolCall,
+        afterToolCall: extraAfterToolCall,
         approvalWait: tools.approvalWait,
         logger: logger,
       ),
-      systemPrompt: _systemPrompt(spec.cwd, mode),
+      systemPrompt: _systemPrompt(cwd, mode),
       tools: registry.tools,
     );
     // План эмитится через очередь агента: PlanUpdated приходит подписчикам
-    // между ToolCallStarted и ToolCallFinished своего вызова (design.md, D5).
-    plan.publish = (entries) => agent.emit(PlanUpdated(id, entries: entries));
+    // между ToolCallStarted и ToolCallFinished своего вызова (design.md
+    // этапа 2, D5).
+    tools.plan.publish = (entries) =>
+        agent.emit(PlanUpdated(id, entries: entries));
     final session = _Session(
-      id,
-      spec.cwd,
-      mode,
-      agent,
-      policy,
-      tools,
-      services,
-      _systemPrompt,
+      id: id,
+      cwd: cwd,
+      mode: mode,
+      model: model,
+      agent: agent,
+      policy: policy,
+      tools: tools,
+      env: env,
+      registry: registry,
+      services: services,
+      logger: logger,
+      compose: _systemPrompt,
+      snapshot: snapshot,
     );
     _sessions.add(session);
     return session;
   }
 
-  /// Системный промпт сессии (§11.5): собирается при создании сессии и при
-  /// смене режима; дата — по часам хоста.
+  /// Системный промпт сессии (§11.5): собирается при создании и загрузке
+  /// сессии и при смене режима; дата — по часам хоста.
   String _systemPrompt(String cwd, ModeId mode) => composeSystemPrompt(
     PromptInputs(
       cwd: cwd,
@@ -122,49 +263,69 @@ final class AgentRuntimeImpl implements AgentRuntime {
       toolNames: {for (final tool in registry.tools) tool.name},
     ),
   );
-
-  @override
-  Future<List<SessionSummary>> listSessions() async => [
-    for (final s in _sessions) SessionSummary(id: s.id, cwd: s.cwd),
-  ];
-
-  @override
-  Future<void> dispose() async {
-    for (final session in _sessions) {
-      await session.close();
-    }
-    _sessions.clear();
-  }
 }
 
 final class _Session implements AgentSession {
-  _Session(
-    this.id,
-    this.cwd,
-    this._mode,
-    this._agent,
-    this._policy,
-    this._tools,
-    this._services,
-    this._compose,
-  ) {
-    _agent.subscribe(_publish);
+  _Session({
+    required this.id,
+    required this.cwd,
+    required ModeId mode,
+    required ModelRef model,
+    required Agent agent,
+    required PermissionPolicy policy,
+    required ToolServices tools,
+    required ExecutionEnv env,
+    required ToolRegistry registry,
+    required AgentCoreServices services,
+    required Logger logger,
+    required String Function(String cwd, ModeId mode) compose,
+    required SessionSnapshot snapshot,
+  }) : _mode = mode,
+       _model = model,
+       _agent = agent,
+       _policy = policy,
+       _tools = tools,
+       _env = env,
+       _registry = registry,
+       _services = services,
+       _logger = logger,
+       _compose = compose,
+       _titled = _hasTitle(snapshot) {
+    _writer = SessionWriter(
+      store: services.sessions,
+      snapshot: snapshot,
+      ids: services.ids,
+      clock: services.clock,
+      logger: logger,
+      onFailure: _onStorageFailure,
+    );
+    // Писатель — первый подписчик агента: запись идёт до того, как событие
+    // увидят остальные (§8.3, SES-8).
+    _agent.subscribe(_onEvent);
   }
 
   @override
   final SessionId id;
   final String cwd;
   ModeId _mode;
+  final ModelRef _model;
   final Agent _agent;
   final PermissionPolicy _policy;
   final ToolServices _tools;
+  final ExecutionEnv _env;
+  final ToolRegistry _registry;
   final AgentCoreServices _services;
+  final Logger _logger;
+  late final SessionWriter _writer;
 
   /// Сборка системного промпта для нового режима.
   final String Function(String cwd, ModeId mode) _compose;
   final _live = StreamController<AgentEvent>.broadcast(sync: true);
   final _turn = <AgentEvent>[];
   TurnEnded? _ended;
+
+  /// Заголовок уже есть в журнале: автоматический больше не пишется.
+  bool _titled;
 
   @override
   ModeId get mode => _mode;
@@ -214,7 +375,133 @@ final class _Session implements AgentSession {
     _policy.mode = mode;
     // Режим plan добавляет свою секцию: промпт меняется со следующего хода.
     _agent.systemPrompt = _compose(cwd, mode);
-    _publish(ModeChanged(id, mode: mode));
+    await _sessionEvent(ModeChanged(id, mode: mode));
+  }
+
+  @override
+  Iterable<AgentEvent> replay() =>
+      buildReplay(_writer.snapshot, logger: _logger);
+
+  @override
+  Future<void> close() async {
+    _agent.abort(const ShutdownCancel());
+    await _agent.waitForIdle();
+    await _services.sessions.close(id);
+    if (!_live.isClosed) {
+      await _live.close();
+    }
+  }
+
+  /// Синтетические результаты прерванных вызовов — сразу после открытия, до
+  /// реплея и нового шага (§8.8, SES-10).
+  Future<void> _heal() async {
+    final snapshot = _writer.snapshot;
+    final meta = <String, ToolMeta>{
+      for (final call in findInterruptedCalls(snapshot))
+        call.id: await _describe(call),
+    };
+    final healed = healInterruptedTurn(
+      snapshot,
+      _services.ids,
+      _services.clock,
+      meta: meta,
+    );
+    for (final record in healed) {
+      await _writer.appendBuilt(record, durable: true);
+    }
+  }
+
+  /// Заголовок прерванного вызова — тот же `present()`, что дал бы
+  /// `ToolCallStarted`; без инструмента или при ошибке — его имя.
+  Future<ToolMeta> _describe(ToolCall call) async {
+    final tool = _registry.lookup(call.name);
+    if (tool == null) {
+      return ToolMeta(title: call.name, kind: ToolKind.other);
+    }
+    try {
+      final presented = await tool.present(
+        call.arguments,
+        ToolContext(
+          env: _env,
+          cancel: CancelTokenSource().token,
+          onUpdate: (_) {},
+          toolCallId: call.id,
+          services: _tools,
+        ),
+      );
+      return ToolMeta(
+        title: presented.title,
+        kind: tool.kind,
+        locations: presented.locations,
+      );
+    } on Object {
+      return ToolMeta(title: call.name, kind: tool.kind);
+    }
+  }
+
+  /// Транскрипт и план из журнала после ремонта (§8.7).
+  void _restoreHistory() {
+    final snapshot = _writer.snapshot;
+    _agent.replaceTranscript([
+      for (final message in buildLlmContext(snapshot, logger: _logger).messages)
+        // Ответы своей модели получают полную ссылку: журнал хранит только
+        // провайдера и id (§2.2).
+        if (message is AssistantMessage &&
+            message.model.provider == _model.provider &&
+            message.model.id == _model.id)
+          message.copyWith(model: _model)
+        else
+          message,
+    ]);
+    final plan = pathToLeaf(snapshot).whereType<PlanRecord>().lastOrNull;
+    if (plan != null) {
+      _tools.plan.restore(plan.entries);
+    }
+  }
+
+  Future<void> _onEvent(AgentEvent event) async {
+    await _writer.handle(event);
+    _publish(event);
+    if (event is TurnEnded) {
+      await _afterTurn();
+    }
+  }
+
+  /// Автоматический заголовок после первого хода со словами пользователя
+  /// (§8.10, design.md D6).
+  Future<void> _afterTurn() async {
+    if (_titled) {
+      return;
+    }
+    final title = summarize(_writer.snapshot, logger: _logger).title;
+    if (title == null) {
+      return;
+    }
+    _titled = true;
+    await _sessionEvent(
+      SessionTitleChanged(id, title: title, updatedAt: _services.clock.now()),
+    );
+  }
+
+  /// Событие уровня сессии: сначала запись, потом подписчики.
+  Future<void> _sessionEvent(AgentEvent event) async {
+    await _writer.handle(event);
+    _publish(event);
+  }
+
+  void _onStorageFailure(Object error) {
+    _agent.abort(StorageFailure(error));
+    // Не ждём: событие встаёт в очередь агента следом за текущим, а
+    // текущее ждёт этого подписчика.
+    unawaited(
+      _agent.emit(
+        AgentError(
+          id,
+          cls: AgentErrorClass.storage,
+          message: 'session journal write failed: $error',
+        ),
+      ),
+    );
   }
 
   void _publish(AgentEvent event) {
@@ -225,12 +512,12 @@ final class _Session implements AgentSession {
       _ended = event;
     }
     _turn.add(event);
-    _live.add(event);
+    if (!_live.isClosed) {
+      _live.add(event);
+    }
   }
 
-  Future<void> close() async {
-    _agent.abort(const ShutdownCancel());
-    await _agent.waitForIdle();
-    await _live.close();
-  }
+  static bool _hasTitle(SessionSnapshot snapshot) => pathToLeaf(
+    snapshot,
+  ).any((r) => r is SessionInfoRecord && (r.title?.isNotEmpty ?? false));
 }

@@ -56,12 +56,14 @@ Future<WebSmokeReport> runWebSmoke() async {
   final core = buildAgentCore(
     profile: HostProfile.of('agent-serve').narrowed(const {
       HostCapability.shellExec: CapabilityOff('браузер без shell'),
+      HostCapability.sessionPersistence: CapabilityOff('журнал в памяти'),
     }),
     services: AgentCoreServices(
       baseEnv: env,
       logger: RecordingLogger(),
       clock: clock,
       ids: SequentialIdGenerator(),
+      sessions: MemorySessionStore(),
       platform: 'web',
     ),
     config: CoreConfig(

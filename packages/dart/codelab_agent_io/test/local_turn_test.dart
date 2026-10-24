@@ -56,13 +56,18 @@ void main() {
       ],
     });
     final core = buildAgentCore(
-      profile: HostProfile.of('embedded-cli'),
+      profile: HostProfile.of('embedded-cli').narrowed(const {
+        HostCapability.sessionPersistence: CapabilityOff(
+          'журнал теста в памяти',
+        ),
+      }),
       services: AgentCoreServices(
         baseEnv: LocalExecutionEnv(cwd: root),
         gate: gate,
         logger: RecordingLogger(),
         clock: const SystemClock(),
         ids: SequentialIdGenerator(),
+        sessions: MemorySessionStore(),
       ),
       config: CoreConfig(
         defaultModel: ModelRef(
