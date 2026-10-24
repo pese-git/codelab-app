@@ -36,6 +36,10 @@ void main() {
       'src/tools/path_lock.dart',
       'src/tools/validator.dart',
       'src/tools/builtin/',
+      // Механизмы журнала и сжатия — внутренние (design.md этапа 3, D1).
+      'src/session/session_writer.dart',
+      'src/session/projections.dart',
+      'src/compaction/',
     ]) {
       expect(barrel, isNot(contains("export '$internal")), reason: internal);
     }
@@ -45,5 +49,19 @@ void main() {
     expect(barrel, contains("export 'src/runtime/agent_runtime.dart'"));
     expect(barrel, contains("export 'src/runtime/agent_session.dart'"));
     expect(barrel, contains("export 'src/host/build_agent_core.dart'"));
+  });
+
+  // Формат журнала и порт хранилища нужны JsonlSessionStore другого пакета
+  // (design.md этапа 3, D1).
+  test('the barrel exports the journal format and the store port', () {
+    for (final file in [
+      'src/session/records.dart',
+      'src/session/parse.dart',
+      'src/session/session_store.dart',
+      'src/session/memory_session_store.dart',
+      'src/session/slug.dart',
+    ]) {
+      expect(barrel, contains("export '$file'"), reason: file);
+    }
   });
 }

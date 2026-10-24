@@ -44,6 +44,25 @@ void main() {
     );
   });
 
+  test('the journal and compaction of stage 3 (§10.4)', () {
+    for (final name in ['agent-serve', 'embedded-cli']) {
+      final profile = HostProfile.of(name);
+
+      expect(
+        (profile.states[HostCapability.sessionPersistence]!
+                as CapabilityTransport)
+            .transports,
+        {'jsonl-file'},
+        reason: name,
+      );
+      expect(
+        profile.states[HostCapability.compaction],
+        isA<CapabilityOn>(),
+        reason: name,
+      );
+    }
+  });
+
   test('an unknown profile is an ArgumentError', () {
     expect(() => HostProfile.of('mainframe'), throwsArgumentError);
   });

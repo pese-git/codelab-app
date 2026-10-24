@@ -20,6 +20,8 @@ String kindOf(AgentEvent event) => switch (event) {
   ModeChanged() => 'mode',
   AgentError() => 'error',
   TurnEnded() => 'turn.end',
+  ContextCompacted() => 'compacted',
+  SessionTitleChanged() => 'title',
 };
 
 void main() {

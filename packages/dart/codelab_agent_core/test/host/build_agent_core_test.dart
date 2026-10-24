@@ -1,7 +1,9 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
 import '../permissions/fake_gate.dart';
+import '../support/models.dart';
 import '../tools/capability_envs.dart';
 import '../tools/fake_shell.dart';
 import 'core_harness.dart';
@@ -37,7 +39,10 @@ void main() {
       'ls',
       'search',
     ]);
-    expect(h.core.plan.offReasons.keys, [HostCapability.shellExec]);
+    expect(h.core.plan.offReasons.keys, [
+      HostCapability.shellExec,
+      HostCapability.sessionPersistence,
+    ]);
     expect(h.logger.eventsOf('host.plan'), hasLength(1));
   });
 
@@ -223,5 +228,45 @@ void main() {
     final plan = seen.indexOf(PlanUpdated);
     expect(plan, greaterThan(seen.indexOf(ToolCallStarted)));
     expect(plan, lessThan(seen.indexOf(ToolCallFinished)));
+  });
+
+  group('sessionPersistence (§10.8, design.md D12)', () {
+    BuiltAgentCore build({required bool persistent}) => buildAgentCore(
+      profile: HostProfile.of(
+        'embedded-cli',
+      ).narrowed({...noExec, if (!persistent) ...inMemoryJournal}),
+      services: AgentCoreServices(
+        baseEnv: MemoryExecutionEnv(cwd: '/proj'),
+        gate: FakeGate(),
+        logger: RecordingLogger(),
+        clock: FakeClock(),
+        ids: SequentialIdGenerator(),
+        sessions: MemorySessionStore(),
+      ),
+      config: CoreConfig(defaultModel: testModel),
+      streamFunction: ScriptedStreamFunction.fromJson(const {'steps': []}).call,
+    );
+
+    test('a persistent journal over the memory store is a wiring error', () {
+      expect(
+        () => build(persistent: true),
+        throwsA(
+          isA<HostWiringException>().having(
+            (e) => e.message,
+            'message',
+            contains('sessionPersistence'),
+          ),
+        ),
+      );
+    });
+
+    test('off — the memory store is fine and the reason is in the plan', () {
+      final core = build(persistent: false);
+
+      expect(
+        core.plan.offReasons[HostCapability.sessionPersistence],
+        isNotEmpty,
+      );
+    });
   });
 }
