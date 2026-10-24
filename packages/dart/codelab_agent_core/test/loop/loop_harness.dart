@@ -3,6 +3,8 @@ import 'package:codelab_agent_core/src/env/bounded_env.dart';
 import 'package:codelab_agent_core/src/loop/agent_loop.dart';
 import 'package:codelab_agent_core/src/loop/loop_config.dart';
 import 'package:codelab_agent_core/src/tools/executor.dart';
+import 'package:codelab_agent_core/src/tools/misuse.dart';
+import 'package:codelab_agent_core/src/tools/plan_service.dart';
 import 'package:codelab_agent_core/src/tools/registry.dart';
 import 'package:codelab_agent_core/testing.dart';
 
@@ -38,7 +40,15 @@ Map<String, Object?> callStep(
 /// Everything a loop test needs: the scripted model, tools over a bounded
 /// memory env, and a config.
 final class LoopHarness {
-  LoopHarness._(this.clock, this.env, this.tools, this.executor, this.stream);
+  LoopHarness._(
+    this.clock,
+    this.env,
+    this.tools,
+    this.executor,
+    this.stream,
+    this.logger,
+    this.approvalWait,
+  );
 
   static Future<LoopHarness> create({
     List<AgentTool> tools = const [],
@@ -50,10 +60,18 @@ final class LoopHarness {
     final env = await BoundedEnv.wrap(memory, '/proj');
     final registry = ToolRegistry();
     tools.forEach(registry.register);
+    final logger = RecordingLogger();
+    final plan = PlanService();
+    final approvalWait = ApprovalWaitMeter();
     final executor = ToolCallExecutor(
       registry: registry,
       env: env,
-      services: ToolServices(clock: clock, logger: RecordingLogger()),
+      services: ToolServices(
+        clock: clock,
+        logger: logger,
+        plan: plan,
+        approvalWait: approvalWait,
+      ),
     );
     final scripted = llm == null
         ? null
@@ -64,8 +82,12 @@ final class LoopHarness {
       tools,
       executor,
       stream ?? scripted!.call,
+      logger,
+      approvalWait,
     );
     h.scripted = scripted;
+    plan.publish = (entries) =>
+        h.events.add(PlanUpdated(session, entries: entries));
     return h;
   }
 
@@ -74,6 +96,11 @@ final class LoopHarness {
   final List<AgentTool> tools;
   final ToolCallExecutor executor;
   final StreamFunction stream;
+  final RecordingLogger logger;
+
+  /// Счётчик ожидания одобрения: тот же, что у сервисов инструментов, —
+  /// тест бюджета добавляет в него «ожидание gate».
+  final ApprovalWaitMeter approvalWait;
   ScriptedStreamFunction? scripted;
   final events = <AgentEvent>[];
 
@@ -83,6 +110,13 @@ final class LoopHarness {
     List<BeforeToolCallHook> beforeToolCall = const [],
     List<AfterToolCallHook> afterToolCall = const [],
     PrepareNextStepHook? prepareNextStep,
+    BeforeFinalResponseHook? beforeFinalResponse,
+    int maxResponseRevisions = 2,
+    int maxSteeringSteps = 20,
+    int emptyResponseRetries = 2,
+    MisuseLimits misuse = const MisuseLimits(),
+    MessageQueue<SteeringItem>? steering,
+    MessageQueue<Message>? followUp,
   }) => AgentLoopConfig(
     sessionId: session,
     model: testModel,
@@ -95,6 +129,15 @@ final class LoopHarness {
     beforeToolCall: beforeToolCall,
     afterToolCall: afterToolCall,
     prepareNextStep: prepareNextStep,
+    beforeFinalResponse: beforeFinalResponse,
+    maxResponseRevisions: maxResponseRevisions,
+    maxSteeringSteps: maxSteeringSteps,
+    emptyResponseRetries: emptyResponseRetries,
+    misuse: misuse,
+    steering: steering,
+    followUp: followUp,
+    approvalWait: approvalWait,
+    logger: logger,
   );
 
   Future<List<Message>> run(
@@ -128,9 +171,14 @@ String describe(AgentEvent e) => switch (e) {
   TurnStarted() => 'TurnStarted',
   StepStarted(:final stepIndex) => 'StepStarted($stepIndex)',
   ModelRequested() => 'ModelRequested',
-  MessageStarted(:final message) =>
+  MessageStarted(:final message, :final origin) =>
     'MessageStarted(${_role(message).split(' ').first}'
-        '${message is ToolResultMessage ? ' ${message.toolCallId}' : ''})',
+        '${message is ToolResultMessage ? ' ${message.toolCallId}' : ''}'
+        '${switch (origin) {
+          LoopNudgeOrigin(:final attempt) => ' nudge $attempt',
+          LoopNoteOrigin() => ' note',
+          null => '',
+        }})',
   MessageDelta(:final delta) => 'MessageDelta($delta)',
   ThoughtDelta(:final delta) => 'ThoughtDelta($delta)',
   MessageEnded(:final message) => 'MessageEnded(${_role(message)})',
@@ -144,6 +192,7 @@ String describe(AgentEvent e) => switch (e) {
   ModeChanged(:final mode) => 'ModeChanged(${mode.value})',
   AgentError(:final cls, :final errorClass) =>
     'AgentError(${cls.name}${errorClass == null ? '' : ' ${errorClass.name}'})',
-  TurnEnded(:final reason, :final budgetExceeded) =>
-    'TurnEnded(${reason.name}${budgetExceeded == null ? '' : ' ${budgetExceeded.name}'})',
+  TurnEnded(:final reason, :final budgetExceeded, :final held) =>
+    'TurnEnded(${reason.name}${budgetExceeded == null ? '' : ' ${budgetExceeded.name}'}'
+        '${held == null ? '' : ' held'})',
 };
