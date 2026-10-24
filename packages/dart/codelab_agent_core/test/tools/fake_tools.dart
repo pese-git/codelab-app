@@ -13,6 +13,7 @@ final class FakeTool extends AgentTool {
     this.onExecute,
     this.preflightText,
     this.sequentialWhen,
+    this.lockArg,
   });
 
   @override
@@ -43,7 +44,14 @@ final class FakeTool extends AgentTool {
   /// `executionModeOf` is sequential when this argument is present.
   final String? sequentialWhen;
 
+  /// Аргумент с путём, который точка исполнения держит под `PathLock`.
+  final String? lockArg;
+
   final executed = <Map<String, Object?>>[];
+
+  @override
+  String? lockPath(Map<String, Object?> args) =>
+      lockArg == null ? null : args[lockArg] as String?;
 
   @override
   ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.trusted;
