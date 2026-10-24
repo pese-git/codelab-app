@@ -48,7 +48,7 @@
    сбой до видимого вывода повторяется; после первого `BlockStartEvent` — нет; `content_filter`,
    401, overflow, aborted не повторяются; rate limit уважает `Retry-After`; fallback порождает
    `FallbackNotice`.
-9. **1.9. Фабрика:** `lib/src/llm/providers/provider_factory.dart` (`ProviderConfig`,
+9. **1.9. Фабрика:** `lib/src/llm/provider_factory.dart` (вне `providers/`: барель её экспортирует, PKG-5) (`ProviderConfig`,
    `createStreamFunction(ProviderConfig config, CoreLlmServices services)`, agent-core-architecture §2.10).
    Хост получает уже обёрнутую функцию; классы адаптеров наружу не экспортируются (PKG-5).
 10. **1.10. Ручной smoke** `packages/dart/codelab_agent_core/tool/llm_smoke.dart` — один запрос к

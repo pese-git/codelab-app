@@ -32,3 +32,18 @@ PKG-1, PKG-2 и PKG-4 проверяет `melos run guard` (`packages/dart/codel
 * (г) архитектура легко расширяема: функция добавлена в точке расширения документа ядра (`ToolRegistry`, порты `AgentCoreServices`, capabilities `HostProfile`, ветка sealed-иерархии `AgentEvent`, ключ схемы конфига, фабрика провайдеров), а не условиями в существующем коде; сторож и allowlist зелёные; нет `TODO` без задачи, `// ignore:` без причины, временных флагов без задачи на удаление;
 * (д) рефакторинг сделан;
 * (е) документы и код не расходятся.
+
+## 4. Ручной smoke провайдеров
+
+`tool/llm_smoke.dart` отправляет один запрос реальному провайдеру через адаптер и печатает события и usage. Так SSE-фикстуры `test/fixtures/sse/` сверяются с настоящими потоками (design.md change `add-agent-core-llm-contract`, D9). В CI скрипт не запускается: ему нужен ключ.
+
+```bash
+CODELAB_SMOKE_PROVIDER=openai-compatible \
+CODELAB_SMOKE_BASE_URL=https://api.openai.com/v1 \
+CODELAB_SMOKE_MODEL=gpt-4.1-mini \
+CODELAB_SMOKE_API_KEY="$OPENAI_API_KEY" \
+fvm dart run tool/llm_smoke.dart
+```
+
+`CODELAB_SMOKE_PROVIDER=anthropic` с `CODELAB_SMOKE_BASE_URL=https://api.anthropic.com` проверяет адаптер Anthropic; `CODELAB_SMOKE_REASONING=low|medium|high` включает рассуждение; `CODELAB_SMOKE_THINKING=budget` нужен моделям Claude 4.5 и старше (по умолчанию `adaptive` — для Claude 4.6 и новее). Для локальных серверов (Ollama, LM Studio) ключ не нужен. Если поток провайдера расходится с фикстурой, фикстура исправляется со ссылкой на документацию провайдера.
+

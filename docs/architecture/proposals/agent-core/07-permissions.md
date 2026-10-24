@@ -33,7 +33,7 @@ final class PermissionRequest {
   final ToolKind kind; final ToolTier tier;      // tool.kindOf(args), tool.tierOf(args) (§6.2)
   final Map<String, Object?> rawInput;             // приведённые аргументы (PERM-6)
   final List<Location> locations;
-  final List<FileDiff> diffs;                      // по одному на файл; из ToolPrepared.presentation или present(args)
+  final List<FileDiff> diffs;                      // по одному на файл; из ToolPrepared.presentation или present(args, ctx)
   final String? reason;                            // например, 'critical command: recursive delete of /'
   final bool allowAlwaysOffered;                   // false для критических шаблонов
   final String? criticalLabel;                     // после MVP: метка критического шаблона §7.6 или
@@ -72,10 +72,11 @@ final class PermissionPolicy {
   final PermissionGate? gate;
   final PolicyRules rules;
   final PermissionDecisionStore decisions;          // allowAlways и rejectAlways
-  Future<PolicyOutcome> decide(AgentTool tool, Map<String, Object?> args, String toolCallId, CancelToken cancel);
+  /// toolCallId, токен отмены, env (для present и шаблона пути) и счётчик ожидания — из ctx.
+  Future<PolicyOutcome> decide(AgentTool tool, Map<String, Object?> args, ToolContext ctx);
   void grantForTurn({Set<String> allow = const {}, Set<String> deny = const {}});   // по именам инструментов
   void clearTurnGrants();                           // в начале каждого prompt() (PERM-8)
-  BeforeToolCallHook asHook();                      // Denied → Block(reason, outcome: rejected)
+  BeforeToolCallHook asHook(AgentTool? Function(String name) lookup);   // Denied → Block(reason, outcome: rejected)
 }
 ```
 
@@ -161,8 +162,8 @@ ask(reason, allowAlwaysOffered = true):
   if gate == null: return Denied('no approval interface is available')
   t0 = clock.now()
   d = await gate.request(PermissionRequest(kind: tool.kindOf(args), tier: tool.tierOf(args),
-        title, locations, diffs из ToolPrepared.presentation ?? present(args), allowAlwaysOffered, ...), cancel)
-  budget.excludeWait(clock.now() - t0)
+        title, locations, diffs из ToolPrepared.presentation ?? present(args, ctx), allowAlwaysOffered, ...), cancel)
+  ctx.services.approvalWait.add(clock.now() - t0)   # исключается из maxDuration хода (§5.2)
   switch d:
     allowOnce   → Allowed('user')
     allowAlways → allowAlways.add(key) (если allowAlwaysOffered, иначе как allowOnce); Allowed('user')

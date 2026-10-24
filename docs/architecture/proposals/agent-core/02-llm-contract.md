@@ -122,7 +122,8 @@ final class ModelRef {
   const ModelRef({required this.provider, required this.id, required this.api,
       required this.baseUrl, required this.contextWindow, required this.maxOutputTokens,
       this.cost, this.supportsImages = false, this.supportsReasoning = false, this.reasoningEffort,
-      this.hiddenReasoning = false, this.supportsTools = true});
+      this.hiddenReasoning = false, this.thinkingMode = ThinkingMode.adaptive,
+      this.supportsTools = true});
   final String provider;          // имя записи провайдера из конфига, например "openrouter"
   final String id;                // id модели у провайдера
   final ProviderApi api;
@@ -132,6 +133,7 @@ final class ModelRef {
   final bool supportsImages, supportsReasoning;
   final ReasoningEffort? reasoningEffort;   // low | medium | high; null — рассуждение выключено (§2.12.3)
   final bool hiddenReasoning;     // модель рассуждает без байтов в потоке до ответа (§2.10.5)
+  final ThinkingMode thinkingMode;  // adaptive | budget — форма thinking у Anthropic (§2.8, §2.12.3)
   final bool supportsTools;   // false — вызов инструментов через промпт (§17.10.11)
 }
 
@@ -423,6 +425,7 @@ final class ProviderConfig {
       this.reasoningFormat = ReasoningFormat.openai, this.systemRole = 'system',
       this.anthropicVersion = '2023-06-01', this.anthropicBeta = const [],
       this.promptCacheKey = false, this.listModels = true,
+      this.timeouts = LlmTimeouts.defaults, this.retry = const RetryPolicy(),
       this.quirks = ProviderQuirks.none, this.credentials});
   final String name;
   final ProviderApi api;
@@ -438,6 +441,8 @@ final class ProviderConfig {
   final List<String> anthropicBeta;
   final bool promptCacheKey;        // отправлять prompt_cache_key (§2.12.1); только openaiChat
   final bool listModels;            // запрашивать список моделей endpoint (§2.12.2)
+  final LlmTimeouts timeouts;       // connect / idle / idleReasoning провайдера (§2.10.1, §2.10.5, §15.4)
+  final RetryPolicy retry;          // бюджеты повторов провайдера (§2.10.2, §15.4)
   final ProviderQuirks quirks;      // после MVP: особенности сервера, задаёт пресет (§17.10.2)
   final CredentialSource? credentials;   // после MVP: пул ключей или OAuth-токен (§17.10.4, §17.10.6)
 }
@@ -572,7 +577,8 @@ data: [DONE]
 | `tools` | `[{"name","description","input_schema"}]`; у последнего — `"cache_control":{"type":"ephemeral"}`; поле не отправляется, если инструментов нет |
 | `tool_choice` | `{"type":"auto"}`, только если есть `tools` |
 | `stream` | `true` |
-| `thinking` | при `reasoningEffort != null`: `{"type":"enabled","budget_tokens": B}`. `B` = 2048 / 8192 / 16384 для low / medium / high, затем `B = min(B, max_tokens − 1024)`; если `B < 1024` — рассуждение не включается. Рассуждение помещается **внутри** `max_tokens`, а не сверх него. Откуда берётся `reasoningEffort` — §2.12.3 |
+| `thinking` | при `reasoningEffort != null`, по `ModelRef.thinkingMode`. `adaptive` (Claude 4.6 и новее; Claude 5.x отвечают на `budget_tokens` ошибкой 400): `{"type":"adaptive","display":"summarized"}` — модель сама решает, сколько рассуждать, а `summarized` возвращает читаемую сводку рассуждения вместо пустых блоков (умолчание API — `omitted`). `budget` (Claude 4.5 и старше): `{"type":"enabled","budget_tokens": B}`, `B` = 2048 / 8192 / 16384 для low / medium / high, затем `B = min(B, max_tokens − 1024)`; если `B < 1024` — рассуждение не включается. В обоих режимах рассуждение помещается **внутри** `max_tokens`, а не сверх него. Откуда берётся `reasoningEffort` — §2.12.3 |
+| `output_config` | только в режиме `adaptive` при `reasoningEffort != null`: `{"effort": "low" \| "medium" \| "high"}` |
 
 Алгоритм преобразования сообщений:
 
@@ -587,8 +593,8 @@ data: [DONE]
 
 ```json
 {
-  "model": "claude-sonnet-4-5",
-  "max_tokens": 16384,
+  "model": "claude-opus-5-5",
+  "max_tokens": 128000,
   "system": [{"type": "text", "text": "You are CodeLab...", "cache_control": {"type": "ephemeral"}}],
   "messages": [
     {"role": "user", "content": [{"type": "text", "text": "Fix the failing test"}]},
@@ -603,7 +609,8 @@ data: [DONE]
     "properties": {"path": {"type": "string"}}, "required": ["path"]}, "cache_control": {"type": "ephemeral"}}],
   "tool_choice": {"type": "auto"},
   "stream": true,
-  "thinking": {"type": "enabled", "budget_tokens": 8192}
+  "thinking": {"type": "adaptive", "display": "summarized"},
+  "output_config": {"effort": "medium"}
 }
 ```
 
@@ -977,11 +984,13 @@ extension type const ModelId(String value) {     // "<provider>/<model>"; model 
 /// Метаданные модели из одного источника; null — источник поле не знает.
 final class ModelInfo {
   const ModelInfo({this.displayName, this.contextWindow, this.maxOutputTokens, this.cost,
-      this.supportsImages, this.supportsReasoning, this.hiddenReasoning, this.supportsTools});
+      this.supportsImages, this.supportsReasoning, this.hiddenReasoning, this.thinkingMode,
+      this.supportsTools});
   final String? displayName;
   final int? contextWindow, maxOutputTokens;
   final ModelCost? cost;
   final bool? supportsImages, supportsReasoning, hiddenReasoning;
+  final ThinkingMode? thinkingMode;
   final bool? supportsTools;   // после MVP: false — вызов инструментов через промпт (§17.10.11)
 }
 
@@ -1050,8 +1059,8 @@ API (§17.10.11).
 лимит ответа < окна).
 
 **Безопасные значения по умолчанию:** окно 32 000, лимит ответа 4 096, без картинок, без
-рассуждения, `hiddenReasoning: false`, `supportsTools: true`, цены неизвестны. Использование хотя бы одного такого поля —
-одна warning-запись `llm.catalog.default_used {model, fields}` на модель за процесс.
+рассуждения, `hiddenReasoning: false`, `thinkingMode: adaptive`, `supportsTools: true`, цены неизвестны. Использование хотя бы одного такого поля,
+кроме цен и `thinkingMode`, — одна warning-запись `llm.catalog.default_used {model, fields}` на модель за процесс.
 
 **Кэш на диске.** `$CODELAB_HOME/cache/models/<provider-id>-<fnv1a32(base_url)>.json` (функция —
 §8.9) и `$CODELAB_HOME/cache/models/metadata-<fnv1a32(metadata_url)>.json`; запись атомарная
@@ -1095,7 +1104,7 @@ refresh(force):
 
 resolve(id, role):
 для каждого поля ModelRef (contextWindow, maxOutputTokens, cost, supportsImages,
-supportsReasoning, hiddenReasoning, после MVP supportsTools) — первое не-null значение по порядку источников:
+supportsReasoning, hiddenReasoning, thinkingMode, после MVP supportsTools) — первое не-null значение по порядку источников:
 1. override      — providers.<p>.models.<m>.<поле> из конфига (явно записал человек)
 2. role          — llm.roles.<role>.context_window / .max_output_tokens (только эти два поля,
                    только при вызове с role)
@@ -1126,12 +1135,13 @@ endpoint, max output 32768 from remote catalog)`.
 
 | Провайдер (`ProviderConfig`) | `low` | `medium` | `high` |
 |---|---|---|---|
-| Anthropic (`anthropicMessages`) | `thinking: {"type":"enabled","budget_tokens": 2048}` | `budget_tokens: 8192` | `budget_tokens: 16384` |
+| Anthropic, `thinkingMode: adaptive` | `thinking: {"type":"adaptive","display":"summarized"}`, `output_config: {"effort":"low"}` | `"effort":"medium"` | `"effort":"high"` |
+| Anthropic, `thinkingMode: budget` | `thinking: {"type":"enabled","budget_tokens": 2048}` | `budget_tokens: 8192` | `budget_tokens: 16384` |
 | OpenAI (`reasoningFormat: openai`) | `"reasoning_effort": "low"` | `"medium"` | `"high"` |
 | OpenRouter (`reasoningFormat: openrouter`) | `"reasoning": {"effort": "low"}` | `"medium"` | `"high"` |
 | `reasoningFormat: none` | — | — | — |
 
-Для Anthropic бюджет ограничивается `min(B, max_tokens − 1024)`; `B < 1024` — рассуждение не
+Для Anthropic в режиме `budget` бюджет ограничивается `min(B, max_tokens − 1024)`; `B < 1024` — рассуждение не
 включается (§2.8). Значение `reasoningFormat` по умолчанию — `openai`; для хоста `openrouter.ai`
 — `openrouter`; конфиг `providers.<id>.reasoning_format` переопределяет.
 
@@ -1250,7 +1260,7 @@ sequenceDiagram
 * `core/openai-prompt-cache-key` (`openai_prompt_cache_key_test.dart`): `api.openai.com` без ключа конфига → `"prompt_cache_key": "<sessionId>"`; другой хост → поля нет; `prompt_cache_key: true` в конфиге другого хоста → поле есть; субагент → id дочерней сессии; суммаризатор → `<sessionId>:summary`; `cached_tokens` и `cache_write_tokens` → `cacheRead`/`cacheWrite`, `input` без них (LLM-12).
 * `model_catalog_test.dart` на fake `http.Client` и `FakeClock`: старт без сети берёт кэш и конфиг, первый HTTP-запрос — после публикации списка (LLM-13); свежий кэш не запрашивается; просроченный — отдаётся сразу и обновляется в фоне; `404` → `unsupported` без повторов до истечения `ttl`; `401` и таймаут — прежний список; пагинация Anthropic по `after_id`; фильтр embedding-моделей; лимит 500.
 * `model_resolution_order_test.dart`: таблица «поле × набор источников» — для каждого поля выигрывает первый источник по порядку §2.12.2; удалённый каталог с моделью, которой нет в списке, список не меняет (LLM-14); только безопасные значения → одно предупреждение `llm.catalog.default_used`.
-* `reasoning_effort_mapping_test.dart`: таблица §2.12.3 для каждого провайдера и уровня; модель без `supportsReasoning` → ни одного из полей `thinking`, `reasoning_effort`, `reasoning` (LLM-15); `budget_tokens` ограничен `max_tokens − 1024`.
+* `reasoning_effort_mapping_test.dart`: таблица §2.12.3 для каждого провайдера и уровня; модель без `supportsReasoning` → ни одного из полей `thinking`, `reasoning_effort`, `reasoning` (LLM-15); в режиме `adaptive` — `thinking.type: adaptive` и `output_config.effort` без `budget_tokens`; в режиме `budget` `budget_tokens` ограничен `max_tokens − 1024`.
 * `core/thinking-resets-idle-timeout` (`watchdog_reasoning_test.dart`, `FakeClock`): дельты рассуждения каждые 100 с в течение 400 с при `idle` 120 с — нет `timeout`; только `ping` каждые 30 с — `timeout` через 120 с; `hiddenReasoning` и 500 с тишины после `StartEvent` — нет `timeout`, 600 с — `timeout` с текстом про hidden reasoning; после первого блока тишина 121 с — `timeout` по `idle` (LLM-16).
 
 ---
