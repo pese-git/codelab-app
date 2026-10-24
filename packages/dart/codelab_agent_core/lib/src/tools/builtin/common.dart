@@ -30,8 +30,7 @@ String fileErrorText(FileError error, ToolContext ctx, String raw) {
     FileErrorCode.outsideWorkspace => 'Path is outside the workspace: $raw',
     FileErrorCode.permissionDenied => 'Permission denied: $path',
     FileErrorCode.notText => '$path is not a UTF-8 text file.',
-    FileErrorCode.unsupported =>
-      'This operation is not supported in the current environment.',
+    FileErrorCode.unsupported => unsupportedText,
     FileErrorCode.notDirectory => '$path is not a directory.',
     FileErrorCode.tooLarge => '$path is too large.',
     FileErrorCode.io => 'Cannot access $path: ${error.message ?? 'I/O error'}',
@@ -61,4 +60,18 @@ List<String> splitLines(String text) {
   }
   final body = text.endsWith('\n') ? text.substring(0, text.length - 1) : text;
   return body.split('\n');
+}
+
+/// Ответ инструмента, которому env не дал нужной capability (§6.4).
+const unsupportedText =
+    'This operation is not supported in the current environment.';
+
+/// Последний сегмент POSIX-пути: имя записи для `ls` и glob `search`.
+String baseName(String path) => path.substring(path.lastIndexOf('/') + 1);
+
+/// Порядок без учёта регистра (`ls`, §6.4); при равенстве — по кодовым
+/// единицам, чтобы порядок был детерминированным.
+int compareIgnoringCase(String a, String b) {
+  final byLower = a.toLowerCase().compareTo(b.toLowerCase());
+  return byLower != 0 ? byLower : a.compareTo(b);
 }

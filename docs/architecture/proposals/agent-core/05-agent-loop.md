@@ -56,7 +56,8 @@ final class AgentLoopConfig {
       this.afterToolCall = const [], this.prepareNextStep, this.beforeFinalResponse,
       this.maxResponseRevisions = 2, this.maxSteeringSteps = 20,
       this.emptyResponseRetries = 2, this.misuse = const MisuseLimits(),
-      this.steering, this.followUp, this.estimateTokens, this.emergencyCompact, this.deadline, this.imageRefs});
+      this.steering, this.followUp, this.approvalWait, this.logger,
+      this.estimateTokens, this.emergencyCompact, this.deadline, this.imageRefs});
   final SessionId sessionId;
   final ModelRef model;
   final StreamFunction stream;
@@ -73,6 +74,9 @@ final class AgentLoopConfig {
   final MisuseLimits misuse;                         // предохранитель неверных вызовов (§6.3.7), loop.misuse.*
   final MessageQueue<SteeringItem>? steering;        // опрашивается циклом; элемент несёт origin (§17.7.2.1)
   final MessageQueue<Message>? followUp;             // опрашивается циклом
+  final ApprovalWaitMeter? approvalWait;             // тот же счётчик, что ToolServices.approvalWait; maxDuration
+                                                     // считает время хода минус его прирост с начала хода
+  final Logger? logger;                              // логи цикла (loop.empty_response, §5.4.1)
   final int Function(LlmContext)? estimateTokens;    // оценка payload (§9)
   final Future<LoopContext?> Function(CancelToken)? emergencyCompact;   // один аварийный вызов сжатия за ход, общий для preflight и overflow (CMP-8)
   final SessionDeadline? deadline;   // после MVP: дедлайн сессии (§17.12.5); null — нет срока
@@ -127,8 +131,9 @@ enum BudgetLimit { steps, tokens, cost, duration, deadline }   // deadline — �
 | `beforeFinalResponse` | шаг завершился без вызовов инструментов, ход готов остановиться, до `TurnEnded` | `Accept` — ход завершается; `Revise(note)` — заметка добавляется в payload следующего шага последним `user`-сообщением, не более `maxResponseRevisions` раз за ход; `Hold(reason)` — ход завершается с ответом, помеченным `TurnEnded.held = reason`. В MVP — только интерфейс, хук не регистрируется; после MVP — составной хук проверок `FinalResponseCheck` с лимитом ревизий и политикой `loop.final_response.on_revise_limit` (§17.12.4) |
 
 **Бюджет хода.** Проверяется на границе шага: после `StepEnded` и до следующего запроса к модели.
-Исполняемый инструмент не прерывается. Время ожидания одобрения (`PermissionGate`) вычитается из
-`maxDuration`. При превышении ход завершается `TurnEnded(reason: completed, budgetExceeded: limit)`;
+Исполняемый инструмент не прерывается. Лимит исчерпан, когда значение его достигло (`>=`): при
+`maxTokens: 1000` ход, потративший ровно 1000 токенов, следующего шага не делает. Время ожидания
+одобрения (`PermissionGate`) вычитается из `maxDuration`. При превышении ход завершается `TurnEnded(reason: completed, budgetExceeded: limit)`;
 ACP-адаптер отдаёт `stopReason: max_turn_requests`, а вид лимита — в `_meta` (расширение через OpenSpec).
 
 **Сборка payload** (каждый запрос, транскрипт не меняется — LOOP-7):
@@ -468,6 +473,8 @@ final class Agent {
   List<Message> get messages;                      // неизменяемая копия транскрипта
   bool get isRunning;
   void replaceTranscript(List<Message> messages);  // только вне хода: после сжатия (§9)
+  /// Общая очередь событий (LOOP-2): через неё эмитят цикл и сервисы сессии (PlanService → PlanUpdated).
+  Future<void> emit(AgentEvent event);
   AgentLoopConfig config;                          // меняется между ходами (модель, режим)
 }
 ```

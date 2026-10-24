@@ -7,6 +7,8 @@ import '../llm/stream_function.dart';
 import '../llm/usage.dart';
 import '../tools/agent_tool.dart';
 import '../tools/executor.dart';
+import '../tools/misuse.dart';
+import '../util/logger.dart';
 import 'agent_events.dart';
 import 'loop_config.dart';
 import 'payload_builder.dart';
@@ -16,14 +18,33 @@ const truncatedArgumentsText =
     'Tool call arguments were truncated because the response hit the output '
     'token limit. Retry with smaller arguments.';
 
-/// One turn of the agent (`agent-core-architecture` §5.4): call the model,
-/// run the tool calls of its answer, repeat while it calls tools. A pure
-/// function over the injected `StreamFunction` and [ToolExecutor]: it knows
-/// neither storage nor protocol (LOOP-6) and returns the messages the turn
-/// added.
+/// Подсказка после пустого ответа модели (§5.4.1).
+const emptyResponseNudge =
+    'Your previous response was empty. Continue the task: call a tool or '
+    'answer the user with text.';
+
+/// Заметка, которой ход останавливается после исчерпания повторов пустого
+/// ответа (§5.4.1).
+String emptyResponseNote(int attempts) =>
+    '[Stopped: the model returned an empty response (attempts: $attempts). '
+    'Send a message to continue.]';
+
+/// Один ход агента (`agent-core-architecture` §5.4).
 ///
-/// [TurnEnded] is always the last event and is emitted exactly once, also
-/// when a hook throws (LOOP-1). The loop awaits every [emit] (LOOP-2).
+/// Почему чистая функция: ход не знает ни хранилища, ни протокола (LOOP-6)
+/// — его одинаково исполняют `Agent` в сессии, тесты на scripted-модели и
+/// (после MVP) субагенты. Состояние между ходами держит вызывающий.
+///
+/// Для чего: вызвать модель, исполнить вызовы инструментов её ответа и
+/// повторять, пока она зовёт инструменты или приходит новый ввод (steering,
+/// follow-up, подсказка пустого ответа, заметка `Revise`). Бюджет хода
+/// проверяется только на границе шага (LOOP-12).
+///
+/// Как использовать: передать новые сообщения [prompts], контекст (история,
+/// системный промпт, инструменты), конфигурацию и приёмник событий. Функция
+/// возвращает сообщения, добавленные ходом. [TurnEnded] — всегда последнее
+/// событие, ровно одно, в том числе при исключении в хуке (LOOP-1); каждый
+/// [emit] ждётся (LOOP-2).
 Future<List<Message>> runAgentLoop({
   required List<Message> prompts,
   required LoopContext context,
@@ -34,7 +55,10 @@ Future<List<Message>> runAgentLoop({
 
 final class _Turn {
   _Turn(this._context, this._config, this._emit, this._cancel)
-    : _transcript = [..._context.messages] {
+    : _transcript = [..._context.messages],
+      _misuse = MisuseBreaker(_config.misuse),
+      _startedAt = _config.clock.now(),
+      _waitAtStart = _config.approvalWait?.total ?? Duration.zero {
     for (final message in _transcript) {
       if (message is AssistantMessage) {
         _usedIds.addAll(message.toolCalls.map((c) => c.id));
@@ -50,31 +74,56 @@ final class _Turn {
   final _added = <Message>[];
   final _usedIds = <String>{};
 
+  /// Один предохранитель на ход (§5.5, шаг 0; LOOP-16).
+  final MisuseBreaker _misuse;
+  final DateTime _startedAt;
+
+  /// Ожидание одобрения до начала хода: время хода считается по приросту.
+  final Duration _waitAtStart;
+  late final TurnId _turnId;
+  var _step = 0;
+  var _usage = Usage.zero;
+  var _steeringSteps = 0;
+
   SessionId get _session => _config.sessionId;
 
   Future<List<Message>> run(List<Message> prompts) async {
     TurnEndReason? reason;
     BudgetLimit? exceeded;
-    var usage = Usage.zero;
+    String? held;
     AssistantMessage? last;
     try {
-      await _emit(
-        TurnStarted(
-          _session,
-          turnId: TurnId(_config.ids.nextId()),
-          input: prompts,
-        ),
-      );
+      _turnId = TurnId(_config.ids.nextId());
+      await _emit(TurnStarted(_session, turnId: _turnId, input: prompts));
       for (final prompt in prompts) {
         await _append(prompt);
       }
-      var step = 0;
       var pending = false;
       var newInput = prompts.isNotEmpty;
-      while (pending || newInput) {
+      var emptyStreak = 0;
+      var revisions = 0;
+      UserMessage? reviseNote;
+      if (await _pollSteering()) {
+        newInput = true;
+      }
+      while (true) {
+        if (!pending && !newInput) {
+          // Естественная остановка: follow-up, затем последний опрос
+          // steering; без ввода ход запечатан.
+          if (_config.followUp?.takeOne() case final message?) {
+            await _append(message);
+            newInput = true;
+          } else if (await _pollSteering()) {
+            newInput = true;
+          }
+          if (!newInput) {
+            break;
+          }
+        }
+        pending = false;
         newInput = false;
-        if (step >= _config.budget.maxSteps) {
-          exceeded = BudgetLimit.steps;
+        if (_budgetExceeded() case final limit?) {
+          exceeded = limit;
           reason = TurnEndReason.completed;
           break;
         }
@@ -82,9 +131,10 @@ final class _Turn {
           reason = TurnEndReason.cancelled;
           break;
         }
-        await _emit(StepStarted(_session, stepIndex: step));
-        final response = await _request();
-        usage += response.usage;
+        await _emit(StepStarted(_session, stepIndex: _step));
+        final response = await _request(reviseNote);
+        reviseNote = null;
+        _usage += response.usage;
         last = response;
         if (response.stopReason case StopReason.error || StopReason.aborted) {
           if (response.stopReason == StopReason.error) {
@@ -101,7 +151,7 @@ final class _Turn {
             StepEnded(
               _session,
               result: StepResult(
-                stepIndex: step,
+                stepIndex: _step,
                 response: response,
                 results: const [],
                 usage: response.usage,
@@ -111,6 +161,10 @@ final class _Turn {
           reason = _failureReason(response);
           break;
         }
+        final empty = isEmptyCompletion(response);
+        if (!empty) {
+          emptyStreak = 0;
+        }
         final calls = response.toolCalls.toList();
         final results = response.stopReason == StopReason.length
             ? [for (final call in calls) _truncatedArguments(call)]
@@ -119,14 +173,59 @@ final class _Turn {
           await _append(result);
         }
         final stepResult = StepResult(
-          stepIndex: step,
+          stepIndex: _step,
           response: response,
           results: results,
           usage: response.usage,
         );
         await _emit(StepEnded(_session, result: stepResult));
-        step++;
+        _step++;
         pending = calls.isNotEmpty;
+        if (!pending && empty) {
+          // Пустой ответ (§5.4.1): подсказка и ещё шаг или видимая заметка;
+          // финальный гейт его не оценивает.
+          _log(LogLevel.warning, 'loop.empty_response', {
+            'attempt': emptyStreak + 1,
+            'model': response.model.id,
+            'stepIndex': stepResult.stepIndex,
+          });
+          if (emptyStreak < _config.emptyResponseRetries) {
+            emptyStreak++;
+            await _appendNudge(emptyStreak);
+            pending = true;
+          } else {
+            await _appendEmptyNote(emptyStreak + 1);
+            emptyStreak = 0;
+          }
+        } else if (!pending) {
+          final verdict = switch (_config.beforeFinalResponse) {
+            final hook? => await hook(
+              response,
+              TurnInfo(
+                turnId: _turnId,
+                stepIndex: stepResult.stepIndex,
+                revisions: revisions,
+                model: _config.model,
+                usage: _usage,
+                turnMessages: _added,
+              ),
+            ),
+            null => const Accept(),
+          };
+          switch (verdict) {
+            case Revise(:final note)
+                when revisions < _config.maxResponseRevisions:
+              revisions++;
+              reviseNote = UserMessage([
+                TextContent(note),
+              ], timestamp: _config.clock.now());
+              pending = true;
+            case Hold(:final reason):
+              held = reason;
+            case Accept() || Revise():
+              break;
+          }
+        }
         if (_config.prepareNextStep case final hook?) {
           if (await hook(stepResult) case final update?) {
             _apply(update);
@@ -136,6 +235,9 @@ final class _Turn {
           reason = TurnEndReason.cancelled;
           break;
         }
+        if (await _pollSteering()) {
+          newInput = true;
+        }
       }
       reason ??= last?.stopReason == StopReason.length
           ? TurnEndReason.maxTokens
@@ -143,6 +245,7 @@ final class _Turn {
     } on Object catch (error) {
       reason = TurnEndReason.failed;
       exceeded = null;
+      held = null;
       try {
         await _emit(
           AgentError(
@@ -152,24 +255,109 @@ final class _Turn {
           ),
         );
       } on Object {
-        // The turn still ends with TurnEnded below (LOOP-1).
+        // Ход всё равно закончится TurnEnded ниже (LOOP-1).
       }
     }
     await _emit(
       TurnEnded(
         _session,
         reason: reason,
-        usage: usage,
+        usage: _usage,
         budgetExceeded: exceeded,
+        held: held,
       ),
     );
     return List.unmodifiable(_added);
   }
 
-  Future<void> _append(Message message) async {
+  /// Лимит бюджета, исчерпанный к границе шага, или `null` (LOOP-12).
+  /// Время ожидания одобрения из времени хода вычитается (design.md, D6).
+  BudgetLimit? _budgetExceeded() {
+    final budget = _config.budget;
+    if (_step >= budget.maxSteps) {
+      return BudgetLimit.steps;
+    }
+    if (budget.maxTokens case final max?
+        when _usage.input + _usage.output >= max) {
+      return BudgetLimit.tokens;
+    }
+    if (budget.maxCost case final max?
+        when _config.model.cost != null && _usage.cost.total >= max) {
+      return BudgetLimit.cost;
+    }
+    if (budget.maxDuration case final max?) {
+      final waited =
+          (_config.approvalWait?.total ?? Duration.zero) - _waitAtStart;
+      final elapsed = _config.clock.now().difference(_startedAt) - waited;
+      if (elapsed >= max) {
+        return BudgetLimit.duration;
+      }
+    }
+    return null;
+  }
+
+  /// Забирает всю очередь steering одним опросом, если следующий шаг
+  /// начнётся: ход не отменён, бюджет не исчерпан, лимит шагов steering не
+  /// достигнут (LOOP-8). Возвращает, был ли новый ввод.
+  Future<bool> _pollSteering() async {
+    final queue = _config.steering;
+    if (queue == null ||
+        queue.isEmpty ||
+        _steeringSteps >= _config.maxSteeringSteps ||
+        _cancel.isCancelled ||
+        _budgetExceeded() != null) {
+      return false;
+    }
+    _steeringSteps++;
+    for (final item in queue.takeAll()) {
+      await _append(item.message, origin: item.origin);
+    }
+    return true;
+  }
+
+  Future<void> _appendNudge(int attempt) => _append(
+    UserMessage([
+      const TextContent(emptyResponseNudge),
+    ], timestamp: _config.clock.now()),
+    origin: LoopNudgeOrigin(LoopNudgeReason.emptyResponse, attempt),
+  );
+
+  /// Заметка — не шаг: без `StepStarted`, бюджет не тратит. Приходит как
+  /// обычный текст ответа, чтобы клиент показал её без особой проекции.
+  Future<void> _appendEmptyNote(int attempts) async {
+    final text = emptyResponseNote(attempts);
+    AssistantMessage note(List<ContentBlock> content) => AssistantMessage(
+      content: content,
+      model: _config.model,
+      usage: Usage.zero,
+      stopReason: StopReason.stop,
+      timestamp: _config.clock.now(),
+    );
+    final partial = note(const []);
+    final full = note([TextContent(text)]);
+    _transcript.add(full);
+    _added.add(full);
+    await _emit(
+      MessageStarted(
+        _session,
+        message: partial,
+        origin: const LoopNoteOrigin(LoopNudgeReason.emptyResponse),
+      ),
+    );
+    await _emit(MessageDelta(_session, delta: text, partial: full));
+    await _emit(MessageEnded(_session, message: full));
+    _log(LogLevel.warning, 'loop.empty_response.stopped', {
+      'attempts': attempts,
+    });
+  }
+
+  void _log(LogLevel level, String event, Map<String, Object?> fields) =>
+      _config.logger?.log(level, event, fields: fields);
+
+  Future<void> _append(Message message, {MessageOrigin? origin}) async {
     _transcript.add(message);
     _added.add(message);
-    await _emit(MessageStarted(_session, message: message));
+    await _emit(MessageStarted(_session, message: message, origin: origin));
     await _emit(MessageEnded(_session, message: message));
   }
 
@@ -185,15 +373,17 @@ final class _Turn {
     }
   }
 
-  /// One model request; a pairing 400 is retried once with a rebuilt
-  /// payload (§5.4, step 14; design.md, D8).
-  Future<AssistantMessage> _request() async {
+  /// Один запрос к модели; 400 из-за парности повторяется один раз с
+  /// пересобранным payload (§5.4, шаг 14; design.md, D8). [note] — заметка
+  /// `Revise`, она уходит только в payload.
+  Future<AssistantMessage> _request(UserMessage? note) async {
     var retried = false;
     while (true) {
       final payload = await buildPayload(
         _transcript,
         cancel: _cancel,
         transform: _config.transformContext,
+        note: note,
       );
       if (!payload.report.isEmpty) {
         await _emit(ToolPairingRepaired(_session, report: payload.report));
@@ -235,10 +425,10 @@ final class _Turn {
     }
   }
 
-  /// Reads the answer: the first block puts the snapshot into the
-  /// transcript with `MessageStarted`; text and reasoning deltas become
-  /// `MessageDelta` / `ThoughtDelta`. Returns the final message and
-  /// whether `MessageStarted` was emitted.
+  /// Читает ответ: первый блок кладёт снимок в транскрипт с
+  /// `MessageStarted`, дельты текста и рассуждения становятся `MessageDelta`
+  /// и `ThoughtDelta`. Возвращает итоговое сообщение и признак того, что
+  /// `MessageStarted` уже эмитирован.
   Future<(AssistantMessage, bool)> _consume(
     AssistantMessageEventStream stream,
   ) async {
@@ -286,8 +476,8 @@ final class _Turn {
     _added[_added.length - 1] = message;
   }
 
-  /// Tool call ids unique in the whole transcript (LOOP-11): a repeated id
-  /// gets `_2`, `_3`… the first time the call is seen.
+  /// Id вызовов уникальны во всём транскрипте (LOOP-11): повтор получает
+  /// `_2`, `_3`… в первый же момент, когда вызов виден.
   AssistantMessage _unique(AssistantMessage message, Map<int, String> renames) {
     var changed = false;
     final content = [
@@ -333,6 +523,8 @@ final class _Turn {
       emit: _emit,
       beforeToolCall: _config.beforeToolCall,
       afterToolCall: _config.afterToolCall,
+      misuse: _misuse,
+      supportsImages: _config.model.supportsImages,
     );
     final sequential = calls.any((call) {
       final tool = _context.tools.where((t) => t.name == call.name).firstOrNull;

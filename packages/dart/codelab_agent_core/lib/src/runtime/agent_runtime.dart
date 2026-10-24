@@ -56,6 +56,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     );
     final logger = spec.ports.logger ?? services.logger;
     final tools = ToolServices(clock: services.clock, logger: logger);
+    final plan = tools.plan;
     final gate = profile.isOn(HostCapability.interactiveApproval)
         ? spec.ports.gate ?? services.gate
         : null;
@@ -85,11 +86,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
           ...spec.extraBeforeToolCall,
         ],
         afterToolCall: spec.extraAfterToolCall,
+        approvalWait: tools.approvalWait,
+        logger: logger,
       ),
       // The system prompt is composed by composeSystemPrompt (tasks.md, 12.4).
       systemPrompt: '',
       tools: registry.tools,
     );
+    // План эмитится через очередь агента: PlanUpdated приходит подписчикам
+    // между ToolCallStarted и ToolCallFinished своего вызова (design.md, D5).
+    plan.publish = (entries) => agent.emit(PlanUpdated(id, entries: entries));
     final session = _Session(
       id,
       spec.cwd,

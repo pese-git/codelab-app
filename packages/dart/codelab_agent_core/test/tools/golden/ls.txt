@@ -1,0 +1,16 @@
+## ls {}
+outcome: completed
+lib/
+node_modules/
+pubspec.yaml
+README.md
+
+## ls {"path":"lib"}
+outcome: completed
+main.dart
+src/
+
+## ls {"path":"README.md"}
+outcome: failed
+README.md is not a directory.
+

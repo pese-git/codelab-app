@@ -39,7 +39,7 @@
 - [x] 4.4 Реализовать `lib/src/loop/payload_builder.dart`, `lib/src/loop/agent_loop.dart` (`runAgentLoop` §5.4 без пустого ответа, бюджета и steering — группа 10) — 4.3 зелёные
 - [x] 4.5 Тест (agent-loop «Agent, steering и follow-up»): `test/loop/agent_test.dart` — `prompt` → события по порядку подписки, `waitForIdle` после всех подписчиков; `test/loop/slow_subscriber_test.dart` (LOOP-2); `test/loop/prompt_while_running_test.dart` (LOOP-10); `abort` → `TurnEnded(cancelled)` (красные)
 - [x] 4.6 Реализовать `lib/src/loop/agent.dart` (очередь emit — design.md, D5) — 4.5 зелёные
-- [ ] 4.7 Проверка итерации 1: ход на `ScriptedStreamFunction` с `read` и `edit` на `MemoryExecutionEnv` под `BoundedEnv` (`test/loop/read_edit_turn_test.dart`); уточнения контракта D14 внесены в документ ядра §5.2, §5.3, §5.4, §5.6, §6.2; `fvm dart run melos run check` зелёный; PR итерации 1
+- [x] 4.7 Проверка итерации 1: ход на `ScriptedStreamFunction` с `read` и `edit` на `MemoryExecutionEnv` под `BoundedEnv` (`test/loop/read_edit_turn_test.dart`); уточнения контракта D14 внесены в документ ядра §5.2, §5.3, §5.4, §5.6, §6.2; `fvm dart run melos run check` зелёный; PR итерации 1
 
 ## 5. Пакет codelab_agent_io и LocalExecutionEnv (2.2)
 
@@ -60,31 +60,31 @@
 - [x] 7.2 Реализовать `lib/src/host/host_profile.dart` — 7.1 зелёный
 - [x] 7.3 Тест (agent-runtime «Минимальная сборка buildAgentCore», «AgentRuntime и AgentSession в памяти»): `test/host/build_agent_core_test.dart` — матрица `agent-serve` на `MemoryExecutionEnv` с выключенным `shellExec` (схемы, `CorePlan.offReasons`), `shellExec` над `MemoryExecutionEnv` → `HostWiringException` (HOST-3), без gate — отказ `no approval interface is available` (PERM-5), `wiring_single_env_test.dart` (ENV-2), политика первым звеном, хуки хоста последними; `test/runtime/agent_session_test.dart` — ход через прямой API, поздний подписчик, `setMode` и `ModeChanged`, `cacheKey` = id сессии, `listSessions`, `dispose`; `test/host/host_wiring_guard_test.dart` — вне `build_agent_core.dart` в `lib/` нет `ToolRegistry(`, `Agent(` и `AgentRuntime(` (HOST-6) (красные)
 - [x] 7.4 Реализовать `lib/src/host/services.dart` (`AgentCoreServices`, `CoreConfig` этапа 2), `lib/src/host/build_agent_core.dart`, `lib/src/runtime/agent_runtime.dart`, `agent_session.dart`, событие `ModeChanged`, экспорт из барели — 7.3 зелёные
-- [ ] 7.5 Проверка итерации 2 (вместе с итерацией 1 change `add-agent-core-permission-policy`): ход «read → edit → exec» через `buildAgentCore` на `LocalExecutionEnv` во временном каталоге с fake gate (`packages/dart/codelab_agent_io/test/local_turn_test.dart`); `fvm dart run melos run check` зелёный локально на macOS и в CI (design.md, риски); PR итерации 2
+- [x] 7.5 Проверка итерации 2 (вместе с итерацией 1 change `add-agent-core-permission-policy`): ход «read → edit → exec» через `buildAgentCore` на `LocalExecutionEnv` во временном каталоге с fake gate (`packages/dart/codelab_agent_io/test/local_turn_test.dart`); `fvm dart run melos run check` зелёный локально на macOS и в CI (design.md, риски); PR итерации 2
 
 ## 8. write, ls, search, update_plan и блокировка пути (2.5, 2.6)
 
-- [ ] 8.1 Тест (agent-tools «Блокировка пути», «Встроенные инструменты MVP»): `test/tools/parallel_edit_test.dart` — 10 параллельных `edit` одного файла (TOOL-7, T-05); `test/tools/builtin/write_test.dart`; `ls_test.dart` (T-06); `search_test.dart` — regex и литерал, ошибка синтаксиса, пропуск каталогов и бинарных, glob `**/*.dart`, `{a,b}`, лимиты и уведомления (T-07); `test/tools/glob_test.dart`; `update_plan_test.dart` — `PlanUpdated` до `ToolCallFinished`, заметка о нескольких `in_progress` (C-05); `read` картинок (§6.4, шаг 2): `ImageContent` при `BinaryFiles` и `supportsImages`, иначе текст ошибки (красные)
-- [ ] 8.2 Реализовать `lib/src/tools/path_lock.dart`, `glob.dart`, `builtin/write.dart`, `ls.dart`, `search.dart`, `update_plan.dart`, `PlanService` — 8.1 зелёные
-- [ ] 8.3 Тест: `test/tools/builtin_tools_golden_test.dart` — каждый инструмент на `MemoryExecutionEnv` против golden; `read`/`search` под `node_modules` огорожены (P-15) (красный)
-- [ ] 8.4 Golden-файлы `test/tools/golden/*.txt` и правки до совпадения — 8.3 зелёный
+- [x] 8.1 Тест (agent-tools «Блокировка пути», «Встроенные инструменты MVP»): `test/tools/parallel_edit_test.dart` — 10 параллельных `edit` одного файла (TOOL-7, T-05); `test/tools/builtin/write_test.dart`; `ls_test.dart` (T-06); `search_test.dart` — regex и литерал, ошибка синтаксиса, пропуск каталогов и бинарных, glob `**/*.dart`, `{a,b}`, лимиты и уведомления (T-07); `test/tools/glob_test.dart`; `update_plan_test.dart` — `PlanUpdated` до `ToolCallFinished`, заметка о нескольких `in_progress` (C-05); `read` картинок (§6.4, шаг 2): `ImageContent` при `BinaryFiles` и `supportsImages`, иначе текст ошибки (красные)
+- [x] 8.2 Реализовать `lib/src/tools/path_lock.dart`, `glob.dart`, `builtin/write.dart`, `ls.dart`, `search.dart`, `update_plan.dart`, `PlanService` — 8.1 зелёные
+- [x] 8.3 Тест: `test/tools/builtin_tools_golden_test.dart` — каждый инструмент на `MemoryExecutionEnv` против golden; `read`/`search` под `node_modules` огорожены (P-15) (красный)
+- [x] 8.4 Golden-файлы `test/tools/golden/*.txt` и правки до совпадения — 8.3 зелёный
 
 ## 9. Предохранитель неверных вызовов (2.5, C-08)
 
-- [ ] 9.1 Тест (agent-tools «Предохранитель повторяющихся неверных вызовов»): `test/tools/misuse_breaker_test.dart` — критерий `core/misuse-breaker-blocks-repeat`: семь вызовов `read {"limit":"ten"}`, ключ по каноническому JSON, отказы разрешения и ненулевой `exec` не блокируются, `enabled: false`; со стороны цикла — новый ход начинает с пустого счётчика, два одинаковых вызова одного пакета засчитываются оба (TOOL-11, LOOP-16) (красный)
-- [ ] 9.2 Реализовать `lib/src/tools/misuse.dart` (`MisuseLimits`, `MisuseBreaker`) и шаги 1a и 9a в `executor.dart` — 9.1 зелёный
+- [x] 9.1 Тест (agent-tools «Предохранитель повторяющихся неверных вызовов»): `test/tools/misuse_breaker_test.dart` — критерий `core/misuse-breaker-blocks-repeat`: семь вызовов `read {"limit":"ten"}`, ключ по каноническому JSON, отказы разрешения и ненулевой `exec` не блокируются, `enabled: false`; со стороны цикла — новый ход начинает с пустого счётчика, два одинаковых вызова одного пакета засчитываются оба (TOOL-11, LOOP-16) (красный)
+- [x] 9.2 Реализовать `lib/src/tools/misuse.dart` (`MisuseLimits`, `MisuseBreaker`) и шаги 1a и 9a в `executor.dart` — 9.1 зелёный
 
 ## 10. Пустой ответ, бюджет, steering и follow-up (2.4)
 
-- [ ] 10.1 Тест (agent-loop «Пустой ответ модели»): `test/loop/empty_completion_test.dart` — критерий `core/empty-completion-retried`, случаи (а)–(д) §5.9 (случай (е) с журналом — этап 3) (LOOP-14, LOOP-15) (красный)
-- [ ] 10.2 Тест (agent-loop «Бюджет хода»): `test/loop/budget_test.dart` — шаги, токены, стоимость при известных ценах, время по `FakeClock` без ожидания одобрения (LOOP-12, design.md, D6) (красный)
-- [ ] 10.3 Тест (agent-loop «Agent, steering и follow-up»): `test/loop/steering_test.dart` — steering во время пакета после пакета, FIFO одним опросом, 25 при лимите 20 (LOOP-8, CAN-6); follow-up после естественной остановки в том же ходе (красный)
-- [ ] 10.4 Реализовать в `agent_loop.dart` пустой ответ (§5.4.1, логи `loop.empty_response`), бюджет с `ApprovalWaitMeter`, опросы steering и follow-up; `final_response_hook_test.dart` — без хука `Accept`, `Revise` даёт шаг с заметкой в payload, `Hold` помечает `TurnEnded.held` (LOOP-13) — 10.1–10.3 зелёные
+- [x] 10.1 Тест (agent-loop «Пустой ответ модели»): `test/loop/empty_completion_test.dart` — критерий `core/empty-completion-retried`, случаи (а)–(д) §5.9 (случай (е) с журналом — этап 3) (LOOP-14, LOOP-15) (красный)
+- [x] 10.2 Тест (agent-loop «Бюджет хода»): `test/loop/budget_test.dart` — шаги, токены, стоимость при известных ценах, время по `FakeClock` без ожидания одобрения (LOOP-12, design.md, D6) (красный)
+- [x] 10.3 Тест (agent-loop «Agent, steering и follow-up»): `test/loop/steering_test.dart` — steering во время пакета после пакета, FIFO одним опросом, 25 при лимите 20 (LOOP-8, CAN-6); follow-up после естественной остановки в том же ходе (красный)
+- [x] 10.4 Реализовать в `agent_loop.dart` пустой ответ (§5.4.1, логи `loop.empty_response`), бюджет с `ApprovalWaitMeter`, опросы steering и follow-up; `final_response_hook_test.dart` — без хука `Accept`, `Revise` даёт шаг с заметкой в payload, `Hold` помечает `TurnEnded.held` (LOOP-13) — 10.1–10.3 зелёные
 
 ## 11. Проверка итерации 3
 
-- [ ] 11.1 Тест «хуки, разрешения первыми» (`core/hooks-order-approval-first`, C-12): через `buildAgentCore` хук хоста видит вызов только после `Allowed`, исключение в `afterToolCall` — результат-ошибка, а не сбой хода
-- [ ] 11.2 `fvm dart run melos run check` зелёный; PR итерации 3
+- [x] 11.1 Тест «хуки, разрешения первыми» (`core/hooks-order-approval-first`, C-12): через `buildAgentCore` хук хоста видит вызов только после `Allowed`, исключение в `afterToolCall` — результат-ошибка, а не сбой хода
+- [x] 11.2 `fvm dart run melos run check` зелёный; PR итерации 3
 
 ## 12. Промпты (2.8)
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import '../cancel/cancel_token.dart';
 import '../llm/messages.dart';
@@ -7,22 +8,24 @@ import '../llm/stream_function.dart';
 import '../llm/usage.dart';
 import '../tools/agent_tool.dart';
 import '../tools/executor.dart';
+import '../tools/misuse.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
+import '../util/logger.dart';
 import 'agent_events.dart';
 import 'turn_budget.dart';
 
-/// Configuration and hooks of a turn (`agent-core-architecture` §5.2).
+/// Конфигурация и хуки хода (`agent-core-architecture` §5.2).
 
-/// The loop awaits every emit (LOOP-2).
+/// Приёмник событий хода; цикл ждёт каждый вызов (LOOP-2).
 typedef AgentEventSink = FutureOr<void> Function(AgentEvent event);
 
-/// Before every model request; changes only the payload (LOOP-7).
+/// Перед каждым запросом к модели; меняет только payload (LOOP-7).
 typedef TransformContextHook =
     Future<List<Message>> Function(List<Message> messages, CancelToken cancel);
 
-/// After validation, before execution; the first [Block] stops the chain.
-/// The first hook is always the permission check (PERM-1).
+/// После валидации, до исполнения; первый [Block] останавливает цепочку.
+/// Первым звеном всегда стоит проверка разрешений (PERM-1).
 typedef BeforeToolCallHook =
     Future<Block?> Function(
       ToolCall call,
@@ -30,7 +33,8 @@ typedef BeforeToolCallHook =
       ToolContext ctx,
     );
 
-/// After execution, before `ToolCallFinished`; overrides by field.
+/// После исполнения, до `ToolCallFinished`; переопределяет результат по
+/// полям.
 typedef AfterToolCallHook =
     Future<ResultOverride?> Function(
       ToolCall call,
@@ -38,13 +42,19 @@ typedef AfterToolCallHook =
       bool isError,
     );
 
-/// After `StepEnded`: replace the context or the model of the next step.
+/// После `StepEnded`: заменить контекст или модель следующего шага.
 typedef PrepareNextStepHook = Future<StepUpdate?> Function(StepResult step);
+
+/// Финальный гейт ответа (LOOP-13): шаг закончился без вызовов, ход готов
+/// остановиться. В MVP хук не регистрируется — поведение совпадает с
+/// [Accept]; после MVP его собирает сессия из проверок (§17.12.4).
+typedef BeforeFinalResponseHook =
+    Future<ResponseVerdict> Function(AssistantMessage message, TurnInfo turn);
 
 final class Block {
   const Block(this.reason, {this.outcome = ToolOutcome.rejected});
 
-  /// The text of the error result for the model.
+  /// Текст результата-ошибки для модели.
   final String reason;
   final ToolOutcome outcome;
 }
@@ -74,9 +84,112 @@ final class StepResult {
   final int stepIndex;
   final AssistantMessage response;
 
-  /// In the order of the calls of [response].
+  /// В порядке вызовов [response].
   final List<ToolResultMessage> results;
   final Usage usage;
+}
+
+/// Решение финального гейта.
+sealed class ResponseVerdict {
+  const ResponseVerdict();
+}
+
+/// Ответ принят, ход завершается.
+final class Accept extends ResponseVerdict {
+  const Accept();
+}
+
+/// Ещё один шаг: [note] уходит модели последним `user`-сообщением payload и
+/// не входит в транскрипт; не больше `maxResponseRevisions` раз за ход.
+final class Revise extends ResponseVerdict {
+  const Revise(this.note);
+
+  final String note;
+}
+
+/// Ход завершается с ответом, помеченным `TurnEnded.held`.
+final class Hold extends ResponseVerdict {
+  const Hold(this.reason);
+
+  final String reason;
+}
+
+/// Сведения о ходе для финального гейта (§17.12.4).
+final class TurnInfo {
+  TurnInfo({
+    required this.turnId,
+    required this.stepIndex,
+    required this.revisions,
+    required this.model,
+    required this.usage,
+    required List<Message> turnMessages,
+  }) : turnMessages = List.unmodifiable(turnMessages);
+
+  final TurnId turnId;
+
+  /// Шаг, давший ответ-кандидат.
+  final int stepIndex;
+
+  /// Сколько `Revise` уже было в этом ходе.
+  final int revisions;
+  final ModelRef model;
+
+  /// Расход хода на момент проверки.
+  final Usage usage;
+
+  /// Сообщения хода, включая кандидата.
+  final List<Message> turnMessages;
+}
+
+/// Очередь сообщений, которую цикл опрашивает на границах шагов (§5.2).
+///
+/// Почему интерфейс: очередь наполняет `Agent` (а после MVP — субагенты и
+/// пользовательский steering со своими правилами приёма, §17.7), а цикл
+/// только забирает из неё.
+abstract interface class MessageQueue<T> {
+  bool get isEmpty;
+  int get length;
+  void add(T item);
+
+  /// Одно сообщение на точку опроса (follow-up); `null` — пусто.
+  T? takeOne();
+
+  /// Все элементы в порядке FIFO за один опрос (steering).
+  List<T> takeAll();
+}
+
+/// [MessageQueue] в памяти — очереди `Agent`.
+final class ListMessageQueue<T> implements MessageQueue<T> {
+  final _items = Queue<T>();
+
+  @override
+  bool get isEmpty => _items.isEmpty;
+
+  @override
+  int get length => _items.length;
+
+  @override
+  void add(T item) => _items.add(item);
+
+  @override
+  T? takeOne() => _items.isEmpty ? null : _items.removeFirst();
+
+  @override
+  List<T> takeAll() {
+    final all = _items.toList();
+    _items.clear();
+    return all;
+  }
+}
+
+/// Сообщение steering: корректировка текущей работы на ближайшей границе
+/// шага (§5.6). [origin] — кто его написал, если не человек (после MVP —
+/// уведомления субагентов, §17.3.8).
+final class SteeringItem {
+  const SteeringItem(this.message, {this.origin});
+
+  final Message message;
+  final MessageOrigin? origin;
 }
 
 final class LoopContext {
@@ -90,10 +203,15 @@ final class LoopContext {
   final String systemPrompt;
   final List<Message> messages;
 
-  /// Schemas of a step are `tools.map(toSchema)`.
+  /// Схемы шага — `tools.map(toSchema)`.
   final List<AgentTool> tools;
 }
 
+/// Всё, что нужно функции хода, кроме контекста и токена отмены.
+///
+/// Как использовать: `Agent` и тесты собирают значение один раз и меняют
+/// его между ходами через [copyWith] (модель, очереди). Поля этапа 3 и
+/// после MVP добавляются как необязательные (design.md, D7).
 final class AgentLoopConfig {
   AgentLoopConfig({
     required this.sessionId,
@@ -107,6 +225,15 @@ final class AgentLoopConfig {
     List<BeforeToolCallHook> beforeToolCall = const [],
     List<AfterToolCallHook> afterToolCall = const [],
     this.prepareNextStep,
+    this.beforeFinalResponse,
+    this.maxResponseRevisions = 2,
+    this.maxSteeringSteps = 20,
+    this.emptyResponseRetries = 2,
+    this.misuse = const MisuseLimits(),
+    this.steering,
+    this.followUp,
+    this.approvalWait,
+    this.logger,
   }) : beforeToolCall = List.unmodifiable(beforeToolCall),
        afterToolCall = List.unmodifiable(afterToolCall);
 
@@ -114,19 +241,46 @@ final class AgentLoopConfig {
   final ModelRef model;
   final StreamFunction stream;
 
-  /// The single execution point (§6.3.1).
+  /// Единая точка исполнения (§6.3.1).
   final ToolExecutor executor;
   final Clock clock;
   final IdGenerator ids;
   final TurnBudget budget;
   final TransformContextHook? transformContext;
 
-  /// `[0]` is always the permission check (PERM-1).
+  /// `[0]` — всегда проверка разрешений (PERM-1).
   final List<BeforeToolCallHook> beforeToolCall;
   final List<AfterToolCallHook> afterToolCall;
   final PrepareNextStepHook? prepareNextStep;
 
-  AgentLoopConfig copyWith({ModelRef? model}) => AgentLoopConfig(
+  /// `null` — ответ всегда принимается (MVP, LOOP-13).
+  final BeforeFinalResponseHook? beforeFinalResponse;
+  final int maxResponseRevisions;
+
+  /// Сколько шагов за ход может добавить steering (LOOP-8).
+  final int maxSteeringSteps;
+
+  /// Повторы пустого ответа подряд (§5.4.1), `loop.empty_response_retries`.
+  final int emptyResponseRetries;
+
+  /// Предохранитель неверных вызовов (§6.3.7), `loop.misuse.*`.
+  final MisuseLimits misuse;
+  final MessageQueue<SteeringItem>? steering;
+  final MessageQueue<Message>? followUp;
+
+  /// Ожидание одобрения за ход: вычитается из времени хода для
+  /// `maxDuration` (design.md, D6). Тот же счётчик, что у
+  /// `ToolServices.approvalWait`; `null` — ожидание не учитывается.
+  final ApprovalWaitMeter? approvalWait;
+
+  /// Логи цикла (`loop.empty_response` и др., §5.4.1); `null` — без логов.
+  final Logger? logger;
+
+  AgentLoopConfig copyWith({
+    ModelRef? model,
+    MessageQueue<SteeringItem>? steering,
+    MessageQueue<Message>? followUp,
+  }) => AgentLoopConfig(
     sessionId: sessionId,
     model: model ?? this.model,
     stream: stream,
@@ -138,5 +292,14 @@ final class AgentLoopConfig {
     beforeToolCall: beforeToolCall,
     afterToolCall: afterToolCall,
     prepareNextStep: prepareNextStep,
+    beforeFinalResponse: beforeFinalResponse,
+    maxResponseRevisions: maxResponseRevisions,
+    maxSteeringSteps: maxSteeringSteps,
+    emptyResponseRetries: emptyResponseRetries,
+    misuse: misuse,
+    steering: steering ?? this.steering,
+    followUp: followUp ?? this.followUp,
+    approvalWait: approvalWait,
+    logger: logger,
   );
 }
