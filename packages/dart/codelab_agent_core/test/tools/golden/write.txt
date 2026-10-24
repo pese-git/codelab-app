@@ -1,0 +1,12 @@
+## write {"path":"lib/new.dart","content":"// new\n"}
+outcome: completed
+Created lib/new.dart (7 bytes).
+
+## write {"path":"README.md","content":"# Demo\n"}
+outcome: completed
+Overwrote README.md (7 bytes).
+
+## write {"path":"../outside.txt","content":"x"}
+outcome: failed
+Path is outside the workspace: ../outside.txt
+

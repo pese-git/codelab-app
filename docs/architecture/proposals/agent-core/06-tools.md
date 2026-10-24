@@ -44,6 +44,10 @@ abstract base class AgentTool {
   /// preflight, prepare и rewriteArgs идут до разрешений и не имеют побочных эффектов (PERM-1),
   /// кроме `prepare` инструмента `lsp` (§17.8, исключение PERM-1).
   String? preflight(Map<String, Object?> args) => null;
+  /// Путь, который точка исполнения держит под PathLock сессии на время execute (§6.3.4, TOOL-7);
+  /// null — блокировка не нужна. args — сырые аргументы: место в очереди занимается при announce,
+  /// в порядке ответа, до валидации. Переопределяют write и edit.
+  String? lockPath(Map<String, Object?> args) => null;
   // После MVP (§17.8.2): уровень, вид, режим пакета и вариант «разрешить всегда» могут зависеть
   // от аргументов. По умолчанию — объявленные значения, поэтому прочие инструменты не меняются.
   ToolTier tierOf(Map<String, Object?> args) => tier;          // политика читает tierOf (§7.4, шаг 7)
@@ -76,7 +80,7 @@ final class ArgsRewrite {                       // после MVP (§17.12.6)
 final class ToolContext {
   const ToolContext({required this.env, required this.cancel, required this.yieldToken,
       required this.onUpdate, required this.toolCallId, required this.services, this.prepared,
-      this.misuse, this.rewrite, this.stepTools = const []});
+      this.misuse, this.rewrite, this.stepTools = const [], this.supportsImages = false});
   final ExecutionEnv env;                       // всегда BoundedEnv (ENV-2)
   final List<String> stepTools;                 // имена схем текущего шага: текст упоминает только их (§6.4)
   final CancelToken cancel, yieldToken;
@@ -90,6 +94,7 @@ final class ToolContext {
                                                 // после MVP (§17.13.4): SessionJournalView? journal (для context_expand)
   final Object? prepared;                       // после MVP: ToolPrepared.state из prepare (шаг 3b)
   final MisuseBreaker? misuse;                  // один на ход, создаёт цикл (§5.5, шаг 0; §6.3.7); null — выключен
+  final bool supportsImages;                    // модель шага принимает картинки: read отдаёт ImageContent (§6.4, шаг 2)
   final ArgsRewrite? rewrite;                   // после MVP (§17.12.6)
 }
 
@@ -264,6 +269,18 @@ final class PathLock {
 Порядок захвата = порядок вызова `run`, а цикл вызывает инструменты пакета в порядке ответа,
 поэтому параллельные правки одного файла применяются в порядке вызовов (TOOL-7). Один экземпляр
 `PathLock` на сессию.
+
+Точка исполнения занимает место в очереди не в шаге 6, а при объявлении вызова (`announce`, шаг 1):
+`reserve(key)` возвращает билет с `acquired` и `release`, шаг 6 ждёт `acquired`. Иначе порядок
+захвата зависел бы от того, чей хук разрешений (шаг 4) ответит раньше. Ключ — нормализованный
+абсолютный путь из `AgentTool.lockPath(rawArgs)`; билет освобождается на любом пути завершения
+вызова, в том числе после отказа, ошибки валидации и `abandon`.
+
+```dart
+// в PathLock:
+PathLockTicket reserve(String key);            // место в очереди; run(key, body) построен на нём
+final class PathLockTicket { final Future<void> acquired; void release(); }   // release идемпотентен
+```
 
 После MVP (§17.8.2) многофайловая правка держит сразу набор путей:
 
@@ -631,7 +648,8 @@ MCP-селектор, которому при создании сессии не
 ```
 
 Заменяет план целиком (так требует ACP `plan`: клиент заменяет весь список). Сервис плана
-сессии эмитит `PlanUpdated(entries)` → ACP `session/update` `plan`; журнал получает запись `plan`
+сессии (`PlanService` в `ToolServices.plan`; сессия задаёт ему `publish` — эмит в очередь `Agent`,
+§5.6) эмитит `PlanUpdated(entries)`, и `update_plan` ждёт доставки до своего `ToolCallFinished` → ACP `session/update` `plan`; журнал получает запись `plan`
 (§8). Больше одного `in_progress` допускается, но дописывается `[Note: more than one entry is in_progress.]`.
 Вывод: `Plan updated: 3 entries (1 completed, 1 in progress, 1 pending).`
 

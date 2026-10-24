@@ -4,7 +4,11 @@ import '../llm/stream_function.dart';
 import '../runtime/agent_runtime.dart';
 import '../tools/builtin/edit.dart';
 import '../tools/builtin/exec.dart';
+import '../tools/builtin/ls.dart';
 import '../tools/builtin/read.dart';
+import '../tools/builtin/search.dart';
+import '../tools/builtin/update_plan.dart';
+import '../tools/builtin/write.dart';
 import '../tools/registry.dart';
 import '../util/logger.dart';
 import 'host_profile.dart';
@@ -75,10 +79,17 @@ BuiltAgentCore buildAgentCore({
     add();
   }
 
+  // Порядок §10.7, шаг 5: базовые инструменты, затем по capability.
   register('read', () => registry.register(ReadTool()));
+  register('write', () => registry.register(WriteTool()));
   register('edit', () => registry.register(EditTool()));
+  register('update_plan', () => registry.register(UpdatePlanTool()));
   if (narrowed.isOn(HostCapability.shellExec)) {
     register('exec', () => registry.register(ExecTool()));
+  }
+  if (narrowed.isOn(HostCapability.fileListing)) {
+    register('ls', () => registry.register(LsTool()));
+    register('search', () => registry.register(SearchTool()));
   }
   final plan = CorePlan(
     profile: narrowed,
