@@ -195,4 +195,7 @@ String describe(AgentEvent e) => switch (e) {
   TurnEnded(:final reason, :final budgetExceeded, :final held) =>
     'TurnEnded(${reason.name}${budgetExceeded == null ? '' : ' ${budgetExceeded.name}'}'
         '${held == null ? '' : ' held'})',
+  ContextCompacted(:final tokensBefore, :final tokensAfter) =>
+    'ContextCompacted($tokensBefore -> $tokensAfter)',
+  SessionTitleChanged(:final title) => 'SessionTitleChanged($title)',
 };

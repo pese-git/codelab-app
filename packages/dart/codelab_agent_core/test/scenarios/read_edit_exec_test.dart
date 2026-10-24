@@ -93,13 +93,16 @@ Future<_Run> _run() async {
     'steps': _steps,
   }, clock: clock);
   final core = buildAgentCore(
-    profile: HostProfile.of('agent-serve'),
+    profile: HostProfile.of('agent-serve').narrowed(const {
+      HostCapability.sessionPersistence: CapabilityOff('журнал теста в памяти'),
+    }),
     services: AgentCoreServices(
       baseEnv: shell,
       gate: gate,
       logger: RecordingLogger(),
       clock: clock,
       ids: SequentialIdGenerator(),
+      sessions: MemorySessionStore(),
       platform: 'linux',
     ),
     config: CoreConfig(defaultModel: testModel),
@@ -154,7 +157,12 @@ void main() {
       ],
     );
     expect(run.trace.first, 'TurnStarted');
-    expect(run.trace.last, 'TurnEnded(completed)');
+    // Заголовок первого хода — событие сессии после TurnEnded (design.md
+    // этапа 3, D6).
+    expect(run.trace.sublist(run.trace.length - 2), [
+      'TurnEnded(completed)',
+      'SessionTitleChanged(Rename the greeting)',
+    ]);
     // В режиме ask gate спрашивает каждый вызов; запрос edit несёт
     // аргументы, место и diff (PERM-6).
     expect(run.requests.map((r) => r.tool), ['read', 'edit', 'exec']);

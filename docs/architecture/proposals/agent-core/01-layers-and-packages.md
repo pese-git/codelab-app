@@ -242,7 +242,7 @@ String? _violates(String uri) {
 3. **PKG-3.** `codelab_agent_acp` и `codelab_agent_mcp` (после MVP — и `codelab_agent_a2a`) не импортируют `dart:io`.
 4. **PKG-4.** Клиенты (`apps/codelab_app`, `apps/codelab_cli`) импортируют агентские пакеты только через `codelab_embedded` и `codelab_setup` (типы конфига и секретов для настроек, dart-agent-and-clients §4.1).
 5. **PKG-5.** Публичный экспорт ядра не раскрывает `lib/src/llm/providers/*` и внутренние классы цикла: хосты получают адаптеры провайдеров через фабрику `createStreamFunction(ProviderConfig config, CoreLlmServices services)` (§2.10).
-6. **PKG-6.** Ядро не создаёт HTTP-клиент, таймеры ожидания, случайность и id само: `http.Client`, `Clock`, `Random` и `IdGenerator` приходят от хоста (в тестах — детерминированные).
+6. **PKG-6.** Ядро не создаёт HTTP-клиент, таймеры ожидания, случайность и id само: `http.Client`, `Clock`, `Random` и `IdGenerator` приходят от хоста (в тестах — детерминированные). Порт `IdGenerator` — `nextId()` для id ходов и вызовов и `nextChars(count, alphabet)` для id сессий и записей журнала (§8.4).
 
 ## 1.6. Обоснование решения
 

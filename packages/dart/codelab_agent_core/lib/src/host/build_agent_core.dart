@@ -3,6 +3,7 @@ import '../env/memory_env.dart';
 import '../llm/stream_function.dart';
 import '../prompts/compose.dart';
 import '../runtime/agent_runtime.dart';
+import '../session/memory_session_store.dart';
 import '../tools/builtin/edit.dart';
 import '../tools/builtin/exec.dart';
 import '../tools/builtin/ls.dart';
@@ -66,6 +67,15 @@ BuiltAgentCore buildAgentCore({
         'env без листинга каталога',
       ),
   });
+  // §10.8: журнал на постоянном носителе требует хранилища, которое не
+  // теряет записи при выходе процесса.
+  if (narrowed.isOn(HostCapability.sessionPersistence) &&
+      services.sessions is MemorySessionStore) {
+    throw const HostWiringException(
+      'capability sessionPersistence требует постоянного SessionStore: '
+      'MemorySessionStore теряет журнал при выходе процесса',
+    );
+  }
   if (narrowed.isOn(HostCapability.shellExec) &&
       services.baseEnv is MemoryExecutionEnv) {
     throw const HostWiringException(

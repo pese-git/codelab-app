@@ -128,7 +128,7 @@ final class _Turn {
           break;
         }
         if (_cancel.isCancelled) {
-          reason = TurnEndReason.cancelled;
+          reason = _cancelledReason;
           break;
         }
         await _emit(StepStarted(_session, stepIndex: _step));
@@ -232,7 +232,7 @@ final class _Turn {
           }
         }
         if (_cancel.isCancelled) {
-          reason = TurnEndReason.cancelled;
+          reason = _cancelledReason;
           break;
         }
         if (await _pollSteering()) {
@@ -558,11 +558,18 @@ final class _Turn {
     timestamp: _config.clock.now(),
   );
 
-  static TurnEndReason _failureReason(AssistantMessage response) =>
-      switch ((response.stopReason, response.errorClass)) {
-        (StopReason.aborted, _) ||
-        (_, LlmErrorClass.aborted) => TurnEndReason.cancelled,
-        (_, LlmErrorClass.terminalFinish) => TurnEndReason.refused,
-        _ => TurnEndReason.failed,
-      };
+  /// Отмена причиной `StorageFailure` — сбой журнала, а не решение
+  /// пользователя: ход завершается `failed` (SES-8).
+  TurnEndReason get _cancelledReason => _cancel.reason is StorageFailure
+      ? TurnEndReason.failed
+      : TurnEndReason.cancelled;
+
+  TurnEndReason _failureReason(AssistantMessage response) => switch ((
+    response.stopReason,
+    response.errorClass,
+  )) {
+    (StopReason.aborted, _) || (_, LlmErrorClass.aborted) => _cancelledReason,
+    (_, LlmErrorClass.terminalFinish) => TurnEndReason.refused,
+    _ => TurnEndReason.failed,
+  };
 }

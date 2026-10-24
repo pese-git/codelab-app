@@ -139,6 +139,7 @@ final class ToolCallFinished extends AgentEvent {
     required this.outcome,
     required List<ContentBlock> content,
     List<FileDiff> diffs = const [],
+    this.interrupted = false,
   }) : content = List.unmodifiable(content),
        diffs = List.unmodifiable(diffs);
 
@@ -148,6 +149,12 @@ final class ToolCallFinished extends AgentEvent {
 
   /// One per changed file; empty — no edits.
   final List<FileDiff> diffs;
+
+  /// Только у реплея: синтетический результат прерванного вызова (§8.8).
+  /// Домен знает четыре исхода, а прерванный вызов показывается как
+  /// `failed` с этим признаком — ACP-проекция этапа 4 ставит по нему
+  /// `_meta.codelab.outcome: "interrupted"`.
+  final bool interrupted;
 }
 
 /// The payload of a request needed a pairing repair (§6.3.3).
@@ -213,6 +220,34 @@ final class AgentError extends AgentEvent {
   final LlmErrorClass? errorClass;
   final String message;
   final bool retrying;
+}
+
+/// Сжатие записано в журнал (§9.8): запись `compaction` пишется до
+/// события, событие её подтверждает.
+final class ContextCompacted extends AgentEvent {
+  const ContextCompacted(
+    super.sessionId, {
+    required this.tokensBefore,
+    required this.tokensAfter,
+  });
+
+  final int tokensBefore, tokensAfter;
+}
+
+/// Заголовок сессии записан в журнал (событие уровня `AgentSession`,
+/// §8.3, §8.10).
+///
+/// Почему событие, а не только запись: ACP-проекция этапа 4 отправляет по
+/// нему `session_info_update`, а клиенту не нужно читать журнал.
+final class SessionTitleChanged extends AgentEvent {
+  const SessionTitleChanged(
+    super.sessionId, {
+    required this.title,
+    required this.updatedAt,
+  });
+
+  final String title;
+  final DateTime updatedAt;
 }
 
 enum TurnEndReason { completed, maxTokens, refused, cancelled, failed }

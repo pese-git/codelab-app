@@ -488,7 +488,9 @@ abstract interface class AgentRuntime {
   /// OpenMode.write → SessionLockedException(owner).
   Future<AgentSession> loadSession(SessionId id, SessionHostPorts ports,
       {OpenMode mode = OpenMode.write});
-  Future<List<SessionSummary>> listSessions({String? cwd});
+  /// Страница сводок с курсором: ACP session/list пагинирует (design.md change
+  /// add-agent-core-sessions-and-compaction, D5); неверный курсор — InvalidCursor.
+  Future<SessionPage> listSessions({String? cwd, String? cursor, int pageSize = 50});
   Future<SessionSearchPage> searchSessions(SessionSearchQuery query);   // после MVP (§17.6.17, D-17): делегирует SessionStore.search
   /// После MVP (§17.6): работают и для незагруженной сессии.
   Future<String> renameSession(SessionId id, String title);   // §17.6.4
@@ -534,8 +536,10 @@ abstract interface class AgentSession {
   Future<RewindResult> rewind(String messageId,
       {bool? summarize, bool dryRun = false, CancelToken? cancel});
   Future<void> label(String targetId, String? label);
-  // После MVP (§8.5.1, §17.9.9): закрыть сессию — остановить субагентов и фоновые команды;
-  // seal: true дополнительно запечатывает журнал (поздние записи отбрасываются, SES-13).
+  // С этапа 3 — close() без seal: отменить ход, дождаться очереди записи журнала (design.md
+  // change add-agent-core-sessions-and-compaction, D4). После MVP (§8.5.1, §17.9.9): ещё и
+  // остановить субагентов и фоновые команды; seal: true дополнительно запечатывает журнал
+  // (поздние записи отбрасываются, SES-13).
   Future<void> close({bool seal = false});
 }
 enum OpenMode { write, readOnlyIfLocked, readOnly }   // после MVP, §17.6.2

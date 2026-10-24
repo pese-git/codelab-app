@@ -29,7 +29,11 @@ void main() {
     expect(result.reason, TurnEndReason.completed);
     expect(result.usage, Usage.zero);
     expect(seen.first, isA<TurnStarted>());
-    expect(seen.last, isA<TurnEnded>());
+    // После TurnEnded — только автоматический заголовок сессии (D6).
+    expect(seen.reversed.take(2).map((e) => e.runtimeType), [
+      SessionTitleChanged,
+      TurnEnded,
+    ]);
     expect(seen.every((e) => e.sessionId == session.id), isTrue);
     expect(h.model.requests.single.cacheKey, session.id.value);
   });
@@ -53,7 +57,10 @@ void main() {
       await pumpEventQueue();
 
       expect(late.first, isA<TurnStarted>());
-      expect(late.last, isA<TurnEnded>());
+      expect(late.reversed.take(2).map((e) => e.runtimeType), [
+        SessionTitleChanged,
+        TurnEnded,
+      ]);
       expect(result.reason, TurnEndReason.cancelled);
     },
   );

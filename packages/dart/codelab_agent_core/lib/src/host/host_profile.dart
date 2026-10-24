@@ -1,10 +1,22 @@
 import '../permissions/modes.dart';
 
 /// Capabilities and profiles of hosts (`agent-core-architecture` §10.2,
-/// §10.4). Stage 2 has the three capabilities that have implementations;
-/// the rest arrive with their subsystems (design.md, D12).
+/// §10.4). Значения появляются вместе с подсистемами: три — этап 2,
+/// `compaction` и `sessionPersistence` — этап 3 (design.md change
+/// `add-agent-core-sessions-and-compaction`, D12).
+enum HostCapability {
+  shellExec,
+  fileListing,
+  interactiveApproval,
 
-enum HostCapability { shellExec, fileListing, interactiveApproval }
+  /// Автоматическое и аварийное сжатие контекста (§9).
+  compaction,
+
+  /// Журнал на постоянном носителе, `session/load`, `session/list`.
+  /// Выключенная — журнал в памяти (`MemorySessionStore`): тесты и хосты
+  /// без носителя.
+  sessionPersistence,
+}
 
 sealed class CapabilityState {
   const CapabilityState();
@@ -59,6 +71,10 @@ final class HostProfile {
       HostCapability.interactiveApproval: CapabilityTransport({
         'acp',
       }, 'вопрос через session/request_permission'),
+      HostCapability.compaction: CapabilityOn(),
+      HostCapability.sessionPersistence: CapabilityTransport({
+        'jsonl-file',
+      }, 'журнал JSONL в \$CODELAB_HOME/sessions'),
     }, ModeId.standard),
     'embedded-cli' => HostProfile._(name, const {
       HostCapability.shellExec: CapabilityTransport({
@@ -68,6 +84,10 @@ final class HostProfile {
       HostCapability.interactiveApproval: CapabilityTransport({
         'acp',
       }, 'вопрос через встроенный ACP-клиент'),
+      HostCapability.compaction: CapabilityOn(),
+      HostCapability.sessionPersistence: CapabilityTransport({
+        'jsonl-file',
+      }, 'журнал JSONL в \$CODELAB_HOME/sessions'),
     }, ModeId.standard),
     _ => throw ArgumentError.value(name, 'name', 'unknown host profile'),
   };

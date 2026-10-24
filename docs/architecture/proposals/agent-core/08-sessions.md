@@ -298,6 +298,8 @@ abstract interface class SessionStore {
   Future<void> create(SessionHeader header);
   /// Одна полная строка JSON за операцию; завершается после записи байтов (§8.5).
   Future<void> append(SessionId id, SessionRecord record, {bool durable = false});
+  /// Сброс записанного на носитель без новой записи — на TurnEnded (таблица ниже).
+  Future<void> flush(SessionId id);
   /// Читает, ремонтирует (§8.6) и возвращает снимок. SessionNotFound, если файла нет.
   Future<SessionSnapshot> open(SessionId id);
   /// Сводки для session/list (§8.10), отсортированы по updatedAt по убыванию.
@@ -337,8 +339,10 @@ final class RepairReport {
 List<SessionRecord> pathToLeaf(SessionSnapshot s, [String? leafId]);    // root-first
 LlmContextProjection buildLlmContext(SessionSnapshot s);                 // §8.7
 Iterable<AgentEvent> buildReplay(SessionSnapshot s);                     // §13.5
-SessionSummary summarize(SessionHeader h, List<SessionRecord> records);  // §8.10
-List<SessionRecord> healInterruptedTurn(SessionSnapshot s, IdGenerator ids, Clock c); // §8.8
+SessionSummary summarize(SessionSnapshot s);                             // §8.10; экспортируется: её зовут хранилища
+List<ToolCall> findInterruptedCalls(SessionSnapshot s);                  // §8.8, шаг 1
+List<MessageRecord> healInterruptedTurn(SessionSnapshot s, IdGenerator ids, Clock c,
+    {Map<String, ToolMeta> meta = const {}});                             // §8.8; meta — заголовки из present()
 ```
 
 `SessionWriter` — объект ядра, через который `AgentSession` пишет журнал. Он держит текущий
@@ -390,7 +394,9 @@ final class SessionTitleChanged extends AgentEvent { final String title; final D
 
 **Идентификатор записи** (`RecordId`):
 
-1. Взять 8 символов из алфавита `0-9a-z` у `IdGenerator.nextChars(8)`.
+1. Взять 8 символов из алфавита `0-9a-z` у `IdGenerator.nextChars(8, alphabet)` (порт
+   `IdGenerator` — `nextId()` и `nextChars(count, alphabet)`; реализация над `Random` хоста —
+   `RandomIdGenerator`, design.md change `add-agent-core-sessions-and-compaction`, D3).
 2. Если id уже есть в `byId` текущего снимка — повторить, не более 16 раз.
 3. После 16 неудач — 12 символов (практически недостижимо: 36^8 ≈ 2,8·10^12).
 4. Id записи никогда не переиспользуется и не меняется. Ссылки (`parentId`, `targetId`,
@@ -813,13 +819,16 @@ $CODELAB_HOME/                              по умолчанию ~/.codelab (
 ```dart
 String fnv1a32Hex(List<int> bytes) {
   var h = 0x811c9dc5;
-  for (final b in bytes) { h ^= b; h = (h * 0x01000193) & 0xffffffff; }
+  for (final b in bytes) { h ^= b; h = (h * 0x193 + (h & 0xff) * 0x01000000) & 0xffffffff; }
   return h.toRadixString(16).padLeft(8, '0');
 }
 ```
 
-`(h * 0x01000193) & 0xffffffff` корректно и в dart2js: произведение 32-битных чисел помещается в
-53 бита мантиссы double.
+Прямое `(h * 0x01000193) & 0xffffffff` в dart2js неверно: произведение 32-битного `h` на
+`0x01000193` доходит до 2^56 и теряет младшие биты (мантисса double — 53 бита). Реализация
+раскладывает множитель на `0x193` и `0x01000000`:
+`h = (h * 0x193 + (h & 0xff) * 0x01000000) & 0xffffffff` — обе части меньше 2^42, результат
+одинаков на Dart VM и в JavaScript.
 
 ## 8.10. Сводка для `session/list`
 
@@ -838,7 +847,7 @@ enum TitleSource { user, auto, derived }   // session_info source:user | session
 ```
 
 ```text
-summarize(header, records):
+summarize(snapshot):                 // заголовок, cwd и записи — из снимка
 1. title := title последней session_info с непустым title (titleSource := её source, по умолчанию auto);
    иначе — первый text-блок первой записи с isUserWords (§8.2.5): пробелы схлопнуты, обрезан до 80 символов
    по границе слова с '…' (titleSource := derived); иначе null

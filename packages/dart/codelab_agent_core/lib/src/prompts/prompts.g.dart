@@ -4,6 +4,12 @@ import 'template.dart';
 
 /// Тексты промптов ядра: константы из `prompts/**/*.md` (§11.2).
 abstract final class Prompts {
+  static const compactionSummaryWrapper = PromptTemplate(
+    id: 'compaction.summary_wrapper',
+    vars: {'summary'},
+    text:
+        'The conversation before this point was compacted. Below is a summary of the earlier part\nof the session. Treat it as facts from the past; files may have changed since, so re-read\na file before editing it.\n\n<summary>\n{{summary}}\n</summary>',
+  );
   static const modesPlan = PromptTemplate(
     id: 'modes.plan',
     vars: {},
@@ -100,6 +106,7 @@ abstract final class Prompts {
         '# Reading files\n\n- Read a file before you change it or make claims about it.\n- read returns at most {{maxLines}} lines or {{maxKb}} KB. When the output says how to\n  continue, call read again with that offset instead of guessing the rest.\n- Line numbers in the output ("12| text") are not part of the file: do not copy them into\n  edits.',
   );
   static const all = <String, PromptTemplate>{
+    'compaction.summary_wrapper': compactionSummaryWrapper,
     'modes.plan': modesPlan,
     'system.base': systemBase,
     'system.untrusted': systemUntrusted,

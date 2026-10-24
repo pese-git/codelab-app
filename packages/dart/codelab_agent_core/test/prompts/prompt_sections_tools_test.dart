@@ -73,14 +73,16 @@ void main() {
   test('CorePlan.promptSections lists the sections of the default mode', () {
     final memory = MemoryExecutionEnv(cwd: '/proj');
     final core = buildAgentCore(
-      profile: HostProfile.of(
-        'agent-serve',
-      ).narrowed(const {HostCapability.shellExec: CapabilityOff('test')}),
+      profile: HostProfile.of('agent-serve').narrowed(const {
+        HostCapability.shellExec: CapabilityOff('test'),
+        HostCapability.sessionPersistence: CapabilityOff('test'),
+      }),
       services: AgentCoreServices(
         baseEnv: memory,
         logger: _NoLogger(),
         clock: const SystemClock(),
         ids: _Ids(),
+        sessions: MemorySessionStore(),
       ),
       config: CoreConfig(
         defaultModel: ModelRef(
@@ -152,4 +154,8 @@ final class _Ids implements IdGenerator {
 
   @override
   String nextId() => 'id-${_n++}';
+
+  @override
+  String nextChars(int count, String alphabet) =>
+      '${_n++}'.padLeft(count, alphabet[0]);
 }
