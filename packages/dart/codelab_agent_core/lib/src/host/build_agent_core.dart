@@ -1,6 +1,7 @@
 import '../env/execution_env.dart';
 import '../env/memory_env.dart';
 import '../llm/stream_function.dart';
+import '../prompts/compose.dart';
 import '../runtime/agent_runtime.dart';
 import '../tools/builtin/edit.dart';
 import '../tools/builtin/exec.dart';
@@ -31,7 +32,8 @@ final class CorePlan {
   /// In registration order.
   final List<String> toolNames;
 
-  /// In assembly order; filled by `composeSystemPrompt` (tasks.md, 12.4).
+  /// Id секций системного промпта в порядке сборки для режима по умолчанию
+  /// (§11.5); сессия в другом режиме собирает свой набор.
   final List<String> promptSections;
   final Map<HostCapability, String> offReasons;
 }
@@ -94,7 +96,17 @@ BuiltAgentCore buildAgentCore({
   final plan = CorePlan(
     profile: narrowed,
     toolNames: [for (final t in registry.tools) t.name],
-    promptSections: const [],
+    // Секции промпта новой сессии в режиме по умолчанию (§10.7, шаг 7).
+    promptSections: systemPromptSections(
+      PromptInputs(
+        cwd: '/',
+        platform: services.platform,
+        today: services.clock.now(),
+        mode: config.permissions.mode ?? narrowed.defaultMode,
+        profile: narrowed,
+        toolNames: {for (final t in registry.tools) t.name},
+      ),
+    ),
     offReasons: {
       for (final MapEntry(key: capability, value: state)
           in narrowed.states.entries)

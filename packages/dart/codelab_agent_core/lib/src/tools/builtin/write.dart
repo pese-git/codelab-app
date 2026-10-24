@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../env/execution_env.dart';
 import '../../llm/messages.dart';
 import '../../util/result.dart';
+import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
 import 'common.dart';
 
@@ -22,9 +23,7 @@ final class WriteTool extends AgentTool {
   String get name => 'write';
 
   @override
-  String get description =>
-      'Create a file or overwrite it with the full new content. Missing '
-      'parent directories are created. To change part of a file, use edit.';
+  String get description => Prompts.toolDescriptionsWrite.render(const {});
 
   @override
   Map<String, Object?> get parameters => const {

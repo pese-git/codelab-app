@@ -9,6 +9,7 @@ import '../loop/agent_events.dart';
 import '../loop/loop_config.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
+import '../prompts/compose.dart';
 import '../tools/agent_tool.dart';
 import '../tools/executor.dart';
 import '../tools/registry.dart';
@@ -89,8 +90,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         approvalWait: tools.approvalWait,
         logger: logger,
       ),
-      // The system prompt is composed by composeSystemPrompt (tasks.md, 12.4).
-      systemPrompt: '',
+      systemPrompt: _systemPrompt(spec.cwd, mode),
       tools: registry.tools,
     );
     // План эмитится через очередь агента: PlanUpdated приходит подписчикам
@@ -104,10 +104,24 @@ final class AgentRuntimeImpl implements AgentRuntime {
       policy,
       tools,
       services,
+      _systemPrompt,
     );
     _sessions.add(session);
     return session;
   }
+
+  /// Системный промпт сессии (§11.5): собирается при создании сессии и при
+  /// смене режима; дата — по часам хоста.
+  String _systemPrompt(String cwd, ModeId mode) => composeSystemPrompt(
+    PromptInputs(
+      cwd: cwd,
+      platform: services.platform,
+      today: services.clock.now(),
+      mode: mode,
+      profile: profile,
+      toolNames: {for (final tool in registry.tools) tool.name},
+    ),
+  );
 
   @override
   Future<List<SessionSummary>> listSessions() async => [
@@ -132,6 +146,7 @@ final class _Session implements AgentSession {
     this._policy,
     this._tools,
     this._services,
+    this._compose,
   ) {
     _agent.subscribe(_publish);
   }
@@ -144,6 +159,9 @@ final class _Session implements AgentSession {
   final PermissionPolicy _policy;
   final ToolServices _tools;
   final AgentCoreServices _services;
+
+  /// Сборка системного промпта для нового режима.
+  final String Function(String cwd, ModeId mode) _compose;
   final _live = StreamController<AgentEvent>.broadcast(sync: true);
   final _turn = <AgentEvent>[];
   TurnEnded? _ended;
@@ -194,6 +212,8 @@ final class _Session implements AgentSession {
   Future<void> setMode(ModeId mode) async {
     _mode = mode;
     _policy.mode = mode;
+    // Режим plan добавляет свою секцию: промпт меняется со следующего хода.
+    _agent.systemPrompt = _compose(cwd, mode);
     _publish(ModeChanged(id, mode: mode));
   }
 

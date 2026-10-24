@@ -88,19 +88,19 @@
 
 ## 12. Промпты (2.8)
 
-- [ ] 12.1 Тест (agent-prompts «Промпты в Markdown и генерация констант», «Шаблоны»): `test/prompts/gen_prompts_test.dart` — ошибки генератора с путём файла (PR-4), `tools/*.md` без `tools`; `test/prompts/template_test.dart` — `\{{`, значение с `{{x}}`, неполный набор → `ArgumentError`; `test/prompts/prompts_sync_test.dart` (PR-1); `test/prompts/no_prompt_literals_test.dart` (PR-2) (красные)
-- [ ] 12.2 Реализовать `tool/gen_prompts.dart` (`dart_style` в `dev_dependencies`, режим `--check`), `lib/src/prompts/template.dart`, файлы `prompts/**/*.md` этапа 2 (design.md, D11), сгенерированный `lib/src/prompts/prompts.g.dart`, melos-скрипт `prompts:check` в `check` — 12.1 зелёные
-- [ ] 12.3 Тест (agent-prompts «Детерминированная сборка системного промпта»): `test/prompts/compose_test.dart` — golden `test/prompts/golden/<profile>-<mode>.txt` для `agent-serve`, `embedded-cli` и режимов `standard`, `plan` (PR-3); `prompt_sections_tools_test.dart` — без `ls` нет `tools/listing`, без `write` и `edit` нет `tools/edit`, `tools/read` остаётся; тест-сторож базы (PR-6) (красные)
-- [ ] 12.4 Реализовать `lib/src/prompts/compose.dart`; `description` встроенных инструментов берётся из `Prompts.toolDescriptions*`; `buildAgentCore` собирает промпт по плану, `CorePlan.promptSections` — 12.3 зелёные
+- [x] 12.1 Тест (agent-prompts «Промпты в Markdown и генерация констант», «Шаблоны»): `test/prompts/gen_prompts_test.dart` — ошибки генератора с путём файла (PR-4), `tools/*.md` без `tools`; `test/prompts/template_test.dart` — `\{{`, значение с `{{x}}`, неполный набор → `ArgumentError`; `test/prompts/prompts_sync_test.dart` (PR-1); `test/prompts/no_prompt_literals_test.dart` (PR-2) (красные)
+- [x] 12.2 Реализовать `tool/gen_prompts.dart` (`dart_style` в `dev_dependencies`, режим `--check`), `lib/src/prompts/template.dart`, файлы `prompts/**/*.md` этапа 2 (design.md, D11), сгенерированный `lib/src/prompts/prompts.g.dart`, melos-скрипт `prompts:check` в `check` — 12.1 зелёные
+- [x] 12.3 Тест (agent-prompts «Детерминированная сборка системного промпта»): `test/prompts/compose_test.dart` — golden `test/prompts/golden/<profile>-<mode>.txt` для `agent-serve`, `embedded-cli` и режимов `standard`, `plan` (PR-3); `prompt_sections_tools_test.dart` — без `ls` нет `tools/listing`, без `write` и `edit` нет `tools/edit`, `tools/read` остаётся; тест-сторож базы (PR-6) (красные)
+- [x] 12.4 Реализовать `lib/src/prompts/compose.dart`; `description` встроенных инструментов берётся из `Prompts.toolDescriptions*`; `buildAgentCore` собирает промпт по плану, `CorePlan.promptSections` — 12.3 зелёные
 
 ## 13. Сквозной сценарий (2.10)
 
-- [ ] 13.1 Тест (agent-runtime «Сквозной сценарий и детерминизм»): `test/scenarios/read_edit_exec_test.dart` — scripted LLM читает, правит и запускает команду на `MemoryExecutionEnv` с фейковым `Shell`; последовательность `AgentEvent`, запросы к gate с `rawInput`, `locations` и diff, итоговые файлы; `same script yields identical event sequence on 100 runs` (PKG-6); парность после отмены — `core/pairing-survives-cancel` (красный)
-- [ ] 13.2 Довести реализацию до зелёного 13.1; дубликаты, появившиеся в итерациях 1–4, устранены (§9.0, правило 8д)
+- [x] 13.1 Тест (agent-runtime «Сквозной сценарий и детерминизм»): `test/scenarios/read_edit_exec_test.dart` — scripted LLM читает, правит и запускает команду на `MemoryExecutionEnv` с фейковым `Shell`; последовательность `AgentEvent`, запросы к gate с `rawInput`, `locations` и diff, итоговые файлы; `same script yields identical event sequence on 100 runs` (PKG-6); парность после отмены — `core/pairing-survives-cancel` (красный)
+- [x] 13.2 Довести реализацию до зелёного 13.1; дубликаты, появившиеся в итерациях 1–4, устранены (§9.0, правило 8д)
 
 ## 14. Web-smoke и завершение этапа
 
-- [ ] 14.1 `test/web_smoke/main.dart` проводит ход через `buildAgentCore` на `MemoryExecutionEnv`: scripted модель вызывает `read` и отвечает текстом (workspace-architecture «Web-smoke проводит ход с инструментом»); `fvm dart run melos run web-compile` зелёный
-- [ ] 14.2 `public_api_test.dart`: барель не экспортирует `src/loop/agent_loop.dart`, `src/loop/agent.dart`, `src/tools/executor.dart` (PKG-5, design.md, D1)
-- [ ] 14.3 Definition of Done этапа: `fvm dart test packages/dart/codelab_agent_core packages/dart/codelab_agent_io` зелёный; `melos run guard` и `melos run web-compile` зелёные; строки матрицы C-01, C-05 (ядро), C-07, C-08, C-12, T-01, T-03, T-04, T-05, T-06, T-07, T-08, T-09 (ядро), T-12, P-08, P-11, P-15 имеют доказательства; `docs/architecture/` и документ ядра правятся там, где реализация уточнила контракт; PR итерации 4
+- [x] 14.1 `test/web_smoke/main.dart` проводит ход через `buildAgentCore` на `MemoryExecutionEnv`: scripted модель вызывает `read` и отвечает текстом (workspace-architecture «Web-smoke проводит ход с инструментом»); `fvm dart run melos run web-compile` зелёный
+- [x] 14.2 `public_api_test.dart`: барель не экспортирует `src/loop/agent_loop.dart`, `src/loop/agent.dart`, `src/tools/executor.dart` (PKG-5, design.md, D1)
+- [x] 14.3 Definition of Done этапа: `fvm dart test packages/dart/codelab_agent_core packages/dart/codelab_agent_io` зелёный; `melos run guard` и `melos run web-compile` зелёные; строки матрицы C-01, C-05 (ядро), C-07, C-08, C-12, T-01, T-03, T-04, T-05, T-06, T-07, T-08, T-09 (ядро), T-12, P-08, P-11, P-15 имеют доказательства; `docs/architecture/` и документ ядра правятся там, где реализация уточнила контракт; PR итерации 4
 - [ ] 14.4 Перед архивированием: `openspec validate add-agent-core-loop-and-tools --strict`; архивировать после change `add-agent-core-llm-contract` (design.md, риски) и вместе с `add-agent-core-permission-policy`; заполнить Purpose новых спецификаций

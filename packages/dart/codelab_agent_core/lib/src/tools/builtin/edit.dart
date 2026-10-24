@@ -1,5 +1,6 @@
 import '../../llm/messages.dart';
 import '../../util/result.dart';
+import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
 import '../unified_diff.dart';
 import 'common.dart';
@@ -22,9 +23,7 @@ final class EditTool extends AgentTool {
   String get name => 'edit';
 
   @override
-  String get description =>
-      'Replace an exact fragment of a file. oldText must occur exactly once; '
-      'read the file first and copy the fragment byte for byte.';
+  String get description => Prompts.toolDescriptionsEdit.render(const {});
 
   @override
   Map<String, Object?> get parameters => const {

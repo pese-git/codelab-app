@@ -53,6 +53,10 @@ melos:
       description: Run architecture guards — forbidden imports and the core dependency allowlist.
       run: fvm dart test packages/dart/codelab_architecture_tests
 
+    prompts:check:
+      description: Check that the generated prompt constants of the agent core match prompts/**/*.md.
+      run: cd packages/dart/codelab_agent_core && fvm dart run tool/gen_prompts.dart --check
+
     web-compile:
       description: Compile the agent core web-smoke entry point to JavaScript and WebAssembly.
       run: >-
@@ -97,6 +101,7 @@ melos:
         - check-format
         - analyze
         - guard
+        - prompts:check
         - test
         - protocol-conformance
         - conformance:client

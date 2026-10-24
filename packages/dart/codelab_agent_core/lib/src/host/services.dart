@@ -17,6 +17,7 @@ final class AgentCoreServices {
     required this.clock,
     required this.ids,
     this.gate,
+    this.platform = 'unknown',
   });
 
   /// Local | ACP client | memory (tests).
@@ -27,6 +28,13 @@ final class AgentCoreServices {
   final Logger logger;
   final Clock clock;
   final IdGenerator ids;
+
+  /// Платформа хоста для системного промпта (`linux`, `macos`, `windows`,
+  /// `web`). Почему сервис: ядро web-безопасно и не читает
+  /// `Platform.operatingSystem`, а модели полезно знать, какой shell и какие
+  /// пути её ждут (§11.5). Хост на `dart:io` передаёт
+  /// `Platform.operatingSystem`.
+  final String platform;
 }
 
 /// The permissions part of the configuration.

@@ -1,6 +1,7 @@
 import '../../env/execution_env.dart';
 import '../../llm/messages.dart';
 import '../../util/result.dart';
+import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
 import '../truncate.dart';
 import 'common.dart';
@@ -25,9 +26,7 @@ final class LsTool extends AgentTool {
   String get name => 'ls';
 
   @override
-  String get description =>
-      'List one directory of the workspace: directories end with "/", links '
-      'with "@". Hidden entries are shown.';
+  String get description => Prompts.toolDescriptionsLs.render(const {});
 
   @override
   Map<String, Object?> get parameters => const {

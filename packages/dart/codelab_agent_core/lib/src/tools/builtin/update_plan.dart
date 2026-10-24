@@ -1,5 +1,6 @@
 import '../../llm/messages.dart';
 import '../../loop/agent_events.dart';
+import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
 
 /// `update_plan` — заменить план работы целиком (`agent-core-architecture`
@@ -19,9 +20,7 @@ final class UpdatePlanTool extends AgentTool {
   String get name => 'update_plan';
 
   @override
-  String get description =>
-      'Replace the whole work plan shown to the user. Send every entry each '
-      'time; keep one entry in_progress.';
+  String get description => Prompts.toolDescriptionsUpdatePlan.render(const {});
 
   @override
   Map<String, Object?> get parameters => const {
