@@ -468,6 +468,91 @@ void main() {
   });
 
   group('SessionStateMachine', () {
+    test('applies current_mode_update to the session without a turn', () {
+      const session = AcpSession(
+        id: SessionId('session-1'),
+        cwd: '/workspace',
+        modes: SessionModeState(
+          availableModes: [
+            SessionMode(id: SessionModeId('standard'), name: 'Standard'),
+            SessionMode(id: SessionModeId('plan'), name: 'Plan'),
+          ],
+          currentModeId: SessionModeId('standard'),
+        ),
+      );
+
+      final result = SessionStateMachine.applyUpdate(
+        session,
+        const SessionUpdate.currentModeUpdate(
+          currentModeId: SessionModeId('plan'),
+        ),
+      );
+
+      expect(result, isA<AppliedStateTransition<AcpSession>>());
+      expect(
+        result.stateOrThrow.modes?.currentModeId,
+        const SessionModeId('plan'),
+      );
+    });
+
+    test('applies session_info_update title to the session', () {
+      const session = AcpSession(id: SessionId('session-1'), cwd: '/w');
+
+      final titled = SessionStateMachine.applyUpdate(
+        session,
+        const SessionUpdate.sessionInfoUpdate(title: 'README'),
+      ).stateOrThrow;
+      // Отсутствующее поле не стирает заголовок (13-acp-adapter §13.5).
+      final kept = SessionStateMachine.applyUpdate(
+        titled,
+        const SessionUpdate.sessionInfoUpdate(
+          updatedAt: '2026-01-01T00:00:00Z',
+        ),
+      ).stateOrThrow;
+
+      expect(titled.title, 'README');
+      expect(kept.title, 'README');
+    });
+
+    test('replayHistory splits the replay into completed turns', () {
+      const session = AcpSession(id: SessionId('session-1'), cwd: '/w');
+      var next = 0;
+
+      final replayed = SessionStateMachine.replayHistory(session, const [
+        SessionUpdate.agentMessageChunk(
+          content: ContentBlock.text(text: 'hello first'),
+        ),
+        SessionUpdate.userMessageChunk(content: ContentBlock.text(text: 'q')),
+        SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: ToolCallId('call_9'),
+            title: 'Read a.txt',
+            kind: ToolKind.read,
+            status: ToolCallStatus.failed,
+          ),
+        ),
+        SessionUpdate.sessionInfoUpdate(title: 'T'),
+      ], nextTurnId: () => PromptTurnId('replay-${next++}'));
+
+      expect(replayed.status, SessionLifecycleStatus.active);
+      expect(replayed.title, 'T');
+      expect(replayed.turns.map((turn) => turn.id.value), [
+        'replay-0',
+        'replay-1',
+      ]);
+      expect(replayed.turns.first.prompt, isEmpty);
+      expect(replayed.turns.last.prompt, const [ContentBlock.text(text: 'q')]);
+      expect(
+        replayed.turns.map((turn) => turn.status),
+        everyElement(PromptTurnStatus.completed),
+      );
+      expect(
+        replayed.turns.last.toolCalls[const ToolCallId('call_9')]?.status,
+        ToolCallStatus.failed,
+      );
+      expect(replayed.activeTurn, isNull);
+    });
+
     test('moves session through active running awaitingApproval active', () {
       const idle = AcpSession(id: _sessionId, cwd: '/workspace');
       final active = SessionStateMachine.activate(idle);
