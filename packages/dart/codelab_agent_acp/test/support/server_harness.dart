@@ -31,14 +31,26 @@ const testAgentInfo = Implementation(
 /// журнал — [JournalStore] (постоянное хранилище для сборки, в памяти для
 /// теста), env хоста — [HostEnv], сессии получают env соединения.
 final class ServerHarness {
-  ServerHarness._(this.core, this.server, this.client, this.logger, this.store);
+  ServerHarness._(
+    this.core,
+    this.server,
+    this.client,
+    this.logger,
+    this.store,
+    this.clock,
+    this.model,
+  );
 
+  /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
+  /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
   static Future<ServerHarness> start({
     String profile = 'agent-serve',
     Map<HostCapability, CapabilityState> narrow = const {},
     List<Map<String, Object?>> steps = const [],
     ExecutionEnv Function(String cwd)? localListing,
     JournalStore? sessions,
+    TurnBudget budget = const TurnBudget(),
+    bool slow = false,
   }) async {
     final clock = FakeClock();
     final logger = RecordingLogger();
@@ -62,7 +74,7 @@ final class ServerHarness {
         ids: SequentialIdGenerator(),
         sessions: store,
       ),
-      config: CoreConfig(defaultModel: scriptedModel),
+      config: CoreConfig(defaultModel: scriptedModel, budget: budget),
       streamFunction: model.call,
     );
     final server = AcpAgentServer(
@@ -75,10 +87,10 @@ final class ServerHarness {
       clock: clock,
     );
     final link = InProcessAcpLink();
-    unawaited(server.serve(link.agent));
+    unawaited(server.serve(slow ? SlowTransport(link.agent) : link.agent));
     final client = TestClient(link.client);
     await client.start();
-    return ServerHarness._(core, server, client, logger, store);
+    return ServerHarness._(core, server, client, logger, store, clock, model);
   }
 
   final BuiltAgentCore core;
@@ -86,6 +98,8 @@ final class ServerHarness {
   final TestClient client;
   final RecordingLogger logger;
   final JournalStore store;
+  final FakeClock clock;
+  final ScriptedStreamFunction model;
 
   /// `initialize` с fs и terminal, как codelab-app.
   Future<JsonRpcResponse> initialize({Object? clientCapabilities}) =>
@@ -100,7 +114,55 @@ final class ServerHarness {
         'clientInfo': {'name': 'codelab-app', 'version': '0.4.0'},
       });
 
+  /// `session/new` в `/work/demo`; возвращает `sessionId`, уведомление
+  /// `available_commands_update` после ответа снимается из очереди.
+  Future<String> newSession({String cwd = '/work/demo'}) async {
+    final response = await client.request('session/new', {
+      'cwd': cwd,
+      'mcpServers': <Object?>[],
+    });
+    await client.next();
+    return response.resultMap['sessionId']! as String;
+  }
+
+  /// `session/prompt` с одним текстовым блоком.
+  Future<JsonRpcResponse> prompt(String sessionId, String text) =>
+      client.request('session/prompt', {
+        'sessionId': sessionId,
+        'prompt': [
+          {'type': 'text', 'text': text},
+        ],
+      });
+
   Future<void> dispose() => server.shutdown(grace: Duration.zero);
+}
+
+/// Транспорт, который отправляет каждый кадр после паузы в цикле событий.
+final class SlowTransport implements AcpTransport {
+  SlowTransport(this._inner);
+
+  final AcpTransport _inner;
+
+  @override
+  Stream<JsonRpcMessage> get inbound => _inner.inbound;
+
+  @override
+  Stream<AcpTransportEvent> get events => _inner.events;
+
+  @override
+  AcpTransportState get state => _inner.state;
+
+  @override
+  Future<void> start() => _inner.start();
+
+  @override
+  Future<void> send(JsonRpcMessage message) async {
+    await Future<void>.delayed(Duration.zero);
+    await _inner.send(message);
+  }
+
+  @override
+  Future<void> close({Duration? timeout}) => _inner.close(timeout: timeout);
 }
 
 /// Клиент теста над концом транспорта: запросы с ожиданием ответа по id и
@@ -109,6 +171,10 @@ final class TestClient {
   TestClient(this.transport);
 
   final AcpTransport transport;
+
+  /// Ответы на запросы агента по методу; запрос без обработчика попадает в
+  /// очередь [next], и тест отвечает [respond].
+  final handlers = <String, FutureOr<Object?> Function(JsonRpcRequest)>{};
 
   /// Все кадры агента в порядке прихода, включая ответы.
   final received = <JsonRpcMessage>[];
@@ -124,6 +190,12 @@ final class TestClient {
 
   void _onMessage(JsonRpcMessage message) {
     received.add(message);
+    if (message case JsonRpcRequest(
+      :final method,
+    ) when handlers.containsKey(method)) {
+      unawaited(_answer(message, handlers[method]!));
+      return;
+    }
     if (message case JsonRpcResponse(:final id)) {
       final pending = _pending.remove(id);
       if (pending != null) {
@@ -160,6 +232,66 @@ final class TestClient {
   );
 
   Future<void> raw(JsonRpcMessage message) => transport.send(message);
+
+  /// Ответ на запрос агента.
+  Future<void> respond(JsonRpcRequest request, Object? result) =>
+      transport.send(JsonRpcMessage.response(id: request.id, result: result));
+
+  Future<void> _answer(
+    JsonRpcRequest request,
+    FutureOr<Object?> Function(JsonRpcRequest) handler,
+  ) async {
+    JsonRpcMessage response;
+    try {
+      response = JsonRpcMessage.response(
+        id: request.id,
+        result: await handler(request),
+      );
+    } on JsonRpcError catch (error) {
+      // Обработчик бросает JsonRpcError, чтобы ответить ошибкой.
+      response = JsonRpcMessage.response(id: request.id, error: error);
+    }
+    await transport.send(response);
+  }
+
+  /// Файлы клиента в памяти для `fs/*` (как codelab-app по рабочей папке).
+  void serveFiles(MemoryExecutionEnv files) {
+    handlers['fs/read_text_file'] = (request) async {
+      final params = request.params! as Map<String, Object?>;
+      final read = await files.readText(
+        params['path']! as String,
+        line: params['line'] as int?,
+        limit: params['limit'] as int?,
+      );
+      return switch (read) {
+        Ok(:final value) => {'content': value},
+        Err(:final error) => throw JsonRpcError(
+          code: error.code == FileErrorCode.notFound ? -32002 : -32603,
+          message: '${error.code.name}: ${error.path}',
+        ),
+      };
+    };
+    handlers['fs/write_text_file'] = (request) async {
+      final params = request.params! as Map<String, Object?>;
+      await files.writeText(
+        params['path']! as String,
+        params['content']! as String,
+      );
+      return <String, Object?>{};
+    };
+  }
+
+  /// Уведомления `session/update` из [frames] — их `update`.
+  static List<Map<String, Object?>> updates(
+    Iterable<JsonRpcMessage> frames,
+  ) => [
+    for (final frame in frames)
+      if (frame case JsonRpcNotification(
+        method: 'session/update',
+        :final params,
+      ))
+        (params! as Map<String, Object?>)['update']! as Map<String, Object?>,
+  ];
 
   /// Следующий кадр агента, кроме ответов на запросы этого клиента.
   Future<JsonRpcMessage> next() {
