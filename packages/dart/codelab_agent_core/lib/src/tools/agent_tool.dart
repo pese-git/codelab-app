@@ -114,6 +114,7 @@ final class ToolContext {
     List<String> stepTools = const [],
     this.misuse,
     this.supportsImages = false,
+    this.onTerminal,
   }) : stepTools = List.unmodifiable(stepTools);
 
   /// Всегда ограниченный env сессии (ENV-2).
@@ -122,6 +123,12 @@ final class ToolContext {
 
   /// Частичный результат для клиента (`ToolCallProgress`).
   final void Function(ToolExecutionResult partial) onUpdate;
+
+  /// Терминал клиента, в котором идёт команда: точка исполнения отдаёт его
+  /// клиенту `ToolCallProgress` с `ToolCallTerminal`, а ACP-проекция — блоком
+  /// `{"type":"terminal"}` вызова (§13.7). `exec` передаёт его в
+  /// `ExecOptions.onTerminal`; `null` — терминал никому не нужен.
+  final void Function(String terminalId)? onTerminal;
   final String toolCallId;
   final ToolServices services;
 

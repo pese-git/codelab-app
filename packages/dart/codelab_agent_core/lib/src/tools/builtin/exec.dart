@@ -86,6 +86,7 @@ final class ExecTool extends AgentTool {
         cancel: ctx.cancel,
         onOutput: (chunk) =>
             ctx.onUpdate(ToolExecutionResult([TextContent(chunk)])),
+        onTerminal: ctx.onTerminal,
       ),
     );
     switch (result) {

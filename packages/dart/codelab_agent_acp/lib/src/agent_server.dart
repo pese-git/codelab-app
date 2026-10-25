@@ -4,11 +4,15 @@ import 'package:acp_protocol/acp_protocol.dart' as acp;
 import 'package:acp_transports/acp_transports.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
+import 'acp_client_env.dart';
+import 'acp_permission_gate.dart';
 import 'config_options.dart';
 import 'connection/acp_error.dart';
+import 'connection/client_requests.dart';
 import 'connection/inbound_router.dart';
 import 'connection/outbound_queue.dart';
 import 'connection/pending_requests.dart';
+import 'prompt_content.dart';
 import 'session_bridge.dart';
 
 /// Таймауты запросов агента к клиенту (§13.9).
@@ -116,7 +120,7 @@ final class AcpAgentServer {
   Future<void> shutdown({Duration grace = const Duration(seconds: 5)}) async {
     _shuttingDown = true;
     for (final bridge in [..._sessions.values]) {
-      await bridge.session.close();
+      await bridge.close();
     }
     _sessions.clear();
     for (final connection in [..._connections]) {
@@ -130,6 +134,11 @@ final class AcpAgentServer {
 final class _Connection {
   _Connection(this._server, this._transport) : _pending = PendingRequests() {
     _outbound = OutboundQueue(_transport, logger: _server._logger);
+    _requests = ClientRequests(
+      outbound: _outbound,
+      pending: _pending,
+      clock: _server.clock,
+    );
     _router = InboundRouter(
       transport: _transport,
       outbound: _outbound,
@@ -144,6 +153,7 @@ final class _Connection {
   final AcpTransport _transport;
   final PendingRequests _pending;
   late final OutboundQueue _outbound;
+  late final ClientRequests _requests;
   late final InboundRouter _router;
 
   /// Возможности клиента из `initialize`; `null` — `initialize` не было.
@@ -154,7 +164,7 @@ final class _Connection {
   Future<void> run() async {
     await _transport.start();
     await _router.run();
-    _pending.failAll(StateError('client connection lost'));
+    _pending.failAll(const ClientDisconnected());
   }
 
   Future<void> close() async {
@@ -179,6 +189,10 @@ final class _Connection {
     return switch (method) {
       acp.sessionNewMethod => _sessionNew(request.params),
       acp.sessionListMethod => _sessionList(request.params),
+      acp.sessionPromptMethod => _sessionPrompt(request.params),
+      // Терпимость: уведомление, присланное запросом, получает ещё и ответ
+      // null (§13.7, шаг 6).
+      acp.sessionCancelMethod => _cancelRequest(request.params),
       _ => throw AcpRequestError.methodNotFound('Method not found: $method'),
     };
   }
@@ -186,12 +200,7 @@ final class _Connection {
   Future<void> _onNotification(acp.JsonRpcNotification notification) async {
     switch (notification.method) {
       case acp.sessionCancelMethod:
-        final cancel = acp.acpSessionCancel.decodeParams(notification.params);
-        _logger.log(
-          LogLevel.info,
-          'acp.cancel.no_turn',
-          fields: {'session_id': cancel.sessionId.value},
-        );
+        _cancel(notification.params);
       default:
         _logger.log(
           LogLevel.info,
@@ -245,8 +254,34 @@ final class _Connection {
         fields: {'name': server.name, 'reason': 'MCP is not available yet'},
       );
     }
-    final session = await _server._runtime.createSession(SessionSpec(cwd: cwd));
-    final bridge = SessionBridge(session);
+    final link = ClientLink(requests: _requests, capabilities: _client!);
+    final clientEnv = AcpClientExecutionEnv(
+      link: link,
+      cwd: cwd,
+      timeouts: _server.config.timeouts,
+      clock: _server.clock,
+      logger: _logger,
+    );
+    final listing = _server.config.localListing;
+    final bridge = SessionBridge(
+      sink: _notify,
+      logger: _logger,
+      clientEnv: clientEnv,
+    );
+    final session = await _server._runtime.createSession(
+      SessionSpec(
+        cwd: cwd,
+        ports: SessionHostPorts(
+          env: listing == null
+              ? clientEnv
+              : ListingOverlayEnv(clientEnv, listing(cwd)),
+          gate: AcpPermissionGate(link, logger: _logger),
+        ),
+        extraBeforeToolCall: [bridge.markInProgress],
+      ),
+    );
+    link.sessionId = session.id.value;
+    bridge.attach(session);
     _server._sessions[session.id.value] = bridge;
     final sessionId = acp.SessionId(session.id.value);
     final response = acp.NewSessionResponse(
@@ -295,6 +330,56 @@ final class _Connection {
     return Reply(acp.acpSessionList.encodeResult(response));
   }
 
+  /// `session/prompt` (§13.7): ход в фоне, ответ — по `TurnEnded`.
+  Future<Reply> _sessionPrompt(Object? params) async {
+    final request = acp.acpSessionPrompt.decodeParams(params);
+    final bridge = _bridge(request.sessionId);
+    final content = promptContent(request.prompt);
+    if (bridge.turnActive) {
+      _logger.log(
+        LogLevel.info,
+        'acp.prompt.rejected',
+        fields: {'session_id': request.sessionId.value, 'reason': 'turnActive'},
+      );
+      throw const AcpRequestError.invalidParams(
+        'a turn is already running',
+        data: {
+          'codelab': {'reason': 'turnActive'},
+        },
+      );
+    }
+    final response = await bridge.prompt(content);
+    return Reply(acp.acpSessionPrompt.encodeResult(response));
+  }
+
+  Future<Reply> _cancelRequest(Object? params) async {
+    _cancel(params);
+    return const Reply(null);
+  }
+
+  /// `session/cancel` (§13.7): без хода — только лог, ничего не уходит.
+  void _cancel(Object? params) {
+    final cancel = acp.acpSessionCancel.decodeParams(params);
+    final bridge = _server._sessions[cancel.sessionId.value];
+    if (bridge == null || !bridge.cancel()) {
+      _logger.log(
+        LogLevel.info,
+        'acp.cancel.no_turn',
+        fields: {'session_id': cancel.sessionId.value},
+      );
+      return;
+    }
+    _logger.log(
+      LogLevel.info,
+      'acp.cancel',
+      fields: {'session_id': cancel.sessionId.value},
+    );
+  }
+
+  SessionBridge _bridge(acp.SessionId id) =>
+      _server._sessions[id.value] ??
+      (throw AcpRequestError.notFound('Session not found: ${id.value}'));
+
   /// Абсолютный путь; при локальном листинге — существующий каталог.
   /// Без листинга проверить каталог нечем: в ACP нет stat каталога
   /// (design.md, D5).
@@ -313,12 +398,17 @@ final class _Connection {
     throw AcpRequestError.invalidParams('cwd does not exist: $cwd');
   }
 
-  void _update(acp.SessionId sessionId, acp.SessionUpdate update) {
+  void _update(acp.SessionId sessionId, acp.SessionUpdate update) =>
+      _notify(acp.SessionNotification(sessionId: sessionId, update: update));
+
+  /// Очередь уведомлений соединения: мосты его сессий ставят сюда кадры
+  /// в порядке событий ядра (D6).
+  void _notify(acp.SessionNotification notification) {
     unawaited(
       _outbound.enqueue(
         acp.encodeAcpNotification(
           method: acp.sessionUpdateMethod,
-          params: acp.SessionNotification(sessionId: sessionId, update: update),
+          params: notification,
         ),
       ),
     );

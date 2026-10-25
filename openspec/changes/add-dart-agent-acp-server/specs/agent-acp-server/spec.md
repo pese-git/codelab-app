@@ -116,8 +116,8 @@
 `AcpClientExecutionEnv` SHALL исполнять файлы и команды через клиента по §4.7 и §13.9:
 - `readText` → `fs/read_text_file`, `writeText` → `fs/write_text_file`, `stat` → `fs/read_text_file` с `limit: 1`; таймаут 30 с;
 - `exec` → `terminal/create` (`command: "/bin/sh"`, `args: ["-c", <команда>]`, `cwd`, `env`, `outputByteLimit`) → `terminal/wait_for_exit` → `terminal/output` → `terminal/release`; `terminal/release` — всегда, включая ошибки, отмену и таймаут (ACP-9, ENV-7);
-- метод, для которого клиент не объявил capability, → `Err(unsupported)` без запроса;
-- ошибка JSON-RPC `-32002` → `notFound`, прочие → `io` с текстом клиента, разрыв соединения → `io` «client connection lost».
+- метод, для которого клиент не объявил capability, → `Err(unsupported)` без запроса (`exec` — `ExecErrorCode.shellUnavailable`);
+- ошибка JSON-RPC `-32002` → `notFound`, прочие → `io` с текстом клиента, таймаут → `io` «… (timed out)», разрыв соединения → `io` «client connection lost».
 
 `AcpPermissionGate` SHALL запрашивать решение через `session/request_permission` по §7.8: `toolCall` с `rawInput`, `locations` и `diff`, варианты `allow_once`, `allow_always` (только если предложен), `reject_once`, `reject_always`; критическая команда — `_meta.codelab.critical`. Неизвестный `optionId`, ошибка JSON-RPC и разрыв → отказ с логом; `cancelled` и отмена хода → `cancelled`.
 

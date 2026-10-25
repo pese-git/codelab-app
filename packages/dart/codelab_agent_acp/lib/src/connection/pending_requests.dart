@@ -17,11 +17,21 @@ final class PendingRequests {
   final _waiting = <JsonRpcId, Completer<JsonRpcResponse>>{};
   var _counter = 0;
 
+  /// Ошибка разрыва после [failAll]: ответа на новый запрос уже не будет.
+  Object? _closed;
+
+  /// Соединение закрыто: новые запросы отправлять некуда.
+  bool get isClosed => _closed != null;
+
   JsonRpcId nextId(String prefix) => JsonRpcId.string('$prefix-${++_counter}');
 
   /// Ожидание ответа на запрос [id]; завершается ответом клиента или
-  /// ошибкой из [fail].
+  /// ошибкой из [fail]. После [failAll] — сразу ошибкой разрыва: иначе
+  /// запрос в закрытое соединение ждал бы своего таймаута.
   Future<JsonRpcResponse> expect(JsonRpcId id) {
+    if (_closed case final error?) {
+      return Future.error(error);
+    }
     final completer = Completer<JsonRpcResponse>();
     _waiting[id] = completer;
     return completer.future;
@@ -42,8 +52,10 @@ final class PendingRequests {
     _waiting.remove(id)?.completeError(error);
   }
 
-  /// Разрыв соединения: все ожидания завершаются ошибкой.
+  /// Разрыв соединения: все ожидания и все будущие запросы завершаются
+  /// ошибкой [error].
   void failAll(Object error) {
+    _closed = error;
     final all = [..._waiting.values];
     _waiting.clear();
     for (final completer in all) {

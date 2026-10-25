@@ -157,7 +157,10 @@ void main() {
       final outcome = await running;
       await clock.elapse(const Duration(seconds: 60));
 
-      expect(outcome.outcome, ToolOutcome.rejected);
+      // Ход отменён во время вопроса — вызов отменён, а не отклонён
+      // (§13.7, «Статусы вызова»; design.md change
+      // `add-dart-agent-acp-server`, D13).
+      expect(outcome.outcome, ToolOutcome.cancelled);
       expect(
         textOf(outcome),
         deniedText('w', 'permission request was cancelled'),

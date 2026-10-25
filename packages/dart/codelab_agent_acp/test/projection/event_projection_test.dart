@@ -2,6 +2,7 @@ import 'package:acp_protocol/acp_protocol.dart' as acp;
 import 'package:codelab_agent_acp/src/connection/acp_error.dart';
 import 'package:codelab_agent_acp/src/event_projection.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_core/src/tools/pairing.dart';
 import 'package:test/test.dart';
 
 import '../support/server_harness.dart' show scriptedModel;

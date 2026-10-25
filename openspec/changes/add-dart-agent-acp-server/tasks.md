@@ -27,24 +27,24 @@
 
 ## 3. Env и gate через клиента (4.3)
 
-- [ ] 3.1 Тест (agent-execution-env «ListingOverlayEnv»): `packages/dart/codelab_agent_core/test/env/listing_overlay_env_test.dart` — `listDir` от второго env, остальное от первого, общая граница `BoundedEnv` (красный)
-- [ ] 3.2 Реализовать `packages/dart/codelab_agent_core/lib/src/env/listing_overlay_env.dart` и экспорт — 3.1 зелёный
-- [ ] 3.3 Тест (agent-acp-server «Запросы агента к клиенту»): `test/acp_client_env_test.dart` на fake-клиенте — общий набор `execution_env_contract.dart` ядра; `fs/*` с абсолютным путём, `line`, `limit`; `stat` через `limit: 1`; `-32002` → `notFound`; таймаут 30 с на `FakeClock`; `exec`: `terminal/create` с `/bin/sh -c`, `env`, `outputByteLimit`; `release` после успеха, ошибки `wait_for_exit`, таймаута и отмены (ACP-9, ENV-7); нет capability → `Err(unsupported)` без кадра; разрыв → `io` «client connection lost» (красный)
-- [ ] 3.4 Реализовать `lib/src/acp_client_env.dart` — 3.3 зелёный
-- [ ] 3.5 Тест (agent-acp-server «Запросы агента к клиенту»): `test/acp_permission_gate_test.dart` — `toolCall` с `rawInput`, `locations`, `diff`; четыре варианта и без `allow_always`; `_meta.codelab.critical` у критической команды; неизвестный `optionId`, ошибка JSON-RPC и разрыв → `rejectOnce` с логом; `cancelled` и отмена хода → `cancelled`, поздний ответ игнорируется (PERM-4) (красный)
-- [ ] 3.6 Реализовать `lib/src/acp_permission_gate.dart` — 3.5 зелёный
+- [x] 3.1 Тест (agent-execution-env «ListingOverlayEnv»): `packages/dart/codelab_agent_core/test/env/listing_overlay_env_test.dart` — `listDir` от второго env, остальное от первого, общая граница `BoundedEnv` (красный)
+- [x] 3.2 Реализовать `packages/dart/codelab_agent_core/lib/src/env/listing_overlay_env.dart` и экспорт — 3.1 зелёный
+- [x] 3.3 Тест (agent-acp-server «Запросы агента к клиенту»): `test/acp_client_env_test.dart` на fake-клиенте — общий набор `execution_env_contract.dart` ядра; `fs/*` с абсолютным путём, `line`, `limit`; `stat` через `limit: 1`; `-32002` → `notFound`; таймаут 30 с на `FakeClock`; `exec`: `terminal/create` с `/bin/sh -c`, `env`, `outputByteLimit`; `release` после успеха, ошибки `wait_for_exit`, таймаута и отмены (ACP-9, ENV-7); нет capability → `Err(unsupported)` без кадра; разрыв → `io` «client connection lost» (красный)
+- [x] 3.4 Реализовать `lib/src/acp_client_env.dart` — 3.3 зелёный
+- [x] 3.5 Тест (agent-acp-server «Запросы агента к клиенту»): `test/acp_permission_gate_test.dart` — `toolCall` с `rawInput`, `locations`, `diff`; четыре варианта и без `allow_always`; `_meta.codelab.critical` у критической команды; неизвестный `optionId`, ошибка JSON-RPC и разрыв → `rejectOnce` с логом; `cancelled` и отмена хода → `cancelled`, поздний ответ игнорируется (PERM-4) (красный)
+- [x] 3.6 Реализовать `lib/src/acp_permission_gate.dart` — 3.5 зелёный
 
 ## 4. Ход, проекция и итог (4.2)
 
-- [ ] 4.1 Тест (agent-acp-server «session/prompt, проекция и итог хода»): `test/projection/every_agent_event_is_projected_test.dart` — список подтипов `AgentEvent` ↔ таблица проекции (ACP-6); `test/projection/event_projection_test.dart` — таблица §13.7 строка за строкой, статусы `pending` → `in_progress` → итог, `outcome` у `cancelled`/`rejected`, `diff` у правок, `terminal` в `content` (красные)
-- [ ] 4.2 Тест: `test/prompt_test.dart` — ход в фоне; `turnActive`; пустой `prompt` и `audio` → `-32602`; контент `resource`/`resource_link` по §13.4; итог хода по таблице §13.8 (`end_turn`, `max_turn_requests` с `budgetExceeded`, `max_tokens`, `refusal`, `-32603` с `data.codelab`) (ACP-7); 1 000 дельт на медленном транспорте — ответ последний (ACP-3) (красный)
-- [ ] 4.3 Реализовать `lib/src/event_projection.dart`, фоновый ход и хук `markInProgress` в `session_bridge.dart`, `lib/src/prompt_content.dart` — 4.1, 4.2 зелёные
+- [x] 4.1 Тест (agent-acp-server «session/prompt, проекция и итог хода»): `test/projection/every_agent_event_is_projected_test.dart` — список подтипов `AgentEvent` ↔ таблица проекции (ACP-6); `test/projection/event_projection_test.dart` — таблица §13.7 строка за строкой, статусы `pending` → `in_progress` → итог, `outcome` у `cancelled`/`rejected`, `diff` у правок, `terminal` в `content` (красные)
+- [x] 4.2 Тест: `test/prompt_test.dart` — ход в фоне; `turnActive`; пустой `prompt` и `audio` → `-32602`; контент `resource`/`resource_link` по §13.4; итог хода по таблице §13.8 (`end_turn`, `max_turn_requests` с `budgetExceeded`, `max_tokens`, `refusal`, `-32603` с `data.codelab`) (ACP-7); 1 000 дельт на медленном транспорте — ответ последний (ACP-3) (красный)
+- [x] 4.3 Реализовать `lib/src/event_projection.dart`, фоновый ход и хук `markInProgress` в `session_bridge.dart`, `lib/src/prompt_content.dart` — 4.1, 4.2 зелёные
 
 ## 5. Отмена (4.2)
 
-- [ ] 5.1 Тест (agent-acp-server «session/cancel»): `test/cancel_test.dart` — отмена во время стрима модели, во время запроса разрешения (ответ `cancelled`), во время `terminal/wait_for_exit` (`kill`, `output`, `release`), ответ всегда `stopReason: cancelled` (ACP-5); отмена без хода — лог `acp.cancel.no_turn`; `session/cancel` как запрос — дополнительно ответ `null` (красный)
-- [ ] 5.2 Реализовать отмену в `session_bridge.dart` и `pending_requests.dart` — 5.1 зелёный
-- [ ] 5.3 Проверка итерации 2: `fvm dart run melos run check` зелёный; документ ядра §13 правится там, где реализация уточнила контракт; PR итерации 2
+- [x] 5.1 Тест (agent-acp-server «session/cancel»): `test/cancel_test.dart` — отмена во время стрима модели, во время запроса разрешения (ответ `cancelled`), во время `terminal/wait_for_exit` (`kill`, `output`, `release`), ответ всегда `stopReason: cancelled` (ACP-5); отмена без хода — лог `acp.cancel.no_turn`; `session/cancel` как запрос — дополнительно ответ `null` (красный)
+- [x] 5.2 Реализовать отмену в `session_bridge.dart` и `pending_requests.dart` — 5.1 зелёный
+- [x] 5.3 Проверка итерации 2: `fvm dart run melos run check` зелёный; документ ядра §13 правится там, где реализация уточнила контракт; PR итерации 2
 
 ## 6. Каталог и опции в ядре (D3, D4)
 

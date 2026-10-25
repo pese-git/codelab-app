@@ -350,7 +350,15 @@ void main() {
       ).where((u) => u['sessionUpdate'] == 'agent_message_chunk').length;
       expect(chunks, 1000);
       await pumpEventQueue();
-      expect(h.client.received.last, response);
+      // После ответа — только события сессии: автозаголовок пишется после
+      // хода (§8.10), кадров хода там нет.
+      final after = TestClient.updates(
+        h.client.received.skip(h.client.received.indexOf(response) + 1),
+      );
+      expect(
+        [for (final u in after) u['sessionUpdate']],
+        ['session_info_update'],
+      );
     },
   );
 }

@@ -83,7 +83,10 @@ void main() {
       'outcome': {'outcome': 'selected', 'optionId': 'allow_once'},
     });
     await pumpEventQueue();
-    expect(h.client.received.last, response);
+    final after = TestClient.updates(
+      h.client.received.skip(h.client.received.indexOf(response) + 1),
+    );
+    expect(after.where((u) => u['toolCallId'] == 'call_2'), isEmpty);
   });
 
   test('cancel during terminal/wait_for_exit: kill, output, release', () async {

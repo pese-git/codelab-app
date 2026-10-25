@@ -147,6 +147,17 @@ final class ToolCallExecutor implements ToolExecutor {
           ),
         ),
       ),
+      onTerminal: (terminalId) => progress.add(
+        Future.sync(
+          () => invocation.emit(
+            ToolCallProgress(
+              invocation.sessionId,
+              toolCallId: call.id,
+              content: [ToolCallTerminal(terminalId)],
+            ),
+          ),
+        ),
+      ),
     );
     // Место в очереди пути занимается здесь, в порядке ответа: хуки
     // разрешений разных вызовов могут ответить в любом порядке (TOOL-7).

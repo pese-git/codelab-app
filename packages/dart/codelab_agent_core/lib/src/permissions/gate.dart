@@ -27,7 +27,9 @@ final class PermissionRequest {
     required Map<String, Object?> rawInput,
     List<Location> locations = const [],
     List<FileDiff> diffs = const [],
+    this.pattern,
     this.reason,
+    this.criticalLabel,
     this.allowAlwaysOffered = true,
   }) : rawInput = Map.unmodifiable(rawInput),
        locations = List.unmodifiable(locations),
@@ -44,8 +46,18 @@ final class PermissionRequest {
   /// One per changed file.
   final List<FileDiff> diffs;
 
+  /// Шаблон «разрешить всегда» (`AgentTool.permissionPattern`, §7.5): им
+  /// клиент называет варианты `allow_always` и `reject_always`, чтобы
+  /// пользователь видел область решения (§13.9). `null` — без шаблона.
+  final String? pattern;
+
   /// For example `critical command: recursive delete of a protected path`.
   final String? reason;
+
+  /// Метка правила критической команды (§7.6), например
+  /// `recursive delete of a protected path`; `null` — команда не
+  /// критическая. ACP-адаптер ставит по ней `_meta.codelab.critical` (§7.8).
+  final String? criticalLabel;
 
   /// `false` for critical patterns.
   final bool allowAlwaysOffered;

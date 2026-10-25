@@ -146,6 +146,22 @@ Contract test (4.7) и агентский драйвер (4.8) нужны оба
 - **Закрытие конца `InProcessAcpLink`** переводит другой конец в `failed` и закрывает его `inbound` — как EOF у stdio, сервер видит конец соединения по завершению потока.
 - **Покрытие FIX-2 клиента** получает элемент `session/set_mode`: codelab-app метод не вызывает (режимы — через `configOptions`), агентскую сторону покрывают фикстуры `acp/set-mode-*`. Это новый элемент протокола, а не возврат покрытого.
 
+### D13. Уточнения контракта, найденные в итерации 2
+
+Документы ядра правятся в том же PR (§4.7, §4.11, §7.8, §13.7, §13.9):
+
+- **Терминал вызова — `ToolContext.onTerminal`.** `exec` передаёт его в `ExecOptions.onTerminal`, а точка исполнения отдаёт `terminalId` событием `ToolCallProgress` с `ToolCallTerminal` — так строка §13.7 «`terminal` в `content`» получает источник. Только добавление в `ToolContext`.
+- **`PermissionRequest.pattern` и `criticalLabel`.** Политика кладёт в запрос шаблон «разрешить всегда» (`PermissionKey.pattern`) и метку критического правила. `AcpPermissionGate` называет варианты `Always allow <pattern>` и `Always reject <pattern>` (§13.9; пример §7.8 приведён к этому), а `_meta.codelab.critical` — `{"critical": true, "label": criticalLabel}`. Только добавления.
+- **Отмена хода во время вопроса — исход `cancelled`.** Хук политики ставит `Block(outcome: cancelled)`, если токен хода отменён к моменту отказа: вызов отменён до старта (§13.7, «Статусы вызова»). Исход `cancelled` от клиента без отмены хода остаётся отказом `rejected` (PERM-7). Ожидание теста этапа 2 `policy_order_test.dart` («a cancel during the wait is cancelled») приведено к таблице статусов.
+- **Таймаут и отмена `fs/*` — `io`.** В `FileErrorCode` нет `timeout`, поэтому таймаут §13.9 — `FileError(io, path, "client did not answer … (timed out)")`, у записи с пометкой `the write may have completed`. У порта `FileSystem` нет токена отмены: мост сессии при `session/cancel` вызывает `AcpClientExecutionEnv.abortPending`, ожидание завершается `io` «aborted».
+- **`exec` без `terminal` — `ExecErrorCode.shellUnavailable`.** Кода `unsupported` у `ExecErrorCode` нет; ни одного кадра не уходит, как требует §4.7.
+- **`in_progress` после `tool_call`.** События сессии приходят подписчику асинхронно, а хук `markInProgress` вызывается в цикле синхронно. Если `tool_call` вызова ещё не спроецирован, мост откладывает `in_progress` до его проекции — порядок кадров вызова не зависит от планировщика.
+- **Автозаголовок — после ответа хода.** `SessionTitleChanged` эмитится после завершённого хода (§8.10), поэтому `session_info_update` идёт после ответа `session/prompt`: ответ — последний кадр *хода* (ACP-3), а не соединения.
+- **Ответ сбоя хода.** `message` ошибки `-32603` — `Turn failed: <текст>`; `retryable: true` только у классов провайдера `network`, `timeout`, `rateLimited`, `server`.
+- **Разрыв соединения.** После конца входящего потока `PendingRequests` отвечает на новые запросы агента сразу `ClientDisconnected`, без кадра и без ожидания таймаута.
+- **Общий набор env для клиента.** `execution_env_contract.dart` получает `clientBacked`: клиент различает только «не найдено» (`-32002`), поэтому набор требует ошибку-значение без точного кода, а `stat` — файл без размера и без каталогов (§4.7).
+- **Проверка ACP-6 без `dart:mirrors`.** Тест читает подтипы `AgentEvent` из исходника иерархии и сверяет с `projectionTable`; исчерпывающий `switch` без `default` ловит обратное при компиляции.
+
 ## Risks / Trade-offs
 
 - **[Неверное прочтение спецификации закрепляется фикстурами]** → у каждой фикстуры ссылка `spec` на раздел `docs/acp/protocol/` (FIX-1); клиентский прогон тех же фикстур против `AcpClientApplication` показывает расхождение агента и клиента; ручная проверка с Zed — в `add-codelab-agent-binary`.
