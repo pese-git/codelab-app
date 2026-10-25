@@ -1,6 +1,7 @@
 import '../cancel/cancel_token.dart';
 import '../env/execution_env.dart';
 import '../llm/messages.dart';
+import '../llm/model_catalog.dart';
 import '../llm/model_ref.dart';
 import '../llm/usage.dart';
 import '../loop/agent_events.dart';
@@ -32,6 +33,18 @@ abstract interface class AgentSession {
   /// Модель, которой идёт следующий шаг: ACP-адаптер показывает её в опции
   /// `model` (§13.6; design.md change `add-dart-agent-acp-server`, D3).
   ModelRef get model;
+
+  /// Уровень рассуждения сессии; хранится и у модели без рассуждения, но в
+  /// запрос уходит только у модели с `supportsReasoning` (§2.12.3).
+  ReasoningEffort get effort;
+
+  /// Модель каталога; пишет `model_change` и действует со следующего шага,
+  /// идущий запрос не прерывается. Модели нет в каталоге — [ArgumentError].
+  Future<void> setModel(ModelId id);
+
+  /// Пишет `config_change {optionId: "effort"}`; действует со следующего
+  /// шага.
+  Future<void> setEffort(ReasoningEffort effort);
 
   /// Запускает ход; второй вызов во время хода — [StateError] (LOOP-10).
   /// Возвращается после `TurnEnded` и записи журнала.
@@ -67,12 +80,29 @@ final class TurnResult {
 }
 
 /// Ports of one session; each falls back to `AgentCoreServices`.
+///
+/// [extraBeforeToolCall] и [extraAfterToolCall] — хуки хоста загруженной
+/// сессии с тем же правилом сборки, что у `SessionSpec` (§10.7): у
+/// `loadSession` нет спецификации, а ACP-адаптеру нужен там свой
+/// `markInProgress` (design.md change `add-dart-agent-acp-server`, D4).
 final class SessionHostPorts {
-  const SessionHostPorts({this.env, this.gate, this.logger});
+  const SessionHostPorts({
+    this.env,
+    this.gate,
+    this.logger,
+    this.extraBeforeToolCall = const [],
+    this.extraAfterToolCall = const [],
+  });
 
   final ExecutionEnv? env;
   final PermissionGate? gate;
   final Logger? logger;
+
+  /// Последними в `beforeToolCall`, после проверки разрешений.
+  final List<BeforeToolCallHook> extraBeforeToolCall;
+
+  /// Первыми в `afterToolCall`.
+  final List<AfterToolCallHook> extraAfterToolCall;
 }
 
 final class SessionSpec {

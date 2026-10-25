@@ -48,21 +48,21 @@
 
 ## 6. Каталог и опции в ядре (D3, D4)
 
-- [ ] 6.1 Тест (agent-runtime «AgentRuntime и AgentSession», «Минимальная сборка buildAgentCore»): `packages/dart/codelab_agent_core/test/runtime/session_options_test.dart` — каталог по умолчанию из `defaultModel`; `setModel` пишет `model_change`, модели нет в каталоге → `ArgumentError`; `setEffort` пишет `config_change`, запрос несёт усилие только у модели с рассуждением; `loadSession` восстанавливает модель из каталога и усилие; модели журнала нет в каталоге → поведение этапа 3; `SessionHostPorts.extraBeforeToolCall` у загруженной сессии стоит после политики (красный)
-- [ ] 6.2 Реализовать `AgentCoreServices.models`, `CoreConfig.effort`, `AgentRuntime.models`, `AgentSession.model`/`effort`/`setModel`/`setEffort`, хуки `SessionHostPorts` и восстановление в `loadSession` — 6.1 зелёный
+- [x] 6.1 Тест (agent-runtime «AgentRuntime и AgentSession», «Минимальная сборка buildAgentCore»): `packages/dart/codelab_agent_core/test/runtime/session_options_test.dart` — каталог по умолчанию из `defaultModel`; `setModel` пишет `model_change`, модели нет в каталоге → `ArgumentError`; `setEffort` пишет `config_change`, запрос несёт усилие только у модели с рассуждением; `loadSession` восстанавливает модель из каталога и усилие; модели журнала нет в каталоге → поведение этапа 3; `SessionHostPorts.extraBeforeToolCall` у загруженной сессии стоит после политики (красный)
+- [x] 6.2 Реализовать `AgentCoreServices.models`, `CoreConfig.effort`, `AgentRuntime.models`, `AgentSession.model`/`effort`/`setModel`/`setEffort`, хуки `SessionHostPorts` и восстановление в `loadSession` — 6.1 зелёный
 
 ## 7. session/load и опции через ACP (4.1)
 
-- [ ] 7.1 Тест (agent-acp-server «session/load и реплей»): `test/session_load_test.dart` — неизвестный id → `-32002`; реплей по правилам §13.5 (слова пользователя, служебные user-записи пропущены, мысли, текст, `tool_call` с итоговым статусом и `diff`, `interrupted`, `compaction` не отправляется); хвост `plan`, `current_mode_update`, `config_option_update`, `available_commands_update`, `session_info_update`; ответ последним (ACP-3); `cwd` запроса выигрывает с записью `codelab.cwd_changed` (красный)
-- [ ] 7.2 Реализовать `lib/src/replay.dart` и `session/load` в `agent_server.dart` — 7.1 зелёный
-- [ ] 7.3 Тест (agent-acp-server «Режимы и опции сессии»): `test/config_options_test.dart` — порядок `mode`, `model`, `effort`; `effort` только у модели с рассуждением и сохраняется при смене модели и `session/load` (ACP-10); `set_config_option` для каждой опции, неизвестный `configId` и значение → `-32602`, нет сессии → `-32002`, ответ без дублирующего `config_option_update` (ACP-11); `session/set_mode` → `{}` и `current_mode_update`; синонимы режимов на входе (красный)
-- [ ] 7.4 Реализовать `session/set_config_option`, `session/set_mode`, опцию `effort` в `config_options.dart` — 7.3 зелёный
+- [x] 7.1 Тест (agent-acp-server «session/load и реплей»): `test/session_load_test.dart` — неизвестный id → `-32002`; реплей по правилам §13.5 (слова пользователя, служебные user-записи пропущены, мысли, текст, `tool_call` с итоговым статусом и `diff`, `interrupted`, `compaction` не отправляется); хвост `plan`, `current_mode_update`, `config_option_update`, `available_commands_update`, `session_info_update`; ответ последним (ACP-3); `cwd` запроса выигрывает с записью `codelab.cwd_changed` (красный)
+- [x] 7.2 Реализовать `lib/src/replay.dart` и `session/load` в `agent_server.dart` — 7.1 зелёный
+- [x] 7.3 Тест (agent-acp-server «Режимы и опции сессии»): `test/config_options_test.dart` — порядок `mode`, `model`, `effort`; `effort` только у модели с рассуждением и сохраняется при смене модели и `session/load` (ACP-10); `set_config_option` для каждой опции, неизвестный `configId` и значение → `-32602`, нет сессии → `-32002`, ответ без дублирующего `config_option_update` (ACP-11); `session/set_mode` → `{}` и `current_mode_update`; синонимы режимов на входе (красный)
+- [x] 7.4 Реализовать `session/set_config_option`, `session/set_mode`, опцию `effort` в `config_options.dart` — 7.3 зелёный
 
 ## 8. Отсоединение и завершение (4.1)
 
-- [ ] 8.1 Тест (agent-acp-server «Отсоединение, переподключение и завершение»): `test/detach_test.dart` на `FakeClock` — закрытие транспорта во время разрешения и загрузка новым соединением в пределах grace → реплей и новый `session/request_permission` с тем же `toolCallId` (PERM-4), итог хода — `session_info_update` с `_meta.codelab.turnEnded`; grace истёк → ход `cancelled`; `detachGrace: Duration.zero` — отмена сразу; `session/load` во время хода в живом соединении → `-32602` `sessionBusy`; `shutdown` — новые запросы `-32603`, ходы отменены, транспорты закрыты (красный)
-- [ ] 8.2 Реализовать отсоединение, переподключение и `shutdown` в `agent_server.dart` — 8.1 зелёный
-- [ ] 8.3 Проверка итерации 3: `fvm dart run melos run check` зелёный; документ ядра §13 и §10.7 правятся там, где реализация уточнила контракт; PR итерации 3
+- [x] 8.1 Тест (agent-acp-server «Отсоединение, переподключение и завершение»): `test/detach_test.dart` на `FakeClock` — закрытие транспорта во время разрешения и загрузка новым соединением в пределах grace → реплей и новый `session/request_permission` с тем же `toolCallId` (PERM-4), итог хода — `session_info_update` с `_meta.codelab.turnEnded`; grace истёк → ход `cancelled`; `detachGrace: Duration.zero` — отмена сразу; `session/load` во время хода в живом соединении → `-32602` `sessionBusy`; `shutdown` — новые запросы `-32603`, ходы отменены, транспорты закрыты (красный)
+- [x] 8.2 Реализовать отсоединение, переподключение и `shutdown` в `agent_server.dart` — 8.1 зелёный
+- [x] 8.3 Проверка итерации 3: `fvm dart run melos run check` зелёный; документ ядра §13 и §10.7 правятся там, где реализация уточнила контракт; PR итерации 3
 
 ## 9. Агентский драйвер и корпус этапа 4 (4.8)
 

@@ -95,10 +95,13 @@ void main() {
   test('mode: current_mode_update first, then the full list', () async {
     final sessionId = await ready();
     await h.client.drain();
+    final mark = h.client.received.length;
 
     final response = await set(sessionId, 'mode', 'plan');
 
-    final updates = updatesBefore(response);
+    final updates = TestClient.updates(
+      h.client.received.sublist(mark, h.client.received.indexOf(response)),
+    );
     expect(updates, [
       {'sessionUpdate': 'current_mode_update', 'currentModeId': 'plan'},
     ]);
@@ -171,6 +174,7 @@ void main() {
   test('session/set_mode answers {} after current_mode_update', () async {
     final sessionId = await ready();
     await h.client.drain();
+    final mark = h.client.received.length;
 
     final response = await h.client.request('session/set_mode', {
       'sessionId': sessionId,
@@ -178,9 +182,14 @@ void main() {
     });
 
     expect(response.resultMap, isEmpty);
-    expect(updatesBefore(response), [
-      {'sessionUpdate': 'current_mode_update', 'currentModeId': 'bypass'},
-    ]);
+    expect(
+      TestClient.updates(
+        h.client.received.sublist(mark, h.client.received.indexOf(response)),
+      ),
+      [
+        {'sessionUpdate': 'current_mode_update', 'currentModeId': 'bypass'},
+      ],
+    );
   });
 
   test('switching to a model without reasoning: one note next turn', () async {

@@ -236,9 +236,9 @@ final class AcpServerConfig {
    * после MVP при объявленном `sessionTree` у `user_message_chunk` и `agent_message_chunk`
      реплея — `_meta.codelab.recordId` (id записи, для «перемотать сюда», §17.6.10); в режиме только
      чтения вызов без результата уходит со статусом `in_progress` (§17.6.8).
-6. После истории: последняя запись `plan` → `plan`; затем `current_mode_update`,
+6. После истории: последняя запись `plan` → `plan` (если план был); затем `current_mode_update`,
    `config_option_update` (полный снимок), `available_commands_update`, `session_info_update`
-   (`title`, `updatedAt`).
+   (`title`, `updatedAt`) — если у сессии есть заголовок.
 7. Ответ `LoadSessionResponse(modes, configOptions)` — после всех уведомлений реплея; после MVP в
    `_meta.codelab` — `readOnly` (шаг 4) и `forkedFrom` (§17.6.10).
 8. Если сессия была переподключена (шаг 3b): каждому ожидающему `session/request_permission`
@@ -246,7 +246,8 @@ final class AcpServerConfig {
    (если придёт) игнорируется (PERM-4).
 9. По `TurnEnded` переподключённого хода ответ на исходный `session/prompt` отправить некуда
    (его соединение закрыто). Адаптер отправляет новому соединению `session_info_update` с
-   `_meta.codelab.turnEnded: {"stopReason": "..."}` (расширение, §13.12); после MVP при непустом
+   `_meta.codelab.turnEnded: {"stopReason": "..."}` (расширение, §13.12), при сбое хода —
+   `{"error": {errorClass, message, retryable}}` (как `data.codelab`, §13.8); после MVP при непустом
    `TurnEnded.returnedSteers` — с полем `steerReturned: ["<steerId>", …]` (§17.7.2.2).
 
 Пример реплея (фрагмент):
@@ -307,6 +308,10 @@ final class AcpServerConfig {
    `/mode`) — тогда уходит `config_option_update`.
 5. `effort` → запись `config_change {optionId: "effort", value}`; действует со следующего шага
    (идущий запрос к модели не прерывается).
+
+Смена модели или усилия посреди хода доходит до цикла хуком `prepareNextStep` сессии на границе
+шага. Заметку §2.12.3 о смене на модель без рассуждения ставит мост сессии ACP-адаптера: смена
+пришла запросом клиента, а заметка не пишется в журнал и не уходит модели.
 
 **Опции сессии** — в порядке массива `configOptions` (спецификация: важные — первыми):
 

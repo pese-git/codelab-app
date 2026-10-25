@@ -306,7 +306,8 @@ buildAgentCore(profile, services, config, streamFunction):
 6. разрешения: PermissionPolicyFactory(mode: config.permissions.mode ?? profile.defaultMode (конфиг заменяет режим профиля, §10.5), gate,
      rules: PolicyRules(toolPolicies: config.permissions.tools, denyPatterns: config.permissions.deny)); политика ставится первым beforeToolCall-хуком (PERM-1);
      вторым — после MVP SessionHooks.before при включённой userHooks (§17.14.2.3);
-     хуки хоста из SessionSpec.extraBeforeToolCall (например, ACP markInProgress, §13.7) — последними
+     хуки хоста из SessionSpec.extraBeforeToolCall (например, ACP markInProgress, §13.7) — последними;
+       у загруженной сессии — из SessionHostPorts.extraBeforeToolCall по тому же правилу
      afterToolCall: хуки хоста из SessionSpec.extraAfterToolCall — первыми, затем (после MVP) SessionHooks.after (§17.14.2.3), затем хук сессии языковых серверов (§17.8.5)
 7. промпт: секции в фиксированном порядке (§11.5), только для включённых capability (HOST-4)
 8. LLM: stream := streamFunction (если передан, только тесты) иначе createStreamFunction(ProviderConfig из config.models,

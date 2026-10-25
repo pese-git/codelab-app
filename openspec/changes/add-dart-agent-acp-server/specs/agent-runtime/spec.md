@@ -5,7 +5,7 @@
 
 `AgentRuntime`:
 - `createSession(SessionSpec)` — сессия с `cwd`, режимом `ModeId`, моделью `ModelRef`, портами `SessionHostPorts` и хуками хоста; журнал создаётся в `SessionStore` и начинается записью `model_change`;
-- `loadSession(id, ports, {model})` — открытие журнала, запись синтетических результатов прерванных вызовов, транскрипт из `buildLlmContext`, режим из последней `mode_change`, план из последней `plan`, усилие рассуждения из последней `config_change` с `optionId: "effort"`; модель — из аргумента, иначе последняя `model_change` ветки, найденная в каталоге, иначе `CoreConfig.defaultModel` с логом `session.model.not_restored`; хуки хоста — `ports.extraBeforeToolCall` и `ports.extraAfterToolCall` по тому же правилу сборки, что у `createSession`;
+- `loadSession(id, ports, {model, cwd})` — открытие журнала, запись синтетических результатов прерванных вызовов, транскрипт из `buildLlmContext`, режим из последней `mode_change`, план из последней `plan`, усилие рассуждения из последней `config_change` с `optionId: "effort"`; модель — из аргумента, иначе последняя `model_change` ветки, найденная в каталоге, иначе `CoreConfig.defaultModel` с логом `session.model.not_restored`; хуки хоста — `ports.extraBeforeToolCall` и `ports.extraAfterToolCall` по тому же правилу сборки, что у `createSession`; `cwd`, отличный от заголовка, — рабочая папка сессии и запись `custom` `codelab.cwd_changed` (§13.5, шаг 2);
 - `models` — каталог моделей сборки (`ModelCatalog`);
 - `listSessions({cwd, cursor, pageSize})` — страница `SessionPage` из `SessionStore.list`; неверный курсор → `InvalidCursor`;
 - `dispose()` — отменяет идущие ходы, дожидается очередей записи и закрывает потоки событий.

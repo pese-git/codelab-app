@@ -20,30 +20,53 @@ import 'event_projection.dart' show acpContent, acpDiff, acpLocation;
 /// Как использовать: соединение создаёт gate на сессию и передаёт его в
 /// порты сессии; политика зовёт [request] с токеном хода. Отмена хода
 /// прекращает ожидание — решение `cancelled`, поздний ответ клиента
-/// игнорируется (PERM-4).
+/// игнорируется (PERM-4). С [waitForReconnect] разрыв соединения не отказ:
+/// вопрос ждёт переподключения и задаётся новому соединению с новым id и
+/// тем же `toolCallId` (§13.5, шаг 8).
 final class AcpPermissionGate implements PermissionGate {
-  AcpPermissionGate(this._link, {required Logger logger}) : _logger = logger;
+  AcpPermissionGate(
+    this._link, {
+    required Logger logger,
+    Future<bool> Function(CancelToken cancel)? waitForReconnect,
+  }) : _logger = logger,
+       _waitForReconnect = waitForReconnect;
 
   final ClientLink _link;
   final Logger _logger;
+
+  /// `true` — сессию переподключили, вопрос задаётся заново; `false` —
+  /// ждать нечего (ход отменён). `null` — разрыв сразу отказ.
+  final Future<bool> Function(CancelToken cancel)? _waitForReconnect;
 
   @override
   Future<PermissionDecision> request(
     PermissionRequest req,
     CancelToken cancel,
   ) async {
-    final Object? raw;
-    try {
-      raw = await _link.requests.request(
-        acp.acpSessionRequestPermission,
-        _params(req),
-        prefix: 'perm',
-        cancel: cancel,
-      );
-    } on ClientCallCancelled {
-      return PermissionDecision.cancelled;
-    } on ClientCallFailure catch (failure) {
-      return _failed(req, '$failure');
+    Object? raw;
+    while (true) {
+      try {
+        raw = await _link.requests.request(
+          acp.acpSessionRequestPermission,
+          _params(req),
+          prefix: 'perm',
+          cancel: cancel,
+        );
+        break;
+      } on ClientCallCancelled {
+        return PermissionDecision.cancelled;
+      } on ClientDisconnected catch (failure) {
+        final wait = _waitForReconnect;
+        if (wait != null && await wait(cancel)) {
+          continue;
+        }
+        if (cancel.isCancelled) {
+          return PermissionDecision.cancelled;
+        }
+        return _failed(req, '$failure');
+      } on ClientCallFailure catch (failure) {
+        return _failed(req, '$failure');
+      }
     }
     final acp.RequestPermissionResponse response;
     try {

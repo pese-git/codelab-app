@@ -8,6 +8,7 @@ import '../compaction/summarizer.dart';
 import '../env/bounded_env.dart';
 import '../env/execution_env.dart';
 import '../llm/messages.dart';
+import '../llm/model_catalog.dart';
 import '../llm/model_ref.dart';
 import '../llm/stream_function.dart';
 import '../loop/agent.dart';
@@ -48,14 +49,23 @@ const coreAgentInfo = AgentInfo(name: 'codelab-agent', version: '0.1.0');
 abstract interface class AgentRuntime {
   Future<AgentSession> createSession(SessionSpec spec);
 
+  /// Каталог моделей сборки: опция `model` и `AgentSession.setModel`
+  /// (§2.12.2, §13.6).
+  ModelCatalog get models;
+
   /// Открывает журнал, дописывает синтетические результаты прерванных
-  /// вызовов и восстанавливает транскрипт, режим и план. [model] — модель
-  /// сессии; `null` — модель по умолчанию конфигурации: каталог моделей для
-  /// восстановления из журнала приходит на этапе 4 (D4).
+  /// вызовов и восстанавливает транскрипт, режим, план и усилие
+  /// рассуждения. [model] — модель сессии; `null` — последняя
+  /// `model_change` ветки, найденная в [models], иначе модель по умолчанию
+  /// конфигурации с логом `session.model.not_restored` (design.md change
+  /// `add-dart-agent-acp-server`, D3). [cwd] — рабочая папка клиента: если
+  /// она не совпадает с заголовком, сессия работает в ней и пишет `custom`
+  /// `codelab.cwd_changed` (§13.5, шаг 2).
   Future<AgentSession> loadSession(
     SessionId id,
     SessionHostPorts ports, {
     ModelRef? model,
+    String? cwd,
   });
 
   /// Страница сводок хранилища; неверный курсор — `InvalidCursor`.
@@ -78,13 +88,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
     required this.config,
     required this.registry,
     required this.stream,
-  });
+  }) : models = services.models ?? FixedModelCatalog([config.defaultModel]);
 
   final HostProfile profile;
   final AgentCoreServices services;
   final CoreConfig config;
   final ToolRegistry registry;
   final StreamFunction stream;
+
+  @override
+  final ModelCatalog models;
   final _sessions = <_Session>[];
 
   SessionStore get _store => services.sessions;
@@ -99,14 +112,22 @@ final class AgentRuntimeImpl implements AgentRuntime {
       metadata: {'profile': profile.name},
     );
     await _store.create(header);
-    final model = spec.model ?? config.defaultModel;
+    final model = _resolve(spec.model ?? config.defaultModel, config.effort);
     final session = await _open(
       snapshot: SessionSnapshot.empty(header),
+      cwd: spec.cwd,
       mode: spec.mode ?? config.permissions.mode ?? profile.defaultMode,
       model: model,
+      effort: config.effort,
       ports: spec.ports,
-      extraBeforeToolCall: spec.extraBeforeToolCall,
-      extraAfterToolCall: spec.extraAfterToolCall,
+      extraBeforeToolCall: [
+        ...spec.extraBeforeToolCall,
+        ...spec.ports.extraBeforeToolCall,
+      ],
+      extraAfterToolCall: [
+        ...spec.extraAfterToolCall,
+        ...spec.ports.extraAfterToolCall,
+      ],
     );
     await session._writer.append(
       (id, parent, at) => _modelChange(id, parent, at, model),
@@ -119,18 +140,40 @@ final class AgentRuntimeImpl implements AgentRuntime {
     SessionId id,
     SessionHostPorts ports, {
     ModelRef? model,
+    String? cwd,
   }) async {
     final snapshot = await _store.open(id);
-    final chosen = model ?? config.defaultModel;
     final restored = buildLlmContext(snapshot);
+    final effort =
+        ReasoningEffort.values
+            .where((e) => e.name == restored.config['effort'])
+            .firstOrNull ??
+        config.effort;
+    // Модель журнала выигрывает, если её знает каталог (D3); иначе —
+    // поведение этапа 3: модель конфигурации и новая model_change.
+    final journalModel = switch (restored.model) {
+      final ModelChangeRecord record => models.resolve(
+        ModelId('${record.provider}/${record.modelId}'),
+        effort: effort,
+      ),
+      null => null,
+    };
+    final chosen = model != null
+        ? _resolve(model, effort)
+        : journalModel ?? _resolve(config.defaultModel, effort);
+    final header = snapshot.header.cwd;
     final session = await _open(
       snapshot: snapshot,
+      cwd: cwd ?? header,
       mode:
           ModeId.values.where((m) => m.value == restored.modeId).firstOrNull ??
           config.permissions.mode ??
           profile.defaultMode,
       model: chosen,
+      effort: effort,
       ports: ports,
+      extraBeforeToolCall: ports.extraBeforeToolCall,
+      extraAfterToolCall: ports.extraAfterToolCall,
     );
     await session._heal();
     if (restored.model case final journal?
@@ -150,8 +193,28 @@ final class AgentRuntimeImpl implements AgentRuntime {
       );
     }
     session._restoreHistory();
+    if (cwd != null && cwd != header) {
+      await session._writer.append(
+        (id, parent, at) => CustomRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          customType: 'codelab.cwd_changed',
+          data: {'from': header, 'to': cwd},
+        ),
+      );
+    }
     return session;
   }
+
+  /// Ссылка каталога с уровнем рассуждения сессии; модели нет в каталоге —
+  /// ссылка как есть, но тоже с уровнем только при рассуждении (§2.12.3).
+  ModelRef _resolve(ModelRef model, ReasoningEffort effort) =>
+      models.resolve(
+        ModelId('${model.provider}/${model.id}'),
+        effort: effort,
+      ) ??
+      _withEffort(model, model.supportsReasoning ? effort : null);
 
   @override
   Future<SessionPage> listSessions({
@@ -186,14 +249,15 @@ final class AgentRuntimeImpl implements AgentRuntime {
   /// писатель журнала.
   Future<_Session> _open({
     required SessionSnapshot snapshot,
+    required String cwd,
     required ModeId mode,
     required ModelRef model,
+    required ReasoningEffort effort,
     required SessionHostPorts ports,
     List<BeforeToolCallHook> extraBeforeToolCall = const [],
     List<AfterToolCallHook> extraAfterToolCall = const [],
   }) async {
     final id = snapshot.header.id;
-    final cwd = snapshot.header.cwd;
     final env = await BoundedEnv.wrap(ports.env ?? services.baseEnv, cwd);
     final logger = ports.logger ?? services.logger;
     final tools = ToolServices(clock: services.clock, logger: logger);
@@ -228,6 +292,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
           ...extraBeforeToolCall,
         ],
         afterToolCall: extraAfterToolCall,
+        // Смена модели или усилия посреди хода действует со следующего шага
+        // (§13.6): идущий запрос не прерывается.
+        prepareNextStep: (_) async => session._takeModelUpdate(),
         approvalWait: tools.approvalWait,
         logger: logger,
         // Без capability compaction — поведение этапа 2: размер не
@@ -251,6 +318,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
       cwd: cwd,
       mode: mode,
       model: model,
+      effort: effort,
+      catalog: models,
       agent: agent,
       policy: policy,
       tools: tools,
@@ -266,6 +335,23 @@ final class AgentRuntimeImpl implements AgentRuntime {
     _sessions.add(session);
     return session;
   }
+
+  static ModelRef _withEffort(ModelRef model, ReasoningEffort? effort) =>
+      ModelRef(
+        provider: model.provider,
+        id: model.id,
+        api: model.api,
+        baseUrl: model.baseUrl,
+        contextWindow: model.contextWindow,
+        maxOutputTokens: model.maxOutputTokens,
+        cost: model.cost,
+        supportsImages: model.supportsImages,
+        supportsReasoning: model.supportsReasoning,
+        reasoningEffort: effort,
+        hiddenReasoning: model.hiddenReasoning,
+        thinkingMode: model.thinkingMode,
+        supportsTools: model.supportsTools,
+      );
 
   /// Системный промпт сессии (§11.5): собирается при создании и загрузке
   /// сессии и при смене режима; дата — по часам хоста.
@@ -287,6 +373,8 @@ final class _Session implements AgentSession {
     required this.cwd,
     required ModeId mode,
     required ModelRef model,
+    required ReasoningEffort effort,
+    required ModelCatalog catalog,
     required Agent agent,
     required PermissionPolicy policy,
     required ToolServices tools,
@@ -299,6 +387,8 @@ final class _Session implements AgentSession {
     required StreamFunction stream,
     required CompactionOverrides? compaction,
   }) : _mode = mode,
+       _effort = effort,
+       _catalog = catalog,
        _stream = stream,
        _compaction = compaction,
        _model = model,
@@ -328,7 +418,12 @@ final class _Session implements AgentSession {
   final SessionId id;
   final String cwd;
   ModeId _mode;
-  final ModelRef _model;
+  ModelRef _model;
+  ReasoningEffort _effort;
+  final ModelCatalog _catalog;
+
+  /// Новая модель, которую идущий ход получит на границе шага.
+  ModelRef? _pendingModel;
   final Agent _agent;
   final PermissionPolicy _policy;
   final ToolServices _tools;
@@ -359,7 +454,60 @@ final class _Session implements AgentSession {
   ModeId get mode => _mode;
 
   @override
-  ModelRef get model => _agent.config.model;
+  ModelRef get model => _model;
+
+  @override
+  ReasoningEffort get effort => _effort;
+
+  @override
+  Future<void> setModel(ModelId id) async {
+    final model =
+        _catalog.resolve(id, effort: _effort) ??
+        (throw ArgumentError.value(id.value, 'id', 'not in the model catalog'));
+    _apply(model);
+    await _writer.append(
+      (id, parent, at) => AgentRuntimeImpl._modelChange(id, parent, at, model),
+    );
+  }
+
+  @override
+  Future<void> setEffort(ReasoningEffort effort) async {
+    _effort = effort;
+    _apply(
+      _catalog.resolve(
+            ModelId('${_model.provider}/${_model.id}'),
+            effort: effort,
+          ) ??
+          AgentRuntimeImpl._withEffort(
+            _model,
+            _model.supportsReasoning ? effort : null,
+          ),
+    );
+    await _writer.append(
+      (id, parent, at) => ConfigChangeRecord(
+        id: id,
+        parentId: parent,
+        timestamp: at,
+        optionId: 'effort',
+        value: effort.name,
+      ),
+    );
+  }
+
+  /// Модель следующего хода — сразу, идущего — на границе шага.
+  void _apply(ModelRef model) {
+    _model = model;
+    _agent.config = _agent.config.copyWith(model: model);
+    if (_agent.isRunning) {
+      _pendingModel = model;
+    }
+  }
+
+  Future<StepUpdate?> _takeModelUpdate() async {
+    final model = _pendingModel;
+    _pendingModel = null;
+    return model == null ? null : StepUpdate(model: model);
+  }
 
   @override
   Stream<AgentEvent> get events => Stream.multi((controller) {

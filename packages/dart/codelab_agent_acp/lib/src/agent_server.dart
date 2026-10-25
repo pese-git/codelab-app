@@ -116,15 +116,33 @@ final class AcpAgentServer {
   }
 
   /// Безопасное завершение (§13.10): новые запросы получают `-32603`,
-  /// сессии закрываются, транспорты закрываются.
+  /// ходы отменяются и дожидаются `TurnEnded` не дольше [grace], сессии
+  /// закрываются (журналы дописаны), затем закрываются транспорты.
   Future<void> shutdown({Duration grace = const Duration(seconds: 5)}) async {
     _shuttingDown = true;
-    for (final bridge in [..._sessions.values]) {
+    final bridges = [..._sessions.values];
+    final turns = [
+      for (final bridge in bridges)
+        if (bridge.cancel()) bridge.idle,
+    ];
+    if (turns.isNotEmpty && grace > Duration.zero) {
+      await Future.any([Future.wait(turns), clock.delay(grace)]);
+    }
+    for (final bridge in bridges) {
       await bridge.close();
     }
     _sessions.clear();
     for (final connection in [..._connections]) {
       await connection.close();
+    }
+  }
+
+  /// Соединение закрыто: его сессии ждут переподключения (D7).
+  void _detach(_Connection connection) {
+    for (final bridge in _sessions.values) {
+      if (identical(bridge.owner, connection)) {
+        bridge.detach(config.detachGrace);
+      }
     }
   }
 }
@@ -165,9 +183,13 @@ final class _Connection {
     await _transport.start();
     await _router.run();
     _pending.failAll(const ClientDisconnected());
+    _server._detach(this);
   }
 
+  /// Ответы на начатые запросы (ходы уже отменены и закрыты), затем
+  /// отправка очереди и закрытие транспорта.
   Future<void> close() async {
+    await _router.drained;
     await _outbound.idle;
     await _transport.close();
   }
@@ -189,7 +211,10 @@ final class _Connection {
     return switch (method) {
       acp.sessionNewMethod => _sessionNew(request.params),
       acp.sessionListMethod => _sessionList(request.params),
+      acp.sessionLoadMethod => _sessionLoad(request.params),
       acp.sessionPromptMethod => _sessionPrompt(request.params),
+      acp.sessionSetConfigOptionMethod => _setConfigOption(request.params),
+      acp.sessionSetModeMethod => _setMode(request.params),
       // Терпимость: уведомление, присланное запросом, получает ещё и ответ
       // null (§13.7, шаг 6).
       acp.sessionCancelMethod => _cancelRequest(request.params),
@@ -254,40 +279,18 @@ final class _Connection {
         fields: {'name': server.name, 'reason': 'MCP is not available yet'},
       );
     }
-    final link = ClientLink(requests: _requests, capabilities: _client!);
-    final clientEnv = AcpClientExecutionEnv(
-      link: link,
-      cwd: cwd,
-      timeouts: _server.config.timeouts,
-      clock: _server.clock,
-      logger: _logger,
-    );
-    final listing = _server.config.localListing;
-    final bridge = SessionBridge(
-      sink: _notify,
-      logger: _logger,
-      clientEnv: clientEnv,
-    );
+    final wiring = _wire(cwd);
     final session = await _server._runtime.createSession(
-      SessionSpec(
-        cwd: cwd,
-        ports: SessionHostPorts(
-          env: listing == null
-              ? clientEnv
-              : ListingOverlayEnv(clientEnv, listing(cwd)),
-          gate: AcpPermissionGate(link, logger: _logger),
-        ),
-        extraBeforeToolCall: [bridge.markInProgress],
-      ),
+      SessionSpec(cwd: cwd, ports: wiring.ports),
     );
-    link.sessionId = session.id.value;
-    bridge.attach(session);
-    _server._sessions[session.id.value] = bridge;
+    wiring.link.sessionId = session.id.value;
+    wiring.bridge.attach(session);
+    _server._sessions[session.id.value] = wiring.bridge;
     final sessionId = acp.SessionId(session.id.value);
     final response = acp.NewSessionResponse(
       sessionId: sessionId,
       modes: sessionModes(session),
-      configOptions: sessionConfigOptions(session),
+      configOptions: wiring.bridge.configOptions,
     );
     return Reply(
       acp.acpSessionNew.encodeResult(response),
@@ -298,6 +301,149 @@ final class _Connection {
       ),
     );
   }
+
+  /// Env, gate и мост сессии этого соединения (D5, D6): файлы и команды —
+  /// через клиента, листинг — локально, если хост его дал.
+  ({ClientLink link, SessionBridge bridge, SessionHostPorts ports}) _wire(
+    String cwd,
+  ) {
+    final link = ClientLink(requests: _requests, capabilities: _client!);
+    final clientEnv = AcpClientExecutionEnv(
+      link: link,
+      cwd: cwd,
+      timeouts: _server.config.timeouts,
+      clock: _server.clock,
+      logger: _logger,
+    );
+    final listing = _server.config.localListing;
+    final bridge = SessionBridge(
+      owner: this,
+      sink: _notify,
+      link: link,
+      catalog: _server._runtime.models,
+      clock: _server.clock,
+      logger: _logger,
+      clientEnv: clientEnv,
+    );
+    final ports = SessionHostPorts(
+      env: listing == null
+          ? clientEnv
+          : ListingOverlayEnv(clientEnv, listing(cwd)),
+      gate: AcpPermissionGate(
+        link,
+        logger: _logger,
+        waitForReconnect: bridge.waitForReconnect,
+      ),
+      extraBeforeToolCall: [bridge.markInProgress],
+    );
+    return (link: link, bridge: bridge, ports: ports);
+  }
+
+  /// `session/load` (§13.5) в объёме MVP: реплей, хвост, затем ответ;
+  /// переподключение идущего хода (шаги 3b, 8, 9).
+  Future<Reply> _sessionLoad(Object? params) async {
+    final request = acp.acpSessionLoad.decodeParams(params);
+    final cwd = request.cwd;
+    await _checkCwd(cwd);
+    final id = request.sessionId.value;
+    for (final server in request.mcpServers) {
+      _logger.log(
+        LogLevel.info,
+        'mcp.server.skipped',
+        fields: {'name': server.name, 'reason': 'MCP is not available yet'},
+      );
+    }
+    var reconnect = false;
+    var bridge = _server._sessions[id];
+    if (bridge != null) {
+      // MVP: второй живой клиент идущего хода не подключается (шаг 3c).
+      if (bridge.turnActive && !bridge.detached) {
+        throw const AcpRequestError.invalidParams(
+          'the session is busy in another connection',
+          data: {
+            'codelab': {'reason': 'sessionBusy'},
+          },
+        );
+      }
+      reconnect = bridge.reattach(
+        owner: this,
+        requests: _requests,
+        capabilities: _client!,
+        sink: _notify,
+      );
+    } else {
+      final wiring = _wire(cwd)..link.sessionId = id;
+      final AgentSession session;
+      try {
+        session = await _server._runtime.loadSession(
+          SessionId(id),
+          wiring.ports,
+          cwd: cwd,
+        );
+      } on SessionNotFound {
+        throw AcpRequestError.notFound('Session not found: $id');
+      }
+      bridge = wiring.bridge..attach(session);
+      _server._sessions[id] = bridge;
+    }
+    for (final update in bridge.replay()) {
+      _update(request.sessionId, update);
+    }
+    final response = acp.LoadSessionResponse(
+      modes: sessionModes(bridge.session),
+      configOptions: bridge.configOptions,
+    );
+    return Reply(
+      acp.acpSessionLoad.encodeResult(response),
+      after: reconnect ? bridge.resume : null,
+    );
+  }
+
+  /// `session/set_config_option` (§13.6): сначала сессия, затем значение;
+  /// ответ — полный список опций без дублирующего уведомления (ACP-11).
+  Future<Reply> _setConfigOption(Object? params) async {
+    final request = acp.acpSessionSetConfigOption.decodeParams(params);
+    final bridge = _bridge(request.sessionId);
+    final value = request.value.value;
+    switch (request.configId.value) {
+      case 'mode':
+        await bridge.setMode(_mode(value));
+      case 'model'
+          when _server._runtime.models.models.any((m) => m.id.value == value):
+        await bridge.setModel(ModelId(value));
+      case 'effort' when bridge.session.model.supportsReasoning:
+        await bridge.session.setEffort(
+          parseEffort(value) ??
+              (throw AcpRequestError.invalidParams('unknown value: $value')),
+        );
+      case 'model':
+        throw AcpRequestError.invalidParams('unknown value: $value');
+      default:
+        throw AcpRequestError.invalidParams(
+          'unknown config option: ${request.configId.value}',
+        );
+    }
+    return Reply(
+      acp.acpSessionSetConfigOption.encodeResult(
+        acp.SetSessionConfigOptionResponse(configOptions: bridge.configOptions),
+      ),
+    );
+  }
+
+  /// `session/set_mode` (§13.6): та же смена, что `configId: "mode"`;
+  /// ответ `{}` после `current_mode_update`.
+  Future<Reply> _setMode(Object? params) async {
+    final request = acp.acpSessionSetMode.decodeParams(params);
+    final bridge = _bridge(request.sessionId);
+    await bridge.setMode(_mode(request.modeId.value));
+    return Reply(
+      acp.acpSessionSetMode.encodeResult(const acp.SetSessionModeResponse()),
+    );
+  }
+
+  static ModeId _mode(String value) =>
+      parseModeId(value) ??
+      (throw AcpRequestError.invalidParams('unknown mode: $value'));
 
   /// `session/list` (§13.5): страница хранилища.
   Future<Reply> _sessionList(Object? params) async {
