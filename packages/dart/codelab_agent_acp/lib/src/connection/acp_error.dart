@@ -39,6 +39,3 @@ final class AcpRequestError implements Exception {
   @override
   String toString() => 'AcpRequestError($code): $message';
 }
-
-/// Код ACP «Resource not found» (`docs/acp/protocol/17-Schema.md`).
-const acpResourceNotFoundCode = -32002;

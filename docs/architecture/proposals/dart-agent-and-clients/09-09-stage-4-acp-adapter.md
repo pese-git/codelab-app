@@ -77,7 +77,9 @@
    `packages/dart/codelab_agent_acp/test/conformance_test.dart` передаёт ему фабрику агента.
    Фикстуры этапа 0 уже содержат кадры `fs/*` и `terminal/*` (задача 0.7), поэтому входят в
    агентский прогон без правки. Скрипт `conformance:agent` входит в `check`. Корпус этапа 4 —
-   ровно 37 фикстур (§14.2), вместе с 12 фикстурами этапа 0 агентский прогон покрывает 49:
+   ровно 35 фикстур (§14.2): 33 в change `add-dart-agent-acp-server` и 2 транспортные в
+   `add-codelab-agent-binary`; вместе с 11 фикстурами этапа 0 с ролью `agent` агентский прогон
+   к концу этапа покрывает 46 (44 после `add-dart-agent-acp-server`):
    * сессии: `acp/session-load-replay`, `acp/session-list-cwd-filter`, `acp/session-info-title`,
      `acp/session-load-interrupted-turn`, `acp/multi-session-concurrent-prompts`;
    * ход и LLM: `acp/prompt-max-turn-requests`, `acp/prompt-failed-provider-auth`,
@@ -87,8 +89,9 @@
      `acp/prompt-cancel-during-terminal`, `acp/compaction-long-session-continues`;
    * инструменты: `acp/tool-write-permission-diff`, `acp/tool-edit-exact-replace`,
      `acp/tool-edit-ambiguous-match-error`, `acp/tool-list-dir`, `acp/tool-search-content`,
-     `acp/tool-invalid-args-error`, `acp/tool-exec-terminal-env-array`, `acp/tool-exec-spill`,
-     `acp/agent-serve-spill-local-read`;
+     `acp/tool-invalid-args-error`, `acp/tool-exec-terminal-env-array` (фикстуры выноса
+     `acp/tool-exec-spill`, `acp/agent-serve-spill-local-read` перенесены в
+     `add-agent-core-output-spill`, веха 1.0);
    * разрешения и режимы: `acp/permission-allow-always-scoped`,
      `acp/permission-critical-pattern-in-bypass`, `acp/permission-options-all-four`,
      `acp/permission-outcome-cancelled`, `acp/set-mode-bypass-no-prompt`,

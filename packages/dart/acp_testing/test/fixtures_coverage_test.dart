@@ -11,16 +11,15 @@ import 'support/corpus_invariants.dart';
 ///
 /// The list only shrinks: an element covered by a fixture must leave it.
 const pendingCoverage = {
-  // Stage 4: acp/session-load-replay, acp/session-list-cwd-filter.
+  // Агентскую сторону покрывают фикстуры с ролью agent (этап 4:
+  // acp/session-load-replay, acp/session-list-cwd-filter,
+  // acp/set-mode-updates-current-mode, acp/config-effort-option). Клиентский
+  // драйвер пока не играет загрузку сессии, список сессий и смену режима
+  // агентом: сценарии клиента для них — follow-up клиента (codelab-app).
   'session/load',
   'session/list',
-  // Stage 4: acp/session-load-replay (replay of user words).
   'user_message_chunk',
-  // Stage 4: acp/prompt-thought-chunk.
-  'agent_thought_chunk',
-  // Stage 4: acp/set-mode-updates-current-mode.
   'current_mode_update',
-  // Stage 4: acp/config-effort-option and the agent-side option changes.
   'config_option_update',
   // Клиент codelab-app метод не вызывает: режимы — через configOptions
   // (§13.6). Агентскую сторону покрывают фикстуры acp/set-mode-*.

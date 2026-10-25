@@ -817,7 +817,7 @@ void main() {
   });
 
   test(
-    'SendPrompt deduplicates and accepts interleaved running updates',
+    'SendPrompt deduplicates idempotent updates and keeps repeated chunks',
     () async {
       await _createSession(client, transport);
       transport.drainSentMessages();
@@ -847,8 +847,14 @@ void main() {
       transport.emitInbound(_sessionUpdate(messageUpdate));
       transport.emitInbound(_sessionUpdate(toolUpdate));
 
+      // Повтор `tool_call_update` идемпотентен и схлопывается, а повтор
+      // чанка — новая дельта текста и сохраняется (`streaming.md` §8).
       final running = client.sessionById(const SessionId('session-1'));
-      expect(running?.turns.single.updates, [messageUpdate, toolUpdate]);
+      expect(running?.turns.single.updates, [
+        messageUpdate,
+        toolUpdate,
+        messageUpdate,
+      ]);
       expect(running?.turns.single.toolCalls, hasLength(1));
       expect(
         running?.turns.single.toolCalls[const ToolCallId('tool-1')]?.title,
@@ -866,7 +872,7 @@ void main() {
         (failure) => fail('$failure'),
       );
       expect(turn.status, PromptTurnStatus.completed);
-      expect(turn.updates, [messageUpdate, toolUpdate]);
+      expect(turn.updates, [messageUpdate, toolUpdate, messageUpdate]);
     },
   );
 

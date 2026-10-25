@@ -42,6 +42,7 @@ const fixtureFormatKeys = <String, Set<String>>{
     'terminal',
     'web',
     'skipInitialize',
+    'sessions',
   },
   'terminalCommand': {'output', 'exitCode'},
   'frame': {'dir', 'frame', 'unordered', 'note', 'optional', 'repeat', 'match'},
@@ -226,6 +227,7 @@ final class FixtureSetup {
     this.config,
     this.clientCapabilities,
     this.web,
+    this.sessions = const {},
   });
 
   factory FixtureSetup._parse(
@@ -248,7 +250,24 @@ final class FixtureSetup {
       }
     }
 
+    final sessions = <String, List<Map<String, Object?>>>{};
+    final rawSessions = r.object(json, path, 'sessions');
+    if (rawSessions != null) {
+      for (final MapEntry(:key, :value) in rawSessions.entries) {
+        final sessionPath = '$path.sessions${_key(key)}';
+        final lines = value;
+        if (lines is! List<Object?> || lines.isEmpty) {
+          r.fail(sessionPath, 'must be a non-empty list of journal records');
+        }
+        sessions[key] = [
+          for (final (i, line) in lines.indexed)
+            r.asObject(line, '$sessionPath[$i]'),
+        ];
+      }
+    }
+
     return FixtureSetup(
+      sessions: sessions,
       cwd: r.string(json, path, 'cwd') ?? defaultFixtureCwd,
       files: r.stringMap(json, path, 'files') ?? const {},
       profile: r.string(json, path, 'profile'),
@@ -263,6 +282,12 @@ final class FixtureSetup {
 
   /// Working directory of the scenario, written as `${cwd}` in frames.
   final String cwd;
+
+  /// Журналы сессий до начала сценария, только для агентского прогона:
+  /// id сессии → записи журнала по порядку (первая — заголовок `session`,
+  /// §8.2). Так фикстура задаёт состояние, которого не получить кадрами,
+  /// например прерванный ход (§8.8). Клиентский прогон поле не читает.
+  final Map<String, List<Map<String, Object?>>> sessions;
 
   /// Files of the working directory before the scenario, by relative path.
   final Map<String, String> files;
@@ -373,7 +398,11 @@ final class FixtureFrame {
 }
 
 final class FixtureLlmScript {
-  const FixtureLlmScript({required this.steps, this.model});
+  const FixtureLlmScript({
+    required this.steps,
+    this.model,
+    this.json = const {},
+  });
 
   factory FixtureLlmScript._parse(
     _Reader r,
@@ -391,6 +420,7 @@ final class FixtureLlmScript {
     }
     final steps = r.list(json, path, 'steps', required: true)!;
     return FixtureLlmScript(
+      json: Map.unmodifiable(json),
       model: model,
       steps: [
         for (final (i, step) in steps.indexed)
@@ -401,6 +431,10 @@ final class FixtureLlmScript {
 
   final Map<String, Object?>? model;
   final List<FixtureLlmStep> steps;
+
+  /// Блок `llm` как в файле: агентский драйвер передаёт его фабрике агента,
+  /// а она строит из него scripted-модель (§14.7, §14.9, шаг 3).
+  final Map<String, Object?> json;
 }
 
 /// One model answer of the scripted model (§14.7). Executed by the agent

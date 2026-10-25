@@ -279,6 +279,46 @@ void main() {
     model.verify();
   });
 
+  // Отмена посреди стрима (фикстура acp/prompt-cancel-mid-stream; design.md
+  // change `add-dart-agent-acp-server`, D15): текст ответа уже ушёл, шаг
+  // ждёт отмены и заканчивается aborted.
+  test('waitForCancel with reply streams the reply, then waits', () async {
+    final model = ScriptedStreamFunction.fromJson(
+      _script([
+        {
+          'reply': [
+            {'text': 'Starting'},
+          ],
+          'waitForCancel': true,
+        },
+      ]),
+    );
+    final source = CancelTokenSource();
+    final deltas = <String>[];
+
+    final stream = model.call(
+      testModel,
+      _context([_user('x')]),
+      cancel: source.token,
+    );
+    final done = () async {
+      await for (final event in stream) {
+        if (event case BlockDeltaEvent(:final delta)) {
+          deltas.add(delta);
+        }
+      }
+      return stream.result;
+    }();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(deltas, ['Starting']);
+
+    source.cancel();
+    final answer = await done;
+
+    expect(answer.stopReason, StopReason.aborted);
+    model.verify();
+  });
+
   test(r'${cwd} and ${sessionId} are substituted in text', () async {
     final model = ScriptedStreamFunction.fromJson(
       _script([

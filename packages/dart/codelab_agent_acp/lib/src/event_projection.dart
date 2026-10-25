@@ -71,14 +71,17 @@ List<acp.SessionUpdate> projectEvent(
         kind: acp.ToolKind.values.byName(event.kind.name),
         status: acp.ToolCallStatus.pending,
         rawInput: event.input,
-        locations: [for (final l in event.locations) acpLocation(l)],
+        locations: acpLocations(event.locations),
       ),
     ),
   ],
+  // Прогресс приходит только от исполняемого вызова: статус in_progress
+  // (фикстура acp/tool-exec-terminal-embed).
   ToolCallProgress(:final toolCallId, :final content) => [
     acp.SessionUpdate.toolCallUpdate(
       toolCallUpdate: acp.ToolCallUpdate(
         toolCallId: acp.ToolCallId(toolCallId),
+        status: acp.ToolCallStatus.inProgress,
         content: [for (final item in content) _toolContent(item)],
       ),
     ),
@@ -191,7 +194,11 @@ acp.SessionUpdate _finished(ToolCallFinished event) =>
       toolCallUpdate: acp.ToolCallUpdate(
         toolCallId: acp.ToolCallId(event.toolCallId),
         status: finishedStatus(event),
-        content: finishedContent(event),
+        // §13.7: у отменённого вызова — только статус и outcome; текст об
+        // отмене — для модели, клиент уже видит вывод в терминале.
+        content: event.outcome == ToolOutcome.cancelled
+            ? null
+            : finishedContent(event),
         meta: finishedMeta(event),
       ),
     );
@@ -255,6 +262,11 @@ acp.ContentBlock acpContent(ContentBlock block) => switch (block) {
 acp.ToolCallContent acpDiff(FileDiff diff) => acp.ToolCallContent.diff(
   diff: acp.Diff(path: diff.path, oldText: diff.oldText, newText: diff.newText),
 );
+
+/// Места вызова; пустой список — ключа нет: фикстуры и клиенты не ждут
+/// `locations: []` (§14.8).
+List<acp.ToolCallLocation>? acpLocations(List<Location> locations) =>
+    locations.isEmpty ? null : [for (final l in locations) acpLocation(l)];
 
 acp.ToolCallLocation acpLocation(Location location) =>
     acp.ToolCallLocation(path: location.path, line: location.line);

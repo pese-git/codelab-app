@@ -1,0 +1,328 @@
+{
+  "id": "acp/tool-exec-terminal-env-array",
+  "spec": [
+    "10-Terminal.md#executing-commands",
+    "10-Terminal.md#releasing-terminals"
+  ],
+  "description": "В режиме bypass exec создаёт терминал клиента: command /bin/sh, args [\"-c\", команда], cwd, env массивом объектов {name, value} (пустой — []), outputByteLimit 1 МиБ; затем wait_for_exit, output и release.",
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "bypass",
+    "terminal": {
+      "/bin/sh -c echo ok": {
+        "output": "ok\n",
+        "exitCode": 0
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "echo"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "echo ok"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Готово."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Запусти echo ok"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "echo ok"
+            },
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "echo ok"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "env — массив {name, value} (10-Terminal.md)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "createId"
+        },
+        "method": "terminal/create",
+        "params": {
+          "sessionId": "${sessionId}",
+          "command": "/bin/sh",
+          "args": [
+            "-c",
+            "echo ok"
+          ],
+          "env": [],
+          "cwd": "${cwd}",
+          "outputByteLimit": 1048576
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${createId}",
+        "result": {
+          "terminalId": {
+            "$capture": "terminalId"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "терминал встраивается в вызов (08-Tool Calls.md, Terminals)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "terminal",
+                "terminalId": "${terminalId}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "waitId"
+        },
+        "method": "terminal/wait_for_exit",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${waitId}",
+        "result": {
+          "$partial": {
+            "exitCode": 0
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "outputId"
+        },
+        "method": "terminal/output",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${outputId}",
+        "result": {
+          "$partial": {
+            "output": "ok\n",
+            "truncated": false
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "release всегда в конце (ACP-9, ENV-7)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "releaseId"
+        },
+        "method": "terminal/release",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${releaseId}",
+        "result": {
+          "$oneOf": [
+            null,
+            {}
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "ok\n"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Готово."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

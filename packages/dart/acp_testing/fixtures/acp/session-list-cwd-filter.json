@@ -1,0 +1,123 @@
+{
+  "id": "acp/session-list-cwd-filter",
+  "spec": [
+    "04-Session List.md#listing-sessions",
+    "04-Session List.md#pagination"
+  ],
+  "description": "В хранилище сессии двух папок; session/list с cwd отдаёт только сессии этой папки, без cwd — все, новые первыми; nextCursor нет, если элементов меньше страницы.",
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "files": {
+      "other/.keep": ""
+    }
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "вторая сессия в другой папке",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}/other",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "otherId"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${otherId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "session/list",
+        "params": {
+          "cwd": "${cwd}"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "фильтр по папке",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "sessions": [
+            {
+              "sessionId": "${sessionId}",
+              "cwd": "${cwd}",
+              "updatedAt": "<ts>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "session/list",
+        "params": {}
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "без фильтра — все, новые первыми",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": {
+          "sessions": [
+            {
+              "sessionId": "${otherId}",
+              "cwd": "${cwd}/other",
+              "updatedAt": "<ts>"
+            },
+            {
+              "sessionId": "${sessionId}",
+              "cwd": "${cwd}",
+              "updatedAt": "<ts>"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

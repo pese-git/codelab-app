@@ -36,13 +36,14 @@
 - `agent-execution-env`: новое требование `ListingOverlayEnv` — `DirectoryListing` от локального env поверх env клиента под одной границей `BoundedEnv`.
 - `acp-golden-fixtures`: новое требование «Агентский драйвер фикстур»; «Инварианты корпуса фикстур» — агентская часть покрытия (FIX-2) и состав корпуса этапа 4.
 - `workspace-architecture`: «Автоматический сторож границ пакетов» — правило пакета `codelab_agent_acp`.
+- `acp-fs-client`: «Поддержка fs/read_text_file» — отсутствующий файл отклоняется `-32002` «Resource not found» (найдено агентским прогоном корпуса, design.md, D15).
 
 ## Impact
 
 - **Новый пакет** `packages/dart/codelab_agent_acp` (зависимости — `codelab_agent_core`, `acp_protocol`, `acp_transports` (web-безопасный барель), `meta`, `async`; dev — `acp_testing`, `acp_client_core`, `codelab_agent_io`, `test`).
-- **`acp_protocol`**: модели `session/set_mode` и запись в `acpMethodRegistry`; клиентский код не меняется.
-- **`acp_testing`**: `InProcessAcpLink` (тестовая копия), `agent_conformance.dart`, новые фикстуры в `fixtures/acp/`; клиентский драйвер не меняется.
+- **`acp_protocol`**: модели `session/set_mode` и запись в `acpMethodRegistry`; вид ошибки `resourceNotFound` (`-32002`).
+- **`acp_testing`**: `InProcessAcpLink` (тестовая копия), `agent_conformance.dart`, новые фикстуры в `fixtures/acp/`, поле формата `setup.sessions`; fake-ФС клиентского драйвера отвечает «файла нет» отказом `FsNotFoundFailure`.
 - **`codelab_agent_core`**: `ListingOverlayEnv`; каталог моделей в `AgentCoreServices`; `AgentSession.setModel` и смена усилия рассуждения с записью `model_change` / `config_change`; `SessionHostPorts` получает хуки хоста для `loadSession`.
 - **Корень**: `workspace:` и скрипт `conformance:agent` в `check`; правило сторожа.
 - **Документы**: `agent-core/13-acp-adapter.md`, `14-golden-fixtures.md` (§14.2 — состав корпуса этапа 4 без фикстур выноса), `09-09-stage-4-acp-adapter.md` правятся в том же PR там, где реализация уточнит контракт.
-- Клиенты (`apps/codelab_app`) не меняются. ACP-контракт не меняется, кроме перечисленных расширений и стандартного `session/set_mode`.
+- **Клиент**: `acp_client_core` отвечает на чтение отсутствующего файла `-32002` (`FsNotFoundFailure`), адаптер `apps/codelab_app/lib/core/platform/text_file_io.dart` распознаёт отсутствующий файл (design.md, D15). Иначе клиенты не меняются. ACP-контракт не меняется, кроме перечисленных расширений и стандартного `session/set_mode`.

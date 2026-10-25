@@ -609,7 +609,7 @@ final class InMemoryFixtureFileSystem
   Future<String> readText({required String path, int? line, int? limit}) async {
     final content = _files[_slash(path)];
     if (content == null) {
-      throw FsIoFailure('No such file: $path');
+      throw FsNotFoundFailure(path);
     }
     if (line == null && limit == null) {
       return content;

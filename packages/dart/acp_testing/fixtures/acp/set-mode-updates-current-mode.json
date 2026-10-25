@@ -1,0 +1,53 @@
+{
+  "id": "acp/set-mode-updates-current-mode",
+  "spec": [
+    "12-Session Model.md#from-the-client",
+    "12-Session Model.md#setting-the-current-mode"
+  ],
+  "description": "Клиент меняет режим методом session/set_mode; агент присылает current_mode_update с новым режимом и отвечает {} после него.",
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard"
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "session/set_mode",
+        "params": {
+          "sessionId": "${sessionId}",
+          "modeId": "plan"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "plan"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ после уведомления (agent-core §13.6)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {}
+      }
+    }
+  ]
+}

@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:acp_protocol/acp_protocol.dart' hide SessionId;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:test/test.dart';
 
 import 'support/server_harness.dart';
@@ -153,5 +156,22 @@ void main() {
     final snapshot = await h.store.open(SessionId(id));
     expect(snapshot.header.cwd, '/work/demo');
     expect(snapshot.records.first, isA<ModelChangeRecord>());
+  });
+
+  // Рабочая папка — ссылка на каталог (как /tmp на macOS): сессия
+  // создаётся (фикстура acp/session-list-cwd-filter).
+  test('a cwd that links to a directory is accepted', () async {
+    final tmp = Directory.systemTemp.createTempSync('cwd_link_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final real = Directory('${tmp.path}/real')..createSync();
+    final link = Link('${tmp.path}/link')..createSync(real.path);
+    h = await ServerHarness.start(
+      localListing: (cwd) => LocalExecutionEnv(cwd: cwd),
+    );
+    await h.initialize();
+
+    final response = await newSession(link.path);
+
+    expect(response.error, isNull);
   });
 }

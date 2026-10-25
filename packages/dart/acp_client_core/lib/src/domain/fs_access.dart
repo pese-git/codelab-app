@@ -38,6 +38,23 @@ final class PathOutsideWorkingDirectoryFailure extends FsAccessFailure {
       '"$workingDirectory".';
 }
 
+/// Файла по пути нет.
+///
+/// Почему отдельный отказ: ACP различает «ресурса нет» кодом `-32002`
+/// (`docs/acp/protocol/17-Schema.md`), и агент по нему понимает, что файл
+/// нужно создать, а не что чтение сорвалось (`agent-core-architecture` §4.7).
+///
+/// Как использовать: адаптер [TextFileReader] бросает его, когда файла нет;
+/// клиент отвечает `-32002 Resource not found`.
+final class FsNotFoundFailure extends FsAccessFailure {
+  const FsNotFoundFailure(this.path);
+
+  final String path;
+
+  @override
+  String toString() => 'No such file: $path';
+}
+
 /// The underlying filesystem operation failed (missing file, no permission,
 /// disk full, ...) — surfaced by a [TextFileReader]/[TextFileWriter]
 /// implementation, not by path validation.
