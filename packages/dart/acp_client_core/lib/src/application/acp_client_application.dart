@@ -101,6 +101,18 @@ final class AcpClientApplication {
   final _handledPermissionRequests = <ApprovalRequestId>{};
   final _sessions = <SessionId, AcpSession>{};
 
+  /// Буферы реплея `session/load` по id загружаемой сессии.
+  ///
+  /// Почему: агент повторяет историю уведомлениями `session/update` до ответа
+  /// на `session/load` (`03-Session Setup.md#loading-a-session`), а сессия
+  /// клиента появляется только по ответу (`session-lifecycle.md` §19).
+  ///
+  /// Для чего: [_handleSessionUpdate] складывает сюда обновления загружаемой
+  /// сессии вместо применения к прежнему состоянию; [loadSession] после
+  /// ответа раскладывает их в ходы (`SessionStateMachine.replayHistory`) и
+  /// убирает буфер при любом исходе запроса.
+  final _sessionReplays = <SessionId, List<SessionUpdate>>{};
+
   /// Bounded ring buffer — see `docs/architecture/observability.md` §28.
   /// Only bounds this in-memory list (used by the UI inspector); the full
   /// structured-logging output is unaffected, see `_logDiagnosticEntry`.
@@ -199,23 +211,47 @@ final class AcpClientApplication {
   }
 
   Future<AcpSession> loadSession(LoadSessionCommand command) async {
-    final response = await _sendRequest<LoadSessionResponse>(
-      method: sessionLoadMethod,
-      params: LoadSessionRequest(
-        sessionId: command.sessionId,
+    // Буфер заводится до отправки: реплей может прийти раньше, чем `await`
+    // вернёт управление.
+    final replay = <SessionUpdate>[];
+    _sessionReplays[command.sessionId] = replay;
+    final LoadSessionResponse response;
+    try {
+      response = await _sendRequest<LoadSessionResponse>(
+        method: sessionLoadMethod,
+        params: LoadSessionRequest(
+          sessionId: command.sessionId,
+          cwd: command.cwd,
+          mcpServers: command.mcpServers,
+          meta: command.meta,
+        ),
+      );
+    } finally {
+      // Повторный `loadSession` той же сессии заменяет буфер — чужой не
+      // трогаем.
+      if (identical(_sessionReplays[command.sessionId], replay)) {
+        _sessionReplays.remove(command.sessionId);
+      }
+    }
+
+    final replayed = SessionStateMachine.replayHistory(
+      AcpSession(
+        id: command.sessionId,
         cwd: command.cwd,
-        mcpServers: command.mcpServers,
-        meta: command.meta,
+        status: SessionLifecycleStatus.active,
+        modes: response.modes,
+        configOptions: response.configOptions,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       ),
+      replay,
+      nextTurnId: () => PromptTurnId('turn-${_nextTurnId++}'),
     );
-    final session = AcpSession(
-      id: command.sessionId,
-      cwd: command.cwd,
-      status: SessionLifecycleStatus.active,
-      modes: response.modes,
-      configOptions: response.configOptions,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+    // Ответ приходит после реплея и описывает итоговое состояние сессии,
+    // поэтому его режимы и опции главнее обновлений из реплея.
+    final session = replayed.copyWith(
+      modes: response.modes ?? replayed.modes,
+      configOptions: response.configOptions ?? replayed.configOptions,
     );
 
     _storeSession(session);
@@ -1493,6 +1529,14 @@ final class AcpClientApplication {
     try {
       final sessionNotification =
           decodeAcpNotificationParams(notification) as SessionNotification;
+      // Реплей загружаемой сессии идёт в буфер, даже если сессия с тем же id
+      // уже есть: история заменит прежнее состояние после ответа.
+      final replay = _sessionReplays[sessionNotification.sessionId];
+      if (replay != null) {
+        replay.add(sessionNotification.update);
+        return;
+      }
+
       final session = _sessions[sessionNotification.sessionId];
       if (session == null) {
         return;
