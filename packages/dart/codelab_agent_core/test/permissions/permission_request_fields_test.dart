@@ -47,4 +47,59 @@ void main() {
     expect(request.reason, 'critical command: ${request.criticalLabel}');
     expect(request.allowAlwaysOffered, isFalse);
   });
+
+  // Один present() на вызов: представление для ToolCallStarted уже
+  // посчитано точкой исполнения, а через ACP-клиента каждый present —
+  // кадр fs/read_text_file (§14.8; design.md change
+  // `add-dart-agent-acp-server`, D15).
+  test('the policy reuses the presentation of the call', () async {
+    final memory = MemoryExecutionEnv(cwd: '/proj');
+    await memory.writeText('/proj/README.md', '# foo\n');
+    final counting = _CountingReads(memory);
+    final h = await ExecutorHarness.create([EditTool()], base: counting);
+    final gate = FakeGate((_) => PermissionDecision.rejectOnce);
+    final p = await PolicyHarness.wrap(h, gate: gate);
+
+    await p.run('edit', {
+      'path': 'README.md',
+      'oldText': 'foo',
+      'newText': 'bar',
+    });
+
+    expect(gate.requests.single.diffs, hasLength(1));
+    expect(counting.reads, 1);
+  });
+}
+
+final class _CountingReads implements ExecutionEnv {
+  _CountingReads(this.inner);
+
+  final MemoryExecutionEnv inner;
+  var reads = 0;
+
+  @override
+  String get cwd => inner.cwd;
+
+  @override
+  Future<Result<String, FileError>> readText(
+    String path, {
+    int? line,
+    int? limit,
+  }) {
+    reads++;
+    return inner.readText(path, line: line, limit: limit);
+  }
+
+  @override
+  Future<Result<void, FileError>> writeText(String path, String content) =>
+      inner.writeText(path, content);
+
+  @override
+  Future<Result<FileStat, FileError>> stat(String path) => inner.stat(path);
+
+  @override
+  Future<Result<ExecResult, ExecError>> exec(
+    String command,
+    ExecOptions options,
+  ) => inner.exec(command, options);
 }
