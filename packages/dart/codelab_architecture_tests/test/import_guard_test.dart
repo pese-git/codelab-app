@@ -75,4 +75,29 @@ void main() {
     expect(violations, hasLength(2));
     expect(violations.first, endsWith('lib/src/server.dart:1 -> dart:io'));
   });
+
+  test('reports Flutter and client packages in the agent binary', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_bin_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'src', 'serve.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'package:flutter/widgets.dart';\n"
+        "import 'package:acp_client_core/acp_client_core.dart';\n"
+        "import 'package:acp_transports/io.dart';\n",
+      );
+    final rule = rules.firstWhere((r) => r.dir == 'apps/codelab_agent');
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    // IO-транспорты бинарю разрешены: он composition root (AGENTS.md §5).
+    expect(violations, hasLength(2));
+    expect(
+      violations.first,
+      endsWith('lib/src/serve.dart:1 -> package:flutter/widgets.dart'),
+    );
+  });
 }
