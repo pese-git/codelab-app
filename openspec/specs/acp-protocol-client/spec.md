@@ -87,7 +87,7 @@ CodeLab SHALL выполнять `initialize` перед настройкой с
 - **THEN** CodeLab продолжает выдавать типизированную протокольную ошибку
 
 ### Requirement: Настройка сессии
-CodeLab SHALL поддерживать `session/new` и SHALL вызывать `session/load` только когда доступен `agentCapabilities.loadSession`.
+CodeLab SHALL поддерживать `session/new` и SHALL вызывать `session/load` только когда доступен `agentCapabilities.loadSession`. При `session/load` CodeLab SHALL восстанавливать историю, которую агент повторяет уведомлениями `session/update` до ответа на запрос, и SHALL NOT считать сессию загруженной до ответа.
 
 #### Scenario: Создаётся новая сессия
 - **WHEN** пользователь создаёт сессию
@@ -96,6 +96,26 @@ CodeLab SHALL поддерживать `session/new` и SHALL вызывать `
 #### Scenario: Load session не поддерживается
 - **WHEN** агент не заявляет `loadSession`
 - **THEN** CodeLab не предлагает и не вызывает `session/load`
+
+#### Scenario: Загруженная сессия показывает повторённую историю
+- **WHEN** агент в ответ на `session/load` присылает до ответа `user_message_chunk`, `tool_call` с итоговым статусом и `agent_message_chunk`, а затем отвечает на запрос
+- **THEN** после ответа сессия содержит завершённый ход с репликой пользователя в prompt, вызовом инструмента с его статусом и ответом агента, и ни один ход реплея не показан выполняющимся
+
+#### Scenario: Границы ходов в реплее
+- **WHEN** в реплее `user_message_chunk` следует за ответом агента
+- **THEN** CodeLab начинает новый ход, а подряд идущие `user_message_chunk` объединяет в одну реплику пользователя
+
+#### Scenario: Сессионные обновления реплея
+- **WHEN** в реплее приходят `current_mode_update`, `config_option_update`, `available_commands_update` и `session_info_update`
+- **THEN** CodeLab применяет их к сессии (текущий режим, опции, команды, заголовок), а режимы и опции из ответа на `session/load` имеют приоритет
+
+#### Scenario: Ошибка session/load
+- **WHEN** агент отвечает на `session/load` ошибкой после части реплея
+- **THEN** CodeLab не создаёт сессию и отбрасывает накопленные обновления реплея
+
+#### Scenario: Режим и заголовок вне хода
+- **WHEN** агент присылает `current_mode_update` или `session_info_update` при отсутствии активного хода
+- **THEN** CodeLab обновляет текущий режим или заголовок сессии; `session_info_update` без `title` заголовок не меняет
 
 ### Requirement: Жизненный цикл prompt turn
 CodeLab SHALL поддерживать `session/prompt`, потоковые `session/update`, `session/request_permission`, `session/cancel` и финальный ответ `session/prompt` со `stopReason`. Уведомление `session/update` с незнакомым видом обновления (`sessionUpdate`) SHALL пропускаться без ошибки и без изменения состояния сессии.
@@ -121,11 +141,19 @@ CodeLab SHALL поддерживать `session/prompt`, потоковые `ses
 - **THEN** CodeLab дополнительно записывает в developer-only журнал `category=protocol` событие с тем же текстом, видом обновления, идентификатором сессии и полным payload уведомления с маскированием секретов, а application-журнал (console, `application.log`, сервер логов) payload не получает
 
 ### Requirement: Идемпотентные переходы состояния
-CodeLab SHALL обрабатывать дублирующиеся, запоздавшие или чередующиеся события потока, не повреждая видимое состояние сессии.
+CodeLab SHALL обрабатывать дублирующиеся, запоздавшие или чередующиеся события потока, не повреждая видимое состояние сессии. Чанки содержимого (`agent_message_chunk`, `agent_thought_chunk`, `user_message_chunk`) SHALL считаться приращениями и SHALL NOT дедуплицироваться по равенству: ACP не даёт им ключа, по которому повторную доставку можно отличить от следующей дельты с тем же текстом. Обновление-снимок SHALL считаться дублем, только если оно равно последнему полученному в ходе обновлению того же вида.
 
 #### Scenario: Приходит дублирующееся обновление
-- **WHEN** одно и то же обновление сессии доставлено более одного раза
+- **WHEN** одно и то же обновление-снимок сессии (`tool_call`, `tool_call_update`, `plan`, `current_mode_update` и другие обновления, не являющиеся чанками) доставлено более одного раза
 - **THEN** CodeLab не дублирует видимые сообщения, approvals или записи tool call
+
+#### Scenario: Снимок возвращается к прежнему значению
+- **WHEN** в одном ходе агент присылает `plan` A, затем `plan` B, затем снова `plan` A (или так же `current_mode_update`)
+- **THEN** CodeLab применяет третье обновление, и текущим становится A, а не B
+
+#### Scenario: Повторяющиеся одинаковые чанки
+- **WHEN** агент присылает несколько `agent_message_chunk` (или `agent_thought_chunk`, `user_message_chunk`) с одинаковым текстом, подряд или вперемешку с другими обновлениями
+- **THEN** CodeLab сохраняет каждую дельту, и видимый текст равен склейке всех присланных дельт
 
 #### Scenario: Запоздавшее обновление после cancel
 - **WHEN** запоздавший `session/update` приходит после `session/cancel`, но до ответа на prompt
