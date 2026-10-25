@@ -51,6 +51,8 @@ final class ServerHarness {
     JournalStore? sessions,
     TurnBudget budget = const TurnBudget(),
     bool slow = false,
+    ModelCatalog? models,
+    Duration detachGrace = const Duration(seconds: 30),
   }) async {
     final clock = FakeClock();
     final logger = RecordingLogger();
@@ -73,6 +75,7 @@ final class ServerHarness {
         clock: clock,
         ids: SequentialIdGenerator(),
         sessions: store,
+        models: models,
       ),
       config: CoreConfig(defaultModel: scriptedModel, budget: budget),
       streamFunction: model.call,
@@ -82,6 +85,7 @@ final class ServerHarness {
       config: AcpServerConfig(
         agentInfo: testAgentInfo,
         localListing: localListing,
+        detachGrace: detachGrace,
       ),
       logger: logger,
       clock: clock,
@@ -101,9 +105,25 @@ final class ServerHarness {
   final FakeClock clock;
   final ScriptedStreamFunction model;
 
+  /// Новое соединение к тому же серверу, уже после `initialize`.
+  Future<TestClient> connect() async {
+    final link = InProcessAcpLink();
+    unawaited(server.serve(link.agent));
+    final other = TestClient(link.client);
+    await other.start();
+    await other.request('initialize', initializeParams());
+    return other;
+  }
+
   /// `initialize` с fs и terminal, как codelab-app.
   Future<JsonRpcResponse> initialize({Object? clientCapabilities}) =>
-      client.request('initialize', {
+      client.request(
+        'initialize',
+        initializeParams(clientCapabilities: clientCapabilities),
+      );
+
+  static Map<String, Object?> initializeParams({Object? clientCapabilities}) =>
+      {
         'protocolVersion': 1,
         'clientCapabilities':
             clientCapabilities ??
@@ -112,7 +132,7 @@ final class ServerHarness {
               'terminal': true,
             },
         'clientInfo': {'name': 'codelab-app', 'version': '0.4.0'},
-      });
+      };
 
   /// `session/new` в `/work/demo`; возвращает `sessionId`, уведомление
   /// `available_commands_update` после ответа снимается из очереди.
@@ -183,8 +203,13 @@ final class TestClient {
   final _waiting = Queue<Completer<JsonRpcMessage>>();
   var _nextId = 100;
 
+  final _closed = Completer<void>();
+
+  /// Агент закрыл соединение: входящий поток завершён.
+  Future<void> get closed => _closed.future;
+
   Future<void> start() async {
-    transport.inbound.listen(_onMessage);
+    transport.inbound.listen(_onMessage, onDone: _closed.complete);
     await transport.start();
   }
 
