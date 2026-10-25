@@ -78,6 +78,18 @@ final class _User {
               )
               .then<void>((_) {}, onError: promptErrors.add),
         );
+      case 'session/load':
+        // id берётся из кадра: загружаемой сессии у клиента может ещё не быть
+        // (acp/session-load-interrupted-turn начинается без session/new).
+        final params = expected['params']! as Map<String, Object?>;
+        step.track(
+          app.loadSession(
+            LoadSessionCommand(
+              sessionId: SessionId(params['sessionId']! as String),
+              cwd: env.cwd,
+            ),
+          ),
+        );
       case 'session/cancel':
         step.track(app.cancelTurn(CancelTurnCommand(sessionId: _session.id)));
       case 'session/set_config_option':
