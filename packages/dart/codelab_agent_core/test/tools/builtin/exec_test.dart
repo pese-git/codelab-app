@@ -166,6 +166,31 @@ void main() {
     ]);
   });
 
+  // §13.7: терминал клиента встраивается в вызов (`ExecOptions.onTerminal`;
+  // design.md change `add-dart-agent-acp-server`, D13).
+  test('a terminal of the env becomes ToolCallProgress', () async {
+    final (h, _) = await harness((command, options) async {
+      options.onTerminal?.call('term_7');
+      return const Ok(
+        ExecResult(
+          exitCode: 0,
+          output: '',
+          truncated: false,
+          duration: Duration.zero,
+        ),
+      );
+    });
+
+    await h.run('exec', {'command': 'dart test'});
+
+    final progress = h.events.whereType<ToolCallProgress>().single;
+    expect(progress.toolCallId, 'call_1');
+    expect(
+      progress.content.single,
+      isA<ToolCallTerminal>().having((c) => c.terminalId, 'id', 'term_7'),
+    );
+  });
+
   test('present: the command is the title', () async {
     final (h, _) = await harness(answering(''));
 

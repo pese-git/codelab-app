@@ -9,11 +9,18 @@ import 'package:test/test.dart';
 ///
 /// [create] returns an env whose `cwd` is an existing empty directory;
 /// [writeBytes] puts raw bytes into a file (for the non-UTF-8 case).
+///
+/// [clientBacked] — env исполняет файлы через ACP-клиента
+/// (`AcpClientExecutionEnv`, §4.7): клиент различает только «не найдено»
+/// (`-32002`), остальные отказы — `io` с его текстом, а `stat` — чтение одной
+/// строки без размера и без каталогов. Тогда набор требует ошибку-значение,
+/// но не её точный код.
 void executionEnvContract(
   String name, {
   required Future<ExecutionEnv> Function() create,
   required Future<void> Function(ExecutionEnv env, String path, List<int> bytes)
   writeBytes,
+  bool clientBacked = false,
 }) {
   group('$name contract', () {
     late ExecutionEnv env;
@@ -78,15 +85,21 @@ void executionEnvContract(
         _code(await env.readText('$root/missing.txt')),
         FileErrorCode.notFound,
       );
-      expect(_code(await env.readText('$root/dir')), FileErrorCode.isDirectory);
-      expect(_code(await env.readText('$root/bad.bin')), FileErrorCode.notText);
+      expect(
+        _code(await env.readText('$root/dir')),
+        clientBacked ? isNotNull : FileErrorCode.isDirectory,
+      );
+      expect(
+        _code(await env.readText('$root/bad.bin')),
+        clientBacked ? isNotNull : FileErrorCode.notText,
+      );
       expect(
         _code(await env.stat('$root/missing.txt')),
         FileErrorCode.notFound,
       );
       expect(
         _code(await env.writeText('$root/dir/file.txt/child', 'x')),
-        FileErrorCode.notDirectory,
+        clientBacked ? isNotNull : FileErrorCode.notDirectory,
       );
     });
 
@@ -94,15 +107,22 @@ void executionEnvContract(
       await env.writeText('$root/s/f.txt', 'héllo');
 
       final file = await env.stat('$root/s/f.txt');
-      final dir = await env.stat('$root/s');
 
       expect(
         file,
         isA<Ok<FileStat, FileError>>()
             .having((r) => r.value.type, 'type', FileType.file)
-            .having((r) => r.value.size, 'size', utf8.encode('héllo').length)
+            .having(
+              (r) => r.value.size,
+              'size',
+              clientBacked ? isNull : utf8.encode('héllo').length,
+            )
             .having((r) => r.value.path, 'path', '$root/s/f.txt'),
       );
+      if (clientBacked) {
+        return;
+      }
+      final dir = await env.stat('$root/s');
       expect(
         dir,
         isA<Ok<FileStat, FileError>>().having(
