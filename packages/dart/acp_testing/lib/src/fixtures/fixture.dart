@@ -43,7 +43,10 @@ const fixtureFormatKeys = <String, Set<String>>{
     'web',
     'skipInitialize',
     'sessions',
+    'transport',
   },
+  'transport': {'kind', 'attempts'},
+  'transportAttempt': {'authorization', 'expectStatus'},
   'terminalCommand': {'output', 'exitCode'},
   'frame': {'dir', 'frame', 'unordered', 'note', 'optional', 'repeat', 'match'},
   'llm': {'model', 'steps'},
@@ -269,6 +272,14 @@ final class FixtureSetup {
 
     return FixtureSetup(
       sessions: sessions,
+      transport: switch (r.object(json, path, 'transport')) {
+        null => null,
+        final transport => FixtureTransport._parse(
+          r,
+          transport,
+          '$path.transport',
+        ),
+      },
       cwd: r.string(json, path, 'cwd') ?? defaultFixtureCwd,
       files: r.stringMap(json, path, 'files') ?? const {},
       profile: r.string(json, path, 'profile'),
@@ -284,6 +295,9 @@ final class FixtureSetup {
   /// Working directory of the scenario, written as `${cwd}` in frames.
   final String cwd;
 
+  /// Транспорт сценария: `null` — прогон в памяти; иначе фикстуру играет
+  /// транспортный драйвер против процесса бинаря (design.md change
+  /// `add-codelab-agent-binary`, D8).
   final FixtureTransport? transport;
 
   /// Журналы сессий до начала сценария, только для агентского прогона:
@@ -827,10 +841,14 @@ final class _Reader {
   }
 }
 
+/// Транспорт процесса бинаря для транспортной фикстуры.
 enum FixtureTransportKind { stdio, ws }
 
+/// Заголовок `Authorization` попытки подключения по WebSocket: без него,
+/// с неверным токеном или с верным.
 enum FixtureAuthorization { none, wrong, valid }
 
+/// Попытка upgrade по WebSocket до основного подключения.
 final class FixtureWsAttempt {
   const FixtureWsAttempt({
     required this.authorization,
@@ -838,12 +856,79 @@ final class FixtureWsAttempt {
   });
 
   final FixtureAuthorization authorization;
+
+  /// HTTP-статус отказа, которого ждёт фикстура (например, `401`).
   final int expectStatus;
 }
 
+/// Блок `setup.transport` (design.md change `add-codelab-agent-binary`, D8).
+///
+/// Почему: транспортные фикстуры проверяют кадрирование stdio и
+/// аутентификацию WebSocket, а формат знает только кадры JSON-RPC. Блок
+/// говорит, через какой транспорт процесса бинаря идут кадры и какие
+/// попытки подключения отказываются до основного.
+///
+/// Как использовать: агентский драйвер в памяти фикстуру с блоком
+/// пропускает; транспортный драйвер (`runAgentFixtureOver`) поднимает
+/// процесс и играет [attempts] по порядку, основное подключение — с верным
+/// токеном. [attempts] допустимы только у `ws`.
 final class FixtureTransport {
   const FixtureTransport({required this.kind, this.attempts = const []});
 
+  factory FixtureTransport._parse(
+    _Reader r,
+    Map<String, Object?> json,
+    String path,
+  ) {
+    r.closed(json, path, 'transport');
+    final kindName = r.string(json, path, 'kind', required: true);
+    final kind =
+        FixtureTransportKind.values
+            .where((k) => k.name == kindName)
+            .firstOrNull ??
+        r.fail(
+          '$path.kind',
+          'must be one of ${FixtureTransportKind.values.map((k) => k.name).join(', ')}',
+        );
+    final rawAttempts = r.list(json, path, 'attempts');
+    if (rawAttempts != null && kind != FixtureTransportKind.ws) {
+      r.fail('$path.attempts', 'attempts are only allowed with kind "ws"');
+    }
+    return FixtureTransport(
+      kind: kind,
+      attempts: [
+        for (final (i, raw) in (rawAttempts ?? const <Object?>[]).indexed)
+          _attempt(
+            r,
+            r.asObject(raw, '$path.attempts[$i]'),
+            '$path.attempts[$i]',
+          ),
+      ],
+    );
+  }
+
   final FixtureTransportKind kind;
   final List<FixtureWsAttempt> attempts;
+
+  static FixtureWsAttempt _attempt(
+    _Reader r,
+    Map<String, Object?> json,
+    String path,
+  ) {
+    r.closed(json, path, 'transportAttempt');
+    final name = r.string(json, path, 'authorization', required: true);
+    final status = r.integer(json, path, 'expectStatus');
+    return FixtureWsAttempt(
+      authorization:
+          FixtureAuthorization.values
+              .where((a) => a.name == name)
+              .firstOrNull ??
+          r.fail(
+            '$path.authorization',
+            'must be one of ${FixtureAuthorization.values.map((a) => a.name).join(', ')}',
+          ),
+      expectStatus:
+          status ?? r.fail('$path.expectStatus', 'required field is missing'),
+    );
+  }
 }

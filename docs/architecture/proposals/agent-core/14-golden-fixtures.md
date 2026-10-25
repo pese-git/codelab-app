@@ -74,7 +74,7 @@ packages/dart/codelab_agent_core/
   фоновые команды — `acp/tool-exec-background-terminal`, `acp/tool-exec-background-local`,
   `acp/session-load-background-job`, `acp/jobs-board` (§17.9.16). Режим `accept-edits` —
   `acp/set-mode-accept-edits` (P-06, область `set-mode`, §7.11).
-* Корпус MVP по этапам (этап — когда фикстура входит в корпус; агентский прогон фикстур с ролью `agent` — с этапа 4, §14.9; клиентский прогон фикстур с ролью `client` — с этапа 0, §14.10). Итого к этапу 4 — 49 фикстур (12 + 37), к этапу 8 — 63 (+ 14):
+* Корпус MVP по этапам (этап — когда фикстура входит в корпус; агентский прогон фикстур с ролью `agent` — с этапа 4, §14.9; клиентский прогон фикстур с ролью `client` — с этапа 0, §14.10). Итого к этапу 4 — 47 фикстур (12 + 35), к этапу 8 — 61 (+ 14):
   * этап 0 — ровно 12 фикстур с клиентским прогоном (dart-agent-and-clients §9.5): `acp/initialize-capabilities`, `acp/session-new-modes-config`, `acp/prompt-text-end-turn`, `acp/prompt-cancel-mid-tool`, `acp/prompt-tool-permission-allow`, `acp/prompt-tool-permission-reject-continues`, `acp/tool-status-lifecycle`, `acp/tool-read-range`, `acp/tool-exec-terminal-embed`, `acp/prompt-update-plan`, `acp/set-config-option-model`, `acp/errors-unknown-session-update-tolerated`;
   * этап 4 — ровно 35 фикстур, возможности этапов 1–4, проверяемые через ACP-адаптер (dart-agent-and-clients §9.9, задача 4.8; 33 — в change `add-dart-agent-acp-server`, транспортные `acp/ws-auth-bearer-required` и `acp/stdio-framing-large-line` — в `add-codelab-agent-binary`): `acp/session-load-replay`, `acp/session-list-cwd-filter`, `acp/prompt-max-turn-requests`, `acp/prompt-failed-provider-auth`, `acp/errors-bad-frame-survives`, `acp/config-effort-option` (опция `effort` — часть `configOptions` этапа 4, §13.6), `acp/prompt-streaming-text`, `acp/prompt-thought-chunk`, `acp/prompt-anthropic-tool-call`, `acp/prompt-network-drop`, `acp/prompt-provider-error`, `acp/prompt-cancel-mid-stream`, `acp/prompt-parallel-tool-calls`, `acp/prompt-turn-budget-exceeded`, `acp/prompt-cancel-during-terminal`, `acp/tool-write-permission-diff`, `acp/tool-edit-exact-replace`, `acp/tool-edit-ambiguous-match-error`, `acp/tool-list-dir`, `acp/tool-search-content`, `acp/tool-invalid-args-error`, `acp/tool-exec-terminal-env-array`, `acp/permission-allow-always-scoped`, `acp/permission-critical-pattern-in-bypass`, `acp/permission-options-all-four`, `acp/permission-outcome-cancelled`, `acp/set-mode-bypass-no-prompt`, `acp/set-mode-plan-rejects-edit`, `acp/set-mode-updates-current-mode`, `acp/session-info-title`, `acp/session-load-interrupted-turn`, `acp/compaction-long-session-continues`, `acp/multi-session-concurrent-prompts`, `acp/ws-auth-bearer-required`, `acp/stdio-framing-large-line`. Фикстуры выноса результата `acp/tool-exec-spill` и `acp/agent-serve-spill-local-read` перенесены в change `add-agent-core-output-spill` (веха 1.0, после P-10). Фикстуры, которые клиентский драйвер не играет (загрузка и список сессий, `session/set_mode`, плохие кадры, параллельные сессии, опция `effort`), имеют роль `agent`; их клиентская сторона — в списке ожидаемого покрытия FIX-2. Встроенных slash-команд на этапе 4 нет (они — этап 8): `available_commands_update` после `session/new` уходит с `availableCommands: []`, и фикстуры этапов 0 и 4 сверяют этот список матчером `{"$any": []}`; состав списка проверяют фикстуры этапа 8. Фикстуры этапа 4, которые ожидают `_meta.codelab.outcome` (например, `acp/permission-outcome-cancelled`, `acp/session-load-interrupted-turn`), объявляют `"extensions": ["outcome"]` (FIX-4); так же `acp/prompt-max-turn-requests` — `"extensions": ["budgetExceeded"]`, `acp/prompt-failed-provider-auth` — `"extensions": ["errorData"]` (`data.codelab`, §13.8). Базовые фикстуры этапа 0 (`acp/prompt-cancel-mid-tool`, `acp/prompt-tool-permission-reject-continues`) `_meta.codelab` в ожидаемых кадрах не пишут: `_meta` сравнивается через `$partial` (§14.6), поэтому агент, который его добавляет, их проходит;
   * этап 8 — ровно 14 фикстур, MCP, конфигурация, команды: `acp/slash-help`, `acp/slash-mode-plan` (встроенные slash-команды — этап 8), `acp/session-new-with-mcp`, `acp/mcp-stdio-tool-call`, `acp/mcp-http-tool-call`, `acp/mcp-tool-permission`, `acp/mcp-result-fenced`, `acp/mcp-prompt-command`, `acp/set-mode-plan-rejects-mcp-write`, `acp/available-commands-no-tools`, `acp/config-model-options-from-endpoint`, `acp/set-config-option-agent`, `acp/slash-compact`, `acp/prompt-template-command`.
@@ -149,6 +149,7 @@ packages/dart/codelab_agent_core/
 | `web` | после MVP: fake-ответы HTTP для web-инструментов — `{ "<URL>": {"status": 200, "headers": {...}, "body": "..."} }`; драйвер conformance агента подставляет `MockClient`, запрос к URL вне карты — ошибка сети; реальная сеть не используется (§17.1.10, WEB-11) |
 | `skipInitialize` | `true` — фикстура сама содержит кадры `initialize`; иначе драйвер выполняет стандартный handshake и `session/new` до `frames` и подставляет `${sessionId}` |
 | `sessions` | только для агентской проверки: журналы сессий до сценария — `{ "<sessionId>": [<заголовок session>, <записи>…] }` в формате журнала (§8.2), `${cwd}` подставляется; так задаётся состояние, которого не получить кадрами (прерванный ход, §8.8). Клиентская проверка поле не читает |
+| `transport` | только для агентской проверки: транспортная фикстура — `{"kind": "stdio"}` или `{"kind": "ws", "attempts": [{"authorization": "none" \| "wrong" \| "valid", "expectStatus": <HTTP-код>}]}`. Кадры идут через stdio или WebSocket процесса бинаря; агентский прогон в памяти такую фикстуру пропускает, её играет транспортный драйвер `apps/codelab_agent/test/transport_conformance_test.dart` тем же алгоритмом §14.9 (попытки `attempts` — до основного подключения с верным токеном) |
 
 Кадр `frames[i]`:
 
@@ -205,6 +206,7 @@ packages/dart/codelab_agent_core/
 | `{"$partial": { … }}` | объект, содержащий как минимум перечисленные ключи; лишние ключи допускаются |
 | `{"$oneOf": [ … ]}` | одно из перечисленных значений |
 | `{"$text": "…"}` | для кадров с `repeat: "+"`: склейка `content.text` всех повторов равна строке |
+| `{"$repeat": {"text": "…", "times": n}}` | строка, повторённая `n` раз: в кадре `c2a` материализуется до отправки, в `a2c` сравнивается как точная строка; так мегабайтная строка остаётся читаемой (`acp/stdio-framing-large-line`); в блоке `llm` транспортной фикстуры генератор разворачивается до передачи бинарю |
 
 `_meta` всегда сравнивается через `$partial`: спецификация разрешает реализациям добавлять туда
 свои ключи.
@@ -403,6 +405,12 @@ runAgentFixture(fx, startAgent):
 11. в конце (и при провале) сначала закрыть client: ожидания агента завершаются разрывом,
     а не таймаутами FakeClock; затем остановить агента
 ```
+
+Транспортный драйвер (`runAgentFixtureOver`) выполняет те же шаги 1–2 и 6–11, а шаги 3–5
+заменяет подключением теста: процесс бинаря `codelab-agent serve --stdio | --ws` со
+сценарием `--llm-script` из блока `llm` фикстуры и клиентский транспорт к нему (OpenSpec
+change `add-codelab-agent-binary`, design.md D8). Шаг 9 проверяет сам бинарь: несовпадение
+шага сценария — ошибка хода, её ловит сравнение кадров.
 
 ## 14.10. Алгоритм: проверка клиента
 

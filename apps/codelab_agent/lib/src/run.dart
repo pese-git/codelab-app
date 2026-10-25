@@ -9,6 +9,7 @@ import 'log/host_logger.dart';
 import 'log/stderr_sink.dart';
 import 'serve/exit_codes.dart';
 import 'serve/serve_stdio.dart';
+import 'serve/serve_ws.dart';
 
 /// Запуск `codelab-agent` от аргументов до кода выхода (design.md change
 /// `add-codelab-agent-binary`, D7).
@@ -59,15 +60,7 @@ Future<int> runCodelabAgent(
     }
     return switch (options.transport) {
       ServeTransport.stdio => await serveStdio(host, logger),
-      // Итерация 2 (design.md, D12): `serve --ws` с аутентификацией.
-      ServeTransport.ws => () {
-        logger.log(
-          LogLevel.error,
-          'serve.usage',
-          fields: {'message': '--ws is not available yet'},
-        );
-        return usageExit;
-      }(),
+      ServeTransport.ws => await serveWs(host, options, environment, logger),
     };
   } on Object catch (error, stack) {
     logger.log(LogLevel.error, 'serve.failed', error: error, stack: stack);

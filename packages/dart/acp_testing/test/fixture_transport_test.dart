@@ -13,7 +13,17 @@ void main() {
     'description': 'Транспортная фикстура для теста загрузчика.',
     'roles': ['agent'],
     'setup': {'cwd': '/work/demo', ...setup},
-    'frames': <Object?>[],
+    'frames': [
+      {
+        'dir': 'c2a',
+        'frame': {
+          'jsonrpc': '2.0',
+          'id': 0,
+          'method': 'initialize',
+          'params': {'protocolVersion': 1},
+        },
+      },
+    ],
   };
 
   AcpFixture parse(Map<String, Object?> json) =>

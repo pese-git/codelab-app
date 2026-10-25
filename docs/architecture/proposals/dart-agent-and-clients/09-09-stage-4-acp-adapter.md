@@ -190,7 +190,7 @@ e2e app). `tasks.md` — пары «тест → реализация» со с�
 
 **Definition of Done.**
 
-* `melos run conformance:agent` — 49 фикстур этапов 0 и 4 с ролью `agent` зелёные; кадры `fs/*`
+* `melos run conformance:agent` и транспортный драйвер `apps/codelab_agent/test/transport_conformance_test.dart` — 46 фикстур этапов 0 и 4 с ролью `agent` зелёные (44 в памяти, 2 транспортные против процесса бинаря); кадры `fs/*`
   и `terminal/*` сверяются, `MemoryExecutionEnv` в прогоне не участвует.
 * `client_application_contract_test.dart: prompt response is sent after the last session/update of the turn` (ACP-3) и `...: session/cancel yields stopReason cancelled` (ACP-5).
 * `every_agent_event_is_projected_test.dart` (ACP-6); `bad_frames_test.dart` (ACP-4).

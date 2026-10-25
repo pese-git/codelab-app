@@ -87,22 +87,20 @@ typedef AgentFixtureStarter =
       AgentFixtureSetup setup,
     );
 
+/// Соединение транспортного прогона: клиентский конец и агент за ним.
 final class AgentConnection {
   const AgentConnection({required this.client, required this.agent});
 
+  /// Клиентский транспорт: драйвер сам вызывает `start` и `close`.
   final AcpTransport client;
   final AgentUnderTest agent;
 }
 
+/// Поднимает агента и клиентский транспорт к нему для [setup] — например,
+/// процесс бинаря и настоящий stdio или WebSocket (design.md change
+/// `add-codelab-agent-binary`, D8).
 typedef AgentFixtureConnector =
     Future<AgentConnection> Function(AgentFixtureSetup setup);
-
-Future<AgentFixtureResult> runAgentFixtureOver(
-  AcpFixture fixture,
-  AgentFixtureConnector connect, {
-  Duration frameTimeout = const Duration(seconds: 5),
-  Duration quietPeriod = const Duration(milliseconds: 200),
-}) => throw UnimplementedError();
 
 final class AgentFixtureResult {
   const AgentFixtureResult._({
@@ -160,25 +158,86 @@ final class AgentFixtureFailure implements Exception {
   }
 }
 
-/// Проигрывает [fixture] против агента из [start] (§14.9).
+/// Проигрывает [fixture] против агента из [start] (§14.9) через пару
+/// транспортов в памяти.
 ///
 /// [frameTimeout] — ожидание кадра агента по реальным часам; [quietPeriod]
 /// — тишина в конце: кадр после неё — провал, так же как лишний запрос
-/// `fs/*` или `terminal/*` (агент сделал больше, чем закреплено).
+/// `fs/*` или `terminal/*` (агент сделал больше, чем закреплено). Фикстура с
+/// `setup.transport` пропускается: её играет [runAgentFixtureOver].
 Future<AgentFixtureResult> runAgentFixture(
   AcpFixture fixture,
   AgentFixtureStarter start, {
   Duration frameTimeout = const Duration(seconds: 5),
   Duration quietPeriod = const Duration(milliseconds: 200),
 }) async {
-  if (!fixture.roles.contains(FixtureRole.agent)) {
+  if (_withoutAgentRole(fixture) case final skipped?) {
+    return skipped;
+  }
+  if (fixture.setup.transport != null) {
     return AgentFixtureResult._(
       skipped: true,
       skipReason:
-          '${fixture.id} has roles '
-          '[${fixture.roles.map((r) => r.name).join(', ')}] without "agent"',
+          '${fixture.id} has setup.transport: the transport driver plays it '
+          'against the binary process',
     );
   }
+  return _play(
+    fixture,
+    (setup) async {
+      final link = InProcessAcpLink();
+      final agent = await start(link.agent, setup);
+      return AgentConnection(client: link.client, agent: agent);
+    },
+    frameTimeout: frameTimeout,
+    quietPeriod: quietPeriod,
+  );
+}
+
+/// Транспортный драйвер (acp-golden-fixtures «Транспортный драйвер
+/// фикстур»): тот же алгоритм §14.9 поверх соединения из [connect].
+/// Фикстура без `setup.transport` пропускается — её играет
+/// [runAgentFixture].
+Future<AgentFixtureResult> runAgentFixtureOver(
+  AcpFixture fixture,
+  AgentFixtureConnector connect, {
+  Duration frameTimeout = const Duration(seconds: 5),
+  Duration quietPeriod = const Duration(milliseconds: 200),
+}) async {
+  if (_withoutAgentRole(fixture) case final skipped?) {
+    return skipped;
+  }
+  if (fixture.setup.transport == null) {
+    return AgentFixtureResult._(
+      skipped: true,
+      skipReason:
+          '${fixture.id} has no setup.transport: the in-memory run plays it',
+    );
+  }
+  return _play(
+    fixture,
+    connect,
+    frameTimeout: frameTimeout,
+    quietPeriod: quietPeriod,
+  );
+}
+
+AgentFixtureResult? _withoutAgentRole(AcpFixture fixture) =>
+    fixture.roles.contains(FixtureRole.agent)
+    ? null
+    : AgentFixtureResult._(
+        skipped: true,
+        skipReason:
+            '${fixture.id} has roles '
+            '[${fixture.roles.map((r) => r.name).join(', ')}] without "agent"',
+      );
+
+Future<AgentFixtureResult> _play(
+  AcpFixture fixture,
+  AgentFixtureConnector connect, {
+  required Duration frameTimeout,
+  required Duration quietPeriod,
+}) async {
   final directory = Directory.systemTemp.createTempSync('agent_fixture_');
   final cwd = directory.resolveSymbolicLinksSync().replaceAll(r'\', '/');
   for (final MapEntry(key: path, value: content)
@@ -187,24 +246,22 @@ Future<AgentFixtureResult> runAgentFixture(
       ..createSync(recursive: true)
       ..writeAsStringSync(content);
   }
-  final link = InProcessAcpLink();
-  final inbox = _Inbox(link.client);
-  await link.client.start();
-  AgentUnderTest? agent;
+  AgentConnection? connection;
+  _Inbox? inbox;
   try {
-    agent = await start(
-      link.agent,
-      AgentFixtureSetup(fixture: fixture, cwd: cwd),
-    );
+    connection = await connect(AgentFixtureSetup(fixture: fixture, cwd: cwd));
+    final client = connection.client;
+    inbox = _Inbox(client);
+    await client.start();
     final run = _AgentRun(
       fixture: fixture,
-      client: link.client,
+      client: client,
       inbox: inbox,
       matcher: FrameMatcher(cwd: cwd, replace: fixture.normalize.replace),
       frameTimeout: frameTimeout,
       quietPeriod: quietPeriod,
     );
-    await run.play(agent);
+    await run.play(connection.agent);
     return AgentFixtureResult._(
       skipped: false,
       variables: Map.unmodifiable(run.matcher.variables),
@@ -213,9 +270,9 @@ Future<AgentFixtureResult> runAgentFixture(
     // Сначала клиентский конец: ожидания агента (fs/*, terminal/*,
     // разрешения) завершаются разрывом, и остановка не ждёт таймаутов,
     // которые у агента идут по FakeClock.
-    await link.client.close();
-    await agent?.stop();
-    await inbox.cancel();
+    await connection?.client.close();
+    await connection?.agent.stop();
+    await inbox?.cancel();
     directory.deleteSync(recursive: true);
   }
 }

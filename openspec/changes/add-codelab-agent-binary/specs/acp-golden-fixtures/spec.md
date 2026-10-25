@@ -60,7 +60,7 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/acp_
 
 #### Scenario: Большая строка по stdio
 - **WHEN** транспортный драйвер проигрывает `acp/stdio-framing-large-line`
-- **THEN** промпт из 2 МиБ одной строкой доходит до агента целиком, а ответ с текстом той же длины приходит одной строкой stdout
+- **THEN** промпт из 2 МиБ одной строкой доходит до агента целиком, а `tool_call` с 2 МиБ в `rawInput`, `fs/write_text_file` и `diff` той же длины приходят каждый одной строкой stdout
 
 #### Scenario: Bearer обязателен
 - **WHEN** транспортный драйвер проигрывает `acp/ws-auth-bearer-required`
