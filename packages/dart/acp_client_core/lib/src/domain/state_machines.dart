@@ -1085,9 +1085,34 @@ PromptTurn _applyUpdateToTurn(PromptTurn turn, SessionUpdate update) {
     UserMessageChunk() ||
     AgentMessageChunk() ||
     AgentThoughtChunk() => turn.copyWith(updates: [...turn.updates, update]),
-    _ when turn.updates.contains(update) => turn,
+    _ when _latestOfKind(turn.updates, update) == update => turn,
     _ => turn.copyWith(updates: [...turn.updates, update]),
   };
+}
+
+/// Последнее обновление того же вида, что [update], или `null`.
+///
+/// Почему: снимок (`plan`, `current_mode_update` и т.п.) несёт полное
+/// текущее значение, и клиент заменяет им прежнее (ACP `11-Agent Plan.md`).
+/// Дублем он является, только если равен *текущему* значению своего вида;
+/// сравнение со всеми прежними обновлениями хода теряло возврат A → B → A.
+///
+/// Для чего: ключ идемпотентности снимков в [_applyUpdateToTurn]
+/// (`AGENTS.md` §9, `fix-repeated-message-chunks`).
+///
+/// Как использовать: вызывать только для снимков — чанки и tool call
+/// обрабатываются раньше. Вид определяется конкретным классом варианта
+/// `SessionUpdate`.
+SessionUpdate? _latestOfKind(
+  List<SessionUpdate> updates,
+  SessionUpdate update,
+) {
+  for (final candidate in updates.reversed) {
+    if (candidate.runtimeType == update.runtimeType) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 PromptTurn _applyToolCallUpdate(
