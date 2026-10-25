@@ -15,8 +15,8 @@
 
 ```dart
 final class AcpAgentServer {
-  AcpAgentServer({required AgentRuntime runtime, required AcpServerConfig config,
-                  required Logger logger, required TraceSink trace, required Clock clock});
+  AcpAgentServer({required BuiltAgentCore core, required AcpServerConfig config,
+                  required Logger logger, required Clock clock});   // профиль — из core.plan
   /// Обслуживает одно соединение до его закрытия. Можно вызывать для нескольких транспортов.
   Future<void> serve(AcpTransport transport);
   /// Безопасное завершение: §13.10.
@@ -24,9 +24,15 @@ final class AcpAgentServer {
 }
 final class AcpServerConfig {
   final Implementation agentInfo; final Duration detachGrace;   // 30 с
-  final AcpTimeouts timeouts; final bool allowLocalExecFallback;
+  final AcpTimeouts timeouts;
+  final ExecutionEnv Function(String cwd)? localListing;        // §10.4: бинарь по stdio
 }
 ```
+
+Сырые кадры разбирает транспорт: порт `AcpTransport` отдаёт `JsonRpcMessage`, поэтому ответы
+`-32700` и `-32600` на неразбираемый JSON или кадр не JSON-RPC 2.0 даёт серверный транспорт
+(`StdioServerAcpTransport`, `WebSocketServerAcpTransport`), а сервер — на всё, что пришло
+сообщением (§13.10).
 
 Внутри соединения есть три компонента:
 
@@ -61,9 +67,9 @@ final class AcpServerConfig {
 | `promptCapabilities.image` | `true` | картинки хранятся в транскрипте; для модели без `image` адаптер провайдера ставит плейсхолдер (§2.5) |
 | `promptCapabilities.audio` | `false` | аудио ни один адаптер провайдера MVP не передаёт |
 | `promptCapabilities.embeddedContext` | `true` | `resource` с `text` превращается в текстовый блок с путём (§13.4) |
-| `mcpCapabilities.http` | `true` при capability `mcp` с транспортом `http` | |
+| `mcpCapabilities.http` | `true` при capability `mcp` с транспортом `http`; до этапа 8 (MCP) — `false` | |
 | `mcpCapabilities.sse` | `false` | транспорт SSE устарел в MCP; клиент MVP умеет stdio и streamable HTTP |
-| `sessionCapabilities.list` | `{}` | `session/list` (§13.5); без `sessionPersistence` — поле отсутствует |
+| `sessionCapabilities.list` | `{}` | `session/list` (§13.5); без `sessionPersistence` — поле `list` отсутствует, `sessionCapabilities` — `{}` |
 | `authMethods` | `[]`; после MVP при `services.login != null` — по методу `codelab-login-<id>` на провайдер с входом по подписке (§17.10.6) | аутентификации на уровне ACP нет (§13.3) |
 
 После MVP `agentCapabilities._meta.codelab` объявляет расширения, введённые через OpenSpec
@@ -736,8 +742,8 @@ Object? _copyJson(Object? v) => switch (v) {
 * `send` на конце не в состоянии `connected` (до `start()` или после `close()`) — `sendFailed`.
   Сообщение, пришедшее до `start()` получателя, буферизуется и доставляется при `start()`: агент
   может ответить раньше, чем клиент запустил свой конец.
-* Закрытие одного конца переводит другой в `failed` с `disconnected` — как EOF у stdio; сервер
-  отрабатывает отсоединение по §13.10. Сообщение, пришедшее после закрытия, отбрасывается с
+* Закрытие одного конца переводит другой в `failed` с `disconnected` и закрывает его `inbound` —
+  как EOF у stdio; сервер отрабатывает отсоединение по §13.10. Сообщение, пришедшее после закрытия, отбрасывается с
   диагностикой `warning`.
 * `codelab_embedded` создаёт `InProcessAcpLink()`, отдаёт `link.client` `AcpClientApplication`,
   а `link.agent` — `AcpAgentServer.serve`.

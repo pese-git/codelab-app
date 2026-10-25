@@ -691,6 +691,65 @@ sealed class SetSessionConfigOptionResponse
   }
 }
 
+/// Параметры `session/set_mode` (`docs/acp/protocol/17-Schema.md`,
+/// `SetSessionModeRequest`): клиент выбирает режим из `availableModes`.
+@freezed
+sealed class SetSessionModeRequest with _$SetSessionModeRequest {
+  const SetSessionModeRequest._();
+
+  const factory SetSessionModeRequest({
+    required SessionId sessionId,
+    required SessionModeId modeId,
+    @JsonKey(name: '_meta') JsonObject? meta,
+  }) = _SetSessionModeRequest;
+
+  factory SetSessionModeRequest.fromJson(Object? value) {
+    final source = requireAcpObject(
+      value,
+      path: 'setSessionModeRequest',
+      allowedKeys: {'sessionId', 'modeId', '_meta'},
+    );
+
+    return SetSessionModeRequest(
+      sessionId: SessionId.fromJson(source['sessionId']),
+      modeId: SessionModeId.fromJson(source['modeId']),
+      meta: _optionalObject(source, '_meta'),
+    );
+  }
+
+  JsonObject toJson() {
+    return {
+      'sessionId': sessionId.toJson(),
+      'modeId': modeId.toJson(),
+      if (meta != null) '_meta': meta,
+    };
+  }
+}
+
+/// Ответ на `session/set_mode` — пустой объект, кроме `_meta`.
+@freezed
+sealed class SetSessionModeResponse with _$SetSessionModeResponse {
+  const SetSessionModeResponse._();
+
+  const factory SetSessionModeResponse({
+    @JsonKey(name: '_meta') JsonObject? meta,
+  }) = _SetSessionModeResponse;
+
+  factory SetSessionModeResponse.fromJson(Object? value) {
+    final source = requireAcpObject(
+      value,
+      path: 'setSessionModeResponse',
+      allowedKeys: {'_meta'},
+    );
+
+    return SetSessionModeResponse(meta: _optionalObject(source, '_meta'));
+  }
+
+  JsonObject toJson() {
+    return {if (meta != null) '_meta': meta};
+  }
+}
+
 @freezed
 sealed class ListSessionsRequest with _$ListSessionsRequest {
   const ListSessionsRequest._();

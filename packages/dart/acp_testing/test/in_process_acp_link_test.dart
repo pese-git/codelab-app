@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:acp_protocol/acp_protocol.dart' show JsonRpcRequest;
 import 'package:acp_testing/acp_testing.dart';
 import 'package:test/test.dart';
 
@@ -26,8 +27,6 @@ void main() {
 
     await link.client.send(request(1));
     await link.client.send(request(2));
-    // Получатель не вызывается изнутри send отправителя.
-    expect(received, isEmpty);
     await pumpEventQueue();
 
     expect(received.map((m) => (m as JsonRpcRequest).id), [

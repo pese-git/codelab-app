@@ -22,6 +22,9 @@ const pendingCoverage = {
   'current_mode_update',
   // Stage 4: acp/config-effort-option and the agent-side option changes.
   'config_option_update',
+  // Клиент codelab-app метод не вызывает: режимы — через configOptions
+  // (§13.6). Агентскую сторону покрывают фикстуры acp/set-mode-*.
+  'session/set_mode',
 };
 
 void main() {

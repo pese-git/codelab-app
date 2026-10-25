@@ -48,7 +48,8 @@ void main() {
             as Map<String, Object?>;
 
     expect(caps['loadSession'], isFalse);
-    expect(caps.containsKey('sessionCapabilities'), isFalse);
+    // Поля list нет; сам объект кодек пишет всегда (§13.2).
+    expect(caps['sessionCapabilities'], isEmpty);
   });
 
   test('a version above 1 is still answered with 1', () async {

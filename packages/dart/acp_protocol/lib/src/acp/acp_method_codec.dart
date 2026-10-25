@@ -18,6 +18,7 @@ const sessionListMethod = 'session/list';
 const sessionPromptMethod = 'session/prompt';
 const sessionCancelMethod = 'session/cancel';
 const sessionSetConfigOptionMethod = 'session/set_config_option';
+const sessionSetModeMethod = 'session/set_mode';
 const sessionRequestPermissionMethod = 'session/request_permission';
 const sessionUpdateMethod = 'session/update';
 const fsReadTextFileMethod = 'fs/read_text_file';
@@ -176,6 +177,15 @@ const acpSessionSetConfigOption =
       encodeResult: _encodeSetSessionConfigOptionResponse,
     );
 
+const acpSessionSetMode =
+    AcpMethodDefinition<SetSessionModeRequest, SetSessionModeResponse>.request(
+      method: sessionSetModeMethod,
+      decodeParams: SetSessionModeRequest.fromJson,
+      encodeParams: _encodeSetSessionModeRequest,
+      decodeResult: SetSessionModeResponse.fromJson,
+      encodeResult: _encodeSetSessionModeResponse,
+    );
+
 const acpSessionRequestPermission =
     AcpMethodDefinition<
       RequestPermissionRequest,
@@ -275,6 +285,7 @@ const acpMethodRegistry = <String, AcpMethodDefinition<Object, Object>>{
   sessionPromptMethod: acpSessionPrompt,
   sessionCancelMethod: acpSessionCancel,
   sessionSetConfigOptionMethod: acpSessionSetConfigOption,
+  sessionSetModeMethod: acpSessionSetMode,
   sessionRequestPermissionMethod: acpSessionRequestPermission,
   sessionUpdateMethod: acpSessionUpdate,
   fsReadTextFileMethod: acpFsReadTextFile,
@@ -442,6 +453,10 @@ JsonObject _encodeSetSessionConfigOptionRequest(
 JsonObject _encodeSetSessionConfigOptionResponse(
   SetSessionConfigOptionResponse value,
 ) => value.toJson();
+JsonObject _encodeSetSessionModeRequest(SetSessionModeRequest value) =>
+    value.toJson();
+JsonObject _encodeSetSessionModeResponse(SetSessionModeResponse value) =>
+    value.toJson();
 JsonObject _encodeRequestPermissionRequest(RequestPermissionRequest value) =>
     value.toJson();
 JsonObject _encodeRequestPermissionResponse(RequestPermissionResponse value) =>
