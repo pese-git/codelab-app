@@ -634,6 +634,10 @@ void main() {
 
     sendMessageChunk('from ');
     sendMessageChunk('agent');
+    // Одинаковые дельты подряд — разные куски ответа, а не повтор
+    // (`fix-repeated-message-chunks`): обе попадают в текст.
+    sendMessageChunk('!');
+    sendMessageChunk('!');
 
     final agentEntriesWhileRunning = shellCubit.state.transcriptEntries
         .where((entry) => entry.title == 'Agent')
@@ -645,7 +649,7 @@ void main() {
           'consecutive agent_message_chunk updates must coalesce into '
           'one entry instead of one per chunk',
     );
-    expect(agentEntriesWhileRunning.single.body, 'hi from agent');
+    expect(agentEntriesWhileRunning.single.body, 'hi from agent!!');
     expect(
       agentEntriesWhileRunning.single.id,
       growingEntryId,
@@ -664,7 +668,7 @@ void main() {
         .where((entry) => entry.title == 'Agent')
         .toList();
     expect(finalAgentEntries, hasLength(1));
-    expect(finalAgentEntries.single.body, 'hi from agent');
+    expect(finalAgentEntries.single.body, 'hi from agent!!');
     expect(finalAgentEntries.single.id, growingEntryId);
 
     await shellCubit.close();

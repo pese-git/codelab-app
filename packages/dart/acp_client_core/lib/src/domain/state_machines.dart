@@ -1076,6 +1076,15 @@ PromptTurn _applyUpdateToTurn(PromptTurn turn, SessionUpdate update) {
         toolCallUpdate,
       ),
     ),
+    // Чанки — приращения без id и номера: повторная доставка неотличима от
+    // следующей дельты с тем же текстом (`----------------` в таблице
+    // Markdown), а дедупликация без опоры в протоколе запрещена
+    // (`streaming.md` §8). Поэтому они всегда дописываются, а проверка на
+    // равенство ниже остаётся только для обновлений-снимков (`plan`,
+    // `current_mode_update` и т.п.) — см. `fix-repeated-message-chunks`.
+    UserMessageChunk() ||
+    AgentMessageChunk() ||
+    AgentThoughtChunk() => turn.copyWith(updates: [...turn.updates, update]),
     _ when turn.updates.contains(update) => turn,
     _ => turn.copyWith(updates: [...turn.updates, update]),
   };
