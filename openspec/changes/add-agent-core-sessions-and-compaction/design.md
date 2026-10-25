@@ -159,7 +159,7 @@ Future<SessionPage> listSessions({String? cwd, String? cursor, int pageSize = 50
 - **Окно.** `effectiveContextWindow(model, cap)` = `min(model.contextWindow, cap)`; одна функция для порога `afterTurn`, проверки `preflight` и `ModelRequested.estimatedTokens` (CMP-6).
 - **Точки подключения цикла.** В `AgentLoopConfig` появляются поля, которые design.md этапа 2 (D7) обещал, но код не объявил:
   - `estimateTokens(LlmContext) → int` — оценка payload; цикл заполняет `ModelRequested.estimatedTokens`;
-  - `emergencyCompact(CancelToken) → Future<LoopContext?>` — один аварийный вызов за ход, общий для `preflight` (§5.2, шаг 4) и `overflow` (§5.4, шаг 14a, CMP-8).
+  - `emergencyCompact(EmergencyCause, CancelToken) → Future<LoopContext?>` — один аварийный вызов за ход, общий для `preflight` (§5.2, шаг 4) и `overflow` (§5.4, шаг 14a, CMP-8); окно проверки — `contextWindowCap` (D16).
 
   `null` в любом поле — «сжатия нет», поведение этапа 2 не меняется.
 - **`emergencyCompact` сессии** вызывает `compact` с триггером `preflight` или `overflow` по снимку журнала. После `Compacted` возвращает `LoopContext` с сообщениями проекции, после `NothingToCompact` и `CompactionFailed` — `null`. Цикл заменяет контекст шага, транскрипт `Agent` после шага — сообщения проекции плюс сообщения шага.
@@ -244,6 +244,36 @@ Python-агент хранил JSON-сессии в `$CODELAB_HOME/data/sessions
 - **Формат `index.json`**: `{"v":1,"sessions":{"<слаг>/<файл>":{"size","mtime","id","cwd","title","updatedAt","messageCount","lastTurnFailed"}}}`; `mtime` — миллисекунды. Ключ — путь относительно `root` через `/`. Кеш пишется через `index.json.tmp` и `rename`; `list` с `cwd` сохраняет строки других каталогов.
 - **Лог `session.quarantined`** (`warning`, поля `session_id`, `lines`, `truncated`) — при каждом карантине на диске.
 - **Обрыв посреди `write` в тесте 6.2.** Дочерний процесс сам оставляет в файле начало следующей строки, печатает `ready` и получает `SIGKILL`: момент сигнала внутри `write` не воспроизводится надёжно (Risks).
+
+### D16. Уточнения контракта, найденные в итерации 3
+
+Документ ядра правится в том же PR (§5.2, §5.4, §9.2, §9.3, §9.6–§9.8):
+
+- **`emergencyCompact(EmergencyCause, CancelToken)`.** Причина (`preflight` или `overflow`) нужна сессии для триггера записи. В `AgentLoopConfig` добавлено `contextWindowCap`: окно проверки перед запросом — `effectiveContextWindow(model, cap)` (CMP-6).
+- **`TurnOutput` вместо `Agent.replaceMessages`** (задача 9.4). `runAgentLoop` возвращает `added` и `history`. После аварийного сжатия транскрипт `Agent` — `history + added`: сообщения хода до сжатия уже в проекции журнала.
+- **Ответ `overflow`, после которого был повтор, не эмитится.** Цикл распознаёт его до `MessageStarted`, поэтому в журнал он не попадает. Повтор идёт без второго `StepStarted`, как повтор после ошибки парности. Синтетический `overflow` проверки перед запросом не эмитит `ModelRequested`.
+- **Без capability `compaction`** сессия не задаёт ни `estimateTokens`, ни `emergencyCompact`: поведение этапа 2, включая отсутствие проверки размера.
+- **Разрезание хода (§9.6)** — только если правило последнего хода сдвинуло срез к началу региона и перед ходом сжимать нечего. Иначе ход сохраняется целиком: так пример §9.6 даёт срез без разрезания, хотя его последний ход больше `keepRecentTokens`. Ограничение действует и при `keepRecentUserTurns > 1`.
+- **Регион без записей `compaction`.** Прошлое резюме передаётся как `previousSummary`. `buildLlmContext` пропускает прошлые записи `compaction` внутри сохранённой части: последнее резюме их обновляет.
+- **Разрезанный ход без раннего региона.** Модель вызывается один раз — для начала хода; основная часть резюме — `previousSummary` как есть. Цитата слов пользователя ставит `> ` перед каждой строкой.
+- **Оценка.** `estimateContextTokens` принимает список сообщений, а не проекцию: сессия оценивает транскрипт `Agent`. Схема инструмента для оценки — `{name, description, parameters}`. Оценщик цикла — `estimateLlmContext(LlmContext)`.
+- **Суммаризатор.** Ошибка модели и пустой ответ — исключение `CompactionFailure`; `compact` превращает его в `CompactionFailed`, лог `compaction.failed` и `AgentError(compaction)`. `SummaryRequest.region` и `turnPrefix` — записи `MessageRecord`: заголовок `[user]` или `[notice]` зависит от `origin` записи.
+- **Проходы.** `NothingToCompact` или `CompactionFailed` на проходе после успешного не отменяют записанное: результат — `Compacted` прошлого прохода.
+- **`afterTurn` после возврата `prompt()`.** Агент уже вне хода, и `replaceTranscript` допустим. Закрытие сессии отменяет фоновое сжатие и ждёт его. Логи — `compaction.done` и `compaction.failed`.
+- **`CompactionOverrides`** лежит рядом с `CoreConfig` в `host/services.dart`: барель экспортирует его без каталога `compaction/` (D1).
+
+### Доказательства строк матрицы этапа 3
+
+| Строка | Доказательство в ядре |
+|---|---|
+| S-01 | `jsonl_crash_recovery_test.dart` (`core/session-crash-mid-turn-loads`), `jsonl_repair_test.dart`, `deterministic_journal_test.dart` |
+| S-03 (ядро) | `session_list_test.dart`, контрактный набор `session_store_contract.dart`; фикстура `acp/session-list-cwd-filter` — этап 4 |
+| S-05 (ядро) | `session_title_test.dart`; фикстура `acp/session-info-title` — этап 4 |
+| S-13 (ядро) | `resume_after_crash_test.dart` (`core/resume-after-crash-no-tool-recall`, `core/interrupted-tool-not-retried`) |
+| K-01 | `long_session_test.dart` (30 ходов в окне 8 192, парность каждого запроса); фикстура `acp/compaction-long-session-continues` — этап 4 |
+| K-03 | `compactor_test.dart` (`core/compaction-iterative-summary`), `summarizer_test.dart` («the next summary updates the previous one») |
+| K-04 | `emergency_compact_test.dart` (CMP-8), `overflow_then_compact_test.dart` |
+| L-14 (ядро) | `overflow_then_compact_test.dart` (`core/overflow-triggers-compaction`) |
 
 ## Risks / Trade-offs
 

@@ -59,7 +59,7 @@ final class Agent {
     _turn = source;
     _idle = idle;
     try {
-      final added = await runAgentLoop(
+      final out = await runAgentLoop(
         prompts: messages,
         context: LoopContext(
           systemPrompt: systemPrompt,
@@ -70,7 +70,13 @@ final class Agent {
         emit: emit,
         cancel: source.token,
       );
-      _messages.addAll(added);
+      // После аварийного сжатия история хода — проекция журнала (§9.8).
+      if (out.history case final history?) {
+        _messages
+          ..clear()
+          ..addAll(history);
+      }
+      _messages.addAll(out.added);
       await _tail;
     } finally {
       _turn = null;

@@ -46,11 +46,18 @@ final class BuiltAgentCore {
   final AgentRuntime runtime;
 }
 
-/// The single way to assemble the core (HOST-6; §10.7 in the scope of stage
-/// 2 — design.md, D12): narrowing by the services, the tool registry by
-/// capability, the policy as the first hook of every session, the plan.
-/// [streamFunction] comes from the host — the factory of stage 1 or a
-/// scripted model in tests.
+/// Единственный способ собрать ядро (HOST-6, `agent-core-architecture`
+/// §10.7).
+///
+/// Почему одна точка: сужение профиля по сервисам и конфигурации, реестр
+/// инструментов по capability, политика разрешений первым хуком каждой
+/// сессии и план включённого должны получаться одинаково у всех хостов.
+///
+/// Как использовать: хост передаёт профиль, сервисы, конфигурацию и
+/// [streamFunction] — фабрику провайдеров этапа 1 или scripted-модель в
+/// тестах. Несовместимые сервисы (журнал в памяти при `sessionPersistence`,
+/// env без shell при `shellExec`) — `HostWiringException`;
+/// `CoreConfig.compaction.enabled: false` выключает capability `compaction`.
 BuiltAgentCore buildAgentCore({
   required HostProfile profile,
   required AgentCoreServices services,
@@ -66,6 +73,8 @@ BuiltAgentCore buildAgentCore({
       HostCapability.fileListing: const CapabilityOff(
         'env без листинга каталога',
       ),
+    if (!config.compaction.enabled)
+      HostCapability.compaction: const CapabilityOff('выключено конфигом'),
   });
   // §10.8: журнал на постоянном носителе требует хранилища, которое не
   // теряет записи при выходе процесса.

@@ -88,8 +88,13 @@ LlmContextProjection buildLlmContext(
   if (compactionIndex >= 0) {
     compaction = path[compactionIndex] as CompactionRecord;
     final firstKept = path.indexWhere((r) => r.id == compaction!.firstKeptId);
+    // Прошлые записи compaction внутри сохранённой части заменены
+    // последним резюме: оно обновляет их (CMP-9), повторять их не нужно.
     final before = firstKept >= 0 && firstKept < compactionIndex
-        ? path.sublist(firstKept, compactionIndex)
+        ? [
+            for (final r in path.sublist(firstKept, compactionIndex))
+              if (r is! CompactionRecord) r,
+          ]
         : const <SessionRecord>[];
     if (firstKept < 0) {
       logger?.log(

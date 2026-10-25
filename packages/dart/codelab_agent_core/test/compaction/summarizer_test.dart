@@ -100,7 +100,7 @@ void main() {
 
     test('an error result is marked and a long result is shortened', () {
       final at = DateTime.utc(2026);
-      final long = '${'h' * 2000}${'m' * 1000}${'t' * 2000}';
+      final long = '${'h' * 2000}${'q' * 1000}${'t' * 2000}';
       final record = MessageRecord(
         id: 'aaaaaaaa',
         parentId: null,
@@ -121,7 +121,7 @@ void main() {
       expect(text, contains('h' * 1500));
       expect(text, isNot(contains('h' * 1501)));
       expect(text, contains('t' * 1500));
-      expect(text, isNot(contains('m')));
+      expect(text, isNot(contains('q')));
     });
   });
 

@@ -1,6 +1,10 @@
 import 'dart:async';
 
 import '../cancel/cancel_token.dart';
+import '../compaction/compactor.dart';
+import '../compaction/estimate.dart';
+import '../compaction/settings.dart';
+import '../compaction/summarizer.dart';
 import '../env/bounded_env.dart';
 import '../env/execution_env.dart';
 import '../llm/messages.dart';
@@ -203,6 +207,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
       rules: config.permissions.rules,
       logger: logger,
     );
+    final compaction = profile.isOn(HostCapability.compaction);
+    // Сессия создаётся после агента, а аварийное сжатие — её метод.
+    late final _Session session;
     final agent = Agent(
       config: AgentLoopConfig(
         sessionId: id,
@@ -223,6 +230,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
         afterToolCall: extraAfterToolCall,
         approvalWait: tools.approvalWait,
         logger: logger,
+        // Без capability compaction — поведение этапа 2: размер не
+        // проверяется, overflow — обычная ошибка шага.
+        estimateTokens: compaction ? estimateLlmContext : null,
+        emergencyCompact: compaction
+            ? (cause, cancel) => session._emergency(cause, cancel)
+            : null,
+        contextWindowCap: config.compaction.contextWindowCap,
       ),
       systemPrompt: _systemPrompt(cwd, mode),
       tools: registry.tools,
@@ -232,7 +246,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     // этапа 2, D5).
     tools.plan.publish = (entries) =>
         agent.emit(PlanUpdated(id, entries: entries));
-    final session = _Session(
+    session = _Session(
       id: id,
       cwd: cwd,
       mode: mode,
@@ -246,6 +260,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
       logger: logger,
       compose: _systemPrompt,
       snapshot: snapshot,
+      stream: stream,
+      compaction: compaction ? config.compaction : null,
     );
     _sessions.add(session);
     return session;
@@ -280,7 +296,11 @@ final class _Session implements AgentSession {
     required Logger logger,
     required String Function(String cwd, ModeId mode) compose,
     required SessionSnapshot snapshot,
+    required StreamFunction stream,
+    required CompactionOverrides? compaction,
   }) : _mode = mode,
+       _stream = stream,
+       _compaction = compaction,
        _model = model,
        _agent = agent,
        _policy = policy,
@@ -317,6 +337,14 @@ final class _Session implements AgentSession {
   final AgentCoreServices _services;
   final Logger _logger;
   late final SessionWriter _writer;
+  final StreamFunction _stream;
+
+  /// Переопределения сжатия; `null` — capability `compaction` выключена.
+  final CompactionOverrides? _compaction;
+
+  /// Фоновое сжатие после хода: следующий [prompt] ждёт его (§9.5).
+  Future<void>? _background;
+  CancelTokenSource? _backgroundCancel;
 
   /// Сборка системного промпта для нового режима.
   final String Function(String cwd, ModeId mode) _compose;
@@ -347,6 +375,9 @@ final class _Session implements AgentSession {
     List<ContentBlock> content, {
     CancelToken? cancel,
   }) async {
+    if (_background case final background?) {
+      await background;
+    }
     if (_agent.isRunning) {
       throw StateError('a turn is already running');
     }
@@ -358,6 +389,10 @@ final class _Session implements AgentSession {
       UserMessage(content, timestamp: _services.clock.now()),
     ]);
     final ended = _ended!;
+    if (ended.reason == TurnEndReason.completed ||
+        ended.reason == TurnEndReason.maxTokens) {
+      _compactAfterTurn();
+    }
     return TurnResult(
       reason: ended.reason,
       usage: ended.usage,
@@ -385,7 +420,9 @@ final class _Session implements AgentSession {
   @override
   Future<void> close() async {
     _agent.abort(const ShutdownCancel());
+    _backgroundCancel?.cancel(const ShutdownCancel());
     await _agent.waitForIdle();
+    await _background;
     await _services.sessions.close(id);
     if (!_live.isClosed) {
       await _live.close();
@@ -442,20 +479,143 @@ final class _Session implements AgentSession {
   /// Транскрипт и план из журнала после ремонта (§8.7).
   void _restoreHistory() {
     final snapshot = _writer.snapshot;
-    _agent.replaceTranscript([
-      for (final message in buildLlmContext(snapshot, logger: _logger).messages)
-        // Ответы своей модели получают полную ссылку: журнал хранит только
-        // провайдера и id (§2.2).
-        if (message is AssistantMessage &&
-            message.model.provider == _model.provider &&
-            message.model.id == _model.id)
-          message.copyWith(model: _model)
-        else
-          message,
-    ]);
+    _agent.replaceTranscript(
+      _withModel(buildLlmContext(snapshot, logger: _logger).messages),
+    );
     final plan = pathToLeaf(snapshot).whereType<PlanRecord>().lastOrNull;
     if (plan != null) {
       _tools.plan.restore(plan.entries);
+    }
+  }
+
+  /// Ответы своей модели получают полную ссылку: журнал хранит только
+  /// провайдера и id (§2.2).
+  List<Message> _withModel(List<Message> messages) => [
+    for (final message in messages)
+      if (message is AssistantMessage &&
+          message.model.provider == _model.provider &&
+          message.model.id == _model.id)
+        message.copyWith(model: _model)
+      else
+        message,
+  ];
+
+  int get _window => effectiveContextWindow(
+    _agent.config.model,
+    cap: _compaction?.contextWindowCap,
+  );
+
+  CompactionSettings get _settings =>
+      CompactionSettings.forWindow(_window, overrides: _compaction);
+
+  List<ToolSchema> get _schemas => [
+    for (final tool in _agent.tools) tool.toSchema(),
+  ];
+
+  /// Сжатие журнала сессии по §9.8 с суммаризатором над моделью сессии
+  /// (design.md, D8).
+  Future<CompactionOutcome> _compact(
+    CompactionTrigger trigger,
+    CancelToken cancel, {
+    required void Function(LlmContextProjection projection) onCompacted,
+  }) {
+    final model = _agent.config.model;
+    final settings = _settings;
+    return compact(
+      writer: _writer,
+      trigger: trigger,
+      summarize: modelSummarizer(
+        stream: _stream,
+        model: model,
+        sessionId: id,
+        settings: settings,
+        clock: _services.clock,
+      ),
+      settings: settings,
+      window: _window,
+      systemPrompt: _agent.systemPrompt,
+      tools: _schemas,
+      ids: _services.ids,
+      clock: _services.clock,
+      cancel: cancel,
+      emit: _sessionEvent,
+      onCompacted: onCompacted,
+      summaryModel: '${model.provider}/${model.id}',
+      logger: _logger,
+    );
+  }
+
+  /// Аварийное сжатие цикла (`preflight`, `overflow`): новый контекст шага
+  /// из проекции; транскрипт агента цикл заменит сам после хода.
+  Future<LoopContext?> _emergency(
+    EmergencyCause cause,
+    CancelToken cancel,
+  ) async {
+    LlmContextProjection? projection;
+    final outcome = await _compact(
+      cause == EmergencyCause.preflight
+          ? CompactionTrigger.preflight
+          : CompactionTrigger.overflow,
+      cancel,
+      onCompacted: (p) => projection = p,
+    );
+    if (outcome is! Compacted || projection == null) {
+      return null;
+    }
+    return LoopContext(
+      systemPrompt: _agent.systemPrompt,
+      messages: _withModel(projection!.messages),
+      tools: _agent.tools,
+    );
+  }
+
+  /// `afterTurn` (§9.5): оценка выше порога — сжатие в фоне до следующего
+  /// [prompt].
+  void _compactAfterTurn() {
+    if (_compaction == null) {
+      return;
+    }
+    final tokens = estimateContextTokens(
+      _agent.messages,
+      systemPrompt: _agent.systemPrompt,
+      tools: _schemas,
+    );
+    if (!shouldCompact(tokens, _window, _settings)) {
+      return;
+    }
+    final source = CancelTokenSource();
+    _backgroundCancel = source;
+    _background = _runBackground(source.token).whenComplete(() {
+      _background = null;
+      _backgroundCancel = null;
+    });
+  }
+
+  Future<void> _runBackground(CancelToken cancel) async {
+    try {
+      await _compact(
+        CompactionTrigger.afterTurn,
+        cancel,
+        onCompacted: (p) => _agent.replaceTranscript(_withModel(p.messages)),
+      );
+    } on CancelledException {
+      // Сессия закрывается: журнал не тронут (CMP-3).
+    } on Object catch (error, stack) {
+      // Ошибка фонового сжатия не должна теряться (AGENTS.md §12).
+      _logger.log(
+        LogLevel.error,
+        'compaction.failed',
+        fields: {'session_id': id.value, 'trigger': 'afterTurn'},
+        error: error,
+        stack: stack,
+      );
+      await _sessionEvent(
+        AgentError(
+          id,
+          cls: AgentErrorClass.compaction,
+          message: 'compaction failed: $error',
+        ),
+      );
     }
   }
 

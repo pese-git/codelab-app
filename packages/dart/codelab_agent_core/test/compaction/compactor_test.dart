@@ -132,35 +132,38 @@ void main() {
     expect(journalAtEvent, contains('"type":"compaction"'));
   });
 
-  test('the region starts after the previous compaction (CMP-9)', () async {
-    await journal(twoTurns());
-    await run(fixed('first'));
-    // Новые записи дописываются после записи сжатия — от текущего листа.
-    final more = RegionBuilder()
-      ..call('c3', 'read', path: 'lib/c.dart')
-      ..result('c3', 'read', 3000)
-      ..user(30)
-      ..assistant(2500);
-    for (final record in more.records.cast<MessageRecord>()) {
-      await writer.append(
-        (id, parent, at) => MessageRecord(
-          id: id,
-          parentId: parent,
-          timestamp: at,
-          message: record.message,
-        ),
-      );
-    }
-    final seen = <SummaryRequest>[];
+  test(
+    'core/compaction-iterative-summary: the region starts after the last one',
+    () async {
+      await journal(twoTurns());
+      await run(fixed('first'));
+      // Новые записи дописываются после записи сжатия — от текущего листа.
+      final more = RegionBuilder()
+        ..call('c3', 'read', path: 'lib/c.dart')
+        ..result('c3', 'read', 3000)
+        ..user(30)
+        ..assistant(2500);
+      for (final record in more.records.cast<MessageRecord>()) {
+        await writer.append(
+          (id, parent, at) => MessageRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            message: record.message,
+          ),
+        );
+      }
+      final seen = <SummaryRequest>[];
 
-    await run(fixed('second', seen: seen));
+      await run(fixed('second', seen: seen));
 
-    final request = seen.single;
-    expect(request.previousSummary, 'first');
-    expect(request.region.first.id, twoTurns().records[6].id);
-    expect(request.fileOps.read, containsAll(['lib/a.dart', 'lib/c.dart']));
-    expect(request.fileOps.modified, ['lib/b.dart']);
-  });
+      final request = seen.single;
+      expect(request.previousSummary, 'first');
+      expect(request.region.first.id, twoTurns().records[6].id);
+      expect(request.fileOps.read, containsAll(['lib/a.dart', 'lib/c.dart']));
+      expect(request.fileOps.modified, ['lib/b.dart']);
+    },
+  );
 
   test(
     'a second pass runs while the estimate is above the threshold',
