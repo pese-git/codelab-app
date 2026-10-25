@@ -44,15 +44,15 @@
 
 ## 5. JSONL на диске (3.3)
 
-- [ ] 5.1 Тест (agent-sessions «JsonlSessionStore пакета codelab_agent_io»): `packages/dart/codelab_agent_io/test/session/jsonl_session_store_test.dart` — общий контрактный набор ядра во временном каталоге; имя файла и каталог слага; строка с `\n` → `StateError`; 100 параллельных `append` → 100 разбираемых строк с уникальными id (SES-4); `FsyncPolicy` через fake-счётчик `flush`; ошибка записи закрывает дескриптор, следующая запись проходит; `index.json` — попадание по `(size, mtime)`, повреждённый кеш пересоздаётся; слаги `/a/b-c` и `/a-b/c` различаются (красные)
-- [ ] 5.2 Реализовать `packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart`, `write_queue.dart`, экспорт `JsonlSessionStore` и `FsyncPolicy` из `lib/codelab_agent_io.dart` — 5.1 зелёные
+- [x] 5.1 Тест (agent-sessions «JsonlSessionStore пакета codelab_agent_io»): `packages/dart/codelab_agent_io/test/session/jsonl_session_store_test.dart` — общий контрактный набор ядра во временном каталоге; имя файла и каталог слага; текст с `\n` и `\r` — одна строка файла (D15); 100 параллельных `append` → 100 разбираемых строк с уникальными id (SES-4); `FsyncPolicy` через fake-счётчик `flush`; ошибка записи закрывает дескриптор, следующая запись проходит; `index.json` — попадание по `(size, mtime)`, повреждённый кеш пересоздаётся; слаги `/a/b-c` и `/a-b/c` различаются (красные)
+- [x] 5.2 Реализовать `packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart`, `write_queue.dart`, экспорт `JsonlSessionStore` и `FsyncPolicy` из `lib/codelab_agent_io.dart` — 5.1 зелёные
 
 ## 6. Открытие и ремонт на диске (3.9)
 
-- [ ] 6.1 Тест (agent-sessions «Открытие и ремонт журнала»): `packages/dart/codelab_agent_io/test/session/jsonl_repair_test.dart` — обрыв посреди последней строки: файл усечён, `.corrupt` с `reason: truncated`, запись после открытия прикрепляется к последней целой (SES-5, SES-6); мусор в середине: `.corrupt`, переписывание через `.tmp` и `rename` (SES-1); dangling `leaf`; цикл `parentId` и отсутствующий родитель; неизвестная версия — файл побайтово не изменён (SES-2); отсутствующий заголовок — синтез без записи в файл (красный)
-- [ ] 6.2 Тест: `packages/dart/codelab_agent_io/test/session/jsonl_crash_recovery_test.dart` — файл, обрезанный посреди последней строки, загружается через `AgentRuntime.loadSession`, ход продолжается; `core/session-crash-mid-turn-loads` — дочерний процесс `dart run` пишет журнал хода и убивается `SIGKILL` посреди записи; сессия открывается, целые записи на месте, обрезанная строка в `.corrupt`, `RepairReport` не пуст, следующий `prompt` выполняется (красные)
-- [ ] 6.3 Реализовать шаги 5a–5b §8.6 в `JsonlSessionStore.open` поверх `parseSessionLines` — 6.1, 6.2 зелёные
-- [ ] 6.4 Проверка итерации 2: `fvm dart run melos run check` зелёный; документ ядра §8.5, §8.6 и §8.9 правятся там, где реализация уточнила контракт; PR итерации 2
+- [x] 6.1 Тест (agent-sessions «Открытие и ремонт журнала»): `packages/dart/codelab_agent_io/test/session/jsonl_repair_test.dart` — обрыв посреди последней строки: файл усечён, `.corrupt` с `reason: truncated`, запись после открытия прикрепляется к последней целой (SES-5, SES-6); мусор в середине: `.corrupt`, переписывание через `.tmp` и `rename` (SES-1); dangling `leaf`; цикл `parentId` и отсутствующий родитель; неизвестная версия — файл побайтово не изменён (SES-2); отсутствующий заголовок — синтез без записи в файл (красный)
+- [x] 6.2 Тест: `packages/dart/codelab_agent_io/test/session/jsonl_crash_recovery_test.dart` — файл, обрезанный посреди последней строки, загружается через `AgentRuntime.loadSession`, ход продолжается; `core/session-crash-mid-turn-loads` — дочерний процесс `dart run` пишет журнал хода и убивается `SIGKILL` посреди записи; сессия открывается, целые записи на месте, обрезанная строка в `.corrupt`, `RepairReport` не пуст, следующий `prompt` выполняется (красные)
+- [x] 6.3 Реализовать шаги 5a–5b §8.6 в `JsonlSessionStore.open` поверх `parseSessionLines` — 6.1, 6.2 зелёные
+- [x] 6.4 Проверка итерации 2: `fvm dart run melos run check` зелёный; документ ядра §8.5, §8.6 и §8.9 правятся там, где реализация уточнила контракт; PR итерации 2
 
 ## 7. Оценка токенов и пороги (3.5)
 
