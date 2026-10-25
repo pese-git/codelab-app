@@ -592,7 +592,18 @@ sealed class LoadSessionResponse with _$LoadSessionResponse {
     @JsonKey(name: '_meta') JsonObject? meta,
   }) = _LoadSessionResponse;
 
+  /// Разбирает ответ на `session/load`; `null` — пустой ответ.
+  ///
+  /// Почему: схема ACP описывает ответ объектом с необязательными полями, а
+  /// пример в `03-Session Setup.md#loading-a-session` отвечает
+  /// `"result": null`. Агент, ответивший как в примере, не должен ломать
+  /// загрузку сессии — `null` равен ответу без полей (так же разобран
+  /// `WriteTextFileResponse`).
   factory LoadSessionResponse.fromJson(Object? value) {
+    if (value == null) {
+      return const LoadSessionResponse();
+    }
+
     final source = requireAcpObject(
       value,
       path: 'loadSessionResponse',
