@@ -24,4 +24,4 @@ _(нет)_
 
 - `packages/dart/acp_client_core/lib/src/application/acp_client_application.dart` — буфер реплея.
 - `packages/dart/acp_client_core/lib/src/domain/state_machines.dart` — `SessionStateMachine.replayHistory`, сессионные `current_mode_update`/`session_info_update`.
-- Клиентское покрытие golden-фикстур (`acp/session-load-replay`, `pendingCoverage` FIX-2) — follow-up после слияния итерации 4 этапа 4 (`add-dart-agent-acp-server`).
+- Клиентское покрытие golden-фикстур (FIX-2): роль `client` у `acp/session-load-replay`, `acp/session-load-interrupted-turn`, `acp/config-effort-option`; `pendingCoverage` в `packages/dart/acp_testing/test/fixtures_coverage_test.dart` сокращён до `session/list` и `session/set_mode`.

@@ -7,5 +7,6 @@
 
 ## 2. Клиентское покрытие FIX-2 (после слияния итерации 4 этапа 4)
 
-- [ ] 2.1 Действие `session/load` в клиентском драйвере фикстур (`_User.act`), роль `client` у `acp/session-load-replay` и проверки состояния
-- [ ] 2.2 Убрать покрытые элементы из `pendingCoverage` (`session/load`, `user_message_chunk`, `current_mode_update`, `config_option_update`); `session/list` и `session/set_mode` остаются — клиент их не вызывает
+- [x] 2.1 Действие `session/load` в клиентском драйвере фикстур (`_User.act`); роль `client` и проверки состояния у `acp/session-load-replay`, `acp/session-load-interrupted-turn`, `acp/config-effort-option` (id запросов — через `$capture`, образцы `modes` и опции `mode` — полные, чтобы клиент мог их разобрать)
+- [x] 2.2 Убрать покрытые элементы из `pendingCoverage` (`session/load`, `user_message_chunk`, `current_mode_update`, `config_option_update`); `session/list` и `session/set_mode` остаются — клиент их не вызывает
+- [x] 2.3 `fvm dart run melos run check`, включая `conformance:client` и `conformance:agent`
