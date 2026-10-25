@@ -38,20 +38,20 @@
 
 ## 5. serve --ws и аутентификация (4.5, 4.6)
 
-- [ ] 5.1 Тест (agent-binary «Аутентификация WebSocket»): `test/ws_auth_test.dart` — процесс `serve --ws --port 0 --llm-script …` с `CODELAB_AGENT_TOKEN`: фактический порт из записи `serve.ws.listening` в stderr; без upgrade → `426`; без `Authorization` → `401` с `WWW-Authenticate: Bearer`; неверный токен → `401`, запись `serve.ws.unauthorized` без токенов; верный токен на пути `/acp` и на `/` → `initialize` отвечает; пустая переменная токена → код `64`; не-loopback `--host` → предупреждение; два подключения — две независимые сессии; `SIGTERM` → `143` (красный)
-- [ ] 5.2 Реализовать `lib/src/serve/serve_ws.dart` (сравнение токена за постоянное время, design.md, D6) — 5.1 зелёный
+- [x] 5.1 Тест (agent-binary «Аутентификация WebSocket»): `test/ws_auth_test.dart` — процесс `serve --ws --port 0 --llm-script …` с `CODELAB_AGENT_TOKEN`: фактический порт из записи `serve.ws.listening` в stderr; без upgrade → `426`; без `Authorization` → `401` с `WWW-Authenticate: Bearer`; неверный токен → `401`, запись `serve.ws.unauthorized` без токенов; верный токен на пути `/acp` и на `/` → `initialize` отвечает; пустая переменная токена → код `64`; не-loopback `--host` → предупреждение; два подключения — две независимые сессии; `SIGTERM` → `143` (красный)
+- [x] 5.2 Реализовать `lib/src/serve/serve_ws.dart` (сравнение токена за постоянное время, design.md, D6) — 5.1 зелёный
 
 ## 6. Транспортные фикстуры (4.8)
 
-- [ ] 6.1 Тест (acp-golden-fixtures «Формат golden-фикстуры ACP»): в `packages/dart/acp_testing/test/` — загрузка `setup.transport` (`stdio`; `ws` с `attempts`), неизвестный `kind` → громкий провал; `$repeat` материализуется в `c2a` и сравнивается точной строкой в `a2c`; согласованность `_schema.json` и загрузчика (красный)
-- [ ] 6.2 Реализовать `setup.transport` и `$repeat` в `fixture.dart`, матчере и `_schema.json` (точечная правка схемы) — 6.1 зелёный
-- [ ] 6.3 Тест (acp-golden-fixtures «Агентский драйвер фикстур»): агентский драйвер пропускает фикстуру с `setup.transport` с причиной «transport driver» (красный)
-- [ ] 6.4 Реализовать пропуск в `agent_conformance.dart` — 6.3 зелёный
-- [ ] 6.5 Фикстуры `acp/stdio-framing-large-line` (промпт 2 МиБ через `$repeat`, ответ той же длины одной строкой) и `acp/ws-auth-bearer-required` (`attempts` `none` → `401`, `wrong` → `401`, затем `initialize`), роль `agent`, теги `stdio` и `ws`, ссылки `spec` на `docs/acp/protocol/16-Transports.md`; `fixtures_load_test.dart` знает корпус этапа 4 полностью (35)
-- [ ] 6.6 Тест (acp-golden-fixtures «Транспортный драйвер фикстур»): `test/transport_conformance_test.dart` — стартер `runAgentFixture` поверх процесса бинаря и настоящего stdio или WebSocket, проверка `attempts`, обе транспортные фикстуры зелёные (красный до реализации стартера)
-- [ ] 6.7 Реализовать транспортный стартер в `test/support/` приложения — 6.6 зелёный
-- [ ] 6.8 Документы: `09-09-stage-4-acp-adapter.md` (DoD — 46 фикстур с ролью `agent`), `agent-core/14-golden-fixtures.md` §14.2 (итого к этапу 4 — 47 = 12 + 35) и описание `setup.transport` и `$repeat` (§14.3–§14.4) (design.md, D8)
-- [ ] 6.9 Проверка итерации 2: `fvm dart run melos run check` зелёный, `conformance:agent` — 44 фикстуры в памяти и 2 пропущены с причиной; PR итерации 2
+- [x] 6.1 Тест (acp-golden-fixtures «Формат golden-фикстуры ACP»): в `packages/dart/acp_testing/test/` — загрузка `setup.transport` (`stdio`; `ws` с `attempts`), неизвестный `kind` → громкий провал; `$repeat` материализуется в `c2a` и сравнивается точной строкой в `a2c`; согласованность `_schema.json` и загрузчика (красный)
+- [x] 6.2 Реализовать `setup.transport` и `$repeat` в `fixture.dart`, матчере (`repeatedText`, `expandRepeat`) и `_schema.json` (точечная правка схемы) — 6.1 зелёный
+- [x] 6.3 Тест (acp-golden-fixtures «Агентский драйвер фикстур»): агентский драйвер пропускает фикстуру с `setup.transport` с причиной «transport driver» (красный)
+- [x] 6.4 Реализовать пропуск в `agent_conformance.dart` — 6.3 зелёный
+- [x] 6.5 Фикстуры `acp/stdio-framing-large-line` (промпт 2 МиБ через `$repeat`; `write` с 2 МиБ: `tool_call`, `fs/write_text_file` и `diff` одной строкой) и `acp/ws-auth-bearer-required` (`attempts` `none` → `401`, `wrong` → `401`, затем `initialize`), роль `agent`, теги `stdio` и `ws`, ссылки `spec` на `docs/acp/protocol/16-Transports.md` (`#stdio`, `#custom-transports`); `fixtures_load_test.dart` знает корпус этапа 4 полностью (35)
+- [x] 6.6 Тест (acp-golden-fixtures «Транспортный драйвер фикстур»): `test/transport_conformance_test.dart` — стартер `runAgentFixture` поверх процесса бинаря и настоящего stdio или WebSocket, проверка `attempts`, обе транспортные фикстуры зелёные (красный до реализации стартера)
+- [x] 6.7 Реализовать `runAgentFixtureOver` и `AgentConnection` в `agent_conformance.dart` и стартер процесса бинаря `test/support/transport_starter.dart` приложения — 6.6 зелёный
+- [x] 6.8 Документы: `09-09-stage-4-acp-adapter.md` (DoD — 46 фикстур с ролью `agent`), `agent-core/14-golden-fixtures.md` §14.2 (итого к этапу 4 — 47 = 12 + 35) и описание `setup.transport` и `$repeat` (§14.3–§14.4) (design.md, D8)
+- [x] 6.9 Проверка итерации 2: `fvm dart run melos run check` зелёный, `conformance:agent` — 44 фикстуры в памяти, 2 транспортные пропущены с причиной (и 1 клиентская, как раньше); транспортный драйвер — 2 зелёные; PR итерации 2
 
 ## 7. E2E app против Dart-агента (4.9)
 

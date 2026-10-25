@@ -1,0 +1,64 @@
+{
+  "id": "acp/ws-auth-bearer-required",
+  "spec": [
+    "16-Transports.md#custom-transports"
+  ],
+  "description": "codelab-agent serve --ws требует Bearer-токен при HTTP upgrade: попытки без заголовка Authorization и с неверным токеном получают 401 до обмена ACP, подключение с верным токеном проходит initialize. Играет транспортный драйвер против процесса бинаря.",
+  "goals": [
+    "R-12"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "skipInitialize": true,
+    "transport": {
+      "kind": "ws",
+      "attempts": [
+        {
+          "authorization": "none",
+          "expectStatus": 401
+        },
+        {
+          "authorization": "wrong",
+          "expectStatus": 401
+        }
+      ]
+    }
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "верный токен: обмен ACP идёт",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    }
+  ]
+}

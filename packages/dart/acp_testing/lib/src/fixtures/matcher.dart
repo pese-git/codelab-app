@@ -41,6 +41,7 @@ const _matcherKeys = {
   r'$contains',
   r'$partial',
   r'$oneOf',
+  r'$repeat',
 };
 
 /// Fields whose value is replaced by `<ts>` regardless of format (§14.5).
@@ -214,6 +215,7 @@ final class FrameMatcher {
           r'$partial' => materialize(value, path),
           r'$oneOf' when value is List<Object?> && value.isNotEmpty =>
             materialize(value.first, path),
+          r'$repeat' => repeatedText(value, path),
           _ => throw FixtureMatchException(
             '$path: $key cannot be turned into a value for the client run',
           ),
@@ -439,6 +441,13 @@ final class FrameMatcher {
         throw FixtureMatchException(
           '$path: \$absent is only allowed as an object value',
         );
+      case r'$repeat':
+        final wanted = repeatedText(value, path);
+        if (actual != wanted) {
+          // Строка бывает мегабайтной: в отчёт — длины и первое
+          // расхождение, а не сами значения.
+          out.add(FrameMismatch(path, _repeatMismatch(wanted, actual)));
+        }
     }
   }
 
@@ -591,4 +600,44 @@ String _encode(Object? value) {
 String _key(String key) =>
     RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(key) ? '.$key' : '["$key"]';
 
-Object? expandRepeat(Object? json) => throw UnimplementedError();
+/// Строка генератора `{"$repeat": {"text": s, "times": n}}` (design.md
+/// change `add-codelab-agent-binary`, D8): `s`, повторённая `n` раз.
+/// Неверный генератор — [FixtureMatchException].
+String repeatedText(Object? value, String path) => switch (value) {
+  {'text': final String text, 'times': final int times}
+      when value.length == 2 && times >= 0 =>
+    text * times,
+  _ => throw FixtureMatchException(
+    '$path: \$repeat must be {"text": <string>, "times": <non-negative int>}',
+  ),
+};
+
+/// Разворачивает только генераторы `$repeat` в [json], остальное — как
+/// есть (переменные `${cwd}` не трогаются).
+///
+/// Для чего: блок `llm` транспортной фикстуры уходит процессу бинаря файлом
+/// `--llm-script`, а `ScriptedStreamFunction` генераторов не знает.
+Object? expandRepeat(Object? json, [String path = r'$']) => switch (json) {
+  {r'$repeat': final value} when json.length == 1 => repeatedText(value, path),
+  final Map<String, Object?> map => {
+    for (final MapEntry(:key, :value) in map.entries)
+      key: expandRepeat(value, '$path.$key'),
+  },
+  final List<Object?> list => [
+    for (final (i, item) in list.indexed) expandRepeat(item, '$path[$i]'),
+  ],
+  _ => json,
+};
+
+String _repeatMismatch(String wanted, Object? actual) {
+  if (actual is! String) {
+    return 'expected a string of ${wanted.length} characters, '
+        'got ${actual.runtimeType}';
+  }
+  var at = 0;
+  while (at < wanted.length && at < actual.length && wanted[at] == actual[at]) {
+    at++;
+  }
+  return 'expected a string of ${wanted.length} characters, got '
+      '${actual.length}; first difference at $at';
+}
