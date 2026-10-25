@@ -58,8 +58,11 @@ const rules = [
     'packages/dart/codelab_agent_io',
     forbidden: ['package:flutter/', 'package:acp_'],
   ),
+  // ACP-сервер агента обслуживает любой транспорт: транспорты и локальный
+  // листинг передаёт хост (PKG-3).
+  PackageRule('packages/dart/codelab_agent_acp', forbidden: webUnsafe),
   PackageRule('apps/codelab_app', forbidden: ['package:codelab_agent_']),
-  // stage 4: codelab_agent_acp — webUnsafe; stage 8: codelab_agent_mcp — webUnsafe
+  // stage 8: codelab_agent_mcp — webUnsafe
   // stage 5: acp_client_kit — webUnsafe; acp_client_io — ['package:flutter/']
   // stage 6: apps/codelab_cli — ['package:flutter/', 'package:codelab_agent_'];
   //   apps/codelab_cli/lib/src — ['package:dart_tui/'], exclude: ['tui/'], sealExclude: false

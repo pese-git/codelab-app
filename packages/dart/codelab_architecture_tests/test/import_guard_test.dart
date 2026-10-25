@@ -54,4 +54,25 @@ void main() {
       endsWith('lib/src/env.dart:1 -> package:acp_protocol/acp_protocol.dart'),
     );
   });
+
+  test('reports dart:io and the IO transports in the ACP server', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_acp_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'src', 'server.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'dart:io';\nimport 'package:acp_transports/io.dart';\n",
+      );
+    final rule = rules.firstWhere(
+      (r) => r.dir == 'packages/dart/codelab_agent_acp',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    expect(violations, hasLength(2));
+    expect(violations.first, endsWith('lib/src/server.dart:1 -> dart:io'));
+  });
 }
