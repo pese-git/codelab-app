@@ -260,6 +260,12 @@ final class _Step {
         return;
       }
       state.start();
+      // С reply — отмена посреди стрима: блоки ответа уже ушли, шаг ждёт
+      // отмены (фикстура acp/prompt-cancel-mid-stream; design.md change
+      // add-dart-agent-acp-server, D15).
+      for (final block in reply) {
+        block.play(state, substitute);
+      }
       await cancel.onCancel;
       cancel.throwIfCancelled();
     }

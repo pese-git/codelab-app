@@ -23,12 +23,56 @@ const _stage0Fixtures = {
   'acp/errors-unknown-session-update-tolerated',
 };
 
+/// Fixtures of stage 4 in the agent package (design.md change
+/// `add-dart-agent-acp-server`, D8): 33 of §14.2; the transport fixtures go
+/// to `add-codelab-agent-binary`, the spill fixtures to
+/// `add-agent-core-output-spill`.
+const _stage4Fixtures = {
+  'acp/compaction-long-session-continues',
+  'acp/config-effort-option',
+  'acp/errors-bad-frame-survives',
+  'acp/multi-session-concurrent-prompts',
+  'acp/permission-allow-always-scoped',
+  'acp/permission-critical-pattern-in-bypass',
+  'acp/permission-options-all-four',
+  'acp/permission-outcome-cancelled',
+  'acp/prompt-anthropic-tool-call',
+  'acp/prompt-cancel-during-terminal',
+  'acp/prompt-cancel-mid-stream',
+  'acp/prompt-failed-provider-auth',
+  'acp/prompt-max-turn-requests',
+  'acp/prompt-network-drop',
+  'acp/prompt-parallel-tool-calls',
+  'acp/prompt-provider-error',
+  'acp/prompt-streaming-text',
+  'acp/prompt-thought-chunk',
+  'acp/prompt-turn-budget-exceeded',
+  'acp/session-info-title',
+  'acp/session-list-cwd-filter',
+  'acp/session-load-interrupted-turn',
+  'acp/session-load-replay',
+  'acp/set-mode-bypass-no-prompt',
+  'acp/set-mode-plan-rejects-edit',
+  'acp/set-mode-updates-current-mode',
+  'acp/tool-edit-ambiguous-match-error',
+  'acp/tool-edit-exact-replace',
+  'acp/tool-exec-terminal-env-array',
+  'acp/tool-invalid-args-error',
+  'acp/tool-list-dir',
+  'acp/tool-search-content',
+  'acp/tool-write-permission-diff',
+};
+
 void main() {
   final corpus = loadFixtureCorpus();
   final protocolDirectory = protocolSpecDirectory();
 
-  test('the corpus holds exactly the stage 0 fixtures', () {
-    expect(corpus.map((f) => f.id).toSet(), _stage0Fixtures);
+  test('the corpus holds exactly the stage 0 and stage 4 fixtures', () {
+    expect(_stage4Fixtures, hasLength(33));
+    expect(corpus.map((f) => f.id).toSet(), {
+      ..._stage0Fixtures,
+      ..._stage4Fixtures,
+    });
   });
 
   for (final fixture in corpus) {

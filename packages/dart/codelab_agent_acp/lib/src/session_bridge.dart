@@ -67,6 +67,10 @@ final class SessionBridge {
   AgentError? _failure;
   var _cancelRequested = false;
 
+  /// Токен идущего хода: `session/cancel`, пришедший до старта цикла, не
+  /// теряется (ход стартует уже отменённым).
+  CancelTokenSource? _turnCancel;
+
   /// Соединение закрыто, сессия ждёт переподключения (D7).
   var _detached = false;
   ClockTimer? _grace;
@@ -93,7 +97,44 @@ final class SessionBridge {
   /// `markInProgress` сработал раньше, чем `tool_call` дошёл до проекции.
   final _earlyInProgress = <String>{};
 
+  /// Ожидающие проекции `tool_call` своего вызова (запрос разрешения).
+  final _awaitingAnnounce = <String, Completer<void>>{};
+
+  /// Терминалы, встроенные в вызов, и ожидающие этого `exec`.
+  final _shownTerminals = <String>{};
+  final _awaitingTerminal = <String, Completer<void>>{};
+
+  /// Для `AcpClientExecutionEnv`: завершается, когда `tool_call_update` с
+  /// терминалом уже в очереди — `terminal/wait_for_exit` идёт после него.
+  Future<void> terminalShown(String terminalId) {
+    if (_shownTerminals.remove(terminalId)) {
+      return Future.value();
+    }
+    return (_awaitingTerminal[terminalId] ??= Completer<void>()).future;
+  }
+
   bool get turnActive => _turn != null;
+
+  /// `TurnEnded` идущего хода; ответ строится по нему, когда `prompt`
+  /// вернулся.
+  TurnEnded? _ended;
+
+  void _finishTurn(Completer<TurnEnded> turn) {
+    final ended = _ended;
+    _ended = null;
+    if (turn.isCompleted) {
+      return;
+    }
+    if (ended == null) {
+      turn.completeError(StateError('the turn ended without TurnEnded'));
+      return;
+    }
+    if (_turnMoved) {
+      _turnMoved = false;
+      _send(_turnEndedInfo(ended));
+    }
+    turn.complete(ended);
+  }
 
   /// Соединение-владелец закрыто, а сессия ещё не переподключена.
   bool get detached => _detached;
@@ -133,6 +174,7 @@ final class SessionBridge {
   Future<acp.PromptResponse> prompt(List<ContentBlock> content) async {
     final turn = _turn = Completer<TurnEnded>();
     _failure = null;
+    _ended = null;
     _cancelRequested = false;
     _turnMoved = false;
     if (_effortNote case final note?) {
@@ -143,13 +185,16 @@ final class SessionBridge {
         ),
       );
     }
-    // Ход идёт в фоне: обработчик ждёт TurnEnded, а не возврата prompt, —
-    // ответ должен встать в очередь после последнего уведомления хода.
+    // Ход идёт в фоне: обработчик ждёт возврата prompt, а не TurnEnded, —
+    // после TurnEnded сессия ещё пишет автозаголовок, и его
+    // session_info_update идёт до ответа, как в фикстурах этапа 0 (D15).
+    // События сессии доставлены подписчику раньше: их микрозадачи
+    // поставлены до завершения prompt.
     unawaited(
       session
-          .prompt(content)
+          .prompt(content, cancel: (_turnCancel = CancelTokenSource()).token)
           .then<void>(
-            (_) {},
+            (_) => _finishTurn(turn),
             onError: (Object error, StackTrace stack) {
               _logger.log(
                 LogLevel.error,
@@ -191,6 +236,7 @@ final class SessionBridge {
       return false;
     }
     _cancelRequested = true;
+    _turnCancel?.cancel();
     unawaited(session.cancel());
     _clientEnv?.abortPending();
     return true;
@@ -295,6 +341,16 @@ final class SessionBridge {
     return moved;
   }
 
+  /// Для `AcpPermissionGate`: завершается, когда `tool_call` вызова уже в
+  /// очереди. События сессии приходят подписчику асинхронно, а вопрос
+  /// политики может быть готов раньше (§13.7, «Статусы вызова»).
+  Future<void> announced(String toolCallId) {
+    if (_announced.contains(toolCallId)) {
+      return Future.value();
+    }
+    return (_awaitingAnnounce[toolCallId] ??= Completer<void>()).future;
+  }
+
   /// После ответа `session/load`: ожидающие разрешения уходят новому
   /// соединению с новым id и тем же `toolCallId` (§13.5, шаг 8; PERM-4).
   void resume() {
@@ -359,22 +415,26 @@ final class SessionBridge {
       case ModeChanged() when echo != null:
         _clientModeChange = null;
         echo.complete();
-      case ToolCallStarted(:final toolCallId)
-          when _earlyInProgress.remove(toolCallId):
-        _send(inProgressUpdate(toolCallId));
+      case ToolCallStarted(:final toolCallId):
+        _awaitingAnnounce.remove(toolCallId)?.complete();
+        if (_earlyInProgress.remove(toolCallId)) {
+          _send(inProgressUpdate(toolCallId));
+        }
+      case ToolCallProgress(:final content):
+        for (final item in content.whereType<ToolCallTerminal>()) {
+          final waiting = _awaitingTerminal.remove(item.terminalId);
+          if (waiting == null) {
+            _shownTerminals.add(item.terminalId);
+          } else {
+            waiting.complete();
+          }
+        }
       case ToolCallFinished(:final toolCallId):
         _announced.remove(toolCallId);
       case TurnEnded():
         _announced.clear();
         _earlyInProgress.clear();
-        if (_turnMoved) {
-          _turnMoved = false;
-          _send(_turnEndedInfo(event));
-        }
-        final turn = _turn;
-        if (turn != null && !turn.isCompleted) {
-          turn.complete(event);
-        }
+        _ended = event;
       case _:
     }
   }

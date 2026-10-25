@@ -4,6 +4,10 @@ const jsonRpcMethodNotFoundCode = -32601;
 const jsonRpcInvalidParamsCode = -32602;
 const jsonRpcInternalErrorCode = -32603;
 
+/// ACP `ErrorCode` resource_not_found (`docs/acp/protocol/17-Schema.md`):
+/// запрошенного ресурса — файла, сессии — нет.
+const acpResourceNotFoundCode = -32002;
+
 enum JsonRpcProtocolErrorKind { invalidJson, invalidShape, unknownMethod }
 
 enum AcpProtocolErrorKind {
@@ -13,6 +17,7 @@ enum AcpProtocolErrorKind {
   invalidAcpParams,
   invalidAcpResult,
   internalError,
+  resourceNotFound,
 }
 
 enum AcpProtocolErrorPhase { jsonRpcMessage, params, result, internal }
@@ -85,6 +90,11 @@ final class AcpProtocolError {
   const AcpProtocolError.internalError(String message)
     : this(kind: AcpProtocolErrorKind.internalError, message: message);
 
+  /// Ресурса нет (`-32002`): по этому коду агент отличает отсутствующий
+  /// файл от прочих сбоев `fs/*` (`agent-core-architecture` §4.7).
+  const AcpProtocolError.resourceNotFound(String message)
+    : this(kind: AcpProtocolErrorKind.resourceNotFound, message: message);
+
   final AcpProtocolErrorKind kind;
   final String message;
   final String? method;
@@ -98,6 +108,7 @@ final class AcpProtocolError {
       AcpProtocolErrorKind.invalidAcpParams => jsonRpcInvalidParamsCode,
       AcpProtocolErrorKind.invalidAcpResult => jsonRpcInvalidParamsCode,
       AcpProtocolErrorKind.internalError => jsonRpcInternalErrorCode,
+      AcpProtocolErrorKind.resourceNotFound => acpResourceNotFoundCode,
     };
   }
 
@@ -109,6 +120,7 @@ final class AcpProtocolError {
       AcpProtocolErrorKind.invalidAcpParams => 'Invalid params',
       AcpProtocolErrorKind.invalidAcpResult => 'Invalid params',
       AcpProtocolErrorKind.internalError => 'Internal error',
+      AcpProtocolErrorKind.resourceNotFound => 'Resource not found',
     };
   }
 

@@ -61,10 +61,7 @@ List<acp.SessionUpdate> replayUpdates(Iterable<AgentEvent> events) {
               ),
               status: finishedStatus(event),
               rawInput: call?.input,
-              locations: [
-                for (final l in call?.locations ?? const <Location>[])
-                  acpLocation(l),
-              ],
+              locations: acpLocations(call?.locations ?? const []),
               content: finishedContent(event),
               meta: finishedMeta(event),
             ),

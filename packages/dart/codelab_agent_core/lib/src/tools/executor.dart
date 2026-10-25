@@ -172,6 +172,7 @@ final class ToolCallExecutor implements ToolExecutor {
     if (tool != null) {
       try {
         presentation = await tool.present(call.arguments, context);
+        context.presentation = presentation;
       } on Object catch (error, stack) {
         services.logger.log(
           LogLevel.debug,

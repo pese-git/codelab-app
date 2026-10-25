@@ -2,7 +2,7 @@ import 'package:acp_protocol/acp_protocol.dart' as acp;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'connection/client_requests.dart';
-import 'event_projection.dart' show acpContent, acpDiff, acpLocation;
+import 'event_projection.dart' show acpContent, acpDiff, acpLocations;
 
 /// Порт разрешений через `session/request_permission`
 /// (`agent-core-architecture` §7.8, §13.9).
@@ -28,8 +28,10 @@ final class AcpPermissionGate implements PermissionGate {
     this._link, {
     required Logger logger,
     Future<bool> Function(CancelToken cancel)? waitForReconnect,
+    Future<void> Function(String toolCallId)? announced,
   }) : _logger = logger,
-       _waitForReconnect = waitForReconnect;
+       _waitForReconnect = waitForReconnect,
+       _announced = announced;
 
   final ClientLink _link;
   final Logger _logger;
@@ -38,11 +40,18 @@ final class AcpPermissionGate implements PermissionGate {
   /// ждать нечего (ход отменён). `null` — разрыв сразу отказ.
   final Future<bool> Function(CancelToken cancel)? _waitForReconnect;
 
+  /// Завершается, когда `tool_call` вызова уже в очереди соединения:
+  /// запрос разрешения не должен опередить его (§13.7, «Статусы вызова»).
+  final Future<void> Function(String toolCallId)? _announced;
+
   @override
   Future<PermissionDecision> request(
     PermissionRequest req,
     CancelToken cancel,
   ) async {
+    if (_announced case final announced?) {
+      await announced(req.toolCallId);
+    }
     Object? raw;
     while (true) {
       try {
@@ -86,6 +95,13 @@ final class AcpPermissionGate implements PermissionGate {
   acp.RequestPermissionRequest _params(PermissionRequest req) {
     final pattern = req.pattern;
     final label = req.criticalLabel;
+    // Пустой список не отправляется: фикстуры и клиенты ждут ключ только
+    // с содержимым (§14.8).
+    final content = [
+      if (req.reason case final reason?)
+        acp.ToolCallContent.content(content: acpContent(TextContent(reason))),
+      for (final diff in req.diffs) acpDiff(diff),
+    ];
     return acp.RequestPermissionRequest(
       sessionId: acp.SessionId(_link.sessionId),
       toolCall: acp.ToolCallUpdate(
@@ -94,14 +110,8 @@ final class AcpPermissionGate implements PermissionGate {
         kind: acp.ToolKind.values.byName(req.kind.name),
         status: acp.ToolCallStatus.pending,
         rawInput: req.rawInput,
-        locations: [for (final l in req.locations) acpLocation(l)],
-        content: [
-          if (req.reason case final reason?)
-            acp.ToolCallContent.content(
-              content: acpContent(TextContent(reason)),
-            ),
-          for (final diff in req.diffs) acpDiff(diff),
-        ],
+        locations: acpLocations(req.locations),
+        content: content.isEmpty ? null : content,
         meta: label == null
             ? null
             : {

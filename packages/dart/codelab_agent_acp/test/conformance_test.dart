@@ -37,6 +37,15 @@ Future<AgentUnderTest> startAgent(
   final clock = FakeClock();
   final logger = RecordingLogger();
   final config = _FixtureConfig.parse(setup);
+  final store = JournalStore();
+  // setup.sessions: состояние журнала, которого не получить кадрами
+  // (прерванный ход, §8.8).
+  for (final MapEntry(key: id, value: records) in setup.sessions.entries) {
+    await store.create(SessionHeader.fromJson(records.first));
+    for (final record in records.skip(1)) {
+      await store.append(SessionId(id), SessionRecord.fromJson(record));
+    }
+  }
   final model = ScriptedStreamFunction.fromJson(
     setup.llm ?? const {'steps': <Object?>[]},
     clock: clock,
@@ -51,13 +60,14 @@ Future<AgentUnderTest> startAgent(
       logger: logger,
       clock: clock,
       ids: SequentialIdGenerator(),
-      sessions: JournalStore(),
+      sessions: store,
       models: FixedModelCatalog(config.models),
     ),
     config: CoreConfig(
       defaultModel: config.defaultModel,
       effort: config.effort,
       budget: config.budget,
+      compaction: config.compaction,
       permissions: PermissionsConfig(
         mode: setup.mode == null ? null : ModeId.parse(setup.mode!),
       ),
@@ -108,6 +118,7 @@ final class _HostGate implements PermissionGate {
 
 /// Фрагмент конфига фикстуры (§15) в объёме, который читают фикстуры
 /// этапов 0 и 4: `agent.default_model`, `agent.effort`, `budget.max_steps`,
+/// `budget.max_tokens`, `compaction.keep_recent_tokens`,
 /// `providers.<id>.models.<model>` (`context_window`, `reasoning`). Другой
 /// ключ — громкий провал: молча проигнорированная настройка сделала бы
 /// фикстуру ложно зелёной.
@@ -117,15 +128,23 @@ final class _FixtureConfig {
     required this.models,
     required this.effort,
     required this.budget,
+    required this.compaction,
   });
 
   factory _FixtureConfig.parse(AgentFixtureSetup setup) {
     final config = setup.config;
-    _keys(config, const {'agent', 'budget', 'providers'}, 'config');
+    _keys(config, const {
+      'agent',
+      'budget',
+      'compaction',
+      'providers',
+    }, 'config');
     final agent = _object(config['agent'], 'config.agent');
     _keys(agent, const {'default_model', 'effort'}, 'config.agent');
     final budget = _object(config['budget'], 'config.budget');
-    _keys(budget, const {'max_steps'}, 'config.budget');
+    _keys(budget, const {'max_steps', 'max_tokens'}, 'config.budget');
+    final compaction = _object(config['compaction'], 'config.compaction');
+    _keys(compaction, const {'keep_recent_tokens'}, 'config.compaction');
     final llmModel = _object(setup.llm?['model'], 'llm.model');
     final scripted = _model(
       llmModel['provider'] as String? ?? 'scripted',
@@ -184,7 +203,13 @@ final class _FixtureConfig {
         final String value => ReasoningEffort.values.byName(value),
         final value => throw FormatException('config.agent.effort: $value'),
       },
-      budget: TurnBudget(maxSteps: budget['max_steps'] as int? ?? 50),
+      compaction: CompactionOverrides(
+        keepRecentTokens: compaction['keep_recent_tokens'] as int?,
+      ),
+      budget: TurnBudget(
+        maxSteps: budget['max_steps'] as int? ?? 50,
+        maxTokens: budget['max_tokens'] as int?,
+      ),
     );
   }
 
@@ -192,6 +217,7 @@ final class _FixtureConfig {
   final List<ModelRef> models;
   final ReasoningEffort effort;
   final TurnBudget budget;
+  final CompactionOverrides compaction;
 
   static ModelRef _model(
     String provider,

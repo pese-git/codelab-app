@@ -1,0 +1,91 @@
+{
+  "id": "acp/prompt-network-drop",
+  "spec": [
+    "05-Prompt Turn.md#3-agent-reports-output",
+    "01-Overview.md#error-handling"
+  ],
+  "description": "Соединение с провайдером рвётся до ответа модели; ход завершается JSON-RPC -32603 с data.codelab: errorClass network, retryable true — сбой сети не превращается в end_turn (ACP-7).",
+  "extensions": [
+    "errorData"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard"
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "error": {
+          "class": "network",
+          "message": "connection reset by peer"
+        }
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Расскажи историю"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "error": {
+          "code": -32603,
+          "message": {
+            "$contains": "Turn failed"
+          },
+          "data": {
+            "codelab": {
+              "errorClass": "network",
+              "message": "connection reset by peer",
+              "retryable": true
+            }
+          }
+        }
+      }
+    }
+  ]
+}

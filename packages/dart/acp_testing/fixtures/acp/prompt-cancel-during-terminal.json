@@ -1,0 +1,393 @@
+{
+  "id": "acp/prompt-cancel-during-terminal",
+  "spec": [
+    "05-Prompt Turn.md#cancellation",
+    "10-Terminal.md#killing-commands",
+    "10-Terminal.md#releasing-terminals"
+  ],
+  "description": "В режиме standard пользователь разрешает exec; пока команда ждёт выхода, ход отменяют; агент отправляет terminal/kill, terminal/output, terminal/release, сообщает вызов failed с _meta.codelab.outcome cancelled и отвечает stopReason cancelled.",
+  "extensions": [
+    "outcome"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "terminal": {
+      "/bin/sh -c sleep 30": {
+        "output": ""
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "тесты"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "sleep 30"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Запусти долгие тесты"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "sleep 30"
+            },
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "sleep 30"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "permId"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "sleep 30"
+            },
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "sleep 30"
+            }
+          },
+          "options": [
+            {
+              "optionId": "allow_once",
+              "name": "Allow once",
+              "kind": "allow_once"
+            },
+            {
+              "optionId": "allow_always",
+              "name": "Always allow sleep 30",
+              "kind": "allow_always"
+            },
+            {
+              "optionId": "reject_once",
+              "name": "Reject",
+              "kind": "reject_once"
+            },
+            {
+              "optionId": "reject_always",
+              "name": "Always reject sleep 30",
+              "kind": "reject_always"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${permId}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "allow_once"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "createId"
+        },
+        "method": "terminal/create",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "command": "/bin/sh",
+            "args": [
+              "-c",
+              "sleep 30"
+            ],
+            "cwd": "${cwd}"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${createId}",
+        "result": {
+          "terminalId": {
+            "$capture": "terminalId"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "terminal",
+                "terminalId": "${terminalId}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "waitId"
+        },
+        "method": "terminal/wait_for_exit",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "пользователь отменяет ход, пока команда работает",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/cancel",
+        "params": {
+          "sessionId": "${sessionId}"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "killId"
+        },
+        "method": "terminal/kill",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "ответ на kill и запоздалый ответ на wait_for_exit — в любом порядке",
+      "unordered": [
+        {
+          "jsonrpc": "2.0",
+          "id": "${killId}",
+          "result": {
+            "$oneOf": [
+              null,
+              {}
+            ]
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": "${waitId}",
+          "result": {
+            "$any": {
+              "exitCode": null,
+              "signal": "SIGTERM"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "outputId"
+        },
+        "method": "terminal/output",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${outputId}",
+        "result": {
+          "$partial": {
+            "output": "",
+            "truncated": false
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "release всегда в конце (ACP-9, ENV-7)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "releaseId"
+        },
+        "method": "terminal/release",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${releaseId}",
+        "result": {
+          "$oneOf": [
+            null,
+            {}
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "отменённый вызов: failed и outcome cancelled",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "failed",
+            "_meta": {
+              "codelab": {
+                "outcome": "cancelled"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "cancelled"
+        }
+      }
+    }
+  ]
+}

@@ -4,7 +4,6 @@ import 'package:acp_protocol/acp_protocol.dart' as acp;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'agent_server.dart' show AcpTimeouts;
-import 'connection/acp_error.dart';
 import 'connection/client_requests.dart';
 
 /// Env сессии, в котором файлы и команды исполняет ACP-клиент
@@ -43,6 +42,11 @@ final class AcpClientExecutionEnv implements ExecutionEnv {
   final AcpTimeouts _timeouts;
   final Clock _clock;
   final Logger _logger;
+
+  /// Завершается, когда терминал уже встроен в вызов на стороне клиента
+  /// (`tool_call_update` с `{"type":"terminal"}` в очереди): `wait_for_exit`
+  /// не должен его опередить. Ставит мост сессии; `null` — не ждать.
+  Future<void> Function(String terminalId)? terminalShown;
 
   /// Отмена ожидающих `fs/*`: по одному источнику на запрос.
   final _fsInFlight = <CancelTokenSource>{};
@@ -176,7 +180,10 @@ final class AcpClientExecutionEnv implements ExecutionEnv {
         ExecError(ExecErrorCode.spawnFailed, message: _describe(failure)),
       );
     }
-    options.onTerminal?.call(terminal.value);
+    if (options.onTerminal case final onTerminal?) {
+      onTerminal(terminal.value);
+      await terminalShown?.call(terminal.value);
+    }
     try {
       return await _awaitTerminal(sessionId, terminal, options, started);
     } finally {
@@ -332,7 +339,7 @@ final class AcpClientExecutionEnv implements ExecutionEnv {
       );
     } on ClientRejected catch (rejected) {
       return Err(
-        rejected.error.code == acpResourceNotFoundCode
+        rejected.error.code == acp.acpResourceNotFoundCode
             ? FileError(FileErrorCode.notFound, path, rejected.error.message)
             : FileError(FileErrorCode.io, path, rejected.error.message),
       );

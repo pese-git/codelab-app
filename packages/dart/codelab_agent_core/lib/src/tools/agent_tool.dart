@@ -129,6 +129,13 @@ final class ToolContext {
   /// `{"type":"terminal"}` вызова (§13.7). `exec` передаёт его в
   /// `ExecOptions.onTerminal`; `null` — терминал никому не нужен.
   final void Function(String terminalId)? onTerminal;
+
+  /// Заголовок, места и diff вызова, уже построенные `present()` для
+  /// `ToolCallStarted`; ставит точка исполнения. Политика разрешений берёт
+  /// их для запроса, а не зовёт `present()` второй раз: через ACP-клиента
+  /// каждый вызов — лишний кадр `fs/read_text_file` (design.md change
+  /// `add-dart-agent-acp-server`, D15). `null` — ещё не построены.
+  ToolPresentation? presentation;
   final String toolCallId;
   final ToolServices services;
 
