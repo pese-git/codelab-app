@@ -62,6 +62,18 @@ const rules = [
   // листинг передаёт хост (PKG-3).
   PackageRule('packages/dart/codelab_agent_acp', forbidden: webUnsafe),
   PackageRule('apps/codelab_app', forbidden: ['package:codelab_agent_']),
+  // Бинарь агента — чистый Dart и composition root: IO-транспорты ему
+  // разрешены, Flutter и клиентские пакеты — нет (design.md change
+  // `add-codelab-agent-binary`, D11). HOST-6 — host_assembly_guard_test.dart.
+  PackageRule(
+    'apps/codelab_agent',
+    forbidden: [
+      'package:flutter/',
+      'package:fluent_ui/',
+      'package:acp_client_core/',
+      'package:acp_ui/',
+    ],
+  ),
   // stage 8: codelab_agent_mcp — webUnsafe
   // stage 5: acp_client_kit — webUnsafe; acp_client_io — ['package:flutter/']
   // stage 6: apps/codelab_cli — ['package:flutter/', 'package:codelab_agent_'];

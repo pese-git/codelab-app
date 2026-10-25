@@ -25,7 +25,7 @@ CodeLab SHALL использовать Dart/Flutter/FVM/Melos monorepo с раз
 
 #### Scenario: Бинарь агента — чистый Dart
 - **WHEN** запускается сторож для `apps/codelab_agent`
-- **THEN** ни один файл `lib/` и `bin/` приложения не импортирует `package:flutter/`
+- **THEN** ни один файл `lib/` приложения не импортирует `package:flutter/`, а `bin/` содержит только точку входа поверх бареля `lib/`
 
 ### Requirement: Автоматический сторож границ пакетов
 CodeLab SHALL проверять границы пакетов тестом `packages/dart/codelab_architecture_tests`, а не только ревью.

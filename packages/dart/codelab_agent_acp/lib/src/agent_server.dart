@@ -105,11 +105,17 @@ final class AcpAgentServer {
       _core.plan.profile.isOn(HostCapability.sessionPersistence);
 
   /// Обслуживает одно соединение до его закрытия.
+  ///
+  /// Вход закрыт (EOF stdin, закрытый сокет) — соединение отвечает на уже
+  /// прочитанные запросы, отправляет очередь и закрывает транспорт; только
+  /// после этого [serve] завершается (§13.10). У stdio выход живёт дольше
+  /// входа: `echo '{…}' | codelab-agent serve --stdio` ждёт ответа после EOF.
   Future<void> serve(AcpTransport transport) async {
     final connection = _Connection(this, transport);
     _connections.add(connection);
     try {
       await connection.run();
+      await connection.close();
     } finally {
       _connections.remove(connection);
     }
@@ -186,13 +192,16 @@ final class _Connection {
     _server._detach(this);
   }
 
-  /// Ответы на начатые запросы (ходы уже отменены и закрыты), затем
-  /// отправка очереди и закрытие транспорта.
-  Future<void> close() async {
+  Future<void>? _closing;
+
+  /// Ответы на начатые запросы, затем отправка очереди и закрытие
+  /// транспорта. Повторный вызов — та же операция: закрывают и `serve`
+  /// после конца входа, и `shutdown`.
+  Future<void> close() => _closing ??= () async {
     await _router.drained;
     await _outbound.idle;
     await _transport.close();
-  }
+  }();
 
   Future<Reply> _onRequest(acp.JsonRpcRequest request) async {
     if (_server._shuttingDown) {
