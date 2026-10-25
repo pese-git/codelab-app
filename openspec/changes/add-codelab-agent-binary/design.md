@@ -159,14 +159,25 @@ apps/codelab_agent/
 
 Заполняется по итогам ручной проверки: `codelab-agent serve --stdio` с реальным провайдером, подключённый в Zed как внешний агент (`agent_servers` в настройках Zed).
 
+Проверка 2026-10-25: Zed 1.25.3 (macOS), бинарь `build/bin/codelab-agent` 0.1.0, провайдер `openai-compatible` — LM Studio (`http://localhost:1234/v1`), модель `qwen/qwen3.5-9b` (`--model cli/qwen/qwen3.5-9b`), режим `standard`; кадры — по ACP-логу Zed.
+
 | Сценарий | Ожидание | Результат |
 |---|---|---|
-| Подключение | Zed показывает агента, `initialize` и `session/new` без ошибок | — |
-| Промпт | ответ стримится по частям | — |
-| Инструменты | `read` и `ls` выполняются, вызовы видны в ленте | — |
-| Одобрение | запрос разрешения на `edit` или `exec` показывает аргументы; «разрешить» и «отклонить» работают | — |
-| Отмена | отмена хода в Zed завершает ход, вызовы — `failed` | — |
-| `session/load` | повторное открытие сессии показывает историю | — |
+| Подключение | Zed показывает агента, `initialize` и `session/new` без ошибок | ок. Лишние поля `clientCapabilities` Zed (`session`, `auth`, `elicitation`) приняты. Найден дефект: `session/new` с MCP-сервером stdio без поля `type` (так его описывает `03-Session Setup.md`) отклоняется `-32602 Invalid params: type must be a string.`; проверка прошла с выключенными MCP-серверами Zed. Исправление — отдельный fix-PR в `acp_protocol` |
+| Промпт | ответ стримится по частям | ок: `agent_thought_chunk` и `agent_message_chunk` дельтами, `session_info_update` с заголовком, ответ `end_turn` последним кадром |
+| Инструменты | `read` и `ls` выполняются, вызовы видны в ленте | ок: `ls`, `read` (через `fs/read_text_file`), `search`; параллельные вызовы в одном ответе модели |
+| Одобрение | запрос разрешения на `edit` или `exec` показывает аргументы; «разрешить» и «отклонить» работают | ок: `exec` — команда в заголовке и `rawInput`, четыре варианта; `allow_once` → `terminal/create` → `wait_for_exit` → `output` → `release`, `completed`. `edit` — diff в `content` запроса, `allow_once` → `fs/write_text_file`, `completed` с diff. `reject_once` для `exec` → `failed`, `_meta.codelab.outcome: rejected`, ход продолжился текстом |
+| Отмена | отмена хода в Zed завершает ход, вызовы — `failed` | ок: `session/cancel` во время `sleep 30` → `terminal/kill` → `output` → `release`, вызов `failed` (`outcome: cancelled`), ответ `stopReason: cancelled`. Замечание: поздний ответ Zed на брошенный `terminal/wait_for_exit` пишется в лог как `warning acp.frame.bad` (unknown response id) — соединение не страдает |
+| `session/load` | повторное открытие сессии показывает историю | ок: после перезапуска процесса Zed вызвал `session/load`; реплей реплик, рассуждений, ответов и вызовов в итоговых статусах, затем режим, опции, команды, заголовок и ответ. Замечание: у отменённого вызова в реплее есть текст `[Command was cancelled after …]`, которого не было в живом `tool_call_update` |
+
+### Доказательства Definition of Done
+
+| Строка матрицы | Критерий приёмки | Доказательство |
+|---|---|---|
+| R-12 | WebSocket только на loopback по умолчанию; без токена или с неверным — отказ до ACP; `Bearer` проходит `initialize` | `ws_auth_test.dart` (426, 401 с `WWW-Authenticate`, `/acp` и `/`, предупреждение `serve.ws.non_loopback`, пустая переменная — код 64); фикстура `acp/ws-auth-bearer-required` в `transport_conformance_test.dart` |
+| R-13 | stdio: одно сообщение — одна строка stdout, логи только в stderr, строки любой длины | `stdio_process_test.dart` (stdout — только JSON-RPC, лог в stderr); фикстура `acp/stdio-framing-large-line` (2 MiB одной строкой) в `transport_conformance_test.dart`; ручная проверка с Zed (D13) |
+| D-01 | чат со стримингом и одобрениями в ленте против Dart-агента | `app:permission_flow_test.dart`, `app:stdio_connect_flow_test.dart` в режиме `CODELAB_E2E_AGENT=dart` (D9); прогон на устройстве — `melos run test:e2e:app:dart-agent` в `release/<version>` |
+| D-02 | карточка показывает команду для `exec`, путь и diff для правок | `app:permission_flow_test.dart` (команда `echo hello`, D9); diff `edit` — ручная проверка с Zed (D13); прогон app — в `release/<version>` |
 
 ## Risks / Trade-offs
 
