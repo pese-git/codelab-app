@@ -157,8 +157,9 @@ final class E2eLaunch {
                              //       + '--permission-mode …' и '--model …' по таблице ниже
   final Matcher sessionLabel;                         // scripted: equals('Session codelab-test-session'); dart: matches(r'^Session \S+$')
   final List<({String value, String name})> models;   // scripted: gpt-5/GPT-5, gpt-4/GPT-4; dart: scripted/gpt-5 и gpt-5, scripted/gpt-4 и gpt-4
-  final String permissionTitle;                       // scripted: 'Run test command'; dart: 'Run echo hello'
+  final String permissionTitle;                       // scripted: 'Run test command'; dart: 'echo hello' (заголовок exec — команда)
   final String rawInputMarker;                        // scripted: '/bin/bash'; dart: 'timeout'
+  Finder get sessionLabelFinder;                      // Text, совпавший с sessionLabel
 }
 ```
 

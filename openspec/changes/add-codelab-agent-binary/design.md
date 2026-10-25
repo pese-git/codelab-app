@@ -134,7 +134,8 @@ apps/codelab_agent/
 - `integration_test/llm_scripts/<mode.wireName>.json` — сценарии, подобранные так, чтобы видимый результат совпал со scripted-агентом.
 - Тег `scripted-only` в `apps/codelab_app/dart_test.yaml`: `crashMidPrompt`, `withFsPathEscape`, `withTerminalPathEscape`, `withTerminalKill`.
 - `melos run build:agent` → `fvm dart compile exe apps/codelab_agent/bin/codelab_agent.dart -o build/bin/codelab-agent`; `melos run test:e2e:app:dart-agent` — `build:agent`, затем `flutter test integration_test -d macos --exclude-tags scripted-only` с define из контракта.
-- D-02: `permission_flow_test.dart` в режиме `dart` проверяет, что карточка показывает команду `echo hello`.
+- D-02: `permission_flow_test.dart` в режиме `dart` проверяет, что карточка показывает команду `echo hello`. Заголовок `exec` у Dart-агента — сама команда (`ToolPresentation` инструмента, фикстура `acp/tool-exec-terminal-embed`), поэтому `permissionTitle` для `dart` — `echo hello`, а не `Run echo hello`, как было в первой редакции контракта.
+- Загрузку сценариев проверяет `apps/codelab_agent/test/llm_scripts_load_test.dart`, а не тест app: приложению запрещено импортировать `codelab_agent_*` (сторож), а файл проверяется только загрузчиком `--llm-script`. Тест читает `apps/codelab_app/integration_test/llm_scripts/*.json` по пути и требует сценарий для каждого режима таблицы контракта.
 
 В feature-ветке тесты только проходят `analyze` (`fvm dart analyze` корня анализирует и `integration_test/`); прогон на устройстве — в `release/<version>`. `build:agent` в `check` не входит: компиляция в exe не проверяет ничего сверх `analyze` и процесса на VM (D10), а занимает минуты в CI.
 

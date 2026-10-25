@@ -9,6 +9,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'support/e2e_agent.dart';
+
 // See stdio_connect_flow_test.dart for why the connection setup dialog and
 // the connect round trip need this specific choreography.
 Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
@@ -55,14 +57,9 @@ void main() {
           await agentDirectory.delete(recursive: true);
         }
       });
-      final agent = await writeCodelabCompatibleStdioAgent(
+      final launch = await E2eAgent.current.launch(
         agentDirectory,
         mode: CodelabCompatibleStdioAgentMode.withPermissionRequest,
-      );
-
-      const dartExecutable = String.fromEnvironment(
-        'CODELAB_E2E_DART',
-        defaultValue: 'dart',
       );
 
       final shellCubit = codeLabDependenciesOf(
@@ -72,11 +69,11 @@ void main() {
       await _openConnectionSetupDialog(tester);
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Command')),
-        dartExecutable,
+        launch.command,
       );
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Args')),
-        '${agent.path} serve --stdio',
+        launch.args,
       );
       await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
@@ -115,7 +112,7 @@ void main() {
       // separate panel) — see embed-approval-in-thread — with the tool
       // call's title, its risk, and all four standard option kinds each
       // bound to their own kind-based shortcut (add-approval-option-kinds).
-      expect(find.text('Run test command'), findsWidgets);
+      expect(find.text(launch.permissionTitle), findsWidgets);
       expect(find.text('Shell'), findsWidgets);
       expect(find.text('Allow once'), findsOneWidget);
       expect(find.text('Allow always'), findsOneWidget);
@@ -124,19 +121,21 @@ void main() {
 
       // The extracted `command` is always visible in the approval details —
       // both in the transcript's inline panel and in the Inspector, which
-      // mirrors tool call details independently.
+      // mirrors tool call details independently. Для Dart-агента это
+      // проверка D-02: команда берётся из аргументов вызова `exec`.
       expect(find.text('echo hello'), findsWidgets);
 
-      // The full raw-input JSON (identified here by the `shell` field, which
-      // has no dedicated detail row) is always visible in the Inspector
+      // The full raw-input JSON (identified here by `rawInputMarker` — the
+      // scripted agent's `shell` field or the Dart agent's `timeout`, neither
+      // of which has a dedicated detail row) is always visible in the Inspector
       // (diagnosable-by-design) but collapsed by default in the transcript's
       // own approval panel (read on the golden path) — one match before
       // expanding it there, two once expanded.
       expect(find.text('View raw input'), findsOneWidget);
-      expect(find.textContaining('/bin/bash'), findsOneWidget);
+      expect(find.textContaining(launch.rawInputMarker), findsOneWidget);
       await tester.tap(find.text('View raw input'));
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.textContaining('/bin/bash'), findsNWidgets(2));
+      expect(find.textContaining(launch.rawInputMarker), findsNWidgets(2));
 
       await tester.tap(find.text('Allow once'));
       await tester.pump();

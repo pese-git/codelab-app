@@ -9,6 +9,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'support/e2e_agent.dart';
+
 // The transport setup form only lives inside the modal ConnectionSetupDialog
 // (see complete-transport-setup-actions) — transport-field-* keys are not
 // reachable until it is open, and the dialog's barrier blocks taps on
@@ -83,12 +85,7 @@ void main() {
         await agentDirectory.delete(recursive: true);
       }
     });
-    final agent = await writeCodelabCompatibleStdioAgent(agentDirectory);
-
-    const dartExecutable = String.fromEnvironment(
-      'CODELAB_E2E_DART',
-      defaultValue: 'dart',
-    );
+    final launch = await E2eAgent.current.launch(agentDirectory);
 
     final shellCubit = codeLabDependenciesOf(
       tester.element(find.byType(CodeLabApp)),
@@ -97,11 +94,11 @@ void main() {
     await _openConnectionSetupDialog(tester);
     await tester.enterText(
       find.byKey(const ValueKey('transport-field-Command')),
-      dartExecutable,
+      launch.command,
     );
     await tester.enterText(
       find.byKey(const ValueKey('transport-field-Args')),
-      '${agent.path} serve --stdio',
+      launch.args,
     );
     await _closeConnectionSetupDialog(tester);
     await _tapConnectAndWaitUntilSettled(tester, shellCubit);
@@ -133,12 +130,7 @@ void main() {
           await agentDirectory.delete(recursive: true);
         }
       });
-      final agent = await writeCodelabCompatibleStdioAgent(agentDirectory);
-
-      const dartExecutable = String.fromEnvironment(
-        'CODELAB_E2E_DART',
-        defaultValue: 'dart',
-      );
+      final launch = await E2eAgent.current.launch(agentDirectory);
 
       final shellCubit = codeLabDependenciesOf(
         tester.element(find.byType(CodeLabApp)),
@@ -147,11 +139,11 @@ void main() {
       await _openConnectionSetupDialog(tester);
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Command')),
-        dartExecutable,
+        launch.command,
       );
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Args')),
-        '${agent.path} serve --stdio',
+        launch.args,
       );
       await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
@@ -161,7 +153,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('new-session-button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Session codelab-test-session'), findsWidgets);
+      expect(launch.sessionLabelFinder, findsWidgets);
 
       await tester.enterText(
         find.byKey(const ValueKey('composer-text-box')),
@@ -206,14 +198,9 @@ void main() {
           await agentDirectory.delete(recursive: true);
         }
       });
-      final agent = await writeCodelabCompatibleStdioAgent(
+      final launch = await E2eAgent.current.launch(
         agentDirectory,
         mode: CodelabCompatibleStdioAgentMode.withConfigOptions,
-      );
-
-      const dartExecutable = String.fromEnvironment(
-        'CODELAB_E2E_DART',
-        defaultValue: 'dart',
       );
 
       final shellCubit = codeLabDependenciesOf(
@@ -223,11 +210,11 @@ void main() {
       await _openConnectionSetupDialog(tester);
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Command')),
-        dartExecutable,
+        launch.command,
       );
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Args')),
-        '${agent.path} serve --stdio',
+        launch.args,
       );
       await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
@@ -237,20 +224,21 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('new-session-button')));
       await tester.pumpAndSettle();
 
-      // The fake agent declares a `model` config option (`gpt-5`/`gpt-4`) in
-      // its `session/new` response — see
-      // codelab_compatible_stdio_agent.dart.
+      // The agent declares a `model` config option in its `session/new`
+      // response — `gpt-5`/`gpt-4` in codelab_compatible_stdio_agent.dart,
+      // or the `--model` flags of the Dart agent (see e2e_agent.dart).
       expect(
         find.byKey(const ValueKey('composer-config-option-model')),
         findsOneWidget,
       );
-      expect(find.text('GPT-5'), findsOneWidget);
+      final [first, second] = launch.models;
+      expect(find.text(first.name), findsOneWidget);
 
       await tester.tap(
         find.byKey(const ValueKey('composer-config-option-model')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('GPT-4'));
+      await tester.tap(find.text(second.name));
       await tester.pump();
 
       // The response comes back over a real stdio round trip — poll the
@@ -263,10 +251,16 @@ void main() {
       }
       await tester.pumpAndSettle();
 
-      expect(shellCubit.state.configOptions.single.currentValue, 'gpt-4');
+      // Не `.single`: у Dart-агента рядом есть опция `mode`.
+      expect(
+        shellCubit.state.configOptions
+            .firstWhere((option) => option.id == 'model')
+            .currentValue,
+        second.value,
+      );
       expect(shellCubit.state.isRespondingToConfigOption, isFalse);
-      expect(find.text('GPT-4'), findsOneWidget);
-      expect(find.text('GPT-5'), findsNothing);
+      expect(find.text(second.name), findsOneWidget);
+      expect(find.text(first.name), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -289,14 +283,9 @@ void main() {
           await agentDirectory.delete(recursive: true);
         }
       });
-      final agent = await writeCodelabCompatibleStdioAgent(
+      final launch = await E2eAgent.current.launch(
         agentDirectory,
         mode: CodelabCompatibleStdioAgentMode.crashMidPrompt,
-      );
-
-      const dartExecutable = String.fromEnvironment(
-        'CODELAB_E2E_DART',
-        defaultValue: 'dart',
       );
 
       final shellCubit = codeLabDependenciesOf(
@@ -306,11 +295,11 @@ void main() {
       await _openConnectionSetupDialog(tester);
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Command')),
-        dartExecutable,
+        launch.command,
       );
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Args')),
-        '${agent.path} serve --stdio',
+        launch.args,
       );
       await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
@@ -357,5 +346,6 @@ void main() {
       await tester.pumpAndSettle();
       await closeCodeLabRootScope();
     },
+    tags: scriptedOnly,
   );
 }

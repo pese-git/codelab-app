@@ -9,6 +9,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'support/e2e_agent.dart';
+
 // See stdio_connect_flow_test.dart for why the connection setup dialog and
 // the connect round trip need this specific choreography.
 Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
@@ -49,27 +51,12 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
   await tester.pumpAndSettle();
 
-  final agent = await writeCodelabCompatibleStdioAgent(
-    agentDirectory,
-    mode: mode,
-  );
-
   // Unlike the other e2e tests, this one points the session's working
   // directory at a dedicated temp dir — which is also the agent process's
   // OS-level spawn cwd (`StdioAcpTransportConfig.cwd` → `Process.start
   // (workingDirectory: ...)`, see shell_cubit.dart `_stdioConfigFromState`).
-  // The melos-provided `CODELAB_E2E_DART` is relative
-  // (`../../.fvm/flutter_sdk/bin/dart`, resolved against `apps/codelab_app`
-  // by the other tests, which never change the working directory) — resolve
-  // it to an absolute path up front so it still finds `dart` once the spawn
-  // cwd moves. A bare `dart` (the default, found via `PATH`) is left as-is.
-  const rawDartExecutable = String.fromEnvironment(
-    'CODELAB_E2E_DART',
-    defaultValue: 'dart',
-  );
-  final dartExecutable = rawDartExecutable.contains('/')
-      ? File(rawDartExecutable).absolute.path
-      : rawDartExecutable;
+  // Поэтому команда и пути в `launch` абсолютные (e2e_agent.dart).
+  final launch = await E2eAgent.current.launch(agentDirectory, mode: mode);
 
   final shellCubit = codeLabDependenciesOf(
     tester.element(find.byType(CodeLabApp)),
@@ -88,11 +75,11 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   await _openConnectionSetupDialog(tester);
   await tester.enterText(
     find.byKey(const ValueKey('transport-field-Command')),
-    dartExecutable,
+    launch.command,
   );
   await tester.enterText(
     find.byKey(const ValueKey('transport-field-Args')),
-    '${agent.path} serve --stdio',
+    launch.args,
   );
   await _closeConnectionSetupDialog(tester);
   await _tapConnectAndWaitUntilSettled(tester, shellCubit);
@@ -233,5 +220,6 @@ void main() {
       await tester.pumpAndSettle();
       await closeCodeLabRootScope();
     },
+    tags: scriptedOnly,
   );
 }
