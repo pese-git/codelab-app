@@ -706,6 +706,88 @@ class SessionStateMachine {
     return reduce(session, SessionStateEvent.update(update: update));
   }
 
+  /// Раскладывает историю, повторённую агентом в ответ на `session/load`,
+  /// в завершённые ходы сессии.
+  ///
+  /// Почему: при `session/load` агент шлёт всю переписку уведомлениями
+  /// `session/update` до ответа (`03-Session Setup.md#loading-a-session`,
+  /// `agent-core/13-acp-adapter.md` §13.5), а в сессии клиента нет активного
+  /// хода, к которому их можно применить, — [applyUpdate] их бы отбросил.
+  ///
+  /// Для чего: восстановить видимую историю загруженной сессии. ACP не
+  /// передаёт в реплее границы ходов и `stopReason`, поэтому ход открывает
+  /// `user_message_chunk`, пришедший после ответа агента (подряд идущие
+  /// чанки пользователя — одна реплика в `PromptTurn.prompt`, а не в
+  /// `updates`). Ход реплея закрыт как [PromptTurnStatus.completed] без
+  /// `stopReason`: это прошлое, и показывать его выполняющимся нельзя
+  /// (`session-lifecycle.md` §51). Сессионные обновления применяются к
+  /// сессии, как в [applyUpdate].
+  ///
+  /// Как использовать: приложение вызывает после успешного ответа
+  /// `session/load` с буфером обновлений этой сессии в порядке прихода;
+  /// [nextTurnId] выдаёт идентификаторы ходов. Ходы добавляются к
+  /// `session.turns`; сессия должна быть без активного хода.
+  static AcpSession replayHistory(
+    AcpSession session,
+    List<SessionUpdate> updates, {
+    required PromptTurnId Function() nextTurnId,
+  }) {
+    var current = session;
+    PromptTurn? turn;
+
+    void closeTurn() {
+      final closed = turn;
+      if (closed == null) {
+        return;
+      }
+      current = current.copyWith(
+        turns: [
+          ...current.turns,
+          closed.copyWith(status: PromptTurnStatus.completed),
+        ],
+      );
+      turn = null;
+    }
+
+    for (final update in updates) {
+      final scoped = _applySessionScopedUpdate(current, update);
+      if (scoped != null) {
+        current = scoped;
+        continue;
+      }
+
+      if (update case UserMessageChunk(:final content)) {
+        final open = turn;
+        if (open != null && open.updates.isEmpty) {
+          turn = open.copyWith(prompt: [...open.prompt, content]);
+          continue;
+        }
+        closeTurn();
+        turn = PromptTurn(
+          id: nextTurnId(),
+          sessionId: session.id,
+          prompt: [content],
+          status: PromptTurnStatus.running,
+        );
+        continue;
+      }
+
+      turn = _applyUpdateToTurn(
+        turn ??
+            PromptTurn(
+              id: nextTurnId(),
+              sessionId: session.id,
+              prompt: const [],
+              status: PromptTurnStatus.running,
+            ),
+        update,
+      );
+    }
+    closeTurn();
+
+    return current.copyWith(status: SessionLifecycleStatus.active);
+  }
+
   static StateTransitionResult<AcpSession> requestApproval(
     AcpSession session,
     ApprovalRequest approval,
@@ -829,43 +911,23 @@ class SessionStateMachine {
     AcpSession session,
     SessionUpdate update,
   ) {
-    // `available_commands_update` is session-scoped, not turn-scoped: per
-    // ACP (docs/acp/protocol/14-Slash Commands.md), an agent may send it
-    // "at any time during a session", including right after `session/new`
-    // and before any prompt turn exists. Record it on the session
-    // regardless of whether a turn is active, instead of silently dropping
-    // it just because no prompt is in flight yet. If a turn does happen to
-    // be active, still thread it through as a turn update too, so it stays
-    // visible in the per-turn protocol log the same way it already did.
-    if (update case AvailableCommandsUpdate(:final availableCommands)) {
-      final withCommands = session.copyWith(
-        availableCommands: availableCommands,
-      );
-      final activeTurn = withCommands.activeTurn;
+    // Сессионные обновления (команды, опции, режим, заголовок) относятся к
+    // сессии, а не к ходу: ACP разрешает их «в любой момент сессии», в том
+    // числе до первого хода и в реплее `session/load`
+    // (`14-Slash Commands.md`, `13-Session Config Options.md`,
+    // `12-Session Model.md`, `04-Session List.md#updating-session-metadata`,
+    // `03-Session Setup.md#loading-a-session`).
+    // Применяем их к сессии всегда, а при активном ходе ещё и проводим через
+    // ход, чтобы они оставались в его журнале протокола.
+    final scoped = _applySessionScopedUpdate(session, update);
+    if (scoped != null) {
+      final activeTurn = scoped.activeTurn;
       if (activeTurn == null) {
-        return _applied(withCommands);
+        return _applied(scoped);
       }
 
       final turn = PromptTurnStateMachine.applyUpdate(activeTurn, update);
-      return _sessionResultFromTurnResult(withCommands, turn);
-    }
-
-    // `config_option_update` is likewise session-scoped, not turn-scoped —
-    // per ACP (docs/acp/protocol/13-Session Config Options.md), an agent
-    // may change a config option's value "at any point during a session,
-    // whether the Agent is idle or generating a response". Same shape as
-    // `AvailableCommandsUpdate` above: apply to the session unconditionally,
-    // and additionally thread it through the active turn if one exists so
-    // it still shows up in the per-turn protocol log.
-    if (update case ConfigOptionUpdate(:final configOptions)) {
-      final withConfigOptions = session.copyWith(configOptions: configOptions);
-      final activeTurn = withConfigOptions.activeTurn;
-      if (activeTurn == null) {
-        return _applied(withConfigOptions);
-      }
-
-      final turn = PromptTurnStateMachine.applyUpdate(activeTurn, update);
-      return _sessionResultFromTurnResult(withConfigOptions, turn);
+      return _sessionResultFromTurnResult(scoped, turn);
     }
 
     final activeTurn = session.activeTurn;
@@ -1029,6 +1091,32 @@ class SessionStateMachine {
       turns: turns,
       updatedAt: turn.completedAt ?? turn.startedAt ?? session.updatedAt,
     );
+  }
+
+  /// Применяет обновление уровня сессии; `null` — обновление относится к
+  /// ходу. `session_info_update` без `title` заголовок не стирает: в ACP
+  /// отсутствующее поле означает «без изменений»
+  /// (`04-Session List.md#updating-session-metadata`), а `null` («стереть»)
+  /// модель `acp_protocol` от отсутствия не отличает.
+  static AcpSession? _applySessionScopedUpdate(
+    AcpSession session,
+    SessionUpdate update,
+  ) {
+    return switch (update) {
+      AvailableCommandsUpdate(:final availableCommands) => session.copyWith(
+        availableCommands: availableCommands,
+      ),
+      ConfigOptionUpdate(:final configOptions) => session.copyWith(
+        configOptions: configOptions,
+      ),
+      CurrentModeUpdate(:final currentModeId) => session.copyWith(
+        modes: session.modes?.copyWith(currentModeId: currentModeId),
+      ),
+      SessionInfoUpdate(:final title) => session.copyWith(
+        title: title ?? session.title,
+      ),
+      _ => null,
+    };
   }
 
   static StateTransitionResult<AcpSession> _sessionResultFromTurnResult(
