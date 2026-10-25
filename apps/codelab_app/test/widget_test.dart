@@ -3506,6 +3506,46 @@ void main() {
       expect(plan!.single.content, 'Open PR for review');
     });
 
+    test('a plan that returns to an earlier value within one turn becomes '
+        'current again', () async {
+      // ACP `11-Agent Plan.md`: клиент ОБЯЗАН полностью заменить план
+      // каждым обновлением — возврат к плану A после B не дубль
+      // (`fix-repeated-message-chunks`).
+      final harness = await createSessionCubit();
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final promptRequestFuture = harness.agentTransport.sent.first;
+      final submitFuture = harness.shellCubit.submitPrompt('plan it');
+      final promptRequest = await promptRequestFuture as dynamic;
+      for (final entries in [
+        [readEntry],
+        [testEntry],
+        [readEntry],
+      ]) {
+        harness.agentTransport.emitInbound(
+          JsonRpcMessage.notification(
+            method: 'session/update',
+            params: {
+              'sessionId': 'session-1',
+              'update': {'sessionUpdate': 'plan', 'entries': entries},
+            },
+          ),
+        );
+      }
+      harness.agentTransport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id as JsonRpcId,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await submitFuture;
+
+      final plan = harness.shellCubit.state.currentPlan;
+      expect(plan, hasLength(1));
+      expect(plan!.single.content, readEntry['content']);
+    });
+
     test(
       'dismissPlan clears currentPlan; a later plan update repopulates it',
       () async {
