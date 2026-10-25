@@ -1,8 +1,9 @@
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:codelab_agent_acp/src/event_projection.dart';
 import 'package:test/test.dart';
+
+import '../../../codelab_agent_core/test/support/package_dir.dart';
 
 /// ACP-6: у каждого подтипа `AgentEvent` есть строка таблицы §13.7 —
 /// кадр или пометка «не передаётся» (задача 4.1, DoD итерации 2).
@@ -13,10 +14,9 @@ import 'package:test/test.dart';
 /// читаются из исходника иерархии: в тестах пакета нет `dart:mirrors`.
 void main() {
   test('projectionTable lists exactly the subtypes of AgentEvent', () {
-    final source = File.fromUri(
-      Isolate.resolvePackageUriSync(
-        Uri.parse('package:codelab_agent_core/src/loop/agent_events.dart'),
-      )!,
+    // corePath, а не Isolate.resolvePackageUri: под flutter test его нет.
+    final source = File(
+      corePath('lib/src/loop/agent_events.dart'),
     ).readAsStringSync();
     final subtypes = {
       for (final match in RegExp(

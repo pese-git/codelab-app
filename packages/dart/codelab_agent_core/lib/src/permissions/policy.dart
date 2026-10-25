@@ -1,4 +1,5 @@
 import '../cancel/cancel_token.dart';
+import '../loop/agent_events.dart' show ToolOutcome;
 import '../loop/loop_config.dart';
 import '../tools/agent_tool.dart';
 import '../tools/builtin/common.dart' show pathPattern;
@@ -124,6 +125,12 @@ final class PermissionPolicy {
       Denied(:final reason) => Block(
         'Permission denied for ${tool.name}: $reason. Do not retry the same '
         'call; choose another approach or ask the user.',
+        // Ход отменён, пока шёл вопрос: вызов отменён до старта, а не
+        // отклонён человеком (§13.7, «Статусы вызова»). Отказ `cancelled`
+        // клиента без отмены хода остаётся `rejected` (PERM-7).
+        outcome: ctx.cancel.isCancelled
+            ? ToolOutcome.cancelled
+            : ToolOutcome.rejected,
       ),
     };
   };
@@ -197,6 +204,7 @@ final class PermissionPolicy {
         ctx,
         key,
         reason: 'critical command: $label',
+        criticalLabel: label,
         allowAlways: false,
       );
     }
@@ -245,6 +253,7 @@ final class PermissionPolicy {
     ToolContext ctx,
     PermissionKey key, {
     String? reason,
+    String? criticalLabel,
     bool allowAlways = true,
   }) async {
     final gate = this.gate;
@@ -283,7 +292,9 @@ final class PermissionPolicy {
             rawInput: args,
             locations: presentation.locations,
             diffs: presentation.diffs,
+            pattern: key.pattern,
             reason: reason,
+            criticalLabel: criticalLabel,
             allowAlwaysOffered: offered,
           ),
           ctx.cancel,

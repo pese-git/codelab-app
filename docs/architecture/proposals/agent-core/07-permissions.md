@@ -320,7 +320,7 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
 (`docs/acp/protocol/08-Tool Calls.md`):
 
 1. `toolCall` — `ToolCallUpdate` с `toolCallId`, `title`, `kind`, `status: "pending"`, `rawInput`, `locations`; `content` — необязательный текстовый блок первым элементом (`reason`; у `lsp rename` — сводка `Rename "<old>" to "<new>": <n> edits in <f> files.`, §17.8.9), затем по одному `{"type":"diff","path","oldText","newText"}` на каждый элемент `diffs` (`write`/`edit` — один). Это стандартный `ToolCallContent`, расширений не требуется. Для критической команды — `_meta: {"codelab": {"critical": true, "label": "<метка правила>"}}` (расширение вводится через OpenSpec, `AGENTS.md` §3.4).
-2. `options`: `allow_once`, `allow_always` (только если `allowAlwaysOffered`), `reject_once`, `reject_always`; `optionId` совпадает с `kind`.
+2. `options`: `allow_once`, `allow_always` (только если `allowAlwaysOffered`), `reject_once`, `reject_always`; `optionId` совпадает с `kind`. Варианты «всегда» называют шаблон `PermissionRequest.pattern` (`Always allow <pattern>`, `Always reject <pattern>`, §13.9); метка `_meta.codelab.critical.label` — `PermissionRequest.criticalLabel`.
 3. Ответ `{"outcome":{"outcome":"selected","optionId":X}}` → решение по `kind` выбранного варианта; неизвестный `optionId` → `rejectOnce` + warning-лог. `{"outcome":{"outcome":"cancelled"}}` → `cancelled`.
 4. Ошибка JSON-RPC или разрыв соединения → `rejectOnce` с причиной в логе.
 5. Отмена токена хода → ожидание прекращается, решение `cancelled` (поздний ответ клиента игнорируется, PERM-4).
@@ -336,9 +336,9 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
                 "oldText":"const config = (debug: false);\n","newText":"const config = (debug: true);\n"}]},
   "options":[
     {"optionId":"allow_once","name":"Allow once","kind":"allow_once"},
-    {"optionId":"allow_always","name":"Always allow this file","kind":"allow_always"},
+    {"optionId":"allow_always","name":"Always allow lib/main.dart","kind":"allow_always"},
     {"optionId":"reject_once","name":"Reject","kind":"reject_once"},
-    {"optionId":"reject_always","name":"Always reject","kind":"reject_always"}]}}
+    {"optionId":"reject_always","name":"Always reject lib/main.dart","kind":"reject_always"}]}}
 
 {"jsonrpc":"2.0","id":21,"result":{"outcome":{"outcome":"selected","optionId":"allow_once"}}}
 ```

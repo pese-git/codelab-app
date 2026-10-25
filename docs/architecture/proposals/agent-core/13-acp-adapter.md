@@ -458,13 +458,19 @@ Slash-команды приходят обычным `session/prompt` с тек�
 | `AgentError` | — | лог и trace; итог хода — через ответ (§13.8) |
 | `TurnEnded` | ответ `session/prompt` | §13.8; после MVP непустой `returnedSteers` → `steerReturned` (§17.7.2.2) |
 
+Ответ `session/prompt` — последний кадр **хода**, а не соединения: автоматический заголовок
+пишется после завершённого хода (§8.10), поэтому его `session_info_update` идёт после ответа.
+
 **Статусы вызова.** `ToolCallStarted` эмитится при входе вызова в единую точку исполнения, **до**
 проверки разрешений (§6.3.1), поэтому `tool_call` уходит со `status: "pending"`; запрос
 разрешения тоже несёт `status: "pending"`. Переход в `in_progress` отправляет хук
 `markInProgress`, который ACP-адаптер передаёт в `SessionSpec.extraBeforeToolCall`: сборка
 (§10.7) ставит его **последним** в цепочке `beforeToolCall`, после проверки разрешений и прочих
 хуков. Хук ставит в `OutboundQueue` `tool_call_update {status: "in_progress"}` и возвращает
-`null` (не блокирует). Если вызов отклонён, отменён до старта или не прошёл валидацию, хук не
+`null` (не блокирует). События сессии приходят подписчику асинхронно, а хук вызывается в цикле
+синхронно: если `tool_call` вызова ещё не спроецирован, `in_progress` откладывается до его
+проекции. Если ход отменён, пока шёл запрос разрешения, вызов получает исход `cancelled`, а не
+`rejected`: он отменён до старта. Если вызов отклонён, отменён до старта или не прошёл валидацию, хук не
 срабатывает и статус идёт `pending → failed`. После MVP вызов `ask` (§17.11.7) остаётся в
 `status: "pending"`, пока клиент не ответит на запрос `_codelab/ask`. Итоговые переходы:
 
@@ -536,8 +542,8 @@ JSON-RPC ошибку: ответ всегда `cancelled`, как требуе�
 
 | Метод | Когда | Таймаут | При таймауте |
 |---|---|---|---|
-| `fs/read_text_file` | `readText` (`path` абсолютный, `line`, `limit`) | 30 с | `Err(FileError.timeout)` |
-| `fs/write_text_file` | `writeText` | 30 с | `Err(FileError.timeout)`; модель предупреждается, что запись могла пройти |
+| `fs/read_text_file` | `readText` (`path` абсолютный, `line`, `limit`) | 30 с | `Err(FileError(io))` с текстом `client did not answer … (timed out)` (кода `timeout` у `FileErrorCode` нет) |
+| `fs/write_text_file` | `writeText` | 30 с | `Err(FileError(io))` с тем же текстом и пометкой `the write may have completed` |
 | `terminal/create` | `exec`: `command: "/bin/sh"`, `args: ["-c", <команда>]`, `cwd`, `env` (`[{name, value}]`: `exec.env` и `exec.secrets`, §4.5), `outputByteLimit` = `ExecOptions.outputByteLimit` (1 МиБ) | 30 с | `Err(ExecError.spawnFailed)` |
 | `terminal/wait_for_exit` | после `create` | нет собственного; ограничен таймаутом `exec` (по умолчанию 120 с) | `terminal/kill` → `terminal/output` → `terminal/release`, `Err(ExecError.timeout)` с хвостом |
 | `terminal/output` | после выхода или kill | 30 с | результат без вывода с пометкой |
