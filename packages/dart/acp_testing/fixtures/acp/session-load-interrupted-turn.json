@@ -8,7 +8,8 @@
     "outcome"
   ],
   "roles": [
-    "agent"
+    "agent",
+    "client"
   ],
   "setup": {
     "cwd": "/work/demo",
@@ -89,7 +90,9 @@
       "dir": "c2a",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 0,
+        "id": {
+          "$capture": "initializeId"
+        },
         "method": "initialize",
         "params": {
           "protocolVersion": 1,
@@ -107,7 +110,7 @@
       "dir": "a2c",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 0,
+        "id": "${initializeId}",
         "result": {
           "$partial": {
             "protocolVersion": 1
@@ -119,7 +122,9 @@
       "dir": "c2a",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 1,
+        "id": {
+          "$capture": "loadId"
+        },
         "method": "session/load",
         "params": {
           "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
@@ -241,10 +246,18 @@
       "note": "ответ session/load — после реплея (ACP-3)",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 1,
+        "id": "${loadId}",
         "result": {
           "modes": {
-            "$any": {}
+            "$any": {
+              "availableModes": [
+                {
+                  "id": "standard",
+                  "name": "Standard"
+                }
+              ],
+              "currentModeId": "standard"
+            }
           },
           "configOptions": {
             "$any": []

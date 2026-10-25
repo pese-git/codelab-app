@@ -6,7 +6,8 @@
   ],
   "description": "Опция effort появляется только у модели с рассуждением и сохраняет значение при смене модели; после смены на модель без рассуждения агент один раз сообщает об этом первым agent_message_chunk следующего хода (agent-core §2.12.3).",
   "roles": [
-    "agent"
+    "agent",
+    "client"
   ],
   "setup": {
     "cwd": "/work/demo",
@@ -53,7 +54,9 @@
       "dir": "c2a",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 2,
+        "id": {
+          "$capture": "modelId"
+        },
         "method": "session/set_config_option",
         "params": {
           "sessionId": "${sessionId}",
@@ -67,14 +70,37 @@
       "note": "модель с рассуждением: опция effort есть (ACP-10)",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 2,
+        "id": "${modelId}",
         "result": {
           "configOptions": [
             {
-              "$partial": {
-                "id": "mode",
-                "currentValue": "standard"
-              }
+              "id": "mode",
+              "name": "Mode",
+              "category": "mode",
+              "type": "select",
+              "currentValue": "standard",
+              "options": [
+                {
+                  "value": "plan",
+                  "name": "Plan"
+                },
+                {
+                  "value": "ask",
+                  "name": "Ask"
+                },
+                {
+                  "value": "standard",
+                  "name": "Standard"
+                },
+                {
+                  "value": "accept-edits",
+                  "name": "Accept edits"
+                },
+                {
+                  "value": "bypass",
+                  "name": "Bypass"
+                }
+              ]
             },
             {
               "id": "model",
@@ -122,7 +148,9 @@
       "dir": "c2a",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 3,
+        "id": {
+          "$capture": "effortId"
+        },
         "method": "session/set_config_option",
         "params": {
           "sessionId": "${sessionId}",
@@ -135,14 +163,37 @@
       "dir": "a2c",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 3,
+        "id": "${effortId}",
         "result": {
           "configOptions": [
             {
-              "$partial": {
-                "id": "mode",
-                "currentValue": "standard"
-              }
+              "id": "mode",
+              "name": "Mode",
+              "category": "mode",
+              "type": "select",
+              "currentValue": "standard",
+              "options": [
+                {
+                  "value": "plan",
+                  "name": "Plan"
+                },
+                {
+                  "value": "ask",
+                  "name": "Ask"
+                },
+                {
+                  "value": "standard",
+                  "name": "Standard"
+                },
+                {
+                  "value": "accept-edits",
+                  "name": "Accept edits"
+                },
+                {
+                  "value": "bypass",
+                  "name": "Bypass"
+                }
+              ]
             },
             {
               "id": "model",
@@ -190,7 +241,9 @@
       "dir": "c2a",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 4,
+        "id": {
+          "$capture": "backId"
+        },
         "method": "session/set_config_option",
         "params": {
           "sessionId": "${sessionId}",
@@ -204,14 +257,37 @@
       "note": "без рассуждения опции нет, значение хранится",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 4,
+        "id": "${backId}",
         "result": {
           "configOptions": [
             {
-              "$partial": {
-                "id": "mode",
-                "currentValue": "standard"
-              }
+              "id": "mode",
+              "name": "Mode",
+              "category": "mode",
+              "type": "select",
+              "currentValue": "standard",
+              "options": [
+                {
+                  "value": "plan",
+                  "name": "Plan"
+                },
+                {
+                  "value": "ask",
+                  "name": "Ask"
+                },
+                {
+                  "value": "standard",
+                  "name": "Standard"
+                },
+                {
+                  "value": "accept-edits",
+                  "name": "Accept edits"
+                },
+                {
+                  "value": "bypass",
+                  "name": "Bypass"
+                }
+              ]
             },
             {
               "id": "model",
