@@ -133,6 +133,19 @@ Contract test (4.7) и агентский драйвер (4.8) нужны оба
 3. **Сессии и опции.** Каталог и опции в ядре (D3, D4), `session/load` с реплеем, `session/set_config_option`, `session/set_mode`, отсоединение и переподключение (D7). DoD: тесты реплея, опций, ACP-10, переподключения.
 4. **Корпус.** Агентский драйвер, 33 фикстуры, contract test (4.7), `conformance:agent` в `check`, правка §14.2 и плана этапа. DoD: агентский прогон 44 фикстур (11 + 33) зелёный, contract test зелёный.
 
+### D12. Уточнения контракта, найденные в итерации 1
+
+Документ ядра правится в том же PR (§13.1, §13.2, §13.11):
+
+- **Сырые кадры разбирает транспорт.** Порт `AcpTransport` отдаёт серверу уже разобранные `JsonRpcMessage`, поэтому неразбираемый JSON (`-32700`) и кадр не JSON-RPC 2.0 (`-32600`) до сервера не доходят. Отвечать на них кодами §13.10 и не закрывать соединение — обязанность серверных транспортов `StdioServerAcpTransport` и `WebSocketServerAcpTransport` (change `add-codelab-agent-binary`). Сервер отвечает на всё, что пришло сообщением: `-32600` (порядок `initialize`), `-32601`, `-32602`, `-32603`, `-32002`, а ответ на неизвестный id и битое уведомление логирует `acp.frame.bad`. Формат фикстур не умеет сырые кадры, поэтому `acp/errors-bad-frame-survives` проверяет только сообщения.
+- **`mcpCapabilities.http: false` до этапа 8.** §13.2 ставит `http` по capability `mcp`, а её до этапа 8 нет: серверы из `session/new` пропускаются. Объявить `http: true` значило бы обещать подключение, которого нет. Фикстура `acp/initialize-capabilities` ждёт `true`; в итерации 4 значение в ней сверяется матчером со ссылкой на §13.2 (правило изменения фикстур).
+- **`sessionCapabilities` — всегда объект.** Кодек `acp_protocol` пишет `sessionCapabilities` всегда; без `sessionPersistence` в нём нет поля `list` (§13.2: «поле отсутствует» — это `list`).
+- **Сервер получает `BuiltAgentCore`.** Возможности `initialize` и проверка `fileListing` (D5) берутся из `CorePlan.profile`, поэтому конструктор — `AcpAgentServer({core, config, logger, clock})`, а не `runtime`. `TraceSink` (§13.1) не вводится в этом change: protocol trace — флаг `--trace-file` бинаря (`add-codelab-agent-binary`).
+- **Уведомление после ответа.** Обработчик возвращает `Reply(result, after: …)`; маршрутизатор ставит ответ в очередь, затем выполняет `after`. Так `available_commands_update` уходит после ответа `session/new` (ACP-8) без отдельной синхронизации.
+- **`AgentSession.model`** добавлен в итерации 1: опция `model` показывает модель сессии. Каталог и смена модели (D3) — итерация 3.
+- **Закрытие конца `InProcessAcpLink`** переводит другой конец в `failed` и закрывает его `inbound` — как EOF у stdio, сервер видит конец соединения по завершению потока.
+- **Покрытие FIX-2 клиента** получает элемент `session/set_mode`: codelab-app метод не вызывает (режимы — через `configOptions`), агентскую сторону покрывают фикстуры `acp/set-mode-*`. Это новый элемент протокола, а не возврат покрытого.
+
 ## Risks / Trade-offs
 
 - **[Неверное прочтение спецификации закрепляется фикстурами]** → у каждой фикстуры ссылка `spec` на раздел `docs/acp/protocol/` (FIX-1); клиентский прогон тех же фикстур против `AcpClientApplication` показывает расхождение агента и клиента; ручная проверка с Zed — в `add-codelab-agent-binary`.
@@ -148,4 +161,4 @@ Contract test (4.7) и агентский драйвер (4.8) нужны оба
 
 ## Open Questions
 
-- Нужна ли `AcpServerConfig.allowLocalExecFallback` (§13.1) в этапе 4: без `clientCapabilities.terminal` `exec` выключен; локальный `exec` агента при stdio — решение хоста `add-codelab-agent-binary`. Пока поле не вводится.
+- Нужна ли `AcpServerConfig.allowLocalExecFallback` в этапе 4: без `clientCapabilities.terminal` `exec` выключен; локальный `exec` агента при stdio — решение хоста `add-codelab-agent-binary`. Поле не вводится и убрано из эскиза §13.1.

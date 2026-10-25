@@ -29,6 +29,10 @@ abstract interface class AgentSession {
 
   ModeId get mode;
 
+  /// Модель, которой идёт следующий шаг: ACP-адаптер показывает её в опции
+  /// `model` (§13.6; design.md change `add-dart-agent-acp-server`, D3).
+  ModelRef get model;
+
   /// Запускает ход; второй вызов во время хода — [StateError] (LOOP-10).
   /// Возвращается после `TurnEnded` и записи журнала.
   Future<TurnResult> prompt(List<ContentBlock> content, {CancelToken? cancel});

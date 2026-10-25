@@ -10,20 +10,20 @@
 
 ## 1. Пакет, протокол и транспорт в памяти (4.1)
 
-- [ ] 1.1 Создать пакет `packages/dart/codelab_agent_acp` (`pubspec.yaml` с allowlist D1, `analysis_options.yaml`, вложенный `AGENTS.md`), добавить в `workspace:` корневого `pubspec.yaml`; правило `codelab_agent_acp` в `codelab_architecture_tests/test/support/rules.dart` и allowlist в `pubspec_allowlist_test.dart`; тест сторожа на временном файле с `import 'dart:io'` (workspace-architecture «Автоматический сторож границ пакетов»)
-- [ ] 1.2 Тест: `packages/dart/acp_protocol/test/set_session_mode_test.dart` — `SetSessionModeRequest`/`SetSessionModeResponse` по схеме `docs/acp/protocol/12-Session Model.md`, запись в `acpMethodRegistry`, кодирование и декодирование (design.md, D2) (красный)
-- [ ] 1.3 Реализовать модели и константу метода `session/set_mode` в `acp_protocol` — 1.2 зелёный
-- [ ] 1.4 Тест: `packages/dart/acp_testing/test/in_process_acp_link_test.dart` — асинхронная доставка в порядке `send`, глубокая копия, не-JSON значение → `sendFailed`, буфер до `start()`, закрытие одного конца → `failed` у другого, сообщение после закрытия отброшено с диагностикой (design.md, D9; §13.11) (красный)
-- [ ] 1.5 Реализовать `packages/dart/acp_testing/lib/src/in_process_acp_link.dart` и экспорт из `acp_testing` — 1.4 зелёный
+- [x] 1.1 Создать пакет `packages/dart/codelab_agent_acp` (`pubspec.yaml` с allowlist D1, `analysis_options.yaml`, вложенный `AGENTS.md`), добавить в `workspace:` корневого `pubspec.yaml`; правило `codelab_agent_acp` в `codelab_architecture_tests/test/support/rules.dart` и allowlist в `pubspec_allowlist_test.dart`; тест сторожа на временном файле с `import 'dart:io'` (workspace-architecture «Автоматический сторож границ пакетов»)
+- [x] 1.2 Тест: `packages/dart/acp_protocol/test/set_session_mode_test.dart` — `SetSessionModeRequest`/`SetSessionModeResponse` по схеме `docs/acp/protocol/12-Session Model.md`, запись в `acpMethodRegistry`, кодирование и декодирование (design.md, D2) (красный)
+- [x] 1.3 Реализовать модели и константу метода `session/set_mode` в `acp_protocol` — 1.2 зелёный
+- [x] 1.4 Тест: `packages/dart/acp_testing/test/in_process_acp_link_test.dart` — асинхронная доставка в порядке `send`, глубокая копия, не-JSON значение → `sendFailed`, буфер до `start()`, закрытие одного конца → `failed` у другого, сообщение после закрытия отброшено с диагностикой (design.md, D9; §13.11) (красный)
+- [x] 1.5 Реализовать `packages/dart/acp_testing/lib/src/in_process_acp_link.dart` и экспорт из `acp_testing` — 1.4 зелёный
 
 ## 2. Каркас соединения (4.1, 4.4)
 
-- [ ] 2.1 Тест (agent-acp-server «Правила протокольного уровня»): `test/robustness/bad_frames_test.dart` — неразбираемый JSON → `-32700` с `id: null`; не JSON-RPC → `-32600`; неизвестный метод → `-32601`; неизвестное уведомление — лог; параметры не декодируются → `-32602`; исключение обработчика → `-32603`; ответ на неизвестный id — лог `acp.frame.bad`; соединение живо после каждого (ACP-4) (красный)
-- [ ] 2.2 Тест (agent-acp-server «Соединение ACP-сервера», «initialize»): `test/initialize_test.dart` — ответ по §13.2 с `loadSession` и `sessionCapabilities.list` по `sessionPersistence`; повторный `initialize` и `session/*` до него → `-32600`; `authenticate` → `-32601`; `clientCapabilities` без поля → лог `acp.client_capabilities.absent` (красный)
-- [ ] 2.3 Реализовать `lib/src/agent_server.dart` (`AcpAgentServer`, `AcpServerConfig`, `AcpTimeouts`), `lib/src/connection/inbound_router.dart`, `outbound_queue.dart`, `pending_requests.dart`, барель `lib/codelab_agent_acp.dart` — 2.1, 2.2 зелёные
-- [ ] 2.4 Тест (agent-acp-server «session/new», «session/list»): `test/session_new_test.dart` — ответ с `modes` и `configOptions`, `available_commands_update` с пустым списком после ответа и ни одного уведомления до него (ACP-8), относительный `cwd` и несуществующий каталог при локальном листинге → `-32602`, MCP-сервер пропущен с `mcp.server.skipped`; `test/session_list_test.dart` — фильтр по `cwd`, страница, `nextCursor`, неверный `cursor` → `-32602` (красные)
-- [ ] 2.5 Реализовать `session/new` и `session/list` в `agent_server.dart` и `lib/src/session_bridge.dart`, опции `mode` и `model` в `lib/src/config_options.dart` — 2.4 зелёные
-- [ ] 2.6 Проверка итерации 1: `fvm dart run melos run check` зелёный (с новым пакетом в `guard`); документ ядра §13 правится там, где реализация уточнила контракт; PR итерации 1
+- [x] 2.1 Тест (agent-acp-server «Правила протокольного уровня»): `test/robustness/bad_frames_test.dart` — сообщения, которые доходят до сервера (сырые кадры разбирает транспорт, D12): неизвестный метод → `-32601`; неизвестное уведомление — лог; параметры не декодируются → `-32602`; исключение обработчика → `-32603`; ответ на неизвестный id — лог `acp.frame.bad`; соединение живо после каждого (ACP-4) (красный)
+- [x] 2.2 Тест (agent-acp-server «Соединение ACP-сервера», «initialize»): `test/initialize_test.dart` — ответ по §13.2 с `loadSession` и `sessionCapabilities.list` по `sessionPersistence`; повторный `initialize` и `session/*` до него → `-32600`; `authenticate` → `-32601`; `clientCapabilities` без поля → лог `acp.client_capabilities.absent` (красный)
+- [x] 2.3 Реализовать `lib/src/agent_server.dart` (`AcpAgentServer`, `AcpServerConfig`, `AcpTimeouts`), `lib/src/connection/inbound_router.dart`, `outbound_queue.dart`, `pending_requests.dart`, барель `lib/codelab_agent_acp.dart` — 2.1, 2.2 зелёные
+- [x] 2.4 Тест (agent-acp-server «session/new», «session/list»): `test/session_new_test.dart` — ответ с `modes` и `configOptions`, `available_commands_update` с пустым списком после ответа и ни одного уведомления до него (ACP-8), относительный `cwd` и несуществующий каталог при локальном листинге → `-32602`, MCP-сервер пропущен с `mcp.server.skipped`; `test/session_list_test.dart` — фильтр по `cwd`, страница, `nextCursor`, неверный `cursor` → `-32602` (красные)
+- [x] 2.5 Реализовать `session/new` и `session/list` в `agent_server.dart` и `lib/src/session_bridge.dart`, опции `mode` и `model` в `lib/src/config_options.dart` — 2.4 зелёные
+- [x] 2.6 Проверка итерации 1: `fvm dart run melos run check` зелёный (с новым пакетом в `guard`); документ ядра §13 правится там, где реализация уточнила контракт; PR итерации 1
 
 ## 3. Env и gate через клиента (4.3)
 

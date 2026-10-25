@@ -359,6 +359,9 @@ final class _Session implements AgentSession {
   ModeId get mode => _mode;
 
   @override
+  ModelRef get model => _agent.config.model;
+
+  @override
   Stream<AgentEvent> get events => Stream.multi((controller) {
     for (final event in _turn) {
       controller.add(event);
