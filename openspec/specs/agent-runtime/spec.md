@@ -24,7 +24,7 @@
 - **THEN** сборка не бросает исключения, а `CorePlan.offReasons` содержит причину для `sessionPersistence`
 
 ### Requirement: Минимальная сборка buildAgentCore
-Хост SHALL собирать ядро только через `buildAgentCore(profile, services, config, streamFunction)` (HOST-6). Функция выполняет шаги §10.7 документа ядра в объёме этапов 2 и 3 (design.md change `add-agent-core-loop-and-tools`, D12; design.md этого change, D12):
+Хост SHALL собирать ядро только через `buildAgentCore(profile, services, config, streamFunction)` (HOST-6). Функция выполняет шаги §10.7 документа ядра в объёме этапов 2–4 (design.md change `add-agent-core-loop-and-tools`, D12; design.md change `add-agent-core-sessions-and-compaction`, D12; design.md change `add-dart-agent-acp-server`, D3):
 
 1. **Сужение по сервисам и конфигурации:**
    - нет `gate` → `interactiveApproval` выключается;
@@ -40,10 +40,14 @@
    - дубликат имени → `HostWiringException` (HOST-5).
 5. **Политика разрешений** — первым звеном `beforeToolCall`, хуки хоста `extraBeforeToolCall` — последними; `extraAfterToolCall` — первыми в `afterToolCall`.
 6. **Промпт** из секций включённых capability.
-7. **`AgentRuntime`** с хранилищем `services.sessions` и настройками `CoreConfig.compaction`.
+7. **`AgentRuntime`** с хранилищем `services.sessions`, настройками `CoreConfig.compaction`, каталогом `services.models` (без каталога — каталог из одной `CoreConfig.defaultModel`) и усилием рассуждения по умолчанию `CoreConfig.effort` (`medium`).
 8. **`CorePlan`** со списком инструментов, секций промпта и причин выключения, лог `host.plan`.
 
 Выключенная capability НЕ SHALL оставлять на поверхности модели ни схемы, ни секции промпта (HOST-4).
+
+#### Scenario: Каталог по умолчанию
+- **WHEN** ядро собирается без `services.models`
+- **THEN** `AgentRuntime.models.models` содержит одну модель — `CoreConfig.defaultModel`
 
 #### Scenario: Матрица профиля
 - **WHEN** ядро собирается для `agent-serve` на `MemoryExecutionEnv` и `MemorySessionStore` с `shellExec` и `sessionPersistence`, выключенными через `narrowed`
@@ -82,11 +86,12 @@
 - **THEN** `read` исполняется без вопроса, а `edit` и `exec` проходят по одному запросу к `PermissionGate` с `rawInput` их вызовов; запрос `edit` содержит `locations` и diff
 
 ### Requirement: AgentRuntime и AgentSession
-Публичный API ядра SHALL предоставлять `AgentRuntime` и `AgentSession` (§5.6 документа ядра; состав этапа 2 — design.md change `add-agent-core-loop-and-tools`, D4; добавления этапа 3 — design.md этого change, D4, D5).
+Публичный API ядра SHALL предоставлять `AgentRuntime` и `AgentSession` (§5.6 документа ядра; состав этапа 2 — design.md change `add-agent-core-loop-and-tools`, D4; добавления этапа 3 — design.md change `add-agent-core-sessions-and-compaction`, D4, D5; добавления этапа 4 — design.md change `add-dart-agent-acp-server`, D3, D4).
 
 `AgentRuntime`:
 - `createSession(SessionSpec)` — сессия с `cwd`, режимом `ModeId`, моделью `ModelRef`, портами `SessionHostPorts` и хуками хоста; журнал создаётся в `SessionStore` и начинается записью `model_change`;
-- `loadSession(id, ports, {model})` — открытие журнала, запись синтетических результатов прерванных вызовов, транскрипт из `buildLlmContext`, режим из последней `mode_change`, план из последней `plan`; модель — из аргумента или `CoreConfig.defaultModel`, другая модель журнала даёт лог `session.model.not_restored`;
+- `loadSession(id, ports, {model, cwd})` — открытие журнала, запись синтетических результатов прерванных вызовов, транскрипт из `buildLlmContext`, режим из последней `mode_change`, план из последней `plan`, усилие рассуждения из последней `config_change` с `optionId: "effort"`; модель — из аргумента, иначе последняя `model_change` ветки, найденная в каталоге, иначе `CoreConfig.defaultModel` с логом `session.model.not_restored`; хуки хоста — `ports.extraBeforeToolCall` и `ports.extraAfterToolCall` по тому же правилу сборки, что у `createSession`; `cwd`, отличный от заголовка, — рабочая папка сессии и запись `custom` `codelab.cwd_changed` (§13.5, шаг 2);
+- `models` — каталог моделей сборки (`ModelCatalog`);
 - `listSessions({cwd, cursor, pageSize})` — страница `SessionPage` из `SessionStore.list`; неверный курсор → `InvalidCursor`;
 - `dispose()` — отменяет идущие ходы, дожидается очередей записи и закрывает потоки событий.
 
@@ -96,6 +101,9 @@
 - `prompt(content, {cancel})` — возвращает `TurnResult` с полями `TurnEnded`; ждёт завершения фонового сжатия предыдущего хода;
 - `cancel()`;
 - `setMode(ModeId)` — эмитит `ModeChanged`; новый режим действует со следующего вызова инструмента;
+- `model` и `effort` — текущая модель и усилие рассуждения;
+- `setModel(ModelId)` — модель из каталога, запись `model_change`, действует со следующего шага; модели нет в каталоге → `ArgumentError`;
+- `setEffort(ReasoningEffort)` — запись `config_change {optionId: "effort"}`, действует со следующего шага; модель без `supportsReasoning` хранит значение, но параметр рассуждения в запрос не уходит (§2.12.3);
 - `replay()` — события журнала активной ветки для `session/load`.
 
 `prompt()` SHALL очищать grants разрешений на ход до начала хода (PERM-8). Повторный `prompt()` во время хода SHALL завершаться `StateError` (LOOP-10).
@@ -120,7 +128,15 @@
 - **WHEN** сессия с двумя ходами и режимом `plan` закрывается и открывается `loadSession` в новом `AgentRuntime` над тем же хранилищем
 - **THEN** режим сессии `plan`, `replay()` отдаёт сообщения обоих ходов, а следующий `prompt` отправляет модели всю историю
 
-#### Scenario: Модель журнала не восстанавливается
-- **WHEN** журнал заканчивается `model_change` модели `a/x`, а `loadSession` вызывается без `model` при `defaultModel` `b/y`
+#### Scenario: Модель журнала восстанавливается из каталога
+- **WHEN** журнал заканчивается `model_change` модели `a/x`, модель `a/x` есть в каталоге, а `loadSession` вызывается без `model`
+- **THEN** сессия работает на `a/x`, и новой записи `model_change` нет
+
+#### Scenario: Модели журнала нет в каталоге
+- **WHEN** журнал заканчивается `model_change` модели `a/x`, её нет в каталоге, а `loadSession` вызывается без `model` при `defaultModel` `b/y`
 - **THEN** сессия работает на `b/y`, пишет лог `session.model.not_restored` и запись `model_change` модели `b/y`
+
+#### Scenario: Смена модели и усилия
+- **WHEN** сессия вызывает `setModel` с моделью каталога и `setEffort(high)`, затем `prompt`
+- **THEN** журнал содержит `model_change` и `config_change {optionId: "effort", value: "high"}`, а запрос хода идёт новой моделью с усилием `high`, если она поддерживает рассуждение
 

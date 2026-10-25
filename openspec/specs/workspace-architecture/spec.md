@@ -80,6 +80,7 @@ CodeLab SHALL проверять границы пакетов тестом `pac
 Правила пакетов:
 - **`codelab_agent_core`** НЕ SHALL импортировать `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web/`, `package:flutter/`, `package:acp_protocol/` и `package:acp_transports/`. Его `dependencies` SHALL быть подмножеством `{http, meta, collection, async, crypto}`.
 - **`codelab_agent_io`** НЕ SHALL импортировать `package:flutter/` и `package:acp_`. Его `dependencies` SHALL быть подмножеством `{codelab_agent_core, path, meta, async, yaml, yaml_edit, toml}`.
+- **`codelab_agent_acp`** НЕ SHALL импортировать `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web/`, `package:flutter/` и `package:acp_transports/io.dart` (PKG-3). Его `dependencies` SHALL быть подмножеством `{codelab_agent_core, acp_protocol, acp_transports, meta, async}`.
 - **Расширение allowlist** любого из этих множеств SHALL проходить через OpenSpec change.
 - **Клиент `apps/codelab_app`** НЕ SHALL импортировать `package:codelab_agent_*` напрямую.
 
@@ -101,5 +102,9 @@ CodeLab SHALL проверять границы пакетов тестом `pac
 
 #### Scenario: Клиент импортирует ядро напрямую
 - **WHEN** файл в `apps/codelab_app/lib/` импортирует `package:codelab_agent_core/`
+- **THEN** сторож сообщает нарушение
+
+#### Scenario: ACP-адаптер импортирует dart:io
+- **WHEN** файл в `packages/dart/codelab_agent_acp/lib/` импортирует `dart:io` или `package:acp_transports/io.dart`
 - **THEN** сторож сообщает нарушение
 
