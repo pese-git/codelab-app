@@ -341,6 +341,84 @@ void main() {
       expect(turn.updates, [hi, space, hi]);
     });
 
+    // Снимок — полное текущее значение (ACP `11-Agent Plan.md`: клиент
+    // заменяет план целиком), поэтому возврат к прежнему значению после
+    // другого — новое состояние, а не дубль.
+    for (final (name, a, b) in [
+      (
+        'plan',
+        const SessionUpdate.plan(
+          entries: [
+            PlanEntry(
+              content: 'Read file',
+              priority: PlanEntryPriority.high,
+              status: PlanEntryStatus.inProgress,
+            ),
+          ],
+        ),
+        const SessionUpdate.plan(
+          entries: [
+            PlanEntry(
+              content: 'Run tests',
+              priority: PlanEntryPriority.high,
+              status: PlanEntryStatus.inProgress,
+            ),
+          ],
+        ),
+      ),
+      (
+        'current_mode_update',
+        const SessionUpdate.currentModeUpdate(
+          currentModeId: SessionModeId('ask'),
+        ),
+        const SessionUpdate.currentModeUpdate(
+          currentModeId: SessionModeId('code'),
+        ),
+      ),
+    ]) {
+      test('applies $name returning to an earlier value', () {
+        var turn = PromptTurnStateMachine.start(_pendingTurn).stateOrThrow;
+        final results = <StateTransitionResult<PromptTurn>>[];
+        for (final update in [a, b, a]) {
+          final result = PromptTurnStateMachine.applyUpdate(turn, update);
+          results.add(result);
+          turn = result.stateOrThrow;
+        }
+
+        expect(results.last, isA<AppliedStateTransition<PromptTurn>>());
+        expect(turn.updates, [a, b, a]);
+      });
+
+      test('ignores $name repeated back to back', () {
+        var turn = PromptTurnStateMachine.start(_pendingTurn).stateOrThrow;
+        turn = PromptTurnStateMachine.applyUpdate(turn, a).stateOrThrow;
+        final repeated = PromptTurnStateMachine.applyUpdate(turn, a);
+
+        expect(repeated, isA<IgnoredStateTransition<PromptTurn>>());
+        expect(repeated.stateOrThrow.updates, [a]);
+      });
+    }
+
+    test('ignores a snapshot equal to the latest of its kind across '
+        'other kinds', () {
+      // Повтор снимка через обновления другого вида — всё ещё дубль:
+      // текущее значение этого вида не изменилось.
+      const mode = SessionUpdate.currentModeUpdate(
+        currentModeId: SessionModeId('ask'),
+      );
+      const chunk = SessionUpdate.agentMessageChunk(
+        content: ContentBlock.text(text: 'hi'),
+      );
+      var turn = PromptTurnStateMachine.start(_pendingTurn).stateOrThrow;
+      for (final update in [mode, chunk]) {
+        turn = PromptTurnStateMachine.applyUpdate(turn, update).stateOrThrow;
+      }
+      final repeated = PromptTurnStateMachine.applyUpdate(turn, mode);
+
+      expect(repeated, isA<IgnoredStateTransition<PromptTurn>>());
+      expect(repeated.stateOrThrow.updates, [mode, chunk]);
+    });
+
     test('ignores duplicate plan updates', () {
       const update = SessionUpdate.plan(
         entries: [
