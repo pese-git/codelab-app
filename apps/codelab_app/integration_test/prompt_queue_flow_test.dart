@@ -9,6 +9,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'support/e2e_agent.dart';
+
 // See stdio_connect_flow_test.dart for why the connection setup dialog and
 // the connect round trip need this specific choreography.
 Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
@@ -56,14 +58,9 @@ void main() {
           await agentDirectory.delete(recursive: true);
         }
       });
-      final agent = await writeCodelabCompatibleStdioAgent(
+      final launch = await E2eAgent.current.launch(
         agentDirectory,
         mode: CodelabCompatibleStdioAgentMode.withQueuedPromptDrain,
-      );
-
-      const dartExecutable = String.fromEnvironment(
-        'CODELAB_E2E_DART',
-        defaultValue: 'dart',
       );
 
       final shellCubit = codeLabDependenciesOf(
@@ -73,11 +70,11 @@ void main() {
       await _openConnectionSetupDialog(tester);
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Command')),
-        dartExecutable,
+        launch.command,
       );
       await tester.enterText(
         find.byKey(const ValueKey('transport-field-Args')),
-        '${agent.path} serve --stdio',
+        launch.args,
       );
       await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);

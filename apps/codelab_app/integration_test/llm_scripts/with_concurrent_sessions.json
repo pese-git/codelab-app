@@ -1,0 +1,60 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "run the test command"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "echo hello",
+                "timeout": 30
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "hello from B"
+          }
+        },
+        "reply": [
+          {
+            "text": "hello from ${sessionId}"
+          }
+        ],
+        "stopReason": "stop"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "approved: allow_once"
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  }
+}

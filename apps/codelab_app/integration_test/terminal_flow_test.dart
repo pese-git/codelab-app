@@ -9,6 +9,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'support/e2e_agent.dart';
+
 // See stdio_connect_flow_test.dart for why the connection setup dialog and
 // the connect round trip need this specific choreography.
 Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
@@ -47,15 +49,7 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
   await tester.pumpAndSettle();
 
-  final agent = await writeCodelabCompatibleStdioAgent(
-    agentDirectory,
-    mode: mode,
-  );
-
-  const dartExecutable = String.fromEnvironment(
-    'CODELAB_E2E_DART',
-    defaultValue: 'dart',
-  );
+  final launch = await E2eAgent.current.launch(agentDirectory, mode: mode);
 
   final shellCubit = codeLabDependenciesOf(
     tester.element(find.byType(CodeLabApp)),
@@ -64,11 +58,11 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   await _openConnectionSetupDialog(tester);
   await tester.enterText(
     find.byKey(const ValueKey('transport-field-Command')),
-    dartExecutable,
+    launch.command,
   );
   await tester.enterText(
     find.byKey(const ValueKey('transport-field-Args')),
-    '${agent.path} serve --stdio',
+    launch.args,
   );
   await _closeConnectionSetupDialog(tester);
   await _tapConnectAndWaitUntilSettled(tester, shellCubit);
@@ -175,6 +169,7 @@ void main() {
       await tester.pumpAndSettle();
       await closeCodeLabRootScope();
     },
+    tags: scriptedOnly,
   );
 
   testWidgets('terminal/kill terminates a real long-running process without '
@@ -208,5 +203,5 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     await closeCodeLabRootScope();
-  });
+  }, tags: scriptedOnly);
 }

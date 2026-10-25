@@ -55,12 +55,12 @@
 
 ## 7. E2E app против Dart-агента (4.9)
 
-- [ ] 7.1 Тест: `test/llm_scripts_load_test.dart` приложения — каждый файл `apps/codelab_app/integration_test/llm_scripts/*.json` загружается как сценарий `--llm-script` без ошибок (красный, пока сценариев нет)
-- [ ] 7.2 Сценарии `apps/codelab_app/integration_test/llm_scripts/<wireName>.json` по таблице контракта `09-09` (`normal`, `withConfigOptions`, `withPermissionRequest`, `withFsAccess`, `withTerminalExecution`, `withPlan`, `withQueuedPromptDrain`, `withConcurrentSessions`, `echoesCwd`) — 7.1 зелёный
-- [ ] 7.3 Помощник `apps/codelab_app/integration_test/support/e2e_agent.dart` (`E2eAgent`, `E2eLaunch`, design.md, D9); тег `scripted-only` в `apps/codelab_app/dart_test.yaml`
-- [ ] 7.4 Параметризовать 8 тестов `apps/codelab_app/integration_test/` помощником по таблице контракта: `sessionLabel`, `models`, `permissionTitle`, `rawInputMarker`, поиск опции по `id: "model"`; тег `scripted-only` у `crashMidPrompt`, `withFsPathEscape`, `withTerminalPathEscape`, `withTerminalKill`; в `permission_flow_test.dart` для `dart` — проверка команды `echo hello` в карточке (D-02) (testing-quality «Интеграционные тесты stdio»)
-- [ ] 7.5 Melos-скрипты `build:agent` и `test:e2e:app:dart-agent` в корневом `pubspec.yaml`; `apps/codelab_app/lib` в изменениях не тронут (testing-quality «Проверки workspace»)
-- [ ] 7.6 Проверка: `fvm dart analyze` корня зелёный (интеграционные тесты собираются); `fvm dart run melos run build:agent` даёт `build/bin/codelab-agent`, и он отвечает на `initialize` командой DoD `09-09`
+- [x] 7.1 Тест: `apps/codelab_agent/test/llm_scripts_load_test.dart` (не в app — сторож импортов, D9) — каждый файл `apps/codelab_app/integration_test/llm_scripts/*.json` загружается как сценарий `--llm-script` без ошибок (красный, пока сценариев нет)
+- [x] 7.2 Сценарии `apps/codelab_app/integration_test/llm_scripts/<wireName>.json` по таблице контракта `09-09` (`normal`, `withConfigOptions`, `withPermissionRequest`, `withFsAccess`, `withTerminalExecution`, `withPlan`, `withQueuedPromptDrain`, `withConcurrentSessions`, `echoesCwd`) — 7.1 зелёный
+- [x] 7.3 Помощник `apps/codelab_app/integration_test/support/e2e_agent.dart` (`E2eAgent`, `E2eLaunch`, design.md, D9); тег `scripted-only` в `apps/codelab_app/dart_test.yaml`
+- [x] 7.4 Параметризовать 8 тестов `apps/codelab_app/integration_test/` помощником по таблице контракта: `sessionLabel`, `models`, `permissionTitle`, `rawInputMarker`, поиск опции по `id: "model"`; тег `scripted-only` у `crashMidPrompt`, `withFsPathEscape`, `withTerminalPathEscape`, `withTerminalKill`; в `permission_flow_test.dart` для `dart` — проверка команды `echo hello` в карточке (D-02) (testing-quality «Интеграционные тесты stdio»)
+- [x] 7.5 Melos-скрипты `build:agent` и `test:e2e:app:dart-agent` в корневом `pubspec.yaml`; `apps/codelab_app/lib` в изменениях не тронут (testing-quality «Проверки workspace»)
+- [x] 7.6 Проверка: `fvm dart analyze` корня зелёный (интеграционные тесты собираются); `fvm dart run melos run build:agent` даёт `build/bin/codelab-agent`, и он отвечает на `initialize` командой DoD `09-09`
 
 ## 8. Zed и Definition of Done (4.10)
 

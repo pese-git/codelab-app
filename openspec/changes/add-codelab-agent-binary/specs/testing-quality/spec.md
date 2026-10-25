@@ -32,7 +32,7 @@ CodeLab SHALL тестировать stdio-интеграцию с `codelab-agen
 
 #### Scenario: Тест в режиме Dart-агента
 - **WHEN** `permission_flow_test.dart` запускается с `CODELAB_E2E_AGENT=dart`
-- **THEN** карточка одобрения показывает заголовок `Run echo hello` и команду `echo hello` из аргументов вызова
+- **THEN** карточка одобрения показывает команду `echo hello` из аргументов вызова `exec` — она же заголовок вызова
 
 #### Scenario: Тест только для scripted-агента
 - **WHEN** e2e-прогон идёт с `--exclude-tags scripted-only`
