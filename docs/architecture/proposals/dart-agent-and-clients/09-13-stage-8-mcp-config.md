@@ -39,7 +39,10 @@
    отброшенном ключе, `--print` — только печатает; `codelab.toml` не удаляется
    (agent-core-architecture §15.7; см. также §7б). Команды `codelab-agent config check` и
    `codelab config check`. Тесты: `core/config-reads-legacy-codelab-toml`,
-   `config_yaml_profile_test.dart`, `config_legacy_ignored_test.dart`.
+   `config_yaml_profile_test.dart`, `config_legacy_ignored_test.dart`. Здесь же читаются ключи
+   `redact.*` (agent-core-architecture §12.4.3, правило доверия проекту §15.3): редакция секретов
+   (P-10) работает с этапа 4 (задача 4.11) со значениями по умолчанию. Значения `SecretStore` (8.9)
+   и токены MCP-серверов (8.1) добавляются в слой `exact` через `addExactSecret`.
 6. **8.6. Инструкции проекта** (agent-core-architecture §11.5): `ProjectContextLoader` хоста
    читает через `ExecutionEnv` (граница `BoundedEnv` соблюдается) файлы от `cwd` вверх до корня
    git-репозитория (без репозитория — только `cwd`), на каждом уровне `AGENTS.md` и `CLAUDE.md`,
