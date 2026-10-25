@@ -1,4 +1,5 @@
 import '../env/execution_env.dart';
+import '../llm/model_catalog.dart';
 import '../llm/model_ref.dart';
 import '../loop/turn_budget.dart';
 import '../permissions/gate.dart';
@@ -25,6 +26,7 @@ final class AgentCoreServices {
     required this.sessions,
     this.gate,
     this.platform = 'unknown',
+    this.models,
   });
 
   /// Local | ACP client | memory (tests).
@@ -47,6 +49,12 @@ final class AgentCoreServices {
   /// пути её ждут (§11.5). Хост на `dart:io` передаёт
   /// `Platform.operatingSystem`.
   final String platform;
+
+  /// Каталог моделей для опции `model` и смены модели сессии (§2.12.2,
+  /// §13.6). `null` — каталог из одной `CoreConfig.defaultModel`: тесты и
+  /// хосты без конфига провайдеров (design.md change
+  /// `add-dart-agent-acp-server`, D3).
+  final ModelCatalog? models;
 }
 
 /// The permissions part of the configuration.
@@ -81,9 +89,14 @@ final class CoreConfig {
     this.permissions = const PermissionsConfig(),
     this.budget = const TurnBudget(),
     this.compaction = const CompactionOverrides(),
+    this.effort = ReasoningEffort.medium,
   });
 
   final ModelRef defaultModel;
+
+  /// Уровень рассуждения новой сессии (`agent.effort`, §2.12.3, §15.4);
+  /// доходит до запроса только у модели с рассуждением.
+  final ReasoningEffort effort;
   final PermissionsConfig permissions;
   final TurnBudget budget;
 

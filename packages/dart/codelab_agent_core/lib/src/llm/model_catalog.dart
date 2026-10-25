@@ -270,3 +270,65 @@ final class _Fields {
   final ThinkingMode thinkingMode;
   final Map<String, ModelInfoSource> provenance;
 }
+
+/// Каталог из готовых [ModelRef]: модели известны хосту целиком.
+///
+/// Почему: ядру без каталога нужен список из одной `CoreConfig.defaultModel`
+/// (тесты, хосты без конфига провайдеров, design.md change
+/// `add-dart-agent-acp-server`, D3), а тестам опций — несколько моделей с
+/// рассуждением и без. Разрешать метаданные здесь нечего: они уже в ссылках.
+///
+/// Как использовать: `FixedModelCatalog([model])`; [resolve] отдаёт ссылку с
+/// уровнем рассуждения только у модели с `supportsReasoning` (§2.12.3).
+final class FixedModelCatalog implements ModelCatalog {
+  FixedModelCatalog(List<ModelRef> models)
+    : _refs = {
+        for (final model in models)
+          ModelId('${model.provider}/${model.id}'): model,
+      } {
+    _models = List.unmodifiable([
+      for (final MapEntry(key: id, value: model) in _refs.entries)
+        ModelEntry(
+          id: id,
+          name: model.id,
+          fromConfig: false,
+          provenance: const {},
+        ),
+    ]);
+  }
+
+  final Map<ModelId, ModelRef> _refs;
+  late final List<ModelEntry> _models;
+
+  @override
+  List<ModelEntry> get models => _models;
+
+  @override
+  Stream<void> get changes => const Stream.empty();
+
+  @override
+  Future<void> refresh({bool force = false}) async {}
+
+  @override
+  ModelRef? resolve(ModelId id, {ReasoningEffort? effort}) {
+    final model = _refs[id];
+    if (model == null) {
+      return null;
+    }
+    return ModelRef(
+      provider: model.provider,
+      id: model.id,
+      api: model.api,
+      baseUrl: model.baseUrl,
+      contextWindow: model.contextWindow,
+      maxOutputTokens: model.maxOutputTokens,
+      cost: model.cost,
+      supportsImages: model.supportsImages,
+      supportsReasoning: model.supportsReasoning,
+      reasoningEffort: model.supportsReasoning ? effort : null,
+      hiddenReasoning: model.hiddenReasoning,
+      thinkingMode: model.thinkingMode,
+      supportsTools: model.supportsTools,
+    );
+  }
+}

@@ -8,7 +8,8 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// поэтому его сборка — одна функция, а не копии в обработчиках.
 ///
 /// Как использовать: [sessionModes] и [sessionConfigOptions] строят
-/// значения `modes` и `configOptions` по текущему состоянию сессии.
+/// значения `modes` и `configOptions` по текущему состоянию сессии;
+/// [parseModeId] и [parseEffort] разбирают значения клиента.
 
 /// Режим сессии на проводе: id, имя и описание для клиента. Тексты видит
 /// пользователь в селекторе клиента, поэтому они английские (§11.7).
@@ -59,13 +60,42 @@ acp.SessionModeState sessionModes(AgentSession session) => acp.SessionModeState(
   ],
 );
 
-/// `configOptions` в порядке важности: `mode`, затем `model` (§13.6).
+/// Устаревшие id режимов: принимаются на входе, наружу не уходят (§13.6).
+const _modeSynonyms = {
+  'architect': ModeId.plan,
+  'debug': ModeId.standard,
+  'acceptEdits': ModeId.acceptEdits,
+  'code': ModeId.bypass,
+};
+
+/// Режим по id клиента или его синониму; `null` — значения нет в списке.
+ModeId? parseModeId(String value) =>
+    ModeId.values.where((mode) => mode.value == value).firstOrNull ??
+    _modeSynonyms[value];
+
+/// Уровень рассуждения по значению опции `effort`; `null` — значения нет.
+ReasoningEffort? parseEffort(String value) =>
+    ReasoningEffort.values.where((e) => e.name == value).firstOrNull;
+
+/// Имена уровней в селекторе клиента (§13.6).
+const _effortNames = {
+  ReasoningEffort.low: 'Low',
+  ReasoningEffort.medium: 'Medium',
+  ReasoningEffort.high: 'High',
+};
+
+/// `configOptions` в порядке важности: `mode`, `model`, `effort` (§13.6).
 ///
-/// Список моделей — модель сессии: каталог моделей подключается в
-/// итерации 3 (design.md, D3).
-List<acp.SessionConfigOption> sessionConfigOptions(AgentSession session) {
+/// `model` — модели каталога [catalog]; модель сессии вне каталога (её
+/// задал хост) идёт первой, чтобы текущее значение было среди вариантов.
+/// `effort` — только у модели с `supportsReasoning` (ACP-10).
+List<acp.SessionConfigOption> sessionConfigOptions(
+  AgentSession session,
+  ModelCatalog catalog,
+) {
   final model = session.model;
   final modelValue = '${model.provider}/${model.id}';
+  final entries = catalog.models;
   return [
     acp.SessionConfigOption.select(
       id: const acp.SessionConfigId('mode'),
@@ -86,11 +116,31 @@ List<acp.SessionConfigOption> sessionConfigOptions(AgentSession session) {
       category: 'model',
       currentValue: acp.SessionConfigValueId(modelValue),
       options: [
-        acp.SessionConfigSelectOption(
-          value: acp.SessionConfigValueId(modelValue),
-          name: model.id,
-        ),
+        if (!entries.any((entry) => entry.id.value == modelValue))
+          acp.SessionConfigSelectOption(
+            value: acp.SessionConfigValueId(modelValue),
+            name: model.id,
+          ),
+        for (final entry in entries)
+          acp.SessionConfigSelectOption(
+            value: acp.SessionConfigValueId(entry.id.value),
+            name: entry.name,
+          ),
       ],
     ),
+    if (model.supportsReasoning)
+      acp.SessionConfigOption.select(
+        id: const acp.SessionConfigId('effort'),
+        name: 'Reasoning effort',
+        category: 'thought_level',
+        currentValue: acp.SessionConfigValueId(session.effort.name),
+        options: [
+          for (final MapEntry(key: effort, value: name) in _effortNames.entries)
+            acp.SessionConfigSelectOption(
+              value: acp.SessionConfigValueId(effort.name),
+              name: name,
+            ),
+        ],
+      ),
   ];
 }

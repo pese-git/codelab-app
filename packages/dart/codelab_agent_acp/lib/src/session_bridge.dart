@@ -5,7 +5,10 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'acp_client_env.dart';
 import 'config_options.dart';
+import 'connection/acp_error.dart';
+import 'connection/client_requests.dart';
 import 'event_projection.dart';
+import 'replay.dart';
 
 /// Куда мост ставит уведомления сессии: очередь соединения-владельца.
 typedef SessionUpdateSink = void Function(acp.SessionNotification update);
@@ -14,28 +17,42 @@ typedef SessionUpdateSink = void Function(acp.SessionNotification update);
 ///
 /// Почему отдельный объект: у сессии ACP есть состояние, которого нет в
 /// ядре, — соединение-владелец, идущий `session/prompt`, флаг отмены,
-/// подписка проекции. Сервер хранит мосты по `sessionId`, чтобы
-/// переподключение нашло сессию из другого соединения (§13.5, шаг 3b).
+/// подписка проекции, отсоединение. Сервер хранит мосты по `sessionId`,
+/// чтобы новое соединение нашло сессию и продолжило её (§13.5, шаг 3).
 ///
 /// Для чего: проецирует каждое событие сессии в [sink] в порядке событий
 /// ядра; [prompt] запускает ход в фоне и завершается ответом по
 /// `TurnEnded` — после всех уведомлений хода (ACP-3); [cancel] отменяет ход
-/// и ожидания клиента.
+/// и ожидания клиента; [detach], [reattach] и [resume] — отсоединение и
+/// переподключение по D7.
 ///
 /// Как использовать: соединение создаёт мост до сессии, передаёт
-/// [markInProgress] в `SessionSpec.extraBeforeToolCall`, затем вызывает
-/// [attach] с созданной сессией. Ход и отмена идут через мост; [close]
+/// [markInProgress] в хуки сессии, затем вызывает [attach] с созданной или
+/// загруженной сессией. Ход, опции и отмена идут через мост; [close]
 /// закрывает сессию.
 final class SessionBridge {
   SessionBridge({
+    required this.owner,
     required this.sink,
+    required ClientLink link,
+    required ModelCatalog catalog,
+    required Clock clock,
     required Logger logger,
     AcpClientExecutionEnv? clientEnv,
-  }) : _logger = logger,
+  }) : _link = link,
+       _catalog = catalog,
+       _clock = clock,
+       _logger = logger,
        _clientEnv = clientEnv;
+
+  /// Соединение-владелец: его запросы и его очередь получают кадры сессии.
+  Object owner;
 
   /// Очередь соединения-владельца; меняется при переподключении.
   SessionUpdateSink sink;
+  final ClientLink _link;
+  final ModelCatalog _catalog;
+  final Clock _clock;
   final Logger _logger;
 
   /// Env через клиента: его `fs/*` прекращаются при отмене хода.
@@ -50,6 +67,26 @@ final class SessionBridge {
   AgentError? _failure;
   var _cancelRequested = false;
 
+  /// Соединение закрыто, сессия ждёт переподключения (D7).
+  var _detached = false;
+  ClockTimer? _grace;
+
+  /// Ожидающие разрешения ждут переподключения; [resume] их отпускает.
+  Completer<void>? _reconnected;
+
+  /// Ход пережил переподключение: его итог уходит новому соединению
+  /// `session_info_update` (§13.5, шаг 9).
+  var _turnMoved = false;
+
+  /// Смена режима по запросу клиента: `config_option_update` не
+  /// дублирует ответ (ACP-11); завершается, когда `current_mode_update`
+  /// поставлен в очередь.
+  Completer<void>? _clientModeChange;
+
+  /// Заметка о смене на модель без рассуждения: первым
+  /// `agent_message_chunk` следующего хода (§2.12.3).
+  String? _effortNote;
+
   /// Вызовы, о которых клиент уже знает (`tool_call` ушёл).
   final _announced = <String>{};
 
@@ -58,12 +95,19 @@ final class SessionBridge {
 
   bool get turnActive => _turn != null;
 
+  /// Соединение-владелец закрыто, а сессия ещё не переподключена.
+  bool get detached => _detached;
+
   /// Подключает созданную или загруженную сессию и начинает проекцию.
   void attach(AgentSession session) {
     this.session = session;
     _id = acp.SessionId(session.id.value);
     _events = session.events.listen(_onEvent);
   }
+
+  /// Текущий снимок `configOptions` (§13.6).
+  List<acp.SessionConfigOption> get configOptions =>
+      sessionConfigOptions(session, _catalog);
 
   /// Хук `beforeToolCall` последним в цепочке (§10.7): вызов прошёл
   /// разрешения и хуки — клиент получает `in_progress` (§13.7).
@@ -90,6 +134,15 @@ final class SessionBridge {
     final turn = _turn = Completer<TurnEnded>();
     _failure = null;
     _cancelRequested = false;
+    _turnMoved = false;
+    if (_effortNote case final note?) {
+      _effortNote = null;
+      _send(
+        acp.SessionUpdate.agentMessageChunk(
+          content: acp.ContentBlock.text(text: note),
+        ),
+      );
+    }
     // Ход идёт в фоне: обработчик ждёт TurnEnded, а не возврата prompt, —
     // ответ должен встать в очередь после последнего уведомления хода.
     unawaited(
@@ -123,6 +176,14 @@ final class SessionBridge {
     }
   }
 
+  /// Завершается вместе с идущим ходом; без хода — сразу.
+  Future<void> get idle async {
+    final turn = _turn;
+    if (turn != null) {
+      await turn.future.then<void>((_) {}, onError: (Object _) {});
+    }
+  }
+
   /// `session/cancel` (§13.7): токен хода, ожидающие разрешения (через
   /// токен), `fs/*` и терминалы. `false` — хода нет.
   bool cancel() {
@@ -135,9 +196,143 @@ final class SessionBridge {
     return true;
   }
 
+  /// Режим по запросу клиента: `current_mode_update` без дублирующего
+  /// `config_option_update` (§13.6, шаг 4); возвращается, когда уведомление
+  /// уже в очереди — ответ встанет после него.
+  Future<void> setMode(ModeId mode) async {
+    final echoed = _clientModeChange = Completer<void>();
+    await session.setMode(mode);
+    await echoed.future;
+  }
+
+  /// Модель по запросу клиента; смена на модель без рассуждения оставляет
+  /// заметку для следующего хода (§2.12.3).
+  Future<void> setModel(ModelId id) async {
+    final before = session.model;
+    await session.setModel(id);
+    final after = session.model;
+    if (before.supportsReasoning && !after.supportsReasoning) {
+      _effortNote =
+          'Reasoning effort is not supported by '
+          '${after.provider}/${after.id}; the setting is kept and applies '
+          'again after switching to a model with reasoning.';
+    } else if (after.supportsReasoning) {
+      _effortNote = null;
+    }
+  }
+
+  /// Кадры `session/load` до ответа: история и хвост (§13.5, шаги 5–6).
+  List<acp.SessionUpdate> replay() {
+    final events = session.replay().toList();
+    final plan = events.whereType<PlanUpdated>().lastOrNull;
+    final title = events.whereType<SessionTitleChanged>().lastOrNull;
+    return [
+      ...replayUpdates(events),
+      if (plan != null)
+        ...projectEvent(plan, configOptions: () => configOptions),
+      acp.SessionUpdate.currentModeUpdate(
+        currentModeId: acp.SessionModeId(session.mode.value),
+      ),
+      acp.SessionUpdate.configOptionUpdate(configOptions: configOptions),
+      // Встроенных slash-команд на этапе 4 нет (§13.4, шаг 6).
+      const acp.SessionUpdate.availableCommandsUpdate(availableCommands: []),
+      if (title != null)
+        acp.SessionUpdate.sessionInfoUpdate(
+          title: title.title,
+          updatedAt: formatJournalTime(title.updatedAt),
+        ),
+    ];
+  }
+
+  /// Соединение-владелец закрыто (§13.10, «Отсоединение»): кадры больше
+  /// некуда отправлять, ход ждёт переподключения [grace], затем
+  /// отменяется. Без хода сессия просто ждёт следующего `session/load`.
+  void detach(Duration grace) {
+    _detached = true;
+    // События остаются в журнале, реплей отдаст их новому соединению.
+    sink = (_) {};
+    if (_turn == null) {
+      return;
+    }
+    _logger.log(
+      LogLevel.info,
+      'acp.session.detached',
+      fields: {'session_id': _id.value, 'grace_ms': grace.inMilliseconds},
+    );
+    if (grace == Duration.zero) {
+      _expire();
+      return;
+    }
+    _grace = _clock.timer(grace, _expire);
+  }
+
+  /// Новое соединение загружает сессию (§13.5, шаг 3): запросы, очередь и
+  /// возможности клиента — его. Возвращает `true`, если это
+  /// переподключение идущего хода.
+  bool reattach({
+    required Object owner,
+    required ClientRequests requests,
+    required acp.ClientCapabilities capabilities,
+    required SessionUpdateSink sink,
+  }) {
+    final moved = _detached && _turn != null;
+    _grace?.cancel();
+    _grace = null;
+    _detached = false;
+    this.owner = owner;
+    this.sink = sink;
+    _link
+      ..requests = requests
+      ..capabilities = capabilities;
+    if (moved) {
+      _turnMoved = true;
+      _logger.log(
+        LogLevel.info,
+        'acp.session.reconnected',
+        fields: {'session_id': _id.value},
+      );
+    }
+    return moved;
+  }
+
+  /// После ответа `session/load`: ожидающие разрешения уходят новому
+  /// соединению с новым id и тем же `toolCallId` (§13.5, шаг 8; PERM-4).
+  void resume() {
+    final reconnected = _reconnected;
+    _reconnected = null;
+    reconnected?.complete();
+  }
+
+  /// Для `AcpPermissionGate`: соединение пропало во время вопроса. `true` —
+  /// сессию переподключили, вопрос задаётся заново; `false` — ход
+  /// отменён (grace истёк) или ждать нечего.
+  Future<bool> waitForReconnect(CancelToken cancel) async {
+    if (!_detached || cancel.isCancelled) {
+      return false;
+    }
+    final reconnected = _reconnected ??= Completer<void>();
+    return Future.any([
+      reconnected.future.then((_) => true),
+      cancel.onCancel.then((_) => false),
+    ]);
+  }
+
   Future<void> close() async {
+    _grace?.cancel();
     await session.close();
     await _events?.cancel();
+  }
+
+  void _expire() {
+    if (!_detached) {
+      return;
+    }
+    _logger.log(
+      LogLevel.info,
+      'acp.session.grace_expired',
+      fields: {'session_id': _id.value},
+    );
+    cancel();
   }
 
   void _onEvent(AgentEvent event) {
@@ -148,13 +343,22 @@ final class SessionBridge {
         _announced.add(toolCallId);
       case _:
     }
+    final echo = _clientModeChange;
     for (final update in projectEvent(
       event,
-      configOptions: () => sessionConfigOptions(session),
+      configOptions: () => configOptions,
     )) {
+      if (event is ModeChanged &&
+          echo != null &&
+          update is acp.ConfigOptionUpdate) {
+        continue;
+      }
       _send(update);
     }
     switch (event) {
+      case ModeChanged() when echo != null:
+        _clientModeChange = null;
+        echo.complete();
       case ToolCallStarted(:final toolCallId)
           when _earlyInProgress.remove(toolCallId):
         _send(inProgressUpdate(toolCallId));
@@ -163,12 +367,37 @@ final class SessionBridge {
       case TurnEnded():
         _announced.clear();
         _earlyInProgress.clear();
+        if (_turnMoved) {
+          _turnMoved = false;
+          _send(_turnEndedInfo(event));
+        }
         final turn = _turn;
         if (turn != null && !turn.isCompleted) {
           turn.complete(event);
         }
       case _:
     }
+  }
+
+  /// Итог хода, чей `session/prompt` остался у закрытого соединения
+  /// (§13.5, шаг 9; расширение `_meta.codelab.turnEnded`, D10).
+  acp.SessionUpdate _turnEndedInfo(TurnEnded event) {
+    Map<String, Object?> ended;
+    try {
+      final response = turnResponse(
+        event,
+        failure: _failure,
+        cancelRequested: _cancelRequested,
+      );
+      ended = {'stopReason': response.stopReason.wireName};
+    } on AcpRequestError catch (error) {
+      ended = {'error': (error.data! as Map<String, Object?>)['codelab']};
+    }
+    return acp.SessionUpdate.sessionInfoUpdate(
+      meta: {
+        'codelab': {'turnEnded': ended},
+      },
+    );
   }
 
   void _send(acp.SessionUpdate update) =>

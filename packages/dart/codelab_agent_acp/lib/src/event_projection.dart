@@ -186,7 +186,33 @@ const _retryable = {
   LlmErrorClass.server,
 };
 
-acp.SessionUpdate _finished(ToolCallFinished event) {
+acp.SessionUpdate _finished(ToolCallFinished event) =>
+    acp.SessionUpdate.toolCallUpdate(
+      toolCallUpdate: acp.ToolCallUpdate(
+        toolCallId: acp.ToolCallId(event.toolCallId),
+        status: finishedStatus(event),
+        content: finishedContent(event),
+        meta: finishedMeta(event),
+      ),
+    );
+
+/// Итоговый статус вызова: в ACP нет `cancelled` и `rejected`, поэтому
+/// всё, кроме исполненного вызова, — `failed` (§13.7).
+acp.ToolCallStatus finishedStatus(ToolCallFinished event) =>
+    event.outcome == ToolOutcome.completed && !event.interrupted
+    ? acp.ToolCallStatus.completed
+    : acp.ToolCallStatus.failed;
+
+/// Контент результата и по одному `diff` на каждый изменённый файл.
+List<acp.ToolCallContent> finishedContent(ToolCallFinished event) => [
+  for (final block in event.content)
+    acp.ToolCallContent.content(content: acpContent(block)),
+  for (final diff in event.diffs) acpDiff(diff),
+];
+
+/// `_meta.codelab.outcome` — исход, которого нет в статусах ACP (D10);
+/// `null` — исход передаёт сам статус.
+Map<String, Object?>? finishedMeta(ToolCallFinished event) {
   final outcome = event.interrupted
       ? 'interrupted'
       : switch (event.outcome) {
@@ -194,25 +220,11 @@ acp.SessionUpdate _finished(ToolCallFinished event) {
           ToolOutcome.cancelled => 'cancelled',
           ToolOutcome.rejected => 'rejected',
         };
-  return acp.SessionUpdate.toolCallUpdate(
-    toolCallUpdate: acp.ToolCallUpdate(
-      toolCallId: acp.ToolCallId(event.toolCallId),
-      // В ACP нет cancelled и rejected: исход уточняет расширение (D10).
-      status: event.outcome == ToolOutcome.completed && !event.interrupted
-          ? acp.ToolCallStatus.completed
-          : acp.ToolCallStatus.failed,
-      content: [
-        for (final block in event.content)
-          acp.ToolCallContent.content(content: acpContent(block)),
-        for (final diff in event.diffs) acpDiff(diff),
-      ],
-      meta: outcome == null
-          ? null
-          : {
-              'codelab': {'outcome': outcome},
-            },
-    ),
-  );
+  return outcome == null
+      ? null
+      : {
+          'codelab': {'outcome': outcome},
+        };
 }
 
 acp.ToolCallContent _toolContent(ToolCallContent item) => switch (item) {

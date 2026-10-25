@@ -495,8 +495,11 @@ abstract interface class AgentRuntime {
   Future<AgentSession> createSession(SessionSpec spec);   // cwd, mode, model, mcpServers, ports, extraBeforeToolCall, extraAfterToolCall
   /// После MVP режим открытия mode (§17.6.8): занятая другим процессом сессия при
   /// OpenMode.write → SessionLockedException(owner).
+  /// cwd — рабочая папка клиента; отличается от заголовка → запись custom
+  /// codelab.cwd_changed (§13.5, шаг 2). Модель — из журнала через каталог (§2.12.2).
   Future<AgentSession> loadSession(SessionId id, SessionHostPorts ports,
-      {OpenMode mode = OpenMode.write});
+      {ModelRef? model, String? cwd, OpenMode mode = OpenMode.write});
+  ModelCatalog get models;                            // каталог сборки; без services.models — одна defaultModel
   /// Страница сводок с курсором: ACP session/list пагинирует (design.md change
   /// add-agent-core-sessions-and-compaction, D5); неверный курсор — InvalidCursor.
   Future<SessionPage> listSessions({String? cwd, String? cursor, int pageSize = 50});
