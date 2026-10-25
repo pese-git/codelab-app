@@ -223,6 +223,17 @@ Contract test (4.7) и агентский драйвер (4.8) нужны оба
 
 Вне этого change: R-12 и R-13 (`acp/ws-auth-bearer-required`, `acp/stdio-framing-large-line`) — `add-codelab-agent-binary`; R-02 с MCP (`acp/session-new-with-mcp`) — этап 8; D-01 и D-02 — тесты codelab-app против бинаря.
 
+### D16. Известные отклонения от ACP после этапа 4
+
+Сверка `AcpAgentServer` с `docs/acp/protocol/` после итерации 4. Методы клиент → агент, все виды `session/update`, `stopReason`, статусы вызова, запросы `fs/*` и `terminal/*` реализованы по спецификации. Расхождений два, оба — решения, а не пропуски; таблица — в §13.15 документа ядра:
+
+- **MCP по stdio (MUST в `03-Session Setup.md`).** До этапа 8 серверы из `mcpServers` пропускаются с логом `mcp.server.skipped` (D12: `mcpCapabilities.http: false`). В профиле `mobile` stdio пропускается и после этапа 8.
+- **Только POSIX-пути.** `cwd` вида `C:\…` получает `-32602`: ядро в MVP работает только с POSIX-путями (§4.4, §4.7 документа ядра). Принять такой `cwd` только в `session/new` нельзя — граница рабочей папки, пути `fs/*` и `terminal/*`, `diff` и `locations` считаются по правилам POSIX. Перевод путей на границе ACP — открытый вопрос §16.3 до поддержки Windows-хоста.
+
+Не отклонение, но записано в §13.15: сбой аутентификации провайдера — `-32603` с `errorClass: "auth"`, а не `auth_required` (`-32000`): `authMethods` пуст, и `authenticate` клиенту предложить нечего (§13.3).
+
+Пропуски, которые ACP разрешает: пустой `available_commands_update` (slash-команды не входят в change, proposal «Не входит»), нет `rawOutput` у вызовов, `audio: false`, бинарный ресурс и `resource_link` в промпте доходят до модели пометкой (§13.4).
+
 ## Risks / Trade-offs
 
 - **[Неверное прочтение спецификации закрепляется фикстурами]** → у каждой фикстуры ссылка `spec` на раздел `docs/acp/protocol/` (FIX-1); клиентский прогон тех же фикстур против `AcpClientApplication` показывает расхождение агента и клиента; ручная проверка с Zed — в `add-codelab-agent-binary`.
