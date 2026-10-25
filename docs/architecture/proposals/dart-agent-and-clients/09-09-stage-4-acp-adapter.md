@@ -105,25 +105,6 @@
    помощником и не содержат захардкоженных ожиданий scripted-агента.
 10. **4.10. Ручная проверка с Zed:** подключение, промпт, инструменты, одобрение, отмена,
     `session/load`; результат — чек-лист в `design.md` change.
-11. **4.11. Редакция секретов в ядре** (P-10, Should; перенесена с этапа 3). На этом этапе
-    `codelab-agent serve` впервые пишет журнал `JsonlSessionStore` в `$CODELAB_HOME/sessions` с
-    настоящим ключом провайдера, поэтому вывод инструментов (`exec env`, `read .env`) не должен
-    попадать в журнал и к провайдеру сырым. Состав:
-    * `Redactor` в `codelab_agent_core` с послойным алгоритмом agent-core-architecture §12.4.1:
-      слои `exact`, `credential_files`, `formats`, `pem`, `connection_strings`, `key_values`;
-      `entropy` выключен; белый список `git_sha`, `uuid`; идемпотентность и сохранение числа строк;
-    * признак `AgentTool.redactResult` — `false` у `write` и `edit` (§6.2);
-    * точки применения §12.4.2 — `userInput`, `toolResult`, `providerRequest`, `journal`, `log`;
-      метод `addExactSecret`;
-    * источники точных секретов этапа 4 — переменные окружения по шаблону имён §12.4 и ключ из
-      `CODELAB_API_KEY`.
-
-    Не входят: ключи `redact.*` (YAML-конфиг — задача 8.5; до неё действуют значения по умолчанию
-    §12.4.3), значения `SecretStore` и токены MCP (задачи 8.9 и 8.1), команда `/redact` (после
-    MVP, §13.4). Задача не зависит от ACP и идёт первой в этапе или параллельно с 4.1. Тесты:
-    `core/redaction-before-journal`, `core/redaction-preserves-line-count`,
-    `core/redaction-write-results-exempt`. После неё — change `add-agent-core-output-spill`
-    (задача 3.8 этапа 3, SPL-3).
 
 **Контракт e2e app с Dart-агентом (задача 4.9).**
 
@@ -198,13 +179,10 @@ final class E2eLaunch {
 поверх клиента, `session/set_mode`, команда в `terminal/create`), не переоткрываются: `design.md`
 ссылается на решения. `add-codelab-agent-binary` (задачи 4.5–4.6, 4.9; scope: CLI агента,
 минимальный конфиг из флагов и `--llm-script`, серверные транспорты, токен WebSocket, контракт
-e2e app). `add-agent-core-secret-redaction` (задача 4.11; scope: слои и точки применения
-редакции, `AgentTool.redactResult`, источники точных секретов этапа 4; без расширения ACP и без
-ключей конфигурации). `tasks.md` — пары «тест → реализация» со ссылкой на критерий (§9.0,
-правило 3).
+e2e app). `tasks.md` — пары «тест → реализация» со ссылкой на критерий (§9.0, правило 3).
 
 **Что прочитать.** Документ ядра §13, §10 (профиль `agent-serve`), §7 (`AcpPermissionGate`),
-§12.4 (редакция, задача 4.11), §14; `docs/acp/protocol/05-Prompt Turn.md`, `08-Tool Calls.md`, `09-File System.md`,
+§14; `docs/acp/protocol/05-Prompt Turn.md`, `08-Tool Calls.md`, `09-File System.md`,
 `10-Terminal.md`, `12-Session Model.md`; `docs/architecture/acp-boundary.md`.
 
 **Definition of Done.**
@@ -222,9 +200,6 @@ e2e app). `add-agent-core-secret-redaction` (задача 4.11; scope: слои 
   `release/<version>` (`AGENTS.md` §21).
 * `serve_flags_test.dart` (задача 4.6): ключ из `CODELAB_API_KEY` не попадает в лог, `--provider`
   вместе с `--llm-script` — ошибка использования.
-* Задача 4.11 (Should, DoD этапа не блокирует): `core/redaction-before-journal`,
-  `core/redaction-preserves-line-count`, `core/redaction-write-results-exempt` зелёные; журнал
-  сессии с выводом `exec env` и `read .env` не содержит значений секретов.
 * Чек-лист Zed заполнен.
 
 **Зависимости.** Этап 3. Исключение — срез P0 ([дорожная карта](../delivery-roadmap.md)): урезанный
