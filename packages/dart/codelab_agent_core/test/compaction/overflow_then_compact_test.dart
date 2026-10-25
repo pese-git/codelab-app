@@ -25,39 +25,42 @@ void main() {
     steps: steps,
   );
 
-  test('overflow → compaction → the step succeeds', () async {
-    final h = harness([
-      textStep('a' * 8000),
-      overflow,
-      textStep('## Open user requests\n- second task'),
-      textStep('Done.'),
-    ]);
-    final session = await h.core.runtime.createSession(
-      SessionSpec(cwd: '/proj'),
-    );
-    await session.prompt(const [TextContent('first task')]);
-    final events = <AgentEvent>[];
-    session.events.listen(events.add);
+  test(
+    'core/overflow-triggers-compaction: overflow → compaction → retry',
+    () async {
+      final h = harness([
+        textStep('a' * 8000),
+        overflow,
+        textStep('## Open user requests\n- second task'),
+        textStep('Done.'),
+      ]);
+      final session = await h.core.runtime.createSession(
+        SessionSpec(cwd: '/proj'),
+      );
+      final events = <AgentEvent>[];
+      session.events.listen(events.add);
+      await session.prompt(const [TextContent('first task')]);
 
-    final result = await session.prompt(const [TextContent('second task')]);
+      final result = await session.prompt(const [TextContent('second task')]);
 
-    expect(result.reason, TurnEndReason.completed);
-    h.model.verify();
-    final summaryRequest = h.model.requests[2];
-    expect(summaryRequest.tools, isEmpty);
-    expect(summaryRequest.cacheKey, '${session.id.value}:summary');
-    final retry = h.model.requests[3];
-    final first = retry.messages.first as UserMessage;
-    expect(
-      (first.content.single as TextContent).text,
-      contains('- second task'),
-    );
-    expect(events.whereType<ContextCompacted>(), hasLength(1));
-    expect(events.whereType<AgentError>(), isEmpty);
-    final snapshot = await h.sessions.open(session.id);
-    expect(snapshot.records.whereType<CompactionRecord>(), hasLength(1));
-    await h.core.runtime.dispose();
-  });
+      expect(result.reason, TurnEndReason.completed);
+      h.model.verify();
+      final summaryRequest = h.model.requests[2];
+      expect(summaryRequest.tools, isEmpty);
+      expect(summaryRequest.cacheKey, '${session.id.value}:summary');
+      final retry = h.model.requests[3];
+      final first = retry.messages.first as UserMessage;
+      expect(
+        (first.content.single as TextContent).text,
+        contains('- second task'),
+      );
+      expect(events.whereType<ContextCompacted>(), hasLength(1));
+      expect(events.whereType<AgentError>(), isEmpty);
+      final snapshot = await h.sessions.open(session.id);
+      expect(snapshot.records.whereType<CompactionRecord>(), hasLength(1));
+      await h.core.runtime.dispose();
+    },
+  );
 
   test('compaction off in the config: overflow fails the turn', () async {
     final h = harness([textStep('a' * 8000), overflow], enabled: false);

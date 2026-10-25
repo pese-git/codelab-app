@@ -51,6 +51,27 @@ typedef PrepareNextStepHook = Future<StepUpdate?> Function(StepResult step);
 typedef BeforeFinalResponseHook =
     Future<ResponseVerdict> Function(AssistantMessage message, TurnInfo turn);
 
+/// Оценка размера payload запроса в токенах (§9.3); цикл кладёт её в
+/// `ModelRequested.estimatedTokens` и сравнивает с окном перед запросом.
+typedef EstimateTokens = int Function(LlmContext context);
+
+/// Что вызвало аварийное сжатие (§9.5).
+enum EmergencyCause {
+  /// Оценка payload больше окна — до обращения к провайдеру.
+  preflight,
+
+  /// Провайдер ответил `errorClass: overflow`.
+  overflow,
+}
+
+/// Аварийное сжатие внутри хода (§5.2, шаг 4; §5.4, шаг 14a).
+///
+/// Возвращает новый контекст шага — сообщения проекции журнала после
+/// сжатия — или `null`, если сжать нечего или сжатие не удалось. Цикл
+/// вызывает его не больше одного раза за ход (CMP-8).
+typedef EmergencyCompact =
+    Future<LoopContext?> Function(EmergencyCause cause, CancelToken cancel);
+
 final class Block {
   const Block(this.reason, {this.outcome = ToolOutcome.rejected});
 
@@ -234,6 +255,9 @@ final class AgentLoopConfig {
     this.followUp,
     this.approvalWait,
     this.logger,
+    this.estimateTokens,
+    this.emergencyCompact,
+    this.contextWindowCap,
   }) : beforeToolCall = List.unmodifiable(beforeToolCall),
        afterToolCall = List.unmodifiable(afterToolCall);
 
@@ -276,6 +300,19 @@ final class AgentLoopConfig {
   /// Логи цикла (`loop.empty_response` и др., §5.4.1); `null` — без логов.
   final Logger? logger;
 
+  /// Оценка payload (§9.3); `null` — размер не проверяется, а
+  /// `ModelRequested.estimatedTokens` равен 0 (поведение этапа 2).
+  final EstimateTokens? estimateTokens;
+
+  /// Аварийное сжатие (design.md change
+  /// `add-agent-core-sessions-and-compaction`, D8); `null` — `overflow`
+  /// остаётся обычной ошибкой шага.
+  final EmergencyCompact? emergencyCompact;
+
+  /// Ограничение окна для проверки перед запросом:
+  /// `effectiveContextWindow(model, cap)` (CMP-6).
+  final int? contextWindowCap;
+
   AgentLoopConfig copyWith({
     ModelRef? model,
     MessageQueue<SteeringItem>? steering,
@@ -301,5 +338,8 @@ final class AgentLoopConfig {
     followUp: followUp ?? this.followUp,
     approvalWait: approvalWait,
     logger: logger,
+    estimateTokens: estimateTokens,
+    emergencyCompact: emergencyCompact,
+    contextWindowCap: contextWindowCap,
   );
 }

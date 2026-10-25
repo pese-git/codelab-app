@@ -66,16 +66,56 @@ final class PermissionsConfig {
   final PolicyRules rules;
 }
 
-/// The validated configuration of the core; loading from files arrives at
-/// stages 4 and 8 (design.md, D12).
+/// Проверенная конфигурация ядра.
+///
+/// Почему одно значение: сборка ядра (`buildAgentCore`) и все сессии
+/// читают настройки из одного места, а хост собирает его из своих
+/// источников. Чтение из файлов приходит на этапах 4 и 8 (design.md change
+/// `add-agent-core-loop-and-tools`, D12).
+///
+/// Как использовать: хост создаёт значение и передаёт в `buildAgentCore`;
+/// поля по умолчанию дают поведение без переопределений.
 final class CoreConfig {
   const CoreConfig({
     required this.defaultModel,
     this.permissions = const PermissionsConfig(),
     this.budget = const TurnBudget(),
+    this.compaction = const CompactionOverrides(),
   });
 
   final ModelRef defaultModel;
   final PermissionsConfig permissions;
   final TurnBudget budget;
+
+  /// Настройки сжатия контекста (§9.4, §15).
+  final CompactionOverrides compaction;
+}
+
+/// Переопределения порогов сжатия из конфигурации (`agent-core-architecture`
+/// §9.4, ключи `compaction.*` §15; design.md change
+/// `add-agent-core-sessions-and-compaction`, D8).
+///
+/// Почему переопределения, а не готовые числа: пороги зависят от окна
+/// модели (`CompactionSettings.forWindow`), а модель сессии может меняться.
+/// Заданное значение заменяет вычисленное и проходит те же ограничения
+/// сверху `w/4` и `w/2`, поэтому настройка не делает порог отрицательным.
+///
+/// Как использовать: `null` в поле — значение из таблицы §9.4.
+/// [contextWindowCap] ограничивает окно для порога, проверки перед запросом
+/// и оценки в `ModelRequested` (CMP-6). `enabled: false` выключает
+/// capability `compaction` при сборке ядра.
+final class CompactionOverrides {
+  const CompactionOverrides({
+    this.reserveTokens,
+    this.keepRecentTokens,
+    this.keepRecentUserTurns,
+    this.contextWindowCap,
+    this.enabled = true,
+  });
+
+  final int? reserveTokens;
+  final int? keepRecentTokens;
+  final int? keepRecentUserTurns;
+  final int? contextWindowCap;
+  final bool enabled;
 }

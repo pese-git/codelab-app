@@ -1,4 +1,5 @@
 import '../cancel/cancel_token.dart';
+import '../compaction/estimate.dart';
 import '../llm/errors.dart';
 import '../llm/event_stream.dart';
 import '../llm/events.dart';
@@ -42,16 +43,38 @@ String emptyResponseNote(int attempts) =>
 ///
 /// Как использовать: передать новые сообщения [prompts], контекст (история,
 /// системный промпт, инструменты), конфигурацию и приёмник событий. Функция
-/// возвращает сообщения, добавленные ходом. [TurnEnded] — всегда последнее
-/// событие, ровно одно, в том числе при исключении в хуке (LOOP-1); каждый
-/// [emit] ждётся (LOOP-2).
-Future<List<Message>> runAgentLoop({
+/// возвращает [TurnOutput]: сообщения хода и, после аварийного сжатия,
+/// новую историю. [TurnEnded] — всегда последнее событие, ровно одно, в
+/// том числе при исключении в хуке (LOOP-1); каждый [emit] ждётся (LOOP-2).
+Future<TurnOutput> runAgentLoop({
   required List<Message> prompts,
   required LoopContext context,
   required AgentLoopConfig config,
   required AgentEventSink emit,
   required CancelToken cancel,
 }) => _Turn(context, config, emit, cancel).run(prompts);
+
+/// Итог хода для владельца транскрипта.
+///
+/// Почему не просто список: аварийное сжатие (§5.4, шаг 14a) заменяет
+/// историю посреди хода, и транскрипт после хода — это [history] плюс
+/// [added], а не старая история плюс все сообщения хода (LOOP-7).
+final class TurnOutput {
+  TurnOutput({required List<Message> added, List<Message>? history})
+    : added = List.unmodifiable(added),
+      history = history == null ? null : List.unmodifiable(history);
+
+  /// Сообщения, добавленные после [history] (без сжатия — весь ход).
+  final List<Message> added;
+
+  /// История, которой аварийное сжатие заменило транскрипт; `null` — не
+  /// заменялась.
+  final List<Message>? history;
+}
+
+/// Текст синтетического ответа, когда payload больше окна, а сжатие не
+/// помогло или его нет (§5.2, шаг 4).
+const contextExhaustedText = 'context window exhausted';
 
 final class _Turn {
   _Turn(this._context, this._config, this._emit, this._cancel)
@@ -85,9 +108,17 @@ final class _Turn {
   var _usage = Usage.zero;
   var _steeringSteps = 0;
 
+  /// Аварийное сжатие уже было в этом ходе (CMP-8).
+  var _emergencyUsed = false;
+
+  /// История после аварийного сжатия и позиция в [_added], с которой идут
+  /// сообщения после неё.
+  List<Message>? _history;
+  var _historyFrom = 0;
+
   SessionId get _session => _config.sessionId;
 
-  Future<List<Message>> run(List<Message> prompts) async {
+  Future<TurnOutput> run(List<Message> prompts) async {
     TurnEndReason? reason;
     BudgetLimit? exceeded;
     String? held;
@@ -267,7 +298,7 @@ final class _Turn {
         held: held,
       ),
     );
-    return List.unmodifiable(_added);
+    return TurnOutput(added: _added.sublist(_historyFrom), history: _history);
   }
 
   /// Лимит бюджета, исчерпанный к границе шага, или `null` (LOOP-12).
@@ -395,11 +426,24 @@ final class _Turn {
         tools: [for (final tool in _context.tools) tool.toSchema()],
         cacheKey: _session.value,
       );
+      final estimated = _config.estimateTokens?.call(context) ?? 0;
+      final window = effectiveContextWindow(
+        model,
+        cap: _config.contextWindowCap,
+      );
+      // Шаг 4 §5.2: payload больше окна (не порога) — один аварийный
+      // вызов и пересборка; иначе ответ overflow без обращения к провайдеру.
+      if (_config.estimateTokens != null && estimated > window) {
+        if (await _compactEmergency(EmergencyCause.preflight)) {
+          continue;
+        }
+        return _exhausted();
+      }
       await _emit(
         ModelRequested(
           _session,
           model: model,
-          estimatedTokens: 0,
+          estimatedTokens: estimated,
           messageCount: payload.messages.length,
         ),
       );
@@ -413,6 +457,13 @@ final class _Turn {
         retried = true;
         continue;
       }
+      // Шаг 14a §5.4: overflow — сжатие и повтор того же шага; ответ с
+      // ошибкой, после которого был повтор, в транскрипт не входит.
+      if (!started &&
+          response.errorClass == LlmErrorClass.overflow &&
+          await _compactEmergency(EmergencyCause.overflow)) {
+        continue;
+      }
       if (started) {
         _replaceLast(response);
       } else {
@@ -423,6 +474,51 @@ final class _Turn {
       await _emit(MessageEnded(_session, message: response));
       return response;
     }
+  }
+
+  /// Один аварийный вызов за ход (CMP-8): новый контекст заменяет
+  /// транскрипт хода. `false` — вызова нет, он уже был или сжатие не
+  /// помогло.
+  Future<bool> _compactEmergency(EmergencyCause cause) async {
+    final hook = _config.emergencyCompact;
+    if (hook == null || _emergencyUsed) {
+      return false;
+    }
+    _emergencyUsed = true;
+    final LoopContext? context;
+    try {
+      context = await hook(cause, _cancel);
+    } on CancelledException {
+      return false;
+    }
+    if (context == null) {
+      return false;
+    }
+    _context = context;
+    _transcript
+      ..clear()
+      ..addAll(context.messages);
+    _history = context.messages;
+    _historyFrom = _added.length;
+    return true;
+  }
+
+  /// Синтетический ответ `overflow`: провайдер не вызывается (§5.2, шаг 4).
+  Future<AssistantMessage> _exhausted() async {
+    final response = AssistantMessage(
+      content: const [],
+      model: _config.model,
+      usage: Usage.zero,
+      stopReason: StopReason.error,
+      errorClass: LlmErrorClass.overflow,
+      errorMessage: contextExhaustedText,
+      timestamp: _config.clock.now(),
+    );
+    _transcript.add(response);
+    _added.add(response);
+    await _emit(MessageStarted(_session, message: response));
+    await _emit(MessageEnded(_session, message: response));
+    return response;
   }
 
   /// Читает ответ: первый блок кладёт снимок в транскрипт с

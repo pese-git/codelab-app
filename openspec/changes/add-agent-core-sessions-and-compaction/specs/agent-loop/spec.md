@@ -67,7 +67,7 @@
 - `prepareNextStep` — после `StepEnded`, может заменить контекст или модель;
 - `beforeFinalResponse` — в MVP только интерфейс; без хука поведение совпадает с `Accept` (LOOP-13);
 - `estimateTokens(LlmContext)` — оценка размера payload (§9.3);
-- `emergencyCompact(CancelToken)` — аварийное сжатие; возвращает новый `LoopContext` или `null`, если сжать нечего или сжатие не удалось.
+- `emergencyCompact(EmergencyCause, CancelToken)` — аварийное сжатие с причиной `preflight` или `overflow`; возвращает новый `LoopContext` или `null`, если сжать нечего или сжатие не удалось; `contextWindowCap` ограничивает окно проверки перед запросом (CMP-6).
 
 Без `estimateTokens` и `emergencyCompact` поведение SHALL совпадать с этапом 2: размер не проверяется, `overflow` — обычная ошибка шага.
 

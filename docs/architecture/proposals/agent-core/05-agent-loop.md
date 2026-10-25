@@ -34,13 +34,18 @@ final class ToolInvocation {             // что цикл передаёт т�
   final List<BeforeToolCallHook> beforeToolCall; final List<AfterToolCallHook> afterToolCall;
 }
 
-Future<List<Message>> runAgentLoop({
+Future<TurnOutput> runAgentLoop({
   required List<Message> prompts,          // пусто = продолжение без новых сообщений
   required LoopContext context,            // systemPrompt, messages, tools: копируется
   required AgentLoopConfig config,
   required AgentEventSink emit,
   required CancelToken cancel,
-});                                         // возвращает сообщения, добавленные этим ходом
+});
+
+final class TurnOutput {                   // транскрипт после хода = (history ?? старая история) + added
+  final List<Message> added;               // сообщения хода после history
+  final List<Message>? history;            // контекст аварийного сжатия (шаг 14a); null — история не заменялась
+}
 
 final class LoopContext {
   const LoopContext({required this.systemPrompt, required this.messages, required this.tools});
@@ -57,7 +62,8 @@ final class AgentLoopConfig {
       this.maxResponseRevisions = 2, this.maxSteeringSteps = 20,
       this.emptyResponseRetries = 2, this.misuse = const MisuseLimits(),
       this.steering, this.followUp, this.approvalWait, this.logger,
-      this.estimateTokens, this.emergencyCompact, this.deadline, this.imageRefs});
+      this.estimateTokens, this.emergencyCompact, this.contextWindowCap,
+      this.deadline, this.imageRefs});
   final SessionId sessionId;
   final ModelRef model;
   final StreamFunction stream;
@@ -78,7 +84,9 @@ final class AgentLoopConfig {
                                                      // считает время хода минус его прирост с начала хода
   final Logger? logger;                              // логи цикла (loop.empty_response, §5.4.1)
   final int Function(LlmContext)? estimateTokens;    // оценка payload (§9)
-  final Future<LoopContext?> Function(CancelToken)? emergencyCompact;   // один аварийный вызов сжатия за ход, общий для preflight и overflow (CMP-8)
+  final Future<LoopContext?> Function(EmergencyCause cause, CancelToken cancel)? emergencyCompact;
+                                                     // один аварийный вызов сжатия за ход, общий для preflight и overflow (CMP-8)
+  final int? contextWindowCap;                       // окно preflight = effectiveContextWindow(model, cap) (CMP-6)
   final SessionDeadline? deadline;   // после MVP: дедлайн сессии (§17.12.5); null — нет срока
   final ImageRefRegistry? imageRefs; // после MVP: картинка уходит модели один раз (§17.11.2.2); null — как MVP
 }
@@ -149,7 +157,7 @@ ACP-адаптер отдаёт `stopReason: max_turn_requests`, а вид ли�
 2. Ремонт парности вызовов (§6.3.3); непустой отчёт → событие `ToolPairingRepaired`.
 3. Если есть заметка `Revise` — добавить `UserMessage([TextContent(note)])` в конец payload.
 3a. После MVP: если у сессии есть дедлайн (§17.12.5) — `UserMessage([TextContent(deadline.timeLeftLine(now))])` последним сообщением payload; в транскрипт не входит.
-4. Оценка размера `estimateTokens(LlmContext)`; если больше окна модели — один вызов `emergencyCompact` за ход (CMP-8) и пересборка с шага 1; если сжатие не помогло или его нет — синтетический `AssistantMessage(stopReason: error, errorClass: overflow, errorMessage: 'context window exhausted')` без обращения к провайдеру.
+4. Оценка размера `estimateTokens(LlmContext)`; если больше окна `effectiveContextWindow(model, cap: contextWindowCap)` — один вызов `emergencyCompact(preflight, …)` за ход (CMP-8) и пересборка с шага 1; если сжатие не помогло или его нет — синтетический `AssistantMessage(stopReason: error, errorClass: overflow, errorMessage: 'context window exhausted')` без обращения к провайдеру и без `ModelRequested`.
 5. `LlmContext(systemPrompt, messages, tools.map(toSchema))` → `ModelRequested` → `stream(...)`.
 
 `systemPrompt` берётся из текущего `LoopContext` и между шагами меняется только через
@@ -297,8 +305,9 @@ runAgentLoop(prompts, context, config, emit, cancel):
         пересобрать payload, ModelRequested, повторить запрос того же шага (без второго StepStarted)
 14a   if response.stopReason == error and response.errorClass == overflow:   # §2.11, §9.5
         if not emergencyUsed and emergencyCompact != null:  # общий с preflight (§5.2, шаг 4) флаг: один раз за ход (CMP-8)
-          emergencyUsed = true; ctx = emergencyCompact(cancel)
-          if ctx != null: применить ctx; goto 11           # один повтор того же шага; ответ с ошибкой в транскрипт не входит
+          emergencyUsed = true; ctx = emergencyCompact(overflow, cancel)
+          if ctx != null: применить ctx; goto 11           # один повтор того же шага, как в шаге 14: без второго
+                                                           # StepStarted; ответ с ошибкой не входит в транскрипт и не эмитится
         # иначе — обычная ошибка шага: шаг 16, reason = failed
 15    transcript[last] = response; emit MessageEnded(response); usage += response.usage
 16    if response.stopReason in {error, aborted}:
