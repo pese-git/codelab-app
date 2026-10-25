@@ -23,9 +23,9 @@ const _stage0Fixtures = {
   'acp/errors-unknown-session-update-tolerated',
 };
 
-/// Fixtures of stage 4 in the agent package (design.md change
-/// `add-dart-agent-acp-server`, D8): 33 of §14.2; the transport fixtures go
-/// to `add-codelab-agent-binary`, the spill fixtures to
+/// Корпус этапа 4 полностью — 35 фикстур §14.2: 33 агентского прогона в
+/// памяти (design.md change `add-dart-agent-acp-server`, D8) и 2
+/// транспортные (`add-codelab-agent-binary`, D8); фикстуры выноса — в
 /// `add-agent-core-output-spill`.
 const _stage4Fixtures = {
   'acp/compaction-long-session-continues',
@@ -61,6 +61,8 @@ const _stage4Fixtures = {
   'acp/tool-list-dir',
   'acp/tool-search-content',
   'acp/tool-write-permission-diff',
+  'acp/stdio-framing-large-line',
+  'acp/ws-auth-bearer-required',
 };
 
 void main() {
@@ -68,7 +70,7 @@ void main() {
   final protocolDirectory = protocolSpecDirectory();
 
   test('the corpus holds exactly the stage 0 and stage 4 fixtures', () {
-    expect(_stage4Fixtures, hasLength(33));
+    expect(_stage4Fixtures, hasLength(35));
     expect(corpus.map((f) => f.id).toSet(), {
       ..._stage0Fixtures,
       ..._stage4Fixtures,

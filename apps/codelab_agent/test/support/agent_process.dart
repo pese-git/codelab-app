@@ -28,6 +28,10 @@ final class AgentProcess {
 
   static Future<String>? _kernel;
 
+  /// Путь к `.dill` бинаря: для клиентских транспортов, которые запускают
+  /// процесс сами (`StdioAcpTransport`).
+  static Future<String> kernel() => _kernel ??= _compile();
+
   /// Запускает бинарь с [args]; [environment] заменяет окружение целиком,
   /// кроме `PATH` и `HOME`.
   static Future<AgentProcess> start(
@@ -35,7 +39,7 @@ final class AgentProcess {
     Map<String, String> environment = const {},
     String? workingDirectory,
   }) async {
-    final kernel = await (_kernel ??= _compile());
+    final kernel = await AgentProcess.kernel();
     final process = await Process.start(
       dartExecutable(),
       [kernel, ...args],
