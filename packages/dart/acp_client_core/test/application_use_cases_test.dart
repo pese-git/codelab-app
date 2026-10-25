@@ -222,6 +222,179 @@ void main() {
     await subscription.cancel();
   });
 
+  test(
+    'LoadSession applies the history replayed before the response',
+    () async {
+      final changes = <AcpSession>[];
+      final subscription = client.sessionChanges.listen(changes.add);
+
+      final future = LoadSession(client)(
+        const LoadSessionCommand(
+          sessionId: SessionId('session-1'),
+          cwd: '/workspace',
+        ),
+      ).run();
+      await _pump();
+      final request = transport.sentMessages.single as JsonRpcRequest;
+
+      // Реплей приходит до ответа (03-Session Setup.md#loading-a-session).
+      for (final update in const [
+        SessionUpdate.userMessageChunk(
+          content: ContentBlock.text(text: 'Что в README.md?'),
+        ),
+        SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: ToolCallId('call_1'),
+            title: 'Read README.md',
+            kind: ToolKind.read,
+            status: ToolCallStatus.completed,
+          ),
+        ),
+        SessionUpdate.agentMessageChunk(
+          content: ContentBlock.text(text: 'Один заголовок.'),
+        ),
+        SessionUpdate.userMessageChunk(
+          content: ContentBlock.text(text: 'Спасибо'),
+        ),
+        SessionUpdate.agentMessageChunk(
+          content: ContentBlock.text(text: 'Пожалуйста.'),
+        ),
+        SessionUpdate.currentModeUpdate(currentModeId: SessionModeId('plan')),
+        SessionUpdate.availableCommandsUpdate(
+          availableCommands: [AvailableCommand(name: 'init', description: 'x')],
+        ),
+        SessionUpdate.sessionInfoUpdate(title: 'README'),
+      ]) {
+        transport.emitInbound(_sessionUpdate(update));
+      }
+
+      // Сессия не считается загруженной до ответа (session-lifecycle §19).
+      expect(client.sessionById(const SessionId('session-1')), isNull);
+      expect(changes, isEmpty);
+
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: request.id,
+          result: const LoadSessionResponse(
+            modes: SessionModeState(
+              availableModes: [
+                SessionMode(id: SessionModeId('standard'), name: 'Standard'),
+                SessionMode(id: SessionModeId('plan'), name: 'Plan'),
+              ],
+              currentModeId: SessionModeId('plan'),
+            ),
+          ).toJson(),
+        ),
+      );
+
+      final session = (await future).getOrElse((failure) => fail('$failure'));
+      expect(session.status, SessionLifecycleStatus.active);
+      expect(session.activeTurn, isNull);
+      expect(session.title, 'README');
+      expect(session.modes?.currentModeId, const SessionModeId('plan'));
+      expect(session.availableCommands.single.name, 'init');
+
+      expect(session.turns, hasLength(2));
+      final first = session.turns.first;
+      expect(first.prompt, const [ContentBlock.text(text: 'Что в README.md?')]);
+      expect(first.status, PromptTurnStatus.completed);
+      expect(
+        first.toolCalls[const ToolCallId('call_1')]?.status,
+        ToolCallStatus.completed,
+      );
+      expect(
+        first.updates.whereType<AgentMessageChunk>().single.content,
+        const ContentBlock.text(text: 'Один заголовок.'),
+      );
+      expect(first.updates.whereType<UserMessageChunk>(), isEmpty);
+
+      final second = session.turns.last;
+      expect(second.id, isNot(first.id));
+      expect(second.prompt, const [ContentBlock.text(text: 'Спасибо')]);
+      expect(second.status, PromptTurnStatus.completed);
+      expect(second.updates.single, isA<AgentMessageChunk>());
+
+      expect(client.sessionById(const SessionId('session-1')), session);
+      expect(changes.single, session);
+
+      await subscription.cancel();
+    },
+  );
+
+  test('LoadSession joins consecutive user chunks into one prompt', () async {
+    final future = LoadSession(client)(
+      const LoadSessionCommand(
+        sessionId: SessionId('session-1'),
+        cwd: '/workspace',
+      ),
+    ).run();
+    await _pump();
+    final request = transport.sentMessages.single as JsonRpcRequest;
+
+    for (final update in const [
+      SessionUpdate.userMessageChunk(content: ContentBlock.text(text: 'a')),
+      SessionUpdate.userMessageChunk(content: ContentBlock.text(text: 'b')),
+      SessionUpdate.agentMessageChunk(content: ContentBlock.text(text: 'c')),
+    ]) {
+      transport.emitInbound(_sessionUpdate(update));
+    }
+    transport.emitInbound(
+      JsonRpcMessage.response(
+        id: request.id,
+        result: const LoadSessionResponse().toJson(),
+      ),
+    );
+
+    final session = (await future).getOrElse((failure) => fail('$failure'));
+    expect(session.turns.single.prompt, const [
+      ContentBlock.text(text: 'a'),
+      ContentBlock.text(text: 'b'),
+    ]);
+  });
+
+  test('LoadSession drops the replay buffer when the request fails', () async {
+    final future = LoadSession(client)(
+      const LoadSessionCommand(
+        sessionId: SessionId('session-1'),
+        cwd: '/workspace',
+      ),
+    ).run();
+    await _pump();
+    final request = transport.sentMessages.single as JsonRpcRequest;
+    transport.emitInbound(
+      _sessionUpdate(
+        const SessionUpdate.userMessageChunk(
+          content: ContentBlock.text(text: 'old'),
+        ),
+      ),
+    );
+    transport.emitInbound(
+      JsonRpcMessage.response(
+        id: request.id,
+        error: const JsonRpcError(code: -32002, message: 'Resource not found'),
+      ),
+    );
+    expect((await future).isLeft(), isTrue);
+    transport.drainSentMessages();
+
+    // Новая сессия с тем же id получает обновления как обычно, без реплея.
+    final created = CreateSession(client)(
+      const CreateSessionCommand(cwd: '/workspace'),
+    ).run();
+    await _pump();
+    final create = transport.sentMessages.single as JsonRpcRequest;
+    transport.emitInbound(
+      JsonRpcMessage.response(
+        id: create.id,
+        result: const NewSessionResponse(
+          sessionId: SessionId('session-1'),
+        ).toJson(),
+      ),
+    );
+    final session = (await created).getOrElse((failure) => fail('$failure'));
+    expect(session.turns, isEmpty);
+  });
+
   test('LoadSession returns typed transport failure when send fails', () async {
     transport.fail(
       const AcpTransportException(
