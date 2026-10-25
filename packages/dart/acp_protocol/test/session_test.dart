@@ -148,6 +148,15 @@ void main() {
       expect(LoadSessionResponse.fromJson(response.toJson()), response);
     });
 
+    test('decodes a null session/load result as an empty response', () {
+      // Пример ответа в `03-Session Setup.md#loading-a-session` — `"result": null`.
+      expect(LoadSessionResponse.fromJson(null), const LoadSessionResponse());
+      expect(
+        decodeAcpResult(sessionLoadMethod, null),
+        const LoadSessionResponse(),
+      );
+    });
+
     test('round-trips session list request and response', () {
       const request = ListSessionsRequest(
         cwd: '/workspace/project',
