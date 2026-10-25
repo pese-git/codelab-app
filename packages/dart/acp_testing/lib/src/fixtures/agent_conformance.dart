@@ -87,6 +87,23 @@ typedef AgentFixtureStarter =
       AgentFixtureSetup setup,
     );
 
+final class AgentConnection {
+  const AgentConnection({required this.client, required this.agent});
+
+  final AcpTransport client;
+  final AgentUnderTest agent;
+}
+
+typedef AgentFixtureConnector =
+    Future<AgentConnection> Function(AgentFixtureSetup setup);
+
+Future<AgentFixtureResult> runAgentFixtureOver(
+  AcpFixture fixture,
+  AgentFixtureConnector connect, {
+  Duration frameTimeout = const Duration(seconds: 5),
+  Duration quietPeriod = const Duration(milliseconds: 200),
+}) => throw UnimplementedError();
+
 final class AgentFixtureResult {
   const AgentFixtureResult._({
     required this.skipped,

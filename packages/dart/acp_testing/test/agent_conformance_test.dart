@@ -157,6 +157,53 @@ void main() {
     expect(started, isFalse);
   });
 
+  // Транспортные фикстуры играет транспортный драйвер против процесса
+  // бинаря (design.md change `add-codelab-agent-binary`, D8).
+  test('a transport fixture is skipped by the in-memory run', () async {
+    var started = false;
+
+    final result = await runAgentFixture(
+      fixture(
+        promptFrames,
+        setup: const {
+          'cwd': '/work/demo',
+          'transport': {'kind': 'stdio'},
+        },
+      ),
+      (transport, setup) async {
+        started = true;
+        return _StubAgent(transport, chunks: const []);
+      },
+    );
+
+    expect(result.skipped, isTrue);
+    expect(result.skipReason, contains('transport driver'));
+    expect(started, isFalse);
+  });
+
+  test('a transport fixture runs over the connection of a connector', () async {
+    late AgentFixtureSetup seen;
+
+    final result = await runAgentFixtureOver(
+      fixture(
+        promptFrames,
+        setup: const {
+          'cwd': '/work/demo',
+          'transport': {'kind': 'stdio'},
+        },
+      ),
+      (setup) async {
+        seen = setup;
+        final link = InProcessAcpLink();
+        final agent = _StubAgent(link.agent, chunks: const ['Hello ', 'there']);
+        return AgentConnection(client: link.client, agent: agent);
+      },
+    );
+
+    expect(result.skipped, isFalse);
+    expect(seen.fixture.setup.transport!.kind, FixtureTransportKind.stdio);
+  });
+
   test('an unused model step fails the run', () async {
     expect(
       () => runAgentFixture(

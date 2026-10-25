@@ -228,6 +228,7 @@ final class FixtureSetup {
     this.clientCapabilities,
     this.web,
     this.sessions = const {},
+    this.transport,
   });
 
   factory FixtureSetup._parse(
@@ -282,6 +283,8 @@ final class FixtureSetup {
 
   /// Working directory of the scenario, written as `${cwd}` in frames.
   final String cwd;
+
+  final FixtureTransport? transport;
 
   /// Журналы сессий до начала сценария, только для агентского прогона:
   /// id сессии → записи журнала по порядку (первая — заголовок `session`,
@@ -822,4 +825,25 @@ final class _Reader {
             : fail('$path${_key(key)}${_key(name)}', 'must be a string'),
     };
   }
+}
+
+enum FixtureTransportKind { stdio, ws }
+
+enum FixtureAuthorization { none, wrong, valid }
+
+final class FixtureWsAttempt {
+  const FixtureWsAttempt({
+    required this.authorization,
+    required this.expectStatus,
+  });
+
+  final FixtureAuthorization authorization;
+  final int expectStatus;
+}
+
+final class FixtureTransport {
+  const FixtureTransport({required this.kind, this.attempts = const []});
+
+  final FixtureTransportKind kind;
+  final List<FixtureWsAttempt> attempts;
 }

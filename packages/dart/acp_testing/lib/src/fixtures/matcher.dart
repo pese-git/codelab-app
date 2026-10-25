@@ -590,3 +590,5 @@ String _encode(Object? value) {
 
 String _key(String key) =>
     RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(key) ? '.$key' : '["$key"]';
+
+Object? expandRepeat(Object? json) => throw UnimplementedError();
