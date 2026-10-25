@@ -304,6 +304,46 @@ final _stateChecks = <String, _StateCheck>{
     expect(turns, hasLength(3));
     expect(turns.every((t) => t.status == PromptTurnStatus.completed), isTrue);
   },
+  // Реплей `session/load` (change `add-client-session-load-replay`): история
+  // заменяет прежние ходы и не выглядит выполняющейся (session-lifecycle §51).
+  'acp/session-load-replay': (user, _) {
+    final session = user.app.sessions.single;
+    expect(session.status, SessionLifecycleStatus.active);
+    expect(session.activeTurn, isNull);
+    expect(session.title, 'Fixture');
+    expect(session.modes?.currentModeId, const SessionModeId('standard'));
+    final turn = session.turns.single;
+    expect(turn.status, PromptTurnStatus.completed);
+    expect(turn.prompt, const [ContentBlock.text(text: 'Что в README.md?')]);
+    expect(
+      turn.toolCalls[const ToolCallId('call_1')]?.status,
+      ToolCallStatus.completed,
+    );
+    expect(
+      turn.updates.whereType<AgentMessageChunk>().single.content,
+      const ContentBlock.text(text: 'Один заголовок.'),
+    );
+  },
+  'acp/session-load-interrupted-turn': (user, _) {
+    final session = user.app.sessions.single;
+    expect(session.id, const SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C'));
+    expect(session.activeTurn, isNull);
+    final turn = session.turns.single;
+    expect(turn.prompt, const [ContentBlock.text(text: 'Прочитай a.txt')]);
+    expect(
+      turn.toolCalls[const ToolCallId('call_9')]?.status,
+      ToolCallStatus.failed,
+    );
+  },
+  'acp/config-effort-option': (user, _) {
+    expect(user.configResults, [isNull, isNull, isNull]);
+    final options = user.app.sessions.single.configOptions!;
+    expect(
+      options.singleWhere((o) => o.id.value == 'model').currentValue.value,
+      'scripted/scripted-1',
+    );
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+  },
   'acp/errors-unknown-session-update-tolerated': (user, _) {
     final session = user.app.sessions.single;
     expect(_lastTurn(user).status, PromptTurnStatus.completed);

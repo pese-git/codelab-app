@@ -6,7 +6,8 @@
   ],
   "description": "Сессия с ходом, вызовом read и заголовком загружается заново: агент повторяет историю (слова пользователя, вызов одним tool_call с итоговым статусом, ответ модели), затем режим, опции, команды и заголовок, и отвечает на session/load последним.",
   "roles": [
-    "agent"
+    "agent",
+    "client"
   ],
   "setup": {
     "cwd": "/work/demo",
@@ -222,7 +223,9 @@
       "dir": "c2a",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 5,
+        "id": {
+          "$capture": "loadId"
+        },
         "method": "session/load",
         "params": {
           "sessionId": "${sessionId}",
@@ -372,10 +375,18 @@
       "note": "ответ session/load — после реплея (ACP-3)",
       "frame": {
         "jsonrpc": "2.0",
-        "id": 5,
+        "id": "${loadId}",
         "result": {
           "modes": {
-            "$any": {}
+            "$any": {
+              "availableModes": [
+                {
+                  "id": "standard",
+                  "name": "Standard"
+                }
+              ],
+              "currentModeId": "standard"
+            }
           },
           "configOptions": {
             "$any": []
