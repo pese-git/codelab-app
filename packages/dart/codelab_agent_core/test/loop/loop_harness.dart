@@ -117,6 +117,9 @@ final class LoopHarness {
     MisuseLimits misuse = const MisuseLimits(),
     MessageQueue<SteeringItem>? steering,
     MessageQueue<Message>? followUp,
+    EstimateTokens? estimateTokens,
+    EmergencyCompact? emergencyCompact,
+    int? contextWindowCap,
   }) => AgentLoopConfig(
     sessionId: session,
     model: testModel,
@@ -138,9 +141,26 @@ final class LoopHarness {
     followUp: followUp,
     approvalWait: approvalWait,
     logger: logger,
+    estimateTokens: estimateTokens,
+    emergencyCompact: emergencyCompact,
+    contextWindowCap: contextWindowCap,
   );
 
+  /// Сообщения, добавленные ходом (история не заменялась).
   Future<List<Message>> run(
+    List<Message> prompts, {
+    List<Message> history = const [],
+    AgentLoopConfig? config,
+    CancelToken? cancel,
+  }) async => (await runTurn(
+    prompts,
+    history: history,
+    config: config,
+    cancel: cancel,
+  )).added;
+
+  /// Итог хода целиком: с историей, заменённой аварийным сжатием.
+  Future<TurnOutput> runTurn(
     List<Message> prompts, {
     List<Message> history = const [],
     AgentLoopConfig? config,

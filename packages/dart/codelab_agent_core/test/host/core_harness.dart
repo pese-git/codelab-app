@@ -16,6 +16,8 @@ final class CoreHarness {
     PermissionMode? modeOverride,
     FakeClock? clock,
     SessionStore? sessions,
+    ModelRef? defaultModel,
+    CompactionOverrides compaction = const CompactionOverrides(),
   }) {
     final c = clock ?? FakeClock();
     final logger = RecordingLogger();
@@ -36,8 +38,9 @@ final class CoreHarness {
         sessions: store,
       ),
       config: CoreConfig(
-        defaultModel: testModel,
+        defaultModel: defaultModel ?? testModel,
         permissions: PermissionsConfig(modeOverride: modeOverride),
+        compaction: compaction,
       ),
       streamFunction: model.call,
     );
