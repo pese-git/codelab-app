@@ -341,6 +341,38 @@ void main() {
     ]);
   });
 
+  // Бинарь с --llm-script: шаги общие для сессий с разными cwd (design.md
+  // change `add-codelab-agent-binary`, D3).
+  test(r'cwdOf gives ${cwd} of the session of the request', () async {
+    final model = ScriptedStreamFunction.fromJson(
+      _script([
+        for (var i = 0; i < 2; i++)
+          {
+            'reply': [
+              {'text': r'cwd was: ${cwd}'},
+            ],
+            'stopReason': 'stop',
+          },
+      ]),
+      cwdOf: (sessionId) =>
+          {'sess-1': '/work/a', 'sess-2': '/work/b'}[sessionId],
+    );
+
+    final first = await _ask(model, _context([_user('x')]));
+    final second = await _ask(
+      model,
+      LlmContext(
+        systemPrompt: 'You are CodeLab.',
+        messages: [_user('y')],
+        tools: const [],
+        cacheKey: 'sess-2',
+      ),
+    );
+
+    expect(first.content, [const TextContent('cwd was: /work/a')]);
+    expect(second.content, [const TextContent('cwd was: /work/b')]);
+  });
+
   test('expect toolResult and tools', () async {
     final model = ScriptedStreamFunction.fromJson(
       _script([

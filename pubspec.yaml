@@ -9,6 +9,7 @@ dev_dependencies:
   melos: ^8.3.0
 
 workspace:
+  - apps/codelab_agent
   - apps/codelab_app
   - packages/dart/acp_client_core
   - packages/dart/acp_protocol

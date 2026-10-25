@@ -30,6 +30,7 @@ final class ScriptedStreamFunction {
     Clock? clock,
     String? cwd,
     String? sessionId,
+    String? Function(String sessionId)? cwdOf,
   }) {
     _checkKeys(json, const {'model', 'steps'}, 'llm');
     final steps = json['steps'];

@@ -6,3 +6,5 @@ library;
 
 export 'src/io/stdio_acp_transport.dart';
 export 'src/io/websocket_acp_transport.dart';
+export 'src/io/stdio_server_acp_transport.dart';
+export 'src/io/websocket_server_acp_transport.dart';

@@ -32,6 +32,20 @@ const acpAllowlist = {
   'async',
 };
 
+/// Dependencies of the agent binary (workspace-architecture «Автоматический
+/// сторож границ пакетов»; design.md change `add-codelab-agent-binary`, D11).
+const binaryAllowlist = {
+  'codelab_agent_core',
+  'codelab_agent_io',
+  'codelab_agent_acp',
+  'acp_protocol',
+  'acp_transports',
+  'args',
+  'http',
+  'async',
+  'meta',
+};
+
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
 
@@ -80,6 +94,16 @@ void main() {
     ).readAsStringSync();
 
     final extra = dependencyKeys(pubspec).difference(acpAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('apps/codelab_agent depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'apps/codelab_agent/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(binaryAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });
