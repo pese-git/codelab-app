@@ -34,6 +34,7 @@ Change `add-dart-agent-acp-server` дал `AcpAgentServer`, но запусти�
 - `agent-transports`: новое требование «Серверные транспорты ACP» — `StdioServerAcpTransport` и `WebSocketServerAcpTransport`, ответы транспорта на сырые плохие кадры; «Общий порт transport» — `inbound` несёт сообщения другой стороны соединения, а не только агента.
 - `acp-golden-fixtures`: «Формат golden-фикстуры ACP» — блок `setup.transport` и генератор `$repeat`; новое требование «Транспортный драйвер фикстур»; «Агентский драйвер фикстур» — фикстуры с `setup.transport` в прогоне в памяти не участвуют.
 - `workspace-architecture`: «Границы пакетов monorepo» — приложение `apps/codelab_agent`; «Автоматический сторож границ пакетов» — правило и allowlist `apps/codelab_agent`.
+- `agent-acp-server`: «Отсоединение, переподключение и завершение» — после конца входа соединение отвечает на прочитанные запросы и закрывает транспорт, затем `serve` завершается (найдено бинарём по stdio, design.md, D7).
 - `testing-quality`: «Проверки workspace» — скрипт `build:agent`; «Интеграционные тесты stdio» — e2e-тесты app параметризуются агентом (`scripted` или `dart`), тег `scripted-only`.
 
 ## Impact

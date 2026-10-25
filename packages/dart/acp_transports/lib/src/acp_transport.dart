@@ -3,24 +3,36 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'acp_transport.freezed.dart';
 
-/// Replaceable ACP message transport used by core/application code.
+/// Заменяемый транспорт сообщений ACP.
+///
+/// Почему: код клиента и агента не должен знать, идут ли кадры по stdio, по
+/// WebSocket или в памяти (agent-transports «Общий порт transport»).
+///
+/// Для чего: один порт для обеих сторон соединения — клиентские транспорты
+/// (`StdioAcpTransport`, `WebSocketAcpTransport`), серверные транспорты
+/// агента (`StdioServerAcpTransport`, `WebSocketServerAcpTransport`) и пара
+/// в памяти тестов.
+///
+/// Как использовать: [start], затем подписка на [inbound] и [send];
+/// [close] — штатное завершение. Сбой соединения приходит в [events].
 abstract interface class AcpTransport {
-  /// Typed inbound JSON-RPC messages received from an agent.
+  /// Разобранные сообщения JSON-RPC от другой стороны соединения: агента —
+  /// у клиента, клиента — у агента.
   Stream<JsonRpcMessage> get inbound;
 
-  /// Lifecycle, diagnostics, and failure events emitted by the transport.
+  /// События жизненного цикла, диагностика и сбои транспорта.
   Stream<AcpTransportEvent> get events;
 
-  /// Current lifecycle state for synchronous status rendering.
+  /// Текущее состояние — для синхронного показа статуса.
   AcpTransportState get state;
 
-  /// Starts the underlying connection or process.
+  /// Открывает соединение, запускает процесс или начинает чтение потоков.
   Future<void> start();
 
-  /// Sends one typed JSON-RPC message to the agent.
+  /// Отправляет одно сообщение JSON-RPC другой стороне соединения.
   Future<void> send(JsonRpcMessage message);
 
-  /// Gracefully closes the transport and releases underlying resources.
+  /// Штатно закрывает транспорт и освобождает ресурсы.
   Future<void> close({Duration? timeout});
 }
 

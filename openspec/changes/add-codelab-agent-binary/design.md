@@ -29,19 +29,23 @@
 
 ```text
 apps/codelab_agent/
-  bin/codelab_agent.dart        main: runCodelabAgent(args) → exitCode
-  lib/codelab_agent.dart        барель для тестов: runCodelabAgent, ServeOptions, parseServeArgs
-  lib/src/cli/serve_args.dart       разбор флагов и переменных → ServeOptions | UsageError (§15.6)
-  lib/src/cli/usage.dart        текст справки (без --llm-script)
-  lib/src/host/agent_host.dart  сборка: провайдер или сценарий, каталог моделей, хранилище,
-                                Logger → BuiltAgentCore и AcpServerConfig (только buildAgentCore, HOST-6)
-  lib/src/host/llm_script.dart  чтение файла {"llm": {...}} → ScriptedStreamFunction и модели
-  lib/src/log/stderr_sink.dart  основной sink: одна строка на запись
-  lib/src/log/file_sink.dart    JSON Lines, права 0600/0700, проверка «не stdout» (§12.3.1)
-  lib/src/serve/serve_stdio.dart  StdioServerAcpTransport + localListing + shutdown по EOF/сигналу
-  lib/src/serve/serve_ws.dart     HttpServer, проверка Bearer, WebSocketServerAcpTransport на каждое подключение
-  test/                         serve_flags_test, stdio_process_test, ws_auth_test, transport_conformance_test,
-                                llm_scripts/hello.json
+  bin/codelab_agent.dart          main: exit(await runCodelabAgent(args))
+  lib/codelab_agent.dart          барель для bin/ и тестов
+  lib/src/run.dart                runCodelabAgent: флаги → лог → хост → транспорт → код выхода
+  lib/src/cli/serve_args.dart     ArgParser и правила §15.6 → ServeOptions | UsageError; serveUsage()
+  lib/src/host/agent_host.dart    сборка: провайдер или сценарий, каталог моделей, хранилище,
+                                  → BuiltAgentCore и AcpServerConfig (только buildAgentCore, HOST-6)
+  lib/src/host/llm_script.dart    файл {"llm": {...}} → ScriptedStreamFunction и модели; CwdTrackingStore
+  lib/src/log/host_logger.dart    HostLogger и порт LogSink: фильтр уровня, раздача, отключение сбойного sink
+  lib/src/log/stderr_sink.dart    основной sink: одна строка на запись
+  lib/src/log/file_sink.dart      JSON Lines, права 0600/0700, проверка «не stdout» (§12.3.1)
+  lib/src/serve/serve_stdio.dart  StdioServerAcpTransport + localListing + завершение по EOF/сигналу
+  lib/src/serve/serve_ws.dart     HttpServer, проверка Bearer, WebSocketServerAcpTransport (итерация 2)
+  lib/src/serve/signals.dart      SIGINT/SIGTERM: первый — безопасное завершение, второй — сразу
+  lib/src/serve/exit_codes.dart   коды выхода 0, 1, 64, 130, 143
+  test/                           serve_flags, agent_host, log_sinks, stdio_process, ws_auth,
+                                  transport_conformance; support/agent_process.dart, support/acp_peer.dart;
+                                  llm_scripts/hello.json
 ```
 
 Приложение — чистый Dart (`apps/*` по `AGENTS.md` §5), в `workspace:` корня. Зависимости — `codelab_agent_core`, `codelab_agent_io`, `codelab_agent_acp`, `acp_protocol`, `acp_transports` (включая `io.dart`), `args`, `http`, `async`, `meta`. `--llm-script` использует `package:codelab_agent_core/testing.dart`: бинарь — тестовый хост для этого флага, а в справке флага нет.
@@ -52,7 +56,7 @@ apps/codelab_agent/
 
 В `acp_transports/lib/src/io/`, экспорт из `io.dart`:
 
-- **`StdioServerAcpTransport({Stream<List<int>> input, IOSink output})`** — по умолчанию `stdin`/`stdout` процесса; параметры нужны тестам. Чтение — `utf8.decoder` + `LineSplitter` без ограничения длины строки (R-13: мегабайтные строки читаются целиком). Запись — одно сообщение `encodeJsonRpcMessage` + `\n` и `flush` в цепочке `Future`, чтобы кадры не перемешивались. EOF входа — `inbound` закрывается, состояние `closed`.
+- **`StdioServerAcpTransport({Stream<List<int>> input, IOSink output})`** — по умолчанию `stdin`/`stdout` процесса; параметры нужны тестам. Чтение — `utf8.decoder` + `LineSplitter` без ограничения длины строки (R-13: мегабайтные строки читаются целиком). Запись — одно сообщение `encodeJsonRpcMessage` + `\n` и `flush` в цепочке `Future`, чтобы кадры не перемешивались. EOF входа закрывает только `inbound`: отправка работает до `close()`, потому что клиент вида `echo '{…initialize…}' | codelab-agent serve --stdio` закрывает stdin сразу и ждёт ответа. `inbound` — поток с одной подпиской: сообщения до подписки сервера не теряются.
 - **`WebSocketServerAcpTransport(WebSocket socket)`** — один текстовый кадр WebSocket = одно сообщение. Бинарный кадр — `-32600` «binary frames are not supported». Закрытие сокета — `inbound` закрывается.
 
 **Сырые плохие кадры** обрабатывает транспорт, потому что сервер получает уже разобранные `JsonRpcMessage` (D12 предыдущего change): неразбираемый JSON → ответ `{"jsonrpc":"2.0","id":null,"error":{"code":-32700,…}}`, JSON не JSON-RPC 2.0 → `-32600` с `id` кадра, если он читается, иначе `null`. Плюс событие `diagnostic` (`warning`) для лога хоста. Соединение живёт (ACP-4). Пустые строки stdio пропускаются без ответа.
@@ -74,7 +78,7 @@ apps/codelab_agent/
 
 Профиль — `agent-serve`. Env хоста — `LocalExecutionEnv` (нужен для `localListing` по stdio); файлы и команды сессий всё равно идут через клиента (`AcpClientExecutionEnv`, §4.7). Для WebSocket capability `fileListing` сужается с причиной «клиент не на этой машине», и `localListing` не передаётся — так `AcpAgentServer` проверяет согласованность (D5 предыдущего change).
 
-**`${cwd}` и `${sessionId}` в сценарии.** Шаги сценария общие для всех сессий процесса (`09-09`, задача 4.6), а `ScriptedStreamFunction` получает `cwd` при создании. Для бинаря сценарий получает функцию `cwdOf(sessionId)`: id сессии запроса — `LlmContext.cacheKey`, а `cwd` — из заголовка журнала в `MemorySessionStore`. Это только добавление параметра в тестовый `ScriptedStreamFunction`; контракт `StreamFunction` не меняется.
+**`${cwd}` и `${sessionId}` в сценарии.** Шаги сценария общие для всех сессий процесса (`09-09`, задача 4.6), а `ScriptedStreamFunction` получает `cwd` при создании. Для бинаря сценарий получает функцию `cwdOf(sessionId)`: id сессии запроса — `LlmContext.cacheKey`, а `cwd` запоминает журнал бинаря `CwdTrackingStore` (обёртка `MemorySessionStore`) при создании заголовка сессии. Это только добавление параметра в тестовый `ScriptedStreamFunction`; контракт `StreamFunction` не меняется.
 
 ### D4. Флаги и переменные этапа 4
 
@@ -102,7 +106,8 @@ apps/codelab_agent/
 
 ### D7. Жизненный цикл и коды выхода
 
-- **stdio:** EOF stdin → `AcpAgentServer.shutdown(grace: 5 с)` → код `0`. `detachGrace` — `Duration.zero`: для stdio отсоединение — конец процесса (§13.10).
+- **stdio:** EOF stdin → соединение отвечает на уже прочитанные запросы и закрывает транспорт, `AcpAgentServer.serve` завершается → `AgentHost.shutdown(grace: 5 с)` → код `0`. `detachGrace` — `Duration.zero`: для stdio отсоединение — конец процесса, идущий ход отменяется (§13.10).
+- **Уточнение сервера.** До этого change `AcpAgentServer.serve` завершался сразу по концу входа и не закрывал транспорт: прочитанный, но ещё не отвеченный запрос мог остаться без ответа, а транспорт — открытым. Теперь `serve` после конца входа ждёт ответов на начатые запросы, отправляет очередь и закрывает транспорт; повторное закрытие из `shutdown` — та же операция (тест `codelab_agent_acp/test/robustness/half_closed_input_test.dart`).
 - **WebSocket:** сервер живёт до сигнала; закрытие одного сокета — отсоединение с `detachGrace` 30 с.
 - **Сигналы:** `SIGINT` → shutdown → `130`; `SIGTERM` → shutdown → `143` (те же значения, что у `codelab -p`, §13.10). Повторный сигнал во время shutdown — немедленный выход с тем же кодом.
 - **Ошибки использования** — `64`; непойманная ошибка запуска (например, порт занят) — `1` с текстом в stderr.

@@ -81,12 +81,20 @@ void main() {
     }
   });
 
-  test('EOF closes inbound and the transport', () async {
+  test('EOF closes inbound; sending works until close', () async {
     final done = transport.inbound.toList();
-    writeLine('{"jsonrpc":"2.0","method":"note"}');
+    writeLine('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}');
     await input.close();
 
     expect(await done, hasLength(1));
+    // Ответ на прочитанный до EOF запрос ещё уходит.
+    await transport.send(
+      const JsonRpcMessage.response(id: JsonRpcId.integer(1), result: {}),
+    );
+    await output.untilCount(1);
+    expect(output.lines, hasLength(1));
+
+    await transport.close();
     expect(transport.state, AcpTransportState.closed);
   });
 

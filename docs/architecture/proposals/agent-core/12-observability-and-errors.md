@@ -158,6 +158,9 @@ final class LogRecord {           // то, что получает sink хост
 `codelab-agent serve` (`--stdio` и `--ws`) и у `codelab` (встроенный агент пишет в этот файл; лог
 клиента — по правилам клиента, [`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §9.11).
 `~` раскрывается, относительный путь — от рабочего каталога процесса.
+До этапа 8 бинарь `codelab-agent` конфиг не читает (§15.6), поэтому значения по умолчанию
+`logging.file` у него нет: файл пишется, только если задан флаг или переменная (OpenSpec change
+`add-codelab-agent-binary`, design.md D5).
 
 | Хост | Основной sink | Файл |
 |---|---|---|
