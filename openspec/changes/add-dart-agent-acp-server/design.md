@@ -156,7 +156,7 @@ Contract test (4.7) и агентский драйвер (4.8) нужны оба
 - **Таймаут и отмена `fs/*` — `io`.** В `FileErrorCode` нет `timeout`, поэтому таймаут §13.9 — `FileError(io, path, "client did not answer … (timed out)")`, у записи с пометкой `the write may have completed`. У порта `FileSystem` нет токена отмены: мост сессии при `session/cancel` вызывает `AcpClientExecutionEnv.abortPending`, ожидание завершается `io` «aborted».
 - **`exec` без `terminal` — `ExecErrorCode.shellUnavailable`.** Кода `unsupported` у `ExecErrorCode` нет; ни одного кадра не уходит, как требует §4.7.
 - **`in_progress` после `tool_call`.** События сессии приходят подписчику асинхронно, а хук `markInProgress` вызывается в цикле синхронно. Если `tool_call` вызова ещё не спроецирован, мост откладывает `in_progress` до его проекции — порядок кадров вызова не зависит от планировщика.
-- **Автозаголовок — после ответа хода.** `SessionTitleChanged` эмитится после завершённого хода (§8.10), поэтому `session_info_update` идёт после ответа `session/prompt`: ответ — последний кадр *хода* (ACP-3), а не соединения.
+- **Автозаголовок — после ответа хода.** *Пересмотрено в D15:* ответ `session/prompt` ставится после возврата `AgentSession.prompt`, поэтому автозаголовок идёт до ответа, как ждут фикстуры этапа 0.
 - **Ответ сбоя хода.** `message` ошибки `-32603` — `Turn failed: <текст>`; `retryable: true` только у классов провайдера `network`, `timeout`, `rateLimited`, `server`.
 - **Разрыв соединения.** После конца входящего потока `PendingRequests` отвечает на новые запросы агента сразу `ClientDisconnected`, без кадра и без ожидания таймаута.
 - **Общий набор env для клиента.** `execution_env_contract.dart` получает `clientBacked`: клиент различает только «не найдено» (`-32002`), поэтому набор требует ошибку-значение без точного кода, а `stat` — файл без размера и без каталогов (§4.7).
@@ -176,6 +176,52 @@ Contract test (4.7) и агентский драйвер (4.8) нужны оба
 - **Отсоединение.** Пока соединения нет, кадры сессии отбрасываются: события в журнале, а реплей отдаст их новому соединению. Ожидающий запрос разрешения не становится отказом: `AcpPermissionGate` ждёт переподключения (`waitForReconnect` моста) и после ответа `session/load` спрашивает снова — с id нового соединения и тем же `toolCallId`. Grace истёк — ход отменяется, вопрос даёт `cancelled`.
 - **`_meta.codelab.turnEnded` при сбое.** Итог хода, переживший переподключение, — `{"stopReason": …}`, а при сбое хода — `{"error": data.codelab}` (§13.8).
 - **`shutdown`.** Ходы отменяются и дожидаются `TurnEnded` не дольше `grace`, затем сессии закрываются, а соединение перед закрытием транспорта отвечает на начатые запросы (`InboundRouter.drained`) — ответ отменённого хода уходит до закрытия.
+
+### D15. Уточнения контракта, найденные агентским прогоном корпуса (итерация 4)
+
+Агентский прогон 44 фикстур нашёл расхождения агента и клиента с контрактом. Исправлено в коде, документы ядра правятся в том же PR (§4.7, §13.7, §14.2, §14.4, §14.7, §14.9, 09-09):
+
+- **Ответ хода — по возврату `AgentSession.prompt`.** После `TurnEnded` сессия ещё пишет автозаголовок; мост отвечает на `session/prompt`, когда `prompt` вернулся, поэтому `session_info_update` идёт до ответа (фикстуры этапа 0). События сессии к этому моменту уже доставлены: их микрозадачи поставлены раньше. Мост передаёт ходу свой `CancelToken`: `session/cancel`, пришедший до старта цикла, не теряется.
+- **Порядок кадров вызова.** Запрос разрешения ждёт, пока `tool_call` его вызова встанет в очередь (`SessionBridge.announced`), а `terminal/wait_for_exit` — пока в очередь встанет `tool_call_update` с терминалом (`AcpClientExecutionEnv.terminalShown`): события сессии приходят подписчику асинхронно, а gate и env работают синхронно с циклом.
+- **Один `present()` на вызов.** Точка исполнения кладёт представление в `ToolContext.presentation`, политика берёт его для запроса разрешения: через клиента каждый `present()` — кадр `fs/read_text_file`. Только добавление поля.
+- **Формы кадров.** `ToolCallProgress` — `tool_call_update` со `status: in_progress`; у отменённого вызова `tool_call_update` без `content` (§13.7: статус и outcome); пустые `locations` и `content` не отправляются. `read` без `path` в сырых аргументах — заголовок `read` без мест.
+- **`ListingOverlayEnv.stat` — от листинга.** В ACP нет stat каталога, а `search` начинает со stat корня (D5 это допускал). Содержимое файлов `search` читает через клиента — клиент видит несохранённые правки; фикстура `acp/tool-search-content` закрепляет эти кадры.
+- **Рабочая папка-ссылка.** `session/new` проверяет каталог по разрешённому пути: ссылка на каталог (`/tmp` на macOS) — допустимая рабочая папка.
+- **`mcpCapabilities.http: false`** в фикстурах `acp/initialize-capabilities`, `acp/session-new-modes-config`, `acp/set-config-option-model` — правка по §13.2 и D12: до этапа 8 MCP-серверы не подключаются.
+- **Формат фикстур.** `setup.sessions` — журналы сессий до сценария (прерванный ход не получить кадрами); шаг с `waitForCancel` и `reply` сначала отдаёт ответ, затем ждёт отмены (отмена посреди стрима без гонки). `acp/set-config-option-model` получает модели каталога в `setup.config.providers`, `acp/prompt-cancel-mid-tool` — необязательный кадр заголовка, как остальные фикстуры. Фабрика прогона читает ключи конфига `agent.default_model`, `agent.effort`, `budget.max_steps`, `budget.max_tokens`, `compaction.keep_recent_tokens`, `providers.<id>.models.<model>` (`context_window`, `reasoning`); другой ключ — провал.
+- **Клиент: «файла нет» — `-32002`.** `acp_client_core` отвечал на чтение отсутствующего файла `-32603`, и создание нового файла через codelab-app ломалось: агент отличает отсутствие файла только по `-32002` (§4.7). Добавлены `FsNotFoundFailure`, вид `AcpProtocolErrorKind.resourceNotFound` и распознавание в адаптере `text_file_io.dart`; дельта спецификации `acp-fs-client`.
+- **Роли фикстур.** Фикстуры загрузки и списка сессий, смены режима методом `session/set_mode`, плохих кадров, параллельных сессий и опции `effort` — только `agent`: клиентский драйвер не играет эти сценарии (`AcpClientApplication` не применяет реплей к ещё не открытой сессии, не вызывает `session/set_mode`). Остальные новые фикстуры проходят и клиентский прогон с проверками состояния.
+- **Драйвер.** Стандартный handshake агентского драйвера — `initialize`, `session/new` и необязательный `available_commands_update`; в конце прогона драйвер сначала закрывает клиентский конец: ожидания агента завершаются разрывом, а не таймаутами `FakeClock`.
+
+Доказательства строк матрицы целей (`agent-parity-goals.md`) этапа 4 в части агента — агентский прогон `conformance:agent`:
+
+| Цель | Фикстуры |
+|---|---|
+| L-04 | `acp/prompt-network-drop`, `acp/prompt-provider-error`, `acp/prompt-failed-provider-auth` |
+| L-05 | `acp/prompt-cancel-mid-stream` |
+| L-16 | `acp/config-effort-option` |
+| C-02 | `acp/prompt-max-turn-requests` |
+| C-05, R-09 | `acp/prompt-update-plan` |
+| C-13 | `acp/prompt-turn-budget-exceeded` |
+| T-01 | `acp/tool-read-range` |
+| T-03 | `acp/tool-write-permission-diff` |
+| T-04 | `acp/tool-edit-exact-replace`, `acp/tool-edit-ambiguous-match-error` |
+| T-08 | `acp/tool-exec-terminal-embed`, `acp/tool-exec-terminal-env-array` |
+| T-09 | `acp/prompt-cancel-during-terminal`, `acp/prompt-cancel-mid-tool` |
+| P-02 | `acp/prompt-tool-permission-allow`, `acp/permission-critical-pattern-in-bypass` |
+| P-04 | `acp/prompt-tool-permission-reject-continues` |
+| P-05 | `acp/set-mode-bypass-no-prompt`, `acp/set-mode-plan-rejects-edit` |
+| S-02, R-03 | `acp/session-load-replay` |
+| S-03, R-04 | `acp/session-list-cwd-filter` |
+| S-05 | `acp/session-info-title` |
+| S-13 | `acp/session-load-interrupted-turn` |
+| R-01 | `acp/initialize-capabilities` |
+| R-05 | `acp/set-mode-updates-current-mode` |
+| R-06 | `acp/set-config-option-model`, `acp/config-effort-option` |
+| R-10 | `acp/permission-options-all-four`, `acp/permission-outcome-cancelled` |
+| R-11 | `acp/multi-session-concurrent-prompts` |
+
+Вне этого change: R-12 и R-13 (`acp/ws-auth-bearer-required`, `acp/stdio-framing-large-line`) — `add-codelab-agent-binary`; R-02 с MCP (`acp/session-new-with-mcp`) — этап 8; D-01 и D-02 — тесты codelab-app против бинаря.
 
 ## Risks / Trade-offs
 

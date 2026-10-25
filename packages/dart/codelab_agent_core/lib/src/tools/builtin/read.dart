@@ -95,7 +95,11 @@ final class ReadTool extends AgentTool {
     Map<String, Object?> args,
     ToolContext ctx,
   ) async {
-    final path = '${args['path']}';
+    // Сырые аргументы бывают без path: вызов ещё не валидирован (§6.2).
+    final path = args['path'];
+    if (path is! String) {
+      return ToolPresentation(title: name);
+    }
     final abs = absolutePath(ctx, path);
     final offset = args['offset'];
     return ToolPresentation(

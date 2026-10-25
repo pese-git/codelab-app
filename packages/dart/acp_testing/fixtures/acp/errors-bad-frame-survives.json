@@ -1,0 +1,164 @@
+{
+  "id": "acp/errors-bad-frame-survives",
+  "spec": [
+    "01-Overview.md#error-handling"
+  ],
+  "description": "Клиент шлёт неизвестный метод, запрос с неверными параметрами и неизвестное уведомление; каждый запрос получает свою JSON-RPC ошибку (-32601, -32602), уведомление игнорируется, а соединение живо: следующий промпт завершается end_turn (ACP-4).",
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard"
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "жив"
+          }
+        },
+        "reply": [
+          {
+            "text": "Да."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "foo/bar",
+        "params": {}
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "неизвестный метод",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "error": {
+          "code": -32601,
+          "message": {
+            "$any": true
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": "not a list"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "параметры не декодируются",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "error": {
+          "code": -32602,
+          "message": {
+            "$any": true
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "неизвестное уведомление — только лог",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "foo/notify",
+        "params": {}
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Ты жив?"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Да."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

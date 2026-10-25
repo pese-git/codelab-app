@@ -923,6 +923,12 @@ final class AcpClientApplication {
           message: error.toString(),
         ),
       );
+    } on FsNotFoundFailure catch (error) {
+      await _sendAcpMethodError(
+        request.id,
+        method: fsReadTextFileMethod,
+        error: AcpProtocolError.resourceNotFound('$error'),
+      );
     } on FsIoFailure catch (error) {
       await _sendAcpMethodError(
         request.id,

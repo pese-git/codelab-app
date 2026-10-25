@@ -48,6 +48,11 @@ final class _User {
   /// `null` on success.
   final configResults = <Object?>[];
 
+  /// Ошибки `session/prompt`: ход, сорвавшийся у агента, клиент получает
+  /// JSON-RPC ошибкой (agent-core §13.8) — это исход сценария, а не сбой
+  /// действия пользователя.
+  final promptErrors = <Object>[];
+
   void act(ClientFixtureStep<AcpClientApplication> step) {
     final expected = step.expected;
     switch (expected['method']) {
@@ -58,17 +63,20 @@ final class _User {
       case 'session/prompt':
         final params = expected['params']! as Map<String, Object?>;
         step.track(
-          app.sendPrompt(
-            SendPromptCommand(
-              sessionId: _session.id,
-              prompt: [
-                for (final block in params['prompt']! as List<Object?>)
-                  ContentBlock.text(
-                    text: (block! as Map<String, Object?>)['text']! as String,
-                  ),
-              ],
-            ),
-          ),
+          app
+              .sendPrompt(
+                SendPromptCommand(
+                  sessionId: _session.id,
+                  prompt: [
+                    for (final block in params['prompt']! as List<Object?>)
+                      ContentBlock.text(
+                        text:
+                            (block! as Map<String, Object?>)['text']! as String,
+                      ),
+                  ],
+                ),
+              )
+              .then<void>((_) {}, onError: promptErrors.add),
         );
       case 'session/cancel':
         step.track(app.cancelTurn(CancelTurnCommand(sessionId: _session.id)));
@@ -192,6 +200,109 @@ final _stateChecks = <String, _StateCheck>{
     );
     expect(model.currentValue.value, 'scripted/m2');
     expect(user.configResults, [isNull, isNotNull]);
+  },
+  // Корпус этапа 4 (design.md change `add-dart-agent-acp-server`, D8).
+  'acp/prompt-streaming-text': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+  },
+  'acp/prompt-thought-chunk': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+    expect(turn.updates.whereType<AgentThoughtChunk>(), isNotEmpty);
+  },
+  'acp/prompt-max-turn-requests': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.maxed);
+  },
+  'acp/prompt-turn-budget-exceeded': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.maxed);
+  },
+  'acp/prompt-failed-provider-auth': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.failed);
+    expect(user.promptErrors, hasLength(1));
+  },
+  'acp/prompt-provider-error': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.failed);
+    expect(user.promptErrors, hasLength(1));
+  },
+  'acp/prompt-network-drop': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.failed);
+    expect(user.promptErrors, hasLength(1));
+  },
+  'acp/prompt-cancel-mid-stream': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.cancelled);
+  },
+  'acp/prompt-parallel-tool-calls': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.completed);
+    expect(_toolCall(user, 'call_2').status, ToolCallStatus.completed);
+  },
+  'acp/prompt-anthropic-tool-call': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.completed);
+  },
+  'acp/prompt-cancel-during-terminal': (user, result) {
+    expect(_lastTurn(user).status, PromptTurnStatus.cancelled);
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.failed);
+    expect(result.environment!.terminal.started.single.args, [
+      '-c',
+      'sleep 30',
+    ]);
+  },
+  'acp/tool-write-permission-diff': (user, result) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    expect(result.environment!.fileSystem.files['NOTES.md'], '# Notes\n');
+  },
+  'acp/tool-edit-exact-replace': (user, result) {
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.completed);
+    expect(result.environment!.fileSystem.files['README.md'], '# bar\nbaz\n');
+  },
+  'acp/tool-edit-ambiguous-match-error': (user, result) {
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.failed);
+    expect(result.environment!.fileSystem.files['README.md'], 'foo\nfoo\n');
+  },
+  'acp/tool-list-dir': (user, _) {
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.completed);
+  },
+  'acp/tool-search-content': (user, _) {
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.completed);
+  },
+  'acp/tool-invalid-args-error': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.failed);
+  },
+  'acp/tool-exec-terminal-env-array': (user, result) {
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.completed);
+    expect(result.environment!.terminal.started.single.command, '/bin/sh');
+  },
+  'acp/permission-options-all-four': (user, _) {
+    final turn = _lastTurn(user);
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.failed);
+    expect(turn.approvals.values.single.status, ApprovalStatus.selected);
+  },
+  'acp/permission-outcome-cancelled': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+    expect(turn.approvals.values.single.status, ApprovalStatus.cancelled);
+  },
+  'acp/permission-critical-pattern-in-bypass': (user, _) {
+    expect(_toolCall(user, 'call_1').status, ToolCallStatus.failed);
+  },
+  'acp/permission-allow-always-scoped': (user, result) {
+    final turn = _lastTurn(user);
+    expect(turn.approvals, hasLength(2));
+    expect(result.environment!.fileSystem.files['README.md'], '# baz\n');
+  },
+  'acp/session-info-title': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    expect(
+      _lastTurn(user).updates.whereType<SessionInfoUpdate>().single.title,
+      'Почини тест в a_test.dart',
+    );
+  },
+  'acp/compaction-long-session-continues': (user, _) {
+    final turns = user.app.sessions.single.turns;
+    expect(turns, hasLength(3));
+    expect(turns.every((t) => t.status == PromptTurnStatus.completed), isTrue);
   },
   'acp/errors-unknown-session-update-tolerated': (user, _) {
     final session = user.app.sessions.single;

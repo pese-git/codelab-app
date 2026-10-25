@@ -18,6 +18,14 @@
     "config": {
       "agent": {
         "default_model": "scripted/m1"
+      },
+      "providers": {
+        "scripted": {
+          "models": {
+            "m1": {},
+            "m2": {}
+          }
+        }
       }
     }
   },
@@ -61,7 +69,7 @@
               "embeddedContext": true
             },
             "mcpCapabilities": {
-              "http": true,
+              "http": false,
               "sse": false
             },
             "sessionCapabilities": {

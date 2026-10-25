@@ -26,7 +26,7 @@ jobs:
           - { job: format, scripts: "check-format" }
           - { job: analyze, scripts: "analyze" }
           - { job: test, scripts: "test" }
-          - { job: conformance, scripts: "protocol-conformance conformance:client" } # + conformance:agent (stage 4)
+          - { job: conformance, scripts: "protocol-conformance conformance:client conformance:agent" }
           - { job: guard, scripts: "guard prompts:check" }
           - { job: web-compile, scripts: "web-compile" } # + flutter build web (stage 10)
           # stage 6: { job: e2e-cli, scripts: "build:cli test:e2e:cli" } — CLI PTY e2e on the Dart VM

@@ -263,7 +263,7 @@ final class PermissionPolicy {
     final offered = allowAlways && tool.offersAllowAlways(args);
     ToolPresentation presentation;
     try {
-      presentation = await tool.present(args, ctx);
+      presentation = ctx.presentation ?? await tool.present(args, ctx);
     } on Object {
       presentation = ToolPresentation(title: tool.name);
     }

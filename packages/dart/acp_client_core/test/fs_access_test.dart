@@ -100,6 +100,20 @@ void main() {
     expect(response.error!.code, jsonRpcInvalidParamsCode);
   });
 
+  // ACP ErrorCode resource_not_found (docs/acp/protocol/17-Schema.md):
+  // агент отличает «файла нет» от прочих сбоев только по коду -32002
+  // (design.md change `add-dart-agent-acp-server`, D15).
+  test('a missing file is -32002 Resource not found', () async {
+    fileIo.readFailure = const FsNotFoundFailure('/workspace/none.txt');
+
+    transport.emitInbound(_readRequest(id: 6, path: '/workspace/none.txt'));
+    await _pump();
+
+    final response = transport.sentMessages.single as JsonRpcResponse;
+    expect(response.error!.code, -32002);
+    expect(response.error!.message, 'Resource not found');
+  });
+
   test('maps an IO failure from the write adapter to a typed error response '
       'without crashing the application', () async {
     fileIo.writeFailure = const FsIoFailure('disk is full');
@@ -128,10 +142,15 @@ final class _RecordingTextFileIo implements TextFileReader, TextFileWriter {
   final writeCalls = <({String path, String content})>[];
   String contentToReturn = '';
   FsIoFailure? writeFailure;
+  FsAccessFailure? readFailure;
 
   @override
   Future<String> readText({required String path, int? line, int? limit}) {
     readCalls.add((path: path, line: line, limit: limit));
+    final failure = readFailure;
+    if (failure != null) {
+      return Future.error(failure);
+    }
     return Future.value(contentToReturn);
   }
 

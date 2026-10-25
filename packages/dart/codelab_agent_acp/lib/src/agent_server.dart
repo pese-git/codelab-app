@@ -333,9 +333,11 @@ final class _Connection {
         link,
         logger: _logger,
         waitForReconnect: bridge.waitForReconnect,
+        announced: bridge.announced,
       ),
       extraBeforeToolCall: [bridge.markInProgress],
     );
+    clientEnv.terminalShown = bridge.terminalShown;
     return (link: link, bridge: bridge, ports: ports);
   }
 
@@ -537,7 +539,16 @@ final class _Connection {
     if (listing == null) {
       return;
     }
-    final stat = await listing(cwd).stat(cwd);
+    final env = listing(cwd);
+    // Рабочая папка может быть ссылкой на каталог (/tmp на macOS): stat —
+    // по разрешённому пути.
+    var target = cwd;
+    if (env case final PathResolver resolver) {
+      if (await resolver.realpath(cwd) case Ok(:final value)) {
+        target = value;
+      }
+    }
+    final stat = await env.stat(target);
     if (stat case Ok(value: FileStat(type: FileType.directory))) {
       return;
     }

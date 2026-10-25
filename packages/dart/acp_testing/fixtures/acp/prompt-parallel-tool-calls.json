@@ -1,0 +1,271 @@
+{
+  "id": "acp/prompt-parallel-tool-calls",
+  "spec": [
+    "08-Tool Calls.md#creating",
+    "08-Tool Calls.md#updating",
+    "05-Prompt Turn.md#5-tool-invocation-and-status-reporting"
+  ],
+  "description": "Модель вызывает два ls в одном ответе; агент объявляет оба вызова в порядке ответа и исполняет их параллельно: статусы in_progress и completed двух вызовов приходят в любом порядке, затем модель отвечает.",
+  "goals": [
+    "P-02"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "files": {
+      "lib/a.dart": "void a() {}\n",
+      "test/a_test.dart": "void main() {}\n"
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "lib"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "ls",
+              "arguments": {
+                "path": "lib"
+              }
+            }
+          },
+          {
+            "toolCall": {
+              "id": "call_2",
+              "name": "ls",
+              "arguments": {
+                "path": "test"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_2",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Нашёл два файла."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Что в lib и test?"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "lib"
+            },
+            "kind": "search",
+            "status": "pending",
+            "rawInput": {
+              "path": "lib"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/lib"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_2",
+            "title": {
+              "$contains": "test"
+            },
+            "kind": "search",
+            "status": "pending",
+            "rawInput": {
+              "path": "test"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/test"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "параллельные вызовы: порядок статусов не задан",
+      "unordered": [
+        {
+          "jsonrpc": "2.0",
+          "method": "session/update",
+          "params": {
+            "sessionId": "${sessionId}",
+            "update": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "call_1",
+              "status": "in_progress"
+            }
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "session/update",
+          "params": {
+            "sessionId": "${sessionId}",
+            "update": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "call_2",
+              "status": "in_progress"
+            }
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "session/update",
+          "params": {
+            "sessionId": "${sessionId}",
+            "update": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "call_1",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "content",
+                  "content": {
+                    "type": "text",
+                    "text": {
+                      "$contains": "a.dart"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "session/update",
+          "params": {
+            "sessionId": "${sessionId}",
+            "update": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "call_2",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "content",
+                  "content": {
+                    "type": "text",
+                    "text": {
+                      "$contains": "a_test.dart"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Нашёл два файла."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

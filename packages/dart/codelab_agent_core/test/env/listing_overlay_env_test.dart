@@ -15,13 +15,15 @@ void main() {
     await listing.writeText('/work/local/a.txt', 'a');
   });
 
-  test('listDir comes from listing, the rest from primary', () async {
+  // stat — тоже от листинга: каталог через ACP-клиента не проверить, а
+  // search начинает со stat корня (design.md, D5, D15).
+  test('listDir and stat come from listing, the rest from primary', () async {
     final env = ListingOverlayEnv(primary, listing);
 
     final entries = await env.listDir('/work/local');
     final read = await env.readText('/work/client.txt');
     final written = await env.writeText('/work/new.txt', 'n');
-    final stat = await env.stat('/work/client.txt');
+    final stat = await env.stat('/work/local');
     final exec = await env.exec('true', ExecOptions(cwd: '/work'));
 
     expect(
@@ -34,12 +36,18 @@ void main() {
     );
     expect(read, const Ok<String, FileError>('from client\n'));
     expect(written, isA<Ok<void, FileError>>());
-    expect(stat, isA<Ok<FileStat, FileError>>());
+    expect(
+      stat,
+      isA<Ok<FileStat, FileError>>().having(
+        (r) => r.value.type,
+        'type',
+        FileType.directory,
+      ),
+    );
     expect(exec, isA<Ok<ExecResult, ExecError>>());
     expect(primary.calls, [
       'readText /work/client.txt',
       'writeText /work/new.txt',
-      'stat /work/client.txt',
       'exec true',
     ]);
     expect(

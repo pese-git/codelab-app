@@ -94,4 +94,14 @@ void main() {
       expect(protocolError.toJsonRpcError().code, jsonRpcMethodNotFoundCode);
     });
   });
+
+  // ErrorCode resource_not_found (docs/acp/protocol/17-Schema.md).
+  test('resourceNotFound maps to -32002 Resource not found', () {
+    const error = AcpProtocolError.resourceNotFound('No such file: /a.txt');
+
+    expect(error.kind, AcpProtocolErrorKind.resourceNotFound);
+    expect(error.jsonRpcCode, acpResourceNotFoundCode);
+    expect(acpResourceNotFoundCode, -32002);
+    expect(error.jsonRpcMessage, 'Resource not found');
+  });
 }

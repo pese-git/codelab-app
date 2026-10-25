@@ -13,6 +13,11 @@ final class IoTextFileIo implements TextFileReader, TextFileWriter {
   Future<String> readText({required String path, int? line, int? limit}) async {
     try {
       final file = File(path);
+      // Отсутствующий файл — отдельный отказ: клиент ответит -32002, и агент
+      // поймёт, что файл нужно создать (agent-core §4.7).
+      if (!await file.exists()) {
+        throw FsNotFoundFailure(path);
+      }
       if (line == null && limit == null) {
         return await file.readAsString();
       }

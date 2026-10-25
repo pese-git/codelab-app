@@ -87,7 +87,7 @@ void main() {
       });
     });
 
-    test('ToolCallProgress → content as is, terminal embedded', () {
+    test('ToolCallProgress → in_progress with content, terminal embedded', () {
       final event = ToolCallProgress(
         s,
         toolCallId: 'call_3',
@@ -101,6 +101,7 @@ void main() {
         {
           'sessionUpdate': 'tool_call_update',
           'toolCallId': 'call_3',
+          'status': 'in_progress',
           'content': [
             {
               'type': 'content',
@@ -179,6 +180,9 @@ void main() {
           'codelab': {'outcome': name},
         });
       }
+      // §13.7: у отменённого — без content, у отклонённого — причина.
+      expect(finish(ToolOutcome.cancelled).containsKey('content'), isFalse);
+      expect(finish(ToolOutcome.rejected)['content'], isNotEmpty);
       expect(finish(ToolOutcome.failed, interrupted: true)['_meta'], {
         'codelab': {'outcome': 'interrupted'},
       });

@@ -1,0 +1,256 @@
+{
+  "id": "acp/session-load-interrupted-turn",
+  "spec": [
+    "03-Session Setup.md#loading-a-session"
+  ],
+  "description": "Журнал кончается вызовом без результата (процесс агента остановился посреди хода); при session/load агент дописывает синтетический результат и показывает вызов tool_call со статусом failed и _meta.codelab.outcome interrupted, инструмент повторно не вызывается.",
+  "extensions": [
+    "outcome"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "sessions": {
+      "01JB8Q2W6R9T3M5K7N1P4X8Z0C": [
+        {
+          "type": "session",
+          "version": 1,
+          "id": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "cwd": "${cwd}",
+          "created": "2026-10-25T10:00:00.000Z",
+          "agent": {
+            "name": "codelab-agent",
+            "version": "0.1.0"
+          }
+        },
+        {
+          "type": "model_change",
+          "id": "r0",
+          "parentId": null,
+          "timestamp": "2026-10-25T10:00:00.000Z",
+          "provider": "scripted",
+          "modelId": "scripted-1"
+        },
+        {
+          "type": "message",
+          "id": "r1",
+          "parentId": "r0",
+          "timestamp": "2026-10-25T10:00:01.000Z",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Прочитай a.txt"
+              }
+            ],
+            "timestamp": "2026-10-25T10:00:01.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r2",
+          "parentId": "r1",
+          "timestamp": "2026-10-25T10:00:02.000Z",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_9",
+                "name": "read",
+                "arguments": {
+                  "path": "a.txt"
+                }
+              }
+            ],
+            "model": {
+              "provider": "scripted",
+              "id": "scripted-1"
+            },
+            "usage": {
+              "input": 10,
+              "output": 5
+            },
+            "stopReason": "toolUse",
+            "timestamp": "2026-10-25T10:00:02.000Z"
+          }
+        }
+      ]
+    }
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/load",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Прочитай a.txt"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "прерванный вызов: failed и outcome interrupted (agent-core §8.8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_9",
+            "title": {
+              "$contains": "a.txt"
+            },
+            "kind": "read",
+            "status": "failed",
+            "rawInput": {
+              "path": "a.txt"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/a.txt"
+              }
+            ],
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "interrupted"
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "outcome": "interrupted"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "после истории — режим, опции, команды, заголовок (agent-core §13.5, шаг 6)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "standard"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/load — после реплея (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "modes": {
+            "$any": {}
+          },
+          "configOptions": {
+            "$any": []
+          }
+        }
+      }
+    }
+  ]
+}

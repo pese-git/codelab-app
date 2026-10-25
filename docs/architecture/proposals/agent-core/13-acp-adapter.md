@@ -463,8 +463,15 @@ Slash-команды приходят обычным `session/prompt` с тек�
 | `AgentError` | — | лог и trace; итог хода — через ответ (§13.8) |
 | `TurnEnded` | ответ `session/prompt` | §13.8; после MVP непустой `returnedSteers` → `steerReturned` (§17.7.2.2) |
 
-Ответ `session/prompt` — последний кадр **хода**, а не соединения: автоматический заголовок
-пишется после завершённого хода (§8.10), поэтому его `session_info_update` идёт после ответа.
+Ответ `session/prompt` ставится в очередь, когда `AgentSession.prompt` вернулся: после
+`TurnEnded` сессия ещё пишет автоматический заголовок (§8.10), и его `session_info_update` идёт
+до ответа — ответ остаётся последним кадром хода (ACP-3).
+
+Формы кадров вызова: `ToolCallProgress` — `tool_call_update` со `status: "in_progress"`; у
+отменённого вызова — только `status: "failed"` и `_meta.codelab.outcome`, без `content` (текст об
+отмене — для модели); пустые `locations` и `content` не отправляются. События сессии приходят
+подписчику асинхронно, поэтому запрос разрешения ждёт, пока `tool_call` его вызова встанет в
+очередь, а `terminal/wait_for_exit` — пока в очередь встанет `tool_call_update` с терминалом.
 
 **Статусы вызова.** `ToolCallStarted` эмитится при входе вызова в единую точку исполнения, **до**
 проверки разрешений (§6.3.1), поэтому `tool_call` уходит со `status: "pending"`; запрос
@@ -761,6 +768,10 @@ Object? _copyJson(Object? v) => switch (v) {
 
 ## 13.12. Расширения протокола (каждое — через OpenSpec change)
 
+Расширения этапа 4 — `outcome`, `budgetExceeded`, `data.codelab`, `turnEnded`, `critical` — вводит
+OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, которые их ожидают,
+объявляют `extensions` (FIX-4).
+
 | Расширение | Где | Зачем |
 |---|---|---|
 | `_meta.codelab.outcome` = `cancelled` / `rejected` / `interrupted` | `tool_call`, `tool_call_update` со `status: failed` | доменный исход, которого нет в `ToolCallStatus` |
@@ -769,6 +780,7 @@ Object? _copyJson(Object? v) => switch (v) {
 | `data.codelab` (`errorClass`, `message`, `retryable`, `reason`) | JSON-RPC ошибки | машиночитаемая причина |
 | `data.codelab.rateLimit` `{kind, provider, model, retryAfterMs, resetAt, window}` (после MVP, OpenSpec `add-rate-limit-info`) | JSON-RPC ошибка `-32603` на `session/prompt` с `errorClass: "rateLimited"` | клиент локализует сообщение о лимите и показывает время сброса (L-32, §17.10.4.1) |
 | `_meta.codelab.turnEnded` | `session_info_update` после переподключения | итог хода, ответ на который отправить некуда |
+| `_meta.codelab.critical` (`critical`, `label`) | `toolCall` в `session/request_permission` критической команды (§7.8) | клиент выделяет опасный вызов; `allow_always` не предлагается |
 | `SetSessionModeRequest` в `acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
 | `_meta.codelab.subagent` (после MVP, §17.3.7) | `session/request_permission` от субагента; `tool_call_update` `task` со `status: failed` (`failure`) | связь запроса с вызовом `task` и типом ребёнка |
 | capability `subagentBoard` (после MVP) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | согласование доски субагентов (U-21) |

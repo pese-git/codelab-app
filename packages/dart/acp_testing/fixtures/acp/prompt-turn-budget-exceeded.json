@@ -1,0 +1,204 @@
+{
+  "id": "acp/prompt-turn-budget-exceeded",
+  "spec": [
+    "05-Prompt Turn.md#stop-reasons"
+  ],
+  "description": "Бюджет хода по токенам (budget.max_tokens = 1000) исчерпан первым шагом; агент не делает второй запрос к модели и отвечает max_turn_requests с _meta.codelab.budgetExceeded: \"tokens\".",
+  "extensions": [
+    "budgetExceeded"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "config": {
+      "budget": {
+        "max_tokens": 1000
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "план"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "update_plan",
+              "arguments": {
+                "entries": [
+                  {
+                    "content": "Прочитать тесты",
+                    "priority": "high",
+                    "status": "pending"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 1500,
+          "output": 20
+        }
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Составь план"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "plan"
+            },
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "entries": [
+                {
+                  "content": "Прочитать тесты",
+                  "priority": "high",
+                  "status": "pending"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "pending"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "Plan updated"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "бюджет токенов исчерпан (agent-core §13.8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "max_turn_requests",
+          "_meta": {
+            "codelab": {
+              "budgetExceeded": "tokens"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

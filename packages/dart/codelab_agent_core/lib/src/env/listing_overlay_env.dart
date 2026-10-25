@@ -10,9 +10,11 @@ import 'execution_env.dart';
 /// одной машине (stdio), каталог можно прочитать локально, а файлы и команды
 /// по-прежнему идут через клиента — он показывает правки и терминалы.
 ///
-/// Для чего: [listDir] — от [listing], всё остальное (`readText`,
-/// `writeText`, `stat`, `exec`) — от [primary]. Корень сессии — корень
-/// [primary].
+/// Для чего: [listDir] и [stat] — от [listing], всё остальное
+/// (`readText`, `writeText`, `exec`) — от [primary]. `stat` локальный,
+/// потому что в ACP нет метода stat: через клиента каталог не проверить, а
+/// `search` начинает со stat корня (design.md, D5, D15). Корень сессии —
+/// корень [primary].
 ///
 /// Как использовать: ACP-сервер передаёт
 /// `ListingOverlayEnv(acpClientEnv, localListing(cwd))` в порты сессии, а
@@ -41,7 +43,7 @@ final class ListingOverlayEnv implements ExecutionEnv, DirectoryListing {
       primary.writeText(path, content);
 
   @override
-  Future<Result<FileStat, FileError>> stat(String path) => primary.stat(path);
+  Future<Result<FileStat, FileError>> stat(String path) => listing.stat(path);
 
   @override
   Future<Result<ExecResult, ExecError>> exec(

@@ -1,0 +1,736 @@
+{
+  "id": "acp/permission-allow-always-scoped",
+  "spec": [
+    "08-Tool Calls.md#requesting-permission",
+    "08-Tool Calls.md#permission-options"
+  ],
+  "description": "После allow_always для README.md вторая правка того же файла идёт без вопроса, а правка другого файла спрашивается снова: решение действует только для своего шаблона.",
+  "extensions": [
+    "outcome"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "files": {
+      "README.md": "# foo\n",
+      "NOTES.md": "foo\n"
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "README"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "edit",
+              "arguments": {
+                "path": "README.md",
+                "oldText": "foo",
+                "newText": "bar"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_2",
+              "name": "edit",
+              "arguments": {
+                "path": "README.md",
+                "oldText": "bar",
+                "newText": "baz"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_2",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_3",
+              "name": "edit",
+              "arguments": {
+                "path": "NOTES.md",
+                "oldText": "foo",
+                "newText": "bar"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_3",
+            "isError": true
+          }
+        },
+        "reply": [
+          {
+            "text": "Готово."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Поправь README.md дважды и NOTES.md"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read1"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/README.md"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read1}",
+        "result": {
+          "content": "# foo\n"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "README.md"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "README.md",
+              "oldText": "foo",
+              "newText": "bar"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/README.md",
+                "line": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "perm1"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "README.md"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "README.md",
+              "oldText": "foo",
+              "newText": "bar"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/README.md",
+                "line": 1
+              }
+            ],
+            "content": [
+              {
+                "type": "diff",
+                "path": "${cwd}/README.md",
+                "oldText": "# foo\n",
+                "newText": "# bar\n"
+              }
+            ]
+          },
+          "options": [
+            {
+              "optionId": "allow_once",
+              "name": "Allow once",
+              "kind": "allow_once"
+            },
+            {
+              "optionId": "allow_always",
+              "name": "Always allow README.md",
+              "kind": "allow_always"
+            },
+            {
+              "optionId": "reject_once",
+              "name": "Reject",
+              "kind": "reject_once"
+            },
+            {
+              "optionId": "reject_always",
+              "name": "Always reject README.md",
+              "kind": "reject_always"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${perm1}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "allow_always"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read2"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/README.md"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read2}",
+        "result": {
+          "content": "# foo\n"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "write1"
+        },
+        "method": "fs/write_text_file",
+        "params": {
+          "sessionId": "${sessionId}",
+          "path": "${cwd}/README.md",
+          "content": "# bar\n"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${write1}",
+        "result": {
+          "$oneOf": [
+            null,
+            {}
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$any": true
+                  }
+                }
+              },
+              {
+                "type": "diff",
+                "path": "${cwd}/README.md",
+                "oldText": "# foo\n",
+                "newText": "# bar\n"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read3"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/README.md"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read3}",
+        "result": {
+          "content": "# bar\n"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_2",
+            "title": {
+              "$contains": "README.md"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "README.md",
+              "oldText": "bar",
+              "newText": "baz"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/README.md",
+                "line": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "тот же шаблон: без вопроса",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_2",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read4"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/README.md"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read4}",
+        "result": {
+          "content": "# bar\n"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "write2"
+        },
+        "method": "fs/write_text_file",
+        "params": {
+          "sessionId": "${sessionId}",
+          "path": "${cwd}/README.md",
+          "content": "# baz\n"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${write2}",
+        "result": {
+          "$oneOf": [
+            null,
+            {}
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_2",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$any": true
+                  }
+                }
+              },
+              {
+                "type": "diff",
+                "path": "${cwd}/README.md",
+                "oldText": "# bar\n",
+                "newText": "# baz\n"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read5"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/NOTES.md"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read5}",
+        "result": {
+          "content": "foo\n"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_3",
+            "title": {
+              "$contains": "NOTES.md"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "NOTES.md",
+              "oldText": "foo",
+              "newText": "bar"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/NOTES.md",
+                "line": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "другой файл — другой шаблон: снова вопрос",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "perm2"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "toolCallId": "call_3",
+            "title": {
+              "$contains": "NOTES.md"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "NOTES.md",
+              "oldText": "foo",
+              "newText": "bar"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/NOTES.md",
+                "line": 1
+              }
+            ],
+            "content": [
+              {
+                "type": "diff",
+                "path": "${cwd}/NOTES.md",
+                "oldText": "foo\n",
+                "newText": "bar\n"
+              }
+            ]
+          },
+          "options": [
+            {
+              "optionId": "allow_once",
+              "name": "Allow once",
+              "kind": "allow_once"
+            },
+            {
+              "optionId": "allow_always",
+              "name": "Always allow NOTES.md",
+              "kind": "allow_always"
+            },
+            {
+              "optionId": "reject_once",
+              "name": "Reject",
+              "kind": "reject_once"
+            },
+            {
+              "optionId": "reject_always",
+              "name": "Always reject NOTES.md",
+              "kind": "reject_always"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${perm2}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "reject_once"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_3",
+            "status": "failed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "rejected"
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "outcome": "rejected"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Готово."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ],
+  "after": {
+    "files": {
+      "README.md": "# baz\n",
+      "NOTES.md": "foo\n"
+    }
+  }
+}

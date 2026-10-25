@@ -145,4 +145,14 @@ void main() {
     expect(started.locations.single.path, '/proj/lib/a.dart');
     expect(started.locations.single.line, 3);
   });
+
+  // Сырые аргументы без path (вызов ещё не прошёл валидацию): заголовок —
+  // имя инструмента, мест нет (фикстура acp/tool-invalid-args-error).
+  test('present without path: the tool name and no locations', () async {
+    await read(const {});
+
+    final started = h.events.first as ToolCallStarted;
+    expect(started.title, 'read');
+    expect(started.locations, isEmpty);
+  });
 }

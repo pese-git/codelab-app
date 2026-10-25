@@ -1,0 +1,251 @@
+{
+  "id": "acp/permission-critical-pattern-in-bypass",
+  "spec": [
+    "08-Tool Calls.md#requesting-permission",
+    "15-Extensibility.md#the-_meta-field"
+  ],
+  "description": "В режиме bypass модель зовёт exec с критической командой (рекурсивное удаление защищённого пути); агент всё равно спрашивает: причина первым текстовым блоком, _meta.codelab.critical с меткой правила, без allow_always; отказ — failed с outcome rejected.",
+  "extensions": [
+    "critical",
+    "outcome"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "bypass"
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "Удали"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "rm -rf /"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": true
+          }
+        },
+        "reply": [
+          {
+            "text": "Понял."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Удали всё"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "rm -rf /"
+            },
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "rm -rf /"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "критическая команда: bypass не отменяет вопроса (agent-core §7.6)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "permId"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "rm -rf /"
+            },
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "rm -rf /"
+            },
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "critical command: recursive delete of a protected path"
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "critical": true,
+                "label": "recursive delete of a protected path"
+              }
+            }
+          },
+          "options": [
+            {
+              "optionId": "allow_once",
+              "name": "Allow once",
+              "kind": "allow_once"
+            },
+            {
+              "optionId": "reject_once",
+              "name": "Reject",
+              "kind": "reject_once"
+            },
+            {
+              "optionId": "reject_always",
+              "name": "Always reject rm -rf /",
+              "kind": "reject_always"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${permId}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "reject_once"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "failed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "rejected"
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "outcome": "rejected"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Понял."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}
