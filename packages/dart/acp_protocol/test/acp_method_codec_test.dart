@@ -12,6 +12,7 @@ void main() {
         sessionPromptMethod,
         sessionCancelMethod,
         sessionSetConfigOptionMethod,
+        sessionSetModeMethod,
         sessionRequestPermissionMethod,
         sessionUpdateMethod,
         fsReadTextFileMethod,
