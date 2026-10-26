@@ -212,6 +212,41 @@ void main() {
       ]);
     });
 
+    test('session notices after reconnect or restart are diagnostic '
+        'entries', () {
+      final entries = transcriptEntriesOf(
+        const [
+          TranscriptItem.notice(
+            id: 's/detached',
+            kind: NoticeKind.detached,
+            text: 'The agent cannot restore sessions after reconnecting.',
+          ),
+          TranscriptItem.notice(
+            id: 's/reconnected',
+            kind: NoticeKind.reconnected,
+            text:
+                'The agent cannot restore sessions; a new session was started.',
+          ),
+        ],
+        cwd: '/work',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      expect(entries.map((entry) => entry.id), [
+        'session-notice-1',
+        'session-notice-2',
+      ]);
+      expect(entries.map((entry) => entry.kind).toSet(), {
+        CodeLabTranscriptEntryKind.diagnostic,
+      });
+      expect(entries.first.title, 'Session');
+      expect(
+        entries.first.body,
+        'The agent cannot restore sessions after reconnecting.',
+      );
+    });
+
     test('a resolved approval is a compact label', () {
       final entries = transcriptEntriesOf(
         const [
