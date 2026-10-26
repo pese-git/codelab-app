@@ -89,6 +89,13 @@
   - перезапуск корневого scope с теми же `SharedPreferences`.
 
   Сценарий Dart-агента — `llm_scripts/session_list_load.json`. Источник: testing-quality «Интеграционный тест списка и загрузки сессий». Прогон в feature-ветке — `analyze`, на macOS — только в `release/*` (`AGENTS.md` §21). PR итерации 5.
+- [ ] 5.6 Ход, переживший переподключение. Dart-агент не отменяет идущий ход при закрытии WebSocket, а держит его `detachGrace` (30 с); при `session/load` с нового соединения он продолжает ход и шлёт его `session/update` уже после ответа на `session/load` (`codelab_agent_acp`, `SessionBridge.reattach`). В `session_list_load_flow_test.dart`, в режиме `dart`, проверить сценарий:
+  - промпт с долгим ходом по WebSocket;
+  - `Reconnect` во время хода;
+  - после `session/load` обновления продолжения хода видны в ленте активной сессии;
+  - итог хода не теряется, `isPromptSubmitting`/`canCancel` возвращаются в `false`.
+
+  Если тест красный, исправить применение обновлений после реплея в `codelab_client_acp`/`codelab_client_core`: ядро сейчас считает ходы реплея завершёнными (acp-protocol-client «Загруженная сессия показывает повторённую историю»). Отдельно от этого kit не отправляет `session/cancel` перед заменой транспорта: отмена оборвала бы ход, который агент сохраняет для переподключения.
 
 ## 6. Документы и Definition of Done
 
