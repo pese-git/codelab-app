@@ -82,13 +82,23 @@ final class LlmScript {
   }
 }
 
-/// Журнал в памяти, который помнит рабочую папку каждой сессии.
+/// Журнал сценария, который помнит рабочую папку каждой сессии.
 ///
 /// Почему: шаги `--llm-script` общие для сессий процесса, а `${cwd}` —
-/// папка сессии запроса (D3). Сценарий узнаёт её по id сессии
-/// (`LlmContext.cacheKey`) через [cwdOf].
+/// папка сессии запроса (D3 change `add-codelab-agent-binary`). Сценарий
+/// узнаёт её по id сессии (`LlmContext.cacheKey`) через [cwdOf]. Папка
+/// запоминается и при [open]: сессию, загруженную `session/load` после
+/// перезапуска процесса, никто не создаёт заново (D2 change
+/// `add-llm-script-session-store`).
+///
+/// Как использовать: хост оборачивает хранилище сценария —
+/// `CwdTrackingStore(MemorySessionStore())` без `--sessions-dir`,
+/// `CwdTrackingStore(JsonlSessionStore(...))` с ним — и передаёт [cwdOf] в
+/// `LlmScript.load`.
 final class CwdTrackingStore implements SessionStore {
-  final _inner = MemorySessionStore();
+  CwdTrackingStore(this._inner);
+
+  final SessionStore _inner;
   final _cwd = <String, String>{};
 
   String? cwdOf(String sessionId) => _cwd[sessionId];
@@ -110,7 +120,11 @@ final class CwdTrackingStore implements SessionStore {
   Future<void> flush(SessionId id) => _inner.flush(id);
 
   @override
-  Future<SessionSnapshot> open(SessionId id) => _inner.open(id);
+  Future<SessionSnapshot> open(SessionId id) async {
+    final snapshot = await _inner.open(id);
+    _cwd[snapshot.header.id.value] = snapshot.header.cwd;
+    return snapshot;
+  }
 
   @override
   Future<SessionPage> list({String? cwd, String? cursor, int pageSize = 50}) =>

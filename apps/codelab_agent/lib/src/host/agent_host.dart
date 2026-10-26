@@ -17,7 +17,8 @@ const agentVersion = '0.1.0';
 /// Хост ядра в бинаре `codelab-agent`: собранное ядро и конфиг ACP-сервера.
 ///
 /// Почему: хост решает, откуда модель (провайдер из флагов или сценарий),
-/// где журнал (`JsonlSessionStore` или память) и что умеет транспорт
+/// где журнал (`JsonlSessionStore` или память; у сценария — память или
+/// каталог `--sessions-dir`) и что умеет транспорт
 /// (листинг только по stdio), а ядро собирается только через
 /// `buildAgentCore` (HOST-6; design.md change `add-codelab-agent-binary`, D3).
 ///
@@ -72,7 +73,16 @@ final class AgentHost {
     final SessionStore sessions;
     http.Client? httpClient;
     if (options.llmScript case final path?) {
-      final store = CwdTrackingStore();
+      // Сценарий не трогает `$CODELAB_HOME`: журнал на диске — только в
+      // каталоге `--sessions-dir` (D1 change `add-llm-script-session-store`).
+      final store = CwdTrackingStore(switch (options.sessionsDir) {
+        final root? => JsonlSessionStore(
+          root: root,
+          clock: clock,
+          logger: logger,
+        ),
+        null => MemorySessionStore(),
+      });
       final script = LlmScript.load(
         path,
         models: options.models,
@@ -82,9 +92,13 @@ final class AgentHost {
       catalog = FixedModelCatalog(script.models);
       streamFunction = script.function.call;
       sessions = store;
-      narrowing[HostCapability.sessionPersistence] = const CapabilityOff(
-        '--llm-script: сессии в памяти',
-      );
+      // `buildAgentCore` не видит память под обёрткой, поэтому capability
+      // сужает хост (D2).
+      if (options.sessionsDir == null) {
+        narrowing[HostCapability.sessionPersistence] = const CapabilityOff(
+          '--llm-script: сессии в памяти',
+        );
+      }
     } else {
       final provider = ProviderConfig(
         name: 'cli',
@@ -125,6 +139,9 @@ final class AgentHost {
       fields: {
         'transport': options.transport.name,
         'provider': options.provider?.flag ?? 'scripted',
+        'sessions': options.llmScript != null && options.sessionsDir == null
+            ? 'memory'
+            : 'jsonl',
         'models': [for (final m in catalog.models) m.id.value],
         // Ключ — только признак: значение в лог не попадает.
         'api_key_env': 'CODELAB_API_KEY',

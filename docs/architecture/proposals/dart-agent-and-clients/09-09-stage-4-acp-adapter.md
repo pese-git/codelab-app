@@ -57,6 +57,10 @@
      переменные `${cwd}` и `${sessionId}`); провайдер — `scripted`, `--model` задаёт его модели;
      один сценарий на процесс, шаги общие для всех сессий соединения; сессии — в
      `MemorySessionStore`, в `$CODELAB_HOME` ничего не пишется;
+   * `--sessions-dir <path>` — только вместе с `--llm-script`, в справке скрыт: журнал сессий
+     сценария в `JsonlSessionStore(root: <path>)`, `loadSession` и `sessionCapabilities.list`
+     объявлены, сессии переживают перезапуск процесса — для e2e списка и загрузки сессий
+     (change `add-llm-script-session-store`);
    * на этапе 8 YAML-конфиг (задача 8.5) заменяет этот минимум, флаги остаются переопределениями.
    Задача владеет `apps/codelab_agent/test/llm_scripts/hello.json` (один шаг: ответ `hello`,
    `stopReason: stop`) — его использует проверка DoD — и тестом

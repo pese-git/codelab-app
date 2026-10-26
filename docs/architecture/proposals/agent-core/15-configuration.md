@@ -653,6 +653,7 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | — | `--base-url <url>` (с этапа 4) | `providers.cli.base_url` |
 | `CODELAB_API_KEY` | — (с этапа 4) | ключ провайдера `cli`: `providers.cli.api_key_env = "CODELAB_API_KEY"`; значение в флаги и логи не попадает |
 | — | `--llm-script <file.json>` (с этапа 4, только тесты) | вместо провайдера — `ScriptedStreamFunction` из файла `{"llm": {...}}` формата §14.7; провайдер `scripted`, `--model` — его модели; в справке бинаря скрыт |
+| — | `--sessions-dir <path>` (только тесты, только с `--llm-script`) | корень `JsonlSessionStore` сессий сценария вместо памяти: `loadSession` и `session/list` объявлены, `$CODELAB_HOME` не трогается; в справке бинаря скрыт (change `add-llm-script-session-store`) |
 | `CODELAB_PERMISSION_MODE` | `--permission-mode <mode>` | `permissions.mode` (`plan`, `ask`, `standard`, `accept-edits`, `bypass`); флаг допускает `autopilot` |
 | `CODELAB_PROFILE` | `--profile <name>` | профиль хоста (`agent-serve` у бинаря) |
 | `CODELAB_LOG_LEVEL` | `--log-level <level>` | `logging.level` |
