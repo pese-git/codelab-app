@@ -5,6 +5,7 @@ import 'package:cherrypick/cherrypick.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart'
     show TestWidgetsFlutterBinding, addTearDown;
+import 'package:shared_preferences/shared_preferences.dart';
 
 final class CodeLabTestBinding {
   CodeLabTestBinding({
@@ -12,6 +13,13 @@ final class CodeLabTestBinding {
     CodeLabStdioTransportFactory? stdioTransportFactory,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
   }) : transport = transport ?? FakeAcpTransport() {
+    // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
+    // а у плагина в тестах нет реализации канала: без моков каждая загрузка
+    // недавних проектов падает `MissingPluginException`. Cubit её
+    // перехватывает, но статический completer плагина может отдать ошибку в
+    // зону уже завершившегося теста, и раннер засчитает её как сбой («failed
+    // after test completion»). Пустое хранилище убирает обращение к каналу.
+    SharedPreferences.setMockInitialValues(const {});
     scope = createCodeLabRootScope(
       transportFactory: () => this.transport,
       stdioTransportFactory: stdioTransportFactory,
