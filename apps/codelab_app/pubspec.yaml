@@ -11,6 +11,8 @@ environment:
 dependencies:
   acp_client_core:
     path: ../../packages/dart/acp_client_core
+  acp_client_io:
+    path: ../../packages/dart/acp_client_io
   acp_client_kit:
     path: ../../packages/dart/acp_client_kit
   acp_protocol:

@@ -1,12 +1,13 @@
 import 'dart:convert';
 
+import 'package:acp_client_kit/acp_client_kit.dart' show recentProjectsLimit;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'recent_projects_store.dart';
 
-/// Recents are capped at this many entries — see
-/// add-open-project-picker/design.md, Decision 4.
-const kRecentProjectsLimit = 10;
+/// Сколько недавних проектов хранится; правило общее с CLI и живёт в kit
+/// (`recentProjectsLimit`, add-open-project-picker/design.md, Decision 4).
+const kRecentProjectsLimit = recentProjectsLimit;
 
 const _kRecentProjectsPrefsKey = 'codelab.recent_projects';
 

@@ -173,6 +173,7 @@ AI-agent обязан интерпретировать эти формулиро
     │   ├── acp_protocol/
     │   ├── acp_transports/
     │   ├── acp_client_core/
+    │   ├── acp_client_io/
     │   ├── acp_client_kit/
     │   ├── acp_testing/
     │   ├── codelab_agent_core/
@@ -186,7 +187,8 @@ AI-agent обязан интерпретировать эти формулиро
 * `acp_protocol` — типизированные модели ACP JSON-RPC, codecs и validation.
 * `acp_transports` — заменяемые ACP transports (stdio, WebSocket, тестовые).
 * `acp_client_core` — domain, application state и use cases ACP-клиента.
-* `acp_client_kit` — общий клиентский слой без UI для app и CLI: рабочее пространство, соединение, сессии; правила — во вложенном `AGENTS.md` пакета.
+* `acp_client_kit` — общий клиентский слой без UI для app и CLI: рабочее пространство, соединение, сессии, транскрипт, очередь промптов; правила — во вложенном `AGENTS.md` пакета.
+* `acp_client_io` — `dart:io`-адаптеры клиентского слоя: файлы, процессы, настоящие транспорты, JSON-хранилища; без Flutter; правила — во вложенном `AGENTS.md` пакета.
 * `acp_testing` — fixtures, fake transports и helpers для conformance-тестов.
 * `codelab_agent_core` — встраиваемое ядро Dart-агента на чистом Dart (LLM, цикл, инструменты, разрешения, сессии); правила — во вложенном `AGENTS.md` пакета.
 * `codelab_architecture_tests` — только тесты: сторож импортов и allowlist зависимостей ядра (`melos run guard`).

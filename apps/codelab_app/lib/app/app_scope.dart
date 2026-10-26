@@ -4,12 +4,19 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:acp_client_core/acp_client_core.dart';
+import 'package:acp_client_io/acp_client_io.dart'
+    show
+        IoTerminalProcessRunner,
+        IoTextFileIo,
+        IoWorkingDirectoryProvider,
+        WorkingDirectoryProvider;
 import 'package:acp_client_kit/acp_client_kit.dart'
     show
         AcpClientBackend,
         ClientWorkspace,
         ConfigTransportResolver,
-        InMemorySecretSource;
+        InMemorySecretSource,
+        RecentProjectsStore;
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_transports/io.dart';
 import 'package:cherrypick/cherrypick.dart';
@@ -25,11 +32,7 @@ import 'package:structured_log_remote_sync/structured_log_remote_sync.dart'
     show RemoteSyncLogOutput;
 
 import '../core/platform/project_folder_picker.dart';
-import '../core/platform/recent_projects_store.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
-import '../core/platform/terminal_process_runner.dart';
-import '../core/platform/text_file_io.dart';
-import '../core/platform/working_directory_provider.dart';
 import '../features/workbench/application/shell_cubit.dart';
 
 part 'app_scope.module.cherrypick.g.dart';
