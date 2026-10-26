@@ -11,11 +11,11 @@ import 'package:test/test.dart';
 void main() {
   for (final fixture in loadFixtureCorpus()) {
     test(fixture.id, () async {
-      late _User user;
+      late ClientFixtureUser user;
       final result = await runClientFixture<AcpClientApplication>(fixture, (
         env,
       ) {
-        user = _User(env);
+        user = ClientFixtureUser(env);
         return user.app;
       }, onBeforeExpect: (step) => user.act(step));
       if (result.skipped) {
@@ -31,122 +31,16 @@ void main() {
   }
 }
 
-/// Drives the client the way a user does in the UI.
-final class _User {
-  _User(this.env)
-    : app = AcpClientApplication(
-        transport: FakeAcpTransport(),
-        textFileReader: env.fileSystem,
-        textFileWriter: env.fileSystem,
-        terminalProcessRunner: env.terminal,
-      );
-
-  final ClientFixtureEnvironment env;
-  final AcpClientApplication app;
-
-  /// Outcomes of `session/set_config_option` calls, in order: the error or
-  /// `null` on success.
-  final configResults = <Object?>[];
-
-  /// Ошибки `session/prompt`: ход, сорвавшийся у агента, клиент получает
-  /// JSON-RPC ошибкой (agent-core §13.8) — это исход сценария, а не сбой
-  /// действия пользователя.
-  final promptErrors = <Object>[];
-
-  void act(ClientFixtureStep<AcpClientApplication> step) {
-    final expected = step.expected;
-    switch (expected['method']) {
-      case 'initialize':
-        step.track(app.connect(env.transport));
-      case 'session/new':
-        step.track(app.createSession(CreateSessionCommand(cwd: env.cwd)));
-      case 'session/prompt':
-        final params = expected['params']! as Map<String, Object?>;
-        step.track(
-          app
-              .sendPrompt(
-                SendPromptCommand(
-                  sessionId: _session.id,
-                  prompt: [
-                    for (final block in params['prompt']! as List<Object?>)
-                      ContentBlock.text(
-                        text:
-                            (block! as Map<String, Object?>)['text']! as String,
-                      ),
-                  ],
-                ),
-              )
-              .then<void>((_) {}, onError: promptErrors.add),
-        );
-      case 'session/load':
-        // id берётся из кадра: загружаемой сессии у клиента может ещё не быть
-        // (acp/session-load-interrupted-turn начинается без session/new).
-        final params = expected['params']! as Map<String, Object?>;
-        step.track(
-          app.loadSession(
-            LoadSessionCommand(
-              sessionId: SessionId(params['sessionId']! as String),
-              cwd: env.cwd,
-            ),
-          ),
-        );
-      case 'session/cancel':
-        step.track(app.cancelTurn(CancelTurnCommand(sessionId: _session.id)));
-      case 'session/set_config_option':
-        final params = expected['params']! as Map<String, Object?>;
-        step.track(
-          app
-              .setSessionConfigOption(
-                SetSessionConfigOptionCommand(
-                  sessionId: _session.id,
-                  configId: SessionConfigId(params['configId']! as String),
-                  value: SessionConfigValueId(params['value']! as String),
-                ),
-              )
-              .then<void>(
-                (_) => configResults.add(null),
-                onError: (Object error) => configResults.add(error),
-              ),
-        );
-      case null when _isPermissionAnswer(expected):
-        final outcome =
-            ((expected['result']! as Map)['outcome']! as Map<String, Object?>);
-        final approval = _session.activeTurn!.approvals.values.singleWhere(
-          (a) => !a.isResolved,
-        );
-        step.track(
-          app.respondToPermission(
-            outcome['outcome'] == 'selected'
-                ? RespondToPermissionCommand.selected(
-                    sessionId: _session.id,
-                    approvalId: approval.id,
-                    optionId: PermissionOptionId(
-                      outcome['optionId']! as String,
-                    ),
-                  )
-                : RespondToPermissionCommand.cancelled(
-                    sessionId: _session.id,
-                    approvalId: approval.id,
-                  ),
-          ),
-        );
-    }
-  }
-
-  AcpSession get _session => app.sessions.single;
-
-  bool _isPermissionAnswer(Map<String, Object?> frame) => switch (frame) {
-    {'result': {'outcome': {'outcome': _}}} => true,
-    _ => false,
-  };
-}
-
 typedef _StateCheck =
-    void Function(_User user, ClientFixtureResult<AcpClientApplication> result);
+    void Function(
+      ClientFixtureUser user,
+      ClientFixtureResult<AcpClientApplication> result,
+    );
 
-PromptTurn _lastTurn(_User user) => user.app.sessions.single.turns.last;
+PromptTurn _lastTurn(ClientFixtureUser user) =>
+    user.app.sessions.single.turns.last;
 
-ToolCallRecord _toolCall(_User user, String id) =>
+ToolCallRecord _toolCall(ClientFixtureUser user, String id) =>
     _lastTurn(user).toolCalls[ToolCallId(id)]!;
 
 final _stateChecks = <String, _StateCheck>{

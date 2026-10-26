@@ -294,6 +294,48 @@ void main() {
       expect(workspace.current.sessions.single.status, SessionStatusView.idle);
     });
 
+    test('the session view carries the projected transcript, updated '
+        'synchronously with the session change', () async {
+      final handle = await newSession('s-1');
+      final promptFuture = agent.sent.firstWhere(
+        (message) =>
+            message is JsonRpcRequest && message.method == sessionPromptMethod,
+      );
+      final turn = application.sendPrompt(
+        SendPromptCommand(
+          sessionId: handle.id,
+          prompt: const [ContentBlock.text(text: 'hello')],
+        ),
+      );
+      final prompt = await promptFuture as JsonRpcRequest;
+
+      agent.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: const {
+            'sessionId': 's-1',
+            'update': {
+              'sessionUpdate': 'agent_message_chunk',
+              'content': {'type': 'text', 'text': 'hi'},
+            },
+          },
+        ),
+      );
+
+      expect(handle.current.transcript.map((item) => item.runtimeType), [
+        UserItem,
+        AgentTextItem,
+      ]);
+
+      agent.emitInbound(
+        JsonRpcMessage.response(
+          id: prompt.id,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await turn;
+    });
+
     test('newSession() without a connection is rejected', () async {
       final idle = workspaceWith([_TestResolver([])]);
 

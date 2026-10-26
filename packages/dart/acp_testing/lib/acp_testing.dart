@@ -24,6 +24,7 @@ export 'src/fake_terminal_process_runner.dart';
 export 'src/codelab_compatible_stdio_agent.dart';
 export 'src/fixtures/agent_conformance.dart';
 export 'src/fixtures/client_conformance.dart';
+export 'src/fixtures/client_fixture_user.dart';
 export 'src/fixtures/fixture.dart';
 export 'src/fixtures/matcher.dart';
 export 'src/in_process_acp_link.dart';
