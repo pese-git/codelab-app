@@ -664,7 +664,7 @@ SIGKILL; поздние события старого поколения отб�
 | `IoProjectFiles` | `codelab_client_io/lib/src/files/` | `dart:io` | realpath, перечисление, чтение, `Directory.watch` |
 | `ProjectTreeState`, `ProjectFilesCubit` | `apps/codelab_desktop/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, предпросмотр |
 | `AcpFileTree`, `AcpFileTreeRowData`, `AcpFilePreview` | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`AcpCodeHighlighter`, §12.3) |
-| `ProjectFilesTab` | `.../project_files/presentation/` | presentation | вкладка сайдбара рядом с `AcpSessionSidebar`, связь с `ComposerCubit` |
+| `ProjectFilesTab` | `.../project_files/presentation/` | presentation | вкладка сайдбара рядом с `CodeLabSessionSidebar`, связь с `ComposerCubit` |
 
 `IoProjectFiles` регистрируется в `app/app_scope.dart` (cherrypick), как
 `IoTextFileIo`; виджеты к файловой системе не обращаются (AGENTS.md §6, §11).

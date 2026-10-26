@@ -29,10 +29,11 @@ Future<void> _tapConnectAndWaitUntilSettled(
   WidgetTester tester,
   CodeLabShellCubit shellCubit,
 ) async {
-  await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
+  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
   await tester.pump();
   final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus == AcpConnectionStatus.connecting &&
+  while (shellCubit.state.connectionStatus ==
+          CodeLabConnectionStatus.connecting &&
       DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 100));
   }
@@ -104,7 +105,7 @@ void main() {
       // the cubit's own state rather than relying on frame timing (same
       // pattern as permission_flow_test.dart).
       bool hasPendingApproval() => shellCubit.state.transcriptEntries.any(
-        (entry) => entry.approval is AcpTranscriptApprovalPending,
+        (entry) => entry.approval is CodeLabTranscriptApprovalPending,
       );
       final approvalDeadline = DateTime.now().add(const Duration(seconds: 10));
       while (!hasPendingApproval() &&
@@ -121,7 +122,7 @@ void main() {
       // The session is busy (turn running, approval pending) — submitting a
       // second message through the real composer must queue it instead of
       // attempting to send, per add-prompt-queue/design.md, Goals. This is
-      // exactly the path acp_prompt_composer.dart's `isSubmitting` used to
+      // exactly the path codelab_prompt_composer.dart's `isSubmitting` used to
       // block entirely (both the text field and the Send button were
       // disabled) — a real regression only an e2e test driving the actual
       // widget tree, not a unit test calling the cubit directly, could have
@@ -183,7 +184,7 @@ void main() {
       expect(find.text('queued message delivered'), findsWidgets);
       expect(shellCubit.state.queuedPrompts, isEmpty);
       expect(find.text('Queue'), findsNothing);
-      expect(find.byType(AcpActivityBar), findsNothing);
+      expect(find.byType(CodeLabActivityBar), findsNothing);
 
       // The reply to the approval sits above both later turns' entries —
       // out of the small default window's transcript viewport, which the
@@ -193,7 +194,7 @@ void main() {
         -100,
         scrollable: find
             .descendant(
-              of: find.byType(AcpTranscriptPanel),
+              of: find.byType(CodeLabTranscriptPanel),
               matching: find.byType(Scrollable),
             )
             .first,

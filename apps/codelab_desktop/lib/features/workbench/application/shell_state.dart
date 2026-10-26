@@ -55,7 +55,7 @@ final class CodeLabShellState {
   });
 
   // Подключение — `ConnectionCubit`.
-  final AcpConnectionStatus connectionStatus;
+  final CodeLabConnectionStatus connectionStatus;
   final CodeLabTransportType transportType;
   final String stdioProfileName;
   final String stdioCommand;
@@ -70,11 +70,11 @@ final class CodeLabShellState {
   // Список и выбор сессий — `SessionsCubit`.
   final String currentSessionLabel;
   final String currentSessionDetail;
-  final List<AcpSessionListItem> sessions;
+  final List<CodeLabSessionListItem> sessions;
   final String? activeSessionId;
 
   // Показываемая сессия — `ActiveSessionCubit`.
-  final List<AcpTranscriptEntry> transcriptEntries;
+  final List<CodeLabTranscriptEntry> transcriptEntries;
   final List<CodeLabInspectorEntry> inspectorEntries;
   final bool isPromptSubmitting;
   final bool canCancel;
@@ -82,24 +82,24 @@ final class CodeLabShellState {
 
   /// Команды, объявленные агентом (`available_commands_update`); каждое
   /// обновление заменяет список целиком.
-  final List<AcpCommandAction> agentCommands;
+  final List<CodeLabCommandAction> agentCommands;
 
   /// Текст для композера после выбора команды агента (`/{name} `) или
   /// возврата промпта из очереди.
   final String composerDraft;
-  final List<AcpConfigOption> configOptions;
+  final List<CodeLabConfigOption> configOptions;
   final bool isRespondingToConfigOption;
 
   /// План сессии; `null` — секция плана скрыта.
-  final List<AcpPlanEntry>? currentPlan;
+  final List<CodeLabPlanEntry>? currentPlan;
 
   /// Промпты, ждущие освобождения показываемой сессии, по порядку; агент их
   /// не видит до отправки (add-prompt-queue/design.md, Non-Goals).
-  final List<AcpQueuedPrompt> queuedPrompts;
+  final List<CodeLabQueuedPrompt> queuedPrompts;
 
   // Раскладка — `LayoutCubit`; режим ленты и доступность композера пока
   // постоянны.
-  final AcpViewMode viewMode;
+  final CodeLabViewMode viewMode;
   final bool isPromptEnabled;
   final bool isCommandPaletteOpen;
   final bool isInspectorVisibleInNarrowLayout;
@@ -109,7 +109,7 @@ final class CodeLabShellState {
   // Проект — `SettingsCubit`.
   final String? selectedProjectPath;
   final bool runAgentFromProjectDirectory;
-  final List<AcpRecentProject> recentProjects;
+  final List<CodeLabRecentProject> recentProjects;
 
   /// Отличает «не передан» от «явно `null`» для [currentPlan] в [copyWith].
   static const Object _unset = Object();
@@ -117,7 +117,7 @@ final class CodeLabShellState {
   /// Копия с заменёнными полями — для тестов виджетов, которые показывают
   /// панели на подготовленном состоянии; фасад состояние так не меняет.
   CodeLabShellState copyWith({
-    AcpConnectionStatus? connectionStatus,
+    CodeLabConnectionStatus? connectionStatus,
     CodeLabTransportType? transportType,
     String? stdioProfileName,
     String? stdioCommand,
@@ -130,28 +130,28 @@ final class CodeLabShellState {
     String? connectionDetail,
     String? currentSessionLabel,
     String? currentSessionDetail,
-    List<AcpSessionListItem>? sessions,
+    List<CodeLabSessionListItem>? sessions,
     String? activeSessionId,
-    List<AcpTranscriptEntry>? transcriptEntries,
+    List<CodeLabTranscriptEntry>? transcriptEntries,
     List<CodeLabInspectorEntry>? inspectorEntries,
-    AcpViewMode? viewMode,
+    CodeLabViewMode? viewMode,
     bool? isPromptEnabled,
     bool? isPromptSubmitting,
     bool? canCancel,
     bool? isRespondingToApproval,
     bool? isCommandPaletteOpen,
     bool? isInspectorVisibleInNarrowLayout,
-    List<AcpCommandAction>? agentCommands,
+    List<CodeLabCommandAction>? agentCommands,
     String? composerDraft,
-    List<AcpConfigOption>? configOptions,
+    List<CodeLabConfigOption>? configOptions,
     bool? isRespondingToConfigOption,
     double? sessionsPaneWidth,
     double? inspectorPaneWidth,
     String? selectedProjectPath,
     bool? runAgentFromProjectDirectory,
-    List<AcpRecentProject>? recentProjects,
+    List<CodeLabRecentProject>? recentProjects,
     Object? currentPlan = _unset,
-    List<AcpQueuedPrompt>? queuedPrompts,
+    List<CodeLabQueuedPrompt>? queuedPrompts,
   }) {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
@@ -194,15 +194,15 @@ final class CodeLabShellState {
       recentProjects: recentProjects ?? this.recentProjects,
       currentPlan: identical(currentPlan, _unset)
           ? this.currentPlan
-          : currentPlan as List<AcpPlanEntry>?,
+          : currentPlan as List<CodeLabPlanEntry>?,
       queuedPrompts: queuedPrompts ?? this.queuedPrompts,
     );
   }
 
   /// Полный список палитры: шесть команд клиента, затем команды агента;
   /// команды агента не заменяют команды клиента.
-  List<AcpCommandAction> get paletteActions => [
-    ...AcpCommandAction.defaults,
+  List<CodeLabCommandAction> get paletteActions => [
+    ...CodeLabCommandAction.defaults,
     ...agentCommands,
   ];
 

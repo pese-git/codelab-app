@@ -29,10 +29,11 @@ Future<void> _tapConnectAndWaitUntilSettled(
   WidgetTester tester,
   CodeLabShellCubit shellCubit,
 ) async {
-  await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
+  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
   await tester.pump();
   final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus == AcpConnectionStatus.connecting &&
+  while (shellCubit.state.connectionStatus ==
+          CodeLabConnectionStatus.connecting &&
       DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 100));
   }
@@ -98,7 +99,7 @@ void main() {
       await tester.pump();
 
       bool hasPendingApproval() => shellCubit.state.transcriptEntries.any(
-        (entry) => entry.approval is AcpTranscriptApprovalPending,
+        (entry) => entry.approval is CodeLabTranscriptApprovalPending,
       );
       final approvalDeadline = DateTime.now().add(const Duration(seconds: 10));
       while (!hasPendingApproval() &&
@@ -151,10 +152,12 @@ void main() {
 
       // A stays visible in the sidebar as awaiting approval, live, purely in
       // the background — the user never switched to it to see this update.
-      AcpSessionStatus statusOf(String sessionId) => shellCubit.state.sessions
+      CodeLabSessionStatus statusOf(String sessionId) => shellCubit
+          .state
+          .sessions
           .firstWhere((item) => item.id == sessionId)
           .status;
-      expect(statusOf(sessionAId), AcpSessionStatus.awaitingApproval);
+      expect(statusOf(sessionAId), CodeLabSessionStatus.awaitingApproval);
 
       // Switch back to A, through the real sidebar, and resolve its pending
       // approval — its transcript reflects the resolution correctly even
@@ -179,7 +182,7 @@ void main() {
 
       expect(find.text('approved: allow_once'), findsWidgets);
       expect(shellCubit.state.isPromptSubmitting, isFalse);
-      expect(statusOf(sessionAId), AcpSessionStatus.idle);
+      expect(statusOf(sessionAId), CodeLabSessionStatus.idle);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

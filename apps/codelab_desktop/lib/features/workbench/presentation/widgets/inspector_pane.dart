@@ -23,7 +23,7 @@ class WorkbenchInspectorPane extends StatelessWidget {
         children: [
           const Padding(
             padding: EdgeInsets.fromLTRB(12, 10, 8, 8),
-            child: AcpText('Inspector', role: AcpTextRole.subtitle),
+            child: CodeLabText('Inspector', role: CodeLabTextRole.subtitle),
           ),
           Expanded(
             child: ListView(
@@ -62,12 +62,12 @@ class _InspectorEntryCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                AcpBadge(label: _categoryLabel, tone: _tone),
+                CodeLabBadge(label: _categoryLabel, tone: _tone),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: AcpText(
+                  child: CodeLabText(
                     entry.title,
-                    role: AcpTextRole.strong,
+                    role: CodeLabTextRole.strong,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -75,7 +75,7 @@ class _InspectorEntryCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            AcpText(
+            CodeLabText(
               entry.summary,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
@@ -87,9 +87,12 @@ class _InspectorEntryCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   if (entry.risk != null)
-                    AcpBadge(label: 'Risk ${entry.risk}', tone: _riskTone),
+                    CodeLabBadge(label: 'Risk ${entry.risk}', tone: _riskTone),
                   if (entry.status != null)
-                    AcpBadge(label: entry.status!, tone: AcpTone.neutral),
+                    CodeLabBadge(
+                      label: entry.status!,
+                      tone: CodeLabTone.neutral,
+                    ),
                 ],
               ),
             ],
@@ -121,21 +124,21 @@ class _InspectorEntryCard extends StatelessWidget {
     };
   }
 
-  AcpTone get _tone {
+  CodeLabTone get _tone {
     return switch (entry.category) {
-      CodeLabInspectorCategory.approval => AcpTone.warning,
-      CodeLabInspectorCategory.toolCall => AcpTone.accent,
-      CodeLabInspectorCategory.protocol => AcpTone.neutral,
-      CodeLabInspectorCategory.diagnostic => AcpTone.danger,
+      CodeLabInspectorCategory.approval => CodeLabTone.warning,
+      CodeLabInspectorCategory.toolCall => CodeLabTone.accent,
+      CodeLabInspectorCategory.protocol => CodeLabTone.neutral,
+      CodeLabInspectorCategory.diagnostic => CodeLabTone.danger,
     };
   }
 
-  AcpTone get _riskTone {
+  CodeLabTone get _riskTone {
     return switch (entry.risk) {
-      'readOnly' => AcpTone.success,
-      'localWrite' || 'network' => AcpTone.warning,
-      'shell' || 'destructive' => AcpTone.danger,
-      _ => AcpTone.neutral,
+      'readOnly' => CodeLabTone.success,
+      'localWrite' || 'network' => CodeLabTone.warning,
+      'shell' || 'destructive' => CodeLabTone.danger,
+      _ => CodeLabTone.neutral,
     };
   }
 
@@ -163,10 +166,10 @@ class _InspectorDetailLine extends StatelessWidget {
         children: [
           SizedBox(
             width: 82,
-            child: AcpText(detail.label, role: AcpTextRole.caption),
+            child: CodeLabText(detail.label, role: CodeLabTextRole.caption),
           ),
           Expanded(
-            child: AcpText(
+            child: CodeLabText(
               detail.value,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
@@ -196,9 +199,9 @@ class _InspectorRawBlock extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            AcpText(label, role: AcpTextRole.caption),
+            CodeLabText(label, role: CodeLabTextRole.caption),
             const SizedBox(height: 4),
-            AcpText(value, maxLines: 8, overflow: TextOverflow.ellipsis),
+            CodeLabText(value, maxLines: 8, overflow: TextOverflow.ellipsis),
           ],
         ),
       ),

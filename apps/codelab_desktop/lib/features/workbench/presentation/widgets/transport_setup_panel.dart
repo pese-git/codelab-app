@@ -32,23 +32,23 @@ class TransportSetupPanel extends StatelessWidget {
               children: [
                 Text('Transport', style: theme.typography.bodyStrong),
                 const SizedBox(width: 12),
-                AcpButton(
+                CodeLabButton(
                   label: 'stdio',
                   icon: FluentIcons.command_prompt,
                   emphasis: state.transportType == CodeLabTransportType.stdio
-                      ? AcpButtonEmphasis.primary
-                      : AcpButtonEmphasis.secondary,
+                      ? CodeLabButtonEmphasis.primary
+                      : CodeLabButtonEmphasis.secondary,
                   onPressed: () =>
                       cubit.selectTransport(CodeLabTransportType.stdio),
                 ),
                 const SizedBox(width: 8),
-                AcpButton(
+                CodeLabButton(
                   label: 'WebSocket',
                   icon: FluentIcons.plug,
                   emphasis:
                       state.transportType == CodeLabTransportType.webSocket
-                      ? AcpButtonEmphasis.primary
-                      : AcpButtonEmphasis.secondary,
+                      ? CodeLabButtonEmphasis.primary
+                      : CodeLabButtonEmphasis.secondary,
                   onPressed: () =>
                       cubit.selectTransport(CodeLabTransportType.webSocket),
                 ),

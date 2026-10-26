@@ -12,7 +12,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         parseEnvLines,
         parseShellWords;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
-import 'package:codelab_ui/codelab_ui.dart' show AcpConnectionStatus;
+import 'package:codelab_ui/codelab_ui.dart' show CodeLabConnectionStatus;
 
 import 'active_session_cubit.dart';
 import 'settings_cubit.dart';
@@ -50,7 +50,7 @@ final class ConnectionFormState {
   /// Форма по профилю встроенного агента; WebSocket — локальный адрес.
   factory ConnectionFormState.initial(StdioAcpAgentProfile profile) =>
       ConnectionFormState(
-        connectionStatus: AcpConnectionStatus.disconnected,
+        connectionStatus: CodeLabConnectionStatus.disconnected,
         transportType: CodeLabTransportType.stdio,
         stdioProfileName: profile.name,
         stdioCommand: profile.command,
@@ -62,7 +62,7 @@ final class ConnectionFormState {
         webSocketToken: '',
       );
 
-  final AcpConnectionStatus connectionStatus;
+  final CodeLabConnectionStatus connectionStatus;
   final CodeLabTransportType transportType;
   final String stdioProfileName;
   final String stdioCommand;
@@ -85,7 +85,7 @@ final class ConnectionFormState {
   };
 
   ConnectionFormState _copyWith({
-    AcpConnectionStatus? connectionStatus,
+    CodeLabConnectionStatus? connectionStatus,
     CodeLabTransportType? transportType,
     String? stdioProfileName,
     String? stdioCommand,
@@ -179,11 +179,11 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
         severity: DiagnosticSeverity.error,
         source: 'transport',
       );
-      emit(state._copyWith(connectionStatus: AcpConnectionStatus.failed));
+      emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       return;
     }
 
-    emit(state._copyWith(connectionStatus: AcpConnectionStatus.connecting));
+    emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.connecting));
     _diagnostics.record(
       isWebSocket
           ? 'Connecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
@@ -208,14 +208,14 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
         source: 'transport',
       );
     } on UnsupportedProtocolVersionException catch (error) {
-      emit(state._copyWith(connectionStatus: AcpConnectionStatus.failed));
+      emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       _diagnostics.record(
         'Incompatible ACP agent: ${error.message}',
         severity: DiagnosticSeverity.error,
         source: 'transport',
       );
     } on Object catch (error) {
-      emit(state._copyWith(connectionStatus: AcpConnectionStatus.failed));
+      emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       _diagnostics.record(
         isWebSocket
             ? 'Failed to connect WebSocket ACP agent: $error'
@@ -240,11 +240,13 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
         severity: DiagnosticSeverity.error,
         source: 'transport',
       );
-      emit(state._copyWith(connectionStatus: AcpConnectionStatus.failed));
+      emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       return;
     }
 
-    emit(state._copyWith(connectionStatus: AcpConnectionStatus.reconnecting));
+    emit(
+      state._copyWith(connectionStatus: CodeLabConnectionStatus.reconnecting),
+    );
     _diagnostics.record(
       isWebSocket
           ? 'Reconnecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
@@ -271,7 +273,7 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
       );
     } on Object catch (error) {
       if (isClosed) return;
-      emit(state._copyWith(connectionStatus: AcpConnectionStatus.failed));
+      emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       _diagnostics.record(
         isWebSocket
             ? 'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}'
@@ -294,11 +296,11 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
   /// agent lost` даёт диагностика kit.
   void _handleWorkspaceChange(WorkspaceState workspace) {
     if (workspace.connection is! ConnectionFailed ||
-        state.connectionStatus != AcpConnectionStatus.connected) {
+        state.connectionStatus != CodeLabConnectionStatus.connected) {
       return;
     }
     batch(() {
-      emit(state._copyWith(connectionStatus: AcpConnectionStatus.failed));
+      emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       _activeSession.resetAfterConnectionLoss();
     });
   }

@@ -22,7 +22,7 @@ class CodeLabShell extends StatelessWidget {
         final cubit = context.read<CodeLabShellCubit>();
         final logBuffer = codeLabDependenciesOf(context).logBuffer;
 
-        return AcpWorkbenchShortcuts(
+        return CodeLabWorkbenchShortcuts(
           onOpenCommandPalette: cubit.openCommandPalette,
           onCancel: state.isCommandPaletteOpen
               ? cubit.closeCommandPalette
@@ -39,7 +39,7 @@ class CodeLabShell extends StatelessWidget {
                   sessionsPane: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      AcpProjectPicker(
+                      CodeLabProjectPicker(
                         currentProjectPath: state.selectedProjectPath,
                         recentProjects: state.recentProjects,
                         onProjectSelected: (path) =>
@@ -49,7 +49,7 @@ class CodeLabShell extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Expanded(
-                        child: AcpSessionSidebar(
+                        child: CodeLabSessionSidebar(
                           sessions: state.sessions,
                           activeSessionId: state.activeSessionId,
                           onSessionSelected: cubit.selectSession,
@@ -106,7 +106,7 @@ class _CommandPaletteOverlay extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520, maxHeight: 480),
-            child: AcpCommandPaletteSurface(
+            child: CodeLabCommandPaletteSurface(
               actions: state.paletteActions,
               onActionSelected: (action) =>
                   selectPaletteCommand(context, cubit, action),
@@ -118,7 +118,7 @@ class _CommandPaletteOverlay extends StatelessWidget {
   }
 }
 
-/// Routes a selected [AcpCommandAction] to the right cubit method — shared
+/// Routes a selected [CodeLabCommandAction] to the right cubit method — shared
 /// by the `Ctrl/Cmd+K` overlay and the inline composer trigger so both
 /// paths behave identically (see wire-command-palette/design.md).
 ///
@@ -130,9 +130,9 @@ class _CommandPaletteOverlay extends StatelessWidget {
 void selectPaletteCommand(
   BuildContext context,
   CodeLabShellCubit cubit,
-  AcpCommandAction action,
+  CodeLabCommandAction action,
 ) {
-  if (action.source == AcpCommandSource.agent) {
+  if (action.source == CodeLabCommandSource.agent) {
     cubit.insertAgentCommand(action);
     return;
   }
@@ -197,7 +197,7 @@ class _ResizableWorkbenchLayoutState extends State<_ResizableWorkbenchLayout> {
 
   @override
   Widget build(BuildContext context) {
-    return AcpWorkbenchLayout(
+    return CodeLabWorkbenchLayout(
       commandBar: widget.commandBar,
       sessionsPane: widget.sessionsPane,
       mainPane: widget.mainPane,

@@ -22,7 +22,7 @@ final class SessionsState {
   });
 
   /// Строки сайдбара, последняя изменившаяся сессия первой.
-  final List<AcpSessionListItem> sessions;
+  final List<CodeLabSessionListItem> sessions;
   final String? activeSessionId;
   final String currentSessionLabel;
   final String currentSessionDetail;
@@ -31,7 +31,7 @@ final class SessionsState {
 /// Список сессий в сайдбаре и выбор показываемой сессии.
 ///
 /// Почему: создание и выбор сессии — `ClientWorkspace.newSession` и
-/// `activate` kit; в app остаётся отображение в `AcpSessionListItem` и
+/// `activate` kit; в app остаётся отображение в `CodeLabSessionListItem` и
 /// решение, какую сессию показывать (таблица переноса `09-10`, строка
 /// «Сессии»; design D10 change `extract-acp-client-kit`).
 ///
@@ -77,7 +77,8 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
 
   /// Создаёт сессию в папке проекта и сразу показывает её.
   Future<void> createSession() async {
-    if (_connection.state.connectionStatus != AcpConnectionStatus.connected) {
+    if (_connection.state.connectionStatus !=
+        CodeLabConnectionStatus.connected) {
       _diagnostics.record(
         'Connect an ACP agent before creating a session.',
         severity: DiagnosticSeverity.warning,
@@ -187,9 +188,9 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   }
 
   static SessionsState _activated(
-    AcpSessionListItem item,
+    CodeLabSessionListItem item,
     AcpSession session, {
-    required List<AcpSessionListItem> sessions,
+    required List<CodeLabSessionListItem> sessions,
   }) => SessionsState(
     sessions: sessions,
     activeSessionId: item.id,

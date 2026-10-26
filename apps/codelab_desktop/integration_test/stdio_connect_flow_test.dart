@@ -36,10 +36,11 @@ Future<void> _tapConnectAndWaitUntilSettled(
   WidgetTester tester,
   CodeLabShellCubit shellCubit,
 ) async {
-  await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
+  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
   await tester.pump();
   final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus == AcpConnectionStatus.connecting &&
+  while (shellCubit.state.connectionStatus ==
+          CodeLabConnectionStatus.connecting &&
       DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 100));
   }
@@ -59,7 +60,7 @@ void main() {
       '',
     );
     await _closeConnectionSetupDialog(tester);
-    await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
+    await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
     await tester.pumpAndSettle();
 
     expect(find.text('Failed'), findsWidgets);
@@ -328,13 +329,14 @@ void main() {
       // synchronous transition is already covered at the unit level in
       // widget_test.dart. Poll straight for the settled failed state.
       final deadline = DateTime.now().add(const Duration(seconds: 10));
-      while (shellCubit.state.connectionStatus != AcpConnectionStatus.failed &&
+      while (shellCubit.state.connectionStatus !=
+              CodeLabConnectionStatus.failed &&
           DateTime.now().isBefore(deadline)) {
         await tester.pump(const Duration(milliseconds: 100));
       }
       await tester.pumpAndSettle();
 
-      expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+      expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       expect(shellCubit.state.isPromptSubmitting, isFalse);
       expect(shellCubit.state.canCancel, isFalse);
       expect(find.text('Failed'), findsWidgets);

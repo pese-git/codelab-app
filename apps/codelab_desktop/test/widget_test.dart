@@ -34,7 +34,7 @@ import 'support/test_app_scope.dart';
 /// comes after the composer in the tree.
 Finder _composerField() => find
     .descendant(
-      of: find.byType(AcpPromptComposer),
+      of: find.byType(CodeLabPromptComposer),
       matching: find.byType(EditableText),
     )
     .last;
@@ -80,10 +80,10 @@ void main() {
       scope.resolve<CodeLabShellCubit>().state.transportType,
       CodeLabTransportType.stdio,
     );
-    expect(find.byType(AcpWorkbenchLayout), findsOneWidget);
-    expect(find.byType(AcpConnectionScreen), findsOneWidget);
-    expect(find.byType(AcpPromptComposer), findsOneWidget);
-    expect(find.byType(AcpWorkbenchShortcuts), findsOneWidget);
+    expect(find.byType(CodeLabWorkbenchLayout), findsOneWidget);
+    expect(find.byType(CodeLabConnectionScreen), findsOneWidget);
+    expect(find.byType(CodeLabPromptComposer), findsOneWidget);
+    expect(find.byType(CodeLabWorkbenchShortcuts), findsOneWidget);
     expect(
       scope.resolve<CodeLabTransportFactory>(),
       isA<CodeLabTransportFactory>(),
@@ -150,7 +150,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(AcpButton, 'WebSocket'));
+    await tester.tap(find.widgetWithText(CodeLabButton, 'WebSocket'));
     await tester.pump(const Duration(milliseconds: 100));
 
     const endpoint = 'wss://agent.example.test/acp';
@@ -218,7 +218,7 @@ void main() {
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
       final buttonFinder = find.descendant(
-        of: find.byType(AcpConnectionScreen),
+        of: find.byType(CodeLabConnectionScreen),
         matching: find.text('Configure connection'),
       );
       await tester.tap(buttonFinder);
@@ -291,7 +291,7 @@ void main() {
       expect(shellCubit.state.stdioCommand, 'custom-agent');
       expect(
         shellCubit.state.connectionStatus,
-        AcpConnectionStatus.disconnected,
+        CodeLabConnectionStatus.disconnected,
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -323,7 +323,10 @@ void main() {
 
     await shellCubit.selectProject('/workspace');
     await shellCubit.connect();
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
 
     final sentRequest = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
@@ -378,7 +381,10 @@ void main() {
       ..updateWebSocketEndpoint('wss://agent.example.test/acp');
     await shellCubit.selectProject('/remote/workspace');
     await shellCubit.connect();
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
 
     final sentRequest = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
@@ -859,7 +865,10 @@ void main() {
       expect(shellCubit.state.canCancel, isTrue);
       final midStreamEntries = shellCubit.state.transcriptEntries;
       expect(midStreamEntries.last.title, 'Run build');
-      expect(midStreamEntries.last.toolCall!.status, AcpToolCallStatus.queued);
+      expect(
+        midStreamEntries.last.toolCall!.status,
+        CodeLabToolCallStatus.queued,
+      );
 
       emitAgentText('after');
       agentTransport.emitInbound(
@@ -877,7 +886,7 @@ void main() {
 
       final readConfigEntry = shellCubit.state.transcriptEntries[2];
       expect(readConfigEntry.toolCall!.name, 'read');
-      expect(readConfigEntry.toolCall!.status, AcpToolCallStatus.running);
+      expect(readConfigEntry.toolCall!.status, CodeLabToolCallStatus.running);
 
       await shellCubit.close();
       await application.dispose();
@@ -988,7 +997,10 @@ void main() {
 
     await shellCubit.selectProject('/workspace');
     await shellCubit.connect();
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
 
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
@@ -1017,7 +1029,7 @@ void main() {
       ),
     );
 
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     expect(shellCubit.state.isPromptSubmitting, isFalse);
     expect(shellCubit.state.canCancel, isFalse);
     expect(
@@ -1071,7 +1083,7 @@ void main() {
     shellCubit.updateStdioCommand('missing-codelab');
     await shellCubit.connect();
 
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     final lossMessages = logger.entries.where(
       (entry) => (entry['event'] as String? ?? '').contains(
         'Connection to ACP agent lost',
@@ -1119,11 +1131,14 @@ void main() {
 
     await shellCubit.selectProject('/workspace');
     await shellCubit.connect();
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
 
     await shellCubit.reconnect();
 
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     final lossMessages = logger.entries.where(
       (entry) => (entry['event'] as String? ?? '').contains(
         'Connection to ACP agent lost',
@@ -1301,9 +1316,9 @@ void main() {
     final submitFuture = shellCubit.submitPrompt('run a command');
     final promptRequest = await promptRequestFuture as dynamic;
 
-    AcpTranscriptEntry? pendingApprovalEntry() {
+    CodeLabTranscriptEntry? pendingApprovalEntry() {
       final matches = shellCubit.state.transcriptEntries
-          .where((entry) => entry.approval is AcpTranscriptApprovalPending)
+          .where((entry) => entry.approval is CodeLabTranscriptApprovalPending)
           .toList();
       return matches.isEmpty ? null : matches.single;
     }
@@ -1342,8 +1357,8 @@ void main() {
     final pendingEntry = pendingApprovalEntry();
     expect(pendingEntry, isNotNull);
     expect(pendingEntry!.title, 'Run command');
-    final pending = pendingEntry.approval! as AcpTranscriptApprovalPending;
-    expect(pending.risk, AcpApprovalRisk.shell);
+    final pending = pendingEntry.approval! as CodeLabTranscriptApprovalPending;
+    expect(pending.risk, CodeLabApprovalRisk.shell);
     expect(pending.command, 'echo hi');
     expect(pending.options.map((option) => option.id), [
       'allow-once',
@@ -1377,12 +1392,13 @@ void main() {
     // it does not disappear (embed-approval-in-thread/specs/
     // agent-workbench-ui: "Approval остаётся в истории после решения").
     final resolvedEntries = shellCubit.state.transcriptEntries
-        .where((entry) => entry.approval is AcpTranscriptApprovalResolved)
+        .where((entry) => entry.approval is CodeLabTranscriptApprovalResolved)
         .toList();
     expect(resolvedEntries, hasLength(1));
     expect(resolvedEntries.single.title, 'Run command');
     expect(
-      (resolvedEntries.single.approval! as AcpTranscriptApprovalResolved).label,
+      (resolvedEntries.single.approval! as CodeLabTranscriptApprovalResolved)
+          .label,
       'Allow once',
     );
 
@@ -1467,16 +1483,16 @@ void main() {
     );
 
     final pendingEntries = shellCubit.state.transcriptEntries
-        .where((entry) => entry.approval is AcpTranscriptApprovalPending)
+        .where((entry) => entry.approval is CodeLabTranscriptApprovalPending)
         .toList();
     expect(pendingEntries, hasLength(2));
     expect(pendingEntries[0].title, 'Run first command');
     expect(pendingEntries[1].title, 'Run second command');
 
     final firstApproval =
-        pendingEntries[0].approval! as AcpTranscriptApprovalPending;
+        pendingEntries[0].approval! as CodeLabTranscriptApprovalPending;
     final secondApproval =
-        pendingEntries[1].approval! as AcpTranscriptApprovalPending;
+        pendingEntries[1].approval! as CodeLabTranscriptApprovalPending;
     expect(
       firstApproval.shortcutsEnabled,
       isTrue,
@@ -1501,11 +1517,11 @@ void main() {
     // The second approval — now the only one still pending — takes over
     // the shortcut.
     final remainingPending = shellCubit.state.transcriptEntries
-        .where((entry) => entry.approval is AcpTranscriptApprovalPending)
+        .where((entry) => entry.approval is CodeLabTranscriptApprovalPending)
         .toList();
     expect(remainingPending, hasLength(1));
     expect(
-      (remainingPending.single.approval! as AcpTranscriptApprovalPending)
+      (remainingPending.single.approval! as CodeLabTranscriptApprovalPending)
           .shortcutsEnabled,
       isTrue,
     );
@@ -1605,7 +1621,7 @@ void main() {
           .singleWhere((entry) => entry.toolCall != null)
           .toolCall
           ?.status,
-      AcpToolCallStatus.cancelled,
+      CodeLabToolCallStatus.cancelled,
     );
 
     // The queue waits for the agent's answer to the cancelled prompt.
@@ -1697,7 +1713,7 @@ void main() {
     expect(shellCubit.state.canCancel, isFalse);
     expect(
       shellCubit.state.transcriptEntries.last.kind,
-      AcpTranscriptEntryKind.diagnostic,
+      CodeLabTranscriptEntryKind.diagnostic,
     );
     expect(logger.entries.last['event'], contains('Failed to send prompt'));
 
@@ -1745,7 +1761,10 @@ void main() {
     ]);
     expect(initialTransport.state, AcpTransportState.closed);
     expect(stdioTransport.state, AcpTransportState.connected);
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
     expect(
       logger.entries.map((entry) => entry['event']),
       contains('Starting stdio ACP agent: codelab serve --stdio.'),
@@ -1813,7 +1832,10 @@ void main() {
       ]);
       expect(connectedTransport.state, AcpTransportState.closed);
       expect(reconnectedTransport.state, AcpTransportState.connected);
-      expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+      expect(
+        shellCubit.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
       expect(
         logger.entries.map((entry) => entry['event']),
         contains(
@@ -1860,7 +1882,7 @@ void main() {
     await shellCubit.connect();
 
     expect(configs, isEmpty);
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     expect(
       logger.entries.last['event'],
       'Stdio command is required before connecting.',
@@ -1898,7 +1920,7 @@ void main() {
     await shellCubit.connect();
 
     expect(configs.single.command, 'missing-codelab');
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     expect(
       logger.entries.last['event'],
       contains('Failed to start stdio ACP agent'),
@@ -1948,7 +1970,10 @@ void main() {
       ),
     ]);
     expect(agentTransport.state, AcpTransportState.connected);
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
     expect(
       logger.entries.map((entry) => entry['event']),
       contains('WebSocket ACP agent connected: wss://agent.example.test/acp.'),
@@ -2011,7 +2036,10 @@ void main() {
       ]);
       expect(connectedTransport.state, AcpTransportState.closed);
       expect(reconnectedTransport.state, AcpTransportState.connected);
-      expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+      expect(
+        shellCubit.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
       expect(
         logger.entries.map((entry) => entry['event']),
         contains(
@@ -2061,11 +2089,14 @@ void main() {
       ..selectTransport(CodeLabTransportType.webSocket)
       ..updateWebSocketEndpoint('wss://agent.example.test/acp');
     await shellCubit.connect();
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
 
     await shellCubit.reconnect();
 
-    expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     expect(
       logger.entries.last['event'],
       contains('Failed to reconnect WebSocket ACP agent'),
@@ -2180,7 +2211,7 @@ void main() {
       shellCubit.updateStdioCommand('missing-codelab');
       await shellCubit.connect();
 
-      expect(shellCubit.state.connectionStatus, AcpConnectionStatus.failed);
+      expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       final message = logger.entries.last['event'];
       expect(message, contains('Failed to start stdio ACP agent'));
       expect(message, isNot(contains('sk-super-secret-value')));
@@ -2249,13 +2280,13 @@ void main() {
     await tester.pump();
 
     expect(shellCubit.state.isCommandPaletteOpen, isTrue);
-    expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+    expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
 
     expect(shellCubit.state.isCommandPaletteOpen, isFalse);
-    expect(find.byType(AcpCommandPaletteSurface), findsNothing);
+    expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScope();
@@ -2331,10 +2362,10 @@ void main() {
         selectPaletteCommand(
           tester.element(find.byType(CodeLabApp)),
           shellCubit,
-          AcpCommandAction.defaults.firstWhere((a) => a.id == 'reconnect'),
+          CodeLabCommandAction.defaults.firstWhere((a) => a.id == 'reconnect'),
         );
         while (shellCubit.state.connectionStatus !=
-            AcpConnectionStatus.connected) {
+            CodeLabConnectionStatus.connected) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
       });
@@ -2342,7 +2373,10 @@ void main() {
 
       expect(connectedTransport.state, AcpTransportState.closed);
       expect(reconnectedTransport.state, AcpTransportState.connected);
-      expect(shellCubit.state.connectionStatus, AcpConnectionStatus.connected);
+      expect(
+        shellCubit.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
       expect(shellCubit.state.isCommandPaletteOpen, isFalse);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -2369,7 +2403,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // The narrow-layout Offstage toggle that this flag drives is covered
-    // directly on `AcpWorkbenchLayout` in acp_organisms_test.dart, at a
+    // directly on `CodeLabWorkbenchLayout` in codelab_organisms_test.dart, at a
     // width narrow enough to trigger it — the full CodeLabApp's command
     // bar isn't adaptive at that width (a pre-existing, unrelated gap), so
     // this test only checks the state/UI wiring this change owns.
@@ -2499,7 +2533,7 @@ void main() {
         binding.scope.resolve<LogBuffer>().entries.value.length,
         diagnosticsBefore,
       );
-      expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+      expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await closeCodeLabRootScope();
@@ -2514,7 +2548,7 @@ void main() {
     await tester.enterText(_composerField(), '/ne');
     await tester.pump();
 
-    expect(find.byType(AcpCommandPaletteSurface), findsOneWidget);
+    expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
     expect(find.text('/new'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -2557,7 +2591,7 @@ void main() {
         const Duration(seconds: 5),
       );
       expect(find.text('From agent'), findsNothing);
-      for (final action in AcpCommandAction.defaults) {
+      for (final action in CodeLabCommandAction.defaults) {
         expect(find.text(action.slashCommand), findsOneWidget);
       }
       shellCubit.closeCommandPalette();
@@ -2598,7 +2632,7 @@ void main() {
       // palette's list to bring them into the built/visible range.
       expect(find.text('/new'), findsOneWidget);
       final paletteScrollable = find.descendant(
-        of: find.byKey(AcpCommandPaletteSurface.listKey),
+        of: find.byKey(CodeLabCommandPaletteSurface.listKey),
         matching: find.byType(Scrollable),
       );
       await tester.scrollUntilVisible(
@@ -2702,7 +2736,7 @@ void main() {
         find.text('/deploy'),
         100,
         scrollable: find.descendant(
-          of: find.byKey(AcpCommandPaletteSurface.listKey),
+          of: find.byKey(CodeLabCommandPaletteSurface.listKey),
           matching: find.byType(Scrollable),
         ),
       );
@@ -2873,9 +2907,9 @@ void main() {
       ),
     );
 
-    AcpTranscriptEntry? pendingApprovalEntry() {
+    CodeLabTranscriptEntry? pendingApprovalEntry() {
       final matches = shellCubit.state.transcriptEntries
-          .where((entry) => entry.approval is AcpTranscriptApprovalPending)
+          .where((entry) => entry.approval is CodeLabTranscriptApprovalPending)
           .toList();
       return matches.isEmpty ? null : matches.single;
     }
@@ -3205,13 +3239,15 @@ void main() {
         final binding = await pumpDesktopShell(tester);
         final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-        final handle = find.byType(AcpResizeHandle).first;
+        final handle = find.byType(CodeLabResizeHandle).first;
         final gesture = await tester.startGesture(tester.getCenter(handle));
         await gesture.moveBy(const Offset(40, 0));
         await tester.pump();
 
         expect(
-          tester.getSize(find.byKey(AcpWorkbenchLayout.sessionsPaneKey)).width,
+          tester
+              .getSize(find.byKey(CodeLabWorkbenchLayout.sessionsPaneKey))
+              .width,
           closeTo(320, 1),
         );
         expect(shellCubit.state.sessionsPaneWidth, 280);
@@ -3233,14 +3269,16 @@ void main() {
         final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
         await tester.drag(
-          find.byType(AcpResizeHandle).last,
+          find.byType(CodeLabResizeHandle).last,
           const Offset(-40, 0),
         );
         await tester.pump();
 
         expect(shellCubit.state.inspectorPaneWidth, closeTo(360, 1));
         expect(
-          tester.getSize(find.byKey(AcpWorkbenchLayout.inspectorPaneKey)).width,
+          tester
+              .getSize(find.byKey(CodeLabWorkbenchLayout.inspectorPaneKey))
+              .width,
           closeTo(360, 1),
         );
 
@@ -3255,7 +3293,7 @@ void main() {
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
       await tester.drag(
-        find.byType(AcpResizeHandle).first,
+        find.byType(CodeLabResizeHandle).first,
         const Offset(-1000, 0),
       );
       await tester.pump();
@@ -3272,7 +3310,7 @@ void main() {
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
       await tester.drag(
-        find.byType(AcpResizeHandle).first,
+        find.byType(CodeLabResizeHandle).first,
         const Offset(1000, 0),
       );
       await tester.pump();
@@ -3291,7 +3329,7 @@ void main() {
       // Dragging right shrinks the inspector (its divider sits on its left
       // edge) — the mirror image of the sessions-pane min test.
       await tester.drag(
-        find.byType(AcpResizeHandle).last,
+        find.byType(CodeLabResizeHandle).last,
         const Offset(1000, 0),
       );
       await tester.pump();
@@ -3308,7 +3346,7 @@ void main() {
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
       await tester.drag(
-        find.byType(AcpResizeHandle).last,
+        find.byType(CodeLabResizeHandle).last,
         const Offset(-1000, 0),
       );
       await tester.pump();
@@ -3327,7 +3365,7 @@ void main() {
         final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
         await tester.drag(
-          find.byType(AcpResizeHandle).first,
+          find.byType(CodeLabResizeHandle).first,
           const Offset(40, 0),
         );
         await tester.pump();
@@ -3340,7 +3378,9 @@ void main() {
 
         expect(shellCubit.state.sessionsPaneWidth, closeTo(320, 1));
         expect(
-          tester.getSize(find.byKey(AcpWorkbenchLayout.sessionsPaneKey)).width,
+          tester
+              .getSize(find.byKey(CodeLabWorkbenchLayout.sessionsPaneKey))
+              .width,
           closeTo(320, 1),
         );
 
@@ -3473,11 +3513,11 @@ void main() {
       final plan = harness.shellCubit.state.currentPlan;
       expect(plan, hasLength(2));
       expect(plan![0].content, readEntry['content']);
-      expect(plan[0].status, AcpPlanEntryStatus.completed);
-      expect(plan[0].priority, AcpPlanEntryPriority.medium);
+      expect(plan[0].status, CodeLabPlanEntryStatus.completed);
+      expect(plan[0].priority, CodeLabPlanEntryPriority.medium);
       expect(plan[1].content, testEntry['content']);
-      expect(plan[1].status, AcpPlanEntryStatus.inProgress);
-      expect(plan[1].priority, AcpPlanEntryPriority.high);
+      expect(plan[1].status, CodeLabPlanEntryStatus.inProgress);
+      expect(plan[1].priority, CodeLabPlanEntryPriority.high);
     });
 
     test('a later plan update fully replaces the previous one, not merges '
@@ -3586,29 +3626,29 @@ void main() {
 
         final activeState = harness.shellCubit.state.copyWith(
           transcriptEntries: const [
-            AcpTranscriptEntry(
+            CodeLabTranscriptEntry(
               id: 'user-1',
-              kind: AcpTranscriptEntryKind.user,
+              kind: CodeLabTranscriptEntryKind.user,
               title: 'You',
               body: 'Fix the token refresh race condition.',
             ),
           ],
           currentPlan: const [
-            AcpPlanEntry(
+            CodeLabPlanEntry(
               content: 'Reproduce the token refresh race condition',
-              status: AcpPlanEntryStatus.completed,
-              priority: AcpPlanEntryPriority.high,
+              status: CodeLabPlanEntryStatus.completed,
+              priority: CodeLabPlanEntryPriority.high,
             ),
-            AcpPlanEntry(
+            CodeLabPlanEntry(
               content: 'Run melos analyze to confirm no new lint issues',
-              status: AcpPlanEntryStatus.inProgress,
-              priority: AcpPlanEntryPriority.medium,
+              status: CodeLabPlanEntryStatus.inProgress,
+              priority: CodeLabPlanEntryPriority.medium,
             ),
           ],
         );
         await pumpMainPane(activeState);
 
-        expect(find.byType(AcpActivityBar), findsOneWidget);
+        expect(find.byType(CodeLabActivityBar), findsOneWidget);
         expect(
           find.text('Run melos analyze to confirm no new lint issues'),
           findsOneWidget,
@@ -3616,21 +3656,21 @@ void main() {
 
         final allCompletedState = activeState.copyWith(
           currentPlan: const [
-            AcpPlanEntry(
+            CodeLabPlanEntry(
               content: 'Reproduce the token refresh race condition',
-              status: AcpPlanEntryStatus.completed,
-              priority: AcpPlanEntryPriority.high,
+              status: CodeLabPlanEntryStatus.completed,
+              priority: CodeLabPlanEntryPriority.high,
             ),
-            AcpPlanEntry(
+            CodeLabPlanEntry(
               content: 'Run melos analyze to confirm no new lint issues',
-              status: AcpPlanEntryStatus.completed,
-              priority: AcpPlanEntryPriority.medium,
+              status: CodeLabPlanEntryStatus.completed,
+              priority: CodeLabPlanEntryPriority.medium,
             ),
           ],
         );
         await pumpMainPane(allCompletedState);
 
-        expect(find.byType(AcpActivityBar), findsNothing);
+        expect(find.byType(CodeLabActivityBar), findsNothing);
 
         await tester.pumpWidget(const SizedBox.shrink());
       },
@@ -3649,9 +3689,9 @@ void main() {
 
       final stateWithTranscript = harness.shellCubit.state.copyWith(
         transcriptEntries: const [
-          AcpTranscriptEntry(
+          CodeLabTranscriptEntry(
             id: 'user-1',
-            kind: AcpTranscriptEntryKind.user,
+            kind: CodeLabTranscriptEntryKind.user,
             title: 'You',
             body: 'Fix the token refresh race condition.',
           ),
@@ -4197,22 +4237,22 @@ void main() {
 
         final state = harness.shellCubit.state.copyWith(
           transcriptEntries: const [
-            AcpTranscriptEntry(
+            CodeLabTranscriptEntry(
               id: 'user-1',
-              kind: AcpTranscriptEntryKind.user,
+              kind: CodeLabTranscriptEntryKind.user,
               title: 'You',
               body: 'Fix the token refresh race condition.',
             ),
           ],
           currentPlan: const [
-            AcpPlanEntry(
+            CodeLabPlanEntry(
               content: 'Run melos analyze to confirm no new lint issues',
-              status: AcpPlanEntryStatus.inProgress,
-              priority: AcpPlanEntryPriority.medium,
+              status: CodeLabPlanEntryStatus.inProgress,
+              priority: CodeLabPlanEntryPriority.medium,
             ),
           ],
           queuedPrompts: const [
-            AcpQueuedPrompt(id: 'queued-0', content: 'do the next thing'),
+            CodeLabQueuedPrompt(id: 'queued-0', content: 'do the next thing'),
           ],
         );
 
@@ -4222,7 +4262,7 @@ void main() {
           ),
         );
 
-        expect(find.byType(AcpActivityBar), findsOneWidget);
+        expect(find.byType(CodeLabActivityBar), findsOneWidget);
         // Plan's collapsed header shows the in-progress entry directly.
         expect(
           find.text('Run melos analyze to confirm no new lint issues'),
@@ -4548,7 +4588,7 @@ void main() {
       addTearDown(setup.shellCubit.close);
       addTearDown(setup.application.dispose);
 
-      AcpSessionStatus statusOf(String sessionId) => setup
+      CodeLabSessionStatus statusOf(String sessionId) => setup
           .shellCubit
           .state
           .sessions
@@ -4556,7 +4596,7 @@ void main() {
           .status;
 
       expect(setup.shellCubit.state.activeSessionId, 'session-b');
-      expect(statusOf('session-a'), AcpSessionStatus.awaitingApproval);
+      expect(statusOf('session-a'), CodeLabSessionStatus.awaitingApproval);
 
       final permissionResponseFuture = setup.agentTransport.sent.first;
       final respondFuture = setup.shellCubit.respondToApproval(
@@ -4570,7 +4610,7 @@ void main() {
       // Still active on B — the resolved approval alone must already be
       // reflected in A's sidebar entry.
       expect(setup.shellCubit.state.activeSessionId, 'session-b');
-      expect(statusOf('session-a'), AcpSessionStatus.running);
+      expect(statusOf('session-a'), CodeLabSessionStatus.running);
 
       setup.agentTransport.emitInbound(
         JsonRpcMessage.response(
@@ -4581,7 +4621,7 @@ void main() {
       await setup.submitFutureA;
 
       expect(setup.shellCubit.state.activeSessionId, 'session-b');
-      expect(statusOf('session-a'), AcpSessionStatus.idle);
+      expect(statusOf('session-a'), CodeLabSessionStatus.idle);
     });
   });
 }

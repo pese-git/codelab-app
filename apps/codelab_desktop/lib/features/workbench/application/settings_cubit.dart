@@ -6,7 +6,7 @@ import 'package:codelab_client_io/codelab_client_io.dart'
     show WorkingDirectoryProvider;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show RecentProjectsStore;
-import 'package:codelab_ui/codelab_ui.dart' show AcpRecentProject;
+import 'package:codelab_ui/codelab_ui.dart' show CodeLabRecentProject;
 
 import '../../../core/platform/project_folder_picker.dart';
 import 'shell_part.dart';
@@ -32,12 +32,12 @@ final class SettingsState {
   final bool runAgentFromProjectDirectory;
 
   /// Недавние проекты, самый свежий первым (design.md, Decision 4).
-  final List<AcpRecentProject> recentProjects;
+  final List<CodeLabRecentProject> recentProjects;
 
   SettingsState _copyWith({
     String? selectedProjectPath,
     bool? runAgentFromProjectDirectory,
-    List<AcpRecentProject>? recentProjects,
+    List<CodeLabRecentProject>? recentProjects,
   }) => SettingsState(
     selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
     runAgentFromProjectDirectory:
