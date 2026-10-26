@@ -779,6 +779,62 @@ void main() {
     ]);
   });
 
+  // Подписи вариантов — свободный текст агента, поэтому кнопку находят по
+  // ключу вида: подписи Dart-агента здесь намеренно не совпадают с видом.
+  for (final layout in CodeLabApprovalOptionsLayout.values) {
+    testWidgets('keys each option button by its kind ($layout)', (
+      tester,
+    ) async {
+      final selected = <String>[];
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: CodeLabApprovalOptionGroup(
+            layout: layout,
+            onSelected: selected.add,
+            options: const [
+              CodeLabApprovalOption(
+                id: 'a1',
+                label: 'Allow once',
+                kind: CodeLabApprovalOptionKind.allowOnce,
+              ),
+              CodeLabApprovalOption(
+                id: 'a2',
+                label: 'Always allow echo *',
+                kind: CodeLabApprovalOptionKind.allowAlways,
+              ),
+              CodeLabApprovalOption(
+                id: 'r1',
+                label: 'Reject',
+                kind: CodeLabApprovalOptionKind.rejectOnce,
+              ),
+              CodeLabApprovalOption(
+                id: 'r2',
+                label: 'Always reject echo *',
+                kind: CodeLabApprovalOptionKind.rejectAlways,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      for (final kind in CodeLabApprovalOptionKind.values) {
+        expect(find.byKey(approvalOptionKey(kind)), findsOneWidget);
+      }
+      expect(
+        find.byKey(const ValueKey('approval-option-allow_always')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.rejectAlways)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(selected, ['r2']);
+    });
+  }
+
   testWidgets('a non-English label without allow/reject words still gets the '
       'shortcut its kind implies', (tester) async {
     final selected = <String>[];

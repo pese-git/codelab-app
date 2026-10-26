@@ -3713,6 +3713,89 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
+
+    // Размер панели — как в e2e `plan_progress_checklist_flow_test` против
+    // Dart-агента: там колонка переполнялась на 31 px, а лента сжималась
+    // до нуля, когда план разворачивался над композером с чипами настроек.
+    testWidgets('the expanded plan fits a 580x275 main pane with config '
+        'chips in the composer, leaving the transcript visible', (
+      tester,
+    ) async {
+      final harness = await createSessionCubit(tester: tester);
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final state = harness.shellCubit.state.copyWith(
+        transcriptEntries: const [
+          CodeLabTranscriptEntry(
+            id: 'user-1',
+            kind: CodeLabTranscriptEntryKind.user,
+            title: 'You',
+            body: 'Fix the token refresh race condition.',
+          ),
+        ],
+        currentPlan: [
+          for (var i = 0; i < 6; i += 1)
+            CodeLabPlanEntry(
+              content: 'Plan step number $i',
+              status: i == 0
+                  ? CodeLabPlanEntryStatus.inProgress
+                  : CodeLabPlanEntryStatus.pending,
+              priority: CodeLabPlanEntryPriority.medium,
+            ),
+        ],
+        configOptions: const [
+          CodeLabConfigOption(
+            id: 'model',
+            name: 'Model',
+            currentValue: 'gpt-5',
+            values: [
+              CodeLabConfigOptionValue(value: 'gpt-5', name: 'gpt-5'),
+              CodeLabConfigOptionValue(value: 'gpt-4', name: 'gpt-4'),
+            ],
+          ),
+          CodeLabConfigOption(
+            id: 'mode',
+            name: 'Permission mode',
+            currentValue: 'standard',
+            values: [
+              CodeLabConfigOptionValue(value: 'standard', name: 'Standard'),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        FluentApp(
+          home: Center(
+            child: SizedBox(
+              width: 580,
+              height: 275,
+              child: WorkbenchMainPane(state: state, cubit: harness.shellCubit),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('Plan step number 0'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Plan step number 1'), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(CodeLabTranscriptPanel)).height,
+        greaterThanOrEqualTo(64),
+      );
+      expect(
+        tester.getRect(find.byType(CodeLabPromptComposer)).bottom,
+        lessThanOrEqualTo(
+          tester.getRect(find.byType(WorkbenchMainPane)).bottom,
+        ),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 
   group('prompt queue', () {
