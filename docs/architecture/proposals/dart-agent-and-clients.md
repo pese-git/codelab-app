@@ -85,6 +85,7 @@ Could / Won't и сценариями приёмки: [agent-parity-goals.md](ag
 | 12.5 | [Headless-формат stream-json](dart-agent-and-clients/12-5-stream-json.md) | `dart-agent-and-clients/12-5-stream-json.md` | 579 |
 | 12.6 | [Удобства CLI и десктопа](dart-agent-and-clients/12-6-cli-desktop-extras.md) | `dart-agent-and-clients/12-6-cli-desktop-extras.md` | 1609 |
 | 12.7 | [Выпуск и распространение](dart-agent-and-clients/12-7-release-and-distribution.md) | `dart-agent-and-clients/12-7-release-and-distribution.md` | 403 |
+| 12.8 | [Смартфон и планшет](dart-agent-and-clients/12-8-phone-and-tablet.md) | `dart-agent-and-clients/12-8-phone-and-tablet.md` | 204 |
 
 ---
 

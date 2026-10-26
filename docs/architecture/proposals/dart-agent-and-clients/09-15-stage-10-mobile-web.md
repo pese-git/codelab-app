@@ -33,7 +33,8 @@
 `codelab_agent_web`, ограничения подключения в web.
 
 **Что прочитать.** Документ ядра §4 (реализации env), §10 (матрица профилей), §16;
-`docs/architecture/platform-integration.md`.
+`docs/architecture/platform-integration.md`; экраны смартфона и планшета, раскладка по ширине и
+открытые вопросы UI — [§12.8](12-8-phone-and-tablet.md).
 
 **Definition of Done.**
 
