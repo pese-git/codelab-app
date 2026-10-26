@@ -23,16 +23,16 @@ class WorkbenchMainPane extends StatelessWidget {
     // Zed's transcript-snapshot-on-completion behavior, so keeping it
     // visible would mean it stays until manually dismissed).
     final plan = state.currentPlan;
-    final activityBarSections = <AcpActivityBarSection>[
+    final activityBarSections = <CodeLabActivityBarSection>[
       if (plan != null &&
-          plan.any((entry) => entry.status != AcpPlanEntryStatus.completed))
-        AcpProgressChecklist.section(
+          plan.any((entry) => entry.status != CodeLabPlanEntryStatus.completed))
+        CodeLabProgressChecklist.section(
           id: 'plan',
           entries: plan,
           onDismiss: cubit.dismissPlan,
         ),
       if (state.queuedPrompts.isNotEmpty)
-        AcpPromptQueuePanel.section(
+        CodeLabPromptQueuePanel.section(
           id: 'queue',
           items: state.queuedPrompts,
           onEdit: cubit.editQueuedPrompt,
@@ -61,7 +61,7 @@ class WorkbenchMainPane extends StatelessWidget {
                               ? constraints.maxHeight - 180
                               : 0,
                         ),
-                        child: AcpConnectionScreen(
+                        child: CodeLabConnectionScreen(
                           status: state.connectionStatus,
                           transportLabel: state.transportLabel,
                           profileLabel: state.profileLabel,
@@ -84,7 +84,7 @@ class WorkbenchMainPane extends StatelessWidget {
           CurrentSessionPanel(state: state),
           const SizedBox(height: 12),
           Expanded(
-            child: AcpTranscriptPanel(
+            child: CodeLabTranscriptPanel(
               entries: state.transcriptEntries,
               viewMode: state.viewMode,
             ),
@@ -92,10 +92,10 @@ class WorkbenchMainPane extends StatelessWidget {
         ],
         if (activityBarSections.isNotEmpty) ...[
           const SizedBox(height: 12),
-          AcpActivityBar(sections: activityBarSections),
+          CodeLabActivityBar(sections: activityBarSections),
         ],
         const SizedBox(height: 12),
-        AcpPromptComposer(
+        CodeLabPromptComposer(
           enabled: state.isPromptEnabled,
           isSubmitting: state.isPromptSubmitting,
           canCancel: state.canCancel,

@@ -314,7 +314,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// сообщается о действии, которого не было. Команды агента здесь только
   /// закрывают палитру: протокольного метода у них нет, текст в композер
   /// вставляет [insertAgentCommand].
-  void selectCommand(AcpCommandAction action) {
+  void selectCommand(CodeLabCommandAction action) {
     if (!action.isAvailable) {
       return;
     }
@@ -336,7 +336,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// Выбор команды агента: `AvailableCommand` в ACP не вызывается, поэтому в
   /// композер вставляется `/{name} ` — пользователь дописывает и отправляет
   /// обычный промпт.
-  void insertAgentCommand(AcpCommandAction action) {
+  void insertAgentCommand(CodeLabCommandAction action) {
     _activeSession.setComposerDraft('${action.slashCommand} ');
     closeCommandPalette();
   }
@@ -387,7 +387,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       activeSessionId: sessions.activeSessionId,
       transcriptEntries: active.transcriptEntries,
       inspectorEntries: active.inspectorEntries,
-      viewMode: AcpViewMode.normal,
+      viewMode: CodeLabViewMode.normal,
       isPromptEnabled: true,
       isPromptSubmitting: active.isPromptSubmitting,
       canCancel: active.canCancel,

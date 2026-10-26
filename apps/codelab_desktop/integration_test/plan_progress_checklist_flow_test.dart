@@ -32,10 +32,11 @@ Future<void> _tapConnectAndWaitUntilSettled(
   WidgetTester tester,
   CodeLabShellCubit shellCubit,
 ) async {
-  await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
+  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
   await tester.pump();
   final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus == AcpConnectionStatus.connecting &&
+  while (shellCubit.state.connectionStatus ==
+          CodeLabConnectionStatus.connecting &&
       DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 100));
   }
@@ -148,7 +149,7 @@ void main() {
       // `dismissPlan()` (by design — it's a log, not live state) and would
       // still show "Open PR for review" as a past `plan` update's value, so
       // asserting that text's absence here would be a false failure.
-      expect(find.byType(AcpActivityBar), findsNothing);
+      expect(find.byType(CodeLabActivityBar), findsNothing);
 
       await submitAndWait('keep going');
 
@@ -162,11 +163,11 @@ void main() {
 
       // Every entry completed — the whole activity bar disappears, not
       // just its label (see design.md: no Zed-style "All Done" state).
-      expect(find.byType(AcpActivityBar), findsNothing);
+      expect(find.byType(CodeLabActivityBar), findsNothing);
       expect(find.text('Current:'), findsNothing);
       expect(
         shellCubit.state.currentPlan?.every(
-          (entry) => entry.status == AcpPlanEntryStatus.completed,
+          (entry) => entry.status == CodeLabPlanEntryStatus.completed,
         ),
         isTrue,
       );

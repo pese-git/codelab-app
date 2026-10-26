@@ -43,22 +43,22 @@ final class ActiveSessionState {
   /// Сессия, которую сейчас показывает рабочее место; совпадает с
   /// `SessionsState.activeSessionId`: обе части меняются одним пакетом.
   final String? sessionId;
-  final List<AcpTranscriptEntry> transcriptEntries;
+  final List<CodeLabTranscriptEntry> transcriptEntries;
   final List<CodeLabInspectorEntry> inspectorEntries;
 
   /// Команды агента из последнего `available_commands_update`.
-  final List<AcpCommandAction> agentCommands;
-  final List<AcpConfigOption> configOptions;
+  final List<CodeLabCommandAction> agentCommands;
+  final List<CodeLabConfigOption> configOptions;
 
   /// План сессии; `null` — плана не было или пользователь его скрыл.
-  final List<AcpPlanEntry>? currentPlan;
+  final List<CodeLabPlanEntry>? currentPlan;
 
   /// Очередь показываемой сессии; очередь фоновой сессии живёт в kit
   /// невидимо, пока её не выберут (add-multi-session-concurrency/design.md).
-  final List<AcpQueuedPrompt> queuedPrompts;
+  final List<CodeLabQueuedPrompt> queuedPrompts;
 
   /// Текст для композера: `/{name} ` выбранной команды агента или
-  /// возвращённый из очереди промпт. `AcpPromptComposer.initialPrompt`
+  /// возвращённый из очереди промпт. `CodeLabPromptComposer.initialPrompt`
   /// применяет его только при изменении значения.
   final String composerDraft;
 
@@ -76,12 +76,12 @@ final class ActiveSessionState {
 
   ActiveSessionState _copyWith({
     String? sessionId,
-    List<AcpTranscriptEntry>? transcriptEntries,
+    List<CodeLabTranscriptEntry>? transcriptEntries,
     List<CodeLabInspectorEntry>? inspectorEntries,
-    List<AcpCommandAction>? agentCommands,
-    List<AcpConfigOption>? configOptions,
+    List<CodeLabCommandAction>? agentCommands,
+    List<CodeLabConfigOption>? configOptions,
     Object? currentPlan = _unset,
-    List<AcpQueuedPrompt>? queuedPrompts,
+    List<CodeLabQueuedPrompt>? queuedPrompts,
     String? composerDraft,
     bool? isPromptSubmitting,
     bool? canCancel,
@@ -96,7 +96,7 @@ final class ActiveSessionState {
     // `null` здесь — «скрыть план», а не «не менять».
     currentPlan: identical(currentPlan, _unset)
         ? this.currentPlan
-        : currentPlan as List<AcpPlanEntry>?,
+        : currentPlan as List<CodeLabPlanEntry>?,
     queuedPrompts: queuedPrompts ?? this.queuedPrompts,
     composerDraft: composerDraft ?? this.composerDraft,
     isPromptSubmitting: isPromptSubmitting ?? this.isPromptSubmitting,
@@ -396,7 +396,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   SessionHandle? _handle(String sessionId) =>
       _workspace.session(SessionId(sessionId));
 
-  List<AcpQueuedPrompt> _queueOf(String sessionId) =>
+  List<CodeLabQueuedPrompt> _queueOf(String sessionId) =>
       queuedPromptsOf(_handle(sessionId)?.current.queue ?? const []);
 
   /// Повторяет очередь kit, только если [sessionId] показывается.

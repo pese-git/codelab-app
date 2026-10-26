@@ -29,10 +29,11 @@ Future<void> _tapConnectAndWaitUntilSettled(
   WidgetTester tester,
   CodeLabShellCubit shellCubit,
 ) async {
-  await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
+  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
   await tester.pump();
   final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus == AcpConnectionStatus.connecting &&
+  while (shellCubit.state.connectionStatus ==
+          CodeLabConnectionStatus.connecting &&
       DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 100));
   }
@@ -96,7 +97,7 @@ void main() {
       // pattern as the prompt/config-option round trips in
       // stdio_connect_flow_test.dart).
       bool hasPendingApproval() => shellCubit.state.transcriptEntries.any(
-        (entry) => entry.approval is AcpTranscriptApprovalPending,
+        (entry) => entry.approval is CodeLabTranscriptApprovalPending,
       );
       final approvalDeadline = DateTime.now().add(const Duration(seconds: 10));
       while (!hasPendingApproval() &&

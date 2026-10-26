@@ -29,7 +29,7 @@ class WorkbenchCommandBar extends StatelessWidget {
             Text('CodeLab', style: FluentTheme.of(context).typography.subtitle),
             const SizedBox(width: 16),
             Expanded(
-              child: AcpConnectionStatusRow(
+              child: CodeLabConnectionStatusRow(
                 status: state.connectionStatus,
                 transportLabel: state.transportLabel,
                 profileLabel: state.profileLabel,
@@ -37,18 +37,18 @@ class WorkbenchCommandBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            AcpIconButton(
+            CodeLabIconButton(
               key: const ValueKey('command-bar-configure-connection'),
               icon: FluentIcons.settings,
               tooltip: 'Configure connection',
               onPressed: () => ConnectionSetupDialog.show(context),
             ),
             const SizedBox(width: 8),
-            AcpButton(
+            CodeLabButton(
               key: const ValueKey('command-bar-connect'),
               label: 'Connect',
               icon: FluentIcons.plug_connected,
-              emphasis: AcpButtonEmphasis.primary,
+              emphasis: CodeLabButtonEmphasis.primary,
               onPressed: cubit.connect,
             ),
           ],

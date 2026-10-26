@@ -39,7 +39,7 @@ void main() {
           .singleWhere((entry) => entry.toolCall != null)
           .toolCall
           ?.status,
-      AcpToolCallStatus.cancelled,
+      CodeLabToolCallStatus.cancelled,
     );
 
     h.endTurn(turn.request, stopReason: 'cancelled');

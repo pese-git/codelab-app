@@ -18,7 +18,7 @@
 
 ## 4. Интеграция в workbench
 
-- [ ] 4.1 Добавить collapsible terminal-строку под существующим `Row` в layout workbench (не пятый слот `AcpWorkbenchLayout`)
+- [ ] 4.1 Добавить collapsible terminal-строку под существующим `Row` в layout workbench (не пятый слот `CodeLabWorkbenchLayout`)
 - [ ] 4.2 Состояние "открыта/закрыта панель" + список вкладок — в `CodeLabShellState` (ephemeral, но переживает пересборку виджета); буфер вывода/процесс — presentation/infrastructure уровень, не в state
 - [ ] 4.3 Подключить старт вкладки к текущему `state.stdioCwd`/`WorkingDirectoryProvider`
 

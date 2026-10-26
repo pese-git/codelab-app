@@ -35,12 +35,12 @@ void main() {
 
     expect(starts, 2);
     expect(h.application.generation, generation + 1);
-    expect(h.cubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.connected);
     expect(
       states.map((state) => state.connectionStatus),
       containsAllInOrder([
-        AcpConnectionStatus.reconnecting,
-        AcpConnectionStatus.connected,
+        CodeLabConnectionStatus.reconnecting,
+        CodeLabConnectionStatus.connected,
       ]),
     );
     expect(first.state, AcpTransportState.closed);
@@ -74,7 +74,7 @@ void main() {
     await h.cubit.reconnect();
 
     expect(starts, 2);
-    expect(h.cubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     expect(
       h.logEvents,
       contains(startsWith('Failed to reconnect stdio ACP agent')),

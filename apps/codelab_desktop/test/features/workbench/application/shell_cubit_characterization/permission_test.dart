@@ -36,10 +36,10 @@ void main() {
     final pending =
         h.cubit.state.transcriptEntries
                 .singleWhere(
-                  (entry) => entry.approval is AcpTranscriptApprovalPending,
+                  (entry) => entry.approval is CodeLabTranscriptApprovalPending,
                 )
                 .approval!
-            as AcpTranscriptApprovalPending;
+            as CodeLabTranscriptApprovalPending;
     expect(pending.command, 'echo hi');
     expect(pending.options.map((option) => option.id), [
       'allow-once',
@@ -64,7 +64,7 @@ void main() {
     expect(h.pendingApprovalTitles(), isEmpty);
     expect(
       h.cubit.state.transcriptEntries
-          .where((entry) => entry.approval is AcpTranscriptApprovalResolved)
+          .where((entry) => entry.approval is CodeLabTranscriptApprovalResolved)
           .map((entry) => entry.title),
       ['Run command'],
     );

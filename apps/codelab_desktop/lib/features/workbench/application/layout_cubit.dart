@@ -57,7 +57,7 @@ final class LayoutCubit extends ShellPartCubit<LayoutState> {
   LayoutCubit({required super.changes}) : super(const LayoutState());
 
   /// Принимает ширину панели сессий в конце перетаскивания
-  /// (`AcpWorkbenchLayout.onSessionsPaneResizeEnd`) в пределах
+  /// (`CodeLabWorkbenchLayout.onSessionsPaneResizeEnd`) в пределах
   /// [kSessionsPaneMinWidth]–[kSessionsPaneMaxWidth].
   void resizeSessionsPane(double width) => emit(
     state._copyWith(

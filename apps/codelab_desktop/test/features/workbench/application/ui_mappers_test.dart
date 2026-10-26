@@ -35,11 +35,11 @@ void main() {
         ),
       ].map(connectionStatusOf),
       [
-        AcpConnectionStatus.disconnected,
-        AcpConnectionStatus.connecting,
-        AcpConnectionStatus.reconnecting,
-        AcpConnectionStatus.connected,
-        AcpConnectionStatus.failed,
+        CodeLabConnectionStatus.disconnected,
+        CodeLabConnectionStatus.connecting,
+        CodeLabConnectionStatus.reconnecting,
+        CodeLabConnectionStatus.connected,
+        CodeLabConnectionStatus.failed,
       ],
     );
   });
@@ -54,18 +54,19 @@ void main() {
       expect(item.title, 'Session session-1');
       expect(item.subtitle, '/work');
       expect(item.updatedLabel, 'Active');
-      expect(item.status, AcpSessionStatus.idle);
+      expect(item.status, CodeLabSessionStatus.idle);
     });
 
     test('a title is trimmed; lifecycle maps to the sidebar badge', () {
-      AcpSessionListItem of(SessionLifecycleStatus status) => sessionListItemOf(
-        AcpSession(
-          id: const SessionId('s'),
-          cwd: '/work',
-          title: '  Fix tests  ',
-          status: status,
-        ),
-      );
+      CodeLabSessionListItem of(SessionLifecycleStatus status) =>
+          sessionListItemOf(
+            AcpSession(
+              id: const SessionId('s'),
+              cwd: '/work',
+              title: '  Fix tests  ',
+              status: status,
+            ),
+          );
 
       expect(of(SessionLifecycleStatus.active).title, 'Fix tests');
       expect(
@@ -73,12 +74,13 @@ void main() {
         SessionLifecycleStatus.values.map(
           (status) => switch (status) {
             SessionLifecycleStatus.idle ||
-            SessionLifecycleStatus.active => AcpSessionStatus.idle,
+            SessionLifecycleStatus.active => CodeLabSessionStatus.idle,
             SessionLifecycleStatus.runningTurn ||
-            SessionLifecycleStatus.cancellingTurn => AcpSessionStatus.running,
+            SessionLifecycleStatus.cancellingTurn =>
+              CodeLabSessionStatus.running,
             SessionLifecycleStatus.awaitingApproval =>
-              AcpSessionStatus.awaitingApproval,
-            SessionLifecycleStatus.failed => AcpSessionStatus.failed,
+              CodeLabSessionStatus.awaitingApproval,
+            SessionLifecycleStatus.failed => CodeLabSessionStatus.failed,
           },
         ),
       );
@@ -128,12 +130,12 @@ void main() {
         'tool-6',
       ]);
       expect(entries.map((entry) => entry.kind), [
-        AcpTranscriptEntryKind.user,
-        AcpTranscriptEntryKind.agent,
-        AcpTranscriptEntryKind.agent,
-        AcpTranscriptEntryKind.agent,
-        AcpTranscriptEntryKind.diagnostic,
-        AcpTranscriptEntryKind.toolCall,
+        CodeLabTranscriptEntryKind.user,
+        CodeLabTranscriptEntryKind.agent,
+        CodeLabTranscriptEntryKind.agent,
+        CodeLabTranscriptEntryKind.agent,
+        CodeLabTranscriptEntryKind.diagnostic,
+        CodeLabTranscriptEntryKind.toolCall,
       ]);
       expect(entries.map((entry) => entry.title), [
         'You',
@@ -146,7 +148,7 @@ void main() {
       expect(entries[4].body, 'Failed to send prompt: agent crashed');
       final tool = entries.last.toolCall!;
       expect(tool.name, 'execute');
-      expect(tool.status, AcpToolCallStatus.running);
+      expect(tool.status, CodeLabToolCallStatus.running);
       expect(tool.detail, 'dart test');
     });
 
@@ -178,8 +180,9 @@ void main() {
             chosen.add((approval.approvalId, approval.sessionId, optionId)),
       );
 
-      final approval = entries.single.approval! as AcpTranscriptApprovalPending;
-      expect(approval.risk, AcpApprovalRisk.shell);
+      final approval =
+          entries.single.approval! as CodeLabTranscriptApprovalPending;
+      expect(approval.risk, CodeLabApprovalRisk.shell);
       expect(approval.command, 'rm -rf build');
       expect(approval.cwd, '/work');
       expect(approval.rawInput, contains('rm -rf build'));
@@ -191,12 +194,12 @@ void main() {
         'reject-once',
       ]);
       expect(approval.options.map((option) => option.kind), [
-        AcpApprovalOptionKind.allowOnce,
-        AcpApprovalOptionKind.rejectOnce,
+        CodeLabApprovalOptionKind.allowOnce,
+        CodeLabApprovalOptionKind.rejectOnce,
       ]);
       expect(approval.options.map((option) => option.tone), [
-        AcpTone.success,
-        AcpTone.danger,
+        CodeLabTone.success,
+        CodeLabTone.danger,
       ]);
 
       approval.onOptionSelected('reject-once');
@@ -225,7 +228,7 @@ void main() {
       );
 
       expect(
-        (entries.single.approval! as AcpTranscriptApprovalResolved).label,
+        (entries.single.approval! as CodeLabTranscriptApprovalResolved).label,
         'Allowed once',
       );
     });
@@ -250,14 +253,14 @@ void main() {
     ]);
 
     expect(options, const [
-      AcpConfigOption(
+      CodeLabConfigOption(
         id: 'model',
         name: 'Model',
         description: 'Which model answers',
         currentValue: 'gpt-5',
         values: [
-          AcpConfigOptionValue(value: 'gpt-5', name: 'GPT-5'),
-          AcpConfigOptionValue(
+          CodeLabConfigOptionValue(value: 'gpt-5', name: 'GPT-5'),
+          CodeLabConfigOptionValue(
             value: 'gpt-4',
             name: 'GPT-4',
             description: 'Older',
@@ -277,13 +280,13 @@ void main() {
         ),
       ]),
       const [
-        AcpCommandAction(
+        CodeLabCommandAction(
           id: 'agent-plan',
           label: 'plan',
           slashCommand: '/plan',
           description: 'Plan first',
           icon: FluentIcons.robot,
-          source: AcpCommandSource.agent,
+          source: CodeLabCommandSource.agent,
           hint: 'what to plan',
         ),
       ],
@@ -351,12 +354,12 @@ void main() {
 
       expect(plan.map((entry) => entry.content), ['write tests', 'ship']);
       expect(plan.map((entry) => entry.status), [
-        AcpPlanEntryStatus.inProgress,
-        AcpPlanEntryStatus.completed,
+        CodeLabPlanEntryStatus.inProgress,
+        CodeLabPlanEntryStatus.completed,
       ]);
       expect(plan.map((entry) => entry.priority), [
-        AcpPlanEntryPriority.high,
-        AcpPlanEntryPriority.medium,
+        CodeLabPlanEntryPriority.high,
+        CodeLabPlanEntryPriority.medium,
       ]);
     });
   });

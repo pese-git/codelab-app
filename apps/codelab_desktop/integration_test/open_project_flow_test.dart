@@ -33,10 +33,11 @@ Future<void> _tapConnectAndWaitUntilSettled(
   WidgetTester tester,
   CodeLabShellCubit shellCubit,
 ) async {
-  await tester.tap(find.widgetWithText(AcpButton, 'Connect').first);
+  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
   await tester.pump();
   final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus == AcpConnectionStatus.connecting &&
+  while (shellCubit.state.connectionStatus ==
+          CodeLabConnectionStatus.connecting &&
       DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 100));
   }

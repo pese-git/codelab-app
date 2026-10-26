@@ -108,7 +108,7 @@ final class ShellHarness {
 
   Future<void> connect() async {
     await cubit.connect();
-    expect(cubit.state.connectionStatus, AcpConnectionStatus.connected);
+    expect(cubit.state.connectionStatus, CodeLabConnectionStatus.connected);
   }
 
   /// Создаёт сессию [sessionId]; агент отвечает с [configOptions].
@@ -208,7 +208,7 @@ final class ShellHarness {
   /// Записи транскрипта активной сессии с ожидающим одобрением.
   List<String> pendingApprovalTitles() => [
     for (final entry in cubit.state.transcriptEntries)
-      if (entry.approval is AcpTranscriptApprovalPending) entry.title,
+      if (entry.approval is CodeLabTranscriptApprovalPending) entry.title,
   ];
 
   /// Даёт доставить состояния, уже выпущенные Cubit: поток `BlocBase`

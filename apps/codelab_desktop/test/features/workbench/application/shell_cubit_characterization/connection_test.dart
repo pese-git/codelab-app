@@ -20,15 +20,18 @@ void main() {
     final h = ShellHarness();
     final (states, _) = h.recordStates();
 
-    expect(h.cubit.state.connectionStatus, AcpConnectionStatus.disconnected);
+    expect(
+      h.cubit.state.connectionStatus,
+      CodeLabConnectionStatus.disconnected,
+    );
     await h.connect();
     await h.settle();
 
     expect(
       states.map((state) => state.connectionStatus),
       containsAllInOrder([
-        AcpConnectionStatus.connecting,
-        AcpConnectionStatus.connected,
+        CodeLabConnectionStatus.connecting,
+        CodeLabConnectionStatus.connected,
       ]),
     );
     expect(h.stdioStarts, 1);
@@ -42,7 +45,7 @@ void main() {
       h.cubit.updateStdioCommand('   ');
       await h.cubit.connect();
 
-      expect(h.cubit.state.connectionStatus, AcpConnectionStatus.failed);
+      expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       expect(h.stdioStarts, 0);
       expect(
         h.logEvents,
@@ -65,7 +68,7 @@ void main() {
       ..updateWebSocketEndpoint('');
     await h.cubit.connect();
 
-    expect(h.cubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     expect(wsStarts, 0);
   });
 
@@ -90,7 +93,7 @@ void main() {
         ..updateWebSocketToken(_token);
       await h.cubit.connect();
 
-      expect(h.cubit.state.connectionStatus, AcpConnectionStatus.failed);
+      expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       expect(
         h.logEvents,
         contains(startsWith('Failed to connect WebSocket ACP agent')),
@@ -112,7 +115,7 @@ void main() {
       ),
     );
 
-    expect(h.cubit.state.connectionStatus, AcpConnectionStatus.failed);
+    expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     expect(h.cubit.state.isPromptSubmitting, isFalse);
     expect(h.cubit.state.canCancel, isFalse);
     expect(h.cubit.state.activeSessionId, 'session-1');

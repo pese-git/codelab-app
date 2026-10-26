@@ -1,13 +1,13 @@
 library;
 
-export 'acp_activity_bar.dart';
-export 'acp_approval_panel.dart';
-export 'acp_command_palette_surface.dart';
-export 'acp_connection_screen.dart';
-export 'acp_progress_checklist.dart';
-export 'acp_project_picker.dart';
-export 'acp_prompt_queue_panel.dart';
-export 'acp_session_sidebar.dart';
-export 'acp_transcript_panel.dart';
-export 'acp_workbench_layout.dart';
-export 'acp_workbench_shortcuts.dart';
+export 'codelab_activity_bar.dart';
+export 'codelab_approval_panel.dart';
+export 'codelab_command_palette_surface.dart';
+export 'codelab_connection_screen.dart';
+export 'codelab_progress_checklist.dart';
+export 'codelab_project_picker.dart';
+export 'codelab_prompt_queue_panel.dart';
+export 'codelab_session_sidebar.dart';
+export 'codelab_transcript_panel.dart';
+export 'codelab_workbench_layout.dart';
+export 'codelab_workbench_shortcuts.dart';

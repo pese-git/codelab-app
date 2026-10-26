@@ -111,15 +111,15 @@ CodeLab SHALL поддерживать клавиатурную эргономи
 - **THEN** CodeLab представляет основные действия, такие как `/new`, `/plan`, `/permissions`, `/logs`, `/compact` и `/reconnect`
 
 ### Requirement: Командная палитра открывается и выполняет доступные действия
-CodeLab SHALL открывать `AcpCommandPaletteSurface` при вызове shortcut'а командной палитры и SHALL выполнять `/new` (создание сессии) и `/reconnect` (переподключение активного transport) немедленно при выборе, закрывая палитру после этого.
+CodeLab SHALL открывать `CodeLabCommandPaletteSurface` при вызове shortcut'а командной палитры и SHALL выполнять `/new` (создание сессии) и `/reconnect` (переподключение активного transport) немедленно при выборе, закрывая палитру после этого.
 
 #### Scenario: Открытие командной палитры показывает surface
 - **WHEN** пользователь вызывает shortcut командной палитры (`Ctrl/Cmd+K`)
-- **THEN** CodeLab показывает `AcpCommandPaletteSurface` поверх workbench
+- **THEN** CodeLab показывает `CodeLabCommandPaletteSurface` поверх workbench
 
 #### Scenario: Закрытие командной палитры
 - **WHEN** командная палитра открыта, и пользователь нажимает `Esc` либо выбирает доступную команду
-- **THEN** CodeLab скрывает `AcpCommandPaletteSurface` и возвращает фокус клавиатуры workbench
+- **THEN** CodeLab скрывает `CodeLabCommandPaletteSurface` и возвращает фокус клавиатуры workbench
 
 #### Scenario: Выбор /new создаёт сессию
 - **WHEN** командная палитра открыта, и пользователь выбирает `/new`
