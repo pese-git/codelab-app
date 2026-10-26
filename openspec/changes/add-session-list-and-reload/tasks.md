@@ -35,7 +35,7 @@
 
 ## 3. Сессии после переподключения (итерация 3)
 
-- [ ] 3.1 Тесты `test/sessions/reconnect_reload_test.dart`:
+- [x] 3.1 Тесты `test/sessions/reconnect_reload_test.dart`:
   - `reconnect()` к агенту с `loadSession` загружает открытые сессии, сначала активную, транскрипт заменяется реплеем;
   - агент без `loadSession` — `detached` и `NoticeItem(kind: detached)` с текстом D5;
   - ошибка `session/load` одной сессии — `detached` только у неё;
@@ -44,7 +44,7 @@
   - неудачный `reconnect()` — одна попытка, `attempt: 1`.
 
   Источник: acp-client-kit «Сессии после переподключения», «Явный автомат соединения».
-- [ ] 3.2 `SessionStatusView.detached`, `NoticeKind.detached`/`reconnected`, перезагрузка сессий в `reconnect()`, запрет отправки и слива очереди у `detached` (D5) — 3.1 зелёный. PR итерации 3.
+- [x] 3.2 `SessionStatusView.detached`, `NoticeKind.detached`/`reconnected`, перезагрузка сессий в `reconnect()`, запрет отправки и слива очереди у `detached` (D5) — 3.1 зелёный. Пока идёт переподключение, сессии ставят промпты в очередь и не сливают её: иначе ход, оборванный заменой транспорта, отправил бы очередь в новое соединение до `session/load`. Новые виды `NoticeKind` в `ui_mappers.dart` — диагностическая запись `Session` (исчерпывающий `switch`; тест в `ui_mappers_test.dart`). PR итерации 3.
 
 ## 4. Восстановление после перезапуска (5.12, итерация 4)
 

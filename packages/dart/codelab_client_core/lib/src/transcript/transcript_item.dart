@@ -99,11 +99,21 @@ sealed class ApprovalStateView with _$ApprovalStateView {
       ResolvedApprovalView;
 }
 
-/// Вид итогового уведомления хода.
+/// Вид уведомления в транскрипте.
 enum NoticeKind {
   /// Ход сорвался; текст — `Failed to send prompt: <причина>`.
   error,
 
   /// Ход завершился без вывода агента; текст — `Completed with stopReason …`.
   emptyTurn,
+
+  /// Связь сессии с агентом потеряна после переподключения: агент не умеет
+  /// загружать сессии или `session/load` не удался (design D5 change
+  /// `add-session-list-and-reload`). Добавляет рабочее пространство, а не
+  /// проекция хода.
+  detached,
+
+  /// Сессию не удалось восстановить после перезапуска хоста, и вместо неё
+  /// создана новая (design D6).
+  reconnected,
 }

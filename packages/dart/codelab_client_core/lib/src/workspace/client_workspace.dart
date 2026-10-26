@@ -10,6 +10,7 @@ import '../connection/transport_resolver.dart';
 import '../diagnostics/diagnostics.dart';
 import '../queue/prompt_queue.dart';
 import '../session/session_views.dart';
+import '../transcript/transcript_item.dart';
 import '../transcript/transcript_projector.dart';
 import 'client_workspace_exception.dart';
 import 'workspace_state.dart';
@@ -53,8 +54,14 @@ abstract interface class ClientWorkspace {
     required String projectDirectory,
   });
 
-  /// Одна попытка переподключения без `session/load` (design D4); список
-  /// сессий после неё запрашивается заново, как после [connect].
+  /// Одна попытка переподключения, без повторов (design D4).
+  ///
+  /// После неё открытые сессии загружаются заново через `session/load`,
+  /// начиная с активной; агент без `loadSession` или ошибка загрузки —
+  /// сессия [SessionStatusView.detached] с уведомлением в транскрипте. Пока
+  /// идёт переподключение, сессии не отправляют промпты и не сливают
+  /// очередь. Затем список сессий запрашивается заново, как после [connect]
+  /// (design D5 change `add-session-list-and-reload`).
   ///
   /// [profile] и [projectDirectory] заменяют текущие, если переданы: хост
   /// мог изменить форму подключения после [connect].
@@ -279,6 +286,11 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       ),
     );
     _transition = _Transition.reconnecting;
+    // Ход, оборванный заменой транспорта, не должен слить очередь в новое
+    // соединение раньше, чем сессия загружена в нём.
+    for (final handle in _handles.values) {
+      handle.suspend();
+    }
     try {
       final connectionState = await _backend.reconnect(
         ReconnectCommand(
@@ -289,12 +301,43 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       _capabilities = _capabilitiesOf(connectionState);
       _publishConnection(_viewFor(connectionState));
     } on Object catch (error) {
+      for (final handle in _handles.values) {
+        handle.resume();
+      }
       _publishFailure(error);
       rethrow;
     } finally {
       _transition = _Transition.none;
     }
+    await _reattachSessions();
     await _listFirstPage();
+  }
+
+  /// Загружает открытые сессии в новом соединении, активную первой: её
+  /// транскрипт пользователь видит сразу, а фоновые его не задерживают.
+  Future<void> _reattachSessions() async {
+    final active = _current.activeSessionId;
+    final ids = [
+      if (active != null && _handles.containsKey(active)) active,
+      for (final id in _order)
+        if (id != active) id,
+    ];
+    for (final id in ids) {
+      final handle = _handles[id]!;
+      if (!_capabilities.loadSession) {
+        handle.detach('The agent cannot restore sessions after reconnecting.');
+        continue;
+      }
+      try {
+        await _load(id, handle.cwd);
+        handle.resume();
+      } on Object {
+        handle.detach(
+          'Session ${id.value} could not be restored after reconnecting.',
+        );
+      }
+    }
+    _publish(_current.copyWith(sessions: _summaries()));
   }
 
   @override
@@ -634,6 +677,18 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
 enum _Transition { none, connecting, reconnecting }
 
+/// Связь открытой сессии с соединением агента.
+enum _Link {
+  /// Сессия работает в текущем соединении.
+  attached,
+
+  /// Идёт переподключение: сессия ждёт `session/load` в новом соединении.
+  reattaching,
+
+  /// Новое соединение сессию не знает.
+  detached,
+}
+
 const _redactor = SecretRedactor();
 
 final class _SessionHandle implements SessionHandle, PromptQueue {
@@ -687,18 +742,68 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   @override
   List<QueuedPrompt> get items => _current.queue;
 
+  /// Связь сессии с текущим соединением агента (design D5 change
+  /// `add-session-list-and-reload`).
+  _Link _link = _Link.attached;
+
+  /// Уведомление о потере связи в конце транскрипта; только у
+  /// [_Link.detached].
+  NoticeItem? _notice;
+
   /// Занята ли сессия: идёт ход (в том числе с ожидающими одобрениями) или
   /// отмена ждёт ответа агента (design D4).
   bool get _isBusy => switch (_current.status) {
     SessionStatusView.running || SessionStatusView.cancelling => true,
     SessionStatusView.idle ||
     SessionStatusView.failed ||
-    SessionStatusView.notLoaded => false,
+    SessionStatusView.notLoaded ||
+    SessionStatusView.detached => false,
   };
+
+  /// Переподключение началось: промпты ставятся в очередь, она не сливается.
+  void suspend() {
+    if (_link == _Link.attached) {
+      _link = _Link.reattaching;
+    }
+  }
+
+  /// Сессия снова связана с агентом: очередь сливается, если сессия
+  /// свободна.
+  void resume() {
+    _link = _Link.attached;
+    _notice = null;
+    unawaited(_drainIfFree());
+  }
+
+  /// Новое соединение не знает сессию: статус `detached` и уведомление
+  /// [text] в конце транскрипта.
+  void detach(String text) {
+    _link = _Link.detached;
+    _notice = NoticeItem(
+      id: '${id.value}/detached',
+      kind: NoticeKind.detached,
+      text: text,
+    );
+    _publish(
+      _sessionFields(
+        _current.copyWith(revision: _current.revision + 1),
+        _session,
+      ),
+    );
+  }
 
   @override
   Future<PromptOutcome> send(String text) async {
-    if (_isBusy) {
+    if (_link == _Link.detached) {
+      final error = ClientWorkspaceException(
+        'Session ${id.value} is detached from the agent.',
+      );
+      final outcome = PromptFailed(id, error);
+      _error('prompt', 'Failed to send prompt: ${describeFailure(error)}');
+      _onOutcome(outcome);
+      return outcome;
+    }
+    if (_isBusy || _link == _Link.reattaching) {
       final item = QueuedPrompt(id: _nextQueuedPromptId(), text: text);
       _setQueue([..._current.queue, item]);
       return PromptQueued(id, item);
@@ -817,7 +922,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
 
   @override
   Future<PromptOutcome?> sendNow(String itemId) async {
-    if (_isBusy) {
+    if (_isBusy || _link != _Link.attached) {
       return null;
     }
     final item = remove(itemId);
@@ -865,7 +970,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   }
 
   Future<void> _drainIfFree() async {
-    if (_isBusy || _current.queue.isEmpty) {
+    if (_isBusy || _link != _Link.attached || _current.queue.isEmpty) {
       return;
     }
     final next = _current.queue.first;
@@ -892,6 +997,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   /// Снимок после `session/load`: проекция транскрипта строится заново,
   /// очередь и флаги представления сохраняются (design D4).
   void reload(AcpSession session) {
+    _notice = null;
     _projector.reset();
     _session = session;
     _projector.apply(session);
@@ -906,8 +1012,13 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   /// Поля представления, которые выводятся из снимка сессии ядра.
   SessionView _sessionFields(SessionView view, AcpSession session) =>
       view.copyWith(
-        status: SessionStatusView.of(session.status),
-        transcript: _projector.items,
+        status: _link == _Link.detached
+            ? SessionStatusView.detached
+            : SessionStatusView.of(session.status),
+        transcript: switch (_notice) {
+          null => _projector.items,
+          final notice => List.unmodifiable([..._projector.items, notice]),
+        },
         configOptions: [
           for (final option in session.configOptions ?? const [])
             ConfigOptionView.of(option),
