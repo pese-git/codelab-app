@@ -45,16 +45,39 @@ void main() {
   });
 
   group('sessionListItemOf', () {
-    test('an untitled session is "Session <id>" with its cwd', () {
+    test('an untitled session without prompts is "New session", not its '
+        'id', () {
       final item = sessionListItemOf(
         const AcpSession(id: SessionId('session-1'), cwd: '/work'),
       );
 
       expect(item.id, 'session-1');
-      expect(item.title, 'Session session-1');
+      expect(item.title, 'New session');
       expect(item.subtitle, '/work');
       expect(item.updatedLabel, 'Active');
       expect(item.status, CodeLabSessionStatus.idle);
+    });
+
+    test('an untitled session is named by its first prompt, collapsed to one '
+        'line and shortened', () {
+      AcpSession withPrompt(String text) => AcpSession(
+        id: const SessionId('s'),
+        cwd: '/work',
+        turns: [
+          PromptTurn(
+            id: const PromptTurnId('t1'),
+            sessionId: const SessionId('s'),
+            prompt: [ContentBlock.text(text: text)],
+          ),
+        ],
+      );
+
+      expect(
+        sessionListItemOf(withPrompt('  Fix the\n failing   tests ')).title,
+        'Fix the failing tests',
+      );
+      final long = sessionListItemOf(withPrompt('a' * 80)).title;
+      expect(long, '${'a' * 60}…');
     });
 
     test('a title is trimmed; lifecycle maps to the sidebar badge', () {

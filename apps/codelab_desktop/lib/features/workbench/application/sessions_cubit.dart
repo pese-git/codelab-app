@@ -134,7 +134,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
           SessionsState(
             sessions: state.sessions,
             activeSessionId: sessionId,
-            currentSessionLabel: selected?.title ?? 'Session $sessionId',
+            currentSessionLabel: selected?.title ?? untitledSessionTitle,
             currentSessionDetail: selected?.subtitle ?? sessionId,
           ),
         );

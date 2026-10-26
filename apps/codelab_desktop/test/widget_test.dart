@@ -344,7 +344,7 @@ void main() {
 
     expect(shellCubit.state.activeSessionId, 'session-1');
     expect(shellCubit.state.sessions.single.id, 'session-1');
-    expect(shellCubit.state.currentSessionLabel, 'Session session-1');
+    expect(shellCubit.state.currentSessionLabel, 'New session');
     expect(shellCubit.state.currentSessionDetail, '/workspace');
     expect(
       logger.entries.map((entry) => entry['event']),
