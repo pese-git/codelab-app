@@ -97,9 +97,12 @@ class CodeLabTranscriptEntry {
   final CodeLabTranscriptApproval? approval;
 }
 
-/// How close to the bottom (in pixels) counts as "the user is following the
-/// live tail of the transcript" — a new pending approval only auto-scrolls
-/// into view when the user was already within this distance of the bottom.
+/// Насколько близко к низу (в пикселях) лента считается «у хвоста».
+///
+/// Пока пользователь в пределах этого расстояния, лента следует за новыми
+/// записями и прокручивается к новому pending approval; дальше — пользователь
+/// читает историю, и позиция не меняется (`agent-workbench-ui`, требование
+/// «Лента transcript следует за хвостом»).
 const _autoScrollBottomThreshold = 80.0;
 
 class CodeLabTranscriptPanel extends StatefulWidget {
@@ -118,29 +121,42 @@ class CodeLabTranscriptPanel extends StatefulWidget {
   State<CodeLabTranscriptPanel> createState() => _AcpTranscriptPanelState();
 }
 
+/// Состояние ленты: владеет `ScrollController` и решает, когда двигать
+/// прокрутку.
+///
+/// Почему: записи дописываются в конец ленты (ответы агента, карточки
+/// инструментов, approval), а ленивый список сам к ним не прокручивается.
+/// Для чего: два механизма прокрутки — анимированная к новому pending
+/// approval и мгновенное следование за хвостом (change
+/// `follow-transcript-tail`, D1–D4); оба отключаются, когда пользователь
+/// прокрутил ленту вверх.
 class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   final _controller = ScrollController();
 
-  /// Whether the user has scrolled up, away from the bottom, to read earlier
-  /// history. Only the user's own scrolling changes it: content growing
-  /// below an untouched viewport does not mean the user stopped following
-  /// the live tail, so it must not suppress the auto-scroll to a new
-  /// approval.
+  /// Пользователь прокрутил ленту вверх, дальше порога от низа, и читает
+  /// историю. Меняется только прокруткой самого пользователя: рост ленты под
+  /// нетронутой видимой частью не означает, что пользователь ушёл от хвоста.
   bool _isReadingHistory = false;
   bool _isUserScrolling = false;
 
-  /// Set while a new pending approval should be kept in view: the lazily
-  /// built list only estimates the extent of entries it has not laid out
-  /// yet, so the real bottom can move after the scroll to it has finished.
+  /// Выставлен, пока новый pending approval нужно держать в виду: ленивый
+  /// список лишь оценивает высоту непостроенных записей, и реальный низ
+  /// может сдвинуться уже после завершения прокрутки к нему.
   bool _isKeepingApprovalInView = false;
+
+  /// Лента следует за хвостом: выставляется, когда обновление пришло, пока
+  /// пользователь был у низа, и сбрасывается любой прокруткой пользователя
+  /// (D2). Пока выставлен, лента догоняет сдвинувшийся низ так же, как для
+  /// approval.
+  bool _isFollowingTail = false;
 
   @override
   void initState() {
     super.initState();
 
-    // The panel can be created with a pending approval already in its first
-    // entries (a host typically swaps in the transcript only once entries
-    // exist) — there is no earlier build for `didUpdateWidget` to diff.
+    // Панель может появиться сразу с pending approval в первых записях (хост
+    // обычно подставляет ленту, только когда записи уже есть) — предыдущей
+    // сборки, с которой сравнил бы `didUpdateWidget`, нет.
     if (_pendingApprovalEntryIds(widget.entries).isNotEmpty) {
       _bringApprovalIntoView();
     }
@@ -156,18 +172,49 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   void didUpdateWidget(covariant CodeLabTranscriptPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    // Метрики контроллера ещё описывают прежнюю раскладку: после раскладки
+    // новая запись уже отодвинет низ, и «был у низа» станет не отличить от
+    // «читал историю» (D1).
+    final wasAtTail = !_isReadingHistory && (_isFollowingTail || _isNearBottom);
+
     final pendingApprovalIds = _pendingApprovalEntryIds(widget.entries);
     if (pendingApprovalIds.isEmpty) {
       _isKeepingApprovalInView = false;
-      return;
     }
 
     final newPendingApprovalIds = pendingApprovalIds.difference(
       _pendingApprovalEntryIds(oldWidget.entries),
     );
     if (newPendingApprovalIds.isNotEmpty && !_isReadingHistory) {
+      // Анимация к approval важнее прыжка в этом кадре: `jumpTo` оборвал бы
+      // её (D3).
       _bringApprovalIntoView();
+      return;
     }
+
+    if (wasAtTail && !identical(widget.entries, oldWidget.entries)) {
+      _jumpToTail();
+    }
+  }
+
+  bool get _isNearBottom {
+    if (!_controller.hasClients) {
+      // Первая раскладка с записями ещё не прошла: лента пуста или только
+      // появилась, пользователь её не прокручивал.
+      return true;
+    }
+    final position = _controller.position;
+    return position.maxScrollExtent - position.pixels <=
+        _autoScrollBottomThreshold;
+  }
+
+  void _jumpToTail() {
+    _isFollowingTail = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _controller.hasClients && _isFollowingTail) {
+        _controller.jumpTo(_controller.position.maxScrollExtent);
+      }
+    });
   }
 
   void _bringApprovalIntoView() {
@@ -190,6 +237,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
     if (notification is UserScrollNotification) {
       _isUserScrolling = true;
       _isKeepingApprovalInView = false;
+      _isFollowingTail = false;
     } else if (notification is ScrollEndNotification) {
       if (_isUserScrolling) {
         _isUserScrolling = false;
@@ -212,13 +260,14 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   }
 
   void _followMovedBottom(ScrollMetrics metrics) {
-    if (!_isKeepingApprovalInView ||
-        _isReadingHistory ||
-        metrics.extentAfter <= 0) {
+    final isHoldingBottom = _isKeepingApprovalInView || _isFollowingTail;
+    if (!isHoldingBottom || _isReadingHistory || metrics.extentAfter <= 0) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _controller.hasClients && _isKeepingApprovalInView) {
+      if (mounted &&
+          _controller.hasClients &&
+          (_isKeepingApprovalInView || _isFollowingTail)) {
         _controller.jumpTo(_controller.position.maxScrollExtent);
       }
     });
