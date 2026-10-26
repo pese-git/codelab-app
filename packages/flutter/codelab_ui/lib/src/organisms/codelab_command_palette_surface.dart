@@ -43,6 +43,17 @@ class CodeLabCommandPaletteSurface extends StatefulWidget {
 class _AcpCommandPaletteSurfaceState
     extends State<CodeLabCommandPaletteSurface> {
   late final TextEditingController _controller;
+
+  /// Фокус поля поиска палитры.
+  ///
+  /// Почему: палитра открывается поверх композера, который уже держит фокус,
+  /// а `autofocus` срабатывает, только когда в области фокуса никого нет, —
+  /// без явного запроса ввод после Cmd/Ctrl+K уходил бы в композер. При
+  /// закрытии палитры узел удаляется, и `FocusScope` возвращает фокус
+  /// прежнему владельцу, поэтому сочетания workbench продолжают работать.
+  final FocusNode _searchFocusNode = FocusNode(
+    debugLabel: 'command-palette-search',
+  );
   late String _query;
 
   @override
@@ -52,6 +63,16 @@ class _AcpCommandPaletteSurfaceState
         ? widget.initialQuery
         : (widget.queryOverride ?? '');
     _controller = TextEditingController(text: widget.initialQuery);
+    if (widget.showSearchField) {
+      // Запрос фокуса во время первого build недопустим, поэтому — после кадра.
+      // Без `Overlay` (превью виджета вне `FluentApp`) поле с фокусом падает
+      // на ручках выделения; в app `Overlay` есть всегда.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && Overlay.maybeOf(context) != null) {
+          _searchFocusNode.requestFocus();
+        }
+      });
+    }
   }
 
   @override
@@ -71,6 +92,7 @@ class _AcpCommandPaletteSurfaceState
   @override
   void dispose() {
     _controller.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -86,7 +108,10 @@ class _AcpCommandPaletteSurfaceState
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: FluentTheme.of(context).scaffoldBackgroundColor,
+        // Сплошная заливка, а не `scaffoldBackgroundColor`: без темы app
+        // fluent_ui отдаёт там полупрозрачный акрил (25 % в светлой теме),
+        // и лента под палитрой просвечивала сквозь список команд.
+        color: FluentTheme.of(context).resources.solidBackgroundFillColorBase,
         border: Border.all(color: Colors.grey.withAlpha(54)),
         borderRadius: BorderRadius.circular(6),
         boxShadow: kElevationToShadow[4],
@@ -108,6 +133,7 @@ class _AcpCommandPaletteSurfaceState
               TextBox(
                 key: CodeLabCommandPaletteSurface.queryFieldKey,
                 controller: _controller,
+                focusNode: _searchFocusNode,
                 prefix: const Padding(
                   padding: EdgeInsetsDirectional.only(start: 10),
                   child: Icon(FluentIcons.search, size: 14),

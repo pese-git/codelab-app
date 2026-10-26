@@ -2292,6 +2292,50 @@ void main() {
     await closeCodeLabRootScope();
   });
 
+  testWidgets('Cmd+K opens the palette from the focused composer, moves typing '
+      'into the palette search and returns focus to the composer on Esc', (
+    tester,
+  ) async {
+    final binding = CodeLabTestBinding();
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+
+    await tester.showKeyboard(_composerField());
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pumpAndSettle();
+
+    expect(shellCubit.state.isCommandPaletteOpen, isTrue);
+    final queryField = find.descendant(
+      of: find.byKey(CodeLabCommandPaletteSurface.queryFieldKey),
+      matching: find.byType(EditableText),
+    );
+    expect(tester.widget<EditableText>(queryField).focusNode.hasFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(shellCubit.state.isCommandPaletteOpen, isFalse);
+    expect(
+      tester.widget<EditableText>(_composerField()).focusNode.hasFocus,
+      isTrue,
+    );
+
+    // Сочетание снова срабатывает: фокус не потерялся при закрытии палитры.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(shellCubit.state.isCommandPaletteOpen, isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
   testWidgets('selecting /new from the palette creates a session and closes '
       'it', (tester) async {
     final initialTransport = FakeAcpTransport();
