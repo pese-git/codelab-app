@@ -45,9 +45,9 @@
 
 ## 7. Разделение Cubit-ов (5.9, итерация 7)
 
-- [ ] 7.1 Тесты `ui_mappers.dart`: `SessionView`/`WorkspaceState` → модели `acp_ui` совпадают с прежними значениями для сессий тестов 5.0
-- [ ] 7.2 `ConnectionCubit`, `SessionsCubit`, `ActiveSessionCubit`, `SettingsCubit`, `LayoutCubit`, `ui_mappers.dart`; `CodeLabShellCubit` — фасад, собирающий `CodeLabShellState` (D10)
-- [ ] 7.3 Проверка: в `shell_cubit.dart` нет логики из левого столбца таблицы переноса `09-10`, файл меньше 600 строк; тесты 5.0, `widget_test.dart` без правок
+- [x] 7.1 Тесты `ui_mappers.dart`: `SessionView`/`WorkspaceState` → модели `acp_ui` совпадают с прежними значениями для сессий тестов 5.0
+- [x] 7.2 `ConnectionCubit`, `SessionsCubit`, `ActiveSessionCubit`, `SettingsCubit`, `LayoutCubit`, `ui_mappers.dart`; `CodeLabShellCubit` — фасад, собирающий `CodeLabShellState` (D10)
+- [x] 7.3 Проверка: в `shell_cubit.dart` нет логики из левого столбца таблицы переноса `09-10`, файл меньше 600 строк; тесты 5.0, `widget_test.dart` без правок
 
 ## 8. Документы и Definition of Done
 

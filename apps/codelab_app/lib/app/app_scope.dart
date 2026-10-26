@@ -238,6 +238,23 @@ final class CodeLabPresentationModule extends Module {
           ),
         )
         .singleton();
+    // Пять Cubit-ов рабочего места (design D10): собираются после
+    // `ClientWorkspace`, чтобы рабочее пространство раньше них подписалось на
+    // `sessionChanges` (design D6).
+    bind<CodeLabShellParts>()
+        .toProvide(
+          () => CodeLabShellParts.build(
+            profile: currentScope.resolve<StdioAcpAgentProfile>(),
+            application: currentScope.resolve<AcpClientApplication>(),
+            workspace: currentScope.resolve<ClientWorkspace>(),
+            secrets: currentScope.resolve<InMemorySecretSource>(),
+            workingDirectoryProvider: currentScope
+                .resolve<WorkingDirectoryProvider>(),
+            projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
+            recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
+          ),
+        )
+        .singleton();
     bind<CodeLabShellCubit>()
         .toProvide(
           () => CodeLabShellCubit(
@@ -245,6 +262,7 @@ final class CodeLabPresentationModule extends Module {
             application: currentScope.resolve<AcpClientApplication>(),
             workspace: currentScope.resolve<ClientWorkspace>(),
             secrets: currentScope.resolve<InMemorySecretSource>(),
+            parts: currentScope.resolve<CodeLabShellParts>(),
             workingDirectoryProvider: currentScope
                 .resolve<WorkingDirectoryProvider>(),
             projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
