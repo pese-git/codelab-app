@@ -126,4 +126,31 @@ void main() {
     expect(violations, hasLength(3));
     expect(violations.first, endsWith('lib/src/workspace.dart:1 -> dart:io'));
   });
+
+  test('reports Flutter in the client IO package, but not dart:io', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_client_io_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'src', 'stores.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'dart:io';\n"
+        "import 'package:acp_transports/io.dart';\n"
+        "import 'package:flutter/foundation.dart';\n",
+      );
+    final rule = rules.firstWhere(
+      (r) => r.dir == 'packages/dart/acp_client_io',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    // IO-адаптеры клиента — его единственное место для `dart:io` и
+    // IO-транспортов вне app (design D2, D11 change `extract-acp-client-kit`).
+    expect(
+      violations.single,
+      endsWith('lib/src/stores.dart:3 -> package:flutter/foundation.dart'),
+    );
+  });
 }
