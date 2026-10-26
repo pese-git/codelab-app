@@ -300,8 +300,8 @@ void main() {
       await tester.pumpWidget(buildPanel([agentEntry(0)]));
       await tester.pumpAndSettle();
 
-      // The agent streams far more than fits, while the user never touches
-      // the scroll position — it stays at the top.
+      // Агент дописал больше, чем помещается, а пользователь ленту не
+      // трогал — лента следует за хвостом (follow-transcript-tail).
       final grownEntries = [for (var i = 0; i < 20; i += 1) agentEntry(i)];
       await tester.pumpWidget(buildPanel(grownEntries));
       await tester.pumpAndSettle();
@@ -309,8 +309,8 @@ void main() {
       final scrollableFinder = find.byType(Scrollable);
       ScrollPosition position() =>
           tester.state<ScrollableState>(scrollableFinder).position;
-      expect(position().pixels, 0.0);
       expect(position().maxScrollExtent, greaterThan(200));
+      expect(position().pixels, position().maxScrollExtent);
 
       await tester.pumpWidget(
         buildPanel([
@@ -408,6 +408,96 @@ void main() {
       );
     },
   );
+
+  group('следует за хвостом ленты (follow-transcript-tail)', () {
+    Widget buildPanel(List<CodeLabTranscriptEntry> entries) {
+      return FluentApp(
+        home: SizedBox(
+          width: 400,
+          height: 200,
+          child: CodeLabTranscriptPanel(entries: entries),
+        ),
+      );
+    }
+
+    // Карточки инструментов выше обычных сообщений — как у Dart-агента,
+    // чьи `read`/`write`/`exec` выталкивали итоговое сообщение за видимую
+    // часть ленивого списка.
+    List<CodeLabTranscriptEntry> entries(int count) => [
+      for (var i = 0; i < count; i += 1)
+        CodeLabTranscriptEntry(
+          id: 'entry-$i',
+          kind: i.isEven
+              ? CodeLabTranscriptEntryKind.toolCall
+              : CodeLabTranscriptEntryKind.agent,
+          title: i.isEven ? 'Tool $i' : 'Agent',
+          body: 'Entry number $i\nwith a second line\nand a third one.',
+        ),
+    ];
+
+    ScrollPosition position(WidgetTester tester) =>
+        tester.state<ScrollableState>(find.byType(Scrollable)).position;
+
+    testWidgets('новые записи у низа ленты остаются видимыми', (tester) async {
+      await tester.pumpWidget(buildPanel(entries(1)));
+      await tester.pumpAndSettle();
+
+      for (var count = 2; count <= 12; count += 1) {
+        await tester.pumpWidget(buildPanel(entries(count)));
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+
+      expect(position(tester).maxScrollExtent, greaterThan(200));
+      expect(position(tester).pixels, position(tester).maxScrollExtent);
+      expect(find.text('Tool 10'), findsOneWidget);
+      expect(
+        find.textContaining('Entry number 11', findRichText: true),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('не сдвигает ленту, пока пользователь читает историю', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildPanel(entries(12)));
+      await tester.pumpAndSettle();
+      expect(position(tester).pixels, 0.0);
+
+      // Прыжок вниз и чтение истории — обе прокрутки пользовательские.
+      await tester.fling(find.byType(Scrollable), const Offset(0, -5000), 3000);
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable), const Offset(0, 300));
+      await tester.pumpAndSettle();
+      final readingOffset = position(tester).pixels;
+      expect(position(tester).maxScrollExtent - readingOffset, greaterThan(80));
+
+      await tester.pumpWidget(buildPanel(entries(16)));
+      await tester.pumpAndSettle();
+
+      expect(position(tester).pixels, readingOffset);
+      expect(find.text('Tool 14'), findsNothing);
+    });
+
+    testWidgets('возврат к низу возобновляет следование', (tester) async {
+      await tester.pumpWidget(buildPanel(entries(12)));
+      await tester.pumpAndSettle();
+      await tester.fling(find.byType(Scrollable), const Offset(0, -5000), 3000);
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable), const Offset(0, 300));
+      await tester.pumpAndSettle();
+
+      await tester.fling(find.byType(Scrollable), const Offset(0, -5000), 3000);
+      await tester.pumpAndSettle();
+      expect(position(tester).pixels, position(tester).maxScrollExtent);
+
+      await tester.pumpWidget(buildPanel(entries(16)));
+      await tester.pumpAndSettle();
+
+      expect(position(tester).pixels, position(tester).maxScrollExtent);
+      expect(find.text('Tool 14'), findsOneWidget);
+    });
+  });
 
   testWidgets('renders transcript summary mode with compact details', (
     tester,
