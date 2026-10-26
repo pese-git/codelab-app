@@ -11,6 +11,11 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 /// Рабочее пространство, подключённое к агенту на [transport]; собирает
 /// диагностику kit в [diagnostics].
 final class KitAgent {
+  /// [capabilities] — что агент объявит в ответе `initialize`.
+  KitAgent({AgentCapabilities capabilities = const AgentCapabilities()}) {
+    transport.initializeAgentCapabilities = capabilities;
+  }
+
   final transport = FakeAcpTransport();
   final application = AcpClientApplication(transport: FakeAcpTransport());
   late final ClientWorkspace workspace = ClientWorkspace(
@@ -20,8 +25,17 @@ final class KitAgent {
   final diagnostics = <WorkspaceDiagnostic>[];
   StreamSubscription<WorkspaceDiagnostic>? _subscription;
 
-  Future<void> start() async {
+  /// Подключается к агенту; [sessions] — ответ на `session/list`, который
+  /// kit отправляет сразу после `initialize` агенту со списком сессий.
+  Future<void> start({ListSessionsResponse? sessions}) async {
     _subscription = workspace.diagnostics.listen(diagnostics.add);
+    if (sessions != null) {
+      unawaited(
+        next(
+          sessionListMethod,
+        ).then((request) => respond(request, sessions.toJson())),
+      );
+    }
     await workspace.connect(
       const StdioProfile(id: 'agent', label: 'Agent', command: 'agent'),
       projectDirectory: '/work',
