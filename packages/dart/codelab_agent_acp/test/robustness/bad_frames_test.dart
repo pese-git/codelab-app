@@ -1,4 +1,4 @@
-import 'package:acp_protocol/acp_protocol.dart';
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:test/test.dart';
 
 import '../support/server_harness.dart';

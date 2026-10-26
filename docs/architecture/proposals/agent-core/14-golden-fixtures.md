@@ -16,7 +16,7 @@
 ## 14.2. Раскладка и именование
 
 ```text
-packages/dart/acp_testing/
+packages/dart/codelab_acp_testing/
   fixtures/acp/                     все фикстуры — плоско, без подкаталогов групп; справа — этап появления
     initialize-capabilities.json    этап 0
     session-new-modes-config.json   этап 0
@@ -50,7 +50,7 @@ packages/dart/codelab_agent_core/
 
 `ScriptedStreamFunction` живёт в ядре (`lib/src/testing/`, экспорт только через
 `package:codelab_agent_core/testing.dart`, основной барель его не экспортирует): она нужна с
-этапа 1 тестам адаптеров и декораторов LLM, а проигрыватель фикстур `acp_testing` берёт её
+этапа 1 тестам адаптеров и декораторов LLM, а проигрыватель фикстур `codelab_acp_testing` берёт её
 оттуда.
 
 * id фикстуры = `acp/` + имя файла без `.json`: `acp/prompt-tool-permission-allow` —
@@ -112,7 +112,7 @@ packages/dart/codelab_agent_core/
 | Критерий | JSON | YAML |
 |---|---|---|
 | Кадры совпадают с проводом | да: кадр копируется из protocol trace (§12.5) без преобразования | нужна конвертация, кавычки и типы (`"1"` vs `1`, `on` vs `true`) легко исказить |
-| Зависимости | `dart:convert` | `package:yaml` в `acp_testing` и в каждом клиенте |
+| Зависимости | `dart:convert` | `package:yaml` в `codelab_acp_testing` и в каждом клиенте |
 | Многострочный текст | `\n` в строках — терпимо, фикстуры короткие | удобнее |
 | Проверка схемы | `_schema.json` + тот же валидатор | так же |
 
@@ -420,7 +420,7 @@ runClientFixture(fx, clientFactory):
    этом прогоне не участвует; fx.setup.files — файловая система клиента (fake fs-порт или
    временный каталог)
 2. transport := FakeAcpTransport(autoRespondToInitialize: false); client := clientFactory(transport)
-   (AcpClientApplication или ClientWorkspace из acp_client_kit; в UI-тестах — app целиком)
+   (AcpClientApplication или ClientWorkspace из codelab_client_core; в UI-тестах — app целиком)
 3. для каждого кадра f по порядку (роли зеркальны):
    a2c → подставить vars; transport.emitInbound(frame)
    c2a → дождаться следующего кадра в transport.sent (таймаут 5 с), нормализовать, сравнить;
@@ -439,7 +439,7 @@ runClientFixture(fx, clientFactory):
 ## 14.11. Инварианты корпуса
 
 1. **FIX-1.** У каждой фикстуры есть непустой `spec`, и каждая ссылка указывает на существующий файл `docs/acp/protocol/` (тест загрузчика).
-2. **FIX-2.** Каждый вид `sessionUpdate` из `acp_protocol` и каждый метод из `acp_method_codec.dart`, включая запросы агента `fs/*`, `terminal/*` и `session/request_permission`, встречается хотя бы в одной фикстуре с ролью `agent` и хотя бы в одной с ролью `client` (тест покрытия; вид, который агент не порождает, — только в `client`). `available_commands_update` закрывает `acp/session-new-modes-config` (этап 0, список — `$any`).
+2. **FIX-2.** Каждый вид `sessionUpdate` из `codelab_acp_protocol` и каждый метод из `acp_method_codec.dart`, включая запросы агента `fs/*`, `terminal/*` и `session/request_permission`, встречается хотя бы в одной фикстуре с ролью `agent` и хотя бы в одной с ролью `client` (тест покрытия; вид, который агент не порождает, — только в `client`). `available_commands_update` закрывает `acp/session-new-modes-config` (этап 0, список — `$any`).
 3. **FIX-3.** Каждая цель Must матрицы паритета с ACP-проявлением ссылается на существующий id фикстуры.
 4. **FIX-4.** Фикстуры без `extensions` не содержат `_meta.codelab`, `data.codelab` и методов `_codelab/*`. Фикстура, ожидающая `_meta.codelab.outcome`, объявляет `"extensions": ["outcome"]` (§14.2, этап 4); агент шлёт `outcome` всегда, а фикстуры без расширения его не проверяют (`_meta` — `$partial`, §14.6).
 
@@ -455,10 +455,10 @@ runClientFixture(fx, clientFactory):
 
 ## 14.13. Как проверить
 
-* `acp_testing/test/fixtures_load_test.dart`: все фикстуры проходят схему, FIX-1, FIX-4.
-* `acp_testing/test/fixtures_coverage_test.dart`: FIX-2, FIX-3.
+* `codelab_acp_testing/test/fixtures_load_test.dart`: все фикстуры проходят схему, FIX-1, FIX-4.
+* `codelab_acp_testing/test/fixtures_coverage_test.dart`: FIX-2, FIX-3.
 * `codelab_agent_acp/test/conformance_test.dart`: `runAgentFixture` на каждой фикстуре.
-* Тесты codelab-app и `acp_client_kit`: `runClientFixture` на фикстурах с ролью `client`.
+* Тесты codelab-app и `codelab_client_core`: `runClientFixture` на фикстурах с ролью `client`.
 * Тест самого матчера: мутации кадра (лишний ключ, другой статус, другой порядок) дают провал с понятным diff.
 
 ---

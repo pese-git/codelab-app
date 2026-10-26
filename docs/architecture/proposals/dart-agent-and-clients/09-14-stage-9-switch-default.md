@@ -13,7 +13,7 @@
    `packages/dart/codelab_architecture_tests/test/parity_evidence_test.dart` разбирает таблицы
    матрицы целей и для каждой строки Must проверяет, что доказательство существует и прошло:
    `acp/<id>` — файл фикстуры; `cli/<id>` — тест с таким именем в `apps/codelab_cli/test/e2e`;
-   `app:<файл>` — файл в `apps/codelab_app/integration_test`; `core/<id>` — тест в агентских
+   `app:<файл>` — файл в `apps/codelab_desktop/integration_test`; `core/<id>` — тест в агентских
    пакетах. Существования мало: тест читает машинные отчёты последнего ночного прогона CI
    (JUnit XML `codelab test-scenario --junit` и `dart test --reporter json` всех Dart VM-наборов,
    артефакт `parity-results/`), а для `app:` — отчёт локального прогона Flutter-тестов

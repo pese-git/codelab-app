@@ -1,16 +1,16 @@
 ## 1. Infrastructure — filesystem read
 
-- [ ] 1.1 Создать `WorkspaceFileReader` (интерфейс + `dart:io`-реализация) в `apps/codelab_app/lib/core/platform/` — `listDirectory(path)` (один уровень), `readFile(path)` (с лимитом размера)
+- [ ] 1.1 Создать `WorkspaceFileReader` (интерфейс + `dart:io`-реализация) в `apps/codelab_desktop/lib/core/platform/` — `listDirectory(path)` (один уровень), `readFile(path)` (с лимитом размера)
 - [ ] 1.2 Добавить захардкоженный игнор-лист директорий (`.git`, `.dart_tool`, `build`, `.venv`, `node_modules`, `.pub-cache`) в `listDirectory`
 - [ ] 1.3 Зарегистрировать `WorkspaceFileReader` в DI рядом с `WorkingDirectoryProvider`
 
-## 2. AcpFilePreviewPanel (acp_ui)
+## 2. AcpFilePreviewPanel (codelab_ui)
 
 - [ ] 2.1 Реализовать `AcpFilePreviewPanel` organism: путь, номера строк, опциональный `highlightRange`, футер с provenance-меткой ("from agent's tool call" / "read directly from disk")
 - [ ] 2.2 Реализовать "too large to preview" состояние
 - [ ] 2.3 Реализовать "Following" toggle (виден только для tool-call-source)
 
-## 3. AcpDirectoryTree (acp_ui)
+## 3. AcpDirectoryTree (codelab_ui)
 
 - [ ] 3.1 Реализовать `AcpDirectoryTree` organism: ленивое раскрытие узлов, иконки папка/файл, выбранное состояние
 - [ ] 3.2 Реализовать пустое/ошибочное состояние (директория недоступна для чтения)

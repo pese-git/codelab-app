@@ -1,4 +1,5 @@
-import 'package:acp_protocol/acp_protocol.dart' show JsonRpcId, JsonRpcRequest;
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
+    show JsonRpcId, JsonRpcRequest;
 import 'package:codelab_agent_acp/src/acp_permission_gate.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';

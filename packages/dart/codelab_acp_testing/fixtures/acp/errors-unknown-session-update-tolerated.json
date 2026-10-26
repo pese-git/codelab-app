@@ -1,0 +1,89 @@
+{
+  "id": "acp/errors-unknown-session-update-tolerated",
+  "spec": [
+    "15-Extensibility.md#custom-notifications",
+    "05-Prompt Turn.md#3-agent-reports-output",
+    "05-Prompt Turn.md#4-check-for-completion"
+  ],
+  "description": "Посреди хода агент присылает session/update незнакомого клиенту вида (usage_update); клиент пропускает его без ошибки и без изменения состояния сессии, принимает следующие обновления и ответ session/prompt (требование acp-protocol-client «Незнакомый вид обновления пропускается»). Агент такого вида не порождает — только роль client.",
+  "roles": [
+    "client"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard"
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "пользователь отправляет промпт",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Привет"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "usage_update",
+            "used": 1200,
+            "size": 32768
+          }
+        }
+      },
+      "note": "вид, которого нет в codelab_acp_protocol"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Привет! Чем помочь?"
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

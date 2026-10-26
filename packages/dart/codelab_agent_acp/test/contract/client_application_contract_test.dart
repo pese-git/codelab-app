@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:acp_client_core/acp_client_core.dart';
-import 'package:acp_protocol/acp_protocol.dart'
+import 'package:codelab_client_acp/codelab_client_acp.dart';
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show AgentMessageChunk, ContentBlock, PermissionOptionId, TextContent;
-import 'package:acp_testing/acp_testing.dart';
+import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_agent_acp/codelab_agent_acp.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart'
     hide ContentBlock, SessionId, TextContent;

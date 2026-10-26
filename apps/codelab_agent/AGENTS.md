@@ -10,8 +10,8 @@
 
 ## 2. Границы
 
-* Чистый Dart: НЕ ДОЛЖЕН импортировать `package:flutter/`, `package:fluent_ui/` и клиентские пакеты (`acp_client_core`, `acp_ui`) — правило `apps/codelab_agent` в `packages/dart/codelab_architecture_tests/test/support/rules.dart`.
-* `dependencies` — только `codelab_agent_core`, `codelab_agent_io`, `codelab_agent_acp`, `acp_protocol`, `acp_transports`, `args`, `http`, `async`, `meta`. Расширение — только через OpenSpec change.
+* Чистый Dart: НЕ ДОЛЖЕН импортировать `package:flutter/`, `package:fluent_ui/` и клиентские пакеты (`codelab_client_acp`, `codelab_ui`) — правило `apps/codelab_agent` в `packages/dart/codelab_architecture_tests/test/support/rules.dart`.
+* `dependencies` — только `codelab_agent_core`, `codelab_agent_io`, `codelab_agent_acp`, `codelab_acp_protocol`, `codelab_acp_transports`, `args`, `http`, `async`, `meta`. Расширение — только через OpenSpec change.
 * Ядро собирается только через `buildAgentCore` (HOST-6): `ToolRegistry(`, `Agent(`, `AgentRuntime(` в `lib/` и `bin/` запрещены.
 * stdout в режиме `--stdio` несёт только кадры ACP; логи — stderr и файл.
 * Значение ключа провайдера (`CODELAB_API_KEY`) и токен WebSocket не попадают в лог, текст ошибок и строковое представление опций.

@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:acp_protocol/acp_protocol.dart';
-import 'package:acp_transports/acp_transports.dart';
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'acp_error.dart';
@@ -114,7 +114,7 @@ final class InboundRouter {
         error: error.toJsonRpcError(),
       );
     } on JsonRpcProtocolException catch (error) {
-      // Декодер acp_protocol не принял параметры (§13.10).
+      // Декодер codelab_acp_protocol не принял параметры (§13.10).
       response = JsonRpcMessage.response(
         id: request.id,
         error: JsonRpcError(

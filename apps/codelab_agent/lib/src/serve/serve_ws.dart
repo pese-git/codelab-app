@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:acp_transports/io.dart';
+import 'package:codelab_acp_transports/io.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import '../cli/serve_args.dart';

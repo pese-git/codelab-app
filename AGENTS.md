@@ -111,7 +111,7 @@ AI-agent обязан интерпретировать эти формулиро
 Источники истины:
 
 * `openspec/specs/`
-* `packages/acp_protocol/`
+* `packages/codelab_acp_protocol/`
 
 Если требуемое поведение ACP не определено, агент ДОЛЖЕН остановиться и запросить уточнение либо предложить OpenSpec change.
 
@@ -167,43 +167,50 @@ AI-agent обязан интерпретировать эти формулиро
 │   ├── specs/
 │   └── changes/
 ├── apps/
-│   └── codelab_app/
+│   ├── codelab_desktop/
+│   └── codelab_agent/
 └── packages/
     ├── dart/
-    │   ├── acp_protocol/
-    │   ├── acp_transports/
-    │   ├── acp_client_core/
-    │   ├── acp_client_io/
-    │   ├── acp_client_kit/
-    │   ├── acp_testing/
+    │   ├── codelab_acp_protocol/
+    │   ├── codelab_acp_transports/
+    │   ├── codelab_acp_testing/
+    │   ├── codelab_client_acp/
+    │   ├── codelab_client_core/
+    │   ├── codelab_client_io/
     │   ├── codelab_agent_core/
+    │   ├── codelab_agent_io/
+    │   ├── codelab_agent_acp/
     │   └── codelab_architecture_tests/
     └── flutter/
-        └── acp_ui/
+        └── codelab_ui/
 ```
 
 Назначение пакетов:
 
-* `acp_protocol` — типизированные модели ACP JSON-RPC, codecs и validation.
-* `acp_transports` — заменяемые ACP transports (stdio, WebSocket, тестовые).
-* `acp_client_core` — domain, application state и use cases ACP-клиента.
-* `acp_client_kit` — общий клиентский слой без UI для app и CLI, web-безопасный: рабочее пространство, соединение, сессии, транскрипт, очередь промптов, одобрения, опции и команды агента, инспектор, диагностика, порты хранилищ; владелец клиентского состояния — Cubit-ы app только отображают его; правила — во вложенном `AGENTS.md` пакета.
-* `acp_client_io` — `dart:io`-адаптеры клиентского слоя: файлы, процессы, рабочая папка, настоящие транспорты (`ioTransportResolver`), JSON-хранилища профилей и недавних проектов; без Flutter; правила — во вложенном `AGENTS.md` пакета.
-* `acp_testing` — fixtures, fake transports и helpers для conformance-тестов.
+* `codelab_acp_protocol` — типизированные модели ACP JSON-RPC, codecs и validation.
+* `codelab_acp_transports` — заменяемые ACP transports (stdio, WebSocket, тестовые).
+* `codelab_acp_testing` — fixtures, fake transports и helpers для conformance-тестов.
+* `codelab_client_acp` — протокольный клиент `AcpClientApplication`: domain, application state и use cases ACP-клиента.
+* `codelab_client_core` — общий клиентский слой без UI для app и CLI, web-безопасный: рабочее пространство, соединение, сессии, транскрипт, очередь промптов, одобрения, опции и команды агента, инспектор, диагностика, порты хранилищ; владелец клиентского состояния — Cubit-ы app только отображают его; правила — во вложенном `AGENTS.md` пакета.
+* `codelab_client_io` — `dart:io`-адаптеры клиентского слоя: файлы, процессы, рабочая папка, настоящие транспорты (`ioTransportResolver`), JSON-хранилища профилей и недавних проектов; без Flutter; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_agent_core` — встраиваемое ядро Dart-агента на чистом Dart (LLM, цикл, инструменты, разрешения, сессии); правила — во вложенном `AGENTS.md` пакета.
+* `codelab_agent_io` — `dart:io`-реализации портов ядра агента: файлы, процессы, журналы сессий; правила — во вложенном `AGENTS.md` пакета.
+* `codelab_agent_acp` — ACP-сервер агента: проекция `AgentRuntime` в протокол; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_architecture_tests` — только тесты: сторож импортов и allowlist зависимостей ядра (`melos run guard`).
-* `acp_ui` — Fluent UI widgets рабочего места CodeLab.
+* `codelab_ui` — Fluent UI widgets рабочего места CodeLab.
+* `apps/codelab_desktop` — десктопный клиент; `apps/codelab_agent` — бинарь Dart-агента `codelab-agent serve --stdio | --ws`.
 
 Правила:
 
+* Пакеты-библиотеки называются `codelab_<сторона>_<слой>` (ADR-0002): сторона — `acp` (общий протокольный слой), `client` или `agent`; слой — `core` (логика без IO), `io` (адаптеры `dart:io`), `acp` (проекция стороны в протокол) или предметное имя у общего слоя (`protocol`, `transports`, `testing`). Пакеты без стороны — `codelab_<назначение>`; мосты между сторонами НЕ ДОЛЖНЫ получать префикс `codelab_agent_`. Имя пакета совпадает с именем его каталога; проверяет `package_naming_test.dart` сторожа.
 * `apps/*` МОГУТ зависеть от `packages/*`.
 * Пакеты НЕ ДОЛЖНЫ зависеть от приложений.
 * Циклические зависимости между пакетами запрещены.
 * Пакеты в `packages/dart/` ДОЛЖНЫ оставаться pure Dart и НЕ ДОЛЖНЫ зависеть от Flutter.
 * Пакеты в `packages/flutter/` МОГУТ зависеть от Flutter.
-* `acp_ui` НЕ ДОЛЖЕН содержать application/business logic.
-* `acp_testing` МОЖЕТ использоваться другими пакетами только как `dev_dependency`.
-* `package:acp_transports/acp_transports.dart` ДОЛЖЕН оставаться web-безопасным; IO-транспорты (`StdioAcpTransport`, `WebSocketAcpTransport`) импортируются из `package:acp_transports/io.dart` только composition root и тестами.
+* `codelab_ui` НЕ ДОЛЖЕН содержать application/business logic.
+* `codelab_acp_testing` МОЖЕТ использоваться другими пакетами только как `dev_dependency`.
+* `package:codelab_acp_transports/codelab_acp_transports.dart` ДОЛЖЕН оставаться web-безопасным; IO-транспорты (`StdioAcpTransport`, `WebSocketAcpTransport`) импортируются из `package:codelab_acp_transports/io.dart` только composition root и тестами.
 * Клиенты (`apps/*`) НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` напрямую.
 * Границы пакетов проверяет тест-сторож `packages/dart/codelab_architecture_tests` (`melos run guard`): правило нового пакета добавляется в `test/support/rules.dart` вместе с пакетом.
 
@@ -220,7 +227,7 @@ AI-agent обязан интерпретировать эти формулиро
 Предпочтительная структура:
 
 ```text id="srlg2c"
-apps/codelab_app/lib/
+apps/codelab_desktop/lib/
 ├── app/
 ├── core/
 └── features/
@@ -266,14 +273,14 @@ application / domain
 
 ## 7. ACP boundary
 
-`packages/acp_protocol` представляет **wire protocol**, а не UI state приложения.
+`packages/codelab_acp_protocol` представляет **wire protocol**, а не UI state приложения.
 
 Входящий поток:
 
 ```text id="jmv7zf"
 ACP wire
    ↓
-acp_protocol
+codelab_acp_protocol
    ↓
 transport / client
    ↓

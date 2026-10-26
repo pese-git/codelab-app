@@ -1,4 +1,4 @@
-import 'package:acp_testing/acp_testing.dart';
+import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:test/test.dart';
 
 import 'support/transport_starter.dart';

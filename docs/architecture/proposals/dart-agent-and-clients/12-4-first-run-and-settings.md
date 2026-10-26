@@ -69,11 +69,11 @@ config.yaml» (§12.4.5, SETUP-15); перенос из CLI — `codelab config 
 
 | Барель | Содержимое | Можно | Нельзя |
 |---|---|---|---|
-| `codelab_setup.dart` (чистый Dart) | `ProviderSetupFlow`, пресеты, `ProviderCheck` и `HttpProviderCheck` поверх `http.Client`, `ProviderReadiness`, `McpServerDraft`, `SettingsAccess`, модели представления, порт `AgentConfigStore` и `ConfigSaveOutcome`; реэкспорт чистых типов ядра (§17.5.2): `ConfigLayer`, `ConfigTarget`, `ConfigSnapshot`, `ConfigEdit` и его подклассы, `ConfigIssue`, `ConfigLoadResult`, `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType`, `SecretNames`, `SecretStore`, `DescribedSecretStore`, `SecretBackendInfo` | `codelab_agent_core`, `http`, `meta` | `dart:io`, `codelab_agent_io`, Flutter, `package:acp_*` |
-| `io.dart` (десктоп и CLI) | `FileAgentConfigStore` поверх `ConfigWriter` и `ConfigLoader`, `systemSecretStore()` (бэкенд по `secrets.backend`, §17.5.4), пути `$CODELAB_HOME`, вход в общие подкоманды CLI ядра `config`/`provider`/`mcp`/`secret` (§17.5.5) | `codelab_agent_io`, `dart:io` | Flutter, `package:acp_*` |
+| `codelab_setup.dart` (чистый Dart) | `ProviderSetupFlow`, пресеты, `ProviderCheck` и `HttpProviderCheck` поверх `http.Client`, `ProviderReadiness`, `McpServerDraft`, `SettingsAccess`, модели представления, порт `AgentConfigStore` и `ConfigSaveOutcome`; реэкспорт чистых типов ядра (§17.5.2): `ConfigLayer`, `ConfigTarget`, `ConfigSnapshot`, `ConfigEdit` и его подклассы, `ConfigIssue`, `ConfigLoadResult`, `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType`, `SecretNames`, `SecretStore`, `DescribedSecretStore`, `SecretBackendInfo` | `codelab_agent_core`, `http`, `meta` | `dart:io`, `codelab_agent_io`, Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
+| `io.dart` (десктоп и CLI) | `FileAgentConfigStore` поверх `ConfigWriter` и `ConfigLoader`, `systemSecretStore()` (бэкенд по `secrets.backend`, §17.5.4), пути `$CODELAB_HOME`, вход в общие подкоманды CLI ядра `config`/`provider`/`mcp`/`secret` (§17.5.5) | `codelab_agent_io`, `dart:io` | Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
 
 Сторож (§9.5) получает новое правило: основной барель `codelab_setup` не импортирует то, что
-запрещено `webUnsafe`, а также `package:codelab_agent_io`, `package:acp_` и `package:flutter/`;
+запрещено `webUnsafe`, а также `package:codelab_agent_io`, `package:codelab_acp_`, `package:codelab_client_` и `package:flutter/`;
 presentation app не импортирует `package:codelab_setup/io.dart`. Клиенты по-прежнему не
 импортируют `codelab_agent_*` напрямую: нужные типы ядра приходят реэкспортом из
 `codelab_setup`, как `ProviderConfig` через `codelab_embedded`. `ConfigWriter`, бэкенды секретов и
@@ -82,7 +82,7 @@ presentation app не импортирует `package:codelab_setup/io.dart`. К
 
 Почему не другие места:
 
-* `acp_client_kit` — это модель ACP-клиента, она одинакова для любого агента. Конфиг своего
+* `codelab_client_core` — это модель ACP-клиента, она одинакова для любого агента. Конфиг своего
   агента в ней — чужая ответственность, а зависимость kit от ядра нарушила бы §4.1.
 * `codelab_agent_io` — там `dart:io`. Автомат мастера нельзя было бы тестировать как чистый Dart
   и использовать на мобильных платформах. Клиенты не импортируют этот пакет напрямую.
@@ -301,14 +301,14 @@ final class SettingFieldView {             // строка общего реда
 заменяется ссылкой (`Authorization: "${secret:codelab/mcp/github/authorization}"`); если
 пользователь вписал ссылку сам (`"Bearer ${secret:…}"`), черновик сохраняет её как обычный текст.
 
-**Состояния Cubit-ов app.** Feature `apps/codelab_app/lib/features/settings/`:
+**Состояния Cubit-ов app.** Feature `apps/codelab_desktop/lib/features/settings/`:
 `application/` содержит Cubit-ы, `infrastructure/settings_module.dart` связывает
 `FileAgentConfigStore`, `systemSecretStore()` и `HttpProviderCheck(IOClient())` из
 `codelab_setup/io.dart`, `presentation/` содержит страницы. Presentation не видит ни файлов, ни
 связки ключей.
 
 ```dart
-// apps/codelab_app/lib/features/settings/application/provider_settings_cubit.dart
+// apps/codelab_desktop/lib/features/settings/application/provider_settings_cubit.dart
 sealed class ProviderSettingsState {}
 final class ProviderSettingsLoading extends ProviderSettingsState {}
 final class ProviderSettingsReadOnly extends ProviderSettingsState {
@@ -342,7 +342,7 @@ sealed class McpAgentStatus {}             // unavailable(reason) | loading | re
                                            // | live(List<McpServerStatus>) — только встроенный агент, §12.4.6
 ```
 
-**Сторож запуска** (`apps/codelab_app/lib/app/boot/`; чистый Dart без Flutter, кроме
+**Сторож запуска** (`apps/codelab_desktop/lib/app/boot/`; чистый Dart без Flutter, кроме
 `boot_host.dart`):
 
 ```dart
@@ -966,7 +966,7 @@ deleted.`, кнопки записи активны.
 9. **SETUP-9.** Presentation app НЕ ДОЛЖЕН обращаться к файлам, связке ключей и HTTP: только
    Cubit-ы `features/settings/application` поверх портов из `codelab_setup`. Основной барель
    `codelab_setup` НЕ ДОЛЖЕН импортировать `dart:io`, `codelab_agent_io`, Flutter и
-   `package:acp_*`; presentation app НЕ ДОЛЖЕН импортировать `codelab_setup/io.dart`.
+   `package:codelab_acp_*`, `package:codelab_client_*`; presentation app НЕ ДОЛЖЕН импортировать `codelab_setup/io.dart`.
 10. **SETUP-10.** Проверочный запрос ДОЛЖЕН идти только на введённый пользователем `base_url`, с
     таймаутом. Ключ ДОЛЖЕН уходить только в заголовке авторизации. `http://` для нелокального
     хоста — только после подтверждения.
@@ -1105,7 +1105,7 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
   повторный `config set` проходит; при обоих файлах действует `config.yaml`, в логе одно
   `config.legacy_ignored` (SETUP-15).
 
-**Интеграционные тесты app** (`apps/codelab_app/integration_test/`, macOS). В scope зависимостей
+**Интеграционные тесты app** (`apps/codelab_desktop/integration_test/`, macOS). В scope зависимостей
 подменяются `SecretStore` (в памяти) и `CODELAB_HOME` (временный каталог). `/models` отдаёт
 локальный `HttpServer`.
 
@@ -1124,7 +1124,7 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
 * `app:mcp_settings_flow_test.dart` (E-13):
   1. добавить `http`-сервер с секретным заголовком → в конфиге
      `Authorization: "${secret:codelab/mcp/github/authorization}"`, значение только в хранилище;
-  2. агент (встроенный, scripted MCP-сервер из `acp_testing`) присылает
+  2. агент (встроенный, scripted MCP-сервер из `codelab_acp_testing`) присылает
      `available_commands_update`; «Agent status» показывает `connected` и число инструментов из
      `McpSupervisor.snapshot()`;
   3. «Reconnect» вызывает `McpSupervisor.reconnect("github")`, состояние проходит
@@ -1162,7 +1162,7 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
 `config_option_update` и сохранение старого конфига при невалидном новом — по §17.5 ядра.
 
 **Сторож:** правило `codelab_setup` (основной барель — `webUnsafe`, `package:codelab_agent_io`,
-`package:acp_`, `package:flutter/`); `apps/codelab_app/lib/features/settings/presentation/` не
+`package:codelab_acp_`, `package:codelab_client_`, `package:flutter/`); `apps/codelab_desktop/lib/features/settings/presentation/` не
 импортирует `codelab_setup/io.dart` и `dart:io` (SETUP-9).
 
 **Скрипты melos:** `test:e2e:app:settings` (`embedded_provider_settings_flow_test.dart`,

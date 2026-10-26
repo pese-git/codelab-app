@@ -37,13 +37,13 @@ State должен находиться на том уровне, котором
 
 ```text
 Protocol state
-    → acp_protocol / acp_client_core
+    → codelab_acp_protocol / codelab_client_acp
 
 Application state
-    → acp_client_core / application layer
+    → codelab_client_acp / application layer
 
 Client workspace state (соединение, сессии, транскрипт, очередь, одобрения)
-    → acp_client_kit
+    → codelab_client_core
 
 Presentation state
     → BLoC / Cubit
@@ -64,10 +64,10 @@ Ephemeral widget state
 
 ```text
 connection/session lifecycle
-    → acp_client_core
+    → codelab_client_acp
 
 client workspace (ConnectionView, SessionView, очередь промптов)
-    → acp_client_kit
+    → codelab_client_core
 
 selected tab
     → presentation
@@ -78,7 +78,7 @@ hover state
 
 Несколько layers МОГУТ иметь derived representation одного state, но source of truth должен быть однозначным.
 
-Владелец клиентского состояния — `acp_client_kit` (`ClientWorkspace`, `WorkspaceState`, `SessionView`; `openspec/changes/archive/2026-10-26-extract-acp-client-kit/design.md`, D4–D7). Cubit-ы `codelab_app` и экраны `codelab_cli` его не дублируют: они отображают `WorkspaceState`/`SessionView` в свои модели и держат только состояние своего UI (черновик формы, раскладку, флаги окна).
+Владелец клиентского состояния — `codelab_client_core` (`ClientWorkspace`, `WorkspaceState`, `SessionView`; `openspec/changes/archive/2026-10-26-extract-acp-client-kit/design.md`, D4–D7). Cubit-ы `codelab_desktop` и экраны `codelab_cli` его не дублируют: они отображают `WorkspaceState`/`SessionView` в свои модели и держат только состояние своего UI (черновик формы, раскладку, флаги окна).
 
 ---
 
@@ -237,8 +237,8 @@ BLoC/Cubit НЕ ДОЛЖЕН:
 * владеть concrete transport;
 * выполнять filesystem implementation;
 * реализовывать security policy;
-* содержать reusable ACP lifecycle logic, если оно принадлежит `acp_client_core`;
-* содержать логику клиента, общую для app и CLI (очередь промптов, проекцию транскрипта, политику переподключения), — она принадлежит `acp_client_kit`.
+* содержать reusable ACP lifecycle logic, если оно принадлежит `codelab_client_acp`;
+* содержать логику клиента, общую для app и CLI (очередь промптов, проекцию транскрипта, политику переподключения), — она принадлежит `codelab_client_core`.
 
 ---
 
@@ -379,7 +379,7 @@ RunningOnSettingsTab
 
 Но дробление не должно приводить к десяткам Cubit без ясной ответственности.
 
-Пример — рабочее место `codelab_app` (`features/workbench/application/`, design D10 change `extract-acp-client-kit`): `ConnectionCubit` (форма подключения, статус), `SessionsCubit` (список и выбор сессий), `ActiveSessionCubit` (лента, очередь, одобрения, опции, план показываемой сессии), `SettingsCubit` (проект, недавние проекты), `LayoutCubit` (панели, палитра). Маппинг представлений kit в модели `acp_ui` — чистые функции `ui_mappers.dart`. Если одно событие меняет несколько Cubit-ов, а потребитель ждёт одного согласованного снимка, изменения склеиваются синхронно (`ShellChanges.batch`), а не через асинхронный `stream`.
+Пример — рабочее место `codelab_desktop` (`features/workbench/application/`, design D10 change `extract-acp-client-kit`): `ConnectionCubit` (форма подключения, статус), `SessionsCubit` (список и выбор сессий), `ActiveSessionCubit` (лента, очередь, одобрения, опции, план показываемой сессии), `SettingsCubit` (проект, недавние проекты), `LayoutCubit` (панели, палитра). Маппинг представлений kit в модели `codelab_ui` — чистые функции `ui_mappers.dart`. Если одно событие меняет несколько Cubit-ов, а потребитель ждёт одного согласованного снимка, изменения склеиваются синхронно (`ShellChanges.batch`), а не через асинхронный `stream`.
 
 ---
 
@@ -1351,7 +1351,7 @@ State getter не должен выполнять I/O или изменять st
 
 ---
 
-## 80. Когда переносить логику из BLoC в `acp_client_core`
+## 80. Когда переносить логику из BLoC в `codelab_client_acp`
 
 Следует рассмотреть перенос, если логика:
 
@@ -1415,7 +1415,7 @@ Global state не создаётся для local concern, local state не ис
             ACP / Infrastructure
                     │
                     ▼
-             acp_client_core
+             codelab_client_acp
                     │
           authoritative state
                     │
@@ -1443,4 +1443,4 @@ Application API
 ACP client / infrastructure
 ```
 
-Если Widget начинает владеть ACP lifecycle, BLoC реализует transport, а `acp_client_core` зависит от Flutter state types, boundaries следует пересмотреть.
+Если Widget начинает владеть ACP lifecycle, BLoC реализует transport, а `codelab_client_acp` зависит от Flutter state types, boundaries следует пересмотреть.

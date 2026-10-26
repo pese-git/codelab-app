@@ -1,4 +1,4 @@
-# 12.1. Общая модель отображения в `acp_client_kit`
+# 12.1. Общая модель отображения в `codelab_client_core`
 
 > Часть предложения [«Dart-агент и клиенты CodeLab»](../dart-agent-and-clients.md). Status: Accepted. Исходные решения, связанные документы и порядок чтения — в оглавлении.
 
@@ -7,12 +7,12 @@
 **Назначение.** Оба клиента показывают одно и то же: мысли модели отдельно от ответа (U-08,
 D-08), строки инструментов без сырого JSON (U-09), markdown (U-10, D-06), diff правок (U-11,
 D-07), статус с моделью, режимом, токенами и стоимостью (U-13, D-09), вложения (U-14, D-12).
-Всё, что не зависит от способа вывода, вычисляется один раз в `acp_client_kit`: разбор markdown в
+Всё, что не зависит от способа вывода, вычисляется один раз в `codelab_client_core`: разбор markdown в
 нейтральное дерево, построчный diff, извлечение детали строки инструмента, сборка статуса из
 опций конфигурации и usage, превращение вложений в блоки ACP. Клиент получает готовые модели и
 решает только, как их нарисовать: CLI — ANSI-последовательностями (§12.2), app — виджетами
-`acp_ui` (§12.3). Пакет остаётся на чистом Dart: без Flutter и без `dart:io`; всё, что требует
-файловой системы, процессов или часов, приходит через порты, реализованные в `acp_client_io`.
+`codelab_ui` (§12.3). Пакет остаётся на чистом Dart: без Flutter и без `dart:io`; всё, что требует
+файловой системы, процессов или часов, приходит через порты, реализованные в `codelab_client_io`.
 
 Модель расширяет эскиз `TranscriptItem` из §9.10 и не меняет алгоритм инкрементальной проекции:
 шаги 1–8 §9.10 остаются, проектор дополнительно заполняет поля ниже.
@@ -24,7 +24,7 @@ flowchart LR
         PR["ответ session/prompt<br/>stopReason, _meta"]
         UX["расширение usage<br/>(через OpenSpec)"]
     end
-    subgraph Kit["acp_client_kit, чистый Dart"]
+    subgraph Kit["codelab_client_core, чистый Dart"]
         TP["TranscriptProjector"]
         MD["IncrementalMarkdown"]
         DF["LineDiff (Myers)"]
@@ -33,14 +33,14 @@ flowchart LR
         TR["ToolRowFormatter"]
         SV["SessionView<br/>transcript + statusBar"]
     end
-    subgraph Ports["Порты (реализация в acp_client_io)"]
+    subgraph Ports["Порты (реализация в codelab_client_io)"]
         GB["GitBranchProbe"]
         TO["TerminalOutputSource"]
         CL["Clock"]
     end
     subgraph Clients["Клиенты"]
         CLI["codelab_cli<br/>ANSI-рендер, TUI"]
-        APP["codelab_app<br/>Cubit + acp_ui"]
+        APP["codelab_desktop<br/>Cubit + codelab_ui"]
     end
     SU --> TP
     PR --> UD
@@ -63,8 +63,8 @@ flowchart LR
 ## 12.1.1. Контракт (Dart)
 
 Эскиз: конструкторы, `==` и `copyWith` опущены; модели неизменяемые (freezed, как в §9.10).
-Файлы — в `packages/dart/acp_client_kit/lib/src/view/` (модели отображения) и
-`lib/src/attachments/`; экспорт через `lib/acp_client_kit.dart`.
+Файлы — в `packages/dart/codelab_client_core/lib/src/view/` (модели отображения) и
+`lib/src/attachments/`; экспорт через `lib/codelab_client_core.dart`.
 
 ```dart
 // ---------- Транскрипт: поля для отображения ----------
@@ -138,7 +138,7 @@ final class ToolCallItem implements TranscriptItem {
   final String id;                                  // == toolCallId
   final String toolCallId;
   final String title;                               // как прислал агент
-  final ToolKind kind;                              // из acp_protocol; неизвестное значение → other
+  final ToolKind kind;                              // из codelab_acp_protocol; неизвестное значение → other
   final ToolCallStatusView status;
   final Map<String, Object?>? rawInput;             // для /inspect и детали строки; не рисуется как JSON
   final List<ToolLocationView> locations;
@@ -386,7 +386,7 @@ final class QueuedPrompt {
   final bool allowOutsideCwd;                       // подтверждение, данное при постановке в очередь
 }
 
-// ---------- Порты (реализации — acp_client_io) ----------
+// ---------- Порты (реализации — codelab_client_io) ----------
 abstract interface class Clock { DateTime now(); }
 abstract interface class GitBranchProbe { Future<String?> branchOf(String cwd); }
 abstract interface class TerminalOutputSource {
@@ -403,7 +403,7 @@ final class FileProbe { final bool exists; final int size; final Uint8List head;
 abstract interface class ProjectFiles { /* canonicalRoot, list, read, watch — §12.6.8 */ }
 abstract interface class GitIgnoreMatcher { /* чистый Dart, §12.6.8 */ }
 final class IgnoreStack { /* .git/info/exclude + .gitignore по папкам, §12.6.8 */ }
-// после MVP (U-27, §12.6.9): память модели по папке; реализация FileFolderChoiceStore — acp_client_io
+// после MVP (U-27, §12.6.9): память модели по папке; реализация FileFolderChoiceStore — codelab_client_io
 abstract interface class FolderChoiceStore { /* read, write, forget по FolderKey — §12.6.9 */ }
 final class FolderModelMemory { /* applyToNewSession, remember — §12.6.9 */ }
 // после MVP (D-17, §12.6.12): поиск и фильтр сессий; типы SessionQuery, DateFilter,
@@ -565,7 +565,7 @@ Setext-заголовки, HTML, сноски и ссылки-определен
 4. **Без расширения** `UsageView.unknown`: сегменты токенов, стоимости и контекста отсутствуют
    (не «0»). Это обычный режим со сторонним агентом.
 5. **Ветка git.** `GitBranchProbe.branchOf(cwd)` вызывается при открытии сессии, после каждого
-   хода и не чаще раза в 5 с; результат кэшируется. Реализация в `acp_client_io` читает
+   хода и не чаще раза в 5 с; результат кэшируется. Реализация в `codelab_client_io` читает
    `.git/HEAD` (с переходом по файлу `.git` с `gitdir:` для worktree и подмодулей), без запуска
    процесса: `ref: refs/heads/<имя>` → `<имя>`, иначе первые 7 символов хеша. Нет репозитория
    или ошибка чтения → `null`.
@@ -675,7 +675,7 @@ Setext-заголовки, HTML, сноски и ссылки-определен
 
 ## 12.1.8. Инварианты
 
-1. **VIEW-1.** `acp_client_kit` не импортирует Flutter, `dart:io` и `dart:ui`; часы, файлы, git и
+1. **VIEW-1.** `codelab_client_core` не импортирует Flutter, `dart:io` и `dart:ui`; часы, файлы, git и
    вывод терминалов — только через порты `Clock`, `AttachmentFiles`, `GitBranchProbe`,
    `TerminalOutputSource`. Проверка — сторож §9.5.
 2. **VIEW-2.** Ни одна модель отображения (`ToolRowView`, `SessionStatusBar`,
@@ -728,7 +728,7 @@ Setext-заголовки, HTML, сноски и ссылки-определен
 
 ## 12.1.10. Как проверить
 
-Тесты — в `packages/dart/acp_client_kit/test/`.
+Тесты — в `packages/dart/codelab_client_core/test/`.
 
 * `view/markdown/incremental_markdown_property_test.dart`: для корпуса ответов из фикстур и
   случайных разбиений на дельты (включая разрыв посреди `**`, строки ограды, `|---|`, `\r\n`)
@@ -764,11 +764,11 @@ Setext-заголовки, HTML, сноски и ссылки-определен
 * `view/markdown/markdown_parser_test.dart` дополнительно: картинка с `alt` и адресом `https://x/y.png` → `MdImage`
   (VIEW-12); задачи `- [ ]`/`- [x]` → `MdListItem.checked`.
 * Golden ACP-фикстура **`acp/prompt-image-block`**
-  (`packages/dart/acp_testing/fixtures/acp/prompt-image-block.json`, цель U-14): агент объявил
+  (`packages/dart/codelab_acp_testing/fixtures/acp/prompt-image-block.json`, цель U-14): агент объявил
   `promptCapabilities.image: true`, клиент отправляет промпт с вложением PNG — кадр
   `session/prompt` содержит `text`, `image` с `mimeType: "image/png"` и `resource_link`; вариант
   `prompt-image-block-no-capability` — без `image` в кадре только `text` и `resource_link`.
-* `melos run guard`: правило VIEW-1 для `acp_client_kit` (без изменений сторожа: правило уже
+* `melos run guard`: правило VIEW-1 для `codelab_client_core` (без изменений сторожа: правило уже
   есть в §9.5).
 
 ---

@@ -703,7 +703,7 @@ open for writing in <profile> (pid <pid>).` и `end_turn`.
 
 **codelab-app** ([12-3-desktop-display.md](../dart-agent-and-clients/12-3-desktop-display.md),
 модель отображения — [12-1-view-model.md](../dart-agent-and-clients/12-1-view-model.md)). В
-`acp_client_kit` `TranscriptItem` получает `recordId`, `SessionHandle` — методы `rename`,
+`codelab_client_core` `TranscriptItem` получает `recordId`, `SessionHandle` — методы `rename`,
 `branches`, `switchBranch`, `rewind`, `fork`, `label` и поток `access` (`write` / `readOnly`).
 UI: «Rename» и «Fork» в контекстном меню сессии сайдбара; на наведении сообщения пользователя —
 «Rewind to here» с диалогом-предупреждением (список файлов из `dryRun`); панель веток (список
@@ -891,7 +891,7 @@ Switch with /branch <n>, rewind with /rewind <n>, copy with /fork <n>.
 * `session_search_budget_test.dart`: 300 журналов — первый ответ `truncated: true`, `scanned == 200`, продолжение по `nextCursor` не повторяет сессий; фальшивые часы — предел 2 с; битый журнал пропущен (SESM-20).
 * `session_query_normalize_test.dart`: общая фикстура `session_query_cases.json` с kit (кавычки, 9 терминов, пустой запрос → `invalidQuery`).
 * Golden ACP-фикстура **`acp/session-search`** (после OpenSpec): `initialize` объявляет `sessionSearch` с `scopes`; запрос примера §17.6.17 → ответ по схеме; `scope: "all"` при `allow_all: false` → `-32602` `searchScopeDenied`; пятый ожидающий запрос → `searchBusy`.
-* Тест приложения **`app:attach_ws_session_flow_test.dart`** (новый, цель D-10): fake-агент по WebSocket, CLI-клиент (`acp_client_kit`) создаёт сессию и запускает ход; app находит сессию в сайдбаре, открывает её и получает реплей и живые события хода; после конца хода app отправляет промпт, CLI видит его; сценарий с агентом, занятым другим процессом, показывает баннер только чтения и кнопку «Fork».
+* Тест приложения **`app:attach_ws_session_flow_test.dart`** (новый, цель D-10): fake-агент по WebSocket, CLI-клиент (`codelab_client_core`) создаёт сессию и запускает ход; app находит сессию в сайдбаре, открывает её и получает реплей и живые события хода; после конца хода app отправляет промпт, CLI видит его; сценарий с агентом, занятым другим процессом, показывает баннер только чтения и кнопку «Fork».
 
 ## 17.6.17. Поиск по тексту сессий (D-17)
 

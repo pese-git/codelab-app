@@ -4,7 +4,7 @@
 Корпус golden-фикстур ACP закрепляет прочтение спецификации ACP в исполняемом виде: одна фикстура — один сценарий кадров с направлением и ссылкой на раздел `docs/acp/protocol/*`. Один корпус проверяет и клиентов CodeLab (драйвер играет роль агента), и Dart-агента (с этапа 4). Формат и алгоритмы — `docs/architecture/proposals/agent-core/14-golden-fixtures.md`.
 ## Requirements
 ### Requirement: Формат golden-фикстуры ACP
-Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/acp_testing/fixtures/acp/<имя>.json` (каталог плоский, без подкаталогов групп) с id `acp/<имя>`. Фикстура SHALL содержать `id`, непустой `spec`, `description`, `setup` и `frames` и МОЖЕТ содержать `goals`, `extensions`, `roles`, `llm`, `normalize`, `after`. Кадр SHALL иметь направление `dir` (`c2a` или `a2c`) и `frame` либо `unordered`; МОЖЕТ иметь `note`, `optional`, `repeat` и `match`. Поле `roles` SHALL принимать подмножество `["agent", "client"]` и по умолчанию равно обоим. Формат SHALL быть описан в `fixtures/acp/_schema.json` (JSON Schema draft 2020-12, без дополнительных свойств на верхнем уровне, в `setup` и в кадре).
+Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/codelab_acp_testing/fixtures/acp/<имя>.json` (каталог плоский, без подкаталогов групп) с id `acp/<имя>`. Фикстура SHALL содержать `id`, непустой `spec`, `description`, `setup` и `frames` и МОЖЕТ содержать `goals`, `extensions`, `roles`, `llm`, `normalize`, `after`. Кадр SHALL иметь направление `dir` (`c2a` или `a2c`) и `frame` либо `unordered`; МОЖЕТ иметь `note`, `optional`, `repeat` и `match`. Поле `roles` SHALL принимать подмножество `["agent", "client"]` и по умолчанию равно обоим. Формат SHALL быть описан в `fixtures/acp/_schema.json` (JSON Schema draft 2020-12, без дополнительных свойств на верхнем уровне, в `setup` и в кадре).
 
 `setup.sessions` МОЖЕТ задавать журналы сессий до сценария (id сессии → записи журнала, первая — заголовок `session`, §8.2) — состояние, которого не получить кадрами, например прерванный ход; его читает только агентский прогон, а `${cwd}` в записях подставляется. Шаг scripted-модели с `waitForCancel` и `reply` SHALL сначала отдавать блоки ответа, затем ждать отмены — так фикстура выражает отмену посреди стрима (design.md change `add-dart-agent-acp-server`, D15).
 
@@ -46,7 +46,7 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/acp_
 - **THEN** каждая мутация даёт провал с понятным diff
 
 ### Requirement: Инварианты корпуса фикстур
-Корпус SHALL соблюдать инварианты: каждая ссылка `spec` указывает на существующий файл и якорь в `docs/acp/protocol/` (FIX-1); фикстура без `extensions` не содержит `_meta.codelab`, `data.codelab` и методов `_codelab/*` (FIX-4); каждый вид `sessionUpdate` из `acp_protocol` и каждый метод из `acp_method_codec.dart` встречается хотя бы в одной фикстуре с ролью `client`, кроме элементов явного списка ожидаемого покрытия (FIX-2, клиентская часть); каждый метод клиент → агент и каждый вид `sessionUpdate`, который отправляет агент, встречается хотя бы в одной фикстуре с ролью `agent`, кроме элементов отдельного списка ожидаемого покрытия агента (FIX-2, агентская часть; design.md change `add-dart-agent-acp-server`, D8). Оба списка ожидаемого покрытия SHALL только сокращаться.
+Корпус SHALL соблюдать инварианты: каждая ссылка `spec` указывает на существующий файл и якорь в `docs/acp/protocol/` (FIX-1); фикстура без `extensions` не содержит `_meta.codelab`, `data.codelab` и методов `_codelab/*` (FIX-4); каждый вид `sessionUpdate` из `codelab_acp_protocol` и каждый метод из `acp_method_codec.dart` встречается хотя бы в одной фикстуре с ролью `client`, кроме элементов явного списка ожидаемого покрытия (FIX-2, клиентская часть); каждый метод клиент → агент и каждый вид `sessionUpdate`, который отправляет агент, встречается хотя бы в одной фикстуре с ролью `agent`, кроме элементов отдельного списка ожидаемого покрытия агента (FIX-2, агентская часть; design.md change `add-dart-agent-acp-server`, D8). Оба списка ожидаемого покрытия SHALL только сокращаться.
 
 #### Scenario: Битая ссылка на спецификацию
 - **WHEN** `spec` фикстуры ссылается на несуществующий файл или якорь
@@ -65,7 +65,7 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/acp_
 - **THEN** тест покрытия падает и называет метод
 
 ### Requirement: Клиентский драйвер фикстур
-`acp_testing` SHALL предоставлять драйвер, который проигрывает фикстуру с ролью `client` против клиента на `FakeAcpTransport`: кадры `a2c` подаются клиенту, кадры `c2a` ожидаются в отправленных клиентом сообщениях (таймаут 5 с) и сравниваются после нормализации. Действия пользователя, которые порождают кадры `c2a`, SHALL выполняться тестом через хук до ожидания кадра. Запросы `fs/*` клиент SHALL обслуживать из файлов `setup.files`, запросы `terminal/*` — по сценарию `setup.terminal` через fake-порты клиента. Фикстура без роли `client` SHALL пропускаться с указанием причины.
+`codelab_acp_testing` SHALL предоставлять драйвер, который проигрывает фикстуру с ролью `client` против клиента на `FakeAcpTransport`: кадры `a2c` подаются клиенту, кадры `c2a` ожидаются в отправленных клиентом сообщениях (таймаут 5 с) и сравниваются после нормализации. Действия пользователя, которые порождают кадры `c2a`, SHALL выполняться тестом через хук до ожидания кадра. Запросы `fs/*` клиент SHALL обслуживать из файлов `setup.files`, запросы `terminal/*` — по сценарию `setup.terminal` через fake-порты клиента. Фикстура без роли `client` SHALL пропускаться с указанием причины.
 
 #### Scenario: Сценарий разрешения
 - **WHEN** драйвер проигрывает `acp/prompt-tool-permission-allow`, а тест в хуке выбирает «разрешить один раз»
@@ -87,8 +87,8 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/acp_
 - **THEN** фикстура не меняется, а исправление клиента оформляется отдельным OpenSpec change
 
 ### Requirement: Агентский драйвер фикстур
-`acp_testing` SHALL предоставлять драйвер `runAgentFixture(fixture, startAgent)`, который проигрывает фикстуру с ролью `agent` против агента по алгоритму §14.9 документа ядра:
-- агент поднимается фабрикой теста на агентском конце пары транспортов в памяти (`InProcessAcpLink`, тестовая копия в `acp_testing`, design.md change `add-dart-agent-acp-server`, D9) с `ScriptedStreamFunction` из блока `llm`, `FakeClock` и `SequentialIdGenerator`;
+`codelab_acp_testing` SHALL предоставлять драйвер `runAgentFixture(fixture, startAgent)`, который проигрывает фикстуру с ролью `agent` против агента по алгоритму §14.9 документа ядра:
+- агент поднимается фабрикой теста на агентском конце пары транспортов в памяти (`InProcessAcpLink`, тестовая копия в `codelab_acp_testing`, design.md change `add-dart-agent-acp-server`, D9) с `ScriptedStreamFunction` из блока `llm`, `FakeClock` и `SequentialIdGenerator`;
 - файлы и команды агент получает через ACP: кадры `fs/*` и `terminal/*` — часть фикстуры, ответы клиента берутся из её кадров `c2a`; `setup.files` пишутся во временный `cwd` только для локального листинга;
 - кадры `c2a` отправляются агенту, кадры `a2c` ожидаются (таймаут 5 с) и сравниваются после нормализации с матчерами `repeat`, `optional`, `unordered`;
 - после последнего кадра 200 мс тишины: лишний кадр или лишний запрос агента — провал;

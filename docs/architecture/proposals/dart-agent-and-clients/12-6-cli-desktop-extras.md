@@ -25,8 +25,8 @@ ACP меняет только D-17 — и то необязательным ра
 | D-17 | поиск и фильтр сессий: заголовок и дата — по `session/list`, текст — расширение | kit, CLI; UI app — §12.3.3, A12; агент — agent-core-architecture §17.6.17 | §12.6.12 |
 
 Этап — 9+ (после переключения по умолчанию). Код CLI — `apps/codelab_cli/lib/src/` (`shell/`,
-`theme/`, `update/`, `power/`, `tui/`, `clipboard/`, `headless/`), общая логика — `acp_client_kit` (чистый Dart) и
-`acp_client_io` (`dart:io`), app — `apps/codelab_app/lib/features/project_files/`. Префикс
+`theme/`, `update/`, `power/`, `tui/`, `clipboard/`, `headless/`), общая логика — `codelab_client_core` (чистый Dart) и
+`codelab_client_io` (`dart:io`), app — `apps/codelab_desktop/lib/features/project_files/`. Префикс
 инвариантов — `UX-`.
 
 Общие правила для всех строк:
@@ -84,7 +84,7 @@ final class ShellRun {
 `AttachmentKindView.inlineText`:
 
 ```dart
-// packages/dart/acp_client_kit/lib/src/view/attachments.dart (дополнение)
+// packages/dart/codelab_client_core/lib/src/view/attachments.dart (дополнение)
 final class ShellOutputAttachment extends PromptAttachment {
   final String command;
   final int? exitCode;                  // null — отменена или таймаут
@@ -144,7 +144,7 @@ final class ShellOutputAttachment extends PromptAttachment {
 9. `/shell drop` — удалить приложенные выводы; `/shell` — показать их список.
 
 **Где работает.** CLI (REPL, TUI). В app-десктопе — не в этой строке (порт `UserShell` в
-`acp_client_io` позволяет добавить позже). На мобильных и web клиентах процессов нет: `!` — обычный
+`codelab_client_io` позволяет добавить позже). На мобильных и web клиентах процессов нет: `!` — обычный
 текст промпта.
 
 **Пример.**
@@ -279,7 +279,7 @@ abstract interface class ThemeCatalog {
 предупреждение и вывод в цветах `dark`. Модульно — `test/theme/theme_catalog_test.dart` (строгий
 разбор, `extends`, понижение глубины), `test/theme/theme_detect_test.dart` (ответ OSC 11,
 таймаут, `COLORFGBG`, tmux), `test/render/*_golden_test.dart` — golden-кадры прогоняются в `dark` и
-`light`. App (D-20) — widget-тест `acp_ui` пользовательской темы: та же тема с неизвестным
+`light`. App (D-20) — widget-тест `codelab_ui` пользовательской темы: та же тема с неизвестным
 токеном применяется, неизвестный ключ попадает в предупреждения с позицией, незаданная роль
 берётся из `extends`; тема с неверным значением цвета не загружается, как в CLI.
 
@@ -659,11 +659,11 @@ SIGKILL; поздние события старого поколения отб�
 
 | Компонент | Пакет / путь | Слой | Ответственность |
 |---|---|---|---|
-| `GitIgnoreMatcher`, `IgnoreStack` | `acp_client_kit/lib/src/files/` | чистый Dart | правила `.gitignore`; общие с дополнением путей CLI (§12.2.8, шаг 3) |
-| `ProjectFiles` (порт), `ProjectEntry`, `FilePreview`, `ProjectFilesFailure` | `acp_client_kit/lib/src/files/` | чистый Dart | контракт чтения папки, файла и наблюдения |
-| `IoProjectFiles` | `acp_client_io/lib/src/files/` | `dart:io` | realpath, перечисление, чтение, `Directory.watch` |
-| `ProjectTreeState`, `ProjectFilesCubit` | `apps/codelab_app/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, предпросмотр |
-| `AcpFileTree`, `AcpFileTreeRowData`, `AcpFilePreview` | `acp_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`AcpCodeHighlighter`, §12.3) |
+| `GitIgnoreMatcher`, `IgnoreStack` | `codelab_client_core/lib/src/files/` | чистый Dart | правила `.gitignore`; общие с дополнением путей CLI (§12.2.8, шаг 3) |
+| `ProjectFiles` (порт), `ProjectEntry`, `FilePreview`, `ProjectFilesFailure` | `codelab_client_core/lib/src/files/` | чистый Dart | контракт чтения папки, файла и наблюдения |
+| `IoProjectFiles` | `codelab_client_io/lib/src/files/` | `dart:io` | realpath, перечисление, чтение, `Directory.watch` |
+| `ProjectTreeState`, `ProjectFilesCubit` | `apps/codelab_desktop/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, предпросмотр |
+| `AcpFileTree`, `AcpFileTreeRowData`, `AcpFilePreview` | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`AcpCodeHighlighter`, §12.3) |
 | `ProjectFilesTab` | `.../project_files/presentation/` | presentation | вкладка сайдбара рядом с `AcpSessionSidebar`, связь с `ComposerCubit` |
 
 `IoProjectFiles` регистрируется в `app/app_scope.dart` (cherrypick), как
@@ -671,7 +671,7 @@ SIGKILL; поздние события старого поколения отб�
 
 ```mermaid
 flowchart LR
-    subgraph Kit["acp_client_kit + acp_client_io"]
+    subgraph Kit["codelab_client_core + codelab_client_io"]
         PF["ProjectFiles<br/>IoProjectFiles"]
         GI["IgnoreStack"]
     end
@@ -682,7 +682,7 @@ flowchart LR
         CC["ComposerCubit"]
         AS["ActiveSessionCubit<br/>cwd активной сессии"]
     end
-    subgraph UI["acp_ui + presentation"]
+    subgraph UI["codelab_ui + presentation"]
         FT["AcpFileTree"]
         FP["AcpFilePreview"]
     end
@@ -697,7 +697,7 @@ flowchart LR
 **Контракт.**
 
 ```dart
-// packages/dart/acp_client_kit/lib/src/files/project_files.dart
+// packages/dart/codelab_client_core/lib/src/files/project_files.dart
 final class ProjectEntry {
   final String relativePath;            // POSIX-разделители, от корня
   final String name;
@@ -727,7 +727,7 @@ abstract interface class ProjectFiles {
   Stream<String> watch(String root, String relativeDir);            // изменившаяся папка
 }
 
-// apps/codelab_app/lib/features/project_files/application/project_files_cubit.dart
+// apps/codelab_desktop/lib/features/project_files/application/project_files_cubit.dart
 final class ProjectTreeState {
   final ProjectTreeStatus status;       // явный автомат: noSession | unavailable(reason) | loading | ready
   final String? root;
@@ -783,14 +783,14 @@ final class ProjectTreeState {
 (`sessions` | `files`, по умолчанию `sessions`), `codelab.file_browser.show_ignored` (`false`).
 
 **Как проверить.** Widget-тест дерева файлов (критерий: «widget-тест дерева файлов»)
-`apps/codelab_app/test/features/project_files/project_files_tab_test.dart` на фальшивом
+`apps/codelab_desktop/test/features/project_files/project_files_tab_test.dart` на фальшивом
 `ProjectFiles`: дерево без записей из `.gitignore`, «Show ignored» показывает их; раскрытие папки
 вызывает один `list`; 10 000 файлов — построено не больше видимых строк + запаса;
 «Insert as mention» → в композере `@lib/a.dart` и чип `composer-attachment-chip-…`; событие
 `watch` → новая строка без перезагрузки дерева; `symlinkOutside` не раскрывается. Плюс
-`packages/flutter/acp_ui/test/acp_file_tree_test.dart` (отрисовка, клавиатура),
-`packages/dart/acp_client_kit/test/files/gitignore_matcher_test.dart` (таблица правил
-`.gitignore`, включая `!` и `**`), `packages/dart/acp_client_io/test/files/io_project_files_test.dart`
+`packages/flutter/codelab_ui/test/acp_file_tree_test.dart` (отрисовка, клавиатура),
+`packages/dart/codelab_client_core/test/files/gitignore_matcher_test.dart` (таблица правил
+`.gitignore`, включая `!` и `**`), `packages/dart/codelab_client_io/test/files/io_project_files_test.dart`
 (временная папка: ссылка наружу → `outsideRoot`; `../` → `invalidPath`; бинарный и большой
 файл; событие наблюдения).
 
@@ -823,7 +823,7 @@ final class ProjectTreeState {
 **Контракт.**
 
 ```dart
-// packages/dart/acp_client_kit/lib/src/preferences/folder_model_memory.dart (чистый Dart)
+// packages/dart/codelab_client_core/lib/src/preferences/folder_model_memory.dart (чистый Dart)
 final class FolderKey {
   final String profileKey;  // embedded | profile:<id> | stdio:<SHA-256 команды, 16 hex> | ws:<scheme://host:port/path>
   final String cwd;         // realpath; Windows — буква диска в нижнем регистре
@@ -833,7 +833,7 @@ final class FolderModelChoice {
   final String? effort;     // currentValue опции категории thought_level
   final DateTime updatedAt;
 }
-abstract interface class FolderChoiceStore {   // CLI — FileFolderChoiceStore (acp_client_io)
+abstract interface class FolderChoiceStore {   // CLI — FileFolderChoiceStore (codelab_client_io)
   Future<FolderModelChoice?> read(FolderKey key);
   Future<void> write(FolderKey key, FolderModelChoice choice);  // перечитать, слить, атомарно записать
   Future<void> forget(FolderKey key);
@@ -945,9 +945,9 @@ Remembered for this folder.
 папке B — ни одного `set_config_option`; `-m a/m1` в A — `a/m1`, файл не изменился; агент без
 `a/m2` — одна заметка, сессия на `a/m1`; `--resume` в A — `set_config_option` не шлётся;
 `config.yaml` и `cli.yaml` байт в байт прежние. Модульно —
-`acp_client_kit/test/preferences/folder_model_memory_test.dart` (приоритет, поиск по категории и
+`codelab_client_core/test/preferences/folder_model_memory_test.dart` (приоритет, поиск по категории и
 по id, снимок после смены модели, `NotOffered`, агентские обновления не запоминаются),
-`acp_client_io/test/preferences/file_folder_choice_store_test.dart` (атомарная запись, два
+`codelab_client_io/test/preferences/file_folder_choice_store_test.dart` (атомарная запись, два
 писателя, вытеснение после 500, битый файл, права `0600`), `test/repl/model_command_test.dart`
 (`/model --forget`).
 
@@ -1202,12 +1202,12 @@ stderr по мере прихода, `--no-stream-thinking` выключает �
 заголовку и дате работает на стороне клиента по данным стандартного `session/list` — с любым
 агентом ACP. Поиск по тексту сообщений — расширение `_codelab/session/search` (через OpenSpec,
 агентская сторона — agent-core-architecture §17.6.17); без него поле ищет только по заголовку и
-id. Логика — в `acp_client_kit`, общая у сайдбара app (§12.3.3, A12) и `/sessions <текст>` в CLI.
+id. Логика — в `codelab_client_core`, общая у сайдбара app (§12.3.3, A12) и `/sessions <текст>` в CLI.
 
 **Контракт.**
 
 ```dart
-// packages/dart/acp_client_kit/lib/src/sessions/session_search.dart (чистый Dart)
+// packages/dart/codelab_client_core/lib/src/sessions/session_search.dart (чистый Dart)
 sealed class DateFilter {}
 final class AnyDate extends DateFilter {}
 final class Today extends DateFilter {}                              // с локальной полуночи
@@ -1259,7 +1259,7 @@ abstract interface class SessionSearch {      // DefaultSessionSearch над Cli
   Future<void> dispose();
 }
 // ClientWorkspace (§9.10): SessionSearch openSessionSearch();
-// acp_client_core: Future<SessionSearchResultDto> searchSessions(SessionSearchParamsDto) — _codelab/session/search
+// codelab_client_acp: Future<SessionSearchResultDto> searchSessions(SessionSearchParamsDto) — _codelab/session/search
 ```
 
 **Алгоритм.**

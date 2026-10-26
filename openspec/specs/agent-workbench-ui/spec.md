@@ -1,6 +1,6 @@
 ## Purpose
 
-Десктопный workbench UI на базе Fluent: layout, организация виджетов `acp_ui` по Atomic Design, паттерны взаимодействия, нужные agent workbench (сайдбар сессий, approvals, режимы отображения, командная палитра и т. д.), и клавиатурная эргономика.
+Десктопный workbench UI на базе Fluent: layout, организация виджетов `codelab_ui` по Atomic Design, паттерны взаимодействия, нужные agent workbench (сайдбар сессий, approvals, режимы отображения, командная палитра и т. д.), и клавиатурная эргономика.
 ## Requirements
 ### Requirement: Десктопный workbench на Fluent
 CodeLab SHALL использовать `fluent_ui` как базовый Flutter UI framework и SHALL NOT использовать Material/Cupertino как базовый design framework.
@@ -25,7 +25,7 @@ CodeLab SHALL предоставлять десктопный layout workbench �
 - **THEN** панель сессий сжимается, а инспектор может сворачиваться, не скрывая prompt composer или состояние отмены
 
 ### Requirement: Организация виджетов по Atomic Design
-CodeLab SHALL организовывать переиспользуемые виджеты `acp_ui` по `atomics`, `molecules` и `organisms`.
+CodeLab SHALL организовывать переиспользуемые виджеты `codelab_ui` по `atomics`, `molecules` и `organisms`.
 
 #### Scenario: Добавляется atomic-виджет
 - **WHEN** реализуется минимальный переиспользуемый control

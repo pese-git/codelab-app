@@ -1,4 +1,4 @@
-import 'package:acp_transports/acp_transports.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 /// Единая очередь исходящих кадров соединения (§13.1, `OutboundQueue`).

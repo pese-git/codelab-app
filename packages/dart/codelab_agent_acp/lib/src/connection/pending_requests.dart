@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:acp_protocol/acp_protocol.dart';
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
 /// Исходящие запросы агента к клиенту и ожидание ответов (§13.1,
 /// `PendingRequests`; §13.9).

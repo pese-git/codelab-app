@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:acp_testing/acp_testing.dart';
+import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_agent/codelab_agent.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';

@@ -34,14 +34,14 @@ CodeLab SHALL маскировать секреты (токены, пароли,
 - **THEN** это значение замаскировано в итоговом structured-выводе тем же способом, что и в существующем UI debug-логе (inspector)
 
 ### Requirement: Логирование по слоям согласно ownership
-CodeLab SHALL помечать structured-события компонентом-источником согласно ownership-модели (`acp_protocol` → protocol-ошибки, `acp_transports` → transport lifecycle, `acp_client_core` → session/request lifecycle, presentation → user intents/UI failures), и presentation-слой SHALL NOT дублировать полный protocol-trace, который уже логируется на уровне ниже.
+CodeLab SHALL помечать structured-события компонентом-источником согласно ownership-модели (`codelab_acp_protocol` → protocol-ошибки, `codelab_acp_transports` → transport lifecycle, `codelab_client_acp` → session/request lifecycle, presentation → user intents/UI failures), и presentation-слой SHALL NOT дублировать полный protocol-trace, который уже логируется на уровне ниже.
 
 #### Scenario: Transport diagnostic-событие помечено своим компонентом
-- **WHEN** `acp_transports` эмитит `AcpTransportEvent.diagnostic`
+- **WHEN** `codelab_acp_transports` эмитит `AcpTransportEvent.diagnostic`
 - **THEN** соответствующее structured-событие помечено источником transport-слоя (например, `component=transport`), а не общим/безымянным источником
 
 #### Scenario: Protocol-ошибка помечена своим компонентом
-- **WHEN** `acp_protocol` выбрасывает типизированную ошибку разбора сообщения, и она перехвачена вышестоящим слоем
+- **WHEN** `codelab_acp_protocol` выбрасывает типизированную ошибку разбора сообщения, и она перехвачена вышестоящим слоем
 - **THEN** соответствующее structured-событие помечено источником protocol-слоя (например, `component=protocol`)
 
 ### Requirement: Ограниченная (bounded) история diagnostic-событий
