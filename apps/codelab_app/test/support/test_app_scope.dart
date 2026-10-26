@@ -10,10 +10,12 @@ final class CodeLabTestBinding {
   CodeLabTestBinding({
     FakeAcpTransport? transport,
     CodeLabStdioTransportFactory? stdioTransportFactory,
+    CodeLabWebSocketTransportFactory? webSocketTransportFactory,
   }) : transport = transport ?? FakeAcpTransport() {
     scope = createCodeLabRootScope(
       transportFactory: () => this.transport,
       stdioTransportFactory: stdioTransportFactory,
+      webSocketTransportFactory: webSocketTransportFactory,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

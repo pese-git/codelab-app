@@ -1,13 +1,13 @@
 ## 1. Характеризационные тесты (5.0, итерация 1)
 
-- [ ] 1.1 `shell_cubit_characterization/connection_test.dart`: `connect()` проходит `connecting` → `connected`; закрытие `FakeAcpTransport` → `failed`, сообщение без секретов; `close()` отписывается, поздние события не вызывают `emit` (testing-quality «Характеризационные тесты фасада приложения»)
-- [ ] 1.2 `sessions_test.dart`: `createSession()` шлёт `session/new` с `cwd` выбранного проекта, сессия активна; `selectSession` пересчитывает `isPromptSubmitting`/`canCancel`; очередь у каждой сессии своя
-- [ ] 1.3 `prompt_test.dart`: флаги во время хода и после `stopReason`; промпт во время хода — в очередь; `editQueuedPrompt`, `deleteQueuedPrompt`, `sendQueuedPromptNow`, `clearQueuedPrompts`; слив очереди после хода
-- [ ] 1.4 `cancel_test.dart`: `cancelTurn()` шлёт `session/cancel`, флаги сбрасываются только по событию сессии; после отмены очередь сливается; без активной сессии — диагностика и ни одного запроса
-- [ ] 1.5 `config_option_test.dart`: `isRespondingToConfigOption` на время запроса, сброс после успеха и ошибки, второй вызов игнорируется, `configOptions` из `sessionChanges`
-- [ ] 1.6 `permission_test.dart`: запрос разрешения — запись с ожидающим одобрением по `toolCallId`; `respondToApproval` шлёт `optionId`; ответ в одной сессии не меняет другую
-- [ ] 1.7 `reconnect_test.dart`: `reconnect()` увеличивает `generation`; поздние `session/update` старого поколения не меняют состояние; одно событие — одно состояние (D1)
-- [ ] 1.8 Проверка: тесты зелёные, `apps/codelab_app/lib` не изменён; PR итерации 1
+- [x] 1.1 `shell_cubit_characterization/connection_test.dart`: `connect()` проходит `connecting` → `connected`; закрытие `FakeAcpTransport` → `failed`, сообщение без секретов; `close()` отписывается, поздние события не вызывают `emit` (testing-quality «Характеризационные тесты фасада приложения»)
+- [x] 1.2 `sessions_test.dart`: `createSession()` шлёт `session/new` с `cwd` выбранного проекта, сессия активна; `selectSession` пересчитывает `isPromptSubmitting`/`canCancel`; очередь у каждой сессии своя
+- [x] 1.3 `prompt_test.dart`: флаги во время хода и после `stopReason`; промпт во время хода — в очередь; `editQueuedPrompt`, `deleteQueuedPrompt`, `sendQueuedPromptNow`, `clearQueuedPrompts`; слив очереди после хода
+- [x] 1.4 `cancel_test.dart`: `cancelTurn()` шлёт `session/cancel`, флаги сбрасываются только по событию сессии; после отмены очередь сливается; без активной сессии — диагностика и ни одного запроса
+- [x] 1.5 `config_option_test.dart`: `isRespondingToConfigOption` на время запроса, сброс после успеха и ошибки, второй вызов игнорируется, `configOptions` из `sessionChanges`
+- [x] 1.6 `permission_test.dart`: запрос разрешения — запись с ожидающим одобрением по `toolCallId`; `respondToApproval` шлёт `optionId`; ответ в одной сессии не меняет другую
+- [x] 1.7 `reconnect_test.dart`: `reconnect()` увеличивает `generation`; поздние `session/update` старого поколения не меняют состояние; одно событие — одно состояние (D1)
+- [x] 1.8 Проверка: тесты зелёные, `apps/codelab_app/lib` не изменён; PR итерации 1
 
 ## 2. Пакет acp_client_kit и фасад (5.1, итерация 2)
 
