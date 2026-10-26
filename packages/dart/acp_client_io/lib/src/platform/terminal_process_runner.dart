@@ -48,10 +48,24 @@ final class IoTerminalProcessRunner implements TerminalProcessRunner {
 
 final class _IoTerminalProcessHandle implements TerminalProcessHandle {
   _IoTerminalProcessHandle(this._process, {required this.outputByteLimit}) {
-    _stdoutSubscription = _process.stdout.listen(_appendOutput);
-    _stderrSubscription = _process.stderr.listen(_appendOutput);
+    _stdoutSubscription = _process.stdout.listen(
+      _appendOutput,
+      onDone: _stdoutDone.complete,
+    );
+    _stderrSubscription = _process.stderr.listen(
+      _appendOutput,
+      onDone: _stderrDone.complete,
+    );
     unawaited(_process.exitCode.then(_handleExit));
   }
+
+  /// Сколько ждать конца stdout и stderr после выхода процесса.
+  ///
+  /// Код выхода может прийти раньше последних байтов вывода (так бывает на
+  /// Linux), поэтому вывод дочитывается до конца потоков. Но потомок, ушедший
+  /// в фон, может держать каналы открытыми бесконечно — ожидание ограничено,
+  /// чтобы `terminal/wait_for_exit` не зависал.
+  static const _outputDrainTimeout = Duration(seconds: 2);
 
   final Process _process;
   final int? outputByteLimit;
@@ -59,6 +73,8 @@ final class _IoTerminalProcessHandle implements TerminalProcessHandle {
   late final StreamSubscription<List<int>> _stdoutSubscription;
   late final StreamSubscription<List<int>> _stderrSubscription;
   final _exitCompleter = Completer<TerminalProcessState>();
+  final _stdoutDone = Completer<void>();
+  final _stderrDone = Completer<void>();
 
   var _truncated = false;
   var _killRequested = false;
@@ -108,7 +124,16 @@ final class _IoTerminalProcessHandle implements TerminalProcessHandle {
     _truncated = true;
   }
 
-  void _handleExit(int exitCode) {
+  Future<void> _handleExit(int exitCode) async {
+    try {
+      await Future.wait([
+        _stdoutDone.future,
+        _stderrDone.future,
+      ]).timeout(_outputDrainTimeout);
+    } on TimeoutException {
+      // Каналы держит фоновый потомок; вывод, пришедший до этого момента,
+      // уже сохранён.
+    }
     _state = TerminalProcessState.exited(
       exitCode: exitCode,
       signal: _killRequested ? 'SIGTERM' : null,
