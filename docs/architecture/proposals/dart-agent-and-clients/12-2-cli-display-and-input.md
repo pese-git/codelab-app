@@ -241,6 +241,8 @@ TTY: вывод headless — данные для скриптов.
 ```dart
 // apps/codelab_cli/lib/src/tui/tui_model.dart — без package:dart_tui и dart:io
 final class TuiModel {
+  // После MVP (U-37, §12.6.13): поля сессии — composer, scroll, expanded, approval —
+  // переезжают в SessionScreen, а модель держит open, active и screens по SessionId.
   final SessionView? session;          // из SessionHandle.view
   final WorkspaceState workspace;
   final ComposerState composer;        // текст, курсор, вложения, история, режим вставки
@@ -276,6 +278,8 @@ final class QuitCmd extends TuiCmd {}
 final class RunShellCmd extends TuiCmd { final String command; } // после MVP: `!<cmd>` (§12.6.2)
 final class RestartAgentCmd extends TuiCmd {}                    // после MVP: `/restart` (§12.6.7)
 final class CopyCmd extends TuiCmd { final String text; }        // после MVP: копирование (U-28, §12.6.10)
+final class SwitchSessionCmd extends TuiCmd { final SessionId id; }               // после MVP: U-37, §12.6.13
+final class CloseSessionCmd extends TuiCmd { final SessionId id; final bool cancelTurn; } // после MVP: U-37
 
 (TuiModel, List<TuiCmd>) reduce(TuiModel model, TuiMsg msg);    // tui_update.dart
 Frame render(TuiModel model);                                   // tui_view.dart
@@ -592,6 +596,9 @@ REPL): конечный автомат над потоком байт stdin.
 | ответы одобрения | `y`, `a`, `n`, `N`, `?` (§9.11) | одобрение | REPL, TUI |
 | `steer` | Ctrl+Enter (после MVP, C-03) | композер, идёт ход | REPL, TUI |
 | `toggle_tasks` | Ctrl+T (после MVP, U-21) | любая; вид `tasks` — доска субагентов и фоновых задач при capability `subagentBoard` или `jobBoard` (§12.3, A15); без неё — подсказка `/tasks` | TUI |
+| `session_switcher` | Ctrl+G (после MVP, U-37, §12.6.13) | любая | TUI |
+| `session_1` … `session_9` | Alt+1 … Alt+9 (после MVP, U-37) | любая | TUI |
+| `session_next` / `session_prev` | Ctrl+PgDn / Ctrl+PgUp (после MVP, U-37) | любая | TUI |
 
 **Steering** (после MVP, C-03, agent-core-architecture §17.7.6). Enter во время хода по-прежнему
 ставит сообщение в очередь (U-15); действие `steer` направляет его в идущий ход через
@@ -677,7 +684,7 @@ keys:
 | `headless.stream_thinking` | после MVP (H-08, §12.6.11): `true`/`false` | `false` |
 | `headless.liveness_interval` | после MVP (H-08): `0` (выключено) или длительность 5s–5m | `10s` |
 
-Слой проекта не задаёт `shell.command`, `update.channel`, `update.base_url` (§12.6.13, UX-14).
+Слой проекта не задаёт `shell.command`, `update.channel`, `update.base_url` (§12.6.14, UX-14).
 CLI сам пишет только файлы состояния (`~/.codelab/cli_state.json` — модели папок, U-27, §12.6.9;
 `update_state.json` — §12.6.4); `cli.yaml` он по-прежнему только читает.
 

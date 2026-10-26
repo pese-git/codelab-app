@@ -48,7 +48,7 @@
     `cli/headless-json-single-object` (§12.5.8). Интерактивные сценарии идут через псевдотерминал
     (обвязка PTY ниже) с вводом клавиш из файла. После MVP: `cli/bang-command`,
     `cli/theme-user-json`, `cli/update-rejects-bad-signature`, `cli/update-replaces-and-resumes`,
-    `cli/tui-scroll-follow`, `cli/power-assertion-released-after-turn`, `cli/restart-reloads-session`,
+    `cli/tui-scroll-follow`, `cli/tui-session-switch`, `cli/power-assertion-released-after-turn`, `cli/restart-reloads-session`,
     `cli/model-remembered-per-folder`, `cli/tui-copy-osc52`, `cli/headless-stream-thinking-stderr`,
     `cli/sessions-filter` (§12.6); `cli/login-openrouter-pkce` (agent-core-architecture §17.10.6);
     `cli/trajectory-export-atif` (agent-core-architecture §17.13.3); `cli/config-export-no-secrets`,
@@ -222,9 +222,11 @@ Headless (`-p`, `-f`) передаёт `_meta.codelab.sealOnClose: true` в `ses
 |---|---|---|
 | `/help` | список команд клиента и агента | — |
 | `/exit`, `/quit` | выход | закрытие транспорта |
-| `/new` | новая сессия в той же папке | `session/new` |
+| `/new` | новая сессия в той же папке; в TUI после MVP — добавляется к открытым (U-37, §12.6.13) | `session/new` |
 | `/sessions [--all] [--since today\|week\|<дата>] [--until <дата>] [--more] [текст]` | список сессий папки с номерами; превью и заголовок — `SessionSummary.title` (`derived` агент строит по словам пользователя, agent-core-architecture §8.10, шаг 1; своих правил по `origin` клиент не вводит, SES-14); после MVP с текстом или датой — фильтр kit по заголовку и дате, с расширением — и по тексту сообщений; `--all` — все папки (D-17, §12.6.12) | `session/list`; текст — `_codelab/session/search` |
-| `/resume <n или id>` | загрузить сессию | `session/load` |
+| `/resume <n или id>` | загрузить сессию; в TUI после MVP — добавить к открытым, уже открытую только активировать (U-37) | `session/load` |
+| `/switch [n или id]` | после MVP, TUI: переключатель открытых сессий или переход к сессии (U-37, §12.6.13); в REPL — подсказка | — |
+| `/close [n или id]` | после MVP, TUI: закрыть открытую сессию; при ходе — подтверждение и отмена (U-37) | `session/cancel` при ходе |
 | `/mode [id]` | без аргумента — список режимов; с аргументом — сменить | `session/set_config_option` (`mode`) |
 | `/model [id]` | то же для модели; форма `/model --role …` (после MVP) передаётся агентской команде `model` (как `/agent:model --role …`), см. agent-core-architecture §17.10.5; после MVP выбор запоминается для папки и профиля (U-27, §12.6.9); `/model --forget` — забыть выбор папки | `session/set_config_option` (`model`); `--role` — `session/prompt` |
 | `/config [id] [значение]` | любые опции конфигурации; `/config reload` и `/config check` передаются агентской команде `config` (как `/agent:config reload`), если агент её объявил, иначе `The agent does not support /config reload.` (§12.4.8, agent-core-architecture §17.5.6) | `session/set_config_option`; `reload`/`check` — `session/prompt` |
