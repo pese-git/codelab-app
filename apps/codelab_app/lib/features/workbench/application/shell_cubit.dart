@@ -20,8 +20,14 @@ import 'package:acp_client_kit/acp_client_kit.dart'
         NoticeItem,
         NoticeKind,
         PendingApprovalView,
+        PromptCompleted,
+        PromptFailed,
+        PromptOutcome,
+        PromptQueued,
         Reconnecting,
         ResolvedApprovalView,
+        SessionHandle,
+        SessionStatusView,
         ThoughtItem,
         ToolCallItem,
         ToolCallStatusView,
@@ -419,25 +425,26 @@ final class CodeLabInspectorDetail {
 /// и характеризационные тесты читают прежний [CodeLabShellState]. Фасад
 /// сохраняет эту поверхность на время переноса.
 ///
-/// Для чего: подключение, переподключение, создание и выбор сессии идут
-/// через [ClientWorkspace]; промпты, отмена, одобрения и опции — пока через
-/// use case-ы `acp_client_core`, до своих итераций.
+/// Для чего: подключение, переподключение, сессии, транскрипт, промпты с
+/// очередью и отмена идут через [ClientWorkspace]; одобрения и опции — пока
+/// через use case-ы `acp_client_core`, до своих итераций.
 ///
 /// Как использовать: граф cherrypick (`app_scope.dart`) передаёт
 /// [workspace] и [secrets] — тот же `InMemorySecretSource`, что у резолвера
 /// WebSocket. Без них Cubit строит рабочее пространство сам поверх
 /// [application] и фабрик транспорта: так его по-прежнему создают тесты
-/// `widget_test.dart`. Параметры `createSessionUseCase` и
-/// `reconnectUseCase` не используются после переноса подключения и сессий в
-/// kit; они остаются, пока эти тесты создают Cubit напрямую, и удаляются
-/// вместе с фасадом после этапа 9 (`09-10`, «Что остаётся неизменным»).
+/// `widget_test.dart`. Параметры `createSessionUseCase`, `reconnectUseCase`,
+/// `sendPromptUseCase` и `cancelTurnUseCase` не используются после переноса
+/// их логики в kit; они остаются, пока эти тесты создают Cubit напрямую, и
+/// удаляются вместе с фасадом после этапа 9 (`09-10`, «Что остаётся
+/// неизменным»).
 final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   CodeLabShellCubit({
     required StdioAcpAgentProfile profile,
     required AcpClientApplication application,
     CreateSession? createSessionUseCase,
-    required SendPrompt sendPromptUseCase,
-    required CancelTurn cancelTurnUseCase,
+    SendPrompt? sendPromptUseCase,
+    CancelTurn? cancelTurnUseCase,
     Reconnect? reconnectUseCase,
     required RespondToPermission respondToPermissionUseCase,
     required SetSessionConfigOption setSessionConfigOptionUseCase,
@@ -452,8 +459,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   }) : this._(
          profile: profile,
          application: application,
-         sendPromptUseCase: sendPromptUseCase,
-         cancelTurnUseCase: cancelTurnUseCase,
          respondToPermissionUseCase: respondToPermissionUseCase,
          setSessionConfigOptionUseCase: setSessionConfigOptionUseCase,
          secrets: secrets ?? InMemorySecretSource(),
@@ -469,8 +474,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   CodeLabShellCubit._({
     required StdioAcpAgentProfile profile,
     required AcpClientApplication application,
-    required SendPrompt sendPromptUseCase,
-    required CancelTurn cancelTurnUseCase,
     required RespondToPermission respondToPermissionUseCase,
     required SetSessionConfigOption setSessionConfigOptionUseCase,
     required InMemorySecretSource secrets,
@@ -482,8 +485,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required RecentProjectsStore recentProjectsStore,
     Logger? logger,
   }) : _application = application,
-       _sendPromptUseCase = sendPromptUseCase,
-       _cancelTurnUseCase = cancelTurnUseCase,
        _respondToPermissionUseCase = respondToPermissionUseCase,
        _setSessionConfigOptionUseCase = setSessionConfigOptionUseCase,
        _secrets = secrets,
@@ -512,27 +513,14 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       _handleSessionChange,
     );
     _workspaceSubscription = _workspace.state.listen(_handleWorkspaceChange);
+    _promptOutcomeSubscription = _workspace.promptOutcomes.listen(
+      _handlePromptOutcome,
+    );
     unawaited(_loadRecentProjects());
   }
 
   final AcpClientApplication _application;
 
-  /// Monotonic, never reused within this cubit's lifetime — unlike an
-  /// index into [CodeLabShellState.queuedPrompts], safe to keep identifying
-  /// a queued prompt across edits/deletes that shift other items' indices.
-  int _nextQueuedPromptId = 0;
-
-  /// Per-session backing store for [CodeLabShellState.queuedPrompts] —
-  /// keyed by session id, never sent to the agent (see add-prompt-queue/
-  /// design.md, Non-Goals: queued prompts belong to the session that was
-  /// active when they were queued, and stay out of sight — not lost —
-  /// until that session is active again). [CodeLabShellState.queuedPrompts]
-  /// always mirrors `this[state.activeSessionId]`; [selectSession] and
-  /// [createSession] re-derive it the same way they already do for
-  /// [CodeLabShellState.currentPlan]/`transcriptEntries`.
-  final Map<String, List<AcpQueuedPrompt>> _queuedPromptsBySession = {};
-  final SendPrompt _sendPromptUseCase;
-  final CancelTurn _cancelTurnUseCase;
   final RespondToPermission _respondToPermissionUseCase;
   final SetSessionConfigOption _setSessionConfigOptionUseCase;
   final ClientWorkspace _workspace;
@@ -556,6 +544,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// [_handleSessionChange] уже обновлён.
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
+  late final StreamSubscription<PromptOutcome> _promptOutcomeSubscription;
 
   /// Ссылка на токен WebSocket в [_secrets].
   static const _webSocketTokenRef = 'codelab_app.websocket.token';
@@ -821,7 +810,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         agentCommands: _agentCommandsFor(session),
         configOptions: _configOptionsFor(session),
         currentPlan: _currentPlanForSession(session),
-        queuedPrompts: _queueFor(sessionItem.id),
+        queuedPrompts: _queuedPromptsFor(sessionItem.id),
         isPromptSubmitting: false,
         canCancel: false,
       ),
@@ -855,7 +844,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           agentCommands: const [],
           configOptions: const [],
           currentPlan: null,
-          queuedPrompts: _queueFor(sessionId),
+          queuedPrompts: _queuedPromptsFor(sessionId),
           isPromptSubmitting: false,
           canCancel: false,
         ),
@@ -874,9 +863,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         agentCommands: _agentCommandsFor(session),
         configOptions: _configOptionsFor(session),
         currentPlan: _currentPlanForSession(session),
-        queuedPrompts: _queueFor(sessionItem.id),
-        isPromptSubmitting: _isBusyLifecycleStatus(session.status),
-        canCancel: _isCancellableLifecycleStatus(session.status),
+        queuedPrompts: _queuedPromptsFor(sessionItem.id),
+        isPromptSubmitting: _isPromptSubmitting(sessionItem.id),
+        canCancel: _canCancel(sessionItem.id),
       ),
     );
   }
@@ -896,105 +885,43 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       );
       return;
     }
-
-    // Checked *before* attempting to send, not caught as a failure after —
-    // `SessionStateMachine._startTurn` would reject this the same way, but
-    // queuing here avoids the round trip and the "Prompt failed" diagnostic
-    // for what is an expected, non-exceptional case. See
-    // add-prompt-queue/design.md, Decisions.
-    if (_isSessionBusy(sessionId)) {
-      _setQueueFor(sessionId, [
-        ..._queueFor(sessionId),
-        AcpQueuedPrompt(id: _newQueuedPromptId(), content: text),
-      ]);
+    final handle = _sessionHandle(sessionId);
+    if (handle == null) {
+      _recordDiagnostic(
+        'Failed to send prompt: ACP session $sessionId is not open.',
+        severity: _DiagnosticSeverity.error,
+        source: 'prompt',
+      );
       return;
     }
 
-    await _dispatchPrompt(sessionId: sessionId, text: text);
-  }
-
-  /// The actual `session/prompt` round trip, shared by [submitPrompt]'s
-  /// direct-send path, [sendQueuedPromptNow], and the queue's auto-drain —
-  /// all three reach a real send exactly the way [submitPrompt] always has.
-  ///
-  /// Deliberately emits nothing itself for `transcriptEntries`,
-  /// `inspectorEntries`, `isPromptSubmitting` or `canCancel`: the domain
-  /// stores the running turn synchronously, before this `await` yields
-  /// (`AcpClientApplication.sendPrompt`'s `_storeSession(runningSession)`),
-  /// so `_handleSessionChange` already picks up the busy status, the
-  /// reconstructed user entry (from `turn.prompt`) and every subsequent
-  /// streamed/terminal update on its own `sessionChanges` events — for
-  /// *whichever* session `sessionId` is, not necessarily the one still
-  /// active by the time this future resolves. Emitting presentation state
-  /// here directly would risk overwriting a *different*, now-active
-  /// session's view — see add-multi-session-concurrency/design.md,
-  /// Decisions.
-  Future<void> _dispatchPrompt({
-    required String sessionId,
-    required String text,
-  }) async {
-    final result = await _sendPromptUseCase(
-      SendPromptCommand(
-        sessionId: SessionId(sessionId),
-        prompt: [ContentBlock.text(text: text)],
-      ),
-    ).run();
-    if (isClosed) return;
-
-    result.match(
-      (failure) {
-        _recordDiagnostic(
-          'Failed to send prompt: ${_failureMessage(failure)}',
-          severity: _DiagnosticSeverity.error,
-          source: 'prompt',
-        );
-      },
-      (turn) {
-        _recordDiagnostic(
-          'Prompt completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
-          source: 'prompt',
-        );
-      },
-    );
-    await _drainQueueIfFree(sessionId);
-  }
-
-  /// Reads the queue belonging to [sessionId] — never `null`, an unseen
-  /// session simply has no queued prompts yet.
-  List<AcpQueuedPrompt> _queueFor(String sessionId) =>
-      _queuedPromptsBySession[sessionId] ?? const [];
-
-  /// Updates the queue belonging to [sessionId] and, only if it is the
-  /// currently active session, mirrors it into
-  /// [CodeLabShellState.queuedPrompts] so the UI reflects it immediately.
-  /// A background session's queue is updated silently — see
-  /// [_queuedPromptsBySession].
-  void _setQueueFor(String sessionId, List<AcpQueuedPrompt> queue) {
-    _queuedPromptsBySession[sessionId] = queue;
-    if (state.activeSessionId == sessionId) {
-      emit(state.copyWith(queuedPrompts: queue));
+    // Kit сам решает, отправить сразу или поставить в очередь занятой
+    // сессии, и сливает очередь после конца хода (design D7 change
+    // `extract-acp-client-kit`). Исход хода и диагностику даёт
+    // [_handlePromptOutcome], поэтому здесь ждём только окончания.
+    final outcome = await handle.send(text);
+    if (outcome is PromptQueued) {
+      _syncQueuedPrompts(sessionId);
     }
   }
 
-  /// Removes [id] from the active session's queue and places its text back
-  /// into the prompt composer (via [CodeLabShellState.composerDraft]) for
-  /// editing. Removed from the queue immediately, not on next send, so the
-  /// text is never live in both places (queue and composer) at once — see
-  /// add-prompt-queue/design.md, Decisions.
+  /// Убирает [id] из очереди активной сессии и возвращает его текст в
+  /// композер ([CodeLabShellState.composerDraft]) — сразу, а не при
+  /// следующей отправке, чтобы текст не жил в двух местах
+  /// (add-prompt-queue/design.md, Decisions).
   void editQueuedPrompt(String id) {
     final sessionId = state.activeSessionId;
-    if (sessionId == null) {
+    final handle = sessionId == null ? null : _sessionHandle(sessionId);
+    final prompt = handle?.queue.remove(id);
+    if (prompt == null) {
       return;
     }
-    final queue = _queueFor(sessionId);
-    final index = queue.indexWhere((item) => item.id == id);
-    if (index == -1) {
-      return;
-    }
-    final prompt = queue[index];
-    final updated = [...queue]..removeAt(index);
-    _queuedPromptsBySession[sessionId] = updated;
-    emit(state.copyWith(queuedPrompts: updated, composerDraft: prompt.content));
+    emit(
+      state.copyWith(
+        queuedPrompts: _queuedPromptsFor(sessionId!),
+        composerDraft: prompt.text,
+      ),
+    );
   }
 
   void deleteQueuedPrompt(String id) {
@@ -1002,33 +929,22 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (sessionId == null) {
       return;
     }
-    _setQueueFor(
-      sessionId,
-      _queueFor(
-        sessionId,
-      ).where((item) => item.id != id).toList(growable: false),
-    );
+    _sessionHandle(sessionId)?.queue.remove(id);
+    _syncQueuedPrompts(sessionId);
   }
 
-  /// Attempts to send [id] immediately, out of FIFO order. If the session
-  /// is still busy at this exact instant — a race, e.g. an approval
-  /// appeared between the button rendering and this call — [id] is left
-  /// exactly where it already was in the queue and nothing else happens:
-  /// an expected race, not an error (see add-prompt-queue/design.md,
+  /// Отправляет [id] вне очереди, если сессия свободна; занятая сессия —
+  /// элемент остаётся на месте (ожидаемая гонка, add-prompt-queue/design.md,
   /// Decisions).
   Future<void> sendQueuedPromptNow(String id) async {
     final sessionId = state.activeSessionId;
-    if (sessionId == null || _isSessionBusy(sessionId)) {
+    final handle = sessionId == null ? null : _sessionHandle(sessionId);
+    if (handle == null) {
       return;
     }
-    final queue = _queueFor(sessionId);
-    final index = queue.indexWhere((item) => item.id == id);
-    if (index == -1) {
-      return;
-    }
-    final prompt = queue[index];
-    _setQueueFor(sessionId, [...queue]..removeAt(index));
-    await _dispatchPrompt(sessionId: sessionId, text: prompt.content);
+    final sending = handle.queue.sendNow(id);
+    _syncQueuedPrompts(sessionId!);
+    await sending;
   }
 
   void clearQueuedPrompts() {
@@ -1036,59 +952,61 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (sessionId == null) {
       return;
     }
-    _setQueueFor(sessionId, const []);
+    _sessionHandle(sessionId)?.queue.clear();
+    _syncQueuedPrompts(sessionId);
   }
 
-  /// Sends the oldest prompt queued for [sessionId] once *that session* is
-  /// genuinely free — called after every point where [isPromptSubmitting]
-  /// or [sessionId]'s own pending approval could have just cleared
-  /// ([_dispatchPrompt], [cancelTurn], [respondToApproval]), always with
-  /// the session the completed turn actually belonged to (not necessarily
-  /// [CodeLabShellState.activeSessionId] any more, if the user switched
-  /// sessions while it was in flight). Re-checks the full condition (not
-  /// just the one signal that changed) each time, per add-prompt-queue/
-  /// design.md, Decisions — recurses into [_dispatchPrompt] on success, so
-  /// a free session drains the whole queue one send at a time, not just
-  /// the first entry.
-  Future<void> _drainQueueIfFree(String sessionId) async {
-    if (_isSessionBusy(sessionId)) {
+  SessionHandle? _sessionHandle(String sessionId) =>
+      _workspace.session(SessionId(sessionId));
+
+  /// Очередь сессии [sessionId] из kit в модели `acp_ui`.
+  List<AcpQueuedPrompt> _queuedPromptsFor(String sessionId) => [
+    for (final item in _sessionHandle(sessionId)?.current.queue ?? const [])
+      AcpQueuedPrompt(id: item.id, content: item.text),
+  ];
+
+  /// Повторяет очередь в [CodeLabShellState.queuedPrompts], только если
+  /// [sessionId] активна: очередь фоновой сессии живёт в kit невидимо, пока
+  /// сессию не выберут (add-multi-session-concurrency/design.md, Decisions).
+  void _syncQueuedPrompts(String sessionId) {
+    if (isClosed || state.activeSessionId != sessionId) {
       return;
     }
-    final queue = _queueFor(sessionId);
-    if (queue.isEmpty) {
-      return;
-    }
-    final next = queue.first;
-    _setQueueFor(sessionId, queue.skip(1).toList());
-    await _dispatchPrompt(sessionId: sessionId, text: next.content);
+    emit(state.copyWith(queuedPrompts: _queuedPromptsFor(sessionId)));
   }
 
-  /// Whether [sessionId] can currently accept a new prompt turn — a pure
-  /// read of that session's own domain status
-  /// (`_application.sessionById(sessionId)?.status`), independent of which
-  /// session is active or of any other session's state. `runningTurn`/
-  /// `awaitingApproval`/`cancellingTurn` are busy (a cancelled turn holds the
-  /// session until the agent answers its `session/prompt`, see
-  /// fix-prompt-cancel-tool-calls/design.md, D2); `idle`/`active`/`failed`
-  /// (including an unknown session) are free. This is also the single source
-  /// [CodeLabShellState.isPromptSubmitting]/[CodeLabShellState.canCancel]
-  /// for the active session are derived from, in [_handleSessionChange] and
-  /// [selectSession] — see add-multi-session-concurrency/design.md,
-  /// Decisions.
-  bool _isSessionBusy(String sessionId) => _isBusyLifecycleStatus(
-    _application.sessionById(SessionId(sessionId))?.status,
-  );
+  /// Флаги совместимости из `SessionView.status` kit (design D4): ход идёт,
+  /// ждёт одобрения или отмена ждёт ответа агента — сессия занята; отменить
+  /// можно, пока отмена ещё не отправлена.
+  bool _isPromptSubmitting(String sessionId) =>
+      switch (_sessionHandle(sessionId)?.current.status) {
+        SessionStatusView.running || SessionStatusView.cancelling => true,
+        _ => false,
+      };
 
-  bool _isBusyLifecycleStatus(SessionLifecycleStatus? status) =>
-      _isCancellableLifecycleStatus(status) ||
-      status == SessionLifecycleStatus.cancellingTurn;
+  bool _canCancel(String sessionId) =>
+      _sessionHandle(sessionId)?.current.status == SessionStatusView.running;
 
-  /// Busy and not already cancelling: the cancel has been sent once.
-  bool _isCancellableLifecycleStatus(SessionLifecycleStatus? status) =>
-      status == SessionLifecycleStatus.runningTurn ||
-      status == SessionLifecycleStatus.awaitingApproval;
-
-  String _newQueuedPromptId() => 'queued-${_nextQueuedPromptId++}';
+  /// Исход каждого хода любой сессии — отправленного Cubit и ушедшего из
+  /// очереди kit — с той же диагностикой, что до переноса очереди в kit.
+  void _handlePromptOutcome(PromptOutcome outcome) {
+    switch (outcome) {
+      case PromptCompleted(:final turn):
+        _recordDiagnostic(
+          'Prompt completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
+          source: 'prompt',
+        );
+      case PromptFailed(:final error):
+        _recordDiagnostic(
+          'Failed to send prompt: ${_errorMessage(error)}',
+          severity: _DiagnosticSeverity.error,
+          source: 'prompt',
+        );
+      case PromptQueued():
+        break;
+    }
+    _syncQueuedPrompts(outcome.sessionId.value);
+  }
 
   Future<void> cancelTurn() async {
     final sessionId = state.activeSessionId;
@@ -1101,28 +1019,26 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       return;
     }
 
-    final result = await _cancelTurnUseCase(
-      CancelTurnCommand(sessionId: SessionId(sessionId)),
-    ).run();
-    if (isClosed) return;
-
-    // As in `_dispatchPrompt`, `isPromptSubmitting`/`canCancel`/
-    // `inspectorEntries` are not touched here — the cancellation itself
-    // updates the session's domain status, which `_handleSessionChange`
-    // picks up on the resulting `sessionChanges` event for whichever
-    // session this is, active or not.
-    result.match(
-      (failure) => _recordDiagnostic(
-        'Failed to cancel prompt turn: ${_failureMessage(failure)}',
-        severity: _DiagnosticSeverity.error,
-        source: 'prompt',
-      ),
-      (turn) => _recordDiagnostic(
+    // `isPromptSubmitting`/`canCancel`/`inspectorEntries` здесь не
+    // трогаются: отмена меняет статус сессии в ядре, и
+    // [_handleSessionChange] подхватывает его из `sessionChanges` для той
+    // сессии, чья она, активной или нет. Очередь сливает kit, когда агент
+    // ответит на отменённый `session/prompt`.
+    try {
+      final turn = await _workspace.session(SessionId(sessionId))?.cancel();
+      if (isClosed || turn == null) return;
+      _recordDiagnostic(
         'Cancelled prompt turn ${turn.id.value}.',
         source: 'prompt',
-      ),
-    );
-    await _drainQueueIfFree(sessionId);
+      );
+    } on Object catch (error) {
+      if (isClosed) return;
+      _recordDiagnostic(
+        'Failed to cancel prompt turn: ${_errorMessage(error)}',
+        severity: _DiagnosticSeverity.error,
+        source: 'prompt',
+      );
+    }
   }
 
   /// Responds to the approval identified by [approvalId] (in [sessionId]) by
@@ -1174,7 +1090,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         );
       },
     );
-    await _drainQueueIfFree(sessionId.value);
   }
 
   /// Sends the user's chosen [value] for [configId] to the agent via
@@ -1278,6 +1193,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   Future<void> close() async {
     await _sessionSubscription.cancel();
     await _workspaceSubscription.cancel();
+    await _promptOutcomeSubscription.cancel();
     if (_ownsWorkspace) {
       await _workspace.dispose();
     }
@@ -1376,8 +1292,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         agentCommands: _agentCommandsFor(session),
         configOptions: _configOptionsFor(session),
         currentPlan: _currentPlanForSession(session),
-        isPromptSubmitting: _isBusyLifecycleStatus(session.status),
-        canCancel: _isCancellableLifecycleStatus(session.status),
+        queuedPrompts: _queuedPromptsFor(sessionItem.id),
+        isPromptSubmitting: _isPromptSubmitting(sessionItem.id),
+        canCancel: _canCancel(sessionItem.id),
       ),
     );
   }

@@ -25,9 +25,9 @@
 
 ## 4. Очередь промптов и отмена (5.4, итерация 4)
 
-- [ ] 4.1 Тесты `prompt_queue_test.dart: queued prompt is sent after the turn ends`, независимость очередей сессий, `edit`/`remove`/`sendNow`/`clear` по стабильному id, `SessionHandle.cancel` (acp-client-kit «Очередь промптов на сессию»)
-- [ ] 4.2 `PromptQueue`, `SessionHandle.send`/`cancel`, флаги `SessionView.status` (D4, D7) — 4.1 зелёный
-- [ ] 4.3 Фасад: `submitPrompt`, операции очереди и `cancelTurn` делегируют kit; поле `_queuedPromptsBySession` удалено; тесты 5.0 без правок; PR итерации 4
+- [x] 4.1 Тесты `prompt_queue_test.dart: queued prompt is sent after the turn ends`, `send` ждёт слива очереди, независимость очередей сессий, `remove`/`sendNow`/`clear` по стабильному id, `SessionHandle.cancel`, `PromptFailed` (acp-client-kit «Очередь промптов на сессию»)
+- [x] 4.2 `PromptQueue`, `QueuedPrompt`, `PromptOutcome`, `SessionHandle.send`/`cancel`, `ClientWorkspace.promptOutcomes`, `SessionView.queue` (D4, D7) — 4.1 зелёный
+- [x] 4.3 Фасад: `submitPrompt`, операции очереди и `cancelTurn` делегируют kit, флаги `isPromptSubmitting`/`canCancel` — из `SessionView.status`; поле `_queuedPromptsBySession` удалено; привязки `SendPrompt`/`CancelTurn` убраны из графа; тесты 5.0 без правок; PR итерации 4
 
 ## 5. Профили, резолверы и acp_client_io (5.5 + 5.8, итерация 5)
 

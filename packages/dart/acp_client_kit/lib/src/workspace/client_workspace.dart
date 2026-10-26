@@ -7,6 +7,7 @@ import '../backend/agent_backend.dart';
 import '../connection/connection_profile.dart';
 import '../connection/connection_view.dart';
 import '../connection/transport_resolver.dart';
+import '../queue/prompt_queue.dart';
 import '../transcript/transcript_projector.dart';
 import 'client_workspace_exception.dart';
 import 'workspace_state.dart';
@@ -64,6 +65,10 @@ abstract interface class ClientWorkspace {
   /// Делает сессию [id] активной; неизвестный id игнорируется.
   void activate(SessionId id);
 
+  /// Исходы ходов всех сессий — и отправленных хостом, и ушедших из
+  /// очереди сами; доставляются синхронно.
+  Stream<PromptOutcome> get promptOutcomes;
+
   /// Отписывается от бэкенда и закрывает потоки; бэкенд закрывает его
   /// владелец.
   Future<void> dispose();
@@ -73,11 +78,17 @@ abstract interface class ClientWorkspace {
 ///
 /// Почему: хосту нужен объект сессии, а не id и выборка из общего списка.
 ///
-/// Для чего: текущее [SessionView] и его изменения. [current] обновляется
-/// синхронно с изменением сессии в ядре клиента, до остальных подписчиков
-/// `sessionChanges`, подписанных позже рабочего пространства (design D6).
-/// Отправку промптов, отмену, одобрения и опции переносят следующие
-/// итерации change (design D12).
+/// Для чего: текущее [SessionView] и его изменения, отправка промптов с
+/// очередью и отмена хода. [current] обновляется синхронно с изменением
+/// сессии в ядре клиента, до остальных подписчиков `sessionChanges`,
+/// подписанных позже рабочего пространства (design D6). Одобрения и опции
+/// переносят следующие итерации change (design D12).
+///
+/// Как использовать: [send] — свободная сессия отправляет `session/prompt`
+/// сразу, занятая (`SessionView.status` — `running` или `cancelling`) ставит
+/// промпт в [queue]. Future [send] завершается после конца хода и слива
+/// очереди сессии, которую этот ход освободил, — как прежний
+/// `CodeLabShellCubit.submitPrompt`.
 abstract interface class SessionHandle {
   SessionId get id;
 
@@ -86,6 +97,15 @@ abstract interface class SessionHandle {
   SessionView get current;
 
   Stream<SessionView> get view;
+
+  PromptQueue get queue;
+
+  Future<PromptOutcome> send(String text);
+
+  /// Отправляет `session/cancel`; ход остаётся `cancelling`, пока агент не
+  /// ответит на его `session/prompt` (fix-prompt-cancel-tool-calls/design.md,
+  /// D2). Ошибки — исключения `acp_client_core`.
+  Future<PromptTurn> cancel();
 }
 
 /// Реализация [ClientWorkspace] по умолчанию.
@@ -104,6 +124,11 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   final AgentBackend _backend;
   final List<TransportResolver> _resolvers;
   final _states = StreamController<WorkspaceState>.broadcast(sync: true);
+  final _outcomes = StreamController<PromptOutcome>.broadcast(sync: true);
+
+  /// Счётчик id элементов очереди: общий для всех сессий, чтобы id не
+  /// повторялись в пределах рабочего пространства.
+  var _nextQueuedPromptId = 0;
   final _handles = <SessionId, _SessionHandle>{};
 
   /// Порядок списка сессий: от новой к старой.
@@ -123,6 +148,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   @override
   Stream<WorkspaceState> get state => _states.stream;
+
+  @override
+  Stream<PromptOutcome> get promptOutcomes => _outcomes.stream;
 
   @override
   Future<void> connect(
@@ -236,6 +264,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       await handle.close();
     }
     await _states.close();
+    await _outcomes.close();
   }
 
   TransportResolver? _resolverFor(ConnectionProfile profile) {
@@ -286,7 +315,16 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       existing.update(session);
       return existing;
     }
-    final handle = _SessionHandle(session);
+    final handle = _SessionHandle(
+      session,
+      backend: _backend,
+      nextQueuedPromptId: () => 'queued-${_nextQueuedPromptId++}',
+      onOutcome: (outcome) {
+        if (!_outcomes.isClosed) {
+          _outcomes.add(outcome);
+        }
+      },
+    );
     _handles[session.id] = handle;
     _order.insert(0, session.id);
     return handle;
@@ -358,11 +396,18 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
 enum _Transition { none, connecting, reconnecting }
 
-final class _SessionHandle implements SessionHandle {
-  _SessionHandle(AcpSession session)
-    : id = session.id,
-      cwd = session.cwd,
-      _session = session {
+final class _SessionHandle implements SessionHandle, PromptQueue {
+  _SessionHandle(
+    AcpSession session, {
+    required AgentBackend backend,
+    required String Function() nextQueuedPromptId,
+    required void Function(PromptOutcome outcome) onOutcome,
+  }) : id = session.id,
+       cwd = session.cwd,
+       _session = session,
+       _backend = backend,
+       _nextQueuedPromptId = nextQueuedPromptId,
+       _onOutcome = onOutcome {
     _projector.apply(session);
     _current = SessionView(
       revision: 0,
@@ -377,6 +422,9 @@ final class _SessionHandle implements SessionHandle {
   @override
   final String cwd;
 
+  final AgentBackend _backend;
+  final String Function() _nextQueuedPromptId;
+  final void Function(PromptOutcome outcome) _onOutcome;
   final _views = StreamController<SessionView>.broadcast(sync: true);
   final _projector = TranscriptProjector();
   late SessionView _current;
@@ -388,6 +436,99 @@ final class _SessionHandle implements SessionHandle {
   @override
   Stream<SessionView> get view => _views.stream;
 
+  @override
+  PromptQueue get queue => this;
+
+  @override
+  List<QueuedPrompt> get items => _current.queue;
+
+  /// Занята ли сессия: идёт ход (в том числе с ожидающими одобрениями) или
+  /// отмена ждёт ответа агента (design D4).
+  bool get _isBusy => switch (_current.status) {
+    SessionStatusView.running || SessionStatusView.cancelling => true,
+    SessionStatusView.idle || SessionStatusView.failed => false,
+  };
+
+  @override
+  Future<PromptOutcome> send(String text) async {
+    if (_isBusy) {
+      final item = QueuedPrompt(id: _nextQueuedPromptId(), text: text);
+      _setQueue([..._current.queue, item]);
+      return PromptQueued(id, item);
+    }
+    return _dispatch(text);
+  }
+
+  @override
+  Future<PromptTurn> cancel() =>
+      _backend.cancelTurn(CancelTurnCommand(sessionId: id));
+
+  @override
+  QueuedPrompt? remove(String itemId) {
+    final item = _current.queue.where((q) => q.id == itemId).firstOrNull;
+    if (item == null) {
+      return null;
+    }
+    _setQueue([
+      for (final queued in _current.queue)
+        if (queued.id != itemId) queued,
+    ]);
+    return item;
+  }
+
+  @override
+  Future<PromptOutcome?> sendNow(String itemId) async {
+    if (_isBusy) {
+      return null;
+    }
+    final item = remove(itemId);
+    if (item == null) {
+      return null;
+    }
+    return _dispatch(item.text);
+  }
+
+  @override
+  void clear() {
+    if (_current.queue.isNotEmpty) {
+      _setQueue(const []);
+    }
+  }
+
+  /// Один `session/prompt`: исход публикуется в
+  /// `ClientWorkspace.promptOutcomes`, затем, если сессия освободилась,
+  /// уходит первый элемент очереди — и так, пока очередь не опустеет.
+  ///
+  /// Слив проверяет условие заново после каждого хода, а не реагирует на
+  /// событие статуса: отправка из обработчика синхронного `sessionChanges`
+  /// вызвала бы вложенную публикацию в тот же поток.
+  Future<PromptOutcome> _dispatch(String text) async {
+    PromptOutcome outcome;
+    try {
+      final turn = await _backend.sendPrompt(
+        SendPromptCommand(
+          sessionId: id,
+          prompt: [ContentBlock.text(text: text)],
+        ),
+      );
+      outcome = PromptCompleted(id, turn);
+    } on Object catch (error) {
+      outcome = PromptFailed(id, error);
+    }
+    _onOutcome(outcome);
+    await _drainIfFree();
+    return outcome;
+  }
+
+  Future<void> _drainIfFree() async {
+    if (_isBusy || _current.queue.isEmpty) {
+      return;
+    }
+    final next = _current.queue.first;
+    _setQueue(_current.queue.skip(1).toList());
+    await _dispatch(next.text);
+  }
+
   /// Каждое изменение сессии в ядре — новое представление с `revision + 1`;
   /// повтор того же снимка (`identical`) — no-op.
   void update(AcpSession session) {
@@ -396,13 +537,26 @@ final class _SessionHandle implements SessionHandle {
     }
     _session = session;
     _projector.apply(session);
-    _current = SessionView(
-      revision: _current.revision + 1,
-      status: SessionStatusView.of(session.status),
-      transcript: _projector.items,
+    _publish(
+      _current.copyWith(
+        revision: _current.revision + 1,
+        status: SessionStatusView.of(session.status),
+        transcript: _projector.items,
+      ),
     );
+  }
+
+  void _setQueue(List<QueuedPrompt> queue) => _publish(
+    _current.copyWith(
+      revision: _current.revision + 1,
+      queue: List.unmodifiable(queue),
+    ),
+  );
+
+  void _publish(SessionView next) {
+    _current = next;
     if (!_views.isClosed) {
-      _views.add(_current);
+      _views.add(next);
     }
   }
 

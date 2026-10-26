@@ -25,6 +25,10 @@ abstract interface class AgentBackend {
   Future<ClientConnectionState> reconnect(ReconnectCommand command);
 
   Future<AcpSession> createSession(CreateSessionCommand command);
+
+  Future<PromptTurn> sendPrompt(SendPromptCommand command);
+
+  Future<PromptTurn> cancelTurn(CancelTurnCommand command);
 }
 
 /// [AgentBackend] поверх `AcpClientApplication`.
@@ -60,4 +64,12 @@ final class AcpClientBackend implements AgentBackend {
   @override
   Future<AcpSession> createSession(CreateSessionCommand command) =>
       _application.createSession(command);
+
+  @override
+  Future<PromptTurn> sendPrompt(SendPromptCommand command) =>
+      _application.sendPrompt(command);
+
+  @override
+  Future<PromptTurn> cancelTurn(CancelTurnCommand command) =>
+      _application.cancelTurn(command);
 }
