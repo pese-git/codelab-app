@@ -83,9 +83,15 @@ Id элементов kit стабильны (`<turnId>/text-<i>`, `<turnId>/too
 
 ### D7. Очередь промптов
 
-`PromptQueue` на сессию (`lib/src/queue/`): перенос `submitPrompt`, `_dispatchPrompt`, `_drainQueueIfFree`, `editQueuedPrompt`, `deleteQueuedPrompt`, `sendQueuedPromptNow`, `clearQueuedPrompts`. Id элементов монотонны в пределах `ClientWorkspace` и не переиспользуются (как `_nextQueuedPromptId`). `SessionHandle.send` — сессия свободна → `session/prompt`, занята → в очередь; конец хода → первый элемент уходит автоматически. Очереди не сохраняются и в агент не отправляются (`add-prompt-queue/design.md`, Non-Goals).
+`PromptQueue` на сессию (`lib/src/queue/`): перенос `submitPrompt`, `_dispatchPrompt`, `_drainQueueIfFree`, `editQueuedPrompt`, `deleteQueuedPrompt`, `sendQueuedPromptNow`, `clearQueuedPrompts`. Элемент — `QueuedPrompt(id, text)`; id `queued-N` монотонны в пределах `ClientWorkspace` и не переиспользуются (как `_nextQueuedPromptId`). Очередь — поле `SessionView.queue`; каждое изменение публикует новый `SessionView`. Очереди не сохраняются и в агент не отправляются (`add-prompt-queue/design.md`, Non-Goals).
 
-`editQueuedPrompt(id)` сегодня возвращает текст в композер и удаляет элемент — это поведение UI; в kit — `PromptQueue.remove(id)` и возврат текста, композер заполняет Cubit.
+- `SessionHandle.send(text)`: сессия свободна → `session/prompt`, занята (`SessionView.status` — `running` или `cancelling`) → элемент очереди и исход `PromptQueued`. Future завершается после конца хода и слива очереди, которую этот ход освободил, — как прежний `submitPrompt`; на это опираются тесты 5.0, которые ждут `submitPrompt` после ответа агента.
+- Слив — как в Cubit: после каждого `session/prompt` kit заново проверяет «сессия свободна и очередь не пуста» и отправляет первый элемент. Слив по событию статуса из `sessionChanges` отклонён: отправка из обработчика синхронного потока вызвала бы вложенную публикацию в тот же поток.
+- Исход каждого хода — и отправленного хостом, и ушедшего из очереди — `PromptCompleted(turn)` или `PromptFailed(error)` в `ClientWorkspace.promptOutcomes` (синхронно); фасад пишет по нему прежнюю диагностику `Prompt completed with stopReason …` / `Failed to send prompt: …` и обновляет `queuedPrompts`.
+- `PromptQueue.remove(id)` возвращает элемент: «редактировать» в app — убрать из очереди и вернуть текст в композер, это делает Cubit. `edit(id, text)` из эскиза `09-10` не нужен ни app, ни CLI этапа 6 и не вводится.
+- `PromptQueue.sendNow(id)` отправляет элемент вне очереди только в свободной сессии; в занятой — no-op, элемент на месте (поведение `sendQueuedPromptNow`). Отмена хода с отправкой элемента (эскиз `09-10`) — новое поведение, вне этого change.
+- `SessionHandle.cancel()` — `session/cancel`; сессия остаётся `cancelling`, пока агент не ответит на отменённый `session/prompt`, и тогда очередь сливает завершившийся `send` этого хода. Слив после ответа на одобрение (`respondToApproval`) не нужен: пока одобрение ожидает, сессия занята, а конец хода сливает очередь сам.
+- Флаги фасада `isPromptSubmitting = status ∈ {running, cancelling}`, `canCancel = status == running` (D4).
 
 ### D8. Профили и резолверы транспорта
 
