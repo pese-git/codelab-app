@@ -66,4 +66,4 @@
 
 - [x] 8.1 Ручная проверка с Zed — выполняет пользователь: чек-лист D13 в `design.md` заполнен
 - [x] 8.2 Definition of Done change: `fvm dart run melos run check` зелёный; `serve_flags_test.dart`, `stdio_process_test.dart`, `ws_auth_test.dart`, `transport_conformance_test.dart` зелёные; строки матрицы R-12, R-13 имеют доказательства (таблица в `design.md`), D-01 и D-02 — тестами app, прогон которых — в `release/<version>`; PR итерации 3
-- [ ] 8.3 Перед архивированием: `openspec validate add-codelab-agent-binary --strict`; заполнить Purpose новой спецификации `agent-binary`
+- [x] 8.3 Перед архивированием: `openspec validate add-codelab-agent-binary --strict`; заполнить Purpose новой спецификации `agent-binary`
