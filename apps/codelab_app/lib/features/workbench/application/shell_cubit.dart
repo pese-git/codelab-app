@@ -2,6 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:acp_client_core/acp_client_core.dart';
+import 'package:acp_client_kit/acp_client_kit.dart'
+    show
+        AcpClientBackend,
+        ClientWorkspace,
+        ClientWorkspaceException,
+        ConfigTransportResolver,
+        Connected,
+        ConnectionFailed,
+        ConnectionProfile,
+        ConnectionView,
+        Connecting,
+        Disconnected,
+        InMemorySecretSource,
+        Reconnecting,
+        WorkspaceState;
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
@@ -400,31 +415,94 @@ final class CodeLabInspectorDetail {
   final String value;
 }
 
+/// Фасад рабочего места CodeLab над `ClientWorkspace` из `acp_client_kit`.
+///
+/// Почему: логика клиента переносится из этого Cubit в kit по частям
+/// (change `extract-acp-client-kit`, design D12), а виджеты, интеграционные
+/// и характеризационные тесты читают прежний [CodeLabShellState]. Фасад
+/// сохраняет эту поверхность на время переноса.
+///
+/// Для чего: подключение, переподключение, создание и выбор сессии идут
+/// через [ClientWorkspace]; промпты, отмена, одобрения и опции — пока через
+/// use case-ы `acp_client_core`, до своих итераций.
+///
+/// Как использовать: граф cherrypick (`app_scope.dart`) передаёт
+/// [workspace] и [secrets] — тот же `InMemorySecretSource`, что у резолвера
+/// WebSocket. Без них Cubit строит рабочее пространство сам поверх
+/// [application] и фабрик транспорта: так его по-прежнему создают тесты
+/// `widget_test.dart`. Параметры `createSessionUseCase` и
+/// `reconnectUseCase` не используются после переноса подключения и сессий в
+/// kit; они остаются, пока эти тесты создают Cubit напрямую, и удаляются
+/// вместе с фасадом после этапа 9 (`09-10`, «Что остаётся неизменным»).
 final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   CodeLabShellCubit({
     required StdioAcpAgentProfile profile,
     required AcpClientApplication application,
-    required CreateSession createSessionUseCase,
+    CreateSession? createSessionUseCase,
     required SendPrompt sendPromptUseCase,
     required CancelTurn cancelTurnUseCase,
-    required Reconnect reconnectUseCase,
+    Reconnect? reconnectUseCase,
     required RespondToPermission respondToPermissionUseCase,
     required SetSessionConfigOption setSessionConfigOptionUseCase,
-    required CodeLabStdioTransportFactory stdioTransportFactory,
-    required CodeLabWebSocketTransportFactory webSocketTransportFactory,
+    CodeLabStdioTransportFactory? stdioTransportFactory,
+    CodeLabWebSocketTransportFactory? webSocketTransportFactory,
+    ClientWorkspace? workspace,
+    InMemorySecretSource? secrets,
+    required WorkingDirectoryProvider workingDirectoryProvider,
+    required ProjectFolderPicker projectFolderPicker,
+    required RecentProjectsStore recentProjectsStore,
+    Logger? logger,
+  }) : this._(
+         profile: profile,
+         application: application,
+         sendPromptUseCase: sendPromptUseCase,
+         cancelTurnUseCase: cancelTurnUseCase,
+         respondToPermissionUseCase: respondToPermissionUseCase,
+         setSessionConfigOptionUseCase: setSessionConfigOptionUseCase,
+         secrets: secrets ?? InMemorySecretSource(),
+         workspace: workspace,
+         stdioTransportFactory: stdioTransportFactory,
+         webSocketTransportFactory: webSocketTransportFactory,
+         workingDirectoryProvider: workingDirectoryProvider,
+         projectFolderPicker: projectFolderPicker,
+         recentProjectsStore: recentProjectsStore,
+         logger: logger,
+       );
+
+  CodeLabShellCubit._({
+    required StdioAcpAgentProfile profile,
+    required AcpClientApplication application,
+    required SendPrompt sendPromptUseCase,
+    required CancelTurn cancelTurnUseCase,
+    required RespondToPermission respondToPermissionUseCase,
+    required SetSessionConfigOption setSessionConfigOptionUseCase,
+    required InMemorySecretSource secrets,
+    required ClientWorkspace? workspace,
+    required CodeLabStdioTransportFactory? stdioTransportFactory,
+    required CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
     Logger? logger,
   }) : _application = application,
-       _createSessionUseCase = createSessionUseCase,
        _sendPromptUseCase = sendPromptUseCase,
        _cancelTurnUseCase = cancelTurnUseCase,
-       _reconnectUseCase = reconnectUseCase,
        _respondToPermissionUseCase = respondToPermissionUseCase,
        _setSessionConfigOptionUseCase = setSessionConfigOptionUseCase,
-       _stdioTransportFactory = stdioTransportFactory,
-       _webSocketTransportFactory = webSocketTransportFactory,
+       _secrets = secrets,
+       _ownsWorkspace = workspace == null,
+       _workspace =
+           workspace ??
+           ClientWorkspace(
+             backend: AcpClientBackend(application),
+             resolvers: [
+               ConfigTransportResolver(
+                 stdio: stdioTransportFactory,
+                 webSocket: webSocketTransportFactory,
+                 secrets: secrets,
+               ),
+             ],
+           ),
        _workingDirectoryProvider = workingDirectoryProvider,
        _projectFolderPicker = projectFolderPicker,
        _recentProjectsStore = recentProjectsStore,
@@ -436,9 +514,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _sessionSubscription = _application.sessionChanges.listen(
       _handleSessionChange,
     );
-    _connectionStateSubscription = _application.connectionStateChanges.listen(
-      _handleConnectionStateChange,
-    );
+    _workspaceSubscription = _workspace.state.listen(_handleWorkspaceChange);
     unawaited(_loadRecentProjects());
   }
 
@@ -458,22 +534,29 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// [createSession] re-derive it the same way they already do for
   /// [CodeLabShellState.currentPlan]/`transcriptEntries`.
   final Map<String, List<AcpQueuedPrompt>> _queuedPromptsBySession = {};
-  final CreateSession _createSessionUseCase;
   final SendPrompt _sendPromptUseCase;
   final CancelTurn _cancelTurnUseCase;
-  final Reconnect _reconnectUseCase;
   final RespondToPermission _respondToPermissionUseCase;
   final SetSessionConfigOption _setSessionConfigOptionUseCase;
-  final CodeLabStdioTransportFactory _stdioTransportFactory;
-  final CodeLabWebSocketTransportFactory _webSocketTransportFactory;
+  final ClientWorkspace _workspace;
+
+  /// Рабочее пространство создал сам Cubit (без графа cherrypick) — тогда он
+  /// и закрывает его в [close].
+  final bool _ownsWorkspace;
+
+  /// Значение токена WebSocket из формы; профиль ссылается на него по
+  /// [_webSocketTokenRef] (design D8).
+  final InMemorySecretSource _secrets;
   final WorkingDirectoryProvider _workingDirectoryProvider;
   final ProjectFolderPicker _projectFolderPicker;
   final RecentProjectsStore _recentProjectsStore;
   final Logger _logger;
   final _redactor = const SecretRedactor();
   late final StreamSubscription<AcpSession> _sessionSubscription;
-  late final StreamSubscription<ClientConnectionState>
-  _connectionStateSubscription;
+  late final StreamSubscription<WorkspaceState> _workspaceSubscription;
+
+  /// Ссылка на токен WebSocket в [_secrets].
+  static const _webSocketTokenRef = 'codelab_app.websocket.token';
 
   void selectTransport(CodeLabTransportType transportType) {
     emit(state.withTransportProjection(transportType: transportType));
@@ -554,58 +637,13 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   }
 
   Future<void> connect() async {
-    if (state.transportType == CodeLabTransportType.webSocket) {
-      final config = _webSocketConfigFromState();
-      if (config == null) {
-        _recordDiagnostic(
-          'WebSocket endpoint is required before connecting.',
-          severity: _DiagnosticSeverity.error,
-          source: 'transport',
-        );
-        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-        return;
-      }
-
-      emit(state.copyWith(connectionStatus: AcpConnectionStatus.connecting));
+    final isWebSocket = state.transportType == CodeLabTransportType.webSocket;
+    final profile = _profileFromState();
+    if (profile == null) {
       _recordDiagnostic(
-        'Connecting WebSocket ACP agent: ${state.selectedConnectionDetail}.',
-        source: 'transport',
-      );
-
-      try {
-        final transport = _webSocketTransportFactory(config);
-        final connectionState = await _application.connect(transport);
-        emit(
-          state.copyWith(
-            connectionStatus: _connectionStatusForConnection(connectionState),
-          ),
-        );
-        _recordDiagnostic(
-          'WebSocket ACP agent connected: ${state.selectedConnectionDetail}.',
-          source: 'transport',
-        );
-      } on UnsupportedProtocolVersionException catch (error) {
-        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-        _recordDiagnostic(
-          'Incompatible ACP agent: ${error.message}',
-          severity: _DiagnosticSeverity.error,
-          source: 'transport',
-        );
-      } on Object catch (error) {
-        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-        _recordDiagnostic(
-          'Failed to connect WebSocket ACP agent: $error',
-          severity: _DiagnosticSeverity.error,
-          source: 'transport',
-        );
-      }
-      return;
-    }
-
-    final config = _stdioConfigFromState();
-    if (config == null) {
-      _recordDiagnostic(
-        'Stdio command is required before connecting.',
+        isWebSocket
+            ? 'WebSocket endpoint is required before connecting.'
+            : 'Stdio command is required before connecting.',
         severity: _DiagnosticSeverity.error,
         source: 'transport',
       );
@@ -615,20 +653,23 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
     emit(state.copyWith(connectionStatus: AcpConnectionStatus.connecting));
     _recordDiagnostic(
-      'Starting stdio ACP agent: ${state.selectedConnectionDetail}.',
+      isWebSocket
+          ? 'Connecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
+          : 'Starting stdio ACP agent: ${state.selectedConnectionDetail}.',
       source: 'transport',
     );
 
     try {
-      final transport = _stdioTransportFactory(config);
-      final connectionState = await _application.connect(transport);
+      await _workspace.connect(profile, projectDirectory: _selectedProjectPath);
       emit(
         state.copyWith(
-          connectionStatus: _connectionStatusForConnection(connectionState),
+          connectionStatus: _connectionStatusFor(_workspace.current.connection),
         ),
       );
       _recordDiagnostic(
-        'Stdio ACP agent started: ${state.selectedConnectionDetail}.',
+        isWebSocket
+            ? 'WebSocket ACP agent connected: ${state.selectedConnectionDetail}.'
+            : 'Stdio ACP agent started: ${state.selectedConnectionDetail}.',
         source: 'transport',
       );
     } on UnsupportedProtocolVersionException catch (error) {
@@ -641,66 +682,26 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     } on Object catch (error) {
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
       _recordDiagnostic(
-        'Failed to start stdio ACP agent: $error',
+        isWebSocket
+            ? 'Failed to connect WebSocket ACP agent: $error'
+            : 'Failed to start stdio ACP agent: $error',
         severity: _DiagnosticSeverity.error,
         source: 'transport',
       );
     }
   }
 
+  /// Одна попытка переподключения через kit с профилем из текущей формы:
+  /// пользователь мог изменить команду, адрес или проект после [connect]
+  /// (design D4).
   Future<void> reconnect() async {
-    if (state.transportType == CodeLabTransportType.webSocket) {
-      final config = _webSocketConfigFromState();
-      if (config == null) {
-        _recordDiagnostic(
-          'WebSocket endpoint is required before reconnecting.',
-          severity: _DiagnosticSeverity.error,
-          source: 'transport',
-        );
-        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-        return;
-      }
-
-      emit(state.copyWith(connectionStatus: AcpConnectionStatus.reconnecting));
+    final isWebSocket = state.transportType == CodeLabTransportType.webSocket;
+    final profile = _profileFromState();
+    if (profile == null) {
       _recordDiagnostic(
-        'Reconnecting WebSocket ACP agent: ${state.selectedConnectionDetail}.',
-        source: 'transport',
-      );
-
-      final result = await _reconnectUseCase(
-        ReconnectCommand(
-          transportFactory: () async => _webSocketTransportFactory(config),
-        ),
-      ).run();
-      if (isClosed) return;
-      result.match(
-        (failure) {
-          emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-          _recordDiagnostic(
-            'Failed to reconnect WebSocket ACP agent: ${_failureMessage(failure)}',
-            severity: _DiagnosticSeverity.error,
-            source: 'transport',
-          );
-        },
-        (connectionState) {
-          emit(
-            state.copyWith(
-              connectionStatus: _connectionStatusForConnection(connectionState),
-            ),
-          );
-          _recordDiagnostic(
-            'WebSocket ACP agent reconnected: ${state.selectedConnectionDetail}.',
-            source: 'transport',
-          );
-        },
-      );
-      return;
-    }
-
-    final config = _stdioConfigFromState();
-    if (config == null) {
-      _recordDiagnostic(
-        'Stdio command is required before reconnecting.',
+        isWebSocket
+            ? 'WebSocket endpoint is required before reconnecting.'
+            : 'Stdio command is required before reconnecting.',
         severity: _DiagnosticSeverity.error,
         source: 'transport',
       );
@@ -710,37 +711,40 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
     emit(state.copyWith(connectionStatus: AcpConnectionStatus.reconnecting));
     _recordDiagnostic(
-      'Reconnecting stdio ACP agent: ${state.selectedConnectionDetail}.',
+      isWebSocket
+          ? 'Reconnecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
+          : 'Reconnecting stdio ACP agent: ${state.selectedConnectionDetail}.',
       source: 'transport',
     );
 
-    final result = await _reconnectUseCase(
-      ReconnectCommand(
-        transportFactory: () async => _stdioTransportFactory(config),
-      ),
-    ).run();
-    if (isClosed) return;
-    result.match(
-      (failure) {
-        emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-        _recordDiagnostic(
-          'Failed to reconnect stdio ACP agent: ${_failureMessage(failure)}',
-          severity: _DiagnosticSeverity.error,
-          source: 'transport',
-        );
-      },
-      (connectionState) {
-        emit(
-          state.copyWith(
-            connectionStatus: _connectionStatusForConnection(connectionState),
-          ),
-        );
-        _recordDiagnostic(
-          'Stdio ACP agent reconnected: ${state.selectedConnectionDetail}.',
-          source: 'transport',
-        );
-      },
-    );
+    try {
+      await _workspace.reconnect(
+        profile: profile,
+        projectDirectory: _selectedProjectPath,
+      );
+      if (isClosed) return;
+      emit(
+        state.copyWith(
+          connectionStatus: _connectionStatusFor(_workspace.current.connection),
+        ),
+      );
+      _recordDiagnostic(
+        isWebSocket
+            ? 'WebSocket ACP agent reconnected: ${state.selectedConnectionDetail}.'
+            : 'Stdio ACP agent reconnected: ${state.selectedConnectionDetail}.',
+        source: 'transport',
+      );
+    } on Object catch (error) {
+      if (isClosed) return;
+      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
+      _recordDiagnostic(
+        isWebSocket
+            ? 'Failed to reconnect WebSocket ACP agent: ${_errorMessage(error)}'
+            : 'Failed to reconnect stdio ACP agent: ${_errorMessage(error)}',
+        severity: _DiagnosticSeverity.error,
+        source: 'transport',
+      );
+    }
   }
 
   /// Commits a new sessions pane width (desktop layout resize), clamped to
@@ -782,43 +786,47 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
     _recordDiagnostic('Creating ACP session.', source: 'session');
 
-    final result = await _createSessionUseCase(
-      CreateSessionCommand(cwd: _selectedProjectPath),
-    ).run();
-    if (isClosed) return;
-
-    result.match(
-      (failure) => _recordDiagnostic(
-        'Failed to create ACP session: ${_failureMessage(failure)}',
+    final AcpSession? session;
+    try {
+      final handle = await _workspace.newSession(cwd: _selectedProjectPath);
+      if (isClosed) return;
+      session = _application.sessionById(handle.id);
+    } on Object catch (error) {
+      if (isClosed) return;
+      _recordDiagnostic(
+        'Failed to create ACP session: ${_errorMessage(error)}',
         severity: _DiagnosticSeverity.error,
         source: 'session',
+      );
+      return;
+    }
+    if (session == null) {
+      return;
+    }
+
+    final sessionItem = _sessionListItem(session);
+    final otherSessions = state.sessions
+        .where((item) => item.id != sessionItem.id)
+        .toList(growable: false);
+    emit(
+      state.copyWith(
+        sessions: [sessionItem, ...otherSessions],
+        activeSessionId: sessionItem.id,
+        currentSessionLabel: sessionItem.title,
+        currentSessionDetail: sessionItem.subtitle ?? session.id.value,
+        transcriptEntries: const [],
+        inspectorEntries: _inspectorEntriesForSession(session),
+        agentCommands: _agentCommandsFor(session),
+        configOptions: _configOptionsFor(session),
+        currentPlan: _currentPlanForSession(session),
+        queuedPrompts: _queueFor(sessionItem.id),
+        isPromptSubmitting: false,
+        canCancel: false,
       ),
-      (session) {
-        final sessionItem = _sessionListItem(session);
-        final otherSessions = state.sessions
-            .where((item) => item.id != sessionItem.id)
-            .toList(growable: false);
-        emit(
-          state.copyWith(
-            sessions: [sessionItem, ...otherSessions],
-            activeSessionId: sessionItem.id,
-            currentSessionLabel: sessionItem.title,
-            currentSessionDetail: sessionItem.subtitle ?? session.id.value,
-            transcriptEntries: const [],
-            inspectorEntries: _inspectorEntriesForSession(session),
-            agentCommands: _agentCommandsFor(session),
-            configOptions: _configOptionsFor(session),
-            currentPlan: _currentPlanForSession(session),
-            queuedPrompts: _queueFor(sessionItem.id),
-            isPromptSubmitting: false,
-            canCancel: false,
-          ),
-        );
-        _recordDiagnostic(
-          'Created ACP session ${session.id.value}.',
-          source: 'session',
-        );
-      },
+    );
+    _recordDiagnostic(
+      'Created ACP session ${session.id.value}.',
+      source: 'session',
     );
   }
 
@@ -829,6 +837,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// inspector/approval/busy state would remain visible until the newly
   /// selected session happened to emit its own `session/update`.
   void selectSession(String sessionId) {
+    _workspace.activate(SessionId(sessionId));
     final session = _application.sessionById(SessionId(sessionId));
     if (session == null) {
       final selected = state.sessions
@@ -1266,7 +1275,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   @override
   Future<void> close() async {
     await _sessionSubscription.cancel();
-    await _connectionStateSubscription.cancel();
+    await _workspaceSubscription.cancel();
+    if (_ownsWorkspace) {
+      await _workspace.dispose();
+    }
     return super.close();
   }
 
@@ -1480,8 +1492,12 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// fully own reporting their own outcome in their own catch/`result.match`
   /// blocks — this handler must stay silent for those, or every explicit
   /// failure would get a second, conflicting diagnostic entry from here.
-  void _handleConnectionStateChange(ClientConnectionState connectionState) {
-    if (connectionState is! ClientConnectionFailed) {
+  /// Неожиданный сбой соединения, пока Cubit считает его установленным:
+  /// сбой явного [connect]/[reconnect] сообщают сами эти методы, поэтому
+  /// здесь он не дублируется.
+  void _handleWorkspaceChange(WorkspaceState workspace) {
+    final connection = workspace.connection;
+    if (connection is! ConnectionFailed) {
       return;
     }
     if (state.connectionStatus != AcpConnectionStatus.connected) {
@@ -1498,7 +1514,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       ),
     );
     _recordDiagnostic(
-      'Connection to ACP agent lost: ${connectionState.message}',
+      'Connection to ACP agent lost: ${connection.message}',
       severity: _DiagnosticSeverity.error,
       source: 'transport',
     );
@@ -1538,36 +1554,41 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return command is String && command.trim().isNotEmpty ? command : null;
   }
 
-  StdioAcpTransportConfig? _stdioConfigFromState() {
-    final command = state.stdioCommand.trim();
-    if (command.isEmpty) {
-      return null;
+  /// Профиль подключения из формы; `null` — форма не заполнена (нет
+  /// команды stdio или корректного адреса WebSocket).
+  ///
+  /// Токен WebSocket кладётся в [_secrets], а профиль хранит только ссылку
+  /// на него (design D8).
+  ConnectionProfile? _profileFromState() {
+    switch (state.transportType) {
+      case CodeLabTransportType.stdio:
+        final command = state.stdioCommand.trim();
+        if (command.isEmpty) {
+          return null;
+        }
+        return ConnectionProfile.stdio(
+          id: 'codelab_app.stdio',
+          label: state.selectedProfileLabel,
+          command: command,
+          args: _splitShellWords(state.stdioArgs),
+          env: _parseEnv(state.stdioEnv),
+          runInProjectDirectory: state.runAgentFromProjectDirectory,
+        );
+      case CodeLabTransportType.webSocket:
+        final endpoint = state.webSocketEndpoint.trim();
+        final uri = endpoint.isEmpty ? null : Uri.tryParse(endpoint);
+        if (uri == null) {
+          return null;
+        }
+        final token = state.webSocketToken.trim();
+        _secrets.write(_webSocketTokenRef, token.isEmpty ? null : token);
+        return ConnectionProfile.webSocket(
+          id: 'codelab_app.websocket',
+          label: state.selectedProfileLabel,
+          uri: uri,
+          tokenRef: token.isEmpty ? null : _webSocketTokenRef,
+        );
     }
-
-    return StdioAcpTransportConfig(
-      command: command,
-      args: _splitShellWords(state.stdioArgs),
-      cwd: state.runAgentFromProjectDirectory ? _selectedProjectPath : null,
-      env: _parseEnv(state.stdioEnv),
-    );
-  }
-
-  WebSocketAcpTransportConfig? _webSocketConfigFromState() {
-    final endpoint = state.webSocketEndpoint.trim();
-    if (endpoint.isEmpty) {
-      return null;
-    }
-
-    final uri = Uri.tryParse(endpoint);
-    if (uri == null) {
-      return null;
-    }
-
-    final token = state.webSocketToken.trim();
-    return WebSocketAcpTransportConfig(
-      uri: uri,
-      token: token.isEmpty ? null : token,
-    );
   }
 
   /// The project directory to use for a session/spawn `cwd` — the selected
@@ -1604,6 +1625,18 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           AcpSessionStatus.awaitingApproval,
         SessionLifecycleStatus.failed => AcpSessionStatus.failed,
       };
+
+  /// Текст ошибки kit или ядра клиента для диагностики — тот же, что давал
+  /// `_failureMessage` после use case-ов `acp_client_core` до переноса
+  /// подключения и сессий в kit. Перенос в `describeFailure` kit — итерация 6
+  /// (design D9).
+  String _errorMessage(Object error) => switch (error) {
+    AcpClientApplicationException(:final message) ||
+    AcpTransportException(:final message) ||
+    StateTransitionException(:final message) ||
+    ClientWorkspaceException(:final message) => message,
+    _ => error.toString(),
+  };
 
   String _failureMessage(AcpClientApplicationFailure failure) =>
       switch (failure) {
@@ -2265,13 +2298,12 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return env;
   }
 
-  AcpConnectionStatus _connectionStatusForConnection(
-    ClientConnectionState connectionState,
-  ) => switch (connectionState) {
-    ClientConnectionDisconnected() => AcpConnectionStatus.disconnected,
-    ClientConnectionConnecting() ||
-    ClientConnectionInitializing() => AcpConnectionStatus.connecting,
-    ClientConnectionReady() => AcpConnectionStatus.connected,
-    ClientConnectionFailed() => AcpConnectionStatus.failed,
-  };
+  AcpConnectionStatus _connectionStatusFor(ConnectionView connection) =>
+      switch (connection) {
+        Disconnected() => AcpConnectionStatus.disconnected,
+        Connecting() => AcpConnectionStatus.connecting,
+        Reconnecting() => AcpConnectionStatus.reconnecting,
+        Connected() => AcpConnectionStatus.connected,
+        ConnectionFailed() => AcpConnectionStatus.failed,
+      };
 }

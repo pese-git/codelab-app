@@ -11,11 +11,11 @@
 
 ## 2. Пакет acp_client_kit и фасад (5.1, итерация 2)
 
-- [ ] 2.1 Тест сторожа: правила `acp_client_kit` (`webUnsafe`) и allowlist его `dependencies` (D2, D11); тест-нарушение на временном пакете (красный, пока правила нет)
-- [ ] 2.2 Пакет `packages/dart/acp_client_kit` в `workspace:`; `AGENTS.md` вложенный — назначение и границы; правило в `rules.dart`, allowlist в `pubspec_allowlist_test.dart` — 2.1 зелёный
-- [ ] 2.3 Тесты kit: `ClientWorkspace` подключается через тестовый резолвер, `ConnectionView` проходит `Connecting` → `Connected`, сбой → `ConnectionFailed`; `newSession`/`activate`; позднее событие старого поколения игнорируется (acp-client-kit «Явный автомат соединения»)
-- [ ] 2.4 `AgentBackend`, `AcpClientBackend`, `ClientWorkspace`, `SessionHandle` (без очереди и проектора — они в 3–4), `WorkspaceState`, `ConnectionView` — 2.3 зелёный
-- [ ] 2.5 Фасад: привязка `CodeLabShellCubit` в `app_scope.dart` получает `ClientWorkspace`; подключение, переподключение, создание и выбор сессии идут через kit; тесты 5.0 и `widget_test.dart` без правок; PR итерации 2
+- [x] 2.1 Тест сторожа: правила `acp_client_kit` (`webUnsafe`) и allowlist его `dependencies` (D2, D11); тест-нарушение на временном пакете (красный, пока правила нет)
+- [x] 2.2 Пакет `packages/dart/acp_client_kit` в `workspace:`; `AGENTS.md` вложенный — назначение и границы; правило в `rules.dart`, allowlist в `pubspec_allowlist_test.dart` — 2.1 зелёный
+- [x] 2.3 Тесты kit: `ClientWorkspace` подключается через тестовый резолвер, `ConnectionView` проходит `Connecting` → `Connected`, сбой → `ConnectionFailed`; профиль без резолвера → `ConnectionFailed`, транспорт не открывается; `reconnect` — одна попытка, `Reconnecting` → `Connected`; `newSession`/`activate`; позднее событие старого поколения игнорируется; `ConfigTransportResolver` (`cwd` по `runInProjectDirectory`, токен по ссылке из `SecretSource`) (acp-client-kit «Явный автомат соединения», «Профили и резолверы транспорта»)
+- [x] 2.4 `AgentBackend`, `AcpClientBackend`, `ClientWorkspace`, `SessionHandle` (без очереди и проектора — они в 3–4), `WorkspaceState`, `ConnectionView`, `ConnectionProfile`, `TransportResolver`, `ConfigTransportResolver`, `SecretSource`, `InMemorySecretSource` — 2.3 зелёный
+- [x] 2.5 Фасад: привязка `CodeLabShellCubit` в `app_scope.dart` получает `ClientWorkspace`; подключение, переподключение, создание и выбор сессии идут через kit; тесты 5.0 и `widget_test.dart` без правок; PR итерации 2
 
 ## 3. Проекция транскрипта (5.3, итерация 3)
 
@@ -31,10 +31,10 @@
 
 ## 5. Профили, резолверы и acp_client_io (5.5 + 5.8, итерация 5)
 
-- [ ] 5.1 Тесты kit: `parseShellWords`, `describeProfile`, профиль без резолвера → `ConnectionFailed` (acp-client-kit «Профили и резолверы транспорта»); тест сторожа для `acp_client_io` (`package:flutter/` запрещён, allowlist)
-- [ ] 5.2 `ConnectionProfile`, `TransportResolver`, `SecretSource`, порты `ProfileStore`, `RecentProjectsStore` в kit — тесты kit 5.1 зелёные
-- [ ] 5.3 Тесты `acp_client_io`: `JsonFileProfileStore` (файл без значения токена), `JsonFileRecentProjectsStore`, резолверы stdio и WebSocket против процесса и сокета на Dart VM (acp-client-kit «IO-адаптеры клиента»)
-- [ ] 5.4 Пакет `packages/dart/acp_client_io`: перенос `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider` из `apps/codelab_app/lib/core/platform/` (с их тестами), резолверы, `JsonFile*Store` — 5.3 зелёный
+- [ ] 5.1 Тесты kit: `parseShellWords`, `describeProfile` (acp-client-kit «Профили и резолверы транспорта»); тест сторожа для `acp_client_io` (`package:flutter/` запрещён, allowlist)
+- [ ] 5.2 `parseShellWords`, `describeProfile`, порты `ProfileStore`, `RecentProjectsStore` в kit — тесты kit 5.1 зелёные
+- [ ] 5.3 Тесты `acp_client_io`: `JsonFileProfileStore` (файл без значения токена), `JsonFileRecentProjectsStore`, `ConfigTransportResolver` с фабриками stdio и WebSocket против процесса и сокета на Dart VM (acp-client-kit «IO-адаптеры клиента»)
+- [ ] 5.4 Пакет `packages/dart/acp_client_io`: перенос `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider` из `apps/codelab_app/lib/core/platform/` (с их тестами), фабрики настоящих транспортов, `JsonFile*Store` — 5.3 зелёный
 - [ ] 5.5 Фасад: формы профиля пишут черновик, подключение — через резолверы; app импортирует адаптеры из `acp_client_io`; тесты 5.0 без правок; PR итерации 5
 
 ## 6. Команды, опции, инспектор, диагностика (5.6 + 5.7, итерация 6)

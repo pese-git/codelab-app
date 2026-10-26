@@ -4,6 +4,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:acp_client_core/acp_client_core.dart';
+import 'package:acp_client_kit/acp_client_kit.dart'
+    show
+        AcpClientBackend,
+        ClientWorkspace,
+        ConfigTransportResolver,
+        InMemorySecretSource;
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_transports/io.dart';
 import 'package:cherrypick/cherrypick.dart';
@@ -209,9 +215,24 @@ final class CodeLabPlatformModule extends Module {
 final class CodeLabPresentationModule extends Module {
   @override
   void builder(Scope currentScope) {
-    bind<CreateSession>()
+    // Токен WebSocket из формы подключения: Cubit кладёт значение, резолвер
+    // читает его по ссылке профиля (design D8 change `extract-acp-client-kit`).
+    bind<InMemorySecretSource>().toInstance(InMemorySecretSource());
+    bind<ClientWorkspace>()
         .toProvide(
-          () => CreateSession(currentScope.resolve<AcpClientApplication>()),
+          () => ClientWorkspace(
+            backend: AcpClientBackend(
+              currentScope.resolve<AcpClientApplication>(),
+            ),
+            resolvers: [
+              ConfigTransportResolver(
+                stdio: currentScope.resolve<CodeLabStdioTransportFactory>(),
+                webSocket: currentScope
+                    .resolve<CodeLabWebSocketTransportFactory>(),
+                secrets: currentScope.resolve<InMemorySecretSource>(),
+              ),
+            ],
+          ),
         )
         .singleton();
     bind<SendPrompt>()
@@ -222,11 +243,6 @@ final class CodeLabPresentationModule extends Module {
     bind<CancelTurn>()
         .toProvide(
           () => CancelTurn(currentScope.resolve<AcpClientApplication>()),
-        )
-        .singleton();
-    bind<Reconnect>()
-        .toProvide(
-          () => Reconnect(currentScope.resolve<AcpClientApplication>()),
         )
         .singleton();
     bind<RespondToPermission>()
@@ -247,18 +263,14 @@ final class CodeLabPresentationModule extends Module {
           () => CodeLabShellCubit(
             profile: currentScope.resolve<StdioAcpAgentProfile>(),
             application: currentScope.resolve<AcpClientApplication>(),
-            createSessionUseCase: currentScope.resolve<CreateSession>(),
             sendPromptUseCase: currentScope.resolve<SendPrompt>(),
             cancelTurnUseCase: currentScope.resolve<CancelTurn>(),
-            reconnectUseCase: currentScope.resolve<Reconnect>(),
             respondToPermissionUseCase: currentScope
                 .resolve<RespondToPermission>(),
             setSessionConfigOptionUseCase: currentScope
                 .resolve<SetSessionConfigOption>(),
-            stdioTransportFactory: currentScope
-                .resolve<CodeLabStdioTransportFactory>(),
-            webSocketTransportFactory: currentScope
-                .resolve<CodeLabWebSocketTransportFactory>(),
+            workspace: currentScope.resolve<ClientWorkspace>(),
+            secrets: currentScope.resolve<InMemorySecretSource>(),
             workingDirectoryProvider: currentScope
                 .resolve<WorkingDirectoryProvider>(),
             projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
@@ -307,10 +319,12 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
   CodeLabRootLifecycle rootLifecycle(
     AcpClientApplication application,
     AcpTransport transport,
+    ClientWorkspace workspace,
     CodeLabShellCubit shellCubit,
   ) => CodeLabRootLifecycle(
     application: application,
     transport: transport,
+    workspace: workspace,
     shellCubit: shellCubit,
   );
 }
@@ -319,13 +333,19 @@ final class CodeLabRootLifecycle implements Disposable {
   CodeLabRootLifecycle({
     required AcpClientApplication application,
     required AcpTransport transport,
+    required ClientWorkspace workspace,
     required CodeLabShellCubit shellCubit,
   }) : _application = application,
        _transport = transport,
+       _workspace = workspace,
        _shellCubit = shellCubit;
 
   final AcpClientApplication _application;
   final AcpTransport _transport;
+
+  /// Закрывается после Cubit (его подписчика) и до ядра клиента: kit не
+  /// закрывает `AcpClientApplication` сам.
+  final ClientWorkspace _workspace;
   final CodeLabShellCubit _shellCubit;
   var _isDisposed = false;
 
@@ -337,6 +357,7 @@ final class CodeLabRootLifecycle implements Disposable {
 
     _isDisposed = true;
     await _shellCubit.close();
+    await _workspace.dispose();
     await _transport.close();
     await _application.dispose();
   }

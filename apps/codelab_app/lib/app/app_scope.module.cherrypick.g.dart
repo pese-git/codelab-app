@@ -47,6 +47,7 @@ final class $CodeLabRootLifecycleModuleContract
           () => rootLifecycle(
             currentScope.resolve<AcpClientApplication>(),
             currentScope.resolve<AcpTransport>(),
+            currentScope.resolve<ClientWorkspace>(),
             currentScope.resolve<CodeLabShellCubit>(),
           ),
         )
