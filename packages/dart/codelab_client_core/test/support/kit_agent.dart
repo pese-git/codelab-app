@@ -16,7 +16,17 @@ final class KitAgent {
     transport.initializeAgentCapabilities = capabilities;
   }
 
-  final transport = FakeAcpTransport();
+  /// Транспорт текущего процесса агента; резолвер читает его при каждом
+  /// открытии, поэтому [restartAgent] подменяет агента для `reconnect`.
+  var transport = FakeAcpTransport();
+
+  /// Новый «процесс» агента для следующего `reconnect()`: прежний транспорт
+  /// ядро клиента закрывает при замене и повторно не открывает.
+  void restartAgent({
+    AgentCapabilities capabilities = const AgentCapabilities(),
+  }) =>
+      transport = FakeAcpTransport()
+        ..initializeAgentCapabilities = capabilities;
   final application = AcpClientApplication(transport: FakeAcpTransport());
   late final ClientWorkspace workspace = ClientWorkspace(
     backend: AcpClientBackend(application),
