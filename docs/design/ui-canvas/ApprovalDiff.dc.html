@@ -66,7 +66,7 @@ body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-appl
 
     <div style="display:flex;gap:16px;">
       <div><span class="type-caption">Command</span><div class="type-body mono" style="font-size:13px;margin-top:2px;">edit_file</div></div>
-      <div><span class="type-caption">CWD</span><div class="type-body mono" style="font-size:13px;margin-top:2px;">apps/codelab_app</div></div>
+      <div><span class="type-caption">CWD</span><div class="type-body mono" style="font-size:13px;margin-top:2px;">apps/codelab_desktop</div></div>
     </div>
 
     <button class="raw-toggle">
@@ -93,7 +93,7 @@ body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-appl
       <div class="type-caption" style="margin-top:6px;">Full diff has 3 more unchanged lines · <a href="#" style="color:var(--accent);text-decoration:none;">expand file</a></div>
     </div>
 
-    <!-- Options — one per PermissionOptionKind (packages/dart/acp_protocol/lib/src/acp/permission.dart:30-34) -->
+    <!-- Options — one per PermissionOptionKind (packages/dart/codelab_acp_protocol/lib/src/acp/permission.dart:30-34) -->
     <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
       <button class="btn btn-primary" style="justify-content:flex-start;">
         <svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10.5 8 14l8-9"/></svg>
@@ -117,7 +117,7 @@ body{margin:0;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-appl
       </button>
     </div>
 
-    <div class="type-caption" style="border-top:1px solid var(--border);padding-top:8px;">Each button maps to a real <span class="mono">PermissionOptionKind</span> (allow_once / allow_always / reject_once / reject_always) — today's <span class="mono">AcpApprovalOption</span> has no <span class="mono">kind</span> field and guesses shortcuts by searching the label text for "allow"/"reject".</div>
+    <div class="type-caption" style="border-top:1px solid var(--border);padding-top:8px;">Each button maps to a real <span class="mono">PermissionOptionKind</span> (allow_once / allow_always / reject_once / reject_always) — today's <span class="mono">CodeLabApprovalOption</span> has no <span class="mono">kind</span> field and guesses shortcuts by searching the label text for "allow"/"reject".</div>
   </div>
 </div>
 </x-dc>

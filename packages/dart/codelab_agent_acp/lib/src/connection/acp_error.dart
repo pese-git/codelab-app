@@ -1,4 +1,4 @@
-import 'package:acp_protocol/acp_protocol.dart';
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
 /// Отказ обработчика запроса с кодом JSON-RPC (§13.10, «Коды ошибок»).
 ///

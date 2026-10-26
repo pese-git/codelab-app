@@ -226,7 +226,7 @@ Consistency важнее локального удобства.
 
 ## 11. Protocol errors
 
-Protocol errors принадлежат `acp_protocol`.
+Protocol errors принадлежат `codelab_acp_protocol`.
 
 Примеры:
 
@@ -274,7 +274,7 @@ Presentation может затем показать понятное сообщ�
 
 ## 14. Transport errors
 
-Transport errors принадлежат `acp_transports`.
+Transport errors принадлежат `codelab_acp_transports`.
 
 Примеры:
 
@@ -1212,13 +1212,13 @@ Failure type должен находиться рядом с boundary, contract 
 Например:
 
 ```text id="yyt4ya"
-acp_protocol
+codelab_acp_protocol
     → ProtocolFailure
 
-acp_transports
+codelab_acp_transports
     → TransportFailure
 
-acp_client_core
+codelab_client_acp
     → SessionFailure / ClientFailure
 
 platform adapter

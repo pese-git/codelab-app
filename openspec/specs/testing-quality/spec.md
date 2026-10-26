@@ -52,7 +52,7 @@ CodeLab SHALL тестировать переходы состояния сес�
 - **THEN** тесты подтверждают, что каждый запрос получает outcome cancelled
 
 ### Requirement: Интеграционные тесты stdio
-CodeLab SHALL тестировать stdio-интеграцию с `codelab-agent` либо совместимым тестовым двойником, использующим ту же семантику запуска/профиля. E2E-тесты `apps/codelab_app/integration_test/` SHALL параметризоваться агентом через `--dart-define=CODELAB_E2E_AGENT=scripted|dart` (по умолчанию `scripted`) и помощник `integration_test/support/e2e_agent.dart`; в режиме `dart` агент — бинарь `CODELAB_E2E_AGENT_BIN` со сценарием `integration_test/llm_scripts/<режим>.json`. Тесты поведения именно scripted-агента SHALL иметь тег `scripted-only` и исключаться в режиме `dart`. Код `apps/codelab_app/lib` для этого НЕ SHALL меняться. Прогон на устройстве или симуляторе (`melos run test:e2e:app:dart-agent`) SHALL выполняться только в ветке `release/<version>`; в feature-ветке тесты SHALL проходить статический анализ.
+CodeLab SHALL тестировать stdio-интеграцию с `codelab-agent` либо совместимым тестовым двойником, использующим ту же семантику запуска/профиля. E2E-тесты `apps/codelab_desktop/integration_test/` SHALL параметризоваться агентом через `--dart-define=CODELAB_E2E_AGENT=scripted|dart` (по умолчанию `scripted`) и помощник `integration_test/support/e2e_agent.dart`; в режиме `dart` агент — бинарь `CODELAB_E2E_AGENT_BIN` со сценарием `integration_test/llm_scripts/<режим>.json`. Тесты поведения именно scripted-агента SHALL иметь тег `scripted-only` и исключаться в режиме `dart`. Код `apps/codelab_desktop/lib` для этого НЕ SHALL меняться. Прогон на устройстве или симуляторе (`melos run test:e2e:app:dart-agent`) SHALL выполняться только в ветке `release/<version>`; в feature-ветке тесты SHALL проходить статический анализ.
 
 #### Scenario: Референсный агент инициализируется
 - **WHEN** тест stdio-интеграции запускает настроенную команду
@@ -97,14 +97,14 @@ CodeLab SHALL запускать CI (`.github/workflows/ci.yml`) на кажды
 
 #### Scenario: Интеграционные тесты на Dart VM
 - **WHEN** CI запускается на pull request, push или по расписанию
-- **THEN** интеграционные тесты чистых Dart-пакетов (реальные процессы и сокеты `acp_transports`) выполняются в джобе `test` на `ubuntu-latest`, а джобов на macOS в workflow нет
+- **THEN** интеграционные тесты чистых Dart-пакетов (реальные процессы и сокеты `codelab_acp_transports`) выполняются в джобе `test` на `ubuntu-latest`, а джобов на macOS в workflow нет
 
 #### Scenario: Шаблон pull request
 - **WHEN** автор открывает pull request на GitHub
 - **THEN** описание заполнено чек-листом из `.github/pull_request_template.md` с пунктами об OpenSpec change, тестах и стороннем коде
 
 ### Requirement: Клиентская conformance-проверка на корпусе фикстур
-CodeLab SHALL проигрывать каждую golden-фикстуру с ролью `client` против `AcpClientApplication` тестом `packages/dart/acp_client_core/test/fixtures/client_fixture_conformance_test.dart`. Melos-скрипт `conformance:client` SHALL запускать эту проверку и SHALL входить в полную проверку `check` и в джоб CI `conformance`.
+CodeLab SHALL проигрывать каждую golden-фикстуру с ролью `client` против `AcpClientApplication` тестом `packages/dart/codelab_client_acp/test/fixtures/client_fixture_conformance_test.dart`. Melos-скрипт `conformance:client` SHALL запускать эту проверку и SHALL входить в полную проверку `check` и в джоб CI `conformance`.
 
 #### Scenario: Корпус этапа 0 проходит
 - **WHEN** выполняется `fvm dart run melos run conformance:client`
@@ -113,4 +113,15 @@ CodeLab SHALL проигрывать каждую golden-фикстуру с р�
 #### Scenario: Полная проверка включает клиентский прогон
 - **WHEN** выполняется `fvm dart run melos run check` или джоб CI `conformance`
 - **THEN** запускается и `protocol-conformance`, и `conformance:client`
+
+### Requirement: Характеризационные тесты фасада приложения
+Перенос логики клиента из `CodeLabShellCubit` в `codelab_client_core` SHALL быть защищён характеризационными тестами публичной поверхности Cubit в `apps/codelab_desktop/test/features/workbench/application/shell_cubit_characterization/`: подключение, сессии, промпты и очередь, отмена, опции конфигурации, одобрения, переподключение. Тесты SHALL создавать Cubit через граф cherrypick app (`CodeLabTestBinding`) с `FakeAcpTransport`, проверять только публичные методы и поля `CodeLabShellState` и конечные состояния, а не число промежуточных `emit`. Тесты SHALL быть зелёными до первого переноса и после каждой итерации change без изменения их текста; тексты 8 интеграционных тестов `apps/codelab_desktop/integration_test/` на время переноса НЕ SHALL меняться.
+
+#### Scenario: Тесты пишутся до переноса
+- **WHEN** открывается первый PR change `extract-acp-client-kit`
+- **THEN** он содержит только характеризационные тесты, код `apps/codelab_desktop/lib` не изменён, и тесты зелёные
+
+#### Scenario: Перенос не меняет тесты
+- **WHEN** итерация переносит часть логики Cubit в kit
+- **THEN** характеризационные тесты и `test/widget_test.dart` зелёные без правок, а `fvm dart analyze` собирает интеграционные тесты
 

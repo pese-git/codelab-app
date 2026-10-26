@@ -104,7 +104,7 @@ Permission policy должна иметь одного authoritative owner.
 Предпочтительно:
 
 ```text
-acp_client_core / application security layer
+codelab_client_acp / application security layer
 ```
 
 или отдельный reusable security component, если это оправдано архитектурой.
@@ -113,8 +113,8 @@ acp_client_core / application security layer
 
 * Widget;
 * dialog;
-* `acp_protocol`;
-* `acp_transports`;
+* `codelab_acp_protocol`;
+* `codelab_acp_transports`;
 * platform plugin.
 
 ---
@@ -142,7 +142,7 @@ Presentation НЕ ДОЛЖНА:
 
 ## 5. Protocol responsibility
 
-`acp_protocol` может описывать protocol representation permission request/response, если это часть ACP.
+`codelab_acp_protocol` может описывать protocol representation permission request/response, если это часть ACP.
 
 Он НЕ ДОЛЖЕН:
 
@@ -156,7 +156,7 @@ Presentation НЕ ДОЛЖНА:
 
 ## 6. Transport responsibility
 
-`acp_transports` только доставляет ACP data.
+`codelab_acp_transports` только доставляет ACP data.
 
 Transport НЕ ДОЛЖЕН:
 
@@ -879,7 +879,7 @@ ACP deny response
 
 ## 53. Test fake
 
-`acp_testing` может предоставлять:
+`codelab_acp_testing` может предоставлять:
 
 * fake permission policy;
 * permission request builder;

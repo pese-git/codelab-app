@@ -1,4 +1,4 @@
-import 'package:acp_protocol/acp_protocol.dart' as acp;
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' as acp;
 import 'package:codelab_agent_acp/src/connection/acp_error.dart';
 import 'package:codelab_agent_acp/src/event_projection.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';

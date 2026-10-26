@@ -15,13 +15,13 @@
 
 ## 2. Границы
 
-* Пакет НЕ ДОЛЖЕН импортировать `dart:io`, `package:flutter/` и `package:acp_transports/io.dart` (PKG-3): правило `packages/dart/codelab_architecture_tests/test/support/rules.dart`, проверка — `melos run guard`.
-* `dependencies` — только `codelab_agent_core`, `acp_protocol`, `acp_transports`, `meta`, `async` (§1.2 документа ядра). Расширение — только через OpenSpec change. Проверка — `pubspec_allowlist_test.dart`.
-* Методы, поля и значения перечислений ACP берутся только из `acp_protocol` и `docs/acp/protocol/`. Всё сверх них — `_meta.codelab.*`, `data.codelab` или методы `_codelab/*`, и каждое расширение вводит OpenSpec change (`AGENTS.md` §3.4, ACP-2).
+* Пакет НЕ ДОЛЖЕН импортировать `dart:io`, `package:flutter/` и `package:codelab_acp_transports/io.dart` (PKG-3): правило `packages/dart/codelab_architecture_tests/test/support/rules.dart`, проверка — `melos run guard`.
+* `dependencies` — только `codelab_agent_core`, `codelab_acp_protocol`, `codelab_acp_transports`, `meta`, `async` (§1.2 документа ядра). Расширение — только через OpenSpec change. Проверка — `pubspec_allowlist_test.dart`.
+* Методы, поля и значения перечислений ACP берутся только из `codelab_acp_protocol` и `docs/acp/protocol/`. Всё сверх них — `_meta.codelab.*`, `data.codelab` или методы `_codelab/*`, и каждое расширение вводит OpenSpec change (`AGENTS.md` §3.4, ACP-2).
 * Из ядра используется публичный барель `package:codelab_agent_core/codelab_agent_core.dart`.
 
 ## 3. Тесты
 
 * TDD — по `packages/dart/codelab_agent_core/AGENTS.md` §2.
-* Сервер проверяется через пару транспортов в памяти `InProcessAcpLink` из `acp_testing`: кадры идут тем же кодеком, что на проводе, но без процессов и сокетов.
+* Сервер проверяется через пару транспортов в памяти `InProcessAcpLink` из `codelab_acp_testing`: кадры идут тем же кодеком, что на проводе, но без процессов и сокетов.
 * Модель — `ScriptedStreamFunction`, время — `FakeClock`, id — `SequentialIdGenerator`: тесты детерминированы.

@@ -11,7 +11,7 @@ const webUnsafe = [
   'dart:js_interop',
   'package:web/',
   'package:flutter/',
-  'package:acp_transports/io.dart',
+  'package:codelab_acp_transports/io.dart',
 ];
 
 final class PackageRule {
@@ -44,24 +44,37 @@ const rules = [
     'packages/dart/codelab_agent_core',
     forbidden: [
       ...webUnsafe,
-      'package:acp_protocol/',
-      'package:acp_transports/',
+      'package:codelab_acp_protocol/',
+      'package:codelab_acp_transports/',
     ],
   ),
   PackageRule(
-    'packages/dart/acp_transports',
+    'packages/dart/codelab_acp_transports',
     forbidden: webUnsafe,
     exclude: ['lib/io.dart', 'lib/src/io/'],
   ),
-  PackageRule('packages/dart/acp_client_core', forbidden: webUnsafe),
+  PackageRule('packages/dart/codelab_client_acp', forbidden: webUnsafe),
+  // Общий клиентский слой app и CLI — чистый Dart и web-безопасен; IO-адаптеры
+  // клиента — в codelab_client_io (design D11 change `extract-acp-client-kit`).
+  PackageRule('packages/dart/codelab_client_core', forbidden: webUnsafe),
+  // dart:io-адаптеры клиента для app и CLI: dart:io и IO-транспорты разрешены,
+  // Flutter — нет (design D11 change `extract-acp-client-kit`).
+  PackageRule(
+    'packages/dart/codelab_client_io',
+    forbidden: ['package:flutter/'],
+  ),
   PackageRule(
     'packages/dart/codelab_agent_io',
-    forbidden: ['package:flutter/', 'package:acp_'],
+    forbidden: [
+      'package:flutter/',
+      'package:codelab_acp_',
+      'package:codelab_client_',
+    ],
   ),
   // ACP-сервер агента обслуживает любой транспорт: транспорты и локальный
   // листинг передаёт хост (PKG-3).
   PackageRule('packages/dart/codelab_agent_acp', forbidden: webUnsafe),
-  PackageRule('apps/codelab_app', forbidden: ['package:codelab_agent_']),
+  PackageRule('apps/codelab_desktop', forbidden: ['package:codelab_agent_']),
   // Бинарь агента — чистый Dart и composition root: IO-транспорты ему
   // разрешены, Flutter и клиентские пакеты — нет (design.md change
   // `add-codelab-agent-binary`, D11). HOST-6 — host_assembly_guard_test.dart.
@@ -70,18 +83,17 @@ const rules = [
     forbidden: [
       'package:flutter/',
       'package:fluent_ui/',
-      'package:acp_client_core/',
-      'package:acp_ui/',
+      'package:codelab_client_acp/',
+      'package:codelab_ui/',
     ],
   ),
   // stage 8: codelab_agent_mcp — webUnsafe
-  // stage 5: acp_client_kit — webUnsafe; acp_client_io — ['package:flutter/']
   // stage 6: apps/codelab_cli — ['package:flutter/', 'package:codelab_agent_'];
   //   apps/codelab_cli/lib/src — ['package:dart_tui/'], exclude: ['tui/'], sealExclude: false
   //   (dart_tui only in lib/src/tui/, §12.2.7; the rest of the CLI goes through TuiRunner)
   // stage 7: codelab_embedded — webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/'];
-  //   apps/codelab_app — ['package:codelab_agent_'] already above
-  // stage 7: codelab_setup — [...webUnsafe, 'package:codelab_agent_io/', 'package:acp_', 'package:flutter/'],
+  //   apps/codelab_desktop — ['package:codelab_agent_'] already above
+  // stage 7: codelab_setup — [...webUnsafe, 'package:codelab_agent_io/', 'package:codelab_acp_', 'package:codelab_client_', 'package:flutter/'],
   //   exclude: ['lib/io.dart', 'lib/src/io/'];
-  //   apps/codelab_app/lib/features/settings/presentation — ['package:codelab_setup/io.dart', 'dart:io'] (§12.4.2, SETUP-9)
+  //   apps/codelab_desktop/lib/features/settings/presentation — ['package:codelab_setup/io.dart', 'dart:io'] (§12.4.2, SETUP-9)
 ];

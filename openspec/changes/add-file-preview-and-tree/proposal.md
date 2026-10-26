@@ -29,8 +29,8 @@ _(нет — `agent-workbench-ui` не трогаем текстово, нова
 
 ## Impact
 
-- `apps/codelab_app/lib/core/platform/` — новый reader для directory listing (`Directory.list()`, ленивый, с игнор-листом) и file read, за infrastructure-boundary (presentation не трогает `dart:io` напрямую, `AGENTS.md` §11).
-- `packages/flutter/acp_ui/lib/src/organisms/` — новый `AcpFilePreviewPanel` (переиспользуется для обоих источников) и `AcpDirectoryTree`.
-- `apps/codelab_app/lib/features/workbench/presentation/widgets/` — вкладка Sessions/Files, точка входа предпросмотра у tool call карточек в inspector/main pane.
-- `apps/codelab_app/lib/features/workbench/application/shell_cubit.dart` — команды открытия/закрытия preview, состояние выбранного узла дерева (ephemeral UI state — см. design.md по аналогии с решением для command palette/dialog).
-- `apps/codelab_app/test/widget_test.dart` — тесты на оба источника preview и на дерево.
+- `apps/codelab_desktop/lib/core/platform/` — новый reader для directory listing (`Directory.list()`, ленивый, с игнор-листом) и file read, за infrastructure-boundary (presentation не трогает `dart:io` напрямую, `AGENTS.md` §11).
+- `packages/flutter/codelab_ui/lib/src/organisms/` — новый `AcpFilePreviewPanel` (переиспользуется для обоих источников) и `AcpDirectoryTree`.
+- `apps/codelab_desktop/lib/features/workbench/presentation/widgets/` — вкладка Sessions/Files, точка входа предпросмотра у tool call карточек в inspector/main pane.
+- `apps/codelab_desktop/lib/features/workbench/application/shell_cubit.dart` — команды открытия/закрытия preview, состояние выбранного узла дерева (ephemeral UI state — см. design.md по аналогии с решением для command palette/dialog).
+- `apps/codelab_desktop/test/widget_test.dart` — тесты на оба источника preview и на дерево.

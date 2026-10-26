@@ -9,7 +9,7 @@
 Раздел задаёт, как codelab-app показывает модель отображения из §12.1: markdown-ответы с
 подсветкой кода (D-06), diff правок (D-07), мысли модели в сворачиваемом блоке (D-08), usage и
 стоимость в статусе чата (D-09) и вложения в композере (D-12). Работа идёт после разделения
-Cubit-ов (задача 5.9): app получает `SessionView` из `acp_client_kit` и только отображает его.
+Cubit-ов (задача 5.9): app получает `SessionView` из `codelab_client_core` и только отображает его.
 Логика проекции, разбора markdown (`IncrementalMarkdown`, §12.1.4), построения hunks
 (`LineDiff`, §12.1.3), строки инструмента (`ToolRowFormatter`, §12.1.6), статус-строки
 (`SessionStatusBar`, §12.1.5) и выбора `ContentBlock` (`PromptContentBuilder.build`, §12.1.7)
@@ -17,13 +17,13 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `acp_clie
 
 Исходная точка в коде сегодня:
 
-* `AcpTranscriptPanel` (`packages/flutter/acp_ui/lib/src/organisms/acp_transcript_panel.dart`)
-  рисует `List<AcpTranscriptEntry>` через `ListView.separated`. Тело агента выводится одним
-  `AcpText` без разметки. Мысли и ответ склеиваются в одинаковые записи «Agent»
+* `CodeLabTranscriptPanel` (`packages/flutter/codelab_ui/lib/src/organisms/codelab_transcript_panel.dart`)
+  рисует `List<CodeLabTranscriptEntry>` через `ListView.separated`. Тело агента выводится одним
+  `CodeLabText` без разметки. Мысли и ответ склеиваются в одинаковые записи «Agent»
   (`_StreamingChunkKind` в `shell_cubit.dart`).
-* Вызов инструмента показывает `AcpToolCallSummary` (имя, статус, цель, деталь) и встроенную
-  карточку одобрения `AcpTranscriptApproval`. У карточки есть только текстовый `diffSummary`.
-* `AcpPromptComposer` принимает только текст, команды `/` и чипы опций конфигурации.
+* Вызов инструмента показывает `CodeLabToolCallSummary` (имя, статус, цель, деталь) и встроенную
+  карточку одобрения `CodeLabTranscriptApproval`. У карточки есть только текстовый `diffSummary`.
+* `CodeLabPromptComposer` принимает только текст, команды `/` и чипы опций конфигурации.
 * В `pubspec.yaml` пакетов нет markdown, подсветки, drag&drop, чтения изображений из буфера и
   открытия ссылок. Из плагинов есть только `file_selector`, он остаётся в app.
 
@@ -39,46 +39,46 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `acp_clie
 
 ## 12.3.2. Контракт
 
-**Размещение компонентов.** `acp_ui` (ui_kit) содержит виджеты и собственные
-презентационные модели без бизнес-логики и без зависимости от `acp_client_kit`. Feature
-`workbench` содержит Cubit-ы, маппер kit → `acp_ui` и обвязку с плагинами.
+**Размещение компонентов.** `codelab_ui` (ui_kit) содержит виджеты и собственные
+презентационные модели без бизнес-логики и без зависимости от `codelab_client_core`. Feature
+`workbench` содержит Cubit-ы, маппер kit → `codelab_ui` и обвязку с плагинами.
 
 | Компонент | Пакет / путь | Слой | Ответственность |
 |---|---|---|---|
-| `AcpTranscriptRow` и наследники, `AcpMdBlock`, `AcpMdInline` | `acp_ui/lib/src/models/` | ui_kit | неизменяемые модели строк ленты и markdown-блоков |
-| `AcpTranscriptPanel` (расширен) | `acp_ui/lib/src/organisms/` | ui_kit | виртуализированная лента строк, следование за хвостом, автопрокрутка к одобрению |
-| `AcpMarkdownBlockView`, `AcpCodeBlock` | `acp_ui/lib/src/molecules/` | ui_kit | один markdown-блок; код с подсветкой, языком и кнопкой копирования |
-| `AcpThoughtBlock` | `acp_ui/lib/src/molecules/` | ui_kit | сворачиваемый блок мыслей |
-| `AcpDiffView`, `AcpDiffViewerDialog` | `acp_ui/lib/src/molecules/`, `organisms/` | ui_kit | unified и side-by-side, свёрнутый предпросмотр, полный просмотр в диалоге |
-| `AcpSessionStatusBar` | `acp_ui/lib/src/molecules/` | ui_kit | модель, режим, токены, стоимость, заполнение контекста |
-| `AcpAttachmentChip`, композер с вложениями | `acp_ui/lib/src/molecules/` | ui_kit | чипы, удаление, подсветка зоны сброса |
-| `AcpCodeHighlighter`, `AcpCodeTheme` | `acp_ui/lib/src/rendering/` | ui_kit | токенизация кода (синхронно или в isolate), кеш, палитры светлой и тёмной темы |
-| `TranscriptRowMapper` | `apps/codelab_app/lib/features/workbench/application/ui_mappers.dart` | application | `SessionView` → `List<AcpTranscriptRow>` с переиспользованием неизменившихся строк |
+| `AcpTranscriptRow` и наследники, `AcpMdBlock`, `AcpMdInline` | `codelab_ui/lib/src/models/` | ui_kit | неизменяемые модели строк ленты и markdown-блоков |
+| `CodeLabTranscriptPanel` (расширен) | `codelab_ui/lib/src/organisms/` | ui_kit | виртуализированная лента строк, следование за хвостом, автопрокрутка к одобрению |
+| `AcpMarkdownBlockView`, `AcpCodeBlock` | `codelab_ui/lib/src/molecules/` | ui_kit | один markdown-блок; код с подсветкой, языком и кнопкой копирования |
+| `AcpThoughtBlock` | `codelab_ui/lib/src/molecules/` | ui_kit | сворачиваемый блок мыслей |
+| `AcpDiffView`, `AcpDiffViewerDialog` | `codelab_ui/lib/src/molecules/`, `organisms/` | ui_kit | unified и side-by-side, свёрнутый предпросмотр, полный просмотр в диалоге |
+| `AcpSessionStatusBar` | `codelab_ui/lib/src/molecules/` | ui_kit | модель, режим, токены, стоимость, заполнение контекста |
+| `AcpAttachmentChip`, композер с вложениями | `codelab_ui/lib/src/molecules/` | ui_kit | чипы, удаление, подсветка зоны сброса |
+| `AcpCodeHighlighter`, `AcpCodeTheme` | `codelab_ui/lib/src/rendering/` | ui_kit | токенизация кода (синхронно или в isolate), кеш, палитры светлой и тёмной темы |
+| `TranscriptRowMapper` | `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart` | application | `SessionView` → `List<AcpTranscriptRow>` с переиспользованием неизменившихся строк |
 | `ActiveSessionCubit` (из 5.9) | `.../workbench/application/` | application | строки ленты и статус активной сессии |
 | `TranscriptViewCubit` | `.../workbench/application/` | application | только UI-состояние: ручное раскрытие блоков, режим diff |
 | `ComposerCubit` | `.../workbench/application/` | application | черновик и вложения по сессиям, лимиты, отправка через `SessionHandle.send` |
-| `AttachmentIntake`, `ClipboardAttachmentReader`, `ExternalLinkOpener` | `apps/codelab_app/lib/core/platform/` | infrastructure | чтение файлов и буфера, MIME, открытие URL |
+| `AttachmentIntake`, `ClipboardAttachmentReader`, `ExternalLinkOpener` | `apps/codelab_desktop/lib/core/platform/` | infrastructure | чтение файлов и буфера, MIME, открытие URL |
 | `ComposerDropZone` | `.../workbench/presentation/widgets/` | presentation | обёртка над плагином drag&drop, передаёт только пути |
-| `ProjectFilesCubit` (после MVP, D-13, §12.6.8) | `apps/codelab_app/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, предпросмотр |
-| `AcpFileTree`, `AcpFilePreview` (после MVP, §12.6.8) | `acp_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`AcpCodeHighlighter`) |
-| `ProjectFilesTab` (после MVP, §12.6.8) | `.../project_files/presentation/` | presentation | вкладка сайдбара рядом с `AcpSessionSidebar`, связь с `ComposerCubit` |
+| `ProjectFilesCubit` (после MVP, D-13, §12.6.8) | `apps/codelab_desktop/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, предпросмотр |
+| `AcpFileTree`, `AcpFilePreview` (после MVP, §12.6.8) | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`AcpCodeHighlighter`) |
+| `ProjectFilesTab` (после MVP, §12.6.8) | `.../project_files/presentation/` | presentation | вкладка сайдбара рядом с `CodeLabSessionSidebar`, связь с `ComposerCubit` |
 | `SessionSearchCubit` (после MVP, D-17, A12) | `.../workbench/application/` | application | владеет `SessionSearch` kit (§12.6.12): склейка ввода, фильтр даты, область, строки результатов |
-| `AcpSessionSearchField`, `AcpSessionSearchResults`, `AcpSessionSearchRowData` (после MVP, A12) | `acp_ui/lib/src/molecules/`, `organisms/`, `models/` | ui_kit | поле поиска с фильтрами даты и области; список результатов с подсветкой и сниппетами |
-| `AppDestination`, `NavigationCubit` (A13) | `apps/codelab_app/lib/app/navigation/` | application | закрытый список экранов, текущий экран и вкладка инспектора, последняя страница настроек; переходы — только через Cubit |
+| `AcpSessionSearchField`, `AcpSessionSearchResults`, `AcpSessionSearchRowData` (после MVP, A12) | `codelab_ui/lib/src/molecules/`, `organisms/`, `models/` | ui_kit | поле поиска с фильтрами даты и области; список результатов с подсветкой и сниппетами |
+| `AppDestination`, `NavigationCubit` (A13) | `apps/codelab_desktop/lib/app/navigation/` | application | закрытый список экранов, текущий экран и вкладка инспектора, последняя страница настроек; переходы — только через Cubit |
 | `CommandPaletteCubit` (A13, R-20) | `.../workbench/application/` | application | группы палитры: команды агента из `available_commands_update`, действия сессии, переходы, действия app; нечёткий поиск |
-| `AcpTurnTimeline`, `AcpTurnStepData` (после MVP, D-22, A14) | `acp_ui/lib/src/organisms/`, `models/` | ui_kit | панель дока «Timeline»: шаги хода, раскрытие шага до его вызовов |
+| `AcpTurnTimeline`, `AcpTurnStepData` (после MVP, D-22, A14) | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | панель дока «Timeline»: шаги хода, раскрытие шага до его вызовов |
 | `SubagentBoardCubit`, `JobBoardCubit` (после MVP, D-25, A15) | `.../workbench/application/` | application | снимки `_codelab/subagents/*` и `_codelab/jobs/*` через kit, действия «Stop», «Kill», «Output» |
-| `AcpTaskBoard`, `AcpTaskRowData` (после MVP, D-25, A15) | `acp_ui/lib/src/organisms/`, `models/` | ui_kit | таблицы субагентов и фоновых задач, панель транскрипта ребёнка только для чтения |
+| `AcpTaskBoard`, `AcpTaskRowData` (после MVP, D-25, A15) | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | таблицы субагентов и фоновых задач, панель транскрипта ребёнка только для чтения |
 
 **Поток состояния.**
 
 ```mermaid
 flowchart LR
-    subgraph Kit["acp_client_kit (чистый Dart)"]
+    subgraph Kit["codelab_client_core (чистый Dart)"]
         SV["SessionView<br/>transcript, statusBar, queue"]
         PAD["PromptContentBuilder.build"]
     end
-    subgraph App["codelab_app / application"]
+    subgraph App["codelab_desktop / application"]
         MAP["TranscriptRowMapper<br/>кеш по identical"]
         ASC["ActiveSessionCubit<br/>rows, status"]
         TVC["TranscriptViewCubit<br/>expansion, diffLayout"]
@@ -89,10 +89,10 @@ flowchart LR
         CR["ClipboardAttachmentReader"]
         LO["ExternalLinkOpener"]
     end
-    subgraph UI["acp_ui + presentation"]
-        TP["AcpTranscriptPanel"]
+    subgraph UI["codelab_ui + presentation"]
+        TP["CodeLabTranscriptPanel"]
         SB["AcpSessionStatusBar"]
-        PC["AcpPromptComposer + ComposerDropZone"]
+        PC["CodeLabPromptComposer + ComposerDropZone"]
     end
     SV --> MAP --> ASC --> TP
     ASC --> SB
@@ -108,7 +108,7 @@ flowchart LR
 **Состояния Cubit-ов.** Неизменяемые; `copyWith` и `==` опущены.
 
 ```dart
-// apps/codelab_app/lib/features/workbench/application/active_session_cubit.dart
+// apps/codelab_desktop/lib/features/workbench/application/active_session_cubit.dart
 final class ActiveSessionState {
   final SessionId? sessionId;
   final int sourceRevision;                  // SessionView.revision, из которого построены rows
@@ -121,7 +121,7 @@ final class ActiveSessionState {
 final class TranscriptViewState {
   final Map<String, bool> expansionOverrides; // id строки мыслей/diff → выбор пользователя
   final AcpDiffLayoutPreference diffLayout;   // auto | unified | sideBySide
-  final AcpViewMode viewMode;                 // существующий summary | normal | verbose
+  final CodeLabViewMode viewMode;                 // существующий summary | normal | verbose
 }
 
 // .../application/composer_cubit.dart
@@ -148,7 +148,7 @@ final class DraftAttachment {
 пользователя. Это UI-состояние, а не состояние сессии. Оно не попадает в kit и не
 сохраняется между запусками.
 
-**Публичные API виджетов `acp_ui`.**
+**Публичные API виджетов `codelab_ui`.**
 
 ```dart
 // Строки ленты. Каждая строка неизменяема; равенство — по id и ревизии содержимого.
@@ -173,23 +173,23 @@ final class AcpToolCallRow extends AcpTranscriptRow {
   final List<AcpDiffData> diffs;            // из ToolDiffContent.diff (DiffView)
   final List<String>? terminalTail;         // ToolTerminalContent.output.tail
   final String? spillPath;                  // ToolTextContent.spill.path: только текст с копированием
-  final AcpTranscriptApproval? approval;    // существующий тип, без изменений
+  final CodeLabTranscriptApproval? approval;    // существующий тип, без изменений
 }
-final class AcpNoticeRow extends AcpTranscriptRow { final AcpTone tone; final String text; }
+final class AcpNoticeRow extends AcpTranscriptRow { final CodeLabTone tone; final String text; }
 
-class AcpTranscriptPanel extends StatefulWidget {
-  const AcpTranscriptPanel({
+class CodeLabTranscriptPanel extends StatefulWidget {
+  const CodeLabTranscriptPanel({
     required List<AcpTranscriptRow> rows,
     Map<String, bool> expansionOverrides = const {},
     ValueChanged<({String rowId, bool expanded})>? onExpansionChanged,
     AcpDiffLayoutPreference diffLayout = AcpDiffLayoutPreference.auto,
     AcpLinkTapCallback? onOpenLink,        // null — ссылки не кликабельны
-    AcpViewMode viewMode = AcpViewMode.normal,
+    CodeLabViewMode viewMode = CodeLabViewMode.normal,
     String emptyLabel = 'No transcript yet',
     Key? key,
   });
-  /// Переходный конструктор: старые AcpTranscriptEntry → строки (для превью и тестов).
-  factory AcpTranscriptPanel.entries({required List<AcpTranscriptEntry> entries, ...});
+  /// Переходный конструктор: старые CodeLabTranscriptEntry → строки (для превью и тестов).
+  factory CodeLabTranscriptPanel.entries({required List<CodeLabTranscriptEntry> entries, ...});
 }
 
 class AcpMarkdownBlockView extends StatelessWidget {
@@ -251,7 +251,7 @@ typedef AcpLinkTapCallback = void Function(Uri uri);
 **Порты платформы.**
 
 ```dart
-// apps/codelab_app/lib/core/platform/attachment_intake.dart
+// apps/codelab_desktop/lib/core/platform/attachment_intake.dart
 abstract interface class AttachmentIntake {
   /// Нормализует пути (realpath), отклоняет папки и нечитаемые файлы. Содержимое не читает:
   /// тип по сигнатуре, лимиты и блоки определяет PromptContentBuilder.build через AttachmentFiles.
@@ -272,7 +272,7 @@ final class IntakeRejected extends IntakeResult { final String path;
   final IntakeRejectReason reason; }               // directory | unreadable
 ```
 
-Реализация `AttachmentFiles` (порт kit, §12.1.1) в app — та же, что в CLI, из `acp_client_io`:
+Реализация `AttachmentFiles` (порт kit, §12.1.1) в app — та же, что в CLI, из `codelab_client_io`:
 app на десктопе может зависеть от `dart:io`-пакетов.
 
 ## 12.3.3. Алгоритмы
@@ -293,7 +293,7 @@ List<AcpTranscriptRow> previous)` вызывается на каждую нов�
    `ToolCallStatusView`, diff — из каждого `ToolDiffContent.diff`, хвост терминала — из
    `ToolTerminalContent.output`, путь выноса — из `ToolTextContent.spill` (файл лежит на машине
    агента, app его не открывает и не читает; строка показывает «полный вывод: <путь>» с кнопкой
-   копирования), одобрение — из существующего маппинга `AcpTranscriptApproval`. `NoticeItem` →
+   копирования), одобрение — из существующего маппинга `CodeLabTranscriptApproval`. `NoticeItem` →
    `AcpNoticeRow`. `UserItem` → `AcpUserRow` с чипами только для чтения из
    `UserItem.attachments` (`PromptAttachmentView`).
 4. Если ни одна строка не изменилась (тот же список по `identical`), Cubit не эмитит состояние.
@@ -303,10 +303,10 @@ List<AcpTranscriptRow> previous)` вызывается на каждую нов�
 
 ```mermaid
 sequenceDiagram
-    participant K as "acp_client_kit"
+    participant K as "codelab_client_core"
     participant M as "TranscriptRowMapper"
     participant C as "ActiveSessionCubit"
-    participant L as "AcpTranscriptPanel"
+    participant L as "CodeLabTranscriptPanel"
     participant H as "AcpCodeHighlighter"
     K->>M: "SessionView rev N, хвост изменился"
     M->>M: "стабильные строки из кеша, хвост заново"
@@ -323,7 +323,7 @@ sequenceDiagram
     H-->>L: "токены, строка перерисована один раз"
 ```
 
-1. `AcpTranscriptPanel` строит `ListView.builder` с `ValueKey(row.id)` и
+1. `CodeLabTranscriptPanel` строит `ListView.builder` с `ValueKey(row.id)` и
    `findChildIndexCallback`. Вставка строк выше не пересоздаёт `State` нижних строк.
 2. `AcpMarkdownBlockView` для стабильной строки обёрнут в `RepaintBoundary`. Родитель
    переиспользует тот же экземпляр модели, поэтому `Element` не перестраивается
@@ -395,13 +395,13 @@ info-строки блока. Неизвестный язык или его от
    `TranscriptViewCubit` для текущего запуска. В side-by-side удалённые и добавленные строки
    одного блока изменений ставятся рядом по порядку; лишние строки одной стороны получают пустую
    пару.
-2. Объём зависит от `AcpViewMode`: `summary` — одна строка `displayPath  +added −removed`; `normal` — предпросмотр
+2. Объём зависит от `CodeLabViewMode`: `summary` — одна строка `displayPath  +added −removed`; `normal` — предпросмотр
    (первые 2 hunk, не больше 20 строк); `verbose` — полностью, но не больше 300 строк inline.
 3. Большой diff (> 300 строк во всех hunks или > 512 КиБ текста) всегда свёрнут: показываются
    сводка, путь и первые 20 строк с кнопкой «Показать полностью» (`diff-open-full-<id>`).
    Кнопка открывает `AcpDiffViewerDialog` с виртуализированным `ListView.builder` по строкам.
 4. Подсветка внутри diff — по расширению пути (тот же `AcpCodeHighlighter`), и только когда весь
-   diff попадает в лимит `compute` из A4. Цвет фона строки — `AcpTone.success` и `AcpTone.danger`
+   diff попадает в лимит `compute` из A4. Цвет фона строки — `CodeLabTone.success` и `CodeLabTone.danger`
    с прозрачностью из темы. Знаки `+` и `−` в поле номеров строк показываются всегда, поэтому
    цвет не единственный носитель смысла.
 5. `change == created` показывается как «новый файл, N строк» (`N = added`) и далее теми же
@@ -414,14 +414,14 @@ info-строки блока. Неизвестный язык или его от
    текстового `diffSummary`. Кнопки и горячие клавиши карточки не меняются.
 
 **A6. Мысли.** `AcpThoughtRow` рисуется блоком, отличным от ответа: приглушённый текст
-(`AcpTextRole.caption`), левая пунктирная полоса, иконка и заголовок «Размышления».
+(`CodeLabTextRole.caption`), левая пунктирная полоса, иконка и заголовок «Размышления».
 
 1. Пока `streaming == true`, блок раскрыт и показывает последние 6 строк, с заголовком
    «Размышляет… N с». Таймер в заголовке тикает раз в секунду и перестраивает только заголовок.
 2. Когда поток закончился, блок сворачивается до заголовка «Размышления · N с» без анимации,
    чтобы лента не прыгала у читающего пользователя. Исключения: пользователь уже вручную
    раскрыл или свернул этот блок (`expansionOverrides[id]` побеждает), или включён
-   `AcpViewMode.verbose` (раскрыт по умолчанию).
+   `CodeLabViewMode.verbose` (раскрыт по умолчанию).
 3. В раскрытом законченном блоке текст выводится как есть, без разбора markdown (kit мысли не
    размечает, §12.1.2, шаг 7), с переносом строк. Если текст длиннее 4000 символов, видны первые
    4000 и кнопка «Показать всё».
@@ -452,8 +452,8 @@ info-строки блока. Неизвестный язык или его от
 `output`, как в CLI (§12.2.6). Подсказка показывает `input`, `output`, `cacheRead`,
 `cacheWrite`, `reasoning`. Если агент шлёт usage во время хода, значение хода обновляется на
 месте. Если только в ответе `session/prompt`, оно появляется в конце хода; до этого рядом с полем
-хода крутится `AcpProgressIndicator`. Пороги контекста: ≥ 80 % — `AcpTone.warning`, ≥ 95 % —
-`AcpTone.danger`. Стоимость форматируется из целых микроединиц `Money.micros` без `double` по
+хода крутится `CodeLabProgressIndicator`. Пороги контекста: ≥ 80 % — `CodeLabTone.warning`, ≥ 95 % —
+`CodeLabTone.danger`. Стоимость форматируется из целых микроединиц `Money.micros` без `double` по
 локали: 2 значащих знака после первой ненулевой цифры для сумм меньше 0,01 и 2 знака после
 запятой для остальных. Валюта — `Money.currency`; десктоп ничего не пересчитывает.
 
@@ -462,10 +462,10 @@ info-строки блока. Неизвестный язык или его от
 ```mermaid
 sequenceDiagram
     participant U as "Пользователь"
-    participant Z as "ComposerDropZone и AcpPromptComposer"
+    participant Z as "ComposerDropZone и CodeLabPromptComposer"
     participant C as "ComposerCubit"
     participant I as "AttachmentIntake"
-    participant K as "acp_client_kit"
+    participant K as "codelab_client_core"
     U->>Z: "перетаскивает файлы или Cmd+V или кнопка"
     Z->>C: "addPaths или pasteFromClipboard или pickFiles"
     C->>I: "readPaths"
@@ -581,10 +581,10 @@ sequenceDiagram
 
 **A12. Поиск и фильтр сессий (после MVP, D-17; логика — kit, §12.6.12; агент —
 agent-core-architecture §17.6.17).** App ничего не фильтрует и не ищет сам: `SessionSearchCubit`
-передаёт запрос в `SessionSearch` kit и превращает `SessionSearchView` в строки `acp_ui`.
+передаёт запрос в `SessionSearch` kit и превращает `SessionSearchView` в строки `codelab_ui`.
 
 ```dart
-// apps/codelab_app/lib/features/workbench/application/session_search_cubit.dart
+// apps/codelab_desktop/lib/features/workbench/application/session_search_cubit.dart
 final class SessionSearchState {
   final String text;                            // поле ввода
   final AcpSessionDateFilter date;              // all | today | week | range(from, to)
@@ -596,7 +596,7 @@ final class SessionSearchState {
 }
 ```
 
-1. **Поле.** Над `AcpSessionSidebar` — `AcpSessionSearchField`: `TextBox` с иконкой поиска и
+1. **Поле.** Над `CodeLabSessionSidebar` — `AcpSessionSearchField`: `TextBox` с иконкой поиска и
    кнопкой очистки; ряд фильтров `All · Today · 7 days · Range…` (Range — два `DatePicker`,
    `from > to` подсвечивает поле и не отправляет запрос); переключатель
    `This project | All projects`. Фокус — Cmd+Shift+F на macOS, Ctrl+Shift+F на остальных
@@ -631,7 +631,7 @@ final class SessionSearchState {
 экран выбирает `NavigationCubit`, `CodeLabAppWidget` рисует экран по его состоянию.
 
 ```dart
-// apps/codelab_app/lib/app/navigation/app_destination.dart
+// apps/codelab_desktop/lib/app/navigation/app_destination.dart
 sealed class AppDestination {}
 final class BootDestination extends AppDestination {}              // 08, §12.4.7
 final class OnboardingDestination extends AppDestination {}        // 07, D-11
@@ -646,7 +646,7 @@ final class WorkbenchDestination extends AppDestination {          // 01 — е�
 final class ToolDockState {
   final List<ToolPane> open;             // files | diff | terminal | plan | timeline | agents | usage | branches | protocol
   final ToolPane? lower;                 // вторая панель под первой (разбиение дока по вертикали)
-  final double width;                    // AcpResizeHandle, shared_preferences
+  final double width;                    // CodeLabResizeHandle, shared_preferences
 }
 final class SettingsDestination extends AppDestination { final SettingsPage page; }  // §12.4.9
 ```
@@ -657,8 +657,8 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
    |---|---|---|
    | шапка | `NavigationAppBar`, `AutoSuggestBox`, `CommandBar` из `ToggleButton` | палитра Cmd/Ctrl+K; переключатели панелей инструментов; состояние соединения |
    | слева — сессии | панель `NavigationView` (`open`, `compact`, `minimal` по ширине), `PaneItemExpander`, `PaneItem` с `InfoBadge` | «New session», поиск (A12), раздел «Pinned», сессии **всех** проектов, сгруппированные по проекту (S-18), со статусами R-21; «Open folder…» (11); в подвале Settings. Сайдбар сворачивается (Cmd/Ctrl+B) |
-   | центр — сессии | собственный `AcpSessionArea`: одна панель сессии или две рядом (split view, 29) с `AcpResizeHandle` между ними | у каждой панели сессии своя шапка (заголовок, проект, режим, `CommandBar`: Rename, Fork, «Open to the side», More), лента и композер со статус-баром |
-   | справа — панели инструментов | собственный `AcpToolDock`: `TabView` открытых панелей, разбиение по вертикали на две, `AcpResizeHandle` по левому краю | Files (D-13), Diff (правки сессии, D-07), Terminal (A16), Plan (R-19), Timeline (A14), Agents (A15), Usage (D-09), Branches (A10), Protocol (R-23) |
+   | центр — сессии | собственный `CodeLabSessionArea`: одна панель сессии или две рядом (split view, 29) с `CodeLabResizeHandle` между ними | у каждой панели сессии своя шапка (заголовок, проект, режим, `CommandBar`: Rename, Fork, «Open to the side», More), лента и композер со статус-баром |
+   | справа — панели инструментов | собственный `CodeLabToolDock`: `TabView` открытых панелей, разбиение по вертикали на две, `CodeLabResizeHandle` по левому краю | Files (D-13), Diff (правки сессии, D-07), Terminal (A16), Plan (R-19), Timeline (A14), Agents (A15), Usage (D-09), Branches (A10), Protocol (R-23) |
 
    Панели инструментов привязаны к сессии в фокусе: Files и Terminal открываются в её папке, Diff,
    Plan, Agents, Usage и Branches показывают её данные. Каждая панель открывается независимо —
@@ -752,7 +752,7 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
    `toolCalls`, `tokens`, `cost`, `lastActivity`, номер запуска `run` (C-17); фоновые дети
    (`background: true`) остаются на доске вне хода.
 2. **Действия ребёнка.** «Open transcript» — `_codelab/subagents/history`; реплей рисуется в
-   отдельной панели `AcpTranscriptPanel` только для чтения и в ленту сессии не попадает. «Stop» —
+   отдельной панели `CodeLabTranscriptPanel` только для чтения и в ленту сессии не попадает. «Stop» —
    `_codelab/subagents/cancel`. Отправить сообщение ребёнку (C-17, D-25) в §17.3.7 метода нет:
    кнопка «Message» появляется только после OpenSpec change, который его вводит.
 3. **Фоновые задачи (T-10).** Строка — снимок `_codelab/jobs/update`: `command`, `state`,
@@ -817,8 +817,8 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
 
 ## 12.3.5. Инварианты
 
-1. **DSK-1.** Виджеты `acp_ui` НЕ ДОЛЖНЫ импортировать `acp_client_kit`, `acp_protocol` или
-   плагины платформы. Модели kit превращает в модели `acp_ui` только `ui_mappers.dart`.
+1. **DSK-1.** Виджеты `codelab_ui` НЕ ДОЛЖНЫ импортировать `codelab_client_core`, `codelab_acp_protocol` или
+   плагины платформы. Модели kit превращает в модели `codelab_ui` только `ui_mappers.dart`.
 2. **DSK-2.** Разбор markdown, построение hunks и выбор `ContentBlock` ДОЛЖНЫ выполняться в kit.
    Десктоп НЕ ДОЛЖЕН разбирать markdown или вычислять diff заново.
 3. **DSK-3.** Блок стабильного префикса ДОЛЖЕН строиться не больше одного раза за время стрима
@@ -865,12 +865,12 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
     (`AcpDiffView` в режиме `preview` вместо текстового `diffSummary`, A5, шаг 6).
 18. **DSK-18.** Новые сочетания клавиш НЕ ДОЛЖНЫ переназначать существующие (Cmd/Ctrl+K, Esc,
     Cmd/Ctrl+Enter, Cmd/Ctrl+Backspace, Alt+←/→).
-19. **DSK-19.** Цвета ДОЛЖНЫ браться из `FluentTheme`, `AcpTone` и `AcpCodeTheme`; литералы цветов
+19. **DSK-19.** Цвета ДОЛЖНЫ браться из `FluentTheme`, `CodeLabTone` и `AcpCodeTheme`; литералы цветов
     в виджетах ленты НЕ ДОЛЖНЫ появляться. Обе темы ДОЛЖНЫ давать контраст не ниже 4,5:1.
 20. **DSK-20.** Состояние раскрытия и выбор формы diff НЕ ДОЛЖНЫ храниться в kit и в журнале
     сессии: это UI-состояние текущего запуска.
 21. **DSK-21.** App НЕ ДОЛЖЕН фильтровать или искать сессии сам: строки результатов строятся
-    только из `SessionSearchView` kit (§12.6.12, UX-26); виджеты `acp_ui` не вызывают `session/list`
+    только из `SessionSearchView` kit (§12.6.12, UX-26); виджеты `codelab_ui` не вызывают `session/list`
     и `_codelab/session/search`.
 22. **DSK-22.** Итог прежнего запроса поиска НЕ ДОЛЖЕН показываться после смены текста, даты или
     области (поколение kit, UX-27); при пустом запросе и фильтре `All` сайдбар ДОЛЖЕН совпадать с
@@ -900,11 +900,11 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
 
 ## 12.3.6. Обоснование
 
-* **Свои презентационные модели в `acp_ui`, а не зависимость от kit.** Сегодня `acp_ui` зависит
+* **Свои презентационные модели в `codelab_ui`, а не зависимость от kit.** Сегодня `codelab_ui` зависит
   только от `fluent_ui`, `flutter_bloc` и `freezed_annotation`. Превью и widget-тесты строят
-  модели без ядра клиента, и задача 5.9 уже требует маппинга в модели `acp_ui`. Цена —
+  модели без ядра клиента, и задача 5.9 уже требует маппинга в модели `codelab_ui`. Цена —
   зеркальные типы `AcpMdBlock` (~150 строк маппера). Мемоизация по `identical` делает маппинг
-  бесплатным для стабильной части. Вариант «`acp_ui` зависит от kit» отклонён: ui_kit стал бы
+  бесплатным для стабильной части. Вариант «`codelab_ui` зависит от kit» отклонён: ui_kit стал бы
   тянуть доменные типы, а изменение view model kit ломало бы ui_kit.
 * **Строка ленты на блок markdown.** Если строка — целое сообщение, длинный ответ строится
   целиком, и вложенный `Column` не виртуализируется. При строке на блок список виртуализирует
@@ -915,7 +915,7 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
   разбирают строку сами, а значит вся инкрементальность kit пропала бы, и пришлось бы
   перепарсивать сообщение на каждый chunk. Рендер блоков в `TextSpan` и `Table` — несколько сотен
   строк на теме Fluent без чужой стилизации.
-* **Подсветка — в `acp_ui`, токены — простые данные.** Подсветка нужна только графическому
+* **Подсветка — в `codelab_ui`, токены — простые данные.** Подсветка нужна только графическому
   клиенту. Если CLI (§12.2) захочет ту же токенизацию для ANSI, токенизатор переносится в kit
   без изменения API `AcpCodeHighlighter`.
 * **Пороги.** 960 px — ширина, при которой две колонки по 80 моноширинных символов помещаются
@@ -930,7 +930,7 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
 
 | Пакет | Куда | Зачем | Почему не существующее |
 |---|---|---|---|
-| `re_highlight` | `acp_ui` | токенизация кода по грамматикам highlight.js, чистый Dart в ядре, работает в `compute` | в проекте нет подсветки; альтернатива на TextMate-грамматиках требует асинхронной загрузки грамматик из assets и тяжелее; собственный токенизатор на десятки языков несоразмерен задаче |
+| `re_highlight` | `codelab_ui` | токенизация кода по грамматикам highlight.js, чистый Dart в ядре, работает в `compute` | в проекте нет подсветки; альтернатива на TextMate-грамматиках требует асинхронной загрузки грамматик из assets и тяжелее; собственный токенизатор на десятки языков несоразмерен задаче |
 | `desktop_drop` | app (presentation) | приём файлов, перетаскиваемых из ОС, на macOS, Windows, Linux | Flutter не даёт drop внешних файлов на десктопе; `file_selector` покрывает только диалог |
 | `pasteboard` | app (`core/platform`) | изображения и файлы из системного буфера | `Clipboard` Flutter читает только текст |
 | `url_launcher` | app (`core/platform`) | открытие http/https/mailto по клику | вызов `open`/`xdg-open` через процесс разносит проверки платформ по коду (AGENTS.md §11) |
@@ -941,7 +941,7 @@ macOS. Пакет-виджет markdown не добавляется.
 
 ## 12.3.7. Как проверить
 
-**Widget-тесты `acp_ui`** (`packages/flutter/acp_ui/test/`). Для производительности проверяются
+**Widget-тесты `codelab_ui`** (`packages/flutter/codelab_ui/test/`). Для производительности проверяются
 счётчики работы, а не время. Виджеты ведут debug-счётчики `AcpRenderStats.blockBuilds`,
 `highlightRuns` и `highlightSyncRuns`; их значения учитываются только в `assert`.
 
@@ -974,10 +974,10 @@ macOS. Пакет-виджет markdown не добавляется.
 | `acp_session_search_test.dart: Esc clears focused field and empty field returns focus` (после MVP) | D-17, DSK-18 |
 | `acp_turn_timeline_test.dart: step rows show model tokens time and context, expanding a step lists its tool calls` (после MVP) | D-22 |
 | `acp_task_board_test.dart: subagent and job rows render snapshot fields, needs-you mark and no Message button without method` (после MVP) | D-25, DSK-26 |
-| существующие `acp_organisms_test.dart`, `acp_molecules_test.dart`, `acp_previews_test.dart` | DSK-17 |
+| существующие `codelab_organisms_test.dart`, `codelab_molecules_test.dart`, `codelab_previews_test.dart` | DSK-17 |
 
-**Unit-тесты app** (`apps/codelab_app/test/features/workbench/application/`,
-`apps/codelab_app/test/core/platform/`):
+**Unit-тесты app** (`apps/codelab_desktop/test/features/workbench/application/`,
+`apps/codelab_desktop/test/core/platform/`):
 
 * `ui_mappers_transcript_test.dart: unchanged kit items map to identical rows` (DSK-4);
 * `ui_mappers_transcript_test.dart: agent text item splits into one row per block with tail flag`;
@@ -1001,8 +1001,8 @@ macOS. Пакет-виджет markdown не добавляется.
 Сигнатуры файлов, лимиты и пометка «вне папки» проверяются тестами kit (§12.1.10,
 `attachments/prompt_content_builder_test.dart`); app их не дублирует.
 
-**Интеграционные тесты** (`apps/codelab_app/integration_test/`, macOS, scripted-агент из
-`acp_testing`; во внешнем и во встроенном режиме, §9.12, задача 7.7):
+**Интеграционные тесты** (`apps/codelab_desktop/integration_test/`, macOS, scripted-агент из
+`codelab_acp_testing`; во внешнем и во встроенном режиме, §9.12, задача 7.7):
 
 * `app:prompt_attachments_flow_test.dart` (D-12). Нативные drag&drop и буфер ОС в
   `integration_test` не управляются, поэтому тест вызывает обработчик `composer-drop-zone` с
@@ -1064,7 +1064,7 @@ macOS. Пакет-виджет markdown не добавляется.
   предпросмотр `AcpDiffView` (ключ `diff-open-full-<id>`, строки `+`/`−`) вместо текстового
   `diffSummary`; шаги сценария и проверки кнопок не меняются.
 
-**Scripted-агент `acp_testing`.** Новые режимы для тестов этого раздела:
+**Scripted-агент `codelab_acp_testing`.** Новые режимы для тестов этого раздела:
 
 * настраиваемые `promptCapabilities` (`image`, `embeddedContext`, `audio`) в ответе `initialize`;
 * запись полученных `ContentBlock` каждого `session/prompt`, чтобы тест проверял точный состав

@@ -12,7 +12,7 @@
 
 1. **6.1. Каркас:** `bin/codelab.dart`, `lib/src/cli_runner.dart` (разбор аргументов на
    `package:args`, `CommandRunner`), `lib/src/composition_root.dart` (сборка `ClientWorkspace`,
-   резолверы stdio и WebSocket из `package:acp_transports/io.dart`, адаптеры `acp_client_io`).
+   резолверы stdio и WebSocket из `package:codelab_acp_transports/io.dart`, адаптеры `codelab_client_io`).
 2. **6.2. Профили:** `lib/src/profiles/profile_arg.dart` — разбор значения `--agent` (таблица
    ниже), команда `codelab profiles list|show|add|remove`.
 3. **6.3. Рендер:** `lib/src/render/terminal_renderer.dart` (потоковый текст, мысли приглушённым
@@ -31,11 +31,11 @@
    `stream-json`) по §12.5.3; схемы — `apps/codelab_cli/schema/stream-json.v1.schema.json` и
    `json.v1.schema.json`.
 8. **6.8. Драйвер фикстур:** `lib/src/scenario/test_scenario_command.dart` поверх загрузчика
-   фикстур из `acp_testing` и `ClientWorkspace`.
+   фикстур из `codelab_acp_testing` и `ClientWorkspace`.
 9. **6.9. Сигналы:** SIGINT и SIGTERM (`ProcessSignal.sigint.watch()`, `sigterm`) — отмена хода,
    корректное закрытие транспорта и дочернего процесса агента.
 10. **6.10. E2E:** `test/e2e/` — запуск собранного бинаря как процесса против scripted stdio-агента
-    из `acp_testing` и против Python-агента (если установлен; иначе тест пропускается с
+    из `codelab_acp_testing` и против Python-агента (если установлен; иначе тест пропускается с
     сообщением). Имена тестов = id строк матрицы: `cli/repl-prompt-streaming`,
     `cli/repl-permission-allow-once`, `cli/repl-permission-reject`, `cli/slash-menu-merges-agent-commands`,
     `cli/client-commands-smoke`, `cli/model-picker-sets-config-option`, `cli/esc-cancels-turn`,
@@ -343,7 +343,7 @@ Enter без выбора ничего не делает: варианта «п�
 закрытый набор `type` (`init`, `turn_start`, `user_message`, `text_delta`, `text`,
 `thought_delta`, `tool_call`, `tool_update`, `tool_result`, `permission`, `plan`, `notice`,
 `subagent`, `turn_end`, `acp`, `result`), версия в `init`. Это проекция модели отображения
-`acp_client_kit`, а не кадров ACP; совместимость с другими CLI не обещается. Первая строка —
+`codelab_client_core`, а не кадров ACP; совместимость с другими CLI не обещается. Первая строка —
 `init`, последняя — всегда `result` (в том числе при ошибке), `usage` до расширения равно `null`;
 секреты редактируются тем же `SecretRedactor`, что и логи клиента. Схема —
 `apps/codelab_cli/schema/stream-json.v1.schema.json`; контракт, типы Dart, алгоритм проекции,
@@ -396,7 +396,7 @@ presentation нового приложения, поэтому решение ф
   неизвестный флаг → `64`, SIGTERM → `143`.
 * `cli/headless-stream-json-golden`: вывод совпадает с golden-файлом `test/e2e/golden/stream_json_basic.ndjson`.
 * `cli/headless-stream-json-schema`: каждая строка всех golden-файлов и живых прогонов `cli/headless-*` проходит `apps/codelab_cli/schema/stream-json.v1.schema.json`; `cli/headless-json-single-object`: `--output-format json` — ровно одна строка, проходит `json.v1.schema.json`; `cli/headless-stream-json-errors`, `-redaction`, `-flags`, `-flush` — зелёные (§12.5.8).
-* `test/scenario/test_scenario_command_test.dart`: против `FixtureReplayAgent` из `acp_testing`
+* `test/scenario/test_scenario_command_test.dart`: против `FixtureReplayAgent` из `codelab_acp_testing`
   (агент, который отвечает ожидаемыми кадрами самой фикстуры) весь корпус даёт `PASS`, а фикстура
   с испорченным ожидаемым кадром — `FAIL` с диффом и код выхода `1`. Прогон против настоящего
   агента — с этапа 7 (`--agent embedded`) и этапа 4 (`--agent 'stdio:codelab-agent serve --stdio'`).

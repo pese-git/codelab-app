@@ -21,10 +21,10 @@
 | MCP-клиент | stdio + streamable HTTP, единый реестр инструментов | архитектура ядра; мапперы контента — Python (этап 2) | этап 8 |
 | Определения агентов в Markdown, slash-команды, ключи `codelab.toml` | по матрице целей (блок «не регрессировать») | Python (этап 2) | — |
 | Context Manager (эпохи, скелеты файлов через tree-sitter) | отложить | Python (этап 2) | только если классическое сжатие заметно теряет качество |
-| Python TUI | заменить на codelab_cli | новое | поверх общего `acp_client_kit` |
+| Python TUI | заменить на codelab_cli | новое | поверх общего `codelab_client_core` |
 | Web UI через textual-serve | не переносить | новое | web-версия — сборка codelab-app для web (этап 10) |
-| `CodeLabShellCubit` (клиентская логика) | вынести в `acp_client_kit` | новое | Cubit-ы app — тонкие обёртки, та же логика в CLI |
-| Разделение `acp_transports` на нейтральную часть и `io.dart` | этап 0 | новое | без него клиентские пакеты не собираются для web |
+| `CodeLabShellCubit` (клиентская логика) | вынести в `codelab_client_core` | новое | Cubit-ы app — тонкие обёртки, та же логика в CLI |
+| Разделение `codelab_acp_transports` на нейтральную часть и `io.dart` | этап 0 | новое | без него клиентские пакеты не собираются для web |
 | Встроенный агент через in-process ACP | `InProcessAcpLink` + `codelab_embedded` | новое | §4.5, §9.12 |
 | Подагенты (`task`) | позже | архитектура ядра | по матрице целей (Should) |
 

@@ -100,7 +100,7 @@ flowchart LR
         S2["2. Цикл, инструменты"]
         S3["3. Сессии и сжатие"]
         S4["4. ACP-адаптер"]
-        S5["5. acp_client_kit"]
+        S5["5. codelab_client_core"]
         S6["6. codelab_cli MVP"]
     end
     subgraph M3["M3. MVP"]

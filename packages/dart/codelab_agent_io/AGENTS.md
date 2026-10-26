@@ -20,7 +20,7 @@
 
 ## 2. Границы
 
-* Пакет НЕ ДОЛЖЕН импортировать `package:flutter/` и `package:acp_*`: правило `packages/dart/codelab_architecture_tests/test/support/rules.dart`, проверка — `melos run guard`.
+* Пакет НЕ ДОЛЖЕН импортировать `package:flutter/`, `package:codelab_acp_*` и `package:codelab_client_*`: правило `packages/dart/codelab_architecture_tests/test/support/rules.dart`, проверка — `melos run guard`.
 * `dependencies` — только подмножество allowlist §1.2 документа ядра: `codelab_agent_core`, `path`, `meta`, `async`, `yaml`, `yaml_edit`, `toml`. Расширение — только через OpenSpec change. Проверка — `pubspec_allowlist_test.dart`.
 * Из ядра используется только публичный барель `package:codelab_agent_core/codelab_agent_core.dart`. Тест может импортировать `src/` ядра только с `// ignore: implementation_imports` и причиной в комментарии.
 * Пути ядра — POSIX. Пути Windows приводятся к виду ядра и обратно функциями `toCorePath` / `toHostPath` (design.md change `add-agent-core-loop-and-tools`, D3).

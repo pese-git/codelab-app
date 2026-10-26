@@ -13,15 +13,15 @@
    `test:e2e:app:prompt-queue`, `test:e2e:app:multi-session`) в секцию `melos:` корневого
    `pubspec.yaml`, удалить `melos.yaml` (melos 8 читает конфигурацию из `pubspec.yaml`). Проверка:
    `melos list` и `melos run check` работают как раньше.
-2. **0.2. Разделить `acp_transports`.** Создать `packages/dart/acp_transports/lib/io.dart` и
+2. **0.2. Разделить `codelab_acp_transports`.** Создать `packages/dart/codelab_acp_transports/lib/io.dart` и
    перенести в него экспорт `StdioAcpTransport` и `WebSocketAcpTransport`. Классы конфигурации
    (`StdioAcpTransportConfig`, `StdioAcpAgentProfile`, `WebSocketAcpTransportConfig`) перенести в
    новый файл `lib/src/transport_configs.dart` без `dart:io` и экспортировать из основного бареля.
-   Обновить импорты в `apps/codelab_app` (`shell_cubit.dart`, `app_scope.dart`), `acp_testing` и
+   Обновить импорты в `apps/codelab_desktop` (`shell_cubit.dart`, `app_scope.dart`), `codelab_acp_testing` и
    тестах. Классы конфигурации объявлены через `freezed` (сейчас — в `stdio_acp_transport.dart` и
    `websocket_acp_transport.dart` с `part '*.freezed.dart'`): после переноса сгенерированный код
    пересобирается — `fvm dart run build_runner build --delete-conflicting-outputs` в
-   `packages/dart/acp_transports` (появляется `lib/src/transport_configs.freezed.dart`, старые
+   `packages/dart/codelab_acp_transports` (появляется `lib/src/transport_configs.freezed.dart`, старые
    `*.freezed.dart` теряют перенесённые классы); сгенерированный код в git не хранится (`.gitignore`: `*.freezed.dart`), CI генерирует его в `prepare`.
    Изменение публичного API → OpenSpec.
 3. **0.3. Создать пакет `packages/dart/codelab_agent_core`** с `pubspec.yaml` по скелету ниже,
@@ -37,8 +37,8 @@
 6. **0.6. Создать CI** `.github/workflows/ci.yml` (эскиз ниже) и
    `.github/pull_request_template.md` с чек-листом: OpenSpec change, тесты, пункт о стороннем коде
    (§7а).
-7. **0.7. Корпус фикстур.** Создать `packages/dart/acp_testing/fixtures/acp/` (файлы плоско,
-   `<id>.json`, раскладка — agent-core-architecture §14.2) и в `packages/dart/acp_testing/lib/src/fixtures/`:
+7. **0.7. Корпус фикстур.** Создать `packages/dart/codelab_acp_testing/fixtures/acp/` (файлы плоско,
+   `<id>.json`, раскладка — agent-core-architecture §14.2) и в `packages/dart/codelab_acp_testing/lib/src/fixtures/`:
    `fixture.dart` (модель фикстуры и загрузчик, громко падает на неполной фикстуре), `matcher.dart`
    (сравнение с нормализацией: id запросов, время, абсолютные пути → плейсхолдеры) и
    `client_conformance.dart` (проигрывает кадры агента в `FakeAcpTransport` и сверяет ответы
@@ -54,7 +54,7 @@
    строки целей в `agent-parity-goals.md`, которые фикстура закрывает; фикстуры без строки — базовые
    для корпуса. Каждая ссылается на раздел `docs/acp/protocol/*`.
 8. **0.8. Клиентский прогон корпуса**:
-   `packages/dart/acp_client_core/test/fixtures/client_fixture_conformance_test.dart` — для каждой
+   `packages/dart/codelab_client_acp/test/fixtures/client_fixture_conformance_test.dart` — для каждой
    фикстуры, у которой `roles` содержит `client`, поднимает `AcpClientApplication` на `FakeAcpTransport` и
    проверяет ответы и итоговое состояние сессии.
 9. **0.9. Лицензия.** Лицензия — MIT (§11); добавить в корень `LICENSE` (текст MIT, правообладатель — Sergey Penkovsky),
@@ -76,7 +76,7 @@
     этапе; задача 9.7 дописывает корневой `AGENTS.md` окончательно, а не создаёт его.
 
 **OpenSpec change.** `add-workspace-ci-and-architecture-guards` (задачи 0.1–0.6, 0.9, 0.11; scope:
-CI, сторож, разделение `acp_transports` как изменение публичного API пакета, правила
+CI, сторож, разделение `codelab_acp_transports` как изменение публичного API пакета, правила
 `AGENTS.md` для агентских пакетов и TDD) и `add-acp-golden-fixture-corpus` (задачи 0.7–0.8;
 scope: формат и корпус фикстур с полем `roles`, клиентский драйвер, правила изменения фикстур).
 `tasks.md` — пары «тест → реализация» со ссылкой на критерий (§9.0, правило 3).
@@ -92,18 +92,18 @@ scope: формат и корпус фикстур с полем `roles`, кли
   нарушение ловится.
 * `fvm dart compile js packages/dart/codelab_agent_core/test/web_smoke/main.dart -o build/web_smoke/core.js`
   и `fvm dart compile wasm ... -o build/web_smoke/core.wasm` проходят.
-* `fvm dart test packages/dart/acp_client_core/test/fixtures` проходит на 12 фикстурах
+* `fvm dart test packages/dart/codelab_client_acp/test/fixtures` проходит на 12 фикстурах
   (клиентский драйвер; агентского драйвера на этапе 0 нет — задача 4.8).
 * Корневой `AGENTS.md` §5 ссылается на документ ядра; `packages/dart/codelab_agent_core/AGENTS.md`
   есть и перечисляет PKG-1…PKG-6, сторож импортов, правило TDD и определение завершённой итерации (задача 0.11).
-* `grep -rn "dart:io" packages/dart/acp_transports/lib/acp_transports.dart packages/dart/acp_transports/lib/src/transport_configs.dart` — пусто.
-* 8 интеграционных тестов app не изменены и собираются (`fvm flutter analyze apps/codelab_app`);
+* `grep -rn "dart:io" packages/dart/codelab_acp_transports/lib/codelab_acp_transports.dart packages/dart/codelab_acp_transports/lib/src/transport_configs.dart` — пусто.
+* 8 интеграционных тестов app не изменены и собираются (`fvm flutter analyze apps/codelab_desktop`);
   их прогон на устройстве (`melos run test:e2e:app:stdio` и остальные) — в ветке `release/<version>`
   (`AGENTS.md` §21).
 
 **Зависимости.** Нет. Этап блокирует все остальные.
 
-**Риски.** Разделение `acp_transports` ломает импорты в app — снижается тем, что изменение
+**Риски.** Разделение `codelab_acp_transports` ломает импорты в app — снижается тем, что изменение
 механическое и защищено тестами app. FVM в CI медленно ставит SDK — кэш каталога FVM.
 
 ## Артефакт: скрипты melos
@@ -117,18 +117,18 @@ scope: формат и корпус фикстур с полем `roles`, кли
     web-compile: >-
       fvm dart compile js -O1 -o build/web_smoke/core.js packages/dart/codelab_agent_core/test/web_smoke/main.dart &&
       fvm dart compile wasm -o build/web_smoke/core.wasm packages/dart/codelab_agent_core/test/web_smoke/main.dart
-    conformance:client: fvm dart test packages/dart/acp_client_core/test/fixtures
+    conformance:client: fvm dart test packages/dart/codelab_client_acp/test/fixtures
     conformance:agent: fvm dart test packages/dart/codelab_agent_acp/test/conformance                 # этап 4
     build:agent: fvm dart compile exe apps/codelab_agent/bin/codelab_agent.dart -o build/bin/codelab-agent  # этап 4
     build:cli: fvm dart compile exe apps/codelab_cli/bin/codelab.dart -o build/bin/codelab              # этап 6
     test:e2e:cli: fvm dart test apps/codelab_cli/test/e2e                                              # этап 6
     test:e2e:app:dart-agent: >-                                                                        # этап 4, контракт — §9.9, задача 4.9
       fvm dart run melos run build:agent &&
-      fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test -d macos
+      fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test -d macos
       --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=dart
       --dart-define=CODELAB_E2E_AGENT_BIN=../../build/bin/codelab-agent"
     test:e2e:app:embedded: >-                                                                          # этап 7
-      fvm dart run melos exec --scope=codelab_app -- "fvm flutter test integration_test -d macos
+      fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test -d macos
       --dart-define=CODELAB_E2E_AGENT=embedded --dart-define=CODELAB_ALLOW_SCRIPTED_LLM=true"
     check:
       description: Run format, analyze, guard, tests, conformance and web compile.
@@ -138,7 +138,7 @@ scope: формат и корпус фикстур с полем `roles`, кли
 `conformance:agent` добавляется в `check` на этапе 4; `test:e2e:*` в `check` не входят.
 
 **Интеграционные тесты в CI — только на Dart VM.** GitHub CI запускает интеграционные тесты
-чистых Dart-пакетов: реальные процессы и сокеты (`acp_transports`), прогон корпуса фикстур
+чистых Dart-пакетов: реальные процессы и сокеты (`codelab_acp_transports`), прогон корпуса фикстур
 (`conformance:client`, с этапа 4 — `conformance:agent`), PTY-e2e CLI (`test:e2e:cli`, этап 6,
 отдельный джоб матрицы). Flutter-тесты приложения на macOS (`test:e2e:app:*`, в том числе
 `dart-agent` и `embedded`) в GitHub CI не запускаются. В ветках `feature/*` и `hotfix/*`
@@ -214,7 +214,7 @@ jobs:
 ```dart
 // packages/dart/codelab_architecture_tests/test/support/rules.dart
 const webUnsafe = ['dart:io', 'dart:isolate', 'dart:ffi', 'dart:html', 'dart:js_interop',
-    'package:web/', 'package:flutter/', 'package:acp_transports/io.dart'];
+    'package:web/', 'package:flutter/', 'package:codelab_acp_transports/io.dart'];
 
 final class PackageRule {
   const PackageRule(this.dir,
@@ -229,19 +229,19 @@ final class PackageRule {
 
 const rules = [
   PackageRule('packages/dart/codelab_agent_core',
-      forbidden: [...webUnsafe, 'package:acp_protocol/', 'package:acp_transports/']),
-  PackageRule('packages/dart/acp_transports', forbidden: webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/']),
-  PackageRule('packages/dart/acp_client_core', forbidden: webUnsafe),
-  // этап 2: codelab_agent_io — ['package:flutter/', 'package:acp_']
+      forbidden: [...webUnsafe, 'package:codelab_acp_protocol/', 'package:codelab_acp_transports/']),
+  PackageRule('packages/dart/codelab_acp_transports', forbidden: webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/']),
+  PackageRule('packages/dart/codelab_client_acp', forbidden: webUnsafe),
+  // этап 2: codelab_agent_io — ['package:flutter/', 'package:codelab_acp_', 'package:codelab_client_']
   // этап 4: codelab_agent_acp — webUnsafe; этап 8: codelab_agent_mcp — webUnsafe
-  // этап 5: acp_client_kit — webUnsafe; acp_client_io — ['package:flutter/']
+  // этап 5: codelab_client_core — webUnsafe; codelab_client_io — ['package:flutter/']
   // этап 6: apps/codelab_cli — ['package:flutter/', 'package:codelab_agent_'];
   //   apps/codelab_cli/lib/src — ['package:dart_tui/'], exclude: ['tui/'], sealExclude: false
   //   (dart_tui — только в lib/src/tui/, §12.2.7; остальной CLI вызывает tui/ через TuiRunner)
-  // этап 7: codelab_embedded — webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/']; apps/codelab_app — ['package:codelab_agent_']
-  // этап 7: codelab_setup — [...webUnsafe, 'package:codelab_agent_io/', 'package:acp_', 'package:flutter/'],
+  // этап 7: codelab_embedded — webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/']; apps/codelab_desktop — ['package:codelab_agent_']
+  // этап 7: codelab_setup — [...webUnsafe, 'package:codelab_agent_io/', 'package:codelab_acp_', 'package:codelab_client_', 'package:flutter/'],
   //   exclude: ['lib/io.dart', 'lib/src/io/'];
-  //   apps/codelab_app/lib/features/settings/presentation — ['package:codelab_setup/io.dart', 'dart:io'] (§12.4.2, SETUP-9)
+  //   apps/codelab_desktop/lib/features/settings/presentation — ['package:codelab_setup/io.dart', 'dart:io'] (§12.4.2, SETUP-9)
 ];
 ```
 
@@ -328,13 +328,13 @@ Allowlist зависимостей — отдельный тест `codelab_arch
 | `codelab_agent_core` (0) | Embeddable pure Dart CodeLab agent core — LLM, loop, tools, permissions, sessions. | `async: ^2.12.0`, `collection: ^1.19.0`, `http: ^1.2.0`, `meta: ^1.16.0` — и только они (PKG-2) | — |
 | `codelab_architecture_tests` (0) | Repository-wide architecture guards (imports, dependency allowlists). | — | `dev_dependencies`: `path: ^1.9.0`, `test` |
 | `codelab_agent_io` (2) | dart:io adapters for the CodeLab agent core — local env, processes, JSONL store, config. | `../codelab_agent_core`, `path: ^1.9.0`; этап 8 — `yaml` (разбор конфига и frontmatter определений агентов и skills), `yaml_edit` (запись конфига с сохранением форматирования), `toml` (только чтение устаревшего `codelab.toml`) | — |
-| `codelab_agent_acp` (4) | ACP agent-side server over the CodeLab agent core. | `../acp_protocol`, `../acp_transports`, `../codelab_agent_core` | `dev_dependencies`: `../acp_client_core`, `../acp_testing` (contract test) |
-| `apps/codelab_agent` (4) | codelab-agent binary — serves the Dart agent over ACP stdio and WebSocket. | `acp_transports`, `codelab_agent_acp`, `codelab_agent_core`, `codelab_agent_io`, `args: ^2.6.0`; этап 8 — `codelab_agent_mcp` | `executables: {codelab-agent: codelab_agent}` |
-| `acp_client_kit` (5) | UI-agnostic ACP client workspace shared by codelab_app and codelab_cli. | `../acp_client_core`, `../acp_protocol`, `meta: ^1.16.0` | `dev_dependencies`: `../acp_testing` |
-| `acp_client_io` (5) | dart:io implementations of ACP client ports — fs, terminal, profile and project stores. | `../acp_client_core`, `../acp_client_kit`, `path: ^1.9.0` | — |
-| `apps/codelab_cli` (6) | codelab — terminal ACP client with REPL and headless modes. | `acp_client_core`, `acp_client_io`, `acp_client_kit`, `acp_transports`, `args: ^2.6.0`, `dart_tui: ^3.0.0` (импортируется только из `lib/src/tui/`, §12.2.7), `structured_log: 0.3.1`; этап 7 — `codelab_embedded` | `executables: {codelab: codelab}` |
-| `codelab_embedded` (7) | Builds the in-process CodeLab agent for ACP clients. | `../acp_transports`, `../codelab_agent_acp`, `../codelab_agent_core`, `../codelab_agent_io` (импортируется только из `lib/io.dart`); этап 8 — `../codelab_agent_mcp` | — |
-| `codelab_setup` (7) | Provider setup wizard, settings view models and config access shared by codelab_app and codelab_cli. | `../codelab_agent_core`, `http: ^1.2.0`, `meta: ^1.16.0`, `../codelab_agent_io` (импортируется только из `lib/io.dart`) | — |
+| `codelab_agent_acp` (4) | ACP agent-side server over the CodeLab agent core. | `../codelab_acp_protocol`, `../codelab_acp_transports`, `../codelab_agent_core` | `dev_dependencies`: `../codelab_client_acp`, `../codelab_acp_testing` (contract test) |
+| `apps/codelab_agent` (4) | codelab-agent binary — serves the Dart agent over ACP stdio and WebSocket. | `codelab_acp_transports`, `codelab_agent_acp`, `codelab_agent_core`, `codelab_agent_io`, `args: ^2.6.0`; этап 8 — `codelab_agent_mcp` | `executables: {codelab-agent: codelab_agent}` |
+| `codelab_client_core` (5) | UI-agnostic ACP client workspace shared by codelab_desktop and codelab_cli. | `../codelab_client_acp`, `../codelab_acp_protocol`, `meta: ^1.16.0` | `dev_dependencies`: `../codelab_acp_testing` |
+| `codelab_client_io` (5) | dart:io implementations of ACP client ports — fs, terminal, profile and project stores. | `../codelab_client_acp`, `../codelab_client_core`, `path: ^1.9.0` | — |
+| `apps/codelab_cli` (6) | codelab — terminal ACP client with REPL and headless modes. | `codelab_client_acp`, `codelab_client_io`, `codelab_client_core`, `codelab_acp_transports`, `args: ^2.6.0`, `dart_tui: ^3.0.0` (импортируется только из `lib/src/tui/`, §12.2.7), `structured_log: 0.3.1`; этап 7 — `codelab_embedded` | `executables: {codelab: codelab}` |
+| `codelab_embedded` (7) | Builds the in-process CodeLab agent for ACP clients. | `../codelab_acp_transports`, `../codelab_agent_acp`, `../codelab_agent_core`, `../codelab_agent_io` (импортируется только из `lib/io.dart`); этап 8 — `../codelab_agent_mcp` | — |
+| `codelab_setup` (7) | Provider setup wizard, settings view models and config access shared by codelab_desktop and codelab_cli. | `../codelab_agent_core`, `http: ^1.2.0`, `meta: ^1.16.0`, `../codelab_agent_io` (импортируется только из `lib/io.dart`) | — |
 | `codelab_agent_mcp` (8) | MCP client for the CodeLab agent core — streamable HTTP and stdio via host port. | `../codelab_agent_core`, `http: ^1.2.0` | — |
 | `codelab_agent_web` (10) | Browser adapters for the CodeLab agent core — IndexedDB env and session store. | `../codelab_agent_core`, `web` (версия — при создании) | — |
 

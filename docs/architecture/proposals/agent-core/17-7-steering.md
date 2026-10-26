@@ -226,7 +226,7 @@ pollSteering():
 its output.` Пакет заканчивается раньше, steering доставляется, процесс продолжает работать.
 Ключ `steering.yield_long_tools` (`false`) включает уступку при `jobs.enabled` (§17.9.7).
 
-## 17.7.4. Алгоритм: клиент (`acp_client_kit`)
+## 17.7.4. Алгоритм: клиент (`codelab_client_core`)
 
 Изменения [kit](../dart-agent-and-clients/09-10-stage-5-client-kit.md) §5.4 и `SessionHandle`:
 
@@ -498,7 +498,7 @@ sequenceDiagram
 ## 17.7.11. Как проверить
 
 Тесты ядра — `packages/dart/codelab_agent_core/test/loop/`; адаптера —
-`packages/dart/codelab_agent_acp/test/`; kit — `packages/dart/acp_client_kit/test/steer/`;
+`packages/dart/codelab_agent_acp/test/`; kit — `packages/dart/codelab_client_core/test/steer/`;
 fake-модель scripted, fake `exec` с управляемым завершением.
 
 * Golden ACP-фикстура **`acp/prompt-steer-during-tool`** (цель C-03, после OpenSpec): кадры

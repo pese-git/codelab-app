@@ -1,0 +1,24 @@
+name: codelab_acp_transports
+description: Replaceable ACP transports for stdio, WebSocket, and tests.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  codelab_acp_protocol:
+    path: ../codelab_acp_protocol
+  fpdart: ^1.2.0
+  freezed_annotation: ^3.1.0
+  meta: ^1.16.0
+  web_socket_channel: ^3.0.3
+
+dev_dependencies:
+  build_runner: ^2.10.5
+  codelab_acp_testing:
+    path: ../codelab_acp_testing
+  freezed: ^3.2.5
+  lints: ^6.0.0
+  test: ^1.26.3

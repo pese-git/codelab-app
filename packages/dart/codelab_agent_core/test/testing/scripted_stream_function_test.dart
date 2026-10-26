@@ -434,7 +434,7 @@ void main() {
         jsonDecode(
               File(
                 corePath(
-                  '../acp_testing/fixtures/acp/prompt-tool-permission-allow.json',
+                  '../codelab_acp_testing/fixtures/acp/prompt-tool-permission-allow.json',
                 ),
               ).readAsStringSync(),
             )

@@ -6,7 +6,7 @@
 
 * проверять correctness на минимально необходимом уровне;
 * держать основную ACP/application logic тестируемой без Flutter;
-* использовать `acp_testing` для reusable test infrastructure;
+* использовать `codelab_acp_testing` для reusable test infrastructure;
 * избегать чрезмерно тяжёлых integration tests;
 * покрывать lifecycle, streaming, reconnect и permission races;
 * обеспечивать предсказуемую validation strategy для AI coding agents и CI.
@@ -88,7 +88,7 @@ method _retryInternal called exactly 2 times
 * ACP protocol;
 * serialization;
 * transport abstractions;
-* `acp_client_core`;
+* `codelab_client_acp`;
 * state machines;
 * permission policy;
 * reconnect logic;
@@ -108,7 +108,7 @@ method _retryInternal called exactly 2 times
 * rendering;
 * navigation/presentation integration;
 * Fluent UI components;
-* `acp_ui`.
+* `codelab_ui`.
 
 Flutter test не должен быть единственным способом проверки core behavior.
 
@@ -133,7 +133,7 @@ fake ACP agent
 или:
 
 ```text
-codelab_app
+codelab_desktop
   ↓
 ACP client
   ↓
@@ -146,11 +146,11 @@ Integration test не должен заменять unit coverage.
 
 ---
 
-## 6. `acp_testing`
+## 6. `codelab_acp_testing`
 
 Package:
 
-`packages/dart/acp_testing`
+`packages/dart/codelab_acp_testing`
 
 предназначен для reusable ACP-specific testing infrastructure.
 
@@ -165,7 +165,7 @@ Package:
 * deterministic stream controllers;
 * lifecycle assertions.
 
-Production code НЕ ДОЛЖЕН зависеть от `acp_testing`.
+Production code НЕ ДОЛЖЕН зависеть от `codelab_acp_testing`.
 
 ---
 
@@ -174,25 +174,25 @@ Production code НЕ ДОЛЖЕН зависеть от `acp_testing`.
 Допустимо:
 
 ```text
-acp_client_core tests
+codelab_client_acp tests
     ↓
-acp_testing
+codelab_acp_testing
 ```
 
 Допустимо:
 
 ```text
-codelab_app tests
+codelab_desktop tests
     ↓
-acp_testing
+codelab_acp_testing
 ```
 
 Недопустимо:
 
 ```text
-acp_client_core/lib
+codelab_client_acp/lib
     ↓
-acp_testing
+codelab_acp_testing
 ```
 
 Test infrastructure не должна проникать в production API.
@@ -201,7 +201,7 @@ Test infrastructure не должна проникать в production API.
 
 ## 8. Protocol tests
 
-`acp_protocol` должен иметь focused tests на:
+`codelab_acp_protocol` должен иметь focused tests на:
 
 * serialization;
 * deserialization;
@@ -302,7 +302,7 @@ test/fixtures/
 
 ## 14. Transport tests
 
-`acp_transports` следует тестировать отдельно от application semantics.
+`codelab_acp_transports` следует тестировать отдельно от application semantics.
 
 Проверять:
 
@@ -335,7 +335,7 @@ Fake transport должен позволять детерминированно:
 
 ## 16. Client-core tests
 
-`acp_client_core` должен иметь основную behavioral coverage ACP client semantics.
+`codelab_client_acp` должен иметь основную behavioral coverage ACP client semantics.
 
 Ключевые области:
 
@@ -539,7 +539,7 @@ Widget tests предназначены для проверки presentation beh
 * error state;
 * loading state;
 * permission state;
-* reusable `acp_ui` components.
+* reusable `codelab_ui` components.
 
 ---
 
@@ -643,7 +643,7 @@ Application tests должны использовать fake adapter.
 
 ## 36. Real process tests
 
-Real process integration tests допустимы для `acp_transports`, если stdio/process transport критичен.
+Real process integration tests допустимы для `codelab_acp_transports`, если stdio/process transport критичен.
 
 Использовать controlled test executable/process, а не внешний production agent.
 
@@ -1059,9 +1059,9 @@ Internal implementation можно тестировать напрямую вн�
 Проверять:
 
 * pure Dart package не импортирует Flutter;
-* production code не импортирует `acp_testing`;
+* production code не импортирует `codelab_acp_testing`;
 * package не импортирует `src` другого package;
-* `acp_ui` не зависит от `codelab_app`;
+* `codelab_ui` не зависит от `codelab_desktop`;
 * forbidden dependency cycles отсутствуют.
 
 ---
@@ -1131,8 +1131,8 @@ fvm flutter test test/features/chat/
 Полный `melos test` особенно нужен при изменении:
 
 * public package API;
-* `acp_protocol`;
-* `acp_client_core`;
+* `codelab_acp_protocol`;
+* `codelab_client_acp`;
 * shared test utilities;
 * dependency graph;
 * code generation;
@@ -1410,7 +1410,7 @@ Protocol/client/state-machine logic остаётся pure Dart testable.
 
 ### TEST-004 — Production не зависит от test infrastructure
 
-`acp_testing` только test/dev dependency.
+`codelab_acp_testing` только test/dev dependency.
 
 ### TEST-005 — Security behavior имеет direct tests
 

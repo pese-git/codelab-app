@@ -70,18 +70,18 @@ CodeLab SHALL включать fake transport и интеграционные т
 - **THEN** CodeLab фиксирует типизированные состояния и диагностику, не падая
 
 ### Requirement: Web-безопасный публичный барель transport
-Основная точка входа `package:acp_transports/acp_transports.dart` SHALL экспортировать порт transport и классы конфигурации (`StdioAcpTransportConfig`, `StdioAcpAgentProfile`, `WebSocketAcpTransportConfig`) без транзитивного импорта `dart:io`. Реализации `StdioAcpTransport` и `WebSocketAcpTransport` SHALL экспортироваться только из отдельной точки входа `package:acp_transports/io.dart`. Файлы основного бареля НЕ SHALL ссылаться на файлы IO-точки входа.
+Основная точка входа `package:codelab_acp_transports/codelab_acp_transports.dart` SHALL экспортировать порт transport и классы конфигурации (`StdioAcpTransportConfig`, `StdioAcpAgentProfile`, `WebSocketAcpTransportConfig`) без транзитивного импорта `dart:io`. Реализации `StdioAcpTransport` и `WebSocketAcpTransport` SHALL экспортироваться только из отдельной точки входа `package:codelab_acp_transports/io.dart`. Файлы основного бареля НЕ SHALL ссылаться на файлы IO-точки входа.
 
 #### Scenario: Основной барель не тянет dart:io
-- **WHEN** сторож архитектуры проверяет `packages/dart/acp_transports/lib/` по правилу web-безопасного пакета с исключением IO-точки входа
-- **THEN** нарушений нет, а `grep -rn "dart:io"` по `lib/acp_transports.dart` и `lib/src/transport_configs.dart` ничего не находит
+- **WHEN** сторож архитектуры проверяет `packages/dart/codelab_acp_transports/lib/` по правилу web-безопасного пакета с исключением IO-точки входа
+- **THEN** нарушений нет, а `grep -rn "dart:io"` по `lib/codelab_acp_transports.dart` и `lib/src/transport_configs.dart` ничего не находит
 
 #### Scenario: Код создания транспорта импортирует io.dart
 - **WHEN** composition root приложения создаёт `StdioAcpTransport` или `WebSocketAcpTransport`
-- **THEN** он импортирует `package:acp_transports/io.dart`, а поведение подключения по stdio и WebSocket не меняется — интеграционные тесты stdio проходят
+- **THEN** он импортирует `package:codelab_acp_transports/io.dart`, а поведение подключения по stdio и WebSocket не меняется — интеграционные тесты stdio проходят
 
 ### Requirement: Серверные транспорты ACP
-`package:acp_transports/io.dart` SHALL экспортировать серверные транспорты агента:
+`package:codelab_acp_transports/io.dart` SHALL экспортировать серверные транспорты агента:
 - `StdioServerAcpTransport` — stdin/stdout процесса (параметры потоков для тестов): одна строка UTF-8 — одно сообщение, длина строки не ограничена, запись сообщений не перемешивается, пустые строки пропускаются, EOF входа закрывает `inbound`;
 - `WebSocketServerAcpTransport` — обёртка над принятым `WebSocket` из `dart:io`: один текстовый кадр — одно сообщение, закрытие сокета закрывает `inbound`.
 

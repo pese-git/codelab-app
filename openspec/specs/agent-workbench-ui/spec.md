@@ -1,6 +1,6 @@
 ## Purpose
 
-Десктопный workbench UI на базе Fluent: layout, организация виджетов `acp_ui` по Atomic Design, паттерны взаимодействия, нужные agent workbench (сайдбар сессий, approvals, режимы отображения, командная палитра и т. д.), и клавиатурная эргономика.
+Десктопный workbench UI на базе Fluent: layout, организация виджетов `codelab_ui` по Atomic Design, паттерны взаимодействия, нужные agent workbench (сайдбар сессий, approvals, режимы отображения, командная палитра и т. д.), и клавиатурная эргономика.
 ## Requirements
 ### Requirement: Десктопный workbench на Fluent
 CodeLab SHALL использовать `fluent_ui` как базовый Flutter UI framework и SHALL NOT использовать Material/Cupertino как базовый design framework.
@@ -25,7 +25,7 @@ CodeLab SHALL предоставлять десктопный layout workbench �
 - **THEN** панель сессий сжимается, а инспектор может сворачиваться, не скрывая prompt composer или состояние отмены
 
 ### Requirement: Организация виджетов по Atomic Design
-CodeLab SHALL организовывать переиспользуемые виджеты `acp_ui` по `atomics`, `molecules` и `organisms`.
+CodeLab SHALL организовывать переиспользуемые виджеты `codelab_ui` по `atomics`, `molecules` и `organisms`.
 
 #### Scenario: Добавляется atomic-виджет
 - **WHEN** реализуется минимальный переиспользуемый control
@@ -111,15 +111,15 @@ CodeLab SHALL поддерживать клавиатурную эргономи
 - **THEN** CodeLab представляет основные действия, такие как `/new`, `/plan`, `/permissions`, `/logs`, `/compact` и `/reconnect`
 
 ### Requirement: Командная палитра открывается и выполняет доступные действия
-CodeLab SHALL открывать `AcpCommandPaletteSurface` при вызове shortcut'а командной палитры и SHALL выполнять `/new` (создание сессии) и `/reconnect` (переподключение активного transport) немедленно при выборе, закрывая палитру после этого.
+CodeLab SHALL открывать `CodeLabCommandPaletteSurface` при вызове shortcut'а командной палитры и SHALL выполнять `/new` (создание сессии) и `/reconnect` (переподключение активного transport) немедленно при выборе, закрывая палитру после этого.
 
 #### Scenario: Открытие командной палитры показывает surface
 - **WHEN** пользователь вызывает shortcut командной палитры (`Ctrl/Cmd+K`)
-- **THEN** CodeLab показывает `AcpCommandPaletteSurface` поверх workbench
+- **THEN** CodeLab показывает `CodeLabCommandPaletteSurface` поверх workbench
 
 #### Scenario: Закрытие командной палитры
 - **WHEN** командная палитра открыта, и пользователь нажимает `Esc` либо выбирает доступную команду
-- **THEN** CodeLab скрывает `AcpCommandPaletteSurface` и возвращает фокус клавиатуры workbench
+- **THEN** CodeLab скрывает `CodeLabCommandPaletteSurface` и возвращает фокус клавиатуры workbench
 
 #### Scenario: Выбор /new создаёт сессию
 - **WHEN** командная палитра открыта, и пользователь выбирает `/new`

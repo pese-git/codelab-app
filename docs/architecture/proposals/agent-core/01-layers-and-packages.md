@@ -14,13 +14,13 @@
 
 | Пакет | Ответственность | Зависит от | Запрещено |
 |---|---|---|---|
-| `packages/dart/codelab_agent_core` | типы сообщений, LLM-контракт и адаптеры провайдеров (HTTP через внедрённый клиент), цикл, инструменты, разрешения, сессии (формат и проекции), сжатие, промпты, `MemoryExecutionEnv`, `AgentRuntime` | чистый Dart, `package:http` (только интерфейс `Client`) | `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web`, `package:flutter`, `acp_protocol`, `acp_transports` |
+| `packages/dart/codelab_agent_core` | типы сообщений, LLM-контракт и адаптеры провайдеров (HTTP через внедрённый клиент), цикл, инструменты, разрешения, сессии (формат и проекции), сжатие, промпты, `MemoryExecutionEnv`, `AgentRuntime` | чистый Dart, `package:http` (только интерфейс `Client`) | `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web`, `package:flutter`, `codelab_acp_protocol`, `codelab_acp_transports` |
 | `packages/dart/codelab_agent_io` | `LocalExecutionEnv` (файлы, процессы), файловый `JsonlSessionStore`, секреты из env и keychain, процессный транспорт для MCP stdio; после MVP — `LocalProcessLauncher` (§17.8.2), `FileSessionLeaseStore` и `ProcessProbe` (§17.6.8) | ядро, `dart:io` | Flutter, ACP |
 | `packages/dart/codelab_agent_mcp` | MCP-клиент: протокол, streamable HTTP, проекция MCP-инструментов в `AgentTool` | ядро | `dart:io` (stdio-процесс приходит портом из `_io`), Flutter, ACP |
 | `packages/dart/codelab_agent_lsp` | после MVP (§17.8): кадрирование `Content-Length`, JSON-RPC, `LspClient`, `LspPool`, кодеки позиций, планировщик `WorkspaceEdit`, инструмент `lsp`, `LspToolFactory` | ядро | `dart:io` (процесс приходит портом `ByteProcessLauncher`), Flutter, ACP |
 | `packages/dart/codelab_agent_a2a` | после MVP (§17.15): модели A2A в ProtoJSON, `A2aClient`, `A2aRemoteAgentConnector` (порт `RemoteAgentConnector` ядра), транспортно-независимый A2A-сервер `A2aRequestHandler`, `A2aPermissionGate` | ядро, `package:http` (интерфейс `Client`) | `dart:io` (HTTP-сервер — в `apps/codelab_agent`), Flutter, ACP |
-| `packages/dart/codelab_agent_acp` | ACP-сервер поверх `AgentRuntime`: `initialize`, `session/*`, проекция событий, `AcpClientExecutionEnv`, `AcpPermissionGate`, реплей `session/load` | ядро, `acp_protocol`, `acp_transports` | `dart:io`, Flutter |
-| `packages/dart/codelab_embedded` | одна функция сборки встроенного агента для клиентов: runtime + ACP-сервер + `InProcessAcpLink`; после MVP — клиентская часть A2A (§17.15.2) | агентские пакеты, `acp_transports` | Flutter |
+| `packages/dart/codelab_agent_acp` | ACP-сервер поверх `AgentRuntime`: `initialize`, `session/*`, проекция событий, `AcpClientExecutionEnv`, `AcpPermissionGate`, реплей `session/load` | ядро, `codelab_acp_protocol`, `codelab_acp_transports` | `dart:io`, Flutter |
+| `packages/dart/codelab_embedded` | одна функция сборки встроенного агента для клиентов: runtime + ACP-сервер + `InProcessAcpLink`; после MVP — клиентская часть A2A (§17.15.2) | агентские пакеты, `codelab_acp_transports` | Flutter |
 | `packages/dart/codelab_agent_images` | после MVP (T-29, §17.11.2.1): `PureDartImagePreparer` — реализация порта `ImagePreparer` на `package:image`; отдельная точка входа `lib/io.dart` — `IsolateImagePreparer` (та же реализация в `Isolate.run`) | ядро, `image` | Flutter, ACP; `dart:io`/`dart:isolate` — только в `lib/io.dart` и `lib/src/io/` (исключение §1.4) |
 | `packages/dart/codelab_agent_web` | `PersistentWebEnv` (файлы в IndexedDB), хранилище сессий для web; этап 10 | ядро, `package:web` | `dart:io`, Flutter, ACP |
 | `apps/codelab_agent` | бинарь `codelab-agent serve --stdio` / `--ws` (после MVP — `--a2a`, HTTP-сервер A2A на `dart:io`, §17.15.4), загрузка конфига, выбор профиля | все агентские пакеты | Flutter, клиентские пакеты |
@@ -35,9 +35,9 @@ flowchart TB
     EMB --> IO
     EMB --> MCP
     EMB --> LSP
-    EMB --> TR["acp_transports"]
+    EMB --> TR["codelab_acp_transports"]
     ACPA --> CORE["codelab_agent_core"]
-    ACPA --> PROTO["acp_protocol"]
+    ACPA --> PROTO["codelab_acp_protocol"]
     ACPA --> TR
     IO --> CORE
     MCP --> CORE
@@ -57,8 +57,8 @@ flowchart TB
 | `codelab_agent_mcp` | `codelab_agent_core`, `http`, `meta`, `async` |
 | `codelab_agent_lsp` (после MVP, §17.8.2) | `codelab_agent_core`, `meta`, `async` |
 | `codelab_agent_a2a` (после MVP, §17.15.2) | `codelab_agent_core`, `http`, `meta`, `async` |
-| `codelab_agent_acp` | `codelab_agent_core`, `acp_protocol`, `acp_transports`, `meta`, `async` |
-| `codelab_embedded` | агентские пакеты `codelab_agent_core`, `codelab_agent_io`, `codelab_agent_acp`, с этапа 8 — `codelab_agent_mcp` (после MVP — и `codelab_agent_lsp`, `codelab_agent_images`, `codelab_agent_a2a`), `acp_protocol`, `acp_transports` |
+| `codelab_agent_acp` | `codelab_agent_core`, `codelab_acp_protocol`, `codelab_acp_transports`, `meta`, `async` |
+| `codelab_embedded` | агентские пакеты `codelab_agent_core`, `codelab_agent_io`, `codelab_agent_acp`, с этапа 8 — `codelab_agent_mcp` (после MVP — и `codelab_agent_lsp`, `codelab_agent_images`, `codelab_agent_a2a`), `codelab_acp_protocol`, `codelab_acp_transports` |
 | `codelab_agent_images` (после MVP) | `codelab_agent_core`, `image`, `meta` |
 | `codelab_agent_web` | `codelab_agent_core`, `web`, `meta`, `async` |
 
@@ -180,7 +180,7 @@ dart-agent-and-clients §9.5), тест `test/import_guard_test.dart`. Прав�
 клиентов (столбец «Запрещено» в §1.2, PKG-4) лежат в одной таблице `test/support/rules.dart`;
 в самих пакетах копий теста нет. Алгоритм для каждого пакета из таблицы:
 
-1. Собрать все файлы `lib/**/*.dart` пакета (рекурсивно, включая файлы `part`, без `*.g.dart`-исключений: сгенерированный код тоже проверяется). Сюда входят и точки входа верхнего уровня, например `lib/testing.dart` ядра: правила «Запрещено» действуют на неё так же, как на `lib/src/**`. Исключение — отдельная IO-точка входа пакета с веб-сборкой (`lib/io.dart` у `acp_transports`, `codelab_embedded`, `codelab_setup`, после MVP — `codelab_agent_images`) вместе с каталогом её реализации `lib/src/io/`: правило пакета перечисляет их в `exclude`, и запреты веб-сборки (`dart:io` и т. п.) на них не действуют. Чтобы исключение не стало обходом, тот же тест отдельно проверяет, что ни один файл пакета вне `exclude` не импортирует и не экспортирует `io.dart` или файлы `lib/src/io/` (относительным путём или через `package:`).
+1. Собрать все файлы `lib/**/*.dart` пакета (рекурсивно, включая файлы `part`, без `*.g.dart`-исключений: сгенерированный код тоже проверяется). Сюда входят и точки входа верхнего уровня, например `lib/testing.dart` ядра: правила «Запрещено» действуют на неё так же, как на `lib/src/**`. Исключение — отдельная IO-точка входа пакета с веб-сборкой (`lib/io.dart` у `codelab_acp_transports`, `codelab_embedded`, `codelab_setup`, после MVP — `codelab_agent_images`) вместе с каталогом её реализации `lib/src/io/`: правило пакета перечисляет их в `exclude`, и запреты веб-сборки (`dart:io` и т. п.) на них не действуют. Чтобы исключение не стало обходом, тот же тест отдельно проверяет, что ни один файл пакета вне `exclude` не импортирует и не экспортирует `io.dart` или файлы `lib/src/io/` (относительным путём или через `package:`).
 2. Из каждого файла извлечь URI директив `import`, `export`, `part` регулярным выражением по началу строки: `^\s*(import|export|part)\s+['"]([^'"]+)['"]`. Условные импорты (`if (dart.library.io) '...'`) тоже извлекаются: каждое альтернативное URI проверяется отдельно.
 3. Для каждого URI вычислить «цель»: `dart:xxx` → библиотека SDK; `package:name/...` → имя пакета; относительный путь → файл того же пакета (разрешить и запомнить для обхода `export`).
 4. Сравнить цель со списком запретов пакета (столбец «Запрещено» в §1.2). Запрет по пакету действует на любой путь внутри него.
@@ -193,7 +193,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 const forbiddenSdk = {'dart:io', 'dart:isolate', 'dart:ffi', 'dart:html', 'dart:js_interop'};
-const forbiddenPackages = {'flutter', 'web', 'acp_protocol', 'acp_transports'};
+const forbiddenPackages = {'flutter', 'web', 'codelab_acp_protocol', 'codelab_acp_transports'};
 final directive = RegExp(r'''^\s*(import|export|part)\s+['"]([^'"]+)['"]''', multiLine: true);
 final conditional = RegExp(r'''if\s*\([^)]*\)\s*['"]([^'"]+)['"]''');
 
@@ -240,7 +240,7 @@ String? _violates(String uri) {
 1. **PKG-1.** Ни один файл `codelab_agent_core/lib/**` не импортирует библиотеки из столбца «Запрещено», в том числе транзитивно через `export`.
 2. **PKG-2.** `pubspec.yaml` ядра содержит только зависимости из allowlist (`http`, `meta`, `collection`, `async`, `crypto`; расширение allowlist — через OpenSpec).
 3. **PKG-3.** `codelab_agent_acp` и `codelab_agent_mcp` (после MVP — и `codelab_agent_a2a`) не импортируют `dart:io`.
-4. **PKG-4.** Клиенты (`apps/codelab_app`, `apps/codelab_cli`) импортируют агентские пакеты только через `codelab_embedded` и `codelab_setup` (типы конфига и секретов для настроек, dart-agent-and-clients §4.1).
+4. **PKG-4.** Клиенты (`apps/codelab_desktop`, `apps/codelab_cli`) импортируют агентские пакеты только через `codelab_embedded` и `codelab_setup` (типы конфига и секретов для настроек, dart-agent-and-clients §4.1).
 5. **PKG-5.** Публичный экспорт ядра не раскрывает `lib/src/llm/providers/*` и внутренние классы цикла: хосты получают адаптеры провайдеров через фабрику `createStreamFunction(ProviderConfig config, CoreLlmServices services)` (§2.10).
 6. **PKG-6.** Ядро не создаёт HTTP-клиент, таймеры ожидания, случайность и id само: `http.Client`, `Clock`, `Random` и `IdGenerator` приходят от хоста (в тестах — детерминированные). Порт `IdGenerator` — `nextId()` для id ходов и вызовов и `nextChars(count, alphabet)` для id сессий и записей журнала (§8.4).
 
@@ -249,7 +249,7 @@ String? _violates(String uri) {
 * **IO — отдельный пакет, а не отдельная точка входа того же пакета.** Граница видна в
   `pubspec.yaml`: у ядра физически нет зависимости, через которую можно было бы дотянуться до
   `dart:io`. Проверка сводится к простому тесту директив, без анализа путей импорта.
-* **Ядро не импортирует `acp_protocol`.** Ядро должно работать и без ACP: в тестах прямого API,
+* **Ядро не импортирует `codelab_acp_protocol`.** Ядро должно работать и без ACP: в тестах прямого API,
   во встроенном режиме будущих хостов, для других протоколов. Если бы типы ACP проникли в ядро,
   любое изменение спецификации ACP затрагивало бы цикл и инструменты.
 * **Тест-сторож на регулярных выражениях, а не на анализаторе.** Директивы Dart имеют простой
@@ -261,7 +261,7 @@ String? _violates(String uri) {
 
 ## 1.7. Как проверить
 
-* `codelab_architecture_tests/test/import_guard_test.dart` — один тест на все агентские пакеты: обход всех файлов `lib/**/*.dart` каждого, включая `part` и `lib/testing.dart`, разбор директив (каждое альтернативное URI условного импорта — отдельно), сравнение со списком запретов пакета (PKG-1, PKG-3); в той же таблице правила клиентов `apps/codelab_app` и `apps/codelab_cli`: импорт `package:codelab_agent_*` запрещён (PKG-4).
+* `codelab_architecture_tests/test/import_guard_test.dart` — один тест на все агентские пакеты: обход всех файлов `lib/**/*.dart` каждого, включая `part` и `lib/testing.dart`, разбор директив (каждое альтернативное URI условного импорта — отдельно), сравнение со списком запретов пакета (PKG-1, PKG-3); в той же таблице правила клиентов `apps/codelab_desktop` и `apps/codelab_cli`: импорт `package:codelab_agent_*` запрещён (PKG-4).
 * `codelab_architecture_tests/test/pubspec_allowlist_test.dart`: множество `dependencies` равно подмножеству allowlist (PKG-2).
 * `no_js_engine_test.dart` — отрицательный тест **`core/no-js-engine-dependency`** (Won't E-11): в замыкании зависимостей каждого агентского пакета и хостов `apps/codelab_agent`, `codelab_embedded` (по `pubspec.lock`) нет пакетов-движков JavaScript и встраиваемых браузеров: имена, совпадающие с `^(flutter_js|flutter_qjs|quickjs.*|js_runtime.*|.*_js_engine|webview.*|flutter_inappwebview.*)$`; `dart:js_interop` и `package:web` используются только в файлах web-профиля (`lib/src/web/**`), а не в коде расширений. Расширения агента — только MCP вне процесса (§6.4) и плагины на Dart (§17.14.3).
 * `public_api_test.dart`: файл `lib/codelab_agent_core.dart` не содержит `export 'src/llm/providers/` и `export 'src/loop/agent_loop.dart'` (PKG-5).

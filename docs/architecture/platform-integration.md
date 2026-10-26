@@ -1123,7 +1123,7 @@ OS/plugin details не распространяются по application code.
 
 ### PLATFORM-002 — Pure Dart boundaries сохраняются
 
-`acp_protocol`, `acp_client_core` и другие pure Dart packages не получают Flutter/platform dependency без архитектурного решения.
+`codelab_acp_protocol`, `codelab_client_acp` и другие pure Dart packages не получают Flutter/platform dependency без архитектурного решения.
 
 ### PLATFORM-003 — Agent-triggered side effects проходят permission policy
 

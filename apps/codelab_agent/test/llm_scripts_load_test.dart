@@ -10,7 +10,7 @@ import 'support/agent_process.dart';
 /// Сценарии e2e codelab-app для режима `dart` (задача 7.1; design.md change
 /// `add-codelab-agent-binary`, D9).
 ///
-/// Почему здесь, а не в `apps/codelab_app/test`: приложению запрещено
+/// Почему здесь, а не в `apps/codelab_desktop/test`: приложению запрещено
 /// импортировать `codelab_agent_*` (сторож импортов), а проверить файл можно
 /// только загрузчиком `--llm-script`. Тест читает сценарии по пути файла.
 ///
@@ -18,7 +18,7 @@ import 'support/agent_process.dart';
 /// поэтому битый сценарий ловится здесь, на Dart VM.
 void main() {
   final directory = Directory(
-    '$appDirectory/../codelab_app/integration_test/llm_scripts',
+    '$appDirectory/../codelab_desktop/integration_test/llm_scripts',
   );
 
   /// Режимы `CodelabCompatibleStdioAgentMode`, тесты которых идут против

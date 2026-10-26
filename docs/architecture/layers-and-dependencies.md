@@ -47,7 +47,7 @@
 
 ```text id="ll6a2s"
 ┌─────────────────────────────────────────────┐
-│                codelab_app                  │
+│                codelab_desktop                  │
 │                                             │
 │ presentation / app-specific orchestration   │
 │ composition root / desktop integration      │
@@ -56,7 +56,7 @@
              ┌─────────┴─────────┐
              ▼                   ▼
 ┌───────────────────────┐  ┌───────────────────────┐
-│        acp_ui         │  │    acp_client_core    │
+│        codelab_ui         │  │    codelab_client_acp    │
 │                       │  │                       │
 │ reusable Flutter UI   │  │ reusable ACP client  │
 │ presentation          │  │ application logic     │
@@ -65,7 +65,7 @@
                            ┌───────────┴───────────┐
                            ▼                       ▼
                 ┌──────────────────┐    ┌──────────────────┐
-                │  acp_transports  │    │   acp_protocol   │
+                │  codelab_acp_transports  │    │   codelab_acp_protocol   │
                 │                  │    │                  │
                 │ transport layer  │    │ wire protocol    │
                 └────────┬─────────┘    └──────────────────┘
@@ -77,7 +77,7 @@
 Testing infrastructure находится отдельно:
 
 ```text id="55dykc"
-acp_testing
+codelab_acp_testing
     │
     └── используется только test/dev кодом
 ```
@@ -93,29 +93,29 @@ Lower-level package НЕ ДОЛЖЕН зависеть от higher-level applica
 Запрещено:
 
 ```text id="ljd98u"
-acp_protocol
-    → acp_client_core
+codelab_acp_protocol
+    → codelab_client_acp
 
-acp_protocol
-    → acp_ui
+codelab_acp_protocol
+    → codelab_ui
 
-acp_protocol
-    → codelab_app
+codelab_acp_protocol
+    → codelab_desktop
 
-acp_transports
-    → acp_ui
+codelab_acp_transports
+    → codelab_ui
 
-acp_transports
-    → codelab_app
+codelab_acp_transports
+    → codelab_desktop
 
-acp_client_core
-    → acp_ui
+codelab_client_acp
+    → codelab_ui
 
-acp_client_core
-    → codelab_app
+codelab_client_acp
+    → codelab_desktop
 
-acp_ui
-    → codelab_app
+codelab_ui
+    → codelab_desktop
 ```
 
 ---
@@ -124,14 +124,14 @@ acp_ui
 
 Базовая dependency policy:
 
-| From ↓ / To →     | `acp_protocol` | `acp_transports` | `acp_client_core` | `acp_ui` | `codelab_app` | `acp_testing` |
+| From ↓ / To →     | `codelab_acp_protocol` | `codelab_acp_transports` | `codelab_client_acp` | `codelab_ui` | `codelab_desktop` | `codelab_acp_testing` |
 | ----------------- | -------------: | ---------------: | ----------------: | -------: | ------------: | ------------: |
-| `acp_protocol`    |              — |                ❌ |                 ❌ |        ❌ |             ❌ |             ❌ |
-| `acp_transports`  |              ✅ |                — |                 ❌ |        ❌ |             ❌ |             ❌ |
-| `acp_client_core` |              ✅ |               ✅* |                 — |        ❌ |             ❌ |             ❌ |
-| `acp_ui`          |             ⚠️ |                ❌ |                ⚠️ |        — |             ❌ |             ❌ |
-| `codelab_app`     |              ✅ |                ✅ |                 ✅ |        ✅ |             — |             ❌ |
-| `acp_testing`     |              ✅ |                ✅ |                 ✅ |       ❌* |             ❌ |             — |
+| `codelab_acp_protocol`    |              — |                ❌ |                 ❌ |        ❌ |             ❌ |             ❌ |
+| `codelab_acp_transports`  |              ✅ |                — |                 ❌ |        ❌ |             ❌ |             ❌ |
+| `codelab_client_acp` |              ✅ |               ✅* |                 — |        ❌ |             ❌ |             ❌ |
+| `codelab_ui`          |             ⚠️ |                ❌ |                ⚠️ |        — |             ❌ |             ❌ |
+| `codelab_desktop`     |              ✅ |                ✅ |                 ✅ |        ✅ |             — |             ❌ |
+| `codelab_acp_testing`     |              ✅ |                ✅ |                 ✅ |       ❌* |             ❌ |             — |
 
 Обозначения:
 
@@ -146,15 +146,15 @@ acp_ui
 
 ---
 
-## 5. `acp_protocol`
+## 5. `codelab_acp_protocol`
 
 Package:
 
-`packages/dart/acp_protocol`
+`packages/dart/codelab_acp_protocol`
 
 ### Ответственность
 
-`acp_protocol` представляет wire-level ACP contract.
+`codelab_acp_protocol` представляет wire-level ACP contract.
 
 Может содержать:
 
@@ -174,12 +174,12 @@ Package:
 
 ### Запрещённые dependencies
 
-`acp_protocol` НЕ ДОЛЖЕН зависеть от:
+`codelab_acp_protocol` НЕ ДОЛЖЕН зависеть от:
 
-* `acp_transports`;
-* `acp_client_core`;
-* `acp_ui`;
-* `codelab_app`;
+* `codelab_acp_transports`;
+* `codelab_client_acp`;
+* `codelab_ui`;
+* `codelab_desktop`;
 * Flutter;
 * `flutter_bloc`;
 * `fluent_ui`;
@@ -191,18 +191,18 @@ Package:
 ACP wire contract
       │
       ▼
-acp_protocol
+codelab_acp_protocol
 ```
 
 Ничто из application/presentation layer не должно быть необходимо для определения ACP message.
 
 ---
 
-## 6. `acp_transports`
+## 6. `codelab_acp_transports`
 
 Package:
 
-`packages/dart/acp_transports`
+`packages/dart/codelab_acp_transports`
 
 ### Ответственность
 
@@ -220,9 +220,9 @@ Transport package отвечает за доставку ACP messages между
 
 ### Разрешённые dependencies
 
-`acp_transports` МОЖЕТ зависеть от:
+`codelab_acp_transports` МОЖЕТ зависеть от:
 
-* `acp_protocol`;
+* `codelab_acp_protocol`;
 * Dart SDK;
 * transport-specific pure Dart libraries.
 
@@ -230,9 +230,9 @@ Transport package отвечает за доставку ACP messages между
 
 НЕ ДОЛЖЕН зависеть от:
 
-* `acp_client_core`;
-* `acp_ui`;
-* `codelab_app`;
+* `codelab_client_acp`;
+* `codelab_ui`;
+* `codelab_desktop`;
 * Flutter presentation;
 * `flutter_bloc`;
 * `fluent_ui`.
@@ -259,15 +259,15 @@ presentation state
 
 ---
 
-## 7. `acp_client_core`
+## 7. `codelab_client_acp`
 
 Package:
 
-`packages/dart/acp_client_core`
+`packages/dart/codelab_client_acp`
 
 ### Ответственность
 
-`acp_client_core` содержит reusable client-side application behavior ACP.
+`codelab_client_acp` содержит reusable client-side application behavior ACP.
 
 Может содержать:
 
@@ -283,33 +283,33 @@ Package:
 
 ### Разрешённые dependencies
 
-`acp_client_core` МОЖЕТ зависеть от:
+`codelab_client_acp` МОЖЕТ зависеть от:
 
-* `acp_protocol`;
+* `codelab_acp_protocol`;
 * transport abstractions;
-* `acp_transports`, если concrete transport является осознанной частью client-core architecture;
+* `codelab_acp_transports`, если concrete transport является осознанной частью client-core architecture;
 * pure Dart libraries.
 
 ### Предпочтительная boundary
 
-Если practical, `acp_client_core` СЛЕДУЕТ зависеть от transport abstraction, а concrete transport создавать выше — в composition root.
+Если practical, `codelab_client_acp` СЛЕДУЕТ зависеть от transport abstraction, а concrete transport создавать выше — в composition root.
 
 Предпочтительно:
 
 ```text id="gocztb"
-acp_client_core
+codelab_client_acp
        │
        ▼
 Transport interface
        ▲
        │
-acp_transports
+codelab_acp_transports
 ```
 
 вместо сильного coupling:
 
 ```text id="3c0fr4"
-acp_client_core
+codelab_client_acp
        │
        ▼
 ConcreteStdioTransport
@@ -319,13 +319,13 @@ ConcreteStdioTransport
 
 ### Запрещённые dependencies
 
-`acp_client_core` НЕ ДОЛЖЕН зависеть от:
+`codelab_client_acp` НЕ ДОЛЖЕН зависеть от:
 
 * Flutter;
 * `flutter_bloc`;
 * `fluent_ui`;
-* `acp_ui`;
-* `codelab_app`;
+* `codelab_ui`;
+* `codelab_desktop`;
 * widgets;
 * `BuildContext`;
 * navigation;
@@ -333,19 +333,19 @@ ConcreteStdioTransport
 
 ### Invariant
 
-Если ACP client behavior можно полностью протестировать обычным Dart test без Flutter binding, это сильный кандидат для `acp_client_core`.
+Если ACP client behavior можно полностью протестировать обычным Dart test без Flutter binding, это сильный кандидат для `codelab_client_acp`.
 
 ---
 
-## 8. `acp_ui`
+## 8. `codelab_ui`
 
 Package:
 
-`packages/flutter/acp_ui`
+`packages/flutter/codelab_ui`
 
 ### Ответственность
 
-`acp_ui` содержит reusable ACP-specific Flutter presentation.
+`codelab_ui` содержит reusable ACP-specific Flutter presentation.
 
 Может содержать:
 
@@ -359,13 +359,13 @@ Package:
 
 ### Разрешённые dependencies
 
-`acp_ui` МОЖЕТ зависеть от:
+`codelab_ui` МОЖЕТ зависеть от:
 
 * Flutter;
 * `fluent_ui`;
 * `flutter_bloc`.
 
-Dependency на `acp_client_core` или `acp_protocol` допустима только если reusable UI действительно должен понимать соответствующий public model.
+Dependency на `codelab_client_acp` или `codelab_acp_protocol` допустима только если reusable UI действительно должен понимать соответствующий public model.
 
 ### Предпочтение
 
@@ -378,33 +378,33 @@ ACP/application model
 presentation mapping
         │
         ▼
-acp_ui model/widget
+codelab_ui model/widget
 ```
 
 вместо распространения raw protocol DTO по widget tree.
 
 ### Запрещённые dependencies
 
-`acp_ui` НЕ ДОЛЖЕН зависеть от:
+`codelab_ui` НЕ ДОЛЖЕН зависеть от:
 
-* `codelab_app`;
+* `codelab_desktop`;
 * concrete ACP transport;
 * application composition root;
 * desktop application-specific services.
 
 ### Invariant
 
-`acp_ui` должен оставаться reusable.
+`codelab_ui` должен оставаться reusable.
 
-Если component имеет смысл только внутри одной feature `codelab_app`, его не следует автоматически переносить в `acp_ui`.
+Если component имеет смысл только внутри одной feature `codelab_desktop`, его не следует автоматически переносить в `codelab_ui`.
 
 ---
 
-## 9. `acp_testing`
+## 9. `codelab_acp_testing`
 
 Package:
 
-`packages/dart/acp_testing`
+`packages/dart/codelab_acp_testing`
 
 ### Ответственность
 
@@ -422,27 +422,27 @@ Reusable testing infrastructure.
 
 ### Dependencies
 
-`acp_testing` МОЖЕТ зависеть от pure Dart ACP packages:
+`codelab_acp_testing` МОЖЕТ зависеть от pure Dart ACP packages:
 
-* `acp_protocol`;
-* `acp_transports`;
-* `acp_client_core`.
+* `codelab_acp_protocol`;
+* `codelab_acp_transports`;
+* `codelab_client_acp`.
 
-Production code НЕ ДОЛЖЕН зависеть от `acp_testing`.
+Production code НЕ ДОЛЖЕН зависеть от `codelab_acp_testing`.
 
-Если появляются reusable Flutter-specific test helpers, следует рассмотреть отдельный Flutter testing package вместо добавления Flutter dependency в pure Dart `acp_testing`.
+Если появляются reusable Flutter-specific test helpers, следует рассмотреть отдельный Flutter testing package вместо добавления Flutter dependency в pure Dart `codelab_acp_testing`.
 
 ---
 
-## 10. `codelab_app`
+## 10. `codelab_desktop`
 
 Application:
 
-`apps/codelab_app`
+`apps/codelab_desktop`
 
 ### Ответственность
 
-`codelab_app` является конечным desktop application и composition root.
+`codelab_desktop` является конечным desktop application и composition root.
 
 Отвечает за:
 
@@ -459,10 +459,10 @@ Application:
 
 Application МОЖЕТ зависеть от:
 
-* `acp_protocol`;
-* `acp_transports`;
-* `acp_client_core`;
-* `acp_ui`;
+* `codelab_acp_protocol`;
+* `codelab_acp_transports`;
+* `codelab_client_acp`;
+* `codelab_ui`;
 * Flutter;
 * `flutter_bloc`;
 * Cherrypick;
@@ -473,7 +473,7 @@ Application МОЖЕТ зависеть от:
 
 ---
 
-## 11. Внутренняя структура `codelab_app`
+## 11. Внутренняя структура `codelab_desktop`
 
 Предпочтительная структура:
 
@@ -570,7 +570,7 @@ features/settings/bar.dart
 
 ## 14. App-level `core/`
 
-`apps/codelab_app/lib/core/` предназначен только для действительно shared application-specific code.
+`apps/codelab_desktop/lib/core/` предназначен только для действительно shared application-specific code.
 
 Примеры:
 
@@ -651,7 +651,7 @@ Application layer:
 * dialogs;
 * concrete visual components.
 
-Для reusable ACP behavior предпочтительным владельцем является `acp_client_core`.
+Для reusable ACP behavior предпочтительным владельцем является `codelab_client_acp`.
 
 ---
 
@@ -728,7 +728,7 @@ Mapping нужен тогда, когда модели имеют разные s
 
 Владелец:
 
-`acp_protocol`
+`codelab_acp_protocol`
 
 ### Application model
 
@@ -736,7 +736,7 @@ Mapping нужен тогда, когда модели имеют разные s
 
 Владелец:
 
-`acp_client_core` или соответствующая application feature.
+`codelab_client_acp` или соответствующая application feature.
 
 ### Presentation model
 
@@ -744,7 +744,7 @@ Mapping нужен тогда, когда модели имеют разные s
 
 Владелец:
 
-`acp_ui` или presentation конкретной feature.
+`codelab_ui` или presentation конкретной feature.
 
 ---
 
@@ -776,7 +776,7 @@ Transport state
     → transport
 
 ACP client/session state
-    → acp_client_core
+    → codelab_client_acp
 
 Presentation state
     → BLoC/Cubit
@@ -797,9 +797,9 @@ Derived presentation state допустим, но source of truth должен �
 
 | Side effect           | Owner                  |
 | --------------------- | ---------------------- |
-| ACP serialization     | `acp_protocol`         |
-| ACP transport I/O     | `acp_transports`       |
-| Session orchestration | `acp_client_core`      |
+| ACP serialization     | `codelab_acp_protocol`         |
+| ACP transport I/O     | `codelab_acp_transports`       |
+| Session orchestration | `codelab_client_acp`      |
 | Permission policy     | application/core       |
 | Dialog                | presentation           |
 | Navigation            | presentation/app       |
@@ -885,7 +885,7 @@ DI container должен использоваться для сборки objec
 
 ## 24. Composition root
 
-`codelab_app` является главным composition root desktop-приложения.
+`codelab_desktop` является главным composition root desktop-приложения.
 
 Composition root отвечает за связывание:
 
@@ -929,7 +929,7 @@ Cross-package dependency должна проходить через public API p
 Предпочтительно:
 
 ```dart
-import 'package:acp_protocol/acp_protocol.dart';
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 ```
 
 вместо импорта внутренних implementation files другого package.
@@ -950,7 +950,7 @@ Implementation details package должны находиться вне его p
 
 ```text
 lib/
-├── acp_protocol.dart
+├── codelab_acp_protocol.dart
 └── src/
     ├── models/
     ├── serialization/
@@ -1077,7 +1077,7 @@ Mapping нужен, если:
 
 ## 30. Protocol errors
 
-Protocol-level ошибки принадлежат `acp_protocol`.
+Protocol-level ошибки принадлежат `codelab_acp_protocol`.
 
 Например:
 
@@ -1092,7 +1092,7 @@ Protocol-level ошибки принадлежат `acp_protocol`.
 
 ## 31. Transport errors
 
-Transport errors принадлежат `acp_transports`.
+Transport errors принадлежат `codelab_acp_transports`.
 
 Например:
 
@@ -1232,7 +1232,7 @@ Platform plugin
 Допустимо:
 
 ```text
-acp_transports
+codelab_acp_transports
 desktop infrastructure adapters
 filesystem adapters
 process adapters
@@ -1287,13 +1287,13 @@ BLoC НЕ ДОЛЖЕН становиться заменой application layer.
 * reusable session state machine;
 * significant retry/reconnect algorithms;
 
-следует проверить, не принадлежит ли эта логика `acp_client_core`.
+следует проверить, не принадлежит ли эта логика `codelab_client_acp`.
 
 ---
 
-## 37. `acp_ui` и BLoC
+## 37. `codelab_ui` и BLoC
 
-`acp_ui` может содержать BLoC-aware widgets, поскольку package явно является Flutter presentation package.
+`codelab_ui` может содержать BLoC-aware widgets, поскольку package явно является Flutter presentation package.
 
 Однако reusable visual component следует по возможности отделять от конкретного state-management context.
 
@@ -1377,7 +1377,7 @@ Freezed является implementation/code-generation инструментом
 
 Однако generated API не должен случайно связывать layers.
 
-Например, Freezed state BLoC не должен импортироваться в `acp_client_core` только потому, что он удобен для UI.
+Например, Freezed state BLoC не должен импортироваться в `codelab_client_acp` только потому, что он удобен для UI.
 
 Тип должен жить на том уровне, semantics которого он представляет.
 
@@ -1390,9 +1390,9 @@ Test code может иметь более широкий dependency graph, че
 Например:
 
 ```text
-acp_client_core tests
+codelab_client_acp tests
        │
-       └── acp_testing
+       └── codelab_acp_testing
 ```
 
 Допустимо.
@@ -1411,11 +1411,11 @@ Test-only packages должны находиться в `dev_dependencies`, ес
 
 Полезно проверять:
 
-* `acp_protocol` не зависит от Flutter;
-* `acp_client_core` не зависит от Flutter;
-* `acp_transports` не зависит от Flutter presentation;
-* `acp_ui` не зависит от `codelab_app`;
-* production packages не зависят от `acp_testing`;
+* `codelab_acp_protocol` не зависит от Flutter;
+* `codelab_client_acp` не зависит от Flutter;
+* `codelab_acp_transports` не зависит от Flutter presentation;
+* `codelab_ui` не зависит от `codelab_desktop`;
+* production packages не зависят от `codelab_acp_testing`;
 * запрещённые `package:*/src/*` imports отсутствуют между packages.
 
 Архитектурное правило, которое можно надёжно проверить автоматически, следует постепенно переносить из документации в static/CI verification.
@@ -1443,7 +1443,7 @@ Test-only packages должны находиться в `dev_dependencies`, ес
 
 ---
 
-## 44. Когда выносить код из `codelab_app`
+## 44. Когда выносить код из `codelab_desktop`
 
 Код является кандидатом на reusable package, если выполняется одно или несколько условий:
 
@@ -1460,9 +1460,9 @@ Test-only packages должны находиться в `dev_dependencies`, ес
 
 ---
 
-## 45. Когда код принадлежит `acp_client_core`
+## 45. Когда код принадлежит `codelab_client_acp`
 
-Код следует рассматривать для `acp_client_core`, если он:
+Код следует рассматривать для `codelab_client_acp`, если он:
 
 * относится к ACP client behavior;
 * не требует Flutter;
@@ -1487,12 +1487,12 @@ permission request model
 
 ---
 
-## 46. Когда код принадлежит `acp_ui`
+## 46. Когда код принадлежит `codelab_ui`
 
-Код следует рассматривать для `acp_ui`, если он:
+Код следует рассматривать для `codelab_ui`, если он:
 
 * является reusable ACP-specific Flutter presentation;
-* не зависит от `codelab_app`;
+* не зависит от `codelab_desktop`;
 * потенциально полезен в другом ACP Flutter application;
 * имеет стабильный presentation contract.
 
@@ -1507,13 +1507,13 @@ conversation message renderer
 
 могут быть кандидатами.
 
-Application-specific page или workflow следует оставить в `codelab_app`.
+Application-specific page или workflow следует оставить в `codelab_desktop`.
 
 ---
 
 ## 47. Когда код принадлежит feature приложения
 
-Код должен оставаться внутри `codelab_app/features/<feature>`, если он:
+Код должен оставаться внутри `codelab_desktop/features/<feature>`, если он:
 
 * специфичен только для CodeLab application;
 * определяет конкретный workflow приложения;
@@ -1534,7 +1534,7 @@ Application-specific page или workflow следует оставить в `co
 ```text
 Widget
   ↓
-acp_transports
+codelab_acp_transports
 ```
 
 ЗАПРЕЩЕНО для application behavior.
@@ -1556,7 +1556,7 @@ File(...)
 ### Protocol → UI
 
 ```text
-acp_protocol
+codelab_acp_protocol
     ↓
 Flutter widget
 ```
@@ -1568,7 +1568,7 @@ Flutter widget
 ### Core → presentation
 
 ```text
-acp_client_core
+codelab_client_acp
       ↓
 flutter_bloc / fluent_ui
 ```
@@ -1580,9 +1580,9 @@ flutter_bloc / fluent_ui
 ### Reusable package → application
 
 ```text
-acp_ui
+codelab_ui
    ↓
-codelab_app
+codelab_desktop
 ```
 
 ЗАПРЕЩЕНО.
@@ -1592,9 +1592,9 @@ codelab_app
 ### Production → testing
 
 ```text
-acp_client_core/lib
+codelab_client_acp/lib
        ↓
-acp_testing
+codelab_acp_testing
 ```
 
 ЗАПРЕЩЕНО.
@@ -1660,16 +1660,16 @@ Cubit
                      APPLICATION
                          │
                          ▼
-                    codelab_app
+                    codelab_desktop
                     /          \
                    ▼            ▼
-              acp_ui      ACP application API
+              codelab_ui      ACP application API
                                │
                                ▼
-                       acp_client_core
+                       codelab_client_acp
                           /          \
                          ▼            ▼
-                acp_transports   acp_protocol
+                codelab_acp_transports   codelab_acp_protocol
                        │
                        ▼
                  External Agent
@@ -1681,13 +1681,13 @@ Cubit
                    composition root
                     /           \
                    ▼             ▼
-          acp_client_core   acp_transports
+          codelab_client_acp   codelab_acp_transports
                    │             │
                    ▼             │
            Transport Port ◄──────┘
                    │
                    ▼
-              acp_protocol
+              codelab_acp_protocol
 ```
 
 Конкретный dependency direction должен минимизировать coupling и сохранять pure Dart boundaries.

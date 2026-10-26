@@ -26,8 +26,8 @@ const ioAllowlist = {
 /// §1.2).
 const acpAllowlist = {
   'codelab_agent_core',
-  'acp_protocol',
-  'acp_transports',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
   'meta',
   'async',
 };
@@ -38,11 +38,36 @@ const binaryAllowlist = {
   'codelab_agent_core',
   'codelab_agent_io',
   'codelab_agent_acp',
-  'acp_protocol',
-  'acp_transports',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
   'args',
   'http',
   'async',
+  'meta',
+};
+
+/// Dependencies of the client kit (design D2 change
+/// `extract-acp-client-kit`): only web-safe packages, so the kit stays free
+/// of Flutter and `dart:io` transitively.
+const kitAllowlist = {
+  'codelab_client_acp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'freezed_annotation',
+  'meta',
+  'collection',
+  'async',
+};
+
+/// Dependencies of the client IO adapters (design D2 change
+/// `extract-acp-client-kit`): the kit, the ACP client packages and `path`,
+/// no Flutter.
+const clientIoAllowlist = {
+  'codelab_client_core',
+  'codelab_client_acp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'path',
   'meta',
 };
 
@@ -104,6 +129,26 @@ void main() {
     ).readAsStringSync();
 
     final extra = dependencyKeys(pubspec).difference(binaryAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('codelab_client_core depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_client_core/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(kitAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('codelab_client_io depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_client_io/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(clientIoAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });

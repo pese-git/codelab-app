@@ -1,0 +1,455 @@
+// ignore_for_file: experimental_member_use
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:codelab_client_acp/codelab_client_acp.dart';
+import 'package:codelab_client_io/codelab_client_io.dart'
+    show
+        IoTerminalProcessRunner,
+        IoTextFileIo,
+        IoWorkingDirectoryProvider,
+        WorkingDirectoryProvider;
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show
+        AcpClientBackend,
+        ClientWorkspace,
+        ConfigTransportResolver,
+        InMemorySecretSource,
+        RecentProjectsStore;
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
+import 'package:codelab_acp_transports/io.dart';
+import 'package:cherrypick/cherrypick.dart';
+import 'package:cherrypick_annotations/cherrypick_annotations.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:path/path.dart' as p;
+import 'package:structured_log/io.dart' as structured_log_io;
+import 'package:structured_log/structured_log.dart' as structured_log;
+import 'package:structured_log_flutter/structured_log_flutter.dart'
+    show LogBuffer;
+import 'package:structured_log_remote_sync/structured_log_remote_sync.dart'
+    show RemoteSyncLogOutput;
+
+import '../core/platform/project_folder_picker.dart';
+import '../core/platform/shared_preferences_recent_projects_store.dart';
+import '../features/workbench/application/shell_cubit.dart';
+
+part 'app_scope.module.cherrypick.g.dart';
+
+typedef CodeLabTransportFactory = AcpTransport Function();
+
+Scope createCodeLabRootScope({
+  CodeLabTransportFactory? transportFactory,
+  CodeLabStdioTransportFactory? stdioTransportFactory,
+  CodeLabWebSocketTransportFactory? webSocketTransportFactory,
+  String? logDirectoryPath,
+}) {
+  final scope = CherryPick.openRootScope()
+    ..installModules([
+      CodeLabLoggingModule(
+        // `path_provider`'s app-support directory is resolved async, before
+        // `runApp()`, in `main.dart` — this fallback only covers callers
+        // that skip that step (tests constructing the scope directly).
+        logDirectoryPath: logDirectoryPath ?? Directory.systemTemp.path,
+      ),
+      CodeLabTransportRuntimeModule(
+        transportFactory: transportFactory ?? _createDefaultTransport,
+        stdioTransportFactory: stdioTransportFactory ?? _createStdioTransport,
+        webSocketTransportFactory:
+            webSocketTransportFactory ?? _createWebSocketTransport,
+      ),
+      CodeLabPlatformModule(),
+      CodeLabPresentationModule(),
+      $CodeLabTransportsModuleContract(),
+      $CodeLabProtocolApplicationModuleContract(),
+      $CodeLabRootLifecycleModuleContract(),
+    ]);
+
+  scope.resolve<CodeLabRootLifecycle>();
+  // Resolved once so CherryPick's Scope.dispose() tracks it as a
+  // Disposable and awaits its flush on shutdown — see
+  // CodeLabLoggingLifecycle's doc comment.
+  scope.resolve<CodeLabLoggingLifecycle>();
+  return scope;
+}
+
+Future<void> closeCodeLabRootScope() => CherryPick.closeRootScope();
+
+CodeLabDependencies codeLabDependenciesOf(BuildContext context) =>
+    CodeLabDependenciesScope.of(context);
+
+final class CodeLabTransportRuntimeModule extends Module {
+  CodeLabTransportRuntimeModule({
+    required CodeLabTransportFactory transportFactory,
+    required CodeLabStdioTransportFactory stdioTransportFactory,
+    required CodeLabWebSocketTransportFactory webSocketTransportFactory,
+  }) : _transportFactory = transportFactory,
+       _stdioTransportFactory = stdioTransportFactory,
+       _webSocketTransportFactory = webSocketTransportFactory;
+
+  final CodeLabTransportFactory _transportFactory;
+  final CodeLabStdioTransportFactory _stdioTransportFactory;
+  final CodeLabWebSocketTransportFactory _webSocketTransportFactory;
+
+  @override
+  void builder(Scope currentScope) {
+    bind<CodeLabTransportFactory>().toInstance(_transportFactory);
+    bind<CodeLabStdioTransportFactory>().toInstance(_stdioTransportFactory);
+    bind<CodeLabWebSocketTransportFactory>().toInstance(
+      _webSocketTransportFactory,
+    );
+  }
+}
+
+/// Configures the project's structured-logging technology
+/// (`openspec/changes/add-structured-logging/design.md`, Decision 5):
+/// human-readable console output for application-level events in debug
+/// builds, non-blocking file sinks in release/for protocol tracing, plus an
+/// in-memory [LogBuffer] feeding the in-app log viewer
+/// (`replace-debug-log-panel-with-fluent/design.md`, Decision 3).
+final class CodeLabLoggingModule extends Module {
+  CodeLabLoggingModule({required String logDirectoryPath})
+    : _logDirectoryPath = logDirectoryPath;
+
+  final String _logDirectoryPath;
+
+  /// Local-dev-only opt-in for shipping `category=application` events to a
+  /// `structured_log_server` instance (viewable in `structured_log_admin_ui`
+  /// while working on CodeLab itself) — never set for end users, see
+  /// `docs/architecture/technology-stack.md` §17.2. Both must be non-empty
+  /// or the sink is not created at all.
+  static const _httpServerUrl = String.fromEnvironment(
+    'CODELAB_LOG_SERVER_URL',
+  );
+  static const _httpProjectKey = String.fromEnvironment(
+    'CODELAB_LOG_SERVER_KEY',
+  );
+
+  @override
+  void builder(Scope currentScope) {
+    final protocolTraceOutput = structured_log_io.AsyncRotatingFileOutput(
+      p.join(_logDirectoryPath, 'protocol.log'),
+      maxSizeBytes: 10 * 1024 * 1024,
+      maxBackups: 5,
+    );
+    // Debug: human-readable console only. Release: also write JSON lines to
+    // a file, non-blocking (design.md Decision 6/8) — console output alone
+    // isn't durable for a desktop app nobody is watching a terminal for.
+    final applicationFileOutput = kDebugMode
+        ? null
+        : structured_log_io.AsyncFileOutput(
+            p.join(_logDirectoryPath, 'application.log'),
+          );
+
+    // Independent capacity from AcpClientApplication's own 500-entry
+    // diagnostics ring buffer — this one backs the in-app log viewer only.
+    final logBuffer = LogBuffer();
+    bind<LogBuffer>().toInstance(logBuffer);
+
+    final httpOutput = _httpServerUrl.isEmpty || _httpProjectKey.isEmpty
+        ? null
+        : RemoteSyncLogOutput(
+            serverUrl: _httpServerUrl,
+            projectSecretKey: _httpProjectKey,
+          );
+
+    configureCodeLabLogging(
+      applicationOutput:
+          applicationFileOutput?.call ?? structured_log.coloredConsoleOutput,
+      protocolTraceOutput: protocolTraceOutput.call,
+      inAppViewerOutput: logBuffer.capture,
+      httpOutput: httpOutput?.call,
+    );
+
+    bind<CodeLabLoggingLifecycle>().toInstance(
+      CodeLabLoggingLifecycle(
+        applicationOutput: applicationFileOutput,
+        protocolTraceOutput: protocolTraceOutput,
+        httpOutput: httpOutput,
+      ),
+    );
+  }
+}
+
+/// Awaits pending writes on all async logging sinks before the scope
+/// finishes disposing (design.md Decision 8) — resolved once via
+/// [createCodeLabRootScope] so CherryPick's own `Scope.dispose()` (which
+/// disposes every resolved [Disposable] automatically) picks it up, rather
+/// than threading it through [CodeLabRootLifecycle]'s constructor.
+final class CodeLabLoggingLifecycle implements Disposable {
+  CodeLabLoggingLifecycle({
+    required this.applicationOutput,
+    required this.protocolTraceOutput,
+    this.httpOutput,
+  });
+
+  final structured_log_io.AsyncFileOutput? applicationOutput;
+  final structured_log_io.AsyncRotatingFileOutput protocolTraceOutput;
+  final RemoteSyncLogOutput? httpOutput;
+
+  @override
+  Future<void> dispose() => Future.wait([
+    if (applicationOutput != null) applicationOutput!.flushed,
+    protocolTraceOutput.flushed,
+    if (httpOutput != null) httpOutput!.close(),
+  ]);
+}
+
+final class CodeLabPlatformModule extends Module {
+  @override
+  void builder(Scope currentScope) {
+    bind<WorkingDirectoryProvider>().toInstance(
+      const IoWorkingDirectoryProvider(),
+    );
+    const textFileIo = IoTextFileIo();
+    bind<TextFileReader>().toInstance(textFileIo);
+    bind<TextFileWriter>().toInstance(textFileIo);
+    bind<ProjectFolderPicker>().toInstance(
+      const FileSelectorProjectFolderPicker(),
+    );
+    bind<RecentProjectsStore>().toInstance(
+      const SharedPreferencesRecentProjectsStore(),
+    );
+    bind<TerminalProcessRunner>().toInstance(const IoTerminalProcessRunner());
+  }
+}
+
+final class CodeLabPresentationModule extends Module {
+  @override
+  void builder(Scope currentScope) {
+    // Токен WebSocket из формы подключения: Cubit кладёт значение, резолвер
+    // читает его по ссылке профиля (design D8 change `extract-acp-client-kit`).
+    bind<InMemorySecretSource>().toInstance(InMemorySecretSource());
+    bind<ClientWorkspace>()
+        .toProvide(
+          () => ClientWorkspace(
+            backend: AcpClientBackend(
+              currentScope.resolve<AcpClientApplication>(),
+            ),
+            resolvers: [
+              ConfigTransportResolver(
+                stdio: currentScope.resolve<CodeLabStdioTransportFactory>(),
+                webSocket: currentScope
+                    .resolve<CodeLabWebSocketTransportFactory>(),
+                secrets: currentScope.resolve<InMemorySecretSource>(),
+              ),
+            ],
+          ),
+        )
+        .singleton();
+    // Пять Cubit-ов рабочего места (design D10): собираются после
+    // `ClientWorkspace`, чтобы рабочее пространство раньше них подписалось на
+    // `sessionChanges` (design D6).
+    bind<CodeLabShellParts>()
+        .toProvide(
+          () => CodeLabShellParts.build(
+            profile: currentScope.resolve<StdioAcpAgentProfile>(),
+            application: currentScope.resolve<AcpClientApplication>(),
+            workspace: currentScope.resolve<ClientWorkspace>(),
+            secrets: currentScope.resolve<InMemorySecretSource>(),
+            workingDirectoryProvider: currentScope
+                .resolve<WorkingDirectoryProvider>(),
+            projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
+            recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
+          ),
+        )
+        .singleton();
+    bind<CodeLabShellCubit>()
+        .toProvide(
+          () => CodeLabShellCubit(
+            profile: currentScope.resolve<StdioAcpAgentProfile>(),
+            application: currentScope.resolve<AcpClientApplication>(),
+            workspace: currentScope.resolve<ClientWorkspace>(),
+            secrets: currentScope.resolve<InMemorySecretSource>(),
+            parts: currentScope.resolve<CodeLabShellParts>(),
+            workingDirectoryProvider: currentScope
+                .resolve<WorkingDirectoryProvider>(),
+            projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
+            recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
+          ),
+        )
+        .singleton();
+  }
+}
+
+@module()
+abstract class CodeLabTransportsModuleContract extends Module {
+  @instance()
+  @singleton()
+  StdioAcpAgentProfile stdioAgentProfile() => codelabAgentStdioProfile;
+
+  @provide()
+  @singleton()
+  AcpTransport transport(CodeLabTransportFactory transportFactory) =>
+      transportFactory();
+}
+
+@module()
+abstract class CodeLabProtocolApplicationModuleContract extends Module {
+  @provide()
+  @singleton()
+  AcpClientApplication application(
+    AcpTransport transport,
+    CodeLabTransportFactory transportFactory,
+    TextFileReader textFileReader,
+    TextFileWriter textFileWriter,
+    TerminalProcessRunner terminalProcessRunner,
+  ) => AcpClientApplication(
+    transport: transport,
+    reconnectTransport: transportFactory,
+    textFileReader: textFileReader,
+    textFileWriter: textFileWriter,
+    terminalProcessRunner: terminalProcessRunner,
+  );
+}
+
+@module()
+abstract class CodeLabRootLifecycleModuleContract extends Module {
+  @provide()
+  @singleton()
+  CodeLabRootLifecycle rootLifecycle(
+    AcpClientApplication application,
+    AcpTransport transport,
+    ClientWorkspace workspace,
+    CodeLabShellCubit shellCubit,
+  ) => CodeLabRootLifecycle(
+    application: application,
+    transport: transport,
+    workspace: workspace,
+    shellCubit: shellCubit,
+  );
+}
+
+final class CodeLabRootLifecycle implements Disposable {
+  CodeLabRootLifecycle({
+    required AcpClientApplication application,
+    required AcpTransport transport,
+    required ClientWorkspace workspace,
+    required CodeLabShellCubit shellCubit,
+  }) : _application = application,
+       _transport = transport,
+       _workspace = workspace,
+       _shellCubit = shellCubit;
+
+  final AcpClientApplication _application;
+  final AcpTransport _transport;
+
+  /// Закрывается после Cubit (его подписчика) и до ядра клиента: kit не
+  /// закрывает `AcpClientApplication` сам.
+  final ClientWorkspace _workspace;
+  final CodeLabShellCubit _shellCubit;
+  var _isDisposed = false;
+
+  @override
+  Future<void> dispose() async {
+    if (_isDisposed) {
+      return;
+    }
+
+    _isDisposed = true;
+    await _shellCubit.close();
+    await _workspace.dispose();
+    await _transport.close();
+    await _application.dispose();
+  }
+}
+
+final class CodeLabDependencies {
+  const CodeLabDependencies({
+    required this.application,
+    required this.shellCubit,
+    required this.logBuffer,
+  });
+
+  final AcpClientApplication application;
+  final CodeLabShellCubit shellCubit;
+
+  /// Backs the in-app log viewer (docked panel and full-screen master-detail
+  /// — `replace-debug-log-panel-with-fluent/design.md`, Decision 3/4).
+  /// Consumers build their own `LogViewerController` over this shared
+  /// buffer, each with independent filter/pause state.
+  final LogBuffer logBuffer;
+}
+
+final class CodeLabDependenciesScope extends InheritedWidget {
+  const CodeLabDependenciesScope({
+    required this.dependencies,
+    required super.child,
+    super.key,
+  });
+
+  final CodeLabDependencies dependencies;
+
+  static CodeLabDependencies of(BuildContext context) {
+    final inherited = context
+        .dependOnInheritedWidgetOfExactType<CodeLabDependenciesScope>();
+    assert(inherited != null, 'CodeLabDependenciesScope was not found.');
+    return inherited!.dependencies;
+  }
+
+  @override
+  bool updateShouldNotify(CodeLabDependenciesScope oldWidget) =>
+      dependencies != oldWidget.dependencies;
+}
+
+class CodeLabBootstrap extends StatefulWidget {
+  const CodeLabBootstrap({
+    required this.child,
+    this.scope,
+    this.logDirectoryPath,
+    super.key,
+  });
+
+  final Widget child;
+  final Scope? scope;
+
+  /// Directory for logging sinks (`design.md` Decision 6) — resolved via
+  /// `path_provider` in `main.dart` before `runApp()`, since that call is
+  /// async and this widget's constructor must stay `const`-compatible.
+  /// `null` (e.g. in tests that don't pass it) falls back to a temp
+  /// directory, see [createCodeLabRootScope].
+  final String? logDirectoryPath;
+
+  @override
+  State<CodeLabBootstrap> createState() => _CodeLabBootstrapState();
+}
+
+class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
+  late final Scope _scope =
+      widget.scope ??
+      createCodeLabRootScope(logDirectoryPath: widget.logDirectoryPath);
+  late final CodeLabDependencies _dependencies = CodeLabDependencies(
+    application: _scope.resolve<AcpClientApplication>(),
+    shellCubit: _scope.resolve<CodeLabShellCubit>(),
+    logBuffer: _scope.resolve<LogBuffer>(),
+  );
+
+  @override
+  void dispose() {
+    final providedScope = widget.scope;
+    if (providedScope == null) {
+      unawaited(closeCodeLabRootScope());
+    } else {
+      unawaited(providedScope.dispose());
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CodeLabDependenciesScope(
+      dependencies: _dependencies,
+      child: widget.child,
+    );
+  }
+}
+
+AcpTransport _createDefaultTransport() =>
+    StdioAcpTransport(codelabAgentStdioProfile.toTransportConfig());
+
+AcpTransport _createStdioTransport(StdioAcpTransportConfig config) =>
+    StdioAcpTransport(config);
+
+AcpTransport _createWebSocketTransport(WebSocketAcpTransportConfig config) =>
+    WebSocketAcpTransport(config);

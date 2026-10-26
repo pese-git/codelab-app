@@ -1,4 +1,4 @@
-import 'package:acp_protocol/acp_protocol.dart' as acp;
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' as acp;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 /// Режимы и опции сессии для ACP (`agent-core-architecture` §13.6).

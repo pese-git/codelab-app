@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:acp_protocol/acp_protocol.dart'
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show JsonRpcMessage, JsonRpcNotification, JsonRpcResponse;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
