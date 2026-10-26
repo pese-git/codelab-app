@@ -12,6 +12,7 @@ workspace:
   - apps/codelab_agent
   - apps/codelab_app
   - packages/dart/acp_client_core
+  - packages/dart/acp_client_io
   - packages/dart/acp_client_kit
   - packages/dart/acp_protocol
   - packages/dart/acp_testing

@@ -59,6 +59,18 @@ const kitAllowlist = {
   'async',
 };
 
+/// Dependencies of the client IO adapters (design D2 change
+/// `extract-acp-client-kit`): the kit, the ACP client packages and `path`,
+/// no Flutter.
+const clientIoAllowlist = {
+  'acp_client_kit',
+  'acp_client_core',
+  'acp_protocol',
+  'acp_transports',
+  'path',
+  'meta',
+};
+
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
 
@@ -127,6 +139,16 @@ void main() {
     ).readAsStringSync();
 
     final extra = dependencyKeys(pubspec).difference(kitAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('acp_client_io depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/acp_client_io/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(clientIoAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });
