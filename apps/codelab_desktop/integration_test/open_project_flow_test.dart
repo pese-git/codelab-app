@@ -147,8 +147,8 @@ void main() {
   );
 
   testWidgets(
-    'recently opened projects persist across a restart, without carrying '
-    'over the previously selected project',
+    'recently opened projects and the selected project persist across a '
+    'restart',
     (tester) async {
       final projectDirectory = await Directory.systemTemp.createTemp(
         'codelab_open_project_restart_e2e_',
@@ -195,9 +195,15 @@ void main() {
       final restartedShellCubit = codeLabDependenciesOf(
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
-      // The selected project itself is session-scoped app state, not
-      // persisted — only the recents list survives (design.md, Risks).
-      expect(restartedShellCubit.state.selectedProjectPath, isNull);
+      // Выбранный проект восстанавливается из снимка рабочего пространства
+      // (spec agent-workbench-ui «Workbench restores sessions after reconnect
+      // and restart»; design D6 change `add-session-list-and-reload`).
+      // Раньше он не сохранялся — это было вне рамок add-open-project-picker.
+      await tester.pumpAndSettle();
+      expect(
+        restartedShellCubit.state.selectedProjectPath,
+        projectDirectory.path,
+      );
 
       await tester.tap(find.byKey(const ValueKey('open-project-picker')));
       await tester.pumpAndSettle();

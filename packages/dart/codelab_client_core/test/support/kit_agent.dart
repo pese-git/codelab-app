@@ -12,9 +12,16 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 /// диагностику kit в [diagnostics].
 final class KitAgent {
   /// [capabilities] — что агент объявит в ответе `initialize`.
-  KitAgent({AgentCapabilities capabilities = const AgentCapabilities()}) {
+  /// [snapshots] — хранилище снимка рабочего пространства; без него
+  /// восстановление выключено.
+  KitAgent({
+    AgentCapabilities capabilities = const AgentCapabilities(),
+    this.snapshots,
+  }) {
     transport.initializeAgentCapabilities = capabilities;
   }
+
+  final WorkspaceSnapshotStore? snapshots;
 
   /// Транспорт текущего процесса агента; резолвер читает его при каждом
   /// открытии, поэтому [restartAgent] подменяет агента для `reconnect`.
@@ -31,6 +38,7 @@ final class KitAgent {
   late final ClientWorkspace workspace = ClientWorkspace(
     backend: AcpClientBackend(application),
     resolvers: [ConfigTransportResolver(stdio: (_) => transport)],
+    snapshots: snapshots,
   );
   final diagnostics = <WorkspaceDiagnostic>[];
   StreamSubscription<WorkspaceDiagnostic>? _subscription;
