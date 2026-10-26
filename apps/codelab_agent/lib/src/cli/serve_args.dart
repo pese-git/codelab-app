@@ -178,7 +178,7 @@ final ArgParser _serveParser = ArgParser()
   )
   ..addOption(
     'log-level',
-    help: 'trace, debug, info, warning or error (CODELAB_LOG_LEVEL).',
+    help: 'trace, debug, info, warning or error, any case (CODELAB_LOG_LEVEL).',
   )
   ..addOption('log-file', help: 'JSON Lines log file (CODELAB_LOG_FILE).')
   // Только тесты: сценарий модели вместо провайдера (§15.6, §14.7).
@@ -275,8 +275,11 @@ ServeOptions parseServeArgs(
 
   final levelName =
       serve.option('log-level') ?? environment['CODELAB_LOG_LEVEL'] ?? 'info';
+  // Регистр не важен: профиль codelab-app по умолчанию передаёт
+  // `CODELAB_LOG_LEVEL=DEBUG` (так понимал Python-агент).
+  final normalizedLevel = levelName.toLowerCase();
   final logLevel =
-      LogLevel.values.where((l) => l.name == levelName).firstOrNull ??
+      LogLevel.values.where((l) => l.name == normalizedLevel).firstOrNull ??
       (throw UsageError('unknown log level: $levelName'));
 
   final home =
