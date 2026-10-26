@@ -108,10 +108,21 @@ melos:
       run: mkdir -p build/bin && fvm dart compile exe apps/codelab_agent/bin/codelab_agent.dart -o build/bin/codelab-agent
 
     test:e2e:app:dart-agent:
-      description: Build codelab-agent and run every codelab_desktop macOS integration test except scripted-only against it (release/* only).
+      description: Build codelab-agent and run every codelab_desktop macOS integration test except scripted-only against it, one file per flutter test run (release/* only).
+      # По одному файлу на запуск: `flutter test integration_test -d macos`
+      # на macOS не поднимает приложение после первого файла («Failed to
+      # foreground app; open returned 1»). Код выхода — ненулевой, если упал
+      # хотя бы один файл; остальные файлы всё равно прогоняются.
       run: >-
         fvm dart run melos run build:agent &&
-        fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test -d macos --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=dart --dart-define=CODELAB_E2E_AGENT_BIN=../../build/bin/codelab-agent"
+        cd apps/codelab_desktop && {
+        status=0;
+        for file in integration_test/*_test.dart; do
+        echo "== $file";
+        fvm flutter test "$file" -d macos --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=dart --dart-define=CODELAB_E2E_AGENT_BIN=../../build/bin/codelab-agent || { echo "FAILED: $file"; status=1; };
+        done;
+        exit $status;
+        }
 
     check:
       description: Run format, analyze, guard, tests, protocol, client and agent fixture conformance, and web compile.
