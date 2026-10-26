@@ -238,28 +238,11 @@ final class CodeLabPresentationModule extends Module {
           ),
         )
         .singleton();
-    bind<RespondToPermission>()
-        .toProvide(
-          () =>
-              RespondToPermission(currentScope.resolve<AcpClientApplication>()),
-        )
-        .singleton();
-    bind<SetSessionConfigOption>()
-        .toProvide(
-          () => SetSessionConfigOption(
-            currentScope.resolve<AcpClientApplication>(),
-          ),
-        )
-        .singleton();
     bind<CodeLabShellCubit>()
         .toProvide(
           () => CodeLabShellCubit(
             profile: currentScope.resolve<StdioAcpAgentProfile>(),
             application: currentScope.resolve<AcpClientApplication>(),
-            respondToPermissionUseCase: currentScope
-                .resolve<RespondToPermission>(),
-            setSessionConfigOptionUseCase: currentScope
-                .resolve<SetSessionConfigOption>(),
             workspace: currentScope.resolve<ClientWorkspace>(),
             secrets: currentScope.resolve<InMemorySecretSource>(),
             workingDirectoryProvider: currentScope

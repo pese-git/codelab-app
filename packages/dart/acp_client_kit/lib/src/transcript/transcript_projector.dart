@@ -54,6 +54,18 @@ final class TranscriptProjector {
   }
 }
 
+/// Ожидающие одобрения сессии по порядку ходов и запросов.
+///
+/// Для чего: `SessionView.pendingApprovals` — тот же вид, что встроен в
+/// элемент вызова транскрипта, включая фокус самого раннего одобрения.
+List<PendingApprovalView> pendingApprovalViews(AcpSession session) => [
+  for (final turn in session.turns)
+    for (final approval in turn.approvals.values)
+      if (approval.status == ApprovalStatus.pending)
+        _approvalView(approval, _earliestPendingApprovalId(turn))!
+            as PendingApprovalView,
+];
+
 /// Транскрипт сессии, пересчитанный с нуля по всем ходам.
 ///
 /// Почему: эталон для [TranscriptProjector] — тот же алгоритм, что строил

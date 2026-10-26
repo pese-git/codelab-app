@@ -7,7 +7,9 @@ import '../backend/agent_backend.dart';
 import '../connection/connection_profile.dart';
 import '../connection/connection_view.dart';
 import '../connection/transport_resolver.dart';
+import '../diagnostics/diagnostics.dart';
 import '../queue/prompt_queue.dart';
+import '../session/session_views.dart';
 import '../transcript/transcript_projector.dart';
 import 'client_workspace_exception.dart';
 import 'workspace_state.dart';
@@ -69,6 +71,11 @@ abstract interface class ClientWorkspace {
   /// очереди сами; доставляются синхронно.
   Stream<PromptOutcome> get promptOutcomes;
 
+  /// Диагностика событий, которыми владеет kit: исходы ходов, отмена,
+  /// ответы на одобрения, опции, неожиданная потеря соединения. Уже без
+  /// секретов; доставляется синхронно, после публикации состояния.
+  Stream<WorkspaceDiagnostic> get diagnostics;
+
   /// Отписывается от бэкенда и закрывает потоки; бэкенд закрывает его
   /// владелец.
   Future<void> dispose();
@@ -79,10 +86,10 @@ abstract interface class ClientWorkspace {
 /// Почему: хосту нужен объект сессии, а не id и выборка из общего списка.
 ///
 /// Для чего: текущее [SessionView] и его изменения, отправка промптов с
-/// очередью и отмена хода. [current] обновляется синхронно с изменением
-/// сессии в ядре клиента, до остальных подписчиков `sessionChanges`,
-/// подписанных позже рабочего пространства (design D6). Одобрения и опции
-/// переносят следующие итерации change (design D12).
+/// очередью, отмена хода, ответы на одобрения и опции конфигурации.
+/// [current] обновляется синхронно с изменением сессии в ядре клиента, до
+/// остальных подписчиков `sessionChanges`, подписанных позже рабочего
+/// пространства (design D6).
 ///
 /// Как использовать: [send] — свободная сессия отправляет `session/prompt`
 /// сразу, занятая (`SessionView.status` — `running` или `cancelling`) ставит
@@ -106,6 +113,21 @@ abstract interface class SessionHandle {
   /// ответит на его `session/prompt` (fix-prompt-cancel-tool-calls/design.md,
   /// D2). Ошибки — исключения `acp_client_core`.
   Future<PromptTurn> cancel();
+
+  /// Отвечает на одобрение [approval] этой сессии вариантом [option]
+  /// (отказ — тоже вариант: в ACP нет отдельного «отклонить»). Одобрение
+  /// другой сессии отклоняет ядро клиента (PERM-003,
+  /// `docs/architecture/permissions.md`).
+  Future<ApprovalRequest> respond(
+    ApprovalRequestId approval,
+    PermissionOptionId option,
+  );
+
+  /// Отправляет `session/set_config_option`; пока запрос в полёте,
+  /// `SessionView.configOptionInFlight` — [configId], а повторный вызов —
+  /// no-op. Показываемое значение приходит из ответа агента, а не
+  /// выставляется заранее. Ошибка — диагностика и исключение вызывающему.
+  Future<void> setConfigOption(String configId, String valueId);
 }
 
 /// Реализация [ClientWorkspace] по умолчанию.
@@ -125,6 +147,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   final List<TransportResolver> _resolvers;
   final _states = StreamController<WorkspaceState>.broadcast(sync: true);
   final _outcomes = StreamController<PromptOutcome>.broadcast(sync: true);
+  final _diagnostics = StreamController<WorkspaceDiagnostic>.broadcast(
+    sync: true,
+  );
 
   /// Счётчик id элементов очереди: общий для всех сессий, чтобы id не
   /// повторялись в пределах рабочего пространства.
@@ -151,6 +176,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   @override
   Stream<PromptOutcome> get promptOutcomes => _outcomes.stream;
+
+  @override
+  Stream<WorkspaceDiagnostic> get diagnostics => _diagnostics.stream;
 
   @override
   Future<void> connect(
@@ -265,6 +293,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     }
     await _states.close();
     await _outcomes.close();
+    await _diagnostics.close();
   }
 
   TransportResolver? _resolverFor(ConnectionProfile profile) {
@@ -297,7 +326,36 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   }
 
   void _handleConnectionState(ClientConnectionState connectionState) {
-    _publishConnection(_viewFor(connectionState));
+    final wasConnected = _current.connection is Connected;
+    final view = _viewFor(connectionState);
+    _publishConnection(view);
+    // Сбой явного connect/reconnect сообщает вызывающий; здесь — только
+    // неожиданная потеря установленного соединения.
+    if (view is ConnectionFailed &&
+        wasConnected &&
+        _transition == _Transition.none) {
+      _report(
+        WorkspaceDiagnostic(
+          severity: DiagnosticSeverity.error,
+          source: 'transport',
+          message: 'Connection to ACP agent lost: ${view.message}',
+        ),
+      );
+    }
+  }
+
+  /// Публикует диагностику после редакции секретов.
+  void _report(WorkspaceDiagnostic diagnostic) {
+    if (_diagnostics.isClosed) {
+      return;
+    }
+    _diagnostics.add(
+      WorkspaceDiagnostic(
+        severity: diagnostic.severity,
+        source: diagnostic.source,
+        message: _redactor.redactText(diagnostic.message),
+      ),
+    );
   }
 
   void _handleSession(AcpSession session) {
@@ -324,6 +382,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
           _outcomes.add(outcome);
         }
       },
+      onDiagnostic: _report,
     );
     _handles[session.id] = handle;
     _order.insert(0, session.id);
@@ -396,23 +455,26 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
 enum _Transition { none, connecting, reconnecting }
 
+const _redactor = SecretRedactor();
+
 final class _SessionHandle implements SessionHandle, PromptQueue {
   _SessionHandle(
     AcpSession session, {
     required AgentBackend backend,
     required String Function() nextQueuedPromptId,
     required void Function(PromptOutcome outcome) onOutcome,
+    required void Function(WorkspaceDiagnostic diagnostic) onDiagnostic,
   }) : id = session.id,
        cwd = session.cwd,
        _session = session,
        _backend = backend,
        _nextQueuedPromptId = nextQueuedPromptId,
-       _onOutcome = onOutcome {
+       _onOutcome = onOutcome,
+       _onDiagnostic = onDiagnostic {
     _projector.apply(session);
-    _current = SessionView(
-      revision: 0,
-      status: SessionStatusView.of(session.status),
-      transcript: _projector.items,
+    _current = _sessionFields(
+      const SessionView(revision: 0, status: SessionStatusView.idle),
+      session,
     );
   }
 
@@ -425,6 +487,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   final AgentBackend _backend;
   final String Function() _nextQueuedPromptId;
   final void Function(PromptOutcome outcome) _onOutcome;
+  final void Function(WorkspaceDiagnostic diagnostic) _onDiagnostic;
   final _views = StreamController<SessionView>.broadcast(sync: true);
   final _projector = TranscriptProjector();
   late SessionView _current;
@@ -460,8 +523,100 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   }
 
   @override
-  Future<PromptTurn> cancel() =>
-      _backend.cancelTurn(CancelTurnCommand(sessionId: id));
+  Future<PromptTurn> cancel() async {
+    try {
+      final turn = await _backend.cancelTurn(CancelTurnCommand(sessionId: id));
+      _info('prompt', 'Cancelled prompt turn ${turn.id.value}.');
+      return turn;
+    } on Object catch (error) {
+      _error(
+        'prompt',
+        'Failed to cancel prompt turn: ${describeFailure(error)}',
+      );
+      rethrow;
+    }
+  }
+
+  @override
+  Future<ApprovalRequest> respond(
+    ApprovalRequestId approval,
+    PermissionOptionId option,
+  ) async {
+    try {
+      final resolved = await _backend.respondToPermission(
+        RespondToPermissionCommand.selected(
+          sessionId: id,
+          approvalId: approval,
+          optionId: option,
+        ),
+      );
+      _info(
+        'approval',
+        'Resolved approval ${resolved.id.value} (${resolved.status.name}).',
+      );
+      return resolved;
+    } on Object catch (error) {
+      _error(
+        'approval',
+        'Failed to respond to approval request: ${describeFailure(error)}',
+      );
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> setConfigOption(String configId, String valueId) async {
+    if (_current.configOptionInFlight != null) {
+      return;
+    }
+    _publish(
+      _current.copyWith(
+        revision: _current.revision + 1,
+        configOptionInFlight: configId,
+      ),
+    );
+    try {
+      await _backend.setSessionConfigOption(
+        SetSessionConfigOptionCommand(
+          sessionId: id,
+          configId: SessionConfigId(configId),
+          value: SessionConfigValueId(valueId),
+        ),
+      );
+      _clearConfigOptionInFlight();
+      _info('session', 'Set config option $configId to $valueId.');
+    } on Object catch (error) {
+      _clearConfigOptionInFlight();
+      _error(
+        'session',
+        'Failed to set config option $configId: ${describeFailure(error)}',
+      );
+      rethrow;
+    }
+  }
+
+  void _clearConfigOptionInFlight() => _publish(
+    _current.copyWith(
+      revision: _current.revision + 1,
+      configOptionInFlight: null,
+    ),
+  );
+
+  void _info(String source, String message) => _onDiagnostic(
+    WorkspaceDiagnostic(
+      severity: DiagnosticSeverity.info,
+      source: source,
+      message: message,
+    ),
+  );
+
+  void _error(String source, String message) => _onDiagnostic(
+    WorkspaceDiagnostic(
+      severity: DiagnosticSeverity.error,
+      source: source,
+      message: message,
+    ),
+  );
 
   @override
   QueuedPrompt? remove(String itemId) {
@@ -512,8 +667,13 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
         ),
       );
       outcome = PromptCompleted(id, turn);
+      _info(
+        'prompt',
+        'Prompt completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
+      );
     } on Object catch (error) {
       outcome = PromptFailed(id, error);
+      _error('prompt', 'Failed to send prompt: ${describeFailure(error)}');
     }
     _onOutcome(outcome);
     await _drainIfFree();
@@ -538,13 +698,28 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     _session = session;
     _projector.apply(session);
     _publish(
-      _current.copyWith(
-        revision: _current.revision + 1,
-        status: SessionStatusView.of(session.status),
-        transcript: _projector.items,
+      _sessionFields(
+        _current.copyWith(revision: _current.revision + 1),
+        session,
       ),
     );
   }
+
+  /// Поля представления, которые выводятся из снимка сессии ядра.
+  SessionView _sessionFields(SessionView view, AcpSession session) =>
+      view.copyWith(
+        status: SessionStatusView.of(session.status),
+        transcript: _projector.items,
+        configOptions: [
+          for (final option in session.configOptions ?? const [])
+            ConfigOptionView.of(option),
+        ],
+        agentCommands: [
+          for (final command in session.availableCommands)
+            AgentCommandView.of(command),
+        ],
+        pendingApprovals: pendingApprovalViews(session),
+      );
 
   void _setQueue(List<QueuedPrompt> queue) => _publish(
     _current.copyWith(

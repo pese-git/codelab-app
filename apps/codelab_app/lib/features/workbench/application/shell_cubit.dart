@@ -1,15 +1,15 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_client_io/acp_client_io.dart' show WorkingDirectoryProvider;
 import 'package:acp_client_kit/acp_client_kit.dart'
     show
         AcpClientBackend,
+        AgentCommandView,
         AgentTextItem,
         ApprovalStateView,
         ClientWorkspace,
-        ClientWorkspaceException,
+        ConfigOptionView,
         ConfigTransportResolver,
         Connected,
         ConnectionFailed,
@@ -18,13 +18,15 @@ import 'package:acp_client_kit/acp_client_kit.dart'
         Connecting,
         Disconnected,
         InMemorySecretSource,
+        InspectorCategory,
+        InspectorDetail,
+        InspectorEntry,
+        InspectorProjection,
         NoticeItem,
         NoticeKind,
         PendingApprovalView,
         parseEnvLines,
         parseShellWords,
-        PromptCompleted,
-        PromptFailed,
         PromptOutcome,
         PromptQueued,
         RecentProjectsStore,
@@ -37,7 +39,10 @@ import 'package:acp_client_kit/acp_client_kit.dart'
         ToolCallStatusView,
         TranscriptItem,
         UserItem,
-        WorkspaceState;
+        WorkspaceDiagnostic,
+        WorkspaceState,
+        describeFailure,
+        formatRedactedJson;
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
 import 'package:acp_ui/acp_ui.dart';
@@ -68,12 +73,6 @@ enum CodeLabTransportType {
 
   final String label;
 }
-
-/// Selects which [Logger] method [CodeLabShellCubit._recordDiagnostic]
-/// calls — a local concept, not a UI type (see
-/// `replace-debug-log-panel-with-fluent/design.md`, Decision 5: this cubit
-/// no longer keeps a displayable diagnostics list of its own).
-enum _DiagnosticSeverity { debug, info, warning, error }
 
 final class CodeLabShellState {
   const CodeLabShellState({
@@ -387,38 +386,11 @@ final class CodeLabShellState {
   };
 }
 
-enum CodeLabInspectorCategory { approval, toolCall, protocol, diagnostic }
-
-final class CodeLabInspectorEntry {
-  const CodeLabInspectorEntry({
-    required this.id,
-    required this.category,
-    required this.title,
-    required this.summary,
-    this.risk,
-    this.status,
-    this.details = const [],
-    this.rawInput,
-    this.rawOutput,
-  });
-
-  final String id;
-  final CodeLabInspectorCategory category;
-  final String title;
-  final String summary;
-  final String? risk;
-  final String? status;
-  final List<CodeLabInspectorDetail> details;
-  final String? rawInput;
-  final String? rawOutput;
-}
-
-final class CodeLabInspectorDetail {
-  const CodeLabInspectorDetail({required this.label, required this.value});
-
-  final String label;
-  final String value;
-}
+/// Модели инспектора — модели kit (`InspectorProjection`, design D9 change
+/// `extract-acp-client-kit`); прежние имена остаются для виджетов и тестов.
+typedef CodeLabInspectorCategory = InspectorCategory;
+typedef CodeLabInspectorEntry = InspectorEntry;
+typedef CodeLabInspectorDetail = InspectorDetail;
 
 /// Фасад рабочего места CodeLab над `ClientWorkspace` из `acp_client_kit`.
 ///
@@ -427,19 +399,20 @@ final class CodeLabInspectorDetail {
 /// и характеризационные тесты читают прежний [CodeLabShellState]. Фасад
 /// сохраняет эту поверхность на время переноса.
 ///
-/// Для чего: подключение, переподключение, сессии, транскрипт, промпты с
-/// очередью и отмена идут через [ClientWorkspace]; одобрения и опции — пока
-/// через use case-ы `acp_client_core`, до своих итераций.
+/// Для чего: подключение, сессии, транскрипт, промпты с очередью, отмена,
+/// одобрения, опции, инспектор и диагностика событий kit идут через
+/// [ClientWorkspace]; Cubit отображает их в модели `acp_ui` и держит
+/// состояние формы и раскладки.
 ///
 /// Как использовать: граф cherrypick (`app_scope.dart`) передаёт
 /// [workspace] и [secrets] — тот же `InMemorySecretSource`, что у резолвера
 /// WebSocket. Без них Cubit строит рабочее пространство сам поверх
 /// [application] и фабрик транспорта: так его по-прежнему создают тесты
-/// `widget_test.dart`. Параметры `createSessionUseCase`, `reconnectUseCase`,
-/// `sendPromptUseCase` и `cancelTurnUseCase` не используются после переноса
-/// их логики в kit; они остаются, пока эти тесты создают Cubit напрямую, и
-/// удаляются вместе с фасадом после этапа 9 (`09-10`, «Что остаётся
-/// неизменным»).
+/// `widget_test.dart`. Параметры use case-ов `acp_client_core`
+/// (`createSessionUseCase`, `sendPromptUseCase` и другие) не используются
+/// после переноса их логики в kit; они остаются, пока эти тесты создают
+/// Cubit напрямую, и удаляются вместе с фасадом после этапа 9 (`09-10`,
+/// «Что остаётся неизменным»).
 final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   CodeLabShellCubit({
     required StdioAcpAgentProfile profile,
@@ -448,8 +421,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     SendPrompt? sendPromptUseCase,
     CancelTurn? cancelTurnUseCase,
     Reconnect? reconnectUseCase,
-    required RespondToPermission respondToPermissionUseCase,
-    required SetSessionConfigOption setSessionConfigOptionUseCase,
+    RespondToPermission? respondToPermissionUseCase,
+    SetSessionConfigOption? setSessionConfigOptionUseCase,
     CodeLabStdioTransportFactory? stdioTransportFactory,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     ClientWorkspace? workspace,
@@ -461,8 +434,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   }) : this._(
          profile: profile,
          application: application,
-         respondToPermissionUseCase: respondToPermissionUseCase,
-         setSessionConfigOptionUseCase: setSessionConfigOptionUseCase,
          secrets: secrets ?? InMemorySecretSource(),
          workspace: workspace,
          stdioTransportFactory: stdioTransportFactory,
@@ -476,8 +447,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   CodeLabShellCubit._({
     required StdioAcpAgentProfile profile,
     required AcpClientApplication application,
-    required RespondToPermission respondToPermissionUseCase,
-    required SetSessionConfigOption setSessionConfigOptionUseCase,
     required InMemorySecretSource secrets,
     required ClientWorkspace? workspace,
     required CodeLabStdioTransportFactory? stdioTransportFactory,
@@ -487,8 +456,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required RecentProjectsStore recentProjectsStore,
     Logger? logger,
   }) : _application = application,
-       _respondToPermissionUseCase = respondToPermissionUseCase,
-       _setSessionConfigOptionUseCase = setSessionConfigOptionUseCase,
        _secrets = secrets,
        _ownsWorkspace = workspace == null,
        _workspace =
@@ -518,13 +485,14 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _promptOutcomeSubscription = _workspace.promptOutcomes.listen(
       _handlePromptOutcome,
     );
+    _diagnosticSubscription = _workspace.diagnostics.listen(
+      _handleKitDiagnostic,
+    );
     unawaited(_loadRecentProjects());
   }
 
   final AcpClientApplication _application;
 
-  final RespondToPermission _respondToPermissionUseCase;
-  final SetSessionConfigOption _setSessionConfigOptionUseCase;
   final ClientWorkspace _workspace;
 
   /// Рабочее пространство создал сам Cubit (без графа cherrypick) — тогда он
@@ -547,6 +515,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
   late final StreamSubscription<PromptOutcome> _promptOutcomeSubscription;
+  late final StreamSubscription<WorkspaceDiagnostic> _diagnosticSubscription;
 
   /// Ссылка на токен WebSocket в [_secrets].
   static const _webSocketTokenRef = 'codelab_app.websocket.token';
@@ -602,7 +571,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       if (isClosed) return;
       _recordDiagnostic(
         'Failed to record recent project: $error',
-        severity: _DiagnosticSeverity.warning,
+        severity: DiagnosticSeverity.warning,
         source: 'project',
       );
     }
@@ -637,7 +606,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         isWebSocket
             ? 'WebSocket endpoint is required before connecting.'
             : 'Stdio command is required before connecting.',
-        severity: _DiagnosticSeverity.error,
+        severity: DiagnosticSeverity.error,
         source: 'transport',
       );
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
@@ -669,7 +638,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
       _recordDiagnostic(
         'Incompatible ACP agent: ${error.message}',
-        severity: _DiagnosticSeverity.error,
+        severity: DiagnosticSeverity.error,
         source: 'transport',
       );
     } on Object catch (error) {
@@ -678,7 +647,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         isWebSocket
             ? 'Failed to connect WebSocket ACP agent: $error'
             : 'Failed to start stdio ACP agent: $error',
-        severity: _DiagnosticSeverity.error,
+        severity: DiagnosticSeverity.error,
         source: 'transport',
       );
     }
@@ -695,7 +664,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         isWebSocket
             ? 'WebSocket endpoint is required before reconnecting.'
             : 'Stdio command is required before reconnecting.',
-        severity: _DiagnosticSeverity.error,
+        severity: DiagnosticSeverity.error,
         source: 'transport',
       );
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
@@ -732,9 +701,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
       _recordDiagnostic(
         isWebSocket
-            ? 'Failed to reconnect WebSocket ACP agent: ${_errorMessage(error)}'
-            : 'Failed to reconnect stdio ACP agent: ${_errorMessage(error)}',
-        severity: _DiagnosticSeverity.error,
+            ? 'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}'
+            : 'Failed to reconnect stdio ACP agent: ${describeFailure(error)}',
+        severity: DiagnosticSeverity.error,
         source: 'transport',
       );
     }
@@ -771,7 +740,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (state.connectionStatus != AcpConnectionStatus.connected) {
       _recordDiagnostic(
         'Connect an ACP agent before creating a session.',
-        severity: _DiagnosticSeverity.warning,
+        severity: DiagnosticSeverity.warning,
         source: 'session',
       );
       return;
@@ -787,8 +756,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     } on Object catch (error) {
       if (isClosed) return;
       _recordDiagnostic(
-        'Failed to create ACP session: ${_errorMessage(error)}',
-        severity: _DiagnosticSeverity.error,
+        'Failed to create ACP session: ${describeFailure(error)}',
+        severity: DiagnosticSeverity.error,
         source: 'session',
       );
       return;
@@ -882,7 +851,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (sessionId == null) {
       _recordDiagnostic(
         'Create or select a session before sending a prompt.',
-        severity: _DiagnosticSeverity.warning,
+        severity: DiagnosticSeverity.warning,
         source: 'prompt',
       );
       return;
@@ -891,7 +860,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (handle == null) {
       _recordDiagnostic(
         'Failed to send prompt: ACP session $sessionId is not open.',
-        severity: _DiagnosticSeverity.error,
+        severity: DiagnosticSeverity.error,
         source: 'prompt',
       );
       return;
@@ -991,31 +960,27 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   /// Исход каждого хода любой сессии — отправленного Cubit и ушедшего из
   /// очереди kit — с той же диагностикой, что до переноса очереди в kit.
-  void _handlePromptOutcome(PromptOutcome outcome) {
-    switch (outcome) {
-      case PromptCompleted(:final turn):
-        _recordDiagnostic(
-          'Prompt completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
-          source: 'prompt',
-        );
-      case PromptFailed(:final error):
-        _recordDiagnostic(
-          'Failed to send prompt: ${_errorMessage(error)}',
-          severity: _DiagnosticSeverity.error,
-          source: 'prompt',
-        );
-      case PromptQueued():
-        break;
-    }
-    _syncQueuedPrompts(outcome.sessionId.value);
-  }
+  /// Исход каждого хода любой сессии — отправленного Cubit и ушедшего из
+  /// очереди kit: очередь могла сдвинуться. Диагностику хода пишет
+  /// [_handleKitDiagnostic].
+  void _handlePromptOutcome(PromptOutcome outcome) =>
+      _syncQueuedPrompts(outcome.sessionId.value);
+
+  /// Диагностика событий kit — та же запись в структурный лог, что раньше
+  /// делал сам Cubit (design D9 change `extract-acp-client-kit`).
+  void _handleKitDiagnostic(WorkspaceDiagnostic diagnostic) =>
+      _recordDiagnostic(
+        diagnostic.message,
+        severity: diagnostic.severity,
+        source: diagnostic.source,
+      );
 
   Future<void> cancelTurn() async {
     final sessionId = state.activeSessionId;
     if (sessionId == null) {
       _recordDiagnostic(
         'Select a session before cancelling a prompt turn.',
-        severity: _DiagnosticSeverity.warning,
+        severity: DiagnosticSeverity.warning,
         source: 'prompt',
       );
       return;
@@ -1026,20 +991,12 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     // [_handleSessionChange] подхватывает его из `sessionChanges` для той
     // сессии, чья она, активной или нет. Очередь сливает kit, когда агент
     // ответит на отменённый `session/prompt`.
+    // Итог отмены — успех или ошибку — сообщает диагностика kit
+    // ([_handleKitDiagnostic]).
     try {
-      final turn = await _workspace.session(SessionId(sessionId))?.cancel();
-      if (isClosed || turn == null) return;
-      _recordDiagnostic(
-        'Cancelled prompt turn ${turn.id.value}.',
-        source: 'prompt',
-      );
-    } on Object catch (error) {
-      if (isClosed) return;
-      _recordDiagnostic(
-        'Failed to cancel prompt turn: ${_errorMessage(error)}',
-        severity: _DiagnosticSeverity.error,
-        source: 'prompt',
-      );
+      await _workspace.session(SessionId(sessionId))?.cancel();
+    } on Object {
+      return;
     }
   }
 
@@ -1060,38 +1017,23 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     if (state.isRespondingToApproval) {
       return;
     }
+    final handle = _workspace.session(sessionId);
+    if (handle == null) {
+      return;
+    }
 
     emit(state.copyWith(isRespondingToApproval: true));
-    final result = await _respondToPermissionUseCase(
-      RespondToPermissionCommand.selected(
-        sessionId: sessionId,
-        approvalId: approvalId,
-        optionId: PermissionOptionId(optionId),
-      ),
-    ).run();
+    // `transcriptEntries` здесь не трогаются: решение (или то, что одобрение
+    // всё ещё ждёт, например после устаревшего ответа) приходит из
+    // следующего `sessionChanges` в [_handleSessionChange]. Итог ответа
+    // сообщает диагностика kit.
+    try {
+      await handle.respond(approvalId, PermissionOptionId(optionId));
+    } on Object {
+      // Ошибка уже записана диагностикой kit.
+    }
     if (isClosed) return;
-
-    // Do not touch `transcriptEntries` here in either branch: the resolution
-    // (or the fact that it is still pending, e.g. after a stale/failed
-    // response) is always re-derived from the next `sessionChanges` event in
-    // `_handleSessionChange`, which stays the single source of truth.
-    result.match(
-      (failure) {
-        emit(state.copyWith(isRespondingToApproval: false));
-        _recordDiagnostic(
-          'Failed to respond to approval request: ${_failureMessage(failure)}',
-          severity: _DiagnosticSeverity.error,
-          source: 'approval',
-        );
-      },
-      (resolved) {
-        emit(state.copyWith(isRespondingToApproval: false));
-        _recordDiagnostic(
-          'Resolved approval ${resolved.id.value} (${resolved.status.name}).',
-          source: 'approval',
-        );
-      },
-    );
+    emit(state.copyWith(isRespondingToApproval: false));
   }
 
   /// Sends the user's chosen [value] for [configId] to the agent via
@@ -1102,37 +1044,19 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// event in [_handleSessionChange], never set optimistically here.
   Future<void> setSessionConfigOption(String configId, String value) async {
     final sessionId = state.activeSessionId;
-    if (sessionId == null || state.isRespondingToConfigOption) {
+    final handle = sessionId == null ? null : _sessionHandle(sessionId);
+    if (handle == null || state.isRespondingToConfigOption) {
       return;
     }
 
     emit(state.copyWith(isRespondingToConfigOption: true));
-    final result = await _setSessionConfigOptionUseCase(
-      SetSessionConfigOptionCommand(
-        sessionId: SessionId(sessionId),
-        configId: SessionConfigId(configId),
-        value: SessionConfigValueId(value),
-      ),
-    ).run();
+    try {
+      await handle.setConfigOption(configId, value);
+    } on Object {
+      // Ошибка уже записана диагностикой kit.
+    }
     if (isClosed) return;
-
-    result.match(
-      (failure) {
-        emit(state.copyWith(isRespondingToConfigOption: false));
-        _recordDiagnostic(
-          'Failed to set config option $configId: ${_failureMessage(failure)}',
-          severity: _DiagnosticSeverity.error,
-          source: 'session',
-        );
-      },
-      (_) {
-        emit(state.copyWith(isRespondingToConfigOption: false));
-        _recordDiagnostic(
-          'Set config option $configId to $value.',
-          source: 'session',
-        );
-      },
-    );
+    emit(state.copyWith(isRespondingToConfigOption: false));
   }
 
   void openCommandPalette() => emit(state.copyWith(isCommandPaletteOpen: true));
@@ -1196,6 +1120,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     await _sessionSubscription.cancel();
     await _workspaceSubscription.cancel();
     await _promptOutcomeSubscription.cancel();
+    await _diagnosticSubscription.cancel();
     if (_ownsWorkspace) {
       await _workspace.dispose();
     }
@@ -1210,19 +1135,19 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// `source` context key.
   void _recordDiagnostic(
     String message, {
-    _DiagnosticSeverity severity = _DiagnosticSeverity.info,
+    DiagnosticSeverity severity = DiagnosticSeverity.info,
     required String source,
   }) {
     final redactedMessage = _redactor.redactText(message);
     final logContext = {'source': source};
     switch (severity) {
-      case _DiagnosticSeverity.debug:
+      case DiagnosticSeverity.debug:
         _logger.debug(redactedMessage, context: logContext);
-      case _DiagnosticSeverity.info:
+      case DiagnosticSeverity.info:
         _logger.info(redactedMessage, context: logContext);
-      case _DiagnosticSeverity.warning:
+      case DiagnosticSeverity.warning:
         _logger.warning(redactedMessage, context: logContext);
-      case _DiagnosticSeverity.error:
+      case DiagnosticSeverity.error:
         _logger.error(redactedMessage, context: logContext);
     }
   }
@@ -1253,7 +1178,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       if (isClosed) return;
       _recordDiagnostic(
         'Failed to load recent projects: $error',
-        severity: _DiagnosticSeverity.warning,
+        severity: DiagnosticSeverity.warning,
         source: 'project',
       );
     }
@@ -1301,59 +1226,44 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
-  /// Derives the current config option list from [AcpSession.configOptions]
-  /// — kept in sync via `SessionStateMachine._applyUpdate`'s
-  /// `ConfigOptionUpdate` handling (session-scoped, same pattern as
-  /// `AvailableCommandsUpdate`/[_agentCommandsFor]). Maps the protocol DTO
-  /// to the `acp_ui`-facing [AcpConfigOption] here, at the application
-  /// boundary — `acp_ui` has no dependency on `acp_protocol`.
-  List<AcpConfigOption> _configOptionsFor(AcpSession session) {
-    return (session.configOptions ?? const [])
-        .map(_configOptionUiModel)
-        .toList(growable: false);
-  }
+  /// Опции конфигурации сессии из kit в модели `acp_ui` (`acp_ui` не
+  /// зависит от протокола и kit).
+  List<AcpConfigOption> _configOptionsFor(AcpSession session) => [
+    for (final option
+        in _sessionHandle(session.id.value)?.current.configOptions ??
+            const <ConfigOptionView>[])
+      AcpConfigOption(
+        id: option.id,
+        name: option.name,
+        currentValue: option.currentValue,
+        description: option.description,
+        values: [
+          for (final value in option.values)
+            AcpConfigOptionValue(
+              value: value.value,
+              name: value.name,
+              description: value.description,
+            ),
+        ],
+      ),
+  ];
 
-  AcpConfigOption _configOptionUiModel(SessionConfigOption option) {
-    return switch (option) {
-      SessionConfigSelect(
-        :final id,
-        :final name,
-        :final currentValue,
-        :final options,
-        :final description,
-      ) =>
-        AcpConfigOption(
-          id: id.value,
-          name: name,
-          currentValue: currentValue.value,
-          description: description,
-          values: options
-              .map(
-                (value) => AcpConfigOptionValue(
-                  value: value.value.value,
-                  name: value.name,
-                  description: value.description,
-                ),
-              )
-              .toList(growable: false),
-        ),
-    };
-  }
-
-  /// Derives the current agent-declared command list from
-  /// [AcpSession.availableCommands], which the domain layer already keeps
-  /// as "last `available_commands_update` wins" — see
-  /// `SessionStateMachine._applyUpdate` in acp_client_core, which applies
-  /// this update to the session itself (not a turn), since ACP allows
-  /// agents to send it at any time, including before any prompt turn
-  /// exists. Recomputed from scratch on every `sessionChanges` event, so
-  /// switching to a session that has not (yet) declared any commands
-  /// naturally yields an empty list.
-  List<AcpCommandAction> _agentCommandsFor(AcpSession session) {
-    return session.availableCommands
-        .map(_agentCommandAction)
-        .toList(growable: false);
-  }
+  /// Команды агента из kit (последний `available_commands_update`) в
+  /// модели палитры `acp_ui`.
+  List<AcpCommandAction> _agentCommandsFor(AcpSession session) => [
+    for (final command
+        in _sessionHandle(session.id.value)?.current.agentCommands ??
+            const <AgentCommandView>[])
+      AcpCommandAction(
+        id: 'agent-${command.name}',
+        label: command.name,
+        slashCommand: '/${command.name}',
+        description: command.description,
+        icon: FluentIcons.robot,
+        source: AcpCommandSource.agent,
+        hint: command.hint,
+      ),
+  ];
 
   /// Derives the active session's current plan from `session.turns` — the
   /// last `SessionUpdate.plan` seen across all of its turns wins (a plan
@@ -1393,19 +1303,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     );
   }
 
-  AcpCommandAction _agentCommandAction(AvailableCommand command) {
-    final hint = command.input?.hint;
-    return AcpCommandAction(
-      id: 'agent-${command.name}',
-      label: command.name,
-      slashCommand: '/${command.name}',
-      description: command.description,
-      icon: FluentIcons.robot,
-      source: AcpCommandSource.agent,
-      hint: hint == null || hint.isEmpty ? null : hint,
-    );
-  }
-
   /// Reacts only to a *spontaneous* connection loss — a transport failure
   /// that happened while nobody asked for one, i.e. `connectionStatus` was
   /// still `connected`. Explicit `connect()`/`reconnect()` already move
@@ -1417,8 +1314,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// сбой явного [connect]/[reconnect] сообщают сами эти методы, поэтому
   /// здесь он не дублируется.
   void _handleWorkspaceChange(WorkspaceState workspace) {
-    final connection = workspace.connection;
-    if (connection is! ConnectionFailed) {
+    if (workspace.connection is! ConnectionFailed) {
       return;
     }
     if (state.connectionStatus != AcpConnectionStatus.connected) {
@@ -1434,11 +1330,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         isRespondingToConfigOption: false,
       ),
     );
-    _recordDiagnostic(
-      'Connection to ACP agent lost: ${connection.message}',
-      severity: _DiagnosticSeverity.error,
-      source: 'transport',
-    );
+    // Запись `Connection to ACP agent lost` даёт диагностика kit.
   }
 
   AcpApprovalRisk _approvalRisk(ApprovalRiskLevel risk) => switch (risk) {
@@ -1542,27 +1434,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         SessionLifecycleStatus.failed => AcpSessionStatus.failed,
       };
 
-  /// Текст ошибки kit или ядра клиента для диагностики — тот же, что давал
-  /// `_failureMessage` после use case-ов `acp_client_core` до переноса
-  /// подключения и сессий в kit. Перенос в `describeFailure` kit — итерация 6
-  /// (design D9).
-  String _errorMessage(Object error) => switch (error) {
-    AcpClientApplicationException(:final message) ||
-    AcpTransportException(:final message) ||
-    StateTransitionException(:final message) ||
-    ClientWorkspaceException(:final message) => message,
-    _ => error.toString(),
-  };
-
-  String _failureMessage(AcpClientApplicationFailure failure) =>
-      switch (failure) {
-        AcpClientTransportFailure(:final message) ||
-        AcpClientProtocolFailure(:final message) ||
-        AcpClientStateRejectedFailure(:final message) ||
-        AcpClientMissingSessionFailure(:final message) ||
-        AcpClientUnexpectedFailure(:final message) => message,
-      };
-
   /// Транскрипт сессии из `acp_client_kit` в модели `acp_ui`.
   ///
   /// Проекцию строит kit (`TranscriptProjector`, design D5 change
@@ -1637,7 +1508,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       risk: _approvalRisk(approval.risk),
       command: approval.command,
       cwd: cwd,
-      rawInput: _prettyJson(approval.rawInput),
+      rawInput: formatRedactedJson(approval.rawInput),
       options: approval.options.map(_approvalOption).toList(),
       enabled: !state.isRespondingToApproval,
       shortcutsEnabled: approval.focused,
@@ -1660,293 +1531,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         ToolCallStatusView.cancelled => AcpToolCallStatus.cancelled,
       };
 
-  List<CodeLabInspectorEntry> _inspectorEntriesForSession(AcpSession session) {
-    final turn = session.turns.lastOrNull;
-    if (turn == null) {
-      return [
-        CodeLabInspectorEntry(
-          id: 'session-${session.id.value}',
-          category: CodeLabInspectorCategory.protocol,
-          title: 'Session ${session.id.value}',
-          summary: 'Status ${session.status.name}',
-          details: [
-            CodeLabInspectorDetail(label: 'CWD', value: session.cwd),
-            CodeLabInspectorDetail(label: 'Status', value: session.status.name),
-          ],
-        ),
-      ];
-    }
-
-    return _inspectorEntriesForTurn(turn);
-  }
-
-  List<CodeLabInspectorEntry> _inspectorEntriesForTurn(PromptTurn turn) {
-    final entries = <CodeLabInspectorEntry>[];
-
-    for (final approval in turn.approvals.values) {
-      entries.add(_approvalInspectorEntry(approval));
-    }
-
-    for (final toolCall in turn.toolCalls.values) {
-      entries.add(_toolCallInspectorEntry(toolCall));
-    }
-
-    for (var index = 0; index < turn.updates.length; index += 1) {
-      entries.add(_protocolInspectorEntry(turn.updates[index], index));
-    }
-
-    entries.add(
-      CodeLabInspectorEntry(
-        id: 'turn-${turn.id.value}',
-        category: CodeLabInspectorCategory.protocol,
-        title: 'Prompt turn ${turn.id.value}',
-        summary: 'Status ${turn.status.name}',
-        status: turn.stopReason?.wireName ?? turn.status.name,
-        details: [
-          CodeLabInspectorDetail(label: 'Session', value: turn.sessionId.value),
-          CodeLabInspectorDetail(label: 'Status', value: turn.status.name),
-          if (turn.stopReason != null)
-            CodeLabInspectorDetail(
-              label: 'Stop reason',
-              value: turn.stopReason!.wireName,
-            ),
-          CodeLabInspectorDetail(
-            label: 'Updates',
-            value: turn.updates.length.toString(),
-          ),
-        ],
-      ),
-    );
-
-    return entries;
-  }
-
-  CodeLabInspectorEntry _approvalInspectorEntry(ApprovalRequest approval) {
-    final toolCall = approval.toolCall;
-    return CodeLabInspectorEntry(
-      id: 'approval-${approval.id.value}',
-      category: CodeLabInspectorCategory.approval,
-      title: 'Approval ${approval.id.value}',
-      summary: toolCall.title,
-      risk: approval.riskLevel.name,
-      status: approval.status.name,
-      details: [
-        CodeLabInspectorDetail(label: 'Tool', value: toolCall.title),
-        CodeLabInspectorDetail(label: 'Kind', value: toolCall.kind.wireName),
-        CodeLabInspectorDetail(label: 'Status', value: approval.status.name),
-        CodeLabInspectorDetail(
-          label: 'Options',
-          value: approval.options
-              .map((option) => '${option.name} (${option.kind.wireName})')
-              .join(', '),
-        ),
-        ..._toolCallContentDetails(toolCall.content),
-        ..._toolCallLocationDetails(toolCall.locations),
-      ],
-      rawInput: _prettyJson(toolCall.rawInput),
-      rawOutput: _prettyJson(toolCall.rawOutput),
-    );
-  }
-
-  CodeLabInspectorEntry _toolCallInspectorEntry(ToolCallRecord toolCall) {
-    return CodeLabInspectorEntry(
-      id: 'tool-${toolCall.id.value}',
-      category: CodeLabInspectorCategory.toolCall,
-      title: toolCall.title,
-      summary: toolCall.kind.wireName,
-      risk: toolCall.riskLevel.name,
-      status: toolCall.status.wireName,
-      details: [
-        CodeLabInspectorDetail(label: 'Tool call', value: toolCall.id.value),
-        CodeLabInspectorDetail(label: 'Kind', value: toolCall.kind.wireName),
-        CodeLabInspectorDetail(
-          label: 'Status',
-          value: toolCall.status.wireName,
-        ),
-        ..._toolCallContentDetails(toolCall.content),
-        ..._toolCallLocationDetails(toolCall.locations),
-      ],
-      rawInput: _prettyJson(toolCall.rawInput),
-      rawOutput: _prettyJson(toolCall.rawOutput),
-    );
-  }
-
-  CodeLabInspectorEntry _protocolInspectorEntry(
-    SessionUpdate update,
-    int index,
-  ) {
-    return switch (update) {
-      UserMessageChunk(:final content) => _contentInspectorEntry(
-        id: 'update-$index',
-        title: 'session/update user_message_chunk',
-        content: content,
-      ),
-      AgentMessageChunk(:final content) => _contentInspectorEntry(
-        id: 'update-$index',
-        title: 'session/update agent_message_chunk',
-        content: content,
-      ),
-      AgentThoughtChunk(:final content) => _contentInspectorEntry(
-        id: 'update-$index',
-        title: 'session/update agent_thought_chunk',
-        content: content,
-      ),
-      ToolCallSessionUpdate(:final toolCall) => CodeLabInspectorEntry(
-        id: 'update-$index',
-        category: CodeLabInspectorCategory.protocol,
-        title: 'session/update tool_call',
-        summary: toolCall.title,
-        details: [
-          CodeLabInspectorDetail(
-            label: 'Tool call',
-            value: toolCall.toolCallId.value,
-          ),
-          CodeLabInspectorDetail(label: 'Kind', value: toolCall.kind.wireName),
-          CodeLabInspectorDetail(
-            label: 'Status',
-            value: toolCall.status.wireName,
-          ),
-          ..._toolCallContentDetails(toolCall.content ?? const []),
-          ..._toolCallLocationDetails(toolCall.locations ?? const []),
-        ],
-        rawInput: _prettyJson(toolCall.rawInput),
-        rawOutput: _prettyJson(toolCall.rawOutput),
-      ),
-      ToolCallUpdateSessionUpdate(:final toolCallUpdate) =>
-        CodeLabInspectorEntry(
-          id: 'update-$index',
-          category: CodeLabInspectorCategory.protocol,
-          title: 'session/update tool_call_update',
-          summary: toolCallUpdate.title ?? toolCallUpdate.toolCallId.value,
-          details: [
-            CodeLabInspectorDetail(
-              label: 'Tool call',
-              value: toolCallUpdate.toolCallId.value,
-            ),
-            if (toolCallUpdate.kind != null)
-              CodeLabInspectorDetail(
-                label: 'Kind',
-                value: toolCallUpdate.kind!.wireName,
-              ),
-            if (toolCallUpdate.status != null)
-              CodeLabInspectorDetail(
-                label: 'Status',
-                value: toolCallUpdate.status!.wireName,
-              ),
-            ..._toolCallContentDetails(toolCallUpdate.content ?? const []),
-            ..._toolCallLocationDetails(toolCallUpdate.locations ?? const []),
-          ],
-          rawInput: _prettyJson(toolCallUpdate.rawInput),
-          rawOutput: _prettyJson(toolCallUpdate.rawOutput),
-        ),
-      PlanUpdate(:final entries) => CodeLabInspectorEntry(
-        id: 'update-$index',
-        category: CodeLabInspectorCategory.protocol,
-        title: 'session/update plan',
-        summary: '${entries.length} entries',
-        details: entries
-            .map(
-              (entry) => CodeLabInspectorDetail(
-                label: entry.status.wireName,
-                value: entry.content,
-              ),
-            )
-            .toList(growable: false),
-      ),
-      AvailableCommandsUpdate(:final availableCommands) =>
-        CodeLabInspectorEntry(
-          id: 'update-$index',
-          category: CodeLabInspectorCategory.protocol,
-          title: 'session/update available_commands_update',
-          summary: '${availableCommands.length} commands',
-        ),
-      CurrentModeUpdate(:final currentModeId) => CodeLabInspectorEntry(
-        id: 'update-$index',
-        category: CodeLabInspectorCategory.protocol,
-        title: 'session/update current_mode_update',
-        summary: currentModeId.value,
-      ),
-      ConfigOptionUpdate(:final configOptions) => CodeLabInspectorEntry(
-        id: 'update-$index',
-        category: CodeLabInspectorCategory.protocol,
-        title: 'session/update config_option_update',
-        summary: '${configOptions.length} options',
-      ),
-      SessionInfoUpdate(:final title) => CodeLabInspectorEntry(
-        id: 'update-$index',
-        category: CodeLabInspectorCategory.protocol,
-        title: 'session/update session_info_update',
-        summary: title ?? 'Session info updated',
-      ),
-    };
-  }
-
-  CodeLabInspectorEntry _contentInspectorEntry({
-    required String id,
-    required String title,
-    required ContentBlock content,
-  }) {
-    return CodeLabInspectorEntry(
-      id: id,
-      category: CodeLabInspectorCategory.protocol,
-      title: title,
-      summary: _contentSummary(content),
-    );
-  }
-
-  List<CodeLabInspectorDetail> _toolCallContentDetails(
-    List<ToolCallContent> content,
-  ) {
-    return [
-      for (final item in content)
-        switch (item) {
-          ToolCallDiff(:final diff) => CodeLabInspectorDetail(
-            label: 'Diff',
-            value: '${diff.path} (${diff.oldText == null ? 'new' : 'edit'})',
-          ),
-          ToolCallTerminal(:final terminalId) => CodeLabInspectorDetail(
-            label: 'Terminal',
-            value: terminalId,
-          ),
-          ToolCallContentBlock(:final content) => CodeLabInspectorDetail(
-            label: 'Content',
-            value: _contentSummary(content),
-          ),
-        },
-    ];
-  }
-
-  List<CodeLabInspectorDetail> _toolCallLocationDetails(
-    List<ToolCallLocation> locations,
-  ) {
-    return [
-      for (final location in locations)
-        CodeLabInspectorDetail(
-          label: 'Location',
-          value: location.line == null
-              ? location.path
-              : '${location.path}:${location.line}',
-        ),
-    ];
-  }
-
-  String _contentSummary(ContentBlock content) {
-    return switch (content) {
-      TextContent(:final text) => text,
-      ImageContent(:final mimeType) => 'Image $mimeType',
-      AudioContent(:final mimeType) => 'Audio $mimeType',
-      ResourceLink(:final uri) => uri,
-      EmbeddedResource(:final resource) => _prettyJson(resource.toJson())!,
-    };
-  }
-
-  String? _prettyJson(Object? value) {
-    if (value == null) {
-      return null;
-    }
-
-    return const JsonEncoder.withIndent('  ').convert(_redactor.redact(value));
-  }
+  List<CodeLabInspectorEntry> _inspectorEntriesForSession(AcpSession session) =>
+      const InspectorProjection().project(session);
 
   AcpConnectionStatus _connectionStatusFor(ConnectionView connection) =>
       switch (connection) {
