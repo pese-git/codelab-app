@@ -2690,4 +2690,264 @@ as String,cause: freezed == cause ? _self.cause : cause ,
 
 }
 
+/// @nodoc
+mixin _$SessionListPage {
+
+ List<SessionInfo> get sessions; String? get nextCursor;
+/// Create a copy of SessionListPage
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$SessionListPageCopyWith<SessionListPage> get copyWith => _$SessionListPageCopyWithImpl<SessionListPage>(this as SessionListPage, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionListPage&&const DeepCollectionEquality().equals(other.sessions, sessions)&&(identical(other.nextCursor, nextCursor) || other.nextCursor == nextCursor));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(sessions),nextCursor);
+
+@override
+String toString() {
+  return 'SessionListPage(sessions: $sessions, nextCursor: $nextCursor)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $SessionListPageCopyWith<$Res>  {
+  factory $SessionListPageCopyWith(SessionListPage value, $Res Function(SessionListPage) _then) = _$SessionListPageCopyWithImpl;
+@useResult
+$Res call({
+ List<SessionInfo> sessions, String? nextCursor
+});
+
+
+
+
+}
+/// @nodoc
+class _$SessionListPageCopyWithImpl<$Res>
+    implements $SessionListPageCopyWith<$Res> {
+  _$SessionListPageCopyWithImpl(this._self, this._then);
+
+  final SessionListPage _self;
+  final $Res Function(SessionListPage) _then;
+
+/// Create a copy of SessionListPage
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? sessions = null,Object? nextCursor = freezed,}) {
+  return _then(_self.copyWith(
+sessions: null == sessions ? _self.sessions : sessions // ignore: cast_nullable_to_non_nullable
+as List<SessionInfo>,nextCursor: freezed == nextCursor ? _self.nextCursor : nextCursor // ignore: cast_nullable_to_non_nullable
+as String?,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [SessionListPage].
+extension SessionListPagePatterns on SessionListPage {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _SessionListPage value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _SessionListPage() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _SessionListPage value)  $default,){
+final _that = this;
+switch (_that) {
+case _SessionListPage():
+return $default(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _SessionListPage value)?  $default,){
+final _that = this;
+switch (_that) {
+case _SessionListPage() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( List<SessionInfo> sessions,  String? nextCursor)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _SessionListPage() when $default != null:
+return $default(_that.sessions,_that.nextCursor);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( List<SessionInfo> sessions,  String? nextCursor)  $default,) {final _that = this;
+switch (_that) {
+case _SessionListPage():
+return $default(_that.sessions,_that.nextCursor);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( List<SessionInfo> sessions,  String? nextCursor)?  $default,) {final _that = this;
+switch (_that) {
+case _SessionListPage() when $default != null:
+return $default(_that.sessions,_that.nextCursor);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class _SessionListPage implements SessionListPage {
+  const _SessionListPage({required final  List<SessionInfo> sessions, this.nextCursor}): _sessions = sessions;
+  
+
+ final  List<SessionInfo> _sessions;
+@override List<SessionInfo> get sessions {
+  if (_sessions is EqualUnmodifiableListView) return _sessions;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_sessions);
+}
+
+@override final  String? nextCursor;
+
+/// Create a copy of SessionListPage
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$SessionListPageCopyWith<_SessionListPage> get copyWith => __$SessionListPageCopyWithImpl<_SessionListPage>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SessionListPage&&const DeepCollectionEquality().equals(other._sessions, _sessions)&&(identical(other.nextCursor, nextCursor) || other.nextCursor == nextCursor));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_sessions),nextCursor);
+
+@override
+String toString() {
+  return 'SessionListPage(sessions: $sessions, nextCursor: $nextCursor)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$SessionListPageCopyWith<$Res> implements $SessionListPageCopyWith<$Res> {
+  factory _$SessionListPageCopyWith(_SessionListPage value, $Res Function(_SessionListPage) _then) = __$SessionListPageCopyWithImpl;
+@override @useResult
+$Res call({
+ List<SessionInfo> sessions, String? nextCursor
+});
+
+
+
+
+}
+/// @nodoc
+class __$SessionListPageCopyWithImpl<$Res>
+    implements _$SessionListPageCopyWith<$Res> {
+  __$SessionListPageCopyWithImpl(this._self, this._then);
+
+  final _SessionListPage _self;
+  final $Res Function(_SessionListPage) _then;
+
+/// Create a copy of SessionListPage
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? sessions = null,Object? nextCursor = freezed,}) {
+  return _then(_SessionListPage(
+sessions: null == sessions ? _self._sessions : sessions // ignore: cast_nullable_to_non_nullable
+as List<SessionInfo>,nextCursor: freezed == nextCursor ? _self.nextCursor : nextCursor // ignore: cast_nullable_to_non_nullable
+as String?,
+  ));
+}
+
+
+}
+
 // dart format on

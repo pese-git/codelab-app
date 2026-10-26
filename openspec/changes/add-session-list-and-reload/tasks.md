@@ -1,19 +1,19 @@
 ## 1. session/list и таймаут запросов в codelab_client_acp (5.2, итерация 1)
 
-- [ ] 1.1 Тесты `packages/dart/codelab_client_acp/test/application/session_list_test.dart`:
+- [x] 1.1 Тесты `packages/dart/codelab_client_acp/test/application/session_list_test.dart`:
   - `listSessions` с `cwd` и курсором возвращает страницу и `nextCursor`;
   - курсор отправляется без изменений, отсутствие `nextCursor` — конец списка;
   - без `sessionCapabilities.list` — типизированная ошибка, кадр не отправляется.
 
   Источник: acp-protocol-client «Исходящий session/list».
-- [ ] 1.2 Тесты `request_timeout_test.dart`:
+- [x] 1.2 Тесты `request_timeout_test.dart`:
   - `session/new` без ответа дольше `requestTimeout` — `AcpRequestTimeoutException` с методом;
   - поздний ответ не меняет состояние;
   - `session/prompt` таймаутом не ограничен;
   - таймаут `session/load` отбрасывает буфер реплея.
 
   Источник: acp-protocol-client «Таймаут исходящих запросов».
-- [ ] 1.3 `AcpClientApplication.listSessions`, `SessionListPage`, параметр `requestTimeout` (60 с по умолчанию), `AcpRequestTimeoutException`, событие лога `request_timeout` (D1, D2) — 1.1 и 1.2 зелёные. PR итерации 1.
+- [x] 1.3 `AcpClientApplication.listSessions`, `SessionListPage`, параметр `requestTimeout` (60 с по умолчанию), `AcpRequestTimeoutException`, событие лога `request_timeout` (D1, D2) — 1.1 и 1.2 зелёные. PR итерации 1.
 
 ## 2. Список и загрузка сессий в codelab_client_core (итерация 2)
 
