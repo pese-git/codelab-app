@@ -25,6 +25,17 @@ final class TranscriptProjector {
 
   List<TranscriptItem> get items => _items;
 
+  /// Забывает проекцию: следующий [apply] строит транскрипт с нуля.
+  ///
+  /// Почему: после `session/load` сессия — реплей агента, и id его ходов
+  /// могут совпасть с прежними (`turn-1`); по сравнению ходов замену не
+  /// отличить, поэтому рабочее пространство сбрасывает проекцию по самому
+  /// событию загрузки (design D4 change `add-session-list-and-reload`).
+  void reset() {
+    _turns.clear();
+    _items = const [];
+  }
+
   /// Применяет снимок сессии; `true` — транскрипт изменился.
   bool apply(AcpSession session) {
     var changed = false;

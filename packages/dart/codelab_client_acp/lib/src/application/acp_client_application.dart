@@ -1983,7 +1983,13 @@ final class AcpClientApplication {
 }
 
 final class _PendingAcpRequest {
-  _PendingAcpRequest(this.method);
+  _PendingAcpRequest(this.method) {
+    // Ответ может прийти, пока кадр запроса ещё отправляется: синхронный
+    // транспорт доставляет его до того, как `_sendRequest` начнёт ждать
+    // [future]. Без слушателя ошибка ответа стала бы необработанной; `ignore`
+    // только снимает это, а ожидающий позже всё равно получает ошибку.
+    _completer.future.ignore();
+  }
 
   final String method;
   final _completer = Completer<Object>();

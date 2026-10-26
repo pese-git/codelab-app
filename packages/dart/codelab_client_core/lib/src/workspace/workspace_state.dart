@@ -19,7 +19,12 @@ part 'workspace_state.freezed.dart';
 /// соединения, списка сессий, статуса сессии или активной сессии.
 ///
 /// Как использовать: подписаться на `ClientWorkspace.state` или прочитать
-/// `ClientWorkspace.current`; [sessions] — от новой к старой.
+/// `ClientWorkspace.current`. [sessions] — список сайдбара проекта: сначала
+/// сессии, открытые в этом запуске, от новой к старой, затем ещё не
+/// открытые сессии агента из `session/list` в его порядке ([SessionStatusView.notLoaded]);
+/// [hasMoreSessions] — у агента есть следующая страница
+/// (`ClientWorkspace.loadMoreSessions`, design D3 change
+/// `add-session-list-and-reload`).
 @freezed
 abstract class WorkspaceState with _$WorkspaceState {
   const factory WorkspaceState({
@@ -28,16 +33,24 @@ abstract class WorkspaceState with _$WorkspaceState {
     String? projectDirectory,
     @Default([]) List<SessionSummaryView> sessions,
     SessionId? activeSessionId,
+    @Default(false) bool hasMoreSessions,
   }) = _WorkspaceState;
 }
 
-/// Строка списка сессий: id, рабочая папка и статус.
+/// Строка списка сессий: id, рабочая папка, статус, заголовок и время
+/// последнего изменения.
+///
+/// [title] — заголовок сессии в ядре клиента (`session_info_update`), а у
+/// неоткрытой — из `session/list`; [updatedAt] — из `session/list`, если
+/// агент его прислал.
 @freezed
 abstract class SessionSummaryView with _$SessionSummaryView {
   const factory SessionSummaryView({
     required SessionId id,
     required String cwd,
     required SessionStatusView status,
+    String? title,
+    DateTime? updatedAt,
   }) = _SessionSummaryView;
 }
 
@@ -79,12 +92,16 @@ abstract class SessionView with _$SessionView {
 ///
 /// Для чего: [running] — идёт ход, в том числе с ожидающими одобрениями;
 /// [cancelling] — отмена отправлена, ход ждёт ответа агента; обе значат
-/// «сессия занята».
+/// «сессия занята»; [notLoaded] — сессия есть у агента (`session/list`), но
+/// в этом запуске не открыта: у неё нет `SessionHandle`, открывает её
+/// `ClientWorkspace.loadSession` (design D3 change
+/// `add-session-list-and-reload`).
 enum SessionStatusView {
   idle,
   running,
   cancelling,
-  failed;
+  failed,
+  notLoaded;
 
   /// Статус представления для статуса жизненного цикла ядра клиента.
   static SessionStatusView of(SessionLifecycleStatus status) =>

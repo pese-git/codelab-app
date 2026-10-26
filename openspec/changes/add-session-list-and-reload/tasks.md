@@ -17,7 +17,7 @@
 
 ## 2. Список и загрузка сессий в codelab_client_core (итерация 2)
 
-- [ ] 2.1 Тесты `test/sessions/session_list_test.dart`:
+- [x] 2.1 Тесты `test/sessions/session_list_test.dart`:
   - после `connect()` первая страница в `WorkspaceState.sessions` со статусом `notLoaded`, заголовком и `updatedAt`;
   - открытая сессия не дублируется;
   - `loadMoreSessions()` добавляет следующую страницу, повторный вызов в полёте игнорируется, `hasMoreSessions` гаснет после последней страницы;
@@ -25,13 +25,13 @@
   - ошибка списка — диагностика.
 
   Источник: acp-client-kit «Список и загрузка сессий проекта».
-- [ ] 2.2 Тесты `test/sessions/load_session_test.dart`:
+- [x] 2.2 Тесты `test/sessions/load_session_test.dart`:
   - `loadSession` строит транскрипт из реплея и регистрирует `SessionHandle`;
   - повторный вызов в полёте не шлёт второй `session/load`;
   - без `loadSession` у агента — `ClientWorkspaceException` без кадра;
   - ошибка — строка остаётся `notLoaded`;
   - реплей с теми же id ходов (`turn-1`) после повторной загрузки — проекция с нуля (D4).
-- [ ] 2.3 `AgentBackend.listSessions`/`loadSession`, `SessionSummaryView.title`/`updatedAt`, `SessionStatusView.notLoaded`, `WorkspaceState.hasMoreSessions`, `ClientWorkspace.loadSession`/`loadMoreSessions`, сброс проекции в `TranscriptProjector` (D3, D4) — 2.1 и 2.2 зелёные. PR итерации 2.
+- [x] 2.3 `AgentBackend.listSessions`/`loadSession`, `SessionSummaryView.title`/`updatedAt`, `SessionStatusView.notLoaded`, `WorkspaceState.hasMoreSessions`, `ClientWorkspace.loadSession`/`loadMoreSessions`, сброс проекции в `TranscriptProjector` (D3, D4) — 2.1 и 2.2 зелёные. Попутно: в `codelab_client_acp` ответ агента с ошибкой, пришедший, пока кадр запроса ещё отправляется, больше не становится необработанной ошибкой (`test/application/early_response_test.dart`). PR итерации 2.
 
 ## 3. Сессии после переподключения (итерация 3)
 

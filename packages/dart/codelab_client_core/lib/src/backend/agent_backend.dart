@@ -26,6 +26,12 @@ abstract interface class AgentBackend {
 
   Future<AcpSession> createSession(CreateSessionCommand command);
 
+  /// Страница `session/list`; только при `sessionCapabilities.list`.
+  Future<SessionListPage> listSessions({String? cwd, String? cursor});
+
+  /// `session/load`: сессия с ходами из реплея агента.
+  Future<AcpSession> loadSession(LoadSessionCommand command);
+
   Future<PromptTurn> sendPrompt(SendPromptCommand command);
 
   Future<PromptTurn> cancelTurn(CancelTurnCommand command);
@@ -72,6 +78,14 @@ final class AcpClientBackend implements AgentBackend {
   @override
   Future<AcpSession> createSession(CreateSessionCommand command) =>
       _application.createSession(command);
+
+  @override
+  Future<SessionListPage> listSessions({String? cwd, String? cursor}) =>
+      _application.listSessions(cwd: cwd, cursor: cursor);
+
+  @override
+  Future<AcpSession> loadSession(LoadSessionCommand command) =>
+      _application.loadSession(command);
 
   @override
   Future<PromptTurn> sendPrompt(SendPromptCommand command) =>
