@@ -16,7 +16,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ClientWorkspace,
         ConfigTransportResolver,
         InMemorySecretSource,
-        RecentProjectsStore;
+        RecentProjectsStore,
+        WorkspaceSnapshotStore;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_acp_transports/io.dart';
 import 'package:cherrypick/cherrypick.dart';
@@ -33,6 +34,7 @@ import 'package:structured_log_remote_sync/structured_log_remote_sync.dart'
 
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
+import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
 import '../features/workbench/application/shell_cubit.dart';
 
 part 'app_scope.module.cherrypick.g.dart';
@@ -211,6 +213,11 @@ final class CodeLabPlatformModule extends Module {
     bind<RecentProjectsStore>().toInstance(
       const SharedPreferencesRecentProjectsStore(),
     );
+    // Снимок рабочего пространства для восстановления после перезапуска
+    // (design D6 change `add-session-list-and-reload`).
+    bind<WorkspaceSnapshotStore>().toInstance(
+      const SharedPreferencesWorkspaceSnapshotStore(),
+    );
     bind<TerminalProcessRunner>().toInstance(const IoTerminalProcessRunner());
   }
 }
@@ -235,6 +242,7 @@ final class CodeLabPresentationModule extends Module {
                 secrets: currentScope.resolve<InMemorySecretSource>(),
               ),
             ],
+            snapshots: currentScope.resolve<WorkspaceSnapshotStore>(),
           ),
         )
         .singleton();

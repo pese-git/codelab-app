@@ -81,6 +81,7 @@ final class CodeLabShellParts {
     final diagnostics = ShellDiagnostics(logger: logger);
     final settings = SettingsCubit(
       changes: changes,
+      workspace: workspace,
       diagnostics: diagnostics,
       workingDirectoryProvider: workingDirectoryProvider,
       projectFolderPicker: projectFolderPicker,

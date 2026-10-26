@@ -5,7 +5,7 @@ import 'package:codelab_client_acp/codelab_client_acp.dart'
 import 'package:codelab_client_io/codelab_client_io.dart'
     show WorkingDirectoryProvider;
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show RecentProjectsStore;
+    show ClientWorkspace, RecentProjectsStore;
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabRecentProject;
 
 import '../../../core/platform/project_folder_picker.dart';
@@ -56,24 +56,31 @@ final class SettingsState {
 /// подключения и новых сессий.
 ///
 /// Как использовать: создаётся вместе с остальными частями
-/// (`CodeLabShellParts`) и сразу загружает недавние проекты; ошибки
-/// хранилища — предупреждение в журнале, не сбой.
+/// (`CodeLabShellParts`) и сразу загружает недавние проекты и проект
+/// прошлого запуска из снимка рабочего пространства
+/// (`ClientWorkspace.restoreProject`, design D6 change
+/// `add-session-list-and-reload`); ошибки хранилищ — предупреждение в
+/// журнале, не сбой.
 final class SettingsCubit extends ShellPartCubit<SettingsState> {
   SettingsCubit({
     required super.changes,
+    required ClientWorkspace workspace,
     required ShellDiagnostics diagnostics,
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
-  }) : _diagnostics = diagnostics,
+  }) : _workspace = workspace,
+       _diagnostics = diagnostics,
        _workingDirectoryProvider = workingDirectoryProvider,
        _projectFolderPicker = projectFolderPicker,
        _recentProjectsStore = recentProjectsStore,
        super(const SettingsState()) {
     // Недавние проекты прошлого запуска видны до первого открытия выбора.
     unawaited(_loadRecentProjects());
+    unawaited(_restoreProject());
   }
 
+  final ClientWorkspace _workspace;
   final ShellDiagnostics _diagnostics;
   final WorkingDirectoryProvider _workingDirectoryProvider;
   final ProjectFolderPicker _projectFolderPicker;
@@ -99,6 +106,7 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     }
 
     emit(state._copyWith(selectedProjectPath: trimmed));
+    _workspace.selectProject(trimmed);
     _diagnostics.record('Selected project: $trimmed.', source: 'project');
 
     try {
@@ -129,6 +137,17 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
 
   void toggleRunAgentFromProjectDirectory(bool value) =>
       emit(state._copyWith(runAgentFromProjectDirectory: value));
+
+  /// Проект прошлого запуска выбирается, только если пользователь ещё не
+  /// выбрал свой, пока снимок читался.
+  Future<void> _restoreProject() async {
+    final project = await _workspace.restoreProject();
+    if (isClosed || project == null || state.selectedProjectPath != null) {
+      return;
+    }
+    emit(state._copyWith(selectedProjectPath: project));
+    _workspace.selectProject(project);
+  }
 
   /// Сбой хранилища не мешает работать: остаются прежние недавние проекты.
   Future<void> _loadRecentProjects() async {
