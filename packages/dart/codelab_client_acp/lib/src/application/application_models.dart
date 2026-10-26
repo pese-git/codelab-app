@@ -126,3 +126,22 @@ sealed class AcpClientApplicationFailure with _$AcpClientApplicationFailure {
     Object? cause,
   }) = AcpClientUnexpectedFailure;
 }
+
+/// Страница списка сессий агента — результат `session/list`.
+///
+/// Почему: ACP отдаёт список страницами с непрозрачным курсором
+/// (`04-Session List.md`, «Pagination»), и размер страницы выбирает агент.
+///
+/// Для чего: результат `AcpClientApplication.listSessions`; элементы —
+/// `SessionInfo` протокола как результат запроса, долгоживущим состоянием
+/// клиента они не становятся (design D1 change `add-session-list-and-reload`).
+///
+/// Как использовать: [nextCursor] передаётся в следующий вызов как есть;
+/// `null` — страница последняя. Курсор не разбирают и не сохраняют.
+@freezed
+sealed class SessionListPage with _$SessionListPage {
+  const factory SessionListPage({
+    required List<SessionInfo> sessions,
+    String? nextCursor,
+  }) = _SessionListPage;
+}

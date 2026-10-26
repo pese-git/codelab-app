@@ -32,6 +32,29 @@ final class MissingAcpSessionException extends AcpClientApplicationException {
   final SessionId sessionId;
 }
 
+/// Агент не ответил на запрос клиента за отведённое время.
+///
+/// Почему: без таймаута зависший агент оставляет запрос висеть навсегда —
+/// кнопка, ждущая ответа на `session/new` или `session/load`, не
+/// разблокируется (design D2 change `add-session-list-and-reload`).
+///
+/// Для чего: типизированный исход запроса, снятого по таймауту; хост
+/// показывает его как обычную ошибку запроса.
+///
+/// Как использовать: бросается из методов [AcpClientApplication], которые
+/// отправляют запрос, кроме [AcpClientApplication.sendPrompt]; время
+/// задаёт `requestTimeout` конструктора.
+final class AcpRequestTimeoutException extends AcpClientApplicationException {
+  AcpRequestTimeoutException({required this.method, required this.timeout})
+    : super(
+        'ACP request $method timed out after ${timeout.inMilliseconds} ms.',
+      );
+
+  /// Метод ACP снятого запроса.
+  final String method;
+  final Duration timeout;
+}
+
 final class UnsupportedProtocolVersionException
     extends AcpClientApplicationException {
   UnsupportedProtocolVersionException({
@@ -55,8 +78,10 @@ final class AcpClientApplication {
     TextFileReader? textFileReader,
     TextFileWriter? textFileWriter,
     TerminalProcessRunner? terminalProcessRunner,
+    Duration requestTimeout = defaultRequestTimeout,
     Logger? logger,
   }) : _transport = transport,
+       _requestTimeout = requestTimeout,
        _reconnectTransport = reconnectTransport,
        _clientInfo = clientInfo,
        _textFileReader = textFileReader,
@@ -69,6 +94,14 @@ final class AcpClientApplication {
   /// The ACP protocol version CodeLab implements and requires the agent to
   /// negotiate during `initialize`.
   static const supportedProtocolVersion = ProtocolVersion(1);
+
+  /// Таймаут исходящего запроса по умолчанию (`09-10`, задача 5.2).
+  static const defaultRequestTimeout = Duration(seconds: 60);
+
+  /// Сколько ждать ответа на исходящий запрос, кроме `session/prompt`: ход
+  /// длится сколько угодно и прерывается `session/cancel`, а не таймером
+  /// (design D2 change `add-session-list-and-reload`).
+  final Duration _requestTimeout;
 
   AcpTransport _transport;
   final AcpTransportFactory? _reconnectTransport;
@@ -256,6 +289,32 @@ final class AcpClientApplication {
 
     _storeSession(session);
     return session;
+  }
+
+  /// Страница сессий агента — `session/list` (`04-Session List.md`).
+  ///
+  /// [cwd] — абсолютный путь проекта, [cursor] — `nextCursor` прошлой
+  /// страницы как есть: курсор непрозрачен, его не разбирают и не сохраняют
+  /// между запусками. Без `sessionCapabilities.list` в ответе `initialize`
+  /// (или до него) запрос не отправляется — ACP запрещает его — и бросается
+  /// [AcpClientApplicationException] (design D1 change
+  /// `add-session-list-and-reload`).
+  Future<SessionListPage> listSessions({String? cwd, String? cursor}) async {
+    final state = _connectionState;
+    if (state is! ClientConnectionReady ||
+        state.capabilities.sessionCapabilities.list == null) {
+      throw const AcpClientApplicationException(
+        'The ACP agent does not support session/list.',
+      );
+    }
+    final response = await _sendRequest<ListSessionsResponse>(
+      method: sessionListMethod,
+      params: ListSessionsRequest(cwd: cwd, cursor: cursor),
+    );
+    return SessionListPage(
+      sessions: response.sessions,
+      nextCursor: response.nextCursor,
+    );
   }
 
   Future<AcpSession> setSessionConfigOption(
@@ -639,7 +698,41 @@ final class AcpClientApplication {
       );
     }
 
-    final result = await pending.future;
+    // Таймер снимает запрос, если агент молчит: ответ после этого
+    // [_completePendingRequest] уже не найдёт и только запишет в журнал.
+    final timer = method == sessionPromptMethod
+        ? null
+        : Timer(_requestTimeout, () {
+            if (!identical(_pendingRequests[id], pending)) {
+              return;
+            }
+            _pendingRequests.remove(id);
+            _logger
+                .bind({logComponentKey: protocolComponent})
+                .withCorrelation(
+                  connectionGeneration: _generation,
+                  requestId: id.toJsonValue().toString(),
+                )
+                .warning(
+                  'request_timeout',
+                  context: {
+                    'method': method,
+                    'timeout_ms': _requestTimeout.inMilliseconds,
+                  },
+                );
+            pending.completeError(
+              AcpRequestTimeoutException(
+                method: method,
+                timeout: _requestTimeout,
+              ),
+            );
+          });
+    final Object result;
+    try {
+      result = await pending.future;
+    } finally {
+      timer?.cancel();
+    }
     if (result is T) {
       return result as T;
     }
@@ -788,6 +881,16 @@ final class AcpClientApplication {
   void _completePendingRequest(JsonRpcResponse response) {
     final pending = _pendingRequests.remove(response.id);
     if (pending == null) {
+      // Запрос уже снят — по таймауту или при замене транспорта; поздний
+      // ответ состояние не меняет (spec acp-protocol-client «Таймаут
+      // исходящих запросов»).
+      _logger
+          .bind({logComponentKey: protocolComponent})
+          .withCorrelation(
+            connectionGeneration: _generation,
+            requestId: response.id.toJsonValue().toString(),
+          )
+          .debug('response_ignored', context: {'reason': 'no_pending_request'});
       return;
     }
     if (response.error != null) {
