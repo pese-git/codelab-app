@@ -5,416 +5,156 @@ import 'package:acp_client_io/acp_client_io.dart' show WorkingDirectoryProvider;
 import 'package:acp_client_kit/acp_client_kit.dart'
     show
         AcpClientBackend,
-        AgentCommandView,
-        AgentTextItem,
-        ApprovalStateView,
         ClientWorkspace,
-        ConfigOptionView,
         ConfigTransportResolver,
-        Connected,
-        ConnectionFailed,
-        ConnectionProfile,
-        ConnectionView,
-        Connecting,
-        Disconnected,
         InMemorySecretSource,
-        InspectorCategory,
-        InspectorDetail,
-        InspectorEntry,
-        InspectorProjection,
-        NoticeItem,
-        NoticeKind,
-        PendingApprovalView,
-        parseEnvLines,
-        parseShellWords,
-        PromptOutcome,
-        PromptQueued,
         RecentProjectsStore,
-        Reconnecting,
-        ResolvedApprovalView,
-        SessionHandle,
-        SessionStatusView,
-        ThoughtItem,
-        ToolCallItem,
-        ToolCallStatusView,
-        TranscriptItem,
-        UserItem,
-        WorkspaceDiagnostic,
-        WorkspaceState,
-        describeFailure,
-        formatRedactedJson;
+        WorkspaceDiagnostic;
 import 'package:acp_protocol/acp_protocol.dart';
-import 'package:acp_transports/acp_transports.dart';
+import 'package:acp_transports/acp_transports.dart' show StdioAcpAgentProfile;
 import 'package:acp_ui/acp_ui.dart';
-import 'package:fluent_ui/fluent_ui.dart' show FluentIcons;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/platform/project_folder_picker.dart';
+import 'active_session_cubit.dart';
+import 'connection_cubit.dart';
+import 'layout_cubit.dart';
+import 'sessions_cubit.dart';
+import 'settings_cubit.dart';
+import 'shell_part.dart';
+import 'shell_state.dart';
 
-typedef CodeLabStdioTransportFactory =
-    AcpTransport Function(StdioAcpTransportConfig config);
+export 'connection_cubit.dart'
+    show
+        CodeLabStdioTransportFactory,
+        CodeLabTransportType,
+        CodeLabWebSocketTransportFactory;
+export 'layout_cubit.dart'
+    show
+        kInspectorPaneMaxWidth,
+        kInspectorPaneMinWidth,
+        kSessionsPaneMaxWidth,
+        kSessionsPaneMinWidth;
+export 'shell_state.dart';
+export 'ui_mappers.dart'
+    show
+        CodeLabInspectorCategory,
+        CodeLabInspectorDetail,
+        CodeLabInspectorEntry;
 
-typedef CodeLabWebSocketTransportFactory =
-    AcpTransport Function(WebSocketAcpTransportConfig config);
-
-/// Resizable-panel width bounds — CodeLab-specific, not baked into the
-/// reusable `acp_ui` layout/handle primitives (see
-/// openspec/changes/add-resizable-panels/design.md).
-const kSessionsPaneMinWidth = 220.0;
-const kSessionsPaneMaxWidth = 480.0;
-const kInspectorPaneMinWidth = 260.0;
-const kInspectorPaneMaxWidth = 520.0;
-
-enum CodeLabTransportType {
-  stdio(label: 'stdio'),
-  webSocket(label: 'WebSocket');
-
-  const CodeLabTransportType({required this.label});
-
-  final String label;
-}
-
-final class CodeLabShellState {
-  const CodeLabShellState({
-    required this.connectionStatus,
-    required this.transportType,
-    required this.stdioProfileName,
-    required this.stdioCommand,
-    required this.stdioArgs,
-    required this.stdioEnv,
-    required this.webSocketEndpoint,
-    required this.webSocketToken,
-    required this.transportLabel,
-    required this.profileLabel,
-    required this.connectionDetail,
-    required this.currentSessionLabel,
-    required this.currentSessionDetail,
+/// Пять частей рабочего места и их общие пакет изменений и журнал.
+///
+/// Почему: части зависят друг от друга (сессии — от подключения, проекта и
+/// показываемой сессии) и должны создаваться в одном порядке — после
+/// `ClientWorkspace`, чтобы рабочее пространство раньше частей подписалось
+/// на `sessionChanges` (design D6 change `extract-acp-client-kit`).
+///
+/// Для чего: одна точка сборки частей для графа cherrypick и для
+/// `CodeLabShellCubit`, созданного без графа (`widget_test.dart`).
+///
+/// Как использовать: [CodeLabShellParts.build]; закрывает части фасад —
+/// на этом change он их единственный потребитель (design D10).
+final class CodeLabShellParts {
+  CodeLabShellParts._({
+    required this.changes,
+    required this.diagnostics,
+    required this.connection,
     required this.sessions,
-    required this.activeSessionId,
-    required this.transcriptEntries,
-    required this.inspectorEntries,
-    required this.viewMode,
-    required this.isPromptEnabled,
-    required this.isPromptSubmitting,
-    required this.canCancel,
-    this.isRespondingToApproval = false,
-    this.isCommandPaletteOpen = false,
-    this.isInspectorVisibleInNarrowLayout = false,
-    this.agentCommands = const [],
-    this.composerDraft = '',
-    this.configOptions = const [],
-    this.isRespondingToConfigOption = false,
-    this.sessionsPaneWidth = 280,
-    this.inspectorPaneWidth = 320,
-    this.selectedProjectPath,
-    this.runAgentFromProjectDirectory = true,
-    this.recentProjects = const [],
-    this.currentPlan,
-    this.queuedPrompts = const [],
+    required this.activeSession,
+    required this.settings,
+    required this.layout,
   });
 
-  factory CodeLabShellState.initial({required StdioAcpAgentProfile profile}) =>
-      CodeLabShellState(
-        connectionStatus: AcpConnectionStatus.disconnected,
-        transportType: CodeLabTransportType.stdio,
-        stdioProfileName: profile.name,
-        stdioCommand: profile.command,
-        stdioArgs: profile.args.join(' '),
-        stdioEnv: profile.env.entries
-            .map((entry) => '${entry.key}=${entry.value}')
-            .join('\n'),
-        webSocketEndpoint: 'ws://localhost:8765/acp',
-        webSocketToken: '',
-        transportLabel: 'stdio',
-        profileLabel: profile.name,
-        connectionDetail: '${profile.command} ${profile.args.join(' ')}',
-        currentSessionLabel: 'No active session',
-        currentSessionDetail: 'Create a session after connecting.',
-        sessions: const [],
-        activeSessionId: null,
-        transcriptEntries: const [],
-        inspectorEntries: const [
-          CodeLabInspectorEntry(
-            id: 'inspector-empty',
-            category: CodeLabInspectorCategory.protocol,
-            title: 'Protocol log',
-            summary: 'Connect and start a session to inspect ACP activity.',
-          ),
-        ],
-        viewMode: AcpViewMode.normal,
-        isPromptEnabled: true,
-        isPromptSubmitting: false,
-        canCancel: false,
-      );
-
-  final AcpConnectionStatus connectionStatus;
-  final CodeLabTransportType transportType;
-  final String stdioProfileName;
-  final String stdioCommand;
-  final String stdioArgs;
-  final String stdioEnv;
-  final String webSocketEndpoint;
-  final String webSocketToken;
-  final String transportLabel;
-  final String profileLabel;
-  final String connectionDetail;
-  final String currentSessionLabel;
-  final String currentSessionDetail;
-  final List<AcpSessionListItem> sessions;
-  final String? activeSessionId;
-  final List<AcpTranscriptEntry> transcriptEntries;
-  final List<CodeLabInspectorEntry> inspectorEntries;
-  final AcpViewMode viewMode;
-  final bool isPromptEnabled;
-  final bool isPromptSubmitting;
-  final bool canCancel;
-  final bool isRespondingToApproval;
-  final bool isCommandPaletteOpen;
-  final bool isInspectorVisibleInNarrowLayout;
-
-  /// Commands the active agent declared via `SessionUpdate.availableCommandsUpdate`,
-  /// replaced wholesale on every new update and cleared on session switch/loss.
-  final List<AcpCommandAction> agentCommands;
-
-  /// Text pushed into the prompt composer as a result of selecting an
-  /// agent-declared command from the palette (`/{name} `). Consumed by
-  /// [AcpPromptComposer.initialPrompt], which only re-applies it when the
-  /// value actually changes, so it is safe to leave set between emits.
-  final String composerDraft;
-
-  /// The active session's config options (e.g. model/mode selectors the
-  /// agent advertised), mapped to the `acp_ui`-facing [AcpConfigOption] and
-  /// replaced wholesale on every new `config_option_update` and
-  /// cleared/restored on session switch/creation — same "later update
-  /// replaces the list" pattern as [agentCommands].
-  final List<AcpConfigOption> configOptions;
-
-  /// Guards against a second `session/set_config_option` request firing
-  /// while one is already in flight, mirroring [isRespondingToApproval].
-  final bool isRespondingToConfigOption;
-
-  /// Widths the user has dragged the sessions/inspector pane dividers to
-  /// (desktop layout), clamped to [kSessionsPaneMinWidth]/
-  /// [kSessionsPaneMaxWidth] and [kInspectorPaneMinWidth]/
-  /// [kInspectorPaneMaxWidth] respectively. Survive widget rebuilds within
-  /// this run, not persisted across app restarts (see
-  /// add-resizable-panels/design.md Open Questions).
-  final double sessionsPaneWidth;
-  final double inspectorPaneWidth;
-
-  /// The working directory ("project") selected via "Open Project" —
-  /// independent of [transportType], applied to the next session created
-  /// (`session/new`'s `cwd`) for both stdio and WebSocket. `null` means no
-  /// project has been explicitly selected yet, in which case
-  /// [CodeLabShellCubit.createSession] falls back to
-  /// `WorkingDirectoryProvider.currentPath`, as it always has. See
-  /// add-open-project-picker/design.md, Decision 1.
-  final String? selectedProjectPath;
-
-  /// Whether a stdio agent process is spawned with [selectedProjectPath] as
-  /// its OS-level working directory (`Process.start(workingDirectory:)`).
-  /// Defaults to `true` so the pre-existing implicit "spawn cwd == project"
-  /// behavior is preserved without any user action; turning it off decouples
-  /// spawn cwd from the selected project without un-selecting the project
-  /// itself. Stdio-only — has no effect over WebSocket. See design.md,
-  /// Decision 2.
-  final bool runAgentFromProjectDirectory;
-
-  /// Recently opened projects, most-recently-opened first — reloaded from
-  /// [RecentProjectsStore] on cubit construction and after every
-  /// [CodeLabShellCubit.selectProject], so it survives app restarts. See
-  /// design.md, Decision 4.
-  final List<AcpRecentProject> recentProjects;
-
-  /// The active session's plan, from the latest `SessionUpdate.plan` seen
-  /// across its turns (last one wins — see design.md, Decisions), mapped
-  /// straight to the `acp_ui`-facing [AcpPlanEntry] (already
-  /// presentation-safe, same reasoning as [configOptions]/[agentCommands] —
-  /// no separate app-level DTO). `null` means no plan update has arrived
-  /// yet for this session, or the user dismissed it via
-  /// [CodeLabShellCubit.dismissPlan] — either way, [AcpActivityBar]'s Plan
-  /// section is hidden.
-  final List<AcpPlanEntry>? currentPlan;
-
-  /// Prompts submitted while the active session couldn't accept a new turn
-  /// (a turn is running, or an approval is pending) — held here instead of
-  /// being sent, in FIFO order. Never a protocol concept — the agent never
-  /// sees an entry until [CodeLabShellCubit] actually dispatches it (either
-  /// via auto-drain once the session frees up, or [CodeLabShellCubit.
-  /// sendQueuedPromptNow]). Per-session, like [currentPlan] and
-  /// `transcriptEntries`: this always mirrors the active session's own
-  /// queue (backed by [CodeLabShellCubit]'s private per-session map), so
-  /// switching sessions swaps in that session's queue rather than losing or
-  /// mixing them — see add-prompt-queue/design.md, Non-Goals and Risks.
-  final List<AcpQueuedPrompt> queuedPrompts;
-
-  /// Distinguishes "not passed" from "explicitly set to null" for
-  /// [currentPlan] in [copyWith] — an ordinary `T? param` parameter can't
-  /// tell those apart (`param ?? this.currentPlan` would keep the old plan
-  /// forever), and [CodeLabShellCubit.dismissPlan] and switching to a
-  /// session without a plan both need to actually clear it.
-  static const Object _unset = Object();
-
-  CodeLabShellState copyWith({
-    AcpConnectionStatus? connectionStatus,
-    CodeLabTransportType? transportType,
-    String? stdioProfileName,
-    String? stdioCommand,
-    String? stdioArgs,
-    String? stdioEnv,
-    String? webSocketEndpoint,
-    String? webSocketToken,
-    String? transportLabel,
-    String? profileLabel,
-    String? connectionDetail,
-    String? currentSessionLabel,
-    String? currentSessionDetail,
-    List<AcpSessionListItem>? sessions,
-    String? activeSessionId,
-    List<AcpTranscriptEntry>? transcriptEntries,
-    List<CodeLabInspectorEntry>? inspectorEntries,
-    AcpViewMode? viewMode,
-    bool? isPromptEnabled,
-    bool? isPromptSubmitting,
-    bool? canCancel,
-    bool? isRespondingToApproval,
-    bool? isCommandPaletteOpen,
-    bool? isInspectorVisibleInNarrowLayout,
-    List<AcpCommandAction>? agentCommands,
-    String? composerDraft,
-    List<AcpConfigOption>? configOptions,
-    bool? isRespondingToConfigOption,
-    double? sessionsPaneWidth,
-    double? inspectorPaneWidth,
-    String? selectedProjectPath,
-    bool? runAgentFromProjectDirectory,
-    List<AcpRecentProject>? recentProjects,
-    Object? currentPlan = _unset,
-    List<AcpQueuedPrompt>? queuedPrompts,
+  factory CodeLabShellParts.build({
+    required StdioAcpAgentProfile profile,
+    required AcpClientApplication application,
+    required ClientWorkspace workspace,
+    required InMemorySecretSource secrets,
+    required WorkingDirectoryProvider workingDirectoryProvider,
+    required ProjectFolderPicker projectFolderPicker,
+    required RecentProjectsStore recentProjectsStore,
+    Logger? logger,
   }) {
-    return CodeLabShellState(
-      connectionStatus: connectionStatus ?? this.connectionStatus,
-      transportType: transportType ?? this.transportType,
-      stdioProfileName: stdioProfileName ?? this.stdioProfileName,
-      stdioCommand: stdioCommand ?? this.stdioCommand,
-      stdioArgs: stdioArgs ?? this.stdioArgs,
-      stdioEnv: stdioEnv ?? this.stdioEnv,
-      webSocketEndpoint: webSocketEndpoint ?? this.webSocketEndpoint,
-      webSocketToken: webSocketToken ?? this.webSocketToken,
-      transportLabel: transportLabel ?? this.transportLabel,
-      profileLabel: profileLabel ?? this.profileLabel,
-      connectionDetail: connectionDetail ?? this.connectionDetail,
-      currentSessionLabel: currentSessionLabel ?? this.currentSessionLabel,
-      currentSessionDetail: currentSessionDetail ?? this.currentSessionDetail,
-      sessions: sessions ?? this.sessions,
-      activeSessionId: activeSessionId ?? this.activeSessionId,
-      transcriptEntries: transcriptEntries ?? this.transcriptEntries,
-      inspectorEntries: inspectorEntries ?? this.inspectorEntries,
-      viewMode: viewMode ?? this.viewMode,
-      isPromptEnabled: isPromptEnabled ?? this.isPromptEnabled,
-      isPromptSubmitting: isPromptSubmitting ?? this.isPromptSubmitting,
-      canCancel: canCancel ?? this.canCancel,
-      isRespondingToApproval:
-          isRespondingToApproval ?? this.isRespondingToApproval,
-      isCommandPaletteOpen: isCommandPaletteOpen ?? this.isCommandPaletteOpen,
-      isInspectorVisibleInNarrowLayout:
-          isInspectorVisibleInNarrowLayout ??
-          this.isInspectorVisibleInNarrowLayout,
-      agentCommands: agentCommands ?? this.agentCommands,
-      composerDraft: composerDraft ?? this.composerDraft,
-      configOptions: configOptions ?? this.configOptions,
-      isRespondingToConfigOption:
-          isRespondingToConfigOption ?? this.isRespondingToConfigOption,
-      sessionsPaneWidth: sessionsPaneWidth ?? this.sessionsPaneWidth,
-      inspectorPaneWidth: inspectorPaneWidth ?? this.inspectorPaneWidth,
-      selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
-      runAgentFromProjectDirectory:
-          runAgentFromProjectDirectory ?? this.runAgentFromProjectDirectory,
-      recentProjects: recentProjects ?? this.recentProjects,
-      currentPlan: identical(currentPlan, _unset)
-          ? this.currentPlan
-          : currentPlan as List<AcpPlanEntry>?,
-      queuedPrompts: queuedPrompts ?? this.queuedPrompts,
+    final changes = ShellChanges();
+    final diagnostics = ShellDiagnostics(logger: logger);
+    final settings = SettingsCubit(
+      changes: changes,
+      diagnostics: diagnostics,
+      workingDirectoryProvider: workingDirectoryProvider,
+      projectFolderPicker: projectFolderPicker,
+      recentProjectsStore: recentProjectsStore,
+    );
+    final activeSession = ActiveSessionCubit(
+      changes: changes,
+      workspace: workspace,
+      diagnostics: diagnostics,
+    );
+    final connection = ConnectionCubit(
+      changes: changes,
+      profile: profile,
+      workspace: workspace,
+      secrets: secrets,
+      diagnostics: diagnostics,
+      settings: settings,
+      activeSession: activeSession,
+    );
+    return CodeLabShellParts._(
+      changes: changes,
+      diagnostics: diagnostics,
+      connection: connection,
+      sessions: SessionsCubit(
+        changes: changes,
+        application: application,
+        workspace: workspace,
+        diagnostics: diagnostics,
+        connection: connection,
+        settings: settings,
+        activeSession: activeSession,
+      ),
+      activeSession: activeSession,
+      settings: settings,
+      layout: LayoutCubit(changes: changes),
     );
   }
 
-  CodeLabShellState withTransportProjection({
-    CodeLabTransportType? transportType,
-    String? stdioProfileName,
-    String? stdioCommand,
-    String? stdioArgs,
-    String? stdioEnv,
-    String? webSocketEndpoint,
-    String? webSocketToken,
-  }) {
-    final next = copyWith(
-      transportType: transportType,
-      stdioProfileName: stdioProfileName,
-      stdioCommand: stdioCommand,
-      stdioArgs: stdioArgs,
-      stdioEnv: stdioEnv,
-      webSocketEndpoint: webSocketEndpoint,
-      webSocketToken: webSocketToken,
-    );
+  final ShellChanges changes;
+  final ShellDiagnostics diagnostics;
+  final ConnectionCubit connection;
+  final SessionsCubit sessions;
+  final ActiveSessionCubit activeSession;
+  final SettingsCubit settings;
+  final LayoutCubit layout;
 
-    return next.copyWith(
-      transportLabel: next.transportType.label,
-      profileLabel: next.selectedProfileLabel,
-      connectionDetail: next.selectedConnectionDetail,
-    );
+  Future<void> close() async {
+    await sessions.close();
+    await connection.close();
+    await activeSession.close();
+    await settings.close();
+    await layout.close();
   }
-
-  /// The full command palette list: the six client-native commands followed
-  /// by whatever the active agent has declared, in that order — the
-  /// client-native set is never removed or replaced by agent commands.
-  List<AcpCommandAction> get paletteActions => [
-    ...AcpCommandAction.defaults,
-    ...agentCommands,
-  ];
-
-  String get selectedProfileLabel => switch (transportType) {
-    CodeLabTransportType.stdio => stdioProfileName,
-    CodeLabTransportType.webSocket => 'Remote ACP Agent',
-  };
-
-  String get selectedConnectionDetail => switch (transportType) {
-    CodeLabTransportType.stdio => [
-      stdioCommand,
-      stdioArgs,
-    ].where((part) => part.trim().isNotEmpty).join(' '),
-    CodeLabTransportType.webSocket => webSocketEndpoint,
-  };
 }
 
-/// Модели инспектора — модели kit (`InspectorProjection`, design D9 change
-/// `extract-acp-client-kit`); прежние имена остаются для виджетов и тестов.
-typedef CodeLabInspectorCategory = InspectorCategory;
-typedef CodeLabInspectorEntry = InspectorEntry;
-typedef CodeLabInspectorDetail = InspectorDetail;
-
-/// Фасад рабочего места CodeLab над `ClientWorkspace` из `acp_client_kit`.
+/// Фасад рабочего места CodeLab над пятью Cubit-ами и `ClientWorkspace`.
 ///
-/// Почему: логика клиента переносится из этого Cubit в kit по частям
-/// (change `extract-acp-client-kit`, design D12), а виджеты, интеграционные
-/// и характеризационные тесты читают прежний [CodeLabShellState]. Фасад
-/// сохраняет эту поверхность на время переноса.
+/// Почему: логика клиента перенесена в `acp_client_kit`, а состояние
+/// рабочего места разделено на `ConnectionCubit`, `SessionsCubit`,
+/// `ActiveSessionCubit`, `SettingsCubit` и `LayoutCubit` (change
+/// `extract-acp-client-kit`, design D10). Виджеты, интеграционные и
+/// характеризационные тесты по-прежнему читают [CodeLabShellState]; фасад
+/// сохраняет эту поверхность до перевода тестов после этапа 9.
 ///
-/// Для чего: подключение, сессии, транскрипт, промпты с очередью, отмена,
-/// одобрения, опции, инспектор и диагностика событий kit идут через
-/// [ClientWorkspace]; Cubit отображает их в модели `acp_ui` и держит
-/// состояние формы и раскладки.
+/// Для чего: собирает [CodeLabShellState] из частей — одно состояние на
+/// каждый пакет изменений частей ([ShellChanges]) — и делегирует им
+/// публичные методы; сам пишет в журнал только диагностику kit.
 ///
 /// Как использовать: граф cherrypick (`app_scope.dart`) передаёт
-/// [workspace] и [secrets] — тот же `InMemorySecretSource`, что у резолвера
-/// WebSocket. Без них Cubit строит рабочее пространство сам поверх
-/// [application] и фабрик транспорта: так его по-прежнему создают тесты
-/// `widget_test.dart`. Параметры use case-ов `acp_client_core`
-/// (`createSessionUseCase`, `sendPromptUseCase` и другие) не используются
-/// после переноса их логики в kit; они остаются, пока эти тесты создают
-/// Cubit напрямую, и удаляются вместе с фасадом после этапа 9 (`09-10`,
-/// «Что остаётся неизменным»).
+/// [workspace], [secrets] и [parts]. Без них Cubit строит рабочее
+/// пространство и части сам поверх [application] и фабрик транспорта: так
+/// его создают тесты `widget_test.dart`. Параметры use case-ов
+/// `acp_client_core` (`createSessionUseCase`, `sendPromptUseCase` и другие)
+/// не используются; они остаются, пока эти тесты создают Cubit напрямую.
 final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
-  CodeLabShellCubit({
+  factory CodeLabShellCubit({
     required StdioAcpAgentProfile profile,
     required AcpClientApplication application,
     CreateSession? createSessionUseCase,
@@ -427,654 +167,151 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     ClientWorkspace? workspace,
     InMemorySecretSource? secrets,
+    CodeLabShellParts? parts,
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
     Logger? logger,
-  }) : this._(
-         profile: profile,
-         application: application,
-         secrets: secrets ?? InMemorySecretSource(),
-         workspace: workspace,
-         stdioTransportFactory: stdioTransportFactory,
-         webSocketTransportFactory: webSocketTransportFactory,
-         workingDirectoryProvider: workingDirectoryProvider,
-         projectFolderPicker: projectFolderPicker,
-         recentProjectsStore: recentProjectsStore,
-         logger: logger,
-       );
+  }) {
+    final secretSource = secrets ?? InMemorySecretSource();
+    final clientWorkspace =
+        workspace ??
+        ClientWorkspace(
+          backend: AcpClientBackend(application),
+          resolvers: [
+            ConfigTransportResolver(
+              stdio: stdioTransportFactory,
+              webSocket: webSocketTransportFactory,
+              secrets: secretSource,
+            ),
+          ],
+        );
+    return CodeLabShellCubit._(
+      workspace: clientWorkspace,
+      ownsWorkspace: workspace == null,
+      parts:
+          parts ??
+          CodeLabShellParts.build(
+            profile: profile,
+            application: application,
+            workspace: clientWorkspace,
+            secrets: secretSource,
+            workingDirectoryProvider: workingDirectoryProvider,
+            projectFolderPicker: projectFolderPicker,
+            recentProjectsStore: recentProjectsStore,
+            logger: logger,
+          ),
+    );
+  }
 
   CodeLabShellCubit._({
-    required StdioAcpAgentProfile profile,
-    required AcpClientApplication application,
-    required InMemorySecretSource secrets,
-    required ClientWorkspace? workspace,
-    required CodeLabStdioTransportFactory? stdioTransportFactory,
-    required CodeLabWebSocketTransportFactory? webSocketTransportFactory,
-    required WorkingDirectoryProvider workingDirectoryProvider,
-    required ProjectFolderPicker projectFolderPicker,
-    required RecentProjectsStore recentProjectsStore,
-    Logger? logger,
-  }) : _application = application,
-       _secrets = secrets,
-       _ownsWorkspace = workspace == null,
-       _workspace =
-           workspace ??
-           ClientWorkspace(
-             backend: AcpClientBackend(application),
-             resolvers: [
-               ConfigTransportResolver(
-                 stdio: stdioTransportFactory,
-                 webSocket: webSocketTransportFactory,
-                 secrets: secrets,
-               ),
-             ],
-           ),
-       _workingDirectoryProvider = workingDirectoryProvider,
-       _projectFolderPicker = projectFolderPicker,
-       _recentProjectsStore = recentProjectsStore,
-       _logger = (logger ?? StructuredLogLogger('codelab_app.shell')).bind({
-         logCategoryKey: applicationLogCategory,
-         logComponentKey: presentationComponent,
-       }),
-       super(CodeLabShellState.initial(profile: profile)) {
-    _sessionSubscription = _application.sessionChanges.listen(
-      _handleSessionChange,
-    );
-    _workspaceSubscription = _workspace.state.listen(_handleWorkspaceChange);
-    _promptOutcomeSubscription = _workspace.promptOutcomes.listen(
-      _handlePromptOutcome,
-    );
+    required ClientWorkspace workspace,
+    required bool ownsWorkspace,
+    required CodeLabShellParts parts,
+  }) : _workspace = workspace,
+       _ownsWorkspace = ownsWorkspace,
+       _parts = parts,
+       super(_compose(parts)) {
+    _parts.changes.listen(() => emit(_compose(_parts)));
     _diagnosticSubscription = _workspace.diagnostics.listen(
       _handleKitDiagnostic,
     );
-    unawaited(_loadRecentProjects());
   }
-
-  final AcpClientApplication _application;
 
   final ClientWorkspace _workspace;
 
   /// Рабочее пространство создал сам Cubit (без графа cherrypick) — тогда он
   /// и закрывает его в [close].
   final bool _ownsWorkspace;
-
-  /// Значение токена WebSocket из формы; профиль ссылается на него по
-  /// [_webSocketTokenRef] (design D8).
-  final InMemorySecretSource _secrets;
-  final WorkingDirectoryProvider _workingDirectoryProvider;
-  final ProjectFolderPicker _projectFolderPicker;
-  final RecentProjectsStore _recentProjectsStore;
-  final Logger _logger;
-  final _redactor = const SecretRedactor();
-
-  /// Подписка на изменения сессий ядра клиента. Открывается после
-  /// подписки [_workspace]: широковещательный синхронный поток доставляет
-  /// события в порядке подписки, поэтому `SessionView` kit к вызову
-  /// [_handleSessionChange] уже обновлён.
-  late final StreamSubscription<AcpSession> _sessionSubscription;
-  late final StreamSubscription<WorkspaceState> _workspaceSubscription;
-  late final StreamSubscription<PromptOutcome> _promptOutcomeSubscription;
+  final CodeLabShellParts _parts;
   late final StreamSubscription<WorkspaceDiagnostic> _diagnosticSubscription;
 
-  /// Ссылка на токен WebSocket в [_secrets].
-  static const _webSocketTokenRef = 'codelab_app.websocket.token';
+  ConnectionCubit get _connection => _parts.connection;
+  SessionsCubit get _sessions => _parts.sessions;
+  ActiveSessionCubit get _activeSession => _parts.activeSession;
+  SettingsCubit get _settings => _parts.settings;
+  LayoutCubit get _layout => _parts.layout;
 
-  void selectTransport(CodeLabTransportType transportType) {
-    emit(state.withTransportProjection(transportType: transportType));
-  }
+  void selectTransport(CodeLabTransportType transportType) =>
+      _connection.selectTransport(transportType);
 
-  void updateStdioProfileName(String value) {
-    emit(state.withTransportProjection(stdioProfileName: value));
-  }
+  void updateStdioProfileName(String value) =>
+      _connection.updateStdioProfileName(value);
 
-  void updateStdioCommand(String value) {
-    emit(state.withTransportProjection(stdioCommand: value));
-  }
+  void updateStdioCommand(String value) =>
+      _connection.updateStdioCommand(value);
 
-  void updateStdioArgs(String value) {
-    emit(state.withTransportProjection(stdioArgs: value));
-  }
+  void updateStdioArgs(String value) => _connection.updateStdioArgs(value);
 
-  void updateStdioEnv(String value) {
-    emit(state.withTransportProjection(stdioEnv: value));
-  }
+  void updateStdioEnv(String value) => _connection.updateStdioEnv(value);
 
-  void updateWebSocketEndpoint(String value) {
-    emit(state.withTransportProjection(webSocketEndpoint: value));
-  }
+  void updateWebSocketEndpoint(String value) =>
+      _connection.updateWebSocketEndpoint(value);
 
-  void updateWebSocketToken(String value) {
-    emit(state.withTransportProjection(webSocketToken: value));
-  }
+  void updateWebSocketToken(String value) =>
+      _connection.updateWebSocketToken(value);
 
-  /// Selects [path] as the current project — applied to the next session
-  /// created, independent of [CodeLabShellState.transportType] (see
-  /// add-open-project-picker/design.md, Decision 1). Also records it via
-  /// [RecentProjectsStore] and refreshes [CodeLabShellState.recentProjects],
-  /// so the "Open Project" picker reflects the new entry immediately rather
-  /// than waiting for the next app start.
-  Future<void> selectProject(String path) async {
-    final trimmed = path.trim();
-    if (trimmed.isEmpty) {
-      return;
-    }
+  Future<void> selectProject(String path) => _settings.selectProject(path);
 
-    emit(state.copyWith(selectedProjectPath: trimmed));
-    _recordDiagnostic('Selected project: $trimmed.', source: 'project');
+  Future<void> browseForProject() => _settings.browseForProject();
 
-    try {
-      await _recentProjectsStore.record(trimmed);
-      if (isClosed) return;
-      await _loadRecentProjects();
-    } on Object catch (error) {
-      if (isClosed) return;
-      _recordDiagnostic(
-        'Failed to record recent project: $error',
-        severity: DiagnosticSeverity.warning,
-        source: 'project',
-      );
-    }
-  }
+  void toggleRunAgentFromProjectDirectory(bool value) =>
+      _settings.toggleRunAgentFromProjectDirectory(value);
 
-  /// Opens the native OS folder-selection dialog via [ProjectFolderPicker]
-  /// and, if the user picks a folder, selects it the same way
-  /// [selectProject] does. Does nothing if the dialog is dismissed without a
-  /// selection.
-  Future<void> browseForProject() async {
-    final path = await _projectFolderPicker.pickFolder(
-      initialDirectory: state.selectedProjectPath,
-    );
-    if (isClosed || path == null) {
-      return;
-    }
-    await selectProject(path);
-  }
+  Future<void> connect() => _connection.connect();
 
-  /// Stdio-only: whether the agent process is spawned with the selected
-  /// project's directory as its OS-level working directory. See
-  /// [CodeLabShellState.runAgentFromProjectDirectory].
-  void toggleRunAgentFromProjectDirectory(bool value) {
-    emit(state.copyWith(runAgentFromProjectDirectory: value));
-  }
+  Future<void> reconnect() => _connection.reconnect();
 
-  Future<void> connect() async {
-    final isWebSocket = state.transportType == CodeLabTransportType.webSocket;
-    final profile = _profileFromState();
-    if (profile == null) {
-      _recordDiagnostic(
-        isWebSocket
-            ? 'WebSocket endpoint is required before connecting.'
-            : 'Stdio command is required before connecting.',
-        severity: DiagnosticSeverity.error,
-        source: 'transport',
-      );
-      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-      return;
-    }
+  void resizeSessionsPane(double width) => _layout.resizeSessionsPane(width);
 
-    emit(state.copyWith(connectionStatus: AcpConnectionStatus.connecting));
-    _recordDiagnostic(
-      isWebSocket
-          ? 'Connecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
-          : 'Starting stdio ACP agent: ${state.selectedConnectionDetail}.',
-      source: 'transport',
-    );
+  void resizeInspectorPane(double width) => _layout.resizeInspectorPane(width);
 
-    try {
-      await _workspace.connect(profile, projectDirectory: _selectedProjectPath);
-      emit(
-        state.copyWith(
-          connectionStatus: _connectionStatusFor(_workspace.current.connection),
-        ),
-      );
-      _recordDiagnostic(
-        isWebSocket
-            ? 'WebSocket ACP agent connected: ${state.selectedConnectionDetail}.'
-            : 'Stdio ACP agent started: ${state.selectedConnectionDetail}.',
-        source: 'transport',
-      );
-    } on UnsupportedProtocolVersionException catch (error) {
-      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-      _recordDiagnostic(
-        'Incompatible ACP agent: ${error.message}',
-        severity: DiagnosticSeverity.error,
-        source: 'transport',
-      );
-    } on Object catch (error) {
-      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-      _recordDiagnostic(
-        isWebSocket
-            ? 'Failed to connect WebSocket ACP agent: $error'
-            : 'Failed to start stdio ACP agent: $error',
-        severity: DiagnosticSeverity.error,
-        source: 'transport',
-      );
-    }
-  }
+  Future<void> createSession() => _sessions.createSession();
 
-  /// Одна попытка переподключения через kit с профилем из текущей формы:
-  /// пользователь мог изменить команду, адрес или проект после [connect]
-  /// (design D4).
-  Future<void> reconnect() async {
-    final isWebSocket = state.transportType == CodeLabTransportType.webSocket;
-    final profile = _profileFromState();
-    if (profile == null) {
-      _recordDiagnostic(
-        isWebSocket
-            ? 'WebSocket endpoint is required before reconnecting.'
-            : 'Stdio command is required before reconnecting.',
-        severity: DiagnosticSeverity.error,
-        source: 'transport',
-      );
-      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-      return;
-    }
+  void selectSession(String sessionId) => _sessions.selectSession(sessionId);
 
-    emit(state.copyWith(connectionStatus: AcpConnectionStatus.reconnecting));
-    _recordDiagnostic(
-      isWebSocket
-          ? 'Reconnecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
-          : 'Reconnecting stdio ACP agent: ${state.selectedConnectionDetail}.',
-      source: 'transport',
-    );
+  Future<void> submitPrompt(String prompt) =>
+      _activeSession.submitPrompt(prompt);
 
-    try {
-      await _workspace.reconnect(
-        profile: profile,
-        projectDirectory: _selectedProjectPath,
-      );
-      if (isClosed) return;
-      emit(
-        state.copyWith(
-          connectionStatus: _connectionStatusFor(_workspace.current.connection),
-        ),
-      );
-      _recordDiagnostic(
-        isWebSocket
-            ? 'WebSocket ACP agent reconnected: ${state.selectedConnectionDetail}.'
-            : 'Stdio ACP agent reconnected: ${state.selectedConnectionDetail}.',
-        source: 'transport',
-      );
-    } on Object catch (error) {
-      if (isClosed) return;
-      emit(state.copyWith(connectionStatus: AcpConnectionStatus.failed));
-      _recordDiagnostic(
-        isWebSocket
-            ? 'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}'
-            : 'Failed to reconnect stdio ACP agent: ${describeFailure(error)}',
-        severity: DiagnosticSeverity.error,
-        source: 'transport',
-      );
-    }
-  }
+  void editQueuedPrompt(String id) => _activeSession.editQueuedPrompt(id);
 
-  /// Commits a new sessions pane width (desktop layout resize), clamped to
-  /// [kSessionsPaneMinWidth]/[kSessionsPaneMaxWidth]. Callers pass the final
-  /// width once a resize drag ends — see `AcpWorkbenchLayout`'s
-  /// `onSessionsPaneResizeEnd`.
-  void resizeSessionsPane(double width) {
-    emit(
-      state.copyWith(
-        sessionsPaneWidth: width.clamp(
-          kSessionsPaneMinWidth,
-          kSessionsPaneMaxWidth,
-        ),
-      ),
-    );
-  }
+  void deleteQueuedPrompt(String id) => _activeSession.deleteQueuedPrompt(id);
 
-  /// Same as [resizeSessionsPane] for the inspector pane.
-  void resizeInspectorPane(double width) {
-    emit(
-      state.copyWith(
-        inspectorPaneWidth: width.clamp(
-          kInspectorPaneMinWidth,
-          kInspectorPaneMaxWidth,
-        ),
-      ),
-    );
-  }
+  Future<void> sendQueuedPromptNow(String id) =>
+      _activeSession.sendQueuedPromptNow(id);
 
-  Future<void> createSession() async {
-    if (state.connectionStatus != AcpConnectionStatus.connected) {
-      _recordDiagnostic(
-        'Connect an ACP agent before creating a session.',
-        severity: DiagnosticSeverity.warning,
-        source: 'session',
-      );
-      return;
-    }
+  void clearQueuedPrompts() => _activeSession.clearQueuedPrompts();
 
-    _recordDiagnostic('Creating ACP session.', source: 'session');
+  Future<void> cancelTurn() => _activeSession.cancelTurn();
 
-    final AcpSession? session;
-    try {
-      final handle = await _workspace.newSession(cwd: _selectedProjectPath);
-      if (isClosed) return;
-      session = _application.sessionById(handle.id);
-    } on Object catch (error) {
-      if (isClosed) return;
-      _recordDiagnostic(
-        'Failed to create ACP session: ${describeFailure(error)}',
-        severity: DiagnosticSeverity.error,
-        source: 'session',
-      );
-      return;
-    }
-    if (session == null) {
-      return;
-    }
-
-    final sessionItem = _sessionListItem(session);
-    final otherSessions = state.sessions
-        .where((item) => item.id != sessionItem.id)
-        .toList(growable: false);
-    emit(
-      state.copyWith(
-        sessions: [sessionItem, ...otherSessions],
-        activeSessionId: sessionItem.id,
-        currentSessionLabel: sessionItem.title,
-        currentSessionDetail: sessionItem.subtitle ?? session.id.value,
-        transcriptEntries: const [],
-        inspectorEntries: _inspectorEntriesForSession(session),
-        agentCommands: _agentCommandsFor(session),
-        configOptions: _configOptionsFor(session),
-        currentPlan: _currentPlanForSession(session),
-        queuedPrompts: _queuedPromptsFor(sessionItem.id),
-        isPromptSubmitting: false,
-        canCancel: false,
-      ),
-    );
-    _recordDiagnostic(
-      'Created ACP session ${session.id.value}.',
-      source: 'session',
-    );
-  }
-
-  /// Switches the active session and reloads all of its per-session state
-  /// (transcript, inspector, pending approval, agent commands,
-  /// `isPromptSubmitting`/`canCancel`) from the application's live
-  /// snapshot — without this, the previously active session's transcript/
-  /// inspector/approval/busy state would remain visible until the newly
-  /// selected session happened to emit its own `session/update`.
-  void selectSession(String sessionId) {
-    _workspace.activate(SessionId(sessionId));
-    final session = _application.sessionById(SessionId(sessionId));
-    if (session == null) {
-      final selected = state.sessions
-          .where((item) => item.id == sessionId)
-          .firstOrNull;
-      emit(
-        state.copyWith(
-          activeSessionId: sessionId,
-          currentSessionLabel: selected?.title ?? 'Session $sessionId',
-          currentSessionDetail: selected?.subtitle ?? sessionId,
-          transcriptEntries: const [],
-          inspectorEntries: const [],
-          agentCommands: const [],
-          configOptions: const [],
-          currentPlan: null,
-          queuedPrompts: _queuedPromptsFor(sessionId),
-          isPromptSubmitting: false,
-          canCancel: false,
-        ),
-      );
-      return;
-    }
-
-    final sessionItem = _sessionListItem(session);
-    emit(
-      state.copyWith(
-        activeSessionId: sessionItem.id,
-        currentSessionLabel: sessionItem.title,
-        currentSessionDetail: sessionItem.subtitle ?? session.id.value,
-        transcriptEntries: _transcriptEntriesForSession(session),
-        inspectorEntries: _inspectorEntriesForSession(session),
-        agentCommands: _agentCommandsFor(session),
-        configOptions: _configOptionsFor(session),
-        currentPlan: _currentPlanForSession(session),
-        queuedPrompts: _queuedPromptsFor(sessionItem.id),
-        isPromptSubmitting: _isPromptSubmitting(sessionItem.id),
-        canCancel: _canCancel(sessionItem.id),
-      ),
-    );
-  }
-
-  Future<void> submitPrompt(String prompt) async {
-    final text = prompt.trim();
-    if (text.isEmpty) {
-      return;
-    }
-
-    final sessionId = state.activeSessionId;
-    if (sessionId == null) {
-      _recordDiagnostic(
-        'Create or select a session before sending a prompt.',
-        severity: DiagnosticSeverity.warning,
-        source: 'prompt',
-      );
-      return;
-    }
-    final handle = _sessionHandle(sessionId);
-    if (handle == null) {
-      _recordDiagnostic(
-        'Failed to send prompt: ACP session $sessionId is not open.',
-        severity: DiagnosticSeverity.error,
-        source: 'prompt',
-      );
-      return;
-    }
-
-    // Kit сам решает, отправить сразу или поставить в очередь занятой
-    // сессии, и сливает очередь после конца хода (design D7 change
-    // `extract-acp-client-kit`). Исход хода и диагностику даёт
-    // [_handlePromptOutcome], поэтому здесь ждём только окончания.
-    final outcome = await handle.send(text);
-    if (outcome is PromptQueued) {
-      _syncQueuedPrompts(sessionId);
-    }
-  }
-
-  /// Убирает [id] из очереди активной сессии и возвращает его текст в
-  /// композер ([CodeLabShellState.composerDraft]) — сразу, а не при
-  /// следующей отправке, чтобы текст не жил в двух местах
-  /// (add-prompt-queue/design.md, Decisions).
-  void editQueuedPrompt(String id) {
-    final sessionId = state.activeSessionId;
-    final handle = sessionId == null ? null : _sessionHandle(sessionId);
-    final prompt = handle?.queue.remove(id);
-    if (prompt == null) {
-      return;
-    }
-    emit(
-      state.copyWith(
-        queuedPrompts: _queuedPromptsFor(sessionId!),
-        composerDraft: prompt.text,
-      ),
-    );
-  }
-
-  void deleteQueuedPrompt(String id) {
-    final sessionId = state.activeSessionId;
-    if (sessionId == null) {
-      return;
-    }
-    _sessionHandle(sessionId)?.queue.remove(id);
-    _syncQueuedPrompts(sessionId);
-  }
-
-  /// Отправляет [id] вне очереди, если сессия свободна; занятая сессия —
-  /// элемент остаётся на месте (ожидаемая гонка, add-prompt-queue/design.md,
-  /// Decisions).
-  Future<void> sendQueuedPromptNow(String id) async {
-    final sessionId = state.activeSessionId;
-    final handle = sessionId == null ? null : _sessionHandle(sessionId);
-    if (handle == null) {
-      return;
-    }
-    final sending = handle.queue.sendNow(id);
-    _syncQueuedPrompts(sessionId!);
-    await sending;
-  }
-
-  void clearQueuedPrompts() {
-    final sessionId = state.activeSessionId;
-    if (sessionId == null) {
-      return;
-    }
-    _sessionHandle(sessionId)?.queue.clear();
-    _syncQueuedPrompts(sessionId);
-  }
-
-  SessionHandle? _sessionHandle(String sessionId) =>
-      _workspace.session(SessionId(sessionId));
-
-  /// Очередь сессии [sessionId] из kit в модели `acp_ui`.
-  List<AcpQueuedPrompt> _queuedPromptsFor(String sessionId) => [
-    for (final item in _sessionHandle(sessionId)?.current.queue ?? const [])
-      AcpQueuedPrompt(id: item.id, content: item.text),
-  ];
-
-  /// Повторяет очередь в [CodeLabShellState.queuedPrompts], только если
-  /// [sessionId] активна: очередь фоновой сессии живёт в kit невидимо, пока
-  /// сессию не выберут (add-multi-session-concurrency/design.md, Decisions).
-  void _syncQueuedPrompts(String sessionId) {
-    if (isClosed || state.activeSessionId != sessionId) {
-      return;
-    }
-    emit(state.copyWith(queuedPrompts: _queuedPromptsFor(sessionId)));
-  }
-
-  /// Флаги совместимости из `SessionView.status` kit (design D4): ход идёт,
-  /// ждёт одобрения или отмена ждёт ответа агента — сессия занята; отменить
-  /// можно, пока отмена ещё не отправлена.
-  bool _isPromptSubmitting(String sessionId) =>
-      switch (_sessionHandle(sessionId)?.current.status) {
-        SessionStatusView.running || SessionStatusView.cancelling => true,
-        _ => false,
-      };
-
-  bool _canCancel(String sessionId) =>
-      _sessionHandle(sessionId)?.current.status == SessionStatusView.running;
-
-  /// Исход каждого хода любой сессии — отправленного Cubit и ушедшего из
-  /// очереди kit — с той же диагностикой, что до переноса очереди в kit.
-  /// Исход каждого хода любой сессии — отправленного Cubit и ушедшего из
-  /// очереди kit: очередь могла сдвинуться. Диагностику хода пишет
-  /// [_handleKitDiagnostic].
-  void _handlePromptOutcome(PromptOutcome outcome) =>
-      _syncQueuedPrompts(outcome.sessionId.value);
-
-  /// Диагностика событий kit — та же запись в структурный лог, что раньше
-  /// делал сам Cubit (design D9 change `extract-acp-client-kit`).
-  void _handleKitDiagnostic(WorkspaceDiagnostic diagnostic) =>
-      _recordDiagnostic(
-        diagnostic.message,
-        severity: diagnostic.severity,
-        source: diagnostic.source,
-      );
-
-  Future<void> cancelTurn() async {
-    final sessionId = state.activeSessionId;
-    if (sessionId == null) {
-      _recordDiagnostic(
-        'Select a session before cancelling a prompt turn.',
-        severity: DiagnosticSeverity.warning,
-        source: 'prompt',
-      );
-      return;
-    }
-
-    // `isPromptSubmitting`/`canCancel`/`inspectorEntries` здесь не
-    // трогаются: отмена меняет статус сессии в ядре, и
-    // [_handleSessionChange] подхватывает его из `sessionChanges` для той
-    // сессии, чья она, активной или нет. Очередь сливает kit, когда агент
-    // ответит на отменённый `session/prompt`.
-    // Итог отмены — успех или ошибку — сообщает диагностика kit
-    // ([_handleKitDiagnostic]).
-    try {
-      await _workspace.session(SessionId(sessionId))?.cancel();
-    } on Object {
-      return;
-    }
-  }
-
-  /// Responds to the approval identified by [approvalId] (in [sessionId]) by
-  /// selecting [optionId] (one of the agent-supplied options, including
-  /// reject-kind options — ACP has no separate "reject" verb, rejecting is
-  /// just selecting a reject_once / reject_always option). Callers pass the
-  /// identity of the specific approval they are resolving — each transcript
-  /// entry's own `ApprovalRequest`, not a single global "current" approval —
-  /// so a stale/late tap can never resolve a different tool call than the
-  /// one the user actually acted on; see PERM-003 in
-  /// docs/architecture/permissions.md.
+  /// Ответ на конкретное одобрение — см.
+  /// [ActiveSessionCubit.respondToApproval] (PERM-003).
   Future<void> respondToApproval({
     required ApprovalRequestId approvalId,
     required SessionId sessionId,
     required String optionId,
-  }) async {
-    if (state.isRespondingToApproval) {
-      return;
-    }
-    final handle = _workspace.session(sessionId);
-    if (handle == null) {
-      return;
-    }
+  }) => _activeSession.respondToApproval(
+    approvalId: approvalId,
+    sessionId: sessionId,
+    optionId: optionId,
+  );
 
-    emit(state.copyWith(isRespondingToApproval: true));
-    // `transcriptEntries` здесь не трогаются: решение (или то, что одобрение
-    // всё ещё ждёт, например после устаревшего ответа) приходит из
-    // следующего `sessionChanges` в [_handleSessionChange]. Итог ответа
-    // сообщает диагностика kit.
-    try {
-      await handle.respond(approvalId, PermissionOptionId(optionId));
-    } on Object {
-      // Ошибка уже записана диагностикой kit.
-    }
-    if (isClosed) return;
-    emit(state.copyWith(isRespondingToApproval: false));
-  }
+  Future<void> setSessionConfigOption(String configId, String value) =>
+      _activeSession.setSessionConfigOption(configId, value);
 
-  /// Sends the user's chosen [value] for [configId] to the agent via
-  /// `session/set_config_option`. Guards against a second request firing
-  /// for the same chip while one is already in flight — mirrors
-  /// [respondToApproval]'s guard/re-derive pattern: the displayed
-  /// `configOptions` is always re-derived from the next `sessionChanges`
-  /// event in [_handleSessionChange], never set optimistically here.
-  Future<void> setSessionConfigOption(String configId, String value) async {
-    final sessionId = state.activeSessionId;
-    final handle = sessionId == null ? null : _sessionHandle(sessionId);
-    if (handle == null || state.isRespondingToConfigOption) {
-      return;
-    }
+  void openCommandPalette() => _layout.openCommandPalette();
 
-    emit(state.copyWith(isRespondingToConfigOption: true));
-    try {
-      await handle.setConfigOption(configId, value);
-    } on Object {
-      // Ошибка уже записана диагностикой kit.
-    }
-    if (isClosed) return;
-    emit(state.copyWith(isRespondingToConfigOption: false));
-  }
+  void closeCommandPalette() => _layout.closeCommandPalette();
 
-  void openCommandPalette() => emit(state.copyWith(isCommandPaletteOpen: true));
-
-  void closeCommandPalette() =>
-      emit(state.copyWith(isCommandPaletteOpen: false));
-
-  /// Dispatches a selected [AcpCommandAction] the same way regardless of
-  /// which trigger opened the palette (`Ctrl/Cmd+K` or the inline `/`
-  /// trigger in the composer) — see the "same handler" decision in
-  /// wire-command-palette/design.md.
+  /// Выполняет выбранную команду палитры одинаково для любого способа её
+  /// открыть (`Ctrl/Cmd+K` или `/` в композере, wire-command-palette/
+  /// design.md).
   ///
-  /// Unavailable client-native commands (`/plan`, `/permissions`,
-  /// `/compact`) leave the palette open and do nothing, so the user is
-  /// never told an action completed when it did not. Agent-declared
-  /// commands are never invoked as a protocol method — the caller is
-  /// responsible for inserting `/{name} ` into the composer before calling
-  /// this method; here they only close the palette.
+  /// Недоступные команды клиента (`/plan`, `/permissions`, `/compact`)
+  /// оставляют палитру открытой и ничего не делают — пользователю не
+  /// сообщается о действии, которого не было. Команды агента здесь только
+  /// закрывают палитру: протокольного метода у них нет, текст в композер
+  /// вставляет [insertAgentCommand].
   void selectCommand(AcpCommandAction action) {
     if (!action.isAvailable) {
       return;
@@ -1086,7 +323,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       case 'reconnect':
         unawaited(reconnect());
       case 'logs':
-        emit(state.copyWith(isInspectorVisibleInNarrowLayout: true));
+        _layout.showInspectorInNarrowLayout();
       default:
         break;
     }
@@ -1094,452 +331,78 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     closeCommandPalette();
   }
 
-  /// Handles selection of an agent-declared [AcpCommandAction]. Unlike
-  /// [selectCommand], this never calls a use case: `AvailableCommand` has no
-  /// "invoke" verb in ACP, so selecting one inserts `/{name} ` into the
-  /// prompt composer (via [CodeLabShellState.composerDraft]) for the user to
-  /// complete and submit as an ordinary prompt.
+  /// Выбор команды агента: `AvailableCommand` в ACP не вызывается, поэтому в
+  /// композер вставляется `/{name} ` — пользователь дописывает и отправляет
+  /// обычный промпт.
   void insertAgentCommand(AcpCommandAction action) {
-    emit(state.copyWith(composerDraft: '${action.slashCommand} '));
+    _activeSession.setComposerDraft('${action.slashCommand} ');
     closeCommandPalette();
   }
 
-  /// Clears the plan summary/checklist for the active session — a
-  /// client-side "hide it" (`AcpActivityBar`'s Plan section, "✕ Clear"),
-  /// not a protocol operation, so nothing is sent to the agent. A later
-  /// `SessionUpdate.plan` for this session repopulates
-  /// [CodeLabShellState.currentPlan] normally via [_handleSessionChange] —
-  /// dismissing does not suppress future updates. See
-  /// add-plan-progress-checklist/design.md, Decisions.
-  void dismissPlan() {
-    emit(state.copyWith(currentPlan: null));
-  }
+  void dismissPlan() => _activeSession.dismissPlan();
 
   @override
   Future<void> close() async {
-    await _sessionSubscription.cancel();
-    await _workspaceSubscription.cancel();
-    await _promptOutcomeSubscription.cancel();
+    _parts.changes.listen(null);
     await _diagnosticSubscription.cancel();
+    await _parts.close();
     if (_ownsWorkspace) {
       await _workspace.dispose();
     }
     return super.close();
   }
 
-  /// Records a diagnostic through the structured [Logger] — the in-app log
-  /// viewer's [LogBuffer] and console/file sinks are its only observers
-  /// (`replace-debug-log-panel-with-fluent/design.md`, Decision 5); this
-  /// cubit keeps no diagnostics list of its own. [source] identifies the
-  /// originating area (`transport`, `session`, `project`, ...) under the
-  /// `source` context key.
-  void _recordDiagnostic(
-    String message, {
-    DiagnosticSeverity severity = DiagnosticSeverity.info,
-    required String source,
-  }) {
-    final redactedMessage = _redactor.redactText(message);
-    final logContext = {'source': source};
-    switch (severity) {
-      case DiagnosticSeverity.debug:
-        _logger.debug(redactedMessage, context: logContext);
-      case DiagnosticSeverity.info:
-        _logger.info(redactedMessage, context: logContext);
-      case DiagnosticSeverity.warning:
-        _logger.warning(redactedMessage, context: logContext);
-      case DiagnosticSeverity.error:
-        _logger.error(redactedMessage, context: logContext);
-    }
-  }
-
-  /// Reloads [CodeLabShellState.recentProjects] from [RecentProjectsStore],
-  /// sorted most-recently-opened first — ordering is an application-layer
-  /// concern (the store's own contract makes no ordering guarantee), so it
-  /// is applied here, once, right before mapping to the `acp_ui`-facing
-  /// [AcpRecentProject]. Called once at construction (so recents from a
-  /// prior run are visible before the user ever opens the picker) and again
-  /// after every [selectProject]. Failures are non-fatal — surfaced as a
-  /// diagnostic, leaving the previous [CodeLabShellState.recentProjects] in
-  /// place, since a corrupt/unavailable store must not block using the app.
-  Future<void> _loadRecentProjects() async {
-    try {
-      final recents = await _recentProjectsStore.load();
-      if (isClosed) return;
-      final sorted = recents.toList()
-        ..sort((a, b) => b.lastOpenedAt.compareTo(a.lastOpenedAt));
-      emit(
-        state.copyWith(
-          recentProjects: sorted
-              .map((entry) => AcpRecentProject(path: entry.path))
-              .toList(growable: false),
-        ),
-      );
-    } on Object catch (error) {
-      if (isClosed) return;
-      _recordDiagnostic(
-        'Failed to load recent projects: $error',
-        severity: DiagnosticSeverity.warning,
-        source: 'project',
-      );
-    }
-  }
-
-  /// Handles a `sessionChanges` event for *any* session, active or in the
-  /// background. [state.sessions] (which feeds the sidebar's live status
-  /// badge) is always refreshed for the changed session — a background
-  /// session's turn progressing must not require switching to it first, see
-  /// add-multi-session-concurrency/design.md, Decisions. Everything else
-  /// (transcript, inspector, agent commands/config options, current plan,
-  /// and the derived `isPromptSubmitting`/`canCancel`) is only recomputed
-  /// when [session] is the active one — a background session's own updates
-  /// must never overwrite what the user is currently looking at.
-  void _handleSessionChange(AcpSession session) {
-    final sessionItem = _sessionListItem(session);
-    final otherSessions = state.sessions
-        .where((item) => item.id != sessionItem.id)
-        .toList(growable: false);
-    final sessions = [sessionItem, ...otherSessions];
-
-    final isActiveSession =
-        state.activeSessionId == null ||
-        state.activeSessionId == session.id.value;
-    if (!isActiveSession) {
-      emit(state.copyWith(sessions: sessions));
-      return;
-    }
-
-    emit(
-      state.copyWith(
-        sessions: sessions,
-        activeSessionId: sessionItem.id,
-        currentSessionLabel: sessionItem.title,
-        currentSessionDetail: sessionItem.subtitle ?? session.id.value,
-        transcriptEntries: _transcriptEntriesForSession(session),
-        inspectorEntries: _inspectorEntriesForSession(session),
-        agentCommands: _agentCommandsFor(session),
-        configOptions: _configOptionsFor(session),
-        currentPlan: _currentPlanForSession(session),
-        queuedPrompts: _queuedPromptsFor(sessionItem.id),
-        isPromptSubmitting: _isPromptSubmitting(sessionItem.id),
-        canCancel: _canCancel(sessionItem.id),
-      ),
-    );
-  }
-
-  /// Опции конфигурации сессии из kit в модели `acp_ui` (`acp_ui` не
-  /// зависит от протокола и kit).
-  List<AcpConfigOption> _configOptionsFor(AcpSession session) => [
-    for (final option
-        in _sessionHandle(session.id.value)?.current.configOptions ??
-            const <ConfigOptionView>[])
-      AcpConfigOption(
-        id: option.id,
-        name: option.name,
-        currentValue: option.currentValue,
-        description: option.description,
-        values: [
-          for (final value in option.values)
-            AcpConfigOptionValue(
-              value: value.value,
-              name: value.name,
-              description: value.description,
-            ),
-        ],
-      ),
-  ];
-
-  /// Команды агента из kit (последний `available_commands_update`) в
-  /// модели палитры `acp_ui`.
-  List<AcpCommandAction> _agentCommandsFor(AcpSession session) => [
-    for (final command
-        in _sessionHandle(session.id.value)?.current.agentCommands ??
-            const <AgentCommandView>[])
-      AcpCommandAction(
-        id: 'agent-${command.name}',
-        label: command.name,
-        slashCommand: '/${command.name}',
-        description: command.description,
-        icon: FluentIcons.robot,
-        source: AcpCommandSource.agent,
-        hint: command.hint,
-      ),
-  ];
-
-  /// Derives the active session's current plan from `session.turns` — the
-  /// last `SessionUpdate.plan` seen across all of its turns wins (a plan
-  /// sent in an earlier turn stays the current one into a later turn that
-  /// hasn't sent its own), same "later update replaces the list" pattern as
-  /// [_agentCommandsFor]/[_configOptionsFor] — except the "list" here is
-  /// nullable: `null` means no `plan` update has arrived yet (or the user
-  /// dismissed it, see [dismissPlan]), which is how
-  /// [CodeLabShellState.currentPlan] signals "no plan section to show" —
-  /// there's no equivalent empty-vs-absent distinction for
-  /// `configOptions`/`agentCommands`, which just use an empty list.
-  List<AcpPlanEntry>? _currentPlanForSession(AcpSession session) {
-    List<PlanEntry>? latest;
-    for (final turn in session.turns) {
-      for (final update in turn.updates) {
-        if (update case PlanUpdate(:final entries)) {
-          latest = entries;
-        }
-      }
-    }
-    return latest?.map(_planEntryUiModel).toList(growable: false);
-  }
-
-  AcpPlanEntry _planEntryUiModel(PlanEntry entry) {
-    return AcpPlanEntry(
-      content: entry.content,
-      status: switch (entry.status) {
-        PlanEntryStatus.pending => AcpPlanEntryStatus.pending,
-        PlanEntryStatus.inProgress => AcpPlanEntryStatus.inProgress,
-        PlanEntryStatus.completed => AcpPlanEntryStatus.completed,
-      },
-      priority: switch (entry.priority) {
-        PlanEntryPriority.high => AcpPlanEntryPriority.high,
-        PlanEntryPriority.medium => AcpPlanEntryPriority.medium,
-        PlanEntryPriority.low => AcpPlanEntryPriority.low,
-      },
-    );
-  }
-
-  /// Reacts only to a *spontaneous* connection loss — a transport failure
-  /// that happened while nobody asked for one, i.e. `connectionStatus` was
-  /// still `connected`. Explicit `connect()`/`reconnect()` already move
-  /// `connectionStatus` to `connecting`/`reconnecting` before awaiting and
-  /// fully own reporting their own outcome in their own catch/`result.match`
-  /// blocks — this handler must stay silent for those, or every explicit
-  /// failure would get a second, conflicting diagnostic entry from here.
-  /// Неожиданный сбой соединения, пока Cubit считает его установленным:
-  /// сбой явного [connect]/[reconnect] сообщают сами эти методы, поэтому
-  /// здесь он не дублируется.
-  void _handleWorkspaceChange(WorkspaceState workspace) {
-    if (workspace.connection is! ConnectionFailed) {
-      return;
-    }
-    if (state.connectionStatus != AcpConnectionStatus.connected) {
-      return;
-    }
-
-    emit(
-      state.copyWith(
-        connectionStatus: AcpConnectionStatus.failed,
-        isPromptSubmitting: false,
-        canCancel: false,
-        isRespondingToApproval: false,
-        isRespondingToConfigOption: false,
-      ),
-    );
-    // Запись `Connection to ACP agent lost` даёт диагностика kit.
-  }
-
-  AcpApprovalRisk _approvalRisk(ApprovalRiskLevel risk) => switch (risk) {
-    ApprovalRiskLevel.readOnly => AcpApprovalRisk.readOnly,
-    ApprovalRiskLevel.localWrite => AcpApprovalRisk.localWrite,
-    ApprovalRiskLevel.network => AcpApprovalRisk.network,
-    ApprovalRiskLevel.shell => AcpApprovalRisk.shell,
-    ApprovalRiskLevel.destructive => AcpApprovalRisk.destructive,
-  };
-
-  AcpApprovalOption _approvalOption(PermissionOption option) =>
-      AcpApprovalOption(
-        id: option.optionId.value,
-        label: option.name,
-        kind: _approvalOptionKind(option.kind),
-        tone: switch (option.kind) {
-          PermissionOptionKind.allowOnce ||
-          PermissionOptionKind.allowAlways => AcpTone.success,
-          PermissionOptionKind.rejectOnce ||
-          PermissionOptionKind.rejectAlways => AcpTone.danger,
-        },
+  /// Диагностика событий kit — та же запись в структурный журнал, что
+  /// раньше делал сам Cubit (design D9).
+  void _handleKitDiagnostic(WorkspaceDiagnostic diagnostic) =>
+      _parts.diagnostics.record(
+        diagnostic.message,
+        severity: diagnostic.severity,
+        source: diagnostic.source,
       );
 
-  AcpApprovalOptionKind _approvalOptionKind(PermissionOptionKind kind) =>
-      switch (kind) {
-        PermissionOptionKind.allowOnce => AcpApprovalOptionKind.allowOnce,
-        PermissionOptionKind.allowAlways => AcpApprovalOptionKind.allowAlways,
-        PermissionOptionKind.rejectOnce => AcpApprovalOptionKind.rejectOnce,
-        PermissionOptionKind.rejectAlways => AcpApprovalOptionKind.rejectAlways,
-      };
-
-  /// Профиль подключения из формы; `null` — форма не заполнена (нет
-  /// команды stdio или корректного адреса WebSocket).
-  ///
-  /// Токен WebSocket кладётся в [_secrets], а профиль хранит только ссылку
-  /// на него (design D8).
-  ConnectionProfile? _profileFromState() {
-    switch (state.transportType) {
-      case CodeLabTransportType.stdio:
-        final command = state.stdioCommand.trim();
-        if (command.isEmpty) {
-          return null;
-        }
-        return ConnectionProfile.stdio(
-          id: 'codelab_app.stdio',
-          label: state.selectedProfileLabel,
-          command: command,
-          args: parseShellWords(state.stdioArgs),
-          env: parseEnvLines(state.stdioEnv),
-          runInProjectDirectory: state.runAgentFromProjectDirectory,
-        );
-      case CodeLabTransportType.webSocket:
-        final endpoint = state.webSocketEndpoint.trim();
-        final uri = endpoint.isEmpty ? null : Uri.tryParse(endpoint);
-        if (uri == null) {
-          return null;
-        }
-        final token = state.webSocketToken.trim();
-        _secrets.write(_webSocketTokenRef, token.isEmpty ? null : token);
-        return ConnectionProfile.webSocket(
-          id: 'codelab_app.websocket',
-          label: state.selectedProfileLabel,
-          uri: uri,
-          tokenRef: token.isEmpty ? null : _webSocketTokenRef,
-        );
-    }
-  }
-
-  /// The project directory to use for a session/spawn `cwd` — the selected
-  /// project if one exists, falling back to the CodeLab process's own
-  /// current directory otherwise (unchanged fallback behavior — see
-  /// add-open-project-picker/design.md, Goals).
-  String get _selectedProjectPath {
-    final selected = state.selectedProjectPath?.trim();
-    return selected == null || selected.isEmpty
-        ? _workingDirectoryProvider.currentPath
-        : selected;
-  }
-
-  AcpSessionListItem _sessionListItem(AcpSession session) {
-    final title = session.title?.trim().isNotEmpty == true
-        ? session.title!.trim()
-        : 'Session ${session.id.value}';
-    return AcpSessionListItem(
-      id: session.id.value,
-      title: title,
-      status: _sessionStatus(session.status),
-      subtitle: session.cwd,
-      updatedLabel: 'Active',
+  static CodeLabShellState _compose(CodeLabShellParts parts) {
+    final connection = parts.connection.state;
+    final sessions = parts.sessions.state;
+    final active = parts.activeSession.state;
+    final settings = parts.settings.state;
+    final layout = parts.layout.state;
+    return CodeLabShellState(
+      connectionStatus: connection.connectionStatus,
+      transportType: connection.transportType,
+      stdioProfileName: connection.stdioProfileName,
+      stdioCommand: connection.stdioCommand,
+      stdioArgs: connection.stdioArgs,
+      stdioEnv: connection.stdioEnv,
+      webSocketEndpoint: connection.webSocketEndpoint,
+      webSocketToken: connection.webSocketToken,
+      transportLabel: connection.transportType.label,
+      profileLabel: connection.selectedProfileLabel,
+      connectionDetail: connection.selectedConnectionDetail,
+      currentSessionLabel: sessions.currentSessionLabel,
+      currentSessionDetail: sessions.currentSessionDetail,
+      sessions: sessions.sessions,
+      activeSessionId: sessions.activeSessionId,
+      transcriptEntries: active.transcriptEntries,
+      inspectorEntries: active.inspectorEntries,
+      viewMode: AcpViewMode.normal,
+      isPromptEnabled: true,
+      isPromptSubmitting: active.isPromptSubmitting,
+      canCancel: active.canCancel,
+      isRespondingToApproval: active.isRespondingToApproval,
+      isCommandPaletteOpen: layout.isCommandPaletteOpen,
+      isInspectorVisibleInNarrowLayout: layout.isInspectorVisibleInNarrowLayout,
+      agentCommands: active.agentCommands,
+      composerDraft: active.composerDraft,
+      configOptions: active.configOptions,
+      isRespondingToConfigOption: active.isRespondingToConfigOption,
+      sessionsPaneWidth: layout.sessionsPaneWidth,
+      inspectorPaneWidth: layout.inspectorPaneWidth,
+      selectedProjectPath: settings.selectedProjectPath,
+      runAgentFromProjectDirectory: settings.runAgentFromProjectDirectory,
+      recentProjects: settings.recentProjects,
+      currentPlan: active.currentPlan,
+      queuedPrompts: active.queuedPrompts,
     );
   }
-
-  AcpSessionStatus _sessionStatus(SessionLifecycleStatus status) =>
-      switch (status) {
-        SessionLifecycleStatus.idle ||
-        SessionLifecycleStatus.active => AcpSessionStatus.idle,
-        SessionLifecycleStatus.runningTurn ||
-        SessionLifecycleStatus.cancellingTurn => AcpSessionStatus.running,
-        SessionLifecycleStatus.awaitingApproval =>
-          AcpSessionStatus.awaitingApproval,
-        SessionLifecycleStatus.failed => AcpSessionStatus.failed,
-      };
-
-  /// Транскрипт сессии из `acp_client_kit` в модели `acp_ui`.
-  ///
-  /// Проекцию строит kit (`TranscriptProjector`, design D5 change
-  /// `extract-acp-client-kit`); здесь только отображение. `SessionView` kit
-  /// уже обновлён к моменту вызова: рабочее пространство подписано на
-  /// `sessionChanges` раньше Cubit (см. [_sessionSubscription]). Id записей —
-  /// позиционные (`prompt-N`, `agent-N`, `tool-N`, `prompt-error-N`), как до
-  /// переноса.
-  List<AcpTranscriptEntry> _transcriptEntriesForSession(AcpSession session) {
-    final transcript =
-        _workspace.session(session.id)?.current.transcript ??
-        const <TranscriptItem>[];
-    return [
-      for (final (index, item) in transcript.indexed)
-        _transcriptEntry(item, index + 1, cwd: session.cwd),
-    ];
-  }
-
-  AcpTranscriptEntry _transcriptEntry(
-    TranscriptItem item,
-    int position, {
-    required String cwd,
-  }) => switch (item) {
-    UserItem(:final text) => AcpTranscriptEntry(
-      id: 'prompt-$position',
-      kind: AcpTranscriptEntryKind.user,
-      title: 'You',
-      body: text,
-    ),
-    AgentTextItem(:final text) ||
-    ThoughtItem(:final text) ||
-    NoticeItem(kind: NoticeKind.emptyTurn, :final text) => AcpTranscriptEntry(
-      id: 'agent-$position',
-      kind: AcpTranscriptEntryKind.agent,
-      title: 'Agent',
-      body: text,
-    ),
-    NoticeItem(kind: NoticeKind.error, :final text) => AcpTranscriptEntry(
-      id: 'prompt-error-$position',
-      kind: AcpTranscriptEntryKind.diagnostic,
-      title: 'Prompt failed',
-      body: text,
-    ),
-    ToolCallItem(:final title, :final details, :final approval) =>
-      AcpTranscriptEntry(
-        id: 'tool-$position',
-        kind: AcpTranscriptEntryKind.toolCall,
-        title: title,
-        toolCall: details == null
-            ? null
-            : AcpToolCallSummary(
-                name: details.kind.wireName,
-                status: _toolCallStatus(details.status),
-                detail: details.command,
-              ),
-        approval: _transcriptApproval(approval, cwd: cwd),
-      ),
-  };
-
-  /// Одобрение встроено в запись вызова: ожидающее — интерактивное,
-  /// решённое — компактная отметка (embed-approval-in-thread/design.md,
-  /// Decisions 1–3).
-  AcpTranscriptApproval? _transcriptApproval(
-    ApprovalStateView? approval, {
-    required String cwd,
-  }) => switch (approval) {
-    null => null,
-    ResolvedApprovalView(:final label) => AcpTranscriptApproval.resolved(
-      label: label,
-    ),
-    PendingApprovalView() => AcpTranscriptApproval.pending(
-      risk: _approvalRisk(approval.risk),
-      command: approval.command,
-      cwd: cwd,
-      rawInput: formatRedactedJson(approval.rawInput),
-      options: approval.options.map(_approvalOption).toList(),
-      enabled: !state.isRespondingToApproval,
-      shortcutsEnabled: approval.focused,
-      onOptionSelected: (optionId) => unawaited(
-        respondToApproval(
-          approvalId: approval.approvalId,
-          sessionId: approval.sessionId,
-          optionId: optionId,
-        ),
-      ),
-    ),
-  };
-
-  AcpToolCallStatus _toolCallStatus(ToolCallStatusView status) =>
-      switch (status) {
-        ToolCallStatusView.queued => AcpToolCallStatus.queued,
-        ToolCallStatusView.running => AcpToolCallStatus.running,
-        ToolCallStatusView.succeeded => AcpToolCallStatus.succeeded,
-        ToolCallStatusView.failed => AcpToolCallStatus.failed,
-        ToolCallStatusView.cancelled => AcpToolCallStatus.cancelled,
-      };
-
-  List<CodeLabInspectorEntry> _inspectorEntriesForSession(AcpSession session) =>
-      const InspectorProjection().project(session);
-
-  AcpConnectionStatus _connectionStatusFor(ConnectionView connection) =>
-      switch (connection) {
-        Disconnected() => AcpConnectionStatus.disconnected,
-        Connecting() => AcpConnectionStatus.connecting,
-        Reconnecting() => AcpConnectionStatus.reconnecting,
-        Connected() => AcpConnectionStatus.connected,
-        ConnectionFailed() => AcpConnectionStatus.failed,
-      };
 }
