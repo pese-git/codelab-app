@@ -78,7 +78,7 @@ hover state
 
 Несколько layers МОГУТ иметь derived representation одного state, но source of truth должен быть однозначным.
 
-Владелец клиентского состояния — `acp_client_kit` (`ClientWorkspace`, `WorkspaceState`, `SessionView`; `openspec/changes/extract-acp-client-kit/design.md`, D4–D7). Cubit-ы `codelab_app` и экраны `codelab_cli` его не дублируют: они отображают `WorkspaceState`/`SessionView` в свои модели и держат только состояние своего UI (черновик формы, раскладку, флаги окна).
+Владелец клиентского состояния — `acp_client_kit` (`ClientWorkspace`, `WorkspaceState`, `SessionView`; `openspec/changes/archive/2026-10-26-extract-acp-client-kit/design.md`, D4–D7). Cubit-ы `codelab_app` и экраны `codelab_cli` его не дублируют: они отображают `WorkspaceState`/`SessionView` в свои модели и держат только состояние своего UI (черновик формы, раскладку, флаги окна).
 
 ---
 
