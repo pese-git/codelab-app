@@ -265,6 +265,21 @@ void main() {
       expect(notice.text, isNot(contains('Exception:')));
     });
 
+    test('a failed prompt without agent output gets only the error notice, '
+        'not an emptyTurn one', () async {
+      final turn = await agent.prompt('go');
+      agent.transport.emitInbound(
+        JsonRpcMessage.response(
+          id: turn.request.id,
+          error: const JsonRpcError(code: -32603, message: 'agent crashed'),
+        ),
+      );
+      await turn.done.then<void>((_) {}, onError: (_) {});
+
+      final notices = agent.items.whereType<NoticeItem>().toList();
+      expect(notices.map((n) => n.kind), [NoticeKind.error]);
+    });
+
     test('applying the same session again changes nothing', () async {
       final turn = await agent.prompt('go');
       agent.update(_message('text'));

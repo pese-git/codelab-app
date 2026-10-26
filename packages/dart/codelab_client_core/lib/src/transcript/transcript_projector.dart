@@ -370,7 +370,13 @@ List<TranscriptItem> _notices(
   PromptTurn turn, {
   required bool hasAgentItems,
 }) => [
-  if (!hasAgentItems && turn.isTerminal)
+  // Сорвавшийся ход объясняет заметка `error` ниже; `emptyTurn` для него
+  // дал бы вторую строку «Completed with stopReason unknown» — у такого хода
+  // нет stopReason (spec `acp-client-kit`: `error` для сорвавшегося хода,
+  // `emptyTurn` — для завершённого без вывода агента).
+  if (!hasAgentItems &&
+      turn.isTerminal &&
+      turn.status != PromptTurnStatus.failed)
     TranscriptItem.notice(
       id: '${turn.id.value}/completed',
       kind: NoticeKind.emptyTurn,
