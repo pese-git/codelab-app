@@ -306,7 +306,7 @@ agent-core-architecture §17.7.4: ожидающее steering — в `SessionVie
 `pendingSteers`.
 
 **Уточнения change `extract-acp-client-kit`.** Задачи 5.0, 5.1, 5.3–5.9 реализованы change
-`openspec/changes/extract-acp-client-kit/`; его `design.md` уточняет эскиз выше там, где он расходится
+`openspec/changes/archive/2026-10-26-extract-acp-client-kit/`; его `design.md` уточняет эскиз выше там, где он расходится
 с поведением app до переноса.
 
 * **`AgentBackend` (D3).** Член порта появляется вместе с итерацией, которая переносит его

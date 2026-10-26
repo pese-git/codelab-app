@@ -3,7 +3,7 @@
 Архитектурная форма CodeLab на уровне всего репозитория: границы пакетов monorepo, слоистая Clean Architecture внутри них, дисциплина SOLID/KISS/DRY, удерживающая эти границы осмысленными, настройка dependency injection через CherryPick и стандартные библиотеки моделирования (`fpdart`, `freezed`), которыми держится типизация состояния и результатов.
 ## Requirements
 ### Requirement: Границы пакетов monorepo
-CodeLab SHALL использовать Dart/Flutter/FVM/Melos monorepo с разделёнными пакетами `acp_protocol`, `acp_transports`, `acp_client_core`, `acp_testing`, `acp_ui`, `codelab_app`. В нём также SHALL быть пакеты Dart-агента `codelab_agent_core`, `codelab_agent_io` и `codelab_agent_acp`, приложение бинаря агента `apps/codelab_agent` (чистый Dart) и пакет архитектурных проверок `codelab_architecture_tests`. Каждый пакет SHALL быть указан в `workspace:` корневого `pubspec.yaml`.
+CodeLab SHALL использовать Dart/Flutter/FVM/Melos monorepo с разделёнными пакетами `acp_protocol`, `acp_transports`, `acp_client_core`, `acp_testing`, `acp_ui`, `codelab_app`. В нём также SHALL быть пакеты Dart-агента `codelab_agent_core`, `codelab_agent_io` и `codelab_agent_acp`, общий клиентский слой `acp_client_kit` (чистый Dart) и его `dart:io`-адаптеры `acp_client_io`, приложение бинаря агента `apps/codelab_agent` (чистый Dart) и пакет архитектурных проверок `codelab_architecture_tests`. Каждый пакет SHALL быть указан в `workspace:` корневого `pubspec.yaml`.
 
 #### Scenario: Пакеты workspace присутствуют
 - **WHEN** реализация разворачивает workspace
@@ -28,6 +28,10 @@ CodeLab SHALL использовать Dart/Flutter/FVM/Melos monorepo с раз
 #### Scenario: Бинарь агента — чистый Dart
 - **WHEN** запускается сторож для `apps/codelab_agent`
 - **THEN** ни один файл `lib/` приложения не импортирует `package:flutter/`, а `bin/` содержит только точку входа поверх бареля `lib/`
+
+#### Scenario: Клиентский слой собирается без Flutter и dart:io
+- **WHEN** запускается сторож для `packages/dart/acp_client_kit`
+- **THEN** ни один файл `lib/` пакета не импортирует `dart:io`, `package:flutter/` и `package:acp_transports/io.dart`, а его `dependencies` — подмножество allowlist пакета
 
 ### Requirement: Границы Clean Architecture
 CodeLab SHALL следовать Clean Architecture с гексагональными границами, где `Domain` и `Application` не зависят от `Presentation` или конкретной `Infrastructure`.
@@ -86,6 +90,8 @@ CodeLab SHALL проверять границы пакетов тестом `pac
 - **`codelab_agent_io`** НЕ SHALL импортировать `package:flutter/` и `package:acp_`. Его `dependencies` SHALL быть подмножеством `{codelab_agent_core, path, meta, async, yaml, yaml_edit, toml}`.
 - **`codelab_agent_acp`** НЕ SHALL импортировать `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web/`, `package:flutter/` и `package:acp_transports/io.dart` (PKG-3). Его `dependencies` SHALL быть подмножеством `{codelab_agent_core, acp_protocol, acp_transports, meta, async}`.
 - **Бинарь `apps/codelab_agent`** НЕ SHALL импортировать `package:flutter/`, `package:fluent_ui/`, `package:acp_client_core/` и `package:acp_ui/`. Его `dependencies` SHALL быть подмножеством `{codelab_agent_core, codelab_agent_io, codelab_agent_acp, acp_protocol, acp_transports, args, http, async, meta}`. В его `lib/` и `bin/` НЕ SHALL встречаться `ToolRegistry(`, `Agent(` и `AgentRuntime(`: ядро собирается только через `buildAgentCore` (HOST-6).
+- **`acp_client_kit`** НЕ SHALL импортировать `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web/`, `package:flutter/` и `package:acp_transports/io.dart`. Его `dependencies` SHALL быть подмножеством `{acp_client_core, acp_protocol, acp_transports, freezed_annotation, meta, collection, async}`.
+- **`acp_client_io`** НЕ SHALL импортировать `package:flutter/`. Его `dependencies` SHALL быть подмножеством `{acp_client_kit, acp_client_core, acp_protocol, acp_transports, path, meta}`.
 - **Расширение allowlist** любого из этих множеств SHALL проходить через OpenSpec change.
 - **Клиент `apps/codelab_app`** НЕ SHALL импортировать `package:codelab_agent_*` напрямую.
 
@@ -116,4 +122,12 @@ CodeLab SHALL проверять границы пакетов тестом `pac
 #### Scenario: Бинарь собирает ядро вручную
 - **WHEN** файл в `apps/codelab_agent/lib/` содержит `AgentRuntime(`
 - **THEN** сторож падает и называет файл и строку (HOST-6)
+
+#### Scenario: Клиентский слой импортирует dart:io
+- **WHEN** файл в `packages/dart/acp_client_kit/lib/` импортирует `dart:io` или `package:acp_transports/io.dart`
+- **THEN** сторож сообщает нарушение
+
+#### Scenario: IO-адаптеры клиента импортируют Flutter
+- **WHEN** файл в `packages/dart/acp_client_io/lib/` импортирует `package:flutter/`
+- **THEN** сторож сообщает нарушение
 
