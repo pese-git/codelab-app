@@ -113,12 +113,14 @@ void main() {
       // separate panel) — see embed-approval-in-thread — with the tool
       // call's title, its risk, and all four standard option kinds each
       // bound to their own kind-based shortcut (add-approval-option-kinds).
+      // Варианты ищутся по ключу вида, а не по подписи: по ACP `name` —
+      // свободный текст агента (у Dart-агента `Always allow <pattern>`,
+      // у scripted-агента `Allow always`), смысл несёт `kind`.
       expect(find.text(launch.permissionTitle), findsWidgets);
       expect(find.text('Shell'), findsWidgets);
-      expect(find.text('Allow once'), findsOneWidget);
-      expect(find.text('Allow always'), findsOneWidget);
-      expect(find.text('Reject once'), findsOneWidget);
-      expect(find.text('Reject always'), findsOneWidget);
+      for (final kind in CodeLabApprovalOptionKind.values) {
+        expect(find.byKey(approvalOptionKey(kind)), findsOneWidget);
+      }
 
       // The extracted `command` is always visible in the approval details —
       // both in the transcript's inline panel and in the Inspector, which
@@ -138,7 +140,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining(launch.rawInputMarker), findsNWidgets(2));
 
-      await tester.tap(find.text('Allow once'));
+      await tester.tap(
+        find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
+      );
       await tester.pump();
 
       // The agent's response to the permission choice, and the deferred
