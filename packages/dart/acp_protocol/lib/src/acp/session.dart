@@ -125,7 +125,14 @@ sealed class McpServer with _$McpServer {
       },
     );
 
-    return switch (_requiredString(source, 'type')) {
+    // У stdio-сервера в ACP нет дискриминатора: `type` обязателен только
+    // для `http` и `sse` (`03-Session Setup.md`, «Stdio Transport»;
+    // `17-Schema.md`, McpServer). Без `type` — stdio; явное `"stdio"`
+    // принимается для совместимости с клиентами, которые его пишут.
+    final type = source.containsKey('type')
+        ? _requiredString(source, 'type')
+        : 'stdio';
+    return switch (type) {
       'stdio' => McpServer.stdio(
         name: _requiredString(source, 'name'),
         command: _requiredString(source, 'command'),

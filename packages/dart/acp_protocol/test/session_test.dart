@@ -35,6 +35,59 @@ void main() {
       });
     });
 
+    // У stdio-сервера в ACP нет поля `type`: дискриминатор есть только у
+    // `http` и `sse` (`03-Session Setup.md`, «Stdio Transport»;
+    // `17-Schema.md`, McpServer). Так его присылает Zed.
+    test('parses a stdio MCP server without type', () {
+      final request = NewSessionRequest.fromJson({
+        'cwd': '/workspace/project',
+        'mcpServers': [
+          {
+            'name': 'filesystem',
+            'command': '/path/to/mcp-server',
+            'args': ['--stdio'],
+            'env': [
+              {'name': 'API_KEY', 'value': 'secret123'},
+            ],
+          },
+        ],
+      });
+
+      expect(
+        request.mcpServers.single,
+        const McpServer.stdio(
+          name: 'filesystem',
+          command: '/path/to/mcp-server',
+          args: ['--stdio'],
+          env: [EnvVariable(name: 'API_KEY', value: 'secret123')],
+        ),
+      );
+    });
+
+    test('still parses a stdio MCP server with type "stdio"', () {
+      expect(
+        McpServer.fromJson({
+          'type': 'stdio',
+          'name': 'filesystem',
+          'command': 'mcp-filesystem',
+          'args': <Object?>[],
+          'env': <Object?>[],
+        }),
+        isA<McpServerStdio>(),
+      );
+    });
+
+    test('an MCP server without type and command is rejected', () {
+      expect(
+        () => McpServer.fromJson({
+          'name': 'api-server',
+          'url': 'https://api.example.com/mcp',
+          'headers': <Object?>[],
+        }),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+    });
+
     test('round-trips new session response with modes and config options', () {
       const response = NewSessionResponse(
         sessionId: SessionId('session-1'),

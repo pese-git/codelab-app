@@ -17,6 +17,10 @@ CodeLab SHALL предоставлять Melos-скрипты для format, ana
 - **WHEN** выполняется `fvm dart run melos list` или любой скрипт из прежнего `melos.yaml`
 - **THEN** команда работает, а файла `melos.yaml` в корне нет
 
+#### Scenario: Сборка бинаря агента
+- **WHEN** выполняется `fvm dart run melos run build:agent`
+- **THEN** появляется исполняемый файл `build/bin/codelab-agent`, который отвечает на `initialize` по stdio; скрипт не входит в `check` (design.md change `add-codelab-agent-binary`, D9)
+
 ### Requirement: Модульные тесты протокола
 CodeLab SHALL тестировать encode/decode протокола, обработку неизвестных полей, валидацию невалидных сообщений и отображение протокольных ошибок.
 
@@ -48,7 +52,7 @@ CodeLab SHALL тестировать переходы состояния сес�
 - **THEN** тесты подтверждают, что каждый запрос получает outcome cancelled
 
 ### Requirement: Интеграционные тесты stdio
-CodeLab SHALL тестировать stdio-интеграцию с `codelab-agent` либо совместимым тестовым двойником, использующим ту же семантику запуска/профиля.
+CodeLab SHALL тестировать stdio-интеграцию с `codelab-agent` либо совместимым тестовым двойником, использующим ту же семантику запуска/профиля. E2E-тесты `apps/codelab_app/integration_test/` SHALL параметризоваться агентом через `--dart-define=CODELAB_E2E_AGENT=scripted|dart` (по умолчанию `scripted`) и помощник `integration_test/support/e2e_agent.dart`; в режиме `dart` агент — бинарь `CODELAB_E2E_AGENT_BIN` со сценарием `integration_test/llm_scripts/<режим>.json`. Тесты поведения именно scripted-агента SHALL иметь тег `scripted-only` и исключаться в режиме `dart`. Код `apps/codelab_app/lib` для этого НЕ SHALL меняться. Прогон на устройстве или симуляторе (`melos run test:e2e:app:dart-agent`) SHALL выполняться только в ветке `release/<version>`; в feature-ветке тесты SHALL проходить статический анализ.
 
 #### Scenario: Референсный агент инициализируется
 - **WHEN** тест stdio-интеграции запускает настроенную команду
@@ -57,6 +61,14 @@ CodeLab SHALL тестировать stdio-интеграцию с `codelab-agen
 #### Scenario: Prompt turn стримит
 - **WHEN** интеграционный тест отправляет `session/prompt`
 - **THEN** CodeLab получает потоковые `session/update` и финальный ответ на prompt
+
+#### Scenario: Тест в режиме Dart-агента
+- **WHEN** `permission_flow_test.dart` запускается с `CODELAB_E2E_AGENT=dart`
+- **THEN** карточка одобрения показывает команду `echo hello` из аргументов вызова `exec` — она же заголовок вызова
+
+#### Scenario: Тест только для scripted-агента
+- **WHEN** e2e-прогон идёт с `--exclude-tags scripted-only`
+- **THEN** тест `agent dying mid-turn` не запускается
 
 ### Requirement: Тесты Flutter UI
 CodeLab SHALL тестировать состояния соединения, поведение prompt composer, рендеринг потокового transcript, approvals, видимость отмены, состояния ошибок и layout workbench.
