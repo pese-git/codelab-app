@@ -100,4 +100,30 @@ void main() {
       endsWith('lib/src/serve.dart:1 -> package:flutter/widgets.dart'),
     );
   });
+
+  test('reports dart:io, Flutter and the IO transports in the client kit', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_kit_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'src', 'workspace.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'dart:io';\n"
+        "import 'package:flutter/foundation.dart';\n"
+        "import 'package:acp_transports/io.dart';\n"
+        "import 'package:acp_client_core/acp_client_core.dart';\n",
+      );
+    final rule = rules.firstWhere(
+      (r) => r.dir == 'packages/dart/acp_client_kit',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    // Kit — чистый Dart и web-безопасен (design D11 change
+    // `extract-acp-client-kit`); ядро клиента ему разрешено.
+    expect(violations, hasLength(3));
+    expect(violations.first, endsWith('lib/src/workspace.dart:1 -> dart:io'));
+  });
 }

@@ -46,6 +46,19 @@ const binaryAllowlist = {
   'meta',
 };
 
+/// Dependencies of the client kit (design D2 change
+/// `extract-acp-client-kit`): only web-safe packages, so the kit stays free
+/// of Flutter and `dart:io` transitively.
+const kitAllowlist = {
+  'acp_client_core',
+  'acp_protocol',
+  'acp_transports',
+  'freezed_annotation',
+  'meta',
+  'collection',
+  'async',
+};
+
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
 
@@ -104,6 +117,16 @@ void main() {
     ).readAsStringSync();
 
     final extra = dependencyKeys(pubspec).difference(binaryAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('acp_client_kit depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/acp_client_kit/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(kitAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });
