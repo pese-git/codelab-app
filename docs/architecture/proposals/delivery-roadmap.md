@@ -473,6 +473,8 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 | 25 | Settings › Code & web | — | — | — | T-13, T-14, T-15, T-17, E-12 |
 | 26 | Settings › General | — | — | E-15 (8.10), D-16, D-18 («About») | D-19 |
 | 27 | Settings › Keyboard | список сочетаний A13 | — | — | — |
+| 28 | панель Terminal в доке (A16) | — | — | — | D-28 (change `add-integrated-terminal`) |
+| 29 | split view сессий, сайдбар по проектам, док панелей инструментов (A13, шаг 0) | — | — | — | R-21, S-18 (раскладка; док вводится вместе с первой панелью — Files, D-13) |
 
 Навигация настроек (§12.4.9) появляется на M3 вместе с первой страницей группы Agent; до M3
 подключение настраивает существующий `ConnectionSetupDialog`.
@@ -515,6 +517,7 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 | `add-subagent-board` | `_codelab/subagents/*` (§17.3.7), доска app (A15) и вид `tasks` CLI | M5 |
 | `add-background-jobs` (уже назван) | `_codelab/jobs/*` (§17.9.11) на той же доске | M5 |
 | `add-redaction-settings` | страница «Redaction», `RedactionPreview` (§12.4.9) | M5 |
+| `add-integrated-terminal` (уже создан) | панель терминала пользователя (D-28, §12.3 A16); выбор PTY-стратегии — задача 1.1 change | M5 |
 
 ---
 

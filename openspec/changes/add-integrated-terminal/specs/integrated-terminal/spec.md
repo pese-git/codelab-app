@@ -1,15 +1,23 @@
 ## ADDED Requirements
 
-### Requirement: Collapsible terminal panel with multiple tabs
-CodeLab SHALL provide a collapsible terminal panel docked at the bottom of the workbench, supporting multiple independent terminal tabs, collapsed by default.
+### Requirement: Terminal pane in the tool dock with multiple tabs
+CodeLab SHALL provide a terminal pane in the workbench tool dock on the right side of the workbench, alongside the other tool panes, supporting multiple independent terminal tabs. The pane SHALL be closed by default and opened from the app bar toggle, a keyboard shortcut or the command palette.
 
-#### Scenario: Expanding the terminal panel
-- **WHEN** user expands the collapsed terminal bar
-- **THEN** CodeLab shows the terminal panel with at least one active tab and a way to open additional tabs
+#### Scenario: Opening the terminal pane
+- **WHEN** user turns on the Terminal toggle in the app bar
+- **THEN** CodeLab shows the terminal pane in the tool dock with at least one active tab and a way to open additional tabs
 
 #### Scenario: Closing a terminal tab
 - **WHEN** user closes a terminal tab
 - **THEN** CodeLab terminates the underlying process for that tab and removes the tab
+
+#### Scenario: Terminal tabs belong to the focused session
+- **WHEN** two sessions are shown side by side and the user moves focus from one to the other
+- **THEN** the terminal pane shows the tabs of the focused session, and the processes of the other session's tabs keep running
+
+#### Scenario: Closing the pane keeps terminal sessions
+- **WHEN** user closes the terminal pane in the tool dock
+- **THEN** the open terminal tabs, their processes and scrollback are kept and shown again when the pane is reopened
 
 #### Scenario: Terminal processes are cleaned up on app close
 - **WHEN** CodeLab is closed while terminal tabs are open
