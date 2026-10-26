@@ -4,7 +4,8 @@ import 'package:test/test.dart';
 
 /// Разбор флагов и переменных `codelab-agent serve` (задача 4.6; agent-binary
 /// «Минимальный конфиг из флагов», «Сценарий --llm-script»; design.md change
-/// `add-codelab-agent-binary`, D1, D4).
+/// `add-codelab-agent-binary`, D1, D4; `--sessions-dir` — D1 change
+/// `add-llm-script-session-store`).
 void main() {
   const scripted = ['serve', '--stdio', '--llm-script', 'hello.json'];
   const provider = [
@@ -126,6 +127,21 @@ void main() {
       expect(
         () => parse([...scripted, '--provider', 'anthropic']),
         usageError(contains('--llm-script')),
+      );
+    });
+
+    test('--sessions-dir: the journal root of the script', () {
+      expect(parse(scripted).sessionsDir, isNull);
+      expect(
+        parse([...scripted, '--sessions-dir', '/tmp/s']).sessionsDir,
+        '/tmp/s',
+      );
+    });
+
+    test('--sessions-dir without --llm-script is a usage error', () {
+      expect(
+        () => parse([...provider, '--sessions-dir', '/tmp/s']),
+        usageError('--sessions-dir requires --llm-script'),
       );
     });
 
@@ -261,9 +277,10 @@ void main() {
     });
   });
 
-  test('the usage text hides --llm-script', () {
+  test('the usage text hides --llm-script and --sessions-dir', () {
     expect(serveUsage(), contains('--stdio'));
     expect(serveUsage(), contains('--provider'));
     expect(serveUsage(), isNot(contains('llm-script')));
+    expect(serveUsage(), isNot(contains('sessions-dir')));
   });
 }
