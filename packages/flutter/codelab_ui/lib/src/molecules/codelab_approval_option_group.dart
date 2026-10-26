@@ -22,11 +22,28 @@ enum CodeLabApprovalOptionsLayout { list, compactRow }
 /// agent-provided [CodeLabApprovalOption.label] text (which may be in any
 /// language and is not a reliable source for that decision).
 enum CodeLabApprovalOptionKind {
-  allowOnce,
-  allowAlways,
-  rejectOnce,
-  rejectAlways,
+  allowOnce('allow_once'),
+  allowAlways('allow_always'),
+  rejectOnce('reject_once'),
+  rejectAlways('reject_always');
+
+  const CodeLabApprovalOptionKind(this.wireName);
+
+  /// Значение `PermissionOptionKind` в ACP (`allow_once` и так далее).
+  final String wireName;
 }
+
+/// Ключ кнопки варианта одобрения по его виду.
+///
+/// Почему: по ACP `name` варианта — свободный текст агента (`Allow always`
+/// у одного, `Always allow <pattern>` у другого), смысл несёт только `kind`.
+/// Для чего: тесты и автоматизация находят вариант по виду, не завися от
+/// подписи агента. Как использовать: `find.byKey(approvalOptionKey(
+/// CodeLabApprovalOptionKind.allowAlways))`; ключ стоит на кнопке в обеих
+/// раскладках [CodeLabApprovalOptionsLayout]. Если агент прислал два варианта
+/// одного вида, ключ найдёт оба.
+ValueKey<String> approvalOptionKey(CodeLabApprovalOptionKind kind) =>
+    ValueKey('approval-option-${kind.wireName}');
 
 class CodeLabApprovalOption {
   const CodeLabApprovalOption({
@@ -82,6 +99,7 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
         children: [
           for (final option in options) ...[
             _AcpApprovalOptionTile(
+              key: approvalOptionKey(option.kind),
               option: option,
               selected: option.id == selectedOptionId,
               enabled: enabled,
@@ -98,6 +116,7 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
             for (final option in options) ...[
               Expanded(
                 child: _AcpApprovalCompactOptionButton(
+                  key: approvalOptionKey(option.kind),
                   option: option,
                   selected: option.id == selectedOptionId,
                   enabled: enabled,
@@ -211,6 +230,7 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
 class _AcpApprovalOptionTile extends StatelessWidget {
   const _AcpApprovalOptionTile({
     required this.option,
+    super.key,
     required this.selected,
     required this.enabled,
     required this.onSelected,
@@ -288,6 +308,7 @@ class _AcpApprovalOptionTile extends StatelessWidget {
 class _AcpApprovalCompactOptionButton extends StatelessWidget {
   const _AcpApprovalCompactOptionButton({
     required this.option,
+    super.key,
     required this.selected,
     required this.enabled,
     required this.onSelected,
