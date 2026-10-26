@@ -51,6 +51,8 @@
 
 ## 8. Документы и Definition of Done
 
-- [ ] 8.1 `AGENTS.md` §5 (структура и назначение `acp_client_kit`, `acp_client_io`), `docs/architecture/technology-stack.md`, `docs/architecture/state-management.md` (владелец клиентского состояния — kit), `09-10-stage-5-client-kit.md` (уточнения D3, D4, D8, D9 этого change)
-- [ ] 8.2 Definition of Done: `fvm dart run melos run check` зелёный; `fvm dart test packages/dart/acp_client_kit packages/dart/acp_client_io packages/dart/acp_client_core` зелёный; `melos run guard` — kit без Flutter и `dart:io`; тексты 8 интеграционных тестов не изменены и собираются; в kit нет членов «после MVP»; PR итерации 7
+- [x] 8.1 `AGENTS.md` §5 (структура и назначение `acp_client_kit`, `acp_client_io`), `docs/architecture/technology-stack.md`, `docs/architecture/state-management.md` (владелец клиентского состояния — kit), `09-10-stage-5-client-kit.md` (уточнения D3, D4, D8, D9 этого change)
+- [x] 8.2 Definition of Done: `fvm dart run melos run check` зелёный; `fvm dart test packages/dart/acp_client_kit packages/dart/acp_client_io packages/dart/acp_client_core` зелёный; `melos run guard` — kit без Flutter и `dart:io`; тексты 8 интеграционных тестов не изменены и собираются; в kit нет членов «после MVP»; PR итерации 7
 - [ ] 8.3 Перед архивированием: `openspec validate extract-acp-client-kit --strict`; заполнить Purpose новой спецификации `acp-client-kit`
+  - `openspec validate extract-acp-client-kit --strict` — valid.
+  - Purpose для `openspec/specs/acp-client-kit/spec.md` (файл создаётся синхронизацией при архивировании): «Общий клиентский слой ACP без UI — пакет `acp_client_kit` на чистом web-безопасном Dart и его `dart:io`-адаптеры `acp_client_io`: рабочее пространство и явный автомат соединения, профили и резолверы транспорта без секретов в профилях, сессии с инкрементальной проекцией транскрипта, очередь промптов, одобрения, опции и команды агента, инспектор и диагностика без секретов. Владелец клиентского состояния для `codelab_app` и `codelab_cli`; хосты только отображают `WorkspaceState` и `SessionView`.»
