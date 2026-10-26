@@ -1,0 +1,27 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "reply": [
+          {
+            "text": "echo: first task"
+          }
+        ],
+        "stopReason": "stop"
+      },
+      {
+        "reply": [
+          {
+            "text": "echo: second task"
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  }
+}
