@@ -43,13 +43,18 @@ abstract interface class ClientWorkspace {
   Stream<WorkspaceState> get state;
 
   /// Подключается к агенту [profile]; [projectDirectory] — папка проекта,
-  /// `cwd` новых сессий и, если профиль просит, процесса агента.
+  /// `cwd` новых сессий и, если профиль просит, процесса агента. Агенту со
+  /// `sessionCapabilities.list` после `initialize` отправляется первый
+  /// `session/list` проекта — `Future` завершается после него; сбой списка
+  /// — диагностика, а не ошибка подключения (design D3 change
+  /// `add-session-list-and-reload`).
   Future<void> connect(
     ConnectionProfile profile, {
     required String projectDirectory,
   });
 
-  /// Одна попытка переподключения без `session/load` (design D4).
+  /// Одна попытка переподключения без `session/load` (design D4); список
+  /// сессий после неё запрашивается заново, как после [connect].
   ///
   /// [profile] и [projectDirectory] заменяют текущие, если переданы: хост
   /// мог изменить форму подключения после [connect].
@@ -63,6 +68,23 @@ abstract interface class ClientWorkspace {
   Future<SessionHandle> newSession({String? cwd});
 
   SessionHandle? session(SessionId id);
+
+  /// Открывает сессию агента [id] через `session/load`: транскрипт строится
+  /// из реплея с нуля, строка списка из [SessionStatusView.notLoaded]
+  /// становится открытой. Сессию не активирует — это решает хост.
+  ///
+  /// Повторный вызов для той же сессии, пока загрузка в полёте, возвращает
+  /// тот же `Future`. Без соединения или без `loadSession` у агента —
+  /// [ClientWorkspaceException] без запроса к агенту; ошибка агента —
+  /// диагностика и исключение вызывающему, строка остаётся `notLoaded`
+  /// (design D4 change `add-session-list-and-reload`).
+  Future<SessionHandle> loadSession(SessionId id, {required String cwd});
+
+  /// Запрашивает следующую страницу `session/list`, если
+  /// `WorkspaceState.hasMoreSessions`; повторный вызов, пока запрос в
+  /// полёте, — no-op. Ошибка — диагностика, список остаётся прежним
+  /// (design D3).
+  Future<void> loadMoreSessions();
 
   /// Делает сессию [id] активной; неизвестный id игнорируется.
   void activate(SessionId id);
@@ -156,8 +178,25 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   var _nextQueuedPromptId = 0;
   final _handles = <SessionId, _SessionHandle>{};
 
-  /// Порядок списка сессий: от новой к старой.
+  /// Порядок открытых сессий: от новой к старой.
   final _order = <SessionId>[];
+
+  /// Ещё не открытые сессии агента из `session/list` в его порядке.
+  final _listed = <SessionId, SessionInfo>{};
+
+  /// `nextCursor` последней страницы; непрозрачен и наружу не отдаётся
+  /// (`04-Session List.md`, «Pagination»).
+  String? _nextCursor;
+  Future<void>? _listing;
+
+  /// Возможности агента из ответа `initialize` текущего соединения.
+  AgentCapabilities _capabilities = const AgentCapabilities();
+
+  final _loading = <SessionId, Future<SessionHandle>>{};
+
+  /// Сессии, загружаемые через `session/load`: их следующий снимок из ядра —
+  /// реплей, и проекция транскрипта строится заново (design D4).
+  final _reloading = <SessionId>{};
 
   late final StreamSubscription<ClientConnectionState> _connectionSubscription;
   late final StreamSubscription<AcpSession> _sessionSubscription;
@@ -204,6 +243,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         projectDirectory: projectDirectory,
       );
       final connectionState = await _backend.connect(transport);
+      _capabilities = _capabilitiesOf(connectionState);
       _publishConnection(_viewFor(connectionState));
     } on Object catch (error) {
       _publishFailure(error);
@@ -211,6 +251,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     } finally {
       _transition = _Transition.none;
     }
+    await _listFirstPage();
   }
 
   @override
@@ -245,6 +286,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
               resolver.open(target, projectDirectory: directory),
         ),
       );
+      _capabilities = _capabilitiesOf(connectionState);
       _publishConnection(_viewFor(connectionState));
     } on Object catch (error) {
       _publishFailure(error);
@@ -252,6 +294,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     } finally {
       _transition = _Transition.none;
     }
+    await _listFirstPage();
   }
 
   @override
@@ -275,6 +318,112 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   @override
   SessionHandle? session(SessionId id) => _handles[id];
+
+  @override
+  Future<SessionHandle> loadSession(SessionId id, {required String cwd}) {
+    final inFlight = _loading[id];
+    if (inFlight != null) {
+      return inFlight;
+    }
+    if (_current.connection is! Connected) {
+      return Future.error(
+        const ClientWorkspaceException(
+          'Connect an agent before loading a session.',
+        ),
+      );
+    }
+    if (!_capabilities.loadSession) {
+      return Future.error(
+        const ClientWorkspaceException('The ACP agent cannot load sessions.'),
+      );
+    }
+    final loading = _load(id, cwd);
+    _loading[id] = loading;
+    return loading.whenComplete(() => _loading.remove(id));
+  }
+
+  Future<SessionHandle> _load(SessionId id, String cwd) async {
+    _reloading.add(id);
+    try {
+      final session = await _backend.loadSession(
+        LoadSessionCommand(sessionId: id, cwd: cwd),
+      );
+      // Строка `session/list` остаётся: из неё заголовок и время изменения,
+      // а дубля нет — открытая сессия в [_summaries] вытесняет её.
+      final handle = _track(session);
+      _publish(_current.copyWith(sessions: _summaries()));
+      return handle;
+    } on Object catch (error) {
+      _report(
+        WorkspaceDiagnostic(
+          severity: DiagnosticSeverity.error,
+          source: 'session',
+          message:
+              'Failed to load ACP session ${id.value}: '
+              '${describeFailure(error)}',
+        ),
+      );
+      rethrow;
+    } finally {
+      _reloading.remove(id);
+    }
+  }
+
+  @override
+  Future<void> loadMoreSessions() async {
+    final cursor = _nextCursor;
+    if (cursor == null || _listing != null) {
+      return;
+    }
+    await _list(cursor: cursor);
+  }
+
+  /// Первая страница списка после подключения: прежний список и курсор
+  /// принадлежали старому соединению или проекту (design D3).
+  Future<void> _listFirstPage() async {
+    _listed.clear();
+    _nextCursor = null;
+    if (_capabilities.sessionCapabilities.list == null) {
+      _publish(
+        _current.copyWith(sessions: _summaries(), hasMoreSessions: false),
+      );
+      return;
+    }
+    await _list();
+  }
+
+  Future<void> _list({String? cursor}) {
+    final listing = _fetchPage(cursor);
+    _listing = listing;
+    return listing.whenComplete(() => _listing = null);
+  }
+
+  Future<void> _fetchPage(String? cursor) async {
+    try {
+      final page = await _backend.listSessions(
+        cwd: _current.projectDirectory,
+        cursor: cursor,
+      );
+      for (final info in page.sessions) {
+        _listed.putIfAbsent(info.sessionId, () => info);
+      }
+      _nextCursor = page.nextCursor;
+    } on Object catch (error) {
+      _report(
+        WorkspaceDiagnostic(
+          severity: DiagnosticSeverity.error,
+          source: 'session',
+          message: 'Failed to list ACP sessions: ${describeFailure(error)}',
+        ),
+      );
+    }
+    _publish(
+      _current.copyWith(
+        sessions: _summaries(),
+        hasMoreSessions: _nextCursor != null,
+      ),
+    );
+  }
 
   @override
   void activate(SessionId id) {
@@ -359,9 +508,12 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   }
 
   void _handleSession(AcpSession session) {
-    final previous = _handles[session.id]?.current.status;
-    final status = _track(session).current.status;
-    if (previous != status) {
+    final previous = _handles[session.id];
+    final previousStatus = previous?.current.status;
+    final previousTitle = previous?.title;
+    final handle = _track(session);
+    if (previousStatus != handle.current.status ||
+        previousTitle != handle.title) {
       _publish(_current.copyWith(sessions: _summaries()));
     }
   }
@@ -369,8 +521,13 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   /// Регистрирует сессию, если она новая, и возвращает её handle.
   _SessionHandle _track(AcpSession session) {
     final existing = _handles[session.id];
+    final reloaded = _reloading.remove(session.id);
     if (existing != null) {
-      existing.update(session);
+      if (reloaded) {
+        existing.reload(session);
+      } else {
+        existing.update(session);
+      }
       return existing;
     }
     final handle = _SessionHandle(
@@ -389,14 +546,36 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     return handle;
   }
 
+  /// Строки списка: открытые сессии, затем неоткрытые из `session/list`;
+  /// сессия, которая есть и там и там, показывается один раз — открытой.
   List<SessionSummaryView> _summaries() => [
     for (final id in _order)
       SessionSummaryView(
         id: id,
         cwd: _handles[id]!.cwd,
         status: _handles[id]!.current.status,
+        title: _handles[id]!.title ?? _listed[id]?.title,
+        updatedAt: _parseTime(_listed[id]?.updatedAt),
       ),
+    for (final info in _listed.values)
+      if (!_handles.containsKey(info.sessionId))
+        SessionSummaryView(
+          id: info.sessionId,
+          cwd: info.cwd,
+          status: SessionStatusView.notLoaded,
+          title: info.title,
+          updatedAt: _parseTime(info.updatedAt),
+        ),
   ];
+
+  static DateTime? _parseTime(String? value) =>
+      value == null ? null : DateTime.tryParse(value);
+
+  static AgentCapabilities _capabilitiesOf(ClientConnectionState state) =>
+      switch (state) {
+        ClientConnectionReady(:final capabilities) => capabilities,
+        _ => const AgentCapabilities(),
+      };
 
   ConnectionView _viewFor(ClientConnectionState connectionState) {
     final reconnecting = _transition == _Transition.reconnecting;
@@ -496,6 +675,9 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   @override
   SessionView get current => _current;
 
+  /// Заголовок сессии в ядре клиента (`session_info_update`).
+  String? get title => _session.title;
+
   @override
   Stream<SessionView> get view => _views.stream;
 
@@ -509,7 +691,9 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   /// отмена ждёт ответа агента (design D4).
   bool get _isBusy => switch (_current.status) {
     SessionStatusView.running || SessionStatusView.cancelling => true,
-    SessionStatusView.idle || SessionStatusView.failed => false,
+    SessionStatusView.idle ||
+    SessionStatusView.failed ||
+    SessionStatusView.notLoaded => false,
   };
 
   @override
@@ -695,6 +879,20 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     if (identical(session, _session)) {
       return;
     }
+    _session = session;
+    _projector.apply(session);
+    _publish(
+      _sessionFields(
+        _current.copyWith(revision: _current.revision + 1),
+        session,
+      ),
+    );
+  }
+
+  /// Снимок после `session/load`: проекция транскрипта строится заново,
+  /// очередь и флаги представления сохраняются (design D4).
+  void reload(AcpSession session) {
+    _projector.reset();
     _session = session;
     _projector.apply(session);
     _publish(
