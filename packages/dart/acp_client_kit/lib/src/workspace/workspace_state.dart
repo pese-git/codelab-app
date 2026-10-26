@@ -4,6 +4,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../connection/connection_profile.dart';
 import '../connection/connection_view.dart';
+import '../transcript/transcript_item.dart';
 
 part 'workspace_state.freezed.dart';
 
@@ -44,13 +45,16 @@ abstract class SessionSummaryView with _$SessionSummaryView {
 /// полей (`09-10`, «Публичный API»).
 ///
 /// Для чего: `SessionHandle.current` и поток `SessionHandle.view`. Поля
-/// транскрипта, очереди, одобрений и опций добавляют следующие итерации
-/// change вместе с переносом своей логики (design D12).
+/// очереди и опций добавляют следующие итерации change вместе с переносом
+/// своей логики (design D12).
 @freezed
 abstract class SessionView with _$SessionView {
   const factory SessionView({
     required int revision,
     required SessionStatusView status,
+
+    /// Транскрипт сессии; строит `TranscriptProjector` (design D5).
+    @Default([]) List<TranscriptItem> transcript,
   }) = _SessionView;
 }
 
