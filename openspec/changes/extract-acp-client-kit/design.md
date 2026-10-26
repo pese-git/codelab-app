@@ -49,15 +49,17 @@
 
 ### D3. Порт `AgentBackend` и `AcpClientBackend`
 
-`AgentBackend` — внутренний порт источника данных kit (эскиз `09-10`), реализация `AcpClientBackend` — тонкая обёртка над `AcpClientApplication`: те же потоки (`connectionStates`, `sessionChanges`, `diagnostics`) и методы. Ошибки — исключения `AcpClientApplication`, как сейчас; kit переводит их в `WorkspaceDiagnostic` через `describeFailure` (D9). Use case-ы `acp_client_core` в kit не используются: они добавляют только `TaskEither` вокруг тех же вызовов, а политика (когда слать, что делать при ошибке) теперь в kit.
+`AgentBackend` — внутренний порт источника данных kit (эскиз `09-10`), реализация `AcpClientBackend` — тонкая обёртка над `AcpClientApplication`: те же потоки (`connectionStates`, `sessionChanges`, `diagnostics`) и методы. Члены порта появляются вместе с итерацией, которая переносит их потребителя в kit (D12): итерация 2 — `connectionStates`, `sessionChanges`, `connect`, `reconnect`, `createSession`. Поздние события старого поколения отбрасывает сам `AcpClientApplication` (отписка от старого транспорта при замене), kit на это опирается и проверяет тестом. `ClientWorkspace.dispose` отписывается от бэкенда, но не закрывает его: `AcpClientApplication` закрывает его владелец (в app — `CodeLabRootLifecycle`). Ошибки — исключения `AcpClientApplication`, как сейчас; kit переводит их в `WorkspaceDiagnostic` через `describeFailure` (D9). Use case-ы `acp_client_core` в kit не используются: они добавляют только `TaskEither` вокруг тех же вызовов, а политика (когда слать, что делать при ошибке) теперь в kit.
 
-На этом change в `AgentBackend` нет `listSessions` и `loadSession` в UI-смысле: `loadSession` объявлен, потому что он уже есть в ядре клиента, но `ClientWorkspace.loadSession` и `listSessions` добавляет `add-session-list-and-reload` вместе с поведением.
+На этом change в `AgentBackend` и `ClientWorkspace` нет `listSessions` и `loadSession`: их добавляет `add-session-list-and-reload` вместе с поведением.
 
 ### D4. `ClientWorkspace`, `SessionHandle`, `ConnectionView`
 
 Форма API — эскиз `09-10` без членов «после MVP», `loadSession`/`listSessions` (D3) и `EmbeddedProfile`. Явный конечный автомат `ConnectionView` (`Disconnected`, `Connecting`, `Connected`, `Reconnecting`, `ConnectionFailed`) вместо флагов (`AGENTS.md` §8). `Reconnecting` на этом change всегда `attempt: 1`: повторов нет, как сейчас.
 
-`reconnect()` повторяет текущее поведение Cubit: одна попытка через `AgentBackend.reconnect` с фабрикой транспорта текущего профиля, без `session/load`. Алгоритм с повторами и загрузкой сессий (`09-10`, «Алгоритм переподключения») — в `add-session-list-and-reload`.
+`reconnect({profile, projectDirectory})` повторяет текущее поведение Cubit: одна попытка через `AgentBackend.reconnect` с транспортом от резолвера профиля, без `session/load`. Переданные `profile` и `projectDirectory` заменяют текущие: Cubit переподключается с профилем из формы, которую пользователь мог изменить после `connect()` (характеризационный тест `cwd` при переключателе «Run agent from project directory»). Без аргументов — профиль последнего подключения; без него — `ClientWorkspaceException`. Отказы kit (нет соединения, нет профиля, нет резолвера) — `ClientWorkspaceException` и наследник `UnsupportedConnectionProfileException`; ошибки транспорта и агента — исключения `acp_client_core`, их kit пробрасывает после публикации `ConnectionFailed`.
+
+Конструктор фасада сохраняет прежние параметры: `widget_test.dart` создаёт `CodeLabShellCubit` напрямую, а его текст не меняется. Граф cherrypick передаёт `workspace` и `secrets`; без них Cubit строит `ClientWorkspace` сам поверх `application` и фабрик транспорта и закрывает его в `close()`. Параметры `createSessionUseCase` и `reconnectUseCase` после итерации 2 не используются и удаляются вместе с фасадом после этапа 9. Алгоритм с повторами и загрузкой сессий (`09-10`, «Алгоритм переподключения») — в `add-session-list-and-reload`.
 
 Флаги совместимости `CodeLabShellState` (таблица переноса, строка «Флаги состояния») считает фасад: `isPromptSubmitting = canCancel = SessionView.status` активной сессии `running` (в том числе с ожидающими одобрениями) или `cancelling`; `isRespondingToConfigOption = configOptionInFlight != null`; повторный `setConfigOption` во время запроса — no-op.
 
@@ -69,7 +71,7 @@
 
 ### D6. Публикация `SessionView` и `WorkspaceState`
 
-Изменения склеиваются в микрозадаче (`scheduleMicrotask`): одно `session/update` → один новый `SessionView` с `revision + 1`, пачка обновлений в одном событии цикла → один. Kit — чистый Dart и не знает о кадрах UI; «не чаще одного раза за кадр» (`09-10`, шаг 8) обеспечивает склейка в микрозадаче, а дальнейшая синхронизация с кадром — забота UI. Поздние события старого поколения (`AcpClientApplication.generation`) отбрасываются до проектора (`AGENTS.md` §9).
+`WorkspaceState` публикуется синхронно (`StreamController.broadcast(sync: true)`): переход соединения и список сессий редки, а фасад и тесты 5.0 читают состояние сразу после события транспорта, без ожидания. Для `SessionView` изменения склеиваются в микрозадаче (`scheduleMicrotask`): одно `session/update` → один новый `SessionView` с `revision + 1`, пачка обновлений в одном событии цикла → один. Тесты 5.0 читают транскрипт сразу после `session/update`, поэтому `SessionHandle.current` обновляется синхронно, а склеивается только публикация в поток `view`; фасад читает `current` по синхронному сигналу (итерация 3). Kit — чистый Dart и не знает о кадрах UI; «не чаще одного раза за кадр» (`09-10`, шаг 8) обеспечивает склейка в микрозадаче, а дальнейшая синхронизация с кадром — забота UI. Поздние события старого поколения (`AcpClientApplication.generation`) отбрасываются до проектора (`AGENTS.md` §9).
 
 ### D7. Очередь промптов
 
@@ -79,9 +81,9 @@
 
 ### D8. Профили и резолверы транспорта
 
-`ConnectionProfile` — `StdioProfile`, `WebSocketProfile` (`lib/src/connection/`); `parseShellWords` (перенос `_splitShellWords`) и `describeProfile` (перенос `selectedProfileLabel`/`selectedConnectionDetail`) — чистые функции kit. `TransportResolver` — порт kit; `StdioTransportResolver` и `WebSocketTransportResolver` — в `acp_client_io` поверх `StdioAcpTransport`/`WebSocketAcpTransport`. Фабрики app `CodeLabStdioTransportFactory`/`CodeLabWebSocketTransportFactory` остаются только как обёртки для тестов (`CodeLabTestBinding` подставляет `FakeAcpTransport`): резолвер в тестах — тестовый, который отдаёт фейковый транспорт.
+`ConnectionProfile` — `StdioProfile`, `WebSocketProfile` (`lib/src/connection/`, итерация 2: без них нет `ClientWorkspace.connect`); `parseShellWords` (перенос `_splitShellWords`) и `describeProfile` (перенос `selectedProfileLabel`/`selectedConnectionDetail`) — чистые функции kit (итерация 5). `TransportResolver` — порт kit. Перевод профиля в `StdioAcpTransportConfig`/`WebSocketAcpTransportConfig` одинаков для всех хостов, поэтому он в kit: `ConfigTransportResolver(stdio:, webSocket:, secrets:)` принимает фабрики транспортов по конфигурации; `runInProjectDirectory` превращается в `cwd` процесса только здесь. `acp_client_io` даёт фабрики настоящих транспортов поверх `StdioAcpTransport`/`WebSocketAcpTransport` (итерация 5). Фабрики app `CodeLabStdioTransportFactory`/`CodeLabWebSocketTransportFactory` передаются в `ConfigTransportResolver`; `CodeLabTestBinding` подставляет `FakeAcpTransport`.
 
-Токен WebSocket в `WebSocketProfile` — ссылка `tokenRef`, значение даёт порт `SecretSource` (kit), который вызывает резолвер. App держит токен в состоянии формы, как сейчас, и передаёт его через `InMemorySecretSource` по ссылке профиля; в файлы и логи значение не попадает. CLI на этапе 6 подставит источник из переменной окружения.
+Токен WebSocket в `WebSocketProfile` — ссылка `tokenRef`, значение даёт порт `SecretSource` (kit), который вызывает резолвер. App держит токен в состоянии формы, как сейчас, и передаёт его через `InMemorySecretSource` (kit: тот же источник нужен тестам и CLI) по ссылке профиля; в файлы и логи значение не попадает. CLI на этапе 6 подставит источник из переменной окружения.
 
 `ProfileStore` и `RecentProjectsStore` — порты kit. `JsonFileProfileStore` (`~/.codelab/profiles.json`) и `JsonFileRecentProjectsStore` — в `acp_client_io`; app подключает только `RecentProjectsStore` на `shared_preferences` (как сейчас), `ProfileStore` app не использует (Non-Goals).
 
@@ -105,10 +107,10 @@
 Каждая итерация — PR в `develop` из `feature/extract-acp-client-kit`, ветка заново от `develop` после слияния; красный тест — отдельным коммитом до реализации (кроме 5.0, D1).
 
 1. **5.0** — характеризационные тесты; код app не меняется.
-2. **5.1** — пакет `acp_client_kit` с API (D4), `AcpClientBackend`, сторож; фасад: Cubit получает `ClientWorkspace` и переводит на него подключение и сессии.
+2. **5.1** — пакет `acp_client_kit` с API (D4), `AcpClientBackend`, профили, `TransportResolver`, `ConfigTransportResolver`, `SecretSource`/`InMemorySecretSource` (D8), сторож; фасад: Cubit получает `ClientWorkspace` и переводит на него подключение и сессии.
 3. **5.3** — `TranscriptProjector` и тест на фикстурах.
 4. **5.4** — `PromptQueue` и отмена.
-5. **5.5 + 5.8** — профили, резолверы, `acp_client_io` (перенос адаптеров, `JsonFile*Store`): резолверы stdio/WebSocket живут в `acp_client_io`, поэтому задачи идут одним PR.
+5. **5.5 + 5.8** — `parseShellWords`, `describeProfile`, порты хранилищ, `acp_client_io` (перенос адаптеров, фабрики настоящих транспортов, `JsonFile*Store`): фабрики живут в `acp_client_io`, поэтому задачи идут одним PR.
 6. **5.6 + 5.7** — `CommandCatalog`, `ConfigOptionView`, `InspectorProjection`, диагностика.
 7. **5.9** — разделение Cubit-ов, `ui_mappers.dart`, проверка размера `shell_cubit.dart`.
 

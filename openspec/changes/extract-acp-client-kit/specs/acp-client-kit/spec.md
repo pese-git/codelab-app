@@ -70,14 +70,14 @@
 - **THEN** опубликованная диагностика содержит маску вместо токена
 
 ### Requirement: Профили и резолверы транспорта
-`ConnectionProfile` SHALL быть закрытой иерархией `StdioProfile` и `WebSocketProfile`; токен WebSocket в профиле SHALL храниться ссылкой, а не значением; значение SHALL давать порт `SecretSource`. Превращение профиля в `AcpTransport` SHALL выполнять `TransportResolver`, который регистрирует composition root; kit НЕ SHALL открывать процессы и сокеты сам.
+`ConnectionProfile` SHALL быть закрытой иерархией `StdioProfile` и `WebSocketProfile`; токен WebSocket в профиле SHALL храниться ссылкой, а не значением; значение SHALL давать порт `SecretSource`. Превращение профиля в `AcpTransport` SHALL выполнять `TransportResolver`, который регистрирует composition root; kit НЕ SHALL открывать процессы и сокеты сам. `ConfigTransportResolver` kit SHALL переводить профиль в конфигурацию транспорта `acp_transports` и вызывать фабрику, которую передал хост.
 
 #### Scenario: Профиль без резолвера
 - **WHEN** `connect` вызывается с профилем, для которого не зарегистрирован резолвер
 - **THEN** `WorkspaceState.connection` становится `ConnectionFailed` с сообщением о неподдерживаемом профиле, транспорт не открывается
 
 ### Requirement: IO-адаптеры клиента
-`dart:io`-реализации портов клиента SHALL жить в `packages/dart/acp_client_io`: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, резолверы `StdioTransportResolver` и `WebSocketTransportResolver`, `JsonFileProfileStore` (`~/.codelab/profiles.json`) и `JsonFileRecentProjectsStore`. Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app.
+`dart:io`-реализации портов клиента SHALL жить в `packages/dart/acp_client_io`: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, фабрики настоящих транспортов stdio и WebSocket для `ConfigTransportResolver` kit, `JsonFileProfileStore` (`~/.codelab/profiles.json`) и `JsonFileRecentProjectsStore`. Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app.
 
 #### Scenario: Профили сохраняются в JSON
 - **WHEN** `JsonFileProfileStore` сохраняет профиль `WebSocketProfile` и читает его заново
