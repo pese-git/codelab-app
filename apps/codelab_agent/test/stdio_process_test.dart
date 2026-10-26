@@ -97,6 +97,84 @@ void main() {
     expect(await agent.exitCode, 0);
   });
 
+  test('--sessions-dir: the next process lists and loads the session '
+      '(change add-llm-script-session-store)', () async {
+    final home = '${temp.path}/home';
+    final args = [
+      'serve',
+      '--stdio',
+      '--llm-script',
+      'test/llm_scripts/hello.json',
+      '--sessions-dir',
+      '${temp.path}/agent-sessions',
+    ];
+
+    final first = await AgentProcess.start(
+      args,
+      environment: {'CODELAB_HOME': home},
+    );
+    first.sendJson(request(1, 'initialize', {'protocolVersion': 1}));
+    await first.responseTo(1);
+    first.sendJson(
+      request(2, 'session/new', {'cwd': temp.path, 'mcpServers': <Object?>[]}),
+    );
+    final sessionId =
+        ((await first.responseTo(2))['result']! as Map)['sessionId'];
+    first.sendJson(
+      request(3, 'session/prompt', {
+        'sessionId': sessionId,
+        'prompt': [
+          {'type': 'text', 'text': 'Hi'},
+        ],
+      }),
+    );
+    await first.responseTo(3);
+    await first.closeStdin();
+    expect(await first.exitCode, 0);
+
+    final second = await AgentProcess.start(
+      args,
+      environment: {'CODELAB_HOME': home},
+    );
+    second.sendJson(request(1, 'initialize', {'protocolVersion': 1}));
+    final init = (await second.responseTo(1))['result']! as Map;
+    expect((init['agentCapabilities']! as Map)['loadSession'], isTrue);
+    second.sendJson(request(2, 'session/list', {'cwd': temp.path}));
+    final page = (await second.responseTo(2))['result']! as Map;
+    expect((page['sessions']! as List).map((s) => (s as Map)['sessionId']), [
+      sessionId,
+    ]);
+    second.sendJson(
+      request(3, 'session/load', {
+        'sessionId': sessionId,
+        'cwd': temp.path,
+        'mcpServers': <Object?>[],
+      }),
+    );
+    final replay = <Map<String, Object?>>[];
+    final loaded = await second.responseTo(3, seen: replay);
+    expect(loaded['error'], isNull);
+    expect(
+      [
+        for (final m in replay)
+          if (m case {
+            'params': {
+              'update': {
+                'sessionUpdate': 'agent_message_chunk',
+                'content': {'text': final String text},
+              },
+            },
+          })
+            text,
+      ].join(),
+      'hello',
+    );
+
+    await second.closeStdin();
+    expect(await second.exitCode, 0);
+    expect(Directory(home).existsSync(), isFalse);
+  });
+
   test('EOF during a turn cancels it and exits 0', () async {
     final script = File('${temp.path}/wait.json')
       ..writeAsStringSync(

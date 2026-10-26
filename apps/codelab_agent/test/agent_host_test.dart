@@ -13,7 +13,8 @@ import 'support/acp_peer.dart';
 /// Сборка ядра бинаря (задача 4.6; agent-binary «Сценарий --llm-script»,
 /// «Минимальный конфиг из флагов», «Команда serve»; design.md change
 /// `add-codelab-agent-binary`, D3): хост поднимается в процессе теста, а
-/// клиент говорит с ним через `InProcessAcpLink`.
+/// клиент говорит с ним через `InProcessAcpLink`. Журнал сценария на диске —
+/// D1, D2 change `add-llm-script-session-store`.
 void main() {
   late Directory temp;
 
@@ -30,6 +31,8 @@ void main() {
       ..writeAsStringSync(jsonEncode({'llm': llm}));
     return file.path;
   }
+
+  String sessionsDir() => '${temp.path}/agent-sessions';
 
   ServeOptions scriptedOptions(
     String script, {
@@ -154,6 +157,87 @@ void main() {
 
       final session = await peer.newSession(temp.path);
       expect(await peer.prompt(session, 'hi'), 'end_turn');
+      expect(Directory('${temp.path}/home').existsSync(), isFalse);
+    });
+  });
+
+  group('--llm-script with --sessions-dir', () {
+    String cwdScript() => writeScript({
+      'steps': [
+        for (var i = 0; i < 2; i++)
+          {
+            'reply': [
+              {'text': r'cwd was: ${cwd}'},
+            ],
+            'stopReason': 'stop',
+          },
+      ],
+    });
+
+    ServeOptions persistentOptions(String script) =>
+        scriptedOptions(script, extra: ['--sessions-dir', sessionsDir()]);
+
+    test('declares loadSession and session/list; journals in the flag '
+        'directory, not in CODELAB_HOME', () async {
+      final (host, peer) = await start(persistentOptions(cwdScript()));
+      final init = await peer.call('initialize', {'protocolVersion': 1});
+      final caps = init['agentCapabilities']! as Map<String, Object?>;
+      expect(caps['loadSession'], isTrue);
+      expect(
+        (caps['sessionCapabilities']! as Map<String, Object?>)['list'],
+        isNotNull,
+      );
+      expect(
+        host.core.plan.offReasons,
+        isNot(contains(HostCapability.sessionPersistence)),
+      );
+
+      final session = await peer.newSession(temp.path);
+      expect(await peer.prompt(session, 'hi'), 'end_turn');
+      expect(Directory(sessionsDir()).existsSync(), isTrue);
+      expect(Directory('${temp.path}/home').existsSync(), isFalse);
+    });
+
+    test('sessions survive a host restart: list, load replay and '
+        r'${cwd} of the loaded session', () async {
+      final script = cwdScript();
+      final work = Directory('${temp.path}/work')..createSync();
+
+      // Первый процесс: сессия с одним ходом, затем завершение.
+      final first = await AgentHost.build(
+        persistentOptions(script),
+        logger: RecordingLogger(),
+      );
+      final firstLink = InProcessAcpLink();
+      unawaited(first.createServer().serve(firstLink.agent));
+      await firstLink.client.start();
+      final firstPeer = AcpPeer(firstLink.client);
+      final sessionId = await firstPeer.openSession(work.path);
+      expect(await firstPeer.prompt(sessionId, 'first question'), 'end_turn');
+      await first.shutdown(grace: Duration.zero);
+
+      // Второй процесс над тем же каталогом журналов.
+      final (_, peer) = await start(persistentOptions(script));
+      await peer.call('initialize', {'protocolVersion': 1});
+      final page = await peer.call('session/list', {'cwd': work.path});
+      expect((page['sessions']! as List).map((s) => (s as Map)['sessionId']), [
+        sessionId,
+      ]);
+
+      await peer.call('session/load', {
+        'sessionId': sessionId,
+        'cwd': work.path,
+        'mcpServers': <Object?>[],
+      });
+      expect(peer.agentText(sessionId), 'cwd was: ${work.path}');
+
+      // Шаги сценария нового процесса начинаются с первого (D3), а `${cwd}`
+      // берётся из журнала загруженной сессии (D2).
+      expect(await peer.prompt(sessionId, 'second question'), 'end_turn');
+      expect(
+        peer.agentText(sessionId),
+        'cwd was: ${work.path}cwd was: ${work.path}',
+      );
       expect(Directory('${temp.path}/home').existsSync(), isFalse);
     });
   });
