@@ -33,6 +33,7 @@ void main() {
     'with_queued_prompt_drain',
     'with_concurrent_sessions',
     'echoes_cwd',
+    'with_session_list',
   ];
 
   test('every mode of the e2e contract has a scenario', () {
