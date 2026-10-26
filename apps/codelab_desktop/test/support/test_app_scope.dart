@@ -12,6 +12,7 @@ final class CodeLabTestBinding {
     FakeAcpTransport? transport,
     CodeLabStdioTransportFactory? stdioTransportFactory,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
+    Map<String, Object> preferences = const {},
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -19,7 +20,9 @@ final class CodeLabTestBinding {
     // перехватывает, но статический completer плагина может отдать ошибку в
     // зону уже завершившегося теста, и раннер засчитает её как сбой («failed
     // after test completion»). Пустое хранилище убирает обращение к каналу.
-    SharedPreferences.setMockInitialValues(const {});
+    // [preferences] — сохранённое прошлым запуском (недавние проекты,
+    // снимок рабочего пространства).
+    SharedPreferences.setMockInitialValues(preferences);
     scope = createCodeLabRootScope(
       transportFactory: () => this.transport,
       stdioTransportFactory: stdioTransportFactory,
