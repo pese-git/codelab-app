@@ -1,6 +1,6 @@
 # ADR-0002: Name workspace packages by the `codelab_<side>_<layer>` scheme
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-10-26
 
