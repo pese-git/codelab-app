@@ -305,6 +305,35 @@ agent-core-architecture §17.7.4: ожидающее steering — в `SessionVie
 сообщение в голову очереди; переподключение с реплеем доставленного id убирает его из
 `pendingSteers`.
 
+**Уточнения change `extract-acp-client-kit`.** Задачи 5.0, 5.1, 5.3–5.9 реализованы change
+`openspec/changes/extract-acp-client-kit/`; его `design.md` уточняет эскиз выше там, где он расходится
+с поведением app до переноса.
+
+* **`AgentBackend` (D3).** Член порта появляется вместе с итерацией, которая переносит его
+  потребителя в kit; `listSessions` и `loadSession` в `AgentBackend` и `ClientWorkspace` добавляет
+  `add-session-list-and-reload` (задачи 5.2 и 5.10) вместе с поведением. Use case-ы
+  `acp_client_core` kit не использует: политика вызовов теперь в kit, а ошибки — исключения
+  `AcpClientApplication`. `ClientWorkspace.dispose` отписывается от бэкенда, но не закрывает его.
+* **`ClientWorkspace` и `ConnectionView` (D4).** Без членов «после MVP», `loadSession`/`listSessions` и
+  `EmbeddedProfile`. `reconnect({profile, projectDirectory})` — одна попытка без `session/load`, как
+  в app до переноса, поэтому `Reconnecting` всегда `attempt: 1`; переданный профиль заменяет текущий
+  (форма могла измениться после `connect`). Алгоритм с повторами и загрузкой сессий ниже — в
+  `add-session-list-and-reload`.
+* **Профили и секреты (D8).** Вместо отдельных резолверов stdio и WebSocket — один
+  `ConfigTransportResolver(stdio:, webSocket:, secrets:)`: перевод профиля в конфигурацию транспорта
+  одинаков для всех хостов; `acp_client_io` даёт `ioTransportResolver` с настоящими транспортами.
+  Токен WebSocket — ссылка `tokenRef`, значение даёт `SecretSource` (в app и тестах —
+  `InMemorySecretSource`). `describeProfile` не вводится: у него нет потребителя до
+  `codelab profiles list` этапа 6. `WorkingDirectoryProvider` переезжает в `acp_client_io`.
+* **Команды, инспектор, диагностика (D9).** `CommandCatalog` и тест R-20 — change
+  `add-command-palette-agent-commands`; на этапе 5 kit даёт только `SessionView.agentCommands`.
+  `InspectorProjection` строится по запросу хоста, а не полем `SessionView`. `WorkspaceDiagnostic`
+  покрывает события kit (исход хода, отмена, одобрение, опция, потеря соединения); сообщения
+  подключения и создания сессии зависят от формы хоста и остаются в app.
+* **Разделение (D10).** Части app синхронно сообщают фасаду о новом состоянии
+  (`ShellChanges`), а событие, меняющее несколько частей, применяется одним пакетом — фасад
+  по-прежнему выпускает одно состояние на событие.
+
 **Артефакт: перенос ответственности из `CodeLabShellCubit`.**
 
 | Ответственность сегодня (методы `shell_cubit.dart`) | Новый дом | Что остаётся в Cubit |

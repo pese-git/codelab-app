@@ -466,6 +466,8 @@ packages/
 │   ├── acp_protocol/
 │   ├── acp_transports/
 │   ├── acp_client_core/
+│   ├── acp_client_kit/
+│   ├── acp_client_io/
 │   └── acp_testing/
 │
 └── flutter/
@@ -577,6 +579,8 @@ Package:
 
 При этом `acp_client_core` НЕ ДОЛЖЕН превращаться в dumping ground для любой application logic.
 
+Логика клиента, общая для app и CLI, но выше протокольного ядра (рабочее пространство, очередь промптов, проекция транскрипта, одобрения, опции, инспектор), — в `acp_client_kit` (§17а).
+
 ### 17.1. Structured logging — `structured_log`
 
 Технология: [`structured_log`](https://pub.dev/packages/structured_log) — pure Dart structured-logging библиотека (JSON output, context binding, processor pipeline, multi-sink routing, typed correlation fields).
@@ -596,6 +600,22 @@ Package:
 **Только для локальной разработки самого CodeLab, не end-user-функциональность.** `CodeLabLoggingModule` (`apps/codelab_app/lib/app/app_scope.dart`) конструирует `RemoteSyncLogOutput` исключительно если ОБЕ compile-time-константы `CODELAB_LOG_SERVER_URL`/`CODELAB_LOG_SERVER_KEY` (`String.fromEnvironment`, передаются через `--dart-define` при `flutter run`) непустые — по умолчанию (без `--dart-define`) sink не создаётся вовсе, нулевая стоимость и нулевой риск. `projectSecretKey` — секрет; НЕ ДОЛЖЕН попадать в репозиторий (`.env`/shell-профиль разработчика, не committed файл) — см. AGENTS.md §10.
 
 Sink получает те же `category=application` события, что уже идут в консоль/файл — никакой отдельной категории. Ships через `configureCodeLabLogging()`'s опциональный параметр `httpOutput` (`packages/dart/acp_client_core/lib/src/infrastructure/structured_log_logger.dart`) — `acp_client_core` не получает зависимость на `structured_log_remote_sync` (только на `structured_log`'s `OutputFunction`-тип), пакет подключён исключительно в `codelab_app`, тем же паттерном, что `structured_log_flutter`/`structured_log_fluent` (Decision 1 `replace-debug-log-panel-with-fluent/design.md`). `CodeLabLoggingLifecycle.dispose()` закрывает `RemoteSyncLogOutput` (флашит буфер) наравне с остальными sinks.
+
+---
+
+## 17а. `acp_client_kit`
+
+Package: `packages/dart/acp_client_kit`. Тип: **pure Dart**, web-безопасный (без `dart:io`).
+
+Общий клиентский слой без UI для `codelab_app` и `codelab_cli` (change `extract-acp-client-kit`): `ClientWorkspace` и `SessionHandle`, явный автомат `ConnectionView`, профили подключения и `TransportResolver`, `SecretSource`, инкрементальная проекция транскрипта, `PromptQueue`, представления опций, команд и одобрений, `InspectorProjection`, `WorkspaceDiagnostic` и `describeFailure`, порты хранилищ (`ProfileStore`, `RecentProjectsStore`). Источник данных — порт `AgentBackend`, реализация `AcpClientBackend` поверх `AcpClientApplication` из `acp_client_core`.
+
+Зависит только от `acp_client_core`, `acp_protocol`, `acp_transports` (без `io.dart`), `freezed_annotation` и `meta`; Flutter и `dart:io` запрещены сторожем (`melos run guard`). Правила — во вложенном `AGENTS.md` пакета.
+
+## 17б. `acp_client_io`
+
+Package: `packages/dart/acp_client_io`. Тип: **pure Dart** с `dart:io`, без Flutter.
+
+`dart:io`-адаптеры портов клиента для хостов на Dart VM и desktop: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `ioTransportResolver` с настоящими stdio- и WebSocket-транспортами, `JsonFileProfileStore`, `JsonFileRecentProjectsStore`. Flutter-плагины (`file_selector`, `shared_preferences`) остаются в `codelab_app`. Правила — во вложенном `AGENTS.md` пакета.
 
 ---
 
@@ -679,6 +699,8 @@ Application:
 
 `codelab_app` может зависеть от:
 
+* `acp_client_kit`;
+* `acp_client_io`;
 * `acp_client_core`;
 * `acp_protocol`;
 * `acp_transports`;
@@ -757,9 +779,12 @@ Architectural dependency rules важнее технической доступ�
               ┌────────────┼────────────┐
               │            │            │
               ▼            ▼            ▼
-          acp_ui    acp_client_core   desktop
-                          │           adapters
-                 ┌────────┴────────┐
+          acp_ui    acp_client_kit ◄── acp_client_io
+                           │          (dart:io adapters)
+                           ▼
+                    acp_client_core
+                           │
+                 ┌─────────┴───────┐
                  │                 │
                  ▼                 ▼
           acp_transports     acp_protocol
@@ -777,6 +802,7 @@ Architectural dependency rules важнее технической доступ�
 * `acp_protocol` не зависит от Flutter packages;
 * `acp_transports` не зависит от Flutter UI;
 * `acp_client_core` остаётся pure Dart;
+* `acp_client_kit` остаётся pure Dart без `dart:io` и зависит только от `acp_client_core`, `acp_protocol`, `acp_transports`; `acp_client_io` — без Flutter;
 * `acp_ui` не зависит от `codelab_app`;
 * `codelab_app` выполняет composition;
 * lower-level packages не зависят от application package.

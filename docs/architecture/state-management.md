@@ -42,6 +42,9 @@ Protocol state
 Application state
     → acp_client_core / application layer
 
+Client workspace state (соединение, сессии, транскрипт, очередь, одобрения)
+    → acp_client_kit
+
 Presentation state
     → BLoC / Cubit
 
@@ -63,6 +66,9 @@ Ephemeral widget state
 connection/session lifecycle
     → acp_client_core
 
+client workspace (ConnectionView, SessionView, очередь промптов)
+    → acp_client_kit
+
 selected tab
     → presentation
 
@@ -71,6 +77,8 @@ hover state
 ```
 
 Несколько layers МОГУТ иметь derived representation одного state, но source of truth должен быть однозначным.
+
+Владелец клиентского состояния — `acp_client_kit` (`ClientWorkspace`, `WorkspaceState`, `SessionView`; `openspec/changes/extract-acp-client-kit/design.md`, D4–D7). Cubit-ы `codelab_app` и экраны `codelab_cli` его не дублируют: они отображают `WorkspaceState`/`SessionView` в свои модели и держат только состояние своего UI (черновик формы, раскладку, флаги окна).
 
 ---
 
@@ -229,7 +237,8 @@ BLoC/Cubit НЕ ДОЛЖЕН:
 * владеть concrete transport;
 * выполнять filesystem implementation;
 * реализовывать security policy;
-* содержать reusable ACP lifecycle logic, если оно принадлежит `acp_client_core`.
+* содержать reusable ACP lifecycle logic, если оно принадлежит `acp_client_core`;
+* содержать логику клиента, общую для app и CLI (очередь промптов, проекцию транскрипта, политику переподключения), — она принадлежит `acp_client_kit`.
 
 ---
 
@@ -369,6 +378,8 @@ RunningOnSettingsTab
 * принадлежат разным features.
 
 Но дробление не должно приводить к десяткам Cubit без ясной ответственности.
+
+Пример — рабочее место `codelab_app` (`features/workbench/application/`, design D10 change `extract-acp-client-kit`): `ConnectionCubit` (форма подключения, статус), `SessionsCubit` (список и выбор сессий), `ActiveSessionCubit` (лента, очередь, одобрения, опции, план показываемой сессии), `SettingsCubit` (проект, недавние проекты), `LayoutCubit` (панели, палитра). Маппинг представлений kit в модели `acp_ui` — чистые функции `ui_mappers.dart`. Если одно событие меняет несколько Cubit-ов, а потребитель ждёт одного согласованного снимка, изменения склеиваются синхронно (`ShellChanges.batch`), а не через асинхронный `stream`.
 
 ---
 
