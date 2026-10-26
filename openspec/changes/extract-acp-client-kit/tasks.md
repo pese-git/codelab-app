@@ -31,11 +31,11 @@
 
 ## 5. Профили, резолверы и acp_client_io (5.5 + 5.8, итерация 5)
 
-- [ ] 5.1 Тесты kit: `parseShellWords`, `describeProfile` (acp-client-kit «Профили и резолверы транспорта»); тест сторожа для `acp_client_io` (`package:flutter/` запрещён, allowlist)
-- [ ] 5.2 `parseShellWords`, `describeProfile`, порты `ProfileStore`, `RecentProjectsStore` в kit — тесты kit 5.1 зелёные
-- [ ] 5.3 Тесты `acp_client_io`: `JsonFileProfileStore` (файл без значения токена), `JsonFileRecentProjectsStore`, `ConfigTransportResolver` с фабриками stdio и WebSocket против процесса и сокета на Dart VM (acp-client-kit «IO-адаптеры клиента»)
-- [ ] 5.4 Пакет `packages/dart/acp_client_io`: перенос `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider` из `apps/codelab_app/lib/core/platform/` (с их тестами), фабрики настоящих транспортов, `JsonFile*Store` — 5.3 зелёный
-- [ ] 5.5 Фасад: формы профиля пишут черновик, подключение — через резолверы; app импортирует адаптеры из `acp_client_io`; тесты 5.0 без правок; PR итерации 5
+- [x] 5.1 Тесты kit: `parseShellWords`, `parseEnvLines` (acp-client-kit «Профили и резолверы транспорта»); тест сторожа для `acp_client_io` (`package:flutter/` запрещён, `dart:io` разрешён, allowlist)
+- [x] 5.2 `parseShellWords`, `parseEnvLines`, порты `ProfileStore`, `RecentProjectsStore` (с `RecentProject`, `recentProjectsLimit`) в kit; `describeProfile` не вводится — нет потребителя (D8) — тесты kit 5.1 зелёные
+- [x] 5.3 Тесты `acp_client_io`: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `JsonFileProfileStore` (файл без значения токена), `JsonFileRecentProjectsStore`, `ConfigTransportResolver` с фабриками stdio и WebSocket против процесса и сокета на Dart VM (acp-client-kit «IO-адаптеры клиента»)
+- [x] 5.4 Пакет `packages/dart/acp_client_io` и вложенный `AGENTS.md`: перенос `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider` из `apps/codelab_app/lib/core/platform/` (в app у них не было тестов — тесты новые), `ioTransportResolver`, `JsonFile*Store`; правило сторожа и allowlist — 5.3 зелёный
+- [x] 5.5 Фасад: формы профиля пишут черновик, профиль строится через `parseShellWords`/`parseEnvLines` kit, подключение — через резолверы; app импортирует адаптеры из `acp_client_io`, прежние пути `core/platform/` — реэкспорт для тестов; тесты 5.0 без правок; PR итерации 5
 
 ## 6. Команды, опции, инспектор, диагностика (5.6 + 5.7, итерация 6)
 

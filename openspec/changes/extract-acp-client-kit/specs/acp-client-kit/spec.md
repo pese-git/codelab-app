@@ -77,7 +77,7 @@
 - **THEN** `WorkspaceState.connection` становится `ConnectionFailed` с сообщением о неподдерживаемом профиле, транспорт не открывается
 
 ### Requirement: IO-адаптеры клиента
-`dart:io`-реализации портов клиента SHALL жить в `packages/dart/acp_client_io`: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, фабрики настоящих транспортов stdio и WebSocket для `ConfigTransportResolver` kit, `JsonFileProfileStore` (`~/.codelab/profiles.json`) и `JsonFileRecentProjectsStore`. Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app.
+`dart:io`-реализации портов клиента SHALL жить в `packages/dart/acp_client_io`: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `ioTransportResolver` — `ConfigTransportResolver` kit с настоящими транспортами stdio и WebSocket, `JsonFileProfileStore` (`~/.codelab/profiles.json`) и `JsonFileRecentProjectsStore`. Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app.
 
 #### Scenario: Профили сохраняются в JSON
 - **WHEN** `JsonFileProfileStore` сохраняет профиль `WebSocketProfile` и читает его заново

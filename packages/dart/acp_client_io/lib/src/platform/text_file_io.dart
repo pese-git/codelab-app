@@ -2,10 +2,19 @@ import 'dart:io';
 
 import 'package:acp_client_core/acp_client_core.dart';
 
-/// `dart:io`-backed implementation of the ACP `fs/read_text_file` and
-/// `fs/write_text_file` client-side ports — see
-/// `docs/architecture/platform-integration.md` §9-10 for why this adapter
-/// lives here rather than in `acp_client_core`.
+/// Реализация клиентских портов ACP `fs/read_text_file` и
+/// `fs/write_text_file` на `dart:io`.
+///
+/// Почему: `acp_client_core` и kit web-безопасны и не трогают файловую
+/// систему; адаптер живёт в `acp_client_io`, общем для app и CLI
+/// (`docs/architecture/platform-integration.md` §9–10; design D2 change
+/// `extract-acp-client-kit`).
+///
+/// Как использовать: composition root передаёт экземпляр в
+/// `AcpClientApplication(textFileReader:, textFileWriter:)`. Ограничение
+/// путей рабочей папкой сессии делает ядро клиента до вызова адаптера
+/// (`AGENTS.md` §10). Отсутствующий файл — `FsNotFoundFailure`, остальные
+/// ошибки файловой системы — `FsIoFailure`.
 final class IoTextFileIo implements TextFileReader, TextFileWriter {
   const IoTextFileIo();
 

@@ -57,6 +57,9 @@ const rules = [
   // Общий клиентский слой app и CLI — чистый Dart и web-безопасен; IO-адаптеры
   // клиента — в acp_client_io (design D11 change `extract-acp-client-kit`).
   PackageRule('packages/dart/acp_client_kit', forbidden: webUnsafe),
+  // dart:io-адаптеры клиента для app и CLI: dart:io и IO-транспорты разрешены,
+  // Flutter — нет (design D11 change `extract-acp-client-kit`).
+  PackageRule('packages/dart/acp_client_io', forbidden: ['package:flutter/']),
   PackageRule(
     'packages/dart/codelab_agent_io',
     forbidden: ['package:flutter/', 'package:acp_'],
@@ -78,7 +81,6 @@ const rules = [
     ],
   ),
   // stage 8: codelab_agent_mcp — webUnsafe
-  // stage 5: acp_client_io — ['package:flutter/']
   // stage 6: apps/codelab_cli — ['package:flutter/', 'package:codelab_agent_'];
   //   apps/codelab_cli/lib/src — ['package:dart_tui/'], exclude: ['tui/'], sealExclude: false
   //   (dart_tui only in lib/src/tui/, §12.2.7; the rest of the CLI goes through TuiRunner)

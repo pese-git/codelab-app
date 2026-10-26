@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:acp_client_core/acp_client_core.dart';
+import 'package:acp_client_io/acp_client_io.dart' show WorkingDirectoryProvider;
 import 'package:acp_client_kit/acp_client_kit.dart'
     show
         AcpClientBackend,
@@ -20,10 +21,13 @@ import 'package:acp_client_kit/acp_client_kit.dart'
         NoticeItem,
         NoticeKind,
         PendingApprovalView,
+        parseEnvLines,
+        parseShellWords,
         PromptCompleted,
         PromptFailed,
         PromptOutcome,
         PromptQueued,
+        RecentProjectsStore,
         Reconnecting,
         ResolvedApprovalView,
         SessionHandle,
@@ -41,8 +45,6 @@ import 'package:fluent_ui/fluent_ui.dart' show FluentIcons;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/platform/project_folder_picker.dart';
-import '../../../core/platform/recent_projects_store.dart';
-import '../../../core/platform/working_directory_provider.dart';
 
 typedef CodeLabStdioTransportFactory =
     AcpTransport Function(StdioAcpTransportConfig config);
@@ -1484,8 +1486,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           id: 'codelab_app.stdio',
           label: state.selectedProfileLabel,
           command: command,
-          args: _splitShellWords(state.stdioArgs),
-          env: _parseEnv(state.stdioEnv),
+          args: parseShellWords(state.stdioArgs),
+          env: parseEnvLines(state.stdioEnv),
           runInProjectDirectory: state.runAgentFromProjectDirectory,
         );
       case CodeLabTransportType.webSocket:
@@ -1944,32 +1946,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     }
 
     return const JsonEncoder.withIndent('  ').convert(_redactor.redact(value));
-  }
-
-  List<String> _splitShellWords(String value) => value
-      .split(RegExp(r'\s+'))
-      .map((part) => part.trim())
-      .where((part) => part.isNotEmpty)
-      .toList(growable: false);
-
-  Map<String, String> _parseEnv(String value) {
-    final env = <String, String>{};
-    for (final line in value.split('\n')) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) {
-        continue;
-      }
-
-      final separator = trimmed.indexOf('=');
-      if (separator <= 0) {
-        continue;
-      }
-
-      env[trimmed.substring(0, separator).trim()] = trimmed
-          .substring(separator + 1)
-          .trim();
-    }
-    return env;
   }
 
   AcpConnectionStatus _connectionStatusFor(ConnectionView connection) =>

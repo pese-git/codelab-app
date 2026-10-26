@@ -5,10 +5,16 @@ import 'dart:typed_data';
 
 import 'package:acp_client_core/acp_client_core.dart';
 
-/// `dart:io`-backed implementation of the ACP `terminal/*` client-side
-/// port — see `docs/architecture/platform-integration.md` §9-10 for why
-/// this adapter lives here rather than in `acp_client_core`, and
-/// `add-acp-terminal-client-support/design.md` for the port's shape.
+/// Реализация клиентского порта ACP `terminal/*` на `dart:io`.
+///
+/// Почему: процессы — забота платформы, а не web-безопасного ядра клиента;
+/// адаптер общий для app и CLI (`docs/architecture/platform-integration.md`
+/// §9–10; форма порта — `add-acp-terminal-client-support/design.md`).
+///
+/// Как использовать: composition root передаёт экземпляр в
+/// `AcpClientApplication(terminalProcessRunner:)`. Вывод stdout и stderr
+/// копится вместе и при `outputByteLimit` обрезается с начала по границе
+/// символа UTF-8; не запустившийся процесс — `TerminalStartFailure`.
 final class IoTerminalProcessRunner implements TerminalProcessRunner {
   const IoTerminalProcessRunner();
 

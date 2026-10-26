@@ -4,7 +4,7 @@
 
 ## 1. Назначение
 
-Общий клиентский слой ACP без UI: рабочее пространство (`ClientWorkspace`), соединение (`ConnectionView`, профили, резолверы транспорта), сессии (`SessionHandle`, `SessionView`). Его используют `apps/codelab_app` (через фасад `CodeLabShellCubit`) и `apps/codelab_cli` (этап 6). Хосты только отображают `WorkspaceState` и `SessionView`; политика — когда слать, как реагировать на сбой, что считать «сессия занята» — живёт здесь.
+Общий клиентский слой ACP без UI: рабочее пространство (`ClientWorkspace`), соединение (`ConnectionView`, профили и их разбор, резолверы транспорта), сессии (`SessionHandle`, `SessionView`), транскрипт (`TranscriptProjector`), очередь промптов (`PromptQueue`), порты хранилищ (`ProfileStore`, `RecentProjectsStore`). Его используют `apps/codelab_app` (через фасад `CodeLabShellCubit`) и `apps/codelab_cli` (этап 6). Хосты только отображают `WorkspaceState` и `SessionView`; политика — когда слать, как реагировать на сбой, что считать «сессия занята» — живёт здесь.
 
 ## 2. Границы
 
