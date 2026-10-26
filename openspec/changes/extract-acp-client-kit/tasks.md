@@ -19,9 +19,9 @@
 
 ## 3. Проекция транскрипта (5.3, итерация 3)
 
-- [ ] 3.1 Тест `transcript_projector_test.dart: incremental projection equals full rebuild for every fixture` и случаи алгоритма (дельты, повторный `tool_call`, `tool_call_update` без `tool_call`, привязка одобрения, `NoticeItem` для отмены и ошибки, повтор обновления — no-op) (acp-client-kit «Инкрементальная проекция транскрипта»)
-- [ ] 3.2 `TranscriptProjector`, `TranscriptItem`, склейка публикаций в микрозадаче (D5, D6) — 3.1 зелёный
-- [ ] 3.3 Фасад строит `transcriptEntries` из `SessionView.transcript`; `_agentTranscriptEntries`, `_toolCallTranscriptEntry`, `_transcriptEntriesForSession` удалены; тесты 5.0 и `widget_test.dart` без правок; PR итерации 3
+- [x] 3.1 Тест `transcript_projector_test.dart: incremental projection equals full rebuild for every fixture` (драйвер `ClientFixtureUser` вынесен в `acp_testing`) и случаи алгоритма (дельты, пустой отрезок, повторный `tool_call`, `tool_call_update`, привязка одобрения и фокус, одобрение без `tool_call` в конце хода, `NoticeItem` для ошибки и пустого хода, повтор снимка — no-op) (acp-client-kit «Инкрементальная проекция транскрипта»)
+- [x] 3.2 `TranscriptProjector`, `projectTranscript`, `TranscriptItem`, `SessionView.transcript` с синхронной публикацией (D5, D6) — 3.1 зелёный
+- [x] 3.3 Фасад строит `transcriptEntries` из `SessionView.transcript`; `_agentTranscriptEntries`, `_toolCallTranscriptEntry` и вспомогательные функции проекции удалены, `_transcriptEntriesForSession` только отображает элементы kit; тесты 5.0 и `widget_test.dart` без правок; PR итерации 3
 
 ## 4. Очередь промптов и отмена (5.4, итерация 4)
 

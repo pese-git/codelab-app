@@ -5,6 +5,8 @@ import 'package:acp_client_core/acp_client_core.dart';
 import 'package:acp_client_kit/acp_client_kit.dart'
     show
         AcpClientBackend,
+        AgentTextItem,
+        ApprovalStateView,
         ClientWorkspace,
         ClientWorkspaceException,
         ConfigTransportResolver,
@@ -15,7 +17,16 @@ import 'package:acp_client_kit/acp_client_kit.dart'
         Connecting,
         Disconnected,
         InMemorySecretSource,
+        NoticeItem,
+        NoticeKind,
+        PendingApprovalView,
         Reconnecting,
+        ResolvedApprovalView,
+        ThoughtItem,
+        ToolCallItem,
+        ToolCallStatusView,
+        TranscriptItem,
+        UserItem,
         WorkspaceState;
 import 'package:acp_protocol/acp_protocol.dart';
 import 'package:acp_transports/acp_transports.dart';
@@ -50,25 +61,11 @@ enum CodeLabTransportType {
   final String label;
 }
 
-/// Discriminates the two streaming `SessionUpdate` kinds that
-/// [CodeLabShellCubit._agentTranscriptEntries] coalesces runs of — kept as
-/// a small named enum (rather than comparing `update.runtimeType`) so the
-/// adjacency check reads as "same streaming kind" and stays exhaustive if
-/// `SessionUpdate` grows another chunk-like variant.
-enum _StreamingChunkKind { message, thought }
-
 /// Selects which [Logger] method [CodeLabShellCubit._recordDiagnostic]
 /// calls — a local concept, not a UI type (see
 /// `replace-debug-log-panel-with-fluent/design.md`, Decision 5: this cubit
 /// no longer keeps a displayable diagnostics list of its own).
 enum _DiagnosticSeverity { debug, info, warning, error }
-
-_StreamingChunkKind? _streamingChunkKind(SessionUpdate update) =>
-    switch (update) {
-      AgentMessageChunk() => _StreamingChunkKind.message,
-      AgentThoughtChunk() => _StreamingChunkKind.thought,
-      _ => null,
-    };
 
 final class CodeLabShellState {
   const CodeLabShellState({
@@ -552,6 +549,11 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   final RecentProjectsStore _recentProjectsStore;
   final Logger _logger;
   final _redactor = const SecretRedactor();
+
+  /// Подписка на изменения сессий ядра клиента. Открывается после
+  /// подписки [_workspace]: широковещательный синхронный поток доставляет
+  /// события в порядке подписки, поэтому `SessionView` kit к вызову
+  /// [_handleSessionChange] уже обновлён.
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
 
@@ -1549,11 +1551,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         PermissionOptionKind.rejectAlways => AcpApprovalOptionKind.rejectAlways,
       };
 
-  String? _commandFromToolCall(ToolCallRecord toolCall) {
-    final command = toolCall.rawInput?['command'];
-    return command is String && command.trim().isNotEmpty ? command : null;
-  }
-
   /// Профиль подключения из формы; `null` — форма не заполнена (нет
   /// команды stdio или корректного адреса WebSocket).
   ///
@@ -1647,342 +1644,102 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         AcpClientUnexpectedFailure(:final message) => message,
       };
 
-  /// `PromptTurn.failureMessage` is `error.toString()`, captured by
-  /// `AcpClientApplication.sendPrompt`'s catch block before the original
-  /// typed exception is discarded — unlike [_failureMessage] above, which
-  /// reads a clean `message` field off a still-typed
-  /// `AcpClientApplicationFailure`. Several domain exceptions
-  /// (`AcpClientApplicationException`, `AcpTransportException`,
-  /// `StateTransitionException`) override `toString()` as
-  /// `"ClassName: <message>"` / `"ClassName(code): <message>"`, so the raw
-  /// value leaks an internal exception type name into user-facing text.
-  /// Strips that prefix on a best-effort basis — the original typed error
-  /// object is gone by the time it reaches `PromptTurn`, so a string
-  /// heuristic is the only option available here (see
-  /// openspec/changes/add-streaming-message-coalescing/design.md, Open
-  /// Questions) — without needing changes to `acp_client_core`.
-  String _cleanDomainFailureMessage(String message) {
-    final prefix = RegExp(
-      r'^[A-Za-z_][A-Za-z0-9_]*(\([^)]*\))?: ',
-    ).matchAsPrefix(message);
-    return prefix == null ? message : message.substring(prefix.end);
-  }
-
-  /// Groups contiguous same-kind streaming chunks of [turn.updates] into a
-  /// single, concatenated entry instead of one entry per chunk — see
-  /// openspec/changes/add-streaming-message-coalescing/design.md ("Decisions").
-  /// Adjacency is determined by the raw update sequence, not just by which
-  /// updates contributed text: any other update kind interposed between two
-  /// same-kind chunks (e.g. a tool call) still starts a new entry, and a
-  /// switch between message and thought chunks always starts a new entry —
-  /// both stay mapped to the same `AcpTranscriptEntryKind.agent`/'Agent'
-  /// visual treatment as before, this only changes how many entries a run
-  /// of chunks produces.
-  List<AcpTranscriptEntry> _agentTranscriptEntries(
-    PromptTurn turn, {
-    required int baseIndex,
-    required String cwd,
-  }) {
-    final entries = <AcpTranscriptEntry>[];
-    final seenToolCallIds = <ToolCallId>{};
-    final focusedApprovalId = _earliestPendingApprovalId(turn);
-    _StreamingChunkKind? runKind;
-    var runText = StringBuffer();
-
-    void flush() {
-      final text = runText.toString().trim();
-      if (text.isNotEmpty) {
-        entries.add(
-          AcpTranscriptEntry(
-            id: 'agent-${baseIndex + entries.length + 1}',
-            kind: AcpTranscriptEntryKind.agent,
-            title: 'Agent',
-            body: text,
-          ),
-        );
-      }
-      runKind = null;
-      runText = StringBuffer();
-    }
-
-    for (final update in turn.updates) {
-      switch (update) {
-        case ToolCallSessionUpdate(:final toolCall):
-          flush();
-          if (seenToolCallIds.add(toolCall.toolCallId)) {
-            entries.add(
-              _toolCallTranscriptEntry(
-                id: 'tool-${baseIndex + entries.length + 1}',
-                toolCallId: toolCall.toolCallId,
-                turn: turn,
-                cwd: cwd,
-                focusedApprovalId: focusedApprovalId,
-              ),
-            );
-          }
-        case ToolCallUpdateSessionUpdate():
-          // Never creates its own entry — the position was already fixed by
-          // the initial `tool_call` above (or, if that never arrived, by the
-          // defensive fallback below), and displayed content/status/approval
-          // is re-read from `turn.toolCalls`/`turn.approvals` (the live read
-          // model) at build time, not from this raw update — see
-          // embed-approval-in-thread/design.md, Decision 1. Still flushes,
-          // like any other non-message/thought update: it must not let two
-          // separate agent text runs coalesce into one entry across it.
-          flush();
-        default:
-          final kind = _streamingChunkKind(update);
-          if (kind == null) {
-            flush();
-            continue;
-          }
-          if (kind != runKind) {
-            flush();
-            runKind = kind;
-          }
-
-          final content = switch (update) {
-            AgentMessageChunk(:final content) => content,
-            AgentThoughtChunk(:final content) => content,
-            _ => null,
-          };
-          final text = switch (content) {
-            TextContent(:final text) => text,
-            _ => null,
-          };
-          if (text != null) {
-            runText.write(text);
-          }
-      }
-    }
-    flush();
-
-    // Defensive fallback: ACP lets an agent send `session/request_permission`
-    // for a tool call it never announced via a `tool_call` update — the
-    // domain model still records the approval (`turn.approvals`), it just
-    // never went through `turn.toolCalls`/`turn.updates` above. Every
-    // approval must be visible somewhere in the transcript (that is the
-    // whole point of this capability), so append one entry per such
-    // otherwise-unseen tool call at the end of this turn's entries — a
-    // best-effort position, since no stream event told us where it belongs.
-    for (final approval in turn.approvals.values) {
-      if (seenToolCallIds.add(approval.toolCall.id)) {
-        entries.add(
-          AcpTranscriptEntry(
-            id: 'tool-${baseIndex + entries.length + 1}',
-            kind: AcpTranscriptEntryKind.toolCall,
-            title: approval.toolCall.title,
-            toolCall: AcpToolCallSummary(
-              name: approval.toolCall.kind.wireName,
-              status: _toolCallStatus(approval.toolCall),
-              detail: _commandFromToolCall(approval.toolCall),
-            ),
-            approval: _transcriptApproval(
-              approval,
-              cwd: cwd,
-              focusedApprovalId: focusedApprovalId,
-            ),
-          ),
-        );
-      }
-    }
-
-    if (entries.isNotEmpty || !turn.isTerminal) {
-      return entries;
-    }
-
+  /// Транскрипт сессии из `acp_client_kit` в модели `acp_ui`.
+  ///
+  /// Проекцию строит kit (`TranscriptProjector`, design D5 change
+  /// `extract-acp-client-kit`); здесь только отображение. `SessionView` kit
+  /// уже обновлён к моменту вызова: рабочее пространство подписано на
+  /// `sessionChanges` раньше Cubit (см. [_sessionSubscription]). Id записей —
+  /// позиционные (`prompt-N`, `agent-N`, `tool-N`, `prompt-error-N`), как до
+  /// переноса.
+  List<AcpTranscriptEntry> _transcriptEntriesForSession(AcpSession session) {
+    final transcript =
+        _workspace.session(session.id)?.current.transcript ??
+        const <TranscriptItem>[];
     return [
-      AcpTranscriptEntry(
-        id: 'agent-${baseIndex + 1}',
-        kind: AcpTranscriptEntryKind.agent,
-        title: 'Agent',
-        body:
-            'Completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
-      ),
+      for (final (index, item) in transcript.indexed)
+        _transcriptEntry(item, index + 1, cwd: session.cwd),
     ];
   }
 
-  /// Builds the transcript entry for [toolCallId], embedding its live status
-  /// (from `turn.toolCalls`) and, when it has one, its approval — pending
-  /// (interactive) or resolved (compact marker) — instead of a separate
-  /// docked panel. See embed-approval-in-thread/design.md, Decisions 1–3.
-  AcpTranscriptEntry _toolCallTranscriptEntry({
-    required String id,
-    required ToolCallId toolCallId,
-    required PromptTurn turn,
+  AcpTranscriptEntry _transcriptEntry(
+    TranscriptItem item,
+    int position, {
     required String cwd,
-    required ApprovalRequestId? focusedApprovalId,
-  }) {
-    final toolCall = turn.toolCalls[toolCallId];
-    final approval = _approvalForToolCall(turn, toolCallId);
-
-    return AcpTranscriptEntry(
-      id: id,
-      kind: AcpTranscriptEntryKind.toolCall,
-      title: toolCall?.title ?? toolCallId.value,
-      toolCall: toolCall == null
-          ? null
-          : AcpToolCallSummary(
-              name: toolCall.kind.wireName,
-              status: _toolCallStatus(toolCall),
-              detail: _commandFromToolCall(toolCall),
-            ),
-      approval: _transcriptApproval(
-        approval,
-        cwd: cwd,
-        focusedApprovalId: focusedApprovalId,
+  }) => switch (item) {
+    UserItem(:final text) => AcpTranscriptEntry(
+      id: 'prompt-$position',
+      kind: AcpTranscriptEntryKind.user,
+      title: 'You',
+      body: text,
+    ),
+    AgentTextItem(:final text) ||
+    ThoughtItem(:final text) ||
+    NoticeItem(kind: NoticeKind.emptyTurn, :final text) => AcpTranscriptEntry(
+      id: 'agent-$position',
+      kind: AcpTranscriptEntryKind.agent,
+      title: 'Agent',
+      body: text,
+    ),
+    NoticeItem(kind: NoticeKind.error, :final text) => AcpTranscriptEntry(
+      id: 'prompt-error-$position',
+      kind: AcpTranscriptEntryKind.diagnostic,
+      title: 'Prompt failed',
+      body: text,
+    ),
+    ToolCallItem(:final title, :final details, :final approval) =>
+      AcpTranscriptEntry(
+        id: 'tool-$position',
+        kind: AcpTranscriptEntryKind.toolCall,
+        title: title,
+        toolCall: details == null
+            ? null
+            : AcpToolCallSummary(
+                name: details.kind.wireName,
+                status: _toolCallStatus(details.status),
+                detail: details.command,
+              ),
+        approval: _transcriptApproval(approval, cwd: cwd),
       ),
-    );
-  }
+  };
 
-  ApprovalRequest? _approvalForToolCall(
-    PromptTurn turn,
-    ToolCallId toolCallId,
-  ) {
-    for (final approval in turn.approvals.values) {
-      if (approval.toolCall.id == toolCallId) {
-        return approval;
-      }
-    }
-    return null;
-  }
-
-  /// The pending approval of [turn] with the earliest `requestedAt` — the
-  /// only one that owns the global approve/reject keyboard shortcuts when
-  /// several approvals are pending at once (FIFO, embed-approval-in-thread/
-  /// design.md, Decision 6). Others stay mouse-only until this one resolves.
-  ApprovalRequestId? _earliestPendingApprovalId(PromptTurn turn) {
-    final pending =
-        turn.approvals.values
-            .where((approval) => approval.status == ApprovalStatus.pending)
-            .toList()
-          ..sort((a, b) {
-            final aTime = a.requestedAt;
-            final bTime = b.requestedAt;
-            if (aTime == null || bTime == null) {
-              return 0;
-            }
-            return aTime.compareTo(bTime);
-          });
-    return pending.firstOrNull?.id;
-  }
-
+  /// Одобрение встроено в запись вызова: ожидающее — интерактивное,
+  /// решённое — компактная отметка (embed-approval-in-thread/design.md,
+  /// Decisions 1–3).
   AcpTranscriptApproval? _transcriptApproval(
-    ApprovalRequest? approval, {
+    ApprovalStateView? approval, {
     required String cwd,
-    required ApprovalRequestId? focusedApprovalId,
-  }) {
-    if (approval == null) {
-      return null;
-    }
-
-    if (approval.status != ApprovalStatus.pending) {
-      return AcpTranscriptApproval.resolved(label: _resolvedLabel(approval));
-    }
-
-    return AcpTranscriptApproval.pending(
-      risk: _approvalRisk(approval.riskLevel),
-      command: _commandFromToolCall(approval.toolCall),
+  }) => switch (approval) {
+    null => null,
+    ResolvedApprovalView(:final label) => AcpTranscriptApproval.resolved(
+      label: label,
+    ),
+    PendingApprovalView() => AcpTranscriptApproval.pending(
+      risk: _approvalRisk(approval.risk),
+      command: approval.command,
       cwd: cwd,
-      rawInput: _prettyJson(approval.toolCall.rawInput),
+      rawInput: _prettyJson(approval.rawInput),
       options: approval.options.map(_approvalOption).toList(),
       enabled: !state.isRespondingToApproval,
-      shortcutsEnabled: approval.id == focusedApprovalId,
+      shortcutsEnabled: approval.focused,
       onOptionSelected: (optionId) => unawaited(
         respondToApproval(
-          approvalId: approval.id,
+          approvalId: approval.approvalId,
           sessionId: approval.sessionId,
           optionId: optionId,
         ),
       ),
-    );
-  }
+    ),
+  };
 
-  String _resolvedLabel(ApprovalRequest approval) {
-    if (approval.status == ApprovalStatus.cancelled) {
-      return 'Cancelled';
-    }
-
-    final selectedId = approval.selectedOptionId;
-    if (selectedId == null) {
-      return 'Resolved';
-    }
-    for (final option in approval.options) {
-      if (option.optionId == selectedId) {
-        return option.name;
-      }
-    }
-    return selectedId.value;
-  }
-
-  /// ACP has no `cancelled` tool call status: a call the client cancelled is
-  /// `failed` with [ToolCallRecord.cancelledByClient] and shows as Cancelled
-  /// (fix-prompt-cancel-tool-calls/design.md, D3).
-  AcpToolCallStatus _toolCallStatus(ToolCallRecord toolCall) =>
-      switch (toolCall.status) {
-        _ when toolCall.cancelledByClient => AcpToolCallStatus.cancelled,
-        ToolCallStatus.pending => AcpToolCallStatus.queued,
-        ToolCallStatus.inProgress => AcpToolCallStatus.running,
-        ToolCallStatus.completed => AcpToolCallStatus.succeeded,
-        ToolCallStatus.failed => AcpToolCallStatus.failed,
+  AcpToolCallStatus _toolCallStatus(ToolCallStatusView status) =>
+      switch (status) {
+        ToolCallStatusView.queued => AcpToolCallStatus.queued,
+        ToolCallStatusView.running => AcpToolCallStatus.running,
+        ToolCallStatusView.succeeded => AcpToolCallStatus.succeeded,
+        ToolCallStatusView.failed => AcpToolCallStatus.failed,
+        ToolCallStatusView.cancelled => AcpToolCallStatus.cancelled,
       };
-
-  /// Sole source of `transcriptEntries` — rebuilds the full transcript for
-  /// [session] from `session.turns` from scratch. Called from
-  /// [_handleSessionChange] on every `sessionChanges` event (including one
-  /// for each streamed chunk of an in-progress turn, since `session.turns`
-  /// already contains the active, non-terminal turn — see
-  /// openspec/changes/add-streaming-message-coalescing/design.md), not just
-  /// when switching to a different session.
-  List<AcpTranscriptEntry> _transcriptEntriesForSession(AcpSession session) {
-    final entries = <AcpTranscriptEntry>[];
-    for (final turn in session.turns) {
-      final promptText = _textFrom(turn.prompt);
-      if (promptText != null && promptText.isNotEmpty) {
-        entries.add(
-          AcpTranscriptEntry(
-            id: 'prompt-${entries.length + 1}',
-            kind: AcpTranscriptEntryKind.user,
-            title: 'You',
-            body: promptText,
-          ),
-        );
-      }
-
-      entries.addAll(
-        _agentTranscriptEntries(
-          turn,
-          baseIndex: entries.length,
-          cwd: session.cwd,
-        ),
-      );
-
-      if (turn.status == PromptTurnStatus.failed &&
-          turn.failureMessage != null) {
-        entries.add(
-          AcpTranscriptEntry(
-            id: 'prompt-error-${entries.length + 1}',
-            kind: AcpTranscriptEntryKind.diagnostic,
-            title: 'Prompt failed',
-            body:
-                'Failed to send prompt: '
-                '${_cleanDomainFailureMessage(turn.failureMessage!)}',
-          ),
-        );
-      }
-    }
-
-    return entries;
-  }
-
-  String? _textFrom(List<ContentBlock> blocks) {
-    final text = blocks
-        .whereType<TextContent>()
-        .map((block) => block.text)
-        .where((text) => text.trim().isNotEmpty)
-        .join('\n');
-    return text.isEmpty ? null : text;
-  }
 
   List<CodeLabInspectorEntry> _inspectorEntriesForSession(AcpSession session) {
     final turn = session.turns.lastOrNull;

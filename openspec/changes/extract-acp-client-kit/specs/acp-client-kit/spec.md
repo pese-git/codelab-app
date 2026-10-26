@@ -23,7 +23,7 @@
 - **THEN** ни `WorkspaceState`, ни `SessionView` не меняются
 
 ### Requirement: Инкрементальная проекция транскрипта
-`TranscriptProjector` SHALL строить `TranscriptItem` сессии инкрементально по новым `session/update`: дельты `agent_message_chunk` и `agent_thought_chunk` дописываются в открытый потоковый элемент того же вида; `tool_call` с известным `toolCallId` обновляет существующий элемент, а не добавляет второй; `tool_call_update` заменяет только пришедшие поля (`content` и `locations` — целиком); запрос разрешения привязывается к `ToolCallItem` по `toolCallId`; конец хода закрывает потоковые элементы, отмена и ошибка добавляют `NoticeItem`. Повторно обработанное обновление SHALL быть no-op. Для любой последовательности обновлений результат инкрементальной проекции SHALL совпадать с проекцией с нуля по полному списку.
+`TranscriptProjector` SHALL строить `TranscriptItem` сессии инкрементально по новым `session/update`: дельты `agent_message_chunk` и `agent_thought_chunk` подряд дописываются в один элемент того же вида, любое другое обновление закрывает отрезок; `tool_call` с известным `toolCallId` обновляет существующий элемент, а не добавляет второй; статус и одобрение вызова берутся из read-модели хода ядра клиента; запрос разрешения привязывается к `ToolCallItem` по `toolCallId`, а для вызова без `tool_call` — к элементу вызова в конце хода; сорвавшийся ход добавляет `NoticeItem` вида `error`, завершённый ход без вывода агента — `NoticeItem` вида `emptyTurn`. Повторно обработанный снимок сессии SHALL быть no-op. Для любой последовательности обновлений результат инкрементальной проекции SHALL совпадать с проекцией с нуля по всем ходам сессии.
 
 #### Scenario: Свойство на корпусе фикстур
 - **WHEN** выполняется `transcript_projector_test.dart: incremental projection equals full rebuild for every fixture`
@@ -34,7 +34,7 @@
 - **THEN** транскрипт содержит один `ToolCallItem` на прежней позиции с полями второго кадра
 
 ### Requirement: Публикация представлений сессии
-`SessionHandle.view` SHALL публиковать неизменяемый `SessionView` с растущим `revision`; изменения, пришедшие в одном событии цикла, SHALL склеиваться в одну публикацию (микрозадача). `SessionView.status` активной сессии `running` (в том числе с ожидающими одобрениями) или `cancelling` SHALL означать «сессия занята»; `SessionView.configOptionInFlight` SHALL быть отличным от `null` на время запроса `session/set_config_option`, и повторный `SessionHandle.setConfigOption` в это время SHALL быть no-op.
+`SessionHandle.view` SHALL публиковать неизменяемый `SessionView` с растущим `revision` синхронно: одно изменение сессии в ядре клиента — одна публикация, и `SessionHandle.current` уже обновлён, когда другие подписчики `sessionChanges` получают это изменение. `SessionView.status` активной сессии `running` (в том числе с ожидающими одобрениями) или `cancelling` SHALL означать «сессия занята»; `SessionView.configOptionInFlight` SHALL быть отличным от `null` на время запроса `session/set_config_option`, и повторный `SessionHandle.setConfigOption` в это время SHALL быть no-op.
 
 #### Scenario: Флаги фасада совпадают с прежними
 - **WHEN** ход идёт и ждёт одобрения

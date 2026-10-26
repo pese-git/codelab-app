@@ -7,6 +7,7 @@ import '../backend/agent_backend.dart';
 import '../connection/connection_profile.dart';
 import '../connection/connection_view.dart';
 import '../connection/transport_resolver.dart';
+import '../transcript/transcript_projector.dart';
 import 'client_workspace_exception.dart';
 import 'workspace_state.dart';
 
@@ -72,9 +73,11 @@ abstract interface class ClientWorkspace {
 ///
 /// Почему: хосту нужен объект сессии, а не id и выборка из общего списка.
 ///
-/// Для чего: текущее [SessionView] и его изменения. Отправку промптов,
-/// отмену, одобрения и опции переносят следующие итерации change
-/// (design D12).
+/// Для чего: текущее [SessionView] и его изменения. [current] обновляется
+/// синхронно с изменением сессии в ядре клиента, до остальных подписчиков
+/// `sessionChanges`, подписанных позже рабочего пространства (design D6).
+/// Отправку промптов, отмену, одобрения и опции переносят следующие
+/// итерации change (design D12).
 abstract interface class SessionHandle {
   SessionId get id;
 
@@ -359,11 +362,14 @@ final class _SessionHandle implements SessionHandle {
   _SessionHandle(AcpSession session)
     : id = session.id,
       cwd = session.cwd,
-      _current = SessionView(
-        revision: 0,
-        status: SessionStatusView.of(session.status),
-      ),
-      _session = session;
+      _session = session {
+    _projector.apply(session);
+    _current = SessionView(
+      revision: 0,
+      status: SessionStatusView.of(session.status),
+      transcript: _projector.items,
+    );
+  }
 
   @override
   final SessionId id;
@@ -372,7 +378,8 @@ final class _SessionHandle implements SessionHandle {
   final String cwd;
 
   final _views = StreamController<SessionView>.broadcast(sync: true);
-  SessionView _current;
+  final _projector = TranscriptProjector();
+  late SessionView _current;
   AcpSession _session;
 
   @override
@@ -388,9 +395,11 @@ final class _SessionHandle implements SessionHandle {
       return;
     }
     _session = session;
+    _projector.apply(session);
     _current = SessionView(
       revision: _current.revision + 1,
       status: SessionStatusView.of(session.status),
+      transcript: _projector.items,
     );
     if (!_views.isClosed) {
       _views.add(_current);
