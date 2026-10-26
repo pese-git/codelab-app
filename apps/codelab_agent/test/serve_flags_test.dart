@@ -225,6 +225,24 @@ void main() {
       expect(parse(scripted).logLevel, LogLevel.info);
     });
 
+    // Профиль codelab-app по умолчанию передаёт `CODELAB_LOG_LEVEL=DEBUG`
+    // (Python-агент принимал верхний регистр), поэтому уровень разбирается
+    // без учёта регистра.
+    test('the log level is case-insensitive', () {
+      expect(
+        parse(scripted, {'CODELAB_LOG_LEVEL': 'DEBUG'}).logLevel,
+        LogLevel.debug,
+      );
+      expect(
+        parse([...scripted, '--log-level', 'INFO']).logLevel,
+        LogLevel.info,
+      );
+      expect(
+        () => parse([...scripted, '--log-level', 'LOUD']),
+        usageError('unknown log level: LOUD'),
+      );
+    });
+
     test('an unknown CODELAB_* variable is a warning', () {
       final options = parse(scripted, {
         'CODELAB_MODLE': 'x',
