@@ -95,13 +95,16 @@ abstract class SessionView with _$SessionView {
 /// «сессия занята»; [notLoaded] — сессия есть у агента (`session/list`), но
 /// в этом запуске не открыта: у неё нет `SessionHandle`, открывает её
 /// `ClientWorkspace.loadSession` (design D3 change
-/// `add-session-list-and-reload`).
+/// `add-session-list-and-reload`); [detached] — сессия была открыта, но
+/// после переподключения новое соединение её не знает: промпты в неё не
+/// отправляются, очередь не сливается (design D5).
 enum SessionStatusView {
   idle,
   running,
   cancelling,
   failed,
-  notLoaded;
+  notLoaded,
+  detached;
 
   /// Статус представления для статуса жизненного цикла ядра клиента.
   static SessionStatusView of(SessionLifecycleStatus status) =>

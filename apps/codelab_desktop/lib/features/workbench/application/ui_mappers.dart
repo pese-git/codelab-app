@@ -104,6 +104,18 @@ List<CodeLabTranscriptEntry> transcriptEntriesOf(
         title: 'Prompt failed',
         body: text,
       ),
+      // Связь сессии с агентом: после переподключения или перезапуска
+      // (design D5, D6 change `add-session-list-and-reload`).
+      NoticeItem(
+        kind: NoticeKind.detached || NoticeKind.reconnected,
+        :final text,
+      ) =>
+        CodeLabTranscriptEntry(
+          id: 'session-notice-${index + 1}',
+          kind: CodeLabTranscriptEntryKind.diagnostic,
+          title: 'Session',
+          body: text,
+        ),
       ToolCallItem(:final title, :final details, :final approval) =>
         CodeLabTranscriptEntry(
           id: 'tool-${index + 1}',
