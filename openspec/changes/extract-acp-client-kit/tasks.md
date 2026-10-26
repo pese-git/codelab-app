@@ -39,9 +39,9 @@
 
 ## 6. Команды, опции, инспектор, диагностика (5.6 + 5.7, итерация 6)
 
-- [ ] 6.1 Тесты kit: `CommandCatalog` (слияние клиентских и агентских команд, конфликт имён), `ConfigOptionView`, `InspectorProjection` (записи одобрения, вызова, протокола, диагностики), `describeFailure` с редакцией токена (acp-client-kit «Диагностика без секретов»)
-- [ ] 6.2 `CommandCatalog`, `ConfigOptionView`, `InspectorProjection`, `WorkspaceDiagnostic`, `describeFailure` — 6.1 зелёный; сопоставление запроса палитры остаётся в `acp_ui` (D9)
-- [ ] 6.3 Фасад: палитра, опции, инспектор и диагностика через kit; `_inspectorEntriesFor*`, `_failureMessage`, `_agentCommandsFor` удалены; тесты 5.0 без правок; PR итерации 6
+- [x] 6.1 Тесты kit: `ConfigOptionView`, `setConfigOption` в полёте и при ошибке, `agentCommands`, `pendingApprovals` и `respond` по сессиям, `InspectorProjection` (записи сессии, одобрения, вызова, протокола, хода; редакция сырых аргументов), `describeFailure` с редакцией токена, диагностика kit (потеря соединения без дубля и без токена, исходы хода, отмена) (acp-client-kit «Диагностика без секретов», «Одобрения привязаны к вызову»)
+- [x] 6.2 `AgentCommandView`, `ConfigOptionView`, `SessionHandle.setConfigOption`/`respond`, `SessionView.pendingApprovals`, `InspectorProjection`, `WorkspaceDiagnostic`, `ClientWorkspace.diagnostics`, `describeFailure`, `formatRedactedJson` — 6.1 зелёный; `CommandCatalog` и сопоставление запроса палитры — `add-command-palette-agent-commands` (D9)
+- [x] 6.3 Фасад: команды агента, опции, одобрения, инспектор и диагностика через kit; логика `_inspectorEntriesFor*`, `_failureMessage`, `_agentCommandAction`, `_configOptionUiModel` удалена, привязки use case-ов `acp_client_core` убраны из графа; тесты 5.0 без правок; PR итерации 6
 
 ## 7. Разделение Cubit-ов (5.9, итерация 7)
 

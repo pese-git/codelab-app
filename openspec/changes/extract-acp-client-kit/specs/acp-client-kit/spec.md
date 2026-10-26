@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Общий клиентский слой без UI
-Логика клиента ACP — подключение, сессии, очередь промптов, проекция транскрипта, одобрения, опции конфигурации, команды, инспектор и диагностика — SHALL жить в пакете `packages/dart/acp_client_kit` на чистом Dart, а не в Flutter-приложении. Публичный API SHALL экспортироваться через `lib/acp_client_kit.dart`: `ClientWorkspace`, `SessionHandle`, `WorkspaceState`, `SessionView`, `ConnectionView`, `TranscriptItem`, `PromptQueue`, `ConnectionProfile`, `TransportResolver`, `SecretSource`, `CommandCatalog`, `ConfigOptionView`, `InspectorProjection`, `WorkspaceDiagnostic`. Источник данных kit SHALL быть портом `AgentBackend`; реализация `AcpClientBackend` SHALL работать поверх `AcpClientApplication` из `acp_client_core`. В коде kit НЕ SHALL быть членов, помеченных в плане как «после MVP», и заглушек для них.
+Логика клиента ACP — подключение, сессии, очередь промптов, проекция транскрипта, одобрения, опции конфигурации, команды, инспектор и диагностика — SHALL жить в пакете `packages/dart/acp_client_kit` на чистом Dart, а не в Flutter-приложении. Публичный API SHALL экспортироваться через `lib/acp_client_kit.dart`: `ClientWorkspace`, `SessionHandle`, `WorkspaceState`, `SessionView`, `ConnectionView`, `TranscriptItem`, `PromptQueue`, `ConnectionProfile`, `TransportResolver`, `SecretSource`, `AgentCommandView`, `ConfigOptionView`, `InspectorProjection`, `WorkspaceDiagnostic`, `describeFailure`. Источник данных kit SHALL быть портом `AgentBackend`; реализация `AcpClientBackend` SHALL работать поверх `AcpClientApplication` из `acp_client_core`. В коде kit НЕ SHALL быть членов, помеченных в плане как «после MVP», и заглушек для них.
 
 #### Scenario: Kit используется без Flutter
 - **WHEN** Dart-программа без Flutter создаёт `ClientWorkspace` с `AcpClientBackend` и тестовым резолвером на `FakeAcpTransport`
@@ -63,11 +63,15 @@
 - **THEN** одобрение A остаётся ожидающим
 
 ### Requirement: Диагностика без секретов
-`ClientWorkspace.diagnostics` SHALL публиковать `WorkspaceDiagnostic` только после редакции секретов `SecretRedactor`; `describeFailure` SHALL давать текст ошибки для UI и CLI без токенов и ключей.
+`ClientWorkspace.diagnostics` SHALL публиковать `WorkspaceDiagnostic` о событиях kit — исходе хода, отмене, ответе на одобрение, опции конфигурации, неожиданной потере соединения — только после редакции секретов `SecretRedactor`; `describeFailure` SHALL давать текст ошибки для UI и CLI без токенов и ключей.
 
 #### Scenario: Токен в тексте ошибки
-- **WHEN** ошибка подключения WebSocket содержит Bearer-токен профиля
-- **THEN** опубликованная диагностика содержит маску вместо токена
+- **WHEN** транспорт установленного соединения падает с сообщением, содержащим токен
+- **THEN** опубликованная диагностика `Connection to ACP agent lost` содержит маску вместо токена
+
+#### Scenario: Сбой явного подключения не дублируется
+- **WHEN** `connect` завершается ошибкой транспорта
+- **THEN** диагностика потери соединения не публикуется
 
 ### Requirement: Профили и резолверы транспорта
 `ConnectionProfile` SHALL быть закрытой иерархией `StdioProfile` и `WebSocketProfile`; токен WebSocket в профиле SHALL храниться ссылкой, а не значением; значение SHALL давать порт `SecretSource`. Превращение профиля в `AcpTransport` SHALL выполнять `TransportResolver`, который регистрирует composition root; kit НЕ SHALL открывать процессы и сокеты сам. `ConfigTransportResolver` kit SHALL переводить профиль в конфигурацию транспорта `acp_transports` и вызывать фабрику, которую передал хост.

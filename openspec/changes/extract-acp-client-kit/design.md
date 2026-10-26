@@ -61,7 +61,7 @@
 
 Конструктор фасада сохраняет прежние параметры: `widget_test.dart` создаёт `CodeLabShellCubit` напрямую, а его текст не меняется. Граф cherrypick передаёт `workspace` и `secrets`; без них Cubit строит `ClientWorkspace` сам поверх `application` и фабрик транспорта и закрывает его в `close()`. Параметры `createSessionUseCase` и `reconnectUseCase` после итерации 2 не используются и удаляются вместе с фасадом после этапа 9. Алгоритм с повторами и загрузкой сессий (`09-10`, «Алгоритм переподключения») — в `add-session-list-and-reload`.
 
-Флаги совместимости `CodeLabShellState` (таблица переноса, строка «Флаги состояния») считает фасад: `isPromptSubmitting = canCancel = SessionView.status` активной сессии `running` (в том числе с ожидающими одобрениями) или `cancelling`; `isRespondingToConfigOption = configOptionInFlight != null`; повторный `setConfigOption` во время запроса — no-op.
+Флаги совместимости `CodeLabShellState` (таблица переноса, строка «Флаги состояния») считает фасад: `isPromptSubmitting = canCancel = SessionView.status` активной сессии `running` (в том числе с ожидающими одобрениями) или `cancelling`; повторный `SessionHandle.setConfigOption` во время запроса — no-op (`configOptionInFlight`). Флаги `isRespondingToConfigOption` и `isRespondingToApproval` фасад держит сам, как раньше: они глобальны для окна и сбрасываются при потере соединения, а запрос в полёте при неожиданном сбое транспорта ядро не завершает — флаг из `configOptionInFlight` остался бы поднятым.
 
 ### D5. Инкрементальная проекция транскрипта
 
@@ -105,10 +105,12 @@ Id элементов kit стабильны (`<turnId>/text-<i>`, `<turnId>/too
 
 ### D9. Команды, опции, инспектор, диагностика
 
-- `CommandCatalog` (`lib/src/commands/`): слияние клиентских команд и `available_commands_update` активной сессии, разрешение конфликтов имён — перенос `paletteActions`, `_agentCommandsFor`, `_agentCommandAction`. Сопоставление текста запроса остаётся в `acp_ui` (`AcpCommandAction.filter`, подстрока) — переносится в kit и заменяется нечётким поиском в `add-command-palette-agent-commands`, вместе с тестом R-20. Так поведение палитры на этом change не меняется.
-- `ConfigOptionView` (`lib/src/config/`) — перенос `_configOptionsFor`.
-- `InspectorProjection` (`lib/src/inspector/`) — перенос `_inspectorEntriesFor*`; используется и командой CLI `/inspect` (этап 6).
-- `WorkspaceDiagnostic` и `describeFailure` (`lib/src/diagnostics/`) — перенос `_recordDiagnostic`, `_failureMessage`, `_cleanDomainFailureMessage`; редакция секретов — `SecretRedactor` из `acp_client_core` до публикации (`AGENTS.md` §10, §16).
+- Команды агента — `SessionView.agentCommands` (`AgentCommandView`: имя, описание, подсказка; `lib/src/session/`) — перенос `_agentCommandsFor`. `CommandCatalog` (клиентские команды + команды агента, разрешение конфликтов имён, поиск) на этом change не вводится: клиентские команды палитры заданы в `acp_ui` вместе с иконками (`AcpCommandAction.defaults`), конфликтов app сегодня не разрешает — обе команды видны в палитре, а сопоставление запроса — подстрока `AcpCommandAction.filter`. Каталог, нечёткий поиск и тест R-20 — change `add-command-palette-agent-commands`; поведение палитры здесь не меняется.
+- `ConfigOptionView` (`lib/src/session/`) — перенос `_configOptionsFor`; `SessionView.configOptions`, `configOptionInFlight` и `SessionHandle.setConfigOption` (D4).
+- Одобрения — `SessionView.pendingApprovals` (тот же `PendingApprovalView`, что в транскрипте) и `SessionHandle.respond`, перенос `respondToApproval`: ядро клиента отклоняет ответ на одобрение другой сессии (PERM-003).
+- `InspectorProjection` (`lib/src/inspector/`) — перенос `_inspectorEntriesFor*`; проекция по запросу хоста, а не поле `SessionView`: пересчёт на каждое изменение каждой сессии вернул бы стоимость O(обновлений хода) на каждый фрагмент ответа. Используется и командой CLI `/inspect` (этап 6). Фасад сохраняет прежние имена `CodeLabInspectorEntry`/`CodeLabInspectorCategory`/`CodeLabInspectorDetail` как `typedef` моделей kit.
+- `describeFailure` (`lib/src/diagnostics/`) — перенос `_failureMessage`; текст проходит `SecretRedactor` (`AGENTS.md` §10, §16). `formatRedactedJson` — сырые аргументы для инспектора и одобрений.
+- `WorkspaceDiagnostic` и `ClientWorkspace.diagnostics` — диагностика событий, которыми владеет kit: исход хода (в том числе из очереди), отмена, ответ на одобрение, опция конфигурации, неожиданная потеря соединения; важность — `DiagnosticSeverity` ядра клиента, `source` — прежний ключ лога app. Сообщения подключения и создания сессии зависят от формы хоста (команда, адрес), поэтому их по-прежнему пишет фасад, тоже через `describeFailure`.
 
 ### D10. Разделение Cubit-ов (5.9) и мапперы
 
@@ -127,7 +129,7 @@ Id элементов kit стабильны (`<turnId>/text-<i>`, `<turnId>/too
 3. **5.3** — `TranscriptProjector` и тест на фикстурах.
 4. **5.4** — `PromptQueue` и отмена.
 5. **5.5 + 5.8** — `parseShellWords`, `describeProfile`, порты хранилищ, `acp_client_io` (перенос адаптеров, фабрики настоящих транспортов, `JsonFile*Store`): фабрики живут в `acp_client_io`, поэтому задачи идут одним PR.
-6. **5.6 + 5.7** — `CommandCatalog`, `ConfigOptionView`, `InspectorProjection`, диагностика.
+6. **5.6 + 5.7** — команды агента, `ConfigOptionView`, одобрения, `InspectorProjection`, диагностика (`CommandCatalog` — `add-command-palette-agent-commands`, D9).
 7. **5.9** — разделение Cubit-ов, `ui_mappers.dart`, проверка размера `shell_cubit.dart`.
 
 После каждой итерации: тесты 5.0 и `widget_test.dart` зелёные без правок, `melos run check` зелёный, 8 интеграционных тестов собираются (`analyze`).

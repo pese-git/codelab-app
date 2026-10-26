@@ -29,6 +29,14 @@ abstract interface class AgentBackend {
   Future<PromptTurn> sendPrompt(SendPromptCommand command);
 
   Future<PromptTurn> cancelTurn(CancelTurnCommand command);
+
+  Future<ApprovalRequest> respondToPermission(
+    RespondToPermissionCommand command,
+  );
+
+  Future<AcpSession> setSessionConfigOption(
+    SetSessionConfigOptionCommand command,
+  );
 }
 
 /// [AgentBackend] поверх `AcpClientApplication`.
@@ -72,4 +80,14 @@ final class AcpClientBackend implements AgentBackend {
   @override
   Future<PromptTurn> cancelTurn(CancelTurnCommand command) =>
       _application.cancelTurn(command);
+
+  @override
+  Future<ApprovalRequest> respondToPermission(
+    RespondToPermissionCommand command,
+  ) => _application.respondToPermission(command);
+
+  @override
+  Future<AcpSession> setSessionConfigOption(
+    SetSessionConfigOptionCommand command,
+  ) => _application.setSessionConfigOption(command);
 }
