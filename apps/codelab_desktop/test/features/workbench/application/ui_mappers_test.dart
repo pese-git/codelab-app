@@ -254,7 +254,34 @@ void main() {
             id: 't1/tool-call-1',
             toolCallId: ToolCallId('call-1'),
             title: 'Clean',
-            approval: ResolvedApprovalView(label: 'Allowed once'),
+            approval: ResolvedApprovalView(
+              label: 'Allowed once',
+              outcome: ApprovalOutcomeView.allowed,
+            ),
+          ),
+        ],
+        cwd: '/work',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      final resolved =
+          entries.single.approval! as CodeLabTranscriptApprovalResolved;
+      expect(resolved.label, 'Allowed once');
+      expect(resolved.outcome, CodeLabApprovalOutcome.allowed);
+    });
+
+    test('a cancelled approval keeps its cancelled outcome', () {
+      final entries = transcriptEntriesOf(
+        const [
+          TranscriptItem.toolCall(
+            id: 't1/tool-call-1',
+            toolCallId: ToolCallId('call-1'),
+            title: 'Clean',
+            approval: ResolvedApprovalView(
+              label: 'Cancelled',
+              outcome: ApprovalOutcomeView.cancelled,
+            ),
           ),
         ],
         cwd: '/work',
@@ -263,8 +290,8 @@ void main() {
       );
 
       expect(
-        (entries.single.approval! as CodeLabTranscriptApprovalResolved).label,
-        'Allowed once',
+        (entries.single.approval! as CodeLabTranscriptApprovalResolved).outcome,
+        CodeLabApprovalOutcome.cancelled,
       );
     });
   });

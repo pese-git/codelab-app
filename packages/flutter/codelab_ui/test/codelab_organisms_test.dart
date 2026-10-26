@@ -185,6 +185,44 @@ void main() {
     expect(find.text('all tests passed'), findsOneWidget);
   });
 
+  testWidgets('a resolved approval is marked by its outcome: a check only '
+      'when allowed', (tester) async {
+    Future<void> pumpResolved(CodeLabApprovalOutcome outcome) {
+      return tester.pumpWidget(
+        FluentApp(
+          home: SizedBox(
+            width: 400,
+            height: 200,
+            child: CodeLabTranscriptPanel(
+              entries: [
+                CodeLabTranscriptEntry(
+                  id: 'call-1',
+                  kind: CodeLabTranscriptEntryKind.toolCall,
+                  title: 'Run command',
+                  approval: CodeLabTranscriptApproval.resolved(
+                    label: 'Resolved',
+                    outcome: outcome,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpResolved(CodeLabApprovalOutcome.allowed);
+    expect(find.byIcon(FluentIcons.check_mark), findsOneWidget);
+
+    await pumpResolved(CodeLabApprovalOutcome.cancelled);
+    expect(find.byIcon(FluentIcons.check_mark), findsNothing);
+    expect(find.byIcon(FluentIcons.cancel), findsOneWidget);
+
+    await pumpResolved(CodeLabApprovalOutcome.rejected);
+    expect(find.byIcon(FluentIcons.check_mark), findsNothing);
+    expect(find.byIcon(FluentIcons.blocked2), findsOneWidget);
+  });
+
   testWidgets(
     'auto-scrolls to a new pending approval only when already near the '
     'bottom',

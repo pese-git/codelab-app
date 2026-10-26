@@ -94,10 +94,28 @@ sealed class ApprovalStateView with _$ApprovalStateView {
     required bool focused,
   }) = PendingApprovalView;
 
-  /// Решено; [label] — имя выбранного варианта, `Cancelled` или `Resolved`.
-  const factory ApprovalStateView.resolved({required String label}) =
-      ResolvedApprovalView;
+  /// Решено; [label] — имя выбранного варианта, `Cancelled` или `Resolved`,
+  /// [outcome] — исход, по которому клиент выбирает отметку (галочка только у
+  /// разрешённого вызова).
+  const factory ApprovalStateView.resolved({
+    required String label,
+    required ApprovalOutcomeView outcome,
+  }) = ResolvedApprovalView;
 }
+
+/// Исход решённого одобрения для отображения.
+///
+/// Почему: одной метки мало — клиент рисовал зелёную галочку и у отменённого,
+/// и у отклонённого запроса, потому что не знал, чем он закончился.
+///
+/// Для чего: проекция [TranscriptProjector] выводит исход из статуса запроса
+/// и вида выбранного варианта ACP (`allow_*` / `reject_*`), а клиент по нему
+/// выбирает иконку и тон.
+///
+/// Как использовать: читать из [ResolvedApprovalView.outcome]; [unknown] —
+/// вариант без известного вида (агент прислал неизвестный `optionId` или
+/// ответ без варианта), клиент показывает его нейтрально.
+enum ApprovalOutcomeView { allowed, rejected, cancelled, unknown }
 
 /// Вид уведомления в транскрипте.
 enum NoticeKind {

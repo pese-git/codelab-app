@@ -30,9 +30,23 @@ sealed class CodeLabTranscriptApproval {
     bool shortcutsEnabled,
   }) = CodeLabTranscriptApprovalPending;
 
-  const factory CodeLabTranscriptApproval.resolved({required String label}) =
-      CodeLabTranscriptApprovalResolved;
+  const factory CodeLabTranscriptApproval.resolved({
+    required String label,
+    CodeLabApprovalOutcome outcome,
+  }) = CodeLabTranscriptApprovalResolved;
 }
+
+/// Исход решённого одобрения, по которому выбирается отметка в записи вызова.
+///
+/// Почему: раньше решённое одобрение всегда получало зелёную галочку, и
+/// отменённый запрос выглядел как «✓ Cancelled».
+///
+/// Для чего: отметка различает разрешённый, отклонённый и отменённый вызов;
+/// [unknown] — исход без известного вида варианта, показывается нейтрально.
+///
+/// Как использовать: app переводит в него исход из модели клиентского ядра и
+/// передаёт в [CodeLabTranscriptApproval.resolved].
+enum CodeLabApprovalOutcome { allowed, rejected, cancelled, unknown }
 
 final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
   const CodeLabTranscriptApprovalPending({
@@ -68,9 +82,13 @@ final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
 
 final class CodeLabTranscriptApprovalResolved
     extends CodeLabTranscriptApproval {
-  const CodeLabTranscriptApprovalResolved({required this.label});
+  const CodeLabTranscriptApprovalResolved({
+    required this.label,
+    this.outcome = CodeLabApprovalOutcome.unknown,
+  });
 
   final String label;
+  final CodeLabApprovalOutcome outcome;
 }
 
 class CodeLabTranscriptEntry {
@@ -484,11 +502,23 @@ class _AcpTranscriptApprovalContent extends StatelessWidget {
           shortcutsEnabled: shortcutsEnabled,
           onOptionSelected: onOptionSelected,
         ),
-      CodeLabTranscriptApprovalResolved(:final label) => Row(
+      CodeLabTranscriptApprovalResolved(:final label, :final outcome) => Row(
         children: [
-          const CodeLabIcon(
-            FluentIcons.check_mark,
-            tone: CodeLabTone.success,
+          CodeLabIcon(
+            switch (outcome) {
+              CodeLabApprovalOutcome.allowed => FluentIcons.check_mark,
+              CodeLabApprovalOutcome.rejected => FluentIcons.blocked2,
+              CodeLabApprovalOutcome.cancelled => FluentIcons.cancel,
+              CodeLabApprovalOutcome.unknown => FluentIcons.info,
+            },
+            // Тоны — как у статуса вызова в `CodeLabToolCallSummary`:
+            // отмена — warning, отказ — danger.
+            tone: switch (outcome) {
+              CodeLabApprovalOutcome.allowed => CodeLabTone.success,
+              CodeLabApprovalOutcome.rejected => CodeLabTone.danger,
+              CodeLabApprovalOutcome.cancelled => CodeLabTone.warning,
+              CodeLabApprovalOutcome.unknown => CodeLabTone.neutral,
+            },
             size: 13,
           ),
           const SizedBox(width: 6),

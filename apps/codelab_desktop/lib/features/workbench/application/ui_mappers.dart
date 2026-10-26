@@ -148,9 +148,16 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
   required ApprovalOptionChosen onSelected,
 }) => switch (approval) {
   null => null,
-  ResolvedApprovalView(:final label) => CodeLabTranscriptApproval.resolved(
-    label: label,
-  ),
+  ResolvedApprovalView(:final label, :final outcome) =>
+    CodeLabTranscriptApproval.resolved(
+      label: label,
+      outcome: switch (outcome) {
+        ApprovalOutcomeView.allowed => CodeLabApprovalOutcome.allowed,
+        ApprovalOutcomeView.rejected => CodeLabApprovalOutcome.rejected,
+        ApprovalOutcomeView.cancelled => CodeLabApprovalOutcome.cancelled,
+        ApprovalOutcomeView.unknown => CodeLabApprovalOutcome.unknown,
+      },
+    ),
   PendingApprovalView() => CodeLabTranscriptApproval.pending(
     risk: _approvalRiskOf(approval.risk),
     command: approval.command,

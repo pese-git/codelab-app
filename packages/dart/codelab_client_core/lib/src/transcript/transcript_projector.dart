@@ -444,7 +444,10 @@ ApprovalStateView? _approvalView(
     return null;
   }
   if (approval.status != ApprovalStatus.pending) {
-    return ApprovalStateView.resolved(label: _resolvedLabel(approval));
+    return ApprovalStateView.resolved(
+      label: _resolvedLabel(approval),
+      outcome: _resolvedOutcome(approval),
+    );
   }
   return ApprovalStateView.pending(
     approvalId: approval.id,
@@ -471,6 +474,24 @@ String _resolvedLabel(ApprovalRequest approval) {
     }
   }
   return selectedId.value;
+}
+
+ApprovalOutcomeView _resolvedOutcome(ApprovalRequest approval) {
+  if (approval.status == ApprovalStatus.cancelled) {
+    return ApprovalOutcomeView.cancelled;
+  }
+  final selectedId = approval.selectedOptionId;
+  for (final option in approval.options) {
+    if (option.optionId == selectedId) {
+      return switch (option.kind) {
+        PermissionOptionKind.allowOnce ||
+        PermissionOptionKind.allowAlways => ApprovalOutcomeView.allowed,
+        PermissionOptionKind.rejectOnce ||
+        PermissionOptionKind.rejectAlways => ApprovalOutcomeView.rejected,
+      };
+    }
+  }
+  return ApprovalOutcomeView.unknown;
 }
 
 /// `PromptTurn.failureMessage` — `error.toString()`, а исключения ядра

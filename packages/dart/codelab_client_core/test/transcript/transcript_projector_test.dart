@@ -173,8 +173,34 @@ void main() {
       expect(tools, hasLength(1));
       expect(
         tools.single.approval,
-        const ApprovalStateView.resolved(label: 'Allow once'),
+        const ApprovalStateView.resolved(
+          label: 'Allow once',
+          outcome: ApprovalOutcomeView.allowed,
+        ),
       );
+
+      await agent.end(turn);
+    });
+
+    test('a rejected permission resolves with the rejected outcome, so the '
+        'client does not mark it as allowed', () async {
+      final turn = await agent.prompt('go');
+      agent
+        ..update(_toolCall('call-1', 'Run tests'))
+        ..requestPermission(id: 1, toolCallId: 'call-1');
+
+      await agent.application.respondToPermission(
+        RespondToPermissionCommand.selected(
+          sessionId: agent.sessionId,
+          approvalId: const ApprovalRequestId('permission-1'),
+          optionId: const PermissionOptionId('reject-once'),
+        ),
+      );
+
+      final approval =
+          agent.items.whereType<ToolCallItem>().single.approval!
+              as ResolvedApprovalView;
+      expect(approval.outcome, ApprovalOutcomeView.rejected);
 
       await agent.end(turn);
     });
