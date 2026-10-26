@@ -15,7 +15,7 @@ CodeLab SHALL let the user open a read-only preview of a file referenced by a to
 CodeLab SHALL let the user browse the working directory as a lazily-expanded tree and open a read-only preview of any file in it, reading the file directly from disk, and SHALL label that content as read directly from disk (not from the agent).
 
 #### Scenario: Browsing the directory tree
-- **WHEN** user switches the sidebar to the "Files" tab
+- **WHEN** user opens the "Files" pane in the tool dock
 - **THEN** CodeLab shows a lazily-expandable tree rooted at the current working directory, excluding common noise directories (`.git`, `.dart_tool`, `build`, `node_modules`, and similar)
 
 #### Scenario: Opening a file from the tree

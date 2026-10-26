@@ -143,8 +143,9 @@ final class ShellOutputAttachment extends PromptAttachment {
    очередь (U-15) переезжает в `QueuedPrompt.attachments`.
 9. `/shell drop` — удалить приложенные выводы; `/shell` — показать их список.
 
-**Где работает.** CLI (REPL, TUI). В app-десктопе — не в этой строке (порт `UserShell` в
-`acp_client_io` позволяет добавить позже). На мобильных и web клиентах процессов нет: `!` — обычный
+**Где работает.** CLI (REPL, TUI). В app-десктопе вместо `!` — интерактивная панель терминала
+(D-28, §12.3 A16, change `add-integrated-terminal`); её вывод, в отличие от `!`, агенту не
+прикладывается. На мобильных и web клиентах процессов нет: `!` — обычный
 текст промпта.
 
 **Пример.**
@@ -649,7 +650,7 @@ SIGKILL; поздние события старого поколения отб�
 
 ## 12.6.8. Файловый браузер проекта в app (D-13)
 
-**Назначение.** В сайдбаре app вкладка «Files» показывает дерево рабочей папки активной сессии с
+**Назначение.** Панель «Files» дока инструментов (§12.3, A13, шаг 0) показывает дерево рабочей папки сессии в фокусе с
 учётом `.gitignore`; файл можно открыть для просмотра только на чтение и вставить в композер как
 упоминание. Браузер видит только `cwd` сессии; это чтение клиента, не инструмент агента, поэтому
 одобрений не требует, но подчиняется той же границе рабочей папки, что ACP `fs/*` в app
@@ -664,7 +665,7 @@ SIGKILL; поздние события старого поколения отб�
 | `IoProjectFiles` | `acp_client_io/lib/src/files/` | `dart:io` | realpath, перечисление, чтение, `Directory.watch` |
 | `ProjectTreeState`, `ProjectFilesCubit` | `apps/codelab_app/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, предпросмотр |
 | `AcpFileTree`, `AcpFileTreeRowData`, `AcpFilePreview` | `acp_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`AcpCodeHighlighter`, §12.3) |
-| `ProjectFilesTab` | `.../project_files/presentation/` | presentation | вкладка сайдбара рядом с `AcpSessionSidebar`, связь с `ComposerCubit` |
+| `ProjectFilesPane` | `.../project_files/presentation/` | presentation | панель «Files» дока инструментов (дерево сверху, предпросмотр снизу), связь с `ComposerCubit` |
 
 `IoProjectFiles` регистрируется в `app/app_scope.dart` (cherrypick), как
 `IoTextFileIo`; виджеты к файловой системе не обращаются (AGENTS.md §6, §11).
