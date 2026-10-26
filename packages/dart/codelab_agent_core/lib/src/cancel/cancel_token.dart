@@ -115,6 +115,22 @@ final class WatchdogFired {
   String toString() => 'watchdog $kind';
 }
 
+/// Запись журнала не удалась: ход нельзя продолжать, потому что его нельзя
+/// сохранить (SES-8).
+///
+/// Почему причина отмены, а не исключение: писатель журнала — подписчик
+/// событий, а исключение подписчика цикл принял бы за ошибку хука. Отмена
+/// этой причиной останавливает ход на ближайшей границе, и цикл завершает
+/// его `TurnEnded(failed)`, а не `cancelled`.
+final class StorageFailure {
+  const StorageFailure(this.error);
+
+  final Object error;
+
+  @override
+  String toString() => 'storage failure: $error';
+}
+
 /// The host is shutting down.
 final class ShutdownCancel {
   const ShutdownCancel();

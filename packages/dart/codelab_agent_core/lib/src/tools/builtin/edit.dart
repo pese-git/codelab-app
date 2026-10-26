@@ -1,22 +1,29 @@
 import '../../llm/messages.dart';
 import '../../util/result.dart';
+import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
 import '../unified_diff.dart';
 import 'common.dart';
 
 const _bom = '﻿';
 
-/// `edit` — replace one exact fragment of a file (`agent-core-architecture`
-/// §6.4). The file is not changed unless `oldText` occurs exactly once
-/// (TOOL-8); CRLF and BOM are kept.
+/// `edit` — заменить один точный фрагмент файла (`agent-core-architecture`
+/// §6.4).
+///
+/// Почему точное совпадение: правка по номерам строк или нечёткому поиску
+/// молча портит файл, когда модель ошиблась в контексте. Здесь файл не
+/// меняется, если `oldText` встречается не ровно один раз (TOOL-8).
+///
+/// Как использовать: модель передаёт `path`, `oldText` и `newText`. Стиль
+/// переводов строк (CRLF) и BOM сохраняются. Точка исполнения держит путь
+/// под `PathLock` ([lockPath]), поэтому параллельные правки одного файла
+/// применяются по очереди (TOOL-7).
 final class EditTool extends AgentTool {
   @override
   String get name => 'edit';
 
   @override
-  String get description =>
-      'Replace an exact fragment of a file. oldText must occur exactly once; '
-      'read the file first and copy the fragment byte for byte.';
+  String get description => Prompts.toolDescriptionsEdit.render(const {});
 
   @override
   Map<String, Object?> get parameters => const {
@@ -44,6 +51,10 @@ final class EditTool extends AgentTool {
   @override
   String permissionPattern(Map<String, Object?> args, String cwd) =>
       pathPattern('${args['path']}', cwd);
+
+  @override
+  String? lockPath(Map<String, Object?> args) =>
+      args['path'] is String ? args['path']! as String : null;
 
   @override
   Future<ToolPresentation> present(

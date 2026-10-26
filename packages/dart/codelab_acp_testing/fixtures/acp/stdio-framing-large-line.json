@@ -1,0 +1,319 @@
+{
+  "id": "acp/stdio-framing-large-line",
+  "spec": [
+    "16-Transports.md#stdio"
+  ],
+  "description": "Кадрирование stdio процесса codelab-agent: промпт из 2 МиБ текста одной строкой stdin доходит до агента целиком, а агент отправляет вызов write с 2 МиБ в rawInput, fs/write_text_file и diff той же длины — каждый кадр одной строкой stdout. Играет транспортный драйвер против процесса бинаря.",
+  "goals": [
+    "R-13"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "bypass",
+    "transport": {
+      "kind": "stdio"
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 10000000
+    },
+    "steps": [
+      {
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "write",
+              "arguments": {
+                "path": "BIG.txt",
+                "content": {
+                  "$repeat": {
+                    "text": "x",
+                    "times": 2097152
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Готово."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "2 МиБ одной строкой stdin",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": {
+                "$repeat": {
+                  "text": "x",
+                  "times": 2097152
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "present() строит diff: файл читается через клиента",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read1"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/BIG.txt"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read1}",
+        "error": {
+          "code": -32002,
+          "message": "Resource not found",
+          "data": {
+            "$any": {
+              "kind": "resourceNotFound",
+              "message": "No such file: ${cwd}/BIG.txt"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "2 МиБ в rawInput — одной строкой stdout",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "BIG.txt"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "BIG.txt",
+              "content": {
+                "$repeat": {
+                  "text": "x",
+                  "times": 2097152
+                }
+              }
+            },
+            "locations": [
+              {
+                "path": "${cwd}/BIG.txt"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "режим bypass: без запроса разрешения",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read2"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/BIG.txt"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read2}",
+        "error": {
+          "code": -32002,
+          "message": "Resource not found",
+          "data": {
+            "$any": {
+              "kind": "resourceNotFound",
+              "message": "No such file: ${cwd}/BIG.txt"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "write1"
+        },
+        "method": "fs/write_text_file",
+        "params": {
+          "sessionId": "${sessionId}",
+          "path": "${cwd}/BIG.txt",
+          "content": {
+            "$repeat": {
+              "text": "x",
+              "times": 2097152
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${write1}",
+        "result": null
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$any": true
+                  }
+                }
+              },
+              {
+                "type": "diff",
+                "path": "${cwd}/BIG.txt",
+                "newText": {
+                  "$repeat": {
+                    "text": "x",
+                    "times": 2097152
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Готово."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "optional": true,
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

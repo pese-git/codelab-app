@@ -1,5 +1,5 @@
 name: codelab_agent_io
-description: dart:io implementations of the CodeLab agent core ports — local files and processes.
+description: dart:io implementations of the CodeLab agent core ports — local files, processes and session journals.
 version: 0.1.0
 publish_to: none
 resolution: workspace

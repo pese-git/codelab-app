@@ -313,7 +313,7 @@ Decision должен быть конкретным.
 Хорошо:
 
 ```text
-Session lifecycle размещается в acp_client_core.
+Session lifecycle размещается в codelab_client_acp.
 Flutter BLoC получает immutable session state через public API.
 ```
 
@@ -335,7 +335,7 @@ Flutter BLoC получает immutable session state через public API.
 
 ```text
 1. Session lifecycle внутри BLoC
-2. Session lifecycle внутри acp_client_core
+2. Session lifecycle внутри codelab_client_acp
 3. Отдельный session package
 ```
 
@@ -357,7 +357,7 @@ Negative:
 - более строгий public API
 
 Risk:
-- acp_client_core может стать слишком большим
+- codelab_client_acp может стать слишком большим
 ```
 
 ---
@@ -448,7 +448,7 @@ persistence database
 Например:
 
 ```text
-split acp_client_core into:
+split codelab_client_acp into:
 - acp_session
 - acp_permissions
 ```

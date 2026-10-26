@@ -1,0 +1,379 @@
+{
+  "id": "acp/tool-write-permission-diff",
+  "spec": [
+    "08-Tool Calls.md#requesting-permission",
+    "08-Tool Calls.md#diffs",
+    "09-File System.md#writing-files"
+  ],
+  "description": "Модель создаёт новый файл; агент проверяет его через fs/read_text_file (файла нет — -32002), запрашивает разрешение с diff без oldText, после allow_once пишет файл через fs/write_text_file и сообщает completed с тем же diff.",
+  "goals": [
+    "P-02"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard"
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "NOTES"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "write",
+              "arguments": {
+                "path": "NOTES.md",
+                "content": "# Notes\n"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Создал NOTES.md."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Создай NOTES.md"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "present() строит diff: файл читается через клиента",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read1"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/NOTES.md"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "файла нет: клиент отвечает -32002 (09-File System.md)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read1}",
+        "error": {
+          "code": -32002,
+          "message": "Resource not found",
+          "data": {
+            "$any": {
+              "kind": "resourceNotFound",
+              "message": "No such file: ${cwd}/NOTES.md"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "NOTES.md"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "NOTES.md",
+              "content": "# Notes\n"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/NOTES.md"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "новый файл: diff без oldText (08-Tool Calls.md, Diffs)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "permId"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "NOTES.md"
+            },
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {
+              "path": "NOTES.md",
+              "content": "# Notes\n"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/NOTES.md"
+              }
+            ],
+            "content": [
+              {
+                "type": "diff",
+                "path": "${cwd}/NOTES.md",
+                "newText": "# Notes\n"
+              }
+            ]
+          },
+          "options": [
+            {
+              "optionId": "allow_once",
+              "name": "Allow once",
+              "kind": "allow_once"
+            },
+            {
+              "optionId": "allow_always",
+              "name": "Always allow NOTES.md",
+              "kind": "allow_always"
+            },
+            {
+              "optionId": "reject_once",
+              "name": "Reject",
+              "kind": "reject_once"
+            },
+            {
+              "optionId": "reject_always",
+              "name": "Always reject NOTES.md",
+              "kind": "reject_always"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${permId}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "allow_once"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "write перечитывает файл под блокировкой пути для diff результата",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read2"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/NOTES.md"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "файла нет: клиент отвечает -32002 (09-File System.md)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read2}",
+        "error": {
+          "code": -32002,
+          "message": "Resource not found",
+          "data": {
+            "$any": {
+              "kind": "resourceNotFound",
+              "message": "No such file: ${cwd}/NOTES.md"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "write1"
+        },
+        "method": "fs/write_text_file",
+        "params": {
+          "sessionId": "${sessionId}",
+          "path": "${cwd}/NOTES.md",
+          "content": "# Notes\n"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${write1}",
+        "result": {
+          "$oneOf": [
+            null,
+            {}
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$any": true
+                  }
+                }
+              },
+              {
+                "type": "diff",
+                "path": "${cwd}/NOTES.md",
+                "newText": "# Notes\n"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Создал NOTES.md."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ],
+  "after": {
+    "files": {
+      "NOTES.md": "# Notes\n"
+    }
+  }
+}

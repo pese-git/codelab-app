@@ -243,7 +243,7 @@ classDiagram
 
 Env выбирается, если клиент объявил в `initialize` `clientCapabilities.fs.readTextFile`,
 `fs.writeTextFile` и `terminal`. Метод, для которого возможности нет, возвращает
-`Err(unsupported)` и ни одного запроса не отправляет (`docs/acp/protocol/09-File System.md`,
+`Err(unsupported)` (`exec` — `ExecErrorCode.shellUnavailable`) и ни одного запроса не отправляет (`docs/acp/protocol/09-File System.md`,
 `10-Terminal.md`: агент НЕ ДОЛЖЕН вызывать необъявленные методы).
 
 | Метод env | ACP |
@@ -255,7 +255,9 @@ Env выбирается, если клиент объявил в `initialize` `
 | `listDir`, `readBytes`, `realpath` | не реализуются (в ACP таких методов нет) |
 
 Ошибки JSON-RPC: код `-32002` (resource not found) → `notFound`; прочие коды → `io` с текстом
-`message` ответа; разрыв соединения → `io` с текстом `client connection lost`.
+`message` ответа; разрыв соединения → `io` с текстом `client connection lost`. У порта
+`FileSystem` нет токена отмены: при `session/cancel` мост сессии вызывает `abortPending()`, и
+ожидающие `fs/*` завершаются `io` с текстом `aborted` (§13.7).
 
 После MVP (§17.11.2): в профиле `agent-serve` для stdio-клиента `BoundedEnv` получает
 `BinaryFiles` от локальной ФС агента (та же, что даёт `listDir` для `fileListing` transport
@@ -287,7 +289,7 @@ Env выбирается, если клиент объявил в `initialize` `
 `terminal/release`; ответ на `wait_for_exit`, если придёт позже, игнорируется.
 
 `ls` и `search` поверх этого env недоступны (нет `DirectoryListing`): профиль выключает их с
-причиной (§10). При подключении по stdio клиент и агент на одной машине, поэтому `ls` и `search` работают по локальной файловой системе под `BoundedEnv`; по WebSocket они выключены с причиной (§10.4, §16.2).
+причиной (§10). При подключении по stdio клиент и агент на одной машине, поэтому `ls` и `search` работают по локальной файловой системе под `BoundedEnv`; по WebSocket они выключены с причиной (§10.4, §16.2). Сборка — `ListingOverlayEnv(AcpClientExecutionEnv, local)`: `listDir` и `stat` локальные (каталог через клиента не проверить), а содержимое файлов, в том числе для `search`, читается через клиента — он отдаёт и несохранённые правки редактора.
 
 ## 4.8. Алгоритм: MemoryExecutionEnv
 
@@ -335,7 +337,7 @@ Env выбирается, если клиент объявил в `initialize` `
 * `bounded_env_test.dart` — табличный тест §4.4 поверх `MemoryExecutionEnv` и (в `_io`) поверх `LocalExecutionEnv` с реальными ссылками во временном каталоге: все строки таблицы, включая `/proj_evil` и ссылку наружу; внутренний env не получает ни одного вызова для отклонённого пути (ENV-3).
 * `bounded_env_capabilities_test.dart`: обёртка над env без `DirectoryListing` не реализует `DirectoryListing`; над env с ним — реализует и проверяет путь (ENV-4).
 * `wiring_single_env_test.dart`: все инструменты сборки получили один и тот же экземпляр внешнего `BoundedEnv` (ENV-2).
-* `execution_env_contract.dart` — общий набор, который прогоняется на `MemoryExecutionEnv`, `LocalExecutionEnv` и `AcpClientExecutionEnv` с fake-клиентом: чтение диапазона строк, запись с созданием родителей, `notFound`, `isDirectory`, `notText`, отсутствие исключений (ENV-1).
+* `execution_env_contract.dart` — общий набор, который прогоняется на `MemoryExecutionEnv`, `LocalExecutionEnv` и `AcpClientExecutionEnv` с fake-клиентом: чтение диапазона строк, запись с созданием родителей, `notFound`, `isDirectory`, `notText`, отсутствие исключений (ENV-1). Для `AcpClientExecutionEnv` — с `clientBacked: true`: клиент различает только «не найдено», поэтому набор требует ошибку-значение без точного кода, а `stat` — файл без размера и без каталогов.
 * `local_exec_test.dart`: ненулевой код → `Ok`; таймаут с `sh -c 'trap "" TERM; sleep 60'` → `Err(timeout)` не позже 5 с (ENV-5); вывод больше лимита → хвост и `truncated`; окружение не содержит переменной, заданной в тестовом процессе, но не в allowlist (ENV-6); `read` из `stdin` получает EOF.
 * `acp_client_env_test.dart` на fake ACP-клиенте: успех, ненулевой код, таймаут, отмена, ошибка `wait_for_exit` — во всех случаях `terminal/release` вызван ровно один раз (ENV-7); без capability `terminal` — `Err(unsupported)` и ни одного кадра.
 

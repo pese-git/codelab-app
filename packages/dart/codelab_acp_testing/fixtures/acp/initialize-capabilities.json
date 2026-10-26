@@ -1,0 +1,79 @@
+{
+  "id": "acp/initialize-capabilities",
+  "spec": [
+    "02-Initialization.md#protocol-version",
+    "02-Initialization.md#version-negotiation",
+    "02-Initialization.md#client-capabilities",
+    "02-Initialization.md#agent-capabilities",
+    "02-Initialization.md#implementation-information"
+  ],
+  "description": "Клиент запрашивает версию 1 и объявляет fs.readTextFile, fs.writeTextFile и terminal; агент отвечает версией 1, capabilities loadSession, promptCapabilities, mcpCapabilities и sessionCapabilities.list, agentInfo и пустыми authMethods.",
+  "goals": [
+    "R-01"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "initializeId"
+        },
+        "method": "initialize",
+        "params": {
+          "$partial": {
+            "protocolVersion": 1,
+            "clientCapabilities": {
+              "fs": {
+                "readTextFile": true,
+                "writeTextFile": true
+              },
+              "terminal": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ агента — ровно эти поля (agent-core §13.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${initializeId}",
+        "result": {
+          "protocolVersion": 1,
+          "agentCapabilities": {
+            "loadSession": true,
+            "promptCapabilities": {
+              "image": true,
+              "audio": false,
+              "embeddedContext": true
+            },
+            "mcpCapabilities": {
+              "http": false,
+              "sse": false
+            },
+            "sessionCapabilities": {
+              "list": {}
+            }
+          },
+          "agentInfo": {
+            "name": "codelab-agent",
+            "title": "CodeLab Agent",
+            "version": {
+              "$any": "0.1.0"
+            }
+          },
+          "authMethods": []
+        }
+      }
+    }
+  ]
+}

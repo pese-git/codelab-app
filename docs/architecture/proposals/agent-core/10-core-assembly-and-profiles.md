@@ -100,6 +100,7 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final List<CodelabPlugin> plugins;               // после MVP (§17.14.3.2): собранные в бинарь, по умолчанию const []
   final RemoteAgentConnector? remoteAgents;        // после MVP (§17.15.2): A2aRemoteAgentConnector; null → типов a2a:* в task нет
   final Logger logger; final Clock clock; final IdGenerator ids;
+  final String platform;                           // для system/base (§11.5): ядро не читает dart:io; хост — Platform.operatingSystem
   final Random random;                             // PKG-6: случайность (джиттер повторов) даёт хост; в тестах Random(42)
 }
 
@@ -305,7 +306,8 @@ buildAgentCore(profile, services, config, streamFunction):
 6. разрешения: PermissionPolicyFactory(mode: config.permissions.mode ?? profile.defaultMode (конфиг заменяет режим профиля, §10.5), gate,
      rules: PolicyRules(toolPolicies: config.permissions.tools, denyPatterns: config.permissions.deny)); политика ставится первым beforeToolCall-хуком (PERM-1);
      вторым — после MVP SessionHooks.before при включённой userHooks (§17.14.2.3);
-     хуки хоста из SessionSpec.extraBeforeToolCall (например, ACP markInProgress, §13.7) — последними
+     хуки хоста из SessionSpec.extraBeforeToolCall (например, ACP markInProgress, §13.7) — последними;
+       у загруженной сессии — из SessionHostPorts.extraBeforeToolCall по тому же правилу
      afterToolCall: хуки хоста из SessionSpec.extraAfterToolCall — первыми, затем (после MVP) SessionHooks.after (§17.14.2.3), затем хук сессии языковых серверов (§17.8.5)
 7. промпт: секции в фиксированном порядке (§11.5), только для включённых capability (HOST-4)
 8. LLM: stream := streamFunction (если передан, только тесты) иначе createStreamFunction(ProviderConfig из config.models,

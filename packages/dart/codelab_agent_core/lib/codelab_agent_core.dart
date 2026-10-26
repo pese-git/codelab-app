@@ -6,6 +6,7 @@ library;
 
 export 'src/cancel/cancel_token.dart';
 export 'src/env/execution_env.dart';
+export 'src/env/listing_overlay_env.dart';
 export 'src/env/memory_env.dart'
     show MemoryExecutionEnv, decodeUtf8Strict, sliceLines;
 export 'src/host/build_agent_core.dart';
@@ -42,6 +43,12 @@ export 'src/permissions/pattern.dart';
 export 'src/permissions/policy.dart' show PolicyRules;
 export 'src/runtime/agent_runtime.dart' show AgentRuntime;
 export 'src/runtime/agent_session.dart';
+export 'src/session/memory_session_store.dart';
+export 'src/session/parse.dart';
+export 'src/session/records.dart';
+export 'src/session/session_store.dart';
+export 'src/session/slug.dart';
+export 'src/session/summary.dart';
 export 'src/tools/agent_tool.dart';
 export 'src/util/clock.dart' show Clock, ClockTimer, SystemClock;
 export 'src/util/ids.dart';

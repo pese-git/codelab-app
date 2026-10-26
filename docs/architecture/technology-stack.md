@@ -38,6 +38,7 @@
 | Integration tests          | `integration_test`      |
 | Lints                      | `flutter_lints`         |
 | Terminal UI (`codelab_cli`) | `dart_tui`             |
+| Разбор аргументов CLI (`codelab_agent`, `codelab_cli`) | `args` |
 
 Технологии из этой таблицы считаются **утверждёнными решениями проекта**.
 
@@ -73,7 +74,7 @@ Flutter используется для desktop application и presentation laye
 
 Основное приложение:
 
-`apps/codelab_app`
+`apps/codelab_desktop`
 
 Flutter-specific код следует ограничивать слоями и packages, которым действительно необходим Flutter.
 
@@ -194,7 +195,7 @@ flutter:
 
 Reusable ACP-specific Flutter components размещаются в:
 
-`packages/flutter/acp_ui`
+`packages/flutter/codelab_ui`
 
 ---
 
@@ -381,11 +382,11 @@ Linux).
 НЕ использовать:
 
 * для программного чтения/записи файлов (это ответственность `dart:io` /
-  `acp_client_core`'s `fs/*` handling) — `file_selector` отвечает только за
+  `codelab_client_acp`'s `fs/*` handling) — `file_selector` отвечает только за
   UI-диалог выбора пути, не за файловый I/O.
 
 Изолируется за узким application-level port (например,
-`ProjectFolderPicker`) в `apps/codelab_app/lib/core/platform/` — widgets и
+`ProjectFolderPicker`) в `apps/codelab_desktop/lib/core/platform/` — widgets и
 domain НЕ ДОЛЖНЫ импортировать `file_selector` напрямую (см. §11
 `AGENTS.md`).
 
@@ -407,7 +408,7 @@ domain НЕ ДОЛЖНЫ импортировать `file_selector` напрям
   хардкодиться или попадать в logs").
 
 Изолируется за application-level port (например, `RecentProjectsStore`) в
-`apps/codelab_app/lib/core/platform/` — по тому же паттерну, что
+`apps/codelab_desktop/lib/core/platform/` — по тому же паттерну, что
 `WorkingDirectoryProvider`.
 
 Добавление второй persistence-технологии (SQL, NoSQL, файловый store и
@@ -462,24 +463,26 @@ ACP functionality разделена на специализированные p
 ```text
 packages/
 ├── dart/
-│   ├── acp_protocol/
-│   ├── acp_transports/
-│   ├── acp_client_core/
-│   └── acp_testing/
+│   ├── codelab_acp_protocol/
+│   ├── codelab_acp_transports/
+│   ├── codelab_client_acp/
+│   ├── codelab_client_core/
+│   ├── codelab_client_io/
+│   └── codelab_acp_testing/
 │
 └── flutter/
-    └── acp_ui/
+    └── codelab_ui/
 ```
 
 Такое разделение является архитектурной boundary, а не только организацией файлов.
 
 ---
 
-## 15. `acp_protocol`
+## 15. `codelab_acp_protocol`
 
 Package:
 
-`packages/dart/acp_protocol`
+`packages/dart/codelab_acp_protocol`
 
 Тип: **pure Dart**.
 
@@ -502,20 +505,20 @@ Package:
 * Flutter;
 * `flutter_bloc`;
 * `fluent_ui`;
-* `acp_ui`;
+* `codelab_ui`;
 * application widgets;
 * navigation;
 * dialogs.
 
-`acp_protocol` описывает ACP wire contract, а не presentation model приложения.
+`codelab_acp_protocol` описывает ACP wire contract, а не presentation model приложения.
 
 ---
 
-## 16. `acp_transports`
+## 16. `codelab_acp_transports`
 
 Package:
 
-`packages/dart/acp_transports`
+`packages/dart/codelab_acp_transports`
 
 Тип: **pure Dart**, пока transport implementation не требует иного архитектурного решения.
 
@@ -542,11 +545,11 @@ Transport должен предоставлять API, пригодный для
 
 ---
 
-## 17. `acp_client_core`
+## 17. `codelab_client_acp`
 
 Package:
 
-`packages/dart/acp_client_core`
+`packages/dart/codelab_client_acp`
 
 Тип: **pure Dart**.
 
@@ -563,28 +566,30 @@ Package:
 * connection/session coordination;
 * преобразование protocol events в client-level concepts.
 
-`acp_client_core` НЕ ДОЛЖЕН зависеть от:
+`codelab_client_acp` НЕ ДОЛЖЕН зависеть от:
 
 * Flutter;
 * widgets;
 * `BuildContext`;
 * `fluent_ui`;
 * `flutter_bloc`;
-* `acp_ui`.
+* `codelab_ui`.
 
-Если behavior может быть реализовано без Flutter и является общим для ACP client, следует сначала рассмотреть размещение в `acp_client_core`, а не в `codelab_app`.
+Если behavior может быть реализовано без Flutter и является общим для ACP client, следует сначала рассмотреть размещение в `codelab_client_acp`, а не в `codelab_desktop`.
 
-При этом `acp_client_core` НЕ ДОЛЖЕН превращаться в dumping ground для любой application logic.
+При этом `codelab_client_acp` НЕ ДОЛЖЕН превращаться в dumping ground для любой application logic.
+
+Логика клиента, общая для app и CLI, но выше протокольного ядра (рабочее пространство, очередь промптов, проекция транскрипта, одобрения, опции, инспектор), — в `codelab_client_core` (§17а).
 
 ### 17.1. Structured logging — `structured_log`
 
 Технология: [`structured_log`](https://pub.dev/packages/structured_log) — pure Dart structured-logging библиотека (JSON output, context binding, processor pipeline, multi-sink routing, typed correlation fields).
 
-Введена в рамках `add-structured-logging` (см. `openspec/changes/add-structured-logging/design.md`) как единственная технология логирования проекта — заменяет ad hoc `print`/`debugPrint` и служит backend для существующего `DiagnosticEntry`-потока `acp_client_core`.
+Введена в рамках `add-structured-logging` (см. `openspec/changes/add-structured-logging/design.md`) как единственная технология логирования проекта — заменяет ad hoc `print`/`debugPrint` и служит backend для существующего `DiagnosticEntry`-потока `codelab_client_acp`.
 
 Версия на момент введения: `0.2.0-dev.4` (prerelease, `-dev`) — пин на точную версию в `pubspec.yaml`, без caret-диапазона. Пакет с тех пор дошёл до стабильных релизов; пин поднят до `0.3.1` — этого требуют актуальные `structured_log_flutter 0.1.3`, `structured_log_fluent 0.1.2+2` (там исправлены переполнение `LogViewerEmptyState` в узкой докнутой панели и горизонтальное переполнение узкого тулбара `FluentLogViewer`) и `structured_log_remote_sync 0.2.1` (§17.2). Миграция `0.2 → 0.3` (см. «Migrating to 0.3.0» в README пакета) для CodeLab свелась к одному: файловые выводы (`AsyncFileOutput`, `AsyncRotatingFileOutput`) переехали в `package:structured_log/io.dart`; временные метки теперь в UTC (`...Z`) — никакие наши тесты и потребители от формата не зависят.
 
-Зависимость подключена **только** в `acp_client_core` (единственный владелец Logger-порта и `structured_log`-адаптера) и `codelab_app` (composition root, конкретная конфигурация sinks). `acp_protocol`/`acp_transports` эту зависимость не получают — они продолжают сигнализировать о своих событиях через уже существующие typed errors/`AcpTransportEvent.diagnostic`, которые `acp_client_core` транслирует в structured-события с сохранением correlation-контекста (см. `design.md` Decision 1).
+Зависимость подключена **только** в `codelab_client_acp` (единственный владелец Logger-порта и `structured_log`-адаптера) и `codelab_desktop` (composition root, конкретная конфигурация sinks). `codelab_acp_protocol`/`codelab_acp_transports` эту зависимость не получают — они продолжают сигнализировать о своих событиях через уже существующие typed errors/`AcpTransportEvent.diagnostic`, которые `codelab_client_acp` транслирует в structured-события с сохранением correlation-контекста (см. `design.md` Decision 1).
 
 Конфигурация (sinks, processors) идёт через глобальный `StructlogConfiguration.configure()`/`getLogger()` пакета — осознанное исключение из общего запрета на global service locator (§23 `layers-and-dependencies.md`), обоснование см. `design.md` Decision 7.
 
@@ -592,17 +597,33 @@ Package:
 
 Технология: [`structured_log_remote_sync`](https://pub.dev/packages/structured_log_remote_sync) — батчащий/ретраящий `OutputFunction` (`RemoteSyncLogOutput`), пересылающий записи по HTTP (`POST /v1/logs`) в `structured_log_server` для просмотра в `structured_log_admin_ui`. Версия: `0.2.1`, точный пин. Пакет — переименованный `structured_log_http` (тот больше не развивается и лишь пересылает на `remote_sync`); при переименовании менялись только имя пакета/класса, API (`serverUrl`, `projectSecretKey`, `sender`, `close()`) остался прежним.
 
-**Только для локальной разработки самого CodeLab, не end-user-функциональность.** `CodeLabLoggingModule` (`apps/codelab_app/lib/app/app_scope.dart`) конструирует `RemoteSyncLogOutput` исключительно если ОБЕ compile-time-константы `CODELAB_LOG_SERVER_URL`/`CODELAB_LOG_SERVER_KEY` (`String.fromEnvironment`, передаются через `--dart-define` при `flutter run`) непустые — по умолчанию (без `--dart-define`) sink не создаётся вовсе, нулевая стоимость и нулевой риск. `projectSecretKey` — секрет; НЕ ДОЛЖЕН попадать в репозиторий (`.env`/shell-профиль разработчика, не committed файл) — см. AGENTS.md §10.
+**Только для локальной разработки самого CodeLab, не end-user-функциональность.** `CodeLabLoggingModule` (`apps/codelab_desktop/lib/app/app_scope.dart`) конструирует `RemoteSyncLogOutput` исключительно если ОБЕ compile-time-константы `CODELAB_LOG_SERVER_URL`/`CODELAB_LOG_SERVER_KEY` (`String.fromEnvironment`, передаются через `--dart-define` при `flutter run`) непустые — по умолчанию (без `--dart-define`) sink не создаётся вовсе, нулевая стоимость и нулевой риск. `projectSecretKey` — секрет; НЕ ДОЛЖЕН попадать в репозиторий (`.env`/shell-профиль разработчика, не committed файл) — см. AGENTS.md §10.
 
-Sink получает те же `category=application` события, что уже идут в консоль/файл — никакой отдельной категории. Ships через `configureCodeLabLogging()`'s опциональный параметр `httpOutput` (`packages/dart/acp_client_core/lib/src/infrastructure/structured_log_logger.dart`) — `acp_client_core` не получает зависимость на `structured_log_remote_sync` (только на `structured_log`'s `OutputFunction`-тип), пакет подключён исключительно в `codelab_app`, тем же паттерном, что `structured_log_flutter`/`structured_log_fluent` (Decision 1 `replace-debug-log-panel-with-fluent/design.md`). `CodeLabLoggingLifecycle.dispose()` закрывает `RemoteSyncLogOutput` (флашит буфер) наравне с остальными sinks.
+Sink получает те же `category=application` события, что уже идут в консоль/файл — никакой отдельной категории. Ships через `configureCodeLabLogging()`'s опциональный параметр `httpOutput` (`packages/dart/codelab_client_acp/lib/src/infrastructure/structured_log_logger.dart`) — `codelab_client_acp` не получает зависимость на `structured_log_remote_sync` (только на `structured_log`'s `OutputFunction`-тип), пакет подключён исключительно в `codelab_desktop`, тем же паттерном, что `structured_log_flutter`/`structured_log_fluent` (Decision 1 `replace-debug-log-panel-with-fluent/design.md`). `CodeLabLoggingLifecycle.dispose()` закрывает `RemoteSyncLogOutput` (флашит буфер) наравне с остальными sinks.
 
 ---
 
-## 18. `acp_ui`
+## 17а. `codelab_client_core`
+
+Package: `packages/dart/codelab_client_core`. Тип: **pure Dart**, web-безопасный (без `dart:io`).
+
+Общий клиентский слой без UI для `codelab_desktop` и `codelab_cli` (change `extract-acp-client-kit`): `ClientWorkspace` и `SessionHandle`, явный автомат `ConnectionView`, профили подключения и `TransportResolver`, `SecretSource`, инкрементальная проекция транскрипта, `PromptQueue`, представления опций, команд и одобрений, `InspectorProjection`, `WorkspaceDiagnostic` и `describeFailure`, порты хранилищ (`ProfileStore`, `RecentProjectsStore`). Источник данных — порт `AgentBackend`, реализация `AcpClientBackend` поверх `AcpClientApplication` из `codelab_client_acp`.
+
+Зависит только от `codelab_client_acp`, `codelab_acp_protocol`, `codelab_acp_transports` (без `io.dart`), `freezed_annotation` и `meta`; Flutter и `dart:io` запрещены сторожем (`melos run guard`). Правила — во вложенном `AGENTS.md` пакета.
+
+## 17б. `codelab_client_io`
+
+Package: `packages/dart/codelab_client_io`. Тип: **pure Dart** с `dart:io`, без Flutter.
+
+`dart:io`-адаптеры портов клиента для хостов на Dart VM и desktop: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `ioTransportResolver` с настоящими stdio- и WebSocket-транспортами, `JsonFileProfileStore`, `JsonFileRecentProjectsStore`. Flutter-плагины (`file_selector`, `shared_preferences`) остаются в `codelab_desktop`. Правила — во вложенном `AGENTS.md` пакета.
+
+---
+
+## 18. `codelab_ui`
 
 Package:
 
-`packages/flutter/acp_ui`
+`packages/flutter/codelab_ui`
 
 Тип: **Flutter package**.
 
@@ -626,19 +647,19 @@ Package:
 
 * реализовывать ACP transport;
 * владеть low-level connection;
-* зависеть от `codelab_app`;
+* зависеть от `codelab_desktop`;
 * содержать desktop application-specific composition;
 * реализовывать platform-specific infrastructure без явной необходимости.
 
-`acp_ui` должен оставаться reusable Flutter boundary.
+`codelab_ui` должен оставаться reusable Flutter boundary.
 
 ---
 
-## 19. `acp_testing`
+## 19. `codelab_acp_testing`
 
 Package:
 
-`packages/dart/acp_testing`
+`packages/dart/codelab_acp_testing`
 
 Предназначен для reusable ACP testing infrastructure.
 
@@ -651,19 +672,19 @@ Package:
 * protocol test helpers;
 * reusable test scenarios.
 
-Production packages НЕ ДОЛЖНЫ зависеть от `acp_testing`.
+Production packages НЕ ДОЛЖНЫ зависеть от `codelab_acp_testing`.
 
-`acp_testing` следует сохранять pure Dart, если Flutter dependency не является необходимой.
+`codelab_acp_testing` следует сохранять pure Dart, если Flutter dependency не является необходимой.
 
 Flutter-specific testing helpers при значительном объёме следует отделять от pure Dart testing utilities.
 
 ---
 
-## 20. `codelab_app`
+## 20. `codelab_desktop`
 
 Application:
 
-`apps/codelab_app`
+`apps/codelab_desktop`
 
 является desktop composition root и конечным приложением.
 
@@ -676,17 +697,19 @@ Application:
 * desktop-specific integration;
 * application-specific features.
 
-`codelab_app` может зависеть от:
+`codelab_desktop` может зависеть от:
 
-* `acp_client_core`;
-* `acp_protocol`;
-* `acp_transports`;
-* `acp_ui`;
+* `codelab_client_core`;
+* `codelab_client_io`;
+* `codelab_client_acp`;
+* `codelab_acp_protocol`;
+* `codelab_acp_transports`;
+* `codelab_ui`;
 * утверждённых Flutter/application dependencies.
 
 Однако наличие прямой dependency не означает, что любой слой приложения может использовать package напрямую.
 
-Например, widget не должен обращаться к `acp_transports` только потому, что package объявлен в `codelab_app/pubspec.yaml`.
+Например, widget не должен обращаться к `codelab_acp_transports` только потому, что package объявлен в `codelab_desktop/pubspec.yaml`.
 
 Architectural dependency rules важнее технической доступности dependency.
 
@@ -700,17 +723,17 @@ Architectural dependency rules важнее технической доступ�
 
 1. **Назначение.** Терминальный слой и цикл Model–Update–View полноэкранного режима `codelab --ui tui`: ввод клавиш (kitty keyboard protocol, xterm modifyOtherKeys, bracketed paste), мышь, размер окна, вывод кадров, восстановление терминала при выходе.
 2. **Где используется.** Только полноэкранный режим `--ui tui`, только код `apps/codelab_cli/lib/src/tui/`, и внутри него — только адаптер (`TuiApp`, `TuiInput`, `TuiEffects`, `TuiRunner`); чистое ядро экрана (`TuiModel`, `reduce`, `render`) пакет не импортирует.
-3. **Где не используется.** Построчный REPL и headless (`-p`, `stream-json`; proposals §12.2.1) пишут в stdout сами и пакет не используют. `acp_client_kit`, `acp_client_core`, `acp_client_io`, пакеты агента и `codelab_app` от него не зависят. Компоненты-редакторы пакета (`TextAreaModel`, `TextInputModel`) и стили `Style` для markdown не используются: у CLI свой композер с реестром клавиш и свой ANSI-рендер markdown, общий с REPL.
+3. **Где не используется.** Построчный REPL и headless (`-p`, `stream-json`; proposals §12.2.1) пишут в stdout сами и пакет не используют. `codelab_client_core`, `codelab_client_acp`, `codelab_client_io`, пакеты агента и `codelab_desktop` от него не зависят. Компоненты-редакторы пакета (`TextAreaModel`, `TextInputModel`) и стили `Style` для markdown не используются: у CLI свой композер с реестром клавиш и свой ANSI-рендер markdown, общий с REPL.
 4. **Какую проблему решает.** Не писать и не сопровождать свой терминальный слой (raw-режим через termios и консоль Windows, построчный diff кадра, декодер kitty и modifyOtherKeys, bracketed paste, мышь, сигналы и восстановление терминала) и получить поддерживаемые компоненты (список с фильтром, viewport, spinner, help) в той же архитектуре Model–Update–View, что задумана для TUI.
 5. **Влияние на architecture boundaries.** `package:dart_tui/` импортируется только из `apps/codelab_cli/lib/src/tui/**`; остальной CLI и kit о нём не знают — правило тест-сторожа импортов (proposals §9.5, `PackageRule` над `apps/codelab_cli/lib/src` с `exclude: ['tui/']`). Модель отображения kit (`SessionView`) остаётся источником состояния; пакет её не заменяет и не дублирует.
 6. **Заменяет ли существующую технологию.** Нет. Заменяет только запланированный в proposals собственный рендер TUI (прежний вариант §12.2.7); кода TUI ещё нет.
 7. **Требуется ли migration.** Нет: заменять нечего.
-8. **Требуется ли ADR.** Нет. Технология затрагивает только presentation нового приложения и не меняет архитектуру ACP-клиента, state management `codelab_app` и границы пакетов (§26). Решение фиксируется в proposals §12.2.12 и в `design.md` OpenSpec change этапа 6 `add-codelab-cli` вместе с итогом разведки (задача 6.11).
+8. **Требуется ли ADR.** Нет. Технология затрагивает только presentation нового приложения и не меняет архитектуру ACP-клиента, state management `codelab_desktop` и границы пакетов (§26). Решение фиксируется в proposals §12.2.12 и в `design.md` OpenSpec change этапа 6 `add-codelab-cli` вместе с итогом разведки (задача 6.11).
 
 Проверка по §25:
 
 * **Существующие dependency и SDK.** Ни одна утверждённая технология не решает задачу терминального UI; `flutter_bloc` и `fluent_ui` — Flutter и к CLI неприменимы. Средствами `dart:io` задача решается только своим терминальным слоем — от него и отказались.
-* **Competing framework.** Нет: state management `codelab_app` (`flutter_bloc`) не затрагивается; MVU пакета живёт только внутри CLI и только в presentation.
+* **Competing framework.** Нет: state management `codelab_desktop` (`flutter_bloc`) не затрагивается; MVU пакета живёт только внутри CLI и только в presentation.
 * **Desktop platforms.** Заявлены Linux, macOS и Windows (на pub.dev также Android и iOS — для CLI не важны). На Windows по исходникам 3.0.0 включается ввод VT (`SetConsoleMode`); вывод VT, размер окна и conhost не подтверждены — пункт чек-листа разведки; до подтверждения на Windows остаётся построчный REPL.
 * **SDK constraints.** Пакет требует Dart `>=3.5.0 <4.0.0`; наш диапазон пакетов `>=3.8.0 <4.0.0` в него входит.
 * **Native configuration.** Отдельной нет, но пакет использует `dart:ffi` (termios libc на macOS и Linux, kernel32 на Windows) и зависит от `ffi`; прочие зависимости — `characters`, `path`. AOT-сборка `dart compile exe` это поддерживает; веб-сборка CLI не нужна.
@@ -722,25 +745,49 @@ Architectural dependency rules важнее технической доступ�
 
 ---
 
+## 20б. Разбор аргументов командной строки — `args`
+
+Технология: [`args`](https://pub.dev/packages/args) — пакет команды Dart (publisher `dart.dev`) для разбора аргументов командной строки: `ArgParser` с флагами, опциями, повторяемыми опциями, подкомандами, скрытыми опциями и генерацией справки.
+
+Решение принято владельцем продукта для бинаря агента `apps/codelab_agent` (`codelab-agent serve`, OpenSpec change `add-codelab-agent-binary`, design.md D1); тот же пакет берёт CLI `codelab` на этапе 6.
+
+1. **Назначение.** Синтаксис аргументов: команда `serve`, флаги `--stdio`/`--ws`, повторяемый `--model`, скрытый `--llm-script`, справка, ошибка неизвестного флага. Правила конфигурации поверх разбора (переменная окружения как значение по умолчанию, флаг сильнее переменной, взаимоисключения, код выхода `64`) — код приложения (документ ядра §15.6).
+2. **Где используется.** Только точки входа приложений: `apps/codelab_agent/lib/src/cli/`, с этапа 6 — `apps/codelab_cli`.
+3. **Где не используется.** Пакеты `packages/*` (ядро, ACP, транспорты, клиентский слой): они не разбирают аргументы процесса. `codelab_desktop` — Flutter-приложение без аргументов командной строки.
+4. **Какую проблему решает.** Не писать и не сопровождать свой разборщик аргументов со справкой и ошибками и не расходиться с будущим CLI `codelab` с подкомандами.
+5. **Влияние на architecture boundaries.** Нет: пакет — чистый Dart без IO; allowlist зависимостей `apps/codelab_agent` в `pubspec_allowlist_test.dart` содержит `args`.
+6. **Заменяет ли существующую технологию.** Нет; до этого аргументов процесса в репозитории не разбирали.
+7. **Требуется ли migration.** Нет.
+8. **Требуется ли ADR.** Нет: технология не меняет архитектуру и не затрагивает границы пакетов (§26).
+
+Проверка по §25: средствами SDK задача решается только своим разборщиком; competing framework нет; пакет чистый Dart (Linux, macOS, Windows, AOT `dart compile exe`), SDK `>=3.3`; native configuration нет; тестируется вызовом разбора без процесса (`serve_flags_test.dart`); security — пакет не читает окружение и файлы, значения флагов в справку не попадают; лицензия BSD-3-Clause, сопровождает команда Dart. Пакет уже был транзитивной зависимостью workspace.
+
+Версия: `^2.7.0` в `apps/codelab_agent/pubspec.yaml`, точная — в `pubspec.lock`.
+
+---
+
 ## 21. Направление package dependencies
 
 Целевая модель ACP subsystem:
 
 ```text
                   ┌──────────────────┐
-                  │   codelab_app    │
+                  │   codelab_desktop    │
                   │ composition root │
                   └────────┬─────────┘
                            │
               ┌────────────┼────────────┐
               │            │            │
               ▼            ▼            ▼
-          acp_ui    acp_client_core   desktop
-                          │           adapters
-                 ┌────────┴────────┐
+          codelab_ui    codelab_client_core ◄── codelab_client_io
+                           │          (dart:io adapters)
+                           ▼
+                    codelab_client_acp
+                           │
+                 ┌─────────┴───────┐
                  │                 │
                  ▼                 ▼
-          acp_transports     acp_protocol
+          codelab_acp_transports     codelab_acp_protocol
                  │
                  ▼
           external agent
@@ -752,11 +799,12 @@ Architectural dependency rules важнее технической доступ�
 
 Основные invariants:
 
-* `acp_protocol` не зависит от Flutter packages;
-* `acp_transports` не зависит от Flutter UI;
-* `acp_client_core` остаётся pure Dart;
-* `acp_ui` не зависит от `codelab_app`;
-* `codelab_app` выполняет composition;
+* `codelab_acp_protocol` не зависит от Flutter packages;
+* `codelab_acp_transports` не зависит от Flutter UI;
+* `codelab_client_acp` остаётся pure Dart;
+* `codelab_client_core` остаётся pure Dart без `dart:io` и зависит только от `codelab_client_acp`, `codelab_acp_protocol`, `codelab_acp_transports`; `codelab_client_io` — без Flutter;
+* `codelab_ui` не зависит от `codelab_desktop`;
+* `codelab_desktop` выполняет composition;
 * lower-level packages не зависят от application package.
 
 ---
@@ -767,7 +815,7 @@ Architectural dependency rules важнее технической доступ�
 
 * `flutter_test`;
 * `integration_test`;
-* `acp_testing`;
+* `codelab_acp_testing`;
 * стандартные Dart testing capabilities там, где применимо.
 
 Предпочтительный уровень тестирования определяется типом кода:
@@ -791,7 +839,7 @@ Desktop integration
 
 Pure Dart logic НЕ СЛЕДУЕТ тестировать через Flutter binding, если достаточно обычного unit test.
 
-Reusable ACP test infrastructure следует размещать в `acp_testing`.
+Reusable ACP test infrastructure следует размещать в `codelab_acp_testing`.
 
 Подробная стратегия:
 

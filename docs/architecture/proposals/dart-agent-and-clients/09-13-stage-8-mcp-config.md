@@ -39,7 +39,9 @@
    отброшенном ключе, `--print` — только печатает; `codelab.toml` не удаляется
    (agent-core-architecture §15.7; см. также §7б). Команды `codelab-agent config check` и
    `codelab config check`. Тесты: `core/config-reads-legacy-codelab-toml`,
-   `config_yaml_profile_test.dart`, `config_legacy_ignored_test.dart`.
+   `config_yaml_profile_test.dart`, `config_legacy_ignored_test.dart`. Здесь же читаются ключи
+   `redact.*` редакции секретов (задача 8.11; agent-core-architecture §12.4.3, правило доверия
+   проекту §15.3).
 6. **8.6. Инструкции проекта** (agent-core-architecture §11.5): `ProjectContextLoader` хоста
    читает через `ExecutionEnv` (граница `BoundedEnv` соблюдается) файлы от `cwd` вверх до корня
    git-репозитория (без репозитория — только `cwd`), на каждом уровне `AGENTS.md` и `CLAUDE.md`,
@@ -68,6 +70,24 @@
     провайдера из окружения (L-25); агентские команды `/config` и `/mcp`. Клиентская часть
     (мастер, страницы настроек) — §12.4. Без 8.10 конфиг правится вручную, а `config check`
     (8.5) его проверяет.
+11. **8.11. Редакция секретов** (P-10, *Should — не блокирует MVP*; перенесена с этапа 3):
+    вывод инструментов (`exec env`, `read .env`), промпт пользователя и лог не попадают в журнал
+    сессии и к провайдеру с сырыми секретами. Состав:
+    * `Redactor` в `codelab_agent_core` с послойным алгоритмом agent-core-architecture §12.4.1:
+      слои `exact`, `credential_files`, `formats`, `pem`, `connection_strings`, `key_values`;
+      `entropy` выключен; белый список `git_sha`, `uuid`; идемпотентность и сохранение числа строк;
+    * признак `AgentTool.redactResult` — `false` у `write` и `edit` (§6.2);
+    * точки применения §12.4.2 — `userInput`, `toolResult`, `providerRequest`, `journal`, `log`
+      (точка `spill` — вместе с выносом результата, задача 3.8);
+    * источники точных секретов (§12.4) — переменные окружения по шаблону имён, ключ провайдера,
+      значения `SecretStore` (8.9) и токены MCP-серверов (8.1) через `addExactSecret`;
+    * ключи `redact.*` из конфигурации (8.5) с правилом доверия проекту (§12.4.3, §15.3).
+
+    Команда `/redact stats | layers` — после MVP (§13.4). До этой задачи журналы этапов 4–7
+    хранят вывод инструментов как есть. Тесты: `core/redaction-before-journal`,
+    `core/redaction-preserves-line-count`, `core/redaction-write-results-exempt`. Вынос
+    результата (задача 3.8, change `add-agent-core-output-spill`) идёт после неё: файл выноса не
+    должен содержать сырых секретов (SPL-3).
 
 **OpenSpec change.** `add-agent-mcp-client` (8.1–8.4; scope: протокол MCP, транспорты, имена и
 виды MCP-инструментов, проверка разрешений; решение о библиотеке MCP — в его `design.md`),
@@ -77,7 +97,9 @@
 `add-agent-secret-store` (8.9; scope: имена секретов, порядок разрешения, бэкенды ОС, команды
 `secret`, диагностика без значений) и `add-config-writer-and-reload` (8.10, Should; scope:
 запись конфига, наблюдатель и перезагрузка, реестр настроек, `McpSupervisor`, команды
-`config`/`provider`/`mcp` на запись). `tasks.md` — пары "тест → реализация" со ссылкой на
+`config`/`provider`/`mcp` на запись) и `add-agent-core-secret-redaction` (8.11, Should; scope:
+слои и точки применения редакции, `AgentTool.redactResult`, источники точных секретов, ключи
+`redact.*`). `tasks.md` — пары "тест → реализация" со ссылкой на
 критерий (§9.0, правило 3).
 
 **Решение о библиотеке MCP** — чек-лист, который заполняется в `design.md` change
@@ -99,7 +121,7 @@
 В `design.md` записываются: кандидаты, отметки по каждому пункту, решение и версия пакета (если
 выбран).
 
-**Что прочитать.** Документ ядра §6, §7, §10 (capability `mcp`), §11, §15; спецификация MCP
+**Что прочитать.** Документ ядра §6, §7, §10 (capability `mcp`), §11, §12.4 (редакция, 8.11), §15; спецификация MCP
 (стандарт протокола, раздел о транспортах); `docs/acp/protocol/03-Session Setup.md`,
 `14-Slash Commands.md`.
 
@@ -137,8 +159,12 @@
   `settings_registry_complete_test.dart` (`core/settings-registry-complete`, E-15),
   `provider_preconfig_env_test.dart` (`core/provider-preconfig-from-env`, L-25),
   `cli_config_commands_test.dart` и фикстура `acp/slash-mcp-list` зелёные.
+* Если сделано (8.11, Should — не блокирует MVP): `core/redaction-before-journal`,
+  `core/redaction-preserves-line-count`, `core/redaction-write-results-exempt` зелёные; журнал
+  сессии с выводом `exec env` и `read .env` не содержит значений секретов.
 
-**Зависимости.** Этап 4; задачи 8.5–8.9 не зависят от MCP и идут параллельно. Этап 7 ждёт
+**Зависимости.** Этап 4; задачи 8.5–8.9 не зависят от MCP и идут параллельно; 8.11 — после
+8.5 и 8.9 (ключи `redact.*` и источник `SecretStore`). Этап 7 ждёт
 8.5 и 8.9 (порядок D3: `{6, 8} → 7`); 8.10 его не блокирует.
 
 **Риски.** Нет зрелого MCP SDK на Dart — свой клиент (протокол небольшой); готовые пакеты pub.dev

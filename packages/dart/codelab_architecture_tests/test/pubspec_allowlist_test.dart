@@ -22,6 +22,55 @@ const ioAllowlist = {
   'toml',
 };
 
+/// Dependencies of the ACP server of the agent (agent-core-architecture
+/// §1.2).
+const acpAllowlist = {
+  'codelab_agent_core',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'meta',
+  'async',
+};
+
+/// Dependencies of the agent binary (workspace-architecture «Автоматический
+/// сторож границ пакетов»; design.md change `add-codelab-agent-binary`, D11).
+const binaryAllowlist = {
+  'codelab_agent_core',
+  'codelab_agent_io',
+  'codelab_agent_acp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'args',
+  'http',
+  'async',
+  'meta',
+};
+
+/// Dependencies of the client kit (design D2 change
+/// `extract-acp-client-kit`): only web-safe packages, so the kit stays free
+/// of Flutter and `dart:io` transitively.
+const kitAllowlist = {
+  'codelab_client_acp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'freezed_annotation',
+  'meta',
+  'collection',
+  'async',
+};
+
+/// Dependencies of the client IO adapters (design D2 change
+/// `extract-acp-client-kit`): the kit, the ACP client packages and `path`,
+/// no Flutter.
+const clientIoAllowlist = {
+  'codelab_client_core',
+  'codelab_client_acp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'path',
+  'meta',
+};
+
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
 
@@ -60,6 +109,46 @@ void main() {
     ).readAsStringSync();
 
     final extra = dependencyKeys(pubspec).difference(ioAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('codelab_agent_acp depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_agent_acp/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(acpAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('apps/codelab_agent depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'apps/codelab_agent/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(binaryAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('codelab_client_core depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_client_core/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(kitAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('codelab_client_io depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_client_io/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(clientIoAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });

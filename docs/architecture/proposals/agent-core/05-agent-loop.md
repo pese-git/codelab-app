@@ -34,13 +34,18 @@ final class ToolInvocation {             // что цикл передаёт т�
   final List<BeforeToolCallHook> beforeToolCall; final List<AfterToolCallHook> afterToolCall;
 }
 
-Future<List<Message>> runAgentLoop({
+Future<TurnOutput> runAgentLoop({
   required List<Message> prompts,          // пусто = продолжение без новых сообщений
   required LoopContext context,            // systemPrompt, messages, tools: копируется
   required AgentLoopConfig config,
   required AgentEventSink emit,
   required CancelToken cancel,
-});                                         // возвращает сообщения, добавленные этим ходом
+});
+
+final class TurnOutput {                   // транскрипт после хода = (history ?? старая история) + added
+  final List<Message> added;               // сообщения хода после history
+  final List<Message>? history;            // контекст аварийного сжатия (шаг 14a); null — история не заменялась
+}
 
 final class LoopContext {
   const LoopContext({required this.systemPrompt, required this.messages, required this.tools});
@@ -56,7 +61,9 @@ final class AgentLoopConfig {
       this.afterToolCall = const [], this.prepareNextStep, this.beforeFinalResponse,
       this.maxResponseRevisions = 2, this.maxSteeringSteps = 20,
       this.emptyResponseRetries = 2, this.misuse = const MisuseLimits(),
-      this.steering, this.followUp, this.estimateTokens, this.emergencyCompact, this.deadline, this.imageRefs});
+      this.steering, this.followUp, this.approvalWait, this.logger,
+      this.estimateTokens, this.emergencyCompact, this.contextWindowCap,
+      this.deadline, this.imageRefs});
   final SessionId sessionId;
   final ModelRef model;
   final StreamFunction stream;
@@ -73,8 +80,13 @@ final class AgentLoopConfig {
   final MisuseLimits misuse;                         // предохранитель неверных вызовов (§6.3.7), loop.misuse.*
   final MessageQueue<SteeringItem>? steering;        // опрашивается циклом; элемент несёт origin (§17.7.2.1)
   final MessageQueue<Message>? followUp;             // опрашивается циклом
+  final ApprovalWaitMeter? approvalWait;             // тот же счётчик, что ToolServices.approvalWait; maxDuration
+                                                     // считает время хода минус его прирост с начала хода
+  final Logger? logger;                              // логи цикла (loop.empty_response, §5.4.1)
   final int Function(LlmContext)? estimateTokens;    // оценка payload (§9)
-  final Future<LoopContext?> Function(CancelToken)? emergencyCompact;   // один аварийный вызов сжатия за ход, общий для preflight и overflow (CMP-8)
+  final Future<LoopContext?> Function(EmergencyCause cause, CancelToken cancel)? emergencyCompact;
+                                                     // один аварийный вызов сжатия за ход, общий для preflight и overflow (CMP-8)
+  final int? contextWindowCap;                       // окно preflight = effectiveContextWindow(model, cap) (CMP-6)
   final SessionDeadline? deadline;   // после MVP: дедлайн сессии (§17.12.5); null — нет срока
   final ImageRefRegistry? imageRefs; // после MVP: картинка уходит модели один раз (§17.11.2.2); null — как MVP
 }
@@ -127,8 +139,9 @@ enum BudgetLimit { steps, tokens, cost, duration, deadline }   // deadline — �
 | `beforeFinalResponse` | шаг завершился без вызовов инструментов, ход готов остановиться, до `TurnEnded` | `Accept` — ход завершается; `Revise(note)` — заметка добавляется в payload следующего шага последним `user`-сообщением, не более `maxResponseRevisions` раз за ход; `Hold(reason)` — ход завершается с ответом, помеченным `TurnEnded.held = reason`. В MVP — только интерфейс, хук не регистрируется; после MVP — составной хук проверок `FinalResponseCheck` с лимитом ревизий и политикой `loop.final_response.on_revise_limit` (§17.12.4) |
 
 **Бюджет хода.** Проверяется на границе шага: после `StepEnded` и до следующего запроса к модели.
-Исполняемый инструмент не прерывается. Время ожидания одобрения (`PermissionGate`) вычитается из
-`maxDuration`. При превышении ход завершается `TurnEnded(reason: completed, budgetExceeded: limit)`;
+Исполняемый инструмент не прерывается. Лимит исчерпан, когда значение его достигло (`>=`): при
+`maxTokens: 1000` ход, потративший ровно 1000 токенов, следующего шага не делает. Время ожидания
+одобрения (`PermissionGate`) вычитается из `maxDuration`. При превышении ход завершается `TurnEnded(reason: completed, budgetExceeded: limit)`;
 ACP-адаптер отдаёт `stopReason: max_turn_requests`, а вид лимита — в `_meta` (расширение через OpenSpec).
 
 **Сборка payload** (каждый запрос, транскрипт не меняется — LOOP-7):
@@ -144,7 +157,7 @@ ACP-адаптер отдаёт `stopReason: max_turn_requests`, а вид ли�
 2. Ремонт парности вызовов (§6.3.3); непустой отчёт → событие `ToolPairingRepaired`.
 3. Если есть заметка `Revise` — добавить `UserMessage([TextContent(note)])` в конец payload.
 3a. После MVP: если у сессии есть дедлайн (§17.12.5) — `UserMessage([TextContent(deadline.timeLeftLine(now))])` последним сообщением payload; в транскрипт не входит.
-4. Оценка размера `estimateTokens(LlmContext)`; если больше окна модели — один вызов `emergencyCompact` за ход (CMP-8) и пересборка с шага 1; если сжатие не помогло или его нет — синтетический `AssistantMessage(stopReason: error, errorClass: overflow, errorMessage: 'context window exhausted')` без обращения к провайдеру.
+4. Оценка размера `estimateTokens(LlmContext)`; если больше окна `effectiveContextWindow(model, cap: contextWindowCap)` — один вызов `emergencyCompact(preflight, …)` за ход (CMP-8) и пересборка с шага 1; если сжатие не помогло или его нет — синтетический `AssistantMessage(stopReason: error, errorClass: overflow, errorMessage: 'context window exhausted')` без обращения к провайдеру и без `ModelRequested`.
 5. `LlmContext(systemPrompt, messages, tools.map(toSchema))` → `ModelRequested` → `stream(...)`.
 
 `systemPrompt` берётся из текущего `LoopContext` и между шагами меняется только через
@@ -292,8 +305,9 @@ runAgentLoop(prompts, context, config, emit, cancel):
         пересобрать payload, ModelRequested, повторить запрос того же шага (без второго StepStarted)
 14a   if response.stopReason == error and response.errorClass == overflow:   # §2.11, §9.5
         if not emergencyUsed and emergencyCompact != null:  # общий с preflight (§5.2, шаг 4) флаг: один раз за ход (CMP-8)
-          emergencyUsed = true; ctx = emergencyCompact(cancel)
-          if ctx != null: применить ctx; goto 11           # один повтор того же шага; ответ с ошибкой в транскрипт не входит
+          emergencyUsed = true; ctx = emergencyCompact(overflow, cancel)
+          if ctx != null: применить ctx; goto 11           # один повтор того же шага, как в шаге 14: без второго
+                                                           # StepStarted; ответ с ошибкой не входит в транскрипт и не эмитится
         # иначе — обычная ошибка шага: шаг 16, reason = failed
 15    transcript[last] = response; emit MessageEnded(response); usage += response.usage
 16    if response.stopReason in {error, aborted}:
@@ -468,6 +482,8 @@ final class Agent {
   List<Message> get messages;                      // неизменяемая копия транскрипта
   bool get isRunning;
   void replaceTranscript(List<Message> messages);  // только вне хода: после сжатия (§9)
+  /// Общая очередь событий (LOOP-2): через неё эмитят цикл и сервисы сессии (PlanService → PlanUpdated).
+  Future<void> emit(AgentEvent event);
   AgentLoopConfig config;                          // меняется между ходами (модель, режим)
 }
 ```
@@ -479,9 +495,14 @@ abstract interface class AgentRuntime {
   Future<AgentSession> createSession(SessionSpec spec);   // cwd, mode, model, mcpServers, ports, extraBeforeToolCall, extraAfterToolCall
   /// После MVP режим открытия mode (§17.6.8): занятая другим процессом сессия при
   /// OpenMode.write → SessionLockedException(owner).
+  /// cwd — рабочая папка клиента; отличается от заголовка → запись custom
+  /// codelab.cwd_changed (§13.5, шаг 2). Модель — из журнала через каталог (§2.12.2).
   Future<AgentSession> loadSession(SessionId id, SessionHostPorts ports,
-      {OpenMode mode = OpenMode.write});
-  Future<List<SessionSummary>> listSessions({String? cwd});
+      {ModelRef? model, String? cwd, OpenMode mode = OpenMode.write});
+  ModelCatalog get models;                            // каталог сборки; без services.models — одна defaultModel
+  /// Страница сводок с курсором: ACP session/list пагинирует (design.md change
+  /// add-agent-core-sessions-and-compaction, D5); неверный курсор — InvalidCursor.
+  Future<SessionPage> listSessions({String? cwd, String? cursor, int pageSize = 50});
   Future<SessionSearchPage> searchSessions(SessionSearchQuery query);   // после MVP (§17.6.17, D-17): делегирует SessionStore.search
   /// После MVP (§17.6): работают и для незагруженной сессии.
   Future<String> renameSession(SessionId id, String title);   // §17.6.4
@@ -527,8 +548,10 @@ abstract interface class AgentSession {
   Future<RewindResult> rewind(String messageId,
       {bool? summarize, bool dryRun = false, CancelToken? cancel});
   Future<void> label(String targetId, String? label);
-  // После MVP (§8.5.1, §17.9.9): закрыть сессию — остановить субагентов и фоновые команды;
-  // seal: true дополнительно запечатывает журнал (поздние записи отбрасываются, SES-13).
+  // С этапа 3 — close() без seal: отменить ход, дождаться очереди записи журнала (design.md
+  // change add-agent-core-sessions-and-compaction, D4). После MVP (§8.5.1, §17.9.9): ещё и
+  // остановить субагентов и фоновые команды; seal: true дополнительно запечатывает журнал
+  // (поздние записи отбрасываются, SES-13).
   Future<void> close({bool seal = false});
 }
 enum OpenMode { write, readOnlyIfLocked, readOnly }   // после MVP, §17.6.2

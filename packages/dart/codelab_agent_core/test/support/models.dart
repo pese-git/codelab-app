@@ -22,3 +22,13 @@ AssistantMessage partialMessage({
   errorClass: errorClass,
   timestamp: DateTime.utc(2026),
 );
+
+/// [testModel] с окном [window] — для тестов сжатия (§9.4).
+ModelRef modelWithWindow(int window) => ModelRef(
+  provider: testModel.provider,
+  id: testModel.id,
+  api: testModel.api,
+  baseUrl: testModel.baseUrl,
+  contextWindow: window,
+  maxOutputTokens: testModel.maxOutputTokens,
+);

@@ -82,7 +82,7 @@ Streaming lifecycle должен иметь одного authoritative owner.
 
 ```text
 ACP request streaming
-    → acp_client_core
+    → codelab_client_acp
 
 presentation projection
     → BLoC/Cubit

@@ -171,8 +171,8 @@ render(template, values):
 
 ```dart
 final class PromptInputs {
-  final String cwd, platform, modeName; final DateTime today;
-  final ModeId mode; final CorePlan plan;
+  final String cwd, platform; final DateTime today;   // modeName = mode.value
+  final ModeId mode; final HostProfile profile;      // уже суженный профиль: CorePlan строится из этих же секций
   final Set<String> toolNames;               // итоговый набор инструментов сессии после выключений (§6.3.8)
   final List<McpServerSummary> mcpServers;   // подключённые серверы и число включённых инструментов
   final ProjectContext? projectContext;      // путь и текст AGENTS.md, уже усечённый хостом

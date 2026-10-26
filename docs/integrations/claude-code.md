@@ -130,7 +130,7 @@
 | Уведомление `session/update` (любая вложенность) | неизвестные корневые поля игнорируются; неизвестный вид обновления пропускается; структура известных видов проверяется строго |
 | Запросы агента (`session/request_permission`, `fs/*`, `terminal/*`) | строго по эталону (на них нужен ответ, они относятся к безопасности) |
 
-Терпимость реализована централизованно в `acp_protocol` (`decodeAcpResult` и `decodeAcpNotificationParams` для `session/update` → `tolerateUnknownRootFields`), а не в каждой модели; пропуск неизвестного вида обновления — `unsupportedSessionUpdateKind` в клиенте.
+Терпимость реализована централизованно в `codelab_acp_protocol` (`decodeAcpResult` и `decodeAcpNotificationParams` для `session/update` → `tolerateUnknownRootFields`), а не в каждой модели; пропуск неизвестного вида обновления — `unsupportedSessionUpdateKind` в клиенте.
 
 ---
 

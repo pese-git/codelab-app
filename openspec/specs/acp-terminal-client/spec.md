@@ -68,6 +68,6 @@ CodeLab SHALL завершать (kill) все активные terminal-про�
 Реализация запуска и управления процессами SHALL находиться в infrastructure-слое приложения и SHALL NOT быть доступна напрямую из `domain`, `application` или `presentation`, и SHALL оставаться независимой от `TerminalProcessFactory`, используемого локальной интерактивной terminal-панелью.
 
 #### Scenario: Domain/application не содержат прямых вызовов dart:io Process
-- **WHEN** запускается статический анализ `packages/dart/acp_client_core`
-- **THEN** пакет не импортирует `dart:io` для управления процессами напрямую, а обращается к ним через порт/интерфейс, реализуемый в `apps/codelab_app`
+- **WHEN** запускается статический анализ `packages/dart/codelab_client_acp`
+- **THEN** пакет не импортирует `dart:io` для управления процессами напрямую, а обращается к ним через порт/интерфейс, реализуемый в `apps/codelab_desktop`
 

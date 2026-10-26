@@ -14,9 +14,9 @@
    пакет, потому что ядру `package:web` запрещён, а `codelab_agent_io` — только `dart:io`.
 2. **10.2. Профили `mobile` и `web`** в `buildAgentCore`: `shellExec` выключен («нет shell на
    платформе»), MCP только по HTTP, хранилище сессий — папка документов приложения или IndexedDB.
-3. **10.3. Composition root app по платформам:** `apps/codelab_app/lib/app/platform_services.dart`
+3. **10.3. Composition root app по платформам:** `apps/codelab_desktop/lib/app/platform_services.dart`
    с условным импортом (`if (dart.library.io)` / `if (dart.library.js_interop)`); на web и
-   мобильных нет stdio-профилей, клиент не объявляет `terminal`, `acp_client_io` не подключается.
+   мобильных нет stdio-профилей, клиент не объявляет `terminal`, `codelab_client_io` не подключается.
 4. **10.4. Мобильные:** рабочая папка — каталог документов приложения (`path_provider` уже в
    зависимостях); `LocalExecutionEnv` с выключенным `exec` — `mobileHostServices` из
    `codelab_embedded/lib/io.dart` (§9.12).
@@ -24,8 +24,8 @@
    откладывается: браузер не даёт задать заголовок авторизации, а токен в URL запрещён правилами
    приватности; способ передачи токена — отдельный OpenSpec change.
 6. **10.6. Сборки:** `fvm flutter build web`, `fvm flutter build ios --simulator`,
-   `fvm flutter build apk --debug` для `apps/codelab_app`; web-сборка — в CI-джобе `web-compile`.
-7. **10.7. Тест** `apps/codelab_app/integration_test/embedded_no_shell_flow_test.dart`: промпт →
+   `fvm flutter build apk --debug` для `apps/codelab_desktop`; web-сборка — в CI-джобе `web-compile`.
+7. **10.7. Тест** `apps/codelab_desktop/integration_test/embedded_no_shell_flow_test.dart`: промпт →
    чтение и запись файла в рабочей папке → в списке инструментов модели нет `exec` (HOST-4
    документа ядра).
 

@@ -279,6 +279,46 @@ void main() {
     model.verify();
   });
 
+  // Отмена посреди стрима (фикстура acp/prompt-cancel-mid-stream; design.md
+  // change `add-dart-agent-acp-server`, D15): текст ответа уже ушёл, шаг
+  // ждёт отмены и заканчивается aborted.
+  test('waitForCancel with reply streams the reply, then waits', () async {
+    final model = ScriptedStreamFunction.fromJson(
+      _script([
+        {
+          'reply': [
+            {'text': 'Starting'},
+          ],
+          'waitForCancel': true,
+        },
+      ]),
+    );
+    final source = CancelTokenSource();
+    final deltas = <String>[];
+
+    final stream = model.call(
+      testModel,
+      _context([_user('x')]),
+      cancel: source.token,
+    );
+    final done = () async {
+      await for (final event in stream) {
+        if (event case BlockDeltaEvent(:final delta)) {
+          deltas.add(delta);
+        }
+      }
+      return stream.result;
+    }();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(deltas, ['Starting']);
+
+    source.cancel();
+    final answer = await done;
+
+    expect(answer.stopReason, StopReason.aborted);
+    model.verify();
+  });
+
   test(r'${cwd} and ${sessionId} are substituted in text', () async {
     final model = ScriptedStreamFunction.fromJson(
       _script([
@@ -299,6 +339,38 @@ void main() {
       const ThinkingContent('In /work/demo.'),
       const TextContent('Session sess-1 in /work/demo.'),
     ]);
+  });
+
+  // Бинарь с --llm-script: шаги общие для сессий с разными cwd (design.md
+  // change `add-codelab-agent-binary`, D3).
+  test(r'cwdOf gives ${cwd} of the session of the request', () async {
+    final model = ScriptedStreamFunction.fromJson(
+      _script([
+        for (var i = 0; i < 2; i++)
+          {
+            'reply': [
+              {'text': r'cwd was: ${cwd}'},
+            ],
+            'stopReason': 'stop',
+          },
+      ]),
+      cwdOf: (sessionId) =>
+          {'sess-1': '/work/a', 'sess-2': '/work/b'}[sessionId],
+    );
+
+    final first = await _ask(model, _context([_user('x')]));
+    final second = await _ask(
+      model,
+      LlmContext(
+        systemPrompt: 'You are CodeLab.',
+        messages: [_user('y')],
+        tools: const [],
+        cacheKey: 'sess-2',
+      ),
+    );
+
+    expect(first.content, [const TextContent('cwd was: /work/a')]);
+    expect(second.content, [const TextContent('cwd was: /work/b')]);
   });
 
   test('expect toolResult and tools', () async {
@@ -362,7 +434,7 @@ void main() {
         jsonDecode(
               File(
                 corePath(
-                  '../acp_testing/fixtures/acp/prompt-tool-permission-allow.json',
+                  '../codelab_acp_testing/fixtures/acp/prompt-tool-permission-allow.json',
                 ),
               ).readAsStringSync(),
             )

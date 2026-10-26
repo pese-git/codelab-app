@@ -6,14 +6,14 @@ Monorepo CodeLab на Dart и Flutter: desktop-клиент **codelab-app** дл
 
 | Путь | Что это |
 |---|---|
-| `apps/codelab_app` | Flutter Desktop клиент ACP |
-| `packages/dart/acp_protocol` | типизированные модели ACP JSON-RPC, кодеки и валидация |
-| `packages/dart/acp_transports` | транспорты ACP; `io.dart` — stdio и WebSocket |
-| `packages/dart/acp_client_core` | domain, состояние и use cases ACP-клиента |
-| `packages/dart/acp_testing` | fake-транспорты, фикстуры и помощники conformance-тестов |
+| `apps/codelab_desktop` | Flutter Desktop клиент ACP |
+| `packages/dart/codelab_acp_protocol` | типизированные модели ACP JSON-RPC, кодеки и валидация |
+| `packages/dart/codelab_acp_transports` | транспорты ACP; `io.dart` — stdio и WebSocket |
+| `packages/dart/codelab_client_acp` | domain, состояние и use cases ACP-клиента |
+| `packages/dart/codelab_acp_testing` | fake-транспорты, фикстуры и помощники conformance-тестов |
 | `packages/dart/codelab_agent_core` | ядро Dart-агента на чистом Dart |
 | `packages/dart/codelab_architecture_tests` | сторож границ пакетов |
-| `packages/flutter/acp_ui` | Fluent UI виджеты рабочего места |
+| `packages/flutter/codelab_ui` | Fluent UI виджеты рабочего места |
 | `openspec/` | спецификации поведения и активные изменения |
 | `docs/` | архитектура, спецификация ACP, интеграции |
 

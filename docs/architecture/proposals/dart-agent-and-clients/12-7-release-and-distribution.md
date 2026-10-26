@@ -71,7 +71,7 @@
 не поддерживается: бинарь `dart compile exe` связан с glibc.
 
 **App.** До первого релиза: идентификатор пакета `com.example.codelabApp` и
-`PRODUCT_COPYRIGHT` в `apps/codelab_app/macos/Runner/Configs/AppInfo.xcconfig` заменяются
+`PRODUCT_COPYRIGHT` в `apps/codelab_desktop/macos/Runner/Configs/AppInfo.xcconfig` заменяются
 постоянными (обратный домен владельца — [§11](11-assumptions-and-open-questions.md)); каталоги `windows/` и `linux/` создаются
 `flutter create --platforms windows,linux`.
 
@@ -95,7 +95,7 @@
   уровня ОС нет: целостность — подписанный `SHA256SUMS` и происхождение (§12.7.6). AppImage —
   Could, после первого релиза.
 
-App (`apps/codelab_app`) не использует `google_fonts` с загрузкой шрифтов во время работы: шрифты — ассеты
+App (`apps/codelab_desktop`) не использует `google_fonts` с загрузкой шрифтов во время работы: шрифты — ассеты
 сборки (иначе app делает сетевой запрос, не описанный в политике, §12.7.7).
 
 ## 12.7.3. Каналы

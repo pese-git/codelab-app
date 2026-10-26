@@ -1,0 +1,361 @@
+{
+  "id": "acp/prompt-cancel-mid-tool",
+  "spec": [
+    "05-Prompt Turn.md#cancellation",
+    "08-Tool Calls.md#status",
+    "10-Terminal.md#executing-commands",
+    "10-Terminal.md#killing-commands",
+    "10-Terminal.md#releasing-terminals",
+    "17-Schema.md#terminal-kill",
+    "17-Schema.md#terminal-release"
+  ],
+  "description": "В режиме bypass модель запускает exec \"dart test\"; агент создаёт терминал клиента и ждёт выхода; пользователь отменяет ход; агент убивает команду, забирает вывод, освобождает терминал, сообщает вызов как failed и отвечает stopReason cancelled. Ожидаемые кадры не пишут _meta.codelab: _meta сравнивается как $partial.",
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "bypass",
+    "terminal": {
+      "/bin/sh -c dart test": {
+        "output": "Running tests...\n"
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "тесты"
+          }
+        },
+        "reply": [
+          {
+            "text": "Запущу тесты."
+          },
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "dart test"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "пользователь отправляет промпт",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Запусти тесты"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Запущу тесты."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "dart test"
+            },
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "dart test"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      },
+      "note": "режим bypass: вызов исполняется без запроса разрешения"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "createId"
+        },
+        "method": "terminal/create",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "command": "/bin/sh",
+            "args": [
+              "-c",
+              "dart test"
+            ],
+            "cwd": "${cwd}"
+          }
+        }
+      },
+      "note": "команда строкой уходит через /bin/sh -c (agent-core §4.7)"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${createId}",
+        "result": {
+          "terminalId": {
+            "$capture": "terminalId"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "terminal",
+                "terminalId": "${terminalId}"
+              }
+            ]
+          }
+        }
+      },
+      "note": "терминал встраивается в вызов"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "waitId"
+        },
+        "method": "terminal/wait_for_exit",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "пользователь отменяет ход, пока команда работает",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/cancel",
+        "params": {
+          "sessionId": "${sessionId}"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "killId"
+        },
+        "method": "terminal/kill",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "ответ на kill и запоздалый ответ на wait_for_exit — в любом порядке",
+      "unordered": [
+        {
+          "jsonrpc": "2.0",
+          "id": "${killId}",
+          "result": {
+            "$oneOf": [
+              null,
+              {}
+            ]
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": "${waitId}",
+          "result": {
+            "$any": {
+              "exitCode": null,
+              "signal": "SIGTERM"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "outputId"
+        },
+        "method": "terminal/output",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${outputId}",
+        "result": {
+          "$partial": {
+            "output": "Running tests...\n",
+            "truncated": false
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "releaseId"
+        },
+        "method": "terminal/release",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "${terminalId}"
+        }
+      },
+      "note": "release всегда после kill (ACP-9)"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${releaseId}",
+        "result": {
+          "$oneOf": [
+            null,
+            {}
+          ]
+        }
+      },
+      "note": "09-File System.md показывает \"result\": null, 17-Schema.md описывает ответ объектом — принимаются оба прочтения"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "failed"
+          }
+        }
+      },
+      "note": "отменённый вызов — failed: статуса cancelled у tool call нет (ACP-1)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "note": "агент может назвать сессию после первого хода",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "после всех уведомлений — stopReason cancelled (ACP-5)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "cancelled"
+        }
+      }
+    }
+  ]
+}

@@ -1,25 +1,25 @@
 import '../cancel/cancel_token.dart';
+import '../loop/agent_events.dart' show ToolOutcome;
 import '../loop/loop_config.dart';
 import '../tools/agent_tool.dart';
+import '../tools/builtin/common.dart' show pathPattern;
+import 'critical_patterns.dart';
 import '../util/logger.dart';
 import 'gate.dart';
 import 'modes.dart';
 import 'pattern.dart';
 
-/// The permission policy of a session (`agent-core-architecture` §7.4): the
-/// first `beforeToolCall` hook of every session (PERM-1). A denial is data
-/// for the model, the turn goes on (PERM-7).
-
+/// Правила политики из конфигурации (§7.3).
 final class PolicyRules {
   const PolicyRules({
     this.toolPolicies = const {},
     this.denyPatterns = const {},
   });
 
-  /// `permissions.tools` of the configuration.
+  /// `permissions.tools` конфигурации.
   final Map<String, ToolPolicy> toolPolicies;
 
-  /// Explicit denials of the configuration.
+  /// Явные запреты конфигурации.
   final Set<PermissionKey> denyPatterns;
 }
 
@@ -39,12 +39,34 @@ final class Denied extends PolicyOutcome {
   final String reason;
 }
 
-/// A critical pattern of a command (§7.6); `null` — none.
+/// Критический шаблон вызова (§7.6): метки через `; ` или `null`.
+///
+/// Почему функция, а не вызов напрямую: тесты политики подменяют её, чтобы
+/// проверять порядок правил без разбора команд. [cwd] — корень сессии:
+/// цели команды (`.codelab/config.yaml`) сравниваются относительно него.
 typedef CriticalFinder =
-    String? Function(AgentTool tool, Map<String, Object?> args);
+    String? Function(AgentTool tool, Map<String, Object?> args, String cwd);
 
-String? _noCritical(AgentTool tool, Map<String, Object?> args) => null;
+/// Критические шаблоны команды `exec` по таблице §7.6 (шаг 3 `decide`).
+String? defaultCriticalFinder(
+  AgentTool tool,
+  Map<String, Object?> args,
+  String cwd,
+) => switch ((tool.name, args['command'])) {
+  ('exec', final String command) => findCritical(command, cwd: cwd)?.label,
+  _ => null,
+};
 
+/// Решает, можно ли исполнить вызов инструмента (§7.4).
+///
+/// Почему отдельный объект: ни один инструмент, зарегистрированный любым
+/// способом, не исполняется без решения политики (PERM-1), а правила
+/// (режим × уровень, «разрешить всегда», критические команды и пути) должны
+/// быть одними для всех инструментов.
+///
+/// Как использовать: сборка ядра создаёт политику на сессию и ставит
+/// [asHook] первым звеном `beforeToolCall`. Отказ — данные для модели, ход
+/// продолжается (PERM-7); `AgentSession.prompt` вызывает [clearTurnGrants].
 final class PermissionPolicy {
   PermissionPolicy({
     required this.mode,
@@ -53,20 +75,20 @@ final class PermissionPolicy {
     this.rules = const PolicyRules(),
     PermissionDecisionStore? decisions,
     required this.logger,
-    this.findCritical = _noCritical,
+    this.findCritical = defaultCriticalFinder,
   }) : decisions = decisions ?? PermissionDecisionStore();
 
-  /// The mode of the session; a change applies to the next call.
+  /// Режим сессии; смена действует со следующего вызова.
   ModeId mode;
 
-  /// Overrides the mode of the session (`autopilot` from a launch flag).
+  /// Перекрывает режим сессии (`autopilot` из флага запуска).
   final PermissionMode? modeOverride;
   final PermissionGate? gate;
   final PolicyRules rules;
   final PermissionDecisionStore decisions;
   final Logger logger;
 
-  /// Critical patterns arrive in iteration 2 of the change (§7.6).
+  /// Критические шаблоны команд (§7.6).
   final CriticalFinder findCritical;
 
   final _turnAllow = <String>{};
@@ -74,7 +96,7 @@ final class PermissionPolicy {
 
   PermissionMode get effectiveMode => modeOverride ?? mode.permissionMode;
 
-  /// Grants by tool name for the current turn only.
+  /// Разрешения и запреты по имени инструмента только на текущий ход.
   void grantForTurn({
     Set<String> allow = const {},
     Set<String> deny = const {},
@@ -83,13 +105,14 @@ final class PermissionPolicy {
     _turnDeny.addAll(deny);
   }
 
-  /// Called at the start of every `prompt()` (PERM-8).
+  /// Вызывается в начале каждого `prompt()` (PERM-8).
   void clearTurnGrants() {
     _turnAllow.clear();
     _turnDeny.clear();
   }
 
-  /// The hook of the policy; [lookup] finds the tool of a call.
+  /// Хук политики для цепочки `beforeToolCall`; [lookup] находит
+  /// инструмент вызова.
   BeforeToolCallHook asHook(
     AgentTool? Function(String name) lookup,
   ) => (call, args, ctx) async {
@@ -102,6 +125,12 @@ final class PermissionPolicy {
       Denied(:final reason) => Block(
         'Permission denied for ${tool.name}: $reason. Do not retry the same '
         'call; choose another approach or ask the user.',
+        // Ход отменён, пока шёл вопрос: вызов отменён до старта, а не
+        // отклонён человеком (§13.7, «Статусы вызова»). Отказ `cancelled`
+        // клиента без отмены хода остаётся `rejected` (PERM-7).
+        outcome: ctx.cancel.isCancelled
+            ? ToolOutcome.cancelled
+            : ToolOutcome.rejected,
       ),
     };
   };
@@ -150,7 +179,22 @@ final class PermissionPolicy {
       return const Denied('plan mode: changes are not allowed');
     }
     final effective = effectiveMode;
-    if (findCritical(tool, args) case final label?) {
+    // Критический путь правки (§7.6.1, PERM-11): конфигурацию агента меняет
+    // только человек, «разрешить всегда» на неё не действует.
+    if (_agentConfigTarget(tool, args, ctx.env.cwd) case final path?) {
+      if (effective == PermissionMode.autopilot || gate == null) {
+        return Denied('Editing agent configuration requires a human: $path');
+      }
+      return _ask(
+        tool,
+        args,
+        ctx,
+        key,
+        reason: 'agent configuration: $path',
+        allowAlways: false,
+      );
+    }
+    if (findCritical(tool, args, ctx.env.cwd) case final label?) {
       if (effective == PermissionMode.autopilot) {
         return Denied('critical command blocked in autopilot: $label');
       }
@@ -160,6 +204,7 @@ final class PermissionPolicy {
         ctx,
         key,
         reason: 'critical command: $label',
+        criticalLabel: label,
         allowAlways: false,
       );
     }
@@ -186,12 +231,29 @@ final class PermissionPolicy {
     };
   }
 
+  /// Цель правки из списка §7.6.1 относительно корня сессии или `null`.
+  /// Правку файла узнаём по `lockPath`: путь блокируют именно инструменты,
+  /// которые меняют файл (`write`, `edit`).
+  static String? _agentConfigTarget(
+    AgentTool tool,
+    Map<String, Object?> args,
+    String cwd,
+  ) {
+    final raw = tool.lockPath(args);
+    if (raw == null) {
+      return null;
+    }
+    final relative = pathPattern(raw, cwd);
+    return isAgentConfigPath(relative) ? relative : null;
+  }
+
   Future<PolicyOutcome> _ask(
     AgentTool tool,
     Map<String, Object?> args,
     ToolContext ctx,
     PermissionKey key, {
     String? reason,
+    String? criticalLabel,
     bool allowAlways = true,
   }) async {
     final gate = this.gate;
@@ -201,7 +263,7 @@ final class PermissionPolicy {
     final offered = allowAlways && tool.offersAllowAlways(args);
     ToolPresentation presentation;
     try {
-      presentation = await tool.present(args, ctx);
+      presentation = ctx.presentation ?? await tool.present(args, ctx);
     } on Object {
       presentation = ToolPresentation(title: tool.name);
     }
@@ -230,7 +292,9 @@ final class PermissionPolicy {
             rawInput: args,
             locations: presentation.locations,
             diffs: presentation.diffs,
+            pattern: key.pattern,
             reason: reason,
+            criticalLabel: criticalLabel,
             allowAlwaysOffered: offered,
           ),
           ctx.cancel,

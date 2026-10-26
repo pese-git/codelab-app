@@ -7,16 +7,16 @@
 ## 13.1. Назначение
 
 `codelab_agent_acp` — проекция `AgentRuntime` в ACP. Адаптер принимает JSON-RPC-кадры через
-`AcpTransport`, декодирует их моделями `acp_protocol`, вызывает API ядра и проецирует
+`AcpTransport`, декодирует их моделями `codelab_acp_protocol`, вызывает API ядра и проецирует
 `AgentEvent` в `session/update`. Методы, поля и значения перечислений берутся только из
-`acp_protocol` и `docs/acp/protocol/`. Всё сверх них — поля `_meta.codelab.*` или методы
+`codelab_acp_protocol` и `docs/acp/protocol/`. Всё сверх них — поля `_meta.codelab.*` или методы
 `_codelab/*`; каждое расширение вводится OpenSpec change (`AGENTS.md` §3.4) и перечислено в
 §13.12.
 
 ```dart
 final class AcpAgentServer {
-  AcpAgentServer({required AgentRuntime runtime, required AcpServerConfig config,
-                  required Logger logger, required TraceSink trace, required Clock clock});
+  AcpAgentServer({required BuiltAgentCore core, required AcpServerConfig config,
+                  required Logger logger, required Clock clock});   // профиль — из core.plan
   /// Обслуживает одно соединение до его закрытия. Можно вызывать для нескольких транспортов.
   Future<void> serve(AcpTransport transport);
   /// Безопасное завершение: §13.10.
@@ -24,9 +24,15 @@ final class AcpAgentServer {
 }
 final class AcpServerConfig {
   final Implementation agentInfo; final Duration detachGrace;   // 30 с
-  final AcpTimeouts timeouts; final bool allowLocalExecFallback;
+  final AcpTimeouts timeouts;
+  final ExecutionEnv Function(String cwd)? localListing;        // §10.4: бинарь по stdio
 }
 ```
+
+Сырые кадры разбирает транспорт: порт `AcpTransport` отдаёт `JsonRpcMessage`, поэтому ответы
+`-32700` и `-32600` на неразбираемый JSON или кадр не JSON-RPC 2.0 даёт серверный транспорт
+(`StdioServerAcpTransport`, `WebSocketServerAcpTransport`), а сервер — на всё, что пришло
+сообщением (§13.10).
 
 Внутри соединения есть три компонента:
 
@@ -61,9 +67,9 @@ final class AcpServerConfig {
 | `promptCapabilities.image` | `true` | картинки хранятся в транскрипте; для модели без `image` адаптер провайдера ставит плейсхолдер (§2.5) |
 | `promptCapabilities.audio` | `false` | аудио ни один адаптер провайдера MVP не передаёт |
 | `promptCapabilities.embeddedContext` | `true` | `resource` с `text` превращается в текстовый блок с путём (§13.4) |
-| `mcpCapabilities.http` | `true` при capability `mcp` с транспортом `http` | |
+| `mcpCapabilities.http` | `true` при capability `mcp` с транспортом `http`; до этапа 8 (MCP) — `false` | |
 | `mcpCapabilities.sse` | `false` | транспорт SSE устарел в MCP; клиент MVP умеет stdio и streamable HTTP |
-| `sessionCapabilities.list` | `{}` | `session/list` (§13.5); без `sessionPersistence` — поле отсутствует |
+| `sessionCapabilities.list` | `{}` | `session/list` (§13.5); без `sessionPersistence` — поле `list` отсутствует, `sessionCapabilities` — `{}` |
 | `authMethods` | `[]`; после MVP при `services.login != null` — по методу `codelab-login-<id>` на провайдер с входом по подписке (§17.10.6) | аутентификации на уровне ACP нет (§13.3) |
 
 После MVP `agentCapabilities._meta.codelab` объявляет расширения, введённые через OpenSpec
@@ -90,7 +96,7 @@ final class AcpServerConfig {
 ## 13.3. `authenticate`
 
 `authMethods` пуст, поэтому клиент по спецификации не вызывает `authenticate`. Метода нет в
-`acp_protocol`; вызов получает `-32601`. Защита соединения — на уровне транспорта: stdio — это
+`codelab_acp_protocol`; вызов получает `-32601`. Защита соединения — на уровне транспорта: stdio — это
 дочерний процесс пользователя; WebSocket слушает `127.0.0.1` и проверяет заголовок
 `Authorization: Bearer <token>` при рукопожатии HTTP (ответ `401` до ACP). Код `-32000`
 зарезервирован за будущим «Authentication required» и не используется ни для чего другого.
@@ -230,9 +236,9 @@ final class AcpServerConfig {
    * после MVP при объявленном `sessionTree` у `user_message_chunk` и `agent_message_chunk`
      реплея — `_meta.codelab.recordId` (id записи, для «перемотать сюда», §17.6.10); в режиме только
      чтения вызов без результата уходит со статусом `in_progress` (§17.6.8).
-6. После истории: последняя запись `plan` → `plan`; затем `current_mode_update`,
+6. После истории: последняя запись `plan` → `plan` (если план был); затем `current_mode_update`,
    `config_option_update` (полный снимок), `available_commands_update`, `session_info_update`
-   (`title`, `updatedAt`).
+   (`title`, `updatedAt`) — если у сессии есть заголовок.
 7. Ответ `LoadSessionResponse(modes, configOptions)` — после всех уведомлений реплея; после MVP в
    `_meta.codelab` — `readOnly` (шаг 4) и `forkedFrom` (§17.6.10).
 8. Если сессия была переподключена (шаг 3b): каждому ожидающему `session/request_permission`
@@ -240,7 +246,8 @@ final class AcpServerConfig {
    (если придёт) игнорируется (PERM-4).
 9. По `TurnEnded` переподключённого хода ответ на исходный `session/prompt` отправить некуда
    (его соединение закрыто). Адаптер отправляет новому соединению `session_info_update` с
-   `_meta.codelab.turnEnded: {"stopReason": "..."}` (расширение, §13.12); после MVP при непустом
+   `_meta.codelab.turnEnded: {"stopReason": "..."}` (расширение, §13.12), при сбое хода —
+   `{"error": {errorClass, message, retryable}}` (как `data.codelab`, §13.8); после MVP при непустом
    `TurnEnded.returnedSteers` — с полем `steerReturned: ["<steerId>", …]` (§17.7.2.2).
 
 Пример реплея (фрагмент):
@@ -272,7 +279,7 @@ final class AcpServerConfig {
 
 | `modeId` | `PermissionMode` | Дополнительно | Устаревшие синонимы (принимаются на входе) |
 |---|---|---|---|
-| `plan` | `write` + запрет tier `write` и `exec` с причиной «режим plan: изменения запрещены»; tier `network` (после MVP) не запрещён — спрашивается (§7.3, §17.1.5) | секция промпта `modes/plan` | `architect` |
+| `plan` | `write` + запрет tier `write` и `exec` с причиной `plan mode: changes are not allowed` (текст уходит модели, поэтому английский, §11.7); tier `network` (после MVP) не запрещён — спрашивается (§7.3, §17.1.5) | секция промпта `modes/plan` | `architect` |
 | `ask` | `alwaysAsk` | — | — |
 | `standard` | `write` | — | `debug` |
 | `accept-edits` | `acceptEdits` | чтение и правки (tier `read`, `write`) без вопроса; `exec`, MCP-инструменты и `network` спрашиваются; критические шаблоны спрашиваются (§7.3.1, P-06) | `acceptEdits` |
@@ -302,6 +309,10 @@ final class AcpServerConfig {
 5. `effort` → запись `config_change {optionId: "effort", value}`; действует со следующего шага
    (идущий запрос к модели не прерывается).
 
+Смена модели или усилия посреди хода доходит до цикла хуком `prepareNextStep` сессии на границе
+шага. Заметку §2.12.3 о смене на модель без рассуждения ставит мост сессии ACP-адаптера: смена
+пришла запросом клиента, а заметка не пишется в журнал и не уходит модели.
+
 **Опции сессии** — в порядке массива `configOptions` (спецификация: важные — первыми):
 
 | `id` | `category` | Значения | Когда есть в списке | Текущее значение |
@@ -329,9 +340,9 @@ final class AcpServerConfig {
    время хода уведомление уходит в той же очереди (§13.10), ход не прерывается.
 
 `session/set_mode` есть в спецификации ACP (`12-Session Model.md`, схема
-`SetSessionModeRequest {sessionId, modeId}`), но ещё не реализован в `acp_protocol`. Решение:
+`SetSessionModeRequest {sessionId, modeId}`), но ещё не реализован в `codelab_acp_protocol`. Решение:
 OpenSpec change этапа 4 добавляет `SetSessionModeRequest`/`SetSessionModeResponse` в
-`acp_protocol`; обработчик — та же функция, что для `configId: "mode"`, ответ `{}`, затем
+`codelab_acp_protocol`; обработчик — та же функция, что для `configId: "mode"`, ответ `{}`, затем
 уведомление `current_mode_update`. До этого изменения метод отвечает `-32601`, а клиенты
 используют `configOptions` (их спецификация называет предпочтительным способом).
 
@@ -452,13 +463,26 @@ Slash-команды приходят обычным `session/prompt` с тек�
 | `AgentError` | — | лог и trace; итог хода — через ответ (§13.8) |
 | `TurnEnded` | ответ `session/prompt` | §13.8; после MVP непустой `returnedSteers` → `steerReturned` (§17.7.2.2) |
 
+Ответ `session/prompt` ставится в очередь, когда `AgentSession.prompt` вернулся: после
+`TurnEnded` сессия ещё пишет автоматический заголовок (§8.10), и его `session_info_update` идёт
+до ответа — ответ остаётся последним кадром хода (ACP-3).
+
+Формы кадров вызова: `ToolCallProgress` — `tool_call_update` со `status: "in_progress"`; у
+отменённого вызова — только `status: "failed"` и `_meta.codelab.outcome`, без `content` (текст об
+отмене — для модели); пустые `locations` и `content` не отправляются. События сессии приходят
+подписчику асинхронно, поэтому запрос разрешения ждёт, пока `tool_call` его вызова встанет в
+очередь, а `terminal/wait_for_exit` — пока в очередь встанет `tool_call_update` с терминалом.
+
 **Статусы вызова.** `ToolCallStarted` эмитится при входе вызова в единую точку исполнения, **до**
 проверки разрешений (§6.3.1), поэтому `tool_call` уходит со `status: "pending"`; запрос
 разрешения тоже несёт `status: "pending"`. Переход в `in_progress` отправляет хук
 `markInProgress`, который ACP-адаптер передаёт в `SessionSpec.extraBeforeToolCall`: сборка
 (§10.7) ставит его **последним** в цепочке `beforeToolCall`, после проверки разрешений и прочих
 хуков. Хук ставит в `OutboundQueue` `tool_call_update {status: "in_progress"}` и возвращает
-`null` (не блокирует). Если вызов отклонён, отменён до старта или не прошёл валидацию, хук не
+`null` (не блокирует). События сессии приходят подписчику асинхронно, а хук вызывается в цикле
+синхронно: если `tool_call` вызова ещё не спроецирован, `in_progress` откладывается до его
+проекции. Если ход отменён, пока шёл запрос разрешения, вызов получает исход `cancelled`, а не
+`rejected`: он отменён до старта. Если вызов отклонён, отменён до старта или не прошёл валидацию, хук не
 срабатывает и статус идёт `pending → failed`. После MVP вызов `ask` (§17.11.7) остаётся в
 `status: "pending"`, пока клиент не ответит на запрос `_codelab/ask`. Итоговые переходы:
 
@@ -530,8 +554,8 @@ JSON-RPC ошибку: ответ всегда `cancelled`, как требуе�
 
 | Метод | Когда | Таймаут | При таймауте |
 |---|---|---|---|
-| `fs/read_text_file` | `readText` (`path` абсолютный, `line`, `limit`) | 30 с | `Err(FileError.timeout)` |
-| `fs/write_text_file` | `writeText` | 30 с | `Err(FileError.timeout)`; модель предупреждается, что запись могла пройти |
+| `fs/read_text_file` | `readText` (`path` абсолютный, `line`, `limit`) | 30 с | `Err(FileError(io))` с текстом `client did not answer … (timed out)` (кода `timeout` у `FileErrorCode` нет) |
+| `fs/write_text_file` | `writeText` | 30 с | `Err(FileError(io))` с тем же текстом и пометкой `the write may have completed` |
 | `terminal/create` | `exec`: `command: "/bin/sh"`, `args: ["-c", <команда>]`, `cwd`, `env` (`[{name, value}]`: `exec.env` и `exec.secrets`, §4.5), `outputByteLimit` = `ExecOptions.outputByteLimit` (1 МиБ) | 30 с | `Err(ExecError.spawnFailed)` |
 | `terminal/wait_for_exit` | после `create` | нет собственного; ограничен таймаутом `exec` (по умолчанию 120 с) | `terminal/kill` → `terminal/output` → `terminal/release`, `Err(ExecError.timeout)` с хвостом |
 | `terminal/output` | после выхода или kill | 30 с | результат без вывода с пометкой |
@@ -561,12 +585,12 @@ JSON-RPC id исходящих запросов — строки `perm-<n>`, `fs
 
 | Правило | Поведение |
 |---|---|
-| Плохой кадр не убивает соединение | неразбираемый JSON → ответ `-32700` с `id: null`; не JSON-RPC 2.0 → `-32600`; неизвестный метод запроса → `-32601`; неизвестное уведомление → лог и игнор; параметры не проходят декодер `acp_protocol` → `-32602`. Соединение и активные ходы живут (ACP-4) |
+| Плохой кадр не убивает соединение | неразбираемый JSON → ответ `-32700` с `id: null`; не JSON-RPC 2.0 → `-32600`; неизвестный метод запроса → `-32601`; неизвестное уведомление → лог и игнор; параметры не проходят декодер `codelab_acp_protocol` → `-32602`. Соединение и активные ходы живут (ACP-4) |
 | Ответ на неизвестный id | лог `acp.frame.bad`, игнор |
 | Исключение обработчика | `-32603`, стек в лог, соединение живёт |
 | Порядок | все кадры соединения — через одну `OutboundQueue`; ответ на `session/prompt` — после последнего уведомления хода; ответ `session/load` — после реплея |
 | Сбой отправки | исключение транспорта при записи → соединение `detached`; ход продолжает работу и пишет журнал; уведомления копятся только как события ядра (не кадры) |
-| Отсоединение | EOF stdin или закрытие WebSocket → `detached` на `detachGrace` (30 с); после MVP — только когда отсоединились все соединения, подключённые к сессии (§17.6.9): отсоединение одного клиента ход не отменяет. Если за это время сессию загрузили новым соединением — переподключение (§13.5, шаг 3b). Иначе: активный ход отменяется (`cancelled`), ожидающие разрешения → `cancelled`. Для stdio отсоединение означает конец процесса агента, поэтому grace не ждётся. После MVP окончательное отсоединение (grace истёк) закрывает сессию `AgentSession.close`, что останавливает фоновые команды (§17.9.9). Сессия, открытая с `_meta.codelab.sealOnClose: true`, закрывается сразу при отсоединении открывшего её соединения, без `detachGrace`, с `seal: true` (§8.5.1), если других подключённых соединений нет |
+| Отсоединение | EOF stdin или закрытие WebSocket → соединение отвечает на уже прочитанные запросы, отправляет очередь и закрывает транспорт (у stdio выход живёт дольше входа: `echo '{…}' \| codelab-agent serve --stdio` ждёт ответа после EOF); сессии → `detached` на `detachGrace` (30 с); после MVP — только когда отсоединились все соединения, подключённые к сессии (§17.6.9): отсоединение одного клиента ход не отменяет. Если за это время сессию загрузили новым соединением — переподключение (§13.5, шаг 3b). Иначе: активный ход отменяется (`cancelled`), ожидающие разрешения → `cancelled`. Для stdio отсоединение означает конец процесса агента, поэтому grace не ждётся. После MVP окончательное отсоединение (grace истёк) закрывает сессию `AgentSession.close`, что останавливает фоновые команды (§17.9.9). Сессия, открытая с `_meta.codelab.sealOnClose: true`, закрывается сразу при отсоединении открывшего её соединения, без `detachGrace`, с `seal: true` (§8.5.1), если других подключённых соединений нет |
 | Повторная доставка разрешения | при переподключении неотвеченный `session/request_permission` отправляется заново с новым id и тем же `toolCallId`; решение принимается один раз (PERM-4) |
 | Безопасное завершение | `shutdown()`: новые запросы → `-32603` «shutting down»; ожидающие разрешения → `cancelled`; активные ходы отменяются и дожидаются `TurnEnded` (не дольше `grace`); журналы дописываются; после MVP освобождаются lease сессий (§17.6.8); затем `transport.close()` |
 | Нет тихих no-op | `session/cancel` без хода, `session/prompt` при активном ходе, ответ на устаревший запрос — каждое логируется отдельным событием |
@@ -607,9 +631,9 @@ dart-agent-and-clients §12.5), поэтому отдельные коды дл�
 ## 13.11. InProcessAcpLink
 
 Встроенный режим соединяет `AcpClientApplication` клиента и `AcpAgentServer` парой транспортов в
-памяти: `InProcessAcpLink` с концами `client` и `agent` (`packages/dart/acp_transports/lib/src/in_process_acp_transport.dart`,
+памяти: `InProcessAcpLink` с концами `client` и `agent` (`packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart`,
 этап 7, dart-agent-and-clients §9.12). Оба конца — `InProcessAcpTransport`, реализация
-существующего интерфейса `AcpTransport` (`packages/dart/acp_transports/lib/src/acp_transport.dart`):
+существующего интерфейса `AcpTransport` (`packages/dart/codelab_acp_transports/lib/src/acp_transport.dart`):
 сообщения передаются объектами `JsonRpcMessage` без кодирования в текст.
 
 ```dart
@@ -736,13 +760,17 @@ Object? _copyJson(Object? v) => switch (v) {
 * `send` на конце не в состоянии `connected` (до `start()` или после `close()`) — `sendFailed`.
   Сообщение, пришедшее до `start()` получателя, буферизуется и доставляется при `start()`: агент
   может ответить раньше, чем клиент запустил свой конец.
-* Закрытие одного конца переводит другой в `failed` с `disconnected` — как EOF у stdio; сервер
-  отрабатывает отсоединение по §13.10. Сообщение, пришедшее после закрытия, отбрасывается с
+* Закрытие одного конца переводит другой в `failed` с `disconnected` и закрывает его `inbound` —
+  как EOF у stdio; сервер отрабатывает отсоединение по §13.10. Сообщение, пришедшее после закрытия, отбрасывается с
   диагностикой `warning`.
 * `codelab_embedded` создаёт `InProcessAcpLink()`, отдаёт `link.client` `AcpClientApplication`,
   а `link.agent` — `AcpAgentServer.serve`.
 
 ## 13.12. Расширения протокола (каждое — через OpenSpec change)
+
+Расширения этапа 4 — `outcome`, `budgetExceeded`, `data.codelab`, `turnEnded`, `critical` — вводит
+OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, которые их ожидают,
+объявляют `extensions` (FIX-4).
 
 | Расширение | Где | Зачем |
 |---|---|---|
@@ -752,7 +780,8 @@ Object? _copyJson(Object? v) => switch (v) {
 | `data.codelab` (`errorClass`, `message`, `retryable`, `reason`) | JSON-RPC ошибки | машиночитаемая причина |
 | `data.codelab.rateLimit` `{kind, provider, model, retryAfterMs, resetAt, window}` (после MVP, OpenSpec `add-rate-limit-info`) | JSON-RPC ошибка `-32603` на `session/prompt` с `errorClass: "rateLimited"` | клиент локализует сообщение о лимите и показывает время сброса (L-32, §17.10.4.1) |
 | `_meta.codelab.turnEnded` | `session_info_update` после переподключения | итог хода, ответ на который отправить некуда |
-| `SetSessionModeRequest` в `acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
+| `_meta.codelab.critical` (`critical`, `label`) | `toolCall` в `session/request_permission` критической команды (§7.8) | клиент выделяет опасный вызов; `allow_always` не предлагается |
+| `SetSessionModeRequest` в `codelab_acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
 | `_meta.codelab.subagent` (после MVP, §17.3.7) | `session/request_permission` от субагента; `tool_call_update` `task` со `status: failed` (`failure`) | связь запроса с вызовом `task` и типом ребёнка |
 | capability `subagentBoard` (после MVP) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | согласование доски субагентов (U-21) |
 | `_codelab/subagents/update`, `/list`, `/cancel`, `/history` (после MVP) | уведомление и методы | доска субагентов: снимки, отмена ребёнка, реплей журнала ребёнка (§17.3.7); `pendingNotices` для фонового режима (§17.3.8); поля снимка `run`, `followUps` и `_meta.codelab.subagentRun` в `/history` (§17.3.8.1) |
@@ -868,7 +897,7 @@ sequenceDiagram
 
 ## 13.14. Инварианты
 
-1. **ACP-1.** Адаптер не отправляет значения перечислений, которых нет в `acp_protocol` (в том числе статус `cancelled` для tool call); каждый исходящий кадр проходит кодек `acp_protocol`.
+1. **ACP-1.** Адаптер не отправляет значения перечислений, которых нет в `codelab_acp_protocol` (в том числе статус `cancelled` для tool call); каждый исходящий кадр проходит кодек `codelab_acp_protocol`.
 2. **ACP-2.** Каждое расширение `_meta`, `data.codelab` или `_codelab/*` перечислено в §13.12 и имеет ссылку на OpenSpec change.
 3. **ACP-3.** Ответ на `session/prompt` отправляется после последнего `session/update` этого хода; ответ на `session/load` — после последнего уведомления реплея.
 4. **ACP-4.** Ошибка разбора или обработки одного кадра не закрывает соединение и не прерывает активные ходы.
@@ -899,6 +928,18 @@ sequenceDiagram
   текущей модели ничего не меняет, вводила бы пользователя в заблуждение.
 * **Переподключение с grace.** WebSocket рвётся при сне ноутбука; отменять ход сразу — терять
   работу. Ограниченное окно 30 с не держит ресурсы бесконечно.
+* **Сбой аутентификации провайдера — `-32603`, а не `-32000`.** `auth_required` (`-32000`) в
+  ACP просит клиента пройти `authenticate` по одному из `authMethods`, а их нет (§13.3): ключ
+  провайдера — конфигурация агента, и клиенту нечего предложить пользователю. Поэтому это сбой
+  хода с `errorClass: "auth"` (§13.8), а `-32000` остаётся за входом по подписке после MVP.
+
+Известные отклонения адаптера от требований `docs/acp/protocol/` (сверка после этапа 4); каждое
+закрыто решением, а не пропущено:
+
+| Требование ACP | Отклонение | Почему и до каких пор |
+|---|---|---|
+| `03-Session Setup.md`: агент MUST подключать MCP-серверы по stdio | серверы из `mcpServers` пропускаются с логом `mcp.server.skipped` | MCP — этап 8 (§13.4, шаг 2); в профиле `mobile` stdio пропускается и после этапа 8 — запуск процессов там недоступен |
+| `03-Session Setup.md`: `cwd` MUST быть абсолютным путём — на Windows это `C:\…` | абсолютным считается только путь с `/`; `C:\…` — `-32602` | ядро в MVP работает только с POSIX-путями (§4.4, §4.7); перевод путей Windows на границе ACP — открытый вопрос §16.3, до поддержки Windows-хоста |
 
 ## 13.16. Как проверить
 

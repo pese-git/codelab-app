@@ -1,0 +1,161 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "start working on the plan"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "update_plan",
+              "arguments": {
+                "entries": [
+                  {
+                    "content": "Read auth module and locate token refresh call sites",
+                    "priority": "medium",
+                    "status": "completed"
+                  },
+                  {
+                    "content": "Run melos analyze to confirm no new lint issues",
+                    "priority": "high",
+                    "status": "in_progress"
+                  },
+                  {
+                    "content": "Open PR for review",
+                    "priority": "low",
+                    "status": "pending"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "plan started"
+          }
+        ],
+        "stopReason": "stop"
+      },
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "keep going"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_2",
+              "name": "update_plan",
+              "arguments": {
+                "entries": [
+                  {
+                    "content": "Read auth module and locate token refresh call sites",
+                    "priority": "medium",
+                    "status": "completed"
+                  },
+                  {
+                    "content": "Run melos analyze to confirm no new lint issues",
+                    "priority": "high",
+                    "status": "in_progress"
+                  },
+                  {
+                    "content": "Open PR for review",
+                    "priority": "low",
+                    "status": "pending"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_2",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "still working"
+          }
+        ],
+        "stopReason": "stop"
+      },
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "finish the plan"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_3",
+              "name": "update_plan",
+              "arguments": {
+                "entries": [
+                  {
+                    "content": "Read auth module and locate token refresh call sites",
+                    "priority": "medium",
+                    "status": "completed"
+                  },
+                  {
+                    "content": "Run melos analyze to confirm no new lint issues",
+                    "priority": "high",
+                    "status": "completed"
+                  },
+                  {
+                    "content": "Open PR for review",
+                    "priority": "low",
+                    "status": "completed"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_3",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "plan finished"
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  }
+}

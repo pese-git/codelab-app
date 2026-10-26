@@ -116,6 +116,51 @@ void main() {
       expect(first, ['id-1', 'id-2', 'id-3']);
       expect(second, first);
     });
+
+    test('nextChars is repeatable, in the alphabet and unique', () {
+      const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
+      final a = SequentialIdGenerator();
+      final b = SequentialIdGenerator();
+
+      final first = [for (var i = 0; i < 100; i++) a.nextChars(8, alphabet)];
+      final second = [for (var i = 0; i < 100; i++) b.nextChars(8, alphabet)];
+
+      expect(second, first);
+      expect(first.toSet(), hasLength(100));
+      for (final value in first) {
+        expect(value, hasLength(8));
+        expect(value.split('').every(alphabet.contains), isTrue, reason: value);
+      }
+    });
+
+    test('nextChars does not disturb nextId', () {
+      final ids = SequentialIdGenerator();
+
+      ids.nextChars(8, '01');
+
+      expect(ids.nextId(), 'id-1');
+    });
+  });
+
+  group('RandomIdGenerator', () {
+    test('is repeatable over Random(42)', () {
+      final a = RandomIdGenerator(Random(42));
+      final b = RandomIdGenerator(Random(42));
+
+      expect(
+        [a.nextId(), a.nextChars(16, 'abc')],
+        [b.nextId(), b.nextChars(16, 'abc')],
+      );
+    });
+
+    test('gives characters of the alphabet only', () {
+      final ids = RandomIdGenerator(Random(7));
+
+      final value = ids.nextChars(64, 'xyz');
+
+      expect(value, hasLength(64));
+      expect(value.split('').toSet().difference({'x', 'y', 'z'}), isEmpty);
+    });
   });
 
   test('Random(42) is repeatable', () {

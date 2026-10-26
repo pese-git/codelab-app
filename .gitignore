@@ -19,7 +19,7 @@ coverage/
 .widget_preview/
 pubspec_overrides.yaml
 *.freezed.dart
-!packages/dart/acp_client_core/lib/src/domain/state_machines.freezed.dart
+!packages/dart/codelab_client_acp/lib/src/domain/state_machines.freezed.dart
 
 # FVM: keep the project config tracked, ignore local SDK metadata/binaries.
 .fvm/*

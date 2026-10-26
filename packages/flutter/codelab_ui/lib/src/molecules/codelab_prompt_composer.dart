@@ -1,0 +1,498 @@
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
+
+import '../atomics/atomics.dart';
+import '../organisms/codelab_command_palette_surface.dart';
+import 'codelab_command_action.dart';
+import 'codelab_config_option.dart';
+
+typedef CodeLabPromptSubmitCallback = void Function(String prompt);
+typedef CodeLabConfigOptionSelected =
+    void Function(String configId, String value);
+
+class CodeLabPromptComposer extends StatefulWidget {
+  const CodeLabPromptComposer({
+    required this.onSubmit,
+    this.onCancel,
+    this.initialPrompt = '',
+    this.placeholder = 'Message the agent',
+    this.isSubmitting = false,
+    this.canCancel = false,
+    this.enabled = true,
+    this.shortcutsEnabled = true,
+    this.commandActions = const [],
+    this.onCommandSelected,
+    this.configOptions = const [],
+    this.onConfigOptionSelected,
+    this.isRespondingToConfigOption = false,
+    super.key,
+  });
+
+  static const inlineCommandPaletteKey = ValueKey(
+    'composer-inline-command-palette',
+  );
+
+  final CodeLabPromptSubmitCallback onSubmit;
+  final VoidCallback? onCancel;
+  final String initialPrompt;
+  final String placeholder;
+
+  /// Shows the Send button's loading spinner. Purely visual — it does not
+  /// disable typing or submitting: [onSubmit] must stay reachable while a
+  /// turn is running, so the caller can queue instead of sending (see
+  /// add-prompt-queue/design.md, Goals).
+  final bool isSubmitting;
+  final bool canCancel;
+  final bool enabled;
+  final bool shortcutsEnabled;
+
+  /// Commands available for the inline `/` trigger. An empty list (the
+  /// default) disables the trigger entirely, preserving prior behavior for
+  /// callers that don't opt in.
+  final List<CodeLabCommandAction> commandActions;
+
+  /// Called when the user selects an available command from the inline
+  /// palette. The `/word` fragment that triggered it has already been
+  /// removed from the composer text by the time this fires.
+  final ValueChanged<CodeLabCommandAction>? onCommandSelected;
+
+  /// Agent-declared session config options (e.g. model/mode selectors),
+  /// rendered as a row of chips above the composer. An empty list (the
+  /// default) renders nothing — there is no "coming soon" state here, an
+  /// agent that never declares any options simply has no row to show.
+  final List<CodeLabConfigOption> configOptions;
+
+  /// Called with `(configId, value)` when the user picks a new value from
+  /// one of the [configOptions] chips.
+  final CodeLabConfigOptionSelected? onConfigOptionSelected;
+
+  /// Disables the config option chips while a previous selection's
+  /// `session/set_config_option` round trip is still in flight.
+  final bool isRespondingToConfigOption;
+
+  @override
+  State<CodeLabPromptComposer> createState() => _AcpPromptComposerState();
+}
+
+class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
+  late final TextEditingController _controller;
+  late final FocusNode _textFocusNode;
+  final LayerLink _composerLayerLink = LayerLink();
+  final OverlayPortalController _paletteOverlayController =
+      OverlayPortalController();
+  bool _paletteEverShown = false;
+  int? _triggerStart;
+  int _selectedIndex = 0;
+
+  // Deliberately not gated on `!widget.isSubmitting`: submitting while a
+  // turn is already running (or an approval is pending) is exactly the
+  // case `onSubmit` must still accept — the caller queues it instead of
+  // sending, per add-prompt-queue/design.md, Goals ("композер... не
+  // блокируется целиком"). `isSubmitting` only drives the loading spinner
+  // below, never whether input/submission is possible.
+  bool get _canSubmit => widget.enabled && _controller.text.trim().isNotEmpty;
+
+  bool get _inlineTriggerEnabled =>
+      widget.commandActions.isNotEmpty && widget.onCommandSelected != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialPrompt);
+    _controller.addListener(_handleTextChanged);
+    _textFocusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(CodeLabPromptComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialPrompt != widget.initialPrompt &&
+        widget.initialPrompt != _controller.text) {
+      _controller.text = widget.initialPrompt;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_handleTextChanged)
+      ..dispose();
+    _textFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredCommands = _filteredCommandActions();
+    final showInlinePalette = _inlineTriggerEnabled && _triggerStart != null;
+    final selectedIndex = filteredCommands.isEmpty
+        ? -1
+        : _selectedIndex.clamp(0, filteredCommands.length - 1);
+
+    final promptRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: TextBox(
+            key: const ValueKey('composer-text-box'),
+            controller: _controller,
+            focusNode: _textFocusNode,
+            enabled: widget.enabled,
+            minLines: 1,
+            maxLines: 4,
+            placeholder: widget.placeholder,
+            suffix: _buildCommandHintSuffix(),
+            onSubmitted: (_) => _submit(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        CodeLabButton(
+          key: const ValueKey('composer-send-button'),
+          label: 'Send',
+          icon: FluentIcons.send,
+          emphasis: CodeLabButtonEmphasis.primary,
+          isLoading: widget.isSubmitting,
+          onPressed: _canSubmit ? _submit : null,
+        ),
+        if (widget.onCancel != null && widget.canCancel) ...[
+          const SizedBox(width: 8),
+          CodeLabButton(
+            key: const ValueKey('composer-cancel-button'),
+            label: 'Cancel',
+            icon: FluentIcons.cancel,
+            onPressed: widget.enabled ? widget.onCancel : null,
+          ),
+        ],
+      ],
+    );
+
+    // When there are no config options, the child is exactly `promptRow` —
+    // structurally identical to before this widget ever grew a config
+    // options row, so that case can never pick up a width/constraint
+    // difference from the `Column` wrapper below.
+    final composerContent = widget.configOptions.isEmpty
+        ? promptRow
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildConfigOptionsRow(),
+              const SizedBox(height: 8),
+              promptRow,
+            ],
+          );
+
+    final body = DecoratedBox(
+      decoration: BoxDecoration(
+        color: FluentTheme.of(context).micaBackgroundColor,
+        border: Border.all(color: Colors.grey.withAlpha(64)),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Padding(padding: const EdgeInsets.all(8), child: composerContent),
+    );
+
+    final shortcutBoundBody = widget.shortcutsEnabled
+        ? CallbackShortcuts(
+            bindings: _shortcutBindings(showInlinePalette, filteredCommands),
+            child: Focus(autofocus: true, child: body),
+          )
+        : body;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return OverlayPortal(
+          controller: _paletteOverlayController,
+          overlayChildBuilder: (context) {
+            return CompositedTransformFollower(
+              link: _composerLayerLink,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.topLeft,
+              followerAnchor: Alignment.bottomLeft,
+              offset: const Offset(0, -8),
+              // The ambient `Overlay` hands its entries a *tight* constraint
+              // the size of the whole screen — plain `SizedBox`/
+              // `ConstrainedBox` can only narrow a constraint within the
+              // range the parent allows, they can't override a tight one,
+              // so on their own the palette would be forced to fill the
+              // entire screen instead of sizing to content. `Align` is the
+              // one widget here that both accepts that outer tight size
+              // (satisfying the Overlay) *and* loosens the constraint it
+              // hands to its own child, letting the child size naturally.
+              // `followerAnchor: bottomLeft` above places *this whole
+              // screen-sized box*'s bottom edge just above the composer, so
+              // aligning our actual (much smaller) content to `bottomLeft`
+              // within it is what visually lands the palette right above
+              // the composer.
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: SizedBox(
+                  width: constraints.maxWidth,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: CodeLabCommandPaletteSurface(
+                      key: CodeLabPromptComposer.inlineCommandPaletteKey,
+                      actions: widget.commandActions,
+                      showSearchField: false,
+                      queryOverride: _activeQuery(),
+                      selectedActionId: selectedIndex < 0
+                          ? null
+                          : filteredCommands[selectedIndex].id,
+                      onActionSelected: _handlePaletteSelection,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+          child: CompositedTransformTarget(
+            link: _composerLayerLink,
+            child: shortcutBoundBody,
+          ),
+        );
+      },
+    );
+  }
+
+  Map<ShortcutActivator, VoidCallback> _shortcutBindings(
+    bool showInlinePalette,
+    List<CodeLabCommandAction> filteredCommands,
+  ) {
+    final bindings = <ShortcutActivator, VoidCallback>{
+      const SingleActivator(LogicalKeyboardKey.enter, control: true): _submit,
+      const SingleActivator(LogicalKeyboardKey.enter, meta: true): _submit,
+    };
+
+    if (showInlinePalette) {
+      bindings[const SingleActivator(LogicalKeyboardKey.enter)] = () =>
+          _handleInlineEnter(filteredCommands);
+      bindings[const SingleActivator(LogicalKeyboardKey.arrowDown)] = () =>
+          _moveInlineSelection(1, filteredCommands.length);
+      bindings[const SingleActivator(LogicalKeyboardKey.arrowUp)] = () =>
+          _moveInlineSelection(-1, filteredCommands.length);
+      bindings[const SingleActivator(LogicalKeyboardKey.escape)] =
+          _closeInlinePalette;
+    } else if (widget.onCancel != null && widget.canCancel) {
+      bindings[const SingleActivator(LogicalKeyboardKey.escape)] = _cancel;
+    }
+
+    return bindings;
+  }
+
+  void _handleTextChanged() {
+    if (_inlineTriggerEnabled) {
+      final detected = _detectTriggerStart();
+      if (detected != _triggerStart) {
+        _selectedIndex = 0;
+      }
+      _triggerStart = detected;
+    }
+    setState(() {});
+    _syncPaletteOverlayVisibility();
+  }
+
+  /// Shows/hides the inline palette's `OverlayPortal` to match
+  /// `_triggerStart`. Must only run from an event handler (text/selection
+  /// change, key press) — `OverlayPortalController.show()`/`hide()` assert
+  /// if called during `build()`. `hide()` additionally asserts if `show()`
+  /// was never called first, since nothing would be registered with the
+  /// ambient `Overlay` to hide yet.
+  void _syncPaletteOverlayVisibility() {
+    final showInlinePalette = _inlineTriggerEnabled && _triggerStart != null;
+    if (showInlinePalette) {
+      _paletteOverlayController.show();
+      _paletteEverShown = true;
+    } else if (_paletteEverShown) {
+      _paletteOverlayController.hide();
+    }
+  }
+
+  /// Scans backward from the cursor for an active `/` trigger: a slash
+  /// that starts the composer text or is immediately preceded by
+  /// whitespace, with no whitespace between it and the cursor. Recomputing
+  /// this from scratch on every keystroke (rather than tracking an index
+  /// across edits) means deleting the triggering slash, or typing a space
+  /// that ends the word, is detected automatically without extra bookkeeping.
+  int? _detectTriggerStart() {
+    final text = _controller.text;
+    final cursor = _controller.selection.baseOffset;
+    if (cursor <= 0 || cursor > text.length) {
+      return null;
+    }
+
+    var index = cursor - 1;
+    while (index >= 0) {
+      final char = text[index];
+      if (char == '/') {
+        break;
+      }
+      if (_isWhitespace(char)) {
+        return null;
+      }
+      index -= 1;
+    }
+
+    if (index < 0 || text[index] != '/') {
+      return null;
+    }
+    if (index > 0 && !_isWhitespace(text[index - 1])) {
+      return null;
+    }
+
+    return index;
+  }
+
+  bool _isWhitespace(String char) =>
+      char == ' ' || char == '\n' || char == '\t';
+
+  /// Shows a command's `input.hint` as a muted suffix while the composer
+  /// text is exactly `/{name} ` for that command — i.e. right after it was
+  /// inserted and before the user has typed any argument. Purely derived
+  /// from the current text and `widget.commandActions`, so it needs no
+  /// extra state and disappears the moment the user types anything past
+  /// that exact prefix.
+  Widget? _buildCommandHintSuffix() {
+    final text = _controller.text;
+    for (final action in widget.commandActions) {
+      final hint = action.hint;
+      if (hint == null || hint.isEmpty) {
+        continue;
+      }
+      if (text == '${action.slashCommand} ') {
+        return Padding(
+          key: const ValueKey('composer-command-hint'),
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: CodeLabText(hint, role: CodeLabTextRole.caption),
+        );
+      }
+    }
+    return null;
+  }
+
+  /// A `Wrap` of `DropDownButton` chips, one per [CodeLabPromptComposer.configOptions]
+  /// entry, in the order the agent declared them. Only built when the list is
+  /// non-empty — see [CodeLabPromptComposer.configOptions].
+  Widget _buildConfigOptionsRow() {
+    return Wrap(
+      key: const ValueKey('composer-config-options-row'),
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final option in widget.configOptions)
+          _buildConfigOptionChip(option),
+      ],
+    );
+  }
+
+  Widget _buildConfigOptionChip(CodeLabConfigOption option) {
+    final currentValue = option.values
+        .where((value) => value.value == option.currentValue)
+        .firstOrNull;
+
+    return DropDownButton(
+      key: ValueKey('composer-config-option-${option.id}'),
+      disabled: widget.isRespondingToConfigOption,
+      title: CodeLabText(currentValue?.name ?? option.currentValue),
+      items: [
+        for (final value in option.values)
+          MenuFlyoutItem(
+            key: ValueKey(
+              'composer-config-option-${option.id}-value-${value.value}',
+            ),
+            text: CodeLabText(value.name),
+            selected: value.value == option.currentValue,
+            onPressed: () =>
+                widget.onConfigOptionSelected?.call(option.id, value.value),
+          ),
+      ],
+    );
+  }
+
+  String _activeQuery() {
+    final start = _triggerStart;
+    if (start == null) {
+      return '';
+    }
+
+    final text = _controller.text;
+    final cursor = _controller.selection.baseOffset;
+    final end = (cursor < 0 ? text.length : cursor).clamp(start, text.length);
+    return text.substring(start, end);
+  }
+
+  List<CodeLabCommandAction> _filteredCommandActions() {
+    if (_triggerStart == null) {
+      return const [];
+    }
+    return CodeLabCommandAction.filter(widget.commandActions, _activeQuery());
+  }
+
+  void _moveInlineSelection(int delta, int length) {
+    if (length == 0) {
+      return;
+    }
+    setState(() {
+      _selectedIndex = (_selectedIndex + delta) % length;
+      if (_selectedIndex < 0) {
+        _selectedIndex += length;
+      }
+    });
+  }
+
+  void _handleInlineEnter(List<CodeLabCommandAction> filteredCommands) {
+    if (filteredCommands.isEmpty) {
+      return;
+    }
+    final index = _selectedIndex.clamp(0, filteredCommands.length - 1);
+    _handlePaletteSelection(filteredCommands[index]);
+  }
+
+  void _handlePaletteSelection(CodeLabCommandAction action) {
+    if (!action.isAvailable) {
+      // Unavailable commands stay highlighted-but-inert: the palette stays
+      // open, the composer text is untouched, and nothing is emitted.
+      return;
+    }
+
+    final start = _triggerStart;
+    if (start == null) {
+      return;
+    }
+
+    final text = _controller.text;
+    final cursor = _controller.selection.baseOffset;
+    final end = (cursor < 0 ? text.length : cursor).clamp(start, text.length);
+    final newText = text.replaceRange(start, end, '');
+    _controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start),
+    );
+    _triggerStart = null;
+    _textFocusNode.requestFocus();
+    widget.onCommandSelected?.call(action);
+  }
+
+  void _closeInlinePalette() {
+    setState(() {
+      _triggerStart = null;
+    });
+    _syncPaletteOverlayVisibility();
+  }
+
+  void _submit() {
+    final prompt = _controller.text.trim();
+    if (prompt.isEmpty || !widget.enabled) {
+      return;
+    }
+
+    widget.onSubmit(prompt);
+    _controller.clear();
+  }
+
+  void _cancel() {
+    if (!widget.enabled || !widget.canCancel) {
+      return;
+    }
+
+    widget.onCancel?.call();
+  }
+}

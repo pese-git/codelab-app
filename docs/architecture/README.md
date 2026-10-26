@@ -280,7 +280,7 @@ Abstraction вводится тогда, когда существует реа�
 
 Читать перед изменением:
 
-* `packages/acp_protocol`;
+* `packages/codelab_acp_protocol`;
 * ACP transport;
 * ACP message handling;
 * protocol mapping.
@@ -443,7 +443,7 @@ Abstraction вводится тогда, когда существует реа�
 
 * агент CodeLab на Dart со встраиваемым ядром `codelab_agent_core` и ACP-адаптером;
 * два ACP-клиента — codelab-app и codelab_cli — со встроенным (`InProcessAcpTransport`) и внешним агентом;
-* выделение общей клиентской логики в `acp_client_kit` и `acp_client_io`;
+* выделение общей клиентской логики в `codelab_client_core` и `codelab_client_io`;
 * почему клиенты не используют прямой API ядра;
 * план миграции с Python-агента, golden ACP-фикстуры и цели паритета.
 * спецификации клиентов после MVP: модель отображения, CLI и десктоп, первый запуск и настройки, headless-формат `stream-json`, удобства CLI и десктопа (`!<cmd>`, темы, самообновление, мышь в TUI, запрет сна, `/restart`, файловый браузер app).

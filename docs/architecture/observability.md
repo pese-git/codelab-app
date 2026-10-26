@@ -66,7 +66,7 @@ crash/error reporting
 
 Каждый layer логирует события своей ответственности.
 
-### `acp_protocol`
+### `codelab_acp_protocol`
 
 Может логировать:
 
@@ -75,7 +75,7 @@ crash/error reporting
 * invalid schema;
 * protocol version mismatch.
 
-### `acp_transports`
+### `codelab_acp_transports`
 
 Может логировать:
 
@@ -84,7 +84,7 @@ crash/error reporting
 * stream closure;
 * transport error.
 
-### `acp_client_core`
+### `codelab_client_acp`
 
 Может логировать:
 
@@ -915,10 +915,10 @@ SessionState → reconnecting
 Хороший flow:
 
 ```text
-acp_transports
+codelab_acp_transports
     → transport closed
 
-acp_client_core
+codelab_client_acp
     → connection state: connected → reconnecting
 
 presentation

@@ -45,7 +45,7 @@ Transport
 ACP wire message
       │
       ▼
-acp_protocol
+codelab_acp_protocol
       │
       ▼
 ACP client core
@@ -75,7 +75,7 @@ ACP client core
 Protocol command/request
       │
       ▼
-acp_protocol
+codelab_acp_protocol
       │
       ▼
 Transport
@@ -107,11 +107,11 @@ External Agent
 
 ---
 
-## 3. Ответственность `acp_protocol`
+## 3. Ответственность `codelab_acp_protocol`
 
 Package:
 
-`packages/dart/acp_protocol`
+`packages/dart/codelab_acp_protocol`
 
 Отвечает только за protocol-level concerns.
 
@@ -141,11 +141,11 @@ Package:
 
 ---
 
-## 4. Ответственность `acp_transports`
+## 4. Ответственность `codelab_acp_transports`
 
 Package:
 
-`packages/dart/acp_transports`
+`packages/dart/codelab_acp_transports`
 
 Отвечает за передачу protocol data.
 
@@ -179,11 +179,11 @@ reconnect session
 
 ---
 
-## 5. Ответственность `acp_client_core`
+## 5. Ответственность `codelab_client_acp`
 
 Package:
 
-`packages/dart/acp_client_core`
+`packages/dart/codelab_client_acp`
 
 Отвечает за reusable client-side semantics ACP.
 
@@ -594,7 +594,7 @@ same UI
 
 ## 23. Serialization
 
-Serialization должна быть централизована в `acp_protocol`.
+Serialization должна быть централизована в `codelab_acp_protocol`.
 
 Не следует вручную сериализовать ACP payload в:
 
@@ -896,7 +896,7 @@ model → wire → model
 
 ## 37. Client-core tests
 
-`acp_client_core` следует тестировать отдельно от Flutter.
+`codelab_client_acp` следует тестировать отдельно от Flutter.
 
 Полезные сценарии:
 
@@ -911,7 +911,7 @@ model → wire → model
 * permission request;
 * transport failure.
 
-Использовать `acp_testing` там, где это снижает boilerplate.
+Использовать `codelab_acp_testing` там, где это снижает boilerplate.
 
 ---
 
@@ -944,7 +944,7 @@ Fake transport не должен зависеть от Flutter.
 * dialog решает semantics tool capability;
 * feature создаёт raw protocol request.
 
-При обнаружении такого pattern следует проверить, не должна ли логика быть перенесена в `acp_protocol` или `acp_client_core`.
+При обнаружении такого pattern следует проверить, не должна ли логика быть перенесена в `codelab_acp_protocol` или `codelab_client_acp`.
 
 ---
 
@@ -965,7 +965,7 @@ Fake transport не должен зависеть от Flutter.
 
 ## 41. Public ACP API
 
-`acp_client_core` должен предоставлять application-friendly API.
+`codelab_client_acp` должен предоставлять application-friendly API.
 
 Предпочтительно:
 
@@ -992,7 +992,7 @@ Low-level API может существовать внутри protocol/client p
 
 ## 42. ACP client facade
 
-При необходимости `acp_client_core` может предоставлять facade, скрывающий:
+При необходимости `codelab_client_acp` может предоставлять facade, скрывающий:
 
 * transport;
 * request registry;
@@ -1031,17 +1031,17 @@ abstract interface class AcpClient {
 
 | Responsibility         | Owner                           |
 | ---------------------- | ------------------------------- |
-| Wire models            | `acp_protocol`                  |
-| Serialization          | `acp_protocol`                  |
-| Deserialization        | `acp_protocol`                  |
-| Transport I/O          | `acp_transports`                |
-| Connection primitives  | `acp_transports`                |
-| Request correlation    | `acp_client_core`               |
-| Session semantics      | `acp_client_core`               |
-| Cancellation semantics | `acp_client_core`               |
-| Permission abstraction | `acp_client_core` / application |
+| Wire models            | `codelab_acp_protocol`                  |
+| Serialization          | `codelab_acp_protocol`                  |
+| Deserialization        | `codelab_acp_protocol`                  |
+| Transport I/O          | `codelab_acp_transports`                |
+| Connection primitives  | `codelab_acp_transports`                |
+| Request correlation    | `codelab_client_acp`               |
+| Session semantics      | `codelab_client_acp`               |
+| Cancellation semantics | `codelab_client_acp`               |
+| Permission abstraction | `codelab_client_acp` / application |
 | UI state               | BLoC/Cubit                      |
-| Rendering              | `acp_ui` / `codelab_app`        |
+| Rendering              | `codelab_ui` / `codelab_desktop`        |
 
 ---
 

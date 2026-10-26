@@ -15,7 +15,8 @@
 
 ```dart
 int estimateTokens(List<Message> messages, {String? systemPrompt, List<ToolSchema> tools = const []});
-int estimateContextTokens(LlmContextProjection p, {required String systemPrompt, required List<ToolSchema> tools});
+int estimateContextTokens(List<Message> messages, {required String systemPrompt, required List<ToolSchema> tools});
+int estimateLlmContext(LlmContext c);                     // оценщик цикла: estimateContextTokens по payload
 int effectiveContextWindow(ModelRef model, {int? cap});   // min(model.contextWindow, cap)
 
 final class CompactionSettings {
@@ -32,16 +33,21 @@ final class CutPoint { final int firstKeptIndex; final bool splitTurn; final int
 CutPoint? findCutPoint(List<SessionRecord> region, CompactionSettings s);
 
 typedef Summarizer = Future<String> Function(SummaryRequest request, CancelToken cancel);
+                                       // бросает CompactionFailure (ошибка модели, пустой ответ) или CancelledException
 final class SummaryRequest {
-  final List<Message> region;          // что сжимаем
+  final List<MessageRecord> region;    // что сжимаем; записи — чтобы отличить слова пользователя от уведомлений
+  final List<MessageRecord>? turnPrefix;
   final String? previousSummary;       // резюме прошлого сжатия: основа для обновления
-  final List<Message>? turnPrefix;     // начало разрезанного хода (§9.6)
   final FileOps fileOps;               // прочитанные и изменённые файлы региона
   final String? focus;                 // указание из `/compact <текст>` (K-02): на чём сосредоточить резюме
 }
-Future<CompactionOutcome> compact(SessionSnapshot s, CompactionTrigger trigger,
-    {required Summarizer summarize, required CompactionSettings settings, required CancelToken cancel,
-     String? focus});                  // только при trigger == manual
+Future<CompactionOutcome> compact({required SessionWriter writer, required CompactionTrigger trigger,
+    required Summarizer summarize, required CompactionSettings settings, required int window,
+    required String systemPrompt, required List<ToolSchema> tools, required IdGenerator ids,
+    required Clock clock, required CancelToken cancel, required AgentEventSink emit,
+    void Function(LlmContextProjection p)? onCompacted,   // сессия заменяет транскрипт до ContextCompacted
+    String? focus,                     // только при trigger == manual
+    String? summaryModel, Logger? logger});
 sealed class CompactionOutcome {}      // Compacted(record, before, after) | NothingToCompact(reason) | CompactionFailed(error)
                                        // Compacted.record — CompactionRecord или (после MVP) HideRecord (§17.13.4)
 enum CompactionTrigger { afterTurn, preflight, overflow, manual }
@@ -76,7 +82,7 @@ abstract interface class CompactionEngine {
 | `ToolResultMessage` | сумма блоков `content` + `ceil(toolName.length / 4)` + 4 |
 | `ToolResultMessage` вынесенного результата (с этапа 3, §17.4) | по той же формуле от фрагмента в `content`: полный текст лежит в файле и в транскрипт не входит |
 | системный промпт | `ceil(systemPrompt.length / 4)` |
-| схемы инструментов | `ceil(jsonEncode(tools).length / 4)` |
+| схемы инструментов | `ceil(jsonEncode(tools).length / 4)`, схема — `{name, description, parameters}` |
 
 Якорь на usage провайдера:
 
@@ -150,7 +156,9 @@ forWindow(w):                                  // w — effectiveContextWindow
 ## 9.6. Алгоритм: выбор точки среза
 
 Регион сжатия — записи активной ветки после предыдущего сжатия (с `firstKeptId` прошлой записи
-`compaction`, если она есть) до листа.
+`compaction`, если она есть) до листа, в порядке контекста модели. Сами записи `compaction` в регион
+не входят: прошлое резюме суммаризатор получает как `previousSummary` (CMP-9), а проекция §8.7
+показывает только последнее резюме — прошлые записи `compaction` внутри сохранённой части пропускаются.
 
 ```text
 findCutPoint(region, s):
@@ -193,8 +201,10 @@ findCutPoint(region, s):
 пользователя всегда остаётся дословно: модель не должна узнавать, что от неё просят, из
 пересказа.
 
-Если шаг 5 сдвинул срез к началу последнего хода, а этот ход сам больше `keepRecentTokens`
-(длинная работа с десятками вызовов), хвост остаётся большим. Тогда применяется разрезание хода:
+Если шаг 5 сдвинул срез к началу последнего хода, перед ходом сжимать нечего (после шага 6 срез
+в начале региона), а сам ход больше `keepRecentTokens` (длинная работа с десятками вызовов), хвост
+остался бы большим. Тогда применяется разрезание хода; если перед ходом есть что сжать, ход
+сохраняется целиком (пример ниже):
 шаги 3–4 повторяются **внутри** хода (между его assistant-сообщениями), и `splitTurn = true`.
 Начало хода (`region[t..c-1]`, включая сообщение пользователя) суммаризируется отдельно как
 `turnPrefix`, а текст сообщения пользователя (запись с `isUserWords`, до 2 000 символов) копируется в резюме дословно
@@ -252,7 +262,9 @@ generateSummary(req, cancel):
 6. если req.turnPrefix != null:
      prefixSummary := тот же вызов с шаблоном compaction/turn_context.md
      summary := ответ + "\n\n---\n\n## Current turn context (split turn)\n\n" +
-                "User request, verbatim:\n\n> " + userText(≤ 2000 символов) + "\n\n" + prefixSummary
+                "User request, verbatim:\n\n" + цитата userText(≤ 2000 символов) + "\n\n" + prefixSummary
+     //   цитата — "> " перед каждой строкой; если регион до хода пуст, шаги 3–5 не выполняются:
+     //   ответ := previousSummary (или пусто, и тогда summary начинается с "## Current turn context")
 7. пустой или состоящий из пробелов ответ → CompactionFailed("empty summary")
 8. вернуть summary
 ```
@@ -359,6 +371,14 @@ compact(snapshot, trigger, summarize, settings, cancel, focus):
 12. emit ContextCompacted(tokensBefore: before, tokensAfter: after)
 13. если after > threshold и проходов < 3 → повторить с шага 3 (CMP-5)
 ```
+
+Проход после успешного: `NothingToCompact` или `CompactionFailed` не отменяют уже записанное —
+результат `compact` остаётся `Compacted` прошлого прохода (неудача всё равно даёт `AgentError`).
+`afterTurn` запускается после возврата `prompt()`, когда агент уже вне хода и транскрипт можно
+заменить (`replaceTranscript`); закрытие сессии отменяет фоновое сжатие. Аварийный путь
+(`preflight`, `overflow`) получает новый контекст шага через `LoopContext`, а транскрипт `Agent`
+после хода — `TurnOutput.history + added` (§5.2). Логи: `compaction.done` (`info`, проход, оценки
+до и после) и `compaction.failed` (`warning`).
 
 `tokensAfter` считается до записи по снимку с ещё не записанной записью — запись пишется
 один раз и уже с итоговым числом.

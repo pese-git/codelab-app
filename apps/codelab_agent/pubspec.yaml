@@ -1,0 +1,33 @@
+name: codelab_agent
+description: CodeLab Dart agent binary — `codelab-agent serve --stdio | --ws`.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+executables:
+  codelab-agent: codelab_agent
+
+dependencies: # allowlist — workspace-architecture «Автоматический сторож границ пакетов»
+  args: ^2.7.0
+  async: ^2.12.0
+  codelab_acp_protocol:
+    path: ../../packages/dart/codelab_acp_protocol
+  codelab_acp_transports:
+    path: ../../packages/dart/codelab_acp_transports
+  codelab_agent_acp:
+    path: ../../packages/dart/codelab_agent_acp
+  codelab_agent_core:
+    path: ../../packages/dart/codelab_agent_core
+  codelab_agent_io:
+    path: ../../packages/dart/codelab_agent_io
+  http: ^1.5.0
+  meta: ^1.16.0
+
+dev_dependencies:
+  codelab_acp_testing:
+    path: ../../packages/dart/codelab_acp_testing
+  lints: ^6.0.0
+  test: ^1.26.3

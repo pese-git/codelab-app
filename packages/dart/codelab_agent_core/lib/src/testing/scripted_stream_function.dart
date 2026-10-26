@@ -22,7 +22,13 @@ import 'fake_clock.dart';
 /// [verify] throws [ScriptedLlmFailure] with every mismatch, extra request
 /// and unused step (design.md, D8).
 final class ScriptedStreamFunction {
-  ScriptedStreamFunction._(this._steps, this.clock, this.cwd, this.sessionId);
+  ScriptedStreamFunction._(
+    this._steps,
+    this.clock,
+    this.cwd,
+    this.sessionId,
+    this.cwdOf,
+  );
 
   /// [json] is the `llm` object: `{"model": {...}, "steps": [...]}`.
   factory ScriptedStreamFunction.fromJson(
@@ -30,6 +36,7 @@ final class ScriptedStreamFunction {
     Clock? clock,
     String? cwd,
     String? sessionId,
+    String? Function(String sessionId)? cwdOf,
   }) {
     _checkKeys(json, const {'model', 'steps'}, 'llm');
     final steps = json['steps'];
@@ -44,6 +51,7 @@ final class ScriptedStreamFunction {
       clock ?? FakeClock(),
       cwd,
       sessionId,
+      cwdOf,
     );
   }
 
@@ -52,6 +60,12 @@ final class ScriptedStreamFunction {
 
   /// Substituted for `${cwd}` in `text` and `thinking`.
   final String? cwd;
+
+  /// Рабочая папка сессии запроса по её id (`LlmContext.cacheKey`), если
+  /// [cwd] не задан. Нужна бинарю с `--llm-script`: шаги сценария общие для
+  /// всех сессий процесса, а папки у сессий разные (design.md change
+  /// `add-codelab-agent-binary`, D3).
+  final String? Function(String sessionId)? cwdOf;
 
   /// Substituted for `${sessionId}`; without it — `LlmContext.cacheKey`.
   final String? sessionId;
@@ -112,8 +126,13 @@ final class ScriptedStreamFunction {
       ..fail(LlmErrorClass.badRequest, 'scripted model: $problem');
   }
 
+  String? _cwdOf(LlmContext context) => switch (context.cacheKey) {
+    final String id => cwdOf?.call(id),
+    null => null,
+  };
+
   String _substitute(String text, LlmContext context) => text
-      .replaceAll(r'${cwd}', cwd ?? r'${cwd}')
+      .replaceAll(r'${cwd}', cwd ?? _cwdOf(context) ?? r'${cwd}')
       .replaceAll(r'${sessionId}', sessionId ?? context.cacheKey ?? '');
 }
 
@@ -260,6 +279,12 @@ final class _Step {
         return;
       }
       state.start();
+      // С reply — отмена посреди стрима: блоки ответа уже ушли, шаг ждёт
+      // отмены (фикстура acp/prompt-cancel-mid-stream; design.md change
+      // add-dart-agent-acp-server, D15).
+      for (final block in reply) {
+        block.play(state, substitute);
+      }
       await cancel.onCancel;
       cancel.throwIfCancelled();
     }

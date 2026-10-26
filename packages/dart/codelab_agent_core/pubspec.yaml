@@ -14,5 +14,6 @@ dependencies: # allowlist PKG-2; расширение — только чере�
   meta: ^1.16.0
 
 dev_dependencies:
+  dart_style: ^3.1.7 # форматирование prompts.g.dart (design.md, D11)
   lints: ^6.0.0
   test: ^1.26.3

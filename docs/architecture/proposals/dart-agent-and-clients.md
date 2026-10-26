@@ -22,7 +22,7 @@ Date: 2026-10-21
 3. В каком порядке, какими изменениями и с какими проверками это делать?
 
 **Короткий ответ: да.** Обе предпосылки уже есть: ACP Client написан на Dart, а пакет
-`acp_protocol` сериализует модели ACP в обе стороны, поэтому агент может переиспользовать те же
+`codelab_acp_protocol` сериализует модели ACP в обе стороны, поэтому агент может переиспользовать те же
 модели.
 
 **Архитектура ядра — собственная.** Контракты, инварианты, алгоритмы, форматы и способы проверки
@@ -42,8 +42,8 @@ Could / Won't и сценариями приёмки: [agent-parity-goals.md](ag
 * `docs/architecture/acp-boundary.md` — граница ACP в клиенте; остаётся в силе для обоих клиентов.
 * `docs/architecture/layers-and-dependencies.md` — правила зависимостей; дополняется новыми пакетами (§4.1).
 * `docs/architecture/permissions.md` — модель одобрения клиента **не меняется**: для `fs/*` и `terminal/*` одобрение по-прежнему за агентом, клиент ограничивает пути (`AGENTS.md` §10). Новый агент запрашивает одобрение всегда (§6.2).
-* `docs/architecture/state-management.md` — `CodeLabShellCubit` разделяется (§4.4, этап 5); правила §80–§81 этого документа определяют, что уходит в `acp_client_kit`.
-* `docs/architecture/platform-integration.md` — адаптеры fs и terminal переезжают в `acp_client_io` (этап 5).
+* `docs/architecture/state-management.md` — `CodeLabShellCubit` разделяется (§4.4, этап 5); правила §80–§81 этого документа определяют, что уходит в `codelab_client_core`.
+* `docs/architecture/platform-integration.md` — адаптеры fs и terminal переезжают в `codelab_client_io` (этап 5).
 * `docs/architecture/testing.md` — добавляются golden ACP-фикстуры и conformance агента (§9.3).
 * [agent-core-architecture.md](agent-core-architecture.md) — архитектура ядра агента: единственный источник для его реализации.
 * [agent-parity-goals.md](agent-parity-goals.md) — матрица целей, блок «не регрессировать», критерий вывода Python-агента.
@@ -78,7 +78,7 @@ Could / Won't и сценариями приёмки: [agent-parity-goals.md](ag
 | 10 | [Риски](dart-agent-and-clients/10-risks.md) | `dart-agent-and-clients/10-risks.md` | 31 |
 | 11 | [Допущения и открытые вопросы](dart-agent-and-clients/11-assumptions-and-open-questions.md) | `dart-agent-and-clients/11-assumptions-and-open-questions.md` | 63 |
 | 12 | [Отображение и настройка в клиентах: спецификации после MVP](dart-agent-and-clients/12-0-clients-post-mvp.md) | `dart-agent-and-clients/12-0-clients-post-mvp.md` | 35 |
-| 12.1 | [Общая модель отображения в `acp_client_kit`](dart-agent-and-clients/12-1-view-model.md) | `dart-agent-and-clients/12-1-view-model.md` | 776 |
+| 12.1 | [Общая модель отображения в `codelab_client_core`](dart-agent-and-clients/12-1-view-model.md) | `dart-agent-and-clients/12-1-view-model.md` | 776 |
 | 12.2 | [CLI: отображение и ввод](dart-agent-and-clients/12-2-cli-display-and-input.md) | `dart-agent-and-clients/12-2-cli-display-and-input.md` | 848 |
 | 12.3 | [Десктоп-приложение: отображение](dart-agent-and-clients/12-3-desktop-display.md) | `dart-agent-and-clients/12-3-desktop-display.md` | 864 |
 | 12.4 | [Первый запуск и настройки](dart-agent-and-clients/12-4-first-run-and-settings.md) | `dart-agent-and-clients/12-4-first-run-and-settings.md` | 1109 |

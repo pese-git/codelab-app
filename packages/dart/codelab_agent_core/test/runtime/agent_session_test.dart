@@ -29,7 +29,11 @@ void main() {
     expect(result.reason, TurnEndReason.completed);
     expect(result.usage, Usage.zero);
     expect(seen.first, isA<TurnStarted>());
-    expect(seen.last, isA<TurnEnded>());
+    // После TurnEnded — только автоматический заголовок сессии (D6).
+    expect(seen.reversed.take(2).map((e) => e.runtimeType), [
+      SessionTitleChanged,
+      TurnEnded,
+    ]);
     expect(seen.every((e) => e.sessionId == session.id), isTrue);
     expect(h.model.requests.single.cacheKey, session.id.value);
   });
@@ -53,7 +57,10 @@ void main() {
       await pumpEventQueue();
 
       expect(late.first, isA<TurnStarted>());
-      expect(late.last, isA<TurnEnded>());
+      expect(late.reversed.take(2).map((e) => e.runtimeType), [
+        SessionTitleChanged,
+        TurnEnded,
+      ]);
       expect(result.reason, TurnEndReason.cancelled);
     },
   );
@@ -110,7 +117,7 @@ void main() {
     expect((await turn).reason, TurnEndReason.cancelled);
   });
 
-  test('listSessions in creation order; dispose ends running turns', () async {
+  test('listSessions pages the store; dispose ends running turns', () async {
     final h = harness([
       {'waitForCancel': true},
     ]);
@@ -121,7 +128,9 @@ void main() {
     final turn = a.prompt([const TextContent('hi')]);
     await pumpEventQueue();
 
-    expect((await runtime.listSessions()).map((s) => s.id), [a.id, b.id]);
+    // Одно время на FakeClock: при равном updatedAt больший id первым
+    // (§8.10, шаг 4).
+    expect((await runtime.listSessions()).items.map((s) => s.id), [b.id, a.id]);
     await runtime.dispose();
     expect((await turn).reason, TurnEndReason.cancelled);
   });

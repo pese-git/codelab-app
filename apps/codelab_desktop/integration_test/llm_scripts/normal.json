@@ -1,0 +1,19 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "reply": [
+          {
+            "text": "hello from compatible stdio agent"
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+## edit {"path":"lib/src/util.dart","oldText":"Hello","newText":"Hi"}
+outcome: completed
+Edited lib/src/util.dart: replaced lines 1-1.
+@@ -1,1 +1,1 @@
+-String greet(String name) => 'Hello, $name!';
++String greet(String name) => 'Hi, $name!';
+
+## edit {"path":"lib/src/util.dart","oldText":"absent","newText":"x"}
+outcome: failed
+No exact match for oldText in lib/src/util.dart. The text must match byte for byte, including whitespace and indentation. Read the file again before editing.
+
+## edit {"path":"lib/main.dart","oldText":"i","newText":"I"}
+outcome: failed
+oldText occurs 5 times in lib/main.dart. Include more surrounding context to make it unique.
+

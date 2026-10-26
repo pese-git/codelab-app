@@ -1,10 +1,16 @@
 import '../env/execution_env.dart';
 import '../env/memory_env.dart';
 import '../llm/stream_function.dart';
+import '../prompts/compose.dart';
 import '../runtime/agent_runtime.dart';
+import '../session/memory_session_store.dart';
 import '../tools/builtin/edit.dart';
 import '../tools/builtin/exec.dart';
+import '../tools/builtin/ls.dart';
 import '../tools/builtin/read.dart';
+import '../tools/builtin/search.dart';
+import '../tools/builtin/update_plan.dart';
+import '../tools/builtin/write.dart';
 import '../tools/registry.dart';
 import '../util/logger.dart';
 import 'host_profile.dart';
@@ -27,7 +33,8 @@ final class CorePlan {
   /// In registration order.
   final List<String> toolNames;
 
-  /// In assembly order; filled by `composeSystemPrompt` (tasks.md, 12.4).
+  /// Id секций системного промпта в порядке сборки для режима по умолчанию
+  /// (§11.5); сессия в другом режиме собирает свой набор.
   final List<String> promptSections;
   final Map<HostCapability, String> offReasons;
 }
@@ -39,11 +46,18 @@ final class BuiltAgentCore {
   final AgentRuntime runtime;
 }
 
-/// The single way to assemble the core (HOST-6; §10.7 in the scope of stage
-/// 2 — design.md, D12): narrowing by the services, the tool registry by
-/// capability, the policy as the first hook of every session, the plan.
-/// [streamFunction] comes from the host — the factory of stage 1 or a
-/// scripted model in tests.
+/// Единственный способ собрать ядро (HOST-6, `agent-core-architecture`
+/// §10.7).
+///
+/// Почему одна точка: сужение профиля по сервисам и конфигурации, реестр
+/// инструментов по capability, политика разрешений первым хуком каждой
+/// сессии и план включённого должны получаться одинаково у всех хостов.
+///
+/// Как использовать: хост передаёт профиль, сервисы, конфигурацию и
+/// [streamFunction] — фабрику провайдеров этапа 1 или scripted-модель в
+/// тестах. Несовместимые сервисы (журнал в памяти при `sessionPersistence`,
+/// env без shell при `shellExec`) — `HostWiringException`;
+/// `CoreConfig.compaction.enabled: false` выключает capability `compaction`.
 BuiltAgentCore buildAgentCore({
   required HostProfile profile,
   required AgentCoreServices services,
@@ -59,7 +73,18 @@ BuiltAgentCore buildAgentCore({
       HostCapability.fileListing: const CapabilityOff(
         'env без листинга каталога',
       ),
+    if (!config.compaction.enabled)
+      HostCapability.compaction: const CapabilityOff('выключено конфигом'),
   });
+  // §10.8: журнал на постоянном носителе требует хранилища, которое не
+  // теряет записи при выходе процесса.
+  if (narrowed.isOn(HostCapability.sessionPersistence) &&
+      services.sessions is MemorySessionStore) {
+    throw const HostWiringException(
+      'capability sessionPersistence требует постоянного SessionStore: '
+      'MemorySessionStore теряет журнал при выходе процесса',
+    );
+  }
   if (narrowed.isOn(HostCapability.shellExec) &&
       services.baseEnv is MemoryExecutionEnv) {
     throw const HostWiringException(
@@ -75,15 +100,32 @@ BuiltAgentCore buildAgentCore({
     add();
   }
 
+  // Порядок §10.7, шаг 5: базовые инструменты, затем по capability.
   register('read', () => registry.register(ReadTool()));
+  register('write', () => registry.register(WriteTool()));
   register('edit', () => registry.register(EditTool()));
+  register('update_plan', () => registry.register(UpdatePlanTool()));
   if (narrowed.isOn(HostCapability.shellExec)) {
     register('exec', () => registry.register(ExecTool()));
+  }
+  if (narrowed.isOn(HostCapability.fileListing)) {
+    register('ls', () => registry.register(LsTool()));
+    register('search', () => registry.register(SearchTool()));
   }
   final plan = CorePlan(
     profile: narrowed,
     toolNames: [for (final t in registry.tools) t.name],
-    promptSections: const [],
+    // Секции промпта новой сессии в режиме по умолчанию (§10.7, шаг 7).
+    promptSections: systemPromptSections(
+      PromptInputs(
+        cwd: '/',
+        platform: services.platform,
+        today: services.clock.now(),
+        mode: config.permissions.mode ?? narrowed.defaultMode,
+        profile: narrowed,
+        toolNames: {for (final t in registry.tools) t.name},
+      ),
+    ),
     offReasons: {
       for (final MapEntry(key: capability, value: state)
           in narrowed.states.entries)

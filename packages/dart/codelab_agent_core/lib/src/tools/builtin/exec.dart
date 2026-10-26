@@ -1,6 +1,7 @@
 import '../../env/execution_env.dart';
 import '../../llm/messages.dart';
 import '../../util/result.dart';
+import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
 import '../fence.dart';
 import '../truncate.dart';
@@ -16,9 +17,7 @@ final class ExecTool extends AgentTool {
   String get name => 'exec';
 
   @override
-  String get description =>
-      'Run a non-interactive shell command in the workspace and return its '
-      'output (the last lines of a long output).';
+  String get description => Prompts.toolDescriptionsExec.render(const {});
 
   @override
   Map<String, Object?> get parameters => const {
@@ -87,6 +86,7 @@ final class ExecTool extends AgentTool {
         cancel: ctx.cancel,
         onOutput: (chunk) =>
             ctx.onUpdate(ToolExecutionResult([TextContent(chunk)])),
+        onTerminal: ctx.onTerminal,
       ),
     );
     switch (result) {
