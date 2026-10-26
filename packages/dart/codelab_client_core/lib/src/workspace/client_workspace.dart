@@ -9,6 +9,8 @@ import '../connection/connection_view.dart';
 import '../connection/transport_resolver.dart';
 import '../diagnostics/diagnostics.dart';
 import '../queue/prompt_queue.dart';
+import '../restore/workspace_restorer.dart';
+import '../restore/workspace_snapshot.dart';
 import '../session/session_views.dart';
 import '../transcript/transcript_item.dart';
 import '../transcript/transcript_projector.dart';
@@ -32,9 +34,12 @@ import 'workspace_state.dart';
 /// после публикации `ConnectionFailed`; отказы самого kit —
 /// [ClientWorkspaceException].
 abstract interface class ClientWorkspace {
+  /// [snapshots] включает восстановление после перезапуска хоста
+  /// ([restoreProject], design D6 change `add-session-list-and-reload`).
   factory ClientWorkspace({
     required AgentBackend backend,
     required List<TransportResolver> resolvers,
+    WorkspaceSnapshotStore? snapshots,
   }) = DefaultClientWorkspace;
 
   WorkspaceState get current;
@@ -95,6 +100,24 @@ abstract interface class ClientWorkspace {
 
   /// Делает сессию [id] активной; неизвестный id игнорируется.
   void activate(SessionId id);
+
+  /// Шаг 1 восстановления: читает снимок прошлого запуска и возвращает его
+  /// проект — хост выбирает его до подключения. Вызывается один раз при
+  /// старте хоста; до вызова снимок не пишется. Без хранилища снимка или
+  /// без снимка — `null`; битый снимок — диагностика, снимок удаляется.
+  ///
+  /// Остальное восстановление идёт само при первом успешном [connect] в
+  /// запуске: сессии снимка — в список, активная — через `session/load`;
+  /// агент без `loadSession` или ошибка загрузки — новая сессия с
+  /// уведомлением `NoticeKind.reconnected` (design D6).
+  Future<String?> restoreProject();
+
+  /// Выбирает папку проекта: `WorkspaceState.projectDirectory` и снимок.
+  /// Следующие [connect] и [newSession] хост по-прежнему вызывает с папкой.
+  void selectProject(String path);
+
+  /// Дожидается записи снимка, начатой до вызова; без хранилища — сразу.
+  Future<void> flushSnapshot();
 
   /// Исходы ходов всех сессий — и отправленных хостом, и ушедших из
   /// очереди сами; доставляются синхронно.
@@ -164,8 +187,12 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   DefaultClientWorkspace({
     required AgentBackend backend,
     required List<TransportResolver> resolvers,
+    WorkspaceSnapshotStore? snapshots,
   }) : _backend = backend,
        _resolvers = List.unmodifiable(resolvers) {
+    if (snapshots != null) {
+      _restorer = WorkspaceRestorer(snapshots, _RestoreHostAdapter(this));
+    }
     _connectionSubscription = backend.connectionStates.listen(
       _handleConnectionState,
     );
@@ -174,6 +201,10 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   final AgentBackend _backend;
   final List<TransportResolver> _resolvers;
+
+  /// Восстановление и запись снимка; `null` — хранилища снимка нет.
+  WorkspaceRestorer? _restorer;
+  var _disposed = false;
   final _states = StreamController<WorkspaceState>.broadcast(sync: true);
   final _outcomes = StreamController<PromptOutcome>.broadcast(sync: true);
   final _diagnostics = StreamController<WorkspaceDiagnostic>.broadcast(
@@ -259,6 +290,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       _transition = _Transition.none;
     }
     await _listFirstPage();
+    await _restorer?.restoreAfterConnect();
   }
 
   @override
@@ -477,7 +509,48 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   }
 
   @override
+  Future<String?> restoreProject() async => await _restorer?.readProject();
+
+  @override
+  void selectProject(String path) =>
+      _publish(_current.copyWith(projectDirectory: path));
+
+  @override
+  Future<void> flushSnapshot() => _restorer?.flush() ?? Future<void>.value();
+
+  /// Добавляет сессии снимка строками `notLoaded`, если их нет в списке.
+  void _rememberSessions(List<SessionRef> sessions) {
+    for (final session in sessions) {
+      if (!_handles.containsKey(session.id)) {
+        _listed.putIfAbsent(
+          session.id,
+          () => SessionInfo(sessionId: session.id, cwd: session.cwd),
+        );
+      }
+    }
+    _publish(_current.copyWith(sessions: _summaries()));
+  }
+
+  Future<SessionHandle> _newSessionWithNotice(String cwd, String text) async {
+    final handle = await newSession(cwd: cwd);
+    _handles[handle.id]!.notify(
+      NoticeItem(
+        id: '${handle.id.value}/reconnected',
+        kind: NoticeKind.reconnected,
+        text: text,
+      ),
+    );
+    return handle;
+  }
+
+  @override
   Future<void> dispose() async {
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
+    // Последняя запись снимка не теряется при закрытии хоста (design D6).
+    await _restorer?.flush();
     await _connectionSubscription.cancel();
     await _sessionSubscription.cancel();
     for (final handle in _handles.values) {
@@ -672,7 +745,39 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     if (!_states.isClosed) {
       _states.add(next);
     }
+    _restorer?.observe(next);
   }
+}
+
+/// [RestoreHost] поверх закрытых операций рабочего пространства.
+final class _RestoreHostAdapter implements RestoreHost {
+  _RestoreHostAdapter(this._workspace);
+
+  final DefaultClientWorkspace _workspace;
+
+  @override
+  WorkspaceState get current => _workspace.current;
+
+  @override
+  AgentCapabilities get capabilities => _workspace._capabilities;
+
+  @override
+  void rememberSessions(List<SessionRef> sessions) =>
+      _workspace._rememberSessions(sessions);
+
+  @override
+  Future<SessionHandle> loadSession(SessionId id, {required String cwd}) =>
+      _workspace.loadSession(id, cwd: cwd);
+
+  @override
+  void activate(SessionId id) => _workspace.activate(id);
+
+  @override
+  Future<SessionHandle> newSessionWithNotice(String cwd, String notice) =>
+      _workspace._newSessionWithNotice(cwd, notice);
+
+  @override
+  void report(WorkspaceDiagnostic diagnostic) => _workspace._report(diagnostic);
 }
 
 enum _Transition { none, connecting, reconnecting }
@@ -779,11 +884,18 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   /// [text] в конце транскрипта.
   void detach(String text) {
     _link = _Link.detached;
-    _notice = NoticeItem(
-      id: '${id.value}/detached',
-      kind: NoticeKind.detached,
-      text: text,
+    notify(
+      NoticeItem(
+        id: '${id.value}/detached',
+        kind: NoticeKind.detached,
+        text: text,
+      ),
     );
+  }
+
+  /// Добавляет [notice] в конец транскрипта, после элементов ходов.
+  void notify(NoticeItem notice) {
+    _notice = notice;
     _publish(
       _sessionFields(
         _current.copyWith(revision: _current.revision + 1),

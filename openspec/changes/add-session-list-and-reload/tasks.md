@@ -48,7 +48,7 @@
 
 ## 4. Восстановление после перезапуска (5.12, итерация 4)
 
-- [ ] 4.1 Тесты `test/restore/workspace_restorer_test.dart`, по случаю на шаги D6:
+- [x] 4.1 Тесты `test/restore/workspace_restorer_test.dart`, по случаю на шаги D6:
   - нет снимка — обычный старт;
   - битый снимок и неизвестная версия — диагностика, снимок удалён;
   - проект снимка отдаётся хосту до подключения;
@@ -59,13 +59,13 @@
   - без отправки промптов и ответов на одобрения.
 
   Источник: acp-client-kit «Восстановление после перезапуска».
-- [ ] 4.2 Тесты записи снимка:
+- [x] 4.2 Тесты записи снимка:
   - после `newSession`, `loadSession`, `activate` и смены проекта;
-  - склейка не чаще раза в секунду, `dispose` дожидается последней записи;
+  - записи не накладываются: синхронная серия изменений — одна запись, изменения во время записи — одна следующая; `dispose` дожидается последней записи;
   - ошибка записи — диагностика;
   - в снимке нет курсора, транскрипта, очереди и секретов.
-- [ ] 4.3 `WorkspaceSnapshot`, порт `WorkspaceSnapshotStore`, `InMemoryWorkspaceSnapshotStore` для тестов и хостов без хранилища, `WorkspaceRestorer` в `lib/src/restore/` (D6) — 4.1 и 4.2 зелёные.
-- [ ] 4.4 Тест и реализация `SharedPreferencesWorkspaceSnapshotStore` в `apps/codelab_desktop/lib/core/platform/` (ключ `codelab.workspace.snapshot`, версия 1). Привязка в графе cherrypick: `SettingsCubit` получает проект из снимка при старте. Тесты фасада и `widget_test.dart` зелёные. PR итерации 4.
+- [x] 4.3 `WorkspaceSnapshot`, порт `WorkspaceSnapshotStore`, `InMemoryWorkspaceSnapshotStore` для тестов и хостов без хранилища, `WorkspaceRestorer` в `lib/src/restore/`; `ClientWorkspace(snapshots:)`, `restoreProject()`, `selectProject()`, `flushSnapshot()` (D6) — 4.1 и 4.2 зелёные.
+- [x] 4.4 Тест и реализация `SharedPreferencesWorkspaceSnapshotStore` в `apps/codelab_desktop/lib/core/platform/` (ключ `codelab.workspace.snapshot`, версия 1). Привязка в графе cherrypick: `SettingsCubit` получает проект из снимка при старте и сообщает выбор проекта рабочему пространству (`test/features/workbench/application/workspace_restore_test.dart`); `CodeLabTestBinding(preferences:)`. `integration_test/flutter_test_config.dart` удаляет снимок перед каждым e2e-тестом (D8) — без этого запись снимка из этой итерации переносила бы состояние между тестами на macOS. В `open_project_flow_test.dart` ожидание после перезапуска сменилось с «проект не выбран» на «выбран проект прошлого запуска»: прежнее поведение было вне рамок `add-open-project-picker`, а новое задаёт требование «Workbench restores sessions after reconnect and restart». Тесты фасада и `widget_test.dart` зелёные. PR итерации 4.
 
 ## 5. Сайдбар и интеграционный тест (5.10, итерация 5)
 
@@ -83,7 +83,7 @@
   - страницы по 2 с курсором;
   - реплей на `session/load`;
   - сессии в файле переживают перезапуск процесса.
-- [ ] 5.5 `integration_test/support` очищает ключ снимка перед каждым тестом. `session_list_load_flow_test.dart` проверяет:
+- [ ] 5.5 `session_list_load_flow_test.dart` (очистка снимка перед тестами — 4.4) проверяет:
   - список и выбор сессии;
   - `Reconnect` перезагружает активную сессию;
   - перезапуск корневого scope с теми же `SharedPreferences`.
@@ -107,5 +107,5 @@
   - `fvm dart run melos run check` и `melos run guard` зелёные;
   - тесты `codelab_client_acp`, `codelab_client_core`, `codelab_acp_testing` зелёные;
   - интеграционные тесты собираются;
-  - тексты прежних 8 интеграционных тестов не изменены.
+  - тексты прежних 8 интеграционных тестов не изменены, кроме ожидания проекта после перезапуска в `open_project_flow_test.dart` (4.4).
 - [ ] 6.3 Перед архивированием: `openspec validate add-session-list-and-reload --strict`.
