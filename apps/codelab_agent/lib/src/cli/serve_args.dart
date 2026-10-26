@@ -51,6 +51,7 @@ final class ServeOptions {
     required this.models,
     required this.apiKey,
     required this.llmScript,
+    required this.sessionsDir,
     required this.mode,
     required this.autopilot,
     required this.logLevel,
@@ -82,6 +83,12 @@ final class ServeOptions {
 
   /// Путь к сценарию модели (только тесты, в справке скрыт).
   final String? llmScript;
+
+  /// Корень журнала сессий сценария из `--sessions-dir` (только тесты, в
+  /// справке скрыт). Почему отдельный флаг: со сценарием `$CODELAB_HOME` не
+  /// трогается, а e2e клиентов нужны сессии, пережившие перезапуск процесса
+  /// (D1 change `add-llm-script-session-store`). `null` — сессии в памяти.
+  final String? sessionsDir;
 
   /// Режим сессий по умолчанию; `null` — режим профиля.
   final ModeId? mode;
@@ -182,18 +189,23 @@ final ArgParser _serveParser = ArgParser()
   )
   ..addOption('log-file', help: 'JSON Lines log file (CODELAB_LOG_FILE).')
   // Только тесты: сценарий модели вместо провайдера (§15.6, §14.7).
-  ..addOption('llm-script', hide: true);
+  ..addOption('llm-script', hide: true)
+  // Только тесты: журнал сессий сценария на диске (D1 change
+  // `add-llm-script-session-store`).
+  ..addOption('sessions-dir', hide: true);
 
 final ArgParser _parser = ArgParser()..addCommand('serve', _serveParser);
 
-/// Текст справки `codelab-agent`; `--llm-script` в нём нет.
+/// Текст справки `codelab-agent`; `--llm-script` и `--sessions-dir` в нём
+/// нет.
 String serveUsage() =>
     'Usage: codelab-agent serve (--stdio | --ws) [options]\n\n'
     '${_serveParser.usage}';
 
 /// Разбирает [args] и [environment] по правилам §15.6: флаг сильнее
 /// переменной, `--model` повторяется, `--stdio` и `--ws`, `--provider` и
-/// `--llm-script` взаимоисключающие. Ошибка — [UsageError].
+/// `--llm-script` взаимоисключающие, `--sessions-dir` — только со сценарием.
+/// Ошибка — [UsageError].
 ServeOptions parseServeArgs(
   List<String> args, {
   required Map<String, String> environment,
@@ -234,6 +246,12 @@ ServeOptions parseServeArgs(
     throw const UsageError(
       '--provider and --llm-script are mutually exclusive',
     );
+  }
+  final sessionsDir = serve.option('sessions-dir');
+  // У провайдера журнал уже в `$CODELAB_HOME/sessions`; второй способ задать
+  // корень до конфига этапа 8 не нужен (D1).
+  if (sessionsDir != null && llmScript == null) {
+    throw const UsageError('--sessions-dir requires --llm-script');
   }
   if (provider == null && llmScript == null) {
     throw const UsageError(
@@ -296,6 +314,7 @@ ServeOptions parseServeArgs(
     models: models,
     apiKey: _nonEmpty(environment['CODELAB_API_KEY']),
     llmScript: llmScript,
+    sessionsDir: sessionsDir,
     mode: mode,
     autopilot: autopilot,
     logLevel: logLevel,
