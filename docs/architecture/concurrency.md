@@ -101,10 +101,10 @@ CPU-heavy работу следует выносить из UI isolate, если
 
 ```text id="ms8kqw"
 ACP transport connection
-    → acp_client_core
+    → codelab_client_acp
 
 transport subscription
-    → acp_client_core
+    → codelab_client_acp
 
 client event subscription
     → SessionBloc
@@ -182,7 +182,7 @@ BLoC/Cubit может владеть presentation-level subscriptions.
 * перестать принимать external callbacks;
 * безопасно игнорировать late results.
 
-BLoC не должен владеть reusable low-level ACP transport lifecycle, если тот относится к `acp_client_core`.
+BLoC не должен владеть reusable low-level ACP transport lifecycle, если тот относится к `codelab_client_acp`.
 
 ---
 

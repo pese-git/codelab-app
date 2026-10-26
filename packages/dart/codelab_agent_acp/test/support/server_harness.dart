@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:acp_protocol/acp_protocol.dart' hide SessionId;
-import 'package:acp_testing/acp_testing.dart';
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' hide SessionId;
+import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_agent_acp/codelab_agent_acp.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';

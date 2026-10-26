@@ -26,8 +26,8 @@ const ioAllowlist = {
 /// §1.2).
 const acpAllowlist = {
   'codelab_agent_core',
-  'acp_protocol',
-  'acp_transports',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
   'meta',
   'async',
 };
@@ -38,8 +38,8 @@ const binaryAllowlist = {
   'codelab_agent_core',
   'codelab_agent_io',
   'codelab_agent_acp',
-  'acp_protocol',
-  'acp_transports',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
   'args',
   'http',
   'async',
@@ -50,9 +50,9 @@ const binaryAllowlist = {
 /// `extract-acp-client-kit`): only web-safe packages, so the kit stays free
 /// of Flutter and `dart:io` transitively.
 const kitAllowlist = {
-  'acp_client_core',
-  'acp_protocol',
-  'acp_transports',
+  'codelab_client_acp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
   'freezed_annotation',
   'meta',
   'collection',
@@ -63,10 +63,10 @@ const kitAllowlist = {
 /// `extract-acp-client-kit`): the kit, the ACP client packages and `path`,
 /// no Flutter.
 const clientIoAllowlist = {
-  'acp_client_kit',
-  'acp_client_core',
-  'acp_protocol',
-  'acp_transports',
+  'codelab_client_core',
+  'codelab_client_acp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
   'path',
   'meta',
 };
@@ -133,9 +133,9 @@ void main() {
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });
 
-  test('acp_client_kit depends only on its allowlist', () {
+  test('codelab_client_core depends only on its allowlist', () {
     final pubspec = File(
-      p.join(root, 'packages/dart/acp_client_kit/pubspec.yaml'),
+      p.join(root, 'packages/dart/codelab_client_core/pubspec.yaml'),
     ).readAsStringSync();
 
     final extra = dependencyKeys(pubspec).difference(kitAllowlist);
@@ -143,9 +143,9 @@ void main() {
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });
 
-  test('acp_client_io depends only on its allowlist', () {
+  test('codelab_client_io depends only on its allowlist', () {
     final pubspec = File(
-      p.join(root, 'packages/dart/acp_client_io/pubspec.yaml'),
+      p.join(root, 'packages/dart/codelab_client_io/pubspec.yaml'),
     ).readAsStringSync();
 
     final extra = dependencyKeys(pubspec).difference(clientIoAllowlist);

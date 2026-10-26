@@ -74,15 +74,15 @@ CodeLab использует layered monorepo. Нижние слои являю�
 ```text
 .
 ├── apps/
-│   └── codelab_app/
+│   └── codelab_desktop/
 ├── packages/
 │   ├── dart/
-│   │   ├── acp_protocol/
-│   │   ├── acp_transports/
-│   │   ├── acp_client_core/
-│   │   └── acp_testing/
+│   │   ├── codelab_acp_protocol/
+│   │   ├── codelab_acp_transports/
+│   │   ├── codelab_client_acp/
+│   │   └── codelab_acp_testing/
 │   └── flutter/
-│       └── acp_ui/
+│       └── codelab_ui/
 ├── docs/
 │   ├── codelab-spec.md
 │   ├── acp/
@@ -93,38 +93,38 @@ CodeLab использует layered monorepo. Нижние слои являю�
 
 ### 5.1. Ответственность пакетов
 
-`packages/dart/acp_protocol` определяет типизированные ACP-сообщения, codecs,
+`packages/dart/codelab_acp_protocol` определяет типизированные ACP-сообщения, codecs,
 validation, errors, обработку версии схемы и forward-compatible сохранение
 неизвестных полей. Пакет не должен импортировать Flutter, UI-код, transport-код
 или `dart:io`.
 
-`packages/dart/acp_transports` определяет заменяемые transport adapters:
+`packages/dart/codelab_acp_transports` определяет заменяемые transport adapters:
 stdio, WebSocket, SSE и fake transports. Пакет отвечает за transport framing и
 маппинг transport failures в типизированные transport errors.
 
-`packages/dart/acp_client_core` владеет состоянием клиента: sessions, messages,
+`packages/dart/codelab_client_acp` владеет состоянием клиента: sessions, messages,
 connection lifecycle, approvals, cancellation и logs. Пакет принимает
 типизированные protocol events и предоставляет состояние для UI.
 
-`packages/dart/acp_testing` предоставляет mock agents, fake transports, fixtures
+`packages/dart/codelab_acp_testing` предоставляет mock agents, fake transports, fixtures
 и protocol conformance tests. Это test-only пакет, он не должен быть production
 dependency приложения.
 
-`packages/flutter/acp_ui` предоставляет переиспользуемые Flutter-виджеты для
+`packages/flutter/codelab_ui` предоставляет переиспользуемые Flutter-виджеты для
 chat, status, approval prompts, tool call display, errors и connection state.
 Пакет должен использовать `fluent_ui` как обязательный UI framework и не должен
 напрямую парсить raw ACP JSON.
 
-`apps/codelab_app` собирает Flutter-приложение, dependency injection, routing,
+`apps/codelab_desktop` собирает Flutter-приложение, dependency injection, routing,
 platform-specific transport selection и финальные пользовательские workflows.
 
 ### 5.2. Правила зависимостей
 
-- `acp_protocol` зависит только от pure Dart dependencies.
-- `acp_transports` может зависеть от `acp_protocol`.
-- `acp_client_core` может зависеть от `acp_protocol` и `acp_transports`.
-- `acp_ui` может зависеть от `acp_client_core` и `acp_protocol`.
-- `codelab_app` может зависеть от всех production packages.
+- `codelab_acp_protocol` зависит только от pure Dart dependencies.
+- `codelab_acp_transports` может зависеть от `codelab_acp_protocol`.
+- `codelab_client_acp` может зависеть от `codelab_acp_protocol` и `codelab_acp_transports`.
+- `codelab_ui` может зависеть от `codelab_client_acp` и `codelab_acp_protocol`.
+- `codelab_desktop` может зависеть от всех production packages.
 - `fpdart` используется для typed functional primitives в pure Dart слоях.
 - `freezed` используется для immutable state, DTO и union/sealed моделей там,
   где это уменьшает boilerplate и повышает типобезопасность.
@@ -154,13 +154,13 @@ Infrastructure
 
 Распределение по пакетам:
 
-- `packages/dart/acp_protocol`: protocol DTO, JSON-RPC codec, schema validation
+- `packages/dart/codelab_acp_protocol`: protocol DTO, JSON-RPC codec, schema validation
   и protocol errors на infrastructure/protocol boundary;
-- `packages/dart/acp_transports`: infrastructure transport adapters;
-- `packages/dart/acp_client_core`: domain и application layer для sessions,
+- `packages/dart/codelab_acp_transports`: infrastructure transport adapters;
+- `packages/dart/codelab_client_acp`: domain и application layer для sessions,
   prompt turns, approvals, cancellation и connection workflows;
-- `packages/flutter/acp_ui`: presentation components;
-- `apps/codelab_app`: composition root, dependency injection, routing и
+- `packages/flutter/codelab_ui`: presentation components;
+- `apps/codelab_desktop`: composition root, dependency injection, routing и
   platform wiring.
 
 Domain/application code не должен зависеть от Flutter, Bloc, `fluent_ui`,
@@ -170,7 +170,7 @@ core/application слоем.
 ### 5.4. Dependency Injection
 
 CodeLab должен использовать CherryPick v4.x.x как DI framework. Dependency
-injection настраивается в composition root (`apps/codelab_app`) и не должна
+injection настраивается в composition root (`apps/codelab_desktop`) и не должна
 проникать в domain logic.
 
 Правила DI:
@@ -182,9 +182,9 @@ injection настраивается в composition root (`apps/codelab_app`) и
   transports, core/application, UI, platform services;
 - production bindings и test bindings должны быть взаимозаменяемы через одни и
   те же ports/interfaces;
-- `acp_client_core` объявляет abstractions и use cases, но не знает о
+- `codelab_client_acp` объявляет abstractions и use cases, но не знает о
   CherryPick scopes, generated modules или Flutter context;
-- `packages/flutter/acp_ui` не должен самостоятельно открывать root scope;
+- `packages/flutter/codelab_ui` не должен самостоятельно открывать root scope;
 - `cherrypick_flutter` допустим только как presentation/app integration layer;
 - DI не заменяет явные constructor dependencies внутри domain/application
   классов;
@@ -218,9 +218,9 @@ KISS для MVP означает:
 - abstractions вводятся только при явной ответственности или изменяемой границе.
 
 DRY применяется к правилам и моделям, но не должен приводить к преждевременной
-абстракции. ACP schemas/codecs централизуются в `acp_protocol`, state
-transitions централизуются в `acp_client_core`, reusable UI primitives
-централизуются в `acp_ui/atomics`.
+абстракции. ACP schemas/codecs централизуются в `codelab_acp_protocol`, state
+transitions централизуются в `codelab_client_acp`, reusable UI primitives
+централизуются в `codelab_ui/atomics`.
 
 ### 5.6. Разрешенные паттерны проектирования
 
@@ -251,7 +251,7 @@ transitions централизуются в `acp_client_core`, reusable UI primi
 
 Wire contract ACP определяется официальной документацией в `docs/acp/protocol/`
 и схемой в `docs/acp/protocol/17-Schema.md`. Типизированные схемы в
-`packages/dart/acp_protocol` должны соответствовать этим документам.
+`packages/dart/codelab_acp_protocol` должны соответствовать этим документам.
 
 Если в документации ACP и реализации возникает расхождение, приоритет имеет
 официальная ACP-документация. Изменение wire contract без обновления
@@ -518,7 +518,7 @@ Cupertino как базового design framework запрещено. Material/
 технический compatibility wrapper, и такой import должен быть изолирован от
 публичных UI-компонентов CodeLab.
 
-Виджеты в `packages/flutter/acp_ui` должны храниться по Atomic Design слоям:
+Виджеты в `packages/flutter/codelab_ui` должны храниться по Atomic Design слоям:
 
 ```text
 lib/
@@ -818,7 +818,7 @@ Change считается complete, когда:
 - Material/Cupertino не используются как базовый design framework;
 - UI widgets организуются по слоям `atomics`, `molecules`, `organisms`;
 - дополнительные стандартные библиотеки: `fpdart` и `freezed`;
-- `acp_client_core` остается pure Dart и не зависит от Bloc, Flutter или UI;
+- `codelab_client_acp` остается pure Dart и не зависит от Bloc, Flutter или UI;
 - read-only operations внутри workspace могут auto-approve только после явной
   user setting;
 - read-only operations вне workspace или sensitive paths требуют explicit

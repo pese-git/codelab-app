@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'dart:math';
 
-import 'package:acp_protocol/acp_protocol.dart' show Implementation;
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
+    show Implementation;
 import 'package:codelab_agent_acp/codelab_agent_acp.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';

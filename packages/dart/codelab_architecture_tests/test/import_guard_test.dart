@@ -39,7 +39,9 @@ void main() {
     addTearDown(() => tmp.deleteSync(recursive: true));
     File(p.join(tmp.path, 'lib', 'src', 'env.dart'))
       ..createSync(recursive: true)
-      ..writeAsStringSync("import 'package:acp_protocol/acp_protocol.dart';\n");
+      ..writeAsStringSync(
+        "import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';\n",
+      );
     final rule = rules.firstWhere(
       (r) => r.dir == 'packages/dart/codelab_agent_io',
     );
@@ -51,7 +53,9 @@ void main() {
 
     expect(
       violations.single,
-      endsWith('lib/src/env.dart:1 -> package:acp_protocol/acp_protocol.dart'),
+      endsWith(
+        'lib/src/env.dart:1 -> package:codelab_acp_protocol/codelab_acp_protocol.dart',
+      ),
     );
   });
 
@@ -61,7 +65,7 @@ void main() {
     File(p.join(tmp.path, 'lib', 'src', 'server.dart'))
       ..createSync(recursive: true)
       ..writeAsStringSync(
-        "import 'dart:io';\nimport 'package:acp_transports/io.dart';\n",
+        "import 'dart:io';\nimport 'package:codelab_acp_transports/io.dart';\n",
       );
     final rule = rules.firstWhere(
       (r) => r.dir == 'packages/dart/codelab_agent_acp',
@@ -83,8 +87,8 @@ void main() {
       ..createSync(recursive: true)
       ..writeAsStringSync(
         "import 'package:flutter/widgets.dart';\n"
-        "import 'package:acp_client_core/acp_client_core.dart';\n"
-        "import 'package:acp_transports/io.dart';\n",
+        "import 'package:codelab_client_acp/codelab_client_acp.dart';\n"
+        "import 'package:codelab_acp_transports/io.dart';\n",
       );
     final rule = rules.firstWhere((r) => r.dir == 'apps/codelab_agent');
 
@@ -109,11 +113,11 @@ void main() {
       ..writeAsStringSync(
         "import 'dart:io';\n"
         "import 'package:flutter/foundation.dart';\n"
-        "import 'package:acp_transports/io.dart';\n"
-        "import 'package:acp_client_core/acp_client_core.dart';\n",
+        "import 'package:codelab_acp_transports/io.dart';\n"
+        "import 'package:codelab_client_acp/codelab_client_acp.dart';\n",
       );
     final rule = rules.firstWhere(
-      (r) => r.dir == 'packages/dart/acp_client_kit',
+      (r) => r.dir == 'packages/dart/codelab_client_core',
     );
 
     final violations = scan(
@@ -134,11 +138,11 @@ void main() {
       ..createSync(recursive: true)
       ..writeAsStringSync(
         "import 'dart:io';\n"
-        "import 'package:acp_transports/io.dart';\n"
+        "import 'package:codelab_acp_transports/io.dart';\n"
         "import 'package:flutter/foundation.dart';\n",
       );
     final rule = rules.firstWhere(
-      (r) => r.dir == 'packages/dart/acp_client_io',
+      (r) => r.dir == 'packages/dart/codelab_client_io',
     );
 
     final violations = scan(

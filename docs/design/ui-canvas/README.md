@@ -1,6 +1,6 @@
 # CodeLab UI/UX Canvas
 
-Визуальный референс UI/UX для CodeLab — 21 экран/компонент ("артборд"), выверенных по реальным исходникам `packages/flutter/acp_ui` и `fluent_ui` (цвета, типографика, spacing взяты из кода, а не на глаз).
+Визуальный референс UI/UX для CodeLab — 21 экран/компонент ("артборд"), выверенных по реальным исходникам `packages/flutter/codelab_ui` и `fluent_ui` (цвета, типографика, spacing взяты из кода, а не на глаз).
 
 ## Как смотреть
 
@@ -31,7 +31,7 @@
 | `ErrorReconnect.dc.html` | Disconnected/failed состояние с конкретным действием восстановления |
 | `NarrowResponsive.dc.html` | Узкое окно — rail + drawer вместо полного скрытия панелей |
 | `MultiSessionSplit.dc.html` | Multi-session split view (north-star, по паттерну Claude Code Desktop) |
-| `ComponentSheet.dc.html` | Справочник компонентов `acp_ui`: цвета, типографика, кнопки, бейджи, spacing/radius-токены |
+| `ComponentSheet.dc.html` | Справочник компонентов `codelab_ui`: цвета, типографика, кнопки, бейджи, spacing/radius-токены |
 | `NavigationFlow.dc.html` | Карта переходов между состояниями |
 
 ## Связь с OpenSpec

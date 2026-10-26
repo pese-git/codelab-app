@@ -93,7 +93,7 @@ flowchart LR
     S1 --> S2["2. Цикл, инструменты,<br/>разрешения"]
     S2 --> S3["3. Сессии и сжатие"]
     S3 --> S4["4. ACP-адаптер<br/>и codelab-agent"]
-    S0 --> S5["5. Общий клиентский слой<br/>acp_client_kit, acp_client_io"]
+    S0 --> S5["5. Общий клиентский слой<br/>codelab_client_core, codelab_client_io"]
     S5 --> S6["6. codelab_cli MVP"]
     S4 --> S8["8. MCP, конфиг,<br/>секреты, AGENTS.md"]
     S6 --> S7["7. Встроенный режим<br/>в обоих клиентах"]
@@ -107,17 +107,17 @@ flowchart LR
 хранилище секретов (задача 8.9); этап 4 входит в него через этап 8.
 
 Клиентская ветка (этапы 5–6) не зависит от агентской (1–4) и идёт параллельно с ней.
-CLI на этапе 6 работает с **текущим Python-агентом** и scripted-агентом из `acp_testing`, а
+CLI на этапе 6 работает с **текущим Python-агентом** и scripted-агентом из `codelab_acp_testing`, а
 после этапа 4 — и с Dart-агентом.
 
 | Этап | Результат | Главная проверка | Подробно |
 |---|---|---|---|
-| **0. Фундамент** | конфигурация melos в одном месте; CI; разделение `acp_transports`; пакет `codelab_agent_core` с web-smoke; сторож архитектуры; корпус golden ACP-фикстур и клиентский прогон; лицензия и `THIRD_PARTY_NOTICES.md`; `AGENTS.md` для агентских пакетов и TDD (задача 0.11) | CI зелёный; сторож валит сборку при импорте `dart:io` в ядро | §9.5 |
+| **0. Фундамент** | конфигурация melos в одном месте; CI; разделение `codelab_acp_transports`; пакет `codelab_agent_core` с web-smoke; сторож архитектуры; корпус golden ACP-фикстур и клиентский прогон; лицензия и `THIRD_PARTY_NOTICES.md`; `AGENTS.md` для агентских пакетов и TDD (задача 0.11) | CI зелёный; сторож валит сборку при импорте `dart:io` в ядро | §9.5 |
 | **1. LLM** | контракт `StreamFunction`, `CancelToken`, SSE, адаптеры OpenAI-совместимый и Anthropic, декораторы, учёт usage, `ScriptedStreamFunction` | стрим с отменой посреди ответа; обрыв сети → событие `ErrorEvent`, не исключение | §9.6 |
 | **2. Цикл, инструменты, разрешения** | `Agent`, цикл с парностью вызовов, `AgentRuntime` в памяти, инструменты `read/write/edit/ls/search/exec/update_plan`, политика разрешений первым хуком, `BoundedEnv`, `MemoryExecutionEnv`, `LocalExecutionEnv`, промпты, минимальный `buildAgentCore` | сценарий «прочитать → отредактировать → запустить» на scripted LLM; ни один инструмент не исполняется в обход политики; `/proj_evil` не проходит при `cwd=/proj` | §9.7 |
 | **3. Сессии и сжатие** | JSONL-журнал, проекции, `loadSession`/`listSessions`, классический компактор, вынос огромного результата в файл сессии (`outputSpill`, задача 3.8 — Should — не блокирует MVP) | обрыв процесса посреди хода не ломает загрузку; длинная сессия продолжается после сжатия без ошибки переполнения | §9.8 |
 | **4. ACP-адаптер и codelab-agent** | `AcpAgentServer`, `AcpClientExecutionEnv`, `AcpPermissionGate`, реплей; бинарь `codelab-agent serve --stdio / --ws` | **codelab-app без изменений работает с Dart-агентом** по stdio; conformance агента на корпусе фикстур; применимые интеграционные тесты app проходят против Dart-агента (`CODELAB_E2E_AGENT=dart`, задача 4.9) | §9.9 |
-| **5. Общий клиентский слой** | `acp_client_kit` и `acp_client_io`; `CodeLabShellCubit` — фасад над kit; `listSessions`, таймауты запросов, `session/load` после reconnect | 8 интеграционных тестов app проходят без изменений; kit покрыт юнит-тестами без Flutter | §9.10 |
+| **5. Общий клиентский слой** | `codelab_client_core` и `codelab_client_io`; `CodeLabShellCubit` — фасад над kit; `listSessions`, таймауты запросов, `session/load` после reconnect | 8 интеграционных тестов app проходят без изменений; kit покрыт юнит-тестами без Flutter | §9.10 |
 | **6. codelab_cli MVP** | AOT-бинарь `codelab`: REPL, одобрение, slash-команды, профили; headless `-p` с кодами выхода и `stream-json`; `codelab test-scenario` | CLI проходит e2e-сценарии против Python-агента и scripted-агента; `codelab -p` работает в CI | §9.11 |
 | **8. MCP, конфиг, секреты, AGENTS.md** | MCP stdio + HTTP, полная конфигурация, загрузка `AGENTS.md`, slash-команды агента, определения агентов в Markdown (задача 8.8); хранилище секретов: `SecretResolver`, хранилища ОС, `codelab secret` (задача 8.9, нужна этапу 7); запись конфига, живая перезагрузка, реестр настроек, переподключение MCP (задача 8.10 — Should — не блокирует MVP) | MCP-инструмент проходит через `ToolExecutor` (`tools/executor.dart`); битый конфиг даёт понятную ошибку | §9.13 |
 | **7. Встроенный режим** | `InProcessAcpLink`, `codelab_embedded`; профиль «встроенный агент» в app и CLI (в CLI — по умолчанию); пакет `codelab_setup` (провайдеры и мастер первого запуска; часть для D-05 — Should — не блокирует MVP) | интеграционные тесты app и e2e CLI проходят в режиме встроенного агента | §9.12 |
@@ -161,7 +161,7 @@ LLM → read/edit/exec → ответ в codelab-app по stdio» без эта�
 
 ```mermaid
 flowchart LR
-    SPEC["Спецификация ACP<br/>docs/acp/protocol"] --> FX["корпус фикстур<br/>acp_testing/fixtures/acp"]
+    SPEC["Спецификация ACP<br/>docs/acp/protocol"] --> FX["корпус фикстур<br/>codelab_acp_testing/fixtures/acp"]
     FX --> AG["conformance Dart-агента<br/>scripted StreamFunction"]
     FX --> CL["проверка клиентов<br/>FakeAcpTransport"]
     AG --> M["матрица целей<br/>agent-parity-goals.md"]
@@ -169,21 +169,21 @@ flowchart LR
     IT["интеграционные тесты<br/>codelab-app и codelab_cli"] --> M
 ```
 
-- **Где лежит корпус:** `packages/dart/acp_testing/fixtures/acp/<имя>.json` — плоско, без
+- **Где лежит корпус:** `packages/dart/codelab_acp_testing/fixtures/acp/<имя>.json` — плоско, без
   подкаталогов групп (фикстуры расширений ACP лежат там же и помечены полем `"extensions"`). Id фикстуры — `acp/` + имя
   файла, имя — `<область>-<сценарий>[-<исход>]`, области — agent-core-architecture §14.2; например
   `acp/prompt-tool-permission-allow`.
 - **Conformance агента** (этап 4): драйвер проигрывает кадры клиента, агент работает на scripted
   `StreamFunction` из той же фикстуры, ответы сравниваются с ожидаемыми кадрами после
   нормализации. Тест: `packages/dart/codelab_agent_acp/test/conformance_test.dart` (agent-core-architecture §14.13).
-- **Проверка клиентов** (этап 0 для `acp_client_core`, этап 5 для `acp_client_kit`):
+- **Проверка клиентов** (этап 0 для `codelab_client_acp`, этап 5 для `codelab_client_core`):
   `FakeAcpTransport` проигрывает кадры агента; проверяются ответы клиента и состояние. Тесты:
-  `packages/dart/acp_client_core/test/fixtures/client_fixture_conformance_test.dart`,
-  `packages/dart/acp_client_kit/test/fixtures/kit_fixture_projection_test.dart`.
+  `packages/dart/codelab_client_acp/test/fixtures/client_fixture_conformance_test.dart`,
+  `packages/dart/codelab_client_core/test/fixtures/kit_fixture_projection_test.dart`.
 - **Драйвер из командной строки** (этап 6): `codelab test-scenario <фикстура> --agent <профиль>`
   проигрывает фикстуры против любого агента — встроенного, `codelab-agent serve --stdio`,
   Python-агента. Проигрывание фикстур — это headless ACP-клиент, поэтому он построен на
-  `acp_client_kit`, и фикстуры одновременно проверяют агента и общий клиентский слой.
+  `codelab_client_core`, и фикстуры одновременно проверяют агента и общий клиентский слой.
 - **Матрица целей:** у каждой строки Must есть доказательство — id фикстуры и/или имя теста
   клиента. Проверка наличия доказательств автоматизирована (этап 9, §9.14).
 - **Критерий вывода Python-агента:** все строки Must зелёные плюс ручная проверка с Zed. Прогон

@@ -7,9 +7,9 @@
 ## 13.1. Назначение
 
 `codelab_agent_acp` — проекция `AgentRuntime` в ACP. Адаптер принимает JSON-RPC-кадры через
-`AcpTransport`, декодирует их моделями `acp_protocol`, вызывает API ядра и проецирует
+`AcpTransport`, декодирует их моделями `codelab_acp_protocol`, вызывает API ядра и проецирует
 `AgentEvent` в `session/update`. Методы, поля и значения перечислений берутся только из
-`acp_protocol` и `docs/acp/protocol/`. Всё сверх них — поля `_meta.codelab.*` или методы
+`codelab_acp_protocol` и `docs/acp/protocol/`. Всё сверх них — поля `_meta.codelab.*` или методы
 `_codelab/*`; каждое расширение вводится OpenSpec change (`AGENTS.md` §3.4) и перечислено в
 §13.12.
 
@@ -96,7 +96,7 @@ final class AcpServerConfig {
 ## 13.3. `authenticate`
 
 `authMethods` пуст, поэтому клиент по спецификации не вызывает `authenticate`. Метода нет в
-`acp_protocol`; вызов получает `-32601`. Защита соединения — на уровне транспорта: stdio — это
+`codelab_acp_protocol`; вызов получает `-32601`. Защита соединения — на уровне транспорта: stdio — это
 дочерний процесс пользователя; WebSocket слушает `127.0.0.1` и проверяет заголовок
 `Authorization: Bearer <token>` при рукопожатии HTTP (ответ `401` до ACP). Код `-32000`
 зарезервирован за будущим «Authentication required» и не используется ни для чего другого.
@@ -340,9 +340,9 @@ final class AcpServerConfig {
    время хода уведомление уходит в той же очереди (§13.10), ход не прерывается.
 
 `session/set_mode` есть в спецификации ACP (`12-Session Model.md`, схема
-`SetSessionModeRequest {sessionId, modeId}`), но ещё не реализован в `acp_protocol`. Решение:
+`SetSessionModeRequest {sessionId, modeId}`), но ещё не реализован в `codelab_acp_protocol`. Решение:
 OpenSpec change этапа 4 добавляет `SetSessionModeRequest`/`SetSessionModeResponse` в
-`acp_protocol`; обработчик — та же функция, что для `configId: "mode"`, ответ `{}`, затем
+`codelab_acp_protocol`; обработчик — та же функция, что для `configId: "mode"`, ответ `{}`, затем
 уведомление `current_mode_update`. До этого изменения метод отвечает `-32601`, а клиенты
 используют `configOptions` (их спецификация называет предпочтительным способом).
 
@@ -585,7 +585,7 @@ JSON-RPC id исходящих запросов — строки `perm-<n>`, `fs
 
 | Правило | Поведение |
 |---|---|
-| Плохой кадр не убивает соединение | неразбираемый JSON → ответ `-32700` с `id: null`; не JSON-RPC 2.0 → `-32600`; неизвестный метод запроса → `-32601`; неизвестное уведомление → лог и игнор; параметры не проходят декодер `acp_protocol` → `-32602`. Соединение и активные ходы живут (ACP-4) |
+| Плохой кадр не убивает соединение | неразбираемый JSON → ответ `-32700` с `id: null`; не JSON-RPC 2.0 → `-32600`; неизвестный метод запроса → `-32601`; неизвестное уведомление → лог и игнор; параметры не проходят декодер `codelab_acp_protocol` → `-32602`. Соединение и активные ходы живут (ACP-4) |
 | Ответ на неизвестный id | лог `acp.frame.bad`, игнор |
 | Исключение обработчика | `-32603`, стек в лог, соединение живёт |
 | Порядок | все кадры соединения — через одну `OutboundQueue`; ответ на `session/prompt` — после последнего уведомления хода; ответ `session/load` — после реплея |
@@ -631,9 +631,9 @@ dart-agent-and-clients §12.5), поэтому отдельные коды дл�
 ## 13.11. InProcessAcpLink
 
 Встроенный режим соединяет `AcpClientApplication` клиента и `AcpAgentServer` парой транспортов в
-памяти: `InProcessAcpLink` с концами `client` и `agent` (`packages/dart/acp_transports/lib/src/in_process_acp_transport.dart`,
+памяти: `InProcessAcpLink` с концами `client` и `agent` (`packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart`,
 этап 7, dart-agent-and-clients §9.12). Оба конца — `InProcessAcpTransport`, реализация
-существующего интерфейса `AcpTransport` (`packages/dart/acp_transports/lib/src/acp_transport.dart`):
+существующего интерфейса `AcpTransport` (`packages/dart/codelab_acp_transports/lib/src/acp_transport.dart`):
 сообщения передаются объектами `JsonRpcMessage` без кодирования в текст.
 
 ```dart
@@ -781,7 +781,7 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | `data.codelab.rateLimit` `{kind, provider, model, retryAfterMs, resetAt, window}` (после MVP, OpenSpec `add-rate-limit-info`) | JSON-RPC ошибка `-32603` на `session/prompt` с `errorClass: "rateLimited"` | клиент локализует сообщение о лимите и показывает время сброса (L-32, §17.10.4.1) |
 | `_meta.codelab.turnEnded` | `session_info_update` после переподключения | итог хода, ответ на который отправить некуда |
 | `_meta.codelab.critical` (`critical`, `label`) | `toolCall` в `session/request_permission` критической команды (§7.8) | клиент выделяет опасный вызов; `allow_always` не предлагается |
-| `SetSessionModeRequest` в `acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
+| `SetSessionModeRequest` в `codelab_acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
 | `_meta.codelab.subagent` (после MVP, §17.3.7) | `session/request_permission` от субагента; `tool_call_update` `task` со `status: failed` (`failure`) | связь запроса с вызовом `task` и типом ребёнка |
 | capability `subagentBoard` (после MVP) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | согласование доски субагентов (U-21) |
 | `_codelab/subagents/update`, `/list`, `/cancel`, `/history` (после MVP) | уведомление и методы | доска субагентов: снимки, отмена ребёнка, реплей журнала ребёнка (§17.3.7); `pendingNotices` для фонового режима (§17.3.8); поля снимка `run`, `followUps` и `_meta.codelab.subagentRun` в `/history` (§17.3.8.1) |
@@ -897,7 +897,7 @@ sequenceDiagram
 
 ## 13.14. Инварианты
 
-1. **ACP-1.** Адаптер не отправляет значения перечислений, которых нет в `acp_protocol` (в том числе статус `cancelled` для tool call); каждый исходящий кадр проходит кодек `acp_protocol`.
+1. **ACP-1.** Адаптер не отправляет значения перечислений, которых нет в `codelab_acp_protocol` (в том числе статус `cancelled` для tool call); каждый исходящий кадр проходит кодек `codelab_acp_protocol`.
 2. **ACP-2.** Каждое расширение `_meta`, `data.codelab` или `_codelab/*` перечислено в §13.12 и имеет ссылку на OpenSpec change.
 3. **ACP-3.** Ответ на `session/prompt` отправляется после последнего `session/update` этого хода; ответ на `session/load` — после последнего уведомления реплея.
 4. **ACP-4.** Ошибка разбора или обработки одного кадра не закрывает соединение и не прерывает активные ходы.

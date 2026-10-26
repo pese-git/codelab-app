@@ -2,10 +2,10 @@
 
 ## Purpose
 
-Общий клиентский слой ACP без UI — пакет `acp_client_kit` на чистом web-безопасном Dart и его `dart:io`-адаптеры `acp_client_io`: рабочее пространство и явный автомат соединения, профили и резолверы транспорта без секретов в профилях, сессии с инкрементальной проекцией транскрипта, очередь промптов, одобрения, опции и команды агента, инспектор и диагностика без секретов. Владелец клиентского состояния для `codelab_app` и `codelab_cli`; хосты только отображают `WorkspaceState` и `SessionView`.
+Общий клиентский слой ACP без UI — пакет `codelab_client_core` на чистом web-безопасном Dart и его `dart:io`-адаптеры `codelab_client_io`: рабочее пространство и явный автомат соединения, профили и резолверы транспорта без секретов в профилях, сессии с инкрементальной проекцией транскрипта, очередь промптов, одобрения, опции и команды агента, инспектор и диагностика без секретов. Владелец клиентского состояния для `codelab_desktop` и `codelab_cli`; хосты только отображают `WorkspaceState` и `SessionView`.
 ## Requirements
 ### Requirement: Общий клиентский слой без UI
-Логика клиента ACP — подключение, сессии, очередь промптов, проекция транскрипта, одобрения, опции конфигурации, команды, инспектор и диагностика — SHALL жить в пакете `packages/dart/acp_client_kit` на чистом Dart, а не в Flutter-приложении. Публичный API SHALL экспортироваться через `lib/acp_client_kit.dart`: `ClientWorkspace`, `SessionHandle`, `WorkspaceState`, `SessionView`, `ConnectionView`, `TranscriptItem`, `PromptQueue`, `ConnectionProfile`, `TransportResolver`, `SecretSource`, `AgentCommandView`, `ConfigOptionView`, `InspectorProjection`, `WorkspaceDiagnostic`, `describeFailure`. Источник данных kit SHALL быть портом `AgentBackend`; реализация `AcpClientBackend` SHALL работать поверх `AcpClientApplication` из `acp_client_core`. В коде kit НЕ SHALL быть членов, помеченных в плане как «после MVP», и заглушек для них.
+Логика клиента ACP — подключение, сессии, очередь промптов, проекция транскрипта, одобрения, опции конфигурации, команды, инспектор и диагностика — SHALL жить в пакете `packages/dart/codelab_client_core` на чистом Dart, а не в Flutter-приложении. Публичный API SHALL экспортироваться через `lib/codelab_client_core.dart`: `ClientWorkspace`, `SessionHandle`, `WorkspaceState`, `SessionView`, `ConnectionView`, `TranscriptItem`, `PromptQueue`, `ConnectionProfile`, `TransportResolver`, `SecretSource`, `AgentCommandView`, `ConfigOptionView`, `InspectorProjection`, `WorkspaceDiagnostic`, `describeFailure`. Источник данных kit SHALL быть портом `AgentBackend`; реализация `AcpClientBackend` SHALL работать поверх `AcpClientApplication` из `codelab_client_acp`. В коде kit НЕ SHALL быть членов, помеченных в плане как «после MVP», и заглушек для них.
 
 #### Scenario: Kit используется без Flutter
 - **WHEN** Dart-программа без Flutter создаёт `ClientWorkspace` с `AcpClientBackend` и тестовым резолвером на `FakeAcpTransport`
@@ -13,7 +13,7 @@
 
 #### Scenario: Приложение работает через kit
 - **WHEN** `CodeLabShellCubit` разрешается из графа cherrypick app
-- **THEN** он получает `ClientWorkspace`, а не use case-ы `acp_client_core`, и его публичная поверхность остаётся прежней
+- **THEN** он получает `ClientWorkspace`, а не use case-ы `codelab_client_acp`, и его публичная поверхность остаётся прежней
 
 ### Requirement: Явный автомат соединения
 Состояние соединения в kit SHALL быть закрытой иерархией `ConnectionView` — `Disconnected`, `Connecting`, `Connected`, `Reconnecting`, `ConnectionFailed` с причиной и сообщением — а не набором булевых флагов. Переподключение SHALL повторять поведение app до переноса: одна попытка с транспортом текущего профиля без `session/load`. Поздние события соединения старого поколения (`AcpClientApplication.generation`) НЕ SHALL менять `WorkspaceState`.
@@ -78,14 +78,14 @@
 - **THEN** диагностика потери соединения не публикуется
 
 ### Requirement: Профили и резолверы транспорта
-`ConnectionProfile` SHALL быть закрытой иерархией `StdioProfile` и `WebSocketProfile`; токен WebSocket в профиле SHALL храниться ссылкой, а не значением; значение SHALL давать порт `SecretSource`. Превращение профиля в `AcpTransport` SHALL выполнять `TransportResolver`, который регистрирует composition root; kit НЕ SHALL открывать процессы и сокеты сам. `ConfigTransportResolver` kit SHALL переводить профиль в конфигурацию транспорта `acp_transports` и вызывать фабрику, которую передал хост.
+`ConnectionProfile` SHALL быть закрытой иерархией `StdioProfile` и `WebSocketProfile`; токен WebSocket в профиле SHALL храниться ссылкой, а не значением; значение SHALL давать порт `SecretSource`. Превращение профиля в `AcpTransport` SHALL выполнять `TransportResolver`, который регистрирует composition root; kit НЕ SHALL открывать процессы и сокеты сам. `ConfigTransportResolver` kit SHALL переводить профиль в конфигурацию транспорта `codelab_acp_transports` и вызывать фабрику, которую передал хост.
 
 #### Scenario: Профиль без резолвера
 - **WHEN** `connect` вызывается с профилем, для которого не зарегистрирован резолвер
 - **THEN** `WorkspaceState.connection` становится `ConnectionFailed` с сообщением о неподдерживаемом профиле, транспорт не открывается
 
 ### Requirement: IO-адаптеры клиента
-`dart:io`-реализации портов клиента SHALL жить в `packages/dart/acp_client_io`: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `ioTransportResolver` — `ConfigTransportResolver` kit с настоящими транспортами stdio и WebSocket, `JsonFileProfileStore` (`~/.codelab/profiles.json`) и `JsonFileRecentProjectsStore`. Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app.
+`dart:io`-реализации портов клиента SHALL жить в `packages/dart/codelab_client_io`: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `ioTransportResolver` — `ConfigTransportResolver` kit с настоящими транспортами stdio и WebSocket, `JsonFileProfileStore` (`~/.codelab/profiles.json`) и `JsonFileRecentProjectsStore`. Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app.
 
 #### Scenario: Профили сохраняются в JSON
 - **WHEN** `JsonFileProfileStore` сохраняет профиль `WebSocketProfile` и читает его заново

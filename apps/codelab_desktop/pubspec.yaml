@@ -1,0 +1,55 @@
+name: codelab_desktop
+description: Desktop CodeLab ACP client application.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  codelab_client_acp:
+    path: ../../packages/dart/codelab_client_acp
+  codelab_client_io:
+    path: ../../packages/dart/codelab_client_io
+  codelab_client_core:
+    path: ../../packages/dart/codelab_client_core
+  codelab_acp_protocol:
+    path: ../../packages/dart/codelab_acp_protocol
+  codelab_acp_transports:
+    path: ../../packages/dart/codelab_acp_transports
+  codelab_ui:
+    path: ../../packages/flutter/codelab_ui
+  cherrypick: ^4.0.0-dev.3
+  cherrypick_annotations: ^4.0.0-dev.0
+  file_selector: ^1.1.0
+  fluent_ui: ^4.11.1
+  flutter:
+    sdk: flutter
+  flutter_bloc: ^9.1.1
+  fpdart: ^1.2.0
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  shared_preferences: ^2.5.5
+  structured_log: 0.3.1
+  structured_log_flutter: 0.1.3
+  structured_log_fluent: 0.1.2+2
+  structured_log_remote_sync: 0.2.1
+
+dev_dependencies:
+  codelab_acp_testing:
+    path: ../../packages/dart/codelab_acp_testing
+  build_runner: ^2.10.5
+  cherrypick_generator: ^4.0.0-dev.2
+  flutter_driver:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  freezed: ^3.2.5
+
+flutter:
+  uses-material-design: true

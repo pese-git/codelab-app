@@ -1,6 +1,0 @@
-# Теги тестов app (контракт e2e `09-09`; design.md change
-# `add-codelab-agent-binary`, D9).
-tags:
-  # Поведение именно scripted-агента из acp_testing; прогон против
-  # Dart-агента идёт с `--exclude-tags scripted-only`.
-  scripted-only:

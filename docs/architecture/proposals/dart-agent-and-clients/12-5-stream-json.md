@@ -27,7 +27,7 @@
 ## 12.5.2. Решение о формате
 
 **Решение.** `stream-json` — собственная стабильная схема CodeLab с номером версии в строке
-`init`. Это проекция модели отображения `acp_client_kit` (§9.10, §12.1) плюс события, которые
+`init`. Это проекция модели отображения `codelab_client_core` (§9.10, §12.1) плюс события, которые
 знает только headless-раннер (границы ходов, решения политики, итог прогона). Совместимость с
 `--output-format stream-json` Claude Code **не обещается**. Исходные кадры ACP доступны для отладки
 флагом `--include-acp` отдельными строками типа `acp`; на их содержимое гарантии стабильности не
@@ -56,7 +56,7 @@ flowchart LR
         PR["ответ session/prompt<br/>stopReason или ошибка"]
         RP["session/request_permission"]
     end
-    subgraph Kit["acp_client_kit"]
+    subgraph Kit["codelab_client_core"]
         TP["TranscriptProjector"]
         SV["SessionView<br/>ревизии"]
         AP["approvals"]
@@ -526,7 +526,7 @@ sequenceDiagram
 ## 12.5.8. Как проверить
 
 **E2E** (`apps/codelab_cli/test/e2e/`, собранный бинарь против scripted stdio-агента из
-`acp_testing`; golden-файлы — `test/e2e/golden/`, нормализация `sessionId` → `<session>`,
+`codelab_acp_testing`; golden-файлы — `test/e2e/golden/`, нормализация `sessionId` → `<session>`,
 `durationMs` → `0`, путей `cwd` и каталога сессий → `<cwd>`, `<sessions>`, версий → `<version>`):
 
 * `cli/headless-stream-json-golden` — сценарий примера §12.5.5 (чтение, фоновый субагент,

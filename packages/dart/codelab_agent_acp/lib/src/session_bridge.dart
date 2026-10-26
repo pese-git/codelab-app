@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:acp_protocol/acp_protocol.dart' as acp;
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' as acp;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'acp_client_env.dart';

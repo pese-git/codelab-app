@@ -203,10 +203,10 @@ sealed class SessionState {
 
 ```text
 Transport state
-    → acp_transports
+    → codelab_acp_transports
 
 Connection/session semantics
-    → acp_client_core
+    → codelab_client_acp
 
 Presentation state
     → BLoC/Cubit
@@ -751,7 +751,7 @@ Reconnect должен иметь одного owner.
 
 ```text
 ACP transport subscription
-    → acp_client_core
+    → codelab_client_acp
 
 client event subscription
     → BLoC
@@ -1136,7 +1136,7 @@ Retry/backoff следует тестировать детерминирован
 
 BLoC tests должны проверять presentation mapping и intents, а не повторять всю ACP lifecycle state machine.
 
-Core lifecycle следует тестировать в `acp_client_core`.
+Core lifecycle следует тестировать в `codelab_client_acp`.
 
 ---
 

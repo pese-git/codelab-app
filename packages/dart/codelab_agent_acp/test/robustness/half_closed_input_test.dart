@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:acp_protocol/acp_protocol.dart';
-import 'package:acp_transports/acp_transports.dart';
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_agent_acp/codelab_agent_acp.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';

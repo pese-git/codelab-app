@@ -41,6 +41,6 @@ CodeLab SHALL реализовывать входящий ACP-метод `fs/wri
 Реализация чтения/записи файлов SHALL находиться в infrastructure-слое приложения и SHALL NOT быть доступна напрямую из `domain`, `application` или `presentation`.
 
 #### Scenario: Domain/application не содержат прямых вызовов dart:io
-- **WHEN** запускается статический анализ `packages/dart/acp_client_core`
-- **THEN** пакет не импортирует `dart:io` для файловых операций напрямую, а обращается к ним через порт/интерфейс, реализуемый в `apps/codelab_app`
+- **WHEN** запускается статический анализ `packages/dart/codelab_client_acp`
+- **THEN** пакет не импортирует `dart:io` для файловых операций напрямую, а обращается к ним через порт/интерфейс, реализуемый в `apps/codelab_desktop`
 

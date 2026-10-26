@@ -9,9 +9,9 @@
 
 **Задачи.**
 
-1. **7.1. `InProcessAcpLink`** (пара `InProcessAcpTransport`) в `packages/dart/acp_transports/lib/src/in_process_acp_transport.dart`
+1. **7.1. `InProcessAcpLink`** (пара `InProcessAcpTransport`) в `packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart`
    (код ниже), экспорт из основного (платформенно-нейтрального) бареля. Тест
-   `packages/dart/acp_transports/test/in_process_acp_transport_test.dart`.
+   `packages/dart/codelab_acp_transports/test/in_process_acp_transport_test.dart`.
 2. **7.2.** Заменить тестовую копию транспорта в contract test этапа 4 на `InProcessAcpLink`.
 3. **7.3. Пакет `packages/dart/codelab_embedded`** (API ниже): `lib/codelab_embedded.dart`
    (нейтральная часть, `createEmbeddedAgent`), `lib/io.dart` (сервисы для десктопа).
@@ -20,7 +20,7 @@
    (agent-core-architecture §10.2) и исполняет файлы и команды локально, даже если клиент объявил
    `fs`/`terminal`.
 5. **7.5. codelab-app:** `EmbeddedProfile` в диалоге подключения («Встроенный агент»),
-   `EmbeddedTransportResolver` в composition root (`apps/codelab_app/lib/app/app_scope.dart`),
+   `EmbeddedTransportResolver` в composition root (`apps/codelab_desktop/lib/app/app_scope.dart`),
    выбор провайдера и модели из конфигурации; конфигурация — загрузчик задачи 8.5
    (`config_loader.dart`), ключ API — `SecretResolver` задачи 8.9 (переменная
    `CODELAB_SECRET_<…>` или связка ключей ОС; §15 и §17.5.4 документа ядра). Это часть MVP.
@@ -44,15 +44,15 @@
    Решение об isolate принимается в этой задаче по критериям ниже («Решение 7.8: ядро в
    isolate») и фиксируется в `design.md` change с числами замера.
 9. **7.9. E2E CLI во встроенном режиме:** те же `cli/*` с `--agent embedded` и scripted-провайдером;
-   `codelab test-scenario packages/dart/acp_testing/fixtures/acp --agent embedded` — в CI-джобе
+   `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded` — в CI-джобе
    `conformance`.
 
 **Артефакт: `InProcessAcpLink`** — пара `InProcessAcpTransport`, реализаций существующего интерфейса `AcpTransport`.
 
 ```dart
-// packages/dart/acp_transports/lib/src/in_process_acp_transport.dart
+// packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart
 import 'dart:async';
-import 'package:acp_protocol/acp_protocol.dart';
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'acp_transport.dart';
 
 /// Пара соединённых транспортов: отправленное в один приходит в inbound другого.
@@ -222,7 +222,7 @@ Future<EmbeddedAgentConfig> loadEmbeddedAgentConfig({required String cwd, requir
    `link.agent.close()`.
 
 Резолвер клиента — несколько строк в composition root, поэтому `codelab_embedded` не зависит от
-`acp_client_kit`:
+`codelab_client_core`:
 
 ```dart
 // После MVP (§12.6.7) реализует TerminatingTransportResolver: terminate = _running?.dispose().
@@ -246,7 +246,7 @@ final class EmbeddedTransportResolver implements TransportResolver {
 ```
 
 **OpenSpec change.** `add-in-process-acp-transport` (задачи 7.1–7.2; scope: публичный API
-`acp_transports`, правила копирования и закрытия) и `add-embedded-agent-mode` (задачи 7.3–7.9;
+`codelab_acp_transports`, правила копирования и закрытия) и `add-embedded-agent-mode` (задачи 7.3–7.9;
 scope: `codelab_embedded`, профили `embedded-*`, профиль подключения в app и CLI, scripted-провайдер
 только для тестов; часть 7.5 про `codelab_setup` и D-05 — отдельный change
 `add-provider-setup-ui`, Should). `tasks.md` — пары "тест → реализация" со ссылкой на критерий
@@ -295,11 +295,11 @@ final class IsolateAcpLink {
 
 **Definition of Done.**
 
-* `fvm dart test packages/dart/acp_transports/test/in_process_acp_transport_test.dart` зелёный.
+* `fvm dart test packages/dart/codelab_acp_transports/test/in_process_acp_transport_test.dart` зелёный.
 * Интеграционные тесты app для встроенного режима (таблица этапа 4) собираются; прогон на
   устройстве `melos run test:e2e:app:embedded` — все применимые тесты зелёные — выполняется в
   ветке `release/<version>` (`AGENTS.md` §21).
-* `codelab test-scenario packages/dart/acp_testing/fixtures/acp --agent embedded` — все `PASS`.
+* `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded` — все `PASS`.
 * `melos run guard`: основной барель `codelab_embedded` не импортирует `dart:io`; app и CLI не
   импортируют `codelab_agent_*` напрямую.
 * Замер 7.8 выполнен, решение об isolate записано в `design.md` с числами и критериями.

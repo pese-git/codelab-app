@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:acp_transports/acp_transports.dart';
-import 'package:acp_transports/io.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
+import 'package:codelab_acp_transports/io.dart';
 import 'package:test/test.dart';
 
 import 'support/acp_peer.dart';
