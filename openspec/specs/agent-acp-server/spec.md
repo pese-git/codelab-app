@@ -140,7 +140,7 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 - **THEN** каждый получает свою ошибку, ход продолжается и завершается ответом `end_turn`
 
 ### Requirement: Отсоединение, переподключение и завершение
-Закрытие транспорта SHALL переводить соединение в `detached` на `detachGrace` (по умолчанию 30 с, `Duration.zero` — без ожидания). Если за это время сессию загружают новым соединением — переподключение: ожидающие `session/request_permission` отправляются заново с новым id и тем же `toolCallId` (PERM-4), итог хода новому соединению — `session_info_update` с `_meta.codelab.turnEnded`. Иначе ход отменяется, разрешения → `cancelled`. `session/load` сессии, ход которой идёт в другом живом соединении, SHALL давать `-32602` с `reason: "sessionBusy"`.
+Конец входа соединения (EOF stdin, закрытый сокет) SHALL приводить к ответам на уже прочитанные запросы, отправке очереди и закрытию транспорта, и только затем `serve` SHALL завершаться: у stdio выход живёт дольше входа (design.md change `add-codelab-agent-binary`, D7). Закрытие транспорта SHALL переводить соединение в `detached` на `detachGrace` (по умолчанию 30 с, `Duration.zero` — без ожидания). Если за это время сессию загружают новым соединением — переподключение: ожидающие `session/request_permission` отправляются заново с новым id и тем же `toolCallId` (PERM-4), итог хода новому соединению — `session_info_update` с `_meta.codelab.turnEnded`. Иначе ход отменяется, разрешения → `cancelled`. `session/load` сессии, ход которой идёт в другом живом соединении, SHALL давать `-32602` с `reason: "sessionBusy"`.
 
 `shutdown({grace})` SHALL отвечать на новые запросы `-32603` «shutting down», завершать ожидающие разрешения `cancelled`, отменять ходы и ждать `TurnEnded` не дольше `grace`, затем закрывать транспорты (§13.10).
 
@@ -151,6 +151,10 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 #### Scenario: Grace истёк
 - **WHEN** соединение закрывается во время хода и за 30 с никто не загружает сессию
 - **THEN** ход завершается `cancelled`, журнал содержит итоговые записи хода
+
+#### Scenario: Ответ после EOF входа
+- **WHEN** клиент пишет `initialize` и сразу закрывает вход соединения, а выход ещё принимает кадры
+- **THEN** ответ на `initialize` отправляется, транспорт закрывается, и `serve` завершается
 
 ### Requirement: Расширения протокола этапа 4
 Сервер SHALL отправлять только расширения, введённые этим change (ACP-2): `_meta.codelab.outcome`, `_meta.codelab.budgetExceeded`, `data.codelab` (`errorClass`, `message`, `retryable`, `reason`), `_meta.codelab.turnEnded`, `_meta.codelab.critical`. Каждое расширение SHALL быть перечислено в §13.12 документа ядра со ссылкой на этот change.
