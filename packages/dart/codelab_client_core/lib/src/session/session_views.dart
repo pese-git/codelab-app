@@ -17,6 +17,11 @@ abstract class ConfigOptionView with _$ConfigOptionView {
     String? description,
     required String currentValue,
     required List<ConfigOptionValueView> values,
+
+    /// Категория опции из ACP (`mode`, `model`, `thought_level`): по ней хост
+    /// находит, например, режим для шапки сессии (change
+    /// `redesign-workbench-shell`, D7). Незнакомая категория — как есть.
+    String? category,
   }) = _ConfigOptionView;
 
   /// Представление опции вида `select` — единственного вида в ACP.
@@ -27,11 +32,13 @@ abstract class ConfigOptionView with _$ConfigOptionView {
       :final currentValue,
       :final options,
       :final description,
+      :final category,
     ) =>
       ConfigOptionView(
         id: id.value,
         name: name,
         description: description,
+        category: category,
         currentValue: currentValue.value,
         values: [
           for (final value in options)
