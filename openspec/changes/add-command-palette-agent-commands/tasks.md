@@ -11,9 +11,9 @@
 
 ## 3. Палитра app на каталоге (итерация 3)
 
-- [ ] 3.1 Красные тесты: `codelab_ui` — `CodeLabCommandPaletteSurface` и `CodeLabPromptComposer` с параметром `search` показывают результат поиска в его порядке, без параметра — отбор `CodeLabCommandAction.filter`; app — `ShellState.paletteActions` без заглушки `/compact` при команде агента `compact`, поиск `ShellState` находит `compact` по `cpt` и ставит `plan` первым по `/pl`.
-- [ ] 3.2 `codelab_ui`: `typedef CodeLabCommandSearch`, параметр `search` у обоих виджетов (D5).
-- [ ] 3.3 App: `ShellState.paletteActions` и поиск из `CommandCatalog` (`HostCommand` из `CodeLabCommandAction.defaults`, сопоставление по `id`); `workbench_shell.dart` и `main_pane.dart` передают поиск — 3.1 и e2e 1.2 зелёные.
+- [x] 3.1 Красные тесты: `codelab_ui` — `CodeLabCommandPaletteSurface` и `CodeLabPromptComposer` с параметром `search` показывают результат поиска в его порядке, без параметра — отбор `CodeLabCommandAction.filter`; app — `ShellState.paletteActions` без заглушки `/compact` при команде агента `compact`, поиск `ShellState` находит `compact` по `cpt` и ставит `plan` первым по `/pl`.
+- [x] 3.2 `codelab_ui`: `typedef CodeLabCommandSearch`, параметр `search` у обоих виджетов (D5).
+- [x] 3.3 App: `ShellState.paletteActions` и поиск из `CommandCatalog` (`HostCommand` из `CodeLabCommandAction.defaults`, сопоставление по `id`); `workbench_shell.dart` и `main_pane.dart` передают поиск — 3.1 и e2e 1.2 зелёные.
 
 ## 4. Документы и Definition of Done
 

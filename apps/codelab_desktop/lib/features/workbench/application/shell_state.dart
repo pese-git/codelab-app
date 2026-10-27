@@ -1,3 +1,5 @@
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show CommandCatalog;
 import 'package:codelab_ui/codelab_ui.dart';
 
 import 'connection_cubit.dart';
@@ -42,6 +44,7 @@ final class CodeLabShellState {
     required this.isCommandPaletteOpen,
     required this.isInspectorVisibleInNarrowLayout,
     required this.agentCommands,
+    required this.commandCatalog,
     required this.composerDraft,
     required this.configOptions,
     required this.isRespondingToConfigOption,
@@ -84,6 +87,10 @@ final class CodeLabShellState {
   /// Команды, объявленные агентом (`available_commands_update`); каждое
   /// обновление заменяет список целиком.
   final List<CodeLabCommandAction> agentCommands;
+
+  /// Каталог палитры: команды app и агента активной сессии с правилами kit
+  /// (change `add-command-palette-agent-commands`, D2–D4).
+  final CommandCatalog commandCatalog;
 
   /// Текст для композера после выбора команды агента (`/{name} `) или
   /// возврата промпта из очереди.
@@ -147,6 +154,7 @@ final class CodeLabShellState {
     bool? isCommandPaletteOpen,
     bool? isInspectorVisibleInNarrowLayout,
     List<CodeLabCommandAction>? agentCommands,
+    CommandCatalog? commandCatalog,
     String? composerDraft,
     List<CodeLabConfigOption>? configOptions,
     bool? isRespondingToConfigOption,
@@ -188,6 +196,7 @@ final class CodeLabShellState {
           isInspectorVisibleInNarrowLayout ??
           this.isInspectorVisibleInNarrowLayout,
       agentCommands: agentCommands ?? this.agentCommands,
+      commandCatalog: commandCatalog ?? this.commandCatalog,
       composerDraft: composerDraft ?? this.composerDraft,
       configOptions: configOptions ?? this.configOptions,
       isRespondingToConfigOption:
@@ -206,12 +215,15 @@ final class CodeLabShellState {
     );
   }
 
-  /// Полный список палитры: шесть команд клиента, затем команды агента;
-  /// команды агента не заменяют команды клиента.
-  List<CodeLabCommandAction> get paletteActions => [
-    ...CodeLabCommandAction.defaults,
-    ...agentCommands,
-  ];
+  /// Полный список палитры: команды клиента, затем команды агента; команда
+  /// агента вытесняет одноимённую недоступную команду клиента (D3).
+  List<CodeLabCommandAction> get paletteActions =>
+      paletteActionsOf(commandCatalog);
+
+  /// Команды палитры под запрос пользователя, лучшие — первыми (D4); её
+  /// получают палитра `Ctrl/Cmd+K` и inline-триггер композера.
+  List<CodeLabCommandAction> searchPalette(String query) =>
+      searchPaletteActions(commandCatalog, query);
 
   String get selectedProfileLabel => profileLabel;
 
