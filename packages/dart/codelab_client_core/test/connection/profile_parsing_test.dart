@@ -32,7 +32,7 @@ void main() {
       expect(parseShellWords(r"""'a "b" \n $HOME'"""), [r'a "b" \n $HOME']);
     });
 
-    test('double quotes unescape only \" and \\', () {
+    test(r'double quotes unescape only \" and \\', () {
       expect(parseShellWords(r'"say \"hi\" \\ \n"'), [r'say "hi" \ \n']);
     });
 
