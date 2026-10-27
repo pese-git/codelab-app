@@ -1,11 +1,12 @@
 import 'dart:async';
 
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../cli_args.dart';
 import '../render/sanitize.dart';
+import '../render/terminal_renderer.dart';
+import '../session_setup.dart';
 import 'approval_policy.dart';
 import 'outcome.dart';
 
@@ -120,16 +121,21 @@ final class HeadlessRunner {
       final SessionHandle session;
       try {
         await _workspace.connect(profile, projectDirectory: cwd);
-        session = await _openSession(cwd, resume: resume, last: continueLast);
+        session = await openCliSession(
+          _workspace,
+          cwd,
+          resume: resume,
+          last: continueLast,
+        );
       } on Object catch (error) {
-        final message = error is _SetupError
+        final message = error is SessionSetupError
             ? error.message
             : describeFailure(error);
         _stderr.writeln(
           sanitizeTerminalText(
-            error is _SetupError
+            error is SessionSetupError
                 ? 'codelab: $message'
-                : 'codelab: cannot start the agent ${_describe(profile)}: '
+                : 'codelab: cannot start the agent ${describeProfile(profile)}: '
                       '$message',
           ),
         );
@@ -140,9 +146,9 @@ final class HeadlessRunner {
         return Signalled(await _interrupted.future);
       }
       try {
-        await _setOption(session, 'model', model);
-        await _setOption(session, 'mode', mode);
-      } on _SetupError catch (error) {
+        await applyConfigFlag(session, 'model', model);
+        await applyConfigFlag(session, 'mode', mode);
+      } on SessionSetupError catch (error) {
         _stderr.writeln(sanitizeTerminalText('codelab: ${error.message}'));
         return ConnectFailed(error.message);
       }
@@ -182,68 +188,6 @@ final class HeadlessRunner {
       timer?.cancel();
       await views?.cancel();
       await diagnostics?.cancel();
-    }
-  }
-
-  /// Новая сессия, сессия `--resume` или последняя сессия папки
-  /// `--continue` (по `updatedAt` из `session/list`).
-  Future<SessionHandle> _openSession(
-    String cwd, {
-    required String? resume,
-    required bool last,
-  }) async {
-    if (resume != null) {
-      return _workspace.loadSession(SessionId(resume), cwd: cwd);
-    }
-    if (!last) {
-      return _workspace.newSession(cwd: cwd);
-    }
-    final sessions = [
-      for (final summary in _workspace.current.sessions)
-        if (summary.cwd == cwd) summary,
-    ];
-    if (sessions.isEmpty) {
-      throw _SetupError('No session to continue in $cwd.');
-    }
-    final latest = sessions.reduce(
-      (a, b) => (b.updatedAt ?? DateTime(0)).isAfter(a.updatedAt ?? DateTime(0))
-          ? b
-          : a,
-    );
-    return _workspace.loadSession(latest.id, cwd: cwd);
-  }
-
-  /// `--model` и `--mode` — опции конфигурации сессии до промпта: опция
-  /// ищется по id, затем по категории; неизвестное значение — ошибка без
-  /// запроса к агенту.
-  Future<void> _setOption(
-    SessionHandle session,
-    String name,
-    String? value,
-  ) async {
-    if (value == null) {
-      return;
-    }
-    final options = session.current.configOptions;
-    final option =
-        options.where((o) => o.id == name).firstOrNull ??
-        options.where((o) => o.category == name).firstOrNull;
-    if (option == null) {
-      throw _SetupError('The agent has no "$name" option.');
-    }
-    if (!option.values.any((v) => v.value == value)) {
-      throw _SetupError(
-        'Unknown $name "$value". Available: '
-        '${option.values.map((v) => v.value).join(', ')}.',
-      );
-    }
-    if (option.currentValue == value) {
-      return;
-    }
-    try {
-      await session.setConfigOption(option.id, value);
-    } on Object catch (error) {
-      throw _SetupError('Cannot set $name "$value": ${describeFailure(error)}');
     }
   }
 
@@ -378,24 +322,6 @@ final class HeadlessRunner {
     return null;
   }
 
-  /// Текст заметки для человека: у сорвавшегося хода — причина агента из
-  /// `PromptFailure`, а не общий текст ошибки запроса.
-  static String noticeText(NoticeItem notice) => switch (notice.failure) {
-    AgentPromptFailure(:final errorClass, :final message) =>
-      errorClass == null ? message : '$message ($errorClass)',
-    RequestPromptFailure(:final code, :final message) =>
-      'agent error $code: $message',
-    ConnectionLostPromptFailure() => 'the connection to the agent was lost',
-    UnknownPromptFailure() || null => notice.text,
-  };
-
-  /// Какого агента не удалось запустить: команда или адрес, без токена.
-  static String _describe(ConnectionProfile profile) => switch (profile) {
-    StdioProfile(:final command, :final args) =>
-      '"${[command, ...args].join(' ')}"',
-    WebSocketProfile(:final uri) => '$uri',
-  };
-
   static bool _isFinal(ToolCallStatusView status) =>
       status == ToolCallStatusView.succeeded ||
       status == ToolCallStatusView.failed ||
@@ -406,12 +332,4 @@ final class HeadlessRunner {
     ToolCallStatusView.failed => '✗',
     _ => '⊘',
   };
-}
-
-/// Ошибка подготовки сессии с готовым текстом для stderr: нет сессии для
-/// `--continue`, неизвестная опция или значение.
-final class _SetupError implements Exception {
-  const _SetupError(this.message);
-
-  final String message;
 }

@@ -50,7 +50,13 @@ enum CodelabCompatibleStdioAgentMode {
   /// `_meta.codelab.critical: true` (как Dart-агент) и вариантами
   /// `allow_once` и `reject_once`; затем сообщает выбранный вариант
   /// (design D10 change `add-codelab-cli`).
-  withCriticalPermission('with_critical_permission');
+  withCriticalPermission('with_critical_permission'),
+
+  /// Ход терминального клиента: три `agent_thought_chunk`, вызовы `read` и
+  /// `execute` (с вложенным `rawInput.env`) со статусом `completed`, затем
+  /// `edit` с запросом одобрения; после ответа — `completed` или `failed`
+  /// правки и ответ агента (design D10 change `add-codelab-cli`).
+  withToolCalls('with_tool_calls');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -477,6 +483,77 @@ Future<void> main(List<String> args) async {
           });
           break;
         }
+        if (_mode == 'with_tool_calls') {
+          // Ход терминального клиента целиком: мысли, два завершённых вызова
+          // (у `execute` во `rawInput` вложенный объект `env` — строка
+          // инструмента CLI не должна его показывать) и правка, которая ждёт
+          // одобрения; ответ — после него (design D10 change
+          // `add-codelab-cli`).
+          void update(Map<String, Object?> update) => _writeNotification(
+            'session/update',
+            {'sessionId': sessionId, 'update': update},
+          );
+          for (final text in ['Looking at ', 'the failing ', 'test.']) {
+            update({
+              'sessionUpdate': 'agent_thought_chunk',
+              'content': {'type': 'text', 'text': text},
+            });
+          }
+          update({
+            'sessionUpdate': 'tool_call',
+            'toolCallId': 'read-1',
+            'title': 'Read README.md',
+            'kind': 'read',
+            'status': 'in_progress',
+            'rawInput': {'path': 'README.md'},
+          });
+          update({
+            'sessionUpdate': 'tool_call_update',
+            'toolCallId': 'read-1',
+            'status': 'completed',
+          });
+          update({
+            'sessionUpdate': 'tool_call',
+            'toolCallId': 'exec-1',
+            'title': 'Run dart test',
+            'kind': 'execute',
+            'status': 'in_progress',
+            'rawInput': {
+              'command': 'dart test',
+              'env': {'CI': 'true', 'DART_TEST': '1'},
+            },
+          });
+          update({
+            'sessionUpdate': 'tool_call_update',
+            'toolCallId': 'exec-1',
+            'status': 'completed',
+          });
+          update({
+            'sessionUpdate': 'tool_call',
+            'toolCallId': 'edit-1',
+            'title': 'Edit lib/main.dart',
+            'kind': 'edit',
+            'status': 'pending',
+            'rawInput': {'path': 'lib/main.dart', 'newText': 'fixed'},
+          });
+          _pendingSessionId = sessionId;
+          _pendingPromptIds[sessionId] = id;
+          _writeRequest(_permissionRequestId, 'session/request_permission', {
+            'sessionId': sessionId,
+            'toolCall': {
+              'toolCallId': 'edit-1',
+              'title': 'Edit lib/main.dart',
+              'kind': 'edit',
+              'status': 'pending',
+              'rawInput': {'path': 'lib/main.dart', 'newText': 'fixed'},
+            },
+            'options': [
+              {'optionId': 'allow_once', 'name': 'Allow once', 'kind': 'allow_once'},
+              {'optionId': 'reject_once', 'name': 'Reject once', 'kind': 'reject_once'},
+            ],
+          });
+          break;
+        }
         if (_mode == 'with_permission_request') {
           // Defer the `session/prompt` response until the client answers
           // our `session/request_permission` — a real agent waits for the
@@ -686,6 +763,33 @@ void _handlePermissionResponse(Map<String, Object?> message) {
   final result = message['result'] as Map<String, Object?>?;
   final outcome = result?['outcome'] as Map<String, Object?>?;
   final selectedOptionId = outcome?['optionId'] as String?;
+
+  if (_mode == 'with_tool_calls') {
+    // Правка выполнена только при `allow_once`; отказ и отмена — `failed`.
+    final allowed = selectedOptionId == 'allow_once';
+    _writeNotification('session/update', {
+      'sessionId': sessionId,
+      'update': {
+        'sessionUpdate': 'tool_call_update',
+        'toolCallId': 'edit-1',
+        'status': allowed ? 'completed' : 'failed',
+      },
+    });
+    _writeNotification('session/update', {
+      'sessionId': sessionId,
+      'update': {
+        'sessionUpdate': 'agent_message_chunk',
+        'content': {
+          'type': 'text',
+          'text': allowed ? 'Fixed the test.' : 'Left the file unchanged.',
+        },
+      },
+    });
+    _writeResponse(promptId, {
+      'stopReason': selectedOptionId != null ? 'end_turn' : 'cancelled',
+    });
+    return;
+  }
 
   _writeNotification('session/update', {
     'sessionId': sessionId,

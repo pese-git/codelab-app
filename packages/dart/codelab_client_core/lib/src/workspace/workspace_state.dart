@@ -83,6 +83,10 @@ abstract class SessionView with _$SessionView {
     /// Запросы `session/request_permission`, ждущие ответа пользователя.
     @Default([]) List<PendingApprovalView> pendingApprovals,
 
+    /// План последнего `plan` сессии в порядке агента; каждое обновление
+    /// заменяет его целиком (design.md change `add-codelab-cli`, D14).
+    @Default([]) List<PlanEntryView> plan,
+
     /// Можно ли повторить последний ход через `SessionHandle.retry`: он
     /// сорвался не из-за потери соединения, агент не запретил повтор
     /// (`retryable: false`), а сессия свободна и связана с агентом

@@ -385,38 +385,29 @@ CodeLabCommandAction _paletteActionOf(CatalogCommand command) =>
       AgentCatalogCommand(:final command) => _agentCommandAction(command),
     };
 
-/// План сессии — последний `SessionUpdate.plan` по всем её ходам.
+/// План сессии из kit: `SessionView.plan` в записях виджета.
 ///
-/// План из раннего хода остаётся текущим и в следующем ходе, который своего
-/// не прислал (add-plan-progress-checklist/design.md, Decisions). `null` —
-/// плана ещё не было: секция плана скрыта.
-List<CodeLabPlanEntry>? currentPlanOf(AcpSession session) {
-  List<PlanEntry>? latest;
-  for (final turn in session.turns) {
-    for (final update in turn.updates) {
-      if (update case PlanUpdate(:final entries)) {
-        latest = entries;
-      }
-    }
-  }
-  return latest
-      ?.map(
-        (entry) => CodeLabPlanEntry(
-          content: entry.content,
-          status: switch (entry.status) {
-            PlanEntryStatus.pending => CodeLabPlanEntryStatus.pending,
-            PlanEntryStatus.inProgress => CodeLabPlanEntryStatus.inProgress,
-            PlanEntryStatus.completed => CodeLabPlanEntryStatus.completed,
-          },
-          priority: switch (entry.priority) {
-            PlanEntryPriority.high => CodeLabPlanEntryPriority.high,
-            PlanEntryPriority.medium => CodeLabPlanEntryPriority.medium,
-            PlanEntryPriority.low => CodeLabPlanEntryPriority.low,
-          },
-        ),
-      )
-      .toList(growable: false);
-}
+/// Правило «последнее обновление `plan` заменяет план, план раннего хода
+/// остаётся текущим» — в kit (design.md change `add-codelab-cli`, D14).
+/// `null` — плана ещё не было: секция плана скрыта.
+List<CodeLabPlanEntry>? planEntriesOf(List<PlanEntryView> plan) => plan.isEmpty
+    ? null
+    : [
+        for (final entry in plan)
+          CodeLabPlanEntry(
+            content: entry.content,
+            status: switch (entry.status) {
+              PlanEntryStatus.pending => CodeLabPlanEntryStatus.pending,
+              PlanEntryStatus.inProgress => CodeLabPlanEntryStatus.inProgress,
+              PlanEntryStatus.completed => CodeLabPlanEntryStatus.completed,
+            },
+            priority: switch (entry.priority) {
+              PlanEntryPriority.high => CodeLabPlanEntryPriority.high,
+              PlanEntryPriority.medium => CodeLabPlanEntryPriority.medium,
+              PlanEntryPriority.low => CodeLabPlanEntryPriority.low,
+            },
+          ),
+      ];
 
 /// Очередь промптов сессии из kit (design D7).
 List<CodeLabQueuedPrompt> queuedPromptsOf(List<QueuedPrompt> queue) => [

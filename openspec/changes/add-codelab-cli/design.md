@@ -68,8 +68,10 @@ apps/codelab_cli/
     ├── cli_args.dart            # ArgParser, CliOptions, UsageError, usage()
     ├── exit_codes.dart          # 0, 1, 64, 130, 143
     ├── signals.dart             # watchStopSignals
-    ├── home.dart                # CodelabHome: CODELAB_HOME, profiles.json, cli_history
+    ├── home.dart                # CodelabHome: CODELAB_HOME, profiles.json, cli_history (HistoryFile)
     ├── composition_root.dart    # ClientWorkspace + ioTransportResolver + EnvSecretSource
+    ├── session_setup.dart       # открытие сессии по --resume/--continue и --model/--mode — общее для headless и REPL
+    ├── strings.dart             # строки REPL для человека (D15)
     ├── profiles/                # profile_arg.dart (значение --agent), profiles_command.dart
     ├── render/                  # output_surface.dart, ansi.dart, sanitize.dart, terminal_renderer.dart, tool_row.dart
     ├── input/                   # key_decoder.dart, key_bindings.dart, line_editor.dart, history.dart, terminal.dart (порт), io_terminal.dart
@@ -122,12 +124,12 @@ apps/codelab_cli/
 
 `Terminal` — порт с такими членами:
 - `Stream<List<int>> input`;
-- `IOSink`-подобный `output`;
+- `StringSink output` и `StringSink errorOutput` (stdout и stderr);
 - `bool get hasTerminal` (stdin и stdout — TTY);
 - `int get columns`;
 - `enableRawMode()` и `restore()`.
 
-`IoTerminal` реализует порт на `stdin.echoMode`/`lineMode` и `stdout.hasTerminal`; `restore()` идемпотентен и вызывается в `finally` и из обработчика сигналов.
+`IoTerminal` включает raw-режим через `stty -icanon -echo -isig -icrnl -ixon -iexten min 1 time 0` на `/dev/tty`, сохранив `stty -g`: `stdin.lineMode = false` в `dart:io` снимает только канонический режим, и без `-isig`/`-icrnl` Ctrl+C пришёл бы сигналом, а Enter не отличался бы от Ctrl+J (D13). Вывод (`OPOST`) не меняется. На Windows и без `/dev/tty` — запасной путь `stdin.echoMode`/`lineMode`. `restore()` идемпотентен и вызывается в `finally` и из обработчика сигналов.
 
 `KeyDecoder` превращает байты в `KeyEvent`. Он поддерживает UTF-8, разрезанный между чтениями, CSI-последовательности стрелок, одиночный Esc по таймауту 50 мс (подменяемые часы) и Alt+Enter (`ESC CR`).
 
@@ -135,7 +137,7 @@ apps/codelab_cli/
 
 `LineEditor` — чистая модель: буфер, курсор, история, многострочность. Перерисовку строки ввода делает рендер.
 
-Без TTY `LineEditor` не используется: ввод идёт построчно через `utf8.decoder` и `LineSplitter`. Это запасной путь для терминалов, где raw-режим не работает (риск §9.11).
+Без TTY `LineEditor` не используется: ввод идёт построчно через `utf8.decoder` и `LineSplitter`. Это запасной путь для терминалов, где raw-режим не работает (риск §9.11). Конец такого ввода завершает REPL, когда у всех отправленных промптов, включая очередь, есть исход; конец ввода терминала — как Ctrl+D: выход с отменой идущего хода.
 
 ### D6. Рендер
 
@@ -158,6 +160,9 @@ apps/codelab_cli/
   - `rawInput` в строку не попадает (TUI-6).
 - **План** — блок `Plan:` и строки `[x]`/`[~]`/`[ ]` по статусу.
 - **Заметки** — строка с префиксом по `NoticeKind`.
+- **Промпт пользователя** — строка `> текст`, когда его ход начинается: и набранный, и ушедший из очереди. Строка ввода при отправке стирается, поэтому промпт не печатается дважды.
+
+На `raw` в stdout идёт только ответ; строки инструментов, план, заметки и строки клиента (`queued: 1`, `cancelled`) — в stderr, промпты пользователя не печатаются.
 
 Перед выводом весь текст из сессии проходит `sanitizeTerminalText`: C0 кроме `\t`/`\n`, DEL и C1 вырезаются, `\t` раскрывается в пробелы (TUI-11). Строка с атрибутами кончается `ESC[0m` (TUI-9).
 
@@ -254,7 +259,7 @@ Headless сам не переподключается. Обрыв соедине
 
 `PtyProcess` описан в §9.11: `script` по ОС, проверка `script --version`, нормализация `\r\n`. Обвязка — в `test/e2e/support/` и пишется своя, а не берётся из `apps/codelab_agent`: приложения не зависят друг от друга. CLI в e2e запускается из kernel, который один раз компилируется в `setUpAll`. Так тесты идут на Dart VM в `melos run test` без предварительной сборки. `build:cli` проверяется отдельно (`testing-quality`).
 
-Ввод клавиш — байты в stdin обвязки. Ожидание вывода — `expectLater(pty.output, emitsThrough(contains(…)))` с таймаутом 10 с.
+Ввод клавиш — байты в stdin обвязки. Ожидание вывода — `pty.waitFor(текст, from: позиция)` по накопленному выводу терминала с таймаутом 10 с. Сигнал в PTY-тесте получает только процесс CLI: `pkill -f` с шаблоном от начала командной строки (`dart` или `dartvm`), потому что у обёрток `sh -c` и `script` те же аргументы.
 
 `test:e2e:cli` — `fvm dart test apps/codelab_cli/test/e2e`.
 

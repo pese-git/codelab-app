@@ -1,4 +1,5 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
+import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'session_views.freezed.dart';
@@ -83,4 +84,46 @@ abstract class AgentCommandView with _$AgentCommandView {
       hint: hint == null || hint.isEmpty ? null : hint,
     );
   }
+}
+
+/// Запись плана сессии из последнего `SessionUpdate.plan`.
+///
+/// Почему: план показывают и app, и CLI, а правило «последнее обновление
+/// заменяет план целиком» должно быть одним (design.md change
+/// `add-codelab-cli`, D14; прежде — `currentPlanOf` app).
+///
+/// Для чего: элемент `SessionView.plan`; статус и приоритет — значения ACP
+/// как есть.
+@freezed
+abstract class PlanEntryView with _$PlanEntryView {
+  const factory PlanEntryView({
+    required String content,
+    required PlanEntryStatus status,
+    required PlanEntryPriority priority,
+  }) = _PlanEntryView;
+
+  factory PlanEntryView.of(PlanEntry entry) => PlanEntryView(
+    content: entry.content,
+    status: entry.status,
+    priority: entry.priority,
+  );
+}
+
+/// План сессии — записи последнего `SessionUpdate.plan` по всем её ходам.
+///
+/// План раннего хода остаётся текущим и в следующем ходе, который своего не
+/// прислал (add-plan-progress-checklist/design.md, Decisions); до первого
+/// обновления — пустой список.
+List<PlanEntryView> planOf(AcpSession session) {
+  List<PlanEntry>? latest;
+  for (final turn in session.turns) {
+    for (final update in turn.updates) {
+      if (update case PlanUpdate(:final entries)) {
+        latest = entries;
+      }
+    }
+  }
+  return List.unmodifiable([
+    for (final entry in latest ?? const <PlanEntry>[]) PlanEntryView.of(entry),
+  ]);
 }

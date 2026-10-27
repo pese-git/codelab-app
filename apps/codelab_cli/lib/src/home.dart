@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'cli_args.dart';
+import 'input/history.dart';
 
 /// Домашний каталог CodeLab на стороне CLI.
 ///
@@ -56,5 +57,43 @@ final class CodelabHome {
         throw FileSystemException('chmod 700 failed: ${result.stderr}', path);
       }
     }
+  }
+}
+
+/// История ввода REPL в файле `$CODELAB_HOME/cli_history` (U-07).
+///
+/// Почему: промпты пользователя могут содержать то, что не должны читать
+/// другие пользователи машины, поэтому файл создаётся с правами `0600` до
+/// записи содержимого (design.md change `add-codelab-cli`, D4).
+///
+/// Как использовать: `HistoryFile(home.historyFile)`; REPL загружает историю
+/// при старте и сохраняет после каждой отправки. Формат — `encodeHistory`.
+final class HistoryFile implements HistoryStore {
+  const HistoryFile(this.path);
+
+  final String path;
+
+  @override
+  Future<List<String>> load() async {
+    final file = File(path);
+    if (!await file.exists()) {
+      return const [];
+    }
+    return decodeHistory(await file.readAsString());
+  }
+
+  @override
+  Future<void> save(List<String> entries) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      await file.create(recursive: true);
+      if (!Platform.isWindows) {
+        final result = await Process.run('chmod', ['600', path]);
+        if (result.exitCode != 0) {
+          throw FileSystemException('chmod 600 failed: ${result.stderr}', path);
+        }
+      }
+    }
+    await file.writeAsString(encodeHistory(entries), flush: true);
   }
 }
