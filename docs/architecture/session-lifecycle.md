@@ -611,6 +611,8 @@ request recoverable
 
 Это должно определяться protocol/application semantics, а не UI.
 
+В CodeLab MVP (change `cancel-turn-on-ws-disconnect`) выбран вариант request failed. Обрыв соединения отменяет ход на стороне агента: у stdio умирает процесс, у `codelab-agent serve --ws` `detachGrace` ноль. Клиент запоминает прерванный ход и после `session/load` показывает последний ход реплея отменённым (`stopReason: cancelled`). Возобновление хода после переподключения (request awaiting reconnect) — после MVP.
+
 ---
 
 ## 31. Disconnect during cancellation
