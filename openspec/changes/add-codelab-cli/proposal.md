@@ -16,7 +16,8 @@
 - **Доработки `codelab_client_core`**, нужные CLI и полезные app:
   - `SessionView.plan` — план сессии в модели kit (сейчас app строит его сам в `currentPlanOf`);
   - `PendingApprovalView.critical` — признак `_meta.codelab.critical` запроса одобрения;
-  - `parseShellWords` понимает кавычки и экранирование.
+  - `parseShellWords` понимает кавычки и экранирование;
+  - `ProfileStore.remove` — удаление профиля для `codelab profiles remove`.
 - **`codelab_acp_testing`**: `FixtureReplayAgent` — агент, отвечающий ожидаемыми кадрами самой фикстуры (проверка драйвера без настоящего агента); новые режимы scripted stdio-агента для сценариев CLI (design.md, D10).
 - **Сторож и workspace**: `apps/codelab_cli` в `workspace:`, правило сторожа (без Flutter и `package:codelab_agent_*`) и allowlist зависимостей; `codelab_acp_testing` — обычная зависимость только у CLI ради `test-scenario` (design.md, D3).
 
@@ -37,7 +38,8 @@
 - `cli-scenario-driver`: команда `codelab test-scenario` — проигрывание golden-фикстур против агента по профилю, вывод и коды выхода.
 
 ### Modified Capabilities
-- `acp-client-kit`: «Публикация представлений сессии» — `SessionView.plan`; «Одобрения привязаны к вызову» — признак `critical`; «Профили и резолверы транспорта» — `parseShellWords` с кавычками и экранированием.
+- `acp-client-kit`: «Публикация представлений сессии» — `SessionView.plan`; «Одобрения привязаны к вызову» — признак `critical`; «Профили и резолверы транспорта» — `parseShellWords` с кавычками и экранированием; «IO-адаптеры клиента» — `ProfileStore.remove` для `codelab profiles remove`.
+- `acp-protocol-client`: «Неожиданный отказ транспорта транслируется в состояние соединения» — отказ транспорта во время `initialize` сразу обрывает ожидающие запросы (агент, завершившийся при старте, давал `connect` ждать таймаута 60 с; найдено e2e CLI).
 - `acp-golden-fixtures`: новое требование «Агент-повторитель фикстуры» (`FixtureReplayAgent`).
 - `workspace-architecture`: «Границы пакетов monorepo» — приложение `apps/codelab_cli`; «Автоматический сторож границ пакетов» — правило и allowlist `apps/codelab_cli`.
 - `testing-quality`: «Проверки workspace» — скрипты `build:cli` и `test:e2e:cli`; новое требование «PTY-e2e терминального клиента».

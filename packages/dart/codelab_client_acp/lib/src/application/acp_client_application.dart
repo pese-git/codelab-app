@@ -1854,6 +1854,12 @@ final class AcpClientApplication {
         // against it the same way `_establishConnection` already does
         // before an intentional disconnect.
         final wasReady = _connectionState is ClientConnectionReady;
+        // Агент может завершиться и во время `initialize` (неверные
+        // аргументы, сбой старта): ответа на него тоже не будет, и `connect`
+        // не должен ждать таймаута запроса (tasks 3.6 change
+        // `add-codelab-cli`).
+        final wasInitializing =
+            _connectionState is ClientConnectionInitializing;
         if (wasReady) {
           // Агент отменяет ход вместе с соединением, как и при замене
           // транспорта: после `session/load` последний ход реплея будет
@@ -1873,7 +1879,7 @@ final class AcpClientApplication {
             ),
           );
         }
-        if (wasReady) {
+        if (wasReady || wasInitializing) {
           // Ответов на запросы оборванного соединения не будет: без этого
           // `sendPrompt` ждал бы вечно, а ход оставался `running` (design D2
           // change `add-connection-and-error-states`).

@@ -88,8 +88,27 @@ const rules = [
     ],
   ),
   // stage 8: codelab_agent_mcp — webUnsafe
-  // stage 6: apps/codelab_cli — ['package:flutter/', 'package:codelab_agent_'];
-  //   apps/codelab_cli/lib/src — ['package:dart_tui/'], exclude: ['tui/'], sealExclude: false
+  // Терминальный клиент — чистый Dart и composition root: dart:io и
+  // IO-транспорты разрешены, Flutter, UI и ядро агента — нет (design.md change
+  // `add-codelab-cli`, D3).
+  PackageRule(
+    'apps/codelab_cli',
+    forbidden: [
+      'package:flutter/',
+      'package:fluent_ui/',
+      'package:codelab_ui/',
+      'package:codelab_agent_',
+    ],
+  ),
+  // Тестовый пакет — только драйверу фикстур `test-scenario` (design.md
+  // change `add-codelab-cli`, D3).
+  PackageRule(
+    'apps/codelab_cli/lib/src',
+    forbidden: ['package:codelab_acp_testing/'],
+    exclude: ['scenario/'],
+    sealExclude: false,
+  ),
+  // TUI change (U-12): apps/codelab_cli/lib/src — ['package:dart_tui/'], exclude: ['tui/'], sealExclude: false
   //   (dart_tui only in lib/src/tui/, §12.2.7; the rest of the CLI goes through TuiRunner)
   // stage 7: codelab_embedded — webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/'];
   //   apps/codelab_desktop — ['package:codelab_agent_'] already above
