@@ -212,4 +212,53 @@ void main() {
       hasLength(1),
     );
   });
+
+  // Повторный Connect к новому процессу агента (в том числе к другому агенту
+  // из диалога подключения) ведёт себя как Reconnect: открытые сессии
+  // перезагружаются или становятся detached, а не остаются привязанными к
+  // агенту, который их не знает (fix: «Session not found» после смены агента).
+  group('connect() with open sessions', () {
+    test('reloads the open sessions from an agent with loadSession', () async {
+      agent = KitAgent(capabilities: _withLoad);
+      await agent.start();
+      final a = await sessionWithTurn('s-a', 'old a');
+
+      agent.restartAgent(capabilities: _withLoad);
+      final load = agent.next(sessionLoadMethod);
+      final connecting = agent.workspace.connect(
+        const StdioProfile(id: 'other', label: 'Other', command: 'other'),
+        projectDirectory: '/work',
+      );
+      await replay(load, 's-a', 'replayed a');
+      await connecting;
+
+      expect(loadedId(await load), 's-a');
+      expect(texts(a), ['user: hello', 'agent: replayed a']);
+      expect(a.current.status, SessionStatusView.idle);
+    });
+
+    test('detaches the open sessions when the new agent cannot load them, '
+        'and a prompt to them never reaches the agent', () async {
+      agent = KitAgent(capabilities: _withLoad);
+      await agent.start();
+      final a = await sessionWithTurn('s-a', 'old a');
+
+      agent.restartAgent();
+      await agent.workspace.connect(
+        const StdioProfile(id: 'other', label: 'Other', command: 'other'),
+        projectDirectory: '/work',
+      );
+
+      expect(a.current.status, SessionStatusView.detached);
+      agent.transport.drainSentMessages();
+      final outcome = await a.send('hello again');
+      expect(outcome, isA<PromptFailed>());
+      expect(
+        agent.transport.sentMessages.whereType<JsonRpcRequest>().where(
+          (request) => request.method == sessionPromptMethod,
+        ),
+        isEmpty,
+      );
+    });
+  });
 }
