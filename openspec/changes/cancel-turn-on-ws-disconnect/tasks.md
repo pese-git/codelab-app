@@ -8,7 +8,7 @@
 
 - [x] 2.1 `agent_host.dart`: `detachGrace: Duration.zero` для обоих транспортов (D1).
 - [x] 2.2 `AcpClientApplication`: отметка прерванных ходов в `_replaceTransport`, пометка последнего хода реплея в `loadSession`, снятие в `sendPrompt` (D2); лог `turn_interrupted` с `session_id`.
-- [ ] 2.3 `melos run check` зелёный; e2e `session_list_load_flow_test.dart` в режиме `dart` на macOS вручную (`AGENTS.md` §21).
+- [x] 2.3 `melos run check` зелёный (CI #102); e2e `session_list_load_flow_test.dart` в режиме `dart` на macOS вручную (`AGENTS.md` §21): 2 теста прошли на `c35a5c9`, остальные 8 файлов e2e зелёные в обоих режимах.
 
 ## 3. Документы
 
