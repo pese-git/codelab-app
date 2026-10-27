@@ -198,6 +198,9 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
     }
 
     emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.connecting));
+    if (await _failIfProjectDirectoryMissing()) {
+      return;
+    }
     _diagnostics.record(
       isWebSocket
           ? 'Connecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
@@ -261,6 +264,9 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
     emit(
       state._copyWith(connectionStatus: CodeLabConnectionStatus.reconnecting),
     );
+    if (await _failIfProjectDirectoryMissing()) {
+      return;
+    }
     _diagnostics.record(
       isWebSocket
           ? 'Reconnecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
@@ -333,6 +339,42 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
         _activeSession.resetAfterConnectionLoss();
       }
     });
+  }
+
+  /// Вызывается сразу после перехода в `connecting`/`reconnecting`, а не
+  /// до него: статус меняется синхронно, и повторное нажатие во время
+  /// проверки не запускает второе подключение.
+  ///
+  /// Останавливает подключение локального агента, если папки проекта нет:
+  /// статус `failed` и понятная причина в `connectionMessage` вместо ошибки
+  /// запуска процесса или отказа `session/new`. Для WebSocket папка — путь
+  /// на стороне удалённого агента, локально её не проверить.
+  Future<bool> _failIfProjectDirectoryMissing() async {
+    if (state.transportType != CodeLabTransportType.stdio) {
+      return false;
+    }
+    final missing = await _settings.missingProjectDirectory();
+    if (missing == null) {
+      return false;
+    }
+    if (isClosed) {
+      return true;
+    }
+    final message =
+        'Project folder not found: $missing. '
+        'Choose an existing folder with Open folder… and connect again.';
+    emit(
+      state._copyWith(
+        connectionStatus: CodeLabConnectionStatus.failed,
+        connectionMessage: message,
+      ),
+    );
+    _diagnostics.record(
+      message,
+      severity: DiagnosticSeverity.error,
+      source: 'project',
+    );
+    return true;
   }
 
   /// Профиль из формы; `null` — форма не заполнена (нет команды stdio или

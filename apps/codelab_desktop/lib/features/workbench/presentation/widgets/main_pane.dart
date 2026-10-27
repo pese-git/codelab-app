@@ -65,7 +65,11 @@ class WorkbenchMainPane extends StatelessWidget {
                     transportLabel: state.transportLabel,
                     profileLabel: state.profileLabel,
                     detail: state.connectionDetail,
-                    description: 'Connect an ACP agent to start a session.',
+                    // Причина сбоя видна и до первой записи ленты, а не
+                    // только в баннере над ней.
+                    description:
+                        state.connectionMessage ??
+                        'Connect an ACP agent to start a session.',
                     onConnect: cubit.connect,
                     onReconnect: cubit.reconnect,
                     onConfigureConnection: () =>

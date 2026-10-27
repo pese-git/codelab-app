@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_io/codelab_client_io.dart'
-    show WorkingDirectoryProvider;
+    show DirectoryExists, WorkingDirectoryProvider;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
         AcpClientBackend,
@@ -77,6 +77,7 @@ final class CodeLabShellParts {
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
+    DirectoryExists? directoryExists,
     DockLayoutStore? dockLayoutStore,
     Logger? logger,
   }) {
@@ -89,6 +90,7 @@ final class CodeLabShellParts {
       workingDirectoryProvider: workingDirectoryProvider,
       projectFolderPicker: projectFolderPicker,
       recentProjectsStore: recentProjectsStore,
+      directoryExists: directoryExists,
     );
     final activeSession = ActiveSessionCubit(
       changes: changes,
@@ -181,6 +183,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
+    DirectoryExists? directoryExists,
     DockLayoutStore? dockLayoutStore,
     Logger? logger,
   }) {
@@ -210,6 +213,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             workingDirectoryProvider: workingDirectoryProvider,
             projectFolderPicker: projectFolderPicker,
             recentProjectsStore: recentProjectsStore,
+            directoryExists: directoryExists,
             dockLayoutStore: dockLayoutStore,
             logger: logger,
           ),

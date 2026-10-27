@@ -22,6 +22,24 @@ void main() {
     });
   });
 
+  group('ioDirectoryExists', () {
+    test(
+      'is true for an existing folder and false once it is deleted',
+      () async {
+        final project = Directory('${tmp.path}/project')..createSync();
+        expect(await ioDirectoryExists(project.path), isTrue);
+
+        project.deleteSync();
+        expect(await ioDirectoryExists(project.path), isFalse);
+      },
+    );
+
+    test('is false for a file', () async {
+      final file = File('${tmp.path}/notes.txt')..writeAsStringSync('x');
+      expect(await ioDirectoryExists(file.path), isFalse);
+    });
+  });
+
   group('IoTextFileIo', () {
     const io = IoTextFileIo();
 

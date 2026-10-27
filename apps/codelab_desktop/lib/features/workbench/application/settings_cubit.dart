@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:codelab_client_acp/codelab_client_acp.dart'
     show DiagnosticSeverity;
 import 'package:codelab_client_io/codelab_client_io.dart'
-    show WorkingDirectoryProvider;
+    show DirectoryExists, WorkingDirectoryProvider;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show ClientWorkspace, RecentProjectsStore;
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabRecentProject;
@@ -60,7 +60,9 @@ final class SettingsState {
 /// прошлого запуска из снимка рабочего пространства
 /// (`ClientWorkspace.restoreProject`, design D6 change
 /// `add-session-list-and-reload`); ошибки хранилищ — предупреждение в
-/// журнале, не сбой.
+/// журнале, не сбой. С `directoryExists` проект прошлого запуска без папки
+/// на диске не восстанавливается, а [missingProjectDirectory] сообщает об
+/// исчезнувшей папке до подключения.
 final class SettingsCubit extends ShellPartCubit<SettingsState> {
   SettingsCubit({
     required super.changes,
@@ -69,11 +71,13 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
+    DirectoryExists? directoryExists,
   }) : _workspace = workspace,
        _diagnostics = diagnostics,
        _workingDirectoryProvider = workingDirectoryProvider,
        _projectFolderPicker = projectFolderPicker,
        _recentProjectsStore = recentProjectsStore,
+       _directoryExists = directoryExists,
        super(const SettingsState()) {
     // Недавние проекты прошлого запуска видны до первого открытия выбора.
     unawaited(_loadRecentProjects());
@@ -86,6 +90,9 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   final ProjectFolderPicker _projectFolderPicker;
   final RecentProjectsStore _recentProjectsStore;
 
+  /// `null` — папка проекта не проверяется (тесты с вымышленными путями).
+  final DirectoryExists? _directoryExists;
+
   /// Папка для `cwd` сессии и процесса агента: выбранный проект, иначе
   /// текущая папка процесса CodeLab (add-open-project-picker/design.md,
   /// Goals).
@@ -94,6 +101,26 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     return selected == null || selected.isEmpty
         ? _workingDirectoryProvider.currentPath
         : selected;
+  }
+
+  /// Папка [projectDirectory], если её нет на диске; `null` — папка на месте
+  /// или проверка не подключена.
+  ///
+  /// Вызывает `ConnectionCubit` перед запуском локального агента: процесс в
+  /// исчезнувшей папке не стартует, а `session/new` с таким `cwd` отклоняет
+  /// агент, и обе ошибки не говорят, что дело в папке. Ошибка самой проверки
+  /// не блокирует подключение — тогда ответит агент.
+  Future<String?> missingProjectDirectory() async {
+    final exists = _directoryExists;
+    if (exists == null) {
+      return null;
+    }
+    final path = projectDirectory;
+    try {
+      return await exists(path) ? null : path;
+    } on Object {
+      return null;
+    }
   }
 
   /// Выбирает [path] проектом следующей сессии, записывает его в недавние и
@@ -139,11 +166,28 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
       emit(state._copyWith(runAgentFromProjectDirectory: value));
 
   /// Проект прошлого запуска выбирается, только если пользователь ещё не
-  /// выбрал свой, пока снимок читался.
+  /// выбрал свой, пока снимок читался, и его папка ещё есть на диске.
+  /// Исчезнувшая папка не выбирается: иначе первое же подключение упало бы
+  /// в ней; пользователь видит предупреждение и выбирает папку заново.
   Future<void> _restoreProject() async {
     final project = await _workspace.restoreProject();
     if (isClosed || project == null || state.selectedProjectPath != null) {
       return;
+    }
+    if (_directoryExists case final exists?) {
+      final present = await exists(project).catchError((Object _) => true);
+      if (isClosed || state.selectedProjectPath != null) {
+        return;
+      }
+      if (!present) {
+        _diagnostics.record(
+          'Project folder from the last run no longer exists: $project. '
+          'Choose a folder with Open folder….',
+          severity: DiagnosticSeverity.warning,
+          source: 'project',
+        );
+        return;
+      }
     }
     emit(state._copyWith(selectedProjectPath: project));
     _workspace.selectProject(project);

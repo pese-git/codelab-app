@@ -6,9 +6,11 @@ import 'dart:io';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_io/codelab_client_io.dart'
     show
+        DirectoryExists,
         IoTerminalProcessRunner,
         IoTextFileIo,
         IoWorkingDirectoryProvider,
+        ioDirectoryExists,
         WorkingDirectoryProvider;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
@@ -47,6 +49,7 @@ Scope createCodeLabRootScope({
   CodeLabStdioTransportFactory? stdioTransportFactory,
   CodeLabWebSocketTransportFactory? webSocketTransportFactory,
   String? logDirectoryPath,
+  DirectoryExists? directoryExists,
 }) {
   final scope = CherryPick.openRootScope()
     ..installModules([
@@ -62,7 +65,9 @@ Scope createCodeLabRootScope({
         webSocketTransportFactory:
             webSocketTransportFactory ?? _createWebSocketTransport,
       ),
-      CodeLabPlatformModule(),
+      CodeLabPlatformModule(
+        directoryExists: directoryExists ?? ioDirectoryExists,
+      ),
       CodeLabPresentationModule(),
       $CodeLabTransportsModuleContract(),
       $CodeLabProtocolApplicationModuleContract(),
@@ -200,11 +205,18 @@ final class CodeLabLoggingLifecycle implements Disposable {
 }
 
 final class CodeLabPlatformModule extends Module {
+  CodeLabPlatformModule({required this.directoryExists});
+
+  /// Проверка папки проекта; тесты с вымышленными путями подменяют её.
+  final DirectoryExists directoryExists;
+
   @override
   void builder(Scope currentScope) {
     bind<WorkingDirectoryProvider>().toInstance(
       const IoWorkingDirectoryProvider(),
     );
+    // Проверка папки проекта до восстановления и подключения.
+    bind<DirectoryExists>().toInstance(directoryExists);
     const textFileIo = IoTextFileIo();
     bind<TextFileReader>().toInstance(textFileIo);
     bind<TextFileWriter>().toInstance(textFileIo);
@@ -266,6 +278,7 @@ final class CodeLabPresentationModule extends Module {
                 .resolve<WorkingDirectoryProvider>(),
             projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
             recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
+            directoryExists: currentScope.resolve<DirectoryExists>(),
             dockLayoutStore: currentScope.resolve<DockLayoutStore>(),
           ),
         )
