@@ -384,6 +384,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       transportLabel: connection.transportType.label,
       profileLabel: connection.selectedProfileLabel,
       connectionDetail: connection.selectedConnectionDetail,
+      connectionMessage: connection.connectionMessage,
       currentSessionLabel: sessions.currentSessionLabel,
       currentSessionDetail: sessions.currentSessionDetail,
       sessions: sessions.sessions,

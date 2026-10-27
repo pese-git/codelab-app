@@ -5,6 +5,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show
         ClientWorkspace,
         ConnectionFailed,
+        ConnectionLost,
         ConnectionProfile,
         InMemorySecretSource,
         WorkspaceState,
@@ -45,6 +46,7 @@ final class ConnectionFormState {
     required this.stdioEnv,
     required this.webSocketEndpoint,
     required this.webSocketToken,
+    this.connectionMessage,
   });
 
   /// Форма по профилю встроенного агента; WebSocket — локальный адрес.
@@ -71,6 +73,11 @@ final class ConnectionFormState {
   final String webSocketEndpoint;
   final String webSocketToken;
 
+  /// Причина из `ConnectionLost` или `ConnectionFailed` kit — текст баннера
+  /// соединения (design D6 change `add-connection-and-error-states`);
+  /// `null` в остальных состояниях.
+  final String? connectionMessage;
+
   String get selectedProfileLabel => switch (transportType) {
     CodeLabTransportType.stdio => stdioProfileName,
     CodeLabTransportType.webSocket => 'Remote ACP Agent',
@@ -93,6 +100,7 @@ final class ConnectionFormState {
     String? stdioEnv,
     String? webSocketEndpoint,
     String? webSocketToken,
+    Object? connectionMessage = _unset,
   }) => ConnectionFormState(
     connectionStatus: connectionStatus ?? this.connectionStatus,
     transportType: transportType ?? this.transportType,
@@ -102,7 +110,13 @@ final class ConnectionFormState {
     stdioEnv: stdioEnv ?? this.stdioEnv,
     webSocketEndpoint: webSocketEndpoint ?? this.webSocketEndpoint,
     webSocketToken: webSocketToken ?? this.webSocketToken,
+    // `null` здесь — «причины нет», а не «не менять».
+    connectionMessage: identical(connectionMessage, _unset)
+        ? this.connectionMessage
+        : connectionMessage as String?,
   );
+
+  static const Object _unset = Object();
 }
 
 /// Форма подключения и подключение к агенту.
@@ -290,18 +304,34 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
     return super.close();
   }
 
-  /// Реагирует только на неожиданную потерю соединения, пока оно считается
-  /// установленным: исход явного [connect]/[reconnect] сообщают сами эти
-  /// методы, второй записи здесь быть не должно. Запись `Connection to ACP
-  /// agent lost` даёт диагностика kit.
+  /// Держит причину сбоя для баннера и реагирует на неожиданную потерю
+  /// соединения, пока оно считается установленным: исход явного
+  /// [connect]/[reconnect] сообщают сами эти методы, второй записи здесь
+  /// быть не должно. Запись `Connection to ACP agent lost` даёт диагностика
+  /// kit; потерю kit публикует как `ConnectionLost` (design D1 change
+  /// `add-connection-and-error-states`).
   void _handleWorkspaceChange(WorkspaceState workspace) {
-    if (workspace.connection is! ConnectionFailed ||
-        state.connectionStatus != CodeLabConnectionStatus.connected) {
+    final message = switch (workspace.connection) {
+      ConnectionLost(:final message) ||
+      ConnectionFailed(:final message) => message,
+      _ => null,
+    };
+    final lost =
+        workspace.connection is ConnectionLost &&
+        state.connectionStatus == CodeLabConnectionStatus.connected;
+    if (message == state.connectionMessage && !lost) {
       return;
     }
     batch(() {
-      emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
-      _activeSession.resetAfterConnectionLoss();
+      emit(
+        state._copyWith(
+          connectionMessage: message,
+          connectionStatus: lost ? CodeLabConnectionStatus.lost : null,
+        ),
+      );
+      if (lost) {
+        _activeSession.resetAfterConnectionLoss();
+      }
     });
   }
 

@@ -90,6 +90,17 @@ class WorkbenchMainPane extends StatelessWidget {
         if (state.transcriptEntries.isNotEmpty) ...[
           CurrentSessionPanel(state: state),
           const SizedBox(height: 12),
+          // При пустой ленте то же состояние показывает экран подключения
+          // (design D6 change `add-connection-and-error-states`).
+          if (_bannerStatusOf(state.connectionStatus) case final status?) ...[
+            CodeLabConnectionBanner(
+              status: status,
+              message: state.connectionMessage,
+              onReconnect: cubit.reconnect,
+              onConfigureConnection: () => ConnectionSetupDialog.show(context),
+            ),
+            const SizedBox(height: 12),
+          ],
         ],
         Expanded(
           child: _ContentWithActivityBar(
@@ -116,6 +127,22 @@ class WorkbenchMainPane extends StatelessWidget {
     );
   }
 }
+
+/// Состояние баннера над непустой лентой; `null` — соединение в порядке или
+/// ещё не устанавливалось (spec `agent-workbench-ui` «Connection banner
+/// above a non-empty transcript»).
+CodeLabConnectionBannerStatus? _bannerStatusOf(
+  CodeLabConnectionStatus status,
+) => switch (status) {
+  CodeLabConnectionStatus.lost => CodeLabConnectionBannerStatus.lost,
+  CodeLabConnectionStatus.failed => CodeLabConnectionBannerStatus.failed,
+  CodeLabConnectionStatus.reconnecting =>
+    CodeLabConnectionBannerStatus.reconnecting,
+  CodeLabConnectionStatus.idle ||
+  CodeLabConnectionStatus.connecting ||
+  CodeLabConnectionStatus.connected ||
+  CodeLabConnectionStatus.disconnected => null,
+};
 
 /// Делит высоту между лентой (или экраном подключения) и activity bar.
 ///

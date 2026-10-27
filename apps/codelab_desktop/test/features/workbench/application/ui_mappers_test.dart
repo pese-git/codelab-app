@@ -193,7 +193,7 @@ void main() {
         'Agent',
         'Agent',
         'Agent',
-        'Prompt failed',
+        'The agent could not complete the turn',
         'Run tests',
       ]);
       expect(entries[4].body, 'Failed to send prompt: agent crashed');

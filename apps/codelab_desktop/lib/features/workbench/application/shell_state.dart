@@ -28,6 +28,7 @@ final class CodeLabShellState {
     required this.transportLabel,
     required this.profileLabel,
     required this.connectionDetail,
+    this.connectionMessage,
     required this.currentSessionLabel,
     required this.currentSessionDetail,
     required this.sessions,
@@ -67,6 +68,10 @@ final class CodeLabShellState {
   final String transportLabel;
   final String profileLabel;
   final String connectionDetail;
+
+  /// Причина потери соединения или неудачного подключения для баннера над
+  /// лентой (design D6 change `add-connection-and-error-states`).
+  final String? connectionMessage;
 
   // Список и выбор сессий — `SessionsCubit`.
   final String currentSessionLabel;
@@ -133,6 +138,7 @@ final class CodeLabShellState {
     String? transportLabel,
     String? profileLabel,
     String? connectionDetail,
+    Object? connectionMessage = _unset,
     String? currentSessionLabel,
     String? currentSessionDetail,
     List<CodeLabSessionListItem>? sessions,
@@ -171,6 +177,9 @@ final class CodeLabShellState {
       transportLabel: transportLabel ?? this.transportLabel,
       profileLabel: profileLabel ?? this.profileLabel,
       connectionDetail: connectionDetail ?? this.connectionDetail,
+      connectionMessage: identical(connectionMessage, _unset)
+          ? this.connectionMessage
+          : connectionMessage as String?,
       currentSessionLabel: currentSessionLabel ?? this.currentSessionLabel,
       currentSessionDetail: currentSessionDetail ?? this.currentSessionDetail,
       sessions: sessions ?? this.sessions,

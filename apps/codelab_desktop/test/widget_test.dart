@@ -972,7 +972,7 @@ void main() {
   });
 
   test('a spontaneous transport failure while a turn is running marks the '
-      'connection failed and clears the now-unreliable active-request state, '
+      'connection lost and clears the now-unreliable active-request state, '
       'without discarding the transcript', () async {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
@@ -1029,7 +1029,7 @@ void main() {
       ),
     );
 
-    expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
+    expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.lost);
     expect(shellCubit.state.isPromptSubmitting, isFalse);
     expect(shellCubit.state.canCancel, isFalse);
     expect(
@@ -1041,15 +1041,11 @@ void main() {
     expect(shellCubit.state.transcriptEntries, isNotEmpty);
     expect(shellCubit.state.transcriptEntries.last.body, 'hello agent');
 
-    // `submitFuture` itself never resolves on its own at this point — a
-    // spontaneous transport failure doesn't fail pending requests (only an
-    // explicit `_replaceTransport`/`dispose()` does), and that's fine: the
-    // UI-facing state above is already corrected by the connection-loss
-    // handler, independently of this dangling call (resuming/settling the
-    // request itself is out of scope — see design.md Non-Goals). `dispose()`
-    // is what finally fails it (same as any other pending request) — await
-    // it before closing the cubit, so its catch-driven `emit` lands while
-    // the cubit is still open rather than crashing on a closed BlocBase.
+    // Отказ транспорта завершает ожидающий `session/prompt` с
+    // `PromptFailure.connectionLost` (design D2 change
+    // `add-connection-and-error-states`); `dispose()` дожидается остальных
+    // запросов до закрытия Cubit-а, чтобы поздний `emit` не попал в
+    // закрытый BlocBase.
     await application.dispose();
     await submitFuture;
     await shellCubit.close();
@@ -3754,6 +3750,112 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(harness.shellCubit.state.currentPlan, isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    // Баннер соединения над непустой лентой (spec agent-workbench-ui
+    // «Connection banner above a non-empty transcript»; design D6 change
+    // `add-connection-and-error-states`).
+    testWidgets('a lost connection shows the banner with its reason and '
+        'Reconnect above a non-empty transcript', (tester) async {
+      final harness = await createSessionCubit(tester: tester);
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      final state = harness.shellCubit.state.copyWith(
+        connectionStatus: CodeLabConnectionStatus.lost,
+        connectionMessage: 'Agent process exited with code 1.',
+        transcriptEntries: const [
+          CodeLabTranscriptEntry(
+            id: 'user-1',
+            kind: CodeLabTranscriptEntryKind.user,
+            title: 'You',
+            body: 'Fix the token refresh race condition.',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(state: state, cubit: harness.shellCubit),
+        ),
+      );
+
+      expect(find.text('Connection to the agent lost'), findsOneWidget);
+      expect(find.text('Agent process exited with code 1.'), findsOneWidget);
+      expect(find.text('Reconnect'), findsOneWidget);
+      expect(find.text('Connection settings'), findsOneWidget);
+      expect(
+        find.text('Fix the token refresh race condition.'),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(
+            state: state.copyWith(
+              connectionStatus: CodeLabConnectionStatus.reconnecting,
+            ),
+            cubit: harness.shellCubit,
+          ),
+        ),
+      );
+      expect(find.text('Reconnecting…'), findsOneWidget);
+      expect(find.text('Reconnect'), findsNothing);
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(
+            state: state.copyWith(
+              connectionStatus: CodeLabConnectionStatus.failed,
+              connectionMessage: 'agent binary missing',
+            ),
+            cubit: harness.shellCubit,
+          ),
+        ),
+      );
+      expect(find.text('Could not connect to the agent'), findsOneWidget);
+      expect(find.text('agent binary missing'), findsOneWidget);
+      expect(find.text('Reconnect'), findsOneWidget);
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(
+            state: state.copyWith(
+              connectionStatus: CodeLabConnectionStatus.connected,
+            ),
+            cubit: harness.shellCubit,
+          ),
+        ),
+      );
+      expect(find.text('Connection to the agent lost'), findsNothing);
+      expect(find.text('Could not connect to the agent'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('an empty transcript keeps the connection screen instead of '
+        'the banner', (tester) async {
+      final harness = await createSessionCubit(tester: tester);
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(
+            state: harness.shellCubit.state.copyWith(
+              connectionStatus: CodeLabConnectionStatus.lost,
+              connectionMessage: 'Agent process exited with code 1.',
+              transcriptEntries: const [],
+            ),
+            cubit: harness.shellCubit,
+          ),
+        ),
+      );
+
+      expect(find.text('Connection to the agent lost'), findsNothing);
+      expect(find.byType(CodeLabConnectionScreen), findsOneWidget);
+      expect(find.text('Reconnect'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
