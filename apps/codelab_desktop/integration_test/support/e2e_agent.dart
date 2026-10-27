@@ -90,7 +90,7 @@ final class E2eAgent {
             '--stdio',
             '--llm-script',
             _noSpaces(script),
-            ..._dartFlags(mode),
+            ..._dartFlags(mode, tempDir),
           ].join(' '),
           sessionLabel: matches(RegExp(r'^Session \S+$')),
           models: const [
@@ -107,36 +107,48 @@ final class E2eAgent {
   /// Флаги бинаря по таблице контракта: режим разрешений даёт тот же
   /// видимый результат, что у scripted-агента (вопрос на `exec`, запись без
   /// вопроса и так далее).
-  static List<String> _dartFlags(CodelabCompatibleStdioAgentMode mode) =>
-      switch (mode) {
-        CodelabCompatibleStdioAgentMode.normal ||
-        CodelabCompatibleStdioAgentMode.withPlan ||
-        CodelabCompatibleStdioAgentMode.echoesCwd => const [],
-        CodelabCompatibleStdioAgentMode.withConfigOptions => const [
-          '--model',
-          'gpt-5',
-          '--model',
-          'gpt-4',
-        ],
-        CodelabCompatibleStdioAgentMode.withPermissionRequest ||
-        CodelabCompatibleStdioAgentMode.withQueuedPromptDrain ||
-        CodelabCompatibleStdioAgentMode.withConcurrentSessions => const [
-          '--permission-mode',
-          'standard',
-        ],
-        CodelabCompatibleStdioAgentMode.withFsAccess => const [
-          '--permission-mode',
-          'accept-edits',
-        ],
-        CodelabCompatibleStdioAgentMode.withTerminalExecution => const [
-          '--permission-mode',
-          'bypass',
-        ],
-        final other => throw StateError(
-          '${other.name} has no Dart agent scenario: tag the test '
-          '$scriptedOnly',
-        ),
-      };
+  ///
+  /// `withSessionList` хранит журнал сессий в `[tempDir]/agent-sessions`:
+  /// без `--sessions-dir` сессии `--llm-script` живут в памяти процесса, и
+  /// агент не объявляет `loadSession` (change `add-llm-script-session-store`,
+  /// D4). Папка общая для всех запусков теста, поэтому Reconnect и
+  /// перезапуск app видят прежние сессии.
+  static List<String> _dartFlags(
+    CodelabCompatibleStdioAgentMode mode,
+    Directory tempDir,
+  ) => switch (mode) {
+    CodelabCompatibleStdioAgentMode.normal ||
+    CodelabCompatibleStdioAgentMode.withPlan ||
+    CodelabCompatibleStdioAgentMode.echoesCwd => const [],
+    CodelabCompatibleStdioAgentMode.withConfigOptions => const [
+      '--model',
+      'gpt-5',
+      '--model',
+      'gpt-4',
+    ],
+    CodelabCompatibleStdioAgentMode.withPermissionRequest ||
+    CodelabCompatibleStdioAgentMode.withQueuedPromptDrain ||
+    CodelabCompatibleStdioAgentMode.withConcurrentSessions => const [
+      '--permission-mode',
+      'standard',
+    ],
+    CodelabCompatibleStdioAgentMode.withFsAccess => const [
+      '--permission-mode',
+      'accept-edits',
+    ],
+    CodelabCompatibleStdioAgentMode.withTerminalExecution => const [
+      '--permission-mode',
+      'bypass',
+    ],
+    CodelabCompatibleStdioAgentMode.withSessionList => [
+      '--sessions-dir',
+      _noSpaces('${tempDir.absolute.path}/agent-sessions'),
+    ],
+    final other => throw StateError(
+      '${other.name} has no Dart agent scenario: tag the test '
+      '$scriptedOnly',
+    ),
+  };
 
   /// Относительная команда разрешается от `apps/codelab_desktop`: спавн агента
   /// идёт из папки проекта, где относительный путь уже не найдётся. Голое
