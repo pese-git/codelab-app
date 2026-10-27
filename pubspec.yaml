@@ -103,6 +103,10 @@ melos:
       description: Run codelab_desktop macOS multi-session concurrency integration test.
       run: fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test/multi_session_concurrency_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
 
+    test:e2e:app:command-palette:
+      description: Run codelab_desktop macOS command palette with agent commands integration test (R-20).
+      run: fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test/command_palette_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
+
     build:agent:
       description: Compile the codelab-agent binary to build/bin/codelab-agent (not part of check).
       run: mkdir -p build/bin && fvm dart compile exe apps/codelab_agent/bin/codelab_agent.dart -o build/bin/codelab-agent
