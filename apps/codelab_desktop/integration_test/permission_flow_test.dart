@@ -5,6 +5,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_desktop/features/workbench/presentation/widgets/inspector_pane.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -132,13 +133,22 @@ void main() {
       // scripted agent's `shell` field or the Dart agent's `timeout`, neither
       // of which has a dedicated detail row) is always visible in the Inspector
       // (diagnosable-by-design) but collapsed by default in the transcript's
-      // own approval panel (read on the golden path) — one match before
-      // expanding it there, two once expanded.
+      // own approval panel (read on the golden path).
+      // Поиск ограничен панелями, а не общим числом совпадений: инспектор
+      // показывает по карточке на каждый протокольный факт, и у Dart-агента,
+      // который до `session/request_permission` шлёт `tool_call` с `rawInput`,
+      // сырые аргументы есть в нескольких карточках, а у scripted-агента — в
+      // одной.
+      Finder rawInputIn(Type panel) => find.descendant(
+        of: find.byType(panel),
+        matching: find.textContaining(launch.rawInputMarker),
+      );
       expect(find.text('View raw input'), findsOneWidget);
-      expect(find.textContaining(launch.rawInputMarker), findsOneWidget);
+      expect(rawInputIn(WorkbenchInspectorPane), findsWidgets);
+      expect(rawInputIn(CodeLabApprovalPanel), findsNothing);
       await tester.tap(find.text('View raw input'));
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.textContaining(launch.rawInputMarker), findsNWidgets(2));
+      expect(rawInputIn(CodeLabApprovalPanel), findsOneWidget);
 
       await tester.tap(
         find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
