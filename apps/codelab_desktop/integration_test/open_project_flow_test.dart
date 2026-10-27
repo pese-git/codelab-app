@@ -6,6 +6,8 @@ import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/core/platform/shared_preferences_recent_projects_store.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart'
+    show projectNameOf;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -15,9 +17,7 @@ import 'support/e2e_agent.dart';
 // The transport setup form only lives inside the modal ConnectionSetupDialog
 // — see stdio_connect_flow_test.dart for the same helper.
 Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(
-    find.byKey(const ValueKey('command-bar-configure-connection')),
-  );
+  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
   await tester.pumpAndSettle();
 }
 
@@ -101,11 +101,10 @@ void main() {
 
       expect(find.text('Connected'), findsWidgets);
 
-      await tester.tap(find.byKey(const ValueKey('open-project-picker')));
-      await tester.pumpAndSettle();
-
-      final recentEntryKey = ValueKey(
-        'open-project-recent-${projectDirectory.path}',
+      // Недавний проект — свёрнутая группа сайдбара; её выбор переключает
+      // проект (change `redesign-workbench-shell`, D4).
+      final recentEntryKey = CodeLabSessionSidebar.projectKey(
+        projectNameOf(projectDirectory.path),
       );
       expect(find.byKey(recentEntryKey), findsOneWidget);
       await tester.tap(find.byKey(recentEntryKey));
@@ -165,11 +164,10 @@ void main() {
       await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('open-project-picker')));
-      await tester.pumpAndSettle();
-
-      final recentEntryKey = ValueKey(
-        'open-project-recent-${projectDirectory.path}',
+      // Недавний проект — свёрнутая группа сайдбара; её выбор переключает
+      // проект (change `redesign-workbench-shell`, D4).
+      final recentEntryKey = CodeLabSessionSidebar.projectKey(
+        projectNameOf(projectDirectory.path),
       );
       expect(find.byKey(recentEntryKey), findsOneWidget);
       await tester.tap(find.byKey(recentEntryKey));
@@ -204,9 +202,6 @@ void main() {
         restartedShellCubit.state.selectedProjectPath,
         projectDirectory.path,
       );
-
-      await tester.tap(find.byKey(const ValueKey('open-project-picker')));
-      await tester.pumpAndSettle();
 
       expect(find.byKey(recentEntryKey), findsOneWidget);
 

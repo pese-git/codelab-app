@@ -64,18 +64,21 @@ void main() {
 
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
 
+    // Каркас A13 шаг 0 (change `redesign-workbench-shell`): app bar,
+    // сайдбар по проектам, панель сессии; док без открытых панелей скрыт.
     expect(find.text('CodeLab'), findsOneWidget);
-    expect(find.text('Sessions'), findsOneWidget);
-    expect(find.text('Inspector'), findsOneWidget);
-    expect(find.text('Debug log'), findsOneWidget);
-    expect(find.byType(WorkbenchDebugLogPane), findsOneWidget);
+    expect(find.byType(CodeLabAppBar), findsOneWidget);
+    expect(find.text('Search or run a command'), findsOneWidget);
+    expect(find.text('Projects'), findsOneWidget);
+    expect(find.byType(CodeLabSessionPaneHeader), findsOneWidget);
+    expect(find.byKey(CodeLabWorkbenchLayout.dockKey), findsNothing);
+    expect(find.byType(WorkbenchDebugLogPane), findsNothing);
     expect(find.text('Codelab Agent'), findsWidgets);
     expect(
       find.text('Connect an ACP agent to start a session.'),
       findsOneWidget,
     );
     expect(find.text('No active session'), findsOneWidget);
-    expect(find.text('Create a session after connecting.'), findsOneWidget);
     expect(
       scope.resolve<CodeLabShellCubit>().state.transportType,
       CodeLabTransportType.stdio,
@@ -145,9 +148,7 @@ void main() {
     expect(shellCubit.state.transportType, CodeLabTransportType.stdio);
     expect(find.text('Codelab Agent'), findsWidgets);
 
-    await tester.tap(
-      find.byKey(const ValueKey('command-bar-configure-connection')),
-    );
+    await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(CodeLabButton, 'WebSocket'));
@@ -191,9 +192,7 @@ void main() {
 
       await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
 
-      await tester.tap(
-        find.byKey(const ValueKey('command-bar-configure-connection')),
-      );
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
       await tester.pumpAndSettle();
 
       expect(find.byType(ConnectionSetupDialog), findsOneWidget);
@@ -247,9 +246,7 @@ void main() {
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-    await tester.tap(
-      find.byKey(const ValueKey('command-bar-configure-connection')),
-    );
+    await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -273,9 +270,7 @@ void main() {
       await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-      await tester.tap(
-        find.byKey(const ValueKey('command-bar-configure-connection')),
-      );
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
       await tester.pumpAndSettle();
 
       await tester.enterText(
@@ -2424,14 +2419,14 @@ void main() {
     },
   );
 
-  testWidgets('selecting /logs opens the full-screen log viewer', (
+  testWidgets('selecting /logs opens the Protocol pane of the tool dock', (
     tester,
   ) async {
     final binding = CodeLabTestBinding();
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-    expect(shellCubit.state.isInspectorVisibleInNarrowLayout, isFalse);
+    expect(shellCubit.state.openPanes, isEmpty);
 
     shellCubit.openCommandPalette();
     await tester.pumpAndSettle(
@@ -2442,21 +2437,13 @@ void main() {
     await tester.tap(find.text('/logs'));
     await tester.pumpAndSettle();
 
-    // The narrow-layout Offstage toggle that this flag drives is covered
-    // directly on `CodeLabWorkbenchLayout` in codelab_organisms_test.dart, at a
-    // width narrow enough to trigger it — the full CodeLabApp's command
-    // bar isn't adaptive at that width (a pre-existing, unrelated gap), so
-    // this test only checks the state/UI wiring this change owns.
-    expect(shellCubit.state.isInspectorVisibleInNarrowLayout, isTrue);
+    // Протокол и debug log — панель Protocol дока (change
+    // `redesign-workbench-shell`, D5); полноэкранный просмотр — Expand.
+    expect(shellCubit.state.openPanes, [ToolPane.protocol]);
+    expect(shellCubit.state.activePane, ToolPane.protocol);
     expect(shellCubit.state.isCommandPaletteOpen, isFalse);
-    expect(find.byType(DebugLogViewerDialog), findsOneWidget);
-    expect(find.byType(FluentLogViewerPage), findsOneWidget);
-
-    // Esc closes the dialog without touching workbench state underneath
-    // (spec: "Закрытие возвращает к workbench без изменений").
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
     expect(find.byType(DebugLogViewerDialog), findsNothing);
+    expect(find.byType(WorkbenchDebugLogPane), findsOneWidget);
     expect(shellCubit.state.activeSessionId, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -2468,6 +2455,8 @@ void main() {
     final binding = CodeLabTestBinding();
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+    shellCubit.togglePane(ToolPane.protocol);
+    await tester.pump();
 
     expect(find.byType(DebugLogViewerDialog), findsNothing);
 
@@ -2506,6 +2495,8 @@ void main() {
       );
       await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+      shellCubit.togglePane(ToolPane.protocol);
+      await tester.pump();
 
       // LogCategoryComboBox hides itself below 2 distinct categories — the
       // buffer is empty at this point, so no selector yet.
@@ -3263,7 +3254,7 @@ void main() {
   group('resizable workbench panels', () {
     Future<CodeLabTestBinding> pumpDesktopShell(WidgetTester tester) async {
       final binding = CodeLabTestBinding();
-      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.physicalSize = const Size(1440, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -3285,9 +3276,7 @@ void main() {
         await tester.pump();
 
         expect(
-          tester
-              .getSize(find.byKey(CodeLabWorkbenchLayout.sessionsPaneKey))
-              .width,
+          tester.getSize(find.byKey(CodeLabWorkbenchLayout.sidebarKey)).width,
           closeTo(320, 1),
         );
         expect(shellCubit.state.sessionsPaneWidth, 280);
@@ -3302,30 +3291,29 @@ void main() {
       },
     );
 
-    testWidgets(
-      'dragging the main/inspector divider left grows the inspector pane',
-      (tester) async {
-        final binding = await pumpDesktopShell(tester);
-        final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+    testWidgets('dragging the dock divider left grows the dock', (
+      tester,
+    ) async {
+      final binding = await pumpDesktopShell(tester);
+      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+      shellCubit.togglePane(ToolPane.plan);
+      await tester.pump();
 
-        await tester.drag(
-          find.byType(CodeLabResizeHandle).last,
-          const Offset(-40, 0),
-        );
-        await tester.pump();
+      await tester.drag(
+        find.byType(CodeLabResizeHandle).last,
+        const Offset(-40, 0),
+      );
+      await tester.pump();
 
-        expect(shellCubit.state.inspectorPaneWidth, closeTo(360, 1));
-        expect(
-          tester
-              .getSize(find.byKey(CodeLabWorkbenchLayout.inspectorPaneKey))
-              .width,
-          closeTo(360, 1),
-        );
+      expect(shellCubit.state.dockWidth, closeTo(400, 1));
+      expect(
+        tester.getSize(find.byKey(CodeLabWorkbenchLayout.dockKey)).width,
+        closeTo(400, 1),
+      );
 
-        await tester.pumpWidget(const SizedBox.shrink());
-        await closeCodeLabRootScope();
-      },
-    );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScope();
+    });
 
     testWidgets('dragging the sessions divider past the minimum stops at the '
         'configured floor', (tester) async {
@@ -3361,10 +3349,12 @@ void main() {
       await closeCodeLabRootScope();
     });
 
-    testWidgets('dragging the inspector divider past the minimum stops at '
+    testWidgets('dragging the dock divider past the minimum stops at '
         'the configured floor', (tester) async {
       final binding = await pumpDesktopShell(tester);
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+      shellCubit.togglePane(ToolPane.plan);
+      await tester.pump();
 
       // Dragging right shrinks the inspector (its divider sits on its left
       // edge) — the mirror image of the sessions-pane min test.
@@ -3374,16 +3364,18 @@ void main() {
       );
       await tester.pump();
 
-      expect(shellCubit.state.inspectorPaneWidth, kInspectorPaneMinWidth);
+      expect(shellCubit.state.dockWidth, kDockMinWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await closeCodeLabRootScope();
     });
 
-    testWidgets('dragging the inspector divider past the maximum stops at '
+    testWidgets('dragging the dock divider past the maximum stops at '
         'the configured ceiling', (tester) async {
       final binding = await pumpDesktopShell(tester);
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+      shellCubit.togglePane(ToolPane.plan);
+      await tester.pump();
 
       await tester.drag(
         find.byType(CodeLabResizeHandle).last,
@@ -3391,7 +3383,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(shellCubit.state.inspectorPaneWidth, kInspectorPaneMaxWidth);
+      expect(shellCubit.state.dockWidth, kDockMaxWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await closeCodeLabRootScope();
@@ -3418,9 +3410,7 @@ void main() {
 
         expect(shellCubit.state.sessionsPaneWidth, closeTo(320, 1));
         expect(
-          tester
-              .getSize(find.byKey(CodeLabWorkbenchLayout.sessionsPaneKey))
-              .width,
+          tester.getSize(find.byKey(CodeLabWorkbenchLayout.sidebarKey)).width,
           closeTo(320, 1),
         );
 

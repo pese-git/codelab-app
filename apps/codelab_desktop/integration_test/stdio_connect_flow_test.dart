@@ -16,9 +16,7 @@ import 'support/e2e_agent.dart';
 // reachable until it is open, and the dialog's barrier blocks taps on
 // anything behind it (e.g. the Connect button) while it is open.
 Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(
-    find.byKey(const ValueKey('command-bar-configure-connection')),
-  );
+  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
   await tester.pumpAndSettle();
 }
 
