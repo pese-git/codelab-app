@@ -31,7 +31,7 @@
 Альтернативы:
 - писать журнал сценария в `$CODELAB_HOME/sessions` — отклонено: нарушает обещание «`$CODELAB_HOME` не создаётся», а e2e app передаёт агенту только команду и аргументы профиля; окружение пришлось бы задавать отдельно;
 - переменная `CODELAB_SESSIONS_DIR` — отклонено: §15.6 не знает такой переменной, а тестовая поверхность бинаря — флаги (`--llm-script`);
-- новый режим scripted-агента вместо Dart-агента — отклонено: сценарий 5.6 проверяет `detachGrace` и `SessionBridge.reattach`, которых у scripted-агента нет.
+- новый режим scripted-агента вместо Dart-агента — отклонено: сценарий 5.6 проверяет поведение процесса Dart-агента при обрыве WebSocket (`detachGrace`, `SessionBridge`), которого у scripted-агента нет.
 
 ### D2. `CwdTrackingStore` над любым хранилищем
 
@@ -47,7 +47,7 @@
 
 `E2eAgent.launch(tempDir, mode: withSessionList)` в режиме `dart` добавляет `--sessions-dir <tempDir>/agent-sessions`: перезапуск app внутри теста поднимает новый процесс с тем же каталогом, а следующий тест получает чистую папку. Сценарий `llm_scripts/with_session_list.json` повторяет видимое поведение режима `withSessionList` scripted-агента. Тег `scripted-only` снимается с тестов, которые проходят на обоих агентах.
 
-Сценарий задачи 5.6 (ход, переживший переподключение) требует WebSocket: по stdio `detachGrace` равен нулю, и закрытие соединения — конец процесса. Тест режима `dart` запускает `codelab-agent serve --ws --port 0 --sessions-dir …` сам, подключает app профилем WebSocket и нажимает `Reconnect` посреди хода со `waitForCancel`/долгим шагом. Если поздние `session/update` после `session/load` применяются неверно, исправление идёт в `codelab_client_acp`/`codelab_client_core` в рамках change `add-session-list-and-reload` (задача 5.6).
+Сценарий задачи 5.6 (ход, переживший переподключение) требует WebSocket: по stdio `detachGrace` равен нулю, и закрытие соединения — конец процесса. Тест режима `dart` запускает `codelab-agent serve --ws --port 0 --sessions-dir …` сам, подключает app профилем WebSocket и нажимает `Reconnect` посреди хода со `waitForCancel`/долгим шагом. Если поздние `session/update` после `session/load` применяются неверно, исправление идёт в `codelab_client_acp`/`codelab_client_core` в рамках change `add-session-list-and-reload` (задача 5.6). Итог: задача 5.6 перенесена в change `cancel-turn-on-ws-disconnect` — бинарь получил `detachGrace` ноль и для WebSocket, сценарий проверяет отмену хода при Reconnect.
 
 ## Risks / Trade-offs
 
