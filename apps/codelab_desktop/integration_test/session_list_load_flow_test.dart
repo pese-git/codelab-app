@@ -2,9 +2,9 @@
 // spec testing-quality «Интеграционный тест списка и загрузки сессий»;
 // строка Must D-03 матрицы паритета).
 //
-// Только scripted-агент: бинарь `codelab-agent` с `--llm-script` держит
-// сессии в памяти и не объявляет `loadSession` (`agent_host.dart`), поэтому
-// по ACP клиент не вправе вызывать `session/load`.
+// На Dart-агенте бинарь запускается с `--sessions-dir` (`E2eAgent`): журнал
+// сессий на диске переживает новый процесс агента при Reconnect и перезапуске
+// app (change `add-llm-script-session-store`).
 
 import 'dart:io';
 
@@ -90,7 +90,6 @@ void main() {
     'the sidebar lists the agent sessions, Reconnect and an app restart '
     'restore the active session, and selecting another restores its '
     'transcript',
-    tags: scriptedOnly,
     (tester) async {
       final project = await Directory.systemTemp.createTemp(
         'codelab_session_list_e2e_',
