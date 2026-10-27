@@ -48,7 +48,7 @@ A failed prompt turn SHALL be shown in the transcript as a notice whose title de
 | a turn interrupted by a lost connection | The connection to the agent was lost |
 | any other or no class | The agent could not complete the turn |
 
-The notice SHALL offer a Retry action exactly when the turn can be retried (`canRetry`, requirement "Повтор сорвавшегося хода" of `acp-client-kit`). Selecting Retry SHALL send the same prompt as a new turn.
+The notice of the session's last turn SHALL offer a Retry action exactly when the session can retry it (`SessionView.canRetry`, requirement "Повтор сорвавшегося хода" of `acp-client-kit`) and the connection is `connected`. Selecting Retry SHALL send the same prompt as a new turn.
 
 #### Scenario: Provider authentication failure
 - **WHEN** the agent answers the prompt as in fixture `acp/prompt-failed-provider-auth`
