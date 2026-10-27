@@ -67,6 +67,7 @@
   - `inspector_pane.dart` и `debug_log_pane.dart` становятся содержимым панели Protocol;
   - `command_bar.dart` удаляется;
   - сочетания Cmd/Ctrl+N и Cmd/Ctrl+B.
-- **Не затронуты:** `codelab_client_core`, `codelab_client_acp`, протокол ACP — change чисто презентационный, на данных уже существующих Cubit-ов.
+- **`codelab_client_core`:** `ConfigOptionView` получает `category` из ACP (`SessionConfigOption.category`), чтобы шапка сессии нашла опцию режима без угадывания по `id` (design D7).
+- **Не затронуты:** `codelab_client_acp`, протокол ACP.
 - **Зависимости:** новых нет, только `fluent_ui`.
 - **Следующие change встраиваются в этот док:** `add-file-preview-and-tree` (панель Files) и `add-integrated-terminal` (панель Terminal).

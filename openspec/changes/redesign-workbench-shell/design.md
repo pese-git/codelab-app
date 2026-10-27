@@ -97,7 +97,17 @@ A13 вводит `NavigationCubit` над `AppDestination` (Boot, Onboarding, Pr
 
 Поэтому `CodeLabSessionSidebar` переписывается собственным организмом из примитивов `fluent_ui`: `PaneItem`-подобных строк, `Expander`-групп и `InfoBadge`, с теми же метриками и состояниями, что у `NavigationPane` (`open` / `compact`). A13 называет `NavigationView` как источник вида; от виджета отказываемся из-за владения телом и чужих порогов, вид сохраняется.
 
-Альтернатива — `NavigationView` с `PaneDisplayMode`, выставленным вручную по нашему классу. Отклонено по причинам выше. Задача 1.1 — короткий спайк, который подтверждает это решение на текущей версии `fluent_ui`, прежде чем писать организм.
+Альтернатива — `NavigationView` с `PaneDisplayMode`, выставленным вручную по нашему классу. Отклонено по причинам выше.
+
+**Итог спайка 1.1 (`fluent_ui` 4.16.1).**
+
+- `NavigationView` получил `paneBodyBuilder`: тело можно подменить. Но выбор по-прежнему задаётся индексом пункта в `NavigationPane.items`, поэтому синхронизация с `SessionsCubit` остаётся.
+- `PaneDisplayMode.auto` переключается при ≤ 640 и ≥ 1008 px, это не пороги §12.8.3.
+- Метрики для своего сайдбара:
+  - ширина `open` — 320 (`kOpenNavigationPaneWidth`), `compact` — 50 (`kCompactNavigationPaneWidth`);
+  - `iconPadding` — 12 по горизонтали, `labelPadding` — 10 справа, `headerPadding` — 8 по вертикали (`NavigationPaneThemeData.standard`).
+
+Решение D3 остаётся в силе.
 
 ### D4. Группы по проектам из уже имеющихся данных
 
@@ -152,6 +162,8 @@ A13 вводит `NavigationCubit` над `AppDestination` (Boot, Onboarding, Pr
 - чип проекта — имя папки, полный `cwd` в подсказке;
 - чип режима из config options, если агент его публикует;
 - справа слот действий — в этом change пустой.
+
+Режим берётся из опции категории `mode` (`SessionConfigOption.category` в ACP). Для этого `ConfigOptionView` в `codelab_client_core` получает поле `category`, которого раньше не было; угадывать опцию по `id` нельзя — `id` выбирает агент.
 
 Rename, Fork, Split не рисуются недоступными кнопками: в палитре уже есть пометки «Coming soon», дублировать их в шапке незачем.
 
