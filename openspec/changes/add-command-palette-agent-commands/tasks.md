@@ -19,13 +19,13 @@
 
 ## 4. Документы и Definition of Done
 
-- [ ] 4.1 Документы:
+- [x] 4.1 Документы:
   - `09-10-stage-5-client-kit.md`: задача 5.6 — выбор команды агента вставляет её в композер, отправка уходит `session/prompt` (D1); эскиз API — `CommandCatalog` как значение хоста вместо `ClientWorkspace.commands`, `runCommand` — этап 6 (D2);
   - `agent-parity-goals.md`: строка R-20 — доказательство `app:command_palette_flow_test.dart`;
   - `AGENTS.md` пакета `codelab_client_core`: каталог команд в назначении пакета.
-- [ ] 4.2 Definition of Done:
+- [x] 4.2 Definition of Done:
   - `fvm dart run melos run check` и `melos run guard` зелёные;
   - тесты `codelab_client_core`, `codelab_acp_testing`, `codelab_ui` и app зелёные;
   - интеграционные тесты собираются (`flutter analyze integration_test`); прогон на macOS — по команде владельца (`AGENTS.md` §21);
   - тексты прежних 9 интеграционных тестов не изменены.
-- [ ] 4.3 Перед архивированием: `openspec validate add-command-palette-agent-commands --strict`.
+- [x] 4.3 Перед архивированием: `openspec validate add-command-palette-agent-commands --strict`.
