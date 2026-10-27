@@ -12,8 +12,11 @@ import 'headless/headless_runner.dart';
 import 'headless/outcome.dart';
 import 'headless/prompt_source.dart';
 import 'home.dart';
+import 'input/io_terminal.dart';
 import 'profiles/profile_arg.dart';
 import 'profiles/profiles_command.dart';
+import 'render/output_surface.dart';
+import 'repl/repl.dart';
 import 'signals.dart';
 
 /// Запуск `codelab` от аргументов до кода выхода (design.md change
@@ -69,9 +72,65 @@ Future<int> _run(
       // Ни `-p`, ни `-f`, а stdin — pipe: промпт из stdin, headless (H-01).
       return _runHeadless(options, environment, io);
     case CliCommand.repl:
-      // REPL появляется в итерации 3 (tasks 6.6); до неё — ошибка
-      // использования, а не молчание.
-      throw const UsageError('The interactive REPL is not implemented yet.');
+      return _runRepl(options, environment, io);
+  }
+}
+
+Future<int> _runRepl(
+  CliOptions options,
+  Map<String, String> environment,
+  CliIo io,
+) async {
+  final cwd = await _sessionFolder(options.cwd);
+  final home = CodelabHome.resolve(environment);
+  final profile = await resolveAgentProfile(
+    options.agent,
+    store: JsonFileProfileStore(home.profilesFile),
+  );
+  await home.ensureExists();
+
+  final terminal = IoTerminal();
+  final runtime = buildCliRuntime(
+    environment: environment,
+    stderr: io.stderr,
+    verbose: options.verbose,
+  );
+  final repl = Repl(
+    workspace: runtime.workspace,
+    terminal: terminal,
+    profile: profile,
+    cwd: cwd,
+    history: HistoryFile(home.historyFile),
+    surface: selectOutputSurface(
+      stdoutIsTerminal: stdout.hasTerminal,
+      environment: environment,
+      noColor: options.noColor,
+    ),
+    unicode: supportsUnicode(environment),
+    firstMessage: options.positional.isEmpty
+        ? null
+        : options.positional.join(' '),
+    resume: options.resume,
+    continueLast: options.continueLast,
+    model: options.model,
+    mode: options.configMode,
+  );
+  // SIGTERM — безопасное завершение с кодом 143; SIGINT вне raw-режима —
+  // как Ctrl+C, поэтому не через `watchStopSignals`, где второй сигнал
+  // выходит сразу (spec codelab-cli «Сигналы CLI»; design.md, D13).
+  final signals = watchStopSignals(
+    (code) => unawaited(repl.interrupt(code)),
+    sigint: const Stream.empty(),
+  );
+  final sigint = ProcessSignal.sigint.watch().listen((_) => repl.onSigint());
+  try {
+    return await repl.run();
+  } finally {
+    // Терминал восстанавливается и при исключении, которое REPL не поймал.
+    terminal.restore();
+    await sigint.cancel();
+    await signals.cancel();
+    await runtime.dispose();
   }
 }
 
