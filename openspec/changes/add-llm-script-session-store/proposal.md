@@ -9,7 +9,7 @@
 - `--sessions-dir` без `--llm-script` — ошибка использования (код `64`): журнал провайдера живёт в `$CODELAB_HOME/sessions`, второй источник пути до конфига этапа 8 не нужен.
 - `CwdTrackingStore` бинаря оборачивает любое хранилище и узнаёт рабочую папку сессии не только при `create`, но и при `open`: `${cwd}` сценария верен и для сессии, загруженной после перезапуска.
 - Без флага поведение `--llm-script` не меняется: сессии в памяти, `loadSession: false`.
-- E2E `codelab_desktop` в режиме `dart`: сценарий `integration_test/llm_scripts/with_session_list.json`, флаги режима `withSessionList` с `--sessions-dir` во временной папке теста; тег `scripted-only` снимается с `session_list_load_flow_test.dart`. Сценарий задачи 5.6 change `add-session-list-and-reload` (ход, переживший переподключение по WebSocket) пишется на этом агенте.
+- E2E `codelab_desktop` в режиме `dart`: сценарий `integration_test/llm_scripts/with_session_list.json`, флаги режима `withSessionList` с `--sessions-dir` во временной папке теста; тег `scripted-only` снимается с `session_list_load_flow_test.dart`. Сценарий задачи 5.6 change `add-session-list-and-reload` (ход, переживший переподключение по WebSocket) опирается на этот агент; сам сценарий и исправление клиента — change `add-resumed-turn-after-reload`.
 
 Не входит:
 - YAML-конфиг и ключ `sessions.dir` — этап 8;

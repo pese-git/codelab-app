@@ -14,4 +14,4 @@
 
 - [x] 2.1 `integration_test/llm_scripts/with_session_list.json` и ветка `withSessionList` в `_dartFlags` (`--sessions-dir <tempDir>/agent-sessions`); сценарий проверяется `apps/codelab_agent/test/llm_scripts_load_test.dart`.
 - [x] 2.2 Снять тег `scripted-only` с `session_list_load_flow_test.dart`; прогон `melos run test:e2e:app:dart-agent` на macOS вручную (`AGENTS.md` §21).
-- [ ] 2.3 Сценарий задачи 5.6 change `add-session-list-and-reload` (ход, переживший переподключение по WebSocket) в режиме `dart`; исправление применения поздних `session/update` в `codelab_client_acp`/`codelab_client_core`, если тест красный.
+- [x] 2.3 Перенесено в change `add-resumed-turn-after-reload` вместе с задачей 5.6 change `add-session-list-and-reload`: сценарий ход-через-Reconnect красный из-за клиента (поздние `session/update` после `session/load`), исправление — отдельное поведение клиента.
