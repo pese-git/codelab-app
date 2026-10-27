@@ -11,8 +11,9 @@ import 'codelab_transcript_row.dart';
 /// «● Done think», где статус повторялся, а вид протокола показывался как
 /// есть (change `redesign-transcript-rows`, D5; §12.1.6).
 ///
-/// Для чего: заголовок — значок статуса, метка, моноширинная деталь, тег
-/// статуса и шеврон; под ним — вторая строка, текстовый вывод и карточка
+/// Для чего: шапка раскрывашки ([CodeLabExpanderCard], как в макете) —
+/// значок статуса, метка и через пробел моноширинная деталь, тег статуса и
+/// шеврон; под ним — вторая строка, текстовый вывод и карточка
 /// ожидающего одобрения. Пока вызов ждёт одобрения, тег — «Awaiting
 /// approval», а строку нельзя свернуть: иначе пропадут кнопки решения.
 ///
@@ -48,130 +49,104 @@ class CodeLabToolCallTile extends StatelessWidget {
     final (statusLabel, statusTone) = _statusTag;
     final approval = row.approval;
 
-    final header = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
+    final muted = theme.resources.textFillColorSecondary;
+    final resolved = approval is CodeLabTranscriptApprovalResolved
+        ? approval
+        : null;
+    final pending = approval is CodeLabTranscriptApprovalPending
+        ? approval
+        : null;
+
+    // Метка и деталь — одна строка через пробел, как в макете: деталь
+    // продолжает фразу «Read lib/main.dart», а не стоит отдельной колонкой.
+    final title = Text.rich(
+      TextSpan(
         children: [
-          _StatusGlyph(row: row),
-          const SizedBox(width: 10),
-          CodeLabText(row.label, role: CodeLabTextRole.strong),
+          TextSpan(text: row.label),
           if (row.detail.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              child: CodeLabText(
-                row.detail,
-                role: CodeLabTextRole.mono,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                color: theme.resources.textFillColorSecondary,
-              ),
+            const TextSpan(text: ' '),
+            TextSpan(
+              text: row.detail,
+              style: CodeLabText.styleOf(
+                context,
+                CodeLabTextRole.mono,
+              )?.copyWith(color: muted),
             ),
-          ] else
-            const Spacer(),
-          const SizedBox(width: 8),
-          if (approval case CodeLabTranscriptApprovalResolved(
-            :final label,
-            :final outcome,
-          )) ...[
-            CodeLabBadge(label: label, tone: _outcomeTone(outcome)),
+          ],
+        ],
+      ),
+      style: theme.typography.body,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+
+    final body = showBody
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (row.secondary case final secondary?)
+                CodeLabText(
+                  secondary,
+                  color: row.status == CodeLabToolCallStatus.failed
+                      ? Colors.red
+                      : null,
+                ),
+              if (showOutput) ...[
+                if (row.secondary != null) const SizedBox(height: 8),
+                CodeLabText(_outputTail, role: CodeLabTextRole.mono),
+              ],
+              if (pending != null) ...[
+                if (row.secondary != null || showOutput)
+                  const SizedBox(height: 12),
+                CodeLabApprovalPanel(
+                  bordered: false,
+                  optionsLayout: CodeLabApprovalOptionsLayout.compactRow,
+                  title: pending.title,
+                  risk: pending.risk,
+                  reason: pending.reason,
+                  command: pending.command,
+                  cwd: pending.cwd,
+                  diffSummary: pending.diffSummary,
+                  rawInput: pending.rawInput,
+                  options: pending.options,
+                  selectedOptionId: pending.selectedOptionId,
+                  enabled: pending.enabled,
+                  approveOptionId: pending.approveOptionId,
+                  rejectOptionId: pending.rejectOptionId,
+                  shortcutsEnabled: pending.shortcutsEnabled,
+                  onOptionSelected: pending.onOptionSelected,
+                ),
+              ],
+            ],
+          )
+        : null;
+
+    return CodeLabExpanderCard(
+      headerKey: headerKey,
+      expanded: expanded,
+      onToggle: canToggle ? onToggle : null,
+      highlighted: row.awaitsApproval,
+      leading: _StatusGlyph(row: row),
+      title: title,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (resolved != null) ...[
+            CodeLabBadge(
+              label: resolved.label,
+              tone: _outcomeTone(resolved.outcome),
+            ),
             const SizedBox(width: 6),
           ],
           CodeLabBadge(key: statusTagKey, label: statusLabel, tone: statusTone),
-          if (canToggle) ...[
-            const SizedBox(width: 6),
-            Icon(
-              expanded
-                  ? FluentIcons.chevron_up_small
-                  : FluentIcons.chevron_down_small,
-              size: 10,
-              color: theme.resources.textFillColorSecondary,
-            ),
-          ],
         ],
       ),
-    );
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.resources.cardBackgroundFillColorDefault,
-        border: Border.all(
-          color: row.awaitsApproval
-              ? theme.accentColor
-              : theme.resources.cardStrokeColorDefault,
-        ),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (canToggle)
-            Semantics(
-              button: true,
-              expanded: expanded,
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  key: headerKey,
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onToggle(!expanded),
-                  child: header,
-                ),
-              ),
-            )
-          else
-            KeyedSubtree(key: headerKey, child: header),
-          if (showBody)
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: theme.resources.cardStrokeColorDefault,
-                  ),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (row.secondary case final secondary?)
-                    CodeLabText(
-                      secondary,
-                      color: row.status == CodeLabToolCallStatus.failed
-                          ? Colors.red
-                          : null,
-                    ),
-                  if (showOutput) ...[
-                    if (row.secondary != null) const SizedBox(height: 8),
-                    CodeLabText(_outputTail, role: CodeLabTextRole.mono),
-                  ],
-                  if (approval
-                      case final CodeLabTranscriptApprovalPending pending) ...[
-                    if (row.secondary != null || showOutput)
-                      const SizedBox(height: 12),
-                    CodeLabApprovalPanel(
-                      bordered: false,
-                      optionsLayout: CodeLabApprovalOptionsLayout.compactRow,
-                      title: pending.title,
-                      risk: pending.risk,
-                      reason: pending.reason,
-                      command: pending.command,
-                      cwd: pending.cwd,
-                      diffSummary: pending.diffSummary,
-                      rawInput: pending.rawInput,
-                      options: pending.options,
-                      selectedOptionId: pending.selectedOptionId,
-                      enabled: pending.enabled,
-                      approveOptionId: pending.approveOptionId,
-                      rejectOptionId: pending.rejectOptionId,
-                      shortcutsEnabled: pending.shortcutsEnabled,
-                      onOptionSelected: pending.onOptionSelected,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-        ],
-      ),
+      // Карточка одобрения в макете — поля 12 сверху и снизу, 16 по бокам;
+      // вывод инструмента — обычное тело раскрывашки, 16 со всех сторон.
+      bodyPadding: pending != null
+          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+          : const EdgeInsets.all(16),
+      body: body,
     );
   }
 
@@ -218,32 +193,32 @@ class _StatusGlyph extends StatelessWidget {
       return const CodeLabIcon(
         FluentIcons.permissions,
         tone: CodeLabTone.accent,
-        size: 14,
+        size: 16,
       );
     }
     return switch (row.status) {
       CodeLabToolCallStatus.running => const SizedBox.square(
-        dimension: 14,
+        dimension: 16,
         child: ProgressRing(strokeWidth: 2),
       ),
       CodeLabToolCallStatus.queued => const CodeLabIcon(
         FluentIcons.circle_ring,
-        size: 14,
+        size: 16,
       ),
       CodeLabToolCallStatus.succeeded => const CodeLabIcon(
         FluentIcons.check_mark,
         tone: CodeLabTone.success,
-        size: 14,
+        size: 16,
       ),
       CodeLabToolCallStatus.failed => const CodeLabIcon(
         FluentIcons.error_badge,
         tone: CodeLabTone.danger,
-        size: 14,
+        size: 16,
       ),
       CodeLabToolCallStatus.cancelled => const CodeLabIcon(
         FluentIcons.cancel,
         tone: CodeLabTone.warning,
-        size: 14,
+        size: 16,
       ),
     };
   }

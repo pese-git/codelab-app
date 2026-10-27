@@ -62,6 +62,11 @@ class CodeLabApprovalPanel extends StatelessWidget {
   /// panel, `compactRow` for an inline-embedded transcript entry.
   final CodeLabApprovalOptionsLayout optionsLayout;
 
+  /// Промежуток между частями карточки — 8, как в макете (карточка
+  /// «Run a command?» артборда Main): заголовок, команда и кнопки читаются
+  /// одним блоком.
+  static const _gap = 8.0;
+
   @override
   Widget build(BuildContext context) {
     final content = Column(
@@ -73,7 +78,7 @@ class CodeLabApprovalPanel extends StatelessWidget {
               Expanded(
                 child: CodeLabText(
                   title,
-                  role: CodeLabTextRole.subtitle,
+                  role: CodeLabTextRole.strong,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -93,7 +98,7 @@ class CodeLabApprovalPanel extends StatelessWidget {
           CodeLabText(reason!, maxLines: 3, overflow: TextOverflow.ellipsis),
         ],
         if (_hasDetails) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: _gap),
           _ApprovalDetails(
             command: command,
             cwd: cwd,
@@ -101,10 +106,10 @@ class CodeLabApprovalPanel extends StatelessWidget {
           ),
         ],
         if (rawInput case final rawInput?) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: _gap),
           CodeLabTextDisclosure(label: 'View raw input', text: rawInput),
         ],
-        const SizedBox(height: 12),
+        const SizedBox(height: _gap),
         CodeLabApprovalOptionGroup(
           options: options,
           selectedOptionId: selectedOptionId,

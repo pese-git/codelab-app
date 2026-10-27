@@ -128,6 +128,58 @@ void main() {
       );
       expect(column.width, kTranscriptColumnMaxWidth);
       expect(column.center.dx, closeTo(row.center.dx, 1));
+      // Боковые поля 20 px входят в 760: тексту остаётся 720, как в макете.
+      final reply = tester.getRect(find.text('Reply'));
+      expect(reply.left, closeTo(column.left + 20, 0.5));
+    });
+
+    testWidgets('rows follow the artboard rhythm: 8 above, 12 between', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel(const [
+          CodeLabUserRow(id: 'user-1', text: 'Run the tests'),
+          CodeLabAgentTextRow(id: 'agent-1', text: 'Running them now.'),
+        ]),
+      );
+
+      final panel = tester.getRect(find.byType(CodeLabTranscriptPanel));
+      final first = tester.getRect(
+        find.byKey(CodeLabTranscriptPanel.rowKey('user-1')),
+      );
+      final second = tester.getRect(
+        find.byKey(CodeLabTranscriptPanel.rowKey('agent-1')),
+      );
+      expect(first.top - panel.top, 8);
+      final bubble = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Run the tests'),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      expect(second.top - bubble.bottom, 12);
+    });
+
+    testWidgets('a tool row has the 48 px expander header of the artboard', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel(const [
+          CodeLabToolCallRow(
+            id: 'tool-1',
+            status: CodeLabToolCallStatus.succeeded,
+            label: 'Read',
+            detail: 'lib/main.dart',
+          ),
+        ]),
+      );
+
+      expect(
+        tester.getSize(find.byKey(CodeLabToolCallTile.headerKey)).height,
+        48,
+      );
     });
 
     testWidgets('long user, agent and notice texts are never cut', (
@@ -243,8 +295,8 @@ void main() {
         ]),
       );
 
-      expect(find.text('Read'), findsOneWidget);
-      expect(find.text('lib/main.dart'), findsOneWidget);
+      // Метка и деталь — одна фраза, как в макете: «Read lib/main.dart».
+      expect(find.text('Read lib/main.dart'), findsOneWidget);
       expect(find.text('Done'), findsOneWidget);
     });
 

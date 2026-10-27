@@ -8,9 +8,19 @@ import 'codelab_tool_call_tile.dart';
 import 'codelab_transcript_notice.dart';
 import 'codelab_transcript_row.dart';
 
-/// Наибольшая ширина колонки переписки (артборд Main; требование
-/// «Transcript reads as a conversation»).
+/// Наибольшая ширина колонки переписки вместе с её боковыми полями
+/// [_columnSidePadding] (артборд Main: `max-width: 760px` с
+/// `box-sizing: border-box`; требование «Transcript reads as a
+/// conversation»). Тексту остаётся 720 px.
 const kTranscriptColumnMaxWidth = 760.0;
+
+/// Поля колонки по макету: 20 px по бокам, 8 сверху, 12 снизу; между
+/// строками — 12. Боковые поля входят в [kTranscriptColumnMaxWidth], иначе
+/// на широком окне текст расползается на 40 px шире макета.
+const _columnSidePadding = 20.0;
+const _columnTopPadding = 8.0;
+const _columnBottomPadding = 12.0;
+const _rowGap = 12.0;
 
 /// Пузырь пользователя — доля ширины колонки; в узкой колонке шире, чтобы
 /// многострочный промпт не превращался в столбик слов (design, Risks).
@@ -257,10 +267,14 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
         onNotification: _onScrollNotification,
         child: ListView.builder(
           controller: _controller,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: const EdgeInsets.only(
+            top: _columnTopPadding,
+            bottom: _columnBottomPadding,
+          ),
           itemCount: widget.rows.length,
           itemBuilder: (context, index) {
             final row = widget.rows[index];
+            final isLast = index == widget.rows.length - 1;
             return Align(
               key: CodeLabTranscriptPanel.rowKey(row.id),
               alignment: Alignment.topCenter,
@@ -269,7 +283,13 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
                   maxWidth: kTranscriptColumnMaxWidth,
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
+                  // Промежуток только между строками: у последней он
+                  // сложился бы с нижним полем ленты.
+                  padding: EdgeInsets.only(
+                    left: _columnSidePadding,
+                    right: _columnSidePadding,
+                    bottom: isLast ? 0 : _rowGap,
+                  ),
                   child: _TranscriptRowView(
                     row: row,
                     expanded: _isExpanded(row),

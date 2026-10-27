@@ -5,6 +5,7 @@ export 'codelab_config_option.dart';
 export 'codelab_approval_option_group.dart';
 export 'codelab_connection_banner.dart';
 export 'codelab_connection_status_row.dart';
+export 'codelab_expander_card.dart';
 export 'codelab_prompt_composer.dart';
 export 'codelab_text_disclosure.dart';
 export 'codelab_thought_block.dart';

@@ -27,9 +27,15 @@ class CodeLabText extends StatelessWidget {
   /// room for a separate badge.
   final Color? color;
 
+  /// Стиль роли [role] в текущей теме — для составного текста
+  /// (`Text.rich`), где часть фразы набрана другой ролью, например
+  /// моноширинная цель в строке вызова «Read lib/main.dart».
+  static TextStyle? styleOf(BuildContext context, CodeLabTextRole role) =>
+      _styleForRole(FluentTheme.of(context).typography, role);
+
   @override
   Widget build(BuildContext context) {
-    final style = _styleForRole(FluentTheme.of(context).typography, role);
+    final style = styleOf(context, role);
     return Text(
       data,
       maxLines: maxLines,
