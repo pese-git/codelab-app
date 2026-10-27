@@ -230,26 +230,11 @@ CodeLabToolCallRow _toolCallRowOf(
     output: details?.textOutput ?? const [],
     approval: _transcriptApprovalOf(
       call.approval,
-      title: approvalTitleOf(details?.kind ?? ToolKind.other),
-      cwd: cwd,
       enabled: approvalsEnabled,
       onSelected: onApprovalSelected,
     ),
   );
 }
-
-/// Вопрос карточки одобрения по виду вызова (требование «Approval card
-/// inside the tool call row»).
-String approvalTitleOf(ToolKind kind) => switch (kind) {
-  ToolKind.execute => 'Run a command?',
-  ToolKind.edit => 'Edit a file?',
-  ToolKind.delete => 'Delete a file?',
-  ToolKind.move => 'Move a file?',
-  ToolKind.read => 'Read a file?',
-  ToolKind.search => 'Run a search?',
-  ToolKind.fetch => 'Fetch a URL?',
-  ToolKind.think || ToolKind.other => 'Allow this tool call?',
-};
 
 /// Чип хода в шапке панели сессии (требование «Session pane header»):
 /// идущий ход с ожидающим одобрением — «Waiting for approval».
@@ -300,8 +285,6 @@ String? _failureBodyOf(PromptFailure? failure) => switch (failure) {
 /// Decisions 1–3).
 CodeLabTranscriptApproval? _transcriptApprovalOf(
   ApprovalStateView? approval, {
-  required String title,
-  required String cwd,
   required bool enabled,
   required ApprovalOptionChosen onSelected,
 }) => switch (approval) {
@@ -317,10 +300,8 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
       },
     ),
   PendingApprovalView() => CodeLabTranscriptApproval.pending(
-    title: title,
     risk: _approvalRiskOf(approval.risk),
     command: approval.command,
-    cwd: cwd,
     rawInput: formatRedactedJson(approval.rawInput),
     options: approval.options.map(_approvalOptionOf).toList(),
     enabled: enabled,
