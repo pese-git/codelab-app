@@ -113,4 +113,46 @@ void main() {
       ['approved: reject_once'],
     );
   });
+  test('with_tool_calls thinks, runs read and exec, asks for edit and then '
+      'answers', () async {
+    final sessionId = await start(
+      CodelabCompatibleStdioAgentMode.withToolCalls,
+    );
+
+    final response = agent.prompt(sessionId, 'fix it');
+    await Future.doWhile(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      return !agent.received.any(
+        (f) => f['method'] == 'session/request_permission',
+      );
+    }).timeout(const Duration(seconds: 10));
+    final request = agent.received.firstWhere(
+      (f) => f['method'] == 'session/request_permission',
+    );
+    expect(((request['params']! as Map)['toolCall']! as Map)['kind'], 'edit');
+    agent.reply(request['id'], {
+      'outcome': {'outcome': 'selected', 'optionId': 'allow_once'},
+    });
+
+    expect((await response)['result'], {'stopReason': 'end_turn'});
+    final kinds = [for (final u in agent.updates) u['sessionUpdate']];
+    expect(kinds.take(3), everyElement('agent_thought_chunk'));
+    expect(kinds.last, 'agent_message_chunk');
+    final calls = {
+      for (final u in agent.updates)
+        if (u['sessionUpdate'] == 'tool_call') u['kind']: u,
+    };
+    expect(calls.keys, containsAll(['read', 'execute', 'edit']));
+    expect(
+      (calls['execute']!['rawInput']! as Map)['env'],
+      isA<Map<String, Object?>>(),
+    );
+    final finished = {
+      for (final u in agent.updates)
+        if (u['sessionUpdate'] == 'tool_call_update' &&
+            u['status'] == 'completed')
+          u['toolCallId'],
+    };
+    expect(finished, hasLength(3));
+  });
 }

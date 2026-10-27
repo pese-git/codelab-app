@@ -406,64 +406,24 @@ void main() {
     );
   });
 
-  group('currentPlanOf', () {
-    PromptTurn turn(String id, List<SessionUpdate> updates) => PromptTurn(
-      id: PromptTurnId(id),
-      sessionId: const SessionId('s'),
-      prompt: const [ContentBlock.text(text: 'go')],
-      updates: updates,
-    );
-
-    test('no plan update is null', () {
-      expect(
-        currentPlanOf(
-          AcpSession(
-            id: const SessionId('s'),
-            cwd: '/work',
-            turns: [turn('turn-1', const [])],
-          ),
-        ),
-        isNull,
-      );
+  group('planEntriesOf', () {
+    test('an empty plan is null', () {
+      expect(planEntriesOf(const []), isNull);
     });
 
-    test('the last plan across all turns wins', () {
-      final plan = currentPlanOf(
-        AcpSession(
-          id: const SessionId('s'),
-          cwd: '/work',
-          turns: [
-            turn('turn-1', const [
-              SessionUpdate.plan(
-                entries: [
-                  PlanEntry(
-                    content: 'old',
-                    priority: PlanEntryPriority.low,
-                    status: PlanEntryStatus.pending,
-                  ),
-                ],
-              ),
-            ]),
-            turn('turn-2', const [
-              SessionUpdate.plan(
-                entries: [
-                  PlanEntry(
-                    content: 'write tests',
-                    priority: PlanEntryPriority.high,
-                    status: PlanEntryStatus.inProgress,
-                  ),
-                  PlanEntry(
-                    content: 'ship',
-                    priority: PlanEntryPriority.medium,
-                    status: PlanEntryStatus.completed,
-                  ),
-                ],
-              ),
-            ]),
-            turn('turn-3', const []),
-          ],
+    test('entries keep their order, status and priority', () {
+      final plan = planEntriesOf(const [
+        PlanEntryView(
+          content: 'write tests',
+          status: PlanEntryStatus.inProgress,
+          priority: PlanEntryPriority.high,
         ),
-      )!;
+        PlanEntryView(
+          content: 'ship',
+          status: PlanEntryStatus.completed,
+          priority: PlanEntryPriority.medium,
+        ),
+      ])!;
 
       expect(plan.map((entry) => entry.content), ['write tests', 'ship']);
       expect(plan.map((entry) => entry.status), [
