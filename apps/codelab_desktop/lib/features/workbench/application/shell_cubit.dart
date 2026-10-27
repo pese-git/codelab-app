@@ -401,6 +401,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       agentCommands: active.agentCommands,
       commandCatalog: paletteCatalogOf(active.agentCommandViews),
       composerDraft: active.composerDraft,
+      composerDraftRevision: active.composerDraftRevision,
       configOptions: active.configOptions,
       isRespondingToConfigOption: active.isRespondingToConfigOption,
       sessionsPaneWidth: layout.sessionsPaneWidth,

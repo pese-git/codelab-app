@@ -146,6 +146,23 @@ final class AcpClientApplication {
   /// убирает буфер при любом исходе запроса.
   final _sessionReplays = <SessionId, List<SessionUpdate>>{};
 
+  /// Число `session/new` в полёте и обновления неизвестных сессий, пришедшие
+  /// за это время.
+  ///
+  /// Почему: агент вправе прислать `session/update` сразу за ответом на
+  /// `session/new` (`available_commands_update`, `14-Slash Commands.md`), и
+  /// транспорт доставляет оба кадра раньше, чем [createSession] вернёт
+  /// управление после `await` и заведёт сессию. Без буфера такие обновления
+  /// терялись (design D7 change `add-command-palette-agent-commands`).
+  ///
+  /// Для чего: [_handleSessionUpdate] складывает сюда обновления сессии, которой
+  /// ещё нет, пока идёт хоть один `session/new`; [createSession] применяет
+  /// обновления своей сессии после ответа, а когда запросов в полёте не
+  /// остаётся, буфер очищается — обновления так и не созданных сессий
+  /// отбрасываются, как прежде.
+  var _sessionsBeingCreated = 0;
+  final _earlyUpdates = <SessionId, List<SessionUpdate>>{};
+
   /// Сессии, чей ход прервала замена транспорта.
   ///
   /// Почему: обрыв соединения отменяет ход на стороне агента (у stdio
@@ -235,15 +252,25 @@ final class AcpClientApplication {
   }
 
   Future<AcpSession> createSession(CreateSessionCommand command) async {
-    final response = await _sendRequest<NewSessionResponse>(
-      method: sessionNewMethod,
-      params: NewSessionRequest(
-        cwd: command.cwd,
-        mcpServers: command.mcpServers,
-        meta: command.meta,
-      ),
-    );
-    final session = AcpSession(
+    _sessionsBeingCreated += 1;
+    final NewSessionResponse response;
+    try {
+      response = await _sendRequest<NewSessionResponse>(
+        method: sessionNewMethod,
+        params: NewSessionRequest(
+          cwd: command.cwd,
+          mcpServers: command.mcpServers,
+          meta: command.meta,
+        ),
+      );
+    } finally {
+      _sessionsBeingCreated -= 1;
+    }
+    final early = _earlyUpdates.remove(response.sessionId) ?? const [];
+    if (_sessionsBeingCreated == 0) {
+      _earlyUpdates.clear();
+    }
+    var session = AcpSession(
       id: response.sessionId,
       cwd: command.cwd,
       status: SessionLifecycleStatus.active,
@@ -252,6 +279,9 @@ final class AcpClientApplication {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
+    for (final update in early) {
+      session = SessionStateMachine.applyUpdate(session, update).stateOrThrow;
+    }
 
     _storeSession(session);
     return session;
@@ -1703,6 +1733,11 @@ final class AcpClientApplication {
 
       final session = _sessions[sessionNotification.sessionId];
       if (session == null) {
+        if (_sessionsBeingCreated > 0) {
+          (_earlyUpdates[sessionNotification.sessionId] ??= []).add(
+            sessionNotification.update,
+          );
+        }
         return;
       }
 

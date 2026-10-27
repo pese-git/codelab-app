@@ -1,7 +1,7 @@
 ## 1. Тестовый агент и e2e R-20 (итерация 1)
 
 - [x] 1.1 Красный тест режима `withAvailableCommands`: `packages/dart/codelab_acp_testing/test/available_commands_agent_test.dart` на настоящем процессе (как `session_list_agent_test.dart`): после `session/new` приходит `available_commands_update` с `compact` без `input` и `plan` с `input.hint` `what to plan`; промпт `/compact` получает `agent_message_chunk` `Compacted the conversation.` и `end_turn`; другой промпт — `echo: <text>` (D6).
-- [x] 1.2 Красный e2e `apps/codelab_desktop/integration_test/command_palette_flow_test.dart`, тег `scripted-only`, шаги 1–5 D6; скрипт melos `test:e2e:app:command-palette`. Ожидаемо красный на шагах 1 (заглушка `/compact` видна) и 4 (нет нечёткого поиска) до итерации 3; в feature-ветке — `flutter analyze integration_test`, прогон на macOS — по команде владельца (`AGENTS.md` §21). Источник: testing-quality «Интеграционный тест палитры с командами агента».
+- [x] 1.2 Красный e2e `apps/codelab_desktop/integration_test/command_palette_flow_test.dart`, только scripted-агент (`skip` в режиме `dart`), шаги 1–5 D6; скрипт melos `test:e2e:app:command-palette`. Ожидаемо красный на шагах 1 (заглушка `/compact` видна) и 4 (нет нечёткого поиска) до итерации 3; в feature-ветке — `flutter analyze integration_test`, прогон на macOS — по команде владельца (`AGENTS.md` §21). Источник: testing-quality «Интеграционный тест палитры с командами агента».
 - [x] 1.3 Режим `withAvailableCommands` в `codelab_compatible_stdio_agent.dart` — 1.1 зелёный.
 
 ## 2. `CommandCatalog` в kit (итерация 2)
@@ -13,6 +13,8 @@
 
 - [x] 3.1 Красные тесты: `codelab_ui` — `CodeLabCommandPaletteSurface` и `CodeLabPromptComposer` с параметром `search` показывают результат поиска в его порядке, без параметра — отбор `CodeLabCommandAction.filter`; app — `ShellState.paletteActions` без заглушки `/compact` при команде агента `compact`, поиск `ShellState` находит `compact` по `cpt` и ставит `plan` первым по `/pl`.
 - [x] 3.2 `codelab_ui`: `typedef CodeLabCommandSearch`, параметр `search` у обоих виджетов (D5).
+- [x] 3.4 Найдено e2e на macOS: обновление сразу за ответом на `session/new` терялось (D7). Красный тест `packages/dart/codelab_client_acp/test/application/new_session_early_update_test.dart`, затем буфер обновлений неизвестных сессий, пока `session/new` в полёте, в `AcpClientApplication`. Источник: acp-protocol-client «Обновления сразу после session/new».
+- [x] 3.5 Найдено e2e на macOS: повторный выбор той же команды агента не вставлял её в композер (D8). Красный тест композера `codelab_molecules_test.dart` («a new draftRevision…»), затем `CodeLabPromptComposer.draftRevision` и номер черновика в `ActiveSessionState` и `ShellState`.
 - [x] 3.3 App: `ShellState.paletteActions` и поиск из `CommandCatalog` (`HostCommand` из `CodeLabCommandAction.defaults`, сопоставление по `id`); `workbench_shell.dart` и `main_pane.dart` передают поиск — 3.1 и e2e 1.2 зелёные.
 
 ## 4. Документы и Definition of Done
