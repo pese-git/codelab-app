@@ -54,6 +54,10 @@ abstract interface class ClientWorkspace {
   /// `session/list` проекта — `Future` завершается после него; сбой списка
   /// — диагностика, а не ошибка подключения (design D3 change
   /// `add-session-list-and-reload`).
+  ///
+  /// Если сессии уже открыты (повторный Connect, в том числе к другому
+  /// агенту), они, как после [reconnect], загружаются заново через
+  /// `session/load` или становятся [SessionStatusView.detached].
   Future<void> connect(
     ConnectionProfile profile, {
     required String projectDirectory,
@@ -282,6 +286,15 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       ),
     );
     _transition = _Transition.connecting;
+    // Повторный Connect — новый процесс агента, а то и другой агент из
+    // диалога подключения: открытые сессии он не знает. Как при Reconnect,
+    // они не шлют промпты, пока не перезагружены, а после подключения
+    // загружаются заново или становятся detached; иначе промпт уходил агенту
+    // и падал «Session not found».
+    final reattach = _handles.isNotEmpty;
+    for (final handle in _handles.values) {
+      handle.suspend();
+    }
     try {
       final transport = await resolver.open(
         profile,
@@ -291,10 +304,16 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       _capabilities = _capabilitiesOf(connectionState);
       _publishConnection(_viewFor(connectionState));
     } on Object catch (error) {
+      for (final handle in _handles.values) {
+        handle.resume();
+      }
       _publishFailure(error);
       rethrow;
     } finally {
       _transition = _Transition.none;
+    }
+    if (reattach) {
+      await _reattachSessions();
     }
     await _listFirstPage();
     await _restorer?.restoreAfterConnect();
