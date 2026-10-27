@@ -116,14 +116,19 @@ melos:
       # По одному файлу на запуск: `flutter test integration_test -d macos`
       # на macOS не поднимает приложение после первого файла («Failed to
       # foreground app; open returned 1»). Код выхода — ненулевой, если упал
-      # хотя бы один файл; остальные файлы всё равно прогоняются.
+      # хотя бы один файл; остальные файлы всё равно прогоняются. Код 79 —
+      # «No tests ran» из package:test: в файле только scripted-only тесты,
+      # это пропуск файла, а не падение.
       run: >-
         fvm dart run melos run build:agent &&
         cd apps/codelab_desktop && {
         status=0;
         for file in integration_test/*_test.dart; do
         echo "== $file";
-        fvm flutter test "$file" -d macos --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=dart --dart-define=CODELAB_E2E_AGENT_BIN=../../build/bin/codelab-agent || { echo "FAILED: $file"; status=1; };
+        fvm flutter test "$file" -d macos --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=dart --dart-define=CODELAB_E2E_AGENT_BIN=../../build/bin/codelab-agent;
+        code=$?;
+        if [ $code -eq 79 ]; then echo "SKIPPED (scripted-only): $file";
+        elif [ $code -ne 0 ]; then echo "FAILED: $file"; status=1; fi;
         done;
         exit $status;
         }
