@@ -924,4 +924,74 @@ void main() {
       expect(selected, 'allow_always');
     },
   );
+
+  group('CodeLabConnectionBanner', () {
+    Widget host(CodeLabConnectionBannerStatus status) => FluentApp(
+      home: ScaffoldPage(
+        content: CodeLabConnectionBanner(
+          status: status,
+          message: 'agent process exited',
+          onReconnect: () {},
+          onConfigureConnection: () {},
+        ),
+      ),
+    );
+
+    testWidgets('a lost connection shows its reason, Reconnect and settings, '
+        'and cannot be dismissed', (tester) async {
+      var reconnected = false;
+      await tester.pumpWidget(
+        FluentApp(
+          home: ScaffoldPage(
+            content: CodeLabConnectionBanner(
+              status: CodeLabConnectionBannerStatus.lost,
+              message: 'agent process exited',
+              onReconnect: () => reconnected = true,
+              onConfigureConnection: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Connection to the agent lost'), findsOneWidget);
+      expect(find.text('agent process exited'), findsOneWidget);
+      expect(find.text('Connection settings'), findsOneWidget);
+      expect(find.byIcon(FluentIcons.chrome_close), findsNothing);
+
+      await tester.tap(find.text('Reconnect'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(reconnected, isTrue);
+    });
+
+    testWidgets('a failed attempt offers Reconnect again', (tester) async {
+      await tester.pumpWidget(host(CodeLabConnectionBannerStatus.failed));
+
+      expect(find.text('Could not connect to the agent'), findsOneWidget);
+      expect(find.text('Reconnect'), findsOneWidget);
+    });
+
+    testWidgets('reconnecting shows progress without actions', (tester) async {
+      await tester.pumpWidget(host(CodeLabConnectionBannerStatus.reconnecting));
+
+      expect(find.text('Reconnecting…'), findsOneWidget);
+      expect(find.byType(ProgressRing), findsOneWidget);
+      expect(find.text('Reconnect'), findsNothing);
+      expect(find.text('Connection settings'), findsNothing);
+    });
+  });
+
+  testWidgets('CodeLabTextDisclosure is collapsed until tapped', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: CodeLabTextDisclosure(label: 'Details', text: 'raw error'),
+      ),
+    );
+
+    expect(find.text('raw error'), findsNothing);
+    await tester.tap(find.text('Details'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('raw error'), findsOneWidget);
+  });
 }

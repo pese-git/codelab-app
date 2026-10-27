@@ -8,6 +8,10 @@ enum CodeLabConnectionStatus {
   connected,
   reconnecting,
   disconnected,
+
+  /// Установленное соединение оборвалось само (design D1 change
+  /// `add-connection-and-error-states`); тон — как у [failed].
+  lost,
   failed,
 }
 
@@ -63,6 +67,7 @@ class CodeLabConnectionStatusRow extends StatelessWidget {
       CodeLabConnectionStatus.connected => 'Connected',
       CodeLabConnectionStatus.reconnecting => 'Reconnecting',
       CodeLabConnectionStatus.disconnected => 'Disconnected',
+      CodeLabConnectionStatus.lost => 'Connection lost',
       CodeLabConnectionStatus.failed => 'Failed',
     };
   }
@@ -74,6 +79,7 @@ class CodeLabConnectionStatusRow extends StatelessWidget {
       CodeLabConnectionStatus.connected => CodeLabStatusTone.active,
       CodeLabConnectionStatus.reconnecting => CodeLabStatusTone.warning,
       CodeLabConnectionStatus.disconnected => CodeLabStatusTone.warning,
+      CodeLabConnectionStatus.lost ||
       CodeLabConnectionStatus.failed => CodeLabStatusTone.danger,
     };
   }

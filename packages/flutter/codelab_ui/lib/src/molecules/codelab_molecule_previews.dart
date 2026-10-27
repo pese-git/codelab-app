@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/widget_previews.dart';
 
 import 'codelab_approval_option_group.dart';
+import 'codelab_connection_banner.dart';
 import 'codelab_connection_status_row.dart';
 import 'codelab_prompt_composer.dart';
 import 'codelab_tool_call_summary.dart';
@@ -88,6 +89,31 @@ Widget codelabConnectionStatusRowPreview() {
       transportLabel: 'stdio',
       profileLabel: 'Codelab Agent',
       detail: 'codelab serve --stdio',
+    ),
+  );
+}
+
+@Preview(
+  name: 'Connection banner lost',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 140),
+)
+Widget codelabConnectionBannerPreview() {
+  // `InfoBar` читает `FluentLocalizations`; превью рендерится без
+  // `FluentApp`, поэтому локализации подключаются здесь.
+  return _AcpPreviewSurface(
+    child: Localizations(
+      locale: const Locale('en'),
+      delegates: const [
+        FluentLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
+      ],
+      child: CodeLabConnectionBanner(
+        status: CodeLabConnectionBannerStatus.lost,
+        message: 'Agent process exited with code 1.',
+        onReconnect: () {},
+        onConfigureConnection: () {},
+      ),
     ),
   );
 }

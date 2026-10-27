@@ -92,7 +92,7 @@ class CodeLabApprovalPanel extends StatelessWidget {
         ],
         if (rawInput case final rawInput?) ...[
           const SizedBox(height: 12),
-          _RawInputDisclosure(rawInput: rawInput),
+          CodeLabTextDisclosure(label: 'View raw input', text: rawInput),
         ],
         const SizedBox(height: 12),
         CodeLabApprovalOptionGroup(
@@ -201,56 +201,6 @@ class _ApprovalDetailLine extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// A minimal collapsed-by-default disclosure for the tool call's raw input.
-///
-/// Not `fluent_ui`'s `Expander`: that widget reads `PageStorage.of(context)`
-/// in `initState`, which throws outside a `Navigator` ancestor — a real
-/// crash surfaced by running this panel in the widget-preview environment
-/// and in `codelab_previews_test.dart`, both of which render organisms bare
-/// (no `FluentApp`/`Navigator`), matching every other preview in this file.
-class _RawInputDisclosure extends StatefulWidget {
-  const _RawInputDisclosure({required this.rawInput});
-
-  final String rawInput;
-
-  @override
-  State<_RawInputDisclosure> createState() => _RawInputDisclosureState();
-}
-
-class _RawInputDisclosureState extends State<_RawInputDisclosure> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Button(
-          onPressed: () => setState(() => _expanded = !_expanded),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _expanded ? FluentIcons.chevron_up : FluentIcons.chevron_down,
-                size: 10,
-              ),
-              const SizedBox(width: 6),
-              const CodeLabText(
-                'View raw input',
-                role: CodeLabTextRole.caption,
-              ),
-            ],
-          ),
-        ),
-        if (_expanded) ...[
-          const SizedBox(height: 6),
-          CodeLabText(widget.rawInput, role: CodeLabTextRole.caption),
-        ],
-      ],
     );
   }
 }

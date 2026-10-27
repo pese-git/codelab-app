@@ -22,6 +22,9 @@ void main() {
     await tester.pumpWidget(codelabConnectionStatusRowPreview());
     expect(tester.takeException(), isNull);
 
+    await tester.pumpWidget(codelabConnectionBannerPreview());
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(codelabApprovalOptionGroupPreview());
     expect(tester.takeException(), isNull);
   });
@@ -29,6 +32,9 @@ void main() {
   testWidgets('organism previews render in bounded preview surfaces', (
     tester,
   ) async {
+    await tester.pumpWidget(codelabTranscriptPanelFailedTurnPreview());
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(codelabTranscriptPanelPreview());
     expect(tester.takeException(), isNull);
 
