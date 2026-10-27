@@ -23,8 +23,13 @@ class CodeLabApprovalPanel extends StatelessWidget {
     this.shortcutsEnabled = true,
     this.bordered = true,
     this.optionsLayout = CodeLabApprovalOptionsLayout.list,
+    this.statusLabel,
     super.key,
   });
+
+  /// Тег состояния рядом с риском — «Awaiting approval» в строке вызова
+  /// ленты (change `redesign-transcript-rows`, D5); `null` — без тега.
+  final String? statusLabel;
 
   /// Omit when a host (e.g. a transcript entry) already renders an
   /// equivalent title for the tool call this approval belongs to — showing
@@ -74,6 +79,11 @@ class CodeLabApprovalPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
+            ],
+            if (title == null) const Spacer(),
+            if (statusLabel case final status?) ...[
+              CodeLabBadge(label: status, tone: CodeLabTone.accent),
+              const SizedBox(width: 6),
             ],
             CodeLabBadge(label: _riskLabel, tone: _riskTone),
           ],
@@ -144,6 +154,8 @@ class CodeLabApprovalPanel extends StatelessWidget {
   }
 }
 
+/// Подробности запроса: команда — в терминальном блоке, `cwd` и сводка
+/// правки — подписями под ним (артборд Main, карточка «Run a command?»).
 class _ApprovalDetails extends StatelessWidget {
   const _ApprovalDetails({this.command, this.cwd, this.diffSummary});
 
@@ -153,54 +165,39 @@ class _ApprovalDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.grey.withAlpha(22),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (command != null)
-              _ApprovalDetailLine(label: 'Command', value: command!),
-            if (cwd != null) _ApprovalDetailLine(label: 'CWD', value: cwd!),
-            if (diffSummary != null)
-              _ApprovalDetailLine(label: 'Diff', value: diffSummary!),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ApprovalDetailLine extends StatelessWidget {
-  const _ApprovalDetailLine({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 74,
-            child: CodeLabText(label, role: CodeLabTextRole.caption),
-          ),
-          Expanded(
-            child: CodeLabText(
-              value,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+    final command = this.command;
+    final cwd = this.cwd;
+    final diffSummary = this.diffSummary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (command != null)
+          DecoratedBox(
+            key: const ValueKey('approval-command'),
+            // Терминальный блок тёмный в обеих темах, как в макете: команда
+            // читается как то, что выполнится в оболочке.
+            decoration: BoxDecoration(
+              color: const Color(0xFF1F2328),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: CodeLabText(
+                '\$ $command',
+                role: CodeLabTextRole.mono,
+                color: const Color(0xFFE6EDF3),
+              ),
             ),
           ),
+        if (cwd != null) ...[
+          const SizedBox(height: 4),
+          CodeLabText(cwd, role: CodeLabTextRole.caption),
         ],
-      ),
+        if (diffSummary != null) ...[
+          const SizedBox(height: 4),
+          CodeLabText(diffSummary, role: CodeLabTextRole.caption),
+        ],
+      ],
     );
   }
 }

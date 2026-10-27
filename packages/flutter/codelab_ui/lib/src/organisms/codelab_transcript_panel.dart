@@ -4,143 +4,33 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
-import 'codelab_approval_panel.dart';
+import 'codelab_tool_call_tile.dart';
+import 'codelab_transcript_notice.dart';
+import 'codelab_transcript_row.dart';
 
-enum CodeLabTranscriptEntryKind { user, agent, toolCall, approval, diagnostic }
+/// Наибольшая ширина колонки переписки (артборд Main; требование
+/// «Transcript reads as a conversation»).
+const kTranscriptColumnMaxWidth = 760.0;
 
-/// Approval state carried by a [CodeLabTranscriptEntry] for the tool call it
-/// belongs to — rendered inline in the entry's own row, not as a separate
-/// panel outside the transcript.
-sealed class CodeLabTranscriptApproval {
-  const CodeLabTranscriptApproval();
+/// Пузырь пользователя — доля ширины колонки; в узкой колонке шире, чтобы
+/// многострочный промпт не превращался в столбик слов (design, Risks).
+const _bubbleWidthFactor = 0.78;
+const _narrowBubbleWidthFactor = 0.9;
+const _narrowColumnWidth = 560.0;
 
-  const factory CodeLabTranscriptApproval.pending({
-    required CodeLabApprovalRisk risk,
-    required List<CodeLabApprovalOption> options,
-    required CodeLabApprovalOptionSelected onOptionSelected,
-    String? reason,
-    String? command,
-    String? cwd,
-    String? diffSummary,
-    String? rawInput,
-    String? selectedOptionId,
-    bool enabled,
-    String? approveOptionId,
-    String? rejectOptionId,
-    bool shortcutsEnabled,
-  }) = CodeLabTranscriptApprovalPending;
-
-  const factory CodeLabTranscriptApproval.resolved({
-    required String label,
-    CodeLabApprovalOutcome outcome,
-  }) = CodeLabTranscriptApprovalResolved;
-}
-
-/// Исход решённого одобрения, по которому выбирается отметка в записи вызова.
-///
-/// Почему: раньше решённое одобрение всегда получало зелёную галочку, и
-/// отменённый запрос выглядел как «✓ Cancelled».
-///
-/// Для чего: отметка различает разрешённый, отклонённый и отменённый вызов;
-/// [unknown] — исход без известного вида варианта, показывается нейтрально.
-///
-/// Как использовать: app переводит в него исход из модели клиентского ядра и
-/// передаёт в [CodeLabTranscriptApproval.resolved].
-enum CodeLabApprovalOutcome { allowed, rejected, cancelled, unknown }
-
-final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
-  const CodeLabTranscriptApprovalPending({
-    required this.risk,
-    required this.options,
-    required this.onOptionSelected,
-    this.reason,
-    this.command,
-    this.cwd,
-    this.diffSummary,
-    this.rawInput,
-    this.selectedOptionId,
-    this.enabled = true,
-    this.approveOptionId,
-    this.rejectOptionId,
-    this.shortcutsEnabled = true,
-  });
-
-  final CodeLabApprovalRisk risk;
-  final List<CodeLabApprovalOption> options;
-  final CodeLabApprovalOptionSelected onOptionSelected;
-  final String? reason;
-  final String? command;
-  final String? cwd;
-  final String? diffSummary;
-  final String? rawInput;
-  final String? selectedOptionId;
-  final bool enabled;
-  final String? approveOptionId;
-  final String? rejectOptionId;
-  final bool shortcutsEnabled;
-}
-
-final class CodeLabTranscriptApprovalResolved
-    extends CodeLabTranscriptApproval {
-  const CodeLabTranscriptApprovalResolved({
-    required this.label,
-    this.outcome = CodeLabApprovalOutcome.unknown,
-  });
-
-  final String label;
-  final CodeLabApprovalOutcome outcome;
-}
-
-/// Действие под записью ленты — например, Retry у заметки о сбое хода.
-///
-/// Почему: заметка о сбое должна давать повторить ход в один клик (design D4
-/// change `add-connection-and-error-states`), а лента не знает, что значит
-/// действие. Для чего: подпись и обработчик, которые строит хост. Как
-/// использовать: передать в [CodeLabTranscriptEntry.action]; `null` у
-/// [onPressed] рисует кнопку недоступной.
-class CodeLabTranscriptEntryAction {
-  const CodeLabTranscriptEntryAction({
-    required this.label,
-    required this.onPressed,
-    this.icon,
-  });
-
-  final String label;
-  final IconData? icon;
-  final VoidCallback? onPressed;
-}
-
-class CodeLabTranscriptEntry {
-  const CodeLabTranscriptEntry({
-    required this.id,
-    required this.kind,
-    required this.title,
-    this.body,
-    this.details,
-    this.action,
-    this.toolCall,
-    this.timestampLabel,
-    this.approval,
-  });
-
-  final String id;
-  final CodeLabTranscriptEntryKind kind;
-  final String title;
-  final String? body;
-
-  /// Технический текст под свёрнутой раскрывашкой Details — например, сырой
-  /// текст ошибки хода (design D3 change `add-connection-and-error-states`).
-  final String? details;
-
-  /// Кнопка под записью; см. [CodeLabTranscriptEntryAction].
-  final CodeLabTranscriptEntryAction? action;
-  final CodeLabToolCallSummary? toolCall;
-  final String? timestampLabel;
-
-  /// Non-null only for a [CodeLabTranscriptEntryKind.toolCall] entry that has an
-  /// associated `ApprovalRequest` — pending (interactive) or resolved
-  /// (compact marker).
-  final CodeLabTranscriptApproval? approval;
+/// Раскрыта ли строка, если пользователь её не трогал (design D3 change
+/// `redesign-transcript-rows`): мысли раскрыты во время стрима, кроме
+/// `summary`; вызовы — только в `verbose`.
+bool _expandedByDefault(CodeLabTranscriptRow row, CodeLabViewMode viewMode) {
+  return switch (row) {
+    CodeLabThoughtRow(:final streaming) => switch (viewMode) {
+      CodeLabViewMode.summary => false,
+      CodeLabViewMode.normal => streaming,
+      CodeLabViewMode.verbose => true,
+    },
+    CodeLabToolCallRow() => viewMode == CodeLabViewMode.verbose,
+    _ => false,
+  };
 }
 
 /// Насколько близко к низу (в пикселях) лента считается «у хвоста».
@@ -151,15 +41,36 @@ class CodeLabTranscriptEntry {
 /// «Лента transcript следует за хвостом»).
 const _autoScrollBottomThreshold = 80.0;
 
+/// Лента переписки с агентом.
+///
+/// Почему: лента должна читаться как переписка — колонка по центру, пузырь
+/// пользователя, ответ без карточки, свои виджеты для мыслей, вызовов и
+/// заметок (change `redesign-transcript-rows`; §12.3.2).
+///
+/// Для чего: рисует [rows], следует за хвостом и прокручивается к новому
+/// ожидающему одобрению. Ручное раскрытие строк хранит владелец
+/// ([expansionOverrides]): строки виртуализированы, и `State` строки теряет
+/// выбор при уходе с экрана (design D3).
+///
+/// Как использовать: хост передаёт строки и [onExpansionChanged]; без него
+/// строки раскрываются только по умолчанию. Ожидающее одобрение всегда
+/// раскрыто.
 class CodeLabTranscriptPanel extends StatefulWidget {
   const CodeLabTranscriptPanel({
-    required this.entries,
+    required this.rows,
+    this.expansionOverrides = const {},
+    this.onExpansionChanged,
     this.emptyLabel = 'No transcript yet',
     this.viewMode = CodeLabViewMode.normal,
     super.key,
   });
 
-  final List<CodeLabTranscriptEntry> entries;
+  /// Ключ строки ленты по её id — для тестов и автоматизации.
+  static ValueKey<String> rowKey(String id) => ValueKey('transcript-row-$id');
+
+  final List<CodeLabTranscriptRow> rows;
+  final Map<String, bool> expansionOverrides;
+  final ValueChanged<({String rowId, bool expanded})>? onExpansionChanged;
   final String emptyLabel;
   final CodeLabViewMode viewMode;
 
@@ -203,7 +114,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
     // Панель может появиться сразу с pending approval в первых записях (хост
     // обычно подставляет ленту, только когда записи уже есть) — предыдущей
     // сборки, с которой сравнил бы `didUpdateWidget`, нет.
-    if (_pendingApprovalEntryIds(widget.entries).isNotEmpty) {
+    if (_pendingApprovalEntryIds(widget.rows).isNotEmpty) {
       _bringApprovalIntoView();
     }
   }
@@ -223,13 +134,13 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
     // «читал историю» (D1).
     final wasAtTail = !_isReadingHistory && (_isFollowingTail || _isNearBottom);
 
-    final pendingApprovalIds = _pendingApprovalEntryIds(widget.entries);
+    final pendingApprovalIds = _pendingApprovalEntryIds(widget.rows);
     if (pendingApprovalIds.isEmpty) {
       _isKeepingApprovalInView = false;
     }
 
     final newPendingApprovalIds = pendingApprovalIds.difference(
-      _pendingApprovalEntryIds(oldWidget.entries),
+      _pendingApprovalEntryIds(oldWidget.rows),
     );
     if (newPendingApprovalIds.isNotEmpty && !_isReadingHistory) {
       // Анимация к approval важнее прыжка в этом кадре: `jumpTo` оборвал бы
@@ -238,7 +149,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
       return;
     }
 
-    if (wasAtTail && !identical(widget.entries, oldWidget.entries)) {
+    if (wasAtTail && !identical(widget.rows, oldWidget.rows)) {
       _jumpToTail();
     }
   }
@@ -319,261 +230,147 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
     });
   }
 
+  bool _isExpanded(CodeLabTranscriptRow row) {
+    if (row is CodeLabToolCallRow && row.awaitsApproval) {
+      return true;
+    }
+    return widget.expansionOverrides[row.id] ??
+        _expandedByDefault(row, widget.viewMode);
+  }
+
+  void _toggle(String rowId, bool expanded) =>
+      widget.onExpansionChanged?.call((rowId: rowId, expanded: expanded));
+
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: FluentTheme.of(context).scaffoldBackgroundColor,
-        border: Border.all(color: Colors.grey.withAlpha(54)),
-        borderRadius: BorderRadius.circular(6),
+    if (widget.rows.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: CodeLabText(widget.emptyLabel, role: CodeLabTextRole.caption),
+        ),
+      );
+    }
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: _onScrollMetricsNotification,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        child: ListView.builder(
+          controller: _controller,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          itemCount: widget.rows.length,
+          itemBuilder: (context, index) {
+            final row = widget.rows[index];
+            return Align(
+              key: CodeLabTranscriptPanel.rowKey(row.id),
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: kTranscriptColumnMaxWidth,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _TranscriptRowView(
+                    row: row,
+                    expanded: _isExpanded(row),
+                    onToggle: (expanded) => _toggle(row.id, expanded),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       ),
-      child: widget.entries.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: CodeLabText(
-                  widget.emptyLabel,
-                  role: CodeLabTextRole.caption,
-                ),
-              ),
-            )
-          : NotificationListener<ScrollMetricsNotification>(
-              onNotification: _onScrollMetricsNotification,
-              child: NotificationListener<ScrollNotification>(
-                onNotification: _onScrollNotification,
-                child: ListView.separated(
-                  controller: _controller,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: widget.entries.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    return _AcpTranscriptEntryRow(
-                      entry: widget.entries[index],
-                      viewMode: widget.viewMode,
-                    );
-                  },
-                ),
-              ),
-            ),
     );
   }
 }
 
-Set<String> _pendingApprovalEntryIds(List<CodeLabTranscriptEntry> entries) {
+Set<String> _pendingApprovalEntryIds(List<CodeLabTranscriptRow> rows) {
   return {
-    for (final entry in entries)
-      if (entry.approval is CodeLabTranscriptApprovalPending) entry.id,
+    for (final row in rows)
+      if (row is CodeLabToolCallRow && row.awaitsApproval) row.id,
   };
 }
 
-class _AcpTranscriptEntryRow extends StatelessWidget {
-  const _AcpTranscriptEntryRow({required this.entry, required this.viewMode});
+/// Одна строка ленты: выбирает виджет по виду строки.
+class _TranscriptRowView extends StatelessWidget {
+  const _TranscriptRowView({
+    required this.row,
+    required this.expanded,
+    required this.onToggle,
+  });
 
-  final CodeLabTranscriptEntry entry;
-  final CodeLabViewMode viewMode;
+  final CodeLabTranscriptRow row;
+  final bool expanded;
+  final ValueChanged<bool> onToggle;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: _backgroundColor(context),
-        borderRadius: BorderRadius.circular(6),
+    return switch (row) {
+      CodeLabUserRow(:final text) => _UserBubble(text: text),
+      CodeLabAgentTextRow(:final text) => Align(
+        alignment: Alignment.centerLeft,
+        child: CodeLabText(text),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CodeLabIcon(_icon, tone: _tone, size: 16),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: CodeLabText(
-                          entry.title,
-                          role: CodeLabTextRole.strong,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (entry.timestampLabel != null) ...[
-                        const SizedBox(width: 8),
-                        CodeLabText(
-                          entry.timestampLabel!,
-                          role: CodeLabTextRole.caption,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (entry.body != null) ...[
-                    const SizedBox(height: 6),
-                    if (entry.kind == CodeLabTranscriptEntryKind.toolCall)
-                      CodeLabText(
-                        entry.body!,
-                        maxLines: _bodyMaxLines,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    else
-                      CodeLabText(entry.body!),
-                  ],
-                  if (entry.details case final details?) ...[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: CodeLabTextDisclosure(
-                        label: 'Details',
-                        text: details,
-                      ),
-                    ),
-                  ],
-                  if (entry.action case final action?) ...[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: CodeLabButton(
-                        label: action.label,
-                        icon: action.icon,
-                        onPressed: action.onPressed,
-                      ),
-                    ),
-                  ],
-                  if (entry.toolCall != null) ...[
-                    const SizedBox(height: 8),
-                    _toolCallForMode(entry.toolCall!),
-                  ],
-                  if (entry.approval case final approval?) ...[
-                    const SizedBox(height: 8),
-                    _AcpTranscriptApprovalContent(approval: approval),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
+      CodeLabThoughtRow(:final text, :final streaming) => CodeLabThoughtBlock(
+        text: text,
+        streaming: streaming,
+        expanded: expanded,
+        onToggle: onToggle,
       ),
-    );
-  }
-
-  Color _backgroundColor(BuildContext context) {
-    return switch (entry.kind) {
-      CodeLabTranscriptEntryKind.user => Colors.blue.withAlpha(24),
-      CodeLabTranscriptEntryKind.agent => Colors.grey.withAlpha(24),
-      CodeLabTranscriptEntryKind.toolCall =>
-        Colors.warningPrimaryColor.withAlpha(24),
-      CodeLabTranscriptEntryKind.approval => Colors.orange.withAlpha(24),
-      CodeLabTranscriptEntryKind.diagnostic => Colors.red.withAlpha(20),
+      final CodeLabToolCallRow call => CodeLabToolCallTile(
+        row: call,
+        expanded: expanded,
+        onToggle: onToggle,
+      ),
+      final CodeLabNoticeRow notice => CodeLabTranscriptNotice(row: notice),
     };
-  }
-
-  IconData get _icon {
-    return switch (entry.kind) {
-      CodeLabTranscriptEntryKind.user => FluentIcons.contact,
-      CodeLabTranscriptEntryKind.agent => FluentIcons.robot,
-      CodeLabTranscriptEntryKind.toolCall => FluentIcons.processing,
-      CodeLabTranscriptEntryKind.approval => FluentIcons.permissions,
-      CodeLabTranscriptEntryKind.diagnostic => FluentIcons.warning,
-    };
-  }
-
-  CodeLabTone get _tone {
-    return switch (entry.kind) {
-      CodeLabTranscriptEntryKind.user => CodeLabTone.accent,
-      CodeLabTranscriptEntryKind.agent => CodeLabTone.neutral,
-      CodeLabTranscriptEntryKind.toolCall => CodeLabTone.warning,
-      CodeLabTranscriptEntryKind.approval => CodeLabTone.warning,
-      CodeLabTranscriptEntryKind.diagnostic => CodeLabTone.danger,
-    };
-  }
-
-  int get _bodyMaxLines {
-    return switch (viewMode) {
-      CodeLabViewMode.summary => 1,
-      CodeLabViewMode.normal => 4,
-      CodeLabViewMode.verbose => 8,
-    };
-  }
-
-  Widget _toolCallForMode(CodeLabToolCallSummary toolCall) {
-    return CodeLabToolCallSummary(
-      name: toolCall.name,
-      status: toolCall.status,
-      target: toolCall.target,
-      detail: toolCall.detail,
-      viewMode: viewMode,
-    );
   }
 }
 
-class _AcpTranscriptApprovalContent extends StatelessWidget {
-  const _AcpTranscriptApprovalContent({required this.approval});
+/// Сообщение пользователя — пузырь справа без подписи «You» (артборд Main).
+class _UserBubble extends StatelessWidget {
+  const _UserBubble({required this.text});
 
-  final CodeLabTranscriptApproval approval;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return switch (approval) {
-      CodeLabTranscriptApprovalPending(
-        :final risk,
-        :final reason,
-        :final command,
-        :final cwd,
-        :final diffSummary,
-        :final rawInput,
-        :final options,
-        :final selectedOptionId,
-        :final enabled,
-        :final approveOptionId,
-        :final rejectOptionId,
-        :final shortcutsEnabled,
-        :final onOptionSelected,
-      ) =>
-        CodeLabApprovalPanel(
-          bordered: false,
-          optionsLayout: CodeLabApprovalOptionsLayout.compactRow,
-          risk: risk,
-          reason: reason,
-          command: command,
-          cwd: cwd,
-          diffSummary: diffSummary,
-          rawInput: rawInput,
-          options: options,
-          selectedOptionId: selectedOptionId,
-          enabled: enabled,
-          approveOptionId: approveOptionId,
-          rejectOptionId: rejectOptionId,
-          shortcutsEnabled: shortcutsEnabled,
-          onOptionSelected: onOptionSelected,
-        ),
-      CodeLabTranscriptApprovalResolved(:final label, :final outcome) => Row(
-        children: [
-          CodeLabIcon(
-            switch (outcome) {
-              CodeLabApprovalOutcome.allowed => FluentIcons.check_mark,
-              CodeLabApprovalOutcome.rejected => FluentIcons.blocked2,
-              CodeLabApprovalOutcome.cancelled => FluentIcons.cancel,
-              CodeLabApprovalOutcome.unknown => FluentIcons.info,
-            },
-            // Тоны — как у статуса вызова в `CodeLabToolCallSummary`:
-            // отмена — warning, отказ — danger.
-            tone: switch (outcome) {
-              CodeLabApprovalOutcome.allowed => CodeLabTone.success,
-              CodeLabApprovalOutcome.rejected => CodeLabTone.danger,
-              CodeLabApprovalOutcome.cancelled => CodeLabTone.warning,
-              CodeLabApprovalOutcome.unknown => CodeLabTone.neutral,
-            },
-            size: 13,
+    final theme = FluentTheme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final factor = constraints.maxWidth < _narrowColumnWidth
+            ? _narrowBubbleWidthFactor
+            : _bubbleWidthFactor;
+        return Align(
+          alignment: Alignment.centerRight,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: constraints.maxWidth * factor,
+            ),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: theme.accentColor.withAlpha(
+                  theme.brightness == Brightness.dark ? 64 : 34,
+                ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                  bottomLeft: Radius.circular(8),
+                  bottomRight: Radius.circular(2),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                child: CodeLabText(text),
+              ),
+            ),
           ),
-          const SizedBox(width: 6),
-          CodeLabText(label, role: CodeLabTextRole.caption),
-        ],
-      ),
-    };
+        );
+      },
+    );
   }
 }

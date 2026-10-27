@@ -1,6 +1,11 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
-enum CodeLabTextRole { title, subtitle, body, strong, caption }
+/// Роль текста в типографике Fluent.
+///
+/// [mono] — моноширинный текст команд, путей и вывода инструментов: в ленте
+/// они должны читаться как код, а не как проза (change
+/// `redesign-transcript-rows`, D5).
+enum CodeLabTextRole { title, subtitle, body, strong, caption, mono }
 
 class CodeLabText extends StatelessWidget {
   const CodeLabText(
@@ -41,5 +46,21 @@ TextStyle? _styleForRole(Typography typography, CodeLabTextRole role) {
     CodeLabTextRole.body => typography.body,
     CodeLabTextRole.strong => typography.bodyStrong,
     CodeLabTextRole.caption => typography.caption,
+    CodeLabTextRole.mono => typography.body?.copyWith(
+      fontFamily: 'Menlo',
+      fontFamilyFallback: _monoFallback,
+      fontSize: 12.5,
+    ),
   };
 }
+
+/// Запасные моноширинные шрифты: на Windows нет Menlo, на Linux — ни Menlo,
+/// ни Consolas.
+const _monoFallback = [
+  'SF Mono',
+  'Consolas',
+  'Cascadia Mono',
+  'DejaVu Sans Mono',
+  'Courier New',
+  'monospace',
+];

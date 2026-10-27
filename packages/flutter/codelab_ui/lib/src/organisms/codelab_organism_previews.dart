@@ -13,46 +13,83 @@ import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
 import 'codelab_tool_dock.dart';
 import 'codelab_transcript_panel.dart';
+import 'codelab_transcript_row.dart';
 import 'codelab_workbench_layout.dart';
 
 const codelabOrganismPreviewGroup = 'ACP organisms';
 
 @Preview(
-  name: 'Transcript panel normal',
+  name: 'Transcript panel conversation',
   group: codelabOrganismPreviewGroup,
-  size: Size(620, 360),
+  size: Size(820, 460),
 )
 Widget codelabTranscriptPanelPreview() {
   return const _AcpOrganismPreviewSurface(
     child: SizedBox(
-      width: 620,
-      height: 360,
+      width: 820,
+      height: 460,
       child: CodeLabTranscriptPanel(
-        entries: [
-          CodeLabTranscriptEntry(
+        rows: [
+          CodeLabUserRow(
             id: 'user-1',
-            kind: CodeLabTranscriptEntryKind.user,
-            title: 'You',
-            body: 'Run analyzer and summarize any failures.',
-            timestampLabel: '12:04',
+            text: 'Run analyzer and summarize any failures.',
           ),
-          CodeLabTranscriptEntry(
+          CodeLabThoughtRow(
+            id: 'thought-1',
+            text:
+                'The analyzer runs per package; start with codelab_ui and '
+                'report only errors.',
+          ),
+          CodeLabAgentTextRow(
             id: 'agent-1',
-            kind: CodeLabTranscriptEntryKind.agent,
-            title: 'Codelab Agent',
-            body: 'I will inspect the workspace checks.',
-            timestampLabel: '12:04',
+            text: 'I will inspect the workspace checks first.',
           ),
-          CodeLabTranscriptEntry(
+          CodeLabToolCallRow(
             id: 'tool-1',
-            kind: CodeLabTranscriptEntryKind.toolCall,
-            title: 'Tool call',
-            toolCall: CodeLabToolCallSummary(
-              name: 'shell',
-              target: 'fvm dart analyze',
-              status: CodeLabToolCallStatus.running,
-              detail: 'packages/flutter/codelab_ui',
-            ),
+            status: CodeLabToolCallStatus.succeeded,
+            label: 'Read',
+            detail: 'lib/src/organisms/codelab_transcript_panel.dart',
+            output: ['import \'package:fluent_ui/fluent_ui.dart\';'],
+          ),
+          CodeLabToolCallRow(
+            id: 'tool-2',
+            status: CodeLabToolCallStatus.running,
+            label: 'Run',
+            detail: 'fvm dart analyze packages/flutter/codelab_ui',
+          ),
+          CodeLabNoticeRow(
+            id: 'notice-1',
+            severity: CodeLabNoticeSeverity.info,
+            body:
+                'The agent cannot restore sessions; a new session was '
+                'started.',
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Transcript panel thinking',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 300),
+)
+Widget codelabTranscriptPanelThinkingPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      height: 300,
+      child: CodeLabTranscriptPanel(
+        rows: [
+          CodeLabUserRow(id: 'user-1', text: 'Why is the build slow?'),
+          CodeLabThoughtRow(
+            id: 'thought-1',
+            streaming: true,
+            text:
+                'The build runs build_runner for every package.\n'
+                'Only three packages have generated files.\n'
+                'Check melos.yaml for the bootstrap hook.',
           ),
         ],
       ),
@@ -71,61 +108,21 @@ Widget codelabTranscriptPanelFailedTurnPreview() {
       width: 620,
       height: 300,
       child: CodeLabTranscriptPanel(
-        entries: [
-          const CodeLabTranscriptEntry(
+        rows: [
+          const CodeLabUserRow(
             id: 'user-1',
-            kind: CodeLabTranscriptEntryKind.user,
-            title: 'You',
-            body: 'Run analyzer and summarize any failures.',
+            text: 'Run analyzer and summarize any failures.',
           ),
-          CodeLabTranscriptEntry(
+          CodeLabNoticeRow(
             id: 'prompt-error-1',
-            kind: CodeLabTranscriptEntryKind.diagnostic,
+            severity: CodeLabNoticeSeverity.error,
             title: 'The model provider is unavailable',
             body: '503 Service Unavailable',
             details: 'ACP request session/prompt failed: Turn failed',
-            action: CodeLabTranscriptEntryAction(
+            action: CodeLabTranscriptAction(
               label: 'Retry',
               icon: FluentIcons.refresh,
               onPressed: () {},
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-@Preview(
-  name: 'Transcript panel summary',
-  group: codelabOrganismPreviewGroup,
-  size: Size(440, 320),
-)
-Widget codelabTranscriptPanelSummaryPreview() {
-  return const _AcpOrganismPreviewSurface(
-    child: SizedBox(
-      width: 440,
-      height: 320,
-      child: CodeLabTranscriptPanel(
-        viewMode: CodeLabViewMode.summary,
-        entries: [
-          CodeLabTranscriptEntry(
-            id: 'agent-summary-1',
-            kind: CodeLabTranscriptEntryKind.agent,
-            title: 'Codelab Agent',
-            body:
-                'Analyzed protocol package and found one formatter-only diff.',
-            timestampLabel: '12:04',
-          ),
-          CodeLabTranscriptEntry(
-            id: 'tool-summary-1',
-            kind: CodeLabTranscriptEntryKind.toolCall,
-            title: 'Tool call',
-            toolCall: CodeLabToolCallSummary(
-              name: 'shell',
-              target: 'fvm dart analyze',
-              status: CodeLabToolCallStatus.succeeded,
-              detail: 'cwd packages/flutter/codelab_ui',
             ),
           ),
         ],
@@ -146,27 +143,20 @@ Widget codelabTranscriptPanelVerbosePreview() {
       height: 420,
       child: CodeLabTranscriptPanel(
         viewMode: CodeLabViewMode.verbose,
-        entries: [
-          CodeLabTranscriptEntry(
+        rows: [
+          CodeLabAgentTextRow(
             id: 'agent-verbose-1',
-            kind: CodeLabTranscriptEntryKind.agent,
-            title: 'Codelab Agent',
-            body:
+            text:
                 'Analyzed protocol package, checked generated DTO boundaries, '
                 'and kept the current session state unchanged while reporting '
                 'the formatter-only diff.',
-            timestampLabel: '12:04',
           ),
-          CodeLabTranscriptEntry(
+          CodeLabToolCallRow(
             id: 'tool-verbose-1',
-            kind: CodeLabTranscriptEntryKind.toolCall,
-            title: 'Tool call',
-            toolCall: CodeLabToolCallSummary(
-              name: 'shell',
-              target: 'fvm dart run melos run analyze',
-              status: CodeLabToolCallStatus.succeeded,
-              detail: 'cwd packages/flutter/codelab_ui',
-            ),
+            status: CodeLabToolCallStatus.failed,
+            label: 'Read',
+            detail: 'lib/main.dart',
+            secondary: 'File not found: lib/main.dart',
           ),
         ],
       ),
@@ -177,37 +167,32 @@ Widget codelabTranscriptPanelVerbosePreview() {
 @Preview(
   name: 'Transcript panel with embedded approval',
   group: codelabOrganismPreviewGroup,
-  size: Size(620, 520),
+  size: Size(820, 460),
 )
 Widget codelabTranscriptPanelEmbeddedApprovalPreview() {
   return _AcpOrganismPreviewSurface(
     child: SizedBox(
-      width: 620,
-      height: 520,
+      width: 820,
+      height: 460,
       child: CodeLabTranscriptPanel(
-        entries: [
-          const CodeLabTranscriptEntry(
+        rows: [
+          const CodeLabToolCallRow(
             id: 'tool-resolved-1',
-            kind: CodeLabTranscriptEntryKind.toolCall,
-            title: 'Edit file — jest.config.js',
-            toolCall: CodeLabToolCallSummary(
-              name: 'edit',
-              status: CodeLabToolCallStatus.succeeded,
-            ),
+            status: CodeLabToolCallStatus.succeeded,
+            label: 'Edit',
+            detail: 'jest.config.js',
             approval: CodeLabTranscriptApproval.resolved(
-              label: 'Allowed once',
+              label: 'Allow once',
               outcome: CodeLabApprovalOutcome.allowed,
             ),
           ),
-          CodeLabTranscriptEntry(
+          CodeLabToolCallRow(
             id: 'tool-pending-1',
-            kind: CodeLabTranscriptEntryKind.toolCall,
-            title: 'Run command',
-            toolCall: const CodeLabToolCallSummary(
-              name: 'execute',
-              status: CodeLabToolCallStatus.queued,
-            ),
+            status: CodeLabToolCallStatus.queued,
+            label: 'Run',
+            detail: 'npm test --coverage',
             approval: CodeLabTranscriptApproval.pending(
+              title: 'Run a command?',
               risk: CodeLabApprovalRisk.shell,
               reason: 'Agent wants to execute a build script.',
               command: 'npm test --coverage',
@@ -221,8 +206,14 @@ Widget codelabTranscriptPanelEmbeddedApprovalPreview() {
                   tone: CodeLabTone.success,
                 ),
                 CodeLabApprovalOption(
+                  id: 'allow_always',
+                  label: 'Always allow npm test',
+                  kind: CodeLabApprovalOptionKind.allowAlways,
+                  tone: CodeLabTone.success,
+                ),
+                CodeLabApprovalOption(
                   id: 'reject_once',
-                  label: 'Reject once',
+                  label: 'Reject',
                   kind: CodeLabApprovalOptionKind.rejectOnce,
                   tone: CodeLabTone.danger,
                 ),
@@ -491,28 +482,37 @@ class _AcpOrganismPreviewSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.ltr,
-      child: FluentTheme(
-        data: FluentThemeData(),
-        child: Builder(
-          builder: (context) {
-            // Подсказки (`Tooltip`) сайдбара и app bar требуют `Overlay`, а
-            // превью рендерятся без `FluentApp`.
-            return Overlay(
-              initialEntries: [
-                OverlayEntry(
-                  builder: (context) => ColoredBox(
-                    color: FluentTheme.of(context).scaffoldBackgroundColor,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: child,
+    // `InfoBar` заметок ленты читает `FluentLocalizations`; превью
+    // рендерятся без `FluentApp`, поэтому локализации подключаются здесь.
+    return Localizations(
+      locale: const Locale('en'),
+      delegates: const [
+        FluentLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
+      ],
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: FluentTheme(
+          data: FluentThemeData(),
+          child: Builder(
+            builder: (context) {
+              // Подсказки (`Tooltip`) сайдбара и app bar требуют `Overlay`, а
+              // превью рендерятся без `FluentApp`.
+              return Overlay(
+                initialEntries: [
+                  OverlayEntry(
+                    builder: (context) => ColoredBox(
+                      color: FluentTheme.of(context).scaffoldBackgroundColor,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: child,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -597,18 +597,14 @@ class _AcpPreviewWorkbench extends StatelessWidget {
           SizedBox(height: 8),
           Expanded(
             child: CodeLabTranscriptPanel(
-              entries: [
-                CodeLabTranscriptEntry(
+              rows: [
+                CodeLabUserRow(
                   id: 'user-1',
-                  kind: CodeLabTranscriptEntryKind.user,
-                  title: 'You',
-                  body: 'Create a desktop layout shell for the workbench.',
+                  text: 'Create a desktop layout shell for the workbench.',
                 ),
-                CodeLabTranscriptEntry(
+                CodeLabAgentTextRow(
                   id: 'agent-1',
-                  kind: CodeLabTranscriptEntryKind.agent,
-                  title: 'Codelab Agent',
-                  body: 'I will keep it slot-based for future app wiring.',
+                  text: 'I will keep it slot-based for future app wiring.',
                 ),
               ],
             ),
