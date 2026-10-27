@@ -1,0 +1,40 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "long task"
+          }
+        },
+        "delayMs": 4000,
+        "reply": [
+          {
+            "text": "echo: long task"
+          }
+        ],
+        "stopReason": "stop"
+      },
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "after reconnect"
+          }
+        },
+        "reply": [
+          {
+            "text": "echo: after reconnect"
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  }
+}

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
@@ -104,6 +106,66 @@ final class E2eAgent {
     }
   }
 
+  /// Запускает `codelab-agent serve --ws` со сценарием
+  /// `integration_test/llm_scripts/[script].json` и журналом сессий в
+  /// `[tempDir]/agent-sessions`; только режим `dart`.
+  ///
+  /// Почему тест запускает агента сам: по WebSocket app не порождает процесс,
+  /// а подключается к уже слушающему серверу. Reconnect меняет только
+  /// соединение, процесс агента остаётся прежним, поэтому отмену хода при
+  /// обрыве решает сам агент (`detachGrace` ноль, change
+  /// `cancel-turn-on-ws-disconnect`), а не смерть процесса, как у stdio.
+  ///
+  /// Как использовать: адрес [E2eWebSocketAgent.endpoint] и
+  /// [E2eWebSocketAgent.token] вводятся в поля `transport-field-Endpoint` и
+  /// `transport-field-Token`; процесс останавливается в `addTearDown` через
+  /// [E2eWebSocketAgent.stop].
+  Future<E2eWebSocketAgent> startWebSocketAgent(
+    Directory tempDir, {
+    required String script,
+  }) async {
+    if (kind != E2eAgentKind.dart) {
+      throw StateError('a WebSocket agent needs CODELAB_E2E_AGENT=dart');
+    }
+    const bin = String.fromEnvironment('CODELAB_E2E_AGENT_BIN');
+    const token = 'e2e-ws-token';
+    final process = await Process.start(
+      File(bin).absolute.path,
+      [
+        'serve',
+        '--ws',
+        '--port',
+        '0',
+        '--llm-script',
+        File('integration_test/llm_scripts/$script.json').absolute.path,
+        '--sessions-dir',
+        '${tempDir.absolute.path}/agent-sessions',
+      ],
+      environment: {'CODELAB_AGENT_TOKEN': token},
+    );
+    unawaited(process.stdout.drain<void>());
+    // Порт `--port 0` известен только из строки лога `serve.ws.listening`.
+    final port = Completer<int>();
+    final stderr = StringBuffer();
+    process.stderr.transform(utf8.decoder).listen((chunk) {
+      stderr.write(chunk);
+      final match = RegExp(
+        r'serve\.ws\.listening .*port: (\d+)',
+      ).firstMatch(stderr.toString());
+      if (match != null && !port.isCompleted) {
+        port.complete(int.parse(match.group(1)!));
+      }
+    });
+    final listening = await port.future.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () {
+        process.kill();
+        throw StateError('codelab-agent --ws did not listen: $stderr');
+      },
+    );
+    return E2eWebSocketAgent._(process, listening, token);
+  }
+
   /// Флаги бинаря по таблице контракта: режим разрешений даёт тот же
   /// видимый результат, что у scripted-агента (вопрос на `exec`, запись без
   /// вопроса и так далее).
@@ -201,4 +263,33 @@ final class E2eLaunch {
         sessionLabel.matches(widget.data ?? widget.textSpan?.toPlainText(), {}),
     description: 'session label',
   );
+}
+
+/// Процесс `codelab-agent serve --ws`, запущенный тестом
+/// ([E2eAgent.startWebSocketAgent]).
+final class E2eWebSocketAgent {
+  E2eWebSocketAgent._(this._process, this.port, this.token);
+
+  final Process _process;
+
+  /// Порт, который сервер выбрал для `--port 0`.
+  final int port;
+
+  /// Bearer-токен сервера: поле `transport-field-Token`.
+  final String token;
+
+  /// Поле `transport-field-Endpoint`.
+  String get endpoint => 'ws://127.0.0.1:$port/acp';
+
+  /// SIGTERM и ожидание выхода, чтобы процесс не пережил тест.
+  Future<void> stop() async {
+    _process.kill();
+    await _process.exitCode.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        _process.kill(ProcessSignal.sigkill);
+        return _process.exitCode;
+      },
+    );
+  }
 }
