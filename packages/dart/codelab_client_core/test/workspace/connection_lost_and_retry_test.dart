@@ -182,4 +182,70 @@ void main() {
       expect(handle.current.canRetry, isFalse);
     });
   });
+
+  // Очередь не уходит в оборванное соединение: промпты остаются в ней до
+  // переподключения (fix регрессии change `add-connection-and-error-states`;
+  // артборд States, «Detached session»: «queued prompts kept, not sent»).
+  group('queue on connection loss', () {
+    const withLoad = AgentCapabilities(loadSession: true);
+
+    /// Сессия с идущим ходом `long task` и двумя промптами в очереди.
+    Future<(SessionHandle, Future<PromptOutcome>)> busyWithQueue() async {
+      agent = KitAgent(capabilities: withLoad);
+      await agent.start();
+      final handle = await agent.newSession('s-1');
+      final turn = await agent.prompt(handle, 'long task');
+      expect(await handle.send('first queued'), isA<PromptQueued>());
+      expect(await handle.send('second queued'), isA<PromptQueued>());
+      return (handle, turn.done);
+    }
+
+    List<String> queued(SessionHandle handle) => [
+      for (final item in handle.current.queue) item.text,
+    ];
+
+    test('a lost connection keeps the queue instead of sending it', () async {
+      final (handle, done) = await busyWithQueue();
+      final outcomes = <PromptOutcome>[];
+      final subscription = agent.workspace.promptOutcomes.listen(outcomes.add);
+      addTearDown(subscription.cancel);
+
+      dropTransport();
+      await done;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(queued(handle), ['first queued', 'second queued']);
+      expect(outcomes, hasLength(1));
+    });
+
+    test('send now on a lost connection keeps the item', () async {
+      final (handle, done) = await busyWithQueue();
+      dropTransport();
+      await done;
+
+      await handle.queue.sendNow(handle.current.queue.first.id);
+
+      expect(queued(handle), ['first queued', 'second queued']);
+    });
+
+    test('the kept queue drains after reconnecting and reloading the '
+        'session', () async {
+      final (handle, done) = await busyWithQueue();
+      dropTransport();
+      await done;
+
+      agent.restartAgent(capabilities: withLoad);
+      final load = agent.next(sessionLoadMethod);
+      final prompt = agent.next(sessionPromptMethod);
+      final reconnecting = agent.workspace.reconnect();
+      agent.respond(await load, const <String, Object?>{});
+      await reconnecting;
+
+      final sent = await prompt;
+      expect(PromptRequest.fromJson(sent.params).prompt, const [
+        ContentBlock.text(text: 'first queued'),
+      ]);
+      expect(queued(handle), ['second queued']);
+    });
+  });
 }
