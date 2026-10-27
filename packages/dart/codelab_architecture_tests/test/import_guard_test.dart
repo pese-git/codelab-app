@@ -157,4 +157,68 @@ void main() {
       endsWith('lib/src/stores.dart:3 -> package:flutter/foundation.dart'),
     );
   });
+  test('reports Flutter and the agent core in the terminal client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'src', 'run.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'dart:io';\n"
+        "import 'package:codelab_acp_transports/io.dart';\n"
+        "import 'package:codelab_agent_core/codelab_agent_core.dart';\n"
+        "import 'package:flutter/foundation.dart';\n",
+      );
+    final rule = rules.firstWhere((r) => r.dir == 'apps/codelab_cli');
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    // CLI — composition root: dart:io и IO-транспорты ему разрешены, ядро
+    // агента и Flutter — нет (design.md change `add-codelab-cli`, D3).
+    expect(violations, hasLength(2));
+    expect(
+      violations.first,
+      endsWith(
+        'lib/src/run.dart:3 -> package:codelab_agent_core/codelab_agent_core.dart',
+      ),
+    );
+  });
+
+  test('allows the testing package only in the scenario driver of the '
+      'terminal client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_testing_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import =
+        "import 'package:codelab_acp_testing/codelab_acp_testing.dart';\n";
+    File(p.join(tmp.path, 'lib', 'src', 'repl', 'repl.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(import);
+    File(p.join(tmp.path, 'lib', 'src', 'scenario', 'driver.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(import);
+    final rule = rules.firstWhere((r) => r.dir == 'apps/codelab_cli/lib/src');
+
+    final violations = scan(
+      tmp.path,
+      PackageRule(
+        'lib/src',
+        forbidden: rule.forbidden,
+        exclude: rule.exclude,
+        sealExclude: rule.sealExclude,
+      ),
+    );
+
+    // `test-scenario` — рабочая команда бинаря, поэтому тестовый пакет ему
+    // разрешён, но только драйверу фикстур (design.md change
+    // `add-codelab-cli`, D3).
+    expect(
+      violations.single,
+      endsWith(
+        'lib/src/repl/repl.dart:1 -> '
+        'package:codelab_acp_testing/codelab_acp_testing.dart',
+      ),
+    );
+  });
 }
