@@ -11,6 +11,13 @@ enum CodeLabSessionStatus {
   completed,
   failed,
   cancelled,
+
+  /// Сессия есть у агента (`session/list`), но в этом запуске не открыта;
+  /// выбор строки загружает её (change `add-session-list-and-reload`, D7).
+  notLoaded,
+
+  /// Сессия была открыта, но после переподключения агент её не знает.
+  detached,
 }
 
 class CodeLabSessionListItem {
@@ -35,6 +42,7 @@ class CodeLabSessionSidebar extends StatelessWidget {
     required this.onSessionSelected,
     this.activeSessionId,
     this.onNewSession,
+    this.onLoadMore,
     this.emptyLabel = 'No sessions yet',
     super.key,
   });
@@ -43,6 +51,11 @@ class CodeLabSessionSidebar extends StatelessWidget {
   final String? activeSessionId;
   final CodeLabSessionSelected onSessionSelected;
   final VoidCallback? onNewSession;
+
+  /// Подгрузка следующей страницы сессий агента; `null` — страниц больше
+  /// нет, кнопка `Load more sessions` скрыта. Есть ли страница, решает
+  /// вызывающий, а не виджет (design D7 change `add-session-list-and-reload`).
+  final VoidCallback? onLoadMore;
   final String emptyLabel;
 
   @override
@@ -86,10 +99,17 @@ class CodeLabSessionSidebar extends StatelessWidget {
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                    itemCount: sessions.length,
+                    itemCount: sessions.length + (onLoadMore == null ? 0 : 1),
                     separatorBuilder: (context, index) =>
                         const SizedBox(height: 6),
                     itemBuilder: (context, index) {
+                      if (index == sessions.length) {
+                        return CodeLabButton(
+                          key: const ValueKey('sessions-load-more'),
+                          label: 'Load more sessions',
+                          onPressed: onLoadMore,
+                        );
+                      }
                       final session = sessions[index];
                       return _AcpSessionTile(
                         session: session,
@@ -195,6 +215,8 @@ class _AcpSessionTile extends StatelessWidget {
       CodeLabSessionStatus.completed => 'Done',
       CodeLabSessionStatus.failed => 'Failed',
       CodeLabSessionStatus.cancelled => 'Cancelled',
+      CodeLabSessionStatus.notLoaded => 'Not loaded',
+      CodeLabSessionStatus.detached => 'Detached',
     };
   }
 
@@ -206,6 +228,8 @@ class _AcpSessionTile extends StatelessWidget {
       CodeLabSessionStatus.completed => CodeLabTone.success,
       CodeLabSessionStatus.failed => CodeLabTone.danger,
       CodeLabSessionStatus.cancelled => CodeLabTone.warning,
+      CodeLabSessionStatus.notLoaded => CodeLabTone.neutral,
+      CodeLabSessionStatus.detached => CodeLabTone.warning,
     };
   }
 
@@ -217,6 +241,8 @@ class _AcpSessionTile extends StatelessWidget {
       CodeLabSessionStatus.completed => FluentIcons.completed,
       CodeLabSessionStatus.failed => FluentIcons.error,
       CodeLabSessionStatus.cancelled => FluentIcons.cancel,
+      CodeLabSessionStatus.notLoaded => FluentIcons.history,
+      CodeLabSessionStatus.detached => FluentIcons.plug_disconnected,
     };
   }
 }

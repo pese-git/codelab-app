@@ -69,27 +69,27 @@
 
 ## 5. Сайдбар и интеграционный тест (5.10, итерация 5)
 
-- [ ] 5.1 Тесты `codelab_ui`: `CodeLabSessionSidebar` показывает статусы `notLoaded` и `detached`, а кнопку `sessions-load-more` — только при `onLoadMore` (D7).
-- [ ] 5.2 Тесты `ui_mappers_test.dart` и widget-тесты app:
+- [x] 5.1 Тесты `codelab_ui`: `CodeLabSessionSidebar` показывает статусы `notLoaded` и `detached`, а кнопку `sessions-load-more` — только при `onLoadMore` (D7).
+- [x] 5.2 Тесты `ui_mappers_test.dart` и widget-тесты app:
   - строки сайдбара из `WorkspaceState.sessions` в прежнем порядке для открытых сессий;
   - выбор `notLoaded` вызывает загрузку и активирует сессию;
   - ошибка загрузки не меняет активную сессию;
   - `NoticeItem` `detached`/`reconnected` — диагностическая запись ленты.
 
   Источник: agent-workbench-ui «Sessions sidebar lists the project's sessions from the agent», «Selecting a not-loaded session restores its transcript».
-- [ ] 5.3 `CodeLabSessionStatus.notLoaded`/`detached` и `onLoadMore` в `codelab_ui`; `SessionsCubit` на `WorkspaceState.sessions`; маппинг в `ui_mappers.dart` (D7) — 5.1 и 5.2 зелёные.
-- [ ] 5.4 Режим scripted-агента `withSessionList` в `codelab_acp_testing` (D8) с тестом пакета на Dart VM:
+- [x] 5.3 `CodeLabSessionStatus.notLoaded`/`detached` и `onLoadMore` в `codelab_ui`; `SessionsCubit` берёт неоткрытые сессии, `detached` и `hasMoreSessions` из `WorkspaceState`, а строки открытых — по-прежнему из `sessionChanges`; `sessionListItemOfSummary` в `ui_mappers.dart`; `CodeLabShellState.hasMoreSessions` и `CodeLabShellCubit.loadMoreSessions()` (D7) — 5.1 и 5.2 зелёные. В характеризационном `reconnect_test.dart` ожидание «лента пустая» после `reconnect()` сужено до «позднего текста в ленте нет»: агент без `loadSession` теперь оставляет уведомление `detached` (D5).
+- [x] 5.4 Режим scripted-агента `withSessionList` в `codelab_acp_testing` (D8) с тестом пакета на Dart VM:
   - `loadSession` и `list` в `initialize`;
   - страницы по 2 с курсором;
   - реплей на `session/load`;
   - сессии в файле переживают перезапуск процесса.
-- [ ] 5.5 `session_list_load_flow_test.dart` (очистка снимка перед тестами — 4.4) проверяет:
+- [x] 5.5 `session_list_load_flow_test.dart` (очистка снимка перед тестами — 4.4) проверяет:
   - список и выбор сессии;
   - `Reconnect` перезагружает активную сессию;
   - перезапуск корневого scope с теми же `SharedPreferences`.
 
-  Сценарий Dart-агента — `llm_scripts/session_list_load.json`. Источник: testing-quality «Интеграционный тест списка и загрузки сессий». Прогон в feature-ветке — `analyze`, на macOS — только в `release/*` (`AGENTS.md` §21). PR итерации 5.
-- [ ] 5.6 Ход, переживший переподключение. Dart-агент не отменяет идущий ход при закрытии WebSocket, а держит его `detachGrace` (30 с); при `session/load` с нового соединения он продолжает ход и шлёт его `session/update` уже после ответа на `session/load` (`codelab_agent_acp`, `SessionBridge.reattach`). В `session_list_load_flow_test.dart`, в режиме `dart`, проверить сценарий:
+  Тест помечен `scripted-only`: Dart-агент с `--llm-script` держит сессии в памяти и не объявляет `loadSession` (D8). Источник: testing-quality «Интеграционный тест списка и загрузки сессий». Прогон в feature-ветке — `analyze`, на macOS — только в `release/*` (`AGENTS.md` §21). PR итерации 5.
+- [ ] 5.6 Заблокировано: нужен агент с `loadSession` при `--llm-script` (D8). Ход, переживший переподключение. Dart-агент не отменяет идущий ход при закрытии WebSocket, а держит его `detachGrace` (30 с); при `session/load` с нового соединения он продолжает ход и шлёт его `session/update` уже после ответа на `session/load` (`codelab_agent_acp`, `SessionBridge.reattach`). В `session_list_load_flow_test.dart`, в режиме `dart`, проверить сценарий:
   - промпт с долгим ходом по WebSocket;
   - `Reconnect` во время хода;
   - после `session/load` обновления продолжения хода видны в ленте активной сессии;

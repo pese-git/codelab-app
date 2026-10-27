@@ -110,6 +110,34 @@ void main() {
     });
   });
 
+  test('an agent session that is not open is a not loaded row', () {
+    final row = sessionListItemOfSummary(
+      SessionSummaryView(
+        id: const SessionId('s-old'),
+        cwd: '/work',
+        status: SessionStatusView.notLoaded,
+        title: '  Fix tests  ',
+        updatedAt: DateTime(2026, 10, 26, 9, 5),
+      ),
+    );
+
+    expect(row.id, 's-old');
+    expect(row.title, 'Fix tests');
+    expect(row.status, CodeLabSessionStatus.notLoaded);
+    expect(row.subtitle, '/work');
+    expect(row.updatedLabel, 'Updated 2026-10-26 09:05');
+    expect(
+      sessionListItemOfSummary(
+        const SessionSummaryView(
+          id: SessionId('s-x'),
+          cwd: '/work',
+          status: SessionStatusView.notLoaded,
+        ),
+      ).title,
+      'Session s-x',
+    );
+  });
+
   group('transcriptEntriesOf', () {
     test('items get the positional ids, kinds and titles of the old '
         'transcript', () {

@@ -103,7 +103,13 @@ void main() {
 
     expect(states, isEmpty);
     expect(h.cubit.state, same(before));
-    expect(h.cubit.state.transcriptEntries, isEmpty);
+    // После `reconnect()` к агенту без `loadSession` в ленте остаётся только
+    // уведомление `detached` (design D5 change `add-session-list-and-reload`);
+    // позднего текста старого соединения в ней нет.
+    expect(
+      h.cubit.state.transcriptEntries.map((entry) => entry.body),
+      isNot(contains('late text from the old connection')),
+    );
   });
 
   test('one session/update produces one state', () async {

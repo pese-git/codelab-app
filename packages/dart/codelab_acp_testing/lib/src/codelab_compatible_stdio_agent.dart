@@ -15,7 +15,15 @@ enum CodelabCompatibleStdioAgentMode {
   withTerminalKill('with_terminal_kill'),
   withPlan('with_plan'),
   withQueuedPromptDrain('with_queued_prompt_drain'),
-  withConcurrentSessions('with_concurrent_sessions');
+  withConcurrentSessions('with_concurrent_sessions'),
+
+  /// Агент со списком и загрузкой сессий: объявляет `loadSession` и
+  /// `sessionCapabilities.list`, отдаёт `session/list` страницами по две
+  /// сессии с непрозрачным курсором и повторяет историю на `session/load`.
+  /// Сессии хранятся в файле `<скрипт>.sessions.json` рядом со скриптом и
+  /// переживают перезапуск процесса (design D8 change
+  /// `add-session-list-and-reload`).
+  withSessionList('with_session_list');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -75,6 +83,28 @@ String? _pendingSessionId;
 String? _sessionCwd;
 String? _fsReadContent;
 String? _terminalId;
+
+// Журнал сессий режима `with_session_list`: рядом со скриптом, чтобы новый
+// процесс агента знал сессии прежнего.
+File get _journalFile => File('${Platform.script.toFilePath()}.sessions.json');
+
+List<Map<String, Object?>> _readJournal() {
+  if (!_journalFile.existsSync()) {
+    return [];
+  }
+  return [
+    for (final session in jsonDecode(_journalFile.readAsStringSync()) as List)
+      (session as Map).cast<String, Object?>(),
+  ];
+}
+
+void _writeJournal(List<Map<String, Object?>> sessions) =>
+    _journalFile.writeAsStringSync(jsonEncode(sessions));
+
+Map<String, Object?>? _journalSession(
+  List<Map<String, Object?>> journal,
+  String sessionId,
+) => journal.where((session) => session['sessionId'] == sessionId).firstOrNull;
 
 String _createSessionId() {
   _sessionCounter += 1;
@@ -154,14 +184,16 @@ Future<void> main(List<String> args) async {
         _writeResponse(id, {
           'protocolVersion': 1,
           'agentCapabilities': {
-            'loadSession': false,
+            'loadSession': _mode == 'with_session_list',
             'mcpCapabilities': {'http': false, 'sse': false},
             'promptCapabilities': {
               'audio': false,
               'embeddedContext': false,
               'image': false,
             },
-            'sessionCapabilities': {},
+            'sessionCapabilities': {
+              if (_mode == 'with_session_list') 'list': <String, Object?>{},
+            },
           },
           'agentInfo': {
             'name': 'codelab-compatible-test-agent',
@@ -171,6 +203,18 @@ Future<void> main(List<String> args) async {
         });
       case 'session/new':
         final params = message['params'] as Map<String, Object?>;
+        if (_mode == 'with_session_list') {
+          final journal = _readJournal();
+          final sessionId = 'codelab-list-session-${journal.length + 1}';
+          journal.add({
+            'sessionId': sessionId,
+            'cwd': params['cwd'],
+            'turns': <Object?>[],
+          });
+          _writeJournal(journal);
+          _writeResponse(id, {'sessionId': sessionId});
+          break;
+        }
         final sessionId = _createSessionId();
         _sessionCwd = params['cwd'] as String?;
         _writeResponse(id, {
@@ -181,6 +225,31 @@ Future<void> main(List<String> args) async {
       case 'session/prompt':
         final promptParams = message['params'] as Map<String, Object?>;
         final sessionId = promptParams['sessionId'] as String;
+        if (_mode == 'with_session_list') {
+          final text =
+              ((promptParams['prompt'] as List).first as Map)['text'] as String;
+          final journal = _readJournal();
+          final session = _journalSession(journal, sessionId);
+          if (session == null) {
+            _writeError(id, -32002, 'Resource not found');
+            break;
+          }
+          session['title'] ??= text;
+          (session['turns'] as List).add({
+            'user': text,
+            'agent': 'echo: $text',
+          });
+          _writeJournal(journal);
+          _writeNotification('session/update', {
+            'sessionId': sessionId,
+            'update': {
+              'sessionUpdate': 'agent_message_chunk',
+              'content': {'type': 'text', 'text': 'echo: $text'},
+            },
+          });
+          _writeResponse(id, {'stopReason': 'end_turn'});
+          break;
+        }
         if (_mode == 'crash_mid_prompt') {
           // Simulate the agent process dying unexpectedly while a turn is
           // running — no response, no notification, just gone. `exit()`
@@ -424,6 +493,53 @@ Future<void> main(List<String> args) async {
         } else {
           _writeError(id, -32602, 'Unknown config option or value');
         }
+      case 'session/list' when _mode == 'with_session_list':
+        final params = message['params'] as Map<String, Object?>? ?? const {};
+        final cwd = params['cwd'] as String?;
+        // Курсор — смещение строкой; для клиента он непрозрачен.
+        final offset = int.parse(params['cursor'] as String? ?? '0');
+        final matching = [
+          for (final session in _readJournal().reversed)
+            if (cwd == null || session['cwd'] == cwd) session,
+        ];
+        final page = matching.skip(offset).take(2).toList();
+        _writeResponse(id, {
+          'sessions': [
+            for (final session in page)
+              {
+                'sessionId': session['sessionId'],
+                'cwd': session['cwd'],
+                if (session['title'] != null) 'title': session['title'],
+              },
+          ],
+          if (offset + page.length < matching.length)
+            'nextCursor': '${offset + page.length}',
+        });
+      case 'session/load' when _mode == 'with_session_list':
+        final params = message['params'] as Map<String, Object?>;
+        final sessionId = params['sessionId'] as String;
+        final session = _journalSession(_readJournal(), sessionId);
+        if (session == null) {
+          _writeError(id, -32002, 'Resource not found');
+          break;
+        }
+        // История повторяется до ответа (`03-Session Setup.md`, «Loading a
+        // Session»).
+        for (final turn in session['turns'] as List) {
+          for (final (kind, key) in [
+            ('user_message_chunk', 'user'),
+            ('agent_message_chunk', 'agent'),
+          ]) {
+            _writeNotification('session/update', {
+              'sessionId': sessionId,
+              'update': {
+                'sessionUpdate': kind,
+                'content': {'type': 'text', 'text': (turn as Map)[key]},
+              },
+            });
+          }
+        }
+        _writeResponse(id, <String, Object?>{});
       default:
         _writeError(id, -32601, 'Method not found');
     }

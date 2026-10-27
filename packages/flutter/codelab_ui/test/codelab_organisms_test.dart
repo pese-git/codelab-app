@@ -1083,6 +1083,70 @@ void main() {
     },
   );
 
+  testWidgets('shows not-loaded and detached sessions with their own badges '
+      '(add-session-list-and-reload, D7)', (tester) async {
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 320,
+          height: 420,
+          child: CodeLabSessionSidebar(
+            onSessionSelected: acpTestSessionSelected,
+            sessions: const [
+              CodeLabSessionListItem(
+                id: 'session-1',
+                title: 'Lost on reconnect',
+                status: CodeLabSessionStatus.detached,
+              ),
+              CodeLabSessionListItem(
+                id: 'session-2',
+                title: 'From the journal',
+                status: CodeLabSessionStatus.notLoaded,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Detached'), findsOneWidget);
+    expect(find.text('Not loaded'), findsOneWidget);
+  });
+
+  testWidgets('offers "Load more sessions" only with onLoadMore and calls '
+      'it', (tester) async {
+    Future<void> pumpSidebar(VoidCallback? onLoadMore) => tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 320,
+          height: 420,
+          child: CodeLabSessionSidebar(
+            onSessionSelected: acpTestSessionSelected,
+            onLoadMore: onLoadMore,
+            sessions: const [
+              CodeLabSessionListItem(
+                id: 'session-1',
+                title: 'First',
+                status: CodeLabSessionStatus.notLoaded,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await pumpSidebar(null);
+    expect(find.byKey(const ValueKey('sessions-load-more')), findsNothing);
+
+    var requested = 0;
+    await pumpSidebar(() => requested++);
+    await tester.tap(find.byKey(const ValueKey('sessions-load-more')));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Load more sessions'), findsOneWidget);
+    expect(requested, 1);
+  });
+
   testWidgets('shows recents, selects a recent project, and requests browse', (
     tester,
   ) async {
