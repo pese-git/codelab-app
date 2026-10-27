@@ -56,6 +56,30 @@ CodeLabSessionListItem sessionListItemOf(AcpSession session) {
   );
 }
 
+/// Строка сайдбара для сессии агента, ещё не открытой в этом запуске
+/// (`session/list` или снимок прошлого запуска; design D7 change
+/// `add-session-list-and-reload`): заголовок агента или `Session <id>`,
+/// подзаголовок — `cwd`, подпись — время последнего изменения.
+CodeLabSessionListItem sessionListItemOfSummary(SessionSummaryView summary) {
+  final title = summary.title?.trim();
+  final updated = summary.updatedAt?.toLocal();
+  return CodeLabSessionListItem(
+    id: summary.id.value,
+    title: title == null || title.isEmpty
+        ? 'Session ${summary.id.value}'
+        : title,
+    status: CodeLabSessionStatus.notLoaded,
+    subtitle: summary.cwd,
+    updatedLabel: updated == null ? null : 'Updated ${_minuteOf(updated)}',
+  );
+}
+
+String _minuteOf(DateTime time) {
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${time.year}-${two(time.month)}-${two(time.day)} '
+      '${two(time.hour)}:${two(time.minute)}';
+}
+
 CodeLabSessionStatus _sessionStatusOf(SessionLifecycleStatus status) =>
     switch (status) {
       SessionLifecycleStatus.idle ||
