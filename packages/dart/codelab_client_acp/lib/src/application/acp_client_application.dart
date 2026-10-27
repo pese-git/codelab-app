@@ -146,6 +146,20 @@ final class AcpClientApplication {
   /// убирает буфер при любом исходе запроса.
   final _sessionReplays = <SessionId, List<SessionUpdate>>{};
 
+  /// Сессии, чей ход прервала замена транспорта.
+  ///
+  /// Почему: обрыв соединения отменяет ход на стороне агента (у stdio
+  /// умирает процесс, у `codelab-agent serve --ws` `detachGrace` ноль), но
+  /// ACP об этом не сообщает: реплей `session/load` не передаёт
+  /// `stopReason`, и прерванный ход выглядел бы «завершённым неизвестно как»
+  /// (design D2 change `cancel-turn-on-ws-disconnect`).
+  ///
+  /// Для чего: [_replaceTransport] добавляет сессии с активным ходом;
+  /// успешный [loadSession] помечает последний ход реплея отменённым и
+  /// убирает id, [sendPrompt] — тоже убирает. Ошибка `session/load` отметку
+  /// сохраняет до следующей загрузки.
+  final _interruptedTurns = <SessionId>{};
+
   /// Bounded ring buffer — see `docs/architecture/observability.md` §28.
   /// Only bounds this in-memory list (used by the UI inspector); the full
   /// structured-logging output is unaffected, see `_logDiagnosticEntry`.
@@ -282,13 +296,43 @@ final class AcpClientApplication {
     );
     // Ответ приходит после реплея и описывает итоговое состояние сессии,
     // поэтому его режимы и опции главнее обновлений из реплея.
-    final session = replayed.copyWith(
+    final merged = replayed.copyWith(
       modes: response.modes ?? replayed.modes,
       configOptions: response.configOptions ?? replayed.configOptions,
     );
+    final session = _interruptedTurns.remove(command.sessionId)
+        ? _markInterruptedTurn(merged)
+        : merged;
 
     _storeSession(session);
     return session;
+  }
+
+  /// Последний ход реплея [session] — прерванный заменой транспорта ход:
+  /// агент пишет реплику в журнал в начале хода (`agent-core` §8). Ход
+  /// показывается отменённым, как его и закончил агент (D2 change
+  /// `cancel-turn-on-ws-disconnect`).
+  AcpSession _markInterruptedTurn(AcpSession session) {
+    final last = session.turns.lastOrNull;
+    if (last == null) {
+      return session;
+    }
+    _logger
+        .bind({logComponentKey: clientComponent})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: session.id.value,
+        )
+        .info('turn_interrupted', context: {'turn_id': last.id.value});
+    return session.copyWith(
+      turns: [
+        ...session.turns.take(session.turns.length - 1),
+        last.copyWith(
+          status: PromptTurnStatus.cancelled,
+          stopReason: StopReason.cancelled,
+        ),
+      ],
+    );
   }
 
   /// Страница сессий агента — `session/list` (`04-Session List.md`).
@@ -341,6 +385,9 @@ final class AcpClientApplication {
   Future<PromptTurn> sendPrompt(SendPromptCommand command) async {
     final generation = _generation;
     final session = _requireSession(command.sessionId);
+    // Новый ход: прежний прерванный уже не последний (D2 change
+    // `cancel-turn-on-ws-disconnect`).
+    _interruptedTurns.remove(command.sessionId);
     final turn = PromptTurn(
       id: PromptTurnId('turn-${_nextTurnId++}'),
       sessionId: command.sessionId,
@@ -594,6 +641,14 @@ final class AcpClientApplication {
     // continuation is scheduled while this method is still tearing down
     // the old transport.
     _generation++;
+    // Ход, шедший в момент замены, агент отменил вместе с соединением; ход
+    // остаётся `running` до `session/load`, который и покажет его
+    // отменённым (D2 change `cancel-turn-on-ws-disconnect`).
+    for (final session in _sessions.values) {
+      if (session.activeTurn != null) {
+        _interruptedTurns.add(session.id);
+      }
+    }
     await _inboundSubscription.cancel();
     await _eventSubscription.cancel();
     _failPendingRequests(

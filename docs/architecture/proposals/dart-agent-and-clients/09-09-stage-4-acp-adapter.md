@@ -43,6 +43,9 @@
 6. **4.6. Бинарь `apps/codelab_agent`:** `bin/codelab_agent.dart`, `apps/codelab_agent/lib/src/serve.dart`
    (`serve --stdio`, `serve --ws --host 127.0.0.1 --port 8765 --token-env CODELAB_AGENT_TOKEN`),
    профиль `agent-serve`; по stdio сервер получает `localListing: (cwd) => LocalExecutionEnv(cwd)`.
+   `detachGrace` бинаря — ноль для обоих транспортов: обрыв соединения отменяет ход, у WebSocket
+   ход без клиента не может исполнять `fs/*` и `terminal/*`; возобновление хода после
+   переподключения — после MVP (change `cancel-turn-on-ws-disconnect`).
    Логи — только в stderr или файл: stdout занят протоколом. **Минимальный конфиг до этапа 8**
    (файлы конфига не читаются, agent-core-architecture §15.6):
    * `--provider openai-compatible|anthropic`, `--base-url <url>`, `--model <model>` (можно

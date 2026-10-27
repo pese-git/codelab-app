@@ -178,8 +178,11 @@ final class AgentHost {
           title: 'CodeLab Agent',
           version: agentVersion,
         ),
-        // Отсоединение stdio — конец процесса, ждать некого (§13.10).
-        detachGrace: stdio ? Duration.zero : const Duration(seconds: 30),
+        // Отсоединение отменяет ход у обоих транспортов: у stdio это конец
+        // процесса, а у WebSocket ход без клиента не может исполнять `fs/*`
+        // и `terminal/*`. Возобновление хода после переподключения — после
+        // MVP (change `cancel-turn-on-ws-disconnect`, D1; §13.10).
+        detachGrace: Duration.zero,
         localListing: stdio ? (cwd) => LocalExecutionEnv(cwd: cwd) : null,
       ),
       logger: logger,
