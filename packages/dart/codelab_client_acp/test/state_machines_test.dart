@@ -553,6 +553,78 @@ void main() {
       expect(replayed.activeTurn, isNull);
     });
 
+    // Ход, переживший переподключение (change `add-resumed-turn-after-reload`,
+    // design D2).
+    test('resumeTurn reopens the last replayed turn as running', () {
+      const session = AcpSession(id: SessionId('session-1'), cwd: '/w');
+      var next = 0;
+      final replayed = SessionStateMachine.replayHistory(session, const [
+        SessionUpdate.userMessageChunk(content: ContentBlock.text(text: 'a')),
+        SessionUpdate.agentMessageChunk(content: ContentBlock.text(text: 'b')),
+        SessionUpdate.userMessageChunk(
+          content: ContentBlock.text(text: 'long task'),
+        ),
+      ], nextTurnId: () => PromptTurnId('replay-${next++}'));
+
+      final result = SessionStateMachine.resumeTurn(
+        replayed,
+        nextTurnId: () => fail('the last turn is reopened, not created'),
+      );
+
+      expect(result, isA<AppliedStateTransition<AcpSession>>());
+      final resumed = result.stateOrThrow;
+      expect(resumed.status, SessionLifecycleStatus.runningTurn);
+      expect(resumed.turns, hasLength(2));
+      expect(resumed.turns.first.status, PromptTurnStatus.completed);
+      final turn = resumed.activeTurn!;
+      expect(turn.id, const PromptTurnId('replay-1'));
+      expect(turn.status, PromptTurnStatus.running);
+      expect(turn.stopReason, isNull);
+      expect(turn.completedAt, isNull);
+      expect(turn.prompt, const [ContentBlock.text(text: 'long task')]);
+
+      final answered = SessionStateMachine.applyUpdate(
+        resumed,
+        const SessionUpdate.agentMessageChunk(
+          content: ContentBlock.text(text: 'echo: long task'),
+        ),
+      ).stateOrThrow;
+      expect(answered.activeTurn!.updates, hasLength(1));
+    });
+
+    test('resumeTurn opens a turn without a prompt when there is none', () {
+      const session = AcpSession(
+        id: SessionId('session-1'),
+        cwd: '/w',
+        status: SessionLifecycleStatus.active,
+      );
+
+      final resumed = SessionStateMachine.resumeTurn(
+        session,
+        nextTurnId: () => const PromptTurnId('turn-7'),
+      ).stateOrThrow;
+
+      expect(resumed.status, SessionLifecycleStatus.runningTurn);
+      expect(resumed.activeTurn?.id, const PromptTurnId('turn-7'));
+      expect(resumed.activeTurn?.prompt, isEmpty);
+      expect(resumed.activeTurn?.status, PromptTurnStatus.running);
+    });
+
+    test('resumeTurn rejects a session with an active turn', () {
+      final running = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      ).stateOrThrow;
+
+      expect(
+        SessionStateMachine.resumeTurn(
+          running,
+          nextTurnId: () => const PromptTurnId('unused'),
+        ),
+        isA<RejectedStateTransition<AcpSession>>(),
+      );
+    });
+
     test('moves session through active running awaitingApproval active', () {
       const idle = AcpSession(id: _sessionId, cwd: '/workspace');
       final active = SessionStateMachine.activate(idle);

@@ -202,7 +202,9 @@ void main() {
       expect(_transcript(tester), ['first task', 'echo: first task']);
     },
   );
-  // Задача 5.6: Dart-агент держит ход закрытого WebSocket `detachGrace` и
+  // Задача 5.6, перенесённая в change `add-resumed-turn-after-reload` (spec
+  // testing-quality «Интеграционный тест хода, пережившего переподключение»):
+  // Dart-агент держит ход закрытого WebSocket `detachGrace` и
   // продолжает его после `session/load` с нового соединения
   // (`SessionBridge.reattach`); продолжение приходит уже после ответа на
   // `session/load` и должно попасть в ленту как живой ход, а не как реплей.

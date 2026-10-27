@@ -113,8 +113,7 @@ final class E2eAgent {
   /// Почему тест запускает агента сам: по WebSocket app не порождает процесс,
   /// а подключается к уже слушающему серверу. Только так ход переживает
   /// Reconnect: процесс агента остаётся прежним, меняется лишь соединение
-  /// (`SessionBridge.reattach`, задача 5.6 change
-  /// `add-session-list-and-reload`).
+  /// (`SessionBridge.reattach`, change `add-resumed-turn-after-reload`).
   ///
   /// Как использовать: адрес [E2eWebSocketAgent.endpoint] и
   /// [E2eWebSocketAgent.token] вводятся в поля `transport-field-Endpoint` и

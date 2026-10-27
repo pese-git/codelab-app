@@ -37,8 +37,7 @@ void main() {
   ];
 
   /// Сценарии e2e вне таблицы режимов: агента запускает сам тест app
-  /// (`E2eAgent.startWebSocketAgent`, задача 5.6 change
-  /// `add-session-list-and-reload`).
+  /// (`E2eAgent.startWebSocketAgent`, change `add-resumed-turn-after-reload`).
   const ownScripts = ['reconnect_mid_turn'];
 
   test('every mode of the e2e contract has a scenario', () {
