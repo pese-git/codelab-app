@@ -29,6 +29,7 @@ final class ActiveSessionState {
     this.currentPlan,
     this.queuedPrompts = const [],
     this.composerDraft = '',
+    this.composerDraftRevision = 0,
     this.isPromptSubmitting = false,
     this.canCancel = false,
     this.isRespondingToApproval = false,
@@ -67,6 +68,10 @@ final class ActiveSessionState {
   /// применяет его только при изменении значения.
   final String composerDraft;
 
+  /// Растёт при каждой подстановке черновика: повторная вставка того же
+  /// текста тоже доходит до композера (`CodeLabPromptComposer.draftRevision`).
+  final int composerDraftRevision;
+
   /// Флаги совместимости из `SessionView.status` (design D4).
   final bool isPromptSubmitting;
   final bool canCancel;
@@ -89,6 +94,7 @@ final class ActiveSessionState {
     Object? currentPlan = _unset,
     List<CodeLabQueuedPrompt>? queuedPrompts,
     String? composerDraft,
+    int? composerDraftRevision,
     bool? isPromptSubmitting,
     bool? canCancel,
     bool? isRespondingToApproval,
@@ -106,6 +112,7 @@ final class ActiveSessionState {
         : currentPlan as List<CodeLabPlanEntry>?,
     queuedPrompts: queuedPrompts ?? this.queuedPrompts,
     composerDraft: composerDraft ?? this.composerDraft,
+    composerDraftRevision: composerDraftRevision ?? this.composerDraftRevision,
     isPromptSubmitting: isPromptSubmitting ?? this.isPromptSubmitting,
     canCancel: canCancel ?? this.canCancel,
     isRespondingToApproval:
@@ -272,6 +279,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       state._copyWith(
         queuedPrompts: _queueOf(sessionId!),
         composerDraft: prompt.text,
+        composerDraftRevision: state.composerDraftRevision + 1,
       ),
     );
   }
@@ -385,8 +393,12 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   void dismissPlan() => emit(state._copyWith(currentPlan: null));
 
   /// Кладёт [text] в композер (выбор команды агента в палитре).
-  void setComposerDraft(String text) =>
-      emit(state._copyWith(composerDraft: text));
+  void setComposerDraft(String text) => emit(
+    state._copyWith(
+      composerDraft: text,
+      composerDraftRevision: state.composerDraftRevision + 1,
+    ),
+  );
 
   @override
   Future<void> close() async {

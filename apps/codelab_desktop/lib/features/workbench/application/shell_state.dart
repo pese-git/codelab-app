@@ -46,6 +46,7 @@ final class CodeLabShellState {
     required this.agentCommands,
     required this.commandCatalog,
     required this.composerDraft,
+    this.composerDraftRevision = 0,
     required this.configOptions,
     required this.isRespondingToConfigOption,
     required this.sessionsPaneWidth,
@@ -95,6 +96,9 @@ final class CodeLabShellState {
   /// Текст для композера после выбора команды агента (`/{name} `) или
   /// возврата промпта из очереди.
   final String composerDraft;
+
+  /// Номер черновика для `CodeLabPromptComposer.draftRevision`.
+  final int composerDraftRevision;
   final List<CodeLabConfigOption> configOptions;
   final bool isRespondingToConfigOption;
 
@@ -156,6 +160,7 @@ final class CodeLabShellState {
     List<CodeLabCommandAction>? agentCommands,
     CommandCatalog? commandCatalog,
     String? composerDraft,
+    int? composerDraftRevision,
     List<CodeLabConfigOption>? configOptions,
     bool? isRespondingToConfigOption,
     double? sessionsPaneWidth,
@@ -198,6 +203,8 @@ final class CodeLabShellState {
       agentCommands: agentCommands ?? this.agentCommands,
       commandCatalog: commandCatalog ?? this.commandCatalog,
       composerDraft: composerDraft ?? this.composerDraft,
+      composerDraftRevision:
+          composerDraftRevision ?? this.composerDraftRevision,
       configOptions: configOptions ?? this.configOptions,
       isRespondingToConfigOption:
           isRespondingToConfigOption ?? this.isRespondingToConfigOption,

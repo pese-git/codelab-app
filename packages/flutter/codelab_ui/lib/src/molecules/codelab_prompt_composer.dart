@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../atomics/atomics.dart';
@@ -15,6 +16,7 @@ class CodeLabPromptComposer extends StatefulWidget {
     required this.onSubmit,
     this.onCancel,
     this.initialPrompt = '',
+    this.draftRevision = 0,
     this.placeholder = 'Message the agent',
     this.isSubmitting = false,
     this.canCancel = false,
@@ -36,6 +38,15 @@ class CodeLabPromptComposer extends StatefulWidget {
   final CodeLabPromptSubmitCallback onSubmit;
   final VoidCallback? onCancel;
   final String initialPrompt;
+
+  /// Номер черновика [initialPrompt]: новый номер подставляет черновик в
+  /// поле, даже если его текст не изменился.
+  ///
+  /// Почему: пользователь мог стереть или отправить вставленный `/compact `,
+  /// и повторный выбор той же команды дал бы тот же текст — без номера поле
+  /// осталось бы пустым (найдено e2e R-20, change
+  /// `add-command-palette-agent-commands`).
+  final int draftRevision;
   final String placeholder;
 
   /// Shows the Send button's loading spinner. Purely visual — it does not
@@ -113,8 +124,10 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
   @override
   void didUpdateWidget(CodeLabPromptComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialPrompt != widget.initialPrompt &&
-        widget.initialPrompt != _controller.text) {
+    final draftChanged =
+        oldWidget.initialPrompt != widget.initialPrompt ||
+        oldWidget.draftRevision != widget.draftRevision;
+    if (draftChanged && widget.initialPrompt != _controller.text) {
       _controller.text = widget.initialPrompt;
     }
   }
@@ -298,13 +311,24 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
     _syncPaletteOverlayVisibility();
   }
 
-  /// Shows/hides the inline palette's `OverlayPortal` to match
-  /// `_triggerStart`. Must only run from an event handler (text/selection
-  /// change, key press) — `OverlayPortalController.show()`/`hide()` assert
-  /// if called during `build()`. `hide()` additionally asserts if `show()`
-  /// was never called first, since nothing would be registered with the
-  /// ambient `Overlay` to hide yet.
+  /// Показывает или прячет `OverlayPortal` inline-палитры по `_triggerStart`.
+  ///
+  /// Почему: `OverlayPortalController.show()`/`hide()` нельзя вызывать во
+  /// время `build()`, а `hide()` — до первого `show()`: в `Overlay` ещё
+  /// нечего прятать. Обычно метод вызывают обработчики событий (текст, клавиши),
+  /// но черновик из `didUpdateWidget` меняет текст во время `build` — тогда
+  /// синхронизация переносится в конец кадра.
   void _syncPaletteOverlayVisibility() {
+    // D8 change `add-command-palette-agent-commands`.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _syncPaletteOverlayVisibility();
+        }
+      });
+      return;
+    }
     final showInlinePalette = _inlineTriggerEnabled && _triggerStart != null;
     if (showInlinePalette) {
       _paletteOverlayController.show();

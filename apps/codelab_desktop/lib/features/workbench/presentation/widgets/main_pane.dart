@@ -103,6 +103,7 @@ class WorkbenchMainPane extends StatelessWidget {
           isSubmitting: state.isPromptSubmitting,
           canCancel: state.canCancel,
           initialPrompt: state.composerDraft,
+          draftRevision: state.composerDraftRevision,
           onSubmit: cubit.submitPrompt,
           onCancel: cubit.cancelTurn,
           commandActions: state.paletteActions,

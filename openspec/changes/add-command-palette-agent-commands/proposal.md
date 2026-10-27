@@ -11,11 +11,12 @@ Change `extract-acp-client-kit` перенёс сюда (design D9) остато
 - Конфликт имён: недоступная команда клиента (`isAvailable: false`) скрывается, если агент объявил команду с тем же именем. Доступные команды клиента (`/new`, `/reconnect`, `/logs`) не скрываются, одноимённая команда агента показывается в своей секции.
 - Палитра app (`Ctrl/Cmd+K` и inline `/`) строит список и фильтрует по запросу через `CommandCatalog`. `CodeLabCommandPaletteSurface` получает функцию поиска от app вместо своего фильтра подстрокой.
 - Выбор команды агента не меняется: в композер вставляется `/{name} ` с подсказкой `input.hint` в placeholder, отправляет пользователь (решение владельца продукта; ACP поведение при выборе не задаёт, `14-Slash Commands.md`).
+- Клиент протокола: `session/update`, пришедший сразу за ответом на `session/new` (например, `available_commands_update`), применяется к новой сессии, а не теряется (найдено e2e R-20 на macOS, design D7).
 - Документы: в плане `09-10` (задача 5.6) формулировка «выбор `/compact` отправляет `session/prompt`» заменяется на «выбор вставляет, отправка отправляет»; эскиз API — `CommandCatalog` как значение, которое строит хост, без `ClientWorkspace.commands`; строка R-20 в `agent-parity-goals.md` получает доказательство.
 
 Не входит:
 - `SessionHandle.runCommand` из эскиза `09-10`: разбор введённой команды и выбор между клиентом и агентом нужен CLI (этап 6), app выполняет команды по выбору в палитре;
-- команды самого Dart-агента: `codelab-agent` объявляет пустой `availableCommands`, поэтому тест идёт только на scripted-агенте (тег `scripted-only`);
+- команды самого Dart-агента: `codelab-agent` объявляет пустой `availableCommands`, поэтому тест идёт только на scripted-агенте (в режиме `dart` — `skip`);
 - реализация `/plan`, `/permissions` и `/compact` как команд клиента.
 
 ## Capabilities
@@ -28,12 +29,14 @@ Change `extract-acp-client-kit` перенёс сюда (design D9) остато
 - `agent-workbench-ui`: «Командная палитра представляет команды, объявленные агентом» — команда агента вытесняет одноимённую недоступную команду клиента, отбор по запросу — нечёткий; «Командная палитра честно помечает нереализованные действия как недоступные» — заглушка скрывается, когда агент объявил команду с её именем.
 - `acp-client-kit`: новое требование «Каталог команд палитры».
 - `testing-quality`: новое требование «Интеграционный тест палитры с командами агента».
+- `acp-protocol-client`: новое требование «Обновления сразу после session/new».
 
 ## Impact
 
 - `packages/dart/codelab_client_core`: `lib/src/commands/command_catalog.dart`, экспорт из бареля, `test/commands/command_catalog_test.dart`.
 - `packages/flutter/codelab_ui`: `CodeLabCommandPaletteSurface` (параметр поиска), тесты организма.
 - `apps/codelab_desktop`: `ShellState.paletteActions`, `ui_mappers.dart`, `workbench_shell.dart`, `main_pane.dart`, тесты application; `integration_test/command_palette_flow_test.dart`; скрипт melos `test:e2e:app:command-palette`.
+- `packages/dart/codelab_client_acp`: `AcpClientApplication.createSession` и обработка `session/update`, `test/application/new_session_early_update_test.dart`.
 - `packages/dart/codelab_acp_testing`: режим `withAvailableCommands` и его тест на настоящем процессе.
 - Документы: `09-10-stage-5-client-kit.md`, `agent-parity-goals.md` (R-20), `AGENTS.md` пакета `codelab_client_core`.
 - ACP-контракт и зависимости не меняются.
