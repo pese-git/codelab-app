@@ -370,7 +370,13 @@ List<TranscriptItem> _notices(
   PromptTurn turn, {
   required bool hasAgentItems,
 }) => [
-  if (!hasAgentItems && turn.isTerminal)
+  // Сорвавшийся ход объясняет заметка `error` ниже; `emptyTurn` для него
+  // дал бы вторую строку «Completed with stopReason unknown» — у такого хода
+  // нет stopReason (spec `acp-client-kit`: `error` для сорвавшегося хода,
+  // `emptyTurn` — для завершённого без вывода агента).
+  if (!hasAgentItems &&
+      turn.isTerminal &&
+      turn.status != PromptTurnStatus.failed)
     TranscriptItem.notice(
       id: '${turn.id.value}/completed',
       kind: NoticeKind.emptyTurn,
@@ -438,7 +444,10 @@ ApprovalStateView? _approvalView(
     return null;
   }
   if (approval.status != ApprovalStatus.pending) {
-    return ApprovalStateView.resolved(label: _resolvedLabel(approval));
+    return ApprovalStateView.resolved(
+      label: _resolvedLabel(approval),
+      outcome: _resolvedOutcome(approval),
+    );
   }
   return ApprovalStateView.pending(
     approvalId: approval.id,
@@ -465,6 +474,24 @@ String _resolvedLabel(ApprovalRequest approval) {
     }
   }
   return selectedId.value;
+}
+
+ApprovalOutcomeView _resolvedOutcome(ApprovalRequest approval) {
+  if (approval.status == ApprovalStatus.cancelled) {
+    return ApprovalOutcomeView.cancelled;
+  }
+  final selectedId = approval.selectedOptionId;
+  for (final option in approval.options) {
+    if (option.optionId == selectedId) {
+      return switch (option.kind) {
+        PermissionOptionKind.allowOnce ||
+        PermissionOptionKind.allowAlways => ApprovalOutcomeView.allowed,
+        PermissionOptionKind.rejectOnce ||
+        PermissionOptionKind.rejectAlways => ApprovalOutcomeView.rejected,
+      };
+    }
+  }
+  return ApprovalOutcomeView.unknown;
 }
 
 /// `PromptTurn.failureMessage` — `error.toString()`, а исключения ядра

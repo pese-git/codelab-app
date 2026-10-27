@@ -55,7 +55,7 @@ void main() {
     await h.createSession('s-new');
 
     expect(rows(h), [
-      ('s-new', CodeLabSessionStatus.idle, 'Session s-new'),
+      ('s-new', CodeLabSessionStatus.idle, 'New session'),
       ('s-old', CodeLabSessionStatus.notLoaded, 'Fix tests'),
     ]);
     expect(h.cubit.state.hasMoreSessions, isTrue);

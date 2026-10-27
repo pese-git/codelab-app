@@ -173,8 +173,34 @@ void main() {
       expect(tools, hasLength(1));
       expect(
         tools.single.approval,
-        const ApprovalStateView.resolved(label: 'Allow once'),
+        const ApprovalStateView.resolved(
+          label: 'Allow once',
+          outcome: ApprovalOutcomeView.allowed,
+        ),
       );
+
+      await agent.end(turn);
+    });
+
+    test('a rejected permission resolves with the rejected outcome, so the '
+        'client does not mark it as allowed', () async {
+      final turn = await agent.prompt('go');
+      agent
+        ..update(_toolCall('call-1', 'Run tests'))
+        ..requestPermission(id: 1, toolCallId: 'call-1');
+
+      await agent.application.respondToPermission(
+        RespondToPermissionCommand.selected(
+          sessionId: agent.sessionId,
+          approvalId: const ApprovalRequestId('permission-1'),
+          optionId: const PermissionOptionId('reject-once'),
+        ),
+      );
+
+      final approval =
+          agent.items.whereType<ToolCallItem>().single.approval!
+              as ResolvedApprovalView;
+      expect(approval.outcome, ApprovalOutcomeView.rejected);
 
       await agent.end(turn);
     });
@@ -263,6 +289,21 @@ void main() {
       expect(notice.kind, NoticeKind.error);
       expect(notice.text, startsWith('Failed to send prompt: '));
       expect(notice.text, isNot(contains('Exception:')));
+    });
+
+    test('a failed prompt without agent output gets only the error notice, '
+        'not an emptyTurn one', () async {
+      final turn = await agent.prompt('go');
+      agent.transport.emitInbound(
+        JsonRpcMessage.response(
+          id: turn.request.id,
+          error: const JsonRpcError(code: -32603, message: 'agent crashed'),
+        ),
+      );
+      await turn.done.then<void>((_) {}, onError: (_) {});
+
+      final notices = agent.items.whereType<NoticeItem>().toList();
+      expect(notices.map((n) => n.kind), [NoticeKind.error]);
     });
 
     test('applying the same session again changes nothing', () async {

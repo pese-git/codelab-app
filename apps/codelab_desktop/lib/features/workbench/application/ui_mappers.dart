@@ -42,11 +42,23 @@ CodeLabConnectionStatus connectionStatusOf(ConnectionView connection) =>
       ConnectionFailed() => CodeLabConnectionStatus.failed,
     };
 
-/// Строка сайдбара: заголовок сессии или `Session <id>`, подзаголовок — `cwd`.
+/// Название сессии, у которой ещё нет ни заголовка, ни промпта.
+const untitledSessionTitle = 'New session';
+
+/// Предел длины названия из первого промпта: строка сайдбара однострочная.
+const _promptTitleMaxLength = 60;
+
+/// Строка сайдбара: заголовок сессии, подзаголовок — `cwd`.
+///
+/// Заголовок агент присылает в `session_info_update` только после первого
+/// хода, а некоторые агенты не присылают его вовсе. До этого название —
+/// начало первого промпта, а у сессии без промптов — [untitledSessionTitle];
+/// id сессии (ULID) пользователю ничего не говорит и в названии не
+/// показывается.
 CodeLabSessionListItem sessionListItemOf(AcpSession session) {
   final title = session.title?.trim().isNotEmpty == true
       ? session.title!.trim()
-      : 'Session ${session.id.value}';
+      : _firstPromptTitle(session) ?? untitledSessionTitle;
   return CodeLabSessionListItem(
     id: session.id.value,
     title: title,
@@ -54,6 +66,21 @@ CodeLabSessionListItem sessionListItemOf(AcpSession session) {
     subtitle: session.cwd,
     updatedLabel: 'Active',
   );
+}
+
+String? _firstPromptTitle(AcpSession session) {
+  for (final turn in session.turns) {
+    for (final block in turn.prompt) {
+      if (block case TextContent(:final text)) {
+        final line = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+        if (line.isEmpty) continue;
+        return line.length <= _promptTitleMaxLength
+            ? line
+            : '${line.substring(0, _promptTitleMaxLength).trimRight()}…';
+      }
+    }
+  }
+  return null;
 }
 
 /// Строка сайдбара для сессии агента, ещё не открытой в этом запуске
@@ -172,9 +199,16 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
   required ApprovalOptionChosen onSelected,
 }) => switch (approval) {
   null => null,
-  ResolvedApprovalView(:final label) => CodeLabTranscriptApproval.resolved(
-    label: label,
-  ),
+  ResolvedApprovalView(:final label, :final outcome) =>
+    CodeLabTranscriptApproval.resolved(
+      label: label,
+      outcome: switch (outcome) {
+        ApprovalOutcomeView.allowed => CodeLabApprovalOutcome.allowed,
+        ApprovalOutcomeView.rejected => CodeLabApprovalOutcome.rejected,
+        ApprovalOutcomeView.cancelled => CodeLabApprovalOutcome.cancelled,
+        ApprovalOutcomeView.unknown => CodeLabApprovalOutcome.unknown,
+      },
+    ),
   PendingApprovalView() => CodeLabTranscriptApproval.pending(
     risk: _approvalRiskOf(approval.risk),
     command: approval.command,

@@ -155,7 +155,10 @@ Widget codelabTranscriptPanelEmbeddedApprovalPreview() {
               name: 'edit',
               status: CodeLabToolCallStatus.succeeded,
             ),
-            approval: CodeLabTranscriptApproval.resolved(label: 'Allowed once'),
+            approval: CodeLabTranscriptApproval.resolved(
+              label: 'Allowed once',
+              outcome: CodeLabApprovalOutcome.allowed,
+            ),
           ),
           CodeLabTranscriptEntry(
             id: 'tool-pending-1',

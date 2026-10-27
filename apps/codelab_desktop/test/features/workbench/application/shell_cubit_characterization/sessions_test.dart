@@ -23,7 +23,7 @@ void main() {
     expect(request.params, containsPair('cwd', '/workspace'));
     expect(h.cubit.state.activeSessionId, 'session-1');
     expect(h.cubit.state.sessions.map((item) => item.id), ['session-1']);
-    expect(h.cubit.state.currentSessionLabel, 'Session session-1');
+    expect(h.cubit.state.currentSessionLabel, 'New session');
     expect(h.cubit.state.currentSessionDetail, '/workspace');
     expect(h.cubit.state.transcriptEntries, isEmpty);
     expect(h.cubit.state.isPromptSubmitting, isFalse);
