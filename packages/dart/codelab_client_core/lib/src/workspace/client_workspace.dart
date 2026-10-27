@@ -669,6 +669,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         }
       },
       onDiagnostic: _report,
+      isConnected: () => _current.connection is Connected,
     );
     _handles[session.id] = handle;
     _order.insert(0, session.id);
@@ -816,13 +817,15 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     required String Function() nextQueuedPromptId,
     required void Function(PromptOutcome outcome) onOutcome,
     required void Function(WorkspaceDiagnostic diagnostic) onDiagnostic,
+    required bool Function() isConnected,
   }) : id = session.id,
        cwd = session.cwd,
        _session = session,
        _backend = backend,
        _nextQueuedPromptId = nextQueuedPromptId,
        _onOutcome = onOutcome,
-       _onDiagnostic = onDiagnostic {
+       _onDiagnostic = onDiagnostic,
+       _isConnected = isConnected {
     _projector.apply(session);
     _current = _sessionFields(
       const SessionView(revision: 0, status: SessionStatusView.idle),
@@ -840,6 +843,15 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   final String Function() _nextQueuedPromptId;
   final void Function(PromptOutcome outcome) _onOutcome;
   final void Function(WorkspaceDiagnostic diagnostic) _onDiagnostic;
+
+  /// Установлено ли соединение рабочего пространства.
+  ///
+  /// Почему: ход, прерванный обрывом, завершается сбоем и освобождает
+  /// сессию; без этой проверки очередь сразу уходила бы в оборванное
+  /// соединение и срывалась, хотя должна дождаться переподключения
+  /// (артборд States, «Detached session»; fix к change
+  /// `add-connection-and-error-states`).
+  final bool Function() _isConnected;
   final _views = StreamController<SessionView>.broadcast(sync: true);
   final _projector = TranscriptProjector();
   late SessionView _current;
@@ -1057,7 +1069,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
 
   @override
   Future<PromptOutcome?> sendNow(String itemId) async {
-    if (_isBusy || _link != _Link.attached) {
+    if (!_canDrain) {
       return null;
     }
     final item = remove(itemId);
@@ -1101,8 +1113,13 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     return outcome;
   }
 
+  /// Можно ли отправлять из очереди: сессия свободна, связана с агентом,
+  /// и соединение установлено. После переподключения очередь сливает
+  /// `resume`, когда сессия загружена.
+  bool get _canDrain => !_isBusy && _link == _Link.attached && _isConnected();
+
   Future<void> _drainIfFree() async {
-    if (_isBusy || _link != _Link.attached || _current.queue.isEmpty) {
+    if (!_canDrain || _current.queue.isEmpty) {
       return;
     }
     final next = _current.queue.first;
