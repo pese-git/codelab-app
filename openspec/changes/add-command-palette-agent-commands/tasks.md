@@ -1,8 +1,8 @@
 ## 1. Тестовый агент и e2e R-20 (итерация 1)
 
-- [ ] 1.1 Красный тест режима `withAvailableCommands`: `packages/dart/codelab_acp_testing/test/available_commands_agent_test.dart` на настоящем процессе (как `session_list_agent_test.dart`): после `session/new` приходит `available_commands_update` с `compact` без `input` и `plan` с `input.hint` `what to plan`; промпт `/compact` получает `agent_message_chunk` `Compacted the conversation.` и `end_turn`; другой промпт — `echo: <text>` (D6).
-- [ ] 1.2 Красный e2e `apps/codelab_desktop/integration_test/command_palette_flow_test.dart`, тег `scripted-only`, шаги 1–5 D6; скрипт melos `test:e2e:app:command-palette`. Ожидаемо красный на шагах 1 (заглушка `/compact` видна) и 4 (нет нечёткого поиска). Источник: testing-quality «Интеграционный тест палитры с командами агента».
-- [ ] 1.3 Режим `withAvailableCommands` в `codelab_compatible_stdio_agent.dart` — 1.1 зелёный.
+- [x] 1.1 Красный тест режима `withAvailableCommands`: `packages/dart/codelab_acp_testing/test/available_commands_agent_test.dart` на настоящем процессе (как `session_list_agent_test.dart`): после `session/new` приходит `available_commands_update` с `compact` без `input` и `plan` с `input.hint` `what to plan`; промпт `/compact` получает `agent_message_chunk` `Compacted the conversation.` и `end_turn`; другой промпт — `echo: <text>` (D6).
+- [x] 1.2 Красный e2e `apps/codelab_desktop/integration_test/command_palette_flow_test.dart`, тег `scripted-only`, шаги 1–5 D6; скрипт melos `test:e2e:app:command-palette`. Ожидаемо красный на шагах 1 (заглушка `/compact` видна) и 4 (нет нечёткого поиска) до итерации 3; в feature-ветке — `flutter analyze integration_test`, прогон на macOS — по команде владельца (`AGENTS.md` §21). Источник: testing-quality «Интеграционный тест палитры с командами агента».
+- [x] 1.3 Режим `withAvailableCommands` в `codelab_compatible_stdio_agent.dart` — 1.1 зелёный.
 
 ## 2. `CommandCatalog` в kit (итерация 2)
 
