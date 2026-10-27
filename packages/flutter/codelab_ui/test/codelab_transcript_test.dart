@@ -28,16 +28,17 @@ Widget _panel(
   ),
 );
 
-CodeLabToolCallRow _pendingRow(String id) => CodeLabToolCallRow(
+CodeLabToolCallRow _pendingRow(
+  String id, {
+  String command = 'echo running tests',
+}) => CodeLabToolCallRow(
   id: id,
   status: CodeLabToolCallStatus.queued,
   label: 'Run',
-  detail: 'echo running tests',
+  detail: command,
   approval: CodeLabTranscriptApproval.pending(
-    title: 'Run a command?',
     risk: CodeLabApprovalRisk.shell,
-    command: 'echo running tests',
-    cwd: '/work/app',
+    command: command,
     options: const [
       CodeLabApprovalOption(
         id: 'allow',
@@ -354,24 +355,67 @@ void main() {
       expect(find.text('hi'), findsOneWidget);
     });
 
-    testWidgets('a command awaiting approval is expanded with its card', (
-      tester,
-    ) async {
+    testWidgets('a command awaiting approval: full command, risk tag and '
+        'the decision bar', (tester) async {
       await tester.pumpWidget(_panel([_pendingRow('tool-1')], width: 820));
 
-      expect(find.text('Awaiting approval'), findsOneWidget);
-      expect(find.text('Queued'), findsNothing);
-      expect(find.text('Run a command?'), findsOneWidget);
-      expect(find.text(r'$ echo running tests'), findsOneWidget);
-      expect(find.text('/work/app'), findsOneWidget);
-      expect(find.byType(FilledButton), findsOneWidget);
+      expect(find.text('Run echo running tests'), findsOneWidget);
       expect(
-        find.ancestor(
-          of: find.text('Allow once'),
-          matching: find.byType(FilledButton),
-        ),
+        tester
+            .widget<CodeLabBadge>(find.byKey(CodeLabToolCallTile.statusTagKey))
+            .label,
+        'Shell',
+      );
+      expect(find.text('Awaiting approval'), findsNothing);
+      expect(find.text('Queued'), findsNothing);
+      // Команда не повторяется под шапкой; внизу — полоса решения.
+      expect(find.textContaining('echo running tests'), findsOneWidget);
+      expect(find.byKey(CodeLabApprovalPrompt.allowKey), findsOneWidget);
+      expect(find.byKey(CodeLabApprovalPrompt.rejectKey), findsOneWidget);
+      expect(find.text('Only this time'), findsOneWidget);
+    });
+
+    testWidgets('a long command is never cut before the decision', (
+      tester,
+    ) async {
+      final command = List.generate(
+        12,
+        (i) => 'step_$i --flag value_$i',
+      ).join(' && ');
+      await tester.pumpWidget(
+        _panel([_pendingRow('tool-1', command: command)], width: 520),
+      );
+
+      final header = tester.widget<Text>(find.textContaining('step_0'));
+      expect(header.maxLines, CodeLabToolCallTile.pendingDetailLines);
+      expect(header.overflow, isNot(TextOverflow.ellipsis));
+      expect(
+        find.byKey(CodeLabToolCallTile.showFullCommandKey),
         findsOneWidget,
       );
+
+      await tester.tap(find.byKey(CodeLabToolCallTile.showFullCommandKey));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        tester.widget<Text>(find.textContaining('step_0')).maxLines,
+        isNull,
+      );
+      expect(find.text('Show less'), findsOneWidget);
+    });
+
+    testWidgets('a command without spaces stays inside the row', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel([_pendingRow('tool-1', command: 'x' * 400)], width: 520),
+      );
+
+      expect(tester.takeException(), isNull);
+      final row = tester.getRect(
+        find.byKey(CodeLabTranscriptPanel.rowKey('tool-1')),
+      );
+      final header = tester.getRect(find.byKey(CodeLabToolCallTile.headerKey));
+      expect(header.right, lessThanOrEqualTo(row.right));
     });
 
     testWidgets('a pending approval stays expanded against an override', (
@@ -385,7 +429,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Run a command?'), findsOneWidget);
+      expect(find.byKey(CodeLabApprovalPrompt.allowKey), findsOneWidget);
     });
 
     testWidgets('a decision leaves a tag toned by its outcome', (tester) async {
@@ -415,7 +459,7 @@ void main() {
 
       await pumpResolved(CodeLabApprovalOutcome.allowed);
       expect(tagTone(), CodeLabTone.success);
-      expect(find.text('Run a command?'), findsNothing);
+      expect(find.byKey(CodeLabApprovalPrompt.allowKey), findsNothing);
 
       await pumpResolved(CodeLabApprovalOutcome.cancelled);
       expect(tagTone(), CodeLabTone.warning);
@@ -544,7 +588,7 @@ void main() {
       expect(position(tester).maxScrollExtent, greaterThan(0));
       expect(position(tester).pixels, position(tester).maxScrollExtent);
       expect(
-        tester.getRect(find.text('Allow once')).bottom,
+        tester.getRect(find.byKey(CodeLabApprovalPrompt.allowKey)).bottom,
         lessThanOrEqualTo(tester.getRect(find.byType(Scrollable)).bottom),
       );
     });

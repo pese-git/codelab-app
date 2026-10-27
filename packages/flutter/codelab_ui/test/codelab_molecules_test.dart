@@ -1,7 +1,5 @@
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -781,59 +779,54 @@ void main() {
 
   // Подписи вариантов — свободный текст агента, поэтому кнопку находят по
   // ключу вида: подписи Dart-агента здесь намеренно не совпадают с видом.
-  for (final layout in CodeLabApprovalOptionsLayout.values) {
-    testWidgets('keys each option button by its kind ($layout)', (
-      tester,
-    ) async {
-      final selected = <String>[];
+  testWidgets('keys each option button by its kind', (tester) async {
+    final selected = <String>[];
 
-      await tester.pumpWidget(
-        FluentApp(
-          home: CodeLabApprovalOptionGroup(
-            layout: layout,
-            onSelected: selected.add,
-            options: const [
-              CodeLabApprovalOption(
-                id: 'a1',
-                label: 'Allow once',
-                kind: CodeLabApprovalOptionKind.allowOnce,
-              ),
-              CodeLabApprovalOption(
-                id: 'a2',
-                label: 'Always allow echo *',
-                kind: CodeLabApprovalOptionKind.allowAlways,
-              ),
-              CodeLabApprovalOption(
-                id: 'r1',
-                label: 'Reject',
-                kind: CodeLabApprovalOptionKind.rejectOnce,
-              ),
-              CodeLabApprovalOption(
-                id: 'r2',
-                label: 'Always reject echo *',
-                kind: CodeLabApprovalOptionKind.rejectAlways,
-              ),
-            ],
-          ),
+    await tester.pumpWidget(
+      FluentApp(
+        home: CodeLabApprovalOptionGroup(
+          onSelected: selected.add,
+          options: const [
+            CodeLabApprovalOption(
+              id: 'a1',
+              label: 'Allow once',
+              kind: CodeLabApprovalOptionKind.allowOnce,
+            ),
+            CodeLabApprovalOption(
+              id: 'a2',
+              label: 'Always allow echo *',
+              kind: CodeLabApprovalOptionKind.allowAlways,
+            ),
+            CodeLabApprovalOption(
+              id: 'r1',
+              label: 'Reject',
+              kind: CodeLabApprovalOptionKind.rejectOnce,
+            ),
+            CodeLabApprovalOption(
+              id: 'r2',
+              label: 'Always reject echo *',
+              kind: CodeLabApprovalOptionKind.rejectAlways,
+            ),
+          ],
         ),
-      );
+      ),
+    );
 
-      for (final kind in CodeLabApprovalOptionKind.values) {
-        expect(find.byKey(approvalOptionKey(kind)), findsOneWidget);
-      }
-      expect(
-        find.byKey(const ValueKey('approval-option-allow_always')),
-        findsOneWidget,
-      );
+    for (final kind in CodeLabApprovalOptionKind.values) {
+      expect(find.byKey(approvalOptionKey(kind)), findsOneWidget);
+    }
+    expect(
+      find.byKey(const ValueKey('approval-option-allow_always')),
+      findsOneWidget,
+    );
 
-      await tester.tap(
-        find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.rejectAlways)),
-      );
-      await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(
+      find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.rejectAlways)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
 
-      expect(selected, ['r2']);
-    });
-  }
+    expect(selected, ['r2']);
+  });
 
   testWidgets('a non-English label without allow/reject words still gets the '
       'shortcut its kind implies', (tester) async {
@@ -866,64 +859,6 @@ void main() {
 
     expect(selected, ['opt_2']);
   });
-
-  testWidgets(
-    'compactRow layout arranges options horizontally with a shortcut hint '
-    'per bound kind',
-    (tester) async {
-      String? selected;
-
-      await tester.pumpWidget(
-        FluentApp(
-          home: SizedBox(
-            width: 400,
-            child: CodeLabApprovalOptionGroup(
-              layout: CodeLabApprovalOptionsLayout.compactRow,
-              onSelected: (optionId) => selected = optionId,
-              options: const [
-                CodeLabApprovalOption(
-                  id: 'allow_once',
-                  label: 'Allow once',
-                  kind: CodeLabApprovalOptionKind.allowOnce,
-                  tone: CodeLabTone.success,
-                ),
-                CodeLabApprovalOption(
-                  id: 'allow_always',
-                  label: 'Allow always',
-                  kind: CodeLabApprovalOptionKind.allowAlways,
-                  tone: CodeLabTone.success,
-                ),
-                CodeLabApprovalOption(
-                  id: 'reject',
-                  label: 'Reject',
-                  kind: CodeLabApprovalOptionKind.rejectOnce,
-                  tone: CodeLabTone.danger,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      // Horizontal, not the vertical list's "Selected" badge column.
-      expect(find.byType(Row), findsWidgets);
-      expect(find.text('Selected'), findsNothing);
-      // No description/tone-badge chips at this density.
-      expect(find.text('Safe'), findsNothing);
-      expect(find.text('Risk'), findsNothing);
-
-      final isMac = defaultTargetPlatform == TargetPlatform.macOS;
-      final mod = isMac ? '⌘' : 'Ctrl+';
-      final alt = isMac ? '⌥' : 'Alt+';
-      expect(find.text('$mod⏎'), findsOneWidget);
-      expect(find.text('$alt$mod⏎'), findsOneWidget);
-      expect(find.text('$mod⌫'), findsOneWidget);
-
-      await tester.tap(find.text('Allow always'));
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(selected, 'allow_always');
-    },
-  );
 
   group('CodeLabConnectionBanner', () {
     Widget host(CodeLabConnectionBannerStatus status) => FluentApp(

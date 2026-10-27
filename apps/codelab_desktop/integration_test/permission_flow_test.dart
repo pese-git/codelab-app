@@ -118,15 +118,25 @@ void main() {
       // у scripted-агента `Allow always`), смысл несёт `kind`.
       expect(find.text(launch.permissionTitle), findsWidgets);
       expect(find.text('Shell'), findsWidgets);
-      for (final kind in CodeLabApprovalOptionKind.values) {
-        expect(find.byKey(approvalOptionKey(kind)), findsOneWidget);
-      }
+      // Полоса решения: «Allow» и «Reject» отвечают вариантом выбранного
+      // охвата, постоянные варианты агента видны в меню охвата «Always»
+      // (change `lighten-approval-block`, D3).
+      expect(find.byKey(CodeLabApprovalPrompt.allowKey), findsOneWidget);
+      expect(find.byKey(CodeLabApprovalPrompt.rejectKey), findsOneWidget);
+      expect(find.text('Only this time'), findsOneWidget);
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.scopeKey));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Always'), findsOneWidget);
+      // Закрыть меню, оставив охват «Only this time»: Escape здесь мог бы
+      // уйти в отмену хода рабочего места.
+      await tester.tap(find.text('Only this time').last);
+      await tester.pump(const Duration(milliseconds: 300));
 
       // The extracted `command` is always visible in the approval details —
       // both in the transcript's inline panel and in the Inspector, which
       // mirrors tool call details independently. Для Dart-агента это
       // проверка D-02: команда берётся из аргументов вызова `exec`.
-      expect(find.text('echo hello'), findsWidgets);
+      expect(find.textContaining('echo hello'), findsWidgets);
 
       // The full raw-input JSON (identified here by `rawInputMarker` — the
       // scripted agent's `shell` field or the Dart agent's `timeout`, neither
@@ -142,20 +152,17 @@ void main() {
         of: find.byType(panel),
         matching: find.textContaining(launch.rawInputMarker),
       );
-      expect(find.text('View raw input'), findsOneWidget);
+      expect(rawInputIn(CodeLabApprovalPrompt), findsNothing);
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.viewRawInputKey));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(rawInputIn(CodeLabApprovalPrompt), findsOneWidget);
       // Записи протокола — в панели Protocol дока (change
       // `redesign-workbench-shell`, D5).
       shellCubit.togglePane(ToolPane.protocol);
       await tester.pumpAndSettle();
       expect(rawInputIn(WorkbenchInspectorPane), findsWidgets);
-      expect(rawInputIn(CodeLabApprovalPanel), findsNothing);
-      await tester.tap(find.text('View raw input'));
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(rawInputIn(CodeLabApprovalPanel), findsOneWidget);
 
-      await tester.tap(
-        find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
-      );
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.allowKey));
       await tester.pump();
 
       // The agent's response to the permission choice, and the deferred
