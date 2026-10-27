@@ -44,8 +44,15 @@ class WorkbenchMainPane extends StatelessWidget {
         ),
     ];
 
+    // Экран подключения — только пока соединение не установлено; пустая
+    // сессия при соединении показывает пустую ленту с подсказкой
+    // (требование «Empty session after connecting», change
+    // `redesign-transcript-rows`, D7).
+    final showConnectionScreen =
+        state.transcriptRows.isEmpty &&
+        state.connectionStatus != CodeLabConnectionStatus.connected;
     final Widget content;
-    if (state.transcriptEntries.isEmpty) {
+    if (showConnectionScreen) {
       content = LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -83,19 +90,25 @@ class WorkbenchMainPane extends StatelessWidget {
       );
     } else {
       content = CodeLabTranscriptPanel(
-        entries: state.transcriptEntries,
+        rows: state.transcriptRows,
         viewMode: state.viewMode,
+        expansionOverrides: state.transcriptExpansion,
+        onExpansionChanged: (change) =>
+            cubit.setTranscriptRowExpanded(change.rowId, change.expanded),
+        emptyLabel: state.activeSessionId == null
+            ? 'Start a new session to talk to the agent.'
+            : 'Send a message to start.',
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (state.transcriptEntries.isNotEmpty) ...[
+        if (!showConnectionScreen) ...[
           _SessionHeader(state: state),
           const SizedBox(height: 12),
-          // При пустой ленте то же состояние показывает экран подключения
-          // (design D6 change `add-connection-and-error-states`).
+          // Пока виден экран подключения, состояние соединения показывает
+          // он (design D6 change `add-connection-and-error-states`).
           if (_bannerStatusOf(state.connectionStatus) case final status?) ...[
             CodeLabConnectionBanner(
               status: status,
@@ -242,6 +255,7 @@ class _SessionHeader extends StatelessWidget {
       projectName: cwd == null ? null : projectNameOf(cwd),
       projectPath: cwd,
       mode: state.sessionMode,
+      turnState: state.turnState,
     );
   }
 }

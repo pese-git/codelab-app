@@ -23,7 +23,7 @@ import 'ui_mappers.dart';
 final class ActiveSessionState {
   const ActiveSessionState({
     this.sessionId,
-    this.transcriptEntries = const [],
+    this.transcriptRows = const [],
     this.inspectorEntries = const [_emptyInspectorEntry],
     this.agentCommands = const [],
     this.agentCommandViews = const [],
@@ -37,6 +37,7 @@ final class ActiveSessionState {
     this.isRespondingToApproval = false,
     this.isRespondingToConfigOption = false,
     this.sessionMode,
+    this.turnState,
   });
 
   static const _emptyInspectorEntry = CodeLabInspectorEntry(
@@ -49,7 +50,7 @@ final class ActiveSessionState {
   /// Сессия, которую сейчас показывает рабочее место; совпадает с
   /// `SessionsState.activeSessionId`: обе части меняются одним пакетом.
   final String? sessionId;
-  final List<CodeLabTranscriptEntry> transcriptEntries;
+  final List<CodeLabTranscriptRow> transcriptRows;
   final List<CodeLabInspectorEntry> inspectorEntries;
 
   /// Команды агента из последнего `available_commands_update`.
@@ -89,11 +90,15 @@ final class ActiveSessionState {
   /// `redesign-workbench-shell`, D7); `null` — агент режим не публикует.
   final String? sessionMode;
 
+  /// Чип состояния хода в шапке панели сессии; `null` — сессия свободна
+  /// (требование «Session pane header», change `redesign-transcript-rows`).
+  final CodeLabTurnState? turnState;
+
   static const Object _unset = Object();
 
   ActiveSessionState _copyWith({
     String? sessionId,
-    List<CodeLabTranscriptEntry>? transcriptEntries,
+    List<CodeLabTranscriptRow>? transcriptRows,
     List<CodeLabInspectorEntry>? inspectorEntries,
     List<CodeLabCommandAction>? agentCommands,
     List<AgentCommandView>? agentCommandViews,
@@ -107,9 +112,10 @@ final class ActiveSessionState {
     bool? isRespondingToApproval,
     bool? isRespondingToConfigOption,
     Object? sessionMode = _unset,
+    Object? turnState = _unset,
   }) => ActiveSessionState(
     sessionId: sessionId ?? this.sessionId,
-    transcriptEntries: transcriptEntries ?? this.transcriptEntries,
+    transcriptRows: transcriptRows ?? this.transcriptRows,
     inspectorEntries: inspectorEntries ?? this.inspectorEntries,
     agentCommands: agentCommands ?? this.agentCommands,
     agentCommandViews: agentCommandViews ?? this.agentCommandViews,
@@ -130,6 +136,9 @@ final class ActiveSessionState {
     sessionMode: identical(sessionMode, _unset)
         ? this.sessionMode
         : sessionMode as String?,
+    turnState: identical(turnState, _unset)
+        ? this.turnState
+        : turnState as CodeLabTurnState?,
   );
 }
 
@@ -188,9 +197,10 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     emit(
       state._copyWith(
         sessionId: id,
-        transcriptEntries: transcriptEntriesOf(
+        transcriptRows: transcriptRowsOf(
           view?.transcript ?? const [],
           cwd: session.cwd,
+          isRunning: view?.status == SessionStatusView.running,
           approvalsEnabled: !state.isRespondingToApproval,
           onApprovalSelected: _onApprovalSelected,
           onRetry: canRetry ? () => unawaited(retryTurn()) : null,
@@ -204,6 +214,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         queuedPrompts: _queueOf(id),
         isPromptSubmitting: _isBusy(view?.status),
         canCancel: view?.status == SessionStatusView.running,
+        turnState: turnStateOf(view),
       ),
     );
   }
@@ -216,7 +227,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     emit(
       state._copyWith(
         sessionId: id,
-        transcriptEntries: const [],
+        transcriptRows: const [],
         inspectorEntries: const InspectorProjection().project(session),
         agentCommands: agentCommandsOf(view?.agentCommands ?? const []),
         agentCommandViews: view?.agentCommands ?? const [],
@@ -226,6 +237,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         queuedPrompts: _queueOf(id),
         isPromptSubmitting: false,
         canCancel: false,
+        turnState: null,
       ),
     );
   }
@@ -235,7 +247,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   void showMissing(String sessionId) => emit(
     state._copyWith(
       sessionId: sessionId,
-      transcriptEntries: const [],
+      transcriptRows: const [],
       inspectorEntries: const [],
       agentCommands: const [],
       agentCommandViews: const [],
@@ -245,6 +257,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       queuedPrompts: _queueOf(sessionId),
       isPromptSubmitting: false,
       canCancel: false,
+      turnState: null,
     ),
   );
 
@@ -260,6 +273,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       state._copyWith(
         isPromptSubmitting: false,
         canCancel: false,
+        turnState: null,
         isRespondingToApproval: false,
         isRespondingToConfigOption: false,
       ),
