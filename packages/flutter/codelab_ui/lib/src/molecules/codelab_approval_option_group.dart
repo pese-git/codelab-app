@@ -7,16 +7,6 @@ import '../atomics/atomics.dart';
 
 typedef CodeLabApprovalOptionSelected = void Function(String optionId);
 
-/// How [CodeLabApprovalOptionGroup] arranges its options.
-///
-/// `list` (default) is the full-detail vertical list — selection badge
-/// column, tone badge, description — used for the standalone/docked
-/// [CodeLabApprovalPanel]. `compactRow` is the dense horizontal row (label +
-/// real shortcut hint, no description) used when the panel is embedded
-/// inline in a transcript entry, where vertical space is at a premium —
-/// see embed-approval-in-thread/design.md.
-enum CodeLabApprovalOptionsLayout { list, compactRow }
-
 /// Mirrors the ACP protocol's `PermissionOptionKind` — a hint for choosing
 /// keyboard shortcuts and UI treatment, independent of the option's
 /// agent-provided [CodeLabApprovalOption.label] text (which may be in any
@@ -40,8 +30,8 @@ enum CodeLabApprovalOptionKind {
 /// Для чего: тесты и автоматизация находят вариант по виду, не завися от
 /// подписи агента. Как использовать: `find.byKey(approvalOptionKey(
 /// CodeLabApprovalOptionKind.allowAlways))`; ключ стоит на кнопке в обеих
-/// раскладках [CodeLabApprovalOptionsLayout]. Если агент прислал два варианта
-/// одного вида, ключ найдёт оба.
+/// [CodeLabApprovalOptionGroup] и на кнопке или пункте меню строки решения
+/// в ленте. Если агент прислал два варианта одного вида, ключ найдёт оба.
 ValueKey<String> approvalOptionKey(CodeLabApprovalOptionKind kind) =>
     ValueKey('approval-option-${kind.wireName}');
 
@@ -70,7 +60,6 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
     this.approveOptionId,
     this.rejectOptionId,
     this.shortcutsEnabled = true,
-    this.layout = CodeLabApprovalOptionsLayout.list,
     super.key,
   });
 
@@ -81,127 +70,97 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
   final String? approveOptionId;
   final String? rejectOptionId;
   final bool shortcutsEnabled;
-  final CodeLabApprovalOptionsLayout layout;
 
   @override
   Widget build(BuildContext context) {
-    final allowOnceId =
-        approveOptionId ?? _idForKind(CodeLabApprovalOptionKind.allowOnce);
-    final allowAlwaysId = _idForKind(CodeLabApprovalOptionKind.allowAlways);
-    final rejectOnceId =
-        rejectOptionId ?? _idForKind(CodeLabApprovalOptionKind.rejectOnce);
-    final rejectAlwaysId = _idForKind(CodeLabApprovalOptionKind.rejectAlways);
-    final showShortcutHints = shortcutsEnabled;
+    final shortcuts = CodeLabApprovalShortcuts(
+      options,
+      approveOptionId: approveOptionId,
+      rejectOptionId: rejectOptionId,
+    );
 
-    final body = switch (layout) {
-      CodeLabApprovalOptionsLayout.list => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final option in options) ...[
-            _AcpApprovalOptionTile(
-              key: approvalOptionKey(option.kind),
-              option: option,
-              selected: option.id == selectedOptionId,
-              enabled: enabled,
-              onSelected: () => onSelected(option.id),
-            ),
-            if (option != options.last) const SizedBox(height: 8),
-          ],
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final option in options) ...[
+          _AcpApprovalOptionTile(
+            key: approvalOptionKey(option.kind),
+            option: option,
+            selected: option.id == selectedOptionId,
+            enabled: enabled,
+            onSelected: () => onSelected(option.id),
+          ),
+          if (option != options.last) const SizedBox(height: 8),
         ],
-      ),
-      CodeLabApprovalOptionsLayout.compactRow => Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final option in options)
-            _AcpApprovalCompactOptionButton(
-              key: approvalOptionKey(option.kind),
-              option: option,
-              selected: option.id == selectedOptionId,
-              enabled: enabled,
-              shortcutLabel: !showShortcutHints
-                  ? null
-                  : _shortcutLabelFor(
-                      option.id,
-                      allowOnceId: allowOnceId,
-                      allowAlwaysId: allowAlwaysId,
-                      rejectOnceId: rejectOnceId,
-                      rejectAlwaysId: rejectAlwaysId,
-                    ),
-              onSelected: () => onSelected(option.id),
-            ),
-        ],
-      ),
-    };
+      ],
+    );
 
     if (!shortcutsEnabled) {
       return body;
     }
 
     return CallbackShortcuts(
-      bindings: {
-        if (allowOnceId != null) ...{
-          SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
-              _selectIfEnabled(allowOnceId),
-          SingleActivator(LogicalKeyboardKey.enter, meta: true): () =>
-              _selectIfEnabled(allowOnceId),
-        },
-        if (allowAlwaysId != null) ...{
-          SingleActivator(
-            LogicalKeyboardKey.enter,
-            control: true,
-            alt: true,
-          ): () =>
-              _selectIfEnabled(allowAlwaysId),
-          SingleActivator(
-            LogicalKeyboardKey.enter,
-            meta: true,
-            alt: true,
-          ): () =>
-              _selectIfEnabled(allowAlwaysId),
-        },
-        if (rejectOnceId != null) ...{
-          SingleActivator(LogicalKeyboardKey.backspace, control: true): () =>
-              _selectIfEnabled(rejectOnceId),
-          SingleActivator(LogicalKeyboardKey.backspace, meta: true): () =>
-              _selectIfEnabled(rejectOnceId),
-        },
-        if (rejectAlwaysId != null) ...{
-          SingleActivator(
-            LogicalKeyboardKey.backspace,
-            control: true,
-            alt: true,
-          ): () =>
-              _selectIfEnabled(rejectAlwaysId),
-          SingleActivator(
-            LogicalKeyboardKey.backspace,
-            meta: true,
-            alt: true,
-          ): () =>
-              _selectIfEnabled(rejectAlwaysId),
-        },
-      },
+      bindings: shortcuts.bindings(_selectIfEnabled),
       child: Focus(autofocus: true, child: body),
     );
   }
 
-  String? _idForKind(CodeLabApprovalOptionKind kind) {
-    for (final option in options) {
-      if (option.kind == kind) {
-        return option.id;
-      }
+  void _selectIfEnabled(String optionId) {
+    if (!enabled) {
+      return;
     }
 
-    return null;
+    onSelected(optionId);
   }
+}
 
-  String? _shortcutLabelFor(
-    String optionId, {
-    required String? allowOnceId,
-    required String? allowAlwaysId,
-    required String? rejectOnceId,
-    required String? rejectAlwaysId,
-  }) {
+/// Сочетания клавиш вариантов одобрения по их виду.
+///
+/// Почему: сочетание выбирается по `PermissionOptionKind`, а не по подписи
+/// агента (требование «Approval options are rendered and bound to shortcuts
+/// by kind»). Строка решения в ленте показывает кнопками только два
+/// варианта, остальные — в меню, а сочетания всех четырёх должны работать
+/// без открытия меню (change `lighten-approval-block`, D2). Поэтому выбор
+/// варианта по виду и привязка вынесены из [CodeLabApprovalOptionGroup] в
+/// одно место.
+///
+/// Для чего: какой вариант отвечает на какое сочетание, подсказка сочетания
+/// для кнопки или пункта меню и таблица привязок для `CallbackShortcuts`.
+///
+/// Как использовать: создать по списку вариантов
+/// (`CodeLabApprovalShortcuts(options)`), подсказку брать через
+/// [labelFor], привязки — `CallbackShortcuts(bindings:
+/// shortcuts.bindings(select))`. [approveOptionId] и [rejectOptionId]
+/// подменяют варианты `allow_once` и `reject_once`, если владелец выбрал их
+/// сам.
+final class CodeLabApprovalShortcuts {
+  CodeLabApprovalShortcuts(
+    List<CodeLabApprovalOption> options, {
+    String? approveOptionId,
+    String? rejectOptionId,
+  }) : allowOnceId =
+           approveOptionId ??
+           _idForKind(options, CodeLabApprovalOptionKind.allowOnce),
+       allowAlwaysId = _idForKind(
+         options,
+         CodeLabApprovalOptionKind.allowAlways,
+       ),
+       rejectOnceId =
+           rejectOptionId ??
+           _idForKind(options, CodeLabApprovalOptionKind.rejectOnce),
+       rejectAlwaysId = _idForKind(
+         options,
+         CodeLabApprovalOptionKind.rejectAlways,
+       );
+
+  final String? allowOnceId;
+  final String? allowAlwaysId;
+  final String? rejectOnceId;
+  final String? rejectAlwaysId;
+
+  /// Подсказка сочетания для варианта [optionId] в обозначениях платформы;
+  /// `null` — у варианта нет сочетания.
+  String? labelFor(String optionId) {
     final isMac = defaultTargetPlatform == TargetPlatform.macOS;
     final mod = isMac ? '⌘' : 'Ctrl+';
     final alt = isMac ? '⌥' : 'Alt+';
@@ -213,12 +172,43 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
     return null;
   }
 
-  void _selectIfEnabled(String optionId) {
-    if (!enabled) {
-      return;
+  /// Привязки сочетаний к [select]; Ctrl и ⌘ равноправны на всех
+  /// платформах.
+  Map<ShortcutActivator, VoidCallback> bindings(
+    void Function(String optionId) select,
+  ) {
+    void bind(
+      Map<ShortcutActivator, VoidCallback> map,
+      String? optionId,
+      LogicalKeyboardKey key, {
+      bool alt = false,
+    }) {
+      if (optionId == null) {
+        return;
+      }
+      map[SingleActivator(key, control: true, alt: alt)] = () =>
+          select(optionId);
+      map[SingleActivator(key, meta: true, alt: alt)] = () => select(optionId);
     }
 
-    onSelected(optionId);
+    final map = <ShortcutActivator, VoidCallback>{};
+    bind(map, allowOnceId, LogicalKeyboardKey.enter);
+    bind(map, allowAlwaysId, LogicalKeyboardKey.enter, alt: true);
+    bind(map, rejectOnceId, LogicalKeyboardKey.backspace);
+    bind(map, rejectAlwaysId, LogicalKeyboardKey.backspace, alt: true);
+    return map;
+  }
+
+  static String? _idForKind(
+    List<CodeLabApprovalOption> options,
+    CodeLabApprovalOptionKind kind,
+  ) {
+    for (final option in options) {
+      if (option.kind == kind) {
+        return option.id;
+      }
+    }
+    return null;
   }
 }
 
@@ -291,82 +281,6 @@ class _AcpApprovalOptionTile extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Кнопка варианта в строке вызова ленты ([CodeLabApprovalOptionsLayout.compactRow]).
-///
-/// Почему: в макете у карточки одобрения одно главное действие — «Allow
-/// once», остальные варианты — обычные кнопки; четыре одинаковые плитки с
-/// цветным текстом не показывали, что нажимать (change
-/// `redesign-transcript-rows`, D5).
-///
-/// Для чего: подпись варианта и подсказка сочетания клавиш в одну строку;
-/// `allow_once` — `FilledButton`. Ширина — по содержимому, ряд переносится.
-class _AcpApprovalCompactOptionButton extends StatelessWidget {
-  const _AcpApprovalCompactOptionButton({
-    required this.option,
-    super.key,
-    required this.selected,
-    required this.enabled,
-    required this.onSelected,
-    this.shortcutLabel,
-  });
-
-  final CodeLabApprovalOption option;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onSelected;
-  final String? shortcutLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = option.kind == CodeLabApprovalOptionKind.allowOnce;
-    final shortcutLabel = this.shortcutLabel;
-    final child = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Text(
-            option.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        if (shortcutLabel != null) ...[
-          const SizedBox(width: 6),
-          Opacity(
-            opacity: 0.75,
-            child: Text(
-              shortcutLabel,
-              style: FluentTheme.of(context).typography.caption?.copyWith(
-                color: primary ? Colors.white : null,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-    final onPressed = enabled ? onSelected : null;
-    final style = ButtonStyle(
-      padding: WidgetStateProperty.all(
-        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      ),
-      shape: !selected
-          ? null
-          : WidgetStateProperty.all(
-              RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-                side: BorderSide(color: Colors.blue, width: 2),
-              ),
-            ),
-    );
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 280),
-      child: primary
-          ? FilledButton(onPressed: onPressed, style: style, child: child)
-          : Button(onPressed: onPressed, style: style, child: child),
     );
   }
 }

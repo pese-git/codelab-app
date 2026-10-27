@@ -19,8 +19,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 /// expanded:, onToggle:, body:)`. [onToggle] `null` — шапка не нажимается и
 /// шеврона нет (строка без подробностей или с ожидающим одобрением).
 /// [body] рисуется, только когда передан: показывать ли его, решает
-/// владелец. [highlighted] обводит карточку акцентом — так выделяется вызов,
-/// который ждёт решения пользователя.
+/// владелец.
 class CodeLabExpanderCard extends StatelessWidget {
   const CodeLabExpanderCard({
     required this.leading,
@@ -30,7 +29,6 @@ class CodeLabExpanderCard extends StatelessWidget {
     this.onToggle,
     this.body,
     this.bodyPadding = const EdgeInsets.all(16),
-    this.highlighted = false,
     this.headerKey,
     this.semanticLabel,
     super.key,
@@ -46,7 +44,6 @@ class CodeLabExpanderCard extends StatelessWidget {
   final ValueChanged<bool>? onToggle;
   final Widget? body;
   final EdgeInsetsGeometry bodyPadding;
-  final bool highlighted;
   final Key? headerKey;
 
   /// Подпись шапки для экранного диктора, если заголовок — не просто текст.
@@ -99,11 +96,7 @@ class CodeLabExpanderCard extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: resources.cardBackgroundFillColorDefault,
-        border: Border.all(
-          color: highlighted
-              ? theme.accentColor
-              : resources.cardStrokeColorDefault,
-        ),
+        border: Border.all(color: resources.cardStrokeColorDefault),
         borderRadius: BorderRadius.circular(_radius),
       ),
       child: ClipRRect(

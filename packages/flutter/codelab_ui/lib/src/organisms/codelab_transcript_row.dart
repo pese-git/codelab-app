@@ -1,7 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../molecules/molecules.dart';
-import 'codelab_approval_panel.dart';
+import 'codelab_approval_prompt.dart';
 
 /// Строка ленты переписки.
 ///
@@ -141,21 +141,18 @@ class CodeLabTranscriptAction {
 }
 
 /// Одобрение вызова инструмента, встроенное в его строку: ожидающее
-/// (интерактивная карточка) или решённое (тег исхода).
+/// (полоса решения) или решённое (тег исхода).
 sealed class CodeLabTranscriptApproval {
   const CodeLabTranscriptApproval();
 
   const factory CodeLabTranscriptApproval.pending({
-    required String title,
     required CodeLabApprovalRisk risk,
     required List<CodeLabApprovalOption> options,
     required CodeLabApprovalOptionSelected onOptionSelected,
     String? reason,
     String? command,
-    String? cwd,
     String? diffSummary,
     String? rawInput,
-    String? selectedOptionId,
     bool enabled,
     String? approveOptionId,
     String? rejectOptionId,
@@ -181,37 +178,32 @@ sealed class CodeLabTranscriptApproval {
 /// передаёт в [CodeLabTranscriptApproval.resolved].
 enum CodeLabApprovalOutcome { allowed, rejected, cancelled, unknown }
 
-/// Ожидающее одобрение. [title] — вопрос по виду вызова («Run a command?»),
-/// его выбирает маппер приложения по спецификации; лента вид вызова не
-/// знает.
+/// Ожидающее одобрение. Заголовка нет: вид действия уже назван меткой
+/// строки вызова (change `lighten-approval-block`, D4). [command] — команда
+/// целиком, как она выполнится: строка вызова показывает её в шапке вместо
+/// обрезанной детали (D5).
 final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
   const CodeLabTranscriptApprovalPending({
-    required this.title,
     required this.risk,
     required this.options,
     required this.onOptionSelected,
     this.reason,
     this.command,
-    this.cwd,
     this.diffSummary,
     this.rawInput,
-    this.selectedOptionId,
     this.enabled = true,
     this.approveOptionId,
     this.rejectOptionId,
     this.shortcutsEnabled = true,
   });
 
-  final String title;
   final CodeLabApprovalRisk risk;
   final List<CodeLabApprovalOption> options;
   final CodeLabApprovalOptionSelected onOptionSelected;
   final String? reason;
   final String? command;
-  final String? cwd;
   final String? diffSummary;
   final String? rawInput;
-  final String? selectedOptionId;
   final bool enabled;
   final String? approveOptionId;
   final String? rejectOptionId;
