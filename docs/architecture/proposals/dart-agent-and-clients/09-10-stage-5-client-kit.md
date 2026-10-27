@@ -148,7 +148,7 @@ abstract interface class TransportResolver {
 // ---------- Рабочее пространство ----------
 abstract interface class ClientWorkspace {
   factory ClientWorkspace({required AgentBackend backend, required List<TransportResolver> resolvers,
-      ProfileStore? profiles, Logger? logger}) = DefaultClientWorkspace;
+      WorkspaceSnapshotStore? snapshots}) = DefaultClientWorkspace;  // snapshots — восстановление (5.12)
 
   WorkspaceState get current;
   Stream<WorkspaceState> get state;                 // соединение, сессии, активная сессия
@@ -163,12 +163,17 @@ abstract interface class ClientWorkspace {
 
   Future<SessionHandle> newSession({String? cwd});  // по умолчанию cwd = projectDirectory
   Future<SessionHandle> loadSession(SessionId id, {required String cwd});
-  /// Одна страница session/list; nextCursor == null — конец списка (курсор не сохраняется).
-  Future<SessionPage> listSessions({String? cwd, String? cursor});
+  /// Следующая страница session/list в WorkspaceState.sessions; курсор живёт в kit и не сохраняется.
+  Future<void> loadMoreSessions();
   // после MVP (D-17, §12.6.12): фильтр по заголовку и дате над session/list и поиск по тексту
   SessionSearch openSessionSearch();
   SessionHandle? session(SessionId id);
   void activate(SessionId id);
+
+  // восстановление после перезапуска app (алгоритм ниже)
+  Future<String?> restoreProject();                 // шаг 1: проект снимка прошлого запуска
+  void selectProject(String path);                  // проект в WorkspaceState и снимке
+  Future<void> flushSnapshot();                     // дождаться записи снимка
 
   CommandCatalog get commands;                      // клиентские + агентские команды активной сессии
   Future<void> dispose();
@@ -185,6 +190,7 @@ final class WorkspaceState {
   final ConnectionProfile? profile; final String? projectDirectory;
   final AgentInfoView? agent;                       // имя, версия, loadSession, list, image
   final List<SessionSummaryView> sessions; final SessionId? activeSessionId;
+  final bool hasMoreSessions;                       // у агента есть следующая страница session/list
 }
 
 sealed class ConnectionView {}                      // явный конечный автомат, без набора bool
@@ -378,32 +384,40 @@ agent-core-architecture §17.7.4: ожидающее steering — в `SessionVie
 Свойство для тестов: для любой фикстуры проекция с нуля по полному списку обновлений совпадает с
 инкрементальной.
 
-**Алгоритм переподключения с восстановлением сессий.**
+**Алгоритм переподключения с восстановлением сессий** (change `add-session-list-and-reload`, D5).
 
 1. `reconnect()` переводит `ConnectionView` в `Reconnecting(attempt)` и запоминает открытые
    сессии `(id, cwd)` и активную сессию.
-2. `AgentBackend.reconnect` с фабрикой транспорта из текущего профиля; попытки с паузой 1, 2, 4,
-   8 с (не больше 5), отмена — `disconnect()`.
-3. После `initialize`: если агент объявил `loadSession`, для каждой открытой сессии —
-   `loadSession(id, cwd)`; реплей `session/update` приходит до ответа и проходит через проектор с
-   нуля (старый транскрипт заменяется, а не дополняется).
+2. `AgentBackend.reconnect` с фабрикой транспорта из текущего профиля — одна попытка, без
+   повторов; отмена — `disconnect()`. Повторы с паузой — отдельный change (вынесены решением
+   владельца продукта). `session/cancel` перед заменой транспорта kit не шлёт: бинарь
+   `codelab-agent` при обрыве соединения отменяет ход сам (`detachGrace` ноль у stdio и WebSocket,
+   change `cancel-turn-on-ws-disconnect`), а прерванный ход после `session/load` показан
+   `cancelled`.
+3. После `initialize`: если агент объявил `loadSession`, для каждой открытой сессии, сначала для
+   активной, — `loadSession(id, cwd)`; реплей `session/update` приходит до ответа и проходит через
+   проектор с нуля (старый транскрипт заменяется, а не дополняется). Список сессий проекта
+   запрашивается заново.
 4. Если `loadSession` не поддерживается или вернул ошибку — сессия получает статус `detached` и
-   `NoticeItem`; очередь промптов сохраняется, но не отправляется до явного действия.
+   `NoticeItem(kind: detached)` (`The agent cannot restore sessions after reconnecting.` или
+   `Session <id> could not be restored after reconnecting.`); промпты в ней дают `PromptFailed`,
+   очередь сохраняется до конца запуска, но не отправляется.
 5. Ожидающие одобрения старого соединения закрываются как отменённые; поздние события старого
    поколения отбрасываются (`AcpClientApplication.generation`).
 
 Перезапуск агента — §12.6.7.
 
-**Алгоритм восстановления после перезапуска app (D-03, задача 5.12).** Переподключение выше
-работает внутри одного запуска; после перезапуска app открытые сессии в памяти потеряны, поэтому
-kit сохраняет снимок и восстанавливает по нему.
+**Алгоритм восстановления после перезапуска app (D-03, задача 5.12;** change
+`add-session-list-and-reload`, D6). Переподключение выше работает внутри одного запуска; после
+перезапуска app открытые сессии в памяти потеряны, поэтому kit сохраняет снимок и восстанавливает
+по нему.
 
-*Что сохраняется.* Порт `WorkspaceSnapshotStore` в kit; в app — реализация на
-`shared_preferences`, ключ `codelab.workspace.snapshot` (значение — JSON с версией формата):
+*Что сохраняется.* Порт `WorkspaceSnapshotStore` (`read`, `write`, `clear`) и модель
+`WorkspaceSnapshot` в `lib/src/restore/` kit; в app — `SharedPreferencesWorkspaceSnapshotStore`,
+ключ `codelab.workspace.snapshot` (значение — JSON с версией формата):
 
 ```json
 {"version": 1, "windows": {"main": {
-  "profileId": "codelab-agent-local",
   "projectDirectory": "/work/app",
   "activeSessionId": "sess_42",
   "openSessions": [{"id": "sess_42", "cwd": "/work/app"}, {"id": "sess_17", "cwd": "/work/app"}]
@@ -411,45 +425,50 @@ kit сохраняет снимок и восстанавливает по не�
 ```
 
 Ключ `windows` — по окну; сейчас окно одно (`main`), несколько окон (§12.3) добавляют свои ключи.
-Не сохраняются: курсоры `session/list` (ACP запрещает их сохранять), транскрипт (его источник —
-реплей агента), очередь промптов, секреты и сам профиль (он в `ProfileStore`, в снимке — только
-`profileId`). Запись — после успешных `session/new`, `session/load`, `activate`, смены проекта и
-закрытия сессии, со склейкой не чаще раза в секунду; ошибка записи — диагностика, а не отказ
-операции.
+Профиля и `profileId` в снимке нет: app стартует без автоподключения, подключается текущая форма,
+`ProfileStore` восстановлению не нужен (решение владельца продукта). Не сохраняются также курсоры
+`session/list` (ACP запрещает их сохранять), транскрипт (его источник — реплей агента), очередь
+промптов и секреты. Запись идёт после успешных `newSession`, `loadSession`, `activate` и смены
+проекта: kit сравнивает снимок из `WorkspaceState` с последним записанным. Записи не
+накладываются: синхронная серия изменений — одна запись (старт в следующей микрозадаче),
+изменения во время записи склеиваются в одну следующую, `dispose` и `flushSnapshot()` дожидаются
+последней. Таймера нет: в widget-тестах он оставался бы висеть. До `restoreProject()` снимок не
+пишется, иначе пустое рабочее пространство стёрло бы снимок прошлого запуска. Ошибка записи —
+диагностика, а не отказ операции.
 
-*Когда запускается.* Один раз при старте app — шаг `routes` сторожа запуска (§12.4.7), если
-включено автоподключение: шаги 1–3 идут внутри шага `routes` под его таймаутом, шаги 4–7 — после
-`BootReady`. «Start without auto-connect» восстановление пропускает, снимок при этом
-не удаляется. CLI снимок не читает (у него `--resume`/`--continue`, §9.11).
+*Когда запускается.* Восстановление — часть `ClientWorkspace(snapshots: …)`; алгоритм —
+`WorkspaceRestorer`. Шаг 1 — при старте app (`restoreProject()`), шаги 2–4 — внутри первого
+успешного `connect()` в этом запуске, один раз; последующие `connect`/`reconnect` идут по
+алгоритму переподключения. CLI снимок не читает (у него `--resume`/`--continue`, §9.11). Переход к
+автоподключению на шаге `routes` сторожа запуска (§12.4.7) меняет только момент вызова шага 2.
 
 1. Прочитать снимок окна. Нет ключа — обычный старт. Неизвестная версия или битый JSON —
-   диагностика `app.restore.snapshot_invalid`, ключ удаляется, обычный старт.
-2. Найти профиль `profileId` в `ProfileStore`. Нет профиля — старт без подключения и баннер
-   `The last connection profile no longer exists.`; проект `projectDirectory` всё равно выбран.
-3. `ClientWorkspace.connect(profile, projectDirectory)`. Агент не запускается или не отвечает на
-   `initialize` (бинарь удалён, процесс упал, таймаут шага `routes`) — `ConnectionFailed` и
-   состояние ошибки workbench с кнопками «Retry» (повтор с шага 3 по тому же снимку) и «Choose
-   another profile»; снимок не удаляется.
-4. После `initialize`: если агент объявил `sessionCapabilities.list` — первая страница
-   `listSessions(cwd: projectDirectory)` в сайдбар (дальше — по `nextCursor` при прокрутке).
-5. Если агент объявил `loadSession` — `loadSession(id, cwd)` для активной сессии с тем же `cwd` и
-   теми же `mcpServers`, что при `session/new` по этому профилю; реплей `session/update` приходит
-   до ответа и проходит через проектор с нуля (как шаг 3 переподключения). Остальные
-   `openSessions` загружаются лениво — при выборе в сайдбаре.
-6. Агент без `loadSession` — `newSession(cwd)` и `NoticeItem(kind: reconnected)`
-   `The agent cannot restore sessions; a new session was started.`. Ошибка `session/load`
-   (агент не знает этот id) — то же с текстом `Session <id> could not be restored; a new session was
-   started.`, id удаляется из снимка.
-7. Ничего не отправляется автоматически: восстановление не повторяет промпты и не отвечает на
+   диагностика `Workspace snapshot is invalid; starting fresh.`, ключ удаляется, обычный старт.
+   Проект снимка становится выбранным проектом, если пользователь ещё не выбрал свой.
+2. При первом успешном `connect()`: если агент объявил `sessionCapabilities.list` — первая
+   страница `AgentBackend.listSessions(cwd: projectDirectory)` в сайдбар (дальше —
+   `loadMoreSessions()`); сессии
+   снимка, которых нет в списке, добавляются строками `notLoaded`. Если агент объявил
+   `loadSession` — `loadSession(id, cwd)` для активной сессии; реплей проходит через проектор с
+   нуля. Остальные сессии снимка загружаются лениво — при выборе в сайдбаре — и до загрузки
+   остаются в снимке.
+3. Агент без `loadSession` — `newSession(cwd)` и `NoticeItem(kind: reconnected)`
+   `The agent cannot restore sessions; a new session was started.`; сессии снимка в список не
+   попадают. Ошибка `session/load` — то же с текстом `Session <id> could not be restored; a new
+   session was started.`, id удаляется из снимка.
+4. Ничего не отправляется автоматически: восстановление не повторяет промпты и не отвечает на
    одобрения.
 
-Тесты: kit — `test/restore/workspace_restorer_test.dart` (по одному случаю на шаги 1–7: нет
-снимка, битый снимок, нет профиля, агент не запустился и «Retry», агент с `loadSession`, без
-`loadSession`, ошибка `session/load`, курсор в снимок не попадает); app — сценарий перезапуска в
-`session_list_load_flow_test.dart`: две сессии, закрыть корневой scope, создать заново с теми же
-значениями `SharedPreferences.setMockInitialValues`, после подключения активная сессия загружена,
-её транскрипт совпадает с транскриптом до перезапуска, сайдбар показывает обе сессии (критерий
-D-03).
+Тесты: kit — `test/restore/workspace_snapshot_test.dart` (формат, версии, запись; курсора,
+tранскрипта, очереди и секретов в снимке нет) и
+`test/restore/workspace_restorer_test.dart` (нет снимка, битый снимок, проект снимка, агент с
+`loadSession`, без `loadSession`, ошибка `session/load`, восстановление один раз, без промптов и
+одобрений); переподключение —
+`test/sessions/reconnect_reload_test.dart`; app — сценарий перезапуска в
+`session_list_load_flow_test.dart`: две сессии, Reconnect, корневой scope закрывается и создаётся
+заново с теми же `shared_preferences`, проект выбран, после подключения активная сессия загружена
+с тем же транскриптом, вторая — `notLoaded`, и её выбор в сайдбаре загружает транскрипт
+(критерий D-03).
 
 **OpenSpec change.** `extract-acp-client-kit` (задачи 5.0, 5.1, 5.3–5.9; scope: новый пакет и
 его публичный API, переход app на kit без изменения поведения) и `add-session-list-and-reload`
