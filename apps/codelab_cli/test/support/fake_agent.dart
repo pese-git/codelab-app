@@ -33,7 +33,8 @@ final class FakeAgent {
 
   final Object? openError;
 
-  final transport = FakeAcpTransport();
+  /// Транспорт текущего «процесса» агента; [restartAgent] заменяет его.
+  var transport = FakeAcpTransport();
   final application = AcpClientApplication(transport: FakeAcpTransport());
   late final ClientWorkspace workspace = ClientWorkspace(
     backend: AcpClientBackend(application),
@@ -52,6 +53,21 @@ final class FakeAgent {
     label: 'Agent',
     command: 'agent',
   );
+
+  /// Новый «процесс» агента: следующий `connect` получит свежий транспорт
+  /// с возможностями [capabilities] (`/profile`, `/reconnect`); [sessions] —
+  /// ответ на его `session/list`.
+  void restartAgent({
+    AgentCapabilities capabilities = const AgentCapabilities(),
+    ListSessionsResponse? sessions,
+  }) {
+    transport = FakeAcpTransport()..initializeAgentCapabilities = capabilities;
+    if (sessions != null) {
+      unawaited(
+        next(sessionListMethod).then((r) => respond(r, sessions.toJson())),
+      );
+    }
+  }
 
   /// Запросы клиента, которые тест уже получил через [next].
   final _consumed = <JsonRpcMessage>{};
@@ -121,14 +137,29 @@ final class FakeAgent {
     'configOptions': ?configOptions,
   });
 
+  /// Варианты одобрения по умолчанию: `allow_once` и `reject_once`.
+  static const defaultOptions = [
+    PermissionOption(
+      optionId: PermissionOptionId('allow-once'),
+      name: 'Allow once',
+      kind: PermissionOptionKind.allowOnce,
+    ),
+    PermissionOption(
+      optionId: PermissionOptionId('reject-once'),
+      name: 'Reject',
+      kind: PermissionOptionKind.rejectOnce,
+    ),
+  ];
+
   /// Запрос одобрения вызова [toolCallId] вида [kind] с вариантами
-  /// `allow_once` и `reject_once`; [critical] — `_meta.codelab.critical`.
+  /// [options]; [critical] — `_meta.codelab.critical`.
   void requestPermission({
     required int id,
     required String sessionId,
     required String toolCallId,
     ToolKind kind = ToolKind.execute,
     bool critical = false,
+    List<PermissionOption> options = defaultOptions,
   }) => transport.emitInbound(
     JsonRpcMessage.request(
       id: JsonRpcId.integer(id),
@@ -147,18 +178,7 @@ final class FakeAgent {
                 }
               : null,
         ),
-        options: const [
-          PermissionOption(
-            optionId: PermissionOptionId('allow-once'),
-            name: 'Allow once',
-            kind: PermissionOptionKind.allowOnce,
-          ),
-          PermissionOption(
-            optionId: PermissionOptionId('reject-once'),
-            name: 'Reject',
-            kind: PermissionOptionKind.rejectOnce,
-          ),
-        ],
+        options: options,
       ).toJson(),
     ),
   );
