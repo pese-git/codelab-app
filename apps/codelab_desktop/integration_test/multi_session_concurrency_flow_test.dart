@@ -162,7 +162,15 @@ void main() {
       // Switch back to A, through the real sidebar, and resolve its pending
       // approval — its transcript reflects the resolution correctly even
       // though the whole wait happened while B was active.
-      await tester.tap(find.text('Session $sessionAId'));
+      // Сайдбар называет сессию по началу первого промпта (#99), поэтому
+      // строку A ищем по её промпту и только внутри сайдбара — тот же текст
+      // есть в шапке и в ленте.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(CodeLabSessionSidebar),
+          matching: find.text('run the test command'),
+        ),
+      );
       // Not `pumpAndSettle()`: A's turn is still waiting on its approval, so
       // the composer now shows A's send-button loading spinner again — the
       // same indeterminate animation as above.

@@ -342,7 +342,15 @@ void main() {
       expect(find.text('Failed'), findsWidgets);
       // The transcript up to the point of the crash is history, not part of
       // the now-untrustworthy active request — it must stay visible.
-      expect(find.text('this turn will never get a reply'), findsOneWidget);
+      // Ищем только в ленте: сайдбар и шапка показывают тот же текст как
+      // название сессии по первому промпту (#99).
+      expect(
+        find.descendant(
+          of: find.byType(CodeLabTranscriptPanel),
+          matching: find.text('this turn will never get a reply'),
+        ),
+        findsOneWidget,
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
