@@ -36,6 +36,11 @@ void main() {
     'with_session_list',
   ];
 
+  /// Сценарии e2e вне таблицы режимов: агента запускает сам тест app
+  /// (`E2eAgent.startWebSocketAgent`, задача 5.6 change
+  /// `add-session-list-and-reload`).
+  const ownScripts = ['reconnect_mid_turn'];
+
   test('every mode of the e2e contract has a scenario', () {
     final present = directory.existsSync()
         ? {
@@ -47,7 +52,7 @@ void main() {
     expect(present, containsAll(wireNames));
   });
 
-  for (final name in wireNames) {
+  for (final name in [...wireNames, ...ownScripts]) {
     test('$name.json loads as --llm-script', () {
       final script = LlmScript.load(
         '${directory.path}/$name.json',

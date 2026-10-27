@@ -49,6 +49,37 @@ Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
   );
 }
 
+/// Подключается по WebSocket к уже запущенному [agent].
+Future<void> _connectWebSocket(
+  WidgetTester tester,
+  E2eWebSocketAgent agent,
+) async {
+  await tester.tap(
+    find.byKey(const ValueKey('command-bar-configure-connection')),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(CodeLabButton, 'WebSocket'));
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.byKey(const ValueKey('transport-field-Endpoint')),
+    agent.endpoint,
+  );
+  await tester.enterText(
+    find.byKey(const ValueKey('transport-field-Token')),
+    agent.token,
+  );
+  await tester.tap(find.widgetWithText(Button, 'Close'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
+  await tester.pump();
+  await _waitFor(
+    tester,
+    () =>
+        _cubit(tester).state.connectionStatus ==
+        CodeLabConnectionStatus.connected,
+  );
+}
+
 /// Ждёт [condition] не дольше 10 секунд, прокачивая кадры.
 Future<void> _waitFor(WidgetTester tester, bool Function() condition) async {
   final deadline = DateTime.now().add(const Duration(seconds: 10));
@@ -169,6 +200,65 @@ void main() {
             _transcript(tester).contains('echo: first task'),
       );
       expect(_transcript(tester), ['first task', 'echo: first task']);
+    },
+  );
+  // Задача 5.6: Dart-агент держит ход закрытого WebSocket `detachGrace` и
+  // продолжает его после `session/load` с нового соединения
+  // (`SessionBridge.reattach`); продолжение приходит уже после ответа на
+  // `session/load` и должно попасть в ленту как живой ход, а не как реплей.
+  testWidgets(
+    'a turn survives Reconnect over WebSocket and its result reaches the '
+    'transcript',
+    skip: E2eAgent.current.isScripted,
+    (tester) async {
+      final project = await Directory.systemTemp.createTemp(
+        'codelab_reconnect_mid_turn_e2e_',
+      );
+      addTearDown(() async {
+        if (await project.exists()) {
+          await project.delete(recursive: true);
+        }
+      });
+      final agent = await E2eAgent.current.startWebSocketAgent(
+        project,
+        script: 'reconnect_mid_turn',
+      );
+      addTearDown(agent.stop);
+
+      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpAndSettle();
+      await _cubit(tester).selectProject(project.path);
+      await tester.pumpAndSettle();
+      await _connectWebSocket(tester, agent);
+
+      await tester.tap(find.byKey(const ValueKey('new-session-button')));
+      await tester.pumpAndSettle();
+      final session = _cubit(tester).state.activeSessionId!;
+      await tester.tap(find.byKey(const ValueKey('composer-text-box')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-text-box')),
+        'long task',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pump();
+      // Сценарий отвечает через 4 с: Reconnect попадает в середину хода.
+      await _waitFor(tester, () => _cubit(tester).state.isPromptSubmitting);
+      expect(_transcript(tester), isNot(contains('echo: long task')));
+
+      await _cubit(tester).reconnect();
+      await _waitFor(
+        tester,
+        () =>
+            _cubit(tester).state.connectionStatus ==
+                CodeLabConnectionStatus.connected &&
+            _transcript(tester).contains('echo: long task') &&
+            !_cubit(tester).state.isPromptSubmitting,
+      );
+      expect(_cubit(tester).state.activeSessionId, session);
+      expect(_transcript(tester), ['long task', 'echo: long task']);
+      expect(_cubit(tester).state.canCancel, isFalse);
     },
   );
 }
