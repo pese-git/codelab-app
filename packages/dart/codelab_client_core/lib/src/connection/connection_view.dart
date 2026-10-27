@@ -13,7 +13,8 @@ part 'connection_view.freezed.dart';
 /// Для чего: поле `WorkspaceState.connection`. Переходы:
 /// `Disconnected` → `Connecting` → `Connected` | `ConnectionFailed`;
 /// `reconnect()` → `Reconnecting` → `Connected` | `ConnectionFailed`;
-/// неожиданный сбой транспорта в `Connected` → `ConnectionFailed`.
+/// неожиданный сбой транспорта в `Connected` → `ConnectionLost`, откуда
+/// `reconnect()` идёт так же, как из `ConnectionFailed`.
 ///
 /// Как использовать: `switch (state.connection)` в отображении; сравнение
 /// по значению (`==`) — так подписчик отличает новое состояние от повтора.
@@ -32,8 +33,20 @@ sealed class ConnectionView with _$ConnectionView {
   const factory ConnectionView.reconnecting({required int attempt}) =
       Reconnecting;
 
-  /// Подключение не удалось или оборвалось; [message] — текст для
-  /// пользователя от ядра клиента или kit.
+  /// Установленное соединение оборвалось без вызова `connect()` или
+  /// `reconnect()` — например, процесс агента завершился.
+  ///
+  /// Отдельный вариант, а не флаг в [ConnectionView.failed]: пользователь
+  /// работал в ленте, и UI показывает над ней баннер с Reconnect, а не
+  /// результат только что нажатой кнопки (design D1 change
+  /// `add-connection-and-error-states`). [message] — причина от транспорта.
+  const factory ConnectionView.lost({
+    required ConnectionFailureReason reason,
+    required String message,
+  }) = ConnectionLost;
+
+  /// Попытка `connect()` или `reconnect()` не удалась; [message] — текст
+  /// для пользователя от ядра клиента или kit.
   const factory ConnectionView.failed({
     required ConnectionFailureReason reason,
     required String message,

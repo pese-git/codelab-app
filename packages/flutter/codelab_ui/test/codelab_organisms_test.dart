@@ -785,6 +785,53 @@ void main() {
     expect(find.text('invalid params'), findsOneWidget);
   });
 
+  testWidgets('a failed turn notice hides details until expanded and offers '
+      'its action', (tester) async {
+    var retried = false;
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 520,
+          height: 300,
+          child: CodeLabTranscriptPanel(
+            entries: [
+              CodeLabTranscriptEntry(
+                id: 'prompt-error-1',
+                kind: CodeLabTranscriptEntryKind.diagnostic,
+                title: 'The model provider is unavailable',
+                body: '503 Service Unavailable',
+                details: 'ACP request session/prompt failed: Turn failed',
+                action: CodeLabTranscriptEntryAction(
+                  label: 'Retry',
+                  icon: FluentIcons.refresh,
+                  onPressed: () => retried = true,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('The model provider is unavailable'), findsOneWidget);
+    expect(find.text('503 Service Unavailable'), findsOneWidget);
+    expect(
+      find.text('ACP request session/prompt failed: Turn failed'),
+      findsNothing,
+    );
+
+    await tester.tap(find.text('Details'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      find.text('ACP request session/prompt failed: Turn failed'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Retry'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(retried, isTrue);
+  });
+
   testWidgets('renders approval risk details and selects option', (
     tester,
   ) async {
@@ -1808,6 +1855,7 @@ String _connectionStatusLabel(CodeLabConnectionStatus status) {
     CodeLabConnectionStatus.connected => 'Connected',
     CodeLabConnectionStatus.reconnecting => 'Reconnecting',
     CodeLabConnectionStatus.disconnected => 'Disconnected',
+    CodeLabConnectionStatus.lost => 'Connection lost',
     CodeLabConnectionStatus.failed => 'Failed',
   };
 }

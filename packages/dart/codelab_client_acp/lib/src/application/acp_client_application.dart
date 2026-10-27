@@ -7,6 +7,7 @@ import '../domain/approval_policy.dart';
 import '../domain/domain_models.dart';
 import '../domain/fs_access.dart';
 import '../domain/logger.dart';
+import '../domain/prompt_failure.dart';
 import '../domain/secret_redaction.dart';
 import '../domain/state_machines.dart';
 import '../domain/terminal_access.dart';
@@ -21,6 +22,22 @@ final class AcpClientApplicationException implements Exception {
 
   @override
   String toString() => 'AcpClientApplicationException: $message';
+}
+
+/// Запрос снят, потому что транспорт соединения неожиданно отказал.
+///
+/// Почему: после отказа транспорта ответа на запрос уже не будет, а
+/// ожидающий `session/prompt` должен завершиться, чтобы ход получил
+/// `PromptFailure.connectionLost`, а не остался `running` (design D2 change
+/// `add-connection-and-error-states`).
+///
+/// Для чего: типизированная причина ошибки ожидающих запросов при потере
+/// соединения; по ней `sendPrompt` отличает обрыв от ответа-ошибки агента.
+///
+/// Как использовать: бросается из методов [AcpClientApplication], чей запрос
+/// ждал ответа в момент отказа транспорта состояния `ready`.
+final class AcpConnectionLostException extends AcpClientApplicationException {
+  const AcpConnectionLostException(super.message);
 }
 
 final class MissingAcpSessionException extends AcpClientApplicationException {
@@ -457,6 +474,7 @@ final class AcpClientApplication {
       final failedSession = SessionStateMachine.failTurn(
         _requireSession(command.sessionId),
         message: error.toString(),
+        failure: _promptFailureOf(error),
         completedAt: DateTime.now(),
       ).stateOrThrow;
 
@@ -1835,6 +1853,17 @@ final class AcpClientApplication {
         // only state `ConnectionStateMachine._fail` rejects, so guard
         // against it the same way `_establishConnection` already does
         // before an intentional disconnect.
+        final wasReady = _connectionState is ClientConnectionReady;
+        if (wasReady) {
+          // Агент отменяет ход вместе с соединением, как и при замене
+          // транспорта: после `session/load` последний ход реплея будет
+          // показан отменённым (D2 change `cancel-turn-on-ws-disconnect`).
+          for (final session in _sessions.values) {
+            if (session.activeTurn != null) {
+              _interruptedTurns.add(session.id);
+            }
+          }
+        }
         if (_connectionState is! ClientConnectionDisconnected) {
           _transitionConnection(
             ConnectionStateEvent.fail(
@@ -1843,6 +1872,12 @@ final class AcpClientApplication {
               cause: error.cause,
             ),
           );
+        }
+        if (wasReady) {
+          // Ответов на запросы оборванного соединения не будет: без этого
+          // `sendPrompt` ждал бы вечно, а ход оставался `running` (design D2
+          // change `add-connection-and-error-states`).
+          _failPendingRequests(AcpConnectionLostException(error.message));
         }
       case AcpTransportStateChanged():
         break;
@@ -2124,3 +2159,15 @@ ConnectionFailureReason _connectionFailureReasonFor(
     AcpTransportErrorCode.unknown => ConnectionFailureReason.unknown,
   };
 }
+
+/// Классифицирует ошибку `session/prompt` для `PromptTurn.failure`
+/// (spec `acp-protocol-client` «Типизированный сбой prompt turn»).
+PromptFailure _promptFailureOf(Object error) => switch (error) {
+  AcpConnectionLostException() => const PromptFailure.connectionLost(),
+  AcpClientApplicationException(cause: final JsonRpcError cause) =>
+    PromptFailure.fromJsonRpcError(cause),
+  AcpClientApplicationException(:final message) => PromptFailure.unknown(
+    message: message,
+  ),
+  _ => PromptFailure.unknown(message: '$error'),
+};

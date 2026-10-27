@@ -82,6 +82,13 @@ abstract class SessionView with _$SessionView {
 
     /// Запросы `session/request_permission`, ждущие ответа пользователя.
     @Default([]) List<PendingApprovalView> pendingApprovals,
+
+    /// Можно ли повторить последний ход через `SessionHandle.retry`: он
+    /// сорвался не из-за потери соединения, агент не запретил повтор
+    /// (`retryable: false`), а сессия свободна и связана с агентом
+    /// (design D4 change `add-connection-and-error-states`). Соединение
+    /// хост проверяет сам — оно в `WorkspaceState.connection`.
+    @Default(false) bool canRetry,
   }) = _SessionView;
 }
 

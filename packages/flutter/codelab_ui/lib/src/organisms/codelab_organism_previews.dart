@@ -58,6 +58,42 @@ Widget codelabTranscriptPanelPreview() {
 }
 
 @Preview(
+  name: 'Transcript panel failed turn',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 300),
+)
+Widget codelabTranscriptPanelFailedTurnPreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      height: 300,
+      child: CodeLabTranscriptPanel(
+        entries: [
+          const CodeLabTranscriptEntry(
+            id: 'user-1',
+            kind: CodeLabTranscriptEntryKind.user,
+            title: 'You',
+            body: 'Run analyzer and summarize any failures.',
+          ),
+          CodeLabTranscriptEntry(
+            id: 'prompt-error-1',
+            kind: CodeLabTranscriptEntryKind.diagnostic,
+            title: 'The model provider is unavailable',
+            body: '503 Service Unavailable',
+            details: 'ACP request session/prompt failed: Turn failed',
+            action: CodeLabTranscriptEntryAction(
+              label: 'Retry',
+              icon: FluentIcons.refresh,
+              onPressed: () {},
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+@Preview(
   name: 'Transcript panel summary',
   group: codelabOrganismPreviewGroup,
   size: Size(440, 320),

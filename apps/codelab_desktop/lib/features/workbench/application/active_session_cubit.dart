@@ -5,6 +5,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show
         AgentCommandView,
         ClientWorkspace,
+        ClientWorkspaceException,
+        Connected,
         InspectorProjection,
         PendingApprovalView,
         PromptOutcome,
@@ -155,6 +157,11 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   final ShellDiagnostics _diagnostics;
   late final StreamSubscription<PromptOutcome> _outcomeSubscription;
 
+  /// Последний показанный снимок: по нему лента перестраивается при потере
+  /// соединения, чтобы убрать Retry (design D4 change
+  /// `add-connection-and-error-states`).
+  AcpSession? _shown;
+
   /// Показывает [session] по её живому снимку в ядре и `SessionView` kit.
   ///
   /// `SessionView` к этому моменту уже обновлён: рабочее пространство
@@ -162,6 +169,13 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   void show(AcpSession session) {
     final id = session.id.value;
     final view = _handle(id)?.current;
+    _shown = session;
+    // Соединение kit в `canRetry` не учитывает — его проверяет хост
+    // (design D4 change `add-connection-and-error-states`).
+    final canRetry =
+        view != null &&
+        view.canRetry &&
+        _workspace.current.connection is Connected;
     emit(
       state._copyWith(
         sessionId: id,
@@ -170,6 +184,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
           cwd: session.cwd,
           approvalsEnabled: !state.isRespondingToApproval,
           onApprovalSelected: _onApprovalSelected,
+          onRetry: canRetry ? () => unawaited(retryTurn()) : null,
         ),
         inspectorEntries: const InspectorProjection().project(session),
         agentCommands: agentCommandsOf(view?.agentCommands ?? const []),
@@ -186,6 +201,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   /// Показывает только что созданную сессию: лента пуста, ход не идёт.
   void showCreated(AcpSession session) {
     final id = session.id.value;
+    _shown = session;
     final view = _handle(id)?.current;
     emit(
       state._copyWith(
@@ -222,14 +238,44 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
 
   /// Неожиданная потеря соединения: ход не идёт, запросы в полёте ядро уже
   /// не завершит — их флаги сбрасываются здесь (design D4).
-  void resetAfterConnectionLoss() => emit(
-    state._copyWith(
-      isPromptSubmitting: false,
-      canCancel: false,
-      isRespondingToApproval: false,
-      isRespondingToConfigOption: false,
-    ),
-  );
+  void resetAfterConnectionLoss() {
+    // Без соединения повторять нечем: лента перестраивается без Retry —
+    // до сброса флагов, иначе снимок идущего хода вернул бы их обратно.
+    if (_shown case final session? when session.id.value == state.sessionId) {
+      show(session);
+    }
+    emit(
+      state._copyWith(
+        isPromptSubmitting: false,
+        canCancel: false,
+        isRespondingToApproval: false,
+        isRespondingToConfigOption: false,
+      ),
+    );
+  }
+
+  /// Повторяет последний сорвавшийся ход показываемой сессии тем же
+  /// промптом (spec `agent-workbench-ui` «Failed turn notice with Retry»).
+  ///
+  /// Новый ход и его исход приходят из `sessionChanges` и диагностики kit;
+  /// здесь — только отказ kit, если повтор стал невозможен между показом
+  /// кнопки и нажатием.
+  Future<void> retryTurn() async {
+    final sessionId = state.sessionId;
+    final handle = sessionId == null ? null : _handle(sessionId);
+    if (handle == null) {
+      return;
+    }
+    try {
+      await handle.retry();
+    } on ClientWorkspaceException catch (error) {
+      _diagnostics.record(
+        'Failed to retry prompt turn: ${error.message}',
+        severity: DiagnosticSeverity.warning,
+        source: 'prompt',
+      );
+    }
+  }
 
   Future<void> submitPrompt(String prompt) async {
     final text = prompt.trim();

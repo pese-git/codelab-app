@@ -102,7 +102,7 @@ void main() {
     },
   );
 
-  test('an unexpected transport failure marks the connection failed and '
+  test('an unexpected transport failure marks the connection lost and '
       'logs no secrets', () async {
     final h = ShellHarness();
     await h.connect();
@@ -115,7 +115,7 @@ void main() {
       ),
     );
 
-    expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
+    expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.lost);
     expect(h.cubit.state.isPromptSubmitting, isFalse);
     expect(h.cubit.state.canCancel, isFalse);
     expect(h.cubit.state.activeSessionId, 'session-1');

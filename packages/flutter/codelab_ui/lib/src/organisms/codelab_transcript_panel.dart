@@ -91,12 +91,33 @@ final class CodeLabTranscriptApprovalResolved
   final CodeLabApprovalOutcome outcome;
 }
 
+/// Действие под записью ленты — например, Retry у заметки о сбое хода.
+///
+/// Почему: заметка о сбое должна давать повторить ход в один клик (design D4
+/// change `add-connection-and-error-states`), а лента не знает, что значит
+/// действие. Для чего: подпись и обработчик, которые строит хост. Как
+/// использовать: передать в [CodeLabTranscriptEntry.action]; `null` у
+/// [onPressed] рисует кнопку недоступной.
+class CodeLabTranscriptEntryAction {
+  const CodeLabTranscriptEntryAction({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+  });
+
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+}
+
 class CodeLabTranscriptEntry {
   const CodeLabTranscriptEntry({
     required this.id,
     required this.kind,
     required this.title,
     this.body,
+    this.details,
+    this.action,
     this.toolCall,
     this.timestampLabel,
     this.approval,
@@ -106,6 +127,13 @@ class CodeLabTranscriptEntry {
   final CodeLabTranscriptEntryKind kind;
   final String title;
   final String? body;
+
+  /// Технический текст под свёрнутой раскрывашкой Details — например, сырой
+  /// текст ошибки хода (design D3 change `add-connection-and-error-states`).
+  final String? details;
+
+  /// Кнопка под записью; см. [CodeLabTranscriptEntryAction].
+  final CodeLabTranscriptEntryAction? action;
   final CodeLabToolCallSummary? toolCall;
   final String? timestampLabel;
 
@@ -394,6 +422,27 @@ class _AcpTranscriptEntryRow extends StatelessWidget {
                       )
                     else
                       CodeLabText(entry.body!),
+                  ],
+                  if (entry.details case final details?) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: CodeLabTextDisclosure(
+                        label: 'Details',
+                        text: details,
+                      ),
+                    ),
+                  ],
+                  if (entry.action case final action?) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: CodeLabButton(
+                        label: action.label,
+                        icon: action.icon,
+                        onPressed: action.onPressed,
+                      ),
+                    ),
                   ],
                   if (entry.toolCall != null) ...[
                     const SizedBox(height: 8),

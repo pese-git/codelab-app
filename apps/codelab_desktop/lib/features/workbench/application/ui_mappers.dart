@@ -17,7 +17,7 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
-import 'package:fluent_ui/fluent_ui.dart' show FluentIcons;
+import 'package:fluent_ui/fluent_ui.dart' show FluentIcons, VoidCallback;
 
 /// Модели инспектора — модели kit (`InspectorProjection`, design D9);
 /// прежние имена остаются для виджетов и тестов.
@@ -39,6 +39,7 @@ CodeLabConnectionStatus connectionStatusOf(ConnectionView connection) =>
       Connecting() => CodeLabConnectionStatus.connecting,
       Reconnecting() => CodeLabConnectionStatus.reconnecting,
       Connected() => CodeLabConnectionStatus.connected,
+      ConnectionLost() => CodeLabConnectionStatus.lost,
       ConnectionFailed() => CodeLabConnectionStatus.failed,
     };
 
@@ -123,71 +124,124 @@ CodeLabSessionStatus _sessionStatusOf(SessionLifecycleStatus status) =>
 /// Id записей — позиционные (`prompt-N`, `agent-N`, `tool-N`,
 /// `prompt-error-N`), как до переноса проекции в kit: на них опираются
 /// виджеты и тесты. [approvalsEnabled] гасит кнопки одобрения, пока ответ на
-/// другое одобрение в полёте.
+/// другое одобрение в полёте. [onRetry] — повтор последнего сорвавшегося
+/// хода; хост передаёт его, только когда повтор возможен
+/// (`SessionView.canRetry` и соединение установлено, design D4 change
+/// `add-connection-and-error-states`), и кнопка Retry появляется у последней
+/// заметки о сбое.
 List<CodeLabTranscriptEntry> transcriptEntriesOf(
   List<TranscriptItem> transcript, {
   required String cwd,
   required bool approvalsEnabled,
   required ApprovalOptionChosen onApprovalSelected,
-}) => [
-  for (final (index, item) in transcript.indexed)
-    switch (item) {
-      UserItem(:final text) => CodeLabTranscriptEntry(
-        id: 'prompt-${index + 1}',
-        kind: CodeLabTranscriptEntryKind.user,
-        title: 'You',
-        body: text,
-      ),
-      AgentTextItem(:final text) ||
-      ThoughtItem(:final text) ||
-      NoticeItem(
-        kind: NoticeKind.emptyTurn,
-        :final text,
-      ) => CodeLabTranscriptEntry(
-        id: 'agent-${index + 1}',
-        kind: CodeLabTranscriptEntryKind.agent,
-        title: 'Agent',
-        body: text,
-      ),
-      NoticeItem(kind: NoticeKind.error, :final text) => CodeLabTranscriptEntry(
-        id: 'prompt-error-${index + 1}',
-        kind: CodeLabTranscriptEntryKind.diagnostic,
-        title: 'Prompt failed',
-        body: text,
-      ),
-      // Связь сессии с агентом: после переподключения или перезапуска
-      // (design D5, D6 change `add-session-list-and-reload`).
-      NoticeItem(
-        kind: NoticeKind.detached || NoticeKind.reconnected,
-        :final text,
-      ) =>
-        CodeLabTranscriptEntry(
-          id: 'session-notice-${index + 1}',
-          kind: CodeLabTranscriptEntryKind.diagnostic,
-          title: 'Session',
+  VoidCallback? onRetry,
+}) {
+  final lastErrorIndex = transcript.lastIndexWhere(
+    (item) => item is NoticeItem && item.kind == NoticeKind.error,
+  );
+  return [
+    for (final (index, item) in transcript.indexed)
+      switch (item) {
+        UserItem(:final text) => CodeLabTranscriptEntry(
+          id: 'prompt-${index + 1}',
+          kind: CodeLabTranscriptEntryKind.user,
+          title: 'You',
           body: text,
         ),
-      ToolCallItem(:final title, :final details, :final approval) =>
-        CodeLabTranscriptEntry(
-          id: 'tool-${index + 1}',
-          kind: CodeLabTranscriptEntryKind.toolCall,
-          title: title,
-          toolCall: details == null
-              ? null
-              : CodeLabToolCallSummary(
-                  name: details.kind.wireName,
-                  status: _toolCallStatusOf(details.status),
-                  detail: details.command,
-                ),
-          approval: _transcriptApprovalOf(
-            approval,
-            cwd: cwd,
-            enabled: approvalsEnabled,
-            onSelected: onApprovalSelected,
-          ),
+        AgentTextItem(:final text) ||
+        ThoughtItem(:final text) ||
+        NoticeItem(
+          kind: NoticeKind.emptyTurn,
+          :final text,
+        ) => CodeLabTranscriptEntry(
+          id: 'agent-${index + 1}',
+          kind: CodeLabTranscriptEntryKind.agent,
+          title: 'Agent',
+          body: text,
         ),
-    },
-];
+        NoticeItem(kind: NoticeKind.error, :final text, :final failure) =>
+          CodeLabTranscriptEntry(
+            id: 'prompt-error-${index + 1}',
+            kind: CodeLabTranscriptEntryKind.diagnostic,
+            title: failureTitleOf(failure),
+            body: _failureBodyOf(failure) ?? text,
+            details: failure == null ? null : text,
+            action: index == lastErrorIndex && onRetry != null
+                ? CodeLabTranscriptEntryAction(
+                    label: 'Retry',
+                    icon: FluentIcons.refresh,
+                    onPressed: onRetry,
+                  )
+                : null,
+          ),
+        // Связь сессии с агентом: после переподключения или перезапуска
+        // (design D5, D6 change `add-session-list-and-reload`).
+        NoticeItem(
+          kind: NoticeKind.detached || NoticeKind.reconnected,
+          :final text,
+        ) =>
+          CodeLabTranscriptEntry(
+            id: 'session-notice-${index + 1}',
+            kind: CodeLabTranscriptEntryKind.diagnostic,
+            title: 'Session',
+            body: text,
+          ),
+        ToolCallItem(:final title, :final details, :final approval) =>
+          CodeLabTranscriptEntry(
+            id: 'tool-${index + 1}',
+            kind: CodeLabTranscriptEntryKind.toolCall,
+            title: title,
+            toolCall: details == null
+                ? null
+                : CodeLabToolCallSummary(
+                    name: details.kind.wireName,
+                    status: _toolCallStatusOf(details.status),
+                    detail: details.command,
+                  ),
+            approval: _transcriptApprovalOf(
+              approval,
+              cwd: cwd,
+              enabled: approvalsEnabled,
+              onSelected: onApprovalSelected,
+            ),
+          ),
+      },
+  ];
+}
+
+/// Заголовок заметки о сбое хода по классу сбоя (design D3 change
+/// `add-connection-and-error-states`).
+///
+/// Почему: сырой текст исключения ничего не говорит пользователю, а класс
+/// сбоя от агента (`data.codelab.errorClass`) — говорит. Незнакомый класс и
+/// сбой без класса получают общий заголовок: словарь классов растёт на
+/// стороне агента.
+String failureTitleOf(PromptFailure? failure) => switch (failure) {
+  AgentPromptFailure(errorClass: 'auth') =>
+    'The agent could not sign in to the model provider',
+  AgentPromptFailure(errorClass: 'network' || 'timeout' || 'server') =>
+    'The model provider is unavailable',
+  AgentPromptFailure(errorClass: 'rateLimited') =>
+    "The model provider's rate limit was reached",
+  AgentPromptFailure(errorClass: 'overflow') =>
+    'The conversation is too long for the model',
+  ConnectionLostPromptFailure() => 'The connection to the agent was lost',
+  AgentPromptFailure() ||
+  RequestPromptFailure() ||
+  UnknownPromptFailure() ||
+  null => 'The agent could not complete the turn',
+};
+
+/// Тело заметки: сообщение агента или JSON-RPC; сырой текст ошибки уходит в
+/// Details. Без типизированного сбоя тело — сам текст заметки.
+String? _failureBodyOf(PromptFailure? failure) => switch (failure) {
+  AgentPromptFailure(:final message) ||
+  RequestPromptFailure(:final message) ||
+  UnknownPromptFailure(:final message) => message,
+  ConnectionLostPromptFailure() =>
+    'Reconnect to continue working with the agent.',
+  null => null,
+};
 
 /// Одобрение встроено в запись вызова: ожидающее — интерактивное,
 /// решённое — компактная отметка (embed-approval-in-thread/design.md,

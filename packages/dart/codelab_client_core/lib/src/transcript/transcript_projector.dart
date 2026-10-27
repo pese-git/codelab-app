@@ -388,6 +388,7 @@ List<TranscriptItem> _notices(
       kind: NoticeKind.error,
       text:
           'Failed to send prompt: ${_withoutTypePrefix(turn.failureMessage!)}',
+      failure: turn.failure,
     ),
 ];
 

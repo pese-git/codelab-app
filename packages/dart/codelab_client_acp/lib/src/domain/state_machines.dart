@@ -3,6 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import 'approval_policy.dart';
 import 'domain_models.dart';
+import 'prompt_failure.dart';
 
 part 'state_machines.freezed.dart';
 
@@ -95,6 +96,7 @@ sealed class PromptTurnStateEvent with _$PromptTurnStateEvent {
 
   const factory PromptTurnStateEvent.fail({
     required String message,
+    PromptFailure? failure,
     DateTime? completedAt,
   }) = PromptTurnFailed;
 
@@ -137,6 +139,7 @@ sealed class SessionStateEvent with _$SessionStateEvent {
 
   const factory SessionStateEvent.failTurn({
     required String message,
+    PromptFailure? failure,
     DateTime? completedAt,
   }) = SessionTurnFailed;
 
@@ -325,11 +328,13 @@ class PromptTurnStateMachine {
         stopReason: stopReason,
         completedAt: completedAt,
       ),
-      PromptTurnFailed(:final message, :final completedAt) => _fail(
-        turn,
-        message: message,
-        completedAt: completedAt,
-      ),
+      PromptTurnFailed(:final message, :final failure, :final completedAt) =>
+        _fail(
+          turn,
+          message: message,
+          failure: failure,
+          completedAt: completedAt,
+        ),
       PromptTurnCancelled(:final completedAt) => _cancel(
         turn,
         completedAt: completedAt,
@@ -408,11 +413,16 @@ class PromptTurnStateMachine {
   static StateTransitionResult<PromptTurn> fail(
     PromptTurn turn, {
     required String message,
+    PromptFailure? failure,
     DateTime? completedAt,
   }) {
     return reduce(
       turn,
-      PromptTurnStateEvent.fail(message: message, completedAt: completedAt),
+      PromptTurnStateEvent.fail(
+        message: message,
+        failure: failure,
+        completedAt: completedAt,
+      ),
     );
   }
 
@@ -554,6 +564,7 @@ class PromptTurnStateMachine {
   static StateTransitionResult<PromptTurn> _fail(
     PromptTurn turn, {
     required String message,
+    PromptFailure? failure,
     DateTime? completedAt,
   }) {
     if (turn.isTerminal) {
@@ -564,6 +575,7 @@ class PromptTurnStateMachine {
       turn.copyWith(
         status: PromptTurnStatus.failed,
         failureMessage: message,
+        failure: failure,
         completedAt: completedAt ?? turn.completedAt,
       ),
     );
@@ -669,11 +681,13 @@ class SessionStateMachine {
           stopReason: stopReason,
           completedAt: completedAt,
         ),
-      SessionTurnFailed(:final message, :final completedAt) => _failTurn(
-        session,
-        message: message,
-        completedAt: completedAt,
-      ),
+      SessionTurnFailed(:final message, :final failure, :final completedAt) =>
+        _failTurn(
+          session,
+          message: message,
+          failure: failure,
+          completedAt: completedAt,
+        ),
       SessionTurnCancelled(:final completedAt) => _cancelTurn(
         session,
         completedAt: completedAt,
@@ -845,11 +859,16 @@ class SessionStateMachine {
   static StateTransitionResult<AcpSession> failTurn(
     AcpSession session, {
     required String message,
+    PromptFailure? failure,
     DateTime? completedAt,
   }) {
     return reduce(
       session,
-      SessionStateEvent.failTurn(message: message, completedAt: completedAt),
+      SessionStateEvent.failTurn(
+        message: message,
+        failure: failure,
+        completedAt: completedAt,
+      ),
     );
   }
 
@@ -885,8 +904,16 @@ class SessionStateMachine {
     PromptTurn turn, {
     DateTime? startedAt,
   }) {
-    if (session.status != SessionLifecycleStatus.idle &&
-        session.status != SessionLifecycleStatus.active) {
+    // `failed` после сорвавшегося хода — исход прошлого хода, а не запрет
+    // на следующий: иначе после любой ошибки сессия не принимала бы промпты,
+    // и повтор хода был бы невозможен (design D4 change
+    // `add-connection-and-error-states`).
+    final canStart = switch (session.status) {
+      SessionLifecycleStatus.idle || SessionLifecycleStatus.active => true,
+      SessionLifecycleStatus.failed => session.activeTurn == null,
+      _ => false,
+    };
+    if (!canStart) {
       return _rejected('session already has an active prompt turn');
     }
 
@@ -1031,6 +1058,7 @@ class SessionStateMachine {
   static StateTransitionResult<AcpSession> _failTurn(
     AcpSession session, {
     required String message,
+    PromptFailure? failure,
     DateTime? completedAt,
   }) {
     final activeTurn = session.activeTurn;
@@ -1041,6 +1069,7 @@ class SessionStateMachine {
     final turn = PromptTurnStateMachine.fail(
       activeTurn,
       message: message,
+      failure: failure,
       completedAt: completedAt,
     );
     return switch (turn) {

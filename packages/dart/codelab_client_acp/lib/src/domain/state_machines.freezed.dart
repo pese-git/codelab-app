@@ -946,7 +946,7 @@ return cancel(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( DateTime? startedAt)?  start,TResult Function( SessionUpdate update)?  update,TResult Function( ApprovalRequest approval)?  requestApproval,TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult Function( StopReason stopReason,  DateTime? completedAt)?  complete,TResult Function( String message,  DateTime? completedAt)?  fail,TResult Function( DateTime? completedAt)?  cancel,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( DateTime? startedAt)?  start,TResult Function( SessionUpdate update)?  update,TResult Function( ApprovalRequest approval)?  requestApproval,TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult Function( StopReason stopReason,  DateTime? completedAt)?  complete,TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  fail,TResult Function( DateTime? completedAt)?  cancel,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case PromptTurnStartRequested() when start != null:
 return start(_that.startedAt);case PromptTurnUpdateReceived() when update != null:
@@ -955,7 +955,7 @@ return requestApproval(_that.approval);case PromptTurnApprovalSelected() when se
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case PromptTurnApprovalCancelled() when cancelApproval != null:
 return cancelApproval(_that.approvalId,_that.resolvedAt);case PromptTurnCompleted() when complete != null:
 return complete(_that.stopReason,_that.completedAt);case PromptTurnFailed() when fail != null:
-return fail(_that.message,_that.completedAt);case PromptTurnCancelled() when cancel != null:
+return fail(_that.message,_that.failure,_that.completedAt);case PromptTurnCancelled() when cancel != null:
 return cancel(_that.completedAt);case _:
   return orElse();
 
@@ -974,7 +974,7 @@ return cancel(_that.completedAt);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( DateTime? startedAt)  start,required TResult Function( SessionUpdate update)  update,required TResult Function( ApprovalRequest approval)  requestApproval,required TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)  selectApproval,required TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)  cancelApproval,required TResult Function( StopReason stopReason,  DateTime? completedAt)  complete,required TResult Function( String message,  DateTime? completedAt)  fail,required TResult Function( DateTime? completedAt)  cancel,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( DateTime? startedAt)  start,required TResult Function( SessionUpdate update)  update,required TResult Function( ApprovalRequest approval)  requestApproval,required TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)  selectApproval,required TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)  cancelApproval,required TResult Function( StopReason stopReason,  DateTime? completedAt)  complete,required TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)  fail,required TResult Function( DateTime? completedAt)  cancel,}) {final _that = this;
 switch (_that) {
 case PromptTurnStartRequested():
 return start(_that.startedAt);case PromptTurnUpdateReceived():
@@ -983,7 +983,7 @@ return requestApproval(_that.approval);case PromptTurnApprovalSelected():
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case PromptTurnApprovalCancelled():
 return cancelApproval(_that.approvalId,_that.resolvedAt);case PromptTurnCompleted():
 return complete(_that.stopReason,_that.completedAt);case PromptTurnFailed():
-return fail(_that.message,_that.completedAt);case PromptTurnCancelled():
+return fail(_that.message,_that.failure,_that.completedAt);case PromptTurnCancelled():
 return cancel(_that.completedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -998,7 +998,7 @@ return cancel(_that.completedAt);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( DateTime? startedAt)?  start,TResult? Function( SessionUpdate update)?  update,TResult? Function( ApprovalRequest approval)?  requestApproval,TResult? Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult? Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult? Function( StopReason stopReason,  DateTime? completedAt)?  complete,TResult? Function( String message,  DateTime? completedAt)?  fail,TResult? Function( DateTime? completedAt)?  cancel,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( DateTime? startedAt)?  start,TResult? Function( SessionUpdate update)?  update,TResult? Function( ApprovalRequest approval)?  requestApproval,TResult? Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult? Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult? Function( StopReason stopReason,  DateTime? completedAt)?  complete,TResult? Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  fail,TResult? Function( DateTime? completedAt)?  cancel,}) {final _that = this;
 switch (_that) {
 case PromptTurnStartRequested() when start != null:
 return start(_that.startedAt);case PromptTurnUpdateReceived() when update != null:
@@ -1007,7 +1007,7 @@ return requestApproval(_that.approval);case PromptTurnApprovalSelected() when se
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case PromptTurnApprovalCancelled() when cancelApproval != null:
 return cancelApproval(_that.approvalId,_that.resolvedAt);case PromptTurnCompleted() when complete != null:
 return complete(_that.stopReason,_that.completedAt);case PromptTurnFailed() when fail != null:
-return fail(_that.message,_that.completedAt);case PromptTurnCancelled() when cancel != null:
+return fail(_that.message,_that.failure,_that.completedAt);case PromptTurnCancelled() when cancel != null:
 return cancel(_that.completedAt);case _:
   return null;
 
@@ -1469,10 +1469,11 @@ as DateTime?,
 
 
 class PromptTurnFailed implements PromptTurnStateEvent {
-  const PromptTurnFailed({required this.message, this.completedAt});
+  const PromptTurnFailed({required this.message, this.failure, this.completedAt});
   
 
  final  String message;
+ final  PromptFailure? failure;
  final  DateTime? completedAt;
 
 /// Create a copy of PromptTurnStateEvent
@@ -1485,16 +1486,16 @@ $PromptTurnFailedCopyWith<PromptTurnFailed> get copyWith => _$PromptTurnFailedCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PromptTurnFailed&&(identical(other.message, message) || other.message == message)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PromptTurnFailed&&(identical(other.message, message) || other.message == message)&&(identical(other.failure, failure) || other.failure == failure)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,message,completedAt);
+int get hashCode => Object.hash(runtimeType,message,failure,completedAt);
 
 @override
 String toString() {
-  return 'PromptTurnStateEvent.fail(message: $message, completedAt: $completedAt)';
+  return 'PromptTurnStateEvent.fail(message: $message, failure: $failure, completedAt: $completedAt)';
 }
 
 
@@ -1505,11 +1506,11 @@ abstract mixin class $PromptTurnFailedCopyWith<$Res> implements $PromptTurnState
   factory $PromptTurnFailedCopyWith(PromptTurnFailed value, $Res Function(PromptTurnFailed) _then) = _$PromptTurnFailedCopyWithImpl;
 @useResult
 $Res call({
- String message, DateTime? completedAt
+ String message, PromptFailure? failure, DateTime? completedAt
 });
 
 
-
+$PromptFailureCopyWith<$Res>? get failure;
 
 }
 /// @nodoc
@@ -1522,15 +1523,28 @@ class _$PromptTurnFailedCopyWithImpl<$Res>
 
 /// Create a copy of PromptTurnStateEvent
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? message = null,Object? completedAt = freezed,}) {
+@pragma('vm:prefer-inline') $Res call({Object? message = null,Object? failure = freezed,Object? completedAt = freezed,}) {
   return _then(PromptTurnFailed(
 message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
-as String,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
+as String,failure: freezed == failure ? _self.failure : failure // ignore: cast_nullable_to_non_nullable
+as PromptFailure?,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
 }
 
+/// Create a copy of PromptTurnStateEvent
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$PromptFailureCopyWith<$Res>? get failure {
+    if (_self.failure == null) {
+    return null;
+  }
 
+  return $PromptFailureCopyWith<$Res>(_self.failure!, (value) {
+    return _then(_self.copyWith(failure: value));
+  });
+}
 }
 
 /// @nodoc
@@ -1728,7 +1742,7 @@ return cancelTurn(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( DateTime? updatedAt)?  activate,TResult Function( PromptTurn turn,  DateTime? startedAt)?  startTurn,TResult Function( SessionUpdate update)?  update,TResult Function( ApprovalRequest approval)?  requestApproval,TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult Function( StopReason stopReason,  DateTime? completedAt)?  completeTurn,TResult Function( String message,  DateTime? completedAt)?  failTurn,TResult Function( DateTime? completedAt)?  cancelTurn,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( DateTime? updatedAt)?  activate,TResult Function( PromptTurn turn,  DateTime? startedAt)?  startTurn,TResult Function( SessionUpdate update)?  update,TResult Function( ApprovalRequest approval)?  requestApproval,TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult Function( StopReason stopReason,  DateTime? completedAt)?  completeTurn,TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  failTurn,TResult Function( DateTime? completedAt)?  cancelTurn,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case SessionActivateRequested() when activate != null:
 return activate(_that.updatedAt);case SessionTurnStartRequested() when startTurn != null:
@@ -1738,7 +1752,7 @@ return requestApproval(_that.approval);case SessionApprovalSelected() when selec
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case SessionApprovalCancelled() when cancelApproval != null:
 return cancelApproval(_that.approvalId,_that.resolvedAt);case SessionTurnCompleted() when completeTurn != null:
 return completeTurn(_that.stopReason,_that.completedAt);case SessionTurnFailed() when failTurn != null:
-return failTurn(_that.message,_that.completedAt);case SessionTurnCancelled() when cancelTurn != null:
+return failTurn(_that.message,_that.failure,_that.completedAt);case SessionTurnCancelled() when cancelTurn != null:
 return cancelTurn(_that.completedAt);case _:
   return orElse();
 
@@ -1757,7 +1771,7 @@ return cancelTurn(_that.completedAt);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( DateTime? updatedAt)  activate,required TResult Function( PromptTurn turn,  DateTime? startedAt)  startTurn,required TResult Function( SessionUpdate update)  update,required TResult Function( ApprovalRequest approval)  requestApproval,required TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)  selectApproval,required TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)  cancelApproval,required TResult Function( StopReason stopReason,  DateTime? completedAt)  completeTurn,required TResult Function( String message,  DateTime? completedAt)  failTurn,required TResult Function( DateTime? completedAt)  cancelTurn,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( DateTime? updatedAt)  activate,required TResult Function( PromptTurn turn,  DateTime? startedAt)  startTurn,required TResult Function( SessionUpdate update)  update,required TResult Function( ApprovalRequest approval)  requestApproval,required TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)  selectApproval,required TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)  cancelApproval,required TResult Function( StopReason stopReason,  DateTime? completedAt)  completeTurn,required TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)  failTurn,required TResult Function( DateTime? completedAt)  cancelTurn,}) {final _that = this;
 switch (_that) {
 case SessionActivateRequested():
 return activate(_that.updatedAt);case SessionTurnStartRequested():
@@ -1767,7 +1781,7 @@ return requestApproval(_that.approval);case SessionApprovalSelected():
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case SessionApprovalCancelled():
 return cancelApproval(_that.approvalId,_that.resolvedAt);case SessionTurnCompleted():
 return completeTurn(_that.stopReason,_that.completedAt);case SessionTurnFailed():
-return failTurn(_that.message,_that.completedAt);case SessionTurnCancelled():
+return failTurn(_that.message,_that.failure,_that.completedAt);case SessionTurnCancelled():
 return cancelTurn(_that.completedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -1782,7 +1796,7 @@ return cancelTurn(_that.completedAt);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( DateTime? updatedAt)?  activate,TResult? Function( PromptTurn turn,  DateTime? startedAt)?  startTurn,TResult? Function( SessionUpdate update)?  update,TResult? Function( ApprovalRequest approval)?  requestApproval,TResult? Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult? Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult? Function( StopReason stopReason,  DateTime? completedAt)?  completeTurn,TResult? Function( String message,  DateTime? completedAt)?  failTurn,TResult? Function( DateTime? completedAt)?  cancelTurn,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( DateTime? updatedAt)?  activate,TResult? Function( PromptTurn turn,  DateTime? startedAt)?  startTurn,TResult? Function( SessionUpdate update)?  update,TResult? Function( ApprovalRequest approval)?  requestApproval,TResult? Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult? Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult? Function( StopReason stopReason,  DateTime? completedAt)?  completeTurn,TResult? Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  failTurn,TResult? Function( DateTime? completedAt)?  cancelTurn,}) {final _that = this;
 switch (_that) {
 case SessionActivateRequested() when activate != null:
 return activate(_that.updatedAt);case SessionTurnStartRequested() when startTurn != null:
@@ -1792,7 +1806,7 @@ return requestApproval(_that.approval);case SessionApprovalSelected() when selec
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case SessionApprovalCancelled() when cancelApproval != null:
 return cancelApproval(_that.approvalId,_that.resolvedAt);case SessionTurnCompleted() when completeTurn != null:
 return completeTurn(_that.stopReason,_that.completedAt);case SessionTurnFailed() when failTurn != null:
-return failTurn(_that.message,_that.completedAt);case SessionTurnCancelled() when cancelTurn != null:
+return failTurn(_that.message,_that.failure,_that.completedAt);case SessionTurnCancelled() when cancelTurn != null:
 return cancelTurn(_that.completedAt);case _:
   return null;
 
@@ -2331,10 +2345,11 @@ as DateTime?,
 
 
 class SessionTurnFailed implements SessionStateEvent {
-  const SessionTurnFailed({required this.message, this.completedAt});
+  const SessionTurnFailed({required this.message, this.failure, this.completedAt});
   
 
  final  String message;
+ final  PromptFailure? failure;
  final  DateTime? completedAt;
 
 /// Create a copy of SessionStateEvent
@@ -2347,16 +2362,16 @@ $SessionTurnFailedCopyWith<SessionTurnFailed> get copyWith => _$SessionTurnFaile
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionTurnFailed&&(identical(other.message, message) || other.message == message)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionTurnFailed&&(identical(other.message, message) || other.message == message)&&(identical(other.failure, failure) || other.failure == failure)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,message,completedAt);
+int get hashCode => Object.hash(runtimeType,message,failure,completedAt);
 
 @override
 String toString() {
-  return 'SessionStateEvent.failTurn(message: $message, completedAt: $completedAt)';
+  return 'SessionStateEvent.failTurn(message: $message, failure: $failure, completedAt: $completedAt)';
 }
 
 
@@ -2367,11 +2382,11 @@ abstract mixin class $SessionTurnFailedCopyWith<$Res> implements $SessionStateEv
   factory $SessionTurnFailedCopyWith(SessionTurnFailed value, $Res Function(SessionTurnFailed) _then) = _$SessionTurnFailedCopyWithImpl;
 @useResult
 $Res call({
- String message, DateTime? completedAt
+ String message, PromptFailure? failure, DateTime? completedAt
 });
 
 
-
+$PromptFailureCopyWith<$Res>? get failure;
 
 }
 /// @nodoc
@@ -2384,15 +2399,28 @@ class _$SessionTurnFailedCopyWithImpl<$Res>
 
 /// Create a copy of SessionStateEvent
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? message = null,Object? completedAt = freezed,}) {
+@pragma('vm:prefer-inline') $Res call({Object? message = null,Object? failure = freezed,Object? completedAt = freezed,}) {
   return _then(SessionTurnFailed(
 message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
-as String,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
+as String,failure: freezed == failure ? _self.failure : failure // ignore: cast_nullable_to_non_nullable
+as PromptFailure?,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
 }
 
+/// Create a copy of SessionStateEvent
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$PromptFailureCopyWith<$Res>? get failure {
+    if (_self.failure == null) {
+    return null;
+  }
 
+  return $PromptFailureCopyWith<$Res>(_self.failure!, (value) {
+    return _then(_self.copyWith(failure: value));
+  });
+}
 }
 
 /// @nodoc
