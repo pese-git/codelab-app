@@ -66,7 +66,9 @@ final class E2eAgent {
         return E2eLaunch._(
           command: _absolute(dart),
           args: '${_noSpaces(agent.path)} serve --stdio',
-          sessionLabel: equals('Session codelab-test-session'),
+          // До первого промпта сессия называется «New session», а не по id
+          // (fix #99 «называть сессию по первому промпту вместо id»).
+          sessionLabel: equals('New session'),
           models: const [
             (value: 'gpt-5', name: 'GPT-5'),
             (value: 'gpt-4', name: 'GPT-4'),
@@ -94,7 +96,7 @@ final class E2eAgent {
             _noSpaces(script),
             ..._dartFlags(mode, tempDir),
           ].join(' '),
-          sessionLabel: matches(RegExp(r'^Session \S+$')),
+          sessionLabel: equals('New session'),
           models: const [
             (value: 'scripted/gpt-5', name: 'gpt-5'),
             (value: 'scripted/gpt-4', name: 'gpt-4'),

@@ -62,6 +62,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Failed'), findsWidgets);
+    // Диагностика — в панели Protocol дока, а не в постоянной карточке
+    // Debug log (change `redesign-workbench-shell`, D5).
+    codeLabDependenciesOf(
+      tester.element(find.byType(CodeLabApp)),
+    ).shellCubit.openPane(ToolPane.protocol);
+    await tester.pumpAndSettle();
     expect(
       find.text('Stdio command is required before connecting.'),
       findsOneWidget,
@@ -268,7 +274,7 @@ void main() {
   );
 
   testWidgets(
-    'a real stdio agent process dying mid-turn is reflected as a failed '
+    'a real stdio agent process dying mid-turn is reflected as a lost '
     'connection, not a stuck Connected/running UI',
     (tester) async {
       await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
@@ -328,16 +334,18 @@ void main() {
       // widget_test.dart. Poll straight for the settled failed state.
       final deadline = DateTime.now().add(const Duration(seconds: 10));
       while (shellCubit.state.connectionStatus !=
-              CodeLabConnectionStatus.failed &&
+              CodeLabConnectionStatus.lost &&
           DateTime.now().isBefore(deadline)) {
         await tester.pump(const Duration(milliseconds: 100));
       }
       await tester.pumpAndSettle();
 
-      expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
+      // Спонтанная потеря — `lost`, а не `failed` (change
+      // `add-connection-and-error-states`, D1).
+      expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.lost);
       expect(shellCubit.state.isPromptSubmitting, isFalse);
       expect(shellCubit.state.canCancel, isFalse);
-      expect(find.text('Failed'), findsWidgets);
+      expect(find.text('Connection lost'), findsWidgets);
       // The transcript up to the point of the crash is history, not part of
       // the now-untrustworthy active request — it must stay visible.
       // Ищем только в ленте: сайдбар и шапка показывают тот же текст как
