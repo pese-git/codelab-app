@@ -2,79 +2,12 @@
 // `add-session-list-and-reload`; design D8): настоящий процесс агента на
 // Dart VM, кадры JSON-RPC построчно через stdin/stdout.
 
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:test/test.dart';
 
-/// Процесс агента и разбор его вывода.
-final class _Agent {
-  _Agent._(this._process) {
-    _process.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen(
-          (line) => _frames.add(jsonDecode(line) as Map<String, Object?>),
-        );
-  }
-
-  static Future<_Agent> start(File script) async => _Agent._(
-    await Process.start(_dartExecutable(), [script.path, 'serve', '--stdio']),
-  );
-
-  final Process _process;
-  final _frames = StreamController<Map<String, Object?>>.broadcast();
-  final received = <Map<String, Object?>>[];
-  var _nextId = 1;
-
-  /// Отправляет запрос и возвращает ответ; уведомления до ответа — в
-  /// [received].
-  Future<Map<String, Object?>> request(
-    String method, [
-    Map<String, Object?> params = const {},
-  ]) async {
-    final id = _nextId++;
-    final response = _frames.stream.firstWhere((frame) {
-      if (frame['id'] == id && frame['method'] == null) {
-        return true;
-      }
-      received.add(frame);
-      return false;
-    });
-    _process.stdin.writeln(
-      jsonEncode({
-        'jsonrpc': '2.0',
-        'id': id,
-        'method': method,
-        'params': params,
-      }),
-    );
-    return response.timeout(const Duration(seconds: 20));
-  }
-
-  Future<String> newSession(String cwd) async =>
-      ((await request('session/new', {
-                'cwd': cwd,
-                'mcpServers': <Object?>[],
-              }))['result']!
-              as Map)['sessionId']
-          as String;
-
-  Future<void> prompt(String sessionId, String text) =>
-      request('session/prompt', {
-        'sessionId': sessionId,
-        'prompt': [
-          {'type': 'text', 'text': text},
-        ],
-      });
-
-  Future<void> stop() async {
-    await _process.stdin.close();
-    await _process.exitCode.timeout(const Duration(seconds: 10));
-  }
-}
+import 'support/agent_process.dart';
 
 void main() {
   late Directory directory;
@@ -89,8 +22,8 @@ void main() {
   });
   tearDown(() => directory.delete(recursive: true));
 
-  Future<_Agent> startAgent() async {
-    final agent = await _Agent.start(script);
+  Future<AgentProcess> startAgent() async {
+    final agent = await AgentProcess.start(script);
     addTearDown(agent.stop);
     await agent.request('initialize', {'protocolVersion': 1});
     return agent;
@@ -99,7 +32,7 @@ void main() {
   test(
     'initialize declares loadSession and sessionCapabilities.list',
     () async {
-      final agent = await _Agent.start(script);
+      final agent = await AgentProcess.start(script);
       addTearDown(agent.stop);
 
       final result =
@@ -217,19 +150,4 @@ void main() {
 
     expect((response['error']! as Map)['code'], -32002);
   });
-}
-
-/// Путь к `dart`: под `flutter test` (`melos run test`)
-/// `Platform.resolvedExecutable` — это `flutter_tester`, а агенту нужен Dart
-/// VM; поэтому сначала берётся SDK из `FLUTTER_ROOT` — как в
-/// `codelab_client_io/test/transport/io_transport_resolver_test.dart`.
-String _dartExecutable() {
-  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
-  if (flutterRoot != null) {
-    final dart = File('$flutterRoot/bin/cache/dart-sdk/bin/dart');
-    if (dart.existsSync()) {
-      return dart.path;
-    }
-  }
-  return Platform.resolvedExecutable;
 }
