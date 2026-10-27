@@ -17,6 +17,7 @@ import 'package:codelab_acp_transports/codelab_acp_transports.dart'
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/platform/dock_layout_store.dart';
 import '../../../core/platform/project_folder_picker.dart';
 import 'active_session_cubit.dart';
 import 'connection_cubit.dart';
@@ -34,8 +35,8 @@ export 'connection_cubit.dart'
         CodeLabWebSocketTransportFactory;
 export 'layout_cubit.dart'
     show
-        kInspectorPaneMaxWidth,
-        kInspectorPaneMinWidth,
+        kDockMaxWidth,
+        kDockMinWidth,
         kSessionsPaneMaxWidth,
         kSessionsPaneMinWidth;
 export 'shell_state.dart';
@@ -76,6 +77,7 @@ final class CodeLabShellParts {
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
+    DockLayoutStore? dockLayoutStore,
     Logger? logger,
   }) {
     final changes = ShellChanges();
@@ -117,7 +119,11 @@ final class CodeLabShellParts {
       ),
       activeSession: activeSession,
       settings: settings,
-      layout: LayoutCubit(changes: changes),
+      layout: LayoutCubit(
+        changes: changes,
+        dockLayoutStore: dockLayoutStore,
+        diagnostics: diagnostics,
+      ),
     );
   }
 
@@ -175,6 +181,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
+    DockLayoutStore? dockLayoutStore,
     Logger? logger,
   }) {
     final secretSource = secrets ?? InMemorySecretSource();
@@ -203,6 +210,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             workingDirectoryProvider: workingDirectoryProvider,
             projectFolderPicker: projectFolderPicker,
             recentProjectsStore: recentProjectsStore,
+            dockLayoutStore: dockLayoutStore,
             logger: logger,
           ),
     );
@@ -268,7 +276,23 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   void resizeSessionsPane(double width) => _layout.resizeSessionsPane(width);
 
-  void resizeInspectorPane(double width) => _layout.resizeInspectorPane(width);
+  void resizeDock(double width) => _layout.resizeDock(width);
+
+  void toggleSidebarCollapsed() => _layout.toggleSidebarCollapsed();
+
+  void toggleSidebarOverlay() => _layout.toggleSidebarOverlay();
+
+  void closeSidebarOverlay() => _layout.closeSidebarOverlay();
+
+  void togglePane(ToolPane pane) => _layout.togglePane(pane);
+
+  void openPane(ToolPane pane) => _layout.openPane(pane);
+
+  void selectPane(ToolPane pane) => _layout.selectPane(pane);
+
+  void closePane(ToolPane pane) => _layout.closePane(pane);
+
+  void dismissDockOverlay() => _layout.dismissDockOverlay();
 
   Future<void> createSession() => _sessions.createSession();
 
@@ -329,7 +353,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       case 'reconnect':
         unawaited(reconnect());
       case 'logs':
-        _layout.showInspectorInNarrowLayout();
+        // Протокол и debug log теперь — панель Protocol дока (change
+        // `redesign-workbench-shell`, D5).
+        _layout.openPane(ToolPane.protocol);
       default:
         break;
     }
@@ -398,7 +424,12 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       canCancel: active.canCancel,
       isRespondingToApproval: active.isRespondingToApproval,
       isCommandPaletteOpen: layout.isCommandPaletteOpen,
-      isInspectorVisibleInNarrowLayout: layout.isInspectorVisibleInNarrowLayout,
+      sidebarCollapsed: layout.sidebarCollapsed,
+      sidebarOverlayOpen: layout.sidebarOverlayOpen,
+      openPanes: layout.openPanes,
+      activePane: layout.activePane,
+      dockOverlayOpen: layout.dockOverlayOpen,
+      sessionMode: active.sessionMode,
       agentCommands: active.agentCommands,
       commandCatalog: paletteCatalogOf(active.agentCommandViews),
       composerDraft: active.composerDraft,
@@ -406,7 +437,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       configOptions: active.configOptions,
       isRespondingToConfigOption: active.isRespondingToConfigOption,
       sessionsPaneWidth: layout.sessionsPaneWidth,
-      inspectorPaneWidth: layout.inspectorPaneWidth,
+      dockWidth: layout.dockWidth,
       selectedProjectPath: settings.selectedProjectPath,
       runAgentFromProjectDirectory: settings.runAgentFromProjectDirectory,
       recentProjects: settings.recentProjects,
