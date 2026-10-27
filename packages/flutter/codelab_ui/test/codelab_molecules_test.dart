@@ -983,4 +983,27 @@ void main() {
       expect(selected, newSession);
     });
   });
+
+  testWidgets('a new draftRevision re-applies the same initialPrompt after '
+      'the user changed the text (change add-command-palette-agent-commands)', (
+    tester,
+  ) async {
+    Widget composer(int revision) => FluentApp(
+      home: CodeLabPromptComposer(
+        onSubmit: (_) {},
+        initialPrompt: '/compact ',
+        draftRevision: revision,
+      ),
+    );
+    String text() =>
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text;
+
+    await tester.pumpWidget(composer(1));
+    await tester.enterText(find.byType(EditableText), '');
+    await tester.pumpWidget(composer(1));
+    expect(text(), isEmpty);
+
+    await tester.pumpWidget(composer(2));
+    expect(text(), '/compact ');
+  });
 }
