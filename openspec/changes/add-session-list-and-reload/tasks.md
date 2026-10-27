@@ -88,14 +88,8 @@
   - `Reconnect` перезагружает активную сессию;
   - перезапуск корневого scope с теми же `SharedPreferences`.
 
-  Тест помечен `scripted-only`: Dart-агент с `--llm-script` держит сессии в памяти и не объявляет `loadSession` (D8). Источник: testing-quality «Интеграционный тест списка и загрузки сессий». Прогон в feature-ветке — `analyze`, на macOS — только в `release/*` (`AGENTS.md` §21). PR итерации 5.
-- [ ] 5.6 Заблокировано: нужен агент с `loadSession` при `--llm-script` (D8). Ход, переживший переподключение. Dart-агент не отменяет идущий ход при закрытии WebSocket, а держит его `detachGrace` (30 с); при `session/load` с нового соединения он продолжает ход и шлёт его `session/update` уже после ответа на `session/load` (`codelab_agent_acp`, `SessionBridge.reattach`). В `session_list_load_flow_test.dart`, в режиме `dart`, проверить сценарий:
-  - промпт с долгим ходом по WebSocket;
-  - `Reconnect` во время хода;
-  - после `session/load` обновления продолжения хода видны в ленте активной сессии;
-  - итог хода не теряется, `isPromptSubmitting`/`canCancel` возвращаются в `false`.
-
-  Если тест красный, исправить применение обновлений после реплея в `codelab_client_acp`/`codelab_client_core`: ядро сейчас считает ходы реплея завершёнными (acp-protocol-client «Загруженная сессия показывает повторённую историю»). Отдельно от этого kit не отправляет `session/cancel` перед заменой транспорта: отмена оборвала бы ход, который агент сохраняет для переподключения.
+  Тест шёл как `scripted-only`, пока Dart-агент с `--llm-script` держал сессии в памяти (D8); тег снят в change `add-llm-script-session-store` (флаг `--sessions-dir`). Источник: testing-quality «Интеграционный тест списка и загрузки сессий». Прогон в feature-ветке — `analyze`, на macOS — только в `release/*` (`AGENTS.md` §21). PR итерации 5.
+- [x] 5.6 Перенесено в change `cancel-turn-on-ws-disconnect`: Reconnect посреди хода по WebSocket. E2E на Dart-агенте показал, что ход, переживший переподключение, клиент не видит: после `session/load` ходы реплея закрыты, а поздние `session/update` отбрасываются. Для MVP выбрана отмена хода при обрыве: `serve --ws` получает `detachGrace` ноль, как stdio, а клиент показывает прерванный ход отменённым. Возобновление хода после переподключения (`_meta.codelab.turnEnded`) — после MVP.
 
 ## 6. Документы и Definition of Done
 
