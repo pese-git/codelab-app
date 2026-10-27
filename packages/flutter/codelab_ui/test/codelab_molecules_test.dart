@@ -924,4 +924,63 @@ void main() {
       expect(selected, 'allow_always');
     },
   );
+
+  group('inline palette with a given search (change '
+      'add-command-palette-agent-commands, D5)', () {
+    const compact = CodeLabCommandAction(
+      id: 'agent-compact',
+      label: 'compact',
+      slashCommand: '/compact',
+      description: 'Compact the conversation',
+      icon: FluentIcons.robot,
+      source: CodeLabCommandSource.agent,
+    );
+    final newSession = CodeLabCommandAction.defaults.firstWhere(
+      (a) => a.id == 'new',
+    );
+
+    Future<CodeLabCommandAction?> pickWithEnter(
+      WidgetTester tester,
+      String text,
+      CodeLabCommandSearch search,
+    ) async {
+      CodeLabCommandAction? selected;
+      await tester.pumpWidget(
+        FluentApp(
+          home: CodeLabPromptComposer(
+            onSubmit: (_) {},
+            commandActions: [...CodeLabCommandAction.defaults, compact],
+            search: search,
+            onCommandSelected: (action) => selected = action,
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(EditableText), text);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      return selected;
+    }
+
+    testWidgets('the search result is what Enter picks', (tester) async {
+      final selected = await pickWithEnter(
+        tester,
+        '/cpt',
+        (query) => query == '/cpt' ? [compact] : const [],
+      );
+
+      expect(selected, compact);
+    });
+
+    testWidgets('Enter picks the first row shown: client section before '
+        'agent section', (tester) async {
+      final selected = await pickWithEnter(
+        tester,
+        '/n',
+        (_) => [compact, newSession],
+      );
+
+      expect(selected, newSession);
+    });
+  });
 }

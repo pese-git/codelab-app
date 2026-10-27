@@ -1759,6 +1759,42 @@ void main() {
       expect(find.text('Open PR for review'), findsNothing);
     });
   });
+
+  testWidgets('a given search replaces the built-in filter and keeps its '
+      'order (change add-command-palette-agent-commands, D5)', (tester) async {
+    final logs = CodeLabCommandAction.defaults.firstWhere(
+      (a) => a.id == 'logs',
+    );
+    final newSession = CodeLabCommandAction.defaults.firstWhere(
+      (a) => a.id == 'new',
+    );
+    final queries = <String>[];
+
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 520,
+          height: 360,
+          child: CodeLabCommandPaletteSurface(
+            initialQuery: '/zz',
+            search: (query) {
+              queries.add(query);
+              return [logs, newSession];
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(queries.last, '/zz');
+    expect(find.text('/logs'), findsOneWidget);
+    expect(find.text('/new'), findsOneWidget);
+    expect(find.text('/plan'), findsNothing);
+    expect(
+      tester.getTopLeft(find.text('/logs')).dy,
+      lessThan(tester.getTopLeft(find.text('/new')).dy),
+    );
+  });
 }
 
 void acpTestSessionSelected(String sessionId) {}
