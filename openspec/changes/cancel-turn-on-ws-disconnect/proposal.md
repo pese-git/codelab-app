@@ -1,6 +1,6 @@
 ## Why
 
-`codelab-agent serve --ws` держит ход закрытого соединения `detachGrace` (30 с) и переподключает его, если сессию загружают с нового соединения (agent-binary «Команда serve», agent-acp-server). Для MVP это даёт две проблемы:
+До этого change `codelab-agent serve --ws` держал ход закрытого соединения `detachGrace` (30 с — значение по умолчанию `AcpAgentServer`) и переподключал его, если сессию загружают с нового соединения (agent-binary «Команда serve», agent-acp-server). Для MVP это давало две проблемы:
 
 - **Клиент не видит продолжения хода.** После `session/load` ядро закрывает ходы реплея, поздние `session/update` отбрасываются, итог `_meta.codelab.turnEnded` клиент не читает. Это воспроизвёл e2e на Dart-агенте (задача 5.6 change `add-session-list-and-reload`, перенесённая сюда).
 - **Ход без клиента не может работать с проектом.** Файлы и команды исполняет клиент (`fs/*`, `terminal/*`, `AcpClientExecutionEnv`), поэтому за время разрыва каждый такой вызов агента получает `client connection lost`.
