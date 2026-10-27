@@ -73,6 +73,17 @@ final class AgentProcess {
               as Map)['sessionId']
           as String;
 
+  /// Уведомление JSON-RPC (без `id`), например `session/cancel`.
+  void notify(String method, Map<String, Object?> params) =>
+      _process.stdin.writeln(
+        jsonEncode({'jsonrpc': '2.0', 'method': method, 'params': params}),
+      );
+
+  /// Ответ клиента на запрос агента с [id].
+  void reply(Object? id, Map<String, Object?> result) => _process.stdin.writeln(
+    jsonEncode({'jsonrpc': '2.0', 'id': id, 'result': result}),
+  );
+
   /// `session/prompt` с одним текстовым блоком; возвращает ответ.
   Future<Map<String, Object?>> prompt(String sessionId, String text) =>
       request('session/prompt', {
