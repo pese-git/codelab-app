@@ -25,8 +25,14 @@ class CodeLabStatusIndicator extends StatelessWidget {
           size: 8,
           tone: _toneForStatus(tone),
         ),
-        const SizedBox(width: 8),
-        Text(label),
+        if (label.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          // Подпись сжимается с многоточием, когда индикатор стоит в узкой
+          // строке (change `redesign-workbench-shell`, 5.3).
+          Flexible(
+            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ],
       ],
     );
   }

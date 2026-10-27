@@ -4,11 +4,14 @@ import 'package:flutter/widget_previews.dart';
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
 import 'codelab_activity_bar.dart';
+import 'codelab_app_bar.dart';
 import 'codelab_approval_panel.dart';
 import 'codelab_command_palette_surface.dart';
 import 'codelab_connection_screen.dart';
 import 'codelab_progress_checklist.dart';
+import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
+import 'codelab_tool_dock.dart';
 import 'codelab_transcript_panel.dart';
 import 'codelab_workbench_layout.dart';
 
@@ -378,28 +381,8 @@ Widget codelabSessionSidebarPreview() {
       child: CodeLabSessionSidebar(
         activeSessionId: 'session-2',
         onSessionSelected: codelabPreviewSessionSelected,
-        sessions: [
-          CodeLabSessionListItem(
-            id: 'session-1',
-            title: 'Repository audit',
-            status: CodeLabSessionStatus.completed,
-            subtitle: 'Checked protocol package boundaries.',
-            updatedLabel: 'Done 10 min ago',
-          ),
-          CodeLabSessionListItem(
-            id: 'session-2',
-            title: 'Workbench UI',
-            status: CodeLabSessionStatus.awaitingApproval,
-            subtitle: 'Waiting for shell command approval.',
-            updatedLabel: 'Active',
-          ),
-          CodeLabSessionListItem(
-            id: 'session-3',
-            title: 'Transport logs',
-            status: CodeLabSessionStatus.running,
-            subtitle: 'Streaming diagnostics from stdio.',
-          ),
-        ],
+        onNewSession: codelabPreviewNewSession,
+        projects: _previewProjects,
       ),
     ),
   );
@@ -514,9 +497,20 @@ class _AcpOrganismPreviewSurface extends StatelessWidget {
         data: FluentThemeData(),
         child: Builder(
           builder: (context) {
-            return ColoredBox(
-              color: FluentTheme.of(context).scaffoldBackgroundColor,
-              child: Padding(padding: const EdgeInsets.all(16), child: child),
+            // Подсказки (`Tooltip`) сайдбара и app bar требуют `Overlay`, а
+            // превью рендерятся без `FluentApp`.
+            return Overlay(
+              initialEntries: [
+                OverlayEntry(
+                  builder: (context) => ColoredBox(
+                    color: FluentTheme.of(context).scaffoldBackgroundColor,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: child,
+                    ),
+                  ),
+                ),
+              ],
             );
           },
         ),
@@ -525,48 +519,52 @@ class _AcpOrganismPreviewSurface extends StatelessWidget {
   }
 }
 
-class _AcpPreviewCommandBar extends StatelessWidget {
-  const _AcpPreviewCommandBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: FluentTheme.of(context).scaffoldBackgroundColor,
-        border: Border.all(color: Colors.grey.withAlpha(54)),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: CodeLabText('CodeLab Agent', role: CodeLabTextRole.title),
-            ),
-            CodeLabStatusIndicator(
-              label: 'Connected',
-              tone: CodeLabStatusTone.active,
-            ),
-            SizedBox(width: 8),
-            CodeLabButton(
-              label: 'Cancel',
-              icon: FluentIcons.cancel,
-              onPressed: codelabPreviewCancel,
-            ),
-            SizedBox(width: 8),
-            CodeLabButton(
-              label: 'Reconnect',
-              icon: FluentIcons.refresh,
-              onPressed: codelabPreviewReconnect,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 void codelabPreviewCancel() {}
+
+const _previewProjects = [
+  CodeLabSidebarProject(
+    path: '/work/codelab-app',
+    name: 'codelab-app',
+    current: true,
+    sessions: [
+      CodeLabSessionListItem(
+        id: 'session-1',
+        title: 'Repository audit',
+        status: CodeLabSessionStatus.completed,
+      ),
+      CodeLabSessionListItem(
+        id: 'session-2',
+        title: 'Workbench UI',
+        status: CodeLabSessionStatus.awaitingApproval,
+      ),
+      CodeLabSessionListItem(
+        id: 'session-3',
+        title: 'Transport logs',
+        status: CodeLabSessionStatus.running,
+      ),
+    ],
+  ),
+  CodeLabSidebarProject(path: '/work/codelab-cli', name: 'codelab-cli'),
+  CodeLabSidebarProject(path: '/work/notes-app', name: 'notes-app'),
+];
+
+const _previewPlan = [
+  CodeLabPlanEntry(
+    content: 'Split transcript into typed rows',
+    status: CodeLabPlanEntryStatus.completed,
+    priority: CodeLabPlanEntryPriority.medium,
+  ),
+  CodeLabPlanEntry(
+    content: 'TranscriptRowMapper with row reuse',
+    status: CodeLabPlanEntryStatus.inProgress,
+    priority: CodeLabPlanEntryPriority.medium,
+  ),
+  CodeLabPlanEntry(
+    content: 'Diff preview in approval card',
+    status: CodeLabPlanEntryStatus.pending,
+    priority: CodeLabPlanEntryPriority.high,
+  ),
+];
 
 class _AcpPreviewWorkbench extends StatelessWidget {
   const _AcpPreviewWorkbench();
@@ -574,30 +572,29 @@ class _AcpPreviewWorkbench extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CodeLabWorkbenchLayout(
-      commandBar: const _AcpPreviewCommandBar(),
-      sessionsPane: const CodeLabSessionSidebar(
-        activeSessionId: 'session-2',
-        onSessionSelected: codelabPreviewSessionSelected,
-        sessions: [
-          CodeLabSessionListItem(
-            id: 'session-1',
-            title: 'Repository audit',
-            status: CodeLabSessionStatus.completed,
-            subtitle: 'Checked protocol package boundaries.',
-            updatedLabel: 'Done 10 min ago',
-          ),
-          CodeLabSessionListItem(
-            id: 'session-2',
-            title: 'Workbench UI',
-            status: CodeLabSessionStatus.awaitingApproval,
-            subtitle: 'Composing desktop scaffold.',
-            updatedLabel: 'Active',
-          ),
+      appBar: const CodeLabAppBar(
+        title: 'CodeLab',
+        connectionStatus: CodeLabConnectionStatus.connected,
+        paneToggles: [
+          CodeLabPaneToggle(pane: ToolPane.plan, selected: true),
+          CodeLabPaneToggle(pane: ToolPane.protocol),
         ],
       ),
-      mainPane: const Column(
+      sidebar: const CodeLabSessionSidebar(
+        activeSessionId: 'session-2',
+        onSessionSelected: codelabPreviewSessionSelected,
+        projects: _previewProjects,
+      ),
+      sessionPane: const Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          CodeLabSessionPaneHeader(
+            title: 'Workbench UI',
+            projectName: 'codelab-app',
+            projectPath: '/work/codelab-app',
+            mode: 'standard',
+          ),
+          SizedBox(height: 8),
           Expanded(
             child: CodeLabTranscriptPanel(
               entries: [
@@ -606,14 +603,12 @@ class _AcpPreviewWorkbench extends StatelessWidget {
                   kind: CodeLabTranscriptEntryKind.user,
                   title: 'You',
                   body: 'Create a desktop layout shell for the workbench.',
-                  timestampLabel: '12:04',
                 ),
                 CodeLabTranscriptEntry(
                   id: 'agent-1',
                   kind: CodeLabTranscriptEntryKind.agent,
                   title: 'Codelab Agent',
                   body: 'I will keep it slot-based for future app wiring.',
-                  timestampLabel: '12:05',
                 ),
               ],
             ),
@@ -622,31 +617,24 @@ class _AcpPreviewWorkbench extends StatelessWidget {
           CodeLabPromptComposer(onSubmit: codelabPreviewPromptSubmitted),
         ],
       ),
-      inspectorPane: CodeLabApprovalPanel(
-        title: 'Run analyzer',
-        risk: CodeLabApprovalRisk.shell,
-        reason: 'Verify the package after layout changes.',
-        command: 'fvm dart run melos run analyze',
-        cwd: 'packages/flutter/codelab_ui',
-        selectedOptionId: 'allow_once',
-        onOptionSelected: codelabPreviewApprovalSelected,
-        options: const [
-          CodeLabApprovalOption(
-            id: 'allow_once',
-            label: 'Allow once',
-            kind: CodeLabApprovalOptionKind.allowOnce,
-            description: 'Run this command for the active prompt turn.',
-            tone: CodeLabTone.warning,
+      dock: CodeLabToolDock(
+        active: ToolPane.plan,
+        tabs: [
+          const CodeLabDockTab(
+            pane: ToolPane.plan,
+            content: _PreviewPlanList(),
           ),
-          CodeLabApprovalOption(
-            id: 'reject',
-            label: 'Reject',
-            kind: CodeLabApprovalOptionKind.rejectOnce,
-            description: 'Return a denied outcome to the agent.',
-            tone: CodeLabTone.danger,
-          ),
+          CodeLabDockTab(pane: ToolPane.protocol, content: SizedBox.shrink()),
         ],
       ),
     );
   }
+}
+
+class _PreviewPlanList extends StatelessWidget {
+  const _PreviewPlanList();
+
+  @override
+  Widget build(BuildContext context) =>
+      CodeLabProgressChecklist.list(entries: _previewPlan);
 }

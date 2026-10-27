@@ -8,4 +8,5 @@ export 'codelab_connection_status_row.dart';
 export 'codelab_prompt_composer.dart';
 export 'codelab_text_disclosure.dart';
 export 'codelab_tool_call_summary.dart';
+export 'codelab_tool_pane.dart';
 export 'codelab_view_mode.dart';

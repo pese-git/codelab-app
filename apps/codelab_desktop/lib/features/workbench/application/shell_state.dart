@@ -43,7 +43,12 @@ final class CodeLabShellState {
     required this.canCancel,
     required this.isRespondingToApproval,
     required this.isCommandPaletteOpen,
-    required this.isInspectorVisibleInNarrowLayout,
+    this.sidebarCollapsed = false,
+    this.sidebarOverlayOpen = false,
+    this.openPanes = const [],
+    this.activePane,
+    this.dockOverlayOpen = false,
+    this.sessionMode,
     required this.agentCommands,
     required this.commandCatalog,
     required this.composerDraft,
@@ -51,7 +56,7 @@ final class CodeLabShellState {
     required this.configOptions,
     required this.isRespondingToConfigOption,
     required this.sessionsPaneWidth,
-    required this.inspectorPaneWidth,
+    this.dockWidth = 360,
     required this.selectedProjectPath,
     required this.runAgentFromProjectDirectory,
     required this.recentProjects,
@@ -119,9 +124,18 @@ final class CodeLabShellState {
   final CodeLabViewMode viewMode;
   final bool isPromptEnabled;
   final bool isCommandPaletteOpen;
-  final bool isInspectorVisibleInNarrowLayout;
+  final bool sidebarCollapsed;
+  final bool sidebarOverlayOpen;
+
+  /// Открытые панели дока и активная (change `redesign-workbench-shell`, D5).
+  final List<ToolPane> openPanes;
+  final ToolPane? activePane;
+  final bool dockOverlayOpen;
+
+  /// Режим активной сессии для чипа шапки; `null` — чипа нет.
+  final String? sessionMode;
   final double sessionsPaneWidth;
-  final double inspectorPaneWidth;
+  final double dockWidth;
 
   // Проект — `SettingsCubit`.
   final String? selectedProjectPath;
@@ -162,7 +176,12 @@ final class CodeLabShellState {
     bool? canCancel,
     bool? isRespondingToApproval,
     bool? isCommandPaletteOpen,
-    bool? isInspectorVisibleInNarrowLayout,
+    bool? sidebarCollapsed,
+    bool? sidebarOverlayOpen,
+    List<ToolPane>? openPanes,
+    Object? activePane = _unset,
+    bool? dockOverlayOpen,
+    Object? sessionMode = _unset,
     List<CodeLabCommandAction>? agentCommands,
     CommandCatalog? commandCatalog,
     String? composerDraft,
@@ -170,7 +189,7 @@ final class CodeLabShellState {
     List<CodeLabConfigOption>? configOptions,
     bool? isRespondingToConfigOption,
     double? sessionsPaneWidth,
-    double? inspectorPaneWidth,
+    double? dockWidth,
     String? selectedProjectPath,
     bool? runAgentFromProjectDirectory,
     List<CodeLabRecentProject>? recentProjects,
@@ -206,9 +225,16 @@ final class CodeLabShellState {
       isRespondingToApproval:
           isRespondingToApproval ?? this.isRespondingToApproval,
       isCommandPaletteOpen: isCommandPaletteOpen ?? this.isCommandPaletteOpen,
-      isInspectorVisibleInNarrowLayout:
-          isInspectorVisibleInNarrowLayout ??
-          this.isInspectorVisibleInNarrowLayout,
+      sidebarCollapsed: sidebarCollapsed ?? this.sidebarCollapsed,
+      sidebarOverlayOpen: sidebarOverlayOpen ?? this.sidebarOverlayOpen,
+      openPanes: openPanes ?? this.openPanes,
+      activePane: identical(activePane, _unset)
+          ? this.activePane
+          : activePane as ToolPane?,
+      dockOverlayOpen: dockOverlayOpen ?? this.dockOverlayOpen,
+      sessionMode: identical(sessionMode, _unset)
+          ? this.sessionMode
+          : sessionMode as String?,
       agentCommands: agentCommands ?? this.agentCommands,
       commandCatalog: commandCatalog ?? this.commandCatalog,
       composerDraft: composerDraft ?? this.composerDraft,
@@ -218,7 +244,7 @@ final class CodeLabShellState {
       isRespondingToConfigOption:
           isRespondingToConfigOption ?? this.isRespondingToConfigOption,
       sessionsPaneWidth: sessionsPaneWidth ?? this.sessionsPaneWidth,
-      inspectorPaneWidth: inspectorPaneWidth ?? this.inspectorPaneWidth,
+      dockWidth: dockWidth ?? this.dockWidth,
       selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
       runAgentFromProjectDirectory:
           runAgentFromProjectDirectory ?? this.runAgentFromProjectDirectory,

@@ -36,6 +36,7 @@ final class ActiveSessionState {
     this.canCancel = false,
     this.isRespondingToApproval = false,
     this.isRespondingToConfigOption = false,
+    this.sessionMode,
   });
 
   static const _emptyInspectorEntry = CodeLabInspectorEntry(
@@ -84,6 +85,10 @@ final class ActiveSessionState {
   final bool isRespondingToApproval;
   final bool isRespondingToConfigOption;
 
+  /// Режим сессии из опции категории `mode` — чип шапки сессии (change
+  /// `redesign-workbench-shell`, D7); `null` — агент режим не публикует.
+  final String? sessionMode;
+
   static const Object _unset = Object();
 
   ActiveSessionState _copyWith({
@@ -101,6 +106,7 @@ final class ActiveSessionState {
     bool? canCancel,
     bool? isRespondingToApproval,
     bool? isRespondingToConfigOption,
+    Object? sessionMode = _unset,
   }) => ActiveSessionState(
     sessionId: sessionId ?? this.sessionId,
     transcriptEntries: transcriptEntries ?? this.transcriptEntries,
@@ -121,6 +127,9 @@ final class ActiveSessionState {
         isRespondingToApproval ?? this.isRespondingToApproval,
     isRespondingToConfigOption:
         isRespondingToConfigOption ?? this.isRespondingToConfigOption,
+    sessionMode: identical(sessionMode, _unset)
+        ? this.sessionMode
+        : sessionMode as String?,
   );
 }
 
@@ -190,6 +199,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         agentCommands: agentCommandsOf(view?.agentCommands ?? const []),
         agentCommandViews: view?.agentCommands ?? const [],
         configOptions: configOptionsOf(view?.configOptions ?? const []),
+        sessionMode: modeLabelOf(view?.configOptions ?? const []),
         currentPlan: currentPlanOf(session),
         queuedPrompts: _queueOf(id),
         isPromptSubmitting: _isBusy(view?.status),
@@ -211,6 +221,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         agentCommands: agentCommandsOf(view?.agentCommands ?? const []),
         agentCommandViews: view?.agentCommands ?? const [],
         configOptions: configOptionsOf(view?.configOptions ?? const []),
+        sessionMode: modeLabelOf(view?.configOptions ?? const []),
         currentPlan: currentPlanOf(session),
         queuedPrompts: _queueOf(id),
         isPromptSubmitting: false,
@@ -229,6 +240,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       agentCommands: const [],
       agentCommandViews: const [],
       configOptions: const [],
+      sessionMode: null,
       currentPlan: null,
       queuedPrompts: _queueOf(sessionId),
       isPromptSubmitting: false,

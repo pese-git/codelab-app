@@ -14,9 +14,7 @@ import 'support/e2e_agent.dart';
 // The transport setup form only lives inside the modal ConnectionSetupDialog
 // — see stdio_connect_flow_test.dart for the same helper.
 Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(
-    find.byKey(const ValueKey('command-bar-configure-connection')),
-  );
+  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
   await tester.pumpAndSettle();
 }
 

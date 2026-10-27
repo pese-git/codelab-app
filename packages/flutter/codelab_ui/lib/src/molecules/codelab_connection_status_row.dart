@@ -33,7 +33,11 @@ class CodeLabConnectionStatusRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        CodeLabStatusIndicator(label: _statusLabel, tone: _statusTone),
+        // Гибкий, как и подписи профиля: в окне телефона (390 px) строка
+        // иначе переполнялась (change `redesign-workbench-shell`, 5.3).
+        Flexible(
+          child: CodeLabStatusIndicator(label: _statusLabel, tone: _statusTone),
+        ),
         const SizedBox(width: 10),
         CodeLabBadge(label: transportLabel, tone: CodeLabTone.accent),
         const SizedBox(width: 6),

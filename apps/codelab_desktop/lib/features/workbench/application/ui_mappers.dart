@@ -435,3 +435,69 @@ List<CodeLabRecentProject> recentProjectsOf(Iterable<RecentProject> recents) {
       .map((entry) => CodeLabRecentProject(path: entry.path))
       .toList(growable: false);
 }
+
+/// Имя папки проекта для заголовка группы и чипа шапки: последний непустой
+/// сегмент пути; полный путь хост показывает подсказкой (change
+/// `redesign-workbench-shell`, D4, D7).
+String projectNameOf(String path) {
+  final segments = path
+      .split(RegExp(r'[/\\]'))
+      .where((segment) => segment.isNotEmpty);
+  return segments.isEmpty ? path : segments.last;
+}
+
+/// Группы проектов сайдбара: выбранный проект раскрыт с сессиями, остальные
+/// недавние — свёрнутыми группами (change `redesign-workbench-shell`, D4).
+///
+/// Выбранный проект, которого нет среди недавних, всё равно идёт первой
+/// группой; без выбранного проекта сессии попадают в группу «No project».
+List<CodeLabSidebarProject> sidebarProjectsOf({
+  required String? selectedProjectPath,
+  required List<CodeLabSessionListItem> sessions,
+  required List<CodeLabRecentProject> recentProjects,
+}) {
+  final selected = selectedProjectPath;
+  return [
+    CodeLabSidebarProject(
+      path: selected ?? '',
+      name: selected == null ? 'No project' : projectNameOf(selected),
+      current: true,
+      sessions: sessions,
+    ),
+    for (final recent in recentProjects)
+      if (recent.path != selected)
+        CodeLabSidebarProject(
+          path: recent.path,
+          name: projectNameOf(recent.path),
+        ),
+  ];
+}
+
+/// Значение опции режима для чипа шапки сессии — по категории `mode` из
+/// ACP; без такой опции чипа нет (change `redesign-workbench-shell`, D7).
+String? modeLabelOf(List<ConfigOptionView> options) {
+  for (final option in options) {
+    if (option.category != 'mode') {
+      continue;
+    }
+    for (final value in option.values) {
+      if (value.value == option.currentValue) {
+        return value.name;
+      }
+    }
+    return option.currentValue;
+  }
+  return null;
+}
+
+/// Подсказка бейджа соединения: профиль, транспорт и команда или адрес —
+/// то, что раньше занимало шапку (change `redesign-workbench-shell`, D6).
+String connectionTooltipOf({
+  required String profileLabel,
+  required String transportLabel,
+  required String connectionDetail,
+}) => [
+  profileLabel,
+  transportLabel,
+  if (connectionDetail.isNotEmpty) connectionDetail,
+].join(' · ');

@@ -15,8 +15,10 @@ void main() {
     expect(CodeLabApprovalRisk.shell, isA<CodeLabApprovalRisk>());
     expect(CodeLabCommandPaletteSurface, isA<Type>());
     expect(CodeLabConnectionScreen, isA<Type>());
-    expect(CodeLabProjectPicker, isA<Type>());
-    expect(CodeLabRecentProject, isA<Type>());
+    expect(CodeLabSidebarProject, isA<Type>());
+    expect(CodeLabAppBar, isA<Type>());
+    expect(CodeLabToolDock, isA<Type>());
+    expect(CodeLabSessionPaneHeader, isA<Type>());
     expect(CodeLabSessionListItem, isA<Type>());
     expect(CodeLabSessionSidebar, isA<Type>());
     expect(CodeLabSessionStatus.awaitingApproval, isA<CodeLabSessionStatus>());
@@ -1041,584 +1043,622 @@ void main() {
     expect(edited, isFalse);
   });
 
-  testWidgets('renders sessions and invokes selection/new callbacks', (
-    tester,
-  ) async {
-    String? selectedSessionId;
-    var newSessionRequested = false;
+  group('CodeLabSessionSidebar', () {
+    const sessions = [
+      CodeLabSessionListItem(
+        id: 'session-1',
+        title: 'Repository audit',
+        status: CodeLabSessionStatus.completed,
+        subtitle: '/work/codelab-app',
+      ),
+      CodeLabSessionListItem(
+        id: 'session-2',
+        title: 'Workbench UI',
+        status: CodeLabSessionStatus.awaitingApproval,
+      ),
+      CodeLabSessionListItem(
+        id: 'session-3',
+        title: 'Fix reconnect race',
+        status: CodeLabSessionStatus.running,
+      ),
+    ];
+    const projects = [
+      CodeLabSidebarProject(
+        path: '/work/codelab-app',
+        name: 'codelab-app',
+        current: true,
+        sessions: sessions,
+      ),
+      CodeLabSidebarProject(path: '/work/notes-app', name: 'notes-app'),
+    ];
 
-    await tester.pumpWidget(
-      FluentApp(
-        home: SizedBox(
-          width: 320,
-          height: 420,
+    Widget sidebar({
+      List<CodeLabSidebarProject> projects = projects,
+      double width = 300,
+      CodeLabSessionSelected onSessionSelected = acpTestSessionSelected,
+      VoidCallback? onNewSession,
+      ValueChanged<String>? onProjectSelected,
+      VoidCallback? onLoadMore,
+      VoidCallback? onOpenFolder,
+      VoidCallback? onSettings,
+    }) => FluentApp(
+      home: Center(
+        child: SizedBox(
+          width: width,
+          height: 560,
           child: CodeLabSessionSidebar(
+            projects: projects,
             activeSessionId: 'session-2',
-            onSessionSelected: (sessionId) => selectedSessionId = sessionId,
-            onNewSession: () => newSessionRequested = true,
-            sessions: const [
-              CodeLabSessionListItem(
-                id: 'session-1',
-                title: 'Repository audit',
-                status: CodeLabSessionStatus.completed,
-                subtitle: 'Checked package boundaries.',
-                updatedLabel: 'Done 10 min ago',
-              ),
-              CodeLabSessionListItem(
-                id: 'session-2',
-                title: 'Workbench UI',
-                status: CodeLabSessionStatus.awaitingApproval,
-                subtitle: 'Waiting for approval.',
-                updatedLabel: 'Active',
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('Sessions'), findsOneWidget);
-    expect(find.text('Repository audit'), findsOneWidget);
-    expect(find.text('Done'), findsOneWidget);
-    expect(find.text('Workbench UI'), findsOneWidget);
-    expect(find.text('Approval'), findsOneWidget);
-    expect(find.text('Active'), findsOneWidget);
-
-    await tester.tap(find.text('Repository audit'));
-    await tester.tap(find.byType(CodeLabIconButton));
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(selectedSessionId, 'session-1');
-    expect(newSessionRequested, isTrue);
-  });
-
-  testWidgets(
-    'renders a live status badge for a background (non-active) session, '
-    'independent of the active one',
-    (tester) async {
-      await tester.pumpWidget(
-        FluentApp(
-          home: SizedBox(
-            width: 320,
-            height: 420,
-            child: CodeLabSessionSidebar(
-              activeSessionId: 'session-2',
-              onSessionSelected: acpTestSessionSelected,
-              sessions: const [
-                CodeLabSessionListItem(
-                  id: 'session-1',
-                  title: 'Background refactor',
-                  status: CodeLabSessionStatus.running,
-                ),
-                CodeLabSessionListItem(
-                  id: 'session-2',
-                  title: 'Active session',
-                  status: CodeLabSessionStatus.idle,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      // session-1's "Running" badge reflects its own live turn even though
-      // it is not the active session — see
-      // add-multi-session-concurrency/specs/agent-workbench-ui/spec.md,
-      // "Sessions sidebar shows live status for background sessions".
-      expect(find.text('Running'), findsOneWidget);
-      expect(find.text('Idle'), findsOneWidget);
-    },
-  );
-
-  testWidgets('shows not-loaded and detached sessions with their own badges '
-      '(add-session-list-and-reload, D7)', (tester) async {
-    await tester.pumpWidget(
-      FluentApp(
-        home: SizedBox(
-          width: 320,
-          height: 420,
-          child: CodeLabSessionSidebar(
-            onSessionSelected: acpTestSessionSelected,
-            sessions: const [
-              CodeLabSessionListItem(
-                id: 'session-1',
-                title: 'Lost on reconnect',
-                status: CodeLabSessionStatus.detached,
-              ),
-              CodeLabSessionListItem(
-                id: 'session-2',
-                title: 'From the journal',
-                status: CodeLabSessionStatus.notLoaded,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('Detached'), findsOneWidget);
-    expect(find.text('Not loaded'), findsOneWidget);
-  });
-
-  testWidgets('offers "Load more sessions" only with onLoadMore and calls '
-      'it', (tester) async {
-    Future<void> pumpSidebar(VoidCallback? onLoadMore) => tester.pumpWidget(
-      FluentApp(
-        home: SizedBox(
-          width: 320,
-          height: 420,
-          child: CodeLabSessionSidebar(
-            onSessionSelected: acpTestSessionSelected,
+            onSessionSelected: onSessionSelected,
+            onNewSession: onNewSession,
+            onProjectSelected: onProjectSelected,
             onLoadMore: onLoadMore,
-            sessions: const [
-              CodeLabSessionListItem(
-                id: 'session-1',
-                title: 'First',
-                status: CodeLabSessionStatus.notLoaded,
-              ),
-            ],
+            onOpenFolder: onOpenFolder,
+            onSettings: onSettings,
           ),
         ),
       ),
     );
 
-    await pumpSidebar(null);
-    expect(find.byKey(const ValueKey('sessions-load-more')), findsNothing);
+    testWidgets('groups sessions by project and selects a session', (
+      tester,
+    ) async {
+      String? selected;
+      var newSession = 0;
+      await tester.pumpWidget(
+        sidebar(
+          onSessionSelected: (id) => selected = id,
+          onNewSession: () => newSession++,
+        ),
+      );
 
-    var requested = 0;
-    await pumpSidebar(() => requested++);
-    await tester.tap(find.byKey(const ValueKey('sessions-load-more')));
-    await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('New session'), findsOneWidget);
+      expect(find.text('Projects'), findsOneWidget);
+      expect(
+        find.byKey(CodeLabSessionSidebar.projectKey('codelab-app')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(CodeLabSessionSidebar.projectKey('notes-app')),
+        findsOneWidget,
+      );
+      expect(find.text('Repository audit'), findsOneWidget);
+      expect(find.text('Workbench UI'), findsOneWidget);
 
-    expect(find.text('Load more sessions'), findsOneWidget);
-    expect(requested, 1);
+      await tester.tap(find.text('Repository audit'));
+      await tester.tap(find.byKey(CodeLabSessionSidebar.newSessionKey));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(selected, 'session-1');
+      expect(newSession, 1);
+    });
+
+    testWidgets('shows a status badge for notable sessions only, including '
+        'background ones', (tester) async {
+      await tester.pumpWidget(
+        sidebar(
+          projects: const [
+            CodeLabSidebarProject(
+              path: '/work/codelab-app',
+              name: 'codelab-app',
+              current: true,
+              sessions: [
+                ...sessions,
+                CodeLabSessionListItem(
+                  id: 'session-4',
+                  title: 'From the journal',
+                  status: CodeLabSessionStatus.notLoaded,
+                ),
+                CodeLabSessionListItem(
+                  id: 'session-5',
+                  title: 'Lost on reconnect',
+                  status: CodeLabSessionStatus.detached,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      // Фоновая сессия показывает свой статус, хотя активна другая
+      // (add-multi-session-concurrency, «Sessions sidebar shows live
+      // status for background sessions»).
+      expect(find.text('Running'), findsOneWidget);
+      expect(find.text('Approval'), findsOneWidget);
+      expect(find.text('Not loaded'), findsOneWidget);
+      expect(find.text('Detached'), findsOneWidget);
+      expect(find.text('Done'), findsNothing);
+    });
+
+    testWidgets('selecting a recent project switches to it', (tester) async {
+      String? selectedPath;
+      await tester.pumpWidget(
+        sidebar(onProjectSelected: (path) => selectedPath = path),
+      );
+
+      await tester.tap(
+        find.byKey(CodeLabSessionSidebar.projectKey('notes-app')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(selectedPath, '/work/notes-app');
+    });
+
+    testWidgets('the current project group collapses and expands', (
+      tester,
+    ) async {
+      await tester.pumpWidget(sidebar());
+
+      await tester.tap(
+        find.byKey(CodeLabSessionSidebar.projectKey('codelab-app')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Repository audit'), findsNothing);
+
+      await tester.tap(
+        find.byKey(CodeLabSessionSidebar.projectKey('codelab-app')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Repository audit'), findsOneWidget);
+    });
+
+    testWidgets('the filter narrows sessions by title', (tester) async {
+      await tester.pumpWidget(sidebar());
+
+      await tester.enterText(
+        find.byKey(CodeLabSessionSidebar.filterKey),
+        'RECONNECT',
+      );
+      await tester.pump();
+
+      expect(find.text('Fix reconnect race'), findsOneWidget);
+      expect(find.text('Repository audit'), findsNothing);
+      expect(find.text('Workbench UI'), findsNothing);
+    });
+
+    testWidgets('offers Load more only with onLoadMore and calls it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(sidebar());
+      expect(find.byKey(CodeLabSessionSidebar.loadMoreKey), findsNothing);
+
+      var requested = 0;
+      await tester.pumpWidget(sidebar(onLoadMore: () => requested++));
+      await tester.tap(find.byKey(CodeLabSessionSidebar.loadMoreKey));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(requested, 1);
+    });
+
+    testWidgets('Open folder and Settings call their callbacks', (
+      tester,
+    ) async {
+      var openFolder = 0;
+      var settings = 0;
+      await tester.pumpWidget(
+        sidebar(onOpenFolder: () => openFolder++, onSettings: () => settings++),
+      );
+
+      await tester.tap(find.byKey(CodeLabSessionSidebar.openFolderKey));
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(openFolder, 1);
+      expect(settings, 1);
+    });
+
+    testWidgets('a narrow sidebar shows icons only', (tester) async {
+      String? selected;
+      await tester.pumpWidget(
+        sidebar(width: 56, onSessionSelected: (id) => selected = id),
+      );
+
+      expect(find.text('New session'), findsNothing);
+      expect(find.text('Projects'), findsNothing);
+      await tester.tap(
+        find.byKey(CodeLabSessionSidebar.sessionKey('session-3')),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(selected, 'session-3');
+    });
+
+    testWidgets('renders the empty state of the current project', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        sidebar(
+          projects: const [
+            CodeLabSidebarProject(
+              path: '/work/codelab-app',
+              name: 'codelab-app',
+              current: true,
+            ),
+          ],
+        ),
+      );
+
+      expect(find.text('No sessions yet'), findsOneWidget);
+    });
   });
 
-  testWidgets('shows recents, selects a recent project, and requests browse', (
+  group('CodeLabAppBar', () {
+    Widget bar({
+      CodeLabConnectionStatus status = CodeLabConnectionStatus.connected,
+      List<CodeLabPaneToggle> toggles = const [],
+      ValueChanged<ToolPane>? onPaneToggled,
+      VoidCallback? onSearch,
+      VoidCallback? onRetry,
+      VoidCallback? onConnect,
+      VoidCallback? onMenu,
+    }) => FluentApp(
+      home: ScaffoldPage(
+        content: CodeLabAppBar(
+          title: 'CodeLab',
+          connectionStatus: status,
+          paneToggles: toggles,
+          onPaneToggled: onPaneToggled,
+          onSearch: onSearch,
+          onRetry: onRetry,
+          onConnect: onConnect,
+          onMenu: onMenu,
+          connectionTooltip: 'Codelab Agent · stdio',
+        ),
+      ),
+    );
+
+    testWidgets('the search field opens the palette', (tester) async {
+      var searched = 0;
+      await tester.pumpWidget(bar(onSearch: () => searched++));
+
+      expect(find.text('Search or run a command'), findsOneWidget);
+      await tester.tap(find.byKey(CodeLabAppBar.searchKey));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(searched, 1);
+    });
+
+    testWidgets('pane toggles report the pane', (tester) async {
+      final toggled = <ToolPane>[];
+      await tester.pumpWidget(
+        bar(
+          toggles: const [
+            CodeLabPaneToggle(pane: ToolPane.plan, selected: true),
+            CodeLabPaneToggle(pane: ToolPane.protocol),
+          ],
+          onPaneToggled: toggled.add,
+        ),
+      );
+
+      await tester.tap(find.byKey(CodeLabAppBar.toggleKey(ToolPane.protocol)));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(toggled, [ToolPane.protocol]);
+    });
+
+    testWidgets('connected badge has no Connect and no binary path', (
+      tester,
+    ) async {
+      await tester.pumpWidget(bar(onConnect: () {}, onRetry: () {}));
+
+      expect(find.text('Connected'), findsOneWidget);
+      expect(find.byKey(CodeLabAppBar.connectionConnectKey), findsNothing);
+      expect(find.byKey(CodeLabAppBar.connectionRetryKey), findsNothing);
+    });
+
+    testWidgets('a lost connection offers Retry', (tester) async {
+      var retried = 0;
+      await tester.pumpWidget(
+        bar(status: CodeLabConnectionStatus.lost, onRetry: () => retried++),
+      );
+
+      expect(find.text('Connection lost'), findsOneWidget);
+      await tester.tap(find.byKey(CodeLabAppBar.connectionRetryKey));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(retried, 1);
+    });
+
+    testWidgets('disconnected offers Connect; reconnecting shows progress', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        bar(status: CodeLabConnectionStatus.disconnected, onConnect: () {}),
+      );
+      expect(find.byKey(CodeLabAppBar.connectionConnectKey), findsOneWidget);
+
+      await tester.pumpWidget(
+        bar(status: CodeLabConnectionStatus.reconnecting),
+      );
+      expect(find.text('Reconnecting…'), findsOneWidget);
+      expect(find.byType(ProgressRing), findsOneWidget);
+    });
+
+    testWidgets('the menu button appears only with onMenu', (tester) async {
+      await tester.pumpWidget(bar());
+      expect(find.byKey(CodeLabAppBar.menuKey), findsNothing);
+
+      await tester.pumpWidget(bar(onMenu: () {}));
+      expect(find.byKey(CodeLabAppBar.menuKey), findsOneWidget);
+    });
+  });
+
+  group('CodeLabToolDock', () {
+    Widget dock({
+      ToolPane active = ToolPane.plan,
+      ValueChanged<ToolPane>? onSelected,
+      ValueChanged<ToolPane>? onClosed,
+    }) => FluentApp(
+      home: SizedBox(
+        width: 360,
+        height: 400,
+        child: CodeLabToolDock(
+          active: active,
+          onSelected: onSelected,
+          onClosed: onClosed,
+          tabs: const [
+            CodeLabDockTab(pane: ToolPane.plan, content: Text('Plan body')),
+            CodeLabDockTab(
+              pane: ToolPane.protocol,
+              content: Text('Protocol body'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    testWidgets('shows a tab per pane and the active content', (tester) async {
+      await tester.pumpWidget(dock());
+
+      expect(find.byKey(CodeLabToolDock.tabKey(ToolPane.plan)), findsOneWidget);
+      expect(
+        find.byKey(CodeLabToolDock.tabKey(ToolPane.protocol)),
+        findsOneWidget,
+      );
+      expect(find.text('Plan body'), findsOneWidget);
+      expect(find.text('Protocol body'), findsNothing);
+      expect(
+        find.byKey(CodeLabToolDock.paneKey(ToolPane.plan)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('selecting and closing tabs report the pane', (tester) async {
+      final selected = <ToolPane>[];
+      final closed = <ToolPane>[];
+      await tester.pumpWidget(
+        dock(onSelected: selected.add, onClosed: closed.add),
+      );
+
+      await tester.tap(find.byKey(CodeLabToolDock.tabKey(ToolPane.protocol)));
+      await tester.tap(find.byKey(CodeLabToolDock.closeKey(ToolPane.plan)));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(selected, [ToolPane.protocol]);
+      expect(closed, [ToolPane.plan]);
+    });
+
+    testWidgets('an active pane missing from the tabs falls back to the '
+        'first', (tester) async {
+      await tester.pumpWidget(dock(active: ToolPane.files));
+
+      expect(find.text('Plan body'), findsOneWidget);
+    });
+  });
+
+  testWidgets('session pane header shows title, project and mode', (
     tester,
   ) async {
-    String? selectedPath;
-    var browseRequested = false;
-
     await tester.pumpWidget(
-      FluentApp(
-        home: SizedBox(
-          width: 280,
-          height: 80,
-          child: CodeLabProjectPicker(
-            currentProjectPath: '/Users/dev/codelab-app',
-            recentProjects: const [
-              CodeLabRecentProject(path: '/Users/dev/codelab-app'),
-              CodeLabRecentProject(path: '/Users/dev/another-project'),
-            ],
-            onProjectSelected: (path) => selectedPath = path,
-            onBrowseRequested: () => browseRequested = true,
+      const FluentApp(
+        home: ScaffoldPage(
+          content: CodeLabSessionPaneHeader(
+            title: 'Fix reconnect race',
+            projectName: 'codelab-app',
+            projectPath: '/work/codelab-app',
+            mode: 'standard',
           ),
         ),
       ),
     );
 
+    expect(find.text('Fix reconnect race'), findsOneWidget);
     expect(find.text('codelab-app'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('open-project-picker')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Browse for folder…'), findsOneWidget);
-    expect(find.text('/Users/dev/another-project'), findsOneWidget);
-
-    await tester.tap(find.text('/Users/dev/another-project'));
-    await tester.pumpAndSettle();
-
-    expect(selectedPath, '/Users/dev/another-project');
-    expect(browseRequested, isFalse);
-
-    await tester.tap(find.byKey(const ValueKey('open-project-picker')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Browse for folder…'));
-    await tester.pumpAndSettle();
-
-    expect(browseRequested, isTrue);
-  });
-
-  testWidgets('renders session sidebar empty state', (tester) async {
-    await tester.pumpWidget(
-      const FluentApp(
-        home: SizedBox(
-          width: 280,
-          height: 240,
-          child: CodeLabSessionSidebar(
-            sessions: [],
-            onSessionSelected: acpTestSessionSelected,
-          ),
-        ),
+    expect(find.text('standard'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Tooltip && widget.message == '/work/codelab-app',
       ),
+      findsOneWidget,
     );
-
-    expect(find.text('No sessions yet'), findsOneWidget);
   });
 
-  testWidgets('renders workbench desktop regions in left center right order', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 760);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      const FluentApp(
-        home: SizedBox(
-          width: 1200,
-          height: 760,
-          child: CodeLabWorkbenchLayout(
-            commandBar: Text('Command bar slot'),
-            sessionsPane: Text('Sessions slot'),
-            mainPane: Text('Transcript and prompt slot'),
-            inspectorPane: Text('Inspector slot'),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byKey(CodeLabWorkbenchLayout.commandBarKey), findsOneWidget);
-    expect(find.byKey(CodeLabWorkbenchLayout.sessionsPaneKey), findsOneWidget);
-    expect(find.byKey(CodeLabWorkbenchLayout.mainPaneKey), findsOneWidget);
-    expect(find.byKey(CodeLabWorkbenchLayout.inspectorPaneKey), findsOneWidget);
-    expect(find.text('Command bar slot'), findsOneWidget);
-    expect(find.text('Sessions slot'), findsOneWidget);
-    expect(find.text('Transcript and prompt slot'), findsOneWidget);
-    expect(find.text('Inspector slot'), findsOneWidget);
-
-    final sessionsLeft = tester
-        .getTopLeft(find.byKey(CodeLabWorkbenchLayout.sessionsPaneKey))
-        .dx;
-    final mainLeft = tester
-        .getTopLeft(find.byKey(CodeLabWorkbenchLayout.mainPaneKey))
-        .dx;
-    final inspectorLeft = tester
-        .getTopLeft(find.byKey(CodeLabWorkbenchLayout.inspectorPaneKey))
-        .dx;
-
-    expect(sessionsLeft, lessThan(mainLeft));
-    expect(mainLeft, lessThan(inspectorLeft));
-  });
-
-  testWidgets('workbench avoids horizontal overflow at desktop width', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1024, 720);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      FluentApp(
-        home: CodeLabWorkbenchLayout(
-          commandBar: const _AcpTestPane(label: 'Command'),
-          sessionsPane: const _AcpTestPane(label: 'Sessions'),
-          mainPane: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Expanded(child: _AcpTestPane(label: 'Transcript')),
-              const SizedBox(height: 12),
-              CodeLabPromptComposer(onSubmit: acpTestPromptSubmitted),
-            ],
-          ),
-          inspectorPane: const _AcpTestPane(label: 'Inspector'),
-        ),
-      ),
-    );
-
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-    'workbench compacts sessions and moves inspector below on medium width',
-    (tester) async {
-      tester.view.physicalSize = const Size(860, 720);
+  group('CodeLabWorkbenchLayout', () {
+    void setWindow(WidgetTester tester, Size size) {
+      tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+    }
 
-      await tester.pumpWidget(
-        FluentApp(
-          home: CodeLabWorkbenchLayout(
-            commandBar: const _AcpTestPane(label: 'Command'),
-            sessionsPane: const _AcpTestPane(label: 'Sessions'),
-            mainPane: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Expanded(child: _AcpTestPane(label: 'Transcript')),
-                const SizedBox(height: 12),
-                CodeLabPromptComposer(onSubmit: acpTestPromptSubmitted),
-              ],
-            ),
-            inspectorPane: const _AcpTestPane(label: 'Inspector'),
-          ),
-        ),
-      );
+    Widget layout({
+      Widget? dock = const _AcpTestPane(label: 'Dock'),
+      Widget sessionPane = const _AcpTestPane(label: 'Session'),
+      bool sidebarCollapsed = false,
+      bool sidebarOverlayOpen = false,
+      bool dockOverlayOpen = false,
+      ValueChanged<double>? onSidebarWidthChanged,
+      VoidCallback? onSidebarResizeEnd,
+      ValueChanged<double>? onDockWidthChanged,
+      VoidCallback? onSidebarOverlayDismiss,
+    }) => FluentApp(
+      home: CodeLabWorkbenchLayout(
+        appBar: const _AcpTestPane(label: 'App bar'),
+        sidebar: const _AcpTestPane(label: 'Sidebar'),
+        sessionPane: sessionPane,
+        dock: dock,
+        sidebarCollapsed: sidebarCollapsed,
+        sidebarOverlayOpen: sidebarOverlayOpen,
+        dockOverlayOpen: dockOverlayOpen,
+        onSidebarWidthChanged: onSidebarWidthChanged,
+        onSidebarResizeEnd: onSidebarResizeEnd,
+        onDockWidthChanged: onDockWidthChanged,
+        onSidebarOverlayDismiss: onSidebarOverlayDismiss,
+      ),
+    );
 
-      expect(tester.takeException(), isNull);
-
-      final sessionsSize = tester.getSize(
-        find.byKey(CodeLabWorkbenchLayout.sessionsPaneKey),
-      );
-      final mainTop = tester
-          .getTopLeft(find.byKey(CodeLabWorkbenchLayout.mainPaneKey))
-          .dy;
-      final inspectorTop = tester
-          .getTopLeft(find.byKey(CodeLabWorkbenchLayout.inspectorPaneKey))
-          .dy;
-      final mainLeft = tester
-          .getTopLeft(find.byKey(CodeLabWorkbenchLayout.mainPaneKey))
-          .dx;
-      final inspectorLeft = tester
-          .getTopLeft(find.byKey(CodeLabWorkbenchLayout.inspectorPaneKey))
-          .dx;
-
-      expect(sessionsSize.width, 176);
-      expect(inspectorTop, greaterThan(mainTop));
-      expect(inspectorLeft, mainLeft);
-    },
-  );
-
-  testWidgets(
-    'workbench keeps narrow width focused on main pane without overflow',
-    (tester) async {
-      tester.view.physicalSize = const Size(430, 720);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await tester.pumpWidget(
-        FluentApp(
-          home: CodeLabWorkbenchLayout(
-            commandBar: const _AcpTestPane(label: 'Command'),
-            sessionsPane: const _AcpTestPane(label: 'Sessions'),
-            mainPane: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Expanded(child: _AcpTestPane(label: 'Transcript')),
-                const SizedBox(height: 12),
-                CodeLabPromptComposer(onSubmit: acpTestPromptSubmitted),
-              ],
-            ),
-            inspectorPane: const _AcpTestPane(label: 'Inspector'),
-          ),
-        ),
-      );
-
-      expect(tester.takeException(), isNull);
-      expect(find.text('Transcript'), findsOneWidget);
-      expect(find.text('Sessions'), findsNothing);
-      expect(find.text('Inspector'), findsNothing);
+    test('layout class follows the window width thresholds', () {
       expect(
-        find.byKey(CodeLabWorkbenchLayout.sessionsPaneKey, skipOffstage: false),
+        [640.0, 641.0, 899.0, 900.0, 1279.0, 1280.0].map(CodeLabLayoutClass.of),
+        [
+          CodeLabLayoutClass.phone,
+          CodeLabLayoutClass.narrow,
+          CodeLabLayoutClass.narrow,
+          CodeLabLayoutClass.medium,
+          CodeLabLayoutClass.medium,
+          CodeLabLayoutClass.wide,
+        ],
+      );
+    });
+
+    testWidgets('wide window shows the four zones left to right', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
+      await tester.pumpWidget(layout());
+
+      expect(tester.takeException(), isNull);
+      final appBarBottom = tester
+          .getBottomLeft(find.byKey(CodeLabWorkbenchLayout.appBarKey))
+          .dy;
+      final sidebar = tester.getRect(
+        find.byKey(CodeLabWorkbenchLayout.sidebarKey),
+      );
+      final session = tester.getRect(
+        find.byKey(CodeLabWorkbenchLayout.sessionPaneKey),
+      );
+      final dock = tester.getRect(find.byKey(CodeLabWorkbenchLayout.dockKey));
+      expect(sidebar.top, greaterThan(appBarBottom));
+      expect(sidebar.right, lessThan(session.left));
+      expect(session.right, lessThan(dock.left));
+      expect(sidebar.width, 280);
+      expect(dock.width, 360);
+    });
+
+    testWidgets('the dock is a column only from 1280 px', (tester) async {
+      setWindow(tester, const Size(1279, 900));
+      await tester.pumpWidget(layout());
+      expect(find.text('Dock'), findsNothing);
+
+      await tester.pumpWidget(layout(dockOverlayOpen: true));
+      await tester.pump();
+      expect(find.text('Dock'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('workbench-overlay-scrim')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(
-          CodeLabWorkbenchLayout.inspectorPaneKey,
-          skipOffstage: false,
-        ),
-        findsOneWidget,
-      );
-    },
-  );
+    });
 
-  testWidgets(
-    'workbench keeps the inspector on stage in narrow layout when asked to',
-    (tester) async {
-      tester.view.physicalSize = const Size(430, 720);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('without open panes there is no dock', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await tester.pumpWidget(layout(dock: null));
+
+      expect(find.byKey(CodeLabWorkbenchLayout.dockKey), findsNothing);
+    });
+
+    testWidgets('narrow window hides the sidebar until it is opened over '
+        'the content', (tester) async {
+      setWindow(tester, const Size(820, 900));
+      var dismissed = 0;
+      await tester.pumpWidget(layout());
+      expect(find.text('Sidebar'), findsNothing);
+      expect(find.text('Session'), findsOneWidget);
 
       await tester.pumpWidget(
-        FluentApp(
-          home: CodeLabWorkbenchLayout(
-            commandBar: const _AcpTestPane(label: 'Command'),
-            sessionsPane: const _AcpTestPane(label: 'Sessions'),
-            mainPane: const _AcpTestPane(label: 'Transcript'),
-            inspectorPane: const _AcpTestPane(label: 'Inspector'),
-            inspectorVisibleInNarrowMode: true,
-          ),
+        layout(
+          sidebarOverlayOpen: true,
+          onSidebarOverlayDismiss: () => dismissed++,
         ),
       );
+      await tester.pump();
+      expect(find.text('Sidebar'), findsOneWidget);
 
-      expect(tester.takeException(), isNull);
-      expect(find.text('Inspector'), findsOneWidget);
-      expect(find.text('Sessions'), findsNothing);
-    },
-  );
+      await tester.tapAt(const Offset(800, 450));
+      expect(dismissed, 1);
+    });
 
-  testWidgets('workbench applies custom desktop pane dimensions', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 720);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('a collapsed sidebar keeps only its icon width', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1100, 900));
+      await tester.pumpWidget(layout(sidebarCollapsed: true));
 
-    await tester.pumpWidget(
-      const FluentApp(
-        home: SizedBox(
-          width: 1200,
-          height: 720,
-          child: CodeLabWorkbenchLayout(
-            sessionsPaneWidth: 240,
-            inspectorPaneWidth: 360,
-            commandBar: _AcpTestPane(label: 'Command'),
-            sessionsPane: _AcpTestPane(label: 'Sessions'),
-            mainPane: _AcpTestPane(label: 'Main'),
-            inspectorPane: _AcpTestPane(label: 'Inspector'),
-          ),
-        ),
-      ),
-    );
+      expect(
+        tester.getSize(find.byKey(CodeLabWorkbenchLayout.sidebarKey)).width,
+        56,
+      );
+    });
 
-    final sessionsSize = tester.getSize(
-      find.byKey(CodeLabWorkbenchLayout.sessionsPaneKey),
-    );
-    final inspectorSize = tester.getSize(
-      find.byKey(CodeLabWorkbenchLayout.inspectorPaneKey),
-    );
+    testWidgets('resizing the window across classes keeps the session pane '
+        'state (MOB-3)', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      var created = 0;
+      final pane = _CountingPane(onCreate: () => created++);
+      await tester.pumpWidget(layout(sessionPane: pane));
 
-    expect(sessionsSize.width, 240);
-    expect(inspectorSize.width, 360);
-    expect(tester.takeException(), isNull);
-  });
+      for (final size in const [Size(820, 900), Size(1100, 900)]) {
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(layout(sessionPane: pane));
+      }
+      tester.view.physicalSize = const Size(1440, 900);
+      await tester.pumpWidget(layout(sessionPane: pane));
 
-  testWidgets('dragging the sessions/main divider reports a positive delta', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 760);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+      expect(created, 1);
+    });
 
-    final deltas = <double>[];
-    await tester.pumpWidget(
-      FluentApp(
-        home: SizedBox(
-          width: 1200,
-          height: 760,
-          child: CodeLabWorkbenchLayout(
-            commandBar: const _AcpTestPane(label: 'Command'),
-            sessionsPane: const _AcpTestPane(label: 'Sessions'),
-            mainPane: const _AcpTestPane(label: 'Main'),
-            inspectorPane: const _AcpTestPane(label: 'Inspector'),
-            onSessionsPaneWidthChanged: deltas.add,
-          ),
-        ),
-      ),
-    );
-
-    await tester.drag(
-      find.byType(CodeLabResizeHandle).first,
-      const Offset(30, 0),
-    );
-
-    expect(deltas, isNotEmpty);
-    expect(deltas.fold(0.0, (sum, dx) => sum + dx), closeTo(30, 0.01));
-  });
-
-  testWidgets(
-    'dragging the main/inspector divider reports a positive delta when '
-    'growing the inspector',
-    (tester) async {
-      tester.view.physicalSize = const Size(1200, 760);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
+    testWidgets('dragging the sidebar divider reports a positive delta', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
       final deltas = <double>[];
+      var ended = 0;
       await tester.pumpWidget(
-        FluentApp(
-          home: SizedBox(
-            width: 1200,
-            height: 760,
-            child: CodeLabWorkbenchLayout(
-              commandBar: const _AcpTestPane(label: 'Command'),
-              sessionsPane: const _AcpTestPane(label: 'Sessions'),
-              mainPane: const _AcpTestPane(label: 'Main'),
-              inspectorPane: const _AcpTestPane(label: 'Inspector'),
-              onInspectorPaneWidthChanged: deltas.add,
-            ),
-          ),
+        layout(
+          onSidebarWidthChanged: deltas.add,
+          onSidebarResizeEnd: () => ended++,
         ),
       );
 
-      // The inspector's divider sits on its left edge, so dragging it left
-      // (negative dx) must grow the inspector (positive reported delta).
+      await tester.drag(
+        find.byType(CodeLabResizeHandle).first,
+        const Offset(30, 0),
+      );
+
+      expect(deltas.fold(0.0, (sum, dx) => sum + dx), closeTo(30, 0.01));
+      expect(ended, 1);
+    });
+
+    testWidgets('dragging the dock divider left grows the dock', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
+      final deltas = <double>[];
+      await tester.pumpWidget(layout(onDockWidthChanged: deltas.add));
+
       await tester.drag(
         find.byType(CodeLabResizeHandle).last,
         const Offset(-30, 0),
       );
 
-      expect(deltas, isNotEmpty);
       expect(deltas.fold(0.0, (sum, dx) => sum + dx), closeTo(30, 0.01));
-    },
-  );
+    });
 
-  testWidgets('workbench dividers are absent without resize callbacks', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 760);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('dividers are absent without resize callbacks', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await tester.pumpWidget(layout());
 
-    await tester.pumpWidget(
-      const FluentApp(
-        home: SizedBox(
-          width: 1200,
-          height: 760,
-          child: CodeLabWorkbenchLayout(
-            commandBar: _AcpTestPane(label: 'Command'),
-            sessionsPane: _AcpTestPane(label: 'Sessions'),
-            mainPane: _AcpTestPane(label: 'Main'),
-            inspectorPane: _AcpTestPane(label: 'Inspector'),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byType(CodeLabResizeHandle), findsNothing);
-  });
-
-  testWidgets('workbench divider signals resize end after a drag completes', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 760);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    var resizeEndCalls = 0;
-    await tester.pumpWidget(
-      FluentApp(
-        home: SizedBox(
-          width: 1200,
-          height: 760,
-          child: CodeLabWorkbenchLayout(
-            commandBar: const _AcpTestPane(label: 'Command'),
-            sessionsPane: const _AcpTestPane(label: 'Sessions'),
-            mainPane: const _AcpTestPane(label: 'Main'),
-            inspectorPane: const _AcpTestPane(label: 'Inspector'),
-            onSessionsPaneWidthChanged: (_) {},
-            onSessionsPaneResizeEnd: () => resizeEndCalls++,
-          ),
-        ),
-      ),
-    );
-
-    await tester.drag(
-      find.byType(CodeLabResizeHandle).first,
-      const Offset(30, 0),
-    );
-
-    expect(resizeEndCalls, 1);
+      expect(find.byType(CodeLabResizeHandle), findsNothing);
+    });
   });
 
   group('CodeLabActivityBar / CodeLabProgressChecklist', () {
@@ -1872,4 +1912,26 @@ class _AcpTestPane extends StatelessWidget {
       child: Center(child: Text(label)),
     );
   }
+}
+
+/// Панель, которая считает создания своего состояния: тест MOB-3 проверяет,
+/// что смена класса раскладки не пересоздаёт панель сессии.
+class _CountingPane extends StatefulWidget {
+  const _CountingPane({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  State<_CountingPane> createState() => _CountingPaneState();
+}
+
+class _CountingPaneState extends State<_CountingPane> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onCreate();
+  }
+
+  @override
+  Widget build(BuildContext context) => const Text('Session');
 }

@@ -32,6 +32,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import 'package:structured_log_remote_sync/structured_log_remote_sync.dart'
     show RemoteSyncLogOutput;
 
+import '../core/platform/dock_layout_store.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
@@ -213,6 +214,11 @@ final class CodeLabPlatformModule extends Module {
     bind<RecentProjectsStore>().toInstance(
       const SharedPreferencesRecentProjectsStore(),
     );
+    // Раскладка дока панелей между запусками (change
+    // `redesign-workbench-shell`, D5).
+    bind<DockLayoutStore>().toInstance(
+      const SharedPreferencesDockLayoutStore(),
+    );
     // Снимок рабочего пространства для восстановления после перезапуска
     // (design D6 change `add-session-list-and-reload`).
     bind<WorkspaceSnapshotStore>().toInstance(
@@ -260,6 +266,7 @@ final class CodeLabPresentationModule extends Module {
                 .resolve<WorkingDirectoryProvider>(),
             projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
             recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
+            dockLayoutStore: currentScope.resolve<DockLayoutStore>(),
           ),
         )
         .singleton();

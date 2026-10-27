@@ -42,6 +42,21 @@ class CodeLabProgressChecklist {
       bodyBuilder: (context) => _Body(entries: entries),
     );
   }
+
+  /// Полный чек-лист без ограничения высоты — содержимое панели Plan дока.
+  ///
+  /// Почему: в доке план занимает всю высоту панели, а секция activity bar
+  /// ограничена [_Body._maxHeight] (change `redesign-workbench-shell`, D5).
+  /// Как использовать: класть в панель с ограниченной высотой — список
+  /// прокручивается сам; строки те же, что в раскрытой секции.
+  static Widget list({required List<CodeLabPlanEntry> entries, Key? key}) =>
+      ListView.separated(
+        key: key,
+        padding: const EdgeInsets.all(12),
+        itemCount: entries.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 8),
+        itemBuilder: (context, index) => _EntryRow(entry: entries[index]),
+      );
 }
 
 class _Header extends StatelessWidget {

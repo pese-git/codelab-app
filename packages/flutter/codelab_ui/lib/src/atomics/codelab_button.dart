@@ -103,7 +103,11 @@ class _AcpButtonContent extends StatelessWidget {
         else if (icon != null)
           Icon(icon, size: 14),
         if (isLoading || icon != null) const SizedBox(width: 8),
-        Text(label, overflow: TextOverflow.ellipsis),
+        // Без `Flexible` многоточие не срабатывает: в узком окне кнопка
+        // переполнялась вместо того, чтобы сократить подпись.
+        Flexible(
+          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
       ],
     );
   }

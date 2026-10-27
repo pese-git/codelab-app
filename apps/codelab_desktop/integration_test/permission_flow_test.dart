@@ -15,9 +15,7 @@ import 'support/e2e_agent.dart';
 // See stdio_connect_flow_test.dart for why the connection setup dialog and
 // the connect round trip need this specific choreography.
 Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(
-    find.byKey(const ValueKey('command-bar-configure-connection')),
-  );
+  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
   await tester.pumpAndSettle();
 }
 
@@ -144,6 +142,10 @@ void main() {
         matching: find.textContaining(launch.rawInputMarker),
       );
       expect(find.text('View raw input'), findsOneWidget);
+      // Записи протокола — в панели Protocol дока (change
+      // `redesign-workbench-shell`, D5).
+      shellCubit.togglePane(ToolPane.protocol);
+      await tester.pumpAndSettle();
       expect(rawInputIn(WorkbenchInspectorPane), findsWidgets);
       expect(rawInputIn(CodeLabApprovalPanel), findsNothing);
       await tester.tap(find.text('View raw input'));

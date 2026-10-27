@@ -29,9 +29,7 @@ CodeLabShellCubit _cubit(WidgetTester tester) =>
 /// Вводит команду агента в форму и подключается (как в
 /// stdio_connect_flow_test.dart).
 Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
-  await tester.tap(
-    find.byKey(const ValueKey('command-bar-configure-connection')),
-  );
+  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
   await tester.pumpAndSettle();
   await tester.enterText(
     find.byKey(const ValueKey('transport-field-Command')),

@@ -10,6 +10,8 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
     this.onReject,
     this.onInspectorPrevious,
     this.onInspectorNext,
+    this.onNewSession,
+    this.onToggleSidebar,
     this.enabled = true,
     super.key,
   });
@@ -21,6 +23,14 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   final VoidCallback? onReject;
   final VoidCallback? onInspectorPrevious;
   final VoidCallback? onInspectorNext;
+
+  /// Cmd/Ctrl+N — новая сессия (A13, шаг 3; change
+  /// `redesign-workbench-shell`).
+  final VoidCallback? onNewSession;
+
+  /// Cmd/Ctrl+B — свернуть или развернуть сайдбар; что именно, решает хост
+  /// по классу раскладки.
+  final VoidCallback? onToggleSidebar;
   final bool enabled;
 
   @override
@@ -38,6 +48,18 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
     }
     if (onCancel != null) {
       bindings[const SingleActivator(LogicalKeyboardKey.escape)] = onCancel!;
+    }
+    if (onNewSession != null) {
+      bindings[const SingleActivator(LogicalKeyboardKey.keyN, control: true)] =
+          onNewSession!;
+      bindings[const SingleActivator(LogicalKeyboardKey.keyN, meta: true)] =
+          onNewSession!;
+    }
+    if (onToggleSidebar != null) {
+      bindings[const SingleActivator(LogicalKeyboardKey.keyB, control: true)] =
+          onToggleSidebar!;
+      bindings[const SingleActivator(LogicalKeyboardKey.keyB, meta: true)] =
+          onToggleSidebar!;
     }
     if (onApprove != null) {
       bindings[const SingleActivator(LogicalKeyboardKey.enter, control: true)] =

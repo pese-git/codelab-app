@@ -6,7 +6,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import '../../application/shell_cubit.dart';
 import '../workbench_shell.dart' show selectPaletteCommand;
 import 'connection_setup_dialog.dart';
-import 'current_session_panel.dart';
+import '../../application/ui_mappers.dart' show projectNameOf;
 
 class WorkbenchMainPane extends StatelessWidget {
   const WorkbenchMainPane({
@@ -52,7 +52,7 @@ class WorkbenchMainPane extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                CurrentSessionPanel(state: state),
+                _SessionHeader(state: state),
                 const SizedBox(height: 12),
                 ConstrainedBox(
                   constraints: BoxConstraints(
@@ -88,7 +88,7 @@ class WorkbenchMainPane extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (state.transcriptEntries.isNotEmpty) ...[
-          CurrentSessionPanel(state: state),
+          _SessionHeader(state: state),
           const SizedBox(height: 12),
           // При пустой ленте то же состояние показывает экран подключения
           // (design D6 change `add-connection-and-error-states`).
@@ -213,6 +213,31 @@ class _ContentWithActivityBar extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Шапка панели сессии по состоянию рабочего места (change
+/// `redesign-workbench-shell`, D7): название, папка проекта, режим.
+class _SessionHeader extends StatelessWidget {
+  const _SessionHeader({required this.state});
+
+  final CodeLabShellState state;
+
+  @override
+  Widget build(BuildContext context) {
+    // Подпись сессии — её `cwd`, а без него id; чип проекта только для пути.
+    final detail = state.currentSessionDetail;
+    final cwd =
+        state.activeSessionId != null &&
+            (detail.contains('/') || detail.contains(r'\'))
+        ? detail
+        : null;
+    return CodeLabSessionPaneHeader(
+      title: state.currentSessionLabel,
+      projectName: cwd == null ? null : projectNameOf(cwd),
+      projectPath: cwd,
+      mode: state.sessionMode,
     );
   }
 }
