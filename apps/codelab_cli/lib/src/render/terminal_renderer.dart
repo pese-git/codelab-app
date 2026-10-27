@@ -124,15 +124,21 @@ final class TerminalRenderer {
     if (!_samePlan(view.plan)) {
       _plan = view.plan;
       if (_plan.isNotEmpty) {
-        _closeThought();
-        _line(planHeader, _raw);
-        for (final entry in _plan) {
-          _line(
-            '  ${_planMark(entry.status)} ${sanitizeTerminalText(entry.content)}',
-            _raw,
-          );
-        }
+        printPlan(_plan);
       }
+    }
+  }
+
+  /// План целиком: заголовок и строка на запись (`[x]`, `[~]`, `[ ]`); на
+  /// [OutputSurface.raw] — в stderr. Для изменения плана и `/plan`.
+  void printPlan(List<PlanEntryView> plan) {
+    _closeThought();
+    _line(planHeader, _raw);
+    for (final entry in plan) {
+      _line(
+        '  ${_planMark(entry.status)} ${sanitizeTerminalText(entry.content)}',
+        _raw,
+      );
     }
   }
 
