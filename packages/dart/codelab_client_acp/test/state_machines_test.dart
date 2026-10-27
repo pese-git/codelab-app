@@ -1093,6 +1093,36 @@ void main() {
 
       expect(failed.turns.single.status, PromptTurnStatus.failed);
     });
+
+    // Без этого повтор хода после ошибки невозможен (design D4 change
+    // `add-connection-and-error-states`).
+    test('a session whose turn failed accepts the next turn', () {
+      final running = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      ).stateOrThrow;
+      final failed = SessionStateMachine.failTurn(
+        running,
+        message: 'boom',
+        failure: const PromptFailure.unknown(message: 'boom'),
+      ).stateOrThrow;
+      expect(failed.status, SessionLifecycleStatus.failed);
+      expect(
+        failed.turns.single.failure,
+        const PromptFailure.unknown(message: 'boom'),
+      );
+
+      final next = SessionStateMachine.startTurn(
+        failed,
+        _secondPendingTurn,
+      ).stateOrThrow;
+
+      expect(next.status, SessionLifecycleStatus.runningTurn);
+      expect(next.turns.map((turn) => turn.status), [
+        PromptTurnStatus.failed,
+        PromptTurnStatus.running,
+      ]);
+    });
   });
 }
 

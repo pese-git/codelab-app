@@ -1210,7 +1210,9 @@ as String,cause: freezed == cause ? _self.cause : cause ,
 /// @nodoc
 mixin _$PromptTurn {
 
- PromptTurnId get id; SessionId get sessionId; List<ContentBlock> get prompt; PromptTurnStatus get status; StopReason? get stopReason; List<SessionUpdate> get updates; Map<ToolCallId, ToolCallRecord> get toolCalls; Map<ApprovalRequestId, ApprovalRequest> get approvals; String? get failureMessage; DateTime? get startedAt; DateTime? get completedAt;
+ PromptTurnId get id; SessionId get sessionId; List<ContentBlock> get prompt; PromptTurnStatus get status; StopReason? get stopReason; List<SessionUpdate> get updates; Map<ToolCallId, ToolCallRecord> get toolCalls; Map<ApprovalRequestId, ApprovalRequest> get approvals; String? get failureMessage;/// Типизированная причина сбоя хода; заполнена вместе с
+/// [failureMessage] (design D2 change `add-connection-and-error-states`).
+ PromptFailure? get failure; DateTime? get startedAt; DateTime? get completedAt;
 /// Create a copy of PromptTurn
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1221,16 +1223,16 @@ $PromptTurnCopyWith<PromptTurn> get copyWith => _$PromptTurnCopyWithImpl<PromptT
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PromptTurn&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other.prompt, prompt)&&(identical(other.status, status) || other.status == status)&&(identical(other.stopReason, stopReason) || other.stopReason == stopReason)&&const DeepCollectionEquality().equals(other.updates, updates)&&const DeepCollectionEquality().equals(other.toolCalls, toolCalls)&&const DeepCollectionEquality().equals(other.approvals, approvals)&&(identical(other.failureMessage, failureMessage) || other.failureMessage == failureMessage)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PromptTurn&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other.prompt, prompt)&&(identical(other.status, status) || other.status == status)&&(identical(other.stopReason, stopReason) || other.stopReason == stopReason)&&const DeepCollectionEquality().equals(other.updates, updates)&&const DeepCollectionEquality().equals(other.toolCalls, toolCalls)&&const DeepCollectionEquality().equals(other.approvals, approvals)&&(identical(other.failureMessage, failureMessage) || other.failureMessage == failureMessage)&&(identical(other.failure, failure) || other.failure == failure)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,sessionId,const DeepCollectionEquality().hash(prompt),status,stopReason,const DeepCollectionEquality().hash(updates),const DeepCollectionEquality().hash(toolCalls),const DeepCollectionEquality().hash(approvals),failureMessage,startedAt,completedAt);
+int get hashCode => Object.hash(runtimeType,id,sessionId,const DeepCollectionEquality().hash(prompt),status,stopReason,const DeepCollectionEquality().hash(updates),const DeepCollectionEquality().hash(toolCalls),const DeepCollectionEquality().hash(approvals),failureMessage,failure,startedAt,completedAt);
 
 @override
 String toString() {
-  return 'PromptTurn(id: $id, sessionId: $sessionId, prompt: $prompt, status: $status, stopReason: $stopReason, updates: $updates, toolCalls: $toolCalls, approvals: $approvals, failureMessage: $failureMessage, startedAt: $startedAt, completedAt: $completedAt)';
+  return 'PromptTurn(id: $id, sessionId: $sessionId, prompt: $prompt, status: $status, stopReason: $stopReason, updates: $updates, toolCalls: $toolCalls, approvals: $approvals, failureMessage: $failureMessage, failure: $failure, startedAt: $startedAt, completedAt: $completedAt)';
 }
 
 
@@ -1241,11 +1243,11 @@ abstract mixin class $PromptTurnCopyWith<$Res>  {
   factory $PromptTurnCopyWith(PromptTurn value, $Res Function(PromptTurn) _then) = _$PromptTurnCopyWithImpl;
 @useResult
 $Res call({
- PromptTurnId id, SessionId sessionId, List<ContentBlock> prompt, PromptTurnStatus status, StopReason? stopReason, List<SessionUpdate> updates, Map<ToolCallId, ToolCallRecord> toolCalls, Map<ApprovalRequestId, ApprovalRequest> approvals, String? failureMessage, DateTime? startedAt, DateTime? completedAt
+ PromptTurnId id, SessionId sessionId, List<ContentBlock> prompt, PromptTurnStatus status, StopReason? stopReason, List<SessionUpdate> updates, Map<ToolCallId, ToolCallRecord> toolCalls, Map<ApprovalRequestId, ApprovalRequest> approvals, String? failureMessage, PromptFailure? failure, DateTime? startedAt, DateTime? completedAt
 });
 
 
-$PromptTurnIdCopyWith<$Res> get id;$SessionIdCopyWith<$Res> get sessionId;
+$PromptTurnIdCopyWith<$Res> get id;$SessionIdCopyWith<$Res> get sessionId;$PromptFailureCopyWith<$Res>? get failure;
 
 }
 /// @nodoc
@@ -1258,7 +1260,7 @@ class _$PromptTurnCopyWithImpl<$Res>
 
 /// Create a copy of PromptTurn
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? sessionId = null,Object? prompt = null,Object? status = null,Object? stopReason = freezed,Object? updates = null,Object? toolCalls = null,Object? approvals = null,Object? failureMessage = freezed,Object? startedAt = freezed,Object? completedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? sessionId = null,Object? prompt = null,Object? status = null,Object? stopReason = freezed,Object? updates = null,Object? toolCalls = null,Object? approvals = null,Object? failureMessage = freezed,Object? failure = freezed,Object? startedAt = freezed,Object? completedAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as PromptTurnId,sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
@@ -1269,7 +1271,8 @@ as StopReason?,updates: null == updates ? _self.updates : updates // ignore: cas
 as List<SessionUpdate>,toolCalls: null == toolCalls ? _self.toolCalls : toolCalls // ignore: cast_nullable_to_non_nullable
 as Map<ToolCallId, ToolCallRecord>,approvals: null == approvals ? _self.approvals : approvals // ignore: cast_nullable_to_non_nullable
 as Map<ApprovalRequestId, ApprovalRequest>,failureMessage: freezed == failureMessage ? _self.failureMessage : failureMessage // ignore: cast_nullable_to_non_nullable
-as String?,startedAt: freezed == startedAt ? _self.startedAt : startedAt // ignore: cast_nullable_to_non_nullable
+as String?,failure: freezed == failure ? _self.failure : failure // ignore: cast_nullable_to_non_nullable
+as PromptFailure?,startedAt: freezed == startedAt ? _self.startedAt : startedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
@@ -1291,6 +1294,18 @@ $SessionIdCopyWith<$Res> get sessionId {
   
   return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
     return _then(_self.copyWith(sessionId: value));
+  });
+}/// Create a copy of PromptTurn
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$PromptFailureCopyWith<$Res>? get failure {
+    if (_self.failure == null) {
+    return null;
+  }
+
+  return $PromptFailureCopyWith<$Res>(_self.failure!, (value) {
+    return _then(_self.copyWith(failure: value));
   });
 }
 }
@@ -1371,10 +1386,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  DateTime? startedAt,  DateTime? completedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  PromptFailure? failure,  DateTime? startedAt,  DateTime? completedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _PromptTurn() when $default != null:
-return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.startedAt,_that.completedAt);case _:
+return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.failure,_that.startedAt,_that.completedAt);case _:
   return orElse();
 
 }
@@ -1392,10 +1407,10 @@ return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopRea
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  DateTime? startedAt,  DateTime? completedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  PromptFailure? failure,  DateTime? startedAt,  DateTime? completedAt)  $default,) {final _that = this;
 switch (_that) {
 case _PromptTurn():
-return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.startedAt,_that.completedAt);}
+return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.failure,_that.startedAt,_that.completedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -1409,10 +1424,10 @@ return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopRea
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  DateTime? startedAt,  DateTime? completedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  PromptFailure? failure,  DateTime? startedAt,  DateTime? completedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _PromptTurn() when $default != null:
-return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.startedAt,_that.completedAt);case _:
+return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.failure,_that.startedAt,_that.completedAt);case _:
   return null;
 
 }
@@ -1424,7 +1439,7 @@ return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopRea
 
 
 class _PromptTurn extends PromptTurn {
-  const _PromptTurn({required this.id, required this.sessionId, required final  List<ContentBlock> prompt, this.status = PromptTurnStatus.pending, this.stopReason, final  List<SessionUpdate> updates = const [], final  Map<ToolCallId, ToolCallRecord> toolCalls = const {}, final  Map<ApprovalRequestId, ApprovalRequest> approvals = const {}, this.failureMessage, this.startedAt, this.completedAt}): _prompt = prompt,_updates = updates,_toolCalls = toolCalls,_approvals = approvals,super._();
+  const _PromptTurn({required this.id, required this.sessionId, required final  List<ContentBlock> prompt, this.status = PromptTurnStatus.pending, this.stopReason, final  List<SessionUpdate> updates = const [], final  Map<ToolCallId, ToolCallRecord> toolCalls = const {}, final  Map<ApprovalRequestId, ApprovalRequest> approvals = const {}, this.failureMessage, this.failure, this.startedAt, this.completedAt}): _prompt = prompt,_updates = updates,_toolCalls = toolCalls,_approvals = approvals,super._();
   
 
 @override final  PromptTurnId id;
@@ -1460,6 +1475,9 @@ class _PromptTurn extends PromptTurn {
 }
 
 @override final  String? failureMessage;
+/// Типизированная причина сбоя хода; заполнена вместе с
+/// [failureMessage] (design D2 change `add-connection-and-error-states`).
+@override final  PromptFailure? failure;
 @override final  DateTime? startedAt;
 @override final  DateTime? completedAt;
 
@@ -1473,16 +1491,16 @@ _$PromptTurnCopyWith<_PromptTurn> get copyWith => __$PromptTurnCopyWithImpl<_Pro
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PromptTurn&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other._prompt, _prompt)&&(identical(other.status, status) || other.status == status)&&(identical(other.stopReason, stopReason) || other.stopReason == stopReason)&&const DeepCollectionEquality().equals(other._updates, _updates)&&const DeepCollectionEquality().equals(other._toolCalls, _toolCalls)&&const DeepCollectionEquality().equals(other._approvals, _approvals)&&(identical(other.failureMessage, failureMessage) || other.failureMessage == failureMessage)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PromptTurn&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other._prompt, _prompt)&&(identical(other.status, status) || other.status == status)&&(identical(other.stopReason, stopReason) || other.stopReason == stopReason)&&const DeepCollectionEquality().equals(other._updates, _updates)&&const DeepCollectionEquality().equals(other._toolCalls, _toolCalls)&&const DeepCollectionEquality().equals(other._approvals, _approvals)&&(identical(other.failureMessage, failureMessage) || other.failureMessage == failureMessage)&&(identical(other.failure, failure) || other.failure == failure)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,sessionId,const DeepCollectionEquality().hash(_prompt),status,stopReason,const DeepCollectionEquality().hash(_updates),const DeepCollectionEquality().hash(_toolCalls),const DeepCollectionEquality().hash(_approvals),failureMessage,startedAt,completedAt);
+int get hashCode => Object.hash(runtimeType,id,sessionId,const DeepCollectionEquality().hash(_prompt),status,stopReason,const DeepCollectionEquality().hash(_updates),const DeepCollectionEquality().hash(_toolCalls),const DeepCollectionEquality().hash(_approvals),failureMessage,failure,startedAt,completedAt);
 
 @override
 String toString() {
-  return 'PromptTurn(id: $id, sessionId: $sessionId, prompt: $prompt, status: $status, stopReason: $stopReason, updates: $updates, toolCalls: $toolCalls, approvals: $approvals, failureMessage: $failureMessage, startedAt: $startedAt, completedAt: $completedAt)';
+  return 'PromptTurn(id: $id, sessionId: $sessionId, prompt: $prompt, status: $status, stopReason: $stopReason, updates: $updates, toolCalls: $toolCalls, approvals: $approvals, failureMessage: $failureMessage, failure: $failure, startedAt: $startedAt, completedAt: $completedAt)';
 }
 
 
@@ -1493,11 +1511,11 @@ abstract mixin class _$PromptTurnCopyWith<$Res> implements $PromptTurnCopyWith<$
   factory _$PromptTurnCopyWith(_PromptTurn value, $Res Function(_PromptTurn) _then) = __$PromptTurnCopyWithImpl;
 @override @useResult
 $Res call({
- PromptTurnId id, SessionId sessionId, List<ContentBlock> prompt, PromptTurnStatus status, StopReason? stopReason, List<SessionUpdate> updates, Map<ToolCallId, ToolCallRecord> toolCalls, Map<ApprovalRequestId, ApprovalRequest> approvals, String? failureMessage, DateTime? startedAt, DateTime? completedAt
+ PromptTurnId id, SessionId sessionId, List<ContentBlock> prompt, PromptTurnStatus status, StopReason? stopReason, List<SessionUpdate> updates, Map<ToolCallId, ToolCallRecord> toolCalls, Map<ApprovalRequestId, ApprovalRequest> approvals, String? failureMessage, PromptFailure? failure, DateTime? startedAt, DateTime? completedAt
 });
 
 
-@override $PromptTurnIdCopyWith<$Res> get id;@override $SessionIdCopyWith<$Res> get sessionId;
+@override $PromptTurnIdCopyWith<$Res> get id;@override $SessionIdCopyWith<$Res> get sessionId;@override $PromptFailureCopyWith<$Res>? get failure;
 
 }
 /// @nodoc
@@ -1510,7 +1528,7 @@ class __$PromptTurnCopyWithImpl<$Res>
 
 /// Create a copy of PromptTurn
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? sessionId = null,Object? prompt = null,Object? status = null,Object? stopReason = freezed,Object? updates = null,Object? toolCalls = null,Object? approvals = null,Object? failureMessage = freezed,Object? startedAt = freezed,Object? completedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? sessionId = null,Object? prompt = null,Object? status = null,Object? stopReason = freezed,Object? updates = null,Object? toolCalls = null,Object? approvals = null,Object? failureMessage = freezed,Object? failure = freezed,Object? startedAt = freezed,Object? completedAt = freezed,}) {
   return _then(_PromptTurn(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as PromptTurnId,sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
@@ -1521,7 +1539,8 @@ as StopReason?,updates: null == updates ? _self._updates : updates // ignore: ca
 as List<SessionUpdate>,toolCalls: null == toolCalls ? _self._toolCalls : toolCalls // ignore: cast_nullable_to_non_nullable
 as Map<ToolCallId, ToolCallRecord>,approvals: null == approvals ? _self._approvals : approvals // ignore: cast_nullable_to_non_nullable
 as Map<ApprovalRequestId, ApprovalRequest>,failureMessage: freezed == failureMessage ? _self.failureMessage : failureMessage // ignore: cast_nullable_to_non_nullable
-as String?,startedAt: freezed == startedAt ? _self.startedAt : startedAt // ignore: cast_nullable_to_non_nullable
+as String?,failure: freezed == failure ? _self.failure : failure // ignore: cast_nullable_to_non_nullable
+as PromptFailure?,startedAt: freezed == startedAt ? _self.startedAt : startedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
@@ -1544,6 +1563,18 @@ $SessionIdCopyWith<$Res> get sessionId {
   
   return $SessionIdCopyWith<$Res>(_self.sessionId, (value) {
     return _then(_self.copyWith(sessionId: value));
+  });
+}/// Create a copy of PromptTurn
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$PromptFailureCopyWith<$Res>? get failure {
+    if (_self.failure == null) {
+    return null;
+  }
+
+  return $PromptFailureCopyWith<$Res>(_self.failure!, (value) {
+    return _then(_self.copyWith(failure: value));
   });
 }
 }

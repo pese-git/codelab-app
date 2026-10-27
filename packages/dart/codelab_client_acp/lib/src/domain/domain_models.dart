@@ -1,6 +1,8 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'prompt_failure.dart';
+
 part 'domain_models.freezed.dart';
 
 @freezed
@@ -88,6 +90,10 @@ sealed class PromptTurn with _$PromptTurn {
     @Default({}) Map<ToolCallId, ToolCallRecord> toolCalls,
     @Default({}) Map<ApprovalRequestId, ApprovalRequest> approvals,
     String? failureMessage,
+
+    /// Типизированная причина сбоя хода; заполнена вместе с
+    /// [failureMessage] (design D2 change `add-connection-and-error-states`).
+    PromptFailure? failure,
     DateTime? startedAt,
     DateTime? completedAt,
   }) = _PromptTurn;
