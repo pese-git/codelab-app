@@ -23,7 +23,14 @@ enum CodelabCompatibleStdioAgentMode {
   /// Сессии хранятся в файле `<скрипт>.sessions.json` рядом со скриптом и
   /// переживают перезапуск процесса (design D8 change
   /// `add-session-list-and-reload`).
-  withSessionList('with_session_list');
+  withSessionList('with_session_list'),
+
+  /// Агент с командами палитры: после ответа на `session/new` объявляет
+  /// `available_commands_update` с `compact` без `input` и `plan` с
+  /// `input.hint`; на промпт `/compact` отвечает отчётом о сжатии, на
+  /// остальные — `echo: <text>` (design D6 change
+  /// `add-command-palette-agent-commands`).
+  withAvailableCommands('with_available_commands');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -222,6 +229,24 @@ Future<void> main(List<String> args) async {
           if (_mode == 'with_config_options')
             'configOptions': [_modelConfigOption()],
         });
+        if (_mode == 'with_available_commands') {
+          // После ответа, как у Dart-агента (agent-acp-server): до ответа у
+          // клиента ещё нет сессии, к которой отнести команды.
+          _writeNotification('session/update', {
+            'sessionId': sessionId,
+            'update': {
+              'sessionUpdate': 'available_commands_update',
+              'availableCommands': [
+                {'name': 'compact', 'description': 'Compact the conversation'},
+                {
+                  'name': 'plan',
+                  'description': 'Create a plan',
+                  'input': {'hint': 'what to plan'},
+                },
+              ],
+            },
+          });
+        }
       case 'session/prompt':
         final promptParams = message['params'] as Map<String, Object?>;
         final sessionId = promptParams['sessionId'] as String;
@@ -245,6 +270,26 @@ Future<void> main(List<String> args) async {
             'update': {
               'sessionUpdate': 'agent_message_chunk',
               'content': {'type': 'text', 'text': 'echo: $text'},
+            },
+          });
+          _writeResponse(id, {'stopReason': 'end_turn'});
+          break;
+        }
+        if (_mode == 'with_available_commands') {
+          // Команда приходит обычным промптом, текст начинается с `/name`
+          // (`14-Slash Commands.md`); агент узнаёт её по префиксу.
+          final text =
+              ((promptParams['prompt'] as List).first as Map)['text'] as String;
+          _writeNotification('session/update', {
+            'sessionId': sessionId,
+            'update': {
+              'sessionUpdate': 'agent_message_chunk',
+              'content': {
+                'type': 'text',
+                'text': text.startsWith('/compact')
+                    ? 'Compacted the conversation.'
+                    : 'echo: $text',
+              },
             },
           });
           _writeResponse(id, {'stopReason': 'end_turn'});

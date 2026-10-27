@@ -498,4 +498,65 @@ void main() {
 
     expect(recents.map((project) => project.path), ['/new', '/mid', '/old']);
   });
+
+  group(
+    'palette catalog (change add-command-palette-agent-commands, D2–D5)',
+    () {
+      final catalog = paletteCatalogOf(const [
+        AgentCommandView(
+          name: 'compact',
+          description: 'Compact the conversation',
+        ),
+        AgentCommandView(
+          name: 'plan',
+          description: 'Create a plan',
+          hint: 'what to plan',
+        ),
+      ]);
+
+      test('the six app commands are the host commands of the catalog', () {
+        expect(
+          paletteActionsOf(paletteCatalogOf(const [])),
+          CodeLabCommandAction.defaults,
+        );
+      });
+
+      test('agent commands replace the client stubs of the same name; the '
+          'remaining stub stays unavailable', () {
+        final ids = [for (final action in paletteActionsOf(catalog)) action.id];
+
+        expect(ids, [
+          'new',
+          'permissions',
+          'logs',
+          'reconnect',
+          'agent-compact',
+          'agent-plan',
+        ]);
+        expect(
+          paletteActionsOf(
+            catalog,
+          ).firstWhere((action) => action.id == 'permissions').isAvailable,
+          isFalse,
+        );
+        expect(
+          paletteActionsOf(catalog).last,
+          isA<CodeLabCommandAction>()
+              .having((a) => a.source, 'source', CodeLabCommandSource.agent)
+              .having((a) => a.hint, 'hint', 'what to plan'),
+        );
+      });
+
+      test('search maps the catalog ranking to palette actions', () {
+        expect(
+          [
+            for (final action in searchPaletteActions(catalog, '/cpt'))
+              action.id,
+          ],
+          ['agent-compact'],
+        );
+        expect(searchPaletteActions(catalog, '/pl').first.id, 'agent-plan');
+      });
+    },
+  );
 }

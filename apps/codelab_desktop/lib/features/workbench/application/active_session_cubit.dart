@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
+        AgentCommandView,
         ClientWorkspace,
         ClientWorkspaceException,
         Connected,
@@ -25,10 +26,12 @@ final class ActiveSessionState {
     this.transcriptEntries = const [],
     this.inspectorEntries = const [_emptyInspectorEntry],
     this.agentCommands = const [],
+    this.agentCommandViews = const [],
     this.configOptions = const [],
     this.currentPlan,
     this.queuedPrompts = const [],
     this.composerDraft = '',
+    this.composerDraftRevision = 0,
     this.isPromptSubmitting = false,
     this.canCancel = false,
     this.isRespondingToApproval = false,
@@ -50,6 +53,9 @@ final class ActiveSessionState {
 
   /// Команды агента из последнего `available_commands_update`.
   final List<CodeLabCommandAction> agentCommands;
+
+  /// Те же команды в форме kit — вход каталога палитры (`paletteCatalogOf`).
+  final List<AgentCommandView> agentCommandViews;
   final List<CodeLabConfigOption> configOptions;
 
   /// План сессии; `null` — плана не было или пользователь его скрыл.
@@ -63,6 +69,10 @@ final class ActiveSessionState {
   /// возвращённый из очереди промпт. `CodeLabPromptComposer.initialPrompt`
   /// применяет его только при изменении значения.
   final String composerDraft;
+
+  /// Растёт при каждой подстановке черновика: повторная вставка того же
+  /// текста тоже доходит до композера (`CodeLabPromptComposer.draftRevision`).
+  final int composerDraftRevision;
 
   /// Флаги совместимости из `SessionView.status` (design D4).
   final bool isPromptSubmitting;
@@ -81,10 +91,12 @@ final class ActiveSessionState {
     List<CodeLabTranscriptEntry>? transcriptEntries,
     List<CodeLabInspectorEntry>? inspectorEntries,
     List<CodeLabCommandAction>? agentCommands,
+    List<AgentCommandView>? agentCommandViews,
     List<CodeLabConfigOption>? configOptions,
     Object? currentPlan = _unset,
     List<CodeLabQueuedPrompt>? queuedPrompts,
     String? composerDraft,
+    int? composerDraftRevision,
     bool? isPromptSubmitting,
     bool? canCancel,
     bool? isRespondingToApproval,
@@ -94,6 +106,7 @@ final class ActiveSessionState {
     transcriptEntries: transcriptEntries ?? this.transcriptEntries,
     inspectorEntries: inspectorEntries ?? this.inspectorEntries,
     agentCommands: agentCommands ?? this.agentCommands,
+    agentCommandViews: agentCommandViews ?? this.agentCommandViews,
     configOptions: configOptions ?? this.configOptions,
     // `null` здесь — «скрыть план», а не «не менять».
     currentPlan: identical(currentPlan, _unset)
@@ -101,6 +114,7 @@ final class ActiveSessionState {
         : currentPlan as List<CodeLabPlanEntry>?,
     queuedPrompts: queuedPrompts ?? this.queuedPrompts,
     composerDraft: composerDraft ?? this.composerDraft,
+    composerDraftRevision: composerDraftRevision ?? this.composerDraftRevision,
     isPromptSubmitting: isPromptSubmitting ?? this.isPromptSubmitting,
     canCancel: canCancel ?? this.canCancel,
     isRespondingToApproval:
@@ -174,6 +188,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         ),
         inspectorEntries: const InspectorProjection().project(session),
         agentCommands: agentCommandsOf(view?.agentCommands ?? const []),
+        agentCommandViews: view?.agentCommands ?? const [],
         configOptions: configOptionsOf(view?.configOptions ?? const []),
         currentPlan: currentPlanOf(session),
         queuedPrompts: _queueOf(id),
@@ -194,6 +209,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         transcriptEntries: const [],
         inspectorEntries: const InspectorProjection().project(session),
         agentCommands: agentCommandsOf(view?.agentCommands ?? const []),
+        agentCommandViews: view?.agentCommands ?? const [],
         configOptions: configOptionsOf(view?.configOptions ?? const []),
         currentPlan: currentPlanOf(session),
         queuedPrompts: _queueOf(id),
@@ -211,6 +227,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       transcriptEntries: const [],
       inspectorEntries: const [],
       agentCommands: const [],
+      agentCommandViews: const [],
       configOptions: const [],
       currentPlan: null,
       queuedPrompts: _queueOf(sessionId),
@@ -308,6 +325,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       state._copyWith(
         queuedPrompts: _queueOf(sessionId!),
         composerDraft: prompt.text,
+        composerDraftRevision: state.composerDraftRevision + 1,
       ),
     );
   }
@@ -421,8 +439,12 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   void dismissPlan() => emit(state._copyWith(currentPlan: null));
 
   /// Кладёт [text] в композер (выбор команды агента в палитре).
-  void setComposerDraft(String text) =>
-      emit(state._copyWith(composerDraft: text));
+  void setComposerDraft(String text) => emit(
+    state._copyWith(
+      composerDraft: text,
+      composerDraftRevision: state.composerDraftRevision + 1,
+    ),
+  );
 
   @override
   Future<void> close() async {

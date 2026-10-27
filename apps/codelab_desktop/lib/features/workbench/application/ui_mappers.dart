@@ -333,7 +333,10 @@ List<CodeLabConfigOption> configOptionsOf(List<ConfigOptionView> options) => [
 /// Команды агента (последний `available_commands_update`) — действия палитры
 /// с источником `agent`; выбор такой команды вставляет `/{name} ` в композер.
 List<CodeLabCommandAction> agentCommandsOf(List<AgentCommandView> commands) => [
-  for (final command in commands)
+  for (final command in commands) _agentCommandAction(command),
+];
+
+CodeLabCommandAction _agentCommandAction(AgentCommandView command) =>
     CodeLabCommandAction(
       id: 'agent-${command.name}',
       label: command.name,
@@ -342,8 +345,45 @@ List<CodeLabCommandAction> agentCommandsOf(List<AgentCommandView> commands) => [
       icon: FluentIcons.robot,
       source: CodeLabCommandSource.agent,
       hint: command.hint,
+    );
+
+/// Шесть команд app как команды хоста каталога: имя — `slashCommand` без
+/// `/`, связь с иконкой — `id` (D2 change `add-command-palette-agent-commands`).
+final List<HostCommand> _paletteHostCommands = List.unmodifiable([
+  for (final action in CodeLabCommandAction.defaults)
+    HostCommand(
+      id: action.id,
+      name: action.slashCommand.substring(1),
+      label: action.label,
+      description: action.description,
+      isAvailable: action.isAvailable,
     ),
+]);
+
+/// Каталог палитры для команд агента активной сессии: команды app и
+/// [agentCommands] с правилами kit (конфликты имён, поиск — D3, D4).
+CommandCatalog paletteCatalogOf(List<AgentCommandView> agentCommands) =>
+    CommandCatalog(host: _paletteHostCommands, agent: agentCommands);
+
+/// Полный список палитры в порядке каталога.
+List<CodeLabCommandAction> paletteActionsOf(CommandCatalog catalog) => [
+  for (final command in catalog.commands) _paletteActionOf(command),
 ];
+
+/// Команды палитры под запрос [query] в порядке поиска каталога.
+List<CodeLabCommandAction> searchPaletteActions(
+  CommandCatalog catalog,
+  String query,
+) => [for (final command in catalog.search(query)) _paletteActionOf(command)];
+
+CodeLabCommandAction _paletteActionOf(CatalogCommand command) =>
+    switch (command) {
+      HostCatalogCommand(:final command) =>
+        CodeLabCommandAction.defaults.firstWhere(
+          (action) => action.id == command.id,
+        ),
+      AgentCatalogCommand(:final command) => _agentCommandAction(command),
+    };
 
 /// План сессии — последний `SessionUpdate.plan` по всем её ходам.
 ///

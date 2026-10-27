@@ -994,4 +994,86 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('raw error'), findsOneWidget);
   });
+
+  group('inline palette with a given search (change '
+      'add-command-palette-agent-commands, D5)', () {
+    const compact = CodeLabCommandAction(
+      id: 'agent-compact',
+      label: 'compact',
+      slashCommand: '/compact',
+      description: 'Compact the conversation',
+      icon: FluentIcons.robot,
+      source: CodeLabCommandSource.agent,
+    );
+    final newSession = CodeLabCommandAction.defaults.firstWhere(
+      (a) => a.id == 'new',
+    );
+
+    Future<CodeLabCommandAction?> pickWithEnter(
+      WidgetTester tester,
+      String text,
+      CodeLabCommandSearch search,
+    ) async {
+      CodeLabCommandAction? selected;
+      await tester.pumpWidget(
+        FluentApp(
+          home: CodeLabPromptComposer(
+            onSubmit: (_) {},
+            commandActions: [...CodeLabCommandAction.defaults, compact],
+            search: search,
+            onCommandSelected: (action) => selected = action,
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(EditableText), text);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      return selected;
+    }
+
+    testWidgets('the search result is what Enter picks', (tester) async {
+      final selected = await pickWithEnter(
+        tester,
+        '/cpt',
+        (query) => query == '/cpt' ? [compact] : const [],
+      );
+
+      expect(selected, compact);
+    });
+
+    testWidgets('Enter picks the first row shown: client section before '
+        'agent section', (tester) async {
+      final selected = await pickWithEnter(
+        tester,
+        '/n',
+        (_) => [compact, newSession],
+      );
+
+      expect(selected, newSession);
+    });
+  });
+
+  testWidgets('a new draftRevision re-applies the same initialPrompt after '
+      'the user changed the text (change add-command-palette-agent-commands)', (
+    tester,
+  ) async {
+    Widget composer(int revision) => FluentApp(
+      home: CodeLabPromptComposer(
+        onSubmit: (_) {},
+        initialPrompt: '/compact ',
+        draftRevision: revision,
+      ),
+    );
+    String text() =>
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text;
+
+    await tester.pumpWidget(composer(1));
+    await tester.enterText(find.byType(EditableText), '');
+    await tester.pumpWidget(composer(1));
+    expect(text(), isEmpty);
+
+    await tester.pumpWidget(composer(2));
+    expect(text(), '/compact ');
+  });
 }

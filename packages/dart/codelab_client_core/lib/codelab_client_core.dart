@@ -1,6 +1,7 @@
 /// Общий клиентский слой ACP без UI: рабочее пространство, соединение,
-/// сессии, их транскрипт, очередь, одобрения, опции, инспектор и
-/// диагностика (change `extract-acp-client-kit`).
+/// сессии, их транскрипт, очередь, одобрения, опции, каталог команд
+/// палитры, инспектор и диагностика (changes `extract-acp-client-kit`,
+/// `add-command-palette-agent-commands`).
 ///
 /// Почему: app и CLI должны вести себя одинаково, поэтому логика клиента
 /// живёт здесь, на чистом Dart, а хосты только отображают её состояние
@@ -12,6 +13,7 @@
 library;
 
 export 'src/backend/agent_backend.dart';
+export 'src/commands/command_catalog.dart';
 export 'src/connection/connection_profile.dart';
 export 'src/connection/connection_view.dart';
 export 'src/connection/profile_parsing.dart';

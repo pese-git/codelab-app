@@ -87,7 +87,7 @@ final class CommandCatalog {
 - после ответа на `session/new` — `available_commands_update` с `compact` («Compact the conversation», без `input`) и `plan` («Create a plan», `input.hint` `what to plan`);
 - промпт, начинающийся с `/compact`, — `agent_message_chunk` `Compacted the conversation.`, затем `end_turn`; другие промпты — `echo: <text>`.
 
-E2E `command_palette_flow_test.dart` (тег `scripted-only`: Dart-агент команд не объявляет):
+E2E `command_palette_flow_test.dart` (только scripted-агент: Dart-агент команд не объявляет; в режиме `dart` — `skip`, а не тег `scripted-only`, иначе прогон `test:e2e:app:dart-agent` падает на файле без тестов — уточнение при реализации):
 1. подключение, новая сессия; `Ctrl/Cmd+K` открывает палитру: в секции агента `compact` и `plan`, заглушки клиента `/compact` и `/plan` нет, `/permissions` остаётся недоступной;
 2. выбор `compact` закрывает палитру и вставляет `/compact ` в композер, `session/prompt` не уходит;
 3. отправка: агент получает `session/prompt` с текстом `/compact`, в ленте реплика `/compact` и ответ `Compacted the conversation.`;
@@ -95,6 +95,18 @@ E2E `command_palette_flow_test.dart` (тег `scripted-only`: Dart-агент к
 5. выбор `/new` в палитре создаёт сессию без `session/prompt`.
 
 Шаг 5 проверяет, что команда хоста по-прежнему выполняется в app. Как в остальных e2e, тест запускает отдельный скрипт melos `test:e2e:app:command-palette`, а `Ctrl/Cmd+K` выбирается по платформе (`meta` на macOS).
+
+### D7. Обновления сразу за ответом на `session/new` не теряются
+
+Найдено e2e R-20 на macOS (уточнение при реализации). Агент вправе прислать `session/update` сразу после создания сессии — ACP так описывает `available_commands_update` (`14-Slash Commands.md`), и Dart-агент шлёт его следом за ответом (agent-acp-server). Транспорт доставляет оба кадра раньше, чем `createSession` вернётся из `await` и заведёт сессию, а обновление неизвестной сессии клиент отбрасывал. Палитра оставалась без команд агента.
+
+Решение в `AcpClientApplication`: пока хотя бы один `session/new` в полёте, обновления сессий, которых ещё нет, складываются в буфер по `sessionId`. После ответа `createSession` применяет обновления своей сессии в порядке прихода, до публикации сессии. Когда запросов в полёте не остаётся, буфер очищается, и обновления так и не созданных сессий отбрасываются, как прежде. Так же устроен буфер реплея `session/load` (`_sessionReplays`).
+
+Почему не регистрировать сессию в обработчике ответа: id сессии появляется только в ответе, а сессию строит вызывающий `createSession` с `cwd` команды; буфер не меняет порядок и не раскрывает частично собранную сессию.
+
+### D8. Повторная вставка того же черновика
+
+Найдено e2e R-20 на macOS (уточнение при реализации). Композер подставлял черновик `initialPrompt` только при смене его текста. Пользователь вставил `/compact `, стёр или отправил его и выбрал `/compact` снова — черновик тот же, поле оставалось пустым. Решение: у черновика есть номер (`CodeLabPromptComposer.draftRevision`); `ActiveSessionCubit` увеличивает его при каждой подстановке — выбор команды агента и возврат промпта из очереди, — и композер подставляет черновик при смене номера, даже если текст тот же.
 
 ## Risks / Trade-offs
 
