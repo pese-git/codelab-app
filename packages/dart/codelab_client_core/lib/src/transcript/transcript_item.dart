@@ -88,7 +88,10 @@ sealed class ApprovalStateView with _$ApprovalStateView {
 
   /// Ждёт ответа пользователя. [focused] — самое раннее ожидающее одобрение
   /// хода: только оно отвечает на клавиши одобрения
-  /// (embed-approval-in-thread/design.md, Decision 6).
+  /// (embed-approval-in-thread/design.md, Decision 6). [critical] — агент
+  /// пометил запрос `_meta.codelab.critical: true`; headless-политика
+  /// `allow-all` такой запрос отклоняет (design.md change `add-codelab-cli`,
+  /// D9, D14).
   const factory ApprovalStateView.pending({
     required ApprovalRequestId approvalId,
     required SessionId sessionId,
@@ -97,6 +100,7 @@ sealed class ApprovalStateView with _$ApprovalStateView {
     Map<String, Object?>? rawInput,
     required List<PermissionOption> options,
     required bool focused,
+    @Default(false) bool critical,
   }) = PendingApprovalView;
 
   /// Решено; [label] — имя выбранного варианта, `Cancelled` или `Resolved`,

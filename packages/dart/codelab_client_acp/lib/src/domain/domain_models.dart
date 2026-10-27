@@ -123,6 +123,11 @@ sealed class ApprovalRequest with _$ApprovalRequest {
     required ToolCallRecord toolCall,
     required List<PermissionOption> options,
     @Default(ApprovalRiskLevel.readOnly) ApprovalRiskLevel riskLevel,
+
+    /// Агент пометил запрос `_meta.codelab.critical: true` (в запросе или
+    /// в его `toolCall`): опасная команда, которую headless-политика
+    /// `allow-all` не разрешает (design.md change `add-codelab-cli`, D9).
+    @Default(false) bool critical,
     @Default(ApprovalStatus.pending) ApprovalStatus status,
     PermissionOptionId? selectedOptionId,
     DateTime? requestedAt,

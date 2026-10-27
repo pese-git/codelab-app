@@ -458,6 +458,7 @@ ApprovalStateView? _approvalView(
     rawInput: approval.toolCall.rawInput,
     options: approval.options,
     focused: approval.id == focused,
+    critical: approval.critical,
   );
 }
 

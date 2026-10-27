@@ -223,7 +223,7 @@ Tab дополняет по `catalog.search`.
 
 `ApprovalPolicy` — чистая функция `decide(PendingApprovalView, policy) → Decision(optionId | cancelled, reason)` по требованию «Политика одобрений headless». Вид `read` определяется по `ToolCallView.kind` вызова в транскрипте.
 
-`--timeout` — `Timer`, затем `SessionHandle.cancel`; итог — `TimedOut` → `130`.
+`--timeout` — `Timer`, затем `SessionHandle.cancel`; итог — `TimedOut` → `130`. Сигнал — `HeadlessRunner.interrupt(code)`: отмена хода и ожидание ответа агента не дольше 2 с, итог — `Signalled(code)`, даже если агент не ответил. `--model` и `--mode` ищут опцию конфигурации по id, затем по категории; неизвестное значение и отсутствие опции — код `1` без промпта. `--continue` берёт сессию папки с самым поздним `updatedAt` из `session/list`.
 
 Headless сам не переподключается. Обрыв соединения — `Failed(ConnectionLost)` → `1`.
 
@@ -248,7 +248,7 @@ Headless сам не переподключается. Обрыв соедине
 - `with_plan` — план;
 - `crash_mid_prompt` — обрыв.
 
-Каждый новый режим получает тест в `codelab_acp_testing/test/`.
+Каждый новый режим получает тест в `codelab_acp_testing/test/cli_modes_agent_test.dart`. Попутно `session/cancel` больше не получает ответ-ошибку `Method not found`: это уведомление, и отвечать на него нельзя (`07-Prompt Turn.md`).
 
 ### D11. Обвязка PTY и запуск CLI в тестах
 
@@ -294,7 +294,7 @@ Headless сам не переподключается. Обрыв соедине
 ### D14. Доработки kit
 
 - **`SessionView.plan: List<PlanEntryView>`** (`content`, `status`, `priority`). Проекция идёт из `PlanUpdate` сессии тем же правилом, что `currentPlanOf` app: последнее обновление заменяет план. `apps/codelab_desktop` переходит на `SessionView.plan`, `currentPlanOf` удаляется. Поведение app не меняется, и это подтверждают его тесты плана.
-- **`PendingApprovalView.critical: bool`** из `_meta.codelab.critical` запроса; значение, отличное от `true`, даёт `false`.
+- **`PendingApprovalView.critical: bool`** из `_meta.codelab.critical` запроса или его `toolCall`: Dart-агент (`AcpPermissionGate`) кладёт признак в `toolCall._meta`. Значение, отличное от `true`, даёт `false`. Признак вычисляется в ядре клиента при приёме запроса (`ApprovalRequest.critical` в `codelab_client_acp`), kit только переносит его в представление.
 - **`parseShellWords`** — POSIX-разбор без подстановок, как в требовании kit. Пользователи — профиль `stdio:` CLI и поле аргументов профиля в app; для команд без кавычек результат не меняется. В app незакрытая кавычка — ошибка формы с причиной в диагностике, а не исключение из Cubit.
 - **`ProfileStore.remove(id)`** — удаление профиля для `codelab profiles remove`; единственная реализация — `JsonFileProfileStore`.
 
