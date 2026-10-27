@@ -304,13 +304,15 @@ void main() {
       expect(host.serverConfig.detachGrace, Duration.zero);
     });
 
-    test('ws: fileListing is off with a reason', () async {
+    // Обрыв WebSocket отменяет ход, как у stdio: ход без клиента не может
+    // ни читать, ни писать файлы (change `cancel-turn-on-ws-disconnect`, D1).
+    test('ws: fileListing is off with a reason, no detach grace', () async {
       final script = writeScript({'steps': <Object?>[]});
       final (host, _) = await start(scriptedOptions(script, transport: '--ws'));
       expect(host.core.plan.toolNames, isNot(contains('ls')));
       expect(host.core.plan.offReasons[HostCapability.fileListing], isNotEmpty);
       expect(host.serverConfig.localListing, isNull);
-      expect(host.serverConfig.detachGrace, const Duration(seconds: 30));
+      expect(host.serverConfig.detachGrace, Duration.zero);
     });
   });
 }

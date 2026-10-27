@@ -49,6 +49,37 @@ Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
   );
 }
 
+/// Подключается по WebSocket к уже запущенному [agent].
+Future<void> _connectWebSocket(
+  WidgetTester tester,
+  E2eWebSocketAgent agent,
+) async {
+  await tester.tap(
+    find.byKey(const ValueKey('command-bar-configure-connection')),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(CodeLabButton, 'WebSocket'));
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.byKey(const ValueKey('transport-field-Endpoint')),
+    agent.endpoint,
+  );
+  await tester.enterText(
+    find.byKey(const ValueKey('transport-field-Token')),
+    agent.token,
+  );
+  await tester.tap(find.widgetWithText(Button, 'Close'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
+  await tester.pump();
+  await _waitFor(
+    tester,
+    () =>
+        _cubit(tester).state.connectionStatus ==
+        CodeLabConnectionStatus.connected,
+  );
+}
+
 /// Ждёт [condition] не дольше 10 секунд, прокачивая кадры.
 Future<void> _waitFor(WidgetTester tester, bool Function() condition) async {
   final deadline = DateTime.now().add(const Duration(seconds: 10));
@@ -58,6 +89,9 @@ Future<void> _waitFor(WidgetTester tester, bool Function() condition) async {
   await tester.pump(const Duration(milliseconds: 300));
   expect(condition(), isTrue);
 }
+
+/// Пометка хода без ответа агента, отменённого обрывом соединения.
+const _cancelledNotice = 'Completed with stopReason cancelled.';
 
 List<String?> _transcript(WidgetTester tester) => [
   for (final entry in _cubit(tester).state.transcriptEntries) entry.body,
@@ -169,6 +203,87 @@ void main() {
             _transcript(tester).contains('echo: first task'),
       );
       expect(_transcript(tester), ['first task', 'echo: first task']);
+    },
+  );
+  // Задача 5.6 change `add-session-list-and-reload`, перенесённая в change
+  // `cancel-turn-on-ws-disconnect` (spec testing-quality «Интеграционный тест
+  // Reconnect посреди хода»): для MVP обрыв соединения отменяет ход и по
+  // WebSocket, как по stdio. Агент не держит ход до переподключения
+  // (`detachGrace` ноль), а клиент после `session/load` показывает прерванный
+  // ход отменённым, а не завершённым.
+  testWidgets(
+    'Reconnect over WebSocket cancels the running turn, and the session '
+    'accepts the next prompt',
+    skip: E2eAgent.current.isScripted,
+    (tester) async {
+      final project = await Directory.systemTemp.createTemp(
+        'codelab_reconnect_mid_turn_e2e_',
+      );
+      addTearDown(() async {
+        if (await project.exists()) {
+          await project.delete(recursive: true);
+        }
+      });
+      final agent = await E2eAgent.current.startWebSocketAgent(
+        project,
+        script: 'reconnect_mid_turn',
+      );
+      addTearDown(agent.stop);
+
+      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpAndSettle();
+      await _cubit(tester).selectProject(project.path);
+      await tester.pumpAndSettle();
+      await _connectWebSocket(tester, agent);
+
+      await tester.tap(find.byKey(const ValueKey('new-session-button')));
+      await tester.pumpAndSettle();
+      final session = _cubit(tester).state.activeSessionId!;
+      await tester.tap(find.byKey(const ValueKey('composer-text-box')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-text-box')),
+        'long task',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pump();
+      // Сценарий отвечает через 4 с: Reconnect попадает в середину хода.
+      await _waitFor(tester, () => _cubit(tester).state.isPromptSubmitting);
+      expect(_transcript(tester), isNot(contains('echo: long task')));
+
+      await _cubit(tester).reconnect();
+      await _waitFor(
+        tester,
+        () =>
+            _cubit(tester).state.connectionStatus ==
+                CodeLabConnectionStatus.connected &&
+            _transcript(tester).contains(_cancelledNotice) &&
+            !_cubit(tester).state.isPromptSubmitting,
+      );
+      expect(_cubit(tester).state.activeSessionId, session);
+      expect(_transcript(tester), ['long task', _cancelledNotice]);
+      expect(_cubit(tester).state.canCancel, isFalse);
+
+      // Следующий промпт принимает агент: ход отменён и на его стороне, а не
+      // только в ленте (иначе `session/prompt` получил бы отказ занятой
+      // сессии).
+      await tester.tap(find.byKey(const ValueKey('composer-text-box')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-text-box')),
+        'after reconnect',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pump();
+      await _waitFor(
+        tester,
+        () =>
+            _transcript(tester).contains('echo: after reconnect') &&
+            !_cubit(tester).state.isPromptSubmitting,
+      );
+      expect(_transcript(tester), isNot(contains('echo: long task')));
     },
   );
 }
