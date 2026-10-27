@@ -184,15 +184,8 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
 
   Future<void> connect() async {
     final isWebSocket = state.transportType == CodeLabTransportType.webSocket;
-    final profile = _profileFromForm();
+    final profile = _profileFromForm(action: 'connecting');
     if (profile == null) {
-      _diagnostics.record(
-        isWebSocket
-            ? 'WebSocket endpoint is required before connecting.'
-            : 'Stdio command is required before connecting.',
-        severity: DiagnosticSeverity.error,
-        source: 'transport',
-      );
       emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       return;
     }
@@ -248,15 +241,8 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
   /// (design D4).
   Future<void> reconnect() async {
     final isWebSocket = state.transportType == CodeLabTransportType.webSocket;
-    final profile = _profileFromForm();
+    final profile = _profileFromForm(action: 'reconnecting');
     if (profile == null) {
-      _diagnostics.record(
-        isWebSocket
-            ? 'WebSocket endpoint is required before reconnecting.'
-            : 'Stdio command is required before reconnecting.',
-        severity: DiagnosticSeverity.error,
-        source: 'transport',
-      );
       emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       return;
     }
@@ -377,21 +363,36 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
     return true;
   }
 
-  /// Профиль из формы; `null` — форма не заполнена (нет команды stdio или
-  /// корректного адреса WebSocket). Токен WebSocket кладётся в [_secrets],
-  /// профиль хранит только ссылку на него (design D8).
-  ConnectionProfile? _profileFromForm() {
+  /// Профиль из формы; `null` — форма не заполнена или неверна (нет команды
+  /// stdio, незакрытая кавычка в аргументах, нет корректного адреса
+  /// WebSocket), причина уже записана в диагностику с [action] в тексте.
+  /// Токен WebSocket кладётся в [_secrets], профиль хранит только ссылку на
+  /// него (design D8).
+  ConnectionProfile? _profileFromForm({required String action}) {
     switch (state.transportType) {
       case CodeLabTransportType.stdio:
         final command = state.stdioCommand.trim();
         if (command.isEmpty) {
+          _recordFormError('Stdio command is required before $action.');
+          return null;
+        }
+        final List<String> args;
+        try {
+          args = parseShellWords(state.stdioArgs);
+        } on FormatException catch (error) {
+          // Аргументы разбираются как в shell (design.md change
+          // `add-codelab-cli`, D14): незакрытая кавычка — ошибка формы, а не
+          // исключение из Cubit.
+          _recordFormError(
+            'Stdio arguments are invalid before $action: ${error.message}.',
+          );
           return null;
         }
         return ConnectionProfile.stdio(
           id: 'codelab_desktop.stdio',
           label: state.selectedProfileLabel,
           command: command,
-          args: parseShellWords(state.stdioArgs),
+          args: args,
           env: parseEnvLines(state.stdioEnv),
           runInProjectDirectory: _settings.state.runAgentFromProjectDirectory,
         );
@@ -399,6 +400,7 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
         final endpoint = state.webSocketEndpoint.trim();
         final uri = endpoint.isEmpty ? null : Uri.tryParse(endpoint);
         if (uri == null) {
+          _recordFormError('WebSocket endpoint is required before $action.');
           return null;
         }
         final token = state.webSocketToken.trim();
@@ -411,4 +413,10 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
         );
     }
   }
+
+  void _recordFormError(String message) => _diagnostics.record(
+    message,
+    severity: DiagnosticSeverity.error,
+    source: 'transport',
+  );
 }

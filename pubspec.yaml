@@ -10,6 +10,7 @@ dev_dependencies:
 
 workspace:
   - apps/codelab_agent
+  - apps/codelab_cli
   - apps/codelab_desktop
   - packages/dart/codelab_client_acp
   - packages/dart/codelab_client_io
@@ -110,6 +111,14 @@ melos:
     build:agent:
       description: Compile the codelab-agent binary to build/bin/codelab-agent (not part of check).
       run: mkdir -p build/bin && fvm dart compile exe apps/codelab_agent/bin/codelab_agent.dart -o build/bin/codelab-agent
+
+    build:cli:
+      description: Compile the codelab terminal client to build/bin/codelab (not part of check).
+      run: mkdir -p build/bin && fvm dart compile exe apps/codelab_cli/bin/codelab.dart -o build/bin/codelab
+
+    test:e2e:cli:
+      description: Run the codelab_cli end-to-end tests (the CLI process against the scripted stdio agent, Dart VM; also part of test).
+      run: fvm dart test apps/codelab_cli/test/e2e
 
     test:e2e:app:dart-agent:
       description: Build codelab-agent and run every codelab_desktop macOS integration test except scripted-only against it, one file per flutter test run (release/* only).

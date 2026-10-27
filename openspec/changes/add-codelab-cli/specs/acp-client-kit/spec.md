@@ -40,3 +40,14 @@
 #### Scenario: Незакрытая кавычка
 - **WHEN** `parseShellWords('run "oops')`
 - **THEN** бросается `FormatException`
+
+### Requirement: IO-адаптеры клиента
+`dart:io`-реализации портов клиента SHALL жить в `packages/dart/codelab_client_io`: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `ioTransportResolver` — `ConfigTransportResolver` kit с настоящими транспортами stdio и WebSocket, `JsonFileProfileStore` (`~/.codelab/profiles.json`) и `JsonFileRecentProjectsStore`. Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app. `ProfileStore.remove(id)` SHALL удалять профиль с этим `id` и возвращать `true`, а без такого профиля — возвращать `false` и не менять файл.
+
+#### Scenario: Профили сохраняются в JSON
+- **WHEN** `JsonFileProfileStore` сохраняет профиль `WebSocketProfile` и читает его заново
+- **THEN** профиль восстановлен полностью, а файл не содержит значения токена
+
+#### Scenario: Удаление профиля
+- **WHEN** в `JsonFileProfileStore` сохранены профили `remote` и `local`, и вызывается `remove('remote')`
+- **THEN** результат — `true`, а новое хранилище на том же файле читает только `local`

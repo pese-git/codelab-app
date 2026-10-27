@@ -106,7 +106,7 @@ apps/codelab_cli/
 `CodelabHome.resolve(environment)`: значение `CODELAB_HOME`, а без него `$HOME/.codelab` (`%USERPROFILE%\.codelab` на Windows). Тот же каталог использует `codelab-agent` для сессий. Файлы MVP:
 - `profiles.json` — `JsonFileProfileStore`, формат kit `{"version":1,"profiles":[…]}`;
 - `cli_history` — по строке на запись, многострочный ввод кодируется JSON-строкой, последние 1 000 записей;
-- каталог создаётся с правами `0700`, файлы `0600`.
+- каталог создаётся с правами `0700`; `cli_history` — с правами `0600` (в нём текст промптов); в `profiles.json` секретов нет, права файла — по умолчанию.
 
 Значение `--agent` разбирает `parseAgentArg` по таблице §9.11:
 - `stdio:` — `parseShellWords` kit (D14), id профиля — `inline`;
@@ -295,7 +295,10 @@ Headless сам не переподключается. Обрыв соедине
 
 - **`SessionView.plan: List<PlanEntryView>`** (`content`, `status`, `priority`). Проекция идёт из `PlanUpdate` сессии тем же правилом, что `currentPlanOf` app: последнее обновление заменяет план. `apps/codelab_desktop` переходит на `SessionView.plan`, `currentPlanOf` удаляется. Поведение app не меняется, и это подтверждают его тесты плана.
 - **`PendingApprovalView.critical: bool`** из `_meta.codelab.critical` запроса; значение, отличное от `true`, даёт `false`.
-- **`parseShellWords`** — POSIX-разбор без подстановок, как в требовании kit. Пользователи — профиль `stdio:` CLI и поле команды профиля в app; для команд без кавычек результат не меняется.
+- **`parseShellWords`** — POSIX-разбор без подстановок, как в требовании kit. Пользователи — профиль `stdio:` CLI и поле аргументов профиля в app; для команд без кавычек результат не меняется. В app незакрытая кавычка — ошибка формы с причиной в диагностике, а не исключение из Cubit.
+- **`ProfileStore.remove(id)`** — удаление профиля для `codelab profiles remove`; единственная реализация — `JsonFileProfileStore`.
+
+- **Отказ транспорта во время `initialize`** (`codelab_client_acp`). Ядро клиента обрывало ожидающие запросы при отказе транспорта только в состоянии `ready`, поэтому агент, завершившийся при старте (например, с неверными аргументами), оставлял `connect` ждать таймаута `initialize` — 60 с. Теперь ожидающие запросы обрываются и в состоянии `initializing`. Найдено e2e CLI в итерации 1; app получает то же исправление.
 
 ### D15. Строки CLI
 

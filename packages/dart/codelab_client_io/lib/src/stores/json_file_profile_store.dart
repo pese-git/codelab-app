@@ -45,11 +45,28 @@ final class JsonFileProfileStore implements ProfileStore {
     } else {
       profiles[index] = profile;
     }
-    await writeJsonObject(path, {
-      'version': _version,
-      'profiles': [for (final stored in profiles) _encode(stored)],
-    });
+    await _write(profiles);
   }
+
+  @override
+  Future<bool> remove(String id) async {
+    final profiles = await load();
+    final kept = [
+      for (final profile in profiles)
+        if (profile.id != id) profile,
+    ];
+    if (kept.length == profiles.length) {
+      return false;
+    }
+    await _write(kept);
+    return true;
+  }
+
+  Future<void> _write(List<ConnectionProfile> profiles) =>
+      writeJsonObject(path, {
+        'version': _version,
+        'profiles': [for (final stored in profiles) _encode(stored)],
+      });
 
   Map<String, Object?> _encode(ConnectionProfile profile) => switch (profile) {
     StdioProfile() => {
