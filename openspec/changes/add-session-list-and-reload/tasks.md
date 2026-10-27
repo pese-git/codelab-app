@@ -93,13 +93,13 @@
 
 ## 6. Документы и Definition of Done
 
-- [ ] 6.1 Документы:
+- [x] 6.1 Документы:
   - `09-10-stage-5-client-kit.md`: алгоритм восстановления — момент первого подключения, без `profileId` и `ProfileStore`; повторы переподключения вынесены (D5, D6);
   - `agent-parity-goals.md`: строка D-03 — доказательство `app:session_list_load_flow_test.dart`;
   - `AGENTS.md` пакета `codelab_client_core`: восстановление и снимок.
-- [ ] 6.2 Definition of Done:
+- [x] 6.2 Definition of Done:
   - `fvm dart run melos run check` и `melos run guard` зелёные;
   - тесты `codelab_client_acp`, `codelab_client_core`, `codelab_acp_testing` зелёные;
   - интеграционные тесты собираются;
-  - тексты прежних 8 интеграционных тестов не изменены, кроме ожидания проекта после перезапуска в `open_project_flow_test.dart` (4.4).
-- [ ] 6.3 Перед архивированием: `openspec validate add-session-list-and-reload --strict`.
+  - тексты прежних 8 интеграционных тестов не изменены, кроме ожидания проекта после перезапуска в `open_project_flow_test.dart` (4.4); `permission_flow_test.dart` позже поправлен отдельно — поиск сырых аргументов внутри панелей, чтобы тест проходил на Dart-агенте (PR #103), поведение app не менялось.
+- [x] 6.3 Перед архивированием: `openspec validate add-session-list-and-reload --strict`.
