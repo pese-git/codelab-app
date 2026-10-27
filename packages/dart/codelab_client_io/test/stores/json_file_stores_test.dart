@@ -1,5 +1,6 @@
 // Тесты JSON-хранилищ профилей и недавних проектов (tasks 5.3; spec
-// acp-client-kit «IO-адаптеры клиента», «Профили сохраняются в JSON»).
+// acp-client-kit «IO-адаптеры клиента», «Профили сохраняются в JSON»;
+// удаление профиля — tasks 2.3 change `add-codelab-cli`).
 
 import 'dart:io';
 
@@ -57,6 +58,26 @@ void main() {
         'Renamed',
         'Local agent',
       ]);
+    });
+
+    test('remove() deletes a profile by id and reports whether it '
+        'existed', () async {
+      final path = '${tmp.path}/profiles.json';
+      final store = JsonFileProfileStore(path);
+      await store.save(remote);
+      await store.save(local);
+
+      expect(await store.remove('remote'), isTrue);
+      expect(await store.remove('missing'), isFalse);
+
+      expect(await JsonFileProfileStore(path).load(), [local]);
+    });
+
+    test('remove() without a file creates no file', () async {
+      final path = '${tmp.path}/profiles.json';
+
+      expect(await JsonFileProfileStore(path).remove('remote'), isFalse);
+      expect(File(path).existsSync(), isFalse);
     });
 
     test('the file keeps the token reference, not a token value', () async {

@@ -71,6 +71,23 @@ const clientIoAllowlist = {
   'meta',
 };
 
+/// Dependencies of the terminal client (workspace-architecture
+/// «Автоматический сторож границ пакетов»; design.md change
+/// `add-codelab-cli`, D3): the client layer, the ACP packages, the testing
+/// package for `test-scenario` and `args`; no Flutter and no agent packages.
+const cliAllowlist = {
+  'codelab_client_core',
+  'codelab_client_io',
+  'codelab_client_acp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'codelab_acp_testing',
+  'args',
+  'async',
+  'path',
+  'meta',
+};
+
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
 
@@ -149,6 +166,16 @@ void main() {
     ).readAsStringSync();
 
     final extra = dependencyKeys(pubspec).difference(clientIoAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('apps/codelab_cli depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'apps/codelab_cli/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(cliAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });
