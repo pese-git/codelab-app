@@ -147,6 +147,35 @@ void main() {
     expect(sentMethods(), isNot(contains(sessionLoadMethod)));
   });
 
+  test('the notice about the new session stays where it happened: later '
+      'turns go below it', () async {
+    store = InMemoryWorkspaceSnapshotStore(_snapshot());
+    agent = KitAgent(snapshots: store);
+    await agent.workspace.restoreProject();
+
+    final create = agent.next(sessionNewMethod);
+    final connecting = agent.start();
+    agent.respond(await create, {'sessionId': 's-new'});
+    await connecting;
+    final active = agent.workspace.session(const SessionId('s-new'))!;
+
+    final turn = await agent.prompt(active, 'hello');
+    agent
+      ..update('s-new', {
+        'sessionUpdate': 'agent_message_chunk',
+        'content': {'type': 'text', 'text': 'hi'},
+      })
+      ..respond(turn.request, {'stopReason': 'end_turn'});
+    await turn.done;
+
+    expect(texts(active), [
+      'reconnected: The agent cannot restore sessions; a new session was '
+          'started.',
+      'user: hello',
+      'agent: hi',
+    ]);
+  });
+
   test('a failed session/load: a new session with a notice, the id leaves '
       'the snapshot', () async {
     store = InMemoryWorkspaceSnapshotStore(_snapshot());
