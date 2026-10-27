@@ -6,8 +6,8 @@
 
 ## 2. `CommandCatalog` в kit (итерация 2)
 
-- [ ] 2.1 Красные тесты `packages/dart/codelab_client_core/test/commands/command_catalog_test.dart` по сценариям acp-client-kit «Каталог команд палитры»: порядок `commands`, заглушка уступает агенту, доступная команда хоста и одноимённая агента остаются обе, повтор имени у агента, заглушка возвращается при новом списке, поиск — пустой запрос, ведущий `/`, регистр, четыре правила и порядок внутри правила.
-- [ ] 2.2 `lib/src/commands/command_catalog.dart`: `HostCommand`, `CatalogCommand` (`HostCatalogCommand`, `AgentCatalogCommand`), `CommandCatalog` (D2–D4); экспорт из бареля — 2.1 зелёный.
+- [x] 2.1 Красные тесты `packages/dart/codelab_client_core/test/commands/command_catalog_test.dart` по сценариям acp-client-kit «Каталог команд палитры»: порядок `commands`, заглушка уступает агенту, доступная команда хоста и одноимённая агента остаются обе, повтор имени у агента, заглушка возвращается при новом списке, поиск — пустой запрос, ведущий `/`, регистр, четыре правила и порядок внутри правила.
+- [x] 2.2 `lib/src/commands/command_catalog.dart`: `HostCommand`, `CatalogCommand` (`HostCatalogCommand`, `AgentCatalogCommand`), `CommandCatalog` (D2–D4); экспорт из бареля — 2.1 зелёный.
 
 ## 3. Палитра app на каталоге (итерация 3)
 
