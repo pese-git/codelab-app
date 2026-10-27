@@ -73,15 +73,19 @@ app» для контракта e2e этапа 4 (D6, задача 4.9): пар�
    `_dispatchPrompt`, `_drainQueueIfFree`, операций редактирования; очередь своя у каждой сессии.
 5. **5.5. Подключение и профили:** `lib/src/connection/` (`ConnectionProfile`, `TransportResolver`,
    переподключение с `session/load`, алгоритм ниже), `lib/src/profiles/profile_store.dart` (порт).
-6. **5.6. Команды и опции:** `lib/src/commands/command_catalog.dart` (клиентские команды +
-   `available_commands_update`, нечёткий поиск по подпоследовательности),
-   `lib/src/config/config_option_view.dart`. Здесь же создаётся интеграционный тест R-20 (Must,
-   этап 5) `apps/codelab_desktop/integration_test/command_palette_flow_test.dart` и режим
-   scripted-агента `withAvailableCommands` в `codelab_acp_testing` (объявляет `/compact` и `/plan` через
+6. **5.6. Команды и опции:** `lib/src/commands/command_catalog.dart` — `CommandCatalog`:
+   команды хоста (`HostCommand`) и агента из `available_commands_update`, недоступная команда
+   хоста уступает одноимённой команде агента, нечёткий поиск (префикс, подстрока и
+   подпоследовательность имени, затем название и описание); `lib/src/config/config_option_view.dart`.
+   Здесь же интеграционный тест R-20 (Must, этап 5)
+   `apps/codelab_desktop/integration_test/command_palette_flow_test.dart` и режим scripted-агента
+   `withAvailableCommands` в `codelab_acp_testing` (объявляет `/compact` и `/plan` через
    `available_commands_update`): Cmd/Ctrl+K открывает палитру с командами app и агента; выбор
-   `/compact` отправляет `session/prompt` с текстом `/compact` и показывает ответ агента в
-   транскрипте; выбор клиентской команды выполняет её без `session/prompt`. Тест пишется первым,
-   до переноса палитры в `CommandCatalog` (критерий матрицы R-20).
+   `/compact` вставляет `/compact ` в композер, отправка уходит `session/prompt` с текстом
+   `/compact`, ответ агента — в транскрипте; выбор клиентской команды выполняет её без
+   `session/prompt`. Тест пишется первым (критерий матрицы R-20). Сделано change
+   `add-command-palette-agent-commands`; выбор команды агента вставляет её, а не отправляет, —
+   решение владельца продукта (ACP поведение при выборе не задаёт, `14-Slash Commands.md`).
 7. **5.7. Инспектор и диагностика:** `lib/src/inspector/inspector_projection.dart` (перенос
    `_inspectorEntriesFor*`), `lib/src/diagnostics/`.
 8. **5.8. Пакет `packages/dart/codelab_client_io`:** перенос `IoTextFileIo`, `IoTerminalProcessRunner`,
@@ -175,7 +179,6 @@ abstract interface class ClientWorkspace {
   void selectProject(String path);                  // проект в WorkspaceState и снимке
   Future<void> flushSnapshot();                     // дождаться записи снимка
 
-  CommandCatalog get commands;                      // клиентские + агентские команды активной сессии
   Future<void> dispose();
 }
 
@@ -216,7 +219,8 @@ abstract interface class SessionHandle {
   Future<void> cancel();
   Future<void> respond(ApprovalRequestId approval, PermissionOptionId option);
   Future<void> setConfigOption(String configId, String valueId);
-  Future<CommandResult> runCommand(String input);   // "/mode plan": клиентская или агентская команда
+  // этап 6 (CLI): разбор введённой команды — клиентская или агентская
+  Future<CommandResult> runCommand(String input);   // "/mode plan"
   /// После MVP (C-03, agent-core-architecture §17.7.4): направить сообщение в идущий ход.
   /// Без agentCapabilities._meta.codelab.steering, без хода или при отказе агента — как send().
   Future<SteerSubmission> steer(String text,
@@ -332,7 +336,9 @@ agent-core-architecture §17.7.4: ожидающее steering — в `SessionVie
   `InMemorySecretSource`). `describeProfile` не вводится: у него нет потребителя до
   `codelab profiles list` этапа 6. `WorkingDirectoryProvider` переезжает в `codelab_client_io`.
 * **Команды, инспектор, диагностика (D9).** `CommandCatalog` и тест R-20 — change
-  `add-command-palette-agent-commands`; на этапе 5 kit даёт только `SessionView.agentCommands`.
+  `add-command-palette-agent-commands`: каталог — неизменяемое значение, которое хост строит из
+  своих команд и `SessionView.agentCommands` активной сессии (`CommandCatalog(host:, agent:)`),
+  а не член `ClientWorkspace`: команды хоста знает только хост. `SessionHandle.runCommand` — этап 6.
   `InspectorProjection` строится по запросу хоста, а не полем `SessionView`. `WorkspaceDiagnostic`
   покрывает события kit (исход хода, отмена, одобрение, опция, потеря соединения); сообщения
   подключения и создания сессии зависят от формы хоста и остаются в app.
@@ -353,7 +359,7 @@ agent-core-architecture §17.7.4: ожидающее steering — в `SessionVie
 | Флаги состояния `CodeLabShellState`: `isPromptSubmitting`, `canCancel` (сегодня оба = `_isBusyLifecycleStatus`: `runningTurn` или `awaitingApproval`), `isRespondingToConfigOption` (защита от повторного `setSessionConfigOption`) | kit: `SessionView.status` активной сессии — `running` (в том числе с непустым `pendingApprovals`) и `cancelling` считаются «занята»; `SessionView.configOptionInFlight != null` — запрос опции в полёте, повторный `SessionHandle.setConfigOption` в это время — no-op, как сейчас | производные поля для совместимости: `isPromptSubmitting = canCancel = status is running или cancelling`; `isRespondingToConfigOption = configOptionInFlight != null`; тесты 5.0 проверяют, что значения совпадают с прежними |
 | Одобрения: `respondToApproval`, `_approvalRisk`, `_approvalOption`, `_approvalOptionKind`, `_approvalForToolCall`, `_earliestPendingApprovalId`, `_transcriptApproval`, `_resolvedLabel` | kit: `PendingApproval`, `ApprovalStateView`, `SessionHandle.respond` | маппинг в `CodeLabApprovalOption`, `CodeLabTranscriptApproval` |
 | Опции конфигурации: `setSessionConfigOption`, `_configOptionsFor`, `_configOptionUiModel` | kit: `ConfigOptionView`, `SessionHandle.setConfigOption` | маппинг в `CodeLabConfigOption` |
-| Палитра и команды: `openCommandPalette`, `closeCommandPalette`, `selectCommand`, `insertAgentCommand`, `paletteActions`, `_agentCommandsFor`, `_agentCommandAction` | kit: `CommandCatalog` (поиск, слияние, разрешение конфликтов имён), `SessionHandle.runCommand` | флаг «палитра открыта», вставка текста в композер |
+| Палитра и команды: `openCommandPalette`, `closeCommandPalette`, `selectCommand`, `insertAgentCommand`, `paletteActions`, `_agentCommandsFor`, `_agentCommandAction` | kit: `CommandCatalog` (поиск, слияние, разрешение конфликтов имён); `SessionHandle.runCommand` — этап 6 | флаг «палитра открыта», вставка текста в композер |
 | План: `dismissPlan`, `_currentPlanForSession`, `_planEntryUiModel` | kit: `SessionView.plan`, `PlanEntryView` | флаг «план скрыт» |
 | Транскрипт: `_agentTranscriptEntries`, `_toolCallTranscriptEntry`, `_transcriptEntriesForSession`, `_textFrom`, `_toolCallStatus`, `_commandFromToolCall`, `_StreamingChunkKind` | kit: `TranscriptProjector`, `TranscriptItem` | маппинг в `CodeLabTranscriptEntry` |
 | Инспектор: `_inspectorEntriesForSession`, `_inspectorEntriesForTurn`, `_approvalInspectorEntry`, `_toolCallInspectorEntry`, `_protocolInspectorEntry`, `_contentInspectorEntry`, `_toolCallContentDetails`, `_toolCallLocationDetails`, `_contentSummary`, `_prettyJson` | kit: `InspectorProjection` (используется и командой CLI `/inspect`) | маппинг в `CodeLabInspectorEntry` |
