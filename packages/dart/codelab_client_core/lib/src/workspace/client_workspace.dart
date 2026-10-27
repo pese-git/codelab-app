@@ -895,9 +895,17 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   /// `add-session-list-and-reload`).
   _Link _link = _Link.attached;
 
-  /// Уведомление о потере связи в конце транскрипта; только у
-  /// [_Link.detached].
+  /// Уведомление о связи сессии с агентом: потеря связи ([_Link.detached])
+  /// или новая сессия вместо невосстановленной.
   NoticeItem? _notice;
+
+  /// Сколько элементов ходов было в транскрипте, когда пришло [_notice]:
+  /// уведомление стоит на этом месте, а не в конце.
+  ///
+  /// Почему: транскрипт пересобирается из проекции ходов при каждой
+  /// публикации, и уведомление, дописанное в конец, уезжало бы под ответы,
+  /// пришедшие после него.
+  int _noticeAt = 0;
 
   /// Занята ли сессия: идёт ход (в том числе с ожидающими одобрениями) или
   /// отмена ждёт ответа агента (design D4).
@@ -937,9 +945,11 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     );
   }
 
-  /// Добавляет [notice] в конец транскрипта, после элементов ходов.
+  /// Ставит [notice] в транскрипт после уже пришедших элементов ходов;
+  /// элементы следующих ходов идут ниже него.
   void notify(NoticeItem notice) {
     _notice = notice;
+    _noticeAt = _projector.items.length;
     _publish(
       _sessionFields(
         _current.copyWith(revision: _current.revision + 1),
@@ -1177,6 +1187,16 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     );
   }
 
+  /// [items] с [notice] на месте [_noticeAt]; проекция могла стать короче
+  /// (например, после сброса), тогда уведомление — в конце.
+  List<TranscriptItem> _withNotice(
+    List<TranscriptItem> items,
+    NoticeItem notice,
+  ) {
+    final at = _noticeAt.clamp(0, items.length);
+    return List.unmodifiable([...items.take(at), notice, ...items.skip(at)]);
+  }
+
   /// Поля представления, которые выводятся из снимка сессии ядра.
   SessionView _sessionFields(SessionView view, AcpSession session) {
     final status = _link == _Link.detached
@@ -1187,7 +1207,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
       canRetry: _canRetry(session, status),
       transcript: switch (_notice) {
         null => _projector.items,
-        final notice => List.unmodifiable([..._projector.items, notice]),
+        final notice => _withNotice(_projector.items, notice),
       },
       configOptions: [
         for (final option in session.configOptions ?? const [])
