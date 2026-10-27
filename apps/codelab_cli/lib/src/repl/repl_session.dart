@@ -10,6 +10,7 @@ import '../render/ansi.dart';
 import '../render/sanitize.dart';
 import '../render/terminal_renderer.dart';
 import '../strings.dart';
+import 'approval_prompt.dart';
 
 /// Состояние ввода REPL.
 ///
@@ -48,8 +49,9 @@ final class ReplSession {
   final TerminalRenderer renderer;
   final LineEditor editor;
 
-  /// Одобрения, о которых уже напечатана строка.
-  final _announced = <ApprovalRequestId>{};
+  /// Запрос одобрения, блок которого показан сейчас; запросы показываются
+  /// по одному в порядке `pendingApprovals` (D8).
+  ApprovalRequestId? _shownApproval;
 
   /// Строка ввода нарисована; [_cursorRow] — строка экрана с курсором,
   /// считая от первой строки ввода.
@@ -60,14 +62,19 @@ final class ReplSession {
   /// Вывод больше не нужен: REPL выходит.
   var closed = false;
 
+  /// Режим терминала выбран, и строку ввода можно рисовать: набранное до
+  /// raw-режима пришло бы с переводом `\r` в `\n`.
+  var inputOpen = false;
+
   int get outstanding => _outstanding;
 
   ReplInputState get state {
     final view = handle.current;
-    if (view.pendingApprovals.isNotEmpty) {
-      return ReplInputState.awaitingApproval;
-    }
     return switch (view.status) {
+      // Одобрение ждёт ответа только внутри хода: запрос, который остался
+      // в представлении после конца хода, ввод не блокирует.
+      SessionStatusView.running when view.pendingApprovals.isNotEmpty =>
+        ReplInputState.awaitingApproval,
       SessionStatusView.running ||
       SessionStatusView.cancelling => ReplInputState.running,
       _ => ReplInputState.editing,
@@ -81,14 +88,14 @@ final class ReplSession {
     }
     hideInput();
     renderer.render(view);
-    for (final approval in view.pendingApprovals) {
-      if (_announced.add(approval.approvalId)) {
-        // Блок одобрения с выбором варианта — группа 7 tasks.md; пока
-        // REPL только показывает запрос, а Esc отменяет ход.
-        renderer.line(
-          permissionRequested(sanitizeTerminalText(_titleOf(view, approval))),
-        );
-      }
+    final approval = state == ReplInputState.awaitingApproval
+        ? view.pendingApprovals.firstOrNull
+        : null;
+    if (approval == null) {
+      _shownApproval = null;
+    } else if (approval.approvalId != _shownApproval) {
+      _shownApproval = approval.approvalId;
+      approvalPrompt!.block.forEach(renderer.line);
     }
     drawInput();
   }
@@ -145,6 +152,24 @@ final class ReplSession {
     drawInput();
   }
 
+  /// Блок первого ожидающего одобрения; `null` — одобрений нет.
+  ApprovalPrompt? get approvalPrompt {
+    final view = handle.current;
+    final approval = view.pendingApprovals.firstOrNull;
+    return approval == null
+        ? null
+        : ApprovalPrompt(
+            approval,
+            title: _titleOf(view, approval),
+            cwd: handle.cwd,
+          );
+  }
+
+  /// Промпты убраны из очереди командой: исхода у них не будет.
+  void forgetQueued(int count) {
+    _outstanding = (_outstanding - count).clamp(0, _outstanding);
+  }
+
   /// Строка клиента (подсказки, ошибки команд) вне транскрипта.
   void say(String text) {
     hideInput();
@@ -171,6 +196,7 @@ final class ReplSession {
   /// Рисует строку ввода: `> ` и текст редактора, курсор — на его позиции.
   void drawInput() {
     if (closed ||
+        !inputOpen ||
         _inputShown ||
         !_terminal.hasTerminal ||
         state == ReplInputState.awaitingApproval ||

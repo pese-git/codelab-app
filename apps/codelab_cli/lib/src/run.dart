@@ -114,6 +114,10 @@ Future<int> _runRepl(
     continueLast: options.continueLast,
     model: options.model,
     mode: options.configMode,
+    // `/profile <id>` — те же формы, что у `--agent`, и профили
+    // `profiles.json` (spec codelab-cli «Профили подключения CLI»).
+    resolveProfile: (id) =>
+        resolveAgentProfile(id, store: JsonFileProfileStore(home.profilesFile)),
   );
   // SIGTERM — безопасное завершение с кодом 143; SIGINT вне raw-режима —
   // как Ctrl+C, поэтому не через `watchStopSignals`, где второй сигнал

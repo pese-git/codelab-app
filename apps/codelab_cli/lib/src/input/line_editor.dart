@@ -86,6 +86,13 @@ final class LineEditor {
     _cursor = i;
   }
 
+  /// Заменяет буфер текстом [text], курсор — в конец (Tab-дополнение).
+  void setText(String text) {
+    _runes = text.runes.toList();
+    _cursor = _runes.length;
+    _historyIndex = null;
+  }
+
   void clear() {
     _runes = [];
     _cursor = 0;
