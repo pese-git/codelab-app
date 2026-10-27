@@ -7,6 +7,19 @@ part 'codelab_command_action.freezed.dart';
 /// to render visually separate sections; it does not affect filtering.
 enum CodeLabCommandSource { client, agent }
 
+/// Поиск команд палитры по запросу пользователя; результат — в порядке
+/// важности.
+///
+/// Почему: правила отбора (конфликты имён, нечёткий поиск) живут в kit
+/// (`CommandCatalog`), а не в виджете (change
+/// `add-command-palette-agent-commands`, D5).
+///
+/// Как использовать: app передаёт функцию в
+/// `CodeLabCommandPaletteSurface.search` и `CodeLabPromptComposer.search`;
+/// [query] — текст поля поиска или фрагмент `/word` композера как есть.
+typedef CodeLabCommandSearch =
+    List<CodeLabCommandAction> Function(String query);
+
 @freezed
 sealed class CodeLabCommandAction with _$CodeLabCommandAction {
   const CodeLabCommandAction._();

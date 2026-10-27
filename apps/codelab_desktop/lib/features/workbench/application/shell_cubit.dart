@@ -25,6 +25,7 @@ import 'sessions_cubit.dart';
 import 'settings_cubit.dart';
 import 'shell_part.dart';
 import 'shell_state.dart';
+import 'ui_mappers.dart' show paletteCatalogOf;
 
 export 'connection_cubit.dart'
     show
@@ -398,6 +399,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       isCommandPaletteOpen: layout.isCommandPaletteOpen,
       isInspectorVisibleInNarrowLayout: layout.isInspectorVisibleInNarrowLayout,
       agentCommands: active.agentCommands,
+      commandCatalog: paletteCatalogOf(active.agentCommandViews),
       composerDraft: active.composerDraft,
       configOptions: active.configOptions,
       isRespondingToConfigOption: active.isRespondingToConfigOption,

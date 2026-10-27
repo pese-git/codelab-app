@@ -22,6 +22,7 @@ class CodeLabPromptComposer extends StatefulWidget {
     this.shortcutsEnabled = true,
     this.commandActions = const [],
     this.onCommandSelected,
+    this.search,
     this.configOptions = const [],
     this.onConfigOptionSelected,
     this.isRespondingToConfigOption = false,
@@ -55,6 +56,12 @@ class CodeLabPromptComposer extends StatefulWidget {
   /// palette. The `/word` fragment that triggered it has already been
   /// removed from the composer text by the time this fires.
   final ValueChanged<CodeLabCommandAction>? onCommandSelected;
+
+  /// Отбор команд inline-палитры по фрагменту `/word`; без него —
+  /// `CodeLabCommandAction.filter`. Передаётся и в саму палитру, поэтому
+  /// подсвеченная строка и выбор `Enter` совпадают с показанным списком
+  /// (D5 change `add-command-palette-agent-commands`).
+  final CodeLabCommandSearch? search;
 
   /// Agent-declared session config options (e.g. model/mode selectors),
   /// rendered as a row of chips above the composer. An empty list (the
@@ -234,6 +241,7 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
                       actions: widget.commandActions,
                       showSearchField: false,
                       queryOverride: _activeQuery(),
+                      search: widget.search,
                       selectedActionId: selectedIndex < 0
                           ? null
                           : filteredCommands[selectedIndex].id,
@@ -423,7 +431,19 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
     if (_triggerStart == null) {
       return const [];
     }
-    return CodeLabCommandAction.filter(widget.commandActions, _activeQuery());
+    final query = _activeQuery();
+    final found =
+        widget.search?.call(query) ??
+        CodeLabCommandAction.filter(widget.commandActions, query);
+    // Порядок показа палитры: секция клиента, затем секция агента. `Enter`
+    // выбирает подсвеченную строку, поэтому индекс считается по нему же, а
+    // не по порядку поиска.
+    return [
+      for (final action in found)
+        if (action.source == CodeLabCommandSource.client) action,
+      for (final action in found)
+        if (action.source == CodeLabCommandSource.agent) action,
+    ];
   }
 
   void _moveInlineSelection(int delta, int length) {

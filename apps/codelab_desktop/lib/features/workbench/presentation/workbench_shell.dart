@@ -111,6 +111,7 @@ class _CommandPaletteOverlay extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 520, maxHeight: 480),
             child: CodeLabCommandPaletteSurface(
               actions: state.paletteActions,
+              search: state.searchPalette,
               onActionSelected: (action) =>
                   selectPaletteCommand(context, cubit, action),
             ),

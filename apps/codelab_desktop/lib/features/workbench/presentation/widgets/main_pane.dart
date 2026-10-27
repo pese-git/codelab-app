@@ -106,6 +106,7 @@ class WorkbenchMainPane extends StatelessWidget {
           onSubmit: cubit.submitPrompt,
           onCancel: cubit.cancelTurn,
           commandActions: state.paletteActions,
+          search: state.searchPalette,
           onCommandSelected: (action) =>
               selectPaletteCommand(context, cubit, action),
           configOptions: state.configOptions,

@@ -12,6 +12,7 @@ class CodeLabCommandPaletteSurface extends StatefulWidget {
     this.onActionSelected,
     this.showSearchField = true,
     this.queryOverride,
+    this.search,
     super.key,
   });
 
@@ -34,6 +35,13 @@ class CodeLabCommandPaletteSurface extends StatefulWidget {
   /// typing in the composer itself rather than a separate search field.
   final bool showSearchField;
   final String? queryOverride;
+
+  /// Отбор команд по запросу. Если задан, [actions] не фильтруются: палитра
+  /// показывает результат [search] в его порядке, раскладывая по секциям
+  /// клиента и агента. Без него — подстрока `CodeLabCommandAction.filter`
+  /// для превью и тестов `codelab_ui` (D5 change
+  /// `add-command-palette-agent-commands`).
+  final CodeLabCommandSearch? search;
 
   @override
   State<CodeLabCommandPaletteSurface> createState() =>
@@ -98,7 +106,9 @@ class _AcpCommandPaletteSurfaceState
 
   @override
   Widget build(BuildContext context) {
-    final filteredActions = CodeLabCommandAction.filter(widget.actions, _query);
+    final filteredActions =
+        widget.search?.call(_query) ??
+        CodeLabCommandAction.filter(widget.actions, _query);
     final clientActions = filteredActions
         .where((action) => action.source == CodeLabCommandSource.client)
         .toList(growable: false);
