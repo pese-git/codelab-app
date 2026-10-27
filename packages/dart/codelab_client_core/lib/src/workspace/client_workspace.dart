@@ -166,6 +166,13 @@ abstract interface class SessionHandle {
   /// D2). Ошибки — исключения `codelab_client_acp`.
   Future<PromptTurn> cancel();
 
+  /// Повторяет последний сорвавшийся ход: его `prompt` уходит новым
+  /// `session/prompt`, прежние ходы не меняются (design D4 change
+  /// `add-connection-and-error-states`). Исход публикуется в
+  /// `ClientWorkspace.promptOutcomes`, как у [send]. При ложном
+  /// `SessionView.canRetry` — [ClientWorkspaceException] без запроса.
+  Future<PromptOutcome> retry();
+
   /// Отвечает на одобрение [approval] этой сессии вариантом [option]
   /// (отказ — тоже вариант: в ACP нет отдельного «отклонить»). Одобрение
   /// другой сессии отклоняет ядро клиента (PERM-003,
@@ -593,12 +600,16 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   void _handleConnectionState(ClientConnectionState connectionState) {
     final wasConnected = _current.connection is Connected;
     final view = _viewFor(connectionState);
-    _publishConnection(view);
     // Сбой явного connect/reconnect сообщает вызывающий; здесь — только
-    // неожиданная потеря установленного соединения.
+    // неожиданная потеря установленного соединения. Она публикуется как
+    // `ConnectionLost`, а не `ConnectionFailed` (design D1 change
+    // `add-connection-and-error-states`).
     if (view is ConnectionFailed &&
         wasConnected &&
         _transition == _Transition.none) {
+      _publishConnection(
+        ConnectionView.lost(reason: view.reason, message: view.message),
+      );
       _report(
         WorkspaceDiagnostic(
           severity: DiagnosticSeverity.error,
@@ -606,7 +617,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
           message: 'Connection to ACP agent lost: ${view.message}',
         ),
       );
+      return;
     }
+    _publishConnection(view);
   }
 
   /// Публикует диагностику после редакции секретов.
@@ -920,7 +933,17 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
       _setQueue([..._current.queue, item]);
       return PromptQueued(id, item);
     }
-    return _dispatch(text);
+    return _dispatch([ContentBlock.text(text: text)]);
+  }
+
+  @override
+  Future<PromptOutcome> retry() async {
+    if (!_current.canRetry || _link != _Link.attached) {
+      throw ClientWorkspaceException(
+        'Session ${id.value} has no failed turn to retry.',
+      );
+    }
+    return _dispatch(_session.turns.last.prompt);
   }
 
   @override
@@ -1041,7 +1064,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     if (item == null) {
       return null;
     }
-    return _dispatch(item.text);
+    return _dispatch([ContentBlock.text(text: item.text)]);
   }
 
   @override
@@ -1058,14 +1081,11 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   /// Слив проверяет условие заново после каждого хода, а не реагирует на
   /// событие статуса: отправка из обработчика синхронного `sessionChanges`
   /// вызвала бы вложенную публикацию в тот же поток.
-  Future<PromptOutcome> _dispatch(String text) async {
+  Future<PromptOutcome> _dispatch(List<ContentBlock> prompt) async {
     PromptOutcome outcome;
     try {
       final turn = await _backend.sendPrompt(
-        SendPromptCommand(
-          sessionId: id,
-          prompt: [ContentBlock.text(text: text)],
-        ),
+        SendPromptCommand(sessionId: id, prompt: prompt),
       );
       outcome = PromptCompleted(id, turn);
       _info(
@@ -1087,7 +1107,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     }
     final next = _current.queue.first;
     _setQueue(_current.queue.skip(1).toList());
-    await _dispatch(next.text);
+    await _dispatch([ContentBlock.text(text: next.text)]);
   }
 
   /// Каждое изменение сессии в ядре — новое представление с `revision + 1`;
@@ -1122,25 +1142,47 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   }
 
   /// Поля представления, которые выводятся из снимка сессии ядра.
-  SessionView _sessionFields(SessionView view, AcpSession session) =>
-      view.copyWith(
-        status: _link == _Link.detached
-            ? SessionStatusView.detached
-            : SessionStatusView.of(session.status),
-        transcript: switch (_notice) {
-          null => _projector.items,
-          final notice => List.unmodifiable([..._projector.items, notice]),
-        },
-        configOptions: [
-          for (final option in session.configOptions ?? const [])
-            ConfigOptionView.of(option),
-        ],
-        agentCommands: [
-          for (final command in session.availableCommands)
-            AgentCommandView.of(command),
-        ],
-        pendingApprovals: pendingApprovalViews(session),
-      );
+  SessionView _sessionFields(SessionView view, AcpSession session) {
+    final status = _link == _Link.detached
+        ? SessionStatusView.detached
+        : SessionStatusView.of(session.status);
+    return view.copyWith(
+      status: status,
+      canRetry: _canRetry(session, status),
+      transcript: switch (_notice) {
+        null => _projector.items,
+        final notice => List.unmodifiable([..._projector.items, notice]),
+      },
+      configOptions: [
+        for (final option in session.configOptions ?? const [])
+          ConfigOptionView.of(option),
+      ],
+      agentCommands: [
+        for (final command in session.availableCommands)
+          AgentCommandView.of(command),
+      ],
+      pendingApprovals: pendingApprovalViews(session),
+    );
+  }
+
+  /// Правила повтора — spec `acp-client-kit` «Повтор сорвавшегося хода».
+  bool _canRetry(AcpSession session, SessionStatusView status) {
+    if (_link != _Link.attached ||
+        status == SessionStatusView.running ||
+        status == SessionStatusView.cancelling ||
+        session.turns.isEmpty) {
+      return false;
+    }
+    final last = session.turns.last;
+    if (last.status != PromptTurnStatus.failed) {
+      return false;
+    }
+    return switch (last.failure) {
+      ConnectionLostPromptFailure() => false,
+      AgentPromptFailure(retryable: false) => false,
+      _ => true,
+    };
+  }
 
   void _setQueue(List<QueuedPrompt> queue) => _publish(
     _current.copyWith(

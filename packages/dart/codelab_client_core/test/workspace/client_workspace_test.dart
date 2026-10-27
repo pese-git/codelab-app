@@ -105,7 +105,7 @@ void main() {
     });
 
     test('an unexpected transport failure is published as '
-        'ConnectionFailed', () async {
+        'ConnectionLost', () async {
       final agent = FakeAcpTransport();
       final workspace = workspaceWith([
         _TestResolver([agent]),
@@ -121,8 +121,8 @@ void main() {
 
       expect(
         workspace.current.connection,
-        isA<ConnectionFailed>().having(
-          (failed) => failed.message,
+        isA<ConnectionLost>().having(
+          (lost) => lost.message,
           'message',
           'agent exited',
         ),

@@ -50,10 +50,15 @@ sealed class TranscriptItem with _$TranscriptItem {
   }) = ToolCallItem;
 
   /// Итог хода, который не виден из обновлений агента.
+  ///
+  /// [failure] заполнен только у [NoticeKind.error]: по нему хост строит
+  /// заголовок заметки, а [text] остаётся нейтральной строкой для CLI
+  /// (design D3 change `add-connection-and-error-states`).
   const factory TranscriptItem.notice({
     required String id,
     required NoticeKind kind,
     required String text,
+    PromptFailure? failure,
   }) = NoticeItem;
 }
 
