@@ -5,7 +5,9 @@
 //
 // Только scripted-агент: бинарь `codelab-agent` объявляет пустой
 // `availableCommands` (agent-acp-server), поэтому команд агента в палитре у
-// него нет.
+// него нет. Вместо тега `scripted-only` — `skip` в режиме `dart`: тег
+// исключил бы единственный тест файла, и `flutter test` завершился бы
+// ошибкой «No tests ran» (как dart-only тест `session_list_load_flow_test`).
 
 import 'dart:io';
 
@@ -111,7 +113,7 @@ void main() {
     'agent-declared commands replace the client stubs in the palette, are '
     'inserted into the composer and reach the agent on send, and fuzzy '
     'search finds them inline',
-    tags: scriptedOnly,
+    skip: !E2eAgent.current.isScripted,
     (tester) async {
       final project = await Directory.systemTemp.createTemp(
         'codelab_command_palette_e2e_',
