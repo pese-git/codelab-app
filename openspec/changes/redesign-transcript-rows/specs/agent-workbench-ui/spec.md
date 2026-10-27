@@ -68,7 +68,7 @@ A pending approval SHALL be shown as a card inside its tool call row. The card S
 | `fetch` | Fetch a URL? |
 | `think`, `other` | Allow this tool call? |
 
-The card SHALL show the tag "Awaiting approval", the approval risk, the reason when present, the command in a monospace terminal-styled block with the `cwd` as a caption when present, and the options. The `allow_once` option SHALL be the primary button; the other options SHALL be standard buttons. Option shortcuts SHALL stay as in requirement "Approval options are rendered and bound to shortcuts by kind", and the raw input SHALL stay behind "View raw input". After the decision the card SHALL be replaced by a tag in the tool call row naming the outcome, as in requirement "Паттерны взаимодействия agent workbench".
+The tool call row SHALL carry the tag "Awaiting approval" in its header, and the card SHALL show the approval risk, the reason when present, the command in a monospace terminal-styled block with the `cwd` as a caption when present, and the options. The `allow_once` option SHALL be the primary button; the other options SHALL be standard buttons. Option shortcuts SHALL stay as in requirement "Approval options are rendered and bound to shortcuts by kind", and the raw input SHALL stay behind "View raw input". After the decision the card SHALL be replaced by a tag in the tool call row naming the outcome, as in requirement "Паттерны взаимодействия agent workbench".
 
 #### Scenario: Command approval card
 - **WHEN** a tool call of kind `execute` with command "echo running tests" in `/work/app` asks for permission with the four standard option kinds

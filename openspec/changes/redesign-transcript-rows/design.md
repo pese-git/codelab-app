@@ -51,6 +51,8 @@
 | `CodeLabToolCallRow` | `status`, `label`, `detail`, `secondary`, `output`, `approval` | `ToolCallItem` + `ToolRowView` |
 | `CodeLabNoticeRow` | `severity`, `title`, `body`, `details`, `action` | `NoticeItem` |
 
+Виджеты строк — `CodeLabThoughtBlock`, `CodeLabToolCallTile` и `CodeLabTranscriptNotice`: имена `CodeLab*Row` заняты моделями. Статус вызова — существующий `CodeLabToolCallStatus` из `CodeLabToolCallSummary`, второй enum не вводится.
+
 `CodeLabTranscriptEntry` и `CodeLabTranscriptEntryKind` удаляются. Существующие `CodeLabTranscriptApproval`, `CodeLabApprovalOutcome` и `CodeLabTranscriptEntryAction` (переименуется в `CodeLabTranscriptAction`) остаются.
 
 Почему не расширять `CodeLabTranscriptEntry` полями: пять видов с разными полями в одном классе дают невозможные сочетания (одобрение у заметки, `streaming` у пользователя). Запечатанная иерархия — то, что зафиксировано в §12.3.2, и markdown change заменит `CodeLabAgentTextRow` на блоки, не трогая остальные строки.
@@ -95,7 +97,7 @@
 Карточка одобрения — переработанный `CodeLabApprovalPanel` в режиме «в строке вызова»:
 
 - заголовок по виду вызова — таблица из спецификации;
-- риск — тегом в заголовке карточки, а не отдельным чипом под строкой;
+- риск — тегом в заголовке карточки, а не отдельным чипом под строкой; тег «Awaiting approval» один — в заголовке строки вызова, чтобы не повторять его в карточке сразу под ним;
 - команда — моноширинный блок на тёмном фоне, `cwd` — подписью под ним;
 - `allow_once` — `FilledButton`, остальные варианты — `Button`; подсказки сочетаний — подписью на кнопках, как сейчас.
 
