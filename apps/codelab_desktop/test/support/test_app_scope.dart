@@ -1,6 +1,7 @@
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:cherrypick/cherrypick.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart'
@@ -13,6 +14,7 @@ final class CodeLabTestBinding {
     CodeLabStdioTransportFactory? stdioTransportFactory,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     Map<String, Object> preferences = const {},
+    DirectoryExists? directoryExists,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -27,6 +29,9 @@ final class CodeLabTestBinding {
       transportFactory: () => this.transport,
       stdioTransportFactory: stdioTransportFactory,
       webSocketTransportFactory: webSocketTransportFactory,
+      // Тесты работают с вымышленными путями вроде `/work/app`; по
+      // умолчанию любая папка считается существующей.
+      directoryExists: directoryExists ?? (_) async => true,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own
