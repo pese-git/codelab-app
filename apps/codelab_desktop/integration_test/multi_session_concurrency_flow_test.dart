@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'support/e2e_agent.dart';
+import '../test/support/transcript_rows.dart';
 
 // See stdio_connect_flow_test.dart for why the connection setup dialog and
 // the connect round trip need this specific choreography.
@@ -96,7 +97,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('composer-send-button')));
       await tester.pump();
 
-      bool hasPendingApproval() => shellCubit.state.transcriptEntries.any(
+      bool hasPendingApproval() => shellCubit.state.transcriptRows.any(
         (entry) => entry.approval is CodeLabTranscriptApprovalPending,
       );
       final approvalDeadline = DateTime.now().add(const Duration(seconds: 10));

@@ -35,10 +35,10 @@ void main() {
     expect(h.cubit.state.canCancel, isFalse);
     expect(h.cubit.state.isPromptSubmitting, isTrue);
     expect(
-      h.cubit.state.transcriptEntries
-          .singleWhere((entry) => entry.toolCall != null)
-          .toolCall
-          ?.status,
+      h.cubit.state.transcriptRows
+          .whereType<CodeLabToolCallRow>()
+          .single
+          .status,
       CodeLabToolCallStatus.cancelled,
     );
 

@@ -9,6 +9,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'shell_cubit_characterization/harness.dart';
+import '../../../support/transcript_rows.dart';
 
 const _withListAndLoad = AgentCapabilities(
   loadSession: true,
@@ -110,7 +111,7 @@ void main() {
     await h.settle();
 
     expect(h.cubit.state.activeSessionId, 's-old');
-    expect(h.cubit.state.transcriptEntries.map((entry) => entry.body), [
+    expect(h.cubit.state.transcriptRows.map((entry) => entry.text), [
       'fix the tests',
       'done',
     ]);
@@ -172,7 +173,7 @@ void main() {
 
       expect(rows(h).single.$2, CodeLabSessionStatus.detached);
       expect(
-        h.cubit.state.transcriptEntries.last.body,
+        h.cubit.state.transcriptRows.last.text,
         'The agent cannot restore sessions after reconnecting.',
       );
     },

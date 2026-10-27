@@ -31,6 +31,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
 import '../../../../support/test_app_scope.dart';
+import '../../../../support/transcript_rows.dart';
 
 /// Готовит среду для `ShellHarness`; вызывается в `setUp` каждого файла.
 ///
@@ -174,6 +175,7 @@ final class ShellHarness {
     required String sessionId,
     required String toolCallId,
     required String title,
+    String command = 'echo hi',
   }) {
     agent.emitInbound(
       JsonRpcMessage.request(
@@ -186,7 +188,7 @@ final class ShellHarness {
             title: title,
             kind: ToolKind.execute,
             status: ToolCallStatus.inProgress,
-            rawInput: const {'command': 'echo hi'},
+            rawInput: {'command': command},
           ),
           options: const [
             PermissionOption(
@@ -205,10 +207,11 @@ final class ShellHarness {
     );
   }
 
-  /// Записи транскрипта активной сессии с ожидающим одобрением.
-  List<String> pendingApprovalTitles() => [
-    for (final entry in cubit.state.transcriptEntries)
-      if (entry.approval is CodeLabTranscriptApprovalPending) entry.title,
+  /// Строки вызовов активной сессии с ожидающим одобрением — «метка деталь»,
+  /// например `Run echo hi`.
+  List<String> pendingApprovalTexts() => [
+    for (final entry in cubit.state.transcriptRows)
+      if (entry.approval is CodeLabTranscriptApprovalPending) entry.text,
   ];
 
   /// Даёт доставить состояния, уже выпущенные Cubit: поток `BlocBase`

@@ -8,6 +8,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'harness.dart';
+import '../../../../support/transcript_rows.dart';
 
 void main() {
   setUp(setUpCharacterization);
@@ -25,7 +26,7 @@ void main() {
     expect(h.cubit.state.sessions.map((item) => item.id), ['session-1']);
     expect(h.cubit.state.currentSessionLabel, 'New session');
     expect(h.cubit.state.currentSessionDetail, '/workspace');
-    expect(h.cubit.state.transcriptEntries, isEmpty);
+    expect(h.cubit.state.transcriptRows, isEmpty);
     expect(h.cubit.state.isPromptSubmitting, isFalse);
     expect(h.cubit.state.canCancel, isFalse);
   });
@@ -72,11 +73,11 @@ void main() {
     h.cubit.selectSession('session-1');
     expect(h.cubit.state.isPromptSubmitting, isTrue);
     expect(h.cubit.state.canCancel, isTrue);
-    expect(h.cubit.state.transcriptEntries.last.body, 'long task');
+    expect(h.cubit.state.transcriptRows.last.text, 'long task');
 
     h.cubit.selectSession('session-2');
     expect(h.cubit.state.isPromptSubmitting, isFalse);
-    expect(h.cubit.state.transcriptEntries, isEmpty);
+    expect(h.cubit.state.transcriptRows, isEmpty);
 
     h.endTurn(turn.request);
     await turn.done;
@@ -98,12 +99,12 @@ void main() {
     h.agentText('session-1', 'background reply');
 
     expect(h.cubit.state.activeSessionId, 'session-2');
-    expect(h.cubit.state.transcriptEntries, isEmpty);
+    expect(h.cubit.state.transcriptRows, isEmpty);
 
     h.endTurn(turn.request);
     await turn.done;
     h.cubit.selectSession('session-1');
-    expect(h.cubit.state.transcriptEntries.last.body, 'background reply');
+    expect(h.cubit.state.transcriptRows.last.text, 'background reply');
   });
 
   test('each session has its own prompt queue', () async {

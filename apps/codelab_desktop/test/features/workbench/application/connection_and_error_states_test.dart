@@ -11,6 +11,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'shell_cubit_characterization/harness.dart';
+import '../../../support/transcript_rows.dart';
 
 void main() {
   setUp(setUpCharacterization);
@@ -39,11 +40,11 @@ void main() {
     ),
   );
 
-  CodeLabTranscriptEntry errorEntry(ShellHarness h) => h
-      .cubit
-      .state
-      .transcriptEntries
-      .lastWhere((entry) => entry.id.startsWith('prompt-error-'));
+  CodeLabNoticeRow errorEntry(ShellHarness h) =>
+      h.cubit.state.transcriptRows.lastWhere(
+            (entry) => entry.id.startsWith('prompt-error-'),
+          )
+          as CodeLabNoticeRow;
 
   group('failureTitleOf', () {
     test('maps each failure class to its title', () {
@@ -98,7 +99,7 @@ void main() {
       h.cubit.state.connectionMessage,
       'Stdio ACP agent exited unexpectedly with code -9.',
     );
-    expect(h.cubit.state.transcriptEntries.first.body, 'hello agent');
+    expect(h.cubit.state.transcriptRows.first.text, 'hello agent');
     final notice = errorEntry(h);
     expect(notice.title, 'The connection to the agent was lost');
     expect(notice.action, isNull);
@@ -123,7 +124,7 @@ void main() {
 
     final notice = errorEntry(h);
     expect(notice.title, 'The agent could not sign in to the model provider');
-    expect(notice.body, '401 Unauthorized from openai: check api_key_env');
+    expect(notice.text, '401 Unauthorized from openai: check api_key_env');
     expect(notice.details, contains('Turn failed'));
     expect(notice.action, isNull);
   });
@@ -158,13 +159,13 @@ void main() {
     h.endTurn(retried);
     await h.settle();
 
-    final entries = h.cubit.state.transcriptEntries;
+    final entries = h.cubit.state.transcriptRows;
     expect(
-      entries.where((entry) => entry.body == 'summarize the logs'),
+      entries.where((entry) => entry.text == 'summarize the logs'),
       hasLength(2),
     );
     expect(errorEntry(h).action, isNull);
-    expect(entries.last.body, 'Here is the summary.');
+    expect(entries.last.text, 'Here is the summary.');
   });
 
   test('an error from a third-party agent gets the general title, the '
@@ -185,7 +186,7 @@ void main() {
 
     final notice = errorEntry(h);
     expect(notice.title, 'The agent could not complete the turn');
-    expect(notice.body, 'Internal error');
+    expect(notice.text, 'Internal error');
     expect(notice.action?.label, 'Retry');
   });
 

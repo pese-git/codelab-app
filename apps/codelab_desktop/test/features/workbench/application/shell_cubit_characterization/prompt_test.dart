@@ -9,6 +9,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'harness.dart';
+import '../../../../support/transcript_rows.dart';
 
 void main() {
   setUp(setUpCharacterization);
@@ -28,14 +29,14 @@ void main() {
     );
     expect(h.cubit.state.isPromptSubmitting, isTrue);
     expect(h.cubit.state.canCancel, isTrue);
-    expect(h.cubit.state.transcriptEntries.last.title, 'You');
-    expect(h.cubit.state.transcriptEntries.last.body, 'hello agent');
+    expect(h.cubit.state.transcriptRows.last.kind, 'user');
+    expect(h.cubit.state.transcriptRows.last.text, 'hello agent');
 
     h
       ..agentText('session-1', 'hi ')
       ..agentText('session-1', 'there');
-    expect(h.cubit.state.transcriptEntries.last.title, 'Agent');
-    expect(h.cubit.state.transcriptEntries.last.body, 'hi there');
+    expect(h.cubit.state.transcriptRows.last.kind, 'agent');
+    expect(h.cubit.state.transcriptRows.last.text, 'hi there');
     expect(h.cubit.state.isPromptSubmitting, isTrue);
 
     h.endTurn(turn.request);
@@ -43,9 +44,9 @@ void main() {
 
     expect(h.cubit.state.isPromptSubmitting, isFalse);
     expect(h.cubit.state.canCancel, isFalse);
-    expect(h.cubit.state.transcriptEntries.map((entry) => entry.title), [
-      'You',
-      'Agent',
+    expect(h.cubit.state.transcriptRows.map((entry) => entry.kind), [
+      'user',
+      'agent',
     ]);
     expect(h.logEvents, contains('Prompt completed with stopReason endTurn.'));
   });
@@ -59,7 +60,7 @@ void main() {
     await h.cubit.submitPrompt('   ');
 
     expect(h.agent.sentMessages, hasLength(sentBefore));
-    expect(h.cubit.state.transcriptEntries, isEmpty);
+    expect(h.cubit.state.transcriptRows, isEmpty);
   });
 
   test('a prompt without an active session is not sent', () async {

@@ -18,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'support/e2e_agent.dart';
+import '../test/support/transcript_rows.dart';
 
 CodeLabShellCubit _cubit(WidgetTester tester) =>
     codeLabDependenciesOf(tester.element(find.byType(CodeLabApp))).shellCubit;
@@ -90,7 +91,7 @@ Future<void> _waitFor(WidgetTester tester, bool Function() condition) async {
 const _cancelledNotice = 'Completed with stopReason cancelled.';
 
 List<String?> _transcript(WidgetTester tester) => [
-  for (final entry in _cubit(tester).state.transcriptEntries) entry.body,
+  for (final entry in _cubit(tester).state.transcriptRows) entry.text,
 ];
 
 /// Создаёт сессию и проводит в ней ход [text]; агент отвечает `echo: …`.

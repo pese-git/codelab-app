@@ -28,6 +28,7 @@ import 'package:structured_log_fluent/structured_log_fluent.dart'
     show FluentLogViewerPage;
 
 import 'support/test_app_scope.dart';
+import 'support/transcript_rows.dart';
 
 /// The prompt composer's text field. `find.byType(EditableText).last` is
 /// ambiguous now: the docked `FluentLogViewer` has its own search box, which
@@ -520,8 +521,8 @@ void main() {
     final submitFuture = shellCubit.submitPrompt('  hello agent  ');
     expect(shellCubit.state.isPromptSubmitting, isTrue);
     expect(shellCubit.state.canCancel, isTrue);
-    expect(shellCubit.state.transcriptEntries.last.title, 'You');
-    expect(shellCubit.state.transcriptEntries.last.body, 'hello agent');
+    expect(shellCubit.state.transcriptRows.last.kind, 'user');
+    expect(shellCubit.state.transcriptRows.last.text, 'hello agent');
 
     final promptRequest = await promptRequestFuture as dynamic;
     expect(promptRequest.method, 'session/prompt');
@@ -555,8 +556,8 @@ void main() {
 
     expect(shellCubit.state.isPromptSubmitting, isFalse);
     expect(shellCubit.state.canCancel, isFalse);
-    expect(shellCubit.state.transcriptEntries.last.title, 'Agent');
-    expect(shellCubit.state.transcriptEntries.last.body, 'hi from agent');
+    expect(shellCubit.state.transcriptRows.last.kind, 'agent');
+    expect(shellCubit.state.transcriptRows.last.text, 'hi from agent');
     expect(
       logger.entries.last['event'],
       'Prompt completed with stopReason endTurn.',
@@ -619,11 +620,11 @@ void main() {
 
     sendMessageChunk('hi ');
 
-    final agentEntriesAfterFirstChunk = shellCubit.state.transcriptEntries
-        .where((entry) => entry.title == 'Agent')
+    final agentEntriesAfterFirstChunk = shellCubit.state.transcriptRows
+        .where((entry) => entry.kind == 'agent')
         .toList();
     expect(agentEntriesAfterFirstChunk, hasLength(1));
-    expect(agentEntriesAfterFirstChunk.single.body, 'hi');
+    expect(agentEntriesAfterFirstChunk.single.text, 'hi');
     expect(
       shellCubit.state.isPromptSubmitting,
       isTrue,
@@ -640,8 +641,8 @@ void main() {
     sendMessageChunk('!');
     sendMessageChunk('!');
 
-    final agentEntriesWhileRunning = shellCubit.state.transcriptEntries
-        .where((entry) => entry.title == 'Agent')
+    final agentEntriesWhileRunning = shellCubit.state.transcriptRows
+        .where((entry) => entry.kind == 'agent')
         .toList();
     expect(
       agentEntriesWhileRunning,
@@ -650,7 +651,7 @@ void main() {
           'consecutive agent_message_chunk updates must coalesce into '
           'one entry instead of one per chunk',
     );
-    expect(agentEntriesWhileRunning.single.body, 'hi from agent!!');
+    expect(agentEntriesWhileRunning.single.text, 'hi from agent!!');
     expect(
       agentEntriesWhileRunning.single.id,
       growingEntryId,
@@ -665,11 +666,11 @@ void main() {
     );
     await submitFuture;
 
-    final finalAgentEntries = shellCubit.state.transcriptEntries
-        .where((entry) => entry.title == 'Agent')
+    final finalAgentEntries = shellCubit.state.transcriptRows
+        .where((entry) => entry.kind == 'agent')
         .toList();
     expect(finalAgentEntries, hasLength(1));
-    expect(finalAgentEntries.single.body, 'hi from agent!!');
+    expect(finalAgentEntries.single.text, 'hi from agent!!');
     expect(finalAgentEntries.single.id, growingEntryId);
 
     await shellCubit.close();
@@ -759,12 +760,12 @@ void main() {
     );
     await submitFuture;
 
-    final agentEntries = shellCubit.state.transcriptEntries
-        .where((entry) => entry.title == 'Agent')
+    final agentEntries = shellCubit.state.transcriptRows
+        .where((entry) => entry.kind == 'agent')
         .toList();
     expect(agentEntries, hasLength(2));
-    expect(agentEntries[0].body, 'let me check the file');
-    expect(agentEntries[1].body, 'here is what I found');
+    expect(agentEntries[0].text, 'let me check the file');
+    expect(agentEntries[1].text, 'here is what I found');
 
     await shellCubit.close();
     await application.dispose();
@@ -858,10 +859,10 @@ void main() {
       // A tool call with no completion text yet, mid-turn (not terminal) —
       // it must already be visible, not held back until the turn ends.
       expect(shellCubit.state.canCancel, isTrue);
-      final midStreamEntries = shellCubit.state.transcriptEntries;
-      expect(midStreamEntries.last.title, 'Run build');
+      final midStreamEntries = shellCubit.state.transcriptRows;
+      expect(midStreamEntries.last.text, 'Run build');
       expect(
-        midStreamEntries.last.toolCall!.status,
+        (midStreamEntries.last as CodeLabToolCallRow).status,
         CodeLabToolCallStatus.queued,
       );
 
@@ -874,14 +875,20 @@ void main() {
       );
       await submitFuture;
 
-      final titles = shellCubit.state.transcriptEntries
-          .map((entry) => entry.title)
-          .toList();
-      expect(titles, ['You', 'Agent', 'Read config', 'Run build', 'Agent']);
+      final rows = shellCubit.state.transcriptRows;
+      expect(rows.map((entry) => entry.kind), [
+        'user',
+        'agent',
+        'tool',
+        'tool',
+        'agent',
+      ]);
+      expect(rows[2].text, 'Read config');
+      expect(rows[3].text, 'Run build');
 
-      final readConfigEntry = shellCubit.state.transcriptEntries[2];
-      expect(readConfigEntry.toolCall!.name, 'read');
-      expect(readConfigEntry.toolCall!.status, CodeLabToolCallStatus.running);
+      final readConfigEntry = rows[2] as CodeLabToolCallRow;
+      expect(readConfigEntry.label, 'Read');
+      expect(readConfigEntry.status, CodeLabToolCallStatus.running);
 
       await shellCubit.close();
       await application.dispose();
@@ -955,12 +962,14 @@ void main() {
     );
     await submitFuture;
 
-    final agentEntries = shellCubit.state.transcriptEntries
-        .where((entry) => entry.title == 'Agent')
+    // Мысли — отдельная строка блока мыслей, ответ — строка ответа
+    // (change `redesign-transcript-rows`, D1).
+    final agentEntries = shellCubit.state.transcriptRows
+        .where((entry) => entry.kind == 'agent' || entry.kind == 'thought')
         .toList();
-    expect(agentEntries, hasLength(2));
-    expect(agentEntries[0].body, 'thinking it through');
-    expect(agentEntries[1].body, 'here is the answer');
+    expect(agentEntries.map((entry) => entry.kind), ['thought', 'agent']);
+    expect(agentEntries[0].text, 'thinking it through');
+    expect(agentEntries[1].text, 'here is the answer');
 
     await shellCubit.close();
     await application.dispose();
@@ -1033,8 +1042,8 @@ void main() {
     );
     // The transcript up to the point of failure is history, not part of
     // the now-untrustworthy active request — it must stay visible.
-    expect(shellCubit.state.transcriptEntries, isNotEmpty);
-    expect(shellCubit.state.transcriptEntries.last.body, 'hello agent');
+    expect(shellCubit.state.transcriptRows, isNotEmpty);
+    expect(shellCubit.state.transcriptRows.last.text, 'hello agent');
 
     // Отказ транспорта завершает ожидающий `session/prompt` с
     // `PromptFailure.connectionLost` (design D2 change
@@ -1307,8 +1316,8 @@ void main() {
     final submitFuture = shellCubit.submitPrompt('run a command');
     final promptRequest = await promptRequestFuture as dynamic;
 
-    CodeLabTranscriptEntry? pendingApprovalEntry() {
-      final matches = shellCubit.state.transcriptEntries
+    CodeLabTranscriptRow? pendingApprovalEntry() {
+      final matches = shellCubit.state.transcriptRows
           .where((entry) => entry.approval is CodeLabTranscriptApprovalPending)
           .toList();
       return matches.isEmpty ? null : matches.single;
@@ -1347,7 +1356,7 @@ void main() {
 
     final pendingEntry = pendingApprovalEntry();
     expect(pendingEntry, isNotNull);
-    expect(pendingEntry!.title, 'Run command');
+    expect(pendingEntry!.text, 'Run echo hi');
     final pending = pendingEntry.approval! as CodeLabTranscriptApprovalPending;
     expect(pending.risk, CodeLabApprovalRisk.shell);
     expect(pending.command, 'echo hi');
@@ -1382,11 +1391,11 @@ void main() {
     // The entry stays in the transcript, collapsed to a resolved marker —
     // it does not disappear (embed-approval-in-thread/specs/
     // agent-workbench-ui: "Approval остаётся в истории после решения").
-    final resolvedEntries = shellCubit.state.transcriptEntries
+    final resolvedEntries = shellCubit.state.transcriptRows
         .where((entry) => entry.approval is CodeLabTranscriptApprovalResolved)
         .toList();
     expect(resolvedEntries, hasLength(1));
-    expect(resolvedEntries.single.title, 'Run command');
+    expect(resolvedEntries.single.text, 'Run echo hi');
     expect(
       (resolvedEntries.single.approval! as CodeLabTranscriptApprovalResolved)
           .label,
@@ -1473,12 +1482,12 @@ void main() {
       ),
     );
 
-    final pendingEntries = shellCubit.state.transcriptEntries
+    final pendingEntries = shellCubit.state.transcriptRows
         .where((entry) => entry.approval is CodeLabTranscriptApprovalPending)
         .toList();
     expect(pendingEntries, hasLength(2));
-    expect(pendingEntries[0].title, 'Run first command');
-    expect(pendingEntries[1].title, 'Run second command');
+    expect(pendingEntries[0].text, 'Run first command');
+    expect(pendingEntries[1].text, 'Run second command');
 
     final firstApproval =
         pendingEntries[0].approval! as CodeLabTranscriptApprovalPending;
@@ -1507,7 +1516,7 @@ void main() {
 
     // The second approval — now the only one still pending — takes over
     // the shortcut.
-    final remainingPending = shellCubit.state.transcriptEntries
+    final remainingPending = shellCubit.state.transcriptRows
         .where((entry) => entry.approval is CodeLabTranscriptApprovalPending)
         .toList();
     expect(remainingPending, hasLength(1));
@@ -1608,10 +1617,10 @@ void main() {
       PromptTurnStatus.cancelling.name,
     );
     expect(
-      shellCubit.state.transcriptEntries
-          .singleWhere((entry) => entry.toolCall != null)
-          .toolCall
-          ?.status,
+      shellCubit.state.transcriptRows
+          .whereType<CodeLabToolCallRow>()
+          .single
+          .status,
       CodeLabToolCallStatus.cancelled,
     );
 
@@ -1702,10 +1711,7 @@ void main() {
 
     expect(shellCubit.state.isPromptSubmitting, isFalse);
     expect(shellCubit.state.canCancel, isFalse);
-    expect(
-      shellCubit.state.transcriptEntries.last.kind,
-      CodeLabTranscriptEntryKind.diagnostic,
-    );
+    expect(shellCubit.state.transcriptRows.last.kind, 'notice');
     expect(logger.entries.last['event'], contains('Failed to send prompt'));
 
     await shellCubit.close();
@@ -2938,16 +2944,16 @@ void main() {
       ),
     );
 
-    CodeLabTranscriptEntry? pendingApprovalEntry() {
-      final matches = shellCubit.state.transcriptEntries
+    CodeLabTranscriptRow? pendingApprovalEntry() {
+      final matches = shellCubit.state.transcriptRows
           .where((entry) => entry.approval is CodeLabTranscriptApprovalPending)
           .toList();
       return matches.isEmpty ? null : matches.single;
     }
 
-    expect(shellCubit.state.transcriptEntries, isNotEmpty);
+    expect(shellCubit.state.transcriptRows, isNotEmpty);
     expect(pendingApprovalEntry(), isNotNull);
-    final session1Transcript = shellCubit.state.transcriptEntries;
+    final session1Transcript = shellCubit.state.transcriptRows;
 
     // session-2: a fresh session with none of that state.
     final createRequestFuture2 = agentTransport.sent.first;
@@ -2963,25 +2969,25 @@ void main() {
 
     // Creating session-2 must not leave session-1's transcript/approval
     // visible.
-    expect(shellCubit.state.transcriptEntries, isEmpty);
+    expect(shellCubit.state.transcriptRows, isEmpty);
     expect(pendingApprovalEntry(), isNull);
 
     // Switching back to session-1 must restore its transcript and pending
     // approval — not leave session-2's (empty) state showing.
     shellCubit.selectSession('session-1');
 
-    expect(shellCubit.state.transcriptEntries, isNotEmpty);
+    expect(shellCubit.state.transcriptRows, isNotEmpty);
     expect(
-      shellCubit.state.transcriptEntries.map((entry) => entry.body),
-      containsAll(session1Transcript.map((entry) => entry.body)),
+      shellCubit.state.transcriptRows.map((entry) => entry.text),
+      containsAll(session1Transcript.map((entry) => entry.text)),
     );
     expect(pendingApprovalEntry(), isNotNull);
-    expect(pendingApprovalEntry()!.title, 'Patch file');
+    expect(pendingApprovalEntry()!.text, 'Edit /workspace/lib/app.dart');
 
     // Switching to session-2 again must clear session-1's state again.
     shellCubit.selectSession('session-2');
 
-    expect(shellCubit.state.transcriptEntries, isEmpty);
+    expect(shellCubit.state.transcriptRows, isEmpty);
     expect(pendingApprovalEntry(), isNull);
 
     await application.respondToPermission(
@@ -3655,12 +3661,10 @@ void main() {
         );
 
         final activeState = harness.shellCubit.state.copyWith(
-          transcriptEntries: const [
-            CodeLabTranscriptEntry(
+          transcriptRows: const [
+            CodeLabUserRow(
               id: 'user-1',
-              kind: CodeLabTranscriptEntryKind.user,
-              title: 'You',
-              body: 'Fix the token refresh race condition.',
+              text: 'Fix the token refresh race condition.',
             ),
           ],
           currentPlan: const [
@@ -3718,12 +3722,10 @@ void main() {
       ], tester: tester);
 
       final stateWithTranscript = harness.shellCubit.state.copyWith(
-        transcriptEntries: const [
-          CodeLabTranscriptEntry(
+        transcriptRows: const [
+          CodeLabUserRow(
             id: 'user-1',
-            kind: CodeLabTranscriptEntryKind.user,
-            title: 'You',
-            body: 'Fix the token refresh race condition.',
+            text: 'Fix the token refresh race condition.',
           ),
         ],
       );
@@ -3756,12 +3758,10 @@ void main() {
       final state = harness.shellCubit.state.copyWith(
         connectionStatus: CodeLabConnectionStatus.lost,
         connectionMessage: 'Agent process exited with code 1.',
-        transcriptEntries: const [
-          CodeLabTranscriptEntry(
+        transcriptRows: const [
+          CodeLabUserRow(
             id: 'user-1',
-            kind: CodeLabTranscriptEntryKind.user,
-            title: 'You',
-            body: 'Fix the token refresh race condition.',
+            text: 'Fix the token refresh race condition.',
           ),
         ],
       );
@@ -3836,7 +3836,7 @@ void main() {
             state: harness.shellCubit.state.copyWith(
               connectionStatus: CodeLabConnectionStatus.lost,
               connectionMessage: 'Agent process exited with code 1.',
-              transcriptEntries: const [],
+              transcriptRows: const [],
             ),
             cubit: harness.shellCubit,
           ),
@@ -3862,12 +3862,10 @@ void main() {
       addTearDown(harness.application.dispose);
 
       final state = harness.shellCubit.state.copyWith(
-        transcriptEntries: const [
-          CodeLabTranscriptEntry(
+        transcriptRows: const [
+          CodeLabUserRow(
             id: 'user-1',
-            kind: CodeLabTranscriptEntryKind.user,
-            title: 'You',
-            body: 'Fix the token refresh race condition.',
+            text: 'Fix the token refresh race condition.',
           ),
         ],
         currentPlan: [
@@ -4455,12 +4453,10 @@ void main() {
         addTearDown(harness.application.dispose);
 
         final state = harness.shellCubit.state.copyWith(
-          transcriptEntries: const [
-            CodeLabTranscriptEntry(
+          transcriptRows: const [
+            CodeLabUserRow(
               id: 'user-1',
-              kind: CodeLabTranscriptEntryKind.user,
-              title: 'You',
-              body: 'Fix the token refresh race condition.',
+              text: 'Fix the token refresh race condition.',
             ),
           ],
           currentPlan: const [
@@ -4701,8 +4697,7 @@ void main() {
       addTearDown(setup.shellCubit.close);
       addTearDown(setup.application.dispose);
 
-      final transcriptBeforeCompletion =
-          setup.shellCubit.state.transcriptEntries;
+      final transcriptBeforeCompletion = setup.shellCubit.state.transcriptRows;
       expect(transcriptBeforeCompletion, isEmpty);
       expect(setup.shellCubit.state.isPromptSubmitting, isFalse);
       expect(setup.shellCubit.state.canCancel, isFalse);
@@ -4716,7 +4711,7 @@ void main() {
 
       // Session B (still active) is untouched by A's completion.
       expect(setup.shellCubit.state.activeSessionId, 'session-b');
-      expect(setup.shellCubit.state.transcriptEntries, isEmpty);
+      expect(setup.shellCubit.state.transcriptRows, isEmpty);
       expect(setup.shellCubit.state.isPromptSubmitting, isFalse);
       expect(setup.shellCubit.state.canCancel, isFalse);
 
