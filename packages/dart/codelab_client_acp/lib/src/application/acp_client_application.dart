@@ -146,6 +146,29 @@ final class AcpClientApplication {
   /// убирает буфер при любом исходе запроса.
   final _sessionReplays = <SessionId, List<SessionUpdate>>{};
 
+  /// Сессии, чей ход прервала замена транспорта; их ход мог продолжиться у
+  /// агента.
+  ///
+  /// Почему: агент CodeLab держит ход закрытого соединения `detachGrace` и
+  /// продолжает его после `session/load` с нового соединения
+  /// (`agent-core/13-acp-adapter.md` §13.5, шаг 3b); знать о прерывании
+  /// может только клиент, который заменил транспорт (design D1 change
+  /// `add-resumed-turn-after-reload`).
+  ///
+  /// Для чего: [_replaceTransport] заполняет множество заново по активным
+  /// ходам; успешный [loadSession] переносит id в [_resumableSessions],
+  /// неудачный — убирает, как и [sendPrompt] (D4).
+  final _interruptedTurns = <SessionId>{};
+
+  /// Загруженные сессии, которые ждут продолжения прерванного хода: первый
+  /// признак хода от агента его возобновляет ([_resumeTurnIfAwaited], D2).
+  final _resumableSessions = <SessionId>{};
+
+  /// Сессии, чей активный ход возобновлён после переподключения: только его
+  /// закрывает `_meta.codelab.turnEnded` ([_settleResumedTurn], D3). У
+  /// живого хода этого соединения итог — ответ на `session/prompt`.
+  final _resumedTurns = <SessionId>{};
+
   /// Bounded ring buffer — see `docs/architecture/observability.md` §28.
   /// Only bounds this in-memory list (used by the UI inspector); the full
   /// structured-logging output is unaffected, see `_logDiagnosticEntry`.
@@ -259,6 +282,10 @@ final class AcpClientApplication {
           meta: command.meta,
         ),
       );
+    } on Object {
+      // Сессия не загружена — продолжения ждать не к чему (D4).
+      _interruptedTurns.remove(command.sessionId);
+      rethrow;
     } finally {
       // Повторный `loadSession` той же сессии заменяет буфер — чужой не
       // трогаем.
@@ -287,6 +314,12 @@ final class AcpClientApplication {
       configOptions: response.configOptions ?? replayed.configOptions,
     );
 
+    // Реплей заменил ходы сессии: прерванный ход теперь последний ход
+    // реплея и ждёт признака продолжения от агента (D1, D4).
+    _resumedTurns.remove(command.sessionId);
+    if (_interruptedTurns.remove(command.sessionId)) {
+      _resumableSessions.add(command.sessionId);
+    }
     _storeSession(session);
     return session;
   }
@@ -341,6 +374,10 @@ final class AcpClientApplication {
   Future<PromptTurn> sendPrompt(SendPromptCommand command) async {
     final generation = _generation;
     final session = _requireSession(command.sessionId);
+    // Новый ход — обновления после него принадлежат ему, а не прерванному
+    // (D4 change `add-resumed-turn-after-reload`).
+    _interruptedTurns.remove(command.sessionId);
+    _resumableSessions.remove(command.sessionId);
     final turn = PromptTurn(
       id: PromptTurnId('turn-${_nextTurnId++}'),
       sessionId: command.sessionId,
@@ -594,6 +631,17 @@ final class AcpClientApplication {
     // continuation is scheduled while this method is still tearing down
     // the old transport.
     _generation++;
+    // Ход, шедший в момент замены, прерван: после `session/load` агент может
+    // его продолжить (design D4 change `add-resumed-turn-after-reload`).
+    // Ожидания прошлой замены теряют силу — прежнее соединение закрыто.
+    _resumableSessions.clear();
+    _resumedTurns.clear();
+    _interruptedTurns
+      ..clear()
+      ..addAll([
+        for (final session in _sessions.values)
+          if (session.activeTurn != null) session.id,
+      ]);
     await _inboundSubscription.cancel();
     await _eventSubscription.cancel();
     _failPendingRequests(
@@ -951,7 +999,10 @@ final class AcpClientApplication {
         return;
       }
 
-      final session = _sessions[permissionRequest.sessionId];
+      // После переподключения агент заново шлёт ожидающий запрос с новым id
+      // (§13.5, шаг 8): он возобновляет прерванный ход (D5).
+      final known = _sessions[permissionRequest.sessionId];
+      final session = known == null ? null : _resumeTurnIfAwaited(known);
       final activeTurn = session?.activeTurn;
       // A cancelling turn answers late permission requests `cancelled` like
       // a missing turn (05-Prompt Turn.md#cancellation).
@@ -1646,15 +1697,22 @@ final class AcpClientApplication {
         return;
       }
 
-      final session = _sessions[sessionNotification.sessionId];
-      if (session == null) {
+      final known = _sessions[sessionNotification.sessionId];
+      if (known == null) {
         return;
       }
 
-      final next = SessionStateMachine.applyUpdate(
-        session,
-        sessionNotification.update,
-      ).stateOrThrow;
+      final update = sessionNotification.update;
+      final turnEnded = _turnEndedOf(update);
+      // Признак хода — обновление уровня хода или итог `turnEnded`
+      // (design D2 change `add-resumed-turn-after-reload`).
+      final session = turnEnded != null || !_isSessionScoped(update)
+          ? _resumeTurnIfAwaited(known)
+          : known;
+      var next = SessionStateMachine.applyUpdate(session, update).stateOrThrow;
+      if (turnEnded != null) {
+        next = _settleResumedTurn(next, turnEnded);
+      }
       _storeSession(next);
     } on Object catch (error) {
       _recordDiagnostic(
@@ -1665,6 +1723,143 @@ final class AcpClientApplication {
         context: {'method': notification.method, 'params': notification.params},
       );
     }
+  }
+
+  /// Обновление уровня сессии (команды, опции, режим, метаданные) — не
+  /// признак хода: агент вправе прислать его в любой момент сессии
+  /// (`SessionStateMachine.applyUpdate`).
+  static bool _isSessionScoped(SessionUpdate update) => switch (update) {
+    AvailableCommandsUpdate() ||
+    ConfigOptionUpdate() ||
+    CurrentModeUpdate() ||
+    SessionInfoUpdate() => true,
+    _ => false,
+  };
+
+  /// Возобновляет прерванный ход [session], если сессия ждёт его
+  /// продолжения и активного хода нет; иначе возвращает [session] как есть.
+  ///
+  /// Почему: после `session/load` ходы реплея закрыты, а агент CodeLab
+  /// продолжает прерванный ход (§13.5, шаг 3b). Показывать ход выполняющимся
+  /// можно только по признаку от агента (`session-lifecycle.md` §51; design
+  /// D1, D2 change `add-resumed-turn-after-reload`).
+  ///
+  /// Как использовать: вызывать с признаком хода — обновлением уровня хода,
+  /// `session/request_permission` или `turnEnded` — до применения самого
+  /// признака к результату.
+  AcpSession _resumeTurnIfAwaited(AcpSession session) {
+    if (session.activeTurn != null || !_resumableSessions.remove(session.id)) {
+      return session;
+    }
+    final resumed = SessionStateMachine.resumeTurn(
+      session,
+      nextTurnId: () => PromptTurnId('turn-${_nextTurnId++}'),
+    ).stateOrThrow;
+    _resumedTurns.add(session.id);
+    _logger
+        .bind({logComponentKey: clientComponent})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: session.id.value,
+        )
+        .info(
+          'turn_resumed',
+          context: {'turn_id': resumed.activeTurn!.id.value},
+        );
+    return resumed;
+  }
+
+  /// Итог хода из `session_info_update` с `_meta.codelab.turnEnded`; `null`
+  /// — расширения нет.
+  ///
+  /// Почему: ответ на исходный `session/prompt` переподключённого хода агенту
+  /// отправить некуда, итог приходит этим расширением
+  /// (`agent-core/13-acp-adapter.md` §13.5, шаг 9; §13.12). Расширение
+  /// разбирается здесь, на границе ACP → application (`acp-boundary.md`):
+  /// домен получает типизированный итог (design D3).
+  static _TurnEnded? _turnEndedOf(SessionUpdate update) {
+    if (update case SessionInfoUpdate(
+      meta: {'codelab': {'turnEnded': final Object? ended}},
+    )) {
+      return switch (ended) {
+        {'stopReason': final String wire} => _parseStopReason(wire, ended),
+        {'error': {'message': final String message}} => _TurnEndedError(
+          message,
+        ),
+        _ => _TurnEndedUnrecognized(ended),
+      };
+    }
+    return null;
+  }
+
+  static _TurnEnded _parseStopReason(String wire, Object? raw) {
+    for (final reason in StopReason.values) {
+      if (reason.wireName == wire) {
+        return _TurnEndedStop(reason);
+      }
+    }
+    return _TurnEndedUnrecognized(raw);
+  }
+
+  /// Закрывает возобновлённый ход [session] итогом [ended].
+  ///
+  /// `turnEnded` для живого хода этого соединения или для сессии без
+  /// активного хода не меняет ходы: итог живого хода — ответ на
+  /// `session/prompt` (design D3). Неизвестная форма закрывает ход с ошибкой
+  /// и диагностикой: вечный активный ход хуже (`session-lifecycle.md` §31).
+  AcpSession _settleResumedTurn(AcpSession session, _TurnEnded ended) {
+    final log = _logger
+        .bind({logComponentKey: clientComponent})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: session.id.value,
+        );
+    if (session.activeTurn == null || !_resumedTurns.remove(session.id)) {
+      log.debug(
+        'event_ignored',
+        context: {'reason': 'turn_not_resumed', 'kind': 'turn_ended'},
+      );
+      return session;
+    }
+
+    final completedAt = DateTime.now();
+    final result = switch (ended) {
+      _TurnEndedStop(:final stopReason) => SessionStateMachine.completeTurn(
+        session,
+        stopReason: stopReason,
+        completedAt: completedAt,
+      ),
+      _TurnEndedError(:final message) => SessionStateMachine.failTurn(
+        session,
+        message: message,
+        completedAt: completedAt,
+      ),
+      _TurnEndedUnrecognized() => SessionStateMachine.failTurn(
+        session,
+        message: 'Unrecognized turnEnded from the ACP agent.',
+        completedAt: completedAt,
+      ),
+    };
+    if (ended is _TurnEndedUnrecognized) {
+      _recordDiagnostic(
+        message: 'Unrecognized _meta.codelab.turnEnded in session/update.',
+        severity: DiagnosticSeverity.warning,
+        source: 'application.protocol',
+        sessionId: session.id.value,
+        context: {'turnEnded': ended.raw},
+      );
+    }
+    log.info(
+      'turn_ended_extension',
+      context: {
+        'outcome': switch (ended) {
+          _TurnEndedStop(:final stopReason) => stopReason.wireName,
+          _TurnEndedError() => 'error',
+          _TurnEndedUnrecognized() => 'unrecognized',
+        },
+      },
+    );
+    return result.stateOrThrow;
   }
 
   /// A `session/update` of a kind this client does not model (e.g.
@@ -2033,4 +2228,32 @@ ConnectionFailureReason _connectionFailureReasonFor(
     AcpTransportErrorCode.disconnected => ConnectionFailureReason.disconnected,
     AcpTransportErrorCode.unknown => ConnectionFailureReason.unknown,
   };
+}
+
+/// Итог возобновлённого хода из `_meta.codelab.turnEnded`
+/// (`agent-core/13-acp-adapter.md` §13.5, шаг 9; design D3 change
+/// `add-resumed-turn-after-reload`).
+sealed class _TurnEnded {
+  const _TurnEnded();
+}
+
+/// `{"stopReason": "<wire>"}` — как ответ на `session/prompt`.
+final class _TurnEndedStop extends _TurnEnded {
+  const _TurnEndedStop(this.stopReason);
+
+  final StopReason stopReason;
+}
+
+/// `{"error": {"errorClass", "message", "retryable"}}` — ход завершился сбоем.
+final class _TurnEndedError extends _TurnEnded {
+  const _TurnEndedError(this.message);
+
+  final String message;
+}
+
+/// Форма, которой нет в §13.5: ход закрывается с ошибкой и диагностикой.
+final class _TurnEndedUnrecognized extends _TurnEnded {
+  const _TurnEndedUnrecognized(this.raw);
+
+  final Object? raw;
 }

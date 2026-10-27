@@ -611,6 +611,8 @@ request recoverable
 
 Это должно определяться protocol/application semantics, а не UI.
 
+В CodeLab (change `add-resumed-turn-after-reload`): `session/prompt` прерванного хода проваливается заменой транспорта (request failed), но сессия запоминается как прерванная. После успешного `session/load` ход ждёт продолжения (request awaiting reconnect). Первое обновление хода, повторный `session/request_permission` или `_meta.codelab.turnEnded` от агента возобновляет последний ход реплея, а `turnEnded` его закрывает. Без такого признака ход остаётся завершённым (§51).
+
 ---
 
 ## 31. Disconnect during cancellation

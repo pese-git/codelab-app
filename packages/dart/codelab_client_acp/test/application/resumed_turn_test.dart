@@ -142,7 +142,14 @@ void main() {
     expect(session.status, SessionLifecycleStatus.active);
     expect(session.turns.single.status, PromptTurnStatus.completed);
     expect(session.turns.single.stopReason, StopReason.endTurn);
-    expect(session.turns.single.updates, hasLength(1));
+    expect(
+      session.turns.single.updates,
+      contains(
+        const SessionUpdate.agentMessageChunk(
+          content: ContentBlock.text(text: 'echo: long task'),
+        ),
+      ),
+    );
   });
 
   test('turnEnded with an error fails the resumed turn', () async {

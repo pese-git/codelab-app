@@ -779,7 +779,7 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | `_meta.codelab.held` | ответ `session/prompt` с `end_turn` и `agent_message_chunk` реплея с `{reason, approved}` (§17.12.4) | ответ ожидает одобрения (после MVP) |
 | `data.codelab` (`errorClass`, `message`, `retryable`, `reason`) | JSON-RPC ошибки | машиночитаемая причина |
 | `data.codelab.rateLimit` `{kind, provider, model, retryAfterMs, resetAt, window}` (после MVP, OpenSpec `add-rate-limit-info`) | JSON-RPC ошибка `-32603` на `session/prompt` с `errorClass: "rateLimited"` | клиент локализует сообщение о лимите и показывает время сброса (L-32, §17.10.4.1) |
-| `_meta.codelab.turnEnded` | `session_info_update` после переподключения | итог хода, ответ на который отправить некуда |
+| `_meta.codelab.turnEnded` | `session_info_update` после переподключения | итог хода, ответ на который отправить некуда; клиент CodeLab закрывает им ход, возобновлённый после `session/load` (change `add-resumed-turn-after-reload`) |
 | `_meta.codelab.critical` (`critical`, `label`) | `toolCall` в `session/request_permission` критической команды (§7.8) | клиент выделяет опасный вызов; `allow_always` не предлагается |
 | `SetSessionModeRequest` в `codelab_acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
 | `_meta.codelab.subagent` (после MVP, §17.3.7) | `session/request_permission` от субагента; `tool_call_update` `task` со `status: failed` (`failure`) | связь запроса с вызовом `task` и типом ребёнка |

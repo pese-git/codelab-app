@@ -788,6 +788,58 @@ class SessionStateMachine {
     return current.copyWith(status: SessionLifecycleStatus.active);
   }
 
+  /// Снова открывает последний ход загруженной сессии, который агент
+  /// продолжил после переподключения.
+  ///
+  /// Почему: агент CodeLab держит ход закрытого соединения `detachGrace` и
+  /// после `session/load` с нового соединения продолжает его
+  /// (`agent-core/13-acp-adapter.md` §13.5, шаг 3b), а [replayHistory]
+  /// закрывает все ходы реплея. Без возобновления обновления продолжения
+  /// отбрасывались бы как пришедшие вне хода.
+  ///
+  /// Для чего: последний ход — реплика прерванного хода, агент пишет её в
+  /// журнал в начале хода; он снова `running` без `stopReason` и
+  /// `completedAt`, сессия — `runningTurn`. Без ходов открывается новый ход
+  /// без промпта с id от [nextTurnId] (design D2 change
+  /// `add-resumed-turn-after-reload`).
+  ///
+  /// Как использовать: `AcpClientApplication` вызывает при первом признаке
+  /// продолжения прерванного хода, затем применяет сам признак обычным путём
+  /// ([applyUpdate], [requestApproval], [completeTurn]). Сессия с активным
+  /// ходом — [RejectedStateTransition].
+  static StateTransitionResult<AcpSession> resumeTurn(
+    AcpSession session, {
+    required PromptTurnId Function() nextTurnId,
+  }) {
+    if (session.activeTurn != null) {
+      return _rejected('session already has an active prompt turn');
+    }
+
+    final last = session.turns.lastOrNull;
+    final resumed = last == null
+        ? PromptTurn(
+            id: nextTurnId(),
+            sessionId: session.id,
+            prompt: const [],
+            status: PromptTurnStatus.running,
+          )
+        : last.copyWith(
+            status: PromptTurnStatus.running,
+            stopReason: null,
+            failureMessage: null,
+            completedAt: null,
+          );
+    return _applied(
+      session.copyWith(
+        status: SessionLifecycleStatus.runningTurn,
+        turns: [
+          ...session.turns.take(session.turns.length - (last == null ? 0 : 1)),
+          resumed,
+        ],
+      ),
+    );
+  }
+
   static StateTransitionResult<AcpSession> requestApproval(
     AcpSession session,
     ApprovalRequest approval,
