@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Интеграционный тест списка и загрузки сессий
-CodeLab SHALL проверять список и загрузку сессий интеграционным тестом `apps/codelab_desktop/integration_test/session_list_load_flow_test.dart` на агенте со списком и загрузкой сессий: scripted-агенте в режиме `withSessionList` из `codelab_acp_testing` и Dart-агенте со сценарием `integration_test/llm_scripts/session_list_load.json`. Тест SHALL покрывать сайдбар со списком сессий проекта, загрузку выбранной сессии, загрузку открытой сессии после `Reconnect` и перезапуск app с теми же `SharedPreferences`. Перед каждым e2e-тестом снимок рабочего пространства в `SharedPreferences` SHALL удаляться, чтобы восстановление одного теста не влияло на другой.
+CodeLab SHALL проверять список и загрузку сессий интеграционным тестом `apps/codelab_desktop/integration_test/session_list_load_flow_test.dart` на scripted-агенте в режиме `withSessionList` из `codelab_acp_testing` — агенте со списком и загрузкой сессий, которые переживают перезапуск его процесса. Тест SHALL иметь тег `scripted-only`, пока бинарь `codelab-agent` со сценарием `--llm-script` держит сессии в памяти и не объявляет `loadSession`. Тест SHALL покрывать сайдбар со списком сессий проекта, загрузку выбранной сессии, загрузку открытой сессии после `Reconnect` и перезапуск app с теми же `SharedPreferences`. Перед каждым e2e-тестом снимок рабочего пространства в `SharedPreferences` SHALL удаляться, чтобы восстановление одного теста не влияло на другой.
 
 #### Scenario: Перезапуск app восстанавливает активную сессию
 - **WHEN** тест создаёт две сессии, отправляет промпт в одну, закрывает корневой scope app и создаёт его заново с теми же значениями `SharedPreferences`, затем подключается

@@ -50,6 +50,7 @@ final class CodeLabShellState {
     required this.selectedProjectPath,
     required this.runAgentFromProjectDirectory,
     required this.recentProjects,
+    this.hasMoreSessions = false,
     required this.currentPlan,
     required this.queuedPrompts,
   });
@@ -111,6 +112,10 @@ final class CodeLabShellState {
   final bool runAgentFromProjectDirectory;
   final List<CodeLabRecentProject> recentProjects;
 
+  /// У агента есть следующая страница сессий — сайдбар показывает
+  /// `Load more sessions` (design D7 change `add-session-list-and-reload`).
+  final bool hasMoreSessions;
+
   /// Отличает «не передан» от «явно `null`» для [currentPlan] в [copyWith].
   static const Object _unset = Object();
 
@@ -150,6 +155,7 @@ final class CodeLabShellState {
     String? selectedProjectPath,
     bool? runAgentFromProjectDirectory,
     List<CodeLabRecentProject>? recentProjects,
+    bool? hasMoreSessions,
     Object? currentPlan = _unset,
     List<CodeLabQueuedPrompt>? queuedPrompts,
   }) {
@@ -192,6 +198,7 @@ final class CodeLabShellState {
       runAgentFromProjectDirectory:
           runAgentFromProjectDirectory ?? this.runAgentFromProjectDirectory,
       recentProjects: recentProjects ?? this.recentProjects,
+      hasMoreSessions: hasMoreSessions ?? this.hasMoreSessions,
       currentPlan: identical(currentPlan, _unset)
           ? this.currentPlan
           : currentPlan as List<CodeLabPlanEntry>?,

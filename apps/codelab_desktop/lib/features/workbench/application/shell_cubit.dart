@@ -271,6 +271,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   Future<void> createSession() => _sessions.createSession();
 
+  Future<void> loadMoreSessions() => _sessions.loadMoreSessions();
+
   void selectSession(String sessionId) => _sessions.selectSession(sessionId);
 
   Future<void> submitPrompt(String prompt) =>
@@ -404,6 +406,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       selectedProjectPath: settings.selectedProjectPath,
       runAgentFromProjectDirectory: settings.runAgentFromProjectDirectory,
       recentProjects: settings.recentProjects,
+      hasMoreSessions: sessions.hasMoreSessions,
       currentPlan: active.currentPlan,
       queuedPrompts: active.queuedPrompts,
     );

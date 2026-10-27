@@ -54,6 +54,9 @@ class CodeLabShell extends StatelessWidget {
                           activeSessionId: state.activeSessionId,
                           onSessionSelected: cubit.selectSession,
                           onNewSession: cubit.createSession,
+                          onLoadMore: state.hasMoreSessions
+                              ? () => unawaited(cubit.loadMoreSessions())
+                              : null,
                         ),
                       ),
                     ],
