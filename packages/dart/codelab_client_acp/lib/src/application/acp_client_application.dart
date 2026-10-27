@@ -1074,6 +1074,9 @@ final class AcpClientApplication {
         toolCall: toolCall,
         options: permissionRequest.options,
         riskLevel: toolCall.riskLevel,
+        critical:
+            _isCritical(permissionRequest.meta) ||
+            _isCritical(permissionRequest.toolCall.meta),
         requestedAt: DateTime.now(),
       );
       final next = SessionStateMachine.requestApproval(
@@ -2164,6 +2167,14 @@ ConnectionFailureReason _connectionFailureReasonFor(
     AcpTransportErrorCode.disconnected => ConnectionFailureReason.disconnected,
     AcpTransportErrorCode.unknown => ConnectionFailureReason.unknown,
   };
+}
+
+/// `_meta.codelab.critical: true` запроса одобрения: так Dart-агент помечает
+/// опасные команды (`AcpPermissionGate`). Только булево `true` — признак;
+/// чужие значения игнорируются (forward compatibility `_meta`).
+bool _isCritical(Map<String, Object?>? meta) {
+  final codelab = meta?['codelab'];
+  return codelab is Map && codelab['critical'] == true;
 }
 
 /// Классифицирует ошибку `session/prompt` для `PromptTurn.failure`

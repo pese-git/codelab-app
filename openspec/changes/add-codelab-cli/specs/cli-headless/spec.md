@@ -32,9 +32,9 @@ stdout в headless SHALL содержать только текст ответо
 Запросы одобрения в headless SHALL решаться политикой `--approve` без чтения stdin (по умолчанию `reject`):
 - `reject` — вариант `reject_once`;
 - `read-only` — `allow_once` для вызовов вида `read`, остальное — `reject_once`;
-- `allow-all` — `allow_once` для всех запросов, кроме запросов с `PendingApprovalView.critical` (`_meta.codelab.critical: true`), которые получают `reject_once`; при старте в stderr печатается одно предупреждение.
+- `allow-all` — `allow_once` для всех запросов, кроме запросов с `PendingApprovalView.critical` (`_meta.codelab.critical: true` в запросе или его `toolCall`), которые получают `reject_once`; при старте в stderr печатается одно предупреждение.
 
-Если агент не предложил нужный вариант, запрос SHALL получать первый предложенный вариант вида `reject_*`, а без таковых — исход `cancelled`. Каждое решение SHALL давать одну строку в stderr с инструментом, решением и причиной (`policy`, `critical`, `cancelled`).
+Если агент не предложил нужный вариант, запрос SHALL получать первый предложенный вариант вида `reject_*`, а без таковых — исход `cancelled` через отмену хода. Каждое решение SHALL давать одну строку в stderr с инструментом, решением и причиной (`policy`, `critical`, `cancelled`).
 
 #### Scenario: Отказ по умолчанию
 - **WHEN** агент запрашивает одобрение `exec`, `--approve` не задан

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_client_io/codelab_client_io.dart';
@@ -9,9 +10,11 @@ import 'composition_root.dart';
 import 'exit_codes.dart';
 import 'headless/headless_runner.dart';
 import 'headless/outcome.dart';
+import 'headless/prompt_source.dart';
 import 'home.dart';
 import 'profiles/profile_arg.dart';
 import 'profiles/profiles_command.dart';
+import 'signals.dart';
 
 /// Запуск `codelab` от аргументов до кода выхода (design.md change
 /// `add-codelab-cli`, D2).
@@ -62,6 +65,9 @@ Future<int> _run(
       );
     case CliCommand.headless:
       return _runHeadless(options, environment, io);
+    case CliCommand.repl when !io.stdinIsTerminal && options.positional.isEmpty:
+      // Ни `-p`, ни `-f`, а stdin — pipe: промпт из stdin, headless (H-01).
+      return _runHeadless(options, environment, io);
     case CliCommand.repl:
       // REPL появляется в итерации 3 (tasks 6.6); до неё — ошибка
       // использования, а не молчание.
@@ -74,14 +80,7 @@ Future<int> _runHeadless(
   Map<String, String> environment,
   CliIo io,
 ) async {
-  // Промпт из файла и stdin — итерация 2 (tasks 4.6).
-  final prompt = options.prompt;
-  if (prompt == null) {
-    throw const UsageError('--prompt-file is not implemented yet.');
-  }
-  if (prompt.trim().isEmpty) {
-    throw const UsageError('No prompt.');
-  }
+  final prompt = await readPrompt(options, io);
   final cwd = await _sessionFolder(options.cwd);
   final home = CodelabHome.resolve(environment);
   final profile = await resolveAgentProfile(
@@ -94,15 +93,30 @@ Future<int> _runHeadless(
     stderr: io.stderr,
     verbose: options.verbose,
   );
+  final runner = HeadlessRunner(
+    workspace: runtime.workspace,
+    stdout: io.stdout,
+    stderr: io.stderr,
+    verbose: options.verbose,
+    approve: options.approve,
+    timeout: options.timeout,
+  );
+  // Сигнал отменяет ход; закрытие транспорта и процесса агента — в
+  // `finally` ниже (design.md, D13).
+  final signals = watchStopSignals((code) => unawaited(runner.interrupt(code)));
   try {
-    final outcome = await HeadlessRunner(
-      workspace: runtime.workspace,
-      stdout: io.stdout,
-      stderr: io.stderr,
-      verbose: options.verbose,
-    ).run(profile: profile, cwd: cwd, prompt: prompt);
+    final outcome = await runner.run(
+      profile: profile,
+      cwd: cwd,
+      prompt: prompt,
+      resume: options.resume,
+      continueLast: options.continueLast,
+      model: options.model,
+      mode: options.configMode,
+    );
     return exitCodeOf(outcome);
   } finally {
+    await signals.cancel();
     await runtime.dispose();
   }
 }

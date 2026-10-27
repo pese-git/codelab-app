@@ -1,41 +1,59 @@
 import 'dart:async';
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 
+import '../cli_args.dart';
 import '../render/sanitize.dart';
+import 'approval_policy.dart';
 import 'outcome.dart';
 
 /// Один ход без интерактива: `codelab -p`.
 ///
 /// Почему: скрипты и CI запускают агента без терминала и читают ответ из
 /// stdout, а исход — из кода выхода (H-01, H-02). Состояние сессии
-/// принадлежит kit, раннер только выводит ревизии `SessionView` и
-/// превращает ответ `session/prompt` в [HeadlessOutcome] (design.md change
-/// `add-codelab-cli`, D9).
+/// принадлежит kit, раннер только выводит ревизии `SessionView`, решает
+/// одобрения политикой `--approve` и превращает ответ `session/prompt` в
+/// [HeadlessOutcome] (design.md change `add-codelab-cli`, D9).
 ///
 /// Для чего: в [stdout] — только текст ответов агента байт в байт как
-/// пришёл, с переводом строки в конце; строки инструментов, заметки и
-/// диагностика (`verbose`) — в [stderr] без управляющих символов.
+/// пришёл, с переводом строки в конце; строки инструментов, решения
+/// политики, заметки и диагностика (`verbose`) — в [stderr] без управляющих
+/// символов.
 ///
 /// Как использовать: `HeadlessRunner(workspace: …, stdout: …, stderr: …)`,
-/// затем `await runner.run(profile: …, cwd: …, prompt: …)`; закрывает
-/// рабочее пространство вызывающий.
+/// затем `await runner.run(profile: …, cwd: …, prompt: …)`; сигнал процесса
+/// — [interrupt]. Закрывает рабочее пространство вызывающий.
 final class HeadlessRunner {
   HeadlessRunner({
     required ClientWorkspace workspace,
     required StringSink stdout,
     required StringSink stderr,
     bool verbose = false,
+    ApprovePolicy approve = ApprovePolicy.reject,
+    Duration? timeout,
+    Duration cancelGrace = const Duration(seconds: 2),
   }) : _workspace = workspace,
        _stdout = stdout,
        _stderr = stderr,
-       _verbose = verbose;
+       _verbose = verbose,
+       _approve = approve,
+       _timeout = timeout,
+       _cancelGrace = cancelGrace;
 
   final ClientWorkspace _workspace;
   final StringSink _stdout;
   final StringSink _stderr;
   final bool _verbose;
+  final ApprovePolicy _approve;
+
+  /// Предел на ход `--timeout`; `null` — без предела.
+  final Duration? _timeout;
+
+  /// Сколько ждать ответа агента на `session/cancel` после сигнала, прежде
+  /// чем выйти без него (design.md, D13).
+  final Duration _cancelGrace;
 
   /// Элементы транскрипта до промпта (реплей загруженной сессии): их текст
   /// не выводится.
@@ -47,14 +65,39 @@ final class HeadlessRunner {
   /// Вызовы инструментов и заметки, уже выведенные в stderr.
   final _reported = <String>{};
 
+  /// Одобрения, на которые политика уже ответила.
+  final _decided = <ApprovalRequestId>{};
+
+  SessionHandle? _session;
   var _hadText = false;
   var _endsWithNewline = true;
   var _noticePrinted = false;
+  var _timedOut = false;
+
+  /// Сигнал прервал прогон; завершает ожидание хода без ответа агента.
+  final _interrupted = Completer<int>();
+
+  /// Прерывает прогон сигналом [code] (`130` или `143`): отменяет идущий ход
+  /// и ждёт ответа агента не дольше `cancelGrace`.
+  Future<void> interrupt(int code) async {
+    if (_interrupted.isCompleted) {
+      return;
+    }
+    _interrupted.complete(code);
+    final session = _session;
+    if (session != null) {
+      await _cancel(session);
+    }
+  }
 
   Future<HeadlessOutcome> run({
     required ConnectionProfile profile,
     required String cwd,
     required String prompt,
+    String? resume,
+    bool continueLast = false,
+    String? model,
+    String? mode,
   }) async {
     final diagnostics = _verbose
         ? _workspace.diagnostics.listen(
@@ -65,36 +108,155 @@ final class HeadlessRunner {
             ),
           )
         : null;
+    if (_approve == ApprovePolicy.allowAll) {
+      _stderr.writeln(
+        'codelab: warning: --approve allow-all allows every permission '
+        'request except critical ones without asking',
+      );
+    }
     StreamSubscription<SessionView>? views;
+    Timer? timer;
     try {
       final SessionHandle session;
       try {
         await _workspace.connect(profile, projectDirectory: cwd);
-        session = await _workspace.newSession(cwd: cwd);
+        session = await _openSession(cwd, resume: resume, last: continueLast);
       } on Object catch (error) {
-        final message = describeFailure(error);
+        final message = error is _SetupError
+            ? error.message
+            : describeFailure(error);
         _stderr.writeln(
           sanitizeTerminalText(
-            'codelab: cannot start the agent ${_describe(profile)}: '
-            '$message',
+            error is _SetupError
+                ? 'codelab: $message'
+                : 'codelab: cannot start the agent ${_describe(profile)}: '
+                      '$message',
           ),
         );
         return ConnectFailed(message);
       }
+      _session = session;
+      if (_interrupted.isCompleted) {
+        return Signalled(await _interrupted.future);
+      }
+      try {
+        await _setOption(session, 'model', model);
+        await _setOption(session, 'mode', mode);
+      } on _SetupError catch (error) {
+        _stderr.writeln(sanitizeTerminalText('codelab: ${error.message}'));
+        return ConnectFailed(error.message);
+      }
 
       _before.addAll(session.current.transcript.map((item) => item.id));
       views = session.view.listen(_onView);
-      final outcome = await session.send(prompt);
+      if (_timeout case final limit?) {
+        timer = Timer(limit, () {
+          _timedOut = true;
+          _stderr.writeln(
+            'codelab: timeout after ${limit.inSeconds}s, cancelling the turn',
+          );
+          unawaited(_cancel(session));
+        });
+      }
+      final sent = session.send(prompt);
+      final signalled = _interrupted.future.then(
+        // После сигнала ждём ответа на отмену, но не дольше `cancelGrace`:
+        // агент может не ответить вовсе.
+        (code) => sent
+            .then<int?>((_) => code)
+            .timeout(_cancelGrace, onTimeout: () => code),
+      );
+      final first = await Future.any<Object?>([sent, signalled]);
       // Последняя ревизия могла прийти синхронно с ответом: выводим её до
       // итога, чтобы ответ не потерял хвост.
       _onView(session.current);
       if (!_endsWithNewline) {
         _stdout.writeln();
       }
-      return _outcomeOf(outcome);
+      if (_interrupted.isCompleted) {
+        return Signalled(await _interrupted.future);
+      }
+      final outcome = _outcomeOf(first! as PromptOutcome);
+      return _timedOut ? const TimedOut() : outcome;
     } finally {
+      timer?.cancel();
       await views?.cancel();
       await diagnostics?.cancel();
+    }
+  }
+
+  /// Новая сессия, сессия `--resume` или последняя сессия папки
+  /// `--continue` (по `updatedAt` из `session/list`).
+  Future<SessionHandle> _openSession(
+    String cwd, {
+    required String? resume,
+    required bool last,
+  }) async {
+    if (resume != null) {
+      return _workspace.loadSession(SessionId(resume), cwd: cwd);
+    }
+    if (!last) {
+      return _workspace.newSession(cwd: cwd);
+    }
+    final sessions = [
+      for (final summary in _workspace.current.sessions)
+        if (summary.cwd == cwd) summary,
+    ];
+    if (sessions.isEmpty) {
+      throw _SetupError('No session to continue in $cwd.');
+    }
+    final latest = sessions.reduce(
+      (a, b) => (b.updatedAt ?? DateTime(0)).isAfter(a.updatedAt ?? DateTime(0))
+          ? b
+          : a,
+    );
+    return _workspace.loadSession(latest.id, cwd: cwd);
+  }
+
+  /// `--model` и `--mode` — опции конфигурации сессии до промпта: опция
+  /// ищется по id, затем по категории; неизвестное значение — ошибка без
+  /// запроса к агенту.
+  Future<void> _setOption(
+    SessionHandle session,
+    String name,
+    String? value,
+  ) async {
+    if (value == null) {
+      return;
+    }
+    final options = session.current.configOptions;
+    final option =
+        options.where((o) => o.id == name).firstOrNull ??
+        options.where((o) => o.category == name).firstOrNull;
+    if (option == null) {
+      throw _SetupError('The agent has no "$name" option.');
+    }
+    if (!option.values.any((v) => v.value == value)) {
+      throw _SetupError(
+        'Unknown $name "$value". Available: '
+        '${option.values.map((v) => v.value).join(', ')}.',
+      );
+    }
+    if (option.currentValue == value) {
+      return;
+    }
+    try {
+      await session.setConfigOption(option.id, value);
+    } on Object catch (error) {
+      throw _SetupError('Cannot set $name "$value": ${describeFailure(error)}');
+    }
+  }
+
+  Future<void> _cancel(SessionHandle session) async {
+    try {
+      await session.cancel();
+    } on Object catch (error) {
+      // Ход мог уже закончиться: отменять нечего, это не ошибка прогона.
+      if (_verbose) {
+        _stderr.writeln(
+          sanitizeTerminalText('codelab: cancel: ${describeFailure(error)}'),
+        );
+      }
     }
   }
 
@@ -122,6 +284,7 @@ final class HeadlessRunner {
   }
 
   void _onView(SessionView view) {
+    _decideApprovals(view);
     for (final item in view.transcript) {
       if (_before.contains(item.id)) {
         continue;
@@ -161,6 +324,60 @@ final class HeadlessRunner {
     }
   }
 
+  /// Отвечает на новые запросы одобрения политикой `--approve`: ровно одно
+  /// решение и одна строка stderr на запрос (spec cli-headless «Политика
+  /// одобрений headless»).
+  void _decideApprovals(SessionView view) {
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+    for (final approval in view.pendingApprovals) {
+      if (!_decided.add(approval.approvalId)) {
+        continue;
+      }
+      final call = _callOf(view, approval.approvalId);
+      final decision = decideApproval(
+        approval,
+        _approve,
+        kind: call?.details?.kind,
+      );
+      _stderr.writeln(
+        sanitizeTerminalText(
+          describeApproval(call?.title ?? 'tool call', decision),
+        ),
+      );
+      final option = decision.optionId;
+      unawaited(
+        option == null
+            ? _cancel(session)
+            : session
+                  .respond(approval.approvalId, option)
+                  .then<void>(
+                    (_) {},
+                    onError: (Object error) => _stderr.writeln(
+                      sanitizeTerminalText(
+                        'codelab: cannot answer the permission request: '
+                        '${describeFailure(error)}',
+                      ),
+                    ),
+                  ),
+      );
+    }
+  }
+
+  /// Вызов инструмента, которому принадлежит одобрение [id].
+  static ToolCallItem? _callOf(SessionView view, ApprovalRequestId id) {
+    for (final item in view.transcript) {
+      if (item case ToolCallItem(
+        approval: PendingApprovalView(:final approvalId),
+      ) when approvalId == id) {
+        return item;
+      }
+    }
+    return null;
+  }
+
   /// Текст заметки для человека: у сорвавшегося хода — причина агента из
   /// `PromptFailure`, а не общий текст ошибки запроса.
   static String noticeText(NoticeItem notice) => switch (notice.failure) {
@@ -189,4 +406,12 @@ final class HeadlessRunner {
     ToolCallStatusView.failed => '✗',
     _ => '⊘',
   };
+}
+
+/// Ошибка подготовки сессии с готовым текстом для stderr: нет сессии для
+/// `--continue`, неизвестная опция или значение.
+final class _SetupError implements Exception {
+  const _SetupError(this.message);
+
+  final String message;
 }

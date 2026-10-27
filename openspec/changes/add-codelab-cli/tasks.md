@@ -39,18 +39,18 @@
 
 ## 4. Headless полностью (6.7, 6.9, H-01, H-02)
 
-- [ ] 4.1 Тест (acp-client-kit «Одобрения привязаны к вызову»): `packages/dart/codelab_client_core/test/` — `PendingApprovalView.critical` из `_meta.codelab.critical: true`, `false` без поля и при нестроковом/небулевом значении (красный)
-- [ ] 4.2 Реализовать `PendingApprovalView.critical` в kit (design.md, D14), перегенерировать freezed — 4.1 зелёный
-- [ ] 4.3 Тест (cli-headless «Политика одобрений headless»): `test/headless/approval_policy_test.dart` — `reject`, `read-only` (вид `read` → `allow_once`, иначе `reject_once`), `allow-all` (критичный → `reject_once` с причиной `critical`), нет нужного варианта → первый `reject_*`, нет `reject_*` → `cancelled`; строка stderr решения (красный)
-- [ ] 4.4 Реализовать `lib/src/headless/approval_policy.dart` и ответ раннера через `SessionHandle.respond`, предупреждение `allow-all` — 4.3 зелёный
-- [ ] 4.5 Тест (cli-headless «Источники промпта headless»): `test/headless/prompt_source_test.dart` — `-p` не читает файл с таким именем, `-f <файл>`, `-f -`, stdin не TTY, пустой промпт → `UsageError('No prompt.')`, ошибка чтения файла → `UsageError`, позиционные аргументы вместе с `-p` → `UsageError` (красный)
-- [ ] 4.6 Реализовать `lib/src/headless/prompt_source.dart` — 4.5 зелёный
-- [ ] 4.7 Тест: `headless_runner_test.dart` дополняется — `--timeout` → `cancel` и `TimedOut`; `--resume <id>` → `loadSession`, реплей не печатается; `--continue` → последняя сессия по `updatedAt`; `--model`/`--mode` → `setConfigOption` до `send`, неизвестное значение → код `1` с сообщением; агент без `loadSession` и `--resume` → код `1` (красный)
-- [ ] 4.8 Реализовать таймаут, загрузку сессии и опции в `headless_runner.dart` — 4.7 зелёный
-- [ ] 4.9 Тест (codelab-cli «Сигналы CLI»): `test/signals_test.dart` — безопасное завершение вызывает `cancel`, ждёт до 2 с, `dispose`, `restore`; повторный сигнал — немедленный код (на фейковом источнике сигналов) (красный)
-- [ ] 4.10 Реализовать `lib/src/signals.dart` и безопасное завершение в `run.dart` (design.md, D13) — 4.9 зелёный
-- [ ] 4.11 Режимы scripted stdio-агента `prompt_error`, `empty_response`, `hangs_until_cancel`, `with_critical_permission` с тестами в `packages/dart/codelab_acp_testing/test/` (design.md, D10)
-- [ ] 4.12 E2E: `cli/headless-exit-codes` (`prompt_error` → `1`, `empty_response` → `1`, `--timeout 1s` с `hangs_until_cancel` → `130` и `session/cancel` у агента, неизвестный флаг → `64`, SIGTERM во время хода → `143`, SIGINT → `130`), `cli/headless-permission-denied` (`with_permission_request` без `--approve` → `reject_once`, строка stderr), `cli/headless-bypass-flag` (`--approve allow-all` разрешает обычный запрос и отклоняет критичный, предупреждение в stderr), `cli/resume-last-session` (`with_session_list`: `-p` создаёт сессию, `-c -p` продолжает её)
+- [x] 4.1 Тест (acp-client-kit «Одобрения привязаны к вызову»): `packages/dart/codelab_client_core/test/` — `PendingApprovalView.critical` из `_meta.codelab.critical: true`, `false` без поля и при нестроковом/небулевом значении (красный)
+- [x] 4.2 Реализовать `ApprovalRequest.critical` в `codelab_client_acp` и `PendingApprovalView.critical` в kit (признак из `_meta` запроса или его `toolCall`, design.md, D14), перегенерировать freezed — 4.1 зелёный (`packages/dart/codelab_client_core/test/approvals/critical_approval_test.dart`)
+- [x] 4.3 Тест (cli-headless «Политика одобрений headless»): `test/headless/approval_policy_test.dart` — `reject`, `read-only` (вид `read` → `allow_once`, иначе `reject_once`), `allow-all` (критичный → `reject_once` с причиной `critical`), нет нужного варианта → первый `reject_*`, нет `reject_*` → `cancelled`; строка stderr решения (красный)
+- [x] 4.4 Реализовать `lib/src/headless/approval_policy.dart` и ответ раннера через `SessionHandle.respond`, предупреждение `allow-all` — 4.3 зелёный
+- [x] 4.5 Тест (cli-headless «Источники промпта headless»): `test/headless/prompt_source_test.dart` — `-p` не читает файл с таким именем, `-f <файл>`, `-f -`, stdin не TTY, пустой промпт → `UsageError('No prompt.')`, ошибка чтения файла → `UsageError`, позиционные аргументы вместе с `-p` → `UsageError` (красный)
+- [x] 4.6 Реализовать `lib/src/headless/prompt_source.dart` — 4.5 зелёный
+- [x] 4.7 Тест: `headless_runner_test.dart` дополняется — `--timeout` → `cancel` и `TimedOut`; `--resume <id>` → `loadSession`, реплей не печатается; `--continue` → последняя сессия по `updatedAt`; `--model`/`--mode` → `setConfigOption` до `send`, неизвестное значение → код `1` с сообщением; агент без `loadSession` и `--resume` → код `1` (красный)
+- [x] 4.8 Реализовать таймаут, загрузку сессии и опции в `headless_runner.dart` — 4.7 зелёный
+- [x] 4.9 Тест (codelab-cli «Сигналы CLI»): `test/signals_test.dart` — безопасное завершение вызывает `cancel`, ждёт до 2 с, `dispose`, `restore`; повторный сигнал — немедленный код (на фейковом источнике сигналов) (красный)
+- [x] 4.10 Реализовать `lib/src/signals.dart` и безопасное завершение в `run.dart` (design.md, D13) — 4.9 зелёный
+- [x] 4.11 Режимы scripted stdio-агента `prompt_error`, `empty_response`, `hangs_until_cancel`, `with_critical_permission` с тестами в `packages/dart/codelab_acp_testing/test/` (design.md, D10)
+- [x] 4.12 E2E: `cli/headless-exit-codes` (`prompt_error` → `1`, `empty_response` → `1`, `--timeout 1s` с `hangs_until_cancel` → `130` и `session/cancel` у агента, неизвестный флаг → `64`, SIGTERM во время хода → `143`, SIGINT → `130`), `cli/headless-permission-denied` (`with_permission_request` без `--approve` → `reject_once`, строка stderr), `cli/headless-bypass-flag` (`--approve allow-all` разрешает обычный запрос и отклоняет критичный, предупреждение в stderr), `cli/resume-last-session` (`with_session_list`: `-p` создаёт сессию, `-c -p` продолжает её)
 - [ ] 4.13 Проверка итерации 2: `check` зелёный; PR итерации 2
 
 ## 5. План в kit и рендер (6.3, U-01, U-08, U-09)

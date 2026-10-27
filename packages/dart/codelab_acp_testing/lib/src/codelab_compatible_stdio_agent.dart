@@ -30,7 +30,27 @@ enum CodelabCompatibleStdioAgentMode {
   /// `input.hint`; на промпт `/compact` отвечает отчётом о сжатии, на
   /// остальные — `echo: <text>` (design D6 change
   /// `add-command-palette-agent-commands`).
-  withAvailableCommands('with_available_commands');
+  withAvailableCommands('with_available_commands'),
+
+  /// Агент, у которого ход срывается: на `session/prompt` — JSON-RPC ошибка
+  /// `-32603` с `data.codelab` класса `provider` (design D10 change
+  /// `add-codelab-cli`).
+  promptError('prompt_error'),
+
+  /// Агент, который завершает ход `end_turn` без единого
+  /// `agent_message_chunk` (design D10 change `add-codelab-cli`).
+  emptyResponse('empty_response'),
+
+  /// Агент, который не отвечает на `session/prompt`, пока не придёт
+  /// `session/cancel`, и тогда завершает ход `cancelled` (design D10 change
+  /// `add-codelab-cli`).
+  hangsUntilCancel('hangs_until_cancel'),
+
+  /// Агент, который на промпт запрашивает одобрение опасной команды с
+  /// `_meta.codelab.critical: true` (как Dart-агент) и вариантами
+  /// `allow_once` и `reject_once`; затем сообщает выбранный вариант
+  /// (design D10 change `add-codelab-cli`).
+  withCriticalPermission('with_critical_permission');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -417,6 +437,46 @@ Future<void> main(List<String> args) async {
           _writeResponse(id, {'stopReason': 'end_turn'});
           break;
         }
+        if (_mode == 'prompt_error') {
+          _writeErrorWithData(id, -32603, 'Turn failed', {
+            'codelab': {
+              'errorClass': 'provider',
+              'message': 'Provider is unavailable',
+              'retryable': false,
+            },
+          });
+          break;
+        }
+        if (_mode == 'empty_response') {
+          _writeResponse(id, {'stopReason': 'end_turn'});
+          break;
+        }
+        if (_mode == 'hangs_until_cancel') {
+          _pendingPromptIds[sessionId] = id;
+          break;
+        }
+        if (_mode == 'with_critical_permission') {
+          _pendingSessionId = sessionId;
+          _pendingPromptIds[sessionId] = id;
+          _writeRequest(_permissionRequestId, 'session/request_permission', {
+            'sessionId': sessionId,
+            'toolCall': {
+              'toolCallId': 'test-tool-call-1',
+              'title': 'Run rm -rf build',
+              'kind': 'execute',
+              'status': 'pending',
+              'rawInput': {'command': 'rm -rf build'},
+              '_meta': {
+                'codelab': {'critical': true, 'label': 'recursive delete'},
+              },
+            },
+            'options': [
+              {'optionId': 'allow_once', 'name': 'Allow once', 'kind': 'allow_once'},
+              {'optionId': 'reject_once', 'name': 'Reject once', 'kind': 'reject_once'},
+            ],
+          });
+          break;
+        }
         if (_mode == 'with_permission_request') {
           // Defer the `session/prompt` response until the client answers
           // our `session/request_permission` — a real agent waits for the
@@ -585,6 +645,16 @@ Future<void> main(List<String> args) async {
           }
         }
         _writeResponse(id, <String, Object?>{});
+      case 'session/cancel':
+        // Уведомление: ответа нет (`07-Prompt Turn.md`, «Cancellation»).
+        // Ход, который ждёт отмены, завершается `cancelled`.
+        final params = message['params'] as Map<String, Object?>;
+        final promptId = _mode == 'hangs_until_cancel'
+            ? _pendingPromptIds.remove(params['sessionId'])
+            : null;
+        if (promptId != null) {
+          _writeResponse(promptId, {'stopReason': 'cancelled'});
+        }
       default:
         _writeError(id, -32601, 'Method not found');
     }
@@ -814,6 +884,19 @@ void _writeNotification(String method, Map<String, Object?> params) {
     'jsonrpc': '2.0',
     'method': method,
     'params': params,
+  }));
+}
+
+void _writeErrorWithData(
+  Object? id,
+  int code,
+  String message,
+  Map<String, Object?> data,
+) {
+  stdout.writeln(jsonEncode({
+    'jsonrpc': '2.0',
+    'id': id,
+    'error': {'code': code, 'message': message, 'data': data},
   }));
 }
 
