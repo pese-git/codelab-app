@@ -5,6 +5,10 @@ import 'dart:async';
 /// [label] — подпись клавиши в `/help keys` (§12.2.11, TUI-7).
 enum Key {
   enter('Enter'),
+
+  /// Различим только в полноэкранном режиме: kitty CSI u и modifyOtherKeys
+  /// разбирает `dart_tui` (design.md change `add-cli-tui`, D8).
+  shiftEnter('Shift+Enter'),
   altEnter('Alt+Enter'),
   ctrlJ('Ctrl+J'),
   tab('Tab'),
@@ -17,6 +21,10 @@ enum Key {
   right('Right'),
   home('Home'),
   end('End'),
+
+  /// Прокрутка транскрипта TUI.
+  pageUp('PgUp'),
+  pageDown('PgDn'),
   ctrlA('Ctrl+A'),
   ctrlC('Ctrl+C'),
   ctrlD('Ctrl+D'),

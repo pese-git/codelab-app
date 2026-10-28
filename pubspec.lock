@@ -249,6 +249,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.7"
+  dart_tui:
+    dependency: transitive
+    description:
+      name: dart_tui
+      sha256: "3612ecfdb0bd6fe1f653a8268585943c9daf366698d1d1b6e889ba9b47b59fcb"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.0"
   fake_async:
     dependency: transitive
     description:

@@ -18,6 +18,7 @@ import 'profiles/profiles_command.dart';
 import 'render/output_surface.dart';
 import 'repl/repl.dart';
 import 'scenario/test_scenario_command.dart';
+import 'tui/tui_runner.dart';
 import 'signals.dart';
 
 /// Запуск `codelab` от аргументов до кода выхода (design.md change
@@ -80,6 +81,14 @@ Future<int> _run(
       );
     case CliCommand.headless:
       return _runHeadless(options, environment, io);
+    case CliCommand.repl when options.ui == UiMode.tui:
+      // Полноэкранный режим рисует кадр в терминал и читает клавиши из
+      // него: без TTY на обоих потоках работать нечему (design.md change
+      // `add-cli-tui`, D4).
+      if (!io.stdinIsTerminal || !io.stdoutIsTerminal) {
+        throw const UsageError('--ui tui needs a terminal on stdin and stdout');
+      }
+      return _runTui(options, environment, io);
     case CliCommand.repl when !io.stdinIsTerminal && options.positional.isEmpty:
       // Ни `-p`, ни `-f`, а stdin — pipe: промпт из stdin, headless (H-01).
       return _runHeadless(options, environment, io);
@@ -145,6 +154,59 @@ Future<int> _runRepl(
     // Терминал восстанавливается и при исключении, которое REPL не поймал.
     terminal.restore();
     await sigint.cancel();
+    await signals.cancel();
+    await runtime.dispose();
+  }
+}
+
+Future<int> _runTui(
+  CliOptions options,
+  Map<String, String> environment,
+  CliIo io,
+) async {
+  final cwd = await _sessionFolder(options.cwd);
+  final home = CodelabHome.resolve(environment);
+  final profile = await resolveAgentProfile(
+    options.agent,
+    store: JsonFileProfileStore(home.profilesFile),
+  );
+  await home.ensureExists();
+
+  final runtime = buildCliRuntime(
+    environment: environment,
+    stderr: io.stderr,
+    verbose: options.verbose,
+  );
+  final tui = TuiRunner(
+    workspace: runtime.workspace,
+    profile: profile,
+    cwd: cwd,
+    history: HistoryFile(home.historyFile),
+    firstMessage: options.positional.isEmpty
+        ? null
+        : options.positional.join(' '),
+    resume: options.resume,
+    continueLast: options.continueLast,
+    model: options.model,
+    mode: options.configMode,
+    unicode: supportsUnicode(environment),
+    color:
+        selectOutputSurface(
+          stdoutIsTerminal: true,
+          environment: environment,
+          noColor: options.noColor,
+        ) ==
+        OutputSurface.ansi,
+    output: stdout,
+    errorOutput: io.stderr,
+  );
+  // Сигналы — наши, а не обработчик dart_tui: SIGTERM даёт код 143, ход
+  // отменяется (spec codelab-tui «Восстановление терминала после TUI»;
+  // design.md change `add-cli-tui`, D7).
+  final signals = watchStopSignals((code) => unawaited(tui.interrupt(code)));
+  try {
+    return await tui.run();
+  } finally {
     await signals.cancel();
     await runtime.dispose();
   }
