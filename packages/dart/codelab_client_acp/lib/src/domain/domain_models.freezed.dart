@@ -2309,7 +2309,7 @@ mixin _$AcpSession {
 
  SessionId get id; String get cwd; String? get title; SessionLifecycleStatus get status; List<PromptTurn> get turns; List<DiagnosticEntry> get diagnostics; SessionModeState? get modes; List<SessionConfigOption>? get configOptions;/// Commands the agent has declared via `SessionUpdate.availableCommandsUpdate`.
 /// Session-scoped rather than turn-scoped — per ACP
-/// (`docs/acp/protocol/14-Slash Commands.md`), agents may send this "at
+/// (`docs/protocols/acp/protocol/14-Slash Commands.md`), agents may send this "at
 /// any time during a session", including before any prompt turn exists.
  List<AvailableCommand> get availableCommands; DateTime? get createdAt; DateTime? get updatedAt;
 /// Create a copy of AcpSession
@@ -2561,12 +2561,12 @@ class _AcpSession extends AcpSession {
 
 /// Commands the agent has declared via `SessionUpdate.availableCommandsUpdate`.
 /// Session-scoped rather than turn-scoped — per ACP
-/// (`docs/acp/protocol/14-Slash Commands.md`), agents may send this "at
+/// (`docs/protocols/acp/protocol/14-Slash Commands.md`), agents may send this "at
 /// any time during a session", including before any prompt turn exists.
  final  List<AvailableCommand> _availableCommands;
 /// Commands the agent has declared via `SessionUpdate.availableCommandsUpdate`.
 /// Session-scoped rather than turn-scoped — per ACP
-/// (`docs/acp/protocol/14-Slash Commands.md`), agents may send this "at
+/// (`docs/protocols/acp/protocol/14-Slash Commands.md`), agents may send this "at
 /// any time during a session", including before any prompt turn exists.
 @override@JsonKey() List<AvailableCommand> get availableCommands {
   if (_availableCommands is EqualUnmodifiableListView) return _availableCommands;

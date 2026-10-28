@@ -13,7 +13,7 @@ sealed class CodeLabConfigOptionValue with _$CodeLabConfigOptionValue {
 }
 
 /// A UI-facing projection of an agent-declared `SessionConfigOption`
-/// (`docs/acp/protocol/13-Session Config Options.md`) — typically a model or
+/// (`docs/protocols/acp/protocol/13-Session Config Options.md`) — typically a model or
 /// mode selector. Deliberately not the protocol DTO itself: `codelab_ui` has no
 /// dependency on `codelab_acp_protocol`, so the mapping happens at the application
 /// boundary (`CodeLabShellCubit`), same as `AvailableCommand` -> [CodeLabCommandAction].

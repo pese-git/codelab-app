@@ -243,7 +243,7 @@ classDiagram
 
 Env выбирается, если клиент объявил в `initialize` `clientCapabilities.fs.readTextFile`,
 `fs.writeTextFile` и `terminal`. Метод, для которого возможности нет, возвращает
-`Err(unsupported)` (`exec` — `ExecErrorCode.shellUnavailable`) и ни одного запроса не отправляет (`docs/acp/protocol/09-File System.md`,
+`Err(unsupported)` (`exec` — `ExecErrorCode.shellUnavailable`) и ни одного запроса не отправляет (`docs/protocols/acp/protocol/09-File System.md`,
 `10-Terminal.md`: агент НЕ ДОЛЖЕН вызывать необъявленные методы).
 
 | Метод env | ACP |

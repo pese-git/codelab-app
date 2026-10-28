@@ -4,7 +4,7 @@
 
 `tolerate-unknown-agent-response-fields` ввёл `tolerateUnknownRootFields` (zone-значение) и применил его в `decodeAcpResult`. Механизм готов; здесь он подключается ко второму входу — уведомлению `session/update`.
 
-Реальные сообщения 0.88.0 (лог `prompt_turn_0_88_0.log`, 2026-10-09): `agent_message_chunk` с `messageId` на корне `update`; `usage_update {used, size, cost?, _meta}` (видов `usage_update` нет в `docs/acp/protocol/17-Schema.md`); `available_commands_update` — штатный.
+Реальные сообщения 0.88.0 (лог `prompt_turn_0_88_0.log`, 2026-10-09): `agent_message_chunk` с `messageId` на корне `update`; `usage_update {used, size, cost?, _meta}` (видов `usage_update` нет в `docs/protocols/acp/protocol/17-Schema.md`); `available_commands_update` — штатный.
 
 ## Goals / Non-Goals
 

@@ -16,7 +16,7 @@ client, Flutter UI, DI setup и reference agent integration согласован
 - Сделать обязательными Clean Architecture с hexagonal boundaries, SOLID, KISS,
   DRY и явные ограничения по design patterns.
 - Требовать ACP JSON-RPC 2.0 compatibility на основе официальной документации в
-  `docs/acp/protocol/`.
+  `docs/protocols/acp/protocol/`.
 - Определить MVP transports: stdio для local agents и WebSocket для remote
   agents.
 - Требовать stdio compatibility с `https://github.com/pese-git/codelab-agent`

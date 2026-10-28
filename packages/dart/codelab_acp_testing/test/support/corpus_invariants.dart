@@ -22,8 +22,8 @@ Directory repoRoot() {
   }
 }
 
-/// `docs/acp/protocol` — the vendored ACP specification.
-String protocolSpecDirectory() => '${repoRoot().path}/docs/acp/protocol';
+/// `docs/protocols/acp/protocol` — the vendored ACP specification.
+String protocolSpecDirectory() => '${repoRoot().path}/docs/protocols/acp/protocol';
 
 /// FIX-1: every `spec` reference names an existing file of the protocol
 /// specification and an anchor of that file (a heading or `<a id="…">`).

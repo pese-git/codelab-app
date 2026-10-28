@@ -11,7 +11,7 @@
 ## 1. Пакет, протокол и транспорт в памяти (4.1)
 
 - [x] 1.1 Создать пакет `packages/dart/codelab_agent_acp` (`pubspec.yaml` с allowlist D1, `analysis_options.yaml`, вложенный `AGENTS.md`), добавить в `workspace:` корневого `pubspec.yaml`; правило `codelab_agent_acp` в `codelab_architecture_tests/test/support/rules.dart` и allowlist в `pubspec_allowlist_test.dart`; тест сторожа на временном файле с `import 'dart:io'` (workspace-architecture «Автоматический сторож границ пакетов»)
-- [x] 1.2 Тест: `packages/dart/acp_protocol/test/set_session_mode_test.dart` — `SetSessionModeRequest`/`SetSessionModeResponse` по схеме `docs/acp/protocol/12-Session Model.md`, запись в `acpMethodRegistry`, кодирование и декодирование (design.md, D2) (красный)
+- [x] 1.2 Тест: `packages/dart/acp_protocol/test/set_session_mode_test.dart` — `SetSessionModeRequest`/`SetSessionModeResponse` по схеме `docs/protocols/acp/protocol/12-Session Model.md`, запись в `acpMethodRegistry`, кодирование и декодирование (design.md, D2) (красный)
 - [x] 1.3 Реализовать модели и константу метода `session/set_mode` в `acp_protocol` — 1.2 зелёный
 - [x] 1.4 Тест: `packages/dart/acp_testing/test/in_process_acp_link_test.dart` — асинхронная доставка в порядке `send`, глубокая копия, не-JSON значение → `sendFailed`, буфер до `start()`, закрытие одного конца → `failed` у другого, сообщение после закрытия отброшено с диагностикой (design.md, D9; §13.11) (красный)
 - [x] 1.5 Реализовать `packages/dart/acp_testing/lib/src/in_process_acp_link.dart` и экспорт из `acp_testing` — 1.4 зелёный
@@ -69,7 +69,7 @@
 - [x] 9.1 Тест (acp-golden-fixtures «Агентский драйвер фикстур»): `packages/dart/acp_testing/test/agent_conformance_test.dart` на заглушке агента — совпадение кадров, лишний кадр после тишины, лишний запрос `fs/*`, пропуск фикстуры без роли `agent`, неиспользованный шаг модели (красный)
 - [x] 9.2 Реализовать `packages/dart/acp_testing/lib/src/fixtures/agent_conformance.dart` (`runAgentFixture`, `AgentFixtureSetup`) — 9.1 зелёный
 - [x] 9.3 Тест (acp-golden-fixtures «Инварианты корпуса фикстур»): агентская часть теста покрытия FIX-2 со списком ожидаемого покрытия агента (красный до фикстур 9.4)
-- [x] 9.4 Написать 33 фикстуры этапа 4 в `packages/dart/acp_testing/fixtures/acp/` (design.md, D8), у каждой `spec` на раздел `docs/acp/protocol/` (FIX-1) и `extensions` для `_meta.codelab`/`data.codelab` (FIX-4):
+- [x] 9.4 Написать 33 фикстуры этапа 4 в `packages/dart/acp_testing/fixtures/acp/` (design.md, D8), у каждой `spec` на раздел `docs/protocols/acp/protocol/` (FIX-1) и `extensions` для `_meta.codelab`/`data.codelab` (FIX-4):
   - сессии: `session-load-replay`, `session-list-cwd-filter`, `session-info-title`, `session-load-interrupted-turn`, `multi-session-concurrent-prompts`;
   - ход и LLM: `prompt-max-turn-requests`, `prompt-failed-provider-auth`, `prompt-streaming-text`, `prompt-thought-chunk`, `prompt-anthropic-tool-call`, `prompt-network-drop`, `prompt-provider-error`, `prompt-cancel-mid-stream`, `prompt-parallel-tool-calls`, `prompt-turn-budget-exceeded`, `prompt-cancel-during-terminal`, `compaction-long-session-continues`;
   - инструменты: `tool-write-permission-diff`, `tool-edit-exact-replace`, `tool-edit-ambiguous-match-error`, `tool-list-dir`, `tool-search-content`, `tool-invalid-args-error`, `tool-exec-terminal-env-array`;

@@ -124,7 +124,7 @@ packages/dart/codelab_agent_core/
 | Поле | Тип | Обязательно | Смысл |
 |---|---|---|---|
 | `id` | string | да | совпадает с путём (`acp/<имя>`); загрузчик сверяет |
-| `spec` | string[] | да, непустой | ссылки на разделы спецификации: `"05-Prompt Turn.md#5-tool-invocation-and-status-reporting"` (путь относительно `docs/acp/protocol/`) |
+| `spec` | string[] | да, непустой | ссылки на разделы спецификации: `"05-Prompt Turn.md#5-tool-invocation-and-status-reporting"` (путь относительно `docs/protocols/acp/protocol/`) |
 | `description` | string | да | что проверяется, одним абзацем |
 | `goals` | string[] | нет | id целей паритета (`P-02`, `C-01`) |
 | `extensions` | string[] | нет | используемые расширения (§13.12): имя — ключ после `codelab.` (`outcome`, `budgetExceeded`, `usage`, …), для `data.codelab` — `errorData` |
@@ -438,7 +438,7 @@ runClientFixture(fx, clientFactory):
 
 ## 14.11. Инварианты корпуса
 
-1. **FIX-1.** У каждой фикстуры есть непустой `spec`, и каждая ссылка указывает на существующий файл `docs/acp/protocol/` (тест загрузчика).
+1. **FIX-1.** У каждой фикстуры есть непустой `spec`, и каждая ссылка указывает на существующий файл `docs/protocols/acp/protocol/` (тест загрузчика).
 2. **FIX-2.** Каждый вид `sessionUpdate` из `codelab_acp_protocol` и каждый метод из `acp_method_codec.dart`, включая запросы агента `fs/*`, `terminal/*` и `session/request_permission`, встречается хотя бы в одной фикстуре с ролью `agent` и хотя бы в одной с ролью `client` (тест покрытия; вид, который агент не порождает, — только в `client`). `available_commands_update` закрывает `acp/session-new-modes-config` (этап 0, список — `$any`).
 3. **FIX-3.** Каждая цель Must матрицы паритета с ACP-проявлением ссылается на существующий id фикстуры.
 4. **FIX-4.** Фикстуры без `extensions` не содержат `_meta.codelab`, `data.codelab` и методов `_codelab/*`. Фикстура, ожидающая `_meta.codelab.outcome`, объявляет `"extensions": ["outcome"]` (§14.2, этап 4); агент шлёт `outcome` всегда, а фикстуры без расширения его не проверяют (`_meta` — `$partial`, §14.6).

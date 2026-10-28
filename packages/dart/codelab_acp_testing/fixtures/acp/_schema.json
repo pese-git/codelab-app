@@ -13,7 +13,7 @@
       "pattern": "^acp/[a-z0-9]+(-[a-z0-9]+)*$"
     },
     "spec": {
-      "description": "References relative to docs/acp/protocol/: \"<file>.md#<anchor>\".",
+      "description": "References relative to docs/protocols/acp/protocol/: \"<file>.md#<anchor>\".",
       "type": "array",
       "items": {"type": "string"},
       "minItems": 1

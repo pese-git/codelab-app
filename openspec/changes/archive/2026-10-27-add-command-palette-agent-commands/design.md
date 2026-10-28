@@ -7,7 +7,7 @@
 - `CommandCatalog` в kit: change `extract-acp-client-kit` перенёс его сюда (design D9);
 - разрешения конфликтов имён: `/plan`, `/permissions` и `/compact` клиента — заглушки `isAvailable: false`, а агент может объявить команду с тем же именем.
 
-ACP (`docs/acp/protocol/14-Slash Commands.md`): агент объявляет команды `available_commands_update`, команда выполняется обычным `session/prompt`, текст которого начинается с `/name`. `input.hint` клиент показывает, пока аргумент не введён. Что клиент делает при выборе команды, ACP не задаёт. Бинарь `codelab-agent` объявляет `availableCommands: []` (agent-acp-server).
+ACP (`docs/protocols/acp/protocol/14-Slash Commands.md`): агент объявляет команды `available_commands_update`, команда выполняется обычным `session/prompt`, текст которого начинается с `/name`. `input.hint` клиент показывает, пока аргумент не введён. Что клиент делает при выборе команды, ACP не задаёт. Бинарь `codelab-agent` объявляет `availableCommands: []` (agent-acp-server).
 
 ## Goals / Non-Goals
 

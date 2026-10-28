@@ -17,7 +17,7 @@ Date: 2026-10-21
 * [delivery-roadmap.md](delivery-roadmap.md) — дорожная карта PoC → MVP → продукт 1.0: вехи, единственное определение MVP, выбор Should для 1.0;
 * [../permissions.md](../permissions.md) — модель разрешений клиента;
 * [`AGENTS.md`](../../../AGENTS.md) — §3.4 (не придумывать ACP), §10 (разрешения), §17 (OpenSpec);
-* `docs/acp/protocol/` и `openspec/specs/` — спецификация ACP и утверждённое поведение продукта.
+* `docs/protocols/acp/protocol/` и `openspec/specs/` — спецификация ACP и утверждённое поведение продукта.
 
 > **Что это за документ.** Каталог целевых возможностей Dart-агента CodeLab (`codelab-agent`,
 > ядро `codelab_agent_core`) и двух его ACP-клиентов — codelab-app (Flutter, десктоп) и
@@ -91,7 +91,7 @@ Date: 2026-10-21
 | Значение | Смысл | Что нужно до реализации |
 |---|---|---|
 | ACP-метод или вид `session/update` (`session/load`, `tool_call_update`, `plan` …) | стандартный ACP | ничего: поведение определено спецификацией |
-| `_meta` или `_codelab/*` | расширение ACP (`docs/acp/protocol/15-Extensibility.md`) | **OpenSpec change** (`AGENTS.md` §3.4, §17); клиенты, не знающие расширения, работают без него |
+| `_meta` или `_codelab/*` | расширение ACP (`docs/protocols/acp/protocol/15-Extensibility.md`) | **OpenSpec change** (`AGENTS.md` §3.4, §17); клиенты, не знающие расширения, работают без него |
 | только клиент | поведение клиента без участия агента (очередь, темы, клавиатура) | изменение в `codelab_client_core` или в UI клиента |
 | не видно | внутреннее поведение ядра | тест ядра через прямой API |
 

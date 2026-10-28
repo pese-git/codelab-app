@@ -54,7 +54,7 @@
   - `packages/dart/codelab_acp_testing` (scripted-агент);
   - `apps/codelab_desktop` (`SessionsCubit`, `ActiveSessionCubit`, `ui_mappers.dart`, хранилище снимка, граф cherrypick);
   - `packages/flutter/codelab_ui` (строка «не загружена» и кнопка подгрузки в `CodeLabSessionSidebar`).
-- ACP: новых методов и полей нет — только `session/list` и `session/load` по `docs/acp/protocol/04-Session List.md` и `03-Session Setup.md`.
+- ACP: новых методов и полей нет — только `session/list` и `session/load` по `docs/protocols/acp/protocol/04-Session List.md` и `03-Session Setup.md`.
 - Данные пользователя: новый ключ `shared_preferences` `codelab.workspace.snapshot` (версионированный JSON без секретов и транскриптов).
 - Зависимости не добавляются.
 - Документы:

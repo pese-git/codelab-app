@@ -16,7 +16,7 @@
 
 Источники:
 - `09-10-stage-5-client-kit.md`: задачи 5.2, 5.10, 5.12, алгоритмы переподключения и восстановления;
-- ACP: `docs/acp/protocol/04-Session List.md`, `03-Session Setup.md`;
+- ACP: `docs/protocols/acp/protocol/04-Session List.md`, `03-Session Setup.md`;
 - матрица паритета, строка D-03.
 
 ## Goals / Non-Goals

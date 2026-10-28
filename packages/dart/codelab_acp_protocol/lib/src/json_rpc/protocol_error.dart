@@ -4,7 +4,7 @@ const jsonRpcMethodNotFoundCode = -32601;
 const jsonRpcInvalidParamsCode = -32602;
 const jsonRpcInternalErrorCode = -32603;
 
-/// ACP `ErrorCode` resource_not_found (`docs/acp/protocol/17-Schema.md`):
+/// ACP `ErrorCode` resource_not_found (`docs/protocols/acp/protocol/17-Schema.md`):
 /// запрошенного ресурса — файла, сессии — нет.
 const acpResourceNotFoundCode = -32002;
 

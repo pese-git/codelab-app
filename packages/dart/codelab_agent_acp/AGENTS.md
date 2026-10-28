@@ -17,7 +17,7 @@
 
 * Пакет НЕ ДОЛЖЕН импортировать `dart:io`, `package:flutter/` и `package:codelab_acp_transports/io.dart` (PKG-3): правило `packages/dart/codelab_architecture_tests/test/support/rules.dart`, проверка — `melos run guard`.
 * `dependencies` — только `codelab_agent_core`, `codelab_acp_protocol`, `codelab_acp_transports`, `meta`, `async` (§1.2 документа ядра). Расширение — только через OpenSpec change. Проверка — `pubspec_allowlist_test.dart`.
-* Методы, поля и значения перечислений ACP берутся только из `codelab_acp_protocol` и `docs/acp/protocol/`. Всё сверх них — `_meta.codelab.*`, `data.codelab` или методы `_codelab/*`, и каждое расширение вводит OpenSpec change (`AGENTS.md` §3.4, ACP-2).
+* Методы, поля и значения перечислений ACP берутся только из `codelab_acp_protocol` и `docs/protocols/acp/protocol/`. Всё сверх них — `_meta.codelab.*`, `data.codelab` или методы `_codelab/*`, и каждое расширение вводит OpenSpec change (`AGENTS.md` §3.4, ACP-2).
 * Из ядра используется публичный барель `package:codelab_agent_core/codelab_agent_core.dart`.
 
 ## 3. Тесты

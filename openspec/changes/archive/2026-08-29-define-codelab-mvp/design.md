@@ -90,7 +90,7 @@ Rationale: это разделение соответствует причина
 
 ### 3. Считать официальные ACP docs источником истины по protocol
 
-`docs/acp/protocol/` и `docs/acp/protocol/17-Schema.md` определяют wire
+`docs/protocols/acp/protocol/` и `docs/protocols/acp/protocol/17-Schema.md` определяют wire
 contract. `acp_protocol` должен encode/decode и validate сообщения по этому
 contract. Custom extensions должны использовать ACP `_meta`, а custom methods
 должны начинаться с `_`.
@@ -238,7 +238,7 @@ immutability и typed recoverable failures.
 - Fluent UI может не покрыть все нужные widgets -> недостающие controls строить
   в `acp_ui` atomics, сохраняя Fluent behavior и styling.
 - ACP schema docs могут измениться -> держать protocol models generated или
-  validated against `docs/acp/protocol/17-Schema.md` и добавить conformance
+  validated against `docs/protocols/acp/protocol/17-Schema.md` и добавить conformance
   tests.
 - Stdio process management может зависеть от platform -> изолировать process
   launch за transport adapter и тестировать process exit, stderr, invalid JSON и

@@ -3,7 +3,7 @@
 Прогон реального prompt turn на `@agentclientprotocol/claude-agent-acp` 0.88.0 (2026-10-09, сырой обмен по stdio, 10 входящих сообщений пропущены через `acp_protocol`) показал: ответ агента не отображается. Агент присылает
 
 - `session/update` / `agent_message_chunk` с дополнительным корневым полем `messageId` — сам текст ответа (`pong`) отвергается как `unsupported root field "messageId"`;
-- `session/update` / `usage_update` (`used`, `size`, `cost`) — вид обновления, которого нет в вендоренной спеке `docs/acp/`; отвергается как неподдерживаемый.
+- `session/update` / `usage_update` (`used`, `size`, `cost`) — вид обновления, которого нет в вендоренной спеке `docs/protocols/acp/`; отвергается как неподдерживаемый.
 
 `AcpClientApplication._handleSessionUpdate` превращает ошибку decode в диагностику уровня `error` и выбрасывает обновление: пользователь не видит ответа модели, а журнал заполняется ошибками. Это тот же класс сбоя, что закрыли `fix-acp-capability-forward-compat` и `tolerate-unknown-agent-response-fields` для ответов на запросы; для потока `session/update` строгость тогда оставили «до фактического сбоя» (design.md того change, Open Questions) — сбой теперь воспроизведён.
 

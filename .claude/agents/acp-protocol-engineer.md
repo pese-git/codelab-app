@@ -8,7 +8,7 @@ model: sonnet
 
 ## Перед кодом
 - Прочитай корневой `AGENTS.md` (§3.4, §5, §7, §9, §12, §15, §19, §21), вложенный `AGENTS.md` пакета, `docs/architecture/acp-boundary.md`, `docs/architecture/testing.md` §8–15, §67–68.
-- Сверься с эталоном ACP: `docs/acp/protocol/` (схема — `17-Schema.md`, транспорты — `16-Transports.md`). Методы, поля и semantics НЕ придумываешь. Расхождение спецификации и задачи — остановись и сообщи.
+- Сверься с эталоном ACP: `docs/protocols/acp/protocol/` (схема — `17-Schema.md`, транспорты — `16-Transports.md`). Методы, поля и semantics НЕ придумываешь. Расхождение спецификации и задачи — остановись и сообщи.
 - Прочитай `design.md` и `tasks.md` текущего change.
 
 ## Правила зоны

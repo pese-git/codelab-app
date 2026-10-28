@@ -1,9 +1,9 @@
 ## Purpose
 
-Реализация CodeLab самого Agent Client Protocol (ACP) — обработка сообщений JSON-RPC 2.0, handshake `initialize`, настройка сессии и жизненный цикл prompt turn, а также идемпотентная обработка получаемого потока событий. Эта capability — граница wire-протокола между CodeLab и любым ACP-совместимым агентом; её нормативный источник — `docs/acp/protocol/`.
+Реализация CodeLab самого Agent Client Protocol (ACP) — обработка сообщений JSON-RPC 2.0, handshake `initialize`, настройка сессии и жизненный цикл prompt turn, а также идемпотентная обработка получаемого потока событий. Эта capability — граница wire-протокола между CodeLab и любым ACP-совместимым агентом; её нормативный источник — `docs/protocols/acp/protocol/`.
 ## Requirements
 ### Requirement: Официальный источник истины ACP
-CodeLab SHALL реализовывать поведение ACP в соответствии с `docs/acp/protocol/` и `docs/acp/protocol/17-Schema.md`.
+CodeLab SHALL реализовывать поведение ACP в соответствии с `docs/protocols/acp/protocol/` и `docs/protocols/acp/protocol/17-Schema.md`.
 
 #### Scenario: Изменение протокольного контракта
 - **WHEN** реализуются модели или методы сообщений ACP

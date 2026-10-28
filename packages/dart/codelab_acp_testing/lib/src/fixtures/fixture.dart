@@ -197,7 +197,7 @@ final class AcpFixture {
 
   final String id;
 
-  /// References relative to `docs/acp/protocol/`: `"<file>.md#<anchor>"`.
+  /// References relative to `docs/protocols/acp/protocol/`: `"<file>.md#<anchor>"`.
   final List<String> spec;
   final String description;
 

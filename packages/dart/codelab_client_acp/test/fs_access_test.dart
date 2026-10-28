@@ -100,7 +100,7 @@ void main() {
     expect(response.error!.code, jsonRpcInvalidParamsCode);
   });
 
-  // ACP ErrorCode resource_not_found (docs/acp/protocol/17-Schema.md):
+  // ACP ErrorCode resource_not_found (docs/protocols/acp/protocol/17-Schema.md):
   // агент отличает «файла нет» от прочих сбоев только по коду -32002
   // (design.md change `add-dart-agent-acp-server`, D15).
   test('a missing file is -32002 Resource not found', () async {

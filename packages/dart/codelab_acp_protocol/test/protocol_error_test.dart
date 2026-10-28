@@ -95,7 +95,7 @@ void main() {
     });
   });
 
-  // ErrorCode resource_not_found (docs/acp/protocol/17-Schema.md).
+  // ErrorCode resource_not_found (docs/protocols/acp/protocol/17-Schema.md).
   test('resourceNotFound maps to -32002 Resource not found', () {
     const error = AcpProtocolError.resourceNotFound('No such file: /a.txt');
 

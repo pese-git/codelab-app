@@ -317,7 +317,7 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
 ## 7.8. AcpPermissionGate
 
 `AcpPermissionGate` (`codelab_agent_acp`) реализует порт через `session/request_permission`
-(`docs/acp/protocol/08-Tool Calls.md`):
+(`docs/protocols/acp/protocol/08-Tool Calls.md`):
 
 1. `toolCall` — `ToolCallUpdate` с `toolCallId`, `title`, `kind`, `status: "pending"`, `rawInput`, `locations`; `content` — необязательный текстовый блок первым элементом (`reason`; у `lsp rename` — сводка `Rename "<old>" to "<new>": <n> edits in <f> files.`, §17.8.9), затем по одному `{"type":"diff","path","oldText","newText"}` на каждый элемент `diffs` (`write`/`edit` — один). Это стандартный `ToolCallContent`, расширений не требуется. Для критической команды — `_meta: {"codelab": {"critical": true, "label": "<метка правила>"}}` (расширение вводится через OpenSpec, `AGENTS.md` §3.4).
 2. `options`: `allow_once`, `allow_always` (только если `allowAlwaysOffered`), `reject_once`, `reject_always`; `optionId` совпадает с `kind`. Варианты «всегда» называют шаблон `PermissionRequest.pattern` (`Always allow <pattern>`, `Always reject <pattern>`, §13.9); метка `_meta.codelab.critical.label` — `PermissionRequest.criticalLabel`.

@@ -1,7 +1,7 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:test/test.dart';
 
-/// `session/set_mode` по схеме `docs/acp/protocol/17-Schema.md`
+/// `session/set_mode` по схеме `docs/protocols/acp/protocol/17-Schema.md`
 /// (`SetSessionModeRequest`, `SetSessionModeResponse`) и
 /// `12-Session Model.md`; design.md change `add-dart-agent-acp-server`, D2.
 void main() {

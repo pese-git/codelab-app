@@ -114,7 +114,7 @@ final class _IoTerminalProcessHandle implements TerminalProcessHandle {
     // Advance past any UTF-8 continuation bytes (`10xxxxxx`) so the cut
     // lands on a real character boundary — the retained output ends up
     // slightly under `outputByteLimit`, exactly as ACP's `terminal/create`
-    // `outputByteLimit` field requires (`docs/acp/protocol/10-Terminal.md`).
+    // `outputByteLimit` field requires (`docs/protocols/acp/protocol/10-Terminal.md`).
     while (cutIndex < bytes.length && (bytes[cutIndex] & 0xC0) == 0x80) {
       cutIndex++;
     }

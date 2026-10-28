@@ -564,7 +564,7 @@ final class AcpClientApplication {
 
   /// Starts the freshly bound transport and performs the ACP `initialize`
   /// handshake required before any session operation, per
-  /// `docs/acp/protocol/02-Initialization.md`.
+  /// `docs/protocols/acp/protocol/02-Initialization.md`.
   Future<ClientConnectionState> _establishConnection() async {
     if (_connectionState is! ClientConnectionDisconnected) {
       _transitionConnection(const ConnectionStateEvent.disconnect());

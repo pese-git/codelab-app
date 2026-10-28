@@ -3,7 +3,7 @@
 // «Обновления сразу после session/new»).
 //
 // Агент вправе прислать `available_commands_update` сразу после создания
-// сессии (`docs/acp/protocol/14-Slash Commands.md`), и Dart-агент так и
+// сессии (`docs/protocols/acp/protocol/14-Slash Commands.md`), и Dart-агент так и
 // делает. Транспорт доставляет ответ и уведомление подряд, до того как
 // `createSession` вернёт управление после `await`; найдено e2e R-20.
 

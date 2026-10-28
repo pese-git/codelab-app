@@ -2,7 +2,7 @@
 
 Документ описывает, как CodeLab работает с агентом Claude Code по ACP и **чем фактическое поведение этого агента отличается от эталонного протокола ACP**.
 
-* **Эталон (reference)** — вендоренный снапшот официальной спецификации в `docs/acp/protocol/` (схема — `17-Schema.md`). Это источник истины ACP для проекта (AGENTS.md §3.4).
+* **Эталон (reference)** — вендоренный снапшот официальной спецификации в `docs/protocols/acp/protocol/` (схема — `17-Schema.md`). Это источник истины ACP для проекта (AGENTS.md §3.4).
 * **Агент** — отдельный процесс, который CodeLab запускает по stdio. Claude Code напрямую ACP не говорит: его оборачивает ACP-совместимый адаптер.
 
 Последняя проверка: 2026-10-09 (macOS, stdio). Снимок ответов агента, на котором основаны таблицы ниже, воспроизводится рецептом из раздела 7.
@@ -145,7 +145,7 @@
 
 ## 6. Связанные материалы
 
-* Эталон протокола: `docs/acp/protocol/` (особенно `02-Initialization.md`, `03-Session Setup.md`, `13-Session Config Options.md`, `15-Extensibility.md`, `17-Schema.md`).
+* Эталон протокола: `docs/protocols/acp/protocol/` (особенно `02-Initialization.md`, `03-Session Setup.md`, `13-Session Config Options.md`, `15-Extensibility.md`, `17-Schema.md`).
 * Граница ACP в архитектуре: `docs/architecture/acp-boundary.md`.
 * OpenSpec: `fix-acp-capability-forward-compat`, `tolerate-unknown-agent-response-fields`, требования `acp-protocol-client` и `agent-workbench-ui`.
 
