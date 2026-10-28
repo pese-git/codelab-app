@@ -177,7 +177,9 @@ void main() {
       expect(shellCubit.state.activeSessionId, sessionAId);
       expect(hasPendingApproval(), isTrue);
 
-      await tester.tap(find.text('Allow once'));
+      // «Allow» с охватом по умолчанию «Only this time» отвечает
+      // `allow_once` (`lighten-approval-block`, D3).
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.allowKey));
       await tester.pump();
 
       final aDeadline = DateTime.now().add(const Duration(seconds: 10));
