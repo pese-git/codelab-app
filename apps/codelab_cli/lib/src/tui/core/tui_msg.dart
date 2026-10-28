@@ -1,6 +1,8 @@
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../../input/key_decoder.dart';
+import '../../render/terminal_renderer.dart';
+import '../../repl/picker_spec.dart';
 import 'tui_model.dart';
 
 /// Сообщение ядра экрана: ввод пользователя, событие kit или результат
@@ -45,6 +47,16 @@ final class SessionViewMsg extends TuiMsg {
   final DateTime at;
 }
 
+/// Активной стала другая сессия (`/new`, `/resume`, `/profile`): её
+/// ревизия заменяет транскрипт без сравнения номеров — у каждой сессии свой
+/// счётчик ревизий (D10).
+final class SessionAttachedMsg extends TuiMsg {
+  const SessionAttachedMsg(this.view, {required this.at});
+
+  final SessionView view;
+  final DateTime at;
+}
+
 /// Строка клиента в транскрипт: вывод команды, ошибка.
 final class NoteMsg extends TuiMsg {
   const NoteMsg(this.text);
@@ -57,4 +69,35 @@ final class EffectFailedMsg extends TuiMsg {
   const EffectFailedMsg(this.error);
 
   final Object error;
+}
+
+/// Команда без аргумента просит выбрать из списка: открыть пикер (D10).
+final class OpenPickerMsg extends TuiMsg {
+  const OpenPickerMsg(this.spec);
+
+  final PickerSpec spec;
+}
+
+/// В пикере выбран пункт [index] списка `PickerSpec.items`.
+final class PickerChosenMsg extends TuiMsg {
+  const PickerChosenMsg(this.index);
+
+  final int index;
+}
+
+/// Пикер закрыт без выбора (Esc).
+final class PickerClosedMsg extends TuiMsg {
+  const PickerClosedMsg();
+}
+
+/// `/thoughts`: новый режим показа мыслей.
+final class ThoughtsMsg extends TuiMsg {
+  const ThoughtsMsg(this.mode);
+
+  final ThoughtsMode mode;
+}
+
+/// `/clear`: заметки клиента убираются из транскрипта.
+final class ClearNotesMsg extends TuiMsg {
+  const ClearNotesMsg();
 }

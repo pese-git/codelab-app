@@ -10,6 +10,7 @@ import '../input/history.dart';
 import '../render/sanitize.dart';
 import '../repl/command_router.dart';
 import '../repl/commands/commands.dart';
+import '../repl/repl_command.dart';
 import '../session_setup.dart';
 import '../strings.dart';
 import 'core/status_line.dart';
@@ -18,6 +19,7 @@ import 'core/tui_model.dart';
 import 'core/tui_msg.dart';
 import 'core/tui_view.dart';
 import 'tui_app.dart';
+import 'tui_command_context.dart';
 import 'tui_effects.dart';
 import 'tui_input.dart';
 
@@ -37,9 +39,9 @@ const _restoreSequences =
 /// 1, 2, 6; design.md change `add-cli-tui`, D7).
 ///
 /// Для чего: подключается и открывает сессию, как REPL (`openCliSession`,
-/// `--model`/`--mode`); запускает `Program` с [TuiApp]; ревизии
-/// `SessionHandle.view` уходят в цикл `DomainMsg`; первое сообщение
-/// отправляется сразу. После выхода — повторное восстановление терминала в
+/// `--model`/`--mode`); запускает `Program` с [TuiApp]; сессией и
+/// подпиской на её ревизии владеет `TuiCommandContext` — через него же
+/// идут клиентские команды (D10); первое сообщение отправляется сразу. После выхода — повторное восстановление терминала в
 /// `finally`, последний ответ агента и статус-строка в обычном экране.
 ///
 /// Как использовать: `await TuiRunner(...).run()` — код выхода: `0`
@@ -59,6 +61,7 @@ final class TuiRunner {
     bool continueLast = false,
     String? model,
     String? mode,
+    Future<ConnectionProfile> Function(String id)? resolveProfile,
     bool unicode = true,
     bool color = true,
     IOSink? output,
@@ -75,6 +78,7 @@ final class TuiRunner {
        _continueLast = continueLast,
        _model = model,
        _mode = mode,
+       _resolveProfile = resolveProfile,
        _unicode = unicode,
        _color = color,
        _output = output ?? stdout,
@@ -92,6 +96,7 @@ final class TuiRunner {
   final bool _continueLast;
   final String? _model;
   final String? _mode;
+  final Future<ConnectionProfile> Function(String id)? _resolveProfile;
   final bool _unicode;
   final bool _color;
   final IOSink _output;
@@ -101,8 +106,10 @@ final class TuiRunner {
   final DateTime Function() _clock;
 
   final _router = CommandRouter(mvpReplCommands);
-  SessionHandle? _handle;
+  TuiCommandContext? _context;
   tea.Program? _program;
+
+  SessionHandle? get _handle => _context?.session;
 
   /// Код выхода; первый заданный побеждает (сигнал раньше `QuitMsg`).
   int? _code;
@@ -138,8 +145,6 @@ final class TuiRunner {
       );
       return failureExit;
     }
-    _handle = handle;
-    _workspace.activate(handle.id);
 
     final effects = TuiEffects(
       session: () => _handle!,
@@ -154,6 +159,8 @@ final class TuiRunner {
         history: entries,
         unicode: _unicode,
         color: _color,
+        cwd: _cwd,
+        commands: mvpReplCommands,
       ),
       input: TuiInput(),
       effects: effects,
@@ -169,9 +176,19 @@ final class TuiRunner {
     // сообщения, отправленные сразу после вызова, не теряются (§12.2.7,
     // шаг 2).
     final done = program.run(app);
-    void send(SessionView view) =>
-        program.send(DomainMsg(SessionViewMsg(view, at: _clock())));
-    final views = handle.view.listen(send);
+    final context = TuiCommandContext(
+      workspace: _workspace,
+      profile: _profile,
+      cwd: _cwd,
+      send: (msg) => program.send(DomainMsg(msg)),
+      onExit: (code) {
+        _code ??= code;
+        program.quit();
+      },
+      resolveProfile: _resolveProfile,
+      clock: _clock,
+    )..attach(handle);
+    _context = context;
     // Исход хода, которого не видно из транскрипта: отмена и сбой без
     // заметки kit — строкой клиента, как в REPL (spec codelab-cli «Рендер
     // хода в REPL»).
@@ -190,7 +207,6 @@ final class TuiRunner {
           break;
       }
     });
-    send(handle.current);
     if (_firstMessage case final text? when text.trim().isNotEmpty) {
       unawaited(
         handle
@@ -222,7 +238,7 @@ final class TuiRunner {
         sanitizeTerminalText('codelab: the screen failed: $error'),
       );
     } finally {
-      await views.cancel();
+      await context.close();
       await outcomes.cancel();
       _restoreTerminal();
     }
@@ -293,21 +309,31 @@ final class TuiRunner {
     }
   }
 
-  /// Строка с `/`. Команды агента и `/exit` работают уже здесь; остальные
-  /// клиентские команды придут в TUI с контекстом команд (tasks 5.3).
+  /// Строка с `/`: команда агента уходит промптом, клиентская — теми же
+  /// `ReplCommand`, что в REPL, через `TuiCommandContext` (D10).
   Future<void> _runCommand(String line) async {
-    final handle = _handle!;
+    final context = _context!;
+    final handle = context.session;
     switch (_router.route(line, agentCommands: handle.current.agentCommands)) {
       case PromptRoute(:final text) || AgentPromptRoute(:final text):
         await handle.send(text);
       case UnknownCommandRoute(:final name):
         _note(unknownCommand(name));
-      case ClientCommandRoute(:final command)
-          when command.name == 'exit' || command.name == 'quit':
-        _code ??= okExit;
-        _program?.quit();
-      case ClientCommandRoute(:final command):
-        _note('/${command.name} is not available in the full-screen mode yet.');
+      case ClientCommandRoute(:final command, :final args):
+        await _run(command, context, args);
+    }
+  }
+
+  /// Ошибка команды — заметкой, как в REPL; цикл экрана не падает.
+  Future<void> _run(
+    ReplCommand command,
+    ReplContext context,
+    List<String> args,
+  ) async {
+    try {
+      await command.run(context, args);
+    } on Object catch (error) {
+      context.say('codelab: ${describeFailure(error)}');
     }
   }
 

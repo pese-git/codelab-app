@@ -12,12 +12,23 @@ import '../render/sanitize.dart';
 /// по `?` (spec codelab-cli «Одобрение в REPL»; U-02; §12.2.11, TUI-6;
 /// design.md change `add-codelab-cli`, D8).
 ///
-/// Как использовать: REPL строит промпт на первый запрос
-/// `SessionView.pendingApprovals`, печатает [block], на клавишу вызывает
-/// [optionFor] и отвечает `SessionHandle.respond`; `?` печатает [details].
-/// [title] — заголовок вызова из транскрипта, [cwd] — папка сессии.
+/// Как использовать: REPL и зона одобрения TUI строят промпт [first] на
+/// первый запрос `SessionView.pendingApprovals`, показывают [block], на
+/// клавишу вызывают [optionFor] и отвечают `SessionHandle.respond`; `?`
+/// показывает [details]. [title] — заголовок вызова из транскрипта, [cwd] —
+/// папка сессии.
 final class ApprovalPrompt {
   const ApprovalPrompt(this.approval, {required this.title, required this.cwd});
+
+  /// Промпт первого ожидающего одобрения [view]; `null` — одобрений нет.
+  /// Заголовок — у вызова инструмента в транскрипте, иначе `tool call`.
+  /// Общий для REPL и TUI (design.md change `add-cli-tui`, D9).
+  static ApprovalPrompt? first(SessionView view, {required String cwd}) {
+    final approval = view.pendingApprovals.firstOrNull;
+    return approval == null
+        ? null
+        : ApprovalPrompt(approval, title: _titleOf(view, approval), cwd: cwd);
+  }
 
   final PendingApprovalView approval;
   final String title;
@@ -99,4 +110,16 @@ final class ApprovalPrompt {
     ApprovalRiskLevel.shell => 'shell',
     ApprovalRiskLevel.destructive => 'destructive',
   };
+
+  static String _titleOf(SessionView view, PendingApprovalView approval) {
+    for (final item in view.transcript) {
+      if (item case ToolCallItem(
+        :final title,
+        approval: PendingApprovalView(:final approvalId),
+      ) when approvalId == approval.approvalId) {
+        return title;
+      }
+    }
+    return 'tool call';
+  }
 }

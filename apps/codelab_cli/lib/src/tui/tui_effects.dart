@@ -22,7 +22,8 @@ final class DomainMsg extends tea.Msg {
 /// `add-cli-tui`, D7).
 ///
 /// Для чего: [SubmitCmd] — `SessionHandle.send` (очередь kit),
-/// [CancelTurnCmd] — `cancel`, [RunCommandCmd] — [runCommand],
+/// [CancelTurnCmd] — `cancel`, [RespondCmd] — `respond` (D9),
+/// [RunCommandCmd] — [runCommand],
 /// [SaveHistoryCmd] — [history], [QuitCmd] — код в [onQuit] и `QuitMsg`.
 /// Исключение команды возвращается `DomainMsg(EffectFailedMsg)`: иначе
 /// обработчик пакета напечатал бы его поверх кадра и завершил программу.
@@ -59,6 +60,9 @@ final class TuiEffects {
   tea.Cmd _cmd(TuiCmd cmd) => switch (cmd) {
     SubmitCmd(:final text) => _guarded(() => _session().send(text)),
     CancelTurnCmd() => _guarded(() => _session().cancel()),
+    RespondCmd(:final approvalId, :final optionId) => _guarded(
+      () => _session().respond(approvalId, optionId),
+    ),
     RunCommandCmd(:final line) => _guarded(() => _runCommand(line)),
     SaveHistoryCmd(:final entries) => _guarded(() => _history.save(entries)),
     QuitCmd(:final code) => () {

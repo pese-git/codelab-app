@@ -189,6 +189,8 @@ Future<int> _runTui(
     continueLast: options.continueLast,
     model: options.model,
     mode: options.configMode,
+    resolveProfile: (id) =>
+        resolveAgentProfile(id, store: JsonFileProfileStore(home.profilesFile)),
     unicode: supportsUnicode(environment),
     color:
         selectOutputSurface(

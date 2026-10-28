@@ -1,5 +1,7 @@
 import 'package:dart_tui/dart_tui.dart' as tea;
 
+import '../render/sanitize.dart';
+import '../repl/picker_spec.dart';
 import 'core/frame.dart';
 import 'core/tui_chrome.dart';
 import 'core/tui_cmd.dart';
@@ -21,14 +23,17 @@ const _spinnerTick = #codelabSpinner;
 /// видит `Program`.
 ///
 /// Почему: ядро экрана — чистые `reduce` и `render` без пакета (TUI-5), а
-/// значок хода и строку подсказок рисуют компоненты пакета (`SpinnerModel`,
-/// `HelpModel`, решение владельца проекта). Компоненты живут здесь, рядом с
-/// моделью ядра, и попадают в кадр строками `TuiChrome` (design.md change
-/// `add-cli-tui`, D7, D12).
+/// значок хода, пикер и строку подсказок рисуют компоненты пакета
+/// (`SpinnerModel`, `ListModel`, `HelpModel`, решение владельца проекта).
+/// Компоненты живут здесь, рядом с моделью ядра, и попадают в кадр строками
+/// `TuiChrome` (design.md change `add-cli-tui`, D7, D12).
 ///
 /// Для чего: [update] переводит сообщение пакета (`TuiInput`) или берёт
 /// `DomainMsg`, вызывает `reduce` и переводит команды (`TuiEffects`); пока
-/// идёт ход, тикает значок хода раз в 100 мс. Исключение `reduce` оставляет
+/// идёт ход, тикает значок хода раз в 100 мс. Пока открыт пикер, клавиши
+/// уходят в его `ListModel`: Enter — `PickerChosenMsg`, Esc вне фильтра —
+/// `PickerClosedMsg`; пикер создаётся и убирается по `TuiModel.overlay`
+/// после `reduce`. Исключение `reduce` оставляет
 /// модель прежней, третье подряд — выход с кодом `1` ([lastError] — для
 /// печати после восстановления терминала). [view] собирает кадр; ошибка
 /// `render` оставляет прошлый кадр (§12.2.7, шаг 7).
@@ -59,7 +64,8 @@ final class TuiApp implements tea.Model {
        _shared = _Shared(),
        lastError = null,
        _errorStreak = 0,
-       _ticking = false;
+       _ticking = false,
+       _list = null;
 
   TuiApp._next(
     TuiApp from, {
@@ -68,6 +74,7 @@ final class TuiApp implements tea.Model {
     int? errorStreak,
     this.lastError,
     bool? ticking,
+    tea.ListModel? Function()? list,
   }) : input = from.input,
        effects = from.effects,
        _reduce = from._reduce,
@@ -76,7 +83,8 @@ final class TuiApp implements tea.Model {
        _help = from._help,
        _shared = from._shared,
        _errorStreak = errorStreak ?? from._errorStreak,
-       _ticking = ticking ?? from._ticking;
+       _ticking = ticking ?? from._ticking,
+       _list = list == null ? from._list : list();
 
   final TuiModel model;
   final TuiInput input;
@@ -94,6 +102,9 @@ final class TuiApp implements tea.Model {
 
   /// Тик значка хода уже запланирован.
   final bool _ticking;
+
+  /// Пикер открытого `TuiModel.overlay`; `null` — пикера нет.
+  final tea.ListModel? _list;
 
   @override
   tea.Cmd? init() => null;
@@ -114,12 +125,49 @@ final class TuiApp implements tea.Model {
         running ? _tick() : null,
       );
     }
+    final list = _list;
+    if (list != null && msg is tea.KeyPressMsg) {
+      switch (_pickerKey(list, msg)) {
+        case final tea.ListModel next:
+          return (
+            TuiApp._next(
+              this,
+              model: model,
+              lastError: lastError,
+              list: () => next,
+            ),
+            null,
+          );
+        case final TuiMsg chosen:
+          return _apply(chosen);
+      }
+    }
     final translated = msg is DomainMsg
         ? msg.msg
         : input.translate(msg, now: _clock());
     if (translated == null) {
       return (this, null);
     }
+    return _apply(translated);
+  }
+
+  /// Клавиша пикера: выбор и закрытие — сообщения ядра, остальное —
+  /// следующее состояние `ListModel` (↑/↓, `/` и фильтр).
+  Object _pickerKey(tea.ListModel list, tea.KeyPressMsg msg) {
+    switch (msg.key) {
+      case 'enter':
+        final selected = list.selected;
+        return selected == null
+            ? const PickerClosedMsg()
+            : PickerChosenMsg(list.items.indexOf(selected));
+      case 'esc' when !list.filterMode && list.filter.isEmpty:
+      case 'ctrl+c':
+        return const PickerClosedMsg();
+    }
+    return list.update(msg).$1 as tea.ListModel;
+  }
+
+  (tea.Model, tea.Cmd?) _apply(TuiMsg translated) {
     final TuiModel next;
     final List<TuiCmd> cmds;
     try {
@@ -132,6 +180,7 @@ final class TuiApp implements tea.Model {
       );
     }
     final startTick = next.running && !_ticking;
+    final overlay = next.overlay;
     final effect = effects.toDartTuiCmd(cmds);
     // Новый размер — полная перерисовка: построчный diff пакета не стирает
     // хвосты строк прошлого, более широкого кадра (§12.2.7, шаг 5;
@@ -146,10 +195,27 @@ final class TuiApp implements tea.Model {
         errorStreak: 0,
         lastError: lastError,
         ticking: _ticking || startTick,
+        list: identical(overlay, model.overlay)
+            ? null
+            : () => overlay == null ? null : _picker(overlay, next.size.rows),
       ),
       startTick ? tea.batch([cmd, _tick()]) : cmd,
     );
   }
+
+  /// Пикер по [spec]: курсор на текущем значении, высота списка — до
+  /// половины экрана вместе с заголовком и строкой счётчика (D10).
+  static tea.ListModel _picker(PickerSpec spec, int rows) => tea.ListModel(
+    items: [
+      for (final item in spec.items)
+        tea.ListItem(title: sanitizeTerminalText(item.label)),
+    ],
+    cursor: spec.current ?? 0,
+    title: sanitizeTerminalText(spec.title ?? ''),
+    height: rows ~/ 2 - 4 < 1 ? 1 : rows ~/ 2 - 4,
+    styles: const tea.FullListStyles(),
+    showDescription: false,
+  );
 
   static tea.Cmd _tick() => tea.tick(
     const Duration(milliseconds: 100),
@@ -165,6 +231,7 @@ final class TuiApp implements tea.Model {
         TuiChrome(
           spinner: _spinner.view().content,
           hints: hintLine(_help),
+          picker: _list?.view().content.split('\n'),
           now: _clock(),
         ),
       );

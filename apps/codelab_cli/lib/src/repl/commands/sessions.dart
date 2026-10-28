@@ -1,8 +1,12 @@
+import 'package:codelab_client_core/codelab_client_core.dart';
+
+import '../picker_spec.dart';
 import '../repl_command.dart';
 
 /// `/sessions` — сессии папки с номерами для `/resume <n>`: открытые в этом
 /// запуске и сессии агента из `session/list` (все страницы, но не больше
-/// [_maxPages]).
+/// [_maxPages]). Список — через `ReplContext.pick`: REPL печатает его, TUI
+/// открывает пикер, выбор которого — `/resume <n>`.
 final class SessionsCommand implements ReplCommand {
   const SessionsCommand();
 
@@ -37,14 +41,27 @@ final class SessionsCommand implements ReplCommand {
       context.say('No sessions in ${context.cwd}.');
       return;
     }
-    final active = context.session.id;
-    for (final (i, summary) in sessions.indexed) {
-      final mark = summary.id == active ? '*' : ' ';
-      final title = summary.title ?? summary.id.value;
-      final updated = summary.updatedAt == null
-          ? ''
-          : '  ${summary.updatedAt!.toLocal().toString().substring(0, 16)}';
-      context.say('$mark ${i + 1}. $title (${summary.id.value})$updated');
-    }
+    final active = sessions.indexWhere((s) => s.id == context.session.id);
+    context.pick(
+      PickerSpec(
+        items: [
+          for (final (i, summary) in sessions.indexed)
+            PickerItem(
+              label:
+                  '${i + 1}. ${summary.title ?? summary.id.value} '
+                  '(${summary.id.value})${_updated(summary)}',
+              line: '/resume ${i + 1}',
+            ),
+        ],
+        current: active < 0 ? null : active,
+      ),
+    );
+  }
+
+  static String _updated(SessionSummaryView summary) {
+    final updated = summary.updatedAt;
+    return updated == null
+        ? ''
+        : '  ${updated.toLocal().toString().substring(0, 16)}';
   }
 }

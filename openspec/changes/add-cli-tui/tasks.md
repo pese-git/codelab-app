@@ -30,21 +30,21 @@
 - [x] 3.1 Тест (codelab-tui «Граница ядра экрана и адаптера», «Восстановление терминала после TUI»): `test/tui/tui_input_test.dart` — `KeyPressMsg` пакета → `Key` (`shift+enter`, `alt+enter`, `ctrl+c`, `esc`, PgUp), `PasteMsg`, `WindowSizeMsg` (повтор размера отбрасывается); `test/tui/tui_effects_test.dart` — каждая ветка `toDartTuiCmd`, исключение эффекта → `EffectFailedMsg`; `test/tui/tui_app_test.dart` — `Program` с `withInput`/`withOutput`/`withWindowSize(100, 30)`/`withoutSignalHandler()` против `FakeAgent`: промпт и стрим, вставка с `\n` без отправки, Shift+Enter в `ESC[13;2u` и `ESC[27;2;13~`, спиннер в статус-строке во время хода, строка подсказок `HelpModel` из реестра, последовательности восстановления в буфере (TUI-4), три ошибки `reduce` подряд → выход с кодом `1` (красный)
 - [x] 3.2 Реализовать `tui/tui_input.dart`, `tui/tui_effects.dart`, `tui/registry_key_map.dart`, `tui/tui_app.dart` (компоненты `SpinnerModel`, `HelpModel`; `reduceGuarded`/`renderGuarded`), `tui/tui_runner.dart` (подписка на `SessionHandle.view`, `finally` с повторным восстановлением, печать последнего ответа, коды `0`/`143`/`1`) — 3.1 зелёный
 - [x] 3.3 PTY-e2e (codelab-tui «Запуск полноэкранного режима», «Восстановление терминала после TUI»; testing-quality «PTY-e2e терминального клиента»): `test/e2e/tui_smoke_test.dart` `cli/tui-smoke` — `--ui tui` в PTY 100×30 против scripted-агента: `ESC[?1049h`, промпт → ответ на экране, статус-строка последней строкой, первое сообщение из позиционных аргументов, Ctrl+D → `ESC[?1049l`, `ESC[?2004l`, `ESC[?25h` и код `0`; SIGTERM во время хода → то же и код `143`
-- [ ] 3.4 Проверка итерации 1: `fvm dart run melos run check` зелёный; PR итерации 1
+- [x] 3.4 Проверка итерации 1: `fvm dart run melos run check` зелёный; PR итерации 1
 
 ## 4. Одобрение (D9)
 
-- [ ] 4.1 Тест (codelab-tui «Одобрение в TUI»): в `test/tui/tui_update_test.dart` и `tui_view_test.dart` — зона одобрения вместо композера с заголовком, командой или путём и папкой; подсказка только с предложенными вариантами; `y/a/n/N` → `RespondCmd` с `optionId` через `ApprovalPrompt.optionFor`; Enter и непредложенный вариант — без команд; `?` раскрывает `rawInput` с редакцией; Esc → `CancelTurnCmd`; два запроса — по одному; ответ включает следование (красный)
-- [ ] 4.2 Реализовать зону одобрения в ядре — 4.1 зелёный; в `tui_app_test.dart` — одобрение `y` против `FakeAgent`
+- [x] 4.1 Тест (codelab-tui «Одобрение в TUI»): в `test/tui/tui_update_test.dart` и `tui_view_test.dart` — зона одобрения вместо композера с заголовком, командой или путём и папкой; подсказка только с предложенными вариантами; `y/a/n/N` → `RespondCmd` с `optionId` через `ApprovalPrompt.optionFor`; Enter и непредложенный вариант — без команд; `?` раскрывает `rawInput` с редакцией; Esc → `CancelTurnCmd`; два запроса — по одному; ответ включает следование (красный)
+- [x] 4.2 Реализовать зону одобрения в ядре — 4.1 зелёный; в `tui_app_test.dart` — одобрение `y` против `FakeAgent`
 
 ## 5. Команды, пикеры и подсказки (D10, D12)
 
-- [ ] 5.1 Тест (codelab-cli «Slash-меню и клиентские команды»): сужение `ReplContext` — `set thoughts(ThoughtsMode)`, `showPlan(List<PlanEntryView>)` и `pick(PickerSpec)` вместо `renderer`; тесты REPL `/thoughts`, `/plan`, `/model`, `/mode` и `/sessions` без аргумента (печать списка, как сейчас) зелёные на новом интерфейсе (красный там, где тесты обращаются к `renderer`)
-- [ ] 5.2 Реализовать сужение в `repl/repl_command.dart`, `repl/repl_session.dart` и командах — 5.1 зелёный, поведение REPL не меняется
-- [ ] 5.3 Тест (codelab-tui «Команды и пикеры TUI»): `test/tui/tui_command_context_test.dart` — `say` → заметка в транскрипте, `clearScreen` сбрасывает заметки, `pick` → `OpenPickerMsg`, `openSession`/`switchProfile`/`reconnect` меняют `SessionHandle` и подписки; `test/tui/tui_update_test.dart` — `PickerChosenMsg` → `RunCommandCmd('/model m2')`, `PickerClosedMsg` закрывает без команд, Tab с одним кандидатом подставляет, с несколькими — пикер; `tui_app_test.dart` — `/model`: строки `ListModel` в кадре с курсором на текущем, ↓ и Enter → `session/set_config_option` с `m2`, Esc без запросов; `/help keys` печатает `KeyBindings.tui` (TUI-7) (красный)
-- [ ] 5.4 Реализовать `tui/tui_command_context.dart`, `repl/picker_spec.dart`, пикер `ListModel` и дополнение Tab в `TuiApp` — 5.3 зелёный
-- [ ] 5.5 PTY-e2e: в `cli/tui-smoke` — одобрение `y` и `/model` с выбором `m2` против scripted-агента
-- [ ] 5.6 Проверка итерации 2: `check` зелёный; PR итерации 2
+- [x] 5.1 Тест (codelab-cli «Slash-меню и клиентские команды»): сужение `ReplContext` — `set thoughts(ThoughtsMode)`, `showPlan(List<PlanEntryView>)` и `pick(PickerSpec)` вместо `renderer`; тесты REPL `/thoughts`, `/plan`, `/model`, `/mode` и `/sessions` без аргумента (печать списка, как сейчас) зелёные на новом интерфейсе (красный там, где тесты обращаются к `renderer`)
+- [x] 5.2 Реализовать сужение в `repl/repl_command.dart`, `repl/repl_session.dart` и командах — 5.1 зелёный, поведение REPL не меняется
+- [x] 5.3 Тест (codelab-tui «Команды и пикеры TUI»): `test/tui/tui_command_context_test.dart` — `say` → заметка в транскрипте, `clearScreen` сбрасывает заметки, `pick` → `OpenPickerMsg`, `openSession`/`switchProfile`/`reconnect` меняют `SessionHandle` и подписки; `test/tui/tui_update_test.dart` — `PickerChosenMsg` → `RunCommandCmd('/model m2')`, `PickerClosedMsg` закрывает без команд, Tab с одним кандидатом подставляет, с несколькими — пикер; `tui_app_test.dart` — `/model`: строки `ListModel` в кадре с курсором на текущем, ↓ и Enter → `session/set_config_option` с `m2`, Esc без запросов; `/help keys` печатает `KeyBindings.tui` (TUI-7) (красный)
+- [x] 5.4 Реализовать `tui/tui_command_context.dart`, `repl/picker_spec.dart`, пикер `ListModel` и дополнение Tab в `TuiApp` — 5.3 зелёный
+- [x] 5.5 PTY-e2e: в `cli/tui-smoke` — одобрение `y` и `/model` с выбором `m2` против scripted-агента
+- [x] 5.6 Проверка итерации 2: `check` зелёный; PR итерации 2
 
 ## 6. Документы и Definition of Done
 

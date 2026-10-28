@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../../render/ansi.dart';
@@ -14,32 +16,62 @@ import 'tui_model.dart';
 /// получает готовое содержимое (TUI-5, TUI-9, TUI-11; §12.2.7, «Раскладка
 /// кадра»; design.md change `add-cli-tui`, D5).
 ///
-/// Для чего: сверху вниз — транскрипт (прижат к низу окна), строка
-/// «↓ N new» при удержании, композер (до 10 строк, дальше прокрутка внутри),
-/// строка подсказок [TuiChrome.hints] (при высоте от 15 строк) и
+/// Для чего: сверху вниз — транскрипт (прижат к низу окна), строки пикера
+/// [TuiChrome.picker] (не выше половины экрана), строка «↓ N new» при
+/// удержании, зона одобрения или композер (до 10 строк, дальше прокрутка
+/// внутри), строка подсказок [TuiChrome.hints] (при высоте от 15 строк) и
 /// статус-строка со значком хода [TuiChrome.spinner]. Ровно `size.rows`
 /// строк, каждая — через `fitLine`.
 ///
 /// Как использовать: `TuiApp.view` на каждом кадре; курсор кадра стоит в
-/// композере после набранного.
+/// композере после набранного, а при зоне одобрения скрыт.
 Frame render(TuiModel model, TuiChrome chrome) {
   final width = model.size.columns;
   final color = model.color;
   final lines = <String>[];
 
+  final picker = model.overlay == null
+      ? const <String>[]
+      : (chrome.picker ?? const <String>[]).take(model.size.rows ~/ 2).toList();
   final transcript = transcriptLines(model);
-  final height = transcriptHeight(model);
+  final height = max(0, transcriptHeight(model) - picker.length);
   final window = _window(model, transcript, height);
   for (var i = window.length; i < height; i++) {
     lines.add('');
   }
-  lines.addAll(window);
+  lines
+    ..addAll(window)
+    ..addAll(picker);
 
   if (!model.scroll.follow) {
     final count = newSinceHold(model);
     lines.add(count > 0 ? '↓ $count new' : '');
   }
 
+  final (int, int)? cursor;
+  if (approvalOf(model) case final prompt?) {
+    lines.addAll(approvalLines(model, prompt));
+    cursor = null;
+  } else {
+    cursor = _composer(model, lines);
+  }
+
+  if (hintsVisible(model)) {
+    lines.add(_fitHints(chrome.hints ?? '', width));
+  }
+
+  final status = statusLine(statusInfoOf(model, chrome), width);
+  lines.add(color ? '$sgrDim$status$sgrReset' : status);
+
+  return Frame([
+    for (final line in lines.take(model.size.rows))
+      fitLine(line, width, color: color),
+  ], cursor: cursor);
+}
+
+/// Строки композера в [lines]; результат — курсор кадра после набранного.
+(int, int) _composer(TuiModel model, List<String> lines) {
+  final width = model.size.columns;
   final composer = model.composer;
   final visible = composerRows(model);
   final first = composer.row >= visible ? composer.row - visible + 1 : 0;
@@ -56,21 +88,7 @@ Frame render(TuiModel model, TuiChrome chrome) {
   final cursorColumn = displayWidth(
     '${composer.row == 0 ? inputPrompt : inputContinuation}$before',
   );
-
-  if (hintsVisible(model)) {
-    lines.add(_fitHints(chrome.hints ?? '', width));
-  }
-
-  final status = statusLine(statusInfoOf(model, chrome), width);
-  lines.add(color ? '$sgrDim$status$sgrReset' : status);
-
-  return Frame(
-    [
-      for (final line in lines.take(model.size.rows))
-        fitLine(line, width, color: color),
-    ],
-    cursor: (cursorRow, cursorColumn < width ? cursorColumn : width - 1),
-  );
+  return (cursorRow, cursorColumn < width ? cursorColumn : width - 1);
 }
 
 /// Видимые строки транскрипта: последние при следовании, окно с [top]
