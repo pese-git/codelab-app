@@ -149,6 +149,7 @@
   | R-14 | `core/litellm-proxy-base-url` | LiteLLM Proxy как OpenAI-совместимый `baseUrl` из конфигурации |
   | R-15 | `core/agent-definition-markdown-frontmatter`, `acp/set-config-option-agent` | опция `agent` содержит определение из `.codelab/agents/*.md`, многострочный `tools` разобран, битый YAML — диагностика с именем файла |
   | R-16 | `core/config-reads-legacy-codelab-toml`, `cli/config-legacy-read-only` | `codelab.toml` читается без `config.yaml`; неизвестный провайдер — ошибка, не mock; рядом с `config.yaml` — одно предупреждение `config.legacy_ignored`; `config migrate` пишет `config.yaml`. Отказ записи при активном `codelab.toml` проверяется, когда есть команды записи (8.10); до 8.10 команд записи нет |
+  | R-24 | `acp/session-new-with-mcp` | сервер из `session/new.mcpServers` подключается, его инструмент доступен модели в этой сессии; на этапе 4 такие серверы только пропускались с `mcp.server.skipped` (R-02) |
 * 8.9 (MVP): `secret_resolver_test.dart`, `secret_store_backends_test.dart`,
   `debug_secrets_test.dart` зелёные; `codelab secret set codelab/openai` с ключом из stdin, затем
   `codelab -p` во встроенном режиме (этап 7) использует ключ; значение секрета не встречается в
