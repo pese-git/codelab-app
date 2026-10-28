@@ -38,6 +38,10 @@ melos:
       description: Run static analysis across the workspace.
       run: fvm dart analyze
 
+    analyze:packages:
+      description: Run static analysis package by package — the CI analyze job of a pull request scoped by MELOS_PACKAGES (tool/ci/affected.dart).
+      run: fvm dart run melos exec -c 4 -- "fvm dart analyze ."
+
     test:
       description: Run all Dart and Flutter tests.
       run: fvm dart run melos exec -c 1 --dir-exists=test --fail-fast -- "fvm flutter test"

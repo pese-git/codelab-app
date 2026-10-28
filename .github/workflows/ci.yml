@@ -5,34 +5,75 @@ on:
     branches: [master, develop]
   pull_request:
   schedule:
-    - cron: "0 3 * * *" # nightly run of the Dart VM suites
+    - cron: "0 3 * * *" # nightly full run of the Dart VM suites
+  workflow_dispatch: # full run of any branch on request
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 # Integration tests run on the Dart VM only: real processes and sockets in the
-# package tests, the ACP fixture corpus, and (stage 6) the CLI PTY e2e. The
-# Flutter macOS app tests (`melos run test:e2e:app:*`) are a local acceptance
-# gate and are not run in GitHub CI.
+# package tests, the ACP fixture corpus, and the CLI PTY e2e. The Flutter macOS
+# app tests (`melos run test:e2e:app:*`) are a local acceptance gate of
+# release/* and are not run in GitHub CI.
+#
+# Scope (AGENTS.md §21, docs/architecture/testing.md §74): a pull request from
+# feature/* or hotfix/* into develop checks only what it affects —
+# tool/ci/affected.dart turns the changed files into the job matrix. Everything
+# runs in full on push to develop and master, on pull requests from release/*
+# or into master, nightly, and on workflow_dispatch.
 jobs:
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.scope.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dart-lang/setup-dart@v1
+      - id: scope
+        env:
+          BASE: origin/${{ github.base_ref || 'develop' }}
+          FULL_REASON: >-
+            ${{ github.event_name != 'pull_request' && format('event {0}', github.event_name)
+            || github.base_ref == 'master' && 'pull request into master'
+            || startsWith(github.head_ref, 'release/') && 'pull request from release/*'
+            || '' }}
+        # An empty package config: `dart run` would resolve the whole pub
+        # workspace, which needs the FVM Flutter SDK; the script uses dart:io only.
+        run: |
+          echo '{"configVersion":2,"packages":[]}' > "$RUNNER_TEMP/package_config.json"
+          dart --packages="$RUNNER_TEMP/package_config.json" tool/ci/affected.dart --base "$BASE" --full-reason "$FULL_REASON"
+
   checks:
     name: ${{ matrix.job }}
+    needs: scope
+    if: needs.scope.outputs.matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { job: format, scripts: "check-format" }
-          - { job: analyze, scripts: "analyze" }
-          - { job: test, scripts: "test" }
-          - { job: conformance, scripts: "protocol-conformance conformance:client conformance:agent" }
-          - { job: guard, scripts: "guard prompts:check" }
-          - { job: web-compile, scripts: "web-compile" } # + flutter build web (stage 10)
-          # The CLI e2e against the scripted agent run inside `test`; here —
-          # the same tests against codelab-agent (change add-cli-e2e-agent-matrix).
-          - { job: e2e-cli-dart, scripts: "test:e2e:cli:dart-agent" }
+        include: ${{ fromJSON(needs.scope.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/prepare
-      - run: for s in ${{ matrix.scripts }}; do fvm dart run melos run "$s" || exit 1; done
+      # MELOS_PACKAGES narrows melos exec to the affected packages; it is set
+      # only when non-empty, because an empty value selects no packages at all.
+      - env:
+          PACKAGES: ${{ matrix.packages }}
+        run: |
+          if [ -n "$PACKAGES" ]; then export MELOS_PACKAGES="$PACKAGES"; fi
+          for s in ${{ matrix.scripts }}; do fvm dart run melos run "$s" || exit 1; done
+
+  # The one status to require in branch protection: green when every scheduled
+  # check passed or there was nothing to check (documentation only).
+  ci:
+    needs: [scope, checks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "scope=${{ needs.scope.result }} checks=${{ needs.checks.result }}"
+          [ "${{ needs.scope.result }}" = success ] || exit 1
+          case "${{ needs.checks.result }}" in success|skipped) ;; *) exit 1;; esac

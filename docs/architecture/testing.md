@@ -1107,24 +1107,36 @@ Changed Dart files должны соответствовать `dart format`.
 
 ## 74. CI levels
 
-CI может быть разделён на уровни.
-
-Например:
+CI разделён на два уровня (`.github/workflows/ci.yml`, `AGENTS.md` §21).
 
 ```text
-PR fast checks:
-  format
-  analyze
-  unit tests
-  BLoC/widget tests
+Затронутое — pull request из feature/* и hotfix/* в develop:
+  format             весь репозиторий (быстро)
+  analyze, test      изменённые пакеты и все, кто от них зависит (MELOS_PACKAGES)
+  guard              всегда; prompts:check — если изменено ядро агента
+  conformance        корпуса затронутых ACP-слоёв
+  web-compile        если изменено ядро агента или его зависимость
+  e2e-cli-dart       если затронуты codelab_cli или codelab_agent
+  только документация — без джобов
 
-Full checks:
-  integration tests
-  platform tests
-  architecture tests
+Полностью — push в develop и master, pull request из release/* или в master,
+ночной запуск, workflow_dispatch:
+  все шаги melos run check
 ```
 
-Конкретная pipeline определяется repository configuration.
+Матрицу считает `tool/ci/affected.dart` (логика — `tool/ci/ci_scope.dart`, тесты —
+`codelab_architecture_tests/test/ci_scope_test.dart`). Затронутое — пакеты pub workspace с
+изменёнными файлами и их зависимые по `dependencies` и `dev_dependencies`. Файл вне пакетов и вне
+документации (`pubspec.lock`, `analysis_options.yaml`, `.github/`, `tool/`) включает полный прогон.
+Документацией внутри пакета считаются только `AGENTS.md`, `README.md` и `CHANGELOG.md`: остальные
+`*.md` там — данные, например промпты ядра агента.
+
+Связь, которой нет в графе пакетов (тест читает файл другого пакета по пути), суженный прогон может
+пропустить; её ловит полный прогон после merge в `develop` и ночной запуск. Полный прогон ветки по
+запросу — `gh workflow run ci --ref <ветка>`.
+
+Обязательной проверкой в защите ветки СЛЕДУЕТ делать только итоговый джоб `ci`: пропущенные джобы
+матрицы не должны блокировать merge.
 
 ---
 
