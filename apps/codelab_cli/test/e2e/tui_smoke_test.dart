@@ -21,6 +21,7 @@ import 'support/pty_process.dart';
 
 Future<void> main() async {
   final skip = await PtyProcess.unavailableReason();
+  final agentSkip = await E2eCliAgent.current.unavailable();
   late Directory dir;
   late E2eCliLaunch launch;
 
@@ -70,31 +71,41 @@ Future<void> main() async {
     expect(stty, isNot(contains('-echo ')));
   }
 
-  test('cli/tui-smoke', () async {
-    final pty = await tui(CodelabCompatibleStdioAgentMode.normal);
-    await pty.waitFor('\x1b[?1049h');
+  test(
+    'cli/tui-smoke',
+    () async {
+      final pty = await tui(CodelabCompatibleStdioAgentMode.normal);
+      await pty.waitFor('\x1b[?1049h');
 
-    pty.write('hello');
-    pty.write('\r');
-    await pty.waitFor(launch.answer);
-    pty.write('\x04');
+      pty.write('hello');
+      pty.write('\r');
+      await pty.waitFor(launch.answer);
+      pty.write('\x04');
 
-    expect(await pty.exitCode, 0);
-    expectRestored(pty);
-  }, skip: skip);
+      expect(await pty.exitCode, 0);
+      expectRestored(pty);
+    },
+    skip: skip ?? agentSkip,
+    tags: pythonAgent,
+  );
 
-  test('cli/tui-smoke: the first message from the arguments', () async {
-    final pty = await tui(
-      CodelabCompatibleStdioAgentMode.normal,
-      args: ['hello'],
-    );
+  test(
+    'cli/tui-smoke: the first message from the arguments',
+    () async {
+      final pty = await tui(
+        CodelabCompatibleStdioAgentMode.normal,
+        args: ['hello'],
+      );
 
-    await pty.waitFor(launch.answer);
-    pty.write('\x04');
+      await pty.waitFor(launch.answer);
+      pty.write('\x04');
 
-    expect(await pty.exitCode, 0);
-    expectRestored(pty);
-  }, skip: skip);
+      expect(await pty.exitCode, 0);
+      expectRestored(pty);
+    },
+    skip: skip ?? agentSkip,
+    tags: pythonAgent,
+  );
 
   test('cli/tui-smoke: SIGTERM during a turn exits with 143', () async {
     final pty = await tui(

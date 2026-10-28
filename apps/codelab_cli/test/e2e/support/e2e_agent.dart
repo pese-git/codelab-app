@@ -9,11 +9,15 @@ import '../../support/cli_process.dart';
 typedef _Mode = CodelabCompatibleStdioAgentMode;
 
 /// Какой агент стоит за e2e терминального клиента.
-enum E2eAgentKind { scripted, dart }
+enum E2eAgentKind { scripted, dart, python }
 
 /// Тег тестов поведения, которое есть только у scripted-агента, и тестов, не
 /// зависящих от агента; прогон против Dart-агента их исключает.
 const scriptedOnly = 'scripted-only';
+
+/// Тег тестов обычного хода, которые идут и против Python-агента: его
+/// mock-провайдер отвечает текстом, без инструментов (design.md, D4).
+const pythonAgent = 'python-agent';
 
 /// Агент e2e CLI, выбранный переменной окружения `CODELAB_E2E_AGENT`.
 ///
@@ -30,7 +34,7 @@ const scriptedOnly = 'scripted-only';
 /// mode: …)`; `launch.agent` — значение `--agent`. Режим без сценария
 /// Dart-агента — [StateError]: такой тест помечается [scriptedOnly].
 final class E2eCliAgent {
-  E2eCliAgent._(this.kind);
+  E2eCliAgent._(this.kind, this._path);
 
   /// Агент из окружения процесса тестов.
   static final E2eCliAgent current = E2eCliAgent.fromEnvironment(
@@ -42,10 +46,38 @@ final class E2eCliAgent {
       E2eCliAgent._(switch (environment['CODELAB_E2E_AGENT'] ?? 'scripted') {
         'scripted' => E2eAgentKind.scripted,
         'dart' => E2eAgentKind.dart,
+        'python' => E2eAgentKind.python,
         final other => throw ArgumentError.value(other, 'CODELAB_E2E_AGENT'),
-      });
+      }, environment['PATH'] ?? '');
 
   final E2eAgentKind kind;
+
+  /// `PATH`, в котором ищется Python-агент.
+  final String _path;
+
+  /// Причина пропустить тест: агента нет; `null` — агент есть.
+  ///
+  /// Python-агент — `codelab` из `PATH`, который отвечает на `serve --help`
+  /// кодом `0` и флагом `--stdio`. Другая программа `codelab` (бинарь CLI
+  /// этапа 9) так не отвечает — тест пропускается, а не падает (D4).
+  Future<String?> unavailable() async {
+    if (kind != E2eAgentKind.python) {
+      return null;
+    }
+    try {
+      final help = await Process.run(
+        'codelab',
+        const ['serve', '--help'],
+        environment: {'PATH': _path},
+      );
+      if (help.exitCode == 0 && '${help.stdout}'.contains('--stdio')) {
+        return null;
+      }
+    } on ProcessException {
+      // Нет `codelab` в `PATH`.
+    }
+    return 'Python agent (codelab serve) is not installed';
+  }
 
   bool get isScripted => kind == E2eAgentKind.scripted;
 
@@ -58,7 +90,46 @@ final class E2eCliAgent {
   }) => switch (kind) {
     E2eAgentKind.scripted => _scripted(dir, mode),
     E2eAgentKind.dart => _dart(dir, mode),
+    E2eAgentKind.python => _python(dir, mode),
   };
+
+  /// Python-агент со своим `CODELAB_HOME`: провайдер `mock` отвечает без
+  /// сети, а `codelab-stdio.lock` агента не пересекается с CLI и другими
+  /// тестами. `CODELAB_HOME` задаётся в самой команде (`env`): агент
+  /// наследует окружение CLI, а у CLI свой `CODELAB_HOME`.
+  static Future<E2eCliLaunch> _python(Directory dir, _Mode mode) async {
+    if (mode != _Mode.normal) {
+      throw StateError(
+        'the Python agent mock answers text only, not ${mode.wireName}: '
+        'tag only plain-turn tests "$pythonAgent"',
+      );
+    }
+    final home = '${dir.path}/python-home';
+    await Directory(home).create(recursive: true);
+    File(
+      '$home/codelab.toml',
+    ).writeAsStringSync('[llm]\nprovider = "mock"\nmodel = "mock/mock"\n');
+    // У mock-провайдера нет инструментов, опций и списка сессий: такие
+    // ожидания в тестах с тегом python-agent не нужны.
+    Never unsupported([Object? _]) =>
+        throw StateError('not a plain-turn expectation of the Python agent');
+    return E2eCliLaunch._(
+      agent: "stdio:env CODELAB_HOME='$home' codelab serve --stdio",
+      answer: 'Mock response',
+      permissionTitle: '',
+      criticalTitle: '',
+      permissionCommand: '',
+      allowedMarker: '',
+      rejectedMarker: '',
+      allowedAnswer: '',
+      rejectedAnswer: '',
+      models: const [],
+      completedToolRow: '',
+      sessionAnswer: unsupported,
+      listedSession: unsupported,
+      savedSessions: unsupported,
+    );
+  }
 
   static Future<E2eCliLaunch> _scripted(Directory dir, _Mode mode) async =>
       E2eCliLaunch._(

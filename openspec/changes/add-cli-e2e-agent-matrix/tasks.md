@@ -40,23 +40,23 @@
 
 ## 4. Python-агент (D4)
 
-- [ ] 4.1 Тест в `e2e_agent_test.dart`:
+- [x] 4.1 Тест в `e2e_agent_test.dart`:
   - `unavailable` — причина, когда `codelab serve --help` не отвечает как Python-агент (подставная команда в `PATH`);
   - `launch` в режиме `python` пишет `codelab.toml` с `provider = "mock"` во временный `CODELAB_HOME` и даёт ответ `Mock response`.
 
   Красный.
-- [ ] 4.2 Режим `python` в `E2eCliAgent`, тег `python-agent` в `dart_test.yaml` и скрипт `test:e2e:cli:python-agent`; тесты с тегом пропускаются с причиной без агента — 4.1 зелёный.
-- [ ] 4.3 Прогон `fvm dart run melos run test:e2e:cli:python-agent`:
+- [x] 4.2 Режим `python` в `E2eCliAgent`, тег `python-agent` в `dart_test.yaml` и скрипт `test:e2e:cli:python-agent`; тесты с тегом пропускаются с причиной без агента — 4.1 зелёный.
+- [x] 4.3 Прогон `fvm dart run melos run test:e2e:cli:python-agent`:
   - с установленным Python-агентом — зелёный;
   - без агента — пропуски с причиной (сценарии «Python-агент не установлен», «Ответ Python-агента»).
 
 ## 5. Документы и Definition of Done
 
-- [ ] 5.1 `09-11-stage-6-cli-mvp.md`:
+- [x] 5.1 `09-11-stage-6-cli-mvp.md`:
   - 6.10 — матрица агентов, `CODELAB_E2E_AGENT`, скрипты;
   - DoD — `test:e2e:cli:dart-agent` в `check` и CI, Python-агент — локально.
-- [ ] 5.2 `agent-parity-goals.md`: критерии U-01…U-05, U-07, U-15, H-01, H-02, P-09, S-04 — e2e против scripted- и Dart-агента, H-01 и U-01 — также Python. `delivery-roadmap.md` §4.3: пункт e2e CLI против трёх агентов выполнен — ссылка на этот change.
-- [ ] 5.3 Проверка DoD:
+- [x] 5.2 `agent-parity-goals.md`: критерии U-01…U-05, U-07, U-15, H-01, H-02, P-09, S-04 — e2e против scripted- и Dart-агента, H-01 и U-01 — также Python. `delivery-roadmap.md` §4.3: пункт e2e CLI против трёх агентов выполнен — ссылка на этот change.
+- [x] 5.3 Проверка DoD:
   - `fvm dart run melos run check` зелёный локально и в CI;
   - `test:e2e:cli:python-agent` зелёный с установленным Python-агентом;
   - `openspec validate add-cli-e2e-agent-matrix --strict` без ошибок;

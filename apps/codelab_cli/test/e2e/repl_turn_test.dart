@@ -25,6 +25,7 @@ final _sgr = RegExp('\x1b\\[[0-9;]*m');
 
 Future<void> main() async {
   final skip = await PtyProcess.unavailableReason();
+  final agentSkip = await E2eCliAgent.current.unavailable();
   late Directory dir;
   late E2eCliLaunch launch;
 
@@ -78,33 +79,43 @@ Future<void> main() async {
     expect(stty, isNot(contains('-echo ')));
   }
 
-  test('cli/repl-prompt-streaming', () async {
-    final pty = await repl(
-      CodelabCompatibleStdioAgentMode.normal,
-      args: ['hello'],
-    );
+  test(
+    'cli/repl-prompt-streaming',
+    () async {
+      final pty = await repl(
+        CodelabCompatibleStdioAgentMode.normal,
+        args: ['hello'],
+      );
 
-    await pty.waitFor(launch.answer);
-    expect(launch.answer.allMatches(pty.text), hasLength(1));
-    pty.write('\x04');
+      await pty.waitFor(launch.answer);
+      expect(launch.answer.allMatches(pty.text), hasLength(1));
+      pty.write('\x04');
 
-    expect(await pty.exitCode, 0);
-    expectRestored(pty);
-  }, skip: skip);
+      expect(await pty.exitCode, 0);
+      expectRestored(pty);
+    },
+    skip: skip ?? agentSkip,
+    tags: pythonAgent,
+  );
 
-  test('cli/repl-prompt-streaming in a pipe has no escape bytes', () async {
-    final launch = await E2eCliAgent.current.launch(dir);
+  test(
+    'cli/repl-prompt-streaming in a pipe has no escape bytes',
+    () async {
+      final launch = await E2eCliAgent.current.launch(dir);
 
-    final result = await CliProcess.run(
-      ['--agent', launch.agent, '--cwd', dir.path, 'hello'],
-      environment: {'CODELAB_HOME': '${dir.path}/codelab'},
-      stdin: '',
-    );
+      final result = await CliProcess.run(
+        ['--agent', launch.agent, '--cwd', dir.path, 'hello'],
+        environment: {'CODELAB_HOME': '${dir.path}/codelab'},
+        stdin: '',
+      );
 
-    expect(result.exitCode, 0, reason: '$result');
-    expect(result.stdout, contains(launch.answer));
-    expect(result.stdout, isNot(contains(_esc)));
-  });
+      expect(result.exitCode, 0, reason: '$result');
+      expect(result.stdout, contains(launch.answer));
+      expect(result.stdout, isNot(contains(_esc)));
+    },
+    skip: agentSkip,
+    tags: pythonAgent,
+  );
 
   test('cli/repl-prompt-streaming with NO_COLOR has no SGR', () async {
     final pty = await repl(
