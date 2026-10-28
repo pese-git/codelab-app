@@ -229,4 +229,48 @@ void main() {
     expect(quits, [1]);
     expect((current as TuiApp).lastError, isA<StateError>());
   });
+
+  test('a cancelled turn leaves a cancelled line in the transcript', () async {
+    final exit = await started(firstMessage: 'slow');
+    final prompt = await agent.next(sessionPromptMethod);
+    // Ход с текстом: у хода без вывода kit сам пишет заметку со
+    // `stopReason`, а строка отмены — забота клиента, как в REPL.
+    agent.chunk('s1', 'Thinking long');
+    await eventually(() => output.text.contains('Thinking long'));
+
+    type('\x1b');
+    await agent.nextNotification(sessionCancelMethod);
+    agent.respond(prompt, {'stopReason': 'cancelled'});
+    await eventually(() => output.text.contains(turnCancelled));
+    expect(output.text, isNot(contains('stopReason')));
+
+    type('\x04');
+    expect(await exit, 0);
+  });
+
+  test('a resize redraws the whole frame', () {
+    final app = TuiApp(
+      model: TuiModel.initial(
+        profile: 'p',
+        size: const TerminalSize(columns: 80, rows: 24),
+      ),
+      input: TuiInput(),
+      effects: TuiEffects(
+        session: () => throw StateError('no session'),
+        history: _NoHistory(),
+        onQuit: (_) {},
+        runCommand: (_) async {},
+      ),
+    );
+
+    final (next, cmd) = app.update(tea.WindowSizeMsg(50, 14));
+
+    // Строки прошлого кадра шире нового: без очистки экрана их хвосты
+    // остаются (design.md, D7).
+    expect(
+      (next as TuiApp).model.size,
+      const TerminalSize(columns: 50, rows: 14),
+    );
+    expect(cmd!(), isA<tea.ClearScreenMsg>());
+  });
 }
