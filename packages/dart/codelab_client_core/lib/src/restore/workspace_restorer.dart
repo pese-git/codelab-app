@@ -60,6 +60,10 @@ final class WorkspaceRestorer {
   /// снимке, пока пользователь их не откроет (ленивая загрузка, D6 шаг 2).
   final _pending = <SessionId, SessionRef>{};
 
+  /// Проект, которому принадлежат [_restoring] и [_pending]; `null` — снимок
+  /// без проекта или восстанавливать уже нечего.
+  String? _snapshotProject;
+
   var _started = false;
   WorkspaceSnapshot? _written;
   WorkspaceSnapshot? _wanted;
@@ -89,6 +93,7 @@ final class WorkspaceRestorer {
     }
     _written = snapshot;
     _restoring = snapshot;
+    _snapshotProject = snapshot.projectDirectory;
     for (final session in snapshot.openSessions) {
       _pending[session.id] = session;
     }
@@ -146,10 +151,24 @@ final class WorkspaceRestorer {
     _observeCurrent();
   }
 
-  /// Записывает снимок для [state], если он изменился.
+  /// Записывает снимок для [state], если он изменился. Проект, отличный от
+  /// проекта снимка, отменяет ещё не выполненное восстановление и убирает
+  /// неоткрытые сессии снимка из следующей записи.
   void observe(WorkspaceState state) {
     if (!_started) {
       return;
+    }
+    // Пользователь перешёл в другой проект: сессии снимка принадлежат
+    // прошлому, и восстанавливать их в новом проекте нельзя — иначе первое
+    // подключение загрузило бы чужие сессии, а при неудаче создало бы
+    // `session/new` в папке прошлого проекта.
+    final project = state.projectDirectory;
+    if (_snapshotProject != null &&
+        project != null &&
+        project != _snapshotProject) {
+      _restoring = null;
+      _pending.clear();
+      _snapshotProject = null;
     }
     final opened = [
       for (final session in state.sessions)

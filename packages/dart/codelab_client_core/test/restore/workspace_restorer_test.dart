@@ -222,6 +222,40 @@ void main() {
     expect(sentMethods(), [initializeMethod]);
   });
 
+  // Пользователь открыл другую папку до первого подключения: снимок описывает
+  // прошлый проект, и его сессии не должны ни появиться в новом проекте, ни
+  // дать `session/new` в старой папке.
+  for (final (name, switchProject) in [
+    (
+      'selectProject',
+      (KitAgent agent) => agent.workspace.selectProject('/other'),
+    ),
+    ('the folder given to connect', (KitAgent agent) {}),
+  ]) {
+    test('another project chosen before the first connection ($name): the '
+        'snapshot is not restored and leaves the saved state', () async {
+      store = InMemoryWorkspaceSnapshotStore(_snapshot());
+      agent = KitAgent(capabilities: _withLoad, snapshots: store);
+      expect(await agent.workspace.restoreProject(), '/work');
+
+      switchProject(agent);
+      await agent.workspace.connect(
+        const StdioProfile(id: 'agent', label: 'Agent', command: 'agent'),
+        projectDirectory: '/other',
+      );
+      await agent.workspace.flushSnapshot();
+
+      expect(sentMethods(), [initializeMethod]);
+      expect(agent.workspace.current.sessions, isEmpty);
+      expect(agent.workspace.current.activeSessionId, isNull);
+      final saved = jsonDecode(store.value!) as Map<String, Object?>;
+      final window = (saved['windows']! as Map)['main'] as Map;
+      expect(window['projectDirectory'], '/other');
+      expect(window['activeSessionId'], isNull);
+      expect(window['openSessions'], isEmpty);
+    });
+  }
+
   test('restoring sends no prompts and answers no approvals', () async {
     store = InMemoryWorkspaceSnapshotStore(_snapshot());
     agent = KitAgent(capabilities: _withLoad, snapshots: store);
