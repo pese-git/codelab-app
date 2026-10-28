@@ -11,7 +11,7 @@
 
 ## 1. Назначение
 
-`codelab_agent_io` — реализации портов ядра на `dart:io` для настольных хостов (`apps/codelab_agent`, `codelab_embedded`, `codelab_cli`):
+`codelab_agent_io` — реализации портов ядра на `dart:io` для настольных хостов: сейчас — `apps/codelab_agent`, с этапа 7 — `codelab_embedded` (ещё не создан), через который агента встраивают клиенты:
 - `LocalExecutionEnv` — файлы и процессы (с этапа 2);
 - `JsonlSessionStore` — журналы сессий в JSONL (этап 3);
 - конфигурация и хранилища секретов (этапы 4 и 8).

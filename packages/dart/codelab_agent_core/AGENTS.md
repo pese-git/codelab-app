@@ -7,7 +7,7 @@
 * **PKG-1.** Ни один файл `lib/**` НЕ ДОЛЖЕН импортировать `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web`, `package:flutter`, `package:codelab_acp_protocol`, `package:codelab_acp_transports` — в том числе через `export`, `part` и альтернативы условного импорта.
 * **PKG-2.** `dependencies` в `pubspec.yaml` — только подмножество `{http, meta, collection, async, crypto}`. Расширение allowlist — только через OpenSpec change.
 * **PKG-3.** `codelab_agent_acp` и `codelab_agent_mcp` (после MVP — и `codelab_agent_a2a`) не импортируют `dart:io` — правило этих пакетов, ядро от них не зависит.
-* **PKG-4.** Клиенты (`apps/codelab_desktop`, `apps/codelab_cli`) импортируют агентские пакеты только через `codelab_embedded` и `codelab_setup`.
+* **PKG-4.** Клиенты (`apps/codelab_desktop`, `apps/codelab_cli`) НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*`. С этапа 7 доступ к агенту у них появится только через пакеты `codelab_embedded` и `codelab_setup` — они ещё не созданы (заготовки правил — в `test/support/rules.dart` сторожа).
 * **PKG-5.** Публичный экспорт ядра НЕ ДОЛЖЕН раскрывать `lib/src/llm/providers/*` и внутренние классы цикла: адаптеры провайдеров — через фабрику `createStreamFunction(ProviderConfig config, CoreLlmServices services)` (§2.10).
 * **PKG-6.** Ядро НЕ ДОЛЖНО само создавать HTTP-клиент, таймеры ожидания, случайность и id: `http.Client`, `Clock`, `Random` и `IdGenerator` приходят от хоста (в тестах — детерминированные).
 

@@ -2,7 +2,7 @@
 
 Инструкции для AI coding agents, разработчиков и CI, работающих в этом monorepo.
 
-Проект: **Flutter Desktop клиент для взаимодействия с AI agents по ACP (Agent Client Protocol)**.
+Проект: **Flutter Desktop клиент для взаимодействия с AI agents по ACP (Agent Client Protocol)**, а также встраиваемый Dart-агент (`apps/codelab_agent`) и терминальный клиент (`apps/codelab_cli`).
 
 Основной технологический стек:
 
@@ -111,7 +111,7 @@ AI-agent обязан интерпретировать эти формулиро
 Источники истины:
 
 * `openspec/specs/`
-* `packages/codelab_acp_protocol/`
+* `packages/dart/codelab_acp_protocol/`
 
 Если требуемое поведение ACP не определено, агент ДОЛЖЕН остановиться и запросить уточнение либо предложить OpenSpec change.
 
@@ -143,7 +143,7 @@ AI-agent обязан интерпретировать эти формулиро
 
 Точные версии зависимостей определяются конфигурацией репозитория:
 
-* `.fvm/fvm_config.json`
+* `.fvmrc` (FVM 3; `.fvm/fvm_config.json` — копия для старых версий FVM, держится в синхроне)
 * `pubspec.yaml`
 * `pubspec.lock`
 
@@ -159,6 +159,7 @@ AI-agent обязан интерпретировать эти формулиро
 .
 ├── AGENTS.md
 ├── pubspec.yaml          # pub workspace и секция melos:
+├── .fvmrc
 ├── .fvm/
 │   └── fvm_config.json
 ├── docs/
@@ -210,7 +211,7 @@ AI-agent обязан интерпретировать эти формулиро
 * Пакеты в `packages/dart/` ДОЛЖНЫ оставаться pure Dart и НЕ ДОЛЖНЫ зависеть от Flutter.
 * Пакеты в `packages/flutter/` МОГУТ зависеть от Flutter.
 * `codelab_ui` НЕ ДОЛЖЕН содержать application/business logic.
-* `codelab_acp_testing` МОЖЕТ использоваться другими пакетами только как `dev_dependency`. Единственное исключение — `apps/codelab_cli`: команда `test-scenario` проигрывает фикстуры в рабочем бинаре, поэтому пакет — обычная зависимость, а импорт `package:codelab_acp_testing/` разрешён только из `lib/src/scenario/` (проверяет сторож; design.md change `add-codelab-cli`, D3).
+* `codelab_acp_testing` МОЖЕТ использоваться другими пакетами только как `dev_dependency`. Единственное исключение — `apps/codelab_cli`: команда `test-scenario` проигрывает фикстуры в рабочем бинаре, поэтому пакет — обычная зависимость, а импорт `package:codelab_acp_testing/` разрешён только из `lib/src/scenario/` (проверяет сторож; `openspec/changes/archive/2026-10-28-add-codelab-cli/design.md`, D3).
 * `package:codelab_acp_transports/codelab_acp_transports.dart` ДОЛЖЕН оставаться web-безопасным; IO-транспорты (`StdioAcpTransport`, `WebSocketAcpTransport`) импортируются из `package:codelab_acp_transports/io.dart` только composition root и тестами.
 * Клиенты (`apps/*`) НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` напрямую.
 * Границы пакетов проверяет тест-сторож `packages/dart/codelab_architecture_tests` (`melos run guard`): правило нового пакета добавляется в `test/support/rules.dart` вместе с пакетом.
@@ -274,7 +275,7 @@ application / domain
 
 ## 7. ACP boundary
 
-`packages/codelab_acp_protocol` представляет **wire protocol**, а не UI state приложения.
+`packages/dart/codelab_acp_protocol` представляет **wire protocol**, а не UI state приложения.
 
 Входящий поток:
 
@@ -387,7 +388,7 @@ Streaming updates ДОЛЖНЫ обрабатываться предсказуе
 
 Компенсирующий контроль, обязательный вместо approval: working directory containment — `path`/`cwd` из этих запросов ДОЛЖНЫ быть ограничены рабочей директорией активной сессии; выход за её пределы ДОЛЖЕН отклоняться как protocol/security error, до выполнения операции.
 
-См. `openspec/changes/add-acp-fs-client-support/design.md` и `openspec/changes/add-acp-terminal-client-support/design.md` для полного обоснования и рассмотренных альтернатив.
+См. `openspec/changes/archive/2026-09-04-add-acp-fs-client-support/design.md` и `openspec/changes/archive/2026-09-04-add-acp-terminal-client-support/design.md` для полного обоснования и рассмотренных альтернатив.
 
 Перед изменением permission flow агент ОБЯЗАН прочитать:
 
@@ -523,7 +524,7 @@ Consistency важнее локальной архитектурной "идеа
 
 * соблюдать Dart naming conventions;
 * предпочитать immutable data там, где это оправдано;
-* использовать типизированные errors/failures;
+* использовать типизированные errors/failures (`docs/architecture/error-handling.md`);
 * НЕ бросать `String`;
 * НЕ использовать generic `Exception`, если существует осмысленный typed error;
 * production code НЕ ДОЛЖЕН использовать `print`;
@@ -717,6 +718,8 @@ melos bootstrap
 2. Запустить static analysis для затронутых packages.
 3. Запустить релевантные tests.
 4. Выполнить более широкую проверку monorepo, если изменены shared packages, ACP, public APIs или cross-package dependencies.
+
+Уровни и виды тестов описаны в `docs/architecture/testing.md`.
 
 Типовые команды:
 
