@@ -725,9 +725,108 @@ CodeLab SHALL host tool panes in a dock on the right, with one closable tab per 
 - **THEN** the dock opens with both tabs and Protocol active
 
 ### Requirement: Session pane header
-The session pane SHALL have a header with the session title, a project chip named after the folder of the session's `cwd` with the full path as a tooltip, and a mode chip when the agent publishes a mode config option.
+The session pane SHALL have a header with the session title, a project chip named after the folder of the session's `cwd` with the full path as a tooltip, and a mode chip when the agent publishes a mode config option. While the session is busy, the header SHALL show a turn state chip: "Turn running" with a progress indicator while a turn runs, "Waiting for approval" while the turn waits for a pending approval, and "Cancelling…" while a cancellation awaits the agent's answer. An idle, failed or detached session SHALL show no turn state chip.
 
 #### Scenario: Header of an active session
 - **WHEN** a session titled "Fix reconnect race" in `/work/codelab-app` is active and the agent publishes the mode "standard"
 - **THEN** the header shows "Fix reconnect race", a "codelab-app" chip with the tooltip `/work/codelab-app`, and a "standard" chip
+
+#### Scenario: Turn state in the header
+- **WHEN** the active session runs a turn, then the turn waits for an approval, then the user approves and the turn ends
+- **THEN** the header shows "Turn running", then "Waiting for approval", then "Turn running", and no turn state chip after the turn ends
+
+### Requirement: Transcript reads as a conversation
+The transcript SHALL be laid out as a conversation in a column centred in the session pane, at most 760 px wide, without a frame around the transcript. A user message SHALL be a bubble aligned to the right, at most 78% of the column width, without a "You" label. An agent reply SHALL be plain text in the column without a card and without an "Agent" label. Consecutive rows SHALL be separated by spacing, not by per-row cards.
+
+#### Scenario: A prompt and its reply
+- **WHEN** the user sends "Render replies as markdown" and the agent answers "I'll split the transcript into typed rows."
+- **THEN** the transcript shows the prompt in a right-aligned bubble and the answer as plain text below it, and neither row shows a "You" or "Agent" label
+
+#### Scenario: Wide window keeps a readable column
+- **WHEN** the session pane is 1200 px wide
+- **THEN** the transcript column is 760 px wide and centred in the pane
+
+### Requirement: Model thoughts in a collapsible block
+Each `agent_thought_chunk` segment SHALL be shown as a thought block distinct from the agent reply: muted text, a thought icon and a header. While the thought is streaming (it is the last transcript item of a running turn), the header SHALL read "Thinking…" with a progress indicator and the block SHALL be expanded. After the thought ends, the header SHALL read "Thoughts" and the block SHALL collapse to its header without animation. The user's manual choice to expand or collapse a block SHALL win over these defaults and SHALL survive the row scrolling out of view. In `verbose` the block SHALL be expanded by default; in `summary` it SHALL stay a one-line header. Thought text SHALL be shown as is, without markdown, and SHALL NOT be part of the agent reply.
+
+#### Scenario: Thought while streaming
+- **WHEN** the agent streams `agent_thought_chunk` updates and nothing else yet
+- **THEN** the transcript shows an expanded block headed "Thinking…" with a progress indicator and the thought text
+
+#### Scenario: Thought collapses when the reply starts
+- **WHEN** after the thought the agent streams `agent_message_chunk` updates
+- **THEN** the thought block collapses to its header "Thoughts", and the reply text is shown below it as plain text
+
+#### Scenario: The user's choice wins
+- **WHEN** the user expands a finished thought block, scrolls it out of view and back
+- **THEN** the block is still expanded
+
+### Requirement: Tool call as a one-line row
+Each tool call SHALL be shown as one row with a status glyph, a label by the tool call's kind, a detail and a status tag, following `ToolRowView` from the client kit (requirement "Строка инструмента без сырого JSON" of `acp-client-kit`). The row SHALL NOT show the protocol kind name or raw JSON. The status tag SHALL read "Queued", "Running", "Done", "Failed" or "Cancelled" by the tool call status. A row with a secondary line or text output SHALL be expandable: expanded, it SHALL show the secondary line and the text output. In `summary` and `normal` rows SHALL be collapsed by default and in `verbose` expanded; a row with a pending approval SHALL always be expanded.
+
+While the tool call has a pending approval, its row SHALL show instead of the status tag the approval risk as a tag ("Read-only", "Local write", "Network", "Shell", "Destructive"), and its detail SHALL be the full subject of the request — the command for a tool call of kind `execute` — without truncation: the detail SHALL wrap up to three lines, and a longer detail SHALL offer "Show full command" that shows the rest in place.
+
+#### Scenario: Completed read
+- **WHEN** the agent reads `lib/main.dart` with a tool call of kind `read` that completes
+- **THEN** the transcript shows one row "Read lib/main.dart" with the tag "Done", without the words `read` or `completed` and without its `rawInput`
+
+#### Scenario: Command awaiting approval
+- **WHEN** a tool call of kind `execute` with `rawInput.command` "echo running tests" waits for an approval with the risk `shell`
+- **THEN** its row reads "Run echo running tests" with the tag "Shell" and is expanded with the decision bar
+
+#### Scenario: Long command is never cut before the decision
+- **WHEN** a tool call of kind `execute` waits for an approval with a command longer than three lines of the row
+- **THEN** the row shows the first three lines of the command and "Show full command", and choosing "Show full command" shows the whole command without an ellipsis
+
+#### Scenario: Failed call shows its reason when expanded
+- **WHEN** a tool call fails with the text content "File not found: lib/main.dart" and the user expands its row
+- **THEN** the row shows "File not found: lib/main.dart" below its header
+
+### Requirement: Approval card inside the tool call row
+A pending approval SHALL be shown inside its tool call row as one decision bar at the bottom of the row, not as a separate card. The decision bar SHALL separate the decision from its scope: it SHALL show an "Allow" button and a "Reject" button and a scope selector with "Only this time" and "Always". A button SHALL answer with the agent's option of its decision and the selected scope:
+
+| Button | Only this time | Always |
+|---|---|---|
+| Allow | `allow_once` | `allow_always` |
+| Reject | `reject_once` | `reject_always` |
+
+The scope SHALL default to "Only this time" when the request has an `allow_once` or `reject_once` option, and to "Always" otherwise. A scope SHALL be offered only when the request has an option of that scope. A button whose decision has no option in the selected scope SHALL be disabled and SHALL say that the agent offers no such option. The "Always" scope SHALL show the names of the agent's `allow_always` and `reject_always` options. The scope SHALL apply to this approval only. Each button SHALL show the shortcut of the option it answers with; option shortcuts SHALL stay as in requirement "Approval options are rendered and bound to shortcuts by kind" and SHALL work whatever scope is selected. The decision bar SHALL NOT repeat the command shown in the row header and SHALL NOT carry a title. The reason, when present, SHALL be shown as a muted line above the decision bar. The raw input SHALL stay collapsed until the user chooses "View raw input" in the decision bar, as in requirement "Approval panel offers a collapsed raw input view". After the decision the decision bar SHALL be replaced by a tag in the tool call row naming the outcome, as in requirement "Паттерны взаимодействия agent workbench".
+
+#### Scenario: Command decision bar
+- **WHEN** a tool call of kind `execute` with command "echo running tests" asks for permission with the four standard option kinds
+- **THEN** the bottom of its row shows "Allow", "Reject" and the scope "Only this time", and the command is not shown a second time
+
+#### Scenario: Allow once by default
+- **WHEN** the user chooses "Allow" without changing the scope
+- **THEN** CodeLab selects the `allow_once` option for that approval
+
+#### Scenario: Always is an explicit scope
+- **WHEN** the user selects the scope "Always" and chooses "Reject"
+- **THEN** CodeLab selects the `reject_always` option for that approval
+
+#### Scenario: A scope without an option for a decision
+- **WHEN** a request offers only `allow_always` and `reject_once` and the scope is "Only this time"
+- **THEN** "Reject" is enabled, "Allow" is disabled and says the agent offers no such option, and selecting "Always" enables "Allow" and disables "Reject"
+
+#### Scenario: Shortcut of an always option
+- **WHEN** the approval is focused, the scope is "Only this time" and the user presses the shortcut of `allow_always`
+- **THEN** CodeLab selects the `allow_always` option for that approval
+
+#### Scenario: Decision leaves a tag
+- **WHEN** the user chooses "Allow" with the scope "Only this time" and the agent's `allow_once` option is named "Allow once"
+- **THEN** the decision bar disappears and the tool call row shows a tag "Allow once" with a success tone
+
+### Requirement: Transcript notices by severity
+Transcript notices SHALL be styled by their kind. A failed turn notice SHALL be an error InfoBar, as in requirement "Failed turn notice with Retry". A detached session notice SHALL be a warning InfoBar. A notice that a new session was started instead of a restored one, a session reconnection notice, and an empty turn notice SHALL be a neutral one-line note with an info icon. Only the failed turn notice SHALL use the error tone.
+
+#### Scenario: New session after a failed restore
+- **WHEN** the agent cannot restore sessions and the workspace starts a new session with a notice
+- **THEN** the transcript shows "The agent cannot restore sessions; a new session was started." as a neutral note, not as an error
+
+### Requirement: Empty session after connecting
+When the connection is established and the active session has no transcript items, the session pane SHALL show an empty state inviting the user to send the first message instead of the connection screen. The connection screen SHALL be shown only while the connection is not established.
+
+#### Scenario: New session while connected
+- **WHEN** the connection is established and the user creates a new session
+- **THEN** the session pane shows the empty state with the composer focused, and no Connect button
 
