@@ -1,0 +1,39 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "rm -rf .",
+                "timeout": 30
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1"
+          }
+        },
+        "reply": [
+          {
+            "text": "approved"
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  }
+}

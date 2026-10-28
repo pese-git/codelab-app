@@ -1,9 +1,9 @@
 // E2E headless: коды выхода, политика одобрений и продолжение сессии
 // (tasks 4.12; H-01, H-02; spec cli-headless «Коды выхода headless»,
 // «Политика одобрений headless», «Источники промпта headless»; codelab-cli
-// «Сигналы CLI»). Собранный CLI против scripted stdio-агента.
+// «Сигналы CLI»). Собранный CLI против агента `CODELAB_E2E_AGENT`
+// (testing-quality «PTY-e2e терминального клиента»).
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart'
@@ -11,6 +11,7 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart'
 import 'package:test/test.dart';
 
 import '../support/cli_process.dart';
+import 'support/e2e_agent.dart';
 
 typedef _Mode = CodelabCompatibleStdioAgentMode;
 
@@ -24,10 +25,12 @@ void main() {
   });
   tearDown(() => tmp.deleteSync(recursive: true));
 
+  late E2eCliLaunch launch;
+
   Future<CliResult> run(_Mode mode, List<String> args, {String? stdin}) async {
-    final agent = await scriptedAgent(tmp, mode: mode);
+    launch = await E2eCliAgent.current.launch(tmp, mode: mode);
     return CliProcess.run(
-      [...args, '-a', agent, '-C', tmp.path],
+      [...args, '-a', launch.agent, '-C', tmp.path],
       environment: environment,
       stdin: stdin,
     );
@@ -36,17 +39,21 @@ void main() {
   /// CLI с ходом, который агент не завершит сам; сигнал — после старта
   /// агента и отправки промпта.
   Future<CliProcess> hangingTurn() async {
-    final agent = await scriptedAgent(tmp, mode: _Mode.hangsUntilCancel);
+    final launch = await E2eCliAgent.current.launch(
+      tmp,
+      mode: _Mode.hangsUntilCancel,
+    );
     final process = await CliProcess.start([
       '-p',
       'hello',
       '-a',
-      agent,
+      launch.agent,
       '-C',
       tmp.path,
       '-v',
     ], environment: environment);
-    await process.waitFor('test agent ready');
+    // Строка `-v` клиента — общая для всех агентов: соединение готово.
+    await process.waitFor('to=ClientConnectionReady');
     // Промпт уходит сразу после `session/new`; пауза с запасом на старт VM.
     await Future<void>.delayed(const Duration(seconds: 1));
     return process;
@@ -103,7 +110,7 @@ void main() {
 
       for (final result in [piped, fromFile]) {
         expect(result.exitCode, 0, reason: '$result');
-        expect(result.stdout, 'hello from compatible stdio agent\n');
+        expect(result.stdout, '${launch.answer}\n');
       }
     });
 
@@ -112,7 +119,7 @@ void main() {
 
       expect(result.exitCode, 64, reason: '$result');
       expect(result.stderr, contains('No prompt.'));
-    });
+    }, tags: scriptedOnly);
   });
 
   test('cli/headless-permission-denied: without --approve the request is '
@@ -120,10 +127,10 @@ void main() {
     final result = await run(_Mode.withPermissionRequest, ['-p', 'go']);
 
     expect(result.exitCode, 0, reason: '$result');
-    expect(result.stdout, 'approved: reject_once\n');
+    expect(result.stdout, '${launch.rejectedAnswer}\n');
     expect(
       result.stderr,
-      contains('permission "Run test command": reject_once (policy)'),
+      contains('permission "${launch.permissionTitle}": reject_once (policy)'),
     );
   });
 
@@ -137,7 +144,7 @@ void main() {
       ]);
 
       expect(result.exitCode, 0, reason: '$result');
-      expect(result.stdout, 'approved: allow_once\n');
+      expect(result.stdout, '${launch.allowedAnswer}\n');
       expect(result.stderr, contains('allow-all'));
     });
 
@@ -150,10 +157,12 @@ void main() {
       ]);
 
       expect(result.exitCode, 0, reason: '$result');
-      expect(result.stdout, 'approved: reject_once\n');
+      expect(result.stdout, '${launch.rejectedAnswer}\n');
       expect(
         result.stderr,
-        contains('permission "Run rm -rf build": reject_once (critical)'),
+        contains(
+          'permission "${launch.criticalTitle}": reject_once (critical)',
+        ),
       );
     });
   });
@@ -162,21 +171,14 @@ void main() {
       'folder', () async {
     final first = await run(_Mode.withSessionList, ['-p', 'first']);
     expect(first.exitCode, 0, reason: '$first');
-    expect(first.stdout, 'echo: first\n');
+    expect(first.stdout, '${launch.sessionAnswer('first')}\n');
 
     final second = await run(_Mode.withSessionList, ['-c', '-p', 'second']);
 
     expect(second.exitCode, 0, reason: '$second');
     // Реплей первого хода в stdout не попадает.
-    expect(second.stdout, 'echo: second\n');
-    final journal =
-        jsonDecode(
-              File(
-                '${tmp.path}/codelab_compatible_stdio_agent.dart.sessions.json',
-              ).readAsStringSync(),
-            )
-            as List;
-    expect(journal, hasLength(1));
-    expect((journal.single as Map)['turns'], hasLength(2));
+    expect(second.stdout, '${launch.sessionAnswer('second')}\n');
+    // Вторая сессия не создана: `-c` продолжил первую.
+    expect(launch.savedSessions(), 1);
   });
 }

@@ -120,6 +120,10 @@ melos:
       description: Run the codelab_cli end-to-end tests (the CLI process against the scripted stdio agent, Dart VM; also part of test).
       run: fvm dart test apps/codelab_cli/test/e2e
 
+    test:e2e:cli:dart-agent:
+      description: Run the codelab_cli end-to-end tests except scripted-only against codelab-agent with --llm-script (kernel compiled by the test, Dart VM; part of check).
+      run: CODELAB_E2E_AGENT=dart fvm dart test apps/codelab_cli/test/e2e --exclude-tags scripted-only
+
     test:e2e:app:dart-agent:
       description: Build codelab-agent and run every codelab_desktop macOS integration test except scripted-only against it, one file per flutter test run (release/* only).
       # По одному файлу на запуск: `flutter test integration_test -d macos`
@@ -143,13 +147,14 @@ melos:
         }
 
     check:
-      description: Run format, analyze, guard, tests, protocol, client and agent fixture conformance, and web compile.
+      description: Run format, analyze, guard, tests, the CLI e2e against the Dart agent, protocol, client and agent fixture conformance, and web compile.
       steps:
         - check-format
         - analyze
         - guard
         - prompts:check
         - test
+        - test:e2e:cli:dart-agent
         - protocol-conformance
         - conformance:client
         - conformance:agent

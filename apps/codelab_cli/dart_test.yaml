@@ -1,0 +1,5 @@
+# Теги e2e CLI (design.md change `add-cli-e2e-agent-matrix`, D5).
+tags:
+  # Поведение только scripted-агента или тест, не зависящий от агента:
+  # прогон против Dart-агента идёт с `--exclude-tags scripted-only`.
+  scripted-only:

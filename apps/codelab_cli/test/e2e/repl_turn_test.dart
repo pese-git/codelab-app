@@ -17,6 +17,7 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart'
 import 'package:test/test.dart';
 
 import '../support/cli_process.dart';
+import 'support/e2e_agent.dart';
 import 'support/pty_process.dart';
 
 const _esc = '\x1b';
@@ -25,6 +26,7 @@ final _sgr = RegExp('\x1b\\[[0-9;]*m');
 Future<void> main() async {
   final skip = await PtyProcess.unavailableReason();
   late Directory dir;
+  late E2eCliLaunch launch;
 
   setUp(() async => dir = await Directory.systemTemp.createTemp('cli_repl_'));
   tearDown(() => dir.delete(recursive: true));
@@ -36,7 +38,7 @@ Future<void> main() async {
     List<String> args = const [],
     Map<String, String> environment = const {},
   }) async {
-    final agent = await scriptedAgent(dir, mode: mode);
+    launch = await E2eCliAgent.current.launch(dir, mode: mode);
     return PtyProcess.start(
       'sh',
       [
@@ -45,7 +47,7 @@ Future<void> main() async {
         dartExecutable(),
         await CliProcess.kernel(),
         '--agent',
-        agent,
+        launch.agent,
         '--cwd',
         dir.path,
         ...args,
@@ -59,8 +61,9 @@ Future<void> main() async {
     );
   }
 
-  /// `with_tool_calls` ждёт одобрения правки: Esc отменяет ход, только
-  /// когда запрос уже показан, иначе отмена гонится с запросом.
+  /// `with_tool_calls` кончается одобрением (правки у scripted-агента,
+  /// команды у Dart-агента): Esc отменяет ход, только когда запрос уже
+  /// показан, иначе отмена гонится с запросом.
   Future<void> cancelAtApproval(PtyProcess pty) async {
     await pty.waitFor('Permission:');
     pty.write(_esc);
@@ -81,11 +84,8 @@ Future<void> main() async {
       args: ['hello'],
     );
 
-    await pty.waitFor('hello from compatible stdio agent');
-    expect(
-      'hello from compatible stdio agent'.allMatches(pty.text),
-      hasLength(1),
-    );
+    await pty.waitFor(launch.answer);
+    expect(launch.answer.allMatches(pty.text), hasLength(1));
     pty.write('\x04');
 
     expect(await pty.exitCode, 0);
@@ -93,16 +93,16 @@ Future<void> main() async {
   }, skip: skip);
 
   test('cli/repl-prompt-streaming in a pipe has no escape bytes', () async {
-    final agent = await scriptedAgent(dir);
+    final launch = await E2eCliAgent.current.launch(dir);
 
     final result = await CliProcess.run(
-      ['--agent', agent, '--cwd', dir.path, 'hello'],
+      ['--agent', launch.agent, '--cwd', dir.path, 'hello'],
       environment: {'CODELAB_HOME': '${dir.path}/codelab'},
       stdin: '',
     );
 
     expect(result.exitCode, 0, reason: '$result');
-    expect(result.stdout, contains('hello from compatible stdio agent'));
+    expect(result.stdout, contains(launch.answer));
     expect(result.stdout, isNot(contains(_esc)));
   });
 
@@ -183,10 +183,13 @@ Future<void> main() async {
       args: ['fix it'],
     );
 
-    await pty.waitFor('✓ Run');
+    await pty.waitFor(launch.completedToolRow);
     final rows = [
       for (final line in pty.text.split('\n'))
-        if (line.contains('Read') || line.contains('Run')) line,
+        if (line.contains('Read') ||
+            line.contains('Run') ||
+            line.contains('Write'))
+          line,
     ];
     expect(rows, isNotEmpty);
     for (final row in rows) {

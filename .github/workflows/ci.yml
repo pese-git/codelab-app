@@ -29,7 +29,9 @@ jobs:
           - { job: conformance, scripts: "protocol-conformance conformance:client conformance:agent" }
           - { job: guard, scripts: "guard prompts:check" }
           - { job: web-compile, scripts: "web-compile" } # + flutter build web (stage 10)
-          # stage 6: { job: e2e-cli, scripts: "build:cli test:e2e:cli" } — CLI PTY e2e on the Dart VM
+          # The CLI e2e against the scripted agent run inside `test`; here —
+          # the same tests against codelab-agent (change add-cli-e2e-agent-matrix).
+          - { job: e2e-cli-dart, scripts: "test:e2e:cli:dart-agent" }
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/prepare
