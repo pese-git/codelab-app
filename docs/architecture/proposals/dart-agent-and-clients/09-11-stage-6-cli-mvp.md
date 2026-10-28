@@ -58,7 +58,7 @@
 11. **6.11. Разведка TUI на `dart_tui`** (исключение (д) §9.0: spike с ограничением по времени —
     не больше трёх рабочих дней, без тестов): в начале этапа, параллельно с 6.1. Зависимость
     `dart_tui: ^3.0.0` добавляется в `apps/codelab_cli/pubspec.yaml` и правило сторожа (только
-    `lib/src/tui/`, §9.5); спайк в `apps/codelab_cli/tool/tui_spike/` (вне `lib/`, удаляется после
+    `lib/src/tui/`, §9.5); спайк в `apps/codelab_cli/tool/tui_spike/` (вне `lib/`, удалён после
     решения) — пустой `TuiApp` с композером и стримом scripted-агента. Проходится чек-лист
     §12.2.7 (внешние сообщения, bracketed paste, Shift+Enter, DEC 2026, восстановление при
     исключении и SIGTERM, ввод-вывод через `withInput`/`withOutput`, Windows Terminal, ширина
@@ -68,7 +68,9 @@
     «отвергнут → свой рендер» (§12.2.12). Сам полноэкранный режим (U-12) по-прежнему после MVP;
     код по итогам разведки пишется по TDD. Разведка перенесена из `add-codelab-cli` в change
     полноэкранного TUI (U-12) вместе с зависимостью и правилом сторожа `package:dart_tui/`: MVP
-    от неё не зависит (design.md change `add-codelab-cli`, D1).
+    от неё не зависит (design.md change `add-codelab-cli`, D1). **Итог:** разведка выполнена в
+    change `add-cli-tui` — таблица чек-листа и решение «пакет подтверждён» в D14 его
+    `design.md`; каталог спайка удалён.
 
 **Обвязка PTY для e2e.** `apps/codelab_cli/test/e2e/support/pty_process.dart` —
 `PtyProcess.start(executable, args, {columns, rows, environment})`: `Process.start` системной
@@ -189,7 +191,7 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 | `--system-prompt-file <файл>` | | этап 8, Should (E-08); то же из файла (UTF-8, ≤ 64 КиБ) | из конфига |
 | `--append-system-prompt <text>` | | этап 8, Should (E-08); дополнение после базового промпта (agent-core-architecture §11.6.1) | из конфига |
 | `--no-color` | | без ANSI | цвет, если TTY и нет `NO_COLOR` |
-| `--ui line\|tui` | | построчный REPL или полноэкранный TUI (U-12, после MVP, §12.2.1, §12.2.7); `tui` требует TTY на stdin и stdout | `line` (`ui.mode` в `cli.yaml`) |
+| `--ui line\|tui` | | построчный REPL или полноэкранный TUI (U-12, change `add-cli-tui`, §12.2.1, §12.2.7); `tui` требует TTY на stdin и stdout и не сочетается с `-p`/`-f` (код 64) | `line` (`ui.mode` в `cli.yaml` — после MVP) |
 | `--attach <файл>` | | вложение к первому промпту (REPL) или к промпту `-p`; флаг можно повторять (U-14, после MVP, §12.2.8) | — |
 | `--trace-file <файл>` | | change `add-cli-stream-json` (общий отвод кадров с `--include-acp`); protocol trace (JSON-RPC кадры с редакцией секретов) в файл | выключено |
 | `--log-file <файл>` | | этап 7, Should (E-16; встроенного агента в CLI до этапа 7 нет, у `codelab-agent serve` флаг — этап 4); лог встроенного агента (JSON Lines, с редакцией секретов) дописывается в файл; переменная `CODELAB_LOG_FILE`; флаг сильнее переменной, переменная сильнее `logging.file` (agent-core-architecture §12.3.1) | `logging.file` (`~/.codelab/logs/agent.log`) |
@@ -390,8 +392,8 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
   `apps/codelab_cli/schema/`), `--output-format`, `--include-thoughts`, `--include-acp`,
   `--input-format`, отвод кадров (`--trace-file`, `/trace`), `/inspect` и diff правки в `?`
   одобрения вместе с расширением модели отображения kit (§12.1).
-* Change полноэкранного TUI (U-12) — разведка 6.11, зависимость `dart_tui`, правило сторожа
-  `package:dart_tui/` и `--ui tui`. Технология затрагивает только presentation приложения,
+* `add-cli-tui` — полноэкранный TUI (U-12) и часть U-23 в нём: разведка 6.11, зависимость
+  `dart_tui`, правило сторожа `package:dart_tui/` и `--ui tui`. Технология затрагивает только presentation приложения,
   поэтому решение фиксируется в `design.md` этого change и §12.2.12, без ADR (technology-stack §20а).
 * Should вне MVP — `--session` (S-14), bracketed paste, Shift+Enter и `/terminal-setup` (U-23) —
   отдельные change (§9.0, правило 6).
@@ -424,9 +426,10 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
   (фикстуры без `setup.transport`, без `FAIL`); `--agent embedded` — с этапа 7.
 * `melos run guard`: CLI не импортирует Flutter и агентские пакеты; `package:codelab_acp_testing/`
   — только из `apps/codelab_cli/lib/src/scenario/` (design.md change `add-codelab-cli`, D3).
-  Правило `package:dart_tui/` (только `apps/codelab_cli/lib/src/tui/`) — в change TUI.
-* Разведка 6.11 — DoD change полноэкранного TUI: таблица чек-листа §12.2.7 и решение по
-  `dart_tui` записываются в его `design.md`, каталог спайка удаляется.
+  Правило `package:dart_tui/` (только `apps/codelab_cli/lib/src/tui/`, ядро `tui/core/` — без
+  пакета и `dart:io`) — change `add-cli-tui`.
+* Разведка 6.11 — DoD change `add-cli-tui`: таблица чек-листа §12.2.7 и решение по
+  `dart_tui` — D14 его `design.md`, каталог спайка удалён.
 * Ручная проверка: сессия с Python-агентом (`codelab -a 'stdio:codelab serve --stdio'`) —
   промпт, одобрение, `/mode`, `/sessions`, `/resume`.
 
