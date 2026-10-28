@@ -17,11 +17,11 @@ A reference set of MCP development skills is available as the
 [`mcp-server-dev` plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/mcp-server-dev).
 It provides three composing skills:
 
-| Skill              | Purpose                                                                                                                 |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Skill | Purpose |
+| - | - |
 | `build-mcp-server` | Entry point. Interrogates the use case, picks a deployment model and tool-design pattern, routes to specialized skills. |
-| `build-mcp-app`    | Adds interactive UI widgets (forms, pickers, dashboards) rendered inline in chat.                                       |
-| `build-mcpb`       | Packages a local stdio server with its runtime so users can install it without Node or Python.                          |
+| `build-mcp-app` | Adds interactive UI widgets (forms, pickers, dashboards) rendered inline in chat. |
+| `build-mcpb` | Packages a local stdio server with its runtime so users can install it without Node or Python. |
 
 Each skill ships a `SKILL.md` file plus a `references/` folder of supporting
 material (auth flows, tool-design patterns, widget templates, manifest schemas)
@@ -51,7 +51,7 @@ questions about:
 * **Who will use it** — just you, your team, or anyone who installs it
 * **Action surface size** — a handful of operations versus wrapping a large API
 * **User interaction needs** — plain text results, structured input via
-  [elicitation](/specification/draft/client/elicitation), or rich UI widgets
+  [elicitation](https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation.md), or rich UI widgets
 * **Upstream auth** — API keys, OAuth 2.0, or none
 
 If your opening message already covers these, the agent skips ahead to the
@@ -62,16 +62,16 @@ recommendation.
 Based on discovery, the skill recommends one of four paths and scaffolds
 accordingly:
 
-**Remote [Streamable HTTP](/specification/draft/basic/transports#streamable-http)**
+**Remote [Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http.md)**
 is the default for anything wrapping a cloud API. Zero install friction, one
 deployment serves all users, and OAuth flows work properly because the server
 can handle redirects and token storage. The reference skill includes scaffolds
 for Cloudflare Workers and portable Express/FastMCP setups.
 
-**[MCP apps](/extensions/apps/overview)** extend a server with interactive
+**[MCP apps](https://modelcontextprotocol.io/extensions/apps/overview.md)** extend a server with interactive
 widgets rendered in chat, such as searchable pickers, charts, and live
 dashboards. The skill hands off to `build-mcp-app` when
-[elicitation's](/specification/draft/client/elicitation) flat-form constraints
+[elicitation's](https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation.md) flat-form constraints
 don't fit.
 
 **[MCP Bundles (MCPB)](https://github.com/modelcontextprotocol/mcpb)** package a
@@ -80,7 +80,7 @@ can install it without setting up Node or Python. Use this path when the server
 must touch the user's machine: reading local files, driving desktop apps, or
 talking to localhost services. The skill hands off to `build-mcpb`.
 
-**Local [stdio](/specification/draft/basic/transports#stdio)** remains available
+**Local [stdio](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio.md)** remains available
 for prototyping, with a noted upgrade path to MCPB when you're ready to
 distribute.
 
@@ -89,16 +89,14 @@ distribute.
 Once your agent scaffolds the server, iterate on tool descriptions and error
 handling, then test and ship:
 
-<CardGroup cols={2}>
-  <Card title="MCP Inspector" icon="magnifying-glass" href="/docs/tools/inspector">
-    Test your server's tools, resources, and prompts interactively
-  </Card>
+> **[MCP Inspector](https://modelcontextprotocol.io/docs/2026-07-28/tools/inspector.md)**
+>
+> Test your server's tools, resources, and prompts interactively
 
-  <Card title="Connect to a client" icon="plug" href="/docs/develop/connect-local-servers">
-    Wire your server into an MCP client via local or remote configuration
-  </Card>
+> **[Connect to a client](https://modelcontextprotocol.io/docs/2026-07-28/develop/connect-local-servers.md)**
+>
+> Wire your server into an MCP client via local or remote configuration
 
-  <Card title="Publish to the Registry" icon="box" href="/registry/quickstart">
-    Make your server discoverable in the MCP Registry
-  </Card>
-</CardGroup>
+> **[Publish to the Registry](https://modelcontextprotocol.io/registry/quickstart.md)**
+>
+> Make your server discoverable in the MCP Registry
