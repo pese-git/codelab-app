@@ -192,7 +192,9 @@ app, фикстуры с ролями, минимальный конфиг би�
 * применимые интеграционные тесты app проходят в режиме `CODELAB_E2E_AGENT=dart` (задача 4.9),
   все 8 — в режиме `scripted` без изменений кода app;
 * e2e codelab_cli (задача 6.10) проходят против Python-, scripted- и Dart-агента; `codelab -p`
-  работает в CI;
+  работает в CI. Как гоняется: `CODELAB_E2E_AGENT=scripted|dart|python` (change
+  `add-cli-e2e-agent-matrix`) — scripted и Dart в `check` и CI, Python (тесты обычного хода на
+  mock-провайдере) — локально, `melos run test:e2e:cli:python-agent`;
 * ручная проверка с Zed (задача 4.10) выполнена.
 
 **Блокирует.** Этап 8 (нужен этап 4) и этап 7 (нужен этап 6).

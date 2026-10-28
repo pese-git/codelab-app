@@ -10,7 +10,8 @@ import 'package:test/test.dart';
 import '../support/cli_process.dart';
 import 'support/e2e_agent.dart';
 
-void main() {
+Future<void> main() async {
+  final agentSkip = await E2eCliAgent.current.unavailable();
   late Directory tmp;
   late Map<String, String> environment;
 
@@ -20,44 +21,54 @@ void main() {
   });
   tearDown(() => tmp.deleteSync(recursive: true));
 
-  test('cli/headless-print-basic: the answer goes to stdout and the exit '
-      'code is 0', () async {
-    final launch = await E2eCliAgent.current.launch(tmp);
+  test(
+    'cli/headless-print-basic: the answer goes to stdout and the exit '
+    'code is 0',
+    () async {
+      final launch = await E2eCliAgent.current.launch(tmp);
 
-    final result = await CliProcess.run([
-      '-p',
-      'hello',
-      '-a',
-      launch.agent,
-      '-C',
-      tmp.path,
-    ], environment: environment);
+      final result = await CliProcess.run([
+        '-p',
+        'hello',
+        '-a',
+        launch.agent,
+        '-C',
+        tmp.path,
+      ], environment: environment);
 
-    expect(result.exitCode, 0, reason: '$result');
-    expect(result.stdout, '${launch.answer}\n');
-  });
+      expect(result.exitCode, 0, reason: '$result');
+      expect(result.stdout, '${launch.answer}\n');
+    },
+    skip: agentSkip,
+    tags: pythonAgent,
+  );
 
-  test('cli/headless-print-basic: the default profile is used without '
-      '--agent', () async {
-    final launch = await E2eCliAgent.current.launch(tmp);
-    final saved = await CliProcess.run([
-      'profiles',
-      'add',
-      'default',
-      launch.agent,
-    ], environment: environment);
-    expect(saved.exitCode, 0, reason: '$saved');
+  test(
+    'cli/headless-print-basic: the default profile is used without '
+    '--agent',
+    () async {
+      final launch = await E2eCliAgent.current.launch(tmp);
+      final saved = await CliProcess.run([
+        'profiles',
+        'add',
+        'default',
+        launch.agent,
+      ], environment: environment);
+      expect(saved.exitCode, 0, reason: '$saved');
 
-    final result = await CliProcess.run([
-      '-p',
-      'hello',
-      '-C',
-      tmp.path,
-    ], environment: environment);
+      final result = await CliProcess.run([
+        '-p',
+        'hello',
+        '-C',
+        tmp.path,
+      ], environment: environment);
 
-    expect(result.exitCode, 0, reason: '$result');
-    expect(result.stdout, '${launch.answer}\n');
-  });
+      expect(result.exitCode, 0, reason: '$result');
+      expect(result.stdout, '${launch.answer}\n');
+    },
+    skip: agentSkip,
+    tags: pythonAgent,
+  );
 
   test('cli/headless-print-basic: an empty CODELAB_HOME without --agent is '
       '64 with the hint, and no agent starts', () async {

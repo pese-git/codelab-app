@@ -3,3 +3,6 @@ tags:
   # Поведение только scripted-агента или тест, не зависящий от агента:
   # прогон против Dart-агента идёт с `--exclude-tags scripted-only`.
   scripted-only:
+  # Тесты обычного хода, которые идут и против Python-агента: прогон
+  # `CODELAB_E2E_AGENT=python` идёт с `--tags python-agent` (D4).
+  python-agent:

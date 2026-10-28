@@ -35,9 +35,14 @@
    фикстур из `codelab_acp_testing` и `ClientWorkspace`.
 9. **6.9. Сигналы:** SIGINT и SIGTERM (`ProcessSignal.sigint.watch()`, `sigterm`) — отмена хода,
    корректное закрытие транспорта и дочернего процесса агента.
-10. **6.10. E2E:** `test/e2e/` — запуск собранного бинаря как процесса против scripted stdio-агента
-    из `codelab_acp_testing` и против Python-агента (если установлен; иначе тест пропускается с
-    сообщением). Имена тестов = id строк матрицы: `cli/repl-prompt-streaming`,
+10. **6.10. E2E:** `test/e2e/` — запуск собранного бинаря как процесса против агента, выбранного
+    `CODELAB_E2E_AGENT` (change `add-cli-e2e-agent-matrix`): `scripted` (по умолчанию) —
+    scripted stdio-агент из `codelab_acp_testing`; `dart` — `codelab-agent serve --stdio` из kernel
+    со сценарием `--llm-script` из `test/e2e/llm_scripts/`; `python` — Python-агент
+    `codelab serve --stdio` с mock-провайдером, только тесты обычного хода (тег `python-agent`);
+    без Python-агента тест пропускается с сообщением. Ожидания, которые у агентов различаются, —
+    в помощнике `test/e2e/support/e2e_agent.dart`; тесты поведения только scripted-агента —
+    тег `scripted-only`. Имена тестов = id строк матрицы: `cli/repl-prompt-streaming`,
     `cli/repl-permission-allow-once`, `cli/repl-permission-reject`, `cli/slash-menu-merges-agent-commands`,
     `cli/client-commands-smoke`, `cli/model-picker-sets-config-option`, `cli/esc-cancels-turn`,
     `cli/prompt-queue-drains-after-turn`, `cli/headless-print-basic`, `cli/headless-exit-codes`,
@@ -413,6 +418,9 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
 * `melos run build:cli` даёт `build/bin/codelab`.
 * `melos run test:e2e:cli` — все `cli/*` из задачи 6.10 зелёные против scripted stdio-агента на
   macOS и Linux; `test/e2e/support/pty_process_test.dart` зелёный на обеих ОС.
+* `melos run test:e2e:cli:dart-agent` — те же тесты без `scripted-only` зелёные против Dart-агента
+  (входит в `check`, джоб CI `e2e-cli-dart`); `melos run test:e2e:cli:python-agent` — тесты обычного
+  хода зелёные против Python-агента локально (в CI Python-агента нет).
 * `codelab -p hi` с пустым `CODELAB_HOME` (нет `profiles.json`) — код 64 и подсказка
   `codelab profiles add default …`; агент не запускается.
 * `cli/headless-exit-codes`: ошибка провайдера → `1`, `session/cancel` по `--timeout` → `130`,

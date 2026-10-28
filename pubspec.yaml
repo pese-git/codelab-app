@@ -124,6 +124,10 @@ melos:
       description: Run the codelab_cli end-to-end tests except scripted-only against codelab-agent with --llm-script (kernel compiled by the test, Dart VM; part of check).
       run: CODELAB_E2E_AGENT=dart fvm dart test apps/codelab_cli/test/e2e --exclude-tags scripted-only
 
+    test:e2e:cli:python-agent:
+      description: Run the plain-turn codelab_cli end-to-end tests (tag python-agent) against the Python agent `codelab serve --stdio` with the mock provider; skipped with a reason without it (local only, not part of check).
+      run: CODELAB_E2E_AGENT=python fvm dart test apps/codelab_cli/test/e2e --tags python-agent
+
     test:e2e:app:dart-agent:
       description: Build codelab-agent and run every codelab_desktop macOS integration test except scripted-only against it, one file per flutter test run (release/* only).
       # По одному файлу на запуск: `flutter test integration_test -d macos`

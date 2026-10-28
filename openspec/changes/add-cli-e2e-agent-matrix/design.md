@@ -45,12 +45,13 @@
 ### D2. Помощник `E2eCliAgent` в `test/e2e/support/e2e_agent.dart`
 
 ```dart
-enum E2eAgentKind { scripted, dart }            // python — итерация 2 (D4)
+enum E2eAgentKind { scripted, dart, python }
 
 final class E2eCliAgent {
   static final E2eCliAgent current;             // из CODELAB_E2E_AGENT
   factory E2eCliAgent.fromEnvironment(Map<String, String> environment);
   final E2eAgentKind kind;
+  Future<String?> unavailable();                // причина пропуска: Python-агента нет
   Future<E2eCliLaunch> launch(Directory dir, {CodelabCompatibleStdioAgentMode mode});
   static Future<String> agentKernel();          // kernel codelab-agent, один на прогон
 }
