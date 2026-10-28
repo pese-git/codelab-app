@@ -1,5 +1,5 @@
-// Выбор агента e2e CLI (tasks 1.1, 2.3 change `add-cli-e2e-agent-matrix`;
-// testing-quality «PTY-e2e терминального клиента»; design.md, D1–D3).
+// Выбор агента e2e CLI (tasks 1.1, 2.3, 4.1 change `add-cli-e2e-agent-matrix`;
+// testing-quality «PTY-e2e терминального клиента»; design.md, D1–D4).
 
 import 'dart:io';
 
@@ -82,5 +82,62 @@ void main() {
       agent.launch(dir, mode: _Mode.withAvailableCommands),
       throwsStateError,
     );
+  });
+
+  group('python', () {
+    /// `codelab` в своём каталоге `PATH`: печатает [help] на `serve --help`.
+    Future<Map<String, String>> fakeCodelab(String help, {int code = 0}) async {
+      final bin = await Directory('${dir.path}/bin').create();
+      final file = File('${bin.path}/codelab')
+        ..writeAsStringSync('#!/bin/sh\necho "$help"\nexit $code\n');
+      await Process.run('chmod', ['+x', file.path]);
+      return {'CODELAB_E2E_AGENT': 'python', 'PATH': bin.path};
+    }
+
+    test('another codelab in PATH is a skip reason', () async {
+      final agent = E2eCliAgent.fromEnvironment(
+        await fakeCodelab('Usage: codelab [options]', code: 64),
+      );
+
+      expect(
+        await agent.unavailable(),
+        'Python agent (codelab serve) is not installed',
+      );
+    });
+
+    test('the Python agent starts with the mock provider in its own '
+        'CODELAB_HOME', () async {
+      final agent = E2eCliAgent.fromEnvironment(
+        await fakeCodelab('usage: codelab serve [-h] [--stdio] [--no-web]'),
+      );
+
+      expect(await agent.unavailable(), isNull);
+      final launch = await agent.launch(dir);
+      final home = '${dir.path}/python-home';
+      expect(
+        launch.agent,
+        "stdio:env CODELAB_HOME='$home' codelab serve --stdio",
+      );
+      expect(
+        File('$home/codelab.toml').readAsStringSync(),
+        contains('provider = "mock"'),
+      );
+      expect(launch.answer, 'Mock response');
+    });
+
+    test('a mode with tools is a state error', () async {
+      final agent = E2eCliAgent.fromEnvironment(
+        await fakeCodelab('usage: codelab serve [-h] [--stdio]'),
+      );
+
+      expect(
+        agent.launch(dir, mode: _Mode.withPermissionRequest),
+        throwsStateError,
+      );
+    });
+  });
+
+  test('scripted and dart are always available', () async {
+    expect(await E2eCliAgent.fromEnvironment(const {}).unavailable(), isNull);
   });
 }
