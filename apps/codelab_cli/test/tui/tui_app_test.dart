@@ -19,6 +19,18 @@ import 'package:test/test.dart';
 import '../support/fake_agent.dart';
 import '../support/fake_terminal.dart' show eventually;
 
+const _models = {
+  'type': 'select',
+  'id': 'model',
+  'name': 'Model',
+  'category': 'model',
+  'currentValue': 'm1',
+  'options': [
+    {'value': 'm1', 'name': 'Model 1'},
+    {'value': 'm2', 'name': 'Model 2'},
+  ],
+};
+
 final class _Bytes implements StreamConsumer<List<int>> {
   final bytes = <int>[];
 
@@ -81,9 +93,12 @@ void main() {
     ],
   );
 
-  Future<Future<int>> started({String? firstMessage}) async {
+  Future<Future<int>> started({
+    String? firstMessage,
+    List<Map<String, Object?>>? configOptions,
+  }) async {
     final exit = runner(firstMessage: firstMessage).run();
-    await agent.acceptNewSession('s1');
+    await agent.acceptNewSession('s1', configOptions: configOptions);
     await eventually(() => output.text.contains('\x1b[?1049h'));
     return exit;
   }
@@ -272,5 +287,76 @@ void main() {
       const TerminalSize(columns: 50, rows: 14),
     );
     expect(cmd!(), isA<tea.ClearScreenMsg>());
+  });
+
+  group('iteration 2', () {
+    test('y answers the permission request and the composer comes '
+        'back', () async {
+      final exit = await started(firstMessage: 'go');
+      final prompt = await agent.next(sessionPromptMethod);
+      agent.requestPermission(id: 7, sessionId: 's1', toolCallId: 'call_1');
+      await eventually(() => output.text.contains('[y] allow once'));
+
+      type('y');
+      final response = await agent.responseTo(7);
+      final outcome =
+          (response.result! as Map<String, Object?>)['outcome']!
+              as Map<String, Object?>;
+      expect(outcome['optionId'], 'allow-once');
+      agent.respond(prompt, {'stopReason': 'end_turn'});
+
+      type('\x04');
+      expect(await exit, 0);
+    });
+
+    test('/model opens a picker on the current model, Down and Enter set '
+        'the next one', () async {
+      final exit = await started(configOptions: [_models]);
+
+      type('/model\r');
+      await eventually(() => output.text.contains('› m1'));
+      expect(output.text, contains('m2  Model 2'));
+
+      type('\x1b[B');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      type('\r');
+      final set = await agent.next(sessionSetConfigOptionMethod);
+      expect(set.params, containsPair('value', 'm2'));
+      agent.respond(set, {
+        'configOptions': [
+          {..._models, 'currentValue': 'm2'},
+        ],
+      });
+
+      type('\x04');
+      expect(await exit, 0);
+    });
+
+    test('Esc closes the picker without a request', () async {
+      final exit = await started(configOptions: [_models]);
+
+      type('/model\r');
+      await eventually(() => output.text.contains('› m1'));
+      type('\x1b');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      expect([
+        for (final m in agent.transport.sentMessages)
+          if (m is JsonRpcRequest) m.method,
+      ], isNot(contains(sessionSetConfigOptionMethod)));
+      type('\x04');
+      expect(await exit, 0);
+    });
+
+    test('/help keys lists the keys of the full-screen mode (TUI-7)', () async {
+      final exit = await started();
+
+      type('/help keys\r');
+      await eventually(() => output.text.contains('Shift+Enter'));
+      expect(output.text, contains('PgUp'));
+
+      type('\x04');
+      expect(await exit, 0);
+    });
   });
 }
