@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:dart_tui/dart_tui.dart' as tea;
 
@@ -171,6 +172,24 @@ final class TuiRunner {
     void send(SessionView view) =>
         program.send(DomainMsg(SessionViewMsg(view, at: _clock())));
     final views = handle.view.listen(send);
+    // Исход хода, которого не видно из транскрипта: отмена и сбой без
+    // заметки kit — строкой клиента, как в REPL (spec codelab-cli «Рендер
+    // хода в REPL»).
+    final outcomes = _workspace.promptOutcomes.listen((outcome) {
+      final current = _handle;
+      if (current == null || outcome.sessionId != current.id) {
+        return;
+      }
+      switch (outcome) {
+        case PromptCompleted(:final turn)
+            when turn.stopReason == StopReason.cancelled:
+          _note(turnCancelled);
+        case PromptFailed(:final error) when !_endsWithErrorNotice(current):
+          _note(turnFailed(describeFailure(error)));
+        case _:
+          break;
+      }
+    });
     send(handle.current);
     if (_firstMessage case final text? when text.trim().isNotEmpty) {
       unawaited(
@@ -204,6 +223,7 @@ final class TuiRunner {
       );
     } finally {
       await views.cancel();
+      await outcomes.cancel();
       _restoreTerminal();
     }
     await _cancelRunningTurn();
@@ -292,6 +312,13 @@ final class TuiRunner {
   }
 
   void _note(String text) => _program?.send(DomainMsg(NoteMsg(text)));
+
+  /// Заметку об ошибке хода kit уже показал транскриптом.
+  static bool _endsWithErrorNotice(SessionHandle handle) =>
+      switch (handle.current.transcript.lastOrNull) {
+        NoticeItem(kind: NoticeKind.error) => true,
+        _ => false,
+      };
 
   TerminalSize _initialSize() {
     try {

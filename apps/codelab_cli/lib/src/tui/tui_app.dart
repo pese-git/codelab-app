@@ -132,7 +132,13 @@ final class TuiApp implements tea.Model {
       );
     }
     final startTick = next.running && !_ticking;
-    final cmd = effects.toDartTuiCmd(cmds);
+    final effect = effects.toDartTuiCmd(cmds);
+    // Новый размер — полная перерисовка: построчный diff пакета не стирает
+    // хвосты строк прошлого, более широкого кадра (§12.2.7, шаг 5;
+    // design.md change `add-cli-tui`, D7).
+    final cmd = translated is ResizeMsg
+        ? tea.batch([effect, () => tea.clearScreen()])
+        : effect;
     return (
       TuiApp._next(
         this,

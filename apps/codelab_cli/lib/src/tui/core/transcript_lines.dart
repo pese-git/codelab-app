@@ -74,9 +74,18 @@ final class TranscriptLayout {
     }
 
     addNotes(0);
+    TranscriptItem? previous;
     for (final (index, item) in view.transcript.indexed) {
+      // Ответ после показанных мыслей — с пустой строкой, как в REPL
+      // (§12.2.3).
+      if (item is AgentTextItem &&
+          previous is ThoughtItem &&
+          thoughts != ThoughtsMode.hidden) {
+        out.add('');
+      }
       out.addAll(_itemLines(item, width, thoughts, unicode, color));
       addNotes(index + 1);
+      previous = item;
     }
     for (final note in notes) {
       // Заметка «после» элемента, которого уже нет (новая сессия), — в конец.

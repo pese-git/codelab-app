@@ -154,7 +154,8 @@ apps/codelab_cli/lib/src/tui/
   - `toolRow` — строки инструментов без сырого JSON, TUI-6;
   - `noticeText` и `sanitize`;
   - правило мыслей по `ThoughtsMode` — `dim` приглушённо, `collapsed` одной строкой «thinking…», `hidden` — ничего;
-  - план — блоком при `/plan`.
+  - план — блоком при `/plan`;
+  - перед ответом после показанных мыслей — пустая строка, как в REPL.
 
   Markdown не рендерится (U-10): текст ответа выводится как есть с переносом по ширине.
 - **Кэш переносов** по ключу `(item.id, ревизия элемента, ширина, режим мыслей)`. При дельте переносится только изменившийся элемент.
@@ -173,7 +174,8 @@ apps/codelab_cli/lib/src/tui/
     - `TickMsg` пакета продвигает `SpinnerModel`;
     - остальное переводит `TuiInput`, затем `reduceGuarded`;
     - после `reduce` адаптер синхронизирует компоненты с моделью: `OverlayState` появился — создаёт `ListModel` из `PickerSpec`, исчез — убирает; ход начался — выпускает `every(100 мс)` для спиннера, кончился — перестаёт;
-    - `List<TuiCmd>` переводит `TuiEffects.toDartTuiCmd` (несколько команд — `batch`).
+    - `List<TuiCmd>` переводит `TuiEffects.toDartTuiCmd` (несколько команд — `batch`);
+    - после `ResizeMsg` добавляется `clearScreen()`: построчный diff пакета не стирает хвосты строк прошлого, более широкого кадра (найдено ручной проверкой в tmux).
   - `view`: собирает `TuiChrome` из `view()` компонентов, вызывает `renderGuarded(model, chrome)` и `frameToView` — `View(altScreen: true, cursor: …)`. Bracketed paste и расширенные клавиши включает `Program` по умолчанию (разведка, пункты 2–3).
 - **`TuiInput`** переводит сообщения пакета:
   - `KeyPressMsg` → `Key` нашего реестра (`TeaKey.code` и `modifiers` → `Key`); `shift+enter` и `alt+enter` → `newline`;
@@ -192,6 +194,7 @@ apps/codelab_cli/lib/src/tui/
 - **`TuiRunner.run(handle, …)`.**
   - Собирает `Program(options: [withAltScreen(), withFps(60)])`.
   - Подписывается на `SessionHandle.view` сразу после запуска `run`: ревизия → `program.send(DomainMsg(SessionViewMsg(…)))`. Состояние соединения видно через заметки kit в транскрипте (`detached`, `reconnected`).
+  - Подписывается на `promptOutcomes` рабочего пространства: исход хода текущей сессии, которого не видно из транскрипта, становится заметкой клиента, как в REPL — отмена (`stopReason: cancelled`) и сбой без заметки об ошибке от kit.
   - В `finally`:
     - отменяет подписки;
     - повторно пишет последовательности выключения (повтор безвреден, TUI-4) и возвращает `echoMode`/`lineMode` stdin;
@@ -264,7 +267,7 @@ apps/codelab_cli/lib/src/tui/
 Решение владельца проекта: значок хода, пикеры и строку подсказок рисуют компоненты пакета, как в §12.2.7:
 - значок хода — `SpinnerModel`;
 - пикеры — `ListModel` с фильтром;
-- строка подсказок — `HelpModel` через `RegistryKeyMap implements KeyMap`: таблица действий одна, TUI-7. Компонент выводит пункт на строку, адаптер сворачивает вывод в одну строку через ` · ` (`hintLine`).
+- строка подсказок — `HelpModel` через `RegistryKeyMap implements KeyMap`: таблица действий одна, TUI-7. Компонент выводит пункт на строку, адаптер сворачивает вывод в одну строку через ` · ` (`hintLine`). Если строка шире экрана, `render` отбрасывает пункты с конца целиком, а не обрезает подпись посередине.
 
 Компонент — `Model` со своим `update` и `view`. Ядро не импортирует пакет (TUI-5, правило сторожа D3), поэтому компоненты живут в `TuiApp`, а не в `TuiModel`.
 - **Ядро решает, что показывать.** Открыт ли пикер и какой (`OverlayState` с `PickerSpec`), идёт ли ход, какие клавиши активны.
