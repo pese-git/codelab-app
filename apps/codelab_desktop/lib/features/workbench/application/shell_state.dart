@@ -35,7 +35,9 @@ final class CodeLabShellState {
     required this.currentSessionDetail,
     required this.sessions,
     required this.activeSessionId,
-    required this.transcriptEntries,
+    required this.transcriptRows,
+    this.transcriptExpansion = const {},
+    this.turnState,
     required this.inspectorEntries,
     required this.viewMode,
     required this.isPromptEnabled,
@@ -89,7 +91,13 @@ final class CodeLabShellState {
   final String? activeSessionId;
 
   // Показываемая сессия — `ActiveSessionCubit`.
-  final List<CodeLabTranscriptEntry> transcriptEntries;
+  final List<CodeLabTranscriptRow> transcriptRows;
+
+  /// Ручное раскрытие строк ленты активной сессии — `TranscriptViewCubit`.
+  final Map<String, bool> transcriptExpansion;
+
+  /// Чип состояния хода в шапке; `null` — сессия свободна.
+  final CodeLabTurnState? turnState;
   final List<CodeLabInspectorEntry> inspectorEntries;
   final bool isPromptSubmitting;
   final bool canCancel;
@@ -168,7 +176,9 @@ final class CodeLabShellState {
     String? currentSessionDetail,
     List<CodeLabSessionListItem>? sessions,
     String? activeSessionId,
-    List<CodeLabTranscriptEntry>? transcriptEntries,
+    List<CodeLabTranscriptRow>? transcriptRows,
+    Map<String, bool>? transcriptExpansion,
+    Object? turnState = _unset,
     List<CodeLabInspectorEntry>? inspectorEntries,
     CodeLabViewMode? viewMode,
     bool? isPromptEnabled,
@@ -216,7 +226,12 @@ final class CodeLabShellState {
       currentSessionDetail: currentSessionDetail ?? this.currentSessionDetail,
       sessions: sessions ?? this.sessions,
       activeSessionId: activeSessionId ?? this.activeSessionId,
-      transcriptEntries: transcriptEntries ?? this.transcriptEntries,
+      transcriptRows: transcriptRows ?? this.transcriptRows,
+      transcriptExpansion: transcriptExpansion ?? this.transcriptExpansion,
+      // `null` здесь — «сессия свободна», а не «не менять».
+      turnState: identical(turnState, _unset)
+          ? this.turnState
+          : turnState as CodeLabTurnState?,
       inspectorEntries: inspectorEntries ?? this.inspectorEntries,
       viewMode: viewMode ?? this.viewMode,
       isPromptEnabled: isPromptEnabled ?? this.isPromptEnabled,

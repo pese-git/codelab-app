@@ -109,33 +109,28 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
           ],
         ],
       ),
-      CodeLabApprovalOptionsLayout.compactRow => IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final option in options) ...[
-              Expanded(
-                child: _AcpApprovalCompactOptionButton(
-                  key: approvalOptionKey(option.kind),
-                  option: option,
-                  selected: option.id == selectedOptionId,
-                  enabled: enabled,
-                  shortcutLabel: !showShortcutHints
-                      ? null
-                      : _shortcutLabelFor(
-                          option.id,
-                          allowOnceId: allowOnceId,
-                          allowAlwaysId: allowAlwaysId,
-                          rejectOnceId: rejectOnceId,
-                          rejectAlwaysId: rejectAlwaysId,
-                        ),
-                  onSelected: () => onSelected(option.id),
-                ),
-              ),
-              if (option != options.last) const SizedBox(width: 8),
-            ],
-          ],
-        ),
+      CodeLabApprovalOptionsLayout.compactRow => Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final option in options)
+            _AcpApprovalCompactOptionButton(
+              key: approvalOptionKey(option.kind),
+              option: option,
+              selected: option.id == selectedOptionId,
+              enabled: enabled,
+              shortcutLabel: !showShortcutHints
+                  ? null
+                  : _shortcutLabelFor(
+                      option.id,
+                      allowOnceId: allowOnceId,
+                      allowAlwaysId: allowAlwaysId,
+                      rejectOnceId: rejectOnceId,
+                      rejectAlwaysId: rejectAlwaysId,
+                    ),
+              onSelected: () => onSelected(option.id),
+            ),
+        ],
       ),
     };
 
@@ -300,11 +295,15 @@ class _AcpApprovalOptionTile extends StatelessWidget {
   }
 }
 
-/// The dense horizontal button used by [CodeLabApprovalOptionsLayout.compactRow]
-/// — label, a real keyboard-shortcut hint (only for whichever option the
-/// group actually binds `Ctrl/Cmd+Enter`/`Escape` to), and the option's tone
-/// conveyed as text color rather than a separate badge (no room for one at
-/// this density).
+/// Кнопка варианта в строке вызова ленты ([CodeLabApprovalOptionsLayout.compactRow]).
+///
+/// Почему: в макете у карточки одобрения одно главное действие — «Allow
+/// once», остальные варианты — обычные кнопки; четыре одинаковые плитки с
+/// цветным текстом не показывали, что нажимать (change
+/// `redesign-transcript-rows`, D5).
+///
+/// Для чего: подпись варианта и подсказка сочетания клавиш в одну строку;
+/// `allow_once` — `FilledButton`. Ширина — по содержимому, ряд переносится.
 class _AcpApprovalCompactOptionButton extends StatelessWidget {
   const _AcpApprovalCompactOptionButton({
     required this.option,
@@ -323,54 +322,53 @@ class _AcpApprovalCompactOptionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final toneColor = _toneForegroundColor(option.tone);
-
-    return Button(
-      onPressed: enabled ? onSelected : null,
-      style: ButtonStyle(
-        padding: WidgetStateProperty.all(EdgeInsets.zero),
-        shape: WidgetStateProperty.all(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
-            side: selected ? BorderSide(color: Colors.blue) : BorderSide.none,
+    final primary = option.kind == CodeLabApprovalOptionKind.allowOnce;
+    final shortcutLabel = this.shortcutLabel;
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            option.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        backgroundColor: !selected
-            ? null
-            : WidgetStateProperty.all(Colors.blue.withAlpha(24)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            CodeLabText(
-              option.label,
-              role: CodeLabTextRole.strong,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              color: toneColor,
+        if (shortcutLabel != null) ...[
+          const SizedBox(width: 6),
+          Opacity(
+            opacity: 0.75,
+            child: Text(
+              shortcutLabel,
+              style: FluentTheme.of(context).typography.caption?.copyWith(
+                color: primary ? Colors.white : null,
+              ),
             ),
-            if (shortcutLabel != null) ...[
-              const SizedBox(height: 3),
-              CodeLabText(shortcutLabel!, role: CodeLabTextRole.caption),
-            ],
-          ],
-        ),
+          ),
+        ],
+      ],
+    );
+    final onPressed = enabled ? onSelected : null;
+    final style = ButtonStyle(
+      padding: WidgetStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       ),
+      shape: !selected
+          ? null
+          : WidgetStateProperty.all(
+              RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+                side: BorderSide(color: Colors.blue, width: 2),
+              ),
+            ),
+    );
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: primary
+          ? FilledButton(onPressed: onPressed, style: style, child: child)
+          : Button(onPressed: onPressed, style: style, child: child),
     );
   }
-}
-
-Color? _toneForegroundColor(CodeLabTone tone) {
-  return switch (tone) {
-    CodeLabTone.neutral => null,
-    CodeLabTone.accent => Colors.blue,
-    CodeLabTone.success => Colors.green,
-    CodeLabTone.warning => Colors.warningPrimaryColor,
-    CodeLabTone.danger => Colors.red,
-  };
 }
 
 class _SelectionBadge extends StatelessWidget {

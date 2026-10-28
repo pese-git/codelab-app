@@ -11,6 +11,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'harness.dart';
+import '../../../../support/transcript_rows.dart';
 
 void main() {
   setUp(setUpCharacterization);
@@ -107,7 +108,7 @@ void main() {
     // уведомление `detached` (design D5 change `add-session-list-and-reload`);
     // позднего текста старого соединения в ней нет.
     expect(
-      h.cubit.state.transcriptEntries.map((entry) => entry.body),
+      h.cubit.state.transcriptRows.map((entry) => entry.text),
       isNot(contains('late text from the old connection')),
     );
   });
@@ -124,7 +125,7 @@ void main() {
     await h.settle();
 
     expect(states, hasLength(1));
-    expect(states.single.transcriptEntries.last.body, 'single chunk');
+    expect(states.single.transcriptRows.last.text, 'single chunk');
 
     h.endTurn(turn.request);
     await turn.done;

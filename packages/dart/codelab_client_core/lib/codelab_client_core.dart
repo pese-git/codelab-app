@@ -25,6 +25,7 @@ export 'src/queue/prompt_queue.dart';
 export 'src/restore/workspace_snapshot.dart';
 export 'src/session/session_views.dart';
 export 'src/stores/stores.dart';
+export 'src/transcript/tool_row.dart';
 export 'src/transcript/transcript_item.dart';
 export 'src/workspace/client_workspace.dart';
 export 'src/workspace/client_workspace_exception.dart';

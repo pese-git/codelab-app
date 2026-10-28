@@ -1,6 +1,11 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
-enum CodeLabTextRole { title, subtitle, body, strong, caption }
+/// Роль текста в типографике Fluent.
+///
+/// [mono] — моноширинный текст команд, путей и вывода инструментов: в ленте
+/// они должны читаться как код, а не как проза (change
+/// `redesign-transcript-rows`, D5).
+enum CodeLabTextRole { title, subtitle, body, strong, caption, mono }
 
 class CodeLabText extends StatelessWidget {
   const CodeLabText(
@@ -22,9 +27,15 @@ class CodeLabText extends StatelessWidget {
   /// room for a separate badge.
   final Color? color;
 
+  /// Стиль роли [role] в текущей теме — для составного текста
+  /// (`Text.rich`), где часть фразы набрана другой ролью, например
+  /// моноширинная цель в строке вызова «Read lib/main.dart».
+  static TextStyle? styleOf(BuildContext context, CodeLabTextRole role) =>
+      _styleForRole(FluentTheme.of(context).typography, role);
+
   @override
   Widget build(BuildContext context) {
-    final style = _styleForRole(FluentTheme.of(context).typography, role);
+    final style = styleOf(context, role);
     return Text(
       data,
       maxLines: maxLines,
@@ -41,5 +52,21 @@ TextStyle? _styleForRole(Typography typography, CodeLabTextRole role) {
     CodeLabTextRole.body => typography.body,
     CodeLabTextRole.strong => typography.bodyStrong,
     CodeLabTextRole.caption => typography.caption,
+    CodeLabTextRole.mono => typography.body?.copyWith(
+      fontFamily: 'Menlo',
+      fontFamilyFallback: _monoFallback,
+      fontSize: 12.5,
+    ),
   };
 }
+
+/// Запасные моноширинные шрифты: на Windows нет Menlo, на Linux — ни Menlo,
+/// ни Consolas.
+const _monoFallback = [
+  'SF Mono',
+  'Consolas',
+  'Cascadia Mono',
+  'DejaVu Sans Mono',
+  'Courier New',
+  'monospace',
+];

@@ -26,6 +26,7 @@ import 'sessions_cubit.dart';
 import 'settings_cubit.dart';
 import 'shell_part.dart';
 import 'shell_state.dart';
+import 'transcript_view_cubit.dart';
 import 'ui_mappers.dart' show paletteCatalogOf;
 
 export 'connection_cubit.dart'
@@ -67,6 +68,7 @@ final class CodeLabShellParts {
     required this.activeSession,
     required this.settings,
     required this.layout,
+    required this.transcriptView,
   });
 
   factory CodeLabShellParts.build({
@@ -126,6 +128,7 @@ final class CodeLabShellParts {
         dockLayoutStore: dockLayoutStore,
         diagnostics: diagnostics,
       ),
+      transcriptView: TranscriptViewCubit(changes: changes),
     );
   }
 
@@ -136,6 +139,7 @@ final class CodeLabShellParts {
   final ActiveSessionCubit activeSession;
   final SettingsCubit settings;
   final LayoutCubit layout;
+  final TranscriptViewCubit transcriptView;
 
   Future<void> close() async {
     await sessions.close();
@@ -143,6 +147,7 @@ final class CodeLabShellParts {
     await activeSession.close();
     await settings.close();
     await layout.close();
+    await transcriptView.close();
   }
 }
 
@@ -290,6 +295,21 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   void togglePane(ToolPane pane) => _layout.togglePane(pane);
 
+  /// Запоминает ручное раскрытие строки ленты активной сессии
+  /// (`CodeLabTranscriptPanel.onExpansionChanged`, design D3 change
+  /// `redesign-transcript-rows`); без активной сессии — no-op.
+  void setTranscriptRowExpanded(String rowId, bool expanded) {
+    final sessionId = _parts.activeSession.state.sessionId;
+    if (sessionId == null) {
+      return;
+    }
+    _parts.transcriptView.setExpanded(
+      sessionId: sessionId,
+      rowId: rowId,
+      expanded: expanded,
+    );
+  }
+
   void openPane(ToolPane pane) => _layout.openPane(pane);
 
   void selectPane(ToolPane pane) => _layout.selectPane(pane);
@@ -403,6 +423,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     final active = parts.activeSession.state;
     final settings = parts.settings.state;
     final layout = parts.layout.state;
+    final transcriptView = parts.transcriptView.state;
     return CodeLabShellState(
       connectionStatus: connection.connectionStatus,
       transportType: connection.transportType,
@@ -420,7 +441,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       currentSessionDetail: sessions.currentSessionDetail,
       sessions: sessions.sessions,
       activeSessionId: sessions.activeSessionId,
-      transcriptEntries: active.transcriptEntries,
+      transcriptRows: active.transcriptRows,
+      transcriptExpansion: transcriptView.overridesFor(active.sessionId),
+      turnState: active.turnState,
       inspectorEntries: active.inspectorEntries,
       viewMode: CodeLabViewMode.normal,
       isPromptEnabled: true,

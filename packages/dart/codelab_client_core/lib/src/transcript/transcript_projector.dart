@@ -402,6 +402,13 @@ ToolCallView _callView(ToolCallRecord record) => ToolCallView(
     ToolCallStatus.failed => ToolCallStatusView.failed,
   },
   command: _command(record),
+  rawInput: record.rawInput,
+  paths: [for (final location in record.locations) location.path],
+  textOutput: [
+    for (final item in record.content)
+      if (item case ToolCallContentBlock(content: TextContent(:final text)))
+        text,
+  ],
 );
 
 String? _command(ToolCallRecord record) {

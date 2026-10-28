@@ -11,6 +11,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'harness.dart';
+import '../../../../support/transcript_rows.dart';
 
 Object? _selectedOption(JsonRpcResponse response) =>
     ((response.result! as Map)['outcome'] as Map)['optionId'];
@@ -32,9 +33,9 @@ void main() {
       title: 'Run command',
     );
 
-    expect(h.pendingApprovalTitles(), ['Run command']);
+    expect(h.pendingApprovalTexts(), ['Run echo hi']);
     final pending =
-        h.cubit.state.transcriptEntries
+        h.cubit.state.transcriptRows
                 .singleWhere(
                   (entry) => entry.approval is CodeLabTranscriptApprovalPending,
                 )
@@ -61,12 +62,12 @@ void main() {
     expect(response.id, const JsonRpcId.integer(7));
     expect(_selectedOption(response), 'allow-once');
     expect(h.cubit.state.isRespondingToApproval, isFalse);
-    expect(h.pendingApprovalTitles(), isEmpty);
+    expect(h.pendingApprovalTexts(), isEmpty);
     expect(
-      h.cubit.state.transcriptEntries
+      h.cubit.state.transcriptRows
           .where((entry) => entry.approval is CodeLabTranscriptApprovalResolved)
-          .map((entry) => entry.title),
-      ['Run command'],
+          .map((entry) => entry.text),
+      ['Run echo hi'],
     );
 
     h.endTurn(turn.request);
@@ -84,6 +85,7 @@ void main() {
       sessionId: 'session-a',
       toolCallId: 'tool-a',
       title: 'Run in A',
+      command: 'echo a',
     );
 
     await h.createSession('session-b');
@@ -93,8 +95,9 @@ void main() {
       sessionId: 'session-b',
       toolCallId: 'tool-b',
       title: 'Run in B',
+      command: 'echo b',
     );
-    expect(h.pendingApprovalTitles(), ['Run in B']);
+    expect(h.pendingApprovalTexts(), ['Run echo b']);
 
     final responseFuture = h.nextResponse();
     await h.cubit.respondToApproval(
@@ -105,10 +108,10 @@ void main() {
     final response = await responseFuture;
     expect(response.id, const JsonRpcId.integer(2));
     expect(_selectedOption(response), 'reject-once');
-    expect(h.pendingApprovalTitles(), isEmpty);
+    expect(h.pendingApprovalTexts(), isEmpty);
 
     h.cubit.selectSession('session-a');
-    expect(h.pendingApprovalTitles(), ['Run in A']);
+    expect(h.pendingApprovalTexts(), ['Run echo a']);
     expect(h.cubit.state.isPromptSubmitting, isTrue);
 
     await h.cubit.respondToApproval(

@@ -119,21 +119,31 @@ CodeLabSessionStatus _sessionStatusOf(SessionLifecycleStatus status) =>
       SessionLifecycleStatus.failed => CodeLabSessionStatus.failed,
     };
 
-/// Транскрипт kit (`TranscriptProjector`, design D5) в записи ленты.
+/// Транскрипт kit (`TranscriptProjector`, design D5) в строки ленты.
 ///
-/// Id записей — позиционные (`prompt-N`, `agent-N`, `tool-N`,
-/// `prompt-error-N`), как до переноса проекции в kit: на них опираются
-/// виджеты и тесты. [approvalsEnabled] гасит кнопки одобрения, пока ответ на
-/// другое одобрение в полёте. [onRetry] — повтор последнего сорвавшегося
-/// хода; хост передаёт его, только когда повтор возможен
-/// (`SessionView.canRetry` и соединение установлено, design D4 change
-/// `add-connection-and-error-states`), и кнопка Retry появляется у последней
-/// заметки о сбое.
-List<CodeLabTranscriptEntry> transcriptEntriesOf(
+/// Почему: лента рисует свой виджет на каждый вид строки — пузырь
+/// пользователя, ответ, мысли, вызов, заметку (change
+/// `redesign-transcript-rows`, D1); маппер — единственное место, где модели
+/// kit превращаются в модели `codelab_ui` (DSK-1).
+///
+/// Для чего: id строк — позиционные (`prompt-N`, `agent-N`, `thought-N`,
+/// `tool-N`, `prompt-error-N`, `session-notice-N`, `notice-N`), как до переноса проекции
+/// в kit: на них опираются тесты, и по ним лента хранит ручное раскрытие.
+/// Строку вызова собирает `ToolRowFormatter` с [cwd] сессии.
+///
+/// Как использовать: [isRunning] — сессия выполняет ход; последние мысли
+/// идущего хода стримятся (design D4). [approvalsEnabled] гасит кнопки
+/// одобрения, пока ответ на другое одобрение в полёте. [onRetry] — повтор
+/// последнего сорвавшегося хода; хост передаёт его, только когда повтор
+/// возможен (`SessionView.canRetry` и соединение установлено, design D4
+/// change `add-connection-and-error-states`), и кнопка Retry появляется у
+/// последней заметки о сбое.
+List<CodeLabTranscriptRow> transcriptRowsOf(
   List<TranscriptItem> transcript, {
   required String cwd,
   required bool approvalsEnabled,
   required ApprovalOptionChosen onApprovalSelected,
+  bool isRunning = false,
   VoidCallback? onRetry,
 }) {
   final lastErrorIndex = transcript.lastIndexWhere(
@@ -142,72 +152,114 @@ List<CodeLabTranscriptEntry> transcriptEntriesOf(
   return [
     for (final (index, item) in transcript.indexed)
       switch (item) {
-        UserItem(:final text) => CodeLabTranscriptEntry(
+        UserItem(:final text) => CodeLabUserRow(
           id: 'prompt-${index + 1}',
-          kind: CodeLabTranscriptEntryKind.user,
-          title: 'You',
-          body: text,
+          text: text,
         ),
-        AgentTextItem(:final text) ||
-        ThoughtItem(:final text) ||
-        NoticeItem(
-          kind: NoticeKind.emptyTurn,
-          :final text,
-        ) => CodeLabTranscriptEntry(
+        AgentTextItem(:final text) => CodeLabAgentTextRow(
           id: 'agent-${index + 1}',
-          kind: CodeLabTranscriptEntryKind.agent,
-          title: 'Agent',
-          body: text,
+          text: text,
+        ),
+        ThoughtItem(:final text) => CodeLabThoughtRow(
+          id: 'thought-${index + 1}',
+          text: text,
+          streaming: isRunning && index == transcript.length - 1,
         ),
         NoticeItem(kind: NoticeKind.error, :final text, :final failure) =>
-          CodeLabTranscriptEntry(
+          CodeLabNoticeRow(
             id: 'prompt-error-${index + 1}',
-            kind: CodeLabTranscriptEntryKind.diagnostic,
+            severity: CodeLabNoticeSeverity.error,
             title: failureTitleOf(failure),
             body: _failureBodyOf(failure) ?? text,
             details: failure == null ? null : text,
             action: index == lastErrorIndex && onRetry != null
-                ? CodeLabTranscriptEntryAction(
+                ? CodeLabTranscriptAction(
                     label: 'Retry',
                     icon: FluentIcons.refresh,
                     onPressed: onRetry,
                   )
                 : null,
           ),
-        // Связь сессии с агентом: после переподключения или перезапуска
-        // (design D5, D6 change `add-session-list-and-reload`).
-        NoticeItem(
-          kind: NoticeKind.detached || NoticeKind.reconnected,
-          :final text,
-        ) =>
-          CodeLabTranscriptEntry(
+        // Связь сессии с агентом (design D5, D6 change
+        // `add-session-list-and-reload`): потеря — предупреждение, новая или
+        // переподключённая сессия и пустой ход — нейтральная строка
+        // (design D6 change `redesign-transcript-rows`).
+        NoticeItem(kind: NoticeKind.detached, :final text) => CodeLabNoticeRow(
+          id: 'session-notice-${index + 1}',
+          severity: CodeLabNoticeSeverity.warning,
+          title: 'Session detached',
+          body: text,
+        ),
+        NoticeItem(kind: NoticeKind.reconnected, :final text) =>
+          CodeLabNoticeRow(
             id: 'session-notice-${index + 1}',
-            kind: CodeLabTranscriptEntryKind.diagnostic,
-            title: 'Session',
+            severity: CodeLabNoticeSeverity.info,
             body: text,
           ),
-        ToolCallItem(:final title, :final details, :final approval) =>
-          CodeLabTranscriptEntry(
-            id: 'tool-${index + 1}',
-            kind: CodeLabTranscriptEntryKind.toolCall,
-            title: title,
-            toolCall: details == null
-                ? null
-                : CodeLabToolCallSummary(
-                    name: details.kind.wireName,
-                    status: _toolCallStatusOf(details.status),
-                    detail: details.command,
-                  ),
-            approval: _transcriptApprovalOf(
-              approval,
-              cwd: cwd,
-              enabled: approvalsEnabled,
-              onSelected: onApprovalSelected,
-            ),
-          ),
+        NoticeItem(kind: NoticeKind.emptyTurn, :final text) => CodeLabNoticeRow(
+          id: 'notice-${index + 1}',
+          severity: CodeLabNoticeSeverity.info,
+          body: text,
+        ),
+        final ToolCallItem call => _toolCallRowOf(
+          call,
+          id: 'tool-${index + 1}',
+          cwd: cwd,
+          approvalsEnabled: approvalsEnabled,
+          onApprovalSelected: onApprovalSelected,
+        ),
       },
   ];
 }
+
+CodeLabToolCallRow _toolCallRowOf(
+  ToolCallItem call, {
+  required String id,
+  required String cwd,
+  required bool approvalsEnabled,
+  required ApprovalOptionChosen onApprovalSelected,
+}) {
+  final view = ToolRowFormatter.format(call, cwd: cwd);
+  final details = call.details;
+  return CodeLabToolCallRow(
+    id: id,
+    status: _toolCallStatusOf(details?.status ?? ToolCallStatusView.queued),
+    label: view.label,
+    detail: view.detail,
+    secondary: view.secondary,
+    output: details?.textOutput ?? const [],
+    approval: _transcriptApprovalOf(
+      call.approval,
+      title: approvalTitleOf(details?.kind ?? ToolKind.other),
+      cwd: cwd,
+      enabled: approvalsEnabled,
+      onSelected: onApprovalSelected,
+    ),
+  );
+}
+
+/// Вопрос карточки одобрения по виду вызова (требование «Approval card
+/// inside the tool call row»).
+String approvalTitleOf(ToolKind kind) => switch (kind) {
+  ToolKind.execute => 'Run a command?',
+  ToolKind.edit => 'Edit a file?',
+  ToolKind.delete => 'Delete a file?',
+  ToolKind.move => 'Move a file?',
+  ToolKind.read => 'Read a file?',
+  ToolKind.search => 'Run a search?',
+  ToolKind.fetch => 'Fetch a URL?',
+  ToolKind.think || ToolKind.other => 'Allow this tool call?',
+};
+
+/// Чип хода в шапке панели сессии (требование «Session pane header»):
+/// идущий ход с ожидающим одобрением — «Waiting for approval».
+CodeLabTurnState? turnStateOf(SessionView? view) => switch (view?.status) {
+  SessionStatusView.running when view!.pendingApprovals.isNotEmpty =>
+    CodeLabTurnState.awaitingApproval,
+  SessionStatusView.running => CodeLabTurnState.running,
+  SessionStatusView.cancelling => CodeLabTurnState.cancelling,
+  _ => null,
+};
 
 /// Заголовок заметки о сбое хода по классу сбоя (design D3 change
 /// `add-connection-and-error-states`).
@@ -243,11 +295,12 @@ String? _failureBodyOf(PromptFailure? failure) => switch (failure) {
   null => null,
 };
 
-/// Одобрение встроено в запись вызова: ожидающее — интерактивное,
-/// решённое — компактная отметка (embed-approval-in-thread/design.md,
+/// Одобрение встроено в строку вызова: ожидающее — интерактивная карточка,
+/// решённое — тег исхода (embed-approval-in-thread/design.md,
 /// Decisions 1–3).
 CodeLabTranscriptApproval? _transcriptApprovalOf(
   ApprovalStateView? approval, {
+  required String title,
   required String cwd,
   required bool enabled,
   required ApprovalOptionChosen onSelected,
@@ -264,6 +317,7 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
       },
     ),
   PendingApprovalView() => CodeLabTranscriptApproval.pending(
+    title: title,
     risk: _approvalRiskOf(approval.risk),
     command: approval.command,
     cwd: cwd,

@@ -22,6 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'support/e2e_agent.dart';
+import '../test/support/transcript_rows.dart';
 
 CodeLabShellCubit _cubit(WidgetTester tester) =>
     codeLabDependenciesOf(tester.element(find.byType(CodeLabApp))).shellCubit;
@@ -62,7 +63,7 @@ Future<void> _waitFor(WidgetTester tester, bool Function() condition) async {
 }
 
 List<String?> _transcript(WidgetTester tester) => [
-  for (final entry in _cubit(tester).state.transcriptEntries) entry.body,
+  for (final entry in _cubit(tester).state.transcriptRows) entry.text,
 ];
 
 final _composer = find.byKey(const ValueKey('composer-text-box'));

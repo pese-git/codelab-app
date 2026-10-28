@@ -71,6 +71,18 @@ abstract class ToolCallView with _$ToolCallView {
 
     /// Команда из `rawInput.command`, если агент её прислал.
     String? command,
+
+    /// `rawInput` вызова как пришёл от агента; источник детали строки
+    /// инструмента (`ToolRowFormatter`, `dart-agent-and-clients` §12.1.6).
+    /// Клиенты не показывают его как есть.
+    Map<String, Object?>? rawInput,
+
+    /// Пути из `locations` вызова в порядке прихода.
+    @Default(<String>[]) List<String> paths,
+
+    /// Тексты элементов `content` с текстовым блоком в порядке прихода:
+    /// вывод вызова, причина отказа или ошибки.
+    @Default(<String>[]) List<String> textOutput,
   }) = _ToolCallView;
 }
 

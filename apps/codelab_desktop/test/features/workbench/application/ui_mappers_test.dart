@@ -10,6 +10,8 @@ import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart';
 import 'package:fluent_ui/fluent_ui.dart' show FluentIcons;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/transcript_rows.dart';
+
 const _allowOnce = PermissionOption(
   optionId: PermissionOptionId('allow-once'),
   name: 'Allow once',
@@ -138,10 +140,9 @@ void main() {
     );
   });
 
-  group('transcriptEntriesOf', () {
-    test('items get the positional ids, kinds and titles of the old '
-        'transcript', () {
-      final entries = transcriptEntriesOf(
+  group('transcriptRowsOf', () {
+    test('items get positional ids and their own row kinds', () {
+      final rows = transcriptRowsOf(
         const [
           TranscriptItem.user(id: 't1/user', text: 'hello'),
           TranscriptItem.agentText(id: 't1/text-0', text: 'hi'),
@@ -164,6 +165,7 @@ void main() {
               kind: ToolKind.execute,
               status: ToolCallStatusView.running,
               command: 'dart test',
+              rawInput: {'command': 'dart test'},
             ),
           ),
         ],
@@ -172,35 +174,72 @@ void main() {
         onApprovalSelected: (_, _) {},
       );
 
-      expect(entries.map((entry) => entry.id), [
+      expect(rows.map((row) => row.id), [
         'prompt-1',
         'agent-2',
-        'agent-3',
-        'agent-4',
+        'thought-3',
+        'notice-4',
         'prompt-error-5',
         'tool-6',
       ]);
-      expect(entries.map((entry) => entry.kind), [
-        CodeLabTranscriptEntryKind.user,
-        CodeLabTranscriptEntryKind.agent,
-        CodeLabTranscriptEntryKind.agent,
-        CodeLabTranscriptEntryKind.agent,
-        CodeLabTranscriptEntryKind.diagnostic,
-        CodeLabTranscriptEntryKind.toolCall,
+      expect(rows.map((row) => row.kind), [
+        'user',
+        'agent',
+        'thought',
+        'notice',
+        'notice',
+        'tool',
       ]);
-      expect(entries.map((entry) => entry.title), [
-        'You',
-        'Agent',
-        'Agent',
-        'Agent',
-        'The agent could not complete the turn',
-        'Run tests',
-      ]);
-      expect(entries[4].body, 'Failed to send prompt: agent crashed');
-      final tool = entries.last.toolCall!;
-      expect(tool.name, 'execute');
-      expect(tool.status, CodeLabToolCallStatus.running);
+      final error = rows[4] as CodeLabNoticeRow;
+      expect(error.severity, CodeLabNoticeSeverity.error);
+      expect(error.title, 'The agent could not complete the turn');
+      expect(error.body, 'Failed to send prompt: agent crashed');
+      expect(
+        (rows[3] as CodeLabNoticeRow).severity,
+        CodeLabNoticeSeverity.info,
+      );
+      final tool = rows.last as CodeLabToolCallRow;
+      expect(tool.label, 'Run');
       expect(tool.detail, 'dart test');
+      expect(tool.status, CodeLabToolCallStatus.running);
+    });
+
+    test('only the last thought of a running turn is streaming', () {
+      List<CodeLabTranscriptRow> rows({
+        required bool isRunning,
+        bool last = true,
+      }) => transcriptRowsOf(
+        [
+          const TranscriptItem.thought(id: 't1/thought-0', text: 'hm'),
+          if (!last)
+            const TranscriptItem.agentText(id: 't1/text-1', text: 'ok'),
+        ],
+        cwd: '/work',
+        isRunning: isRunning,
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      expect(
+        (rows(isRunning: true).first as CodeLabThoughtRow).streaming,
+        isTrue,
+      );
+      expect(
+        (rows(isRunning: true, last: false).first as CodeLabThoughtRow)
+            .streaming,
+        isFalse,
+      );
+      expect(
+        (rows(isRunning: false).first as CodeLabThoughtRow).streaming,
+        isFalse,
+      );
+    });
+
+    test('the approval card is titled by the kind of the call', () {
+      expect(approvalTitleOf(ToolKind.execute), 'Run a command?');
+      expect(approvalTitleOf(ToolKind.edit), 'Edit a file?');
+      expect(approvalTitleOf(ToolKind.fetch), 'Fetch a URL?');
+      expect(approvalTitleOf(ToolKind.other), 'Allow this tool call?');
     });
 
     test('a pending approval is interactive and answers through the '
@@ -216,12 +255,16 @@ void main() {
       );
       final chosen = <(ApprovalRequestId, SessionId, String)>[];
 
-      final entries = transcriptEntriesOf(
+      final entries = transcriptRowsOf(
         const [
           TranscriptItem.toolCall(
             id: 't1/tool-call-1',
             toolCallId: ToolCallId('call-1'),
             title: 'Clean',
+            details: ToolCallView(
+              kind: ToolKind.execute,
+              status: ToolCallStatusView.queued,
+            ),
             approval: pending,
           ),
         ],
@@ -233,6 +276,7 @@ void main() {
 
       final approval =
           entries.single.approval! as CodeLabTranscriptApprovalPending;
+      expect(approval.title, 'Run a command?');
       expect(approval.risk, CodeLabApprovalRisk.shell);
       expect(approval.command, 'rm -rf build');
       expect(approval.cwd, '/work');
@@ -263,9 +307,8 @@ void main() {
       ]);
     });
 
-    test('session notices after reconnect or restart are diagnostic '
-        'entries', () {
-      final entries = transcriptEntriesOf(
+    test('a detached session is a warning, a new session a neutral note', () {
+      final rows = transcriptRowsOf(
         const [
           TranscriptItem.notice(
             id: 's/detached',
@@ -282,24 +325,24 @@ void main() {
         cwd: '/work',
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
-      );
+      ).cast<CodeLabNoticeRow>();
 
-      expect(entries.map((entry) => entry.id), [
+      expect(rows.map((row) => row.id), [
         'session-notice-1',
         'session-notice-2',
       ]);
-      expect(entries.map((entry) => entry.kind).toSet(), {
-        CodeLabTranscriptEntryKind.diagnostic,
-      });
-      expect(entries.first.title, 'Session');
+      expect(rows.map((row) => row.severity), [
+        CodeLabNoticeSeverity.warning,
+        CodeLabNoticeSeverity.info,
+      ]);
       expect(
-        entries.first.body,
+        rows.first.body,
         'The agent cannot restore sessions after reconnecting.',
       );
     });
 
     test('a resolved approval is a compact label', () {
-      final entries = transcriptEntriesOf(
+      final entries = transcriptRowsOf(
         const [
           TranscriptItem.toolCall(
             id: 't1/tool-call-1',
@@ -323,7 +366,7 @@ void main() {
     });
 
     test('a cancelled approval keeps its cancelled outcome', () {
-      final entries = transcriptEntriesOf(
+      final entries = transcriptRowsOf(
         const [
           TranscriptItem.toolCall(
             id: 't1/tool-call-1',
@@ -519,4 +562,40 @@ void main() {
       });
     },
   );
+
+  group('turnStateOf', () {
+    SessionView view(SessionStatusView status, {bool pending = false}) =>
+        SessionView(
+          revision: 1,
+          status: status,
+          pendingApprovals: [
+            if (pending)
+              const PendingApprovalView(
+                approvalId: ApprovalRequestId('permission-1'),
+                sessionId: SessionId('s'),
+                risk: ApprovalRiskLevel.shell,
+                options: [_allowOnce],
+                focused: true,
+              ),
+          ],
+        );
+
+    test('a busy session gets a chip, a free one none', () {
+      expect(
+        turnStateOf(view(SessionStatusView.running)),
+        CodeLabTurnState.running,
+      );
+      expect(
+        turnStateOf(view(SessionStatusView.running, pending: true)),
+        CodeLabTurnState.awaitingApproval,
+      );
+      expect(
+        turnStateOf(view(SessionStatusView.cancelling)),
+        CodeLabTurnState.cancelling,
+      );
+      expect(turnStateOf(view(SessionStatusView.idle)), isNull);
+      expect(turnStateOf(view(SessionStatusView.detached)), isNull);
+      expect(turnStateOf(null), isNull);
+    });
+  });
 }
