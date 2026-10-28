@@ -88,9 +88,11 @@ void main() {
       TranscriptItem.agentText(id: 'a1', text: 'answer'),
     ];
 
-    expect(lines(items), ['pondering', 'answer']);
+    // Мысли отделены от ответа пустой строкой, как в REPL (§12.2.3).
+    expect(lines(items), ['pondering', '', 'answer']);
     expect(lines(items, thoughts: ThoughtsMode.collapsed), [
       'thinking…',
+      '',
       'answer',
     ]);
     expect(lines(items, thoughts: ThoughtsMode.hidden), ['answer']);

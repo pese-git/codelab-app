@@ -151,4 +151,20 @@ void main() {
 
     expect(render(model, _chrome()).lines.map(_plain), contains('↓ 3 new'));
   });
+
+  test('a hint line wider than the terminal drops whole entries from the '
+      'end', () {
+    final frame = render(
+      _model(const [], columns: 40),
+      TuiChrome(
+        hints: 'Enter send · Shift+Enter new line · Esc cancel · Ctrl+D exit',
+        now: _t0,
+      ),
+    );
+
+    expect(
+      frame.lines.map(_plain).toList()[frame.lines.length - 2],
+      'Enter send · Shift+Enter new line',
+    );
+  });
 }
