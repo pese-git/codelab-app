@@ -13,15 +13,15 @@
 | `agent-core-engineer` | `codelab_agent_core`, `codelab_agent_io`, `apps/codelab_agent` | да |
 | `client-engineer` | `codelab_client_acp`, `codelab_client_core`, `codelab_client_io`, `apps/codelab_cli` | да |
 | `desktop-engineer` | `apps/codelab_desktop`, `packages/flutter/codelab_ui` | да |
-| `check-runner` | `melos run check` и targeted-скрипты | нет |
+| `check-runner` | проверки затронутого; полный `melos run check` — по просьбе | нет |
 | `architecture-reviewer` | спецификации, границы, слои, паттерны, тесты, комментарии | нет |
 | `acp-safety-reviewer` | безопасность, ACP, данные, состояние, наблюдаемость (§2, приоритеты 1–5) | нет |
 
 ## Команды
-- `/change <задача>` — полный цикл: OpenSpec change → одобрение пользователя → реализация по `tasks.md` (TDD) → `melos run check` → двойное ревью → исправления.
+- `/change <задача>` — полный цикл: OpenSpec change → одобрение пользователя → реализация по `tasks.md` (TDD) → проверка затронутого (§21) → двойное ревью → исправления.
 - `/implement <change-id>` — реализовать или продолжить существующий change.
 - `/codelab-review [change-id]` — check + двойное ревью текущей ветки (не путать со встроенной `/review` Claude Code).
-- `/check [скрипты]` — прогон проверок.
+- `/check [скрипты]` — прогон проверок; без аргументов — полный `melos run check` (явная просьба пользователя).
 
 ## Процесс
 - Задача, меняющая поведение, ACP-контракты, public API, persistence, security или архитектуру, начинается с `codelab-architect` (§17). Implementation-only правку можно сделать напрямую, но затем — `/codelab-review`.

@@ -28,7 +28,7 @@
 ## 3. Тесты
 
 * TDD — по `packages/dart/codelab_agent_core/AGENTS.md` §2.
-* `LocalExecutionEnv` проверяется на реальных файлах во временном каталоге и на реальных процессах `/bin/sh`. Это интеграционные тесты на Dart VM, они входят в `melos run check`. В ветках `feature/*` и `hotfix/*` другие прогоны не нужны (корневой `AGENTS.md` §21).
+* `LocalExecutionEnv` проверяется на реальных файлах во временном каталоге и на реальных процессах `/bin/sh`. Это интеграционные тесты на Dart VM, они входят в `melos run check` и в локальную проверку затронутого, если изменён пакет (корневой `AGENTS.md` §21). В ветках `feature/*` и `hotfix/*` другие прогоны не нужны (корневой `AGENTS.md` §21).
 * Общий контракт env — `packages/dart/codelab_agent_core/test/env/execution_env_contract.dart`; тесты пакета прогоняют его на `LocalExecutionEnv`.
 * Общий контракт хранилища сессий — `packages/dart/codelab_agent_core/test/session/session_store_contract.dart`; его проходит `JsonlSessionStore` во временном каталоге. Тест сбоя (`jsonl_crash_recovery_test.dart`) запускает дочерний процесс `test/session/crash_child.dart` и завершает его `SIGKILL`.
 * Тесты времени (таймаут, завершение дерева процессов) задают пределы с запасом («не позже N с»), а не точное время. CI работает на Linux; ветка Windows (`taskkill`) проверяется вручную.
