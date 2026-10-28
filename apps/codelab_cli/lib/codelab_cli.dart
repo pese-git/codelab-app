@@ -32,6 +32,8 @@ export 'src/repl/repl.dart';
 export 'src/repl/repl_command.dart';
 export 'src/repl/repl_session.dart';
 export 'src/run.dart';
+export 'src/scenario/agent_connector.dart';
+export 'src/scenario/test_scenario_command.dart';
 export 'src/session_setup.dart';
 export 'src/signals.dart';
 export 'src/strings.dart';

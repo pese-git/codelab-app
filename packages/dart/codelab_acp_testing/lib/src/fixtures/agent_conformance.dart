@@ -196,22 +196,31 @@ Future<AgentFixtureResult> runAgentFixture(
 
 /// Транспортный драйвер (acp-golden-fixtures «Транспортный драйвер
 /// фикстур»): тот же алгоритм §14.9 поверх соединения из [connect].
-/// Фикстура без `setup.transport` пропускается — её играет
-/// [runAgentFixture].
+///
+/// [transportFixtures] выбирает, какие фикстуры играть: `true` — только с
+/// `setup.transport` (драйвер бинаря агента; остальные играет
+/// [runAgentFixture]); `false` — только без него, через соединение
+/// профиля (`codelab test-scenario`; транспортные фикстуры проверяет
+/// драйвер бинаря, design.md change `add-codelab-cli`, D12). Фикстура
+/// другого вида пропускается с причиной.
 Future<AgentFixtureResult> runAgentFixtureOver(
   AcpFixture fixture,
   AgentFixtureConnector connect, {
   Duration frameTimeout = const Duration(seconds: 5),
   Duration quietPeriod = const Duration(milliseconds: 200),
+  bool transportFixtures = true,
 }) async {
   if (_withoutAgentRole(fixture) case final skipped?) {
     return skipped;
   }
-  if (fixture.setup.transport == null) {
+  final hasTransport = fixture.setup.transport != null;
+  if (hasTransport != transportFixtures) {
     return AgentFixtureResult._(
       skipped: true,
-      skipReason:
-          '${fixture.id} has no setup.transport: the in-memory run plays it',
+      skipReason: hasTransport
+          ? '${fixture.id} has setup.transport: the transport driver of '
+                'codelab-agent plays it against the binary process'
+          : '${fixture.id} has no setup.transport: the in-memory run plays it',
     );
   }
   return _play(
@@ -299,7 +308,8 @@ final class _AgentRun {
 
   Future<void> play(AgentUnderTest agent) async {
     final frames = [
-      if (!fixture.setup.skipInitialize) ..._handshake(fixture.setup),
+      if (!fixture.setup.skipInitialize)
+        ...agentFixtureHandshake(fixture.setup),
       ...fixture.frames,
     ];
     for (final frame in frames) {
@@ -502,8 +512,9 @@ final class _AgentRun {
 /// Стандартный handshake (§14.9, шаг 6): `initialize` с
 /// `setup.clientCapabilities`, `session/new` в `cwd`; `sessionId` ответа —
 /// переменная прогона. `available_commands_update` после ответа — часть
-/// handshake: фикстуры начинаются с первого кадра сценария.
-List<FixtureFrame> _handshake(FixtureSetup setup) {
+/// handshake: фикстуры начинаются с первого кадра сценария. Общий для
+/// драйвера и `FixtureReplayAgent`, который играет его зеркально.
+List<FixtureFrame> agentFixtureHandshake(FixtureSetup setup) {
   FixtureFrame frame(
     int index,
     FrameDirection dir,
