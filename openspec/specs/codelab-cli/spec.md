@@ -4,7 +4,7 @@
 Терминальный клиент `codelab` (`apps/codelab_cli`) на чистом Dart поверх общего клиентского слоя `codelab_client_core`: разбор команд и флагов, профили подключения, построчный REPL со стримингом, одобрения, slash-команды, клавиши и история ввода. Состояния сессий, очереди и одобрений у CLI нет — их владелец kit. Устройство — `docs/architecture/proposals/dart-agent-and-clients/09-11-stage-6-cli-mvp.md` и §12.2.
 ## Requirements
 ### Requirement: Команда codelab и разбор флагов
-Терминальный клиент `apps/codelab_cli` SHALL собираться в бинарь `codelab` (`melos run build:cli` → `build/bin/codelab`). Без подкоманды и без `-p`/`-f` `codelab [опции] [первое сообщение]` SHALL запускать REPL; подкоманды MVP — `profiles` и `test-scenario`; `--version` и `--help` SHALL печатать версию и справку и выходить с кодом `0`. Флаги MVP — по таблице `09-11-stage-6-cli-mvp.md` без пометки этапа и с пометкой «этап 6», кроме перечисленных в design.md, D1 как перенесённые. Флаг или подкоманда, не зарегистрированные в этой сборке, SHALL давать код `64` и строку `Unknown flag` / `Unknown command` в stderr без запуска агента. Ошибка разбора SHALL оставлять stdout пустым. Клиент НЕ SHALL импортировать Flutter и `package:codelab_agent_*`.
+Терминальный клиент `apps/codelab_cli` SHALL собираться в бинарь `codelab` (`melos run build:cli` → `build/bin/codelab`). Без подкоманды и без `-p`/`-f` `codelab [опции] [первое сообщение]` SHALL запускать REPL; подкоманды MVP — `profiles` и `test-scenario`; `--version` и `--help` SHALL печатать версию и справку и выходить с кодом `0`. Флаги MVP — по таблице `09-11-stage-6-cli-mvp.md` без пометки этапа и с пометкой «этап 6», кроме перечисленных в design.md, D1 как перенесённые. Флаг или подкоманда, не зарегистрированные в этой сборке, SHALL давать код `64` и строку `Unknown flag` / `Unknown command` в stderr без запуска агента. Флаг `--ui line|tui` SHALL выбирать интерактивный режим: `line` (по умолчанию) — построчный REPL, `tui` — полноэкранный режим (capability `codelab-tui`). `--ui tui` SHALL давать код `64` без запуска агента, если stdin или stdout не TTY (`--ui tui needs a terminal on stdin and stdout`) и вместе с `-p`/`-f` (`--ui applies only to the interactive mode`); неизвестное значение — код `64`. Ошибка разбора SHALL оставлять stdout пустым. Клиент НЕ SHALL импортировать Flutter и `package:codelab_agent_*`.
 
 #### Scenario: Неизвестный флаг
 - **WHEN** запускается `codelab --output-format stream-json -p hi`
@@ -13,6 +13,14 @@
 #### Scenario: Версия
 - **WHEN** запускается `codelab --version`
 - **THEN** в stdout одна строка с версией клиента, код выхода `0`
+
+#### Scenario: TUI без терминала
+- **WHEN** запускается `codelab --ui tui` со stdout в pipe
+- **THEN** процесс завершается с кодом `64`, в stderr — `--ui tui needs a terminal on stdin and stdout`, агент не запускается
+
+#### Scenario: TUI с headless
+- **WHEN** запускается `codelab --ui tui -p hi`
+- **THEN** процесс завершается с кодом `64`, stdout пуст, агент не запускается
 
 ### Requirement: Профили подключения CLI
 Значение `--agent` (`-a`) SHALL разбираться так: `stdio:<команда> [аргументы]` — `StdioProfile` с разбором аргументов как в shell (кавычки, экранирование); `ws://…` или `wss://…` — `WebSocketProfile`, токен которого читается из переменной `CODELAB_AGENT_TOKEN` через `SecretSource`; `embedded` — код `64` и `Embedded agent is not available in this build.` до этапа 7; иначе — id профиля из `$CODELAB_HOME/profiles.json` (`CODELAB_HOME` по умолчанию — `~/.codelab`), хранимого `JsonFileProfileStore`. Без `--agent` SHALL использоваться профиль `default`; если файла или профиля нет — код `64` и `No default agent profile. Pass --agent or run "codelab profiles add default stdio:<command>".`, агент не запускается. Команда `codelab profiles list|show <id>|add <id> <значение --agent>|remove <id>` SHALL работать без запуска агента; значение токена в `profiles.json` НЕ SHALL записываться. Ошибка подключения SHALL давать понятное сообщение в stderr и код `1` (U-06).

@@ -96,7 +96,7 @@ CodeLab SHALL проверять границы пакетов тестом `pac
 - **Бинарь `apps/codelab_agent`** НЕ SHALL импортировать `package:flutter/`, `package:fluent_ui/`, `package:codelab_client_acp/` и `package:codelab_ui/`. Его `dependencies` SHALL быть подмножеством `{codelab_agent_core, codelab_agent_io, codelab_agent_acp, codelab_acp_protocol, codelab_acp_transports, args, http, async, meta}`. В его `lib/` и `bin/` НЕ SHALL встречаться `ToolRegistry(`, `Agent(` и `AgentRuntime(`: ядро собирается только через `buildAgentCore` (HOST-6).
 - **`codelab_client_core`** НЕ SHALL импортировать `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web/`, `package:flutter/` и `package:codelab_acp_transports/io.dart`. Его `dependencies` SHALL быть подмножеством `{codelab_client_acp, codelab_acp_protocol, codelab_acp_transports, freezed_annotation, meta, collection, async}`.
 - **`codelab_client_io`** НЕ SHALL импортировать `package:flutter/`. Его `dependencies` SHALL быть подмножеством `{codelab_client_core, codelab_client_acp, codelab_acp_protocol, codelab_acp_transports, path, meta}`.
-- **Терминальный клиент `apps/codelab_cli`** НЕ SHALL импортировать `package:flutter/`, `package:fluent_ui/`, `package:codelab_ui/` и `package:codelab_agent_`. Его `dependencies` SHALL быть подмножеством `{codelab_client_core, codelab_client_io, codelab_client_acp, codelab_acp_protocol, codelab_acp_transports, codelab_acp_testing, args, async, path, meta}`; `package:codelab_acp_testing/` SHALL импортироваться только из `lib/src/scenario/`.
+- **Терминальный клиент `apps/codelab_cli`** НЕ SHALL импортировать `package:flutter/`, `package:fluent_ui/`, `package:codelab_ui/` и `package:codelab_agent_`. Его `dependencies` SHALL быть подмножеством `{codelab_client_core, codelab_client_io, codelab_client_acp, codelab_acp_protocol, codelab_acp_transports, codelab_acp_testing, dart_tui, args, async, path, meta}`; `package:codelab_acp_testing/` SHALL импортироваться только из `lib/src/scenario/`; `package:dart_tui/` SHALL импортироваться только из `lib/src/tui/`, а файлы ядра экрана `lib/src/tui/core/` НЕ SHALL импортировать ни `package:dart_tui/`, ни `dart:io`.
 - **Расширение allowlist** любого из этих множеств SHALL проходить через OpenSpec change.
 - **Клиент `apps/codelab_desktop`** НЕ SHALL импортировать `package:codelab_agent_*` напрямую.
 
@@ -142,5 +142,9 @@ CodeLab SHALL проверять границы пакетов тестом `pac
 
 #### Scenario: Тестовый пакет вне драйвера фикстур
 - **WHEN** файл в `apps/codelab_cli/lib/src/repl/` импортирует `package:codelab_acp_testing/`
+- **THEN** сторож сообщает нарушение
+
+#### Scenario: Пакет TUI вне адаптера
+- **WHEN** файл в `apps/codelab_cli/lib/src/repl/` или в `apps/codelab_cli/lib/src/tui/core/` импортирует `package:dart_tui/`
 - **THEN** сторож сообщает нарушение
 
