@@ -40,4 +40,25 @@ void main() {
     expect(io.stdoutText, isEmpty);
     expect(io.stderrText, contains('Unknown flag --output-format'));
   });
+
+  test('--ui tui without a terminal exits with 64 and does not start the '
+      'agent', () async {
+    for (final io in [
+      FakeCliIo(stdinIsTerminal: true),
+      FakeCliIo(stdoutIsTerminal: true),
+    ]) {
+      final code = await runCodelab(
+        ['--ui', 'tui', '--agent', 'stdio:/nonexistent/agent'],
+        environment: {'HOME': '/nonexistent'},
+        io: io,
+      );
+
+      expect(code, 64);
+      expect(io.stdoutText, isEmpty);
+      expect(
+        io.stderrText,
+        contains('--ui tui needs a terminal on stdin and stdout'),
+      );
+    }
+  });
 }

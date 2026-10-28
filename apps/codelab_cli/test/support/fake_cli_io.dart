@@ -13,10 +13,13 @@ import 'package:codelab_cli/codelab_cli.dart';
 /// `runCodelab(args, environment: env, io: io)` и [stdoutText],
 /// [stderrText].
 final class FakeCliIo implements CliIo {
-  FakeCliIo({String? stdin, this.stdinIsTerminal = false})
-    : _stdin = stdin == null
-          ? const Stream<List<int>>.empty()
-          : Stream.value(utf8.encode(stdin));
+  FakeCliIo({
+    String? stdin,
+    this.stdinIsTerminal = false,
+    this.stdoutIsTerminal = false,
+  }) : _stdin = stdin == null
+           ? const Stream<List<int>>.empty()
+           : Stream.value(utf8.encode(stdin));
 
   final Stream<List<int>> _stdin;
   final _stdout = StringBuffer();
@@ -24,6 +27,9 @@ final class FakeCliIo implements CliIo {
 
   @override
   final bool stdinIsTerminal;
+
+  @override
+  final bool stdoutIsTerminal;
 
   @override
   Stream<List<int>> get stdin => _stdin;
