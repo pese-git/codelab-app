@@ -11,7 +11,7 @@
 
 ## 1. Назначение
 
-`codelab_agent_acp` — проекция `AgentRuntime` в ACP: `AcpAgentServer` обслуживает соединения по любому `AcpTransport`, проецирует события ядра в `session/update` и исполняет файлы, команды и запросы разрешений через клиента. Транспорты (stdio, WebSocket) и локальный листинг передаёт хост — бинарь `apps/codelab_agent` или `codelab_embedded`.
+`codelab_agent_acp` — проекция `AgentRuntime` в ACP: `AcpAgentServer` обслуживает соединения по любому `AcpTransport`, проецирует события ядра в `session/update` и исполняет файлы, команды и запросы разрешений через клиента. Транспорты (stdio, WebSocket) и локальный листинг передаёт хост — бинарь `apps/codelab_agent`, а с этапа 7 и `codelab_embedded` (ещё не создан).
 
 ## 2. Границы
 
