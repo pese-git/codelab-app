@@ -5,8 +5,10 @@
 .opencode/
 .idea/
 *.iml
-.claude/
-CLAUDE.md
+.claude/*
+!.claude/agents/
+!.claude/commands/
+!.claude/skills/
 .mcp.json
 
 # Dart / Flutter
