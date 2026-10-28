@@ -35,7 +35,7 @@
 - [x] 3.6a Тест (acp-protocol-client «Неожиданный отказ транспорта транслируется в состояние соединения»): `packages/dart/codelab_client_acp/test/application/agent_exit_during_initialize_test.dart` — отказ транспорта во время `initialize` сразу завершает `connect` (красный); реализовать обрыв ожидающих запросов в состоянии `initializing` — зелёный (design.md, D14)
 - [x] 3.6 E2E `cli/headless-print-basic` (`test/e2e/headless_print_basic_test.dart`): `codelab -p hello -a 'stdio:dart <agent.dart>'` против режима `normal` → stdout с текстом ответа, код `0`; пустой `CODELAB_HOME` без `--agent` → код `64` и подсказка, агент не запущен; `--agent 'stdio:/nonexistent'` → код `1`
 - [x] 3.7 Скрипты `build:cli` и `test:e2e:cli` в корневом `pubspec.yaml` (testing-quality «Проверки workspace»); проверка: `build/bin/codelab --version`
-- [ ] 3.8 Проверка итерации 1: `fvm dart run melos run check` зелёный (новое приложение в `guard` и `test`); PR итерации 1
+- [x] 3.8 Проверка итерации 1: `fvm dart run melos run check` зелёный (новое приложение в `guard` и `test`); PR итерации 1
 
 ## 4. Headless полностью (6.7, 6.9, H-01, H-02)
 
@@ -92,11 +92,11 @@
 - [x] 8.3 Тест (cli-scenario-driver «Команда test-scenario», «Вывод и коды выхода test-scenario»): `test/scenario/test_scenario_command_test.dart` — корпус против процессного `FixtureReplayAgent` → все `PASS`/`SKIP`, код `0`; копия фикстуры с испорченным ожидаемым кадром → `FAIL` с диффом, код `1`; `--filter`; фикстура без роли `agent` → `SKIP` с причиной; сторонний агент и фикстура с `llm` → `SKIP`; битый файл → код `64`; `embedded` → `64`; агент не запускается → `1`; формат строк и итога (красный)
 - [x] 8.4 Реализовать `scenario/test_scenario_command.dart` и `scenario/agent_connector.dart` поверх `runAgentFixtureOver`, `--llm-script` для `codelab-agent` — 8.3 зелёный
 - [x] 8.5 Интеграционный тест: `test-scenario` на корпусе с `--agent 'stdio:<kernel codelab-agent> serve --stdio'` — фикстуры роли `agent` без транспортного блока `PASS`; пропуск, если kernel бинаря агента не собирается
-- [ ] 8.6 Проверка итерации 5: `check` зелёный; PR итерации 5
+- [x] 8.6 Проверка итерации 5: `check` зелёный; PR итерации 5
 
 ## 9. Документы и Definition of Done
 
-- [ ] 9.1 `09-11-stage-6-cli-mvp.md`: раздел «OpenSpec change» и DoD — перенос stream-json и флагов вывода в `add-cli-stream-json`, разведки 6.11 и сторожа `package:dart_tui/` в change TUI, `--trace-file`/`/trace`/`/inspect`, U-23 и `--session`; примечание о строках MVP по-английски (design.md, D1, D15); `12-5-stream-json.md` — ссылка на `add-cli-stream-json`
-- [ ] 9.2 `agent-parity-goals.md`: статусы H-01, H-02, H-04, U-01–U-09, U-15 и уточнение критерия H-01 (позиционные файлы — к U-14, design.md, D9); `AGENTS.md` §5 — `apps/codelab_cli` в структуре и назначении, исключение для `codelab_acp_testing` (design.md, D3); `docs/architecture/testing.md` — PTY-e2e CLI, если раздел описывает уровни тестов приложений
-- [ ] 9.3 Ручная проверка с Python-агентом (`codelab -a 'stdio:codelab serve --stdio'`): промпт, одобрение, `/mode`, `/sessions`, `/resume`; итог — в описании PR
+- [x] 9.1 `09-11-stage-6-cli-mvp.md`: раздел «OpenSpec change» и DoD — перенос stream-json и флагов вывода в `add-cli-stream-json`, разведки 6.11 и сторожа `package:dart_tui/` в change TUI, `--trace-file`/`/trace`/`/inspect`, U-23 и `--session`; примечание о строках MVP по-английски (design.md, D1, D15); `12-5-stream-json.md` — ссылка на `add-cli-stream-json`
+- [x] 9.2 `agent-parity-goals.md`: статусы H-01, H-02, H-04, U-01–U-09, U-15 и уточнение критерия H-01 (позиционные файлы — к U-14, design.md, D9); `AGENTS.md` §5 — `apps/codelab_cli` в структуре и назначении, исключение для `codelab_acp_testing` (design.md, D3); `docs/architecture/testing.md` — PTY-e2e CLI, если раздел описывает уровни тестов приложений
+- [x] 9.3 Ручная проверка с Python-агентом (`codelab -a 'stdio:codelab serve --stdio'`): промпт, одобрение, `/mode`, `/sessions`, `/resume`; итог — в описании PR. Одобрение на Python-агенте не проверяется: его mock-провайдер не вызывает инструменты; одобрение закрывают PTY-e2e `cli/repl-permission-*` против scripted-агента
 - [ ] 9.4 Проверка DoD: `fvm dart run melos run check` и `test:e2e:cli` зелёные локально и в CI (macOS локально, Linux в CI); `build:cli` даёт `build/bin/codelab`; `openspec validate add-codelab-cli` без ошибок; PR итерации 6

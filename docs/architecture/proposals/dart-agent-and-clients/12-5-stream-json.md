@@ -22,7 +22,10 @@
 | Usage | L-11, OpenSpec `add-usage-extension` после этапа 9 | `usage` всегда есть и до расширения равно `null` |
 
 Этап — 6 (задача 6.7, `apps/codelab_cli/lib/src/headless/`); формат утверждается OpenSpec change
-`add-codelab-cli` как «stream-json v1». Префикс инвариантов — `SJ-`.
+`add-cli-stream-json` как «stream-json v1». MVP CLI (`add-codelab-cli`) выводит только текст:
+проекции нужны поля, которых в модели отображения kit ещё нет (§12.1), поэтому формат, `json`,
+флаги `--include-*` и отвод кадров вынесены в отдельный change (design.md change
+`add-codelab-cli`, D1). Префикс инвариантов — `SJ-`.
 
 ## 12.5.2. Решение о формате
 
