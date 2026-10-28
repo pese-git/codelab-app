@@ -48,15 +48,15 @@
 
 ## 6. Документы и Definition of Done
 
-- [ ] 6.1 `12-2-cli-display-and-input.md`:
+- [x] 6.1 `12-2-cli-display-and-input.md`:
   - §12.2.7: ядро в `tui/core/` и правило сторожа; компоненты пакета в адаптере и `TuiChrome` (D12); строки кадра режет наш рендер (шаг 4); чек-лист разведки — ссылка на D14;
   - §12.2.9: Ctrl+J в TUI не различается с Enter, `newline` в TUI — Shift+Enter, Alt+Enter, `\` + Enter;
   - §12.2.12, мера 3: итог разведки — в `design.md` change `add-cli-tui`.
-- [ ] 6.2 Обновить ссылки и статусы:
+- [x] 6.2 Обновить ссылки и статусы:
   - `09-11-stage-6-cli-mvp.md`: строка `--ui` — change `add-cli-tui`; пункт 6.11 и DoD разведки — ссылки на D14;
   - `agent-parity-goals.md`: U-12 — «закрыто change `add-cli-tui`» с файлом `cli/tui-smoke`; U-23 — частично (вставка и Shift+Enter в TUI);
   - `technology-stack.md` §20а: версия `dart_tui` из `pubspec.lock`;
   - вложенный `apps/codelab_cli/AGENTS.md`: `package:dart_tui/` только в `lib/src/tui/`, ядро `tui/core/` без пакета.
-- [ ] 6.3 Удалить каталог спайка `apps/codelab_cli/tool/tui_spike/`.
-- [ ] 6.4 Ручная проверка `--ui tui` в Terminal.app или iTerm2 против Python-агента: промпт, вставка, Shift+Enter или Alt+Enter, `/mode`, `/sessions`, `/resume`, выход. Итог — в описании PR.
-- [ ] 6.5 Проверка DoD: `fvm dart run melos run check` и `test:e2e:cli` зелёные локально и в CI; `openspec validate add-cli-tui --strict` без ошибок; PR итерации 3
+- [x] 6.3 Удалить каталог спайка `apps/codelab_cli/tool/tui_spike/`.
+- [x] 6.4 Ручная проверка `--ui tui` в терминале (tmux) против Dart-агента `codelab-agent serve --stdio` с моделью LM Studio (`--provider openai-compatible`, решение владельца проекта вместо Python-агента): промпт, вставка, Shift+Enter или Alt+Enter, одобрение, `/model`, `/mode`, `/sessions`, `/resume`, выход. Итог — в описании PR.
+- [x] 6.5 Проверка DoD: `fvm dart run melos run check` и `test:e2e:cli` зелёные локально и в CI; `openspec validate add-cli-tui --strict` без ошибок; PR итерации 3

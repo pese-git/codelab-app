@@ -204,20 +204,24 @@ TTY: вывод headless — данные для скриптов.
 [`dart_tui`](https://pub.dev/packages/dart_tui) (MIT, `^3.0.0`; [технологический стек](../../technology-stack.md),
 §20а) — каркас Model–Update–View в духе Elm и Bubble Tea: `Model` с `init()`, `update(Msg)` и
 `view()`, асинхронные команды `Cmd`, `Program`, который владеет циклом событий и терминалом.
-Пакет импортируется только из `apps/codelab_cli/lib/src/tui/` (правило сторожа, §9.5);
-построчный REPL, headless, рендеры `lib/src/render/` и декодер `lib/src/input/key_decoder.dart`
-о нём не знают и пишут в stdout сами. Возможности, которые проверяет разведка этапа 6
-(задача 6.11), — «Чек-лист разведки» ниже.
+Пакет импортируется только из `apps/codelab_cli/lib/src/tui/`, а ядро экрана
+`lib/src/tui/core/` не импортирует ни его, ни `dart:io` (два правила сторожа, §9.5; design.md
+change `add-cli-tui`, D2, D3); построчный REPL, headless, рендеры `lib/src/render/` и декодер
+`lib/src/input/key_decoder.dart` о нём не знают и пишут в stdout сами. Возможности, которые
+проверила разведка этапа 6 (задача 6.11), — «Чек-лист разведки» ниже, итог — D14 того же
+`design.md`.
 
 **Архитектура Model–Update–View.** Два слоя.
 
-1. **Чистое ядро экрана** (`tui_model.dart`, `tui_update.dart`, `tui_view.dart`) — без
+1. **Чистое ядро экрана** (`lib/src/tui/core/`: `tui_model.dart`, `tui_update.dart`,
+   `tui_view.dart`, `composer.dart`, `transcript_lines.dart`, `frame.dart` и др.) — без
    `package:dart_tui` и `dart:io`. Состояние экрана — неизменяемая `TuiModel`; `reduce(model,
    msg)` — чистая функция, возвращающая новую модель и список команд-данных `TuiCmd`;
-   `render(model)` — чистая функция, возвращающая кадр (`Frame`: строки ширины `size.columns`
-   и позиция курсора). Ядро тестируется без терминала и без пакета (TUI-5).
+   `render(model, chrome)` — чистая функция, возвращающая кадр (`Frame`: строки ширины
+   `size.columns` и позиция курсора); `chrome` (`TuiChrome`) — готовые строки компонентов
+   dart_tui (ниже). Ядро тестируется без терминала и без пакета (TUI-5).
 2. **Адаптер к `dart_tui`** (`tui_app.dart`, `tui_input.dart`, `tui_effects.dart`,
-   `tui_runner.dart`). `TuiApp implements Model` (dart_tui): `update(Msg)` переводит сообщение
+   `registry_key_map.dart`, `tui_command_context.dart`, `tui_runner.dart` в `lib/src/tui/`). `TuiApp implements Model` (dart_tui): `update(Msg)` переводит сообщение
    dart_tui в `TuiMsg` (`TuiInput`: `KeyPressMsg` — через реестр клавиш §12.2.9, `PasteMsg`,
    `WindowSizeMsg`, после MVP — мышь), вызывает `reduce` и переводит `List<TuiCmd>` в один `Cmd`
    dart_tui (`TuiEffects.toDartTuiCmd`, несколько команд — `batch`); `view()` вызывает `render` и
@@ -239,7 +243,8 @@ TTY: вывод headless — данные для скриптов.
 `render`, а ядро и его тесты не меняются.
 
 ```dart
-// apps/codelab_cli/lib/src/tui/tui_model.dart — без package:dart_tui и dart:io
+// Эскиз полной модели после MVP. Реализация MVP — apps/codelab_cli/lib/src/tui/core/
+// (без package:dart_tui и dart:io); её поля — design.md change `add-cli-tui`, D5.
 final class TuiModel {
   // После MVP (U-37, §12.6.13): поля сессии — composer, scroll, expanded, approval —
   // переезжают в SessionScreen, а модель держит open, active и screens по SessionId.
@@ -282,7 +287,7 @@ final class SwitchSessionCmd extends TuiCmd { final SessionId id; }             
 final class CloseSessionCmd extends TuiCmd { final SessionId id; final bool cancelTurn; } // после MVP: U-37
 
 (TuiModel, List<TuiCmd>) reduce(TuiModel model, TuiMsg msg);    // tui_update.dart
-Frame render(TuiModel model);                                   // tui_view.dart
+Frame render(TuiModel model, TuiChrome chrome);                 // tui_view.dart
 ```
 
 ```dart
@@ -371,7 +376,8 @@ sequenceDiagram
    переписывает только изменённые строки и оборачивает вывод в synchronized output
    `ESC[?2026h … ESC[?2026l`, если терминал подтвердил режим 2026 на запрос DECRQM; иначе пишет
    без обёртки (выбор `withCellRenderer()` для таких терминалов — пункт чек-листа). Содержимое
-   `View` пакет пишет как есть, поэтому за него отвечает наш `render`: каждая строка не шире
+   `View` пакет пишет как есть и длинные строки не режет (разведка, D14 `add-cli-tui`), поэтому
+   за него отвечает наш `render` (`fitLine` в `core/frame.dart`): каждая строка не шире
    `size.columns` (ширина символов — §12.2.2), кончается сбросом атрибутов (TUI-9), а текст
    агента и инструментов проходит санитизацию до попадания в кадр (TUI-11).
 5. **Размер.** dart_tui на macOS и Linux слушает `ProcessSignal.sigwinch` и присылает
@@ -403,7 +409,12 @@ sequenceDiagram
    `ESC[?2026h … l`. Команда `raw()` dart_tui не используется: в 3.0.0 `Program` не пишет
    `RawMsg` в терминал.
 
-**Компоненты dart_tui.** Используются: `SpinnerModel` — значок хода в статус-строке и значок
+**Компоненты dart_tui.** Компоненты — `Model` пакета, поэтому живут в адаптере (`TuiApp`),
+а не в `TuiModel`: ядро решает, *что* показывать (идёт ли ход, открыт ли пикер и какой —
+`PickerSpec`), адаптер — *как*, и отдаёт `view()` компонентов в `render` строками `TuiChrome`;
+раскладка, ширина и сброс атрибутов остаются за ядром (design.md change `add-cli-tui`, D12). В
+MVP используются `SpinnerModel`, `ListModel` и `HelpModel`; остальное ниже — после MVP.
+Используются: `SpinnerModel` — значок хода в статус-строке и значок
 `running` строк инструментов (кадры `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 100 мс, §12.2.4); `ViewportModel` —
 оверлеи со статичным длинным текстом (подробности `/inspect` и Enter на строке инструмента,
 `/help keys`, полный diff по `?` в зоне одобрения); `ListModel` (с фильтром) и
@@ -420,8 +431,9 @@ OSC 8 и санитизацией, строки инструментов §12.2.
 композер, транскрипт с кэшем переносов, slash-меню и дополнение путей §12.2.8 (нечёткий поиск
 `CommandCatalog`, семантика Tab U-24), реестр клавиш §12.2.9, темы §12.6.3.
 
-**Чек-лист разведки** (задача 6.11, исключение (д) §9.0; итог — таблица в `design.md` change
-`add-codelab-cli`, по строке на пункт: «да», «нет → запасной путь», ссылка на файл спайка).
+**Чек-лист разведки** (задача 6.11, исключение (д) §9.0; итог — таблица D14 в `design.md` change
+`add-cli-tui`, по строке на пункт: «да», «нет → запасной путь», ссылка на файл спайка; пакет
+подтверждён).
 Пункты 1–6 по исходникам 3.0.0 поддерживаются и подтверждаются запуском в терминалах из
 таблицы §12.2.9; 7–10 по исходникам не установлены и проверяются впервые.
 
@@ -457,7 +469,7 @@ OSC 8 и санитизацией, строки инструментов §12.2.
 Enter — подробности, Esc — назад; другой печатный символ возвращает фокус в композер и вводится
 туда; при ожидающем одобрении режим выбора выключен (U-28, §12.6.10, шаг 8; UX-22).
 
-**Композер.** Многострочный редактор (`lib/src/tui/composer.dart`): курсор в 2D, перенос по
+**Композер.** Многострочный редактор (`lib/src/tui/core/composer.dart`): курсор в 2D, перенос по
 ширине, история (общая с REPL, `~/.codelab/cli_history`), чипы вложений над текстом
 (`[img clipboard-1.png 34 КБ] [file lib/a.dart]`; Backspace в начале пустой строки удаляет
 последний чип). Ввод `/` в начале открывает slash-меню (U-03), `@` — дополнение путей
@@ -564,6 +576,10 @@ REPL): конечный автомат над потоком байт stdin.
    строке, заканчивающейся `\`, — `\` удаляется и вставляется перевод строки (запасной путь,
    который работает в любом терминале).
 
+В TUI Ctrl+J не различается с Enter: `dart_tui` присылает его как Enter (разведка, D14 change
+`add-cli-tui`, пункт 3). Поэтому таблица `KeyBindings.tui` строится из таблицы REPL без Ctrl+J,
+а `newline` в TUI — Shift+Enter (где терминал различает), Alt+Enter и `\` + Enter.
+
 **Реестр клавиш** (`lib/src/input/key_bindings.dart`): одна таблица действий; из неё строятся
 обработка, строка подсказок TUI и `/help keys`. Действие, на которое ссылается подсказка, но нет
 в реестре, — ошибка теста. Переопределение — отображение `keys` в `~/.codelab/cli.yaml`
@@ -576,7 +592,7 @@ REPL): конечный автомат над потоком байт stdin.
 | Действие | Клавиши по умолчанию | Область | Режим |
 |---|---|---|---|
 | `submit` | Enter | композер | REPL, TUI |
-| `newline` | Shift+Enter, Alt+Enter, Ctrl+J; `\` + Enter | композер | REPL, TUI |
+| `newline` | Shift+Enter, Alt+Enter, Ctrl+J (только REPL); `\` + Enter | композер | REPL, TUI |
 | `cancel_turn` | Esc, Ctrl+C | идёт ход | REPL, TUI |
 | `cancel_shell` | Esc, Ctrl+C | идёт команда `!` (приоритет над `cancel_turn`, §12.6.2) | REPL, TUI |
 | `decline_ask` | Esc | вопрос `ask` (после MVP; ответ `declined`, agent-core-architecture §17.11.7; приоритет над `cancel_turn`) | REPL, TUI |
@@ -627,8 +643,8 @@ Shift+Enter и, после MVP, Ctrl+Enter для `steer` — по факту п
 | VS Code (`TERM_PROGRAM=vscode`) | добавить в `keybindings.json` правило `shift+enter` → `workbench.action.terminal.sendSequence` с `\u001b[13;2u` |
 | tmux | `set -s extended-keys on` и `set -as terminal-features 'xterm*:extkeys'` в `~/.tmux.conf` |
 | kitty, WezTerm, Ghostty, foot | протокол поддерживается; ничего настраивать не нужно |
-| Windows Terminal | Shift+Enter различим при modifyOtherKeys; иначе Alt+Enter или Ctrl+J |
-| неизвестно | Alt+Enter, Ctrl+J и `\` + Enter работают везде |
+| Windows Terminal | Shift+Enter различим при modifyOtherKeys; иначе Alt+Enter или Ctrl+J (в TUI — Alt+Enter) |
+| неизвестно | Alt+Enter и `\` + Enter работают везде; Ctrl+J — только в REPL |
 
 ## 12.2.10. Конфигурация клиента
 
@@ -780,10 +796,10 @@ CLI сам пишет только файлы состояния (`~/.codelab/cl
   и зависимость `ffi`; один издатель.
 * **Меры.** (1) Изоляция: `package:dart_tui/` разрешён только в `apps/codelab_cli/lib/src/tui/`
   (сторож §9.5), а ядро экрана внутри `tui/` не импортирует его вовсе (TUI-5) — замена пакета
-  затрагивает четыре файла адаптера. (2) Версия `^3.0.0` в `pubspec.yaml`, точная — в
+  затрагивает только файлы адаптера в `lib/src/tui/`, а не ядро `lib/src/tui/core/`. (2) Версия `^3.0.0` в `pubspec.yaml`, точная — в
   `pubspec.lock`; переход на новую мажорную версию — отдельный PR с прогоном PTY-тестов и
   чек-листа §12.2.7. (3) Разведка в начале этапа 6 (задача 6.11, исключение (д) §9.0) по
-  чек-листу §12.2.7; итог — в `design.md` `add-codelab-cli`. (4) Модульные тесты чистых
+  чек-листу §12.2.7; итог — D14 в `design.md` change `add-cli-tui` (пакет подтверждён). (4) Модульные тесты чистых
   `reduce`/`render` не зависят от dart_tui; адаптер тестируется через `withInput`/`withOutput`
   (`test/tui/tui_app_test.dart`); PTY-e2e (`cli/tui-smoke` и после MVP `cli/tui-*`) не
   меняются. (5) Запасной путь: если разведка отвергнет пакет (нет пункта 2 чек-листа или
@@ -850,15 +866,18 @@ CLI сам пишет только файлы состояния (`~/.codelab/cl
 * **`cli/tui-smoke`** (`test/e2e/tui_smoke_test.dart`, U-12): `codelab --ui tui` в PTY 100×30;
   вывод содержит `ESC[?1049h`; промпт → ответ появляется в области транскрипта, статус-строка
   в последней строке; Ctrl+D → `ESC[?1049l`, `ESC[?2004l`, курсор виден (TUI-4); SIGTERM во время
-  хода — то же восстановление. Модульно, без dart_tui — `test/tui/tui_update_test.dart` (клавиши
-  → модель и команды `TuiCmd`), `test/tui/tui_view_golden_test.dart` (кадры; строки не шире
+  хода — то же восстановление; одобрение `y` и пикер `/model` с выбором другой модели (change
+  `add-cli-tui`). Модульно, без dart_tui — `test/tui/tui_update_test.dart` и
+  `tui_interaction_test.dart` (клавиши, одобрение, пикеры, Tab → модель и команды `TuiCmd`),
+  `test/tui/tui_view_test.dart` (кадры; строки не шире
   терминала, сброс атрибутов в конце, TUI-9; `ESC` из текста агента вырезан, TUI-11). Адаптер —
   `test/tui/tui_app_test.dart`: `Program` с `withInput` (поток байт), `withOutput` (буфер),
   `withWindowSize(100, 30)` и `withoutSignalHandler()`; Shift+Enter в kitty и modifyOtherKeys →
   `newline`, вставка → одно `PasteMsg`, `Program.send(DomainMsg(SessionViewMsg))` → строка в
   буфере вывода; исключение в `reduce` → кадр прежний, три подряд → выход и последовательности
   восстановления в буфере (TUI-4). `test/tui/tui_effects_test.dart` — каждая ветка
-  `toDartTuiCmd` на фальшивом `SessionHandle`; исключение команды → `EffectFailedMsg`.
+  `toDartTuiCmd` на фальшивом `SessionHandle`; исключение команды → `EffectFailedMsg`;
+  `test/tui/tui_command_context_test.dart` — вывод команд заметками и смена сессии.
   `test/tui/tui_input_test.dart` — §12.2.9, «Два источника клавиш».
 * **`cli/status-line-usage`** (`test/e2e/status_line_usage_test.dart`, U-13): scripted-агент
   отвечает с usage в форме, утверждённой OpenSpec; после хода строка содержит модель, режим,
