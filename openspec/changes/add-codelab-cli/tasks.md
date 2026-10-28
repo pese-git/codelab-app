@@ -83,15 +83,15 @@
 - [x] 7.5 Тест: `test/repl/commands/` — по файлу на команду MVP: `/help` и `/help keys`, `/exit`/`/quit`, `/new`, `/sessions`, `/resume`, `/mode` и `/model` (список с отметкой текущего, установка, неизвестное значение без запроса, нет опции `mode` — сообщение), `/config`, `/cancel`, `/queue`, `/queue drop`, `/queue clear`, `/profile`, `/reconnect`, `/plan`, `/clear`, `/thoughts` (красный)
 - [x] 7.6 Реализовать команды в `repl/commands/` — 7.5 зелёный
 - [x] 7.7 E2E (PTY): `cli/repl-permission-allow-once` и `cli/repl-permission-reject` (`with_permission_request`), `cli/slash-menu-merges-agent-commands` (`with_available_commands`: Tab показывает `compact` и `plan` с пометкой, `/agent:plan` уходит промптом), `cli/client-commands-smoke` (`with_session_list`: `/help`, `/new`, `/sessions`, `/resume 1`, `/cancel`, `/exit`), `cli/model-picker-sets-config-option` (`with_config_options`), `cli/connect-profiles-stdio-ws-embedded` (stdio-профиль из `profiles.json`; WebSocket к `codelab-agent serve --ws` на собранном kernel бинаря агента с токеном из `CODELAB_AGENT_TOKEN`, пропуск без бинаря; `embedded` → `64`)
-- [ ] 7.8 Проверка итерации 4: `check` зелёный; PR итерации 4
+- [x] 7.8 Проверка итерации 4: `check` зелёный; PR итерации 4
 
 ## 8. Драйвер фикстур (6.8, H-04)
 
-- [ ] 8.1 Тест (acp-golden-fixtures «Агент-повторитель фикстуры»): `packages/dart/codelab_acp_testing/test/fixture_replay_agent_test.dart` — агентский драйвер против `FixtureReplayAgent` в процессе: весь корпус с ролью `agent` даёт `PASS`; кадр клиента вне фикстуры → `-32600`; процессный вариант (`dart <файл> <фикстура>`) отвечает на `initialize` (красный)
-- [ ] 8.2 Реализовать `FixtureReplayAgent` и генератор его исходника (design.md, D12) — 8.1 зелёный
-- [ ] 8.3 Тест (cli-scenario-driver «Команда test-scenario», «Вывод и коды выхода test-scenario»): `test/scenario/test_scenario_command_test.dart` — корпус против процессного `FixtureReplayAgent` → все `PASS`/`SKIP`, код `0`; копия фикстуры с испорченным ожидаемым кадром → `FAIL` с диффом, код `1`; `--filter`; фикстура без роли `agent` → `SKIP` с причиной; сторонний агент и фикстура с `llm` → `SKIP`; битый файл → код `64`; `embedded` → `64`; агент не запускается → `1`; формат строк и итога (красный)
-- [ ] 8.4 Реализовать `scenario/test_scenario_command.dart` и `scenario/agent_connector.dart` поверх `runAgentFixtureOver`, `--llm-script` для `codelab-agent` — 8.3 зелёный
-- [ ] 8.5 Интеграционный тест: `test-scenario` на корпусе с `--agent 'stdio:<kernel codelab-agent> serve --stdio'` — фикстуры роли `agent` без транспортного блока `PASS`; пропуск, если kernel бинаря агента не собирается
+- [x] 8.1 Тест (acp-golden-fixtures «Агент-повторитель фикстуры»): `packages/dart/codelab_acp_testing/test/fixture_replay_agent_test.dart` — агентский драйвер против `FixtureReplayAgent` в процессе: весь корпус с ролью `agent` даёт `PASS`; кадр клиента вне фикстуры → `-32600`; процессный вариант (`dart <файл> <фикстура>`) отвечает на `initialize` (красный)
+- [x] 8.2 Реализовать `FixtureReplayAgent` и генератор его исходника (design.md, D12) — 8.1 зелёный
+- [x] 8.3 Тест (cli-scenario-driver «Команда test-scenario», «Вывод и коды выхода test-scenario»): `test/scenario/test_scenario_command_test.dart` — корпус против процессного `FixtureReplayAgent` → все `PASS`/`SKIP`, код `0`; копия фикстуры с испорченным ожидаемым кадром → `FAIL` с диффом, код `1`; `--filter`; фикстура без роли `agent` → `SKIP` с причиной; сторонний агент и фикстура с `llm` → `SKIP`; битый файл → код `64`; `embedded` → `64`; агент не запускается → `1`; формат строк и итога (красный)
+- [x] 8.4 Реализовать `scenario/test_scenario_command.dart` и `scenario/agent_connector.dart` поверх `runAgentFixtureOver`, `--llm-script` для `codelab-agent` — 8.3 зелёный
+- [x] 8.5 Интеграционный тест: `test-scenario` на корпусе с `--agent 'stdio:<kernel codelab-agent> serve --stdio'` — фикстуры роли `agent` без транспортного блока `PASS`; пропуск, если kernel бинаря агента не собирается
 - [ ] 8.6 Проверка итерации 5: `check` зелёный; PR итерации 5
 
 ## 9. Документы и Definition of Done

@@ -18,7 +18,7 @@ final class UsageError implements Exception {
 }
 
 /// Что запускает `codelab`.
-enum CliCommand { repl, headless, profiles, version, help }
+enum CliCommand { repl, headless, profiles, testScenario, version, help }
 
 /// Политика одобрений headless (`--approve`, spec cli-headless «Политика
 /// одобрений headless»).
@@ -59,6 +59,7 @@ final class CliOptions {
     required this.timeout,
     required this.noColor,
     required this.verbose,
+    this.filter,
   });
 
   final CliCommand command;
@@ -96,6 +97,9 @@ final class CliOptions {
 
   final bool noColor;
   final bool verbose;
+
+  /// `test-scenario --filter`: glob по id фикстуры; `null` — все.
+  final String? filter;
 }
 
 /// Подкоманды, которые регистрируются позже (этапы 7–9 и после MVP): до
@@ -107,7 +111,6 @@ const _laterCommands = {
   'mcp',
   'secret',
   'sessions',
-  'test-scenario',
   'update',
   'login',
   'logout',
@@ -176,7 +179,19 @@ ArgParser _parser() {
     ..addFlag('help', abbr: 'h', negatable: false, help: 'Print this help.');
   // Аргументы подкоманды разбирает она сама: у `profiles add` значение
   // профиля вроде `stdio:… --stdio` не должно попасть в флаги `codelab`.
-  parser.addCommand('profiles', ArgParser(allowTrailingOptions: false));
+  parser
+    ..addCommand('profiles', ArgParser(allowTrailingOptions: false))
+    ..addCommand(
+      'test-scenario',
+      ArgParser()
+        ..addOption('agent', abbr: 'a', valueHelp: 'profile')
+        ..addOption('filter', valueHelp: 'glob', help: 'Fixture ids to play.')
+        ..addOption(
+          'timeout',
+          valueHelp: 'duration',
+          help: 'Wait for an agent frame (default 30s).',
+        ),
+    );
   return parser;
 }
 
@@ -186,6 +201,7 @@ Usage:
   codelab [options] [first message]   interactive REPL
   codelab -p "<prompt>" [options]     headless: one turn, answer in stdout
   codelab profiles list|show <id>|add <id> <agent>|remove <id>
+  codelab test-scenario <file-or-dir>... --agent <profile> [--filter <glob>] [--timeout <d>]
 
 Options:
 ${_parser().usage}''';
@@ -207,6 +223,20 @@ CliOptions parseCliArgs(List<String> args) {
   }
   if (results.flag('version')) {
     return _options(CliCommand.version, results);
+  }
+  if (results.command case final command?
+      when command.name == 'test-scenario') {
+    return _options(
+      CliCommand.testScenario,
+      results,
+      positional: command.rest,
+      agent: command.option('agent'),
+      filter: command.option('filter'),
+      // Ожидание кадра агента; по умолчанию 30 с (spec cli-scenario-driver).
+      timeout: _parseDuration(
+        command.option('timeout') ?? results.option('timeout') ?? '30s',
+      ),
+    );
   }
   if (results.command case final command?) {
     return _options(CliCommand.profiles, results, positional: command.rest);
@@ -242,10 +272,14 @@ CliOptions _options(
   CliCommand command,
   ArgResults results, {
   List<String> positional = const [],
+  String? agent,
+  String? filter,
+  Duration? timeout,
 }) => CliOptions._(
   command: command,
   positional: List.unmodifiable(positional),
-  agent: results.option('agent'),
+  agent: agent ?? results.option('agent'),
+  filter: filter,
   cwd: results.option('cwd'),
   model: results.option('model'),
   configMode: results.option('mode'),
@@ -256,10 +290,12 @@ CliOptions _options(
   approve: ApprovePolicy.values.firstWhere(
     (policy) => policy.flag == results.option('approve'),
   ),
-  timeout: switch (results.option('timeout')) {
-    null => null,
-    final value => _parseDuration(value),
-  },
+  timeout:
+      timeout ??
+      switch (results.option('timeout')) {
+        null => null,
+        final value => _parseDuration(value),
+      },
   noColor: results.flag('no-color'),
   verbose: results.flag('verbose'),
 );

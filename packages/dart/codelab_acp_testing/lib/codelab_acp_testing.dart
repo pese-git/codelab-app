@@ -23,7 +23,8 @@ export 'package:codelab_acp_transports/codelab_acp_transports.dart'
 export 'src/fake_acp_transport.dart';
 export 'src/fake_terminal_process_runner.dart';
 export 'src/codelab_compatible_stdio_agent.dart';
-export 'src/fixtures/agent_conformance.dart';
+export 'src/fixtures/agent_conformance.dart' hide agentFixtureHandshake;
+export 'src/fixtures/fixture_replay_agent.dart';
 export 'src/fixtures/client_conformance.dart';
 export 'src/fixtures/client_fixture_user.dart';
 export 'src/fixtures/fixture.dart';

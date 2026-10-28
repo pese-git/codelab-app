@@ -17,6 +17,7 @@ import 'profiles/profile_arg.dart';
 import 'profiles/profiles_command.dart';
 import 'render/output_surface.dart';
 import 'repl/repl.dart';
+import 'scenario/test_scenario_command.dart';
 import 'signals.dart';
 
 /// Запуск `codelab` от аргументов до кода выхода (design.md change
@@ -65,6 +66,17 @@ Future<int> _run(
         store: JsonFileProfileStore(home.profilesFile),
         stdout: io.stdout,
         stderr: io.stderr,
+      );
+    case CliCommand.testScenario:
+      final home = CodelabHome.resolve(environment);
+      return runTestScenario(
+        options,
+        profile: await resolveAgentProfile(
+          options.agent,
+          store: JsonFileProfileStore(home.profilesFile),
+        ),
+        environment: environment,
+        stdout: io.stdout,
       );
     case CliCommand.headless:
       return _runHeadless(options, environment, io);
