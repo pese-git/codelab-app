@@ -94,18 +94,20 @@ final class TranscriptLayout {
       }
     }
     if (view.plan.isNotEmpty) {
-      out.add(planHeader);
-      for (final entry in view.plan) {
-        out.addAll(
-          wrapLine(
-            '  ${_planMark(entry.status)} ${sanitizeTerminalText(entry.content)}',
-            width,
-          ),
-        );
+      for (final line in planLines(view.plan)) {
+        out.addAll(wrapLine(line, width));
       }
     }
     return out;
   }
+
+  /// План строками без переноса: заголовок и запись на строку (`[x]`,
+  /// `[~]`, `[ ]`) — для блока в конце транскрипта и для `/plan`.
+  static List<String> planLines(List<PlanEntryView> plan) => [
+    planHeader,
+    for (final entry in plan)
+      '  ${_planMark(entry.status)} ${sanitizeTerminalText(entry.content)}',
+  ];
 
   List<String> _itemLines(
     TranscriptItem item,

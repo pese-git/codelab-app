@@ -35,7 +35,7 @@ final class ConfigCommand implements ReplCommand {
       return;
     }
     if (args.length == 1) {
-      showConfigOption(context, option);
+      showConfigOption(context, option, '/config ${option.id}');
       return;
     }
     await setConfigOption(context, option, args[1], option.id);

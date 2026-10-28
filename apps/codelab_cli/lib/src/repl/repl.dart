@@ -17,6 +17,7 @@ import '../session_setup.dart';
 import '../strings.dart';
 import 'command_router.dart';
 import 'commands/commands.dart';
+import 'picker_spec.dart';
 import 'repl_command.dart';
 import 'repl_session.dart';
 
@@ -232,7 +233,24 @@ final class Repl implements ReplContext {
   ConnectionProfile get profile => _profile;
 
   @override
-  TerminalRenderer get renderer => _active.renderer;
+  set thoughts(ThoughtsMode mode) => _active.renderer.thoughts = mode;
+
+  @override
+  void showPlan(List<PlanEntryView> plan) => _active.renderer.printPlan(plan);
+
+  /// Список печатается строками, текущий пункт — со `*`; пункты под
+  /// заголовком — с отступом.
+  @override
+  void pick(PickerSpec spec) {
+    final title = spec.title;
+    if (title != null) {
+      say(title);
+    }
+    final indent = title == null ? '' : '  ';
+    for (final (i, item) in spec.items.indexed) {
+      say('$indent${i == spec.current ? '*' : ' '} ${item.label}');
+    }
+  }
 
   @override
   KeyBindings get keys => _keys;

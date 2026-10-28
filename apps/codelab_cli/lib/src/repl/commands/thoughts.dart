@@ -24,7 +24,7 @@ final class ThoughtsCommand implements ReplCommand {
       context.say('Usage: $usage');
       return;
     }
-    context.renderer.thoughts = mode;
+    context.thoughts = mode;
     context.say('thoughts: ${mode.name}');
   }
 }

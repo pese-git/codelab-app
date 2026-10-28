@@ -20,6 +20,6 @@ final class PlanCommand implements ReplCommand {
       context.say('No plan yet.');
       return;
     }
-    context.renderer.printPlan(plan);
+    context.showPlan(plan);
   }
 }

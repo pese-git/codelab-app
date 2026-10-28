@@ -169,6 +169,9 @@ final class ComposerState {
   ComposerState clear() =>
       ComposerState(history: history, historyIndex: null, draft: '');
 
+  /// Весь текст — [value], курсор в конце (дополнение Tab, D10).
+  ComposerState replace(String value) => clear().insert(value);
+
   /// ↑: строкой выше, а на первой строке — предыдущая запись истории.
   ComposerState up() {
     if (row > 0) {

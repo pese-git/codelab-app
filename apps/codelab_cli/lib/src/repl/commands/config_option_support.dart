@@ -1,5 +1,6 @@
 import 'package:codelab_client_core/codelab_client_core.dart';
 
+import '../picker_spec.dart';
 import '../repl_command.dart';
 
 /// Общее для `/mode`, `/model` и `/config`: поиск опции, показ значений и
@@ -14,13 +15,29 @@ ConfigOptionView? findConfigOption(ReplContext context, String name) {
       options.where((o) => o.category == name).firstOrNull;
 }
 
-/// Значения [option] с отметкой текущего.
-void showConfigOption(ReplContext context, ConfigOptionView option) {
-  context.say('${option.name} (${option.id}):');
-  for (final value in option.values) {
-    final mark = value.value == option.currentValue ? '*' : ' ';
-    context.say('  $mark ${value.value}  ${value.name}');
-  }
+/// Выбор значения [option]: строка пункта — [command] со значением
+/// (`/model b`, `/config model b`), курсор — на текущем.
+void showConfigOption(
+  ReplContext context,
+  ConfigOptionView option,
+  String command,
+) {
+  final current = option.values.indexWhere(
+    (v) => v.value == option.currentValue,
+  );
+  context.pick(
+    PickerSpec(
+      title: '${option.name} (${option.id}):',
+      items: [
+        for (final value in option.values)
+          PickerItem(
+            label: '${value.value}  ${value.name}',
+            line: '$command ${value.value}',
+          ),
+      ],
+      current: current < 0 ? null : current,
+    ),
+  );
 }
 
 /// Устанавливает [option] значением [value] и печатает итог из ответа
@@ -72,7 +89,7 @@ final class ConfigOptionCommand implements ReplCommand {
       return;
     }
     if (args.isEmpty) {
-      showConfigOption(context, option);
+      showConfigOption(context, option, '/$name');
       return;
     }
     await setConfigOption(context, option, args.first, name);

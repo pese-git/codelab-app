@@ -2,6 +2,7 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../input/key_bindings.dart';
 import '../render/terminal_renderer.dart';
+import 'picker_spec.dart';
 
 /// Клиентская команда REPL (`/new`, `/model`, …).
 ///
@@ -31,6 +32,9 @@ abstract interface class ReplCommand {
 /// [openSession] делает сессию активной; [switchProfile] и [reconnect]
 /// подключаются заново и при `detached` открывают новую сессию;
 /// [listedSessions] — последний вывод `/sessions` для `/resume <n>`.
+/// Вывод, который различается у REPL и TUI, — узкими членами [thoughts],
+/// [showPlan] и [pick], а не рендером целиком: так те же команды работают
+/// в полноэкранном режиме (design.md change `add-cli-tui`, D10).
 abstract interface class ReplContext {
   ClientWorkspace get workspace;
 
@@ -40,7 +44,15 @@ abstract interface class ReplContext {
 
   ConnectionProfile get profile;
 
-  TerminalRenderer get renderer;
+  /// Режим показа мыслей до конца процесса (`/thoughts`).
+  set thoughts(ThoughtsMode mode);
+
+  /// План целиком (`/plan`).
+  void showPlan(List<PlanEntryView> plan);
+
+  /// Выбор из списка для команды без аргумента: REPL печатает список, TUI
+  /// открывает пикер.
+  void pick(PickerSpec spec);
 
   KeyBindings get keys;
 

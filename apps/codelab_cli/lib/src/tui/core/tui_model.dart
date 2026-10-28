@@ -1,7 +1,12 @@
+import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../../render/terminal_renderer.dart';
+import '../../repl/approval_prompt.dart';
+import '../../repl/picker_spec.dart';
+import '../../repl/repl_command.dart';
 import 'composer.dart';
+import 'frame.dart';
 import 'transcript_lines.dart';
 
 /// Размер терминала в колонках и строках.
@@ -46,7 +51,10 @@ final class ScrollState {
 /// Для чего: [session] — последняя ревизия; [notes] — строки клиента;
 /// [turnStartedAt] — начало идущего хода для статус-строки; [lastInterrupt] —
 /// первый Ctrl+C вне хода (выход по второму за 1 с, U-07). [layout] —
-/// мемоизация строк транскрипта, общая для `reduce` и `render`.
+/// мемоизация строк транскрипта, общая для `reduce` и `render`. [overlay] —
+/// открытый пикер (D10); [detailsFor] — одобрение, у которого по `?`
+/// раскрыт `rawInput` (D9); [cwd] — папка сессии для зоны одобрения;
+/// [commands] — клиентские команды для дополнения Tab.
 ///
 /// Как использовать: `TuiModel.initial(...)` у `TuiRunner`; дальше — только
 /// `reduce`.
@@ -64,6 +72,10 @@ final class TuiModel {
     this.lastInterrupt,
     this.unicode = true,
     this.color = true,
+    this.cwd = '',
+    this.commands = const [],
+    this.overlay,
+    this.detailsFor,
   });
 
   factory TuiModel.initial({
@@ -73,6 +85,8 @@ final class TuiModel {
     bool unicode = true,
     bool color = true,
     ThoughtsMode thoughts = ThoughtsMode.dim,
+    String cwd = '',
+    List<ReplCommand> commands = const [],
   }) => TuiModel._(
     profile: profile,
     size: size,
@@ -81,6 +95,8 @@ final class TuiModel {
     unicode: unicode,
     color: color,
     thoughts: thoughts,
+    cwd: cwd,
+    commands: commands,
   );
 
   final String profile;
@@ -95,6 +111,10 @@ final class TuiModel {
   final DateTime? lastInterrupt;
   final bool unicode;
   final bool color;
+  final String cwd;
+  final List<ReplCommand> commands;
+  final PickerSpec? overlay;
+  final ApprovalRequestId? detailsFor;
 
   /// Идёт ли ход: клавиши Esc и Ctrl+C отменяют его.
   bool get running => switch (session?.status) {
@@ -111,6 +131,8 @@ final class TuiModel {
     ThoughtsMode? thoughts,
     DateTime? Function()? turnStartedAt,
     DateTime? Function()? lastInterrupt,
+    PickerSpec? Function()? overlay,
+    ApprovalRequestId? Function()? detailsFor,
   }) => TuiModel._(
     profile: profile,
     size: size ?? this.size,
@@ -124,6 +146,10 @@ final class TuiModel {
     lastInterrupt: lastInterrupt == null ? this.lastInterrupt : lastInterrupt(),
     unicode: unicode,
     color: color,
+    cwd: cwd,
+    commands: commands,
+    overlay: overlay == null ? this.overlay : overlay(),
+    detailsFor: detailsFor == null ? this.detailsFor : detailsFor(),
   );
 }
 
@@ -140,12 +166,77 @@ List<String> transcriptLines(TuiModel model) => model.layout.lines(
   color: model.color,
 );
 
-/// Сколько строк композера видно: не больше 10, дальше он прокручивается.
-int composerRows(TuiModel model) =>
-    model.composer.lines.length > 10 ? 10 : model.composer.lines.length;
+/// Одобрение, которого ждёт идущий ход; `null` — композер открыт.
+///
+/// Запрос, оставшийся в представлении после конца хода, ввод не блокирует —
+/// как в REPL (D9).
+ApprovalPrompt? approvalOf(TuiModel model) {
+  final session = model.session;
+  return session != null && session.status == SessionStatusView.running
+      ? ApprovalPrompt.first(session, cwd: model.cwd)
+      : null;
+}
 
-/// Видна ли строка подсказок: при высоте меньше 15 строк — нет.
-bool hintsVisible(TuiModel model) => model.size.rows >= 15;
+/// Строки зоны одобрения: заголовок, команда, папка, по `?` — `rawInput`
+/// не выше половины экрана, затем подсказка (D9). Строки переносятся по
+/// ширине: обрезка спрятала бы клавиши подсказки, а подсказка переносится
+/// целыми пунктами, чтобы клавиша не оторвалась от подписи.
+List<String> approvalLines(TuiModel model, ApprovalPrompt prompt) {
+  final block = prompt.block;
+  var lines = block;
+  if (model.detailsFor == prompt.approval.approvalId) {
+    final limit = model.size.rows ~/ 2;
+    var details = prompt.details.split('\n');
+    if (details.length > limit) {
+      details = [...details.take(limit - 1), '  …'];
+    }
+    lines = [
+      ...block.take(block.length - 1),
+      for (final line in details) '  $line',
+      block.last,
+    ];
+  }
+  final width = model.size.columns;
+  return [
+    for (final line in lines.take(lines.length - 1)) ...wrapLine(line, width),
+    ..._wrapEntries(lines.last, width),
+  ];
+}
+
+/// Подсказка `  [y] allow once  [n] …` строками не шире [width]: пункты,
+/// разделённые двумя пробелами, не рвутся; отступ повторяется.
+List<String> _wrapEntries(String hint, int width) {
+  const indent = '  ';
+  final entries = hint.trimLeft().split('  ');
+  final out = <String>[];
+  var line = indent;
+  for (final entry in entries) {
+    final next = line == indent ? '$line$entry' : '$line  $entry';
+    if (line != indent && displayWidth(next) > width) {
+      out.add(line);
+      line = '$indent$entry';
+    } else {
+      line = next;
+    }
+  }
+  return [...out, line];
+}
+
+/// Сколько строк занимает низ экрана: зона одобрения или композер (не
+/// больше 10 строк, дальше он прокручивается).
+int composerRows(TuiModel model) {
+  final prompt = approvalOf(model);
+  if (prompt != null) {
+    return approvalLines(model, prompt).length;
+  }
+  return model.composer.lines.length > 10 ? 10 : model.composer.lines.length;
+}
+
+/// Видна ли строка подсказок: при высоте меньше 15 строк — нет; в зоне
+/// одобрения и в пикере тоже нет — её клавиши там не действуют, а у зоны и
+/// пикера свои подсказки.
+bool hintsVisible(TuiModel model) =>
+    model.size.rows >= 15 && model.overlay == null && approvalOf(model) == null;
 
 /// Высота окна транскрипта. При удержании одна строка уходит под «↓ N new»,
 /// поэтому окно не прыгает, когда счётчик появляется.

@@ -153,17 +153,8 @@ final class ReplSession {
   }
 
   /// Блок первого ожидающего одобрения; `null` — одобрений нет.
-  ApprovalPrompt? get approvalPrompt {
-    final view = handle.current;
-    final approval = view.pendingApprovals.firstOrNull;
-    return approval == null
-        ? null
-        : ApprovalPrompt(
-            approval,
-            title: _titleOf(view, approval),
-            cwd: handle.cwd,
-          );
-  }
+  ApprovalPrompt? get approvalPrompt =>
+      ApprovalPrompt.first(handle.current, cwd: handle.cwd);
 
   /// Промпты убраны из очереди командой: исхода у них не будет.
   void forgetQueued(int count) {
@@ -253,16 +244,4 @@ final class ReplSession {
     NoticeItem(kind: NoticeKind.error) => true,
     _ => false,
   };
-
-  static String _titleOf(SessionView view, PendingApprovalView approval) {
-    for (final item in view.transcript) {
-      if (item case ToolCallItem(
-        :final title,
-        approval: PendingApprovalView(:final approvalId),
-      ) when approvalId == approval.approvalId) {
-        return title;
-      }
-    }
-    return 'tool call';
-  }
 }

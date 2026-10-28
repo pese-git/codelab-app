@@ -1,3 +1,6 @@
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
+import 'package:codelab_client_acp/codelab_client_acp.dart';
+
 /// Команда ядра экрана — описание действия, которое исполняет адаптер.
 ///
 /// Почему: команды-данные сравниваются в тестах `reduce` по значению, а
@@ -94,4 +97,24 @@ final class SaveHistoryCmd extends TuiCmd {
 
   @override
   String toString() => 'SaveHistoryCmd($entries)';
+}
+
+/// Ответить на запрос одобрения [approvalId] вариантом [optionId] (D9).
+final class RespondCmd extends TuiCmd {
+  const RespondCmd(this.approvalId, this.optionId);
+
+  final ApprovalRequestId approvalId;
+  final PermissionOptionId optionId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RespondCmd &&
+      other.approvalId == approvalId &&
+      other.optionId == optionId;
+
+  @override
+  int get hashCode => Object.hash(approvalId, optionId);
+
+  @override
+  String toString() => 'RespondCmd($approvalId, $optionId)';
 }
