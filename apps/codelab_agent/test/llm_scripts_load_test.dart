@@ -63,6 +63,48 @@ void main() {
     }, skip: directory.existsSync() ? null : 'no ${directory.path}');
   }
 
+  // Сценарии e2e терминального клиента для `CODELAB_E2E_AGENT=dart`
+  // (testing-quality «PTY-e2e терминального клиента»; design.md change
+  // `add-cli-e2e-agent-matrix`, D3). Список — режимы, для которых
+  // `E2eCliAgent` запускает Dart-агента.
+  group('codelab_cli e2e scripts', () {
+    final cli = Directory('$appDirectory/../codelab_cli/test/e2e/llm_scripts');
+    const cliScripts = [
+      'normal',
+      'with_permission_request',
+      'with_critical_permission',
+      'with_config_options',
+      'with_session_list',
+      'with_tool_calls',
+      'hangs_until_cancel',
+      'prompt_error',
+      'empty_response',
+    ];
+
+    test('every mode has a scenario and nothing else is there', () {
+      final present = cli.existsSync()
+          ? {
+              for (final file in cli.listSync().whereType<File>())
+                if (file.path.endsWith('.json'))
+                  file.uri.pathSegments.last.replaceAll('.json', ''),
+            }
+          : <String>{};
+      expect(present, unorderedEquals(cliScripts));
+    });
+
+    for (final name in cliScripts) {
+      test('$name.json loads as --llm-script', () {
+        final script = LlmScript.load(
+          '${cli.path}/$name.json',
+          models: const [],
+          clock: const SystemClock(),
+          cwdOf: (_) => null,
+        );
+        expect(script.models, isNotEmpty);
+      });
+    }
+  });
+
   test('a broken scenario is a usage error', () {
     final temp = Directory.systemTemp.createTempSync('llm_script_');
     addTearDown(() => temp.deleteSync(recursive: true));
