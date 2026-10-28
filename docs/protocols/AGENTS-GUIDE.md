@@ -1,5 +1,3 @@
-Here's the English translation in Markdown format.
-
 # What is AGENTS.md
 
 `AGENTS.md` is an instruction file for AI agents working with a repository.
