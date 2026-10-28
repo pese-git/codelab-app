@@ -1,7 +1,7 @@
 # acp-terminal-client Specification
 
 ## Purpose
-Клиентская сторона ACP-методов `terminal/*` (`create`, `output`, `wait_for_exit`, `kill`, `release`): CodeLab запускает команды агента и управляет жизненным циклом процесса. Отдельного подтверждения клиент не запрашивает — разрешение остаётся решением агента (`AGENTS.md` §10, исключение для `terminal/*`); компенсирующий контроль — ограничение `cwd` рабочей директорией сессии. Вывод ограничивается `outputByteLimit`, активные процессы завершаются при отключении и dispose, запуск процессов изолирован за platform-boundary. Нормативный источник — `docs/acp/protocol/10-Terminal.md`.
+Клиентская сторона ACP-методов `terminal/*` (`create`, `output`, `wait_for_exit`, `kill`, `release`): CodeLab запускает команды агента и управляет жизненным циклом процесса. Отдельного подтверждения клиент не запрашивает — разрешение остаётся решением агента (`AGENTS.md` §10, исключение для `terminal/*`); компенсирующий контроль — ограничение `cwd` рабочей директорией сессии. Вывод ограничивается `outputByteLimit`, активные процессы завершаются при отключении и dispose, запуск процессов изолирован за platform-boundary. Нормативный источник — `docs/protocols/acp/protocol/10-Terminal.md`.
 
 ## Requirements
 ### Requirement: Поддержка terminal/create без client-side approval

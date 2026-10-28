@@ -1,6 +1,6 @@
 ## Why
 
-Когда агент присылает **запрос** (JSON-RPC request с `id`), метод которого CodeLab не обрабатывает, клиент сегодня ничего не отвечает: в `AcpClientApplication._handleInboundMessage` ветка `JsonRpcRequest()` просто делает `break`. По JSON-RPC 2.0 на каждый запрос обязан прийти ответ, а ACP прямо описывает случай нераспознанного кастомного метода (`docs/acp/protocol/15-Extensibility.md`, «Custom Requests»): получатель отвечает стандартной ошибкой `-32601 Method not found`. Агент, который ждёт ответа на такой запрос, остаётся в ожидании навсегда (зависший turn / недоступная фича), а в логе CodeLab нет ни следа этого.
+Когда агент присылает **запрос** (JSON-RPC request с `id`), метод которого CodeLab не обрабатывает, клиент сегодня ничего не отвечает: в `AcpClientApplication._handleInboundMessage` ветка `JsonRpcRequest()` просто делает `break`. По JSON-RPC 2.0 на каждый запрос обязан прийти ответ, а ACP прямо описывает случай нераспознанного кастомного метода (`docs/protocols/acp/protocol/15-Extensibility.md`, «Custom Requests»): получатель отвечает стандартной ошибкой `-32601 Method not found`. Агент, который ждёт ответа на такой запрос, остаётся в ожидании навсегда (зависший turn / недоступная фича), а в логе CodeLab нет ни следа этого.
 
 Реальные агенты уже шлют нестандартные методы с префиксом `_` (например, уведомление `_auth/status_update` у `@agentclientprotocol/claude-agent-acp`); запросы такого рода — вопрос времени. Ограничение зафиксировано в `docs/integrations/claude-code.md`, разд. 5, п. 2.
 

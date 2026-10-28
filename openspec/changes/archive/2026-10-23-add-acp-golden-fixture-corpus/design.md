@@ -5,7 +5,7 @@
 - `docs/architecture/proposals/agent-core/14-golden-fixtures.md` — назначение, раскладка (§14.2), схема (§14.4), нормализация (§14.5), матчеры (§14.6), scripted-модель (§14.7), пример (§14.8), алгоритм проверки клиента (§14.10), инварианты FIX-1…FIX-4 (§14.11), проверки (§14.13);
 - `docs/architecture/proposals/dart-agent-and-clients/09-05-stage-0-foundation.md` — задачи 0.7–0.8 и Definition of Done;
 - `docs/architecture/proposals/agent-parity-goals.md` — id целей, которые закрывают фикстуры этапа 0;
-- `docs/acp/protocol/*` — вендоренная спецификация ACP, на разделы которой ссылается каждая фикстура.
+- `docs/protocols/acp/protocol/*` — вендоренная спецификация ACP, на разделы которой ссылается каждая фикстура.
 
 Текущее состояние: `acp_testing` даёт `FakeAcpTransport` (`autoRespondToInitialize`, `emitInbound`, `sentMessages`), `FakeTerminalProcessRunner` и `CodelabCompatibleStdioAgent`; `AcpClientApplication` принимает порты `TextFileReader`, `TextFileWriter`, `TerminalProcessRunner`. `acp_testing` зависит от `acp_client_core`, а `acp_client_core` подключает `acp_testing` как `dev_dependency`.
 
@@ -65,7 +65,7 @@
 
 ### D5. Инварианты корпуса на этапе 0
 
-- FIX-1 (непустой `spec`, ссылки на существующие файлы `docs/acp/protocol/`, якорь существует в файле) и FIX-4 (без `extensions` нет `_meta.codelab`, `data.codelab`, `_codelab/*`) — в `fixtures_load_test.dart` с этапа 0 полностью.
+- FIX-1 (непустой `spec`, ссылки на существующие файлы `docs/protocols/acp/protocol/`, якорь существует в файле) и FIX-4 (без `extensions` нет `_meta.codelab`, `data.codelab`, `_codelab/*`) — в `fixtures_load_test.dart` с этапа 0 полностью.
 - FIX-2 (каждый вид `sessionUpdate` и каждый метод `acp_method_codec.dart` есть в фикстуре каждой роли) — `fixtures_coverage_test.dart` с явным списком `pendingCoverage`: виды и методы, для которых фикстуры появятся на этапе 4. После итерации 2 в списке — `session/load`, `session/list`, `user_message_chunk`, `agent_thought_chunk`, `current_mode_update`, `config_option_update`; `fs/write_text_file`, `terminal/kill` и `session_info_update` уже покрыты фикстурами этапа 0 (`acp/prompt-tool-permission-allow`, `acp/prompt-cancel-mid-tool`, необязательный кадр `session_info_update`). Виды `sessionUpdate` тест берёт из декодера `session_update.dart`, методы — из `acpMethodRegistry`. Тест падает и на непокрытом элементе вне списка, и на элементе из списка, который уже покрыт, — список только сокращается. Агентская роль в FIX-2 проверяется с задачи 4.8; до неё тест проверяет клиентскую роль.
 - FIX-3 — с агентским прогоном (задача 4.8).
 
@@ -75,7 +75,7 @@
 
 ### D7. Правила изменения фикстур
 
-- новая фикстура или изменение ожидаемых кадров — только со ссылкой `spec` на раздел `docs/acp/protocol/*`, который обосновывает кадр;
+- новая фикстура или изменение ожидаемых кадров — только со ссылкой `spec` на раздел `docs/protocols/acp/protocol/*`, который обосновывает кадр;
 - правка ожидаемого кадра под поведение реализации без такой ссылки запрещена (`AGENTS.md` §17: «запрещено молча менять specification под существующую реализацию»);
 - обновление вендоренной спецификации ACP → прогон корпуса, расхождения разбираются по одному;
 - пункт о фикстурах — в шаблоне pull request.

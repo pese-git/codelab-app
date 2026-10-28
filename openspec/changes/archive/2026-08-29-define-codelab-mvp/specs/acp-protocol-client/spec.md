@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Official ACP source of truth
-CodeLab SHALL implement ACP behavior according to `docs/acp/protocol/` and `docs/acp/protocol/17-Schema.md`.
+CodeLab SHALL implement ACP behavior according to `docs/protocols/acp/protocol/` and `docs/protocols/acp/protocol/17-Schema.md`.
 
 #### Scenario: Protocol contract changes
 - **WHEN** ACP message models or methods are implemented

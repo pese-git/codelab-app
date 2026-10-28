@@ -1,6 +1,6 @@
 ## Context
 
-ACP определяет два способа, которыми агент сообщает клиенту конфигурируемые параметры сессии: устаревший `SessionModeState`/`session/set_mode` (`docs/acp/protocol/12-Session Model.md`) и предпочитаемый `SessionConfigOption[]`/`session/set_config_option` (`docs/acp/protocol/13-Session Config Options.md`, категории `mode`/`model`/`thought_level`). Сам протокол явно требует: «Clients that support config options SHOULD use them exclusively and ignore `modes`».
+ACP определяет два способа, которыми агент сообщает клиенту конфигурируемые параметры сессии: устаревший `SessionModeState`/`session/set_mode` (`docs/protocols/acp/protocol/12-Session Model.md`) и предпочитаемый `SessionConfigOption[]`/`session/set_config_option` (`docs/protocols/acp/protocol/13-Session Config Options.md`, категории `mode`/`model`/`thought_level`). Сам протокол явно требует: «Clients that support config options SHOULD use them exclusively and ignore `modes`».
 
 В `acp_protocol` уже полностью смоделированы входящие DTO: `SessionConfigOption`/`SessionConfigId`/`SessionConfigValueId`/`SessionConfigSelectOption` (`packages/dart/acp_protocol/lib/src/acp/session.dart:281-429`), `SessionUpdate.configOptionUpdate`/`currentModeUpdate` (`session_update.dart:201-207`). `AcpClientApplication.createSession()`/`loadSession()` уже кладут `response.configOptions` в `AcpSession.configOptions` при создании/загрузке сессии (`acp_client_application.dart:123-168`).
 

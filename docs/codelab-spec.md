@@ -249,8 +249,8 @@ transitions централизуются в `codelab_client_acp`, reusable UI pr
 
 ## 6. ACP-контракт
 
-Wire contract ACP определяется официальной документацией в `docs/acp/protocol/`
-и схемой в `docs/acp/protocol/17-Schema.md`. Типизированные схемы в
+Wire contract ACP определяется официальной документацией в `docs/protocols/acp/protocol/`
+и схемой в `docs/protocols/acp/protocol/17-Schema.md`. Типизированные схемы в
 `packages/dart/codelab_acp_protocol` должны соответствовать этим документам.
 
 Если в документации ACP и реализации возникает расхождение, приоритет имеет
@@ -724,8 +724,8 @@ workspace orchestrator.
 - `analysis_options.yaml`;
 - `.gitignore`;
 - `docs/codelab-spec.md`;
-- `docs/acp/protocol/01-Overview.md`;
-- `docs/acp/protocol/17-Schema.md`;
+- `docs/protocols/acp/protocol/01-Overview.md`;
+- `docs/protocols/acp/protocol/17-Schema.md`;
 - `openspec/config.yaml`.
 
 Обязательные Melos scripts:
@@ -755,8 +755,8 @@ fvm dart run melos run protocol-conformance
 Change считается complete, когда:
 
 - implementation соответствует этой specification и активным OpenSpec changes;
-- protocol changes соответствуют `docs/acp/protocol/` и
-  `docs/acp/protocol/17-Schema.md`;
+- protocol changes соответствуют `docs/protocols/acp/protocol/` и
+  `docs/protocols/acp/protocol/17-Schema.md`;
 - соблюдено направление Clean Architecture dependencies: presentation зависит
   от application/domain, а domain не зависит от infrastructure/UI;
 - concrete infrastructure подключена через ports/adapters и composition root;

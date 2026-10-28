@@ -247,7 +247,7 @@ codelab_cli могут создать `AgentRuntime` и подписаться �
 **Решение: клиентам достаточно ACP.** И codelab-app, и codelab_cli встраивают ядро только через
 `InProcessAcpTransport`. Возможности сверх стандарта ACP добавляются расширениями протокола
 (`_meta`, `_codelab/*`), а не прямым API. Расширения разрешены механизмом extensibility ACP
-(`docs/acp/protocol/15-Extensibility.md`). По правилу `AGENTS.md` §3.4 каждое из них вводится только
+(`docs/protocols/acp/protocol/15-Extensibility.md`). По правилу `AGENTS.md` §3.4 каждое из них вводится только
 через OpenSpec change, чтобы не изобретать семантику ACP. Причины выбора ACP:
 1. один путь кода в каждом клиенте;
 2. одинаковое поведение встроенного и внешнего агента;

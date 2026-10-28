@@ -709,7 +709,7 @@ sealed class SetSessionConfigOptionResponse
   }
 }
 
-/// Параметры `session/set_mode` (`docs/acp/protocol/17-Schema.md`,
+/// Параметры `session/set_mode` (`docs/protocols/acp/protocol/17-Schema.md`,
 /// `SetSessionModeRequest`): клиент выбирает режим из `availableModes`.
 @freezed
 sealed class SetSessionModeRequest with _$SetSessionModeRequest {

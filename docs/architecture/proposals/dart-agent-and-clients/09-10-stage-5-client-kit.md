@@ -60,7 +60,7 @@ app» для контракта e2e этапа 4 (D6, задача 4.9): пар�
 2. **5.2. Дополнения `codelab_client_acp`:** `listSessions({String? cwd, String? cursor})`
    (`session/list`, только если агент объявил `sessionCapabilities.list`) возвращает страницу
    `SessionListPage(sessions, nextCursor)`; курсор непрозрачен, не разбирается и не сохраняется
-   между запусками (`docs/acp/protocol/04-Session List.md`, «Pagination»), отсутствие `nextCursor` —
+   между запусками (`docs/protocols/acp/protocol/04-Session List.md`, «Pagination»), отсутствие `nextCursor` —
    конец списка; таймаут на JSON-RPC запрос (`requestTimeout`, по умолчанию
    60 с, кроме `session/prompt`); при сбое транспорта все ожидающие запросы завершаются
    типизированной ошибкой. Тесты в `packages/dart/codelab_client_acp/test/application/`.
@@ -487,7 +487,7 @@ reconnect и после перезапуска app — меняет наблюд
 
 **Что прочитать.** `docs/architecture/state-management.md` §61, §80–§82;
 `docs/architecture/session-lifecycle.md`; `docs/architecture/streaming.md`;
-`docs/architecture/platform-integration.md`; `docs/acp/protocol/04-Session List.md`,
+`docs/architecture/platform-integration.md`; `docs/protocols/acp/protocol/04-Session List.md`,
 `12-Session Model.md`. Документ ядра для этого этапа не нужен.
 
 **Definition of Done.**

@@ -9,7 +9,7 @@
 `codelab_agent_acp` — проекция `AgentRuntime` в ACP. Адаптер принимает JSON-RPC-кадры через
 `AcpTransport`, декодирует их моделями `codelab_acp_protocol`, вызывает API ядра и проецирует
 `AgentEvent` в `session/update`. Методы, поля и значения перечислений берутся только из
-`codelab_acp_protocol` и `docs/acp/protocol/`. Всё сверх них — поля `_meta.codelab.*` или методы
+`codelab_acp_protocol` и `docs/protocols/acp/protocol/`. Всё сверх них — поля `_meta.codelab.*` или методы
 `_codelab/*`; каждое расширение вводится OpenSpec change (`AGENTS.md` §3.4) и перечислено в
 §13.12.
 
@@ -936,7 +936,7 @@ sequenceDiagram
   провайдера — конфигурация агента, и клиенту нечего предложить пользователю. Поэтому это сбой
   хода с `errorClass: "auth"` (§13.8), а `-32000` остаётся за входом по подписке после MVP.
 
-Известные отклонения адаптера от требований `docs/acp/protocol/` (сверка после этапа 4); каждое
+Известные отклонения адаптера от требований `docs/protocols/acp/protocol/` (сверка после этапа 4); каждое
 закрыто решением, а не пропущено:
 
 | Требование ACP | Отклонение | Почему и до каких пор |

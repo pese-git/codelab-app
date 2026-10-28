@@ -1,6 +1,6 @@
 ## Why
 
-При `session/load` агент повторяет историю сессии уведомлениями `session/update` до ответа на запрос (`docs/acp/protocol/03-Session Setup.md#loading-a-session`; `agent-core/13-acp-adapter.md` §13.5). Клиент `acp_client_core` создавал сессию только по ответу, а обновления неизвестной сессии отбрасывал — загруженная сессия открывалась пустой. Кроме того, `current_mode_update` и `session_info_update` вне хода не доходили до состояния сессии, хотя ACP разрешает их в любой момент сессии.
+При `session/load` агент повторяет историю сессии уведомлениями `session/update` до ответа на запрос (`docs/protocols/acp/protocol/03-Session Setup.md#loading-a-session`; `agent-core/13-acp-adapter.md` §13.5). Клиент `acp_client_core` создавал сессию только по ответу, а обновления неизвестной сессии отбрасывал — загруженная сессия открывалась пустой. Кроме того, `current_mode_update` и `session_info_update` вне хода не доходили до состояния сессии, хотя ACP разрешает их в любой момент сессии.
 
 ## What Changes
 

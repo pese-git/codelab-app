@@ -31,7 +31,7 @@ Date: 2026-10-21
 * [`../testing.md`](../testing.md) — тестовая стратегия; сюда добавляются тесты из блоков «Как проверить».
 * [`../layers-and-dependencies.md`](../layers-and-dependencies.md), [`../error-handling.md`](../error-handling.md), [`../observability.md`](../observability.md) — общие правила зависимостей, ошибок и логирования.
 * [`../../../AGENTS.md`](../../../AGENTS.md) — §3.4 (не придумывать ACP), §10 (разрешения), §12 (async), §16 (наблюдаемость).
-* `docs/acp/protocol/` — спецификация ACP: `05-Prompt Turn.md`, `08-Tool Calls.md`, `09-File System.md`, `10-Terminal.md`, `11-Agent Plan.md`, `15-Extensibility.md`, `17-Schema.md`.
+* `docs/protocols/acp/protocol/` — спецификация ACP: `05-Prompt Turn.md`, `08-Tool Calls.md`, `09-File System.md`, `10-Terminal.md`, `11-Agent Plan.md`, `15-Extensibility.md`, `17-Schema.md`.
 
 ## Как пользоваться документом
 

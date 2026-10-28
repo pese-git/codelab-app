@@ -193,7 +193,7 @@ final class E2eLaunch {
 e2e app). `tasks.md` — пары «тест → реализация» со ссылкой на критерий (§9.0, правило 3).
 
 **Что прочитать.** Документ ядра §13, §10 (профиль `agent-serve`), §7 (`AcpPermissionGate`),
-§14; `docs/acp/protocol/05-Prompt Turn.md`, `08-Tool Calls.md`, `09-File System.md`,
+§14; `docs/protocols/acp/protocol/05-Prompt Turn.md`, `08-Tool Calls.md`, `09-File System.md`,
 `10-Terminal.md`, `12-Session Model.md`; `docs/architecture/acp-boundary.md`.
 
 **Definition of Done.**

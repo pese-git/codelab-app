@@ -122,7 +122,7 @@
 выбран).
 
 **Что прочитать.** Документ ядра §6, §7, §10 (capability `mcp`), §11, §12.4 (редакция, 8.11), §15; спецификация MCP
-(стандарт протокола, раздел о транспортах); `docs/acp/protocol/03-Session Setup.md`,
+(стандарт протокола, раздел о транспортах); `docs/protocols/acp/protocol/03-Session Setup.md`,
 `14-Slash Commands.md`.
 
 **Definition of Done.**

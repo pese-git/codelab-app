@@ -1,7 +1,7 @@
 # acp-golden-fixtures Specification
 
 ## Purpose
-Корпус golden-фикстур ACP закрепляет прочтение спецификации ACP в исполняемом виде: одна фикстура — один сценарий кадров с направлением и ссылкой на раздел `docs/acp/protocol/*`. Один корпус проверяет и клиентов CodeLab (драйвер играет роль агента), и Dart-агента (с этапа 4). Формат и алгоритмы — `docs/architecture/proposals/agent-core/14-golden-fixtures.md`.
+Корпус golden-фикстур ACP закрепляет прочтение спецификации ACP в исполняемом виде: одна фикстура — один сценарий кадров с направлением и ссылкой на раздел `docs/protocols/acp/protocol/*`. Один корпус проверяет и клиентов CodeLab (драйвер играет роль агента), и Dart-агента (с этапа 4). Формат и алгоритмы — `docs/architecture/proposals/agent-core/14-golden-fixtures.md`.
 ## Requirements
 ### Requirement: Формат golden-фикстуры ACP
 Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/codelab_acp_testing/fixtures/acp/<имя>.json` (каталог плоский, без подкаталогов групп) с id `acp/<имя>`. Фикстура SHALL содержать `id`, непустой `spec`, `description`, `setup` и `frames` и МОЖЕТ содержать `goals`, `extensions`, `roles`, `llm`, `normalize`, `after`. Кадр SHALL иметь направление `dir` (`c2a` или `a2c`) и `frame` либо `unordered`; МОЖЕТ иметь `note`, `optional`, `repeat` и `match`. Поле `roles` SHALL принимать подмножество `["agent", "client"]` и по умолчанию равно обоим. Формат SHALL быть описан в `fixtures/acp/_schema.json` (JSON Schema draft 2020-12, без дополнительных свойств на верхнем уровне, в `setup` и в кадре).
@@ -46,7 +46,7 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 - **THEN** каждая мутация даёт провал с понятным diff
 
 ### Requirement: Инварианты корпуса фикстур
-Корпус SHALL соблюдать инварианты: каждая ссылка `spec` указывает на существующий файл и якорь в `docs/acp/protocol/` (FIX-1); фикстура без `extensions` не содержит `_meta.codelab`, `data.codelab` и методов `_codelab/*` (FIX-4); каждый вид `sessionUpdate` из `codelab_acp_protocol` и каждый метод из `acp_method_codec.dart` встречается хотя бы в одной фикстуре с ролью `client`, кроме элементов явного списка ожидаемого покрытия (FIX-2, клиентская часть); каждый метод клиент → агент и каждый вид `sessionUpdate`, который отправляет агент, встречается хотя бы в одной фикстуре с ролью `agent`, кроме элементов отдельного списка ожидаемого покрытия агента (FIX-2, агентская часть; design.md change `add-dart-agent-acp-server`, D8). Оба списка ожидаемого покрытия SHALL только сокращаться.
+Корпус SHALL соблюдать инварианты: каждая ссылка `spec` указывает на существующий файл и якорь в `docs/protocols/acp/protocol/` (FIX-1); фикстура без `extensions` не содержит `_meta.codelab`, `data.codelab` и методов `_codelab/*` (FIX-4); каждый вид `sessionUpdate` из `codelab_acp_protocol` и каждый метод из `acp_method_codec.dart` встречается хотя бы в одной фикстуре с ролью `client`, кроме элементов явного списка ожидаемого покрытия (FIX-2, клиентская часть); каждый метод клиент → агент и каждый вид `sessionUpdate`, который отправляет агент, встречается хотя бы в одной фикстуре с ролью `agent`, кроме элементов отдельного списка ожидаемого покрытия агента (FIX-2, агентская часть; design.md change `add-dart-agent-acp-server`, D8). Оба списка ожидаемого покрытия SHALL только сокращаться.
 
 #### Scenario: Битая ссылка на спецификацию
 - **WHEN** `spec` фикстуры ссылается на несуществующий файл или якорь

@@ -8,11 +8,11 @@ model: opus
 
 ## Порядок
 1. `git diff develop...HEAD` + `git status` (или diff от оркестратора).
-2. Прочитай `docs/architecture/permissions.md`, `acp-boundary.md`, `session-lifecycle.md`, `streaming.md`, `concurrency.md`, `observability.md`, `error-handling.md` — по затронутым темам; эталон ACP — `docs/acp/protocol/`.
+2. Прочитай `docs/architecture/permissions.md`, `acp-boundary.md`, `session-lifecycle.md`, `streaming.md`, `concurrency.md`, `observability.md`, `error-handling.md` — по затронутым темам; эталон ACP — `docs/protocols/acp/protocol/`.
 3. Проследи путь данных от ACP wire / модели LLM / пользователя до ФС, процессов, сети, хранилища и UI.
 
 ## Чек-лист
-**Корректность ACP** (§3.4, §7): ни одного придуманного метода, поля, состояния или semantics — сверка с `docs/acp/protocol/17-Schema.md`; ровно один ответ на запрос; корректные ошибки JSON-RPC; forward compatibility; поведение Claude Code и других агентов, расходящееся с эталоном, обработано на границе (`docs/integrations/claude-code.md`), а не размазано по коду.
+**Корректность ACP** (§3.4, §7): ни одного придуманного метода, поля, состояния или semantics — сверка с `docs/protocols/acp/protocol/17-Schema.md`; ровно один ответ на запрос; корректные ошибки JSON-RPC; forward compatibility; поведение Claude Code и других агентов, расходящееся с эталоном, обработано на границе (`docs/integrations/claude-code.md`), а не размазано по коду.
 **Permissions** (§10): опасные действия идут через application-level policy; решение по одному tool call не применяется к другому; запрос привязан к правильным session/request/tool call; неизвестная опасная capability запрещена по умолчанию; protocol/infrastructure/widgets не показывают диалоги и не решают, опасно ли действие.
 **Containment** (§10, `BoundedEnv`): `path`/`cwd` в `fs/*`, `terminal/*` и инструментах агента ограничены корнем сессии; `..`, абсолютные пути, symlink наружу отклоняются **до** операции; процессы — аргументами списком, без shell-строк с вводом от модели.
 **Streaming и гонки** (§9, §12): duplicate/replayed и late events старого request/session/connection не меняют состояние; reconnect без дублирующих подписок; cancellation vs completion явно; fire-and-forget ошибки не теряются; операции, переживающие owner, имеют отмену или защиту от stale result.

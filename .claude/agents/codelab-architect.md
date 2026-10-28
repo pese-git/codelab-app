@@ -10,7 +10,7 @@ model: opus
 1. Корневой `AGENTS.md` целиком и вложенные `AGENTS.md` затронутых пакетов/приложений.
 2. `openspec/specs/<capability>/` для затрагиваемого поведения; активные `openspec/changes/*` — нет ли уже change по теме.
 3. Документы границы: `docs/architecture/` (`acp-boundary.md`, `session-lifecycle.md`, `streaming.md`, `concurrency.md`, `permissions.md`, `layers-and-dependencies.md`, `testing.md` …), для ядра — `docs/architecture/proposals/agent-core-architecture.md` и `agent-core/*`.
-4. ACP — только `docs/acp/protocol/` и `packages/dart/codelab_acp_protocol/`. Придумывать методы, поля, состояния и semantics ACP ЗАПРЕЩЕНО (§3.4): если поведение не определено — зафиксируй вопрос и остановись.
+4. ACP — только `docs/protocols/acp/protocol/` и `packages/dart/codelab_acp_protocol/`. Придумывать методы, поля, состояния и semantics ACP ЗАПРЕЩЕНО (§3.4): если поведение не определено — зафиксируй вопрос и остановись.
 5. Существующие реализации похожего поведения (§14) — используй codegraph для поиска и оценки влияния.
 
 ## Что выдать

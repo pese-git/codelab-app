@@ -52,7 +52,7 @@
    `acp/tool-read-range` (T-01), `acp/tool-exec-terminal-embed` (T-08), `acp/prompt-update-plan` (C-05),
    `acp/set-config-option-model` (R-06), `acp/errors-unknown-session-update-tolerated`. Id в скобках —
    строки целей в `agent-parity-goals.md`, которые фикстура закрывает; фикстуры без строки — базовые
-   для корпуса. Каждая ссылается на раздел `docs/acp/protocol/*`.
+   для корпуса. Каждая ссылается на раздел `docs/protocols/acp/protocol/*`.
 8. **0.8. Клиентский прогон корпуса**:
    `packages/dart/codelab_client_acp/test/fixtures/client_fixture_conformance_test.dart` — для каждой
    фикстуры, у которой `roles` содержит `client`, поднимает `AcpClientApplication` на `FakeAcpTransport` и

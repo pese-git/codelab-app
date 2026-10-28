@@ -163,7 +163,7 @@ LLM → read/edit/exec → ответ в codelab-app по stdio» без эта�
 
 ```mermaid
 flowchart LR
-    SPEC["Спецификация ACP<br/>docs/acp/protocol"] --> FX["корпус фикстур<br/>codelab_acp_testing/fixtures/acp"]
+    SPEC["Спецификация ACP<br/>docs/protocols/acp/protocol"] --> FX["корпус фикстур<br/>codelab_acp_testing/fixtures/acp"]
     FX --> AG["conformance Dart-агента<br/>scripted StreamFunction"]
     FX --> CL["проверка клиентов<br/>FakeAcpTransport"]
     AG --> M["матрица целей<br/>agent-parity-goals.md"]

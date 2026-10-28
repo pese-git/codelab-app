@@ -112,6 +112,7 @@ AI-agent обязан интерпретировать эти формулиро
 
 * `openspec/specs/`
 * `packages/dart/codelab_acp_protocol/`
+* референсная спецификация ACP — `docs/protocols/acp/` (`protocol/17-Schema.md` — схема сообщений); её НЕ ДОЛЖНЫ менять
 
 Если требуемое поведение ACP не определено, агент ДОЛЖЕН остановиться и запросить уточнение либо предложить OpenSpec change.
 
@@ -163,7 +164,8 @@ AI-agent обязан интерпретировать эти формулиро
 ├── .fvm/
 │   └── fvm_config.json
 ├── docs/
-│   └── architecture/
+│   ├── architecture/
+│   └── protocols/        # референсные спецификации ACP, A2A, MCP, Agent Skills — не изменять
 ├── openspec/
 │   ├── specs/
 │   └── changes/
@@ -382,7 +384,7 @@ Streaming updates ДОЛЖНЫ обрабатываться предсказуе
 
 ### Исключение: ACP `fs/*` и `terminal/*` client-side методы
 
-`fs/read_text_file`, `fs/write_text_file` и `terminal/create`/`terminal/output`/`terminal/wait_for_exit`/`terminal/kill`/`terminal/release` — это ACP-методы agent → client, для которых сама спецификация ACP делает `session/request_permission` опциональным (`MAY`) решением агента, а не обязательным шагом клиента (`docs/acp/protocol/08-Tool Calls.md#requesting-permission`, `09-File System.md`, `10-Terminal.md`).
+`fs/read_text_file`, `fs/write_text_file` и `terminal/create`/`terminal/output`/`terminal/wait_for_exit`/`terminal/kill`/`terminal/release` — это ACP-методы agent → client, для которых сама спецификация ACP делает `session/request_permission` опциональным (`MAY`) решением агента, а не обязательным шагом клиента (`docs/protocols/acp/protocol/08-Tool Calls.md#requesting-permission`, `09-File System.md`, `10-Terminal.md`).
 
 Для этих методов CodeLab НЕ ДОЛЖЕН вводить собственный client-side approval-гейт — permission остаётся ответственностью агента. Это сознательное, явно принятое отступление от общего правила этого раздела, а не пробел.
 

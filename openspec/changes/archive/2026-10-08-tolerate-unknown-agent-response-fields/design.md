@@ -16,7 +16,7 @@
 **Non-Goals:**
 - Не поддерживаем `models` (выбор модели), `fork`/`resume` и прочие незнакомые поля — только «не падать». Это отдельные changes, если понадобятся (AGENTS.md §3.4: не придумываем семантику ACP).
 - Не ослабляем валидацию уведомлений и запросов агента (`session/update`, `session/request_permission`, `fs/*`, `terminal/*`) — у них другая роль и риск (см. Risks).
-- Не меняем `docs/acp/` и публичный API пакетов; не убираем `requireAcpCapabilityObject` (остаётся рабочим, но становится частным случаем).
+- Не меняем `docs/protocols/acp/` и публичный API пакетов; не убираем `requireAcpCapabilityObject` (остаётся рабочим, но становится частным случаем).
 
 ## Decisions
 

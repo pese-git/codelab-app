@@ -1,6 +1,6 @@
 ## Context
 
-ACP (`docs/acp/protocol/05-Prompt Turn.md#cancellation`) описывает отмену так:
+ACP (`docs/protocols/acp/protocol/05-Prompt Turn.md#cancellation`) описывает отмену так:
 
 - клиент MAY отправить `session/cancel` в любой момент хода;
 - клиент SHOULD сразу пометить все незавершённые вызовы инструментов текущего хода как `cancelled`;

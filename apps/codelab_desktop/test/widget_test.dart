@@ -3160,7 +3160,7 @@ void main() {
     expect(shellCubit.state.configOptions, isEmpty);
 
     // No prompt is in flight here on purpose — per ACP
-    // (docs/acp/protocol/13-Session Config Options.md), an agent may send
+    // (docs/protocols/acp/protocol/13-Session Config Options.md), an agent may send
     // config_option_update "at any point during a session", not just
     // during a prompt turn.
     agentTransport.emitInbound(

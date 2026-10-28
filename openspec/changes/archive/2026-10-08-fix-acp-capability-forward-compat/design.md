@@ -4,7 +4,7 @@
 
 В `initialize.dart` этим же helper'ом decode'ятся вложенные capability-объекты `initialize`-handshake: `AgentCapabilities`, `McpCapabilities`, `PromptCapabilities`, `SessionCapabilities`, `SessionListCapabilities`, а также `ClientCapabilities`/`FileSystemCapabilities` (эти два — по конструкции исходящие, но модель симметрично умеет и decode их).
 
-Ручная проверка против реального агента (`@zed-industries/claude-code-acp`, обёртка над Claude Code) показала: его `initialize`-ответ содержит `agentCapabilities.sessionCapabilities: {"fork": {}, "list": {}, "resume": {}}`. `SessionCapabilities.fromJson` знает только про `list`/`_meta` — `fork`/`resume` не входят в `allowedKeys`, `requireOnlyRootKeys` бросает исключение, `initialize` целиком падает, соединение уходит в `Failed`. Агент — не баг-репорт: `fork`/`resume` — реальные capability-флаги апстрим ACP-спеки, которых просто нет в текущем вендоренном снапшоте `docs/acp/protocol/` (см. proposal.md, Why).
+Ручная проверка против реального агента (`@zed-industries/claude-code-acp`, обёртка над Claude Code) показала: его `initialize`-ответ содержит `agentCapabilities.sessionCapabilities: {"fork": {}, "list": {}, "resume": {}}`. `SessionCapabilities.fromJson` знает только про `list`/`_meta` — `fork`/`resume` не входят в `allowedKeys`, `requireOnlyRootKeys` бросает исключение, `initialize` целиком падает, соединение уходит в `Failed`. Агент — не баг-репорт: `fork`/`resume` — реальные capability-флаги апстрим ACP-спеки, которых просто нет в текущем вендоренном снапшоте `docs/protocols/acp/protocol/` (см. proposal.md, Why).
 
 ## Goals / Non-Goals
 
@@ -15,7 +15,7 @@
 **Non-Goals:**
 - Не разбираем/не поддерживаем сами `fork`/`resume` как capabilities — это отдельная, самостоятельная работа (свой OpenSpec change, если/когда понадобится), не входящая в этот фикс. Здесь только "не падать", а не "уметь использовать".
 - Не меняем `requireOnlyRootKeys`/`requireAcpObject` глобально и не ослабляем строгую валидацию где-либо ещё в пакете.
-- Не трогаем `docs/acp/protocol/` (вендоренный снапшот спеки) — источник истины ACP не редактируется этим change (AGENTS.md §3.4).
+- Не трогаем `docs/protocols/acp/protocol/` (вендоренный снапшот спеки) — источник истины ACP не редактируется этим change (AGENTS.md §3.4).
 
 ## Decisions
 
