@@ -1,10 +1,10 @@
 ---
-description: Двойное ревью текущей ветки CodeLab (архитектура + безопасность/ACP) с прогоном melos check
+description: Двойное ревью текущей ветки CodeLab (архитектура + безопасность/ACP) с проверкой затронутого
 argument-hint: [change-id или фокус ревью]
 ---
 Контекст: $ARGUMENTS
 
-1. **check-runner** — `melos run check` (параллельно с шагом 2).
+1. **check-runner** — проверка затронутого по `git diff --name-only develop...HEAD` и незакоммиченным изменениям (AGENTS.md §21); полный `melos run check` — только если пользователь попросил (параллельно с шагом 2).
 2. **architecture-reviewer** и **acp-safety-reviewer** — параллельно; diff: `git diff develop...HEAD` плюс незакоммиченные изменения. Если указан change-id — передай путь `openspec/changes/<change-id>/`, иначе пусть ревьюверы сами найдут связанный change.
 3. Покажи пользователю: таблицу проверок, оба вердикта, сводный список замечаний (сначала CRITICAL/BLOCKER).
 
