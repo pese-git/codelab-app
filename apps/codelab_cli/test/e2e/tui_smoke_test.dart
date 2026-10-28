@@ -16,11 +16,13 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart'
 import 'package:test/test.dart';
 
 import '../support/cli_process.dart';
+import 'support/e2e_agent.dart';
 import 'support/pty_process.dart';
 
 Future<void> main() async {
   final skip = await PtyProcess.unavailableReason();
   late Directory dir;
+  late E2eCliLaunch launch;
 
   setUp(() async => dir = await Directory.systemTemp.createTemp('cli_tui_'));
   tearDown(() => dir.delete(recursive: true));
@@ -29,7 +31,7 @@ Future<void> main() async {
     CodelabCompatibleStdioAgentMode mode, {
     List<String> args = const [],
   }) async {
-    final agent = await scriptedAgent(dir, mode: mode);
+    launch = await E2eCliAgent.current.launch(dir, mode: mode);
     return PtyProcess.start(
       'sh',
       [
@@ -38,7 +40,7 @@ Future<void> main() async {
         dartExecutable(),
         await CliProcess.kernel(),
         '--agent',
-        agent,
+        launch.agent,
         '--cwd',
         dir.path,
         '--ui',
@@ -74,7 +76,7 @@ Future<void> main() async {
 
     pty.write('hello');
     pty.write('\r');
-    await pty.waitFor('hello from compatible stdio agent');
+    await pty.waitFor(launch.answer);
     pty.write('\x04');
 
     expect(await pty.exitCode, 0);
@@ -87,7 +89,7 @@ Future<void> main() async {
       args: ['hello'],
     );
 
-    await pty.waitFor('hello from compatible stdio agent');
+    await pty.waitFor(launch.answer);
     pty.write('\x04');
 
     expect(await pty.exitCode, 0);
@@ -119,11 +121,11 @@ Future<void> main() async {
       args: ['run it'],
     );
     await pty.waitFor('[y] allow once');
-    expect(pty.text, contains('command: echo hello'));
+    expect(pty.text, contains('command: ${launch.permissionCommand}'));
 
     pty.write('y');
 
-    await pty.waitFor('approved: allow_once');
+    await pty.waitFor(launch.allowedMarker);
     pty.write('\x04');
     expect(await pty.exitCode, 0);
     expectRestored(pty);
@@ -134,12 +136,13 @@ Future<void> main() async {
     await pty.waitFor('\x1b[?1049h');
 
     pty.write('/model\r');
-    await pty.waitFor('› gpt-5');
+    final [current, next] = launch.models;
+    await pty.waitFor('› $current');
     pty
       ..write('\x1b[B')
       ..write('\r');
 
-    await pty.waitFor('model = gpt-4');
+    await pty.waitFor('model = $next');
     pty.write('\x04');
     expect(await pty.exitCode, 0);
     expectRestored(pty);

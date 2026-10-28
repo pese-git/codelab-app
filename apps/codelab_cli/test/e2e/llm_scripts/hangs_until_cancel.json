@@ -1,0 +1,17 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "waitForCancel": true
+      },
+      {
+        "waitForCancel": true
+      }
+    ]
+  }
+}

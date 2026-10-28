@@ -11,11 +11,13 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart'
 import 'package:test/test.dart';
 
 import '../support/cli_process.dart';
+import 'support/e2e_agent.dart';
 import 'support/pty_process.dart';
 
 Future<void> main() async {
   final skip = await PtyProcess.unavailableReason();
   late Directory dir;
+  late E2eCliLaunch launch;
 
   setUp(() async => dir = await Directory.systemTemp.createTemp('cli_repl_'));
   tearDown(() => dir.delete(recursive: true));
@@ -24,10 +26,17 @@ Future<void> main() async {
     CodelabCompatibleStdioAgentMode mode, {
     List<String> args = const [],
   }) async {
-    final agent = await scriptedAgent(dir, mode: mode);
+    launch = await E2eCliAgent.current.launch(dir, mode: mode);
     return PtyProcess.start(
       dartExecutable(),
-      [await CliProcess.kernel(), '--agent', agent, '--cwd', dir.path, ...args],
+      [
+        await CliProcess.kernel(),
+        '--agent',
+        launch.agent,
+        '--cwd',
+        dir.path,
+        ...args,
+      ],
       environment: {
         'HOME': '${dir.path}/home',
         'CODELAB_HOME': '${dir.path}/codelab',
@@ -49,12 +58,12 @@ Future<void> main() async {
       args: ['run it'],
     );
     await pty.waitFor('[y] allow once');
-    expect(pty.text, contains('Permission: Run test command'));
-    expect(pty.text, contains('command: echo hello'));
+    expect(pty.text, contains('Permission: ${launch.permissionTitle}'));
+    expect(pty.text, contains('command: ${launch.permissionCommand}'));
 
     pty.write('y');
 
-    await pty.waitFor('approved: allow_once');
+    await pty.waitFor(launch.allowedMarker);
     pty.write('\x04');
     expect(await pty.exitCode, 0);
   }, skip: skip);
@@ -68,49 +77,57 @@ Future<void> main() async {
 
     pty.write('n');
 
-    await pty.waitFor('approved: reject_once');
+    await pty.waitFor(launch.rejectedMarker);
     pty.write('\x04');
     expect(await pty.exitCode, 0);
   }, skip: skip);
 
-  test('cli/slash-menu-merges-agent-commands', () async {
-    final pty = await repl(
-      CodelabCompatibleStdioAgentMode.withAvailableCommands,
-    );
-    await pty.waitFor('> ');
-    // Команды агент объявляет после ответа на `session/new`: ждём, пока
-    // они дойдут, по Tab на их префиксе.
-    final from = pty.text.length;
-    pty.write('/\t');
-    await pty.waitFor('/compact', from: from);
-    expect(pty.text.substring(from), contains('(agent)'));
-    expect(pty.text.substring(from), contains('/agent:plan'));
-    expect(pty.text.substring(from), contains('/help'));
+  test(
+    'cli/slash-menu-merges-agent-commands',
+    () async {
+      final pty = await repl(
+        CodelabCompatibleStdioAgentMode.withAvailableCommands,
+      );
+      await pty.waitFor('> ');
+      // Команды агент объявляет после ответа на `session/new`: ждём, пока
+      // они дойдут, по Tab на их префиксе.
+      final from = pty.text.length;
+      pty.write('/\t');
+      await pty.waitFor('/compact', from: from);
+      expect(pty.text.substring(from), contains('(agent)'));
+      expect(pty.text.substring(from), contains('/agent:plan'));
+      expect(pty.text.substring(from), contains('/help'));
 
-    pty.write('\x15');
-    await send(pty, '/agent:plan the release', 'echo: /plan the release');
-    await send(pty, '/plan', 'No plan yet.');
-    pty.write('\x04');
-    expect(await pty.exitCode, 0);
-  }, skip: skip);
+      pty.write('\x15');
+      await send(pty, '/agent:plan the release', 'echo: /plan the release');
+      await send(pty, '/plan', 'No plan yet.');
+      pty.write('\x04');
+      expect(await pty.exitCode, 0);
+      // Dart-агент объявит свои команды на этапе 8 (R-07, R-08).
+    },
+    skip: skip,
+    tags: scriptedOnly,
+  );
 
   test('cli/client-commands-smoke', () async {
     final pty = await repl(
       CodelabCompatibleStdioAgentMode.withSessionList,
       args: ['first prompt'],
     );
-    await pty.waitFor('echo: first prompt');
+    final answer = launch.sessionAnswer('first prompt');
+    await pty.waitFor(answer);
 
     await send(pty, '/help', '/help keys');
     await send(pty, '/new', 'New session');
-    // У сессии, открытой в этом запуске, заголовка нет — агент не шлёт
-    // `session_info_update`, поэтому строка списка показывает id.
-    await send(pty, '/sessions', 'codelab-list-session-1');
+    // Scripted-агент не шлёт `session_info_update`, и строка списка
+    // показывает id; Dart-агент называет сессию по первому промпту.
+    final listed = launch.listedSession('first prompt');
+    await send(pty, '/sessions', listed);
     final listing = pty.text.substring(pty.text.lastIndexOf('/sessions'));
     final number = RegExp(
-      r'(\d+)\. codelab-list-session-1 ',
+      '(\\d+)\\. ${RegExp.escape(listed)} ',
     ).firstMatch(listing)!.group(1)!;
-    await send(pty, '/resume $number', 'echo: first prompt');
+    await send(pty, '/resume $number', answer);
     await send(pty, '/cancel', 'Nothing to cancel.');
     pty.write('/exit\r');
 
@@ -121,9 +138,10 @@ Future<void> main() async {
     final pty = await repl(CodelabCompatibleStdioAgentMode.withConfigOptions);
     await pty.waitFor('> ');
 
-    await send(pty, '/model', '* gpt-5');
-    await send(pty, '/model gpt-4', 'model = gpt-4');
-    await send(pty, '/model', '* gpt-4');
+    final [current, next] = launch.models;
+    await send(pty, '/model', '* $current');
+    await send(pty, '/model $next', 'model = $next');
+    await send(pty, '/model', '* $next');
     await send(pty, '/model zzz', 'Unknown model "zzz"');
     pty.write('\x04');
     expect(await pty.exitCode, 0);

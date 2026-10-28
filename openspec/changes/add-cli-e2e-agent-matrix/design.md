@@ -45,25 +45,32 @@
 ### D2. Помощник `E2eCliAgent` в `test/e2e/support/e2e_agent.dart`
 
 ```dart
-enum E2eAgentKind { scripted, dart, python }
+enum E2eAgentKind { scripted, dart }            // python — итерация 2 (D4)
 
 final class E2eCliAgent {
-  static final E2eCliAgent current;          // из CODELAB_E2E_AGENT
+  static final E2eCliAgent current;             // из CODELAB_E2E_AGENT
+  factory E2eCliAgent.fromEnvironment(Map<String, String> environment);
   final E2eAgentKind kind;
-  String? get unavailable;                    // причина пропуска (Python не установлен)
   Future<E2eCliLaunch> launch(Directory dir, {CodelabCompatibleStdioAgentMode mode});
+  static Future<String> agentKernel();          // kernel codelab-agent, один на прогон
 }
 
 final class E2eCliLaunch {
-  final String agent;                         // значение --agent: stdio:'…' …
-  final Map<String, String> environment;      // CODELAB_HOME для Python и т. п.
-  final String answer;                        // текст ответа на обычный промпт
-  final String permissionTitle;               // заголовок вызова в «Permission: …»
-  final String permissionCommand;             // «command: …» блока одобрения
-  final String allowedMarker, rejectedMarker; // итог хода после y / n
-  final List<String> models;                  // значения опции model: текущее первым
+  final String agent;                           // значение --agent: stdio:'…' …
+  final String answer;                          // ответ на обычный промпт
+  final String permissionTitle, criticalTitle;  // заголовки в «Permission: …» и решении headless
+  final String permissionCommand;               // «command: …» блока одобрения
+  final String allowedMarker, rejectedMarker;   // что видно в REPL и TUI после y / n
+  final String allowedAnswer, rejectedAnswer;   // stdout headless после разрешения и отказа
+  final List<String> models;                    // значения опции model: текущее первым
+  final String completedToolRow;                // завершённый вызов хода with_tool_calls
+  String sessionAnswer(String prompt);          // ответ в режиме with_session_list
+  String listedSession(String firstPrompt);     // что /sessions показывает о сессии
+  int savedSessions();                          // сколько сессий агент сохранил
 }
 ```
+
+Агент Python-режима (D4) задаётся одной строкой `--agent` (`stdio:env CODELAB_HOME=<tmp> codelab serve --stdio`), поэтому отдельного окружения в `E2eCliLaunch` нет: агент наследует окружение CLI, а `CODELAB_HOME` CLI и агента различаются.
 
 `scriptedAgent()` из `test/support/cli_process.dart` остаётся для модульных тестов, которые не входят в матрицу. e2e переходят на `E2eCliAgent.current.launch`.
 
@@ -78,13 +85,14 @@ final class E2eCliLaunch {
 
   | Режим | Флаги |
   |---|---|
-  | `withPermissionRequest` | `--permission-mode standard` |
+  | `withPermissionRequest`, `withCriticalPermission` | `--permission-mode standard`; критический вызов — `rm -rf .` |
   | `withConfigOptions` | `--model gpt-5 --model gpt-4` |
-  | `withSessionList` и `--continue` | `--sessions-dir <tmp>/agent-sessions` |
+  | все режимы | `--sessions-dir <tmp>/agent-sessions`: журнал не попадает в настоящий `~/.codelab` |
   | `hangsUntilCancel` | шаг `waitForCancel` |
-  | ошибка провайдера | шаг `error` |
-  | `withToolCalls` | шаги `toolCall` `read` и `exec` в режиме `bypass` |
+  | `promptError`, `emptyResponse` | шаг `error` класса `auth` (без повторов) и пустой `reply` |
+  | `withToolCalls` | `--permission-mode accept-edits`: мысль, `read README.md` (файл пишет помощник) и `write notes.txt` без вопроса, затем `exec` с вопросом — ход кончается одобрением, как у scripted-агента |
 
+- **Критический вызов.** `rm -rf build` scripted-агент помечает критическим искусственно. Для Dart-агента он не критичен: по P-07 критичны корень, домашний и системный каталоги и предок рабочей папки. В сценарии — `rm -rf .`: он критичен, а при поломке защиты удалит только временную папку теста.
 - **Ожидания Dart-агента:**
   - заголовок одобрения `exec` — сама команда (`echo hello`);
   - модели — `scripted/gpt-5` и `scripted/gpt-4`;
@@ -134,7 +142,7 @@ final class E2eCliLaunch {
 | `cli/headless-permission-denied`, `cli/headless-bypass-flag` | да | да | — | у mock нет инструментов |
 | `cli/resume-last-session` | да | да | — | Dart — `--sessions-dir` |
 | `cli/connect-profiles-stdio-ws-embedded`: stdio | да | да | — | — |
-| `cli/connect-profiles-stdio-ws-embedded`: ws, `embedded` | да | — | — | WebSocket-агент теста — scripted; `embedded` от агента не зависит |
+| `cli/connect-profiles-stdio-ws-embedded`: ws, `embedded` | да | — | — | WebSocket-сервер теста — всегда Dart-агент из kernel, повторять его в прогоне `dart` незачем; `embedded` от агента не зависит |
 | `cli/repl-permission-allow-once`, `-reject` | да | да | — | у mock нет инструментов |
 | `cli/slash-menu-merges-agent-commands` | да | — | — | Dart-агент объявит команды на этапе 8 (R-07, R-08) |
 | `cli/client-commands-smoke` (`/sessions`, `/resume`) | да | да | — | — |

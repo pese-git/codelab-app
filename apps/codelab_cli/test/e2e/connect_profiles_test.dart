@@ -14,25 +14,9 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 import '../support/cli_process.dart';
+import 'support/e2e_agent.dart';
 
 const _token = 'e2e-secret-token';
-
-Future<String?> _agentKernel() async {
-  final source = File('$appDirectory/../codelab_agent/bin/codelab_agent.dart');
-  if (!source.existsSync()) {
-    return null;
-  }
-  final dir = await Directory.systemTemp.createTemp('codelab_agent_kernel_');
-  final output = '${dir.path}/codelab_agent.dill';
-  final result = await Process.run(dartExecutable(), [
-    'compile',
-    'kernel',
-    source.path,
-    '-o',
-    output,
-  ], workingDirectory: '$appDirectory/../codelab_agent');
-  return result.exitCode == 0 ? output : null;
-}
 
 void main() {
   late Directory dir;
@@ -43,12 +27,12 @@ void main() {
   test('cli/connect-profiles-stdio-ws-embedded: stdio profile from '
       'profiles.json', () async {
     final env = {'CODELAB_HOME': '${dir.path}/codelab'};
-    final agent = await scriptedAgent(dir);
+    final launch = await E2eCliAgent.current.launch(dir);
     final added = await CliProcess.run([
       'profiles',
       'add',
       'default',
-      agent,
+      launch.agent,
     ], environment: env);
     expect(added.exitCode, 0, reason: '$added');
 
@@ -60,16 +44,12 @@ void main() {
     ], environment: env);
 
     expect(result.exitCode, 0, reason: '$result');
-    expect(result.stdout, contains('hello from compatible stdio agent'));
+    expect(result.stdout, contains(launch.answer));
   });
 
   test('cli/connect-profiles-stdio-ws-embedded: WebSocket with the token '
       'from CODELAB_AGENT_TOKEN', () async {
-    final kernel = await _agentKernel();
-    if (kernel == null) {
-      markTestSkipped('the codelab-agent kernel does not compile');
-      return;
-    }
+    final kernel = await E2eCliAgent.agentKernel();
     final script = File('${dir.path}/hello.json')
       ..writeAsStringSync(
         jsonEncode({
@@ -125,7 +105,8 @@ void main() {
     expect(result.exitCode, 0, reason: '$result');
     expect(result.stdout, contains('hello over websocket'));
     expect('${result.stdout}${result.stderr}', isNot(contains(_token)));
-  });
+    // Сервер — всегда Dart-агент теста: в прогоне `dart` тест не повторяется.
+  }, tags: scriptedOnly);
 
   test('cli/connect-profiles-stdio-ws-embedded: embedded is 64', () async {
     final result = await CliProcess.run(
@@ -136,5 +117,5 @@ void main() {
     expect(result.exitCode, 64);
     expect(result.stderr, contains('Embedded agent is not available'));
     expect(result.stdout, isEmpty);
-  });
+  }, tags: scriptedOnly);
 }

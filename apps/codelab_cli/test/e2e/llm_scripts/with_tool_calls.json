@@ -1,0 +1,58 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "reply": [
+          {
+            "thinking": "Looking at the failing test."
+          },
+          {
+            "toolCall": {
+              "id": "read_1",
+              "name": "read",
+              "arguments": {
+                "path": "README.md"
+              }
+            }
+          },
+          {
+            "toolCall": {
+              "id": "write_1",
+              "name": "write",
+              "arguments": {
+                "path": "notes.txt",
+                "content": "fixed"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "write_1"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "exec_1",
+              "name": "exec",
+              "arguments": {
+                "command": "echo ok",
+                "timeout": 30
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      }
+    ]
+  }
+}
