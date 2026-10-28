@@ -109,7 +109,7 @@ apps/codelab_cli/lib/src/tui/
 ### D5. Чистое ядро
 
 `TuiModel` неизменяема и хранит:
-- последний `SessionView` и `WorkspaceState`;
+- последний `SessionView` и id профиля (статус-строка);
 - `ComposerState` (строки, курсор, позиция в истории);
 - `ScrollState` (`offsetFromBottom`, `follow`, `newSinceHold`);
 - `OverlayState?` — открытый пикер или список дополнений как `PickerSpec` (что выбирается и какая команда исполнится); навигацию и фильтр держит компонент адаптера (D12);
@@ -123,7 +123,7 @@ apps/codelab_cli/lib/src/tui/
 `TuiMsg`:
 - `KeyMsg(Key)` — `Key` из `input/key_decoder.dart`, общий с REPL;
 - `PasteMsg(text)`, `ResizeMsg`;
-- `SessionViewMsg(view, at)` — `at` ставит адаптер: из него `reduce` берёт `turnStartedAt`, оставаясь чистым; `WorkspaceMsg`;
+- `SessionViewMsg(view, at)` — `at` ставит адаптер: из него `reduce` берёт `turnStartedAt`, оставаясь чистым;
 - `NoteMsg(text)` — вывод команды;
 - `EffectFailedMsg`;
 - `OpenPickerMsg(PickerSpec)` — от команды без аргумента;
@@ -191,7 +191,7 @@ apps/codelab_cli/lib/src/tui/
   Каждая функция `Cmd` ловит исключение и возвращает `DomainMsg(EffectFailedMsg)`: обработчик пакета печатает поверх кадра и завершает программу (§12.2.7, шаг 7).
 - **`TuiRunner.run(handle, …)`.**
   - Собирает `Program(options: [withAltScreen(), withFps(60)])`.
-  - Подписывается на `SessionHandle.view` и `ClientWorkspace.state` сразу после запуска `run`: событие → `program.send(DomainMsg(…))`.
+  - Подписывается на `SessionHandle.view` сразу после запуска `run`: ревизия → `program.send(DomainMsg(SessionViewMsg(…)))`. Состояние соединения видно через заметки kit в транскрипте (`detached`, `reconnected`).
   - В `finally`:
     - отменяет подписки;
     - повторно пишет последовательности выключения (повтор безвреден, TUI-4) и возвращает `echoMode`/`lineMode` stdin;
@@ -200,9 +200,9 @@ apps/codelab_cli/lib/src/tui/
 
 ### D8. Композер и клавиши
 
-- **Композер** (`core/composer.dart`): строки, курсор в 2D, перенос по ширине для отображения, история `HistoryFile` (общая с REPL).
+- **Композер** (`core/composer.dart`): строки, курсор в 2D, история `HistoryFile` (общая с REPL). Строка шире экрана обрезается `fitLine`; перенос строк композера по ширине — позже.
 - **Клавиши.**
-  - Действия TUI добавляются в общий реестр `KeyBindings` новой областью `KeyScope.transcript` и таблицей `KeyBindings.tui`:
+  - Действия TUI добавляются в общий реестр `KeyBindings` таблицей `KeyBindings.tui`; клавиши прокрутки — в области `any`, отдельная область транскрипта не нужна, пока у транскрипта нет фокуса (режим выбора U-28):
     - PgUp/PgDn — `scroll_up`/`scroll_down`;
     - End — `follow`;
     - ↑/↓ — история на первой и последней строке композера, иначе перемещение курсора.
@@ -264,7 +264,7 @@ apps/codelab_cli/lib/src/tui/
 Решение владельца проекта: значок хода, пикеры и строку подсказок рисуют компоненты пакета, как в §12.2.7:
 - значок хода — `SpinnerModel`;
 - пикеры — `ListModel` с фильтром;
-- строка подсказок — `HelpModel` через `RegistryKeyMap implements KeyMap`: таблица действий одна, TUI-7.
+- строка подсказок — `HelpModel` через `RegistryKeyMap implements KeyMap`: таблица действий одна, TUI-7. Компонент выводит пункт на строку, адаптер сворачивает вывод в одну строку через ` · ` (`hintLine`).
 
 Компонент — `Model` со своим `update` и `view`. Ядро не импортирует пакет (TUI-5, правило сторожа D3), поэтому компоненты живут в `TuiApp`, а не в `TuiModel`.
 - **Ядро решает, что показывать.** Открыт ли пикер и какой (`OverlayState` с `PickerSpec`), идёт ли ход, какие клавиши активны.
@@ -343,7 +343,7 @@ apps/codelab_cli/lib/src/tui/
 
 Каждая итерация — отдельный PR в `develop`. Модульные тесты пишутся первыми, отдельным красным коммитом до кода. PTY-e2e — приёмочные ворота.
 
-1. **Ядро и запуск.**
+1. **Ядро и запуск.** До итерации 2 клиентские команды, кроме `/exit` и `/quit`, отвечают заметкой `/<name> is not available in the full-screen mode yet.`; команды агента уходят промптом.
    - Зависимость и сторож, флаг `--ui`.
    - Ядро: модель, транскрипт с прокруткой, композер, статус-строка, `fitLine`.
    - Адаптер и `TuiRunner`, ход и очередь.

@@ -20,6 +20,20 @@ final class UsageError implements Exception {
 /// Что запускает `codelab`.
 enum CliCommand { repl, headless, profiles, testScenario, version, help }
 
+/// Интерактивный режим `--ui`: построчный REPL или полноэкранный TUI.
+///
+/// Почему: TUI встаёт рядом с REPL, а не вместо него — REPL остаётся
+/// режимом по умолчанию и запасным путём (spec codelab-cli «Команда codelab
+/// и разбор флагов»; design.md change `add-cli-tui`, D1, D4).
+enum UiMode {
+  line('line'),
+  tui('tui');
+
+  const UiMode(this.flag);
+
+  final String flag;
+}
+
 /// Политика одобрений headless (`--approve`, spec cli-headless «Политика
 /// одобрений headless»).
 enum ApprovePolicy {
@@ -59,6 +73,7 @@ final class CliOptions {
     required this.timeout,
     required this.noColor,
     required this.verbose,
+    required this.ui,
     this.filter,
   });
 
@@ -97,6 +112,9 @@ final class CliOptions {
 
   final bool noColor;
   final bool verbose;
+
+  /// `--ui`: интерактивный режим; на headless не влияет.
+  final UiMode ui;
 
   /// `test-scenario --filter`: glob по id фикстуры; `null` — все.
   final String? filter;
@@ -167,6 +185,13 @@ ArgParser _parser() {
       'timeout',
       valueHelp: 'duration',
       help: 'Headless: limit per turn, e.g. 90s or 10m.',
+    )
+    ..addOption(
+      'ui',
+      valueHelp: 'mode',
+      allowed: [for (final mode in UiMode.values) mode.flag],
+      defaultsTo: UiMode.line.flag,
+      help: 'Interactive mode: line-by-line REPL or full-screen TUI.',
     )
     ..addFlag('no-color', negatable: false, help: 'No ANSI colors.')
     ..addFlag(
@@ -261,6 +286,11 @@ CliOptions parseCliArgs(List<String> args) {
   if (results.option('resume') != null && results.flag('continue')) {
     throw const UsageError('Pass either --resume or --continue, not both.');
   }
+  // Полноэкранный режим — только интерактивный: у headless свой вывод
+  // (design.md change `add-cli-tui`, D4).
+  if (headless && results.option('ui') == UiMode.tui.flag) {
+    throw const UsageError('--ui applies only to the interactive mode');
+  }
   return _options(
     headless ? CliCommand.headless : CliCommand.repl,
     results,
@@ -298,6 +328,7 @@ CliOptions _options(
       },
   noColor: results.flag('no-color'),
   verbose: results.flag('verbose'),
+  ui: UiMode.values.firstWhere((mode) => mode.flag == results.option('ui')),
 );
 
 /// `90s`, `10m`, `1h30m`; ноль и единицы без суффикса — ошибка.

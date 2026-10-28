@@ -20,6 +20,10 @@ abstract interface class CliIo {
   /// (H-01).
   bool get stdinIsTerminal;
 
+  /// Подключён ли stdout к терминалу: полноэкранному режиму нужны оба
+  /// потока (design.md change `add-cli-tui`, D4).
+  bool get stdoutIsTerminal;
+
   StringSink get stdout;
 
   StringSink get stderr;
@@ -37,6 +41,9 @@ final class ProcessCliIo implements CliIo {
 
   @override
   bool get stdinIsTerminal => io.stdin.hasTerminal;
+
+  @override
+  bool get stdoutIsTerminal => io.stdout.hasTerminal;
 
   @override
   StringSink get stdout => io.stdout;

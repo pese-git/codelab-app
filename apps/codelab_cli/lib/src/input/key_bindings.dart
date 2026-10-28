@@ -1,6 +1,6 @@
 import 'key_decoder.dart';
 
-/// Действие REPL, к которому привязывается клавиша.
+/// Действие REPL или TUI, к которому привязывается клавиша.
 ///
 /// [description] — текст `/help keys`; таблица — единственный источник
 /// подписей (§12.2.11, TUI-7).
@@ -21,7 +21,12 @@ enum KeyAction {
   moveEnd('move to the end of the line'),
   deleteBackward('delete the character before the cursor'),
   deleteForward('delete the character under the cursor'),
-  deleteToStart('delete to the start of the line');
+  deleteToStart('delete to the start of the line'),
+
+  /// Только TUI: прокрутка транскрипта (§12.2.7, «Транскрипт и прокрутка»).
+  scrollUp('scroll the transcript up'),
+  scrollDown('scroll the transcript down'),
+  follow('follow the output again');
 
   const KeyAction(this.description);
 
@@ -63,9 +68,10 @@ final class KeyBindingConflict implements Exception {
 /// «Редактор строки и клавиши»; §12.2.11, TUI-7; design.md change
 /// `add-codelab-cli`, D5).
 ///
-/// Как использовать: REPL берёт [mvp] и спрашивает [actionFor] на каждую
-/// клавишу; `/help keys` печатает [helpLines]. Ctrl+Enter, Shift+Enter,
-/// bracketed paste и секция `keys` из `cli.yaml` добавятся сюда после MVP.
+/// Как использовать: REPL берёт [mvp], полноэкранный режим — [tui], и
+/// спрашивает [actionFor] на каждую клавишу; `/help keys` печатает
+/// [helpLines]. Ctrl+Enter и секция `keys` из `cli.yaml` добавятся сюда
+/// позже.
 final class KeyBindings {
   KeyBindings(List<KeyBinding> bindings)
     : bindings = List.unmodifiable(bindings) {
@@ -107,6 +113,38 @@ final class KeyBindings {
     KeyBinding(KeyScope.any, Key.backspace, KeyAction.deleteBackward),
     KeyBinding(KeyScope.any, Key.delete, KeyAction.deleteForward),
     KeyBinding(KeyScope.any, Key.ctrlU, KeyAction.deleteToStart),
+  ]);
+
+  /// Таблица полноэкранного режима.
+  ///
+  /// Отличия от [mvp] (design.md change `add-cli-tui`, D8): новая строка —
+  /// Shift+Enter и Alt+Enter, а Ctrl+J нет: `dart_tui` присылает его как
+  /// Enter (разведка 6.11, D14 пункт 3); PgUp и PgDn листают транскрипт;
+  /// End возвращает следование за выводом, поэтому конец строки — Ctrl+E.
+  static final tui = KeyBindings(const [
+    KeyBinding(KeyScope.any, Key.enter, KeyAction.submit),
+    KeyBinding(KeyScope.any, Key.shiftEnter, KeyAction.newline),
+    KeyBinding(KeyScope.any, Key.altEnter, KeyAction.newline),
+    KeyBinding(KeyScope.running, Key.escape, KeyAction.cancelTurn),
+    KeyBinding(KeyScope.running, Key.ctrlC, KeyAction.cancelTurn),
+    KeyBinding(KeyScope.editing, Key.escape, KeyAction.clearLine),
+    KeyBinding(KeyScope.editing, Key.ctrlC, KeyAction.interrupt),
+    KeyBinding(KeyScope.any, Key.ctrlD, KeyAction.exit),
+    KeyBinding(KeyScope.any, Key.up, KeyAction.historyPrevious),
+    KeyBinding(KeyScope.any, Key.down, KeyAction.historyNext),
+    KeyBinding(KeyScope.any, Key.tab, KeyAction.complete),
+    KeyBinding(KeyScope.any, Key.ctrlL, KeyAction.clearScreen),
+    KeyBinding(KeyScope.any, Key.left, KeyAction.moveLeft),
+    KeyBinding(KeyScope.any, Key.right, KeyAction.moveRight),
+    KeyBinding(KeyScope.any, Key.home, KeyAction.moveHome),
+    KeyBinding(KeyScope.any, Key.ctrlA, KeyAction.moveHome),
+    KeyBinding(KeyScope.any, Key.ctrlE, KeyAction.moveEnd),
+    KeyBinding(KeyScope.any, Key.backspace, KeyAction.deleteBackward),
+    KeyBinding(KeyScope.any, Key.delete, KeyAction.deleteForward),
+    KeyBinding(KeyScope.any, Key.ctrlU, KeyAction.deleteToStart),
+    KeyBinding(KeyScope.any, Key.pageUp, KeyAction.scrollUp),
+    KeyBinding(KeyScope.any, Key.pageDown, KeyAction.scrollDown),
+    KeyBinding(KeyScope.any, Key.end, KeyAction.follow),
   ]);
 
   final List<KeyBinding> bindings;

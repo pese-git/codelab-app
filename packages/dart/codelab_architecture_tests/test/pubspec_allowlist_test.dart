@@ -82,6 +82,7 @@ const cliAllowlist = {
   'codelab_acp_protocol',
   'codelab_acp_transports',
   'codelab_acp_testing',
+  'dart_tui',
   'args',
   'async',
   'path',

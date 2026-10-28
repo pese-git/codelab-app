@@ -26,6 +26,9 @@ dependencies: # allowlist — workspace-architecture «Автоматическ�
     path: ../../packages/dart/codelab_client_core
   codelab_client_io:
     path: ../../packages/dart/codelab_client_io
+  # Только адаптер полноэкранного режима `lib/src/tui/`, не ядро экрана
+  # `lib/src/tui/core/` (design.md change `add-cli-tui`, D3; правило сторожа).
+  dart_tui: ^3.0.0
   meta: ^1.16.0
   path: ^1.9.0
 

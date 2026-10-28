@@ -108,8 +108,21 @@ const rules = [
     exclude: ['scenario/'],
     sealExclude: false,
   ),
-  // TUI change (U-12): apps/codelab_cli/lib/src — ['package:dart_tui/'], exclude: ['tui/'], sealExclude: false
-  //   (dart_tui only in lib/src/tui/, §12.2.7; the rest of the CLI goes through TuiRunner)
+  // dart_tui — только адаптеру полноэкранного режима `lib/src/tui/`;
+  // остальной CLI запускает его через `TuiRunner` (design.md change
+  // `add-cli-tui`, D3).
+  PackageRule(
+    'apps/codelab_cli/lib/src',
+    forbidden: ['package:dart_tui/'],
+    exclude: ['tui/'],
+    sealExclude: false,
+  ),
+  // Ядро экрана — чистые `reduce` и `render`: ни пакета TUI, ни dart:io
+  // (TUI-5; design.md change `add-cli-tui`, D3).
+  PackageRule(
+    'apps/codelab_cli/lib/src/tui/core',
+    forbidden: ['package:dart_tui/', 'dart:io'],
+  ),
   // stage 7: codelab_embedded — webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/'];
   //   apps/codelab_desktop — ['package:codelab_agent_'] already above
   // stage 7: codelab_setup — [...webUnsafe, 'package:codelab_agent_io/', 'package:codelab_acp_', 'package:codelab_client_', 'package:flutter/'],
