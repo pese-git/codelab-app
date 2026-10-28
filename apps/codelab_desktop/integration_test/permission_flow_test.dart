@@ -116,7 +116,11 @@ void main() {
       // Варианты ищутся по ключу вида, а не по подписи: по ACP `name` —
       // свободный текст агента (у Dart-агента `Always allow <pattern>`,
       // у scripted-агента `Allow always`), смысл несёт `kind`.
-      expect(find.text(launch.permissionTitle), findsWidgets);
+      // Шапка ждущего вызова — «<метка> <команда>» одной фразой: до решения
+      // видна извлечённая команда целиком, а не ACP `title` агента
+      // (redesign-transcript-rows, lighten-approval-block), поэтому текст
+      // шапки одинаков для scripted- и Dart-агента.
+      expect(find.text('Run echo hello'), findsOneWidget);
       expect(find.text('Shell'), findsWidgets);
       // Полоса решения: «Allow» и «Reject» отвечают вариантом выбранного
       // охвата, постоянные варианты агента видны в меню охвата «Always»
@@ -159,7 +163,9 @@ void main() {
       // Записи протокола — в панели Protocol дока (change
       // `redesign-workbench-shell`, D5).
       shellCubit.togglePane(ToolPane.protocol);
-      await tester.pumpAndSettle();
+      // Не `pumpAndSettle()`: ход всё ещё ждёт одобрения, и спиннер кнопки
+      // отправки не даёт кадрам успокоиться (см. выше).
+      await tester.pump(const Duration(milliseconds: 300));
       expect(rawInputIn(WorkbenchInspectorPane), findsWidgets);
 
       await tester.tap(find.byKey(CodeLabApprovalPrompt.allowKey));

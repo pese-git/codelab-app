@@ -73,7 +73,6 @@ final class E2eAgent {
             (value: 'gpt-5', name: 'GPT-5'),
             (value: 'gpt-4', name: 'GPT-4'),
           ],
-          permissionTitle: 'Run test command',
           rawInputMarker: '/bin/bash',
         );
       case E2eAgentKind.dart:
@@ -101,8 +100,6 @@ final class E2eAgent {
             (value: 'scripted/gpt-5', name: 'gpt-5'),
             (value: 'scripted/gpt-4', name: 'gpt-4'),
           ],
-          // Заголовок `exec` — сама команда (ToolPresentation инструмента).
-          permissionTitle: 'echo hello',
           rawInputMarker: 'timeout',
         );
     }
@@ -236,7 +233,6 @@ final class E2eLaunch {
     required this.args,
     required this.sessionLabel,
     required this.models,
-    required this.permissionTitle,
     required this.rawInputMarker,
   });
 
@@ -251,9 +247,6 @@ final class E2eLaunch {
 
   /// Значения и подписи опции `model`, по умолчанию — первая.
   final List<({String value, String name})> models;
-
-  /// Заголовок карточки одобрения для команды `echo hello`.
-  final String permissionTitle;
 
   /// Текст, который есть только в сырых аргументах вызова (`rawInput`).
   final String rawInputMarker;

@@ -116,7 +116,10 @@ void main() {
       // indeterminate animation `pumpAndSettle` would wait on forever.
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Allow once'), findsOneWidget);
+      // Кнопка решения ищется по ключу: с `lighten-approval-block` (D3)
+      // «Allow» отвечает вариантом выбранного охвата («Only this time» —
+      // `allow_once`), подпись варианта агента на кнопке не видна.
+      expect(find.byKey(CodeLabApprovalPrompt.allowKey), findsOneWidget);
 
       // The session is busy (turn running, approval pending) — submitting a
       // second message through the real composer must queue it instead of
@@ -165,9 +168,9 @@ void main() {
       // the approval arrived, is now partly scrolled past. Scroll it back
       // into view first, as a user would, so the tap lands on the option
       // instead of whatever covers its center.
-      await tester.ensureVisible(find.text('Allow once'));
+      await tester.ensureVisible(find.byKey(CodeLabApprovalPrompt.allowKey));
       await tester.pump();
-      await tester.tap(find.text('Allow once'));
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.allowKey));
       await tester.pump();
 
       final turnDeadline = DateTime.now().add(const Duration(seconds: 10));
