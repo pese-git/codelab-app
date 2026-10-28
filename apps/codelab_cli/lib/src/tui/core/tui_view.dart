@@ -58,7 +58,7 @@ Frame render(TuiModel model, TuiChrome chrome) {
   );
 
   if (hintsVisible(model)) {
-    lines.add(chrome.hints ?? '');
+    lines.add(_fitHints(chrome.hints ?? '', width));
   }
 
   final status = statusLine(statusInfoOf(model, chrome), width);
@@ -110,4 +110,14 @@ StatusInfo statusInfoOf(TuiModel model, TuiChrome chrome) {
         ? chrome.now.difference(started)
         : null,
   );
+}
+
+/// Строка подсказок не шире экрана: лишние пункты отбрасываются с конца
+/// целиком, чтобы не осталось обрезанной подписи вроде «exi».
+String _fitHints(String hints, int width) {
+  final entries = hints.split(' · ');
+  while (entries.length > 1 && displayWidth(entries.join(' · ')) > width) {
+    entries.removeLast();
+  }
+  return entries.join(' · ');
 }
