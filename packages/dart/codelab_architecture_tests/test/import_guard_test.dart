@@ -221,4 +221,51 @@ void main() {
       ),
     );
   });
+
+  test('allows the TUI package only in the TUI adapter of the terminal '
+      'client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_tui_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:dart_tui/dart_tui.dart';\n";
+    for (final file in ['repl/repl.dart', 'tui/tui_app.dart']) {
+      File(p.join(tmp.path, 'lib', 'src', file))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(import);
+    }
+    File(p.join(tmp.path, 'lib', 'src', 'tui', 'core', 'tui_view.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("${import}import 'dart:io';\n");
+    final tuiRules = rules.where(
+      (r) =>
+          r.dir.startsWith('apps/codelab_cli/lib/src') &&
+          r.forbidden.contains('package:dart_tui/'),
+    );
+
+    final violations = [
+      for (final rule in tuiRules)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            rule.dir.replaceFirst('apps/codelab_cli/', ''),
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+
+    // dart_tui — только адаптер TUI, а ядро экрана `tui/core/` не знает ни
+    // пакета, ни dart:io (design.md change `add-cli-tui`, D3; TUI-5).
+    expect(violations, hasLength(3));
+    expect(
+      violations,
+      containsAll([
+        endsWith('lib/src/repl/repl.dart:1 -> package:dart_tui/dart_tui.dart'),
+        endsWith(
+          'lib/src/tui/core/tui_view.dart:1 -> package:dart_tui/dart_tui.dart',
+        ),
+        endsWith('lib/src/tui/core/tui_view.dart:2 -> dart:io'),
+      ]),
+    );
+  });
 }

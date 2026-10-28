@@ -79,4 +79,27 @@ void main() {
       returnsNormally,
     );
   });
+
+  // Таблица TUI (tasks 2.8 change `add-cli-tui`; design.md, D8): Ctrl+J
+  // приходит от dart_tui как Enter, поэтому новая строка — Shift+Enter и
+  // Alt+Enter; End — следование за выводом, конец строки — Ctrl+E.
+  test('the TUI table', () {
+    final tui = KeyBindings.tui;
+    KeyAction? idle(Key key) => tui.actionFor(key, running: false);
+
+    expect(idle(Key.enter), KeyAction.submit);
+    expect(idle(Key.shiftEnter), KeyAction.newline);
+    expect(idle(Key.altEnter), KeyAction.newline);
+    expect(idle(Key.ctrlJ), isNull);
+    expect(idle(Key.pageUp), KeyAction.scrollUp);
+    expect(idle(Key.pageDown), KeyAction.scrollDown);
+    expect(idle(Key.end), KeyAction.follow);
+    expect(idle(Key.ctrlE), KeyAction.moveEnd);
+    expect(tui.actionFor(Key.escape, running: true), KeyAction.cancelTurn);
+    expect(idle(Key.ctrlD), KeyAction.exit);
+    expect(
+      tui.helpLines().join('\n'),
+      allOf(contains('Shift+Enter'), isNot(contains('Ctrl+J'))),
+    );
+  });
 }

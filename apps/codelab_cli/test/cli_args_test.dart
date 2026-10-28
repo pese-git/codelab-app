@@ -129,7 +129,6 @@ void main() {
       ['--include-acp'],
       ['--input-format', 'text'],
       ['--trace-file', 'x'],
-      ['--ui', 'tui'],
       ['--session', 'x'],
       ['--permission-mode', 'ask'],
       ['--config', 'x.yaml'],
@@ -220,5 +219,40 @@ void main() {
     final options = parseCliArgs(['test-scenario', 'x', '-a', 'stdio:agent']);
 
     expect(options.timeout, const Duration(seconds: 30));
+  });
+
+  // Флаг полноэкранного режима (tasks 1.3 change `add-cli-tui`; spec
+  // codelab-cli «Команда codelab и разбор флагов»; design.md, D4).
+  test('--ui selects the interactive mode, line by default', () {
+    expect(parseCliArgs([]).ui, UiMode.line);
+    expect(parseCliArgs(['--ui', 'line']).ui, UiMode.line);
+    final tui = parseCliArgs(['--ui', 'tui', 'hello']);
+    expect(tui.ui, UiMode.tui);
+    expect(tui.command, CliCommand.repl);
+    expect(tui.positional, ['hello']);
+  });
+
+  test('--ui tui with -p or -f is a usage error', () {
+    for (final args in [
+      ['--ui', 'tui', '-p', 'hi'],
+      ['--ui', 'tui', '-f', 'x.md'],
+    ]) {
+      expect(
+        () => parseCliArgs(args),
+        throwsA(
+          isA<UsageError>().having(
+            (e) => e.message,
+            'message',
+            '--ui applies only to the interactive mode',
+          ),
+        ),
+        reason: '$args',
+      );
+    }
+    expect(parseCliArgs(['--ui', 'line', '-p', 'hi']).ui, UiMode.line);
+  });
+
+  test('an unknown --ui value is a usage error', () {
+    expect(() => parseCliArgs(['--ui', 'full']), throwsA(isA<UsageError>()));
   });
 }
