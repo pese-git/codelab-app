@@ -155,7 +155,6 @@ void main() {
       'mcp',
       'secret',
       'sessions',
-      'test-scenario',
       'update',
       'login',
       'logout',
@@ -195,5 +194,31 @@ void main() {
     expect(text, contains('--print'));
     expect(text, contains('--approve'));
     expect(text, isNot(contains('--output-format')));
+  });
+
+  test('test-scenario takes paths, --agent, --filter and --timeout', () {
+    final options = parseCliArgs([
+      'test-scenario',
+      'fixtures/acp',
+      'one.json',
+      '--agent',
+      'stdio:agent',
+      '--filter',
+      'acp/session-*',
+      '--timeout',
+      '10s',
+    ]);
+
+    expect(options.command, CliCommand.testScenario);
+    expect(options.positional, ['fixtures/acp', 'one.json']);
+    expect(options.agent, 'stdio:agent');
+    expect(options.filter, 'acp/session-*');
+    expect(options.timeout, const Duration(seconds: 10));
+  });
+
+  test('test-scenario without --timeout waits 30s for a frame', () {
+    final options = parseCliArgs(['test-scenario', 'x', '-a', 'stdio:agent']);
+
+    expect(options.timeout, const Duration(seconds: 30));
   });
 }
