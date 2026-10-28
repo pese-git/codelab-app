@@ -8,6 +8,7 @@ import 'package:dart_tui/dart_tui.dart' as tea;
 import 'package:test/test.dart';
 
 import '../support/fake_agent.dart';
+import '../support/fake_terminal.dart' show eventually;
 
 final class _History implements HistoryStore {
   List<String>? saved;
@@ -74,6 +75,29 @@ void main() {
 
     await agent.nextNotification(sessionCancelMethod);
     turn.ignore();
+  });
+
+  test('RespondCmd answers the permission request (D9)', () async {
+    final turn = handle.send('go');
+    final prompt = await agent.next(sessionPromptMethod);
+    agent.requestPermission(id: 7, sessionId: 's1', toolCallId: 'call_1');
+    await eventually(() => handle.current.pendingApprovals.isNotEmpty);
+    final approval = handle.current.pendingApprovals.single;
+
+    expect(
+      await run(
+        RespondCmd(approval.approvalId, const PermissionOptionId('allow-once')),
+      ),
+      isNull,
+    );
+
+    final response = await agent.responseTo(7);
+    expect(
+      (response.result! as Map<String, Object?>)['outcome'],
+      containsPair('optionId', 'allow-once'),
+    );
+    agent.respond(prompt, {'stopReason': 'end_turn'});
+    await turn;
   });
 
   test('RunCommandCmd runs the command line', () async {

@@ -1,5 +1,5 @@
-// PTY-e2e полноэкранного режима `cli/tui-smoke` (tasks 3.3 change
-// `add-cli-tui`; spec codelab-tui «Запуск полноэкранного режима»,
+// PTY-e2e полноэкранного режима `cli/tui-smoke` (tasks 3.3, 5.5 change
+// `add-cli-tui`; spec codelab-tui «Одобрение в TUI», «Команды и пикеры TUI»; spec codelab-tui «Запуск полноэкранного режима»,
 // «Восстановление терминала после TUI»; testing-quality «PTY-e2e
 // терминального клиента»; §12.2.13; design.md, D13).
 //
@@ -110,6 +110,38 @@ Future<void> main() async {
     expect(killed.exitCode, 0, reason: '${killed.stderr}');
 
     expect(await pty.exitCode, 143);
+    expectRestored(pty);
+  }, skip: skip);
+
+  test('cli/tui-smoke: y allows the permission request once', () async {
+    final pty = await tui(
+      CodelabCompatibleStdioAgentMode.withPermissionRequest,
+      args: ['run it'],
+    );
+    await pty.waitFor('[y] allow once');
+    expect(pty.text, contains('command: echo hello'));
+
+    pty.write('y');
+
+    await pty.waitFor('approved: allow_once');
+    pty.write('\x04');
+    expect(await pty.exitCode, 0);
+    expectRestored(pty);
+  }, skip: skip);
+
+  test('cli/tui-smoke: /model picks the next model', () async {
+    final pty = await tui(CodelabCompatibleStdioAgentMode.withConfigOptions);
+    await pty.waitFor('\x1b[?1049h');
+
+    pty.write('/model\r');
+    await pty.waitFor('› gpt-5');
+    pty
+      ..write('\x1b[B')
+      ..write('\r');
+
+    await pty.waitFor('model = gpt-4');
+    pty.write('\x04');
+    expect(await pty.exitCode, 0);
     expectRestored(pty);
   }, skip: skip);
 }
