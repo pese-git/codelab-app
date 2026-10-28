@@ -168,7 +168,8 @@ AI-agent обязан интерпретировать эти формулиро
 │   └── changes/
 ├── apps/
 │   ├── codelab_desktop/
-│   └── codelab_agent/
+│   ├── codelab_agent/
+│   └── codelab_cli/
 └── packages/
     ├── dart/
     │   ├── codelab_acp_protocol/
@@ -198,7 +199,7 @@ AI-agent обязан интерпретировать эти формулиро
 * `codelab_agent_acp` — ACP-сервер агента: проекция `AgentRuntime` в протокол; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_architecture_tests` — только тесты: сторож импортов и allowlist зависимостей ядра (`melos run guard`).
 * `codelab_ui` — Fluent UI widgets рабочего места CodeLab.
-* `apps/codelab_desktop` — десктопный клиент; `apps/codelab_agent` — бинарь Dart-агента `codelab-agent serve --stdio | --ws`.
+* `apps/codelab_desktop` — десктопный клиент; `apps/codelab_agent` — бинарь Dart-агента `codelab-agent serve --stdio | --ws`; `apps/codelab_cli` — терминальный клиент `codelab` на чистом Dart (REPL, headless `-p`, драйвер фикстур `test-scenario`) поверх `codelab_client_core`; правила — во вложенном `AGENTS.md` приложения.
 
 Правила:
 
@@ -209,7 +210,7 @@ AI-agent обязан интерпретировать эти формулиро
 * Пакеты в `packages/dart/` ДОЛЖНЫ оставаться pure Dart и НЕ ДОЛЖНЫ зависеть от Flutter.
 * Пакеты в `packages/flutter/` МОГУТ зависеть от Flutter.
 * `codelab_ui` НЕ ДОЛЖЕН содержать application/business logic.
-* `codelab_acp_testing` МОЖЕТ использоваться другими пакетами только как `dev_dependency`.
+* `codelab_acp_testing` МОЖЕТ использоваться другими пакетами только как `dev_dependency`. Единственное исключение — `apps/codelab_cli`: команда `test-scenario` проигрывает фикстуры в рабочем бинаре, поэтому пакет — обычная зависимость, а импорт `package:codelab_acp_testing/` разрешён только из `lib/src/scenario/` (проверяет сторож; design.md change `add-codelab-cli`, D3).
 * `package:codelab_acp_transports/codelab_acp_transports.dart` ДОЛЖЕН оставаться web-безопасным; IO-транспорты (`StdioAcpTransport`, `WebSocketAcpTransport`) импортируются из `package:codelab_acp_transports/io.dart` только composition root и тестами.
 * Клиенты (`apps/*`) НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` напрямую.
 * Границы пакетов проверяет тест-сторож `packages/dart/codelab_architecture_tests` (`melos run guard`): правило нового пакета добавляется в `test/support/rules.dart` вместе с пакетом.

@@ -29,7 +29,8 @@
    `lib/src/headless/stream_json/` — `StreamJsonProjector` (чистая проекция ревизий kit),
    `StreamJsonRedactor`, `StreamJsonWriter` (единственный владелец stdout в `json` и
    `stream-json`) по §12.5.3; схемы — `apps/codelab_cli/schema/stream-json.v1.schema.json` и
-   `json.v1.schema.json`.
+   `json.v1.schema.json`. В change `add-codelab-cli` (MVP) — только текстовый вывод; `json`,
+   `stream-json` и `lib/src/headless/stream_json/` — change `add-cli-stream-json` (§12.5).
 8. **6.8. Драйвер фикстур:** `lib/src/scenario/test_scenario_command.dart` поверх загрузчика
    фикстур из `codelab_acp_testing` и `ClientWorkspace`.
 9. **6.9. Сигналы:** SIGINT и SIGTERM (`ProcessSignal.sigint.watch()`, `sigterm`) — отмена хода,
@@ -45,7 +46,8 @@
     `cli/headless-stream-json-golden`, `cli/headless-stream-json-schema`,
     `cli/headless-stream-json-errors`, `cli/headless-stream-json-redaction`,
     `cli/headless-stream-json-flags`, `cli/headless-stream-json-flush`,
-    `cli/headless-json-single-object` (§12.5.8). Интерактивные сценарии идут через псевдотерминал
+    `cli/headless-json-single-object` (§12.5.8; тесты `stream-json` и `json` — change
+    `add-cli-stream-json`). Интерактивные сценарии идут через псевдотерминал
     (обвязка PTY ниже) с вводом клавиш из файла. После MVP: `cli/bang-command`,
     `cli/theme-user-json`, `cli/update-rejects-bad-signature`, `cli/update-replaces-and-resumes`,
     `cli/tui-scroll-follow`, `cli/tui-session-switch`, `cli/power-assertion-released-after-turn`, `cli/restart-reloads-session`,
@@ -64,7 +66,9 @@
     Windows Terminal. Итог — таблица в `design.md` change `add-codelab-cli`: по пункту «да» или
     «нет → запасной путь», версия пакета из `pubspec.lock`, решение «пакет подтверждён» или
     «отвергнут → свой рендер» (§12.2.12). Сам полноэкранный режим (U-12) по-прежнему после MVP;
-    код по итогам разведки пишется по TDD.
+    код по итогам разведки пишется по TDD. Разведка перенесена из `add-codelab-cli` в change
+    полноэкранного TUI (U-12) вместе с зависимостью и правилом сторожа `package:dart_tui/`: MVP
+    от неё не зависит (design.md change `add-codelab-cli`, D1).
 
 **Обвязка PTY для e2e.** `apps/codelab_cli/test/e2e/support/pty_process.dart` —
 `PtyProcess.start(executable, args, {columns, rows, environment})`: `Process.start` системной
@@ -164,15 +168,15 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 | `--resume <sessionId>` | `-r` | загрузить сессию (`session/load`) вместо новой; после MVP сессия, открытая на запись другим процессом (`sessionLocked`, agent-core-architecture §17.6.10), → сообщение `Session <id> is open for writing in <profile> (pid <pid>). Use --read-only to watch it or /fork to continue in a copy.` и код выхода `1` | — |
 | `--read-only` | | после MVP: с `--resume` — открыть сессию только для чтения (`_meta.codelab.openMode: "readOnly"`); статус-строка получает сегмент `read-only` (agent-core-architecture §17.6.11) | выключено |
 | `--continue` | `-c` | загрузить последнюю сессию этой папки (`session/list`) | — |
-| `--session <name>` | | этап 6, Should — не блокирует MVP (S-14): открыть сессию с заголовком `<name>` в рабочей папке или создать новую с этим заголовком (S-14, agent-core-architecture §8.10.2); несколько совпадений — в headless код 1 со списком id, в REPL — выбор; вместе с `--resume`/`--continue` → код 64 | — |
+| `--session <name>` | | этап 6, Should — не блокирует MVP (S-14), отдельный change после `add-codelab-cli`: открыть сессию с заголовком `<name>` в рабочей папке или создать новую с этим заголовком (S-14, agent-core-architecture §8.10.2); несколько совпадений — в headless код 1 со списком id, в REPL — выбор; вместе с `--resume`/`--continue` → код 64 | — |
 | `--print <промпт>` | `-p` | headless-режим | — |
 | `--prompt-file <файл>` | `-f` | headless: промпт из файла; `-` — из stdin | — |
-| `--output-format text\|json\|stream-json` | | только headless: `text` — ответ как есть; `json` — один итоговый объект в конце; `stream-json` — NDJSON v1 (§12.5.3); в REPL → код 64 | `text` |
-| `--include-thoughts` | | headless: события `thought_delta` в `stream-json` (§12.5.3) | выключено |
+| `--output-format text\|json\|stream-json` | | change `add-cli-stream-json`; только headless: `text` — ответ как есть; `json` — один итоговый объект в конце; `stream-json` — NDJSON v1 (§12.5.3); в REPL → код 64 | `text` |
+| `--include-thoughts` | | change `add-cli-stream-json`; headless: события `thought_delta` в `stream-json` (§12.5.3) | выключено |
 | `--stream-thinking` | | после MVP (H-08): headless `text`/`json` — мысли модели в stderr по мере прихода (приглушённо, если stderr — TTY); stdout не меняется; со `stream-json` не действует (одна строка предупреждения, мысли там — `--include-thoughts`); с `--no-stream-thinking` или в REPL → код 64 (§12.6.11) | `headless.stream_thinking` (`false`) |
 | `--no-stream-thinking` | | после MVP (H-08): выключить вывод мыслей явно; сильнее `headless.stream_thinking` (§12.6.11) | — |
-| `--include-acp` | | только с `--output-format stream-json`: строки `acp` с исходными кадрами после редакции (§12.5.3); иначе код 64 | выключено |
-| `--input-format text\|stream-json` | | `text` — промпт из `-p`, `-f` или stdin; `stream-json` зарезервирован → код 64 (§12.5.2) | `text` |
+| `--include-acp` | | change `add-cli-stream-json`; только с `--output-format stream-json`: строки `acp` с исходными кадрами после редакции (§12.5.3); иначе код 64 | выключено |
+| `--input-format text\|stream-json` | | change `add-cli-stream-json`; `text` — промпт из `-p`, `-f` или stdin; `stream-json` зарезервирован → код 64 (§12.5.2) | `text` |
 | `--approve <политика>` | | headless: `reject` (отклонять всё), `read-only` (разрешать once только вызовы вида `read`, остальное отклонять), `allow-all` (разрешать once всё, кроме запросов с `_meta.codelab.critical: true`; печатает предупреждение в stderr) | `reject` |
 | `--permission-mode <режим>` | | этап 7 (нужен встроенный агент; у `codelab-agent serve` тот же флаг — этап 4); `accept-edits` — после MVP (P-06). Режим встроенного агента: `plan`, `ask`, `standard`, `accept-edits`, `bypass`, `autopilot` (только с `-p`) (agent-core-architecture §7.7, §13.6); на внешнего агента не влияет | `standard` |
 | `--timeout <длительность>` | | headless: предел на ход (`90s`, `10m`); по истечении — `session/cancel` | без предела |
@@ -187,7 +191,7 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 | `--no-color` | | без ANSI | цвет, если TTY и нет `NO_COLOR` |
 | `--ui line\|tui` | | построчный REPL или полноэкранный TUI (U-12, после MVP, §12.2.1, §12.2.7); `tui` требует TTY на stdin и stdout | `line` (`ui.mode` в `cli.yaml`) |
 | `--attach <файл>` | | вложение к первому промпту (REPL) или к промпту `-p`; флаг можно повторять (U-14, после MVP, §12.2.8) | — |
-| `--trace-file <файл>` | | protocol trace (JSON-RPC кадры с редакцией секретов) в файл | выключено |
+| `--trace-file <файл>` | | change `add-cli-stream-json` (общий отвод кадров с `--include-acp`); protocol trace (JSON-RPC кадры с редакцией секретов) в файл | выключено |
 | `--log-file <файл>` | | этап 7, Should (E-16; встроенного агента в CLI до этапа 7 нет, у `codelab-agent serve` флаг — этап 4); лог встроенного агента (JSON Lines, с редакцией секретов) дописывается в файл; переменная `CODELAB_LOG_FILE`; флаг сильнее переменной, переменная сильнее `logging.file` (agent-core-architecture §12.3.1) | `logging.file` (`~/.codelab/logs/agent.log`) |
 | `--verbose` | `-v` | диагностика соединения в stderr | выключено |
 | `--debug-llm-snapshot[=headers\|body]` | | после MVP (L-27): встроенный агент пишет снимки зависших запросов к LLM (`logging.llm_snapshot`, agent-core-architecture §17.10.10) | выключено |
@@ -245,12 +249,12 @@ Headless (`-p`, `-f`) передаёт `_meta.codelab.sealOnClose: true` в `ses
 | `/profile [id]` | показать профиль или переподключиться к другому | новое соединение |
 | `/reconnect` | переподключиться и перезагрузить сессию; процесс агента не завершается намеренно; полный перезапуск — `/restart` | `initialize`, `session/load` |
 | `/plan` | показать текущий план | — |
-| `/inspect [toolCallId]` | подробности вызова инструмента: аргументы, вывод, разрешение | — |
-| `/trace on\|off` | protocol trace в файл сессии | — |
+| `/inspect [toolCallId]` | change `add-cli-stream-json`: подробности вызова инструмента: аргументы, вывод, разрешение | — |
+| `/trace on\|off` | change `add-cli-stream-json`: protocol trace в файл сессии | — |
 | `/clear` | очистить экран (сессия сохраняется) | — |
 | `/thoughts dim\|collapsed\|hidden` | как показывать мысли модели (U-08, §12.2.3) | — |
 | `/paste-image` | приложить картинку из буфера обмена к следующему промпту (U-14, после MVP, §12.2.8) | — |
-| `/terminal-setup` | обнаруженные возможности терминала и подсказка, как сделать Shift+Enter различимым (U-23, §12.2.9) | — |
+| `/terminal-setup` | после MVP (U-23, Should, отдельный change): обнаруженные возможности терминала и подсказка, как сделать Shift+Enter различимым (U-23, §12.2.9) | — |
 | `/help keys` | таблица клавиш из реестра `key_bindings.dart` (§12.2.9) | — |
 | `!<команда>` | после MVP: выполнить команду в локальном shell в `cwd` сессии, вне агента; вывод прикладывается к следующему промпту (U-16, §12.6.2) | — |
 | `/shell`, `/shell drop` | после MVP: приложенные выводы `!`; удалить их | — |
@@ -277,9 +281,9 @@ Headless (`-p`, `-f`) передаёт `_meta.codelab.sealOnClose: true` в `ses
 |---|---|---|
 | Enter | ввод | отправить; во время хода — в очередь (сообщение «в очереди: n») |
 | Ctrl+Enter | идёт ход | после MVP: направить сообщение в ход (steering, C-03, §12.2.9); различим при CSI u, kitty или modifyOtherKeys; без хода или без capability — как Enter |
-| Shift+Enter, Alt+Enter или Ctrl+J | ввод | новая строка; Shift+Enter — где терминал различает его (kitty keyboard protocol, xterm modifyOtherKeys; U-23, §12.2.9) |
+| Shift+Enter, Alt+Enter или Ctrl+J | ввод | новая строка; Shift+Enter — после MVP (U-23), где терминал различает его (kitty keyboard protocol, xterm modifyOtherKeys; U-23, §12.2.9) |
 | `\` + Enter | ввод | запасной путь в любом терминале: `\` в конце строки удаляется, вставляется перевод строки |
-| вставка (bracketed paste) | ввод | вставленный текст с переводами строк попадает в ввод целиком и не отправляется (U-23) |
+| вставка (bracketed paste) | ввод | после MVP (U-23): вставленный текст с переводами строк попадает в ввод целиком и не отправляется (U-23) |
 | Esc | идёт ход | отменить ход (`session/cancel`) |
 | Esc | ввод, нет хода | очистить строку |
 | Ctrl+C | идёт ход | отменить ход |
@@ -318,8 +322,11 @@ codelab_cli, а не в `config.yaml` агента (§12.2.10).
 | `a` | `allow_always` | агент запоминает по инструменту и шаблону аргументов |
 | `n` | `reject_once` | ход продолжается: модель получает отказ текстом |
 | `N` | `reject_always` | |
-| `?` | — | показать `rawInput` целиком и diff правки, затем снова спросить |
+| `?` | — | показать `rawInput` целиком и diff правки, затем снова спросить; в MVP — `rawInput` с редакцией секретов, diff — change `add-cli-stream-json` |
 | Esc, Ctrl+C | — | отменить ход; ожидающий запрос получает исход `cancelled` |
+
+В MVP блок и подсказка выводятся по-английски (`Permission:`, `[y] allow once`): строки CLI —
+английские константы до локализации (design.md change `add-codelab-cli`, D15).
 
 Enter без выбора ничего не делает: варианта «по умолчанию» нет. Пока ждёт одобрение, ввод в
 композер недоступен; новые запросы одобрения ставятся в очередь и показываются по одному.
@@ -373,11 +380,23 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
 Вывод: строка `PASS|FAIL|SKIP <id> (<время>)` на фикстуру и итог. Код выхода: `0` — все прошли,
 `1` — есть `FAIL`, `64` — ошибка использования.
 
-**OpenSpec change.** `add-codelab-cli` — scope: команды и флаги, REPL-команды и клавиши, UX
-одобрения, коды выхода, формат stream-json v1 по §12.5 (схема в apps/codelab_cli/schema/), драйвер фикстур;
-зависимость `dart_tui` для будущего `--ui tui` и итог разведки 6.11 (технология затрагивает только
-presentation нового приложения, поэтому решение фиксируется в `design.md` этого change и §12.2.12,
-без ADR; technology-stack §20а). Отдельно, если
+**OpenSpec change.** Этап делится на change (решение владельца проекта, design.md change
+`add-codelab-cli`, D1):
+
+* `add-codelab-cli` (MVP) — scope: команды и флаги, REPL-команды и клавиши, UX одобрения, коды
+  выхода, headless с текстовым выводом, драйвер фикстур. Закрывает Must этапа (H-01, H-02, H-04,
+  U-01–U-07, U-15) и Should U-08, U-09. Строки CLI — английские константы (D15).
+* `add-cli-stream-json` — формат stream-json v1 и `json` по §12.5 (схемы в
+  `apps/codelab_cli/schema/`), `--output-format`, `--include-thoughts`, `--include-acp`,
+  `--input-format`, отвод кадров (`--trace-file`, `/trace`), `/inspect` и diff правки в `?`
+  одобрения вместе с расширением модели отображения kit (§12.1).
+* Change полноэкранного TUI (U-12) — разведка 6.11, зависимость `dart_tui`, правило сторожа
+  `package:dart_tui/` и `--ui tui`. Технология затрагивает только presentation приложения,
+  поэтому решение фиксируется в `design.md` этого change и §12.2.12, без ADR (technology-stack §20а).
+* Should вне MVP — `--session` (S-14), bracketed paste, Shift+Enter и `/terminal-setup` (U-23) —
+  отдельные change (§9.0, правило 6).
+
+До своего change флаги не регистрируются (код 64 `Unknown flag`). Отдельно, если
 понадобится расширение ACP для статус-строки (usage) — свой change `add-usage-extension` после
 этапа 9 (§12.1.5).
 `tasks.md` — пары "тест → реализация" со ссылкой на критерий (§9.0, правило 3); PTY-e2e
@@ -396,16 +415,18 @@ presentation нового приложения, поэтому решение ф
   `codelab profiles add default …`; агент не запускается.
 * `cli/headless-exit-codes`: ошибка провайдера → `1`, `session/cancel` по `--timeout` → `130`,
   неизвестный флаг → `64`, SIGTERM → `143`.
-* `cli/headless-stream-json-golden`: вывод совпадает с golden-файлом `test/e2e/golden/stream_json_basic.ndjson`.
-* `cli/headless-stream-json-schema`: каждая строка всех golden-файлов и живых прогонов `cli/headless-*` проходит `apps/codelab_cli/schema/stream-json.v1.schema.json`; `cli/headless-json-single-object`: `--output-format json` — ровно одна строка, проходит `json.v1.schema.json`; `cli/headless-stream-json-errors`, `-redaction`, `-flags`, `-flush` — зелёные (§12.5.8).
+* change `add-cli-stream-json`: `cli/headless-stream-json-golden` — вывод совпадает с golden-файлом `test/e2e/golden/stream_json_basic.ndjson`.
+* change `add-cli-stream-json`: `cli/headless-stream-json-schema` — каждая строка всех golden-файлов и живых прогонов `cli/headless-*` проходит `apps/codelab_cli/schema/stream-json.v1.schema.json`; `cli/headless-json-single-object`: `--output-format json` — ровно одна строка, проходит `json.v1.schema.json`; `cli/headless-stream-json-errors`, `-redaction`, `-flags`, `-flush` — зелёные (§12.5.8).
 * `test/scenario/test_scenario_command_test.dart`: против `FixtureReplayAgent` из `codelab_acp_testing`
   (агент, который отвечает ожидаемыми кадрами самой фикстуры) весь корпус даёт `PASS`, а фикстура
   с испорченным ожидаемым кадром — `FAIL` с диффом и код выхода `1`. Прогон против настоящего
-  агента — с этапа 7 (`--agent embedded`) и этапа 4 (`--agent 'stdio:codelab-agent serve --stdio'`).
-* `melos run guard`: CLI не импортирует Flutter и агентские пакеты; `package:dart_tui/` — только из
-  `apps/codelab_cli/lib/src/tui/`.
-* Разведка 6.11 завершена: таблица чек-листа §12.2.7 и решение по `dart_tui` записаны в
-  `design.md` `add-codelab-cli`; каталог спайка удалён.
+  агента: `--agent 'stdio:codelab-agent serve --stdio'` — `test/scenario/codelab_agent_corpus_test.dart`
+  (фикстуры без `setup.transport`, без `FAIL`); `--agent embedded` — с этапа 7.
+* `melos run guard`: CLI не импортирует Flutter и агентские пакеты; `package:codelab_acp_testing/`
+  — только из `apps/codelab_cli/lib/src/scenario/` (design.md change `add-codelab-cli`, D3).
+  Правило `package:dart_tui/` (только `apps/codelab_cli/lib/src/tui/`) — в change TUI.
+* Разведка 6.11 — DoD change полноэкранного TUI: таблица чек-листа §12.2.7 и решение по
+  `dart_tui` записываются в его `design.md`, каталог спайка удаляется.
 * Ручная проверка: сессия с Python-агентом (`codelab -a 'stdio:codelab serve --stdio'`) —
   промпт, одобрение, `/mode`, `/sessions`, `/resume`.
 

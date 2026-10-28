@@ -197,6 +197,11 @@ codelab_acp_testing
 
 Test infrastructure не должна проникать в production API.
 
+Единственное исключение — `apps/codelab_cli`: рабочая команда `codelab test-scenario` проигрывает
+golden-фикстуры против агента, поэтому `codelab_acp_testing` — её обычная зависимость. Импорт
+`package:codelab_acp_testing/` разрешён только из `apps/codelab_cli/lib/src/scenario/`, это
+проверяет сторож `melos run guard` (design.md change `add-codelab-cli`, D3).
+
 ---
 
 ## 8. Protocol tests
@@ -646,6 +651,19 @@ Application tests должны использовать fake adapter.
 Real process integration tests допустимы для `codelab_acp_transports`, если stdio/process transport критичен.
 
 Использовать controlled test executable/process, а не внешний production agent.
+
+Для терминального клиента `apps/codelab_cli` реальный процесс — приёмочный уровень (e2e
+`test/e2e/`, имена тестов — id строк матрицы `cli/*`):
+
+* бинарь CLI запускается kernel-файлом против scripted stdio-агента из `codelab_acp_testing`;
+* интерактивные сценарии REPL идут через псевдотерминал `test/e2e/support/pty_process.dart`
+  (системная утилита `script` BSD или util-linux; если её нет, тест пропускается с сообщением);
+* ожидание — по содержимому вывода, а не по паузам; одиночный Esc подаётся отдельной записью с
+  паузой больше таймаута декодера клавиш;
+* прогон — `melos run test:e2e:cli` (входит в `melos run test`), только Dart VM.
+
+Логика REPL, рендера, редактора строки и headless проверяется модульными тестами поверх портов
+без процессов и терминала; e2e их не заменяют (design.md change `add-codelab-cli`, D2, D11).
 
 ---
 
@@ -1410,7 +1428,8 @@ Protocol/client/state-machine logic остаётся pure Dart testable.
 
 ### TEST-004 — Production не зависит от test infrastructure
 
-`codelab_acp_testing` только test/dev dependency.
+`codelab_acp_testing` только test/dev dependency. Исключение — `apps/codelab_cli` с импортом только
+из `lib/src/scenario/` (§7).
 
 ### TEST-005 — Security behavior имеет direct tests
 
