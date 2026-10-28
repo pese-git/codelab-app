@@ -10,9 +10,7 @@ Using MCP, AI applications like Claude or ChatGPT can connect to data sources (e
 
 Think of MCP like a USB-C port for AI applications. Just as USB-C provides a standardized way to connect electronic devices, MCP provides a standardized way to connect AI applications to external systems.
 
-<Frame>
-  <img src="https://mintcdn.com/mcp/bEUxYpZqie0DsluH/images/mcp-simple-diagram.png?fit=max&auto=format&n=bEUxYpZqie0DsluH&q=85&s=35268aa0ad50b8c385913810e7604550" width="3840" height="1500" data-path="images/mcp-simple-diagram.png" />
-</Frame>
+![](https://mintcdn.com/mcp/bEUxYpZqie0DsluH/images/mcp-simple-diagram.png?fit=max\&auto=format\&n=bEUxYpZqie0DsluH\&q=85\&s=35268aa0ad50b8c385913810e7604550)
 
 ## What can MCP enable?
 
@@ -26,33 +24,39 @@ Think of MCP like a USB-C port for AI applications. Just as USB-C provides a sta
 Depending on where you sit in the ecosystem, MCP can have a range of benefits.
 
 * **Developers**: MCP reduces development time and complexity when building, or integrating with, an AI application or agent.
-* **AI applications or agents**: MCP provides access to an ecosystem of data sources, tools and apps which will enhance capabilities and improve the end-user experience.
-* **End-users**: MCP results in more capable AI applications or agents which can access your data and take actions on your behalf when necessary.
+* **AI applications or agents**: MCP gives them access to an ecosystem of data sources, tools and apps, which enhances their capabilities and improves the end-user experience.
+* **End-users**: MCP results in more capable AI applications or agents that can access user data and take actions on the user's behalf when necessary.
 
 ## Broad ecosystem support
 
-MCP is an open protocol supported across a wide range of clients and servers. AI assistants like [Claude](https://claude.com/docs/connectors/building) and [ChatGPT](https://developers.openai.com/api/docs/mcp/), development tools like [Visual Studio Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers), [Cursor](https://cursor.com/docs/context/mcp), [MCPJam](https://docs.mcpjam.com/getting-started), and [many others](/clients) all support MCP — making it easy to build once and integrate everywhere.
+MCP is an open protocol supported across a wide range of clients and servers. AI assistants like [Claude](https://claude.com/docs/connectors/building) and [ChatGPT](https://developers.openai.com/api/docs/mcp/), development tools like [Visual Studio Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers), [Cursor](https://cursor.com/docs/context/mcp), [MCPJam](https://docs.mcpjam.com/getting-started), and many others all support MCP — making it easy to build once and integrate everywhere.
 
 ## Start Building
 
-<CardGroup cols={2}>
-  <Card title="Build servers" icon="server" href="/docs/develop/build-server">
-    Create MCP servers to expose your data and tools
-  </Card>
+> **[Build servers](https://modelcontextprotocol.io/docs/2026-07-28/develop/build-server.md)**
+>
+> Create MCP servers to expose your data and tools
 
-  <Card title="Build clients" icon="computer" href="/docs/develop/build-client">
-    Develop applications that connect to MCP servers
-  </Card>
+> **[Build clients](https://modelcontextprotocol.io/docs/2026-07-28/develop/build-client.md)**
+>
+> Develop applications that connect to MCP servers
 
-  <Card title="Build MCP Apps" icon="puzzle-piece" href="/extensions/apps/overview">
-    Build interactive apps that run inside AI clients
-  </Card>
-</CardGroup>
+> **[Build MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview.md)**
+>
+> Build interactive apps that run inside AI clients
 
 ## Learn more
 
-<CardGroup cols={2}>
-  <Card title="Understand concepts" icon="book" href="/docs/learn/architecture">
-    Learn the core concepts and architecture of MCP
-  </Card>
-</CardGroup>
+> **[Architecture](https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture.md)**
+>
+> Learn the core concepts and architecture of MCP
+
+> **[Security](https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices.md)**
+>
+> Understand the security considerations and best practices for MCP
+
+## Community
+
+> **[Contributing](https://modelcontextprotocol.io/community/contributing.md)**
+>
+> Learn how to get involved and contribute to MCP
