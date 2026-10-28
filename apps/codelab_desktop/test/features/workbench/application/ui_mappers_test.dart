@@ -235,13 +235,6 @@ void main() {
       );
     });
 
-    test('the approval card is titled by the kind of the call', () {
-      expect(approvalTitleOf(ToolKind.execute), 'Run a command?');
-      expect(approvalTitleOf(ToolKind.edit), 'Edit a file?');
-      expect(approvalTitleOf(ToolKind.fetch), 'Fetch a URL?');
-      expect(approvalTitleOf(ToolKind.other), 'Allow this tool call?');
-    });
-
     test('a pending approval is interactive and answers through the '
         'callback with its own identity', () {
       const pending = PendingApprovalView(
@@ -276,10 +269,8 @@ void main() {
 
       final approval =
           entries.single.approval! as CodeLabTranscriptApprovalPending;
-      expect(approval.title, 'Run a command?');
       expect(approval.risk, CodeLabApprovalRisk.shell);
       expect(approval.command, 'rm -rf build');
-      expect(approval.cwd, '/work');
       expect(approval.rawInput, contains('rm -rf build'));
       expect(approval.rawInput, isNot(contains('sk-123')));
       expect(approval.enabled, isFalse);

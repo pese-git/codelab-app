@@ -47,7 +47,7 @@ void main() {
     await tester.pumpWidget(codelabTranscriptPanelVerbosePreview());
     expect(tester.takeException(), isNull);
 
-    await tester.pumpWidget(codelabApprovalPanelPreview());
+    await tester.pumpWidget(codelabApprovalPromptPreview());
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(codelabConnectionScreenPreview());

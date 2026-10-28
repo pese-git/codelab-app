@@ -2,7 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
-import 'codelab_approval_panel.dart';
+import 'codelab_approval_prompt.dart';
 import 'codelab_transcript_row.dart';
 
 /// Вызов инструмента в ленте: одна строка и раскрываемые подробности.
@@ -13,13 +13,16 @@ import 'codelab_transcript_row.dart';
 ///
 /// Для чего: шапка раскрывашки ([CodeLabExpanderCard], как в макете) —
 /// значок статуса, метка и через пробел моноширинная деталь, тег статуса и
-/// шеврон; под ним — вторая строка, текстовый вывод и карточка
-/// ожидающего одобрения. Пока вызов ждёт одобрения, тег — «Awaiting
-/// approval», а строку нельзя свернуть: иначе пропадут кнопки решения.
+/// шеврон; под ним — вторая строка и текстовый вывод. Пока вызов ждёт
+/// одобрения (change `lighten-approval-block`): деталь — команда целиком,
+/// до трёх строк и «Show full command» для остального (D5); вместо тега
+/// статуса — тег риска (D6); внизу — полоса решения
+/// [CodeLabApprovalPrompt]. Свернуть такую строку нельзя: иначе
+/// пропадут кнопки решения.
 ///
 /// Как использовать: `CodeLabToolCallTile(row:, expanded:, onToggle:)`;
 /// раскрытие решает лента ([CodeLabTranscriptPanel]).
-class CodeLabToolCallTile extends StatelessWidget {
+class CodeLabToolCallTile extends StatefulWidget {
   const CodeLabToolCallTile({
     required this.row,
     required this.expanded,
@@ -29,56 +32,49 @@ class CodeLabToolCallTile extends StatelessWidget {
 
   static const headerKey = ValueKey('tool-call-header');
   static const statusTagKey = ValueKey('tool-call-status');
+  static const showFullCommandKey = ValueKey('tool-call-show-full-command');
 
   /// Сколько последних строк вывода видно в раскрытой строке.
   static const outputTailLines = 20;
+
+  /// Сколько строк команды видно в шапке до «Show full command».
+  static const pendingDetailLines = 3;
 
   final CodeLabToolCallRow row;
   final bool expanded;
   final ValueChanged<bool> onToggle;
 
   @override
+  State<CodeLabToolCallTile> createState() => _CodeLabToolCallTileState();
+}
+
+class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
+  /// Пользователь раскрыл длинную команду в шапке. Это временный просмотр
+  /// до решения, а не выбор о ленте, поэтому он живёт в `State` строки, а не
+  /// в `TranscriptViewCubit` (design D5).
+  bool _showFullDetail = false;
+
+  CodeLabToolCallRow get row => widget.row;
+
+  @override
   Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
     final canToggle = row.isExpandable && !row.awaitsApproval;
-    final showBody = row.isExpandable && (expanded || row.awaitsApproval);
+    final showBody =
+        row.isExpandable && (widget.expanded || row.awaitsApproval);
     // Вторая строка упавшего вызова — первая строка его же вывода: если
     // вывод ничего к ней не добавляет, он не повторяется под ней.
     final showOutput =
         row.output.isNotEmpty && _outputTail.trim() != row.secondary?.trim();
-    final (statusLabel, statusTone) = _statusTag;
     final approval = row.approval;
-
-    final muted = theme.resources.textFillColorSecondary;
     final resolved = approval is CodeLabTranscriptApprovalResolved
         ? approval
         : null;
     final pending = approval is CodeLabTranscriptApprovalPending
         ? approval
         : null;
-
-    // Метка и деталь — одна строка через пробел, как в макете: деталь
-    // продолжает фразу «Read lib/main.dart», а не стоит отдельной колонкой.
-    final title = Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(text: row.label),
-          if (row.detail.isNotEmpty) ...[
-            const TextSpan(text: ' '),
-            TextSpan(
-              text: row.detail,
-              style: CodeLabText.styleOf(
-                context,
-                CodeLabTextRole.mono,
-              )?.copyWith(color: muted),
-            ),
-          ],
-        ],
-      ),
-      style: theme.typography.body,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
+    final (statusLabel, statusTone) = pending == null
+        ? _statusTag
+        : (pending.risk.label, pending.risk.tone);
 
     final body = showBody
         ? Column(
@@ -98,18 +94,11 @@ class CodeLabToolCallTile extends StatelessWidget {
               if (pending != null) ...[
                 if (row.secondary != null || showOutput)
                   const SizedBox(height: 12),
-                CodeLabApprovalPanel(
-                  bordered: false,
-                  optionsLayout: CodeLabApprovalOptionsLayout.compactRow,
-                  title: pending.title,
-                  risk: pending.risk,
+                CodeLabApprovalPrompt(
                   reason: pending.reason,
-                  command: pending.command,
-                  cwd: pending.cwd,
                   diffSummary: pending.diffSummary,
                   rawInput: pending.rawInput,
                   options: pending.options,
-                  selectedOptionId: pending.selectedOptionId,
                   enabled: pending.enabled,
                   approveOptionId: pending.approveOptionId,
                   rejectOptionId: pending.rejectOptionId,
@@ -122,12 +111,13 @@ class CodeLabToolCallTile extends StatelessWidget {
         : null;
 
     return CodeLabExpanderCard(
-      headerKey: headerKey,
-      expanded: expanded,
-      onToggle: canToggle ? onToggle : null,
-      highlighted: row.awaitsApproval,
+      headerKey: CodeLabToolCallTile.headerKey,
+      expanded: widget.expanded,
+      onToggle: canToggle ? widget.onToggle : null,
       leading: _StatusGlyph(row: row),
-      title: title,
+      title: pending == null
+          ? _title(context, row.detail, maxLines: 1)
+          : _pendingTitle(context, pending.command ?? row.detail),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -138,22 +128,106 @@ class CodeLabToolCallTile extends StatelessWidget {
             ),
             const SizedBox(width: 6),
           ],
-          CodeLabBadge(key: statusTagKey, label: statusLabel, tone: statusTone),
+          CodeLabBadge(
+            key: CodeLabToolCallTile.statusTagKey,
+            label: statusLabel,
+            tone: statusTone,
+          ),
         ],
       ),
-      // Карточка одобрения в макете — поля 12 сверху и снизу, 16 по бокам;
-      // вывод инструмента — обычное тело раскрывашки, 16 со всех сторон.
+      // Полоса решения — узкая полоса внизу строки под тонкой линией тела
+      // (design D3): поля минимальные, отступы держат сами кнопки.
       bodyPadding: pending != null
-          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+          ? const EdgeInsets.all(4)
           : const EdgeInsets.all(16),
       body: body,
     );
   }
 
+  /// Метка и деталь — одна фраза через пробел, как в макете: «Read
+  /// lib/main.dart», а не две колонки.
+  Text _title(BuildContext context, String detail, {int? maxLines}) {
+    final theme = FluentTheme.of(context);
+    return Text.rich(
+      _titleSpan(context, detail),
+      style: theme.typography.body,
+      maxLines: maxLines,
+      overflow: maxLines == null ? null : TextOverflow.ellipsis,
+    );
+  }
+
+  TextSpan _titleSpan(BuildContext context, String detail) {
+    final muted = FluentTheme.of(context).resources.textFillColorSecondary;
+    return TextSpan(
+      children: [
+        TextSpan(text: row.label),
+        if (detail.isNotEmpty) ...[
+          const TextSpan(text: ' '),
+          TextSpan(
+            text: detail,
+            style: CodeLabText.styleOf(
+              context,
+              CodeLabTextRole.mono,
+            )?.copyWith(color: muted),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Шапка ждущего вызова: команда целиком, до [pendingDetailLines] строк;
+  /// длиннее — «Show full command» показывает остальное на месте. До
+  /// решения команда не обрезается многоточием: пользователь одобряет ровно
+  /// то, что выполнится (spec «Long command is never cut before the
+  /// decision»).
+  Widget _pendingTitle(BuildContext context, String detail) {
+    const lines = CodeLabToolCallTile.pendingDetailLines;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(
+            style: FluentTheme.of(context).typography.body,
+            children: [_titleSpan(context, detail)],
+          ),
+          maxLines: lines,
+          textDirection: Directionality.of(context),
+          textScaler:
+              MediaQuery.maybeTextScalerOf(context) ?? TextScaler.noScaling,
+        )..layout(maxWidth: constraints.maxWidth);
+        final exceeds = painter.didExceedMaxLines;
+        painter.dispose();
+        if (!exceeds) {
+          return _title(context, detail);
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Обрезка по строкам без многоточия: остаток открывает ссылка
+            // ниже, а не скрывает «…» посреди команды.
+            _showFullDetail
+                ? _title(context, detail)
+                : Text.rich(
+                    _titleSpan(context, detail),
+                    style: FluentTheme.of(context).typography.body,
+                    maxLines: lines,
+                    overflow: TextOverflow.clip,
+                  ),
+            HyperlinkButton(
+              key: CodeLabToolCallTile.showFullCommandKey,
+              style: const ButtonStyle(
+                padding: WidgetStatePropertyAll(EdgeInsets.zero),
+              ),
+              onPressed: () =>
+                  setState(() => _showFullDetail = !_showFullDetail),
+              child: Text(_showFullDetail ? 'Show less' : 'Show full command'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   (String, CodeLabTone) get _statusTag {
-    if (row.awaitsApproval) {
-      return ('Awaiting approval', CodeLabTone.accent);
-    }
     return switch (row.status) {
       CodeLabToolCallStatus.queued => ('Queued', CodeLabTone.neutral),
       CodeLabToolCallStatus.running => ('Running', CodeLabTone.accent),
@@ -165,9 +239,11 @@ class CodeLabToolCallTile extends StatelessWidget {
 
   String get _outputTail {
     final lines = row.output.join('\n').trimRight().split('\n');
-    return lines.length <= outputTailLines
+    return lines.length <= CodeLabToolCallTile.outputTailLines
         ? lines.join('\n')
-        : lines.sublist(lines.length - outputTailLines).join('\n');
+        : lines
+              .sublist(lines.length - CodeLabToolCallTile.outputTailLines)
+              .join('\n');
   }
 
   // Тоны — как у тегов статуса: отмена — warning, отказ — danger.

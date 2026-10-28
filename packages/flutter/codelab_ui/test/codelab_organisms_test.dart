@@ -11,7 +11,7 @@ void main() {
     expect(CodeLabPlanEntry, isA<Type>());
     expect(CodeLabPlanEntryStatus.inProgress, isA<CodeLabPlanEntryStatus>());
     expect(CodeLabPlanEntryPriority.high, isA<CodeLabPlanEntryPriority>());
-    expect(CodeLabApprovalPanel, isA<Type>());
+    expect(CodeLabApprovalPrompt, isA<Type>());
     expect(CodeLabApprovalRisk.shell, isA<CodeLabApprovalRisk>());
     expect(CodeLabCommandPaletteSurface, isA<Type>());
     expect(CodeLabConnectionScreen, isA<Type>());
@@ -143,123 +143,235 @@ void main() {
     expect(nextInspector, isTrue);
   });
 
-  testWidgets('renders approval risk details and selects option', (
-    tester,
-  ) async {
-    String? selected;
+  group('CodeLabApprovalPrompt', () {
+    const fourOptions = [
+      CodeLabApprovalOption(
+        id: 'a1',
+        label: 'Allow once',
+        kind: CodeLabApprovalOptionKind.allowOnce,
+      ),
+      CodeLabApprovalOption(
+        id: 'a2',
+        label: 'Always allow echo *',
+        kind: CodeLabApprovalOptionKind.allowAlways,
+      ),
+      CodeLabApprovalOption(
+        id: 'r1',
+        label: 'Reject',
+        kind: CodeLabApprovalOptionKind.rejectOnce,
+      ),
+      CodeLabApprovalOption(
+        id: 'r2',
+        label: 'Always reject echo *',
+        kind: CodeLabApprovalOptionKind.rejectAlways,
+      ),
+    ];
 
-    await tester.pumpWidget(
-      FluentApp(
-        home: CodeLabApprovalPanel(
-          title: 'Run shell command',
-          risk: CodeLabApprovalRisk.shell,
-          reason: 'Needed to verify workspace health.',
-          command: 'fvm dart analyze',
-          cwd: '/repo',
-          diffSummary: 'No file edits',
-          selectedOptionId: 'allow_once',
-          onOptionSelected: (optionId) => selected = optionId,
-          options: const [
-            CodeLabApprovalOption(
-              id: 'allow_once',
-              label: 'Allow once',
-              kind: CodeLabApprovalOptionKind.allowOnce,
-              description: 'Run once.',
-              tone: CodeLabTone.warning,
-            ),
-            CodeLabApprovalOption(
-              id: 'reject',
-              label: 'Reject',
-              kind: CodeLabApprovalOptionKind.rejectOnce,
-              description: 'Deny.',
-              tone: CodeLabTone.danger,
-            ),
-          ],
+    Widget prompt({
+      required ValueChanged<String> onSelected,
+      List<CodeLabApprovalOption> options = fourOptions,
+      bool enabled = true,
+      String? reason,
+      String? rawInput,
+      double width = 720,
+    }) => FluentApp(
+      home: Center(
+        child: SizedBox(
+          width: width,
+          child: CodeLabApprovalPrompt(
+            reason: reason,
+            rawInput: rawInput,
+            enabled: enabled,
+            options: options,
+            onOptionSelected: onSelected,
+          ),
         ),
       ),
     );
 
-    expect(find.text('Run shell command'), findsOneWidget);
-    expect(find.text('Shell'), findsOneWidget);
-    expect(find.text('Needed to verify workspace health.'), findsOneWidget);
-    expect(find.text('\$ fvm dart analyze'), findsOneWidget);
-    expect(find.text('/repo'), findsOneWidget);
-    expect(find.text('No file edits'), findsOneWidget);
+    Future<void> pickScope(WidgetTester tester, String scope) async {
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.scopeKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(scope).last);
+      await tester.pumpAndSettle();
+    }
 
-    await tester.tap(find.text('Reject'));
-    await tester.pump(const Duration(milliseconds: 100));
+    Button button(WidgetTester tester, Key key) => tester.widget<Button>(
+      find.descendant(of: find.byKey(key), matching: find.byType(Button)),
+    );
 
-    expect(selected, 'reject');
-  });
+    testWidgets('one bar: Allow, Reject and the scope Only this time', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        prompt(onSelected: (_) {}, reason: 'Needed to run the tests.'),
+      );
 
-  testWidgets('keeps disabled approvals from selecting options or shortcuts', (
-    tester,
-  ) async {
-    String? selected;
+      expect(find.text('Allow'), findsOneWidget);
+      expect(find.text('Reject'), findsOneWidget);
+      expect(find.text('Only this time'), findsOneWidget);
+      expect(find.text('Always allow echo *'), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(find.text('Needed to run the tests.'), findsOneWidget);
+      // Кнопки и охват — в одной строке колонки 720 px.
+      final allow = tester.getRect(find.byKey(CodeLabApprovalPrompt.allowKey));
+      final scope = tester.getRect(find.byKey(CodeLabApprovalPrompt.scopeKey));
+      expect((allow.center.dy - scope.center.dy).abs(), lessThan(4));
+    });
 
-    await tester.pumpWidget(
-      FluentApp(
-        home: CodeLabApprovalPanel(
-          title: 'Run shell command',
-          risk: CodeLabApprovalRisk.shell,
-          enabled: false,
-          onOptionSelected: (optionId) => selected = optionId,
+    testWidgets('Allow answers allow_once by default', (tester) async {
+      final selected = <String>[];
+      await tester.pumpWidget(prompt(onSelected: selected.add));
+
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.allowKey));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(selected, ['a1']);
+    });
+
+    testWidgets('Always is an explicit scope and names the agent options', (
+      tester,
+    ) async {
+      final selected = <String>[];
+      await tester.pumpWidget(prompt(onSelected: selected.add));
+
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.scopeKey));
+      await tester.pumpAndSettle();
+      expect(find.text('Always allow echo *'), findsOneWidget);
+      expect(find.text('Always reject echo *'), findsOneWidget);
+      await tester.tap(find.text('Always').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.rejectKey));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(selected, ['r2']);
+    });
+
+    testWidgets('a scope without an option for a decision disables it', (
+      tester,
+    ) async {
+      final selected = <String>[];
+      await tester.pumpWidget(
+        prompt(
+          onSelected: selected.add,
           options: const [
             CodeLabApprovalOption(
-              id: 'allow_once',
-              label: 'Allow once',
-              kind: CodeLabApprovalOptionKind.allowOnce,
+              id: 'a2',
+              label: 'Always allow',
+              kind: CodeLabApprovalOptionKind.allowAlways,
             ),
             CodeLabApprovalOption(
-              id: 'reject',
+              id: 'r1',
               label: 'Reject',
               kind: CodeLabApprovalOptionKind.rejectOnce,
             ),
           ],
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Allow once'));
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pump(const Duration(milliseconds: 100));
+      expect(button(tester, CodeLabApprovalPrompt.allowKey).onPressed, isNull);
+      expect(
+        button(tester, CodeLabApprovalPrompt.rejectKey).onPressed,
+        isNotNull,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(CodeLabApprovalPrompt.allowKey),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Tooltip &&
+                widget.message == CodeLabApprovalPrompt.noSuchOption,
+          ),
+        ),
+        findsOneWidget,
+      );
 
-    expect(selected, isNull);
-  });
+      await pickScope(tester, 'Always');
+      expect(
+        button(tester, CodeLabApprovalPrompt.allowKey).onPressed,
+        isNotNull,
+      );
+      expect(button(tester, CodeLabApprovalPrompt.rejectKey).onPressed, isNull);
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.allowKey));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(selected, ['a2']);
+    });
 
-  testWidgets('raw input is collapsed by default and expands on tap', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      FluentApp(
-        home: CodeLabApprovalPanel(
-          title: 'Run shell command',
-          risk: CodeLabApprovalRisk.shell,
+    testWidgets('a single scope is shown without a menu', (tester) async {
+      await tester.pumpWidget(
+        prompt(
+          onSelected: (_) {},
+          options: const [
+            CodeLabApprovalOption(
+              id: 'a1',
+              label: 'Allow once',
+              kind: CodeLabApprovalOptionKind.allowOnce,
+            ),
+            CodeLabApprovalOption(
+              id: 'r1',
+              label: 'Reject',
+              kind: CodeLabApprovalOptionKind.rejectOnce,
+            ),
+          ],
+        ),
+      );
+
+      expect(find.byType(DropDownButton), findsNothing);
+      expect(find.text('Only this time'), findsOneWidget);
+    });
+
+    testWidgets('the shortcut of an always option works in any scope', (
+      tester,
+    ) async {
+      final selected = <String>[];
+      await tester.pumpWidget(prompt(onSelected: selected.add));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(selected, ['a2']);
+    });
+
+    testWidgets('raw input stays collapsed until View raw input', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        prompt(
+          onSelected: (_) {},
           rawInput: '{\n  "command": "rm -rf build"\n}',
-          onOptionSelected: (_) {},
-          options: const [
-            CodeLabApprovalOption(
-              id: 'allow_once',
-              label: 'Allow once',
-              kind: CodeLabApprovalOptionKind.allowOnce,
-            ),
-          ],
         ),
-      ),
-    );
+      );
 
-    expect(find.text('View raw input'), findsOneWidget);
-    expect(find.textContaining('rm -rf build'), findsNothing);
+      expect(find.textContaining('rm -rf build'), findsNothing);
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.viewRawInputKey));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.textContaining('rm -rf build'), findsOneWidget);
+    });
 
-    await tester.tap(find.text('View raw input'));
-    await tester.pumpAndSettle();
+    testWidgets('a disabled bar ignores buttons and shortcuts', (tester) async {
+      final selected = <String>[];
+      await tester.pumpWidget(prompt(onSelected: selected.add, enabled: false));
 
-    expect(find.textContaining('rm -rf build'), findsOneWidget);
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.allowKey));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(selected, isEmpty);
+    });
+
+    testWidgets('a narrow column wraps the bar without overflow', (
+      tester,
+    ) async {
+      await tester.pumpWidget(prompt(onSelected: (_) {}, width: 260));
+
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets('renders connection details and invokes callbacks', (

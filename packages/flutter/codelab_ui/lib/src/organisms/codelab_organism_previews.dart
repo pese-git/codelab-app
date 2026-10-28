@@ -5,7 +5,7 @@ import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
 import 'codelab_activity_bar.dart';
 import 'codelab_app_bar.dart';
-import 'codelab_approval_panel.dart';
+import 'codelab_approval_prompt.dart';
 import 'codelab_command_palette_surface.dart';
 import 'codelab_connection_screen.dart';
 import 'codelab_progress_checklist.dart';
@@ -192,11 +192,10 @@ Widget codelabTranscriptPanelEmbeddedApprovalPreview() {
             label: 'Run',
             detail: 'npm test --coverage',
             approval: CodeLabTranscriptApproval.pending(
-              title: 'Run a command?',
               risk: CodeLabApprovalRisk.shell,
               reason: 'Agent wants to execute a build script.',
               command: 'npm test --coverage',
-              cwd: '/home/user/project',
+              rawInput: '{\n  "command": "npm test --coverage"\n}',
               onOptionSelected: codelabPreviewApprovalSelected,
               options: const [
                 CodeLabApprovalOption(
@@ -227,37 +226,38 @@ Widget codelabTranscriptPanelEmbeddedApprovalPreview() {
 }
 
 @Preview(
-  name: 'Approval panel',
+  name: 'Approval prompt',
   group: codelabOrganismPreviewGroup,
-  size: Size(520, 360),
+  size: Size(620, 160),
 )
-Widget codelabApprovalPanelPreview() {
-  return _AcpOrganismPreviewSurface(
+Widget codelabApprovalPromptPreview() {
+  return const _AcpOrganismPreviewSurface(
     child: SizedBox(
-      width: 520,
-      child: CodeLabApprovalPanel(
-        title: 'Run shell command',
-        risk: CodeLabApprovalRisk.shell,
+      width: 620,
+      child: CodeLabApprovalPrompt(
         reason: 'The agent wants to verify the Flutter UI package.',
-        command: 'fvm dart run melos run analyze',
-        cwd: 'packages/flutter/codelab_ui',
         rawInput: '{\n  "command": "fvm dart run melos run analyze"\n}',
-        selectedOptionId: 'allow_once',
         onOptionSelected: codelabPreviewApprovalSelected,
-        options: const [
+        options: [
           CodeLabApprovalOption(
             id: 'allow_once',
             label: 'Allow once',
             kind: CodeLabApprovalOptionKind.allowOnce,
-            description: 'Run this command for the active prompt turn.',
-            tone: CodeLabTone.warning,
           ),
           CodeLabApprovalOption(
-            id: 'reject',
+            id: 'allow_always',
+            label: 'Always allow melos run analyze',
+            kind: CodeLabApprovalOptionKind.allowAlways,
+          ),
+          CodeLabApprovalOption(
+            id: 'reject_once',
             label: 'Reject',
             kind: CodeLabApprovalOptionKind.rejectOnce,
-            description: 'Return a denied outcome to the agent.',
-            tone: CodeLabTone.danger,
+          ),
+          CodeLabApprovalOption(
+            id: 'reject_always',
+            label: 'Always reject',
+            kind: CodeLabApprovalOptionKind.rejectAlways,
           ),
         ],
       ),
