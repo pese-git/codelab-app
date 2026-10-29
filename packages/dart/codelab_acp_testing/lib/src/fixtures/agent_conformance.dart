@@ -49,6 +49,15 @@ final class AgentFixtureSetup {
   /// Блок `llm` для scripted-модели (§14.7); `null` — модель не нужна.
   Map<String, Object?>? get llm => fixture.llm?.json;
 
+  /// Fake MCP-серверы сценария (`setup.mcp`): драйвер только отдаёт их
+  /// фабрике, она строит серверы (design.md change `add-agent-mcp-client`,
+  /// D15).
+  Map<String, FixtureMcpServer> get mcp => fixture.setup.mcp;
+
+  /// Ожидания после сценария (`after`), в том числе `mcpCalls`, которые
+  /// сверяет `AgentUnderTest.verify()` фабрики.
+  FixtureAfter? get after => fixture.after;
+
   /// Журналы сессий до сценария (`setup.sessions`) с подставленным
   /// `${cwd}`: фабрика кладёт их в хранилище агента до старта.
   Map<String, List<Map<String, Object?>>> get sessions => {

@@ -129,7 +129,7 @@ abstract interface class McpSessionTools {         // объект MCP-част�
   List<AgentTool> get tools;                       // в порядке регистрации (§6.4)
   List<McpServerSummary> get servers;              // для секции mcp (§11.5)
   McpToolsUpdate? takeUpdate();                    // ожидающее tools/list_changed; ядро забирает на границе шага
-  Future<void> replaceServers(List<McpServerConfig> servers);   // повторный session/load открытой сессии (§13.5)
+  Future<void> replaceServers(List<McpServerConfig> servers);   // повторный session/load (§13.5): полный список после слияния и фильтра ядра
   Future<void> close();
 }
 abstract interface class McpTransport {            // транспорт уровня сообщений: одно сообщение — один JSON-текст
@@ -143,13 +143,22 @@ abstract interface class McpTransport {            // транспорт уро�
 }
 abstract interface class McpTransportFactory {     // реализует хост; stdio — в codelab_agent_io
   Set<String> get transports;
-  Future<McpTransport> open(McpServerConfig server, {required String cwd, required CancelToken cancel});
+  Future<McpTransport> open(McpServerConfig server,
+      {required String cwd, required CancelToken cancel, required Logger logger});   // logger сессии с session_id
 }
 ```
 
 Единственное исключение `open` и `send` — `McpTransportException` с текстом нашего кода (`spawn
 failed: …`, `invalid url`). Ошибка в потоках `incoming` или `abortedRequests` переводит клиент
 сервера в «не подключён» (`mcp.server.failed` с причиной `disconnected: transport error`).
+`open` получает логгер сессии (`BoundLogger` с `session_id`): через него транспорт пишет
+`mcp.server.stderr` и `mcp.server.closed` (§12.3).
+
+`replaceServers(servers)` получает полный желаемый список после слияния и фильтра ядра (серверы
+конфига, затем серверы клиента): серверы конфига не трогаются, совпавшие по `sameConnection`
+остаются, исчезнувшие закрываются, новые подключаются и занимают имена инструментов последними
+(коллизия отключает новый сервер), отключённый или не подключившийся сервер пробуется заново; сбой
+сервера — `mcp.server.failed`, а не исключение.
 
 Решения — `openspec/changes/add-agent-mcp-client/design.md` (D3, D6).
 

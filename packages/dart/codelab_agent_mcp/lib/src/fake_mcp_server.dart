@@ -749,13 +749,18 @@ final class FakeMcpTransportFactory implements McpTransportFactory {
   /// Имена серверов в порядке открытия транспортов.
   final opened = <String>[];
 
+  /// Логгеры, с которыми коннектор открывал транспорты, в том же порядке.
+  final loggers = <Logger>[];
+
   @override
   Future<McpTransport> open(
     McpServerConfig server, {
     required String cwd,
     required CancelToken cancel,
+    required Logger logger,
   }) async {
     opened.add(server.name);
+    loggers.add(logger);
     if (_failures[server.name] case final message?) {
       throw McpTransportException(message);
     }

@@ -44,7 +44,10 @@ const fixtureFormatKeys = <String, Set<String>>{
     'skipInitialize',
     'sessions',
     'transport',
+    'mcp',
   },
+  'mcpServer': {'era', 'tools', 'results'},
+  'mcpCall': {'name', 'arguments'},
   'transport': {'kind', 'attempts'},
   'transportAttempt': {'authorization', 'expectStatus'},
   'terminalCommand': {'output', 'exitCode'},
@@ -65,7 +68,7 @@ const fixtureFormatKeys = <String, Set<String>>{
   'llmError': {'class', 'message'},
   'normalize': {'replace'},
   'replaceRule': {'path', 'regex', 'with'},
-  'after': {'files'},
+  'after': {'files', 'mcpCalls'},
 };
 
 /// Allowed `stopReason` of an `llm` step (§14.7).
@@ -232,6 +235,7 @@ final class FixtureSetup {
     this.web,
     this.sessions = const {},
     this.transport,
+    this.mcp = const {},
   });
 
   factory FixtureSetup._parse(
@@ -270,7 +274,20 @@ final class FixtureSetup {
       }
     }
 
+    final mcp = <String, FixtureMcpServer>{};
+    final rawMcp = r.object(json, path, 'mcp');
+    if (rawMcp != null) {
+      for (final MapEntry(:key, :value) in rawMcp.entries) {
+        mcp[key] = FixtureMcpServer._parse(
+          r,
+          r.asObject(value, '$path.mcp${_key(key)}'),
+          '$path.mcp${_key(key)}',
+        );
+      }
+    }
+
     return FixtureSetup(
+      mcp: mcp,
       sessions: sessions,
       transport: switch (r.object(json, path, 'transport')) {
         null => null,
@@ -305,6 +322,11 @@ final class FixtureSetup {
   /// §8.2). Так фикстура задаёт состояние, которого не получить кадрами,
   /// например прерванный ход (§8.8). Клиентский прогон поле не читает.
   final Map<String, List<Map<String, Object?>>> sessions;
+
+  /// Fake MCP-серверы сценария по имени из `mcpServers` кадра, только для
+  /// агентского прогона (design.md change `add-agent-mcp-client`, D15).
+  /// Клиентский прогон поле не читает: клиенты CodeLab `mcpServers` не шлют.
+  final Map<String, FixtureMcpServer> mcp;
 
   /// Files of the working directory before the scenario, by relative path.
   final Map<String, String> files;
@@ -589,8 +611,81 @@ final class FixtureReplaceRule {
   final String replacement;
 }
 
+/// Эпоха fake MCP-сервера фикстуры (design.md change `add-agent-mcp-client`,
+/// D15): `modern` — `2026-07-28`, `legacy` — `2025-11-25`.
+enum FixtureMcpEra { modern, legacy }
+
+/// Описание fake MCP-сервера в `setup.mcp`.
+///
+/// Почему данные, а не готовый сервер: драйвер `codelab_acp_testing` не
+/// зависит от пакетов агента и MCP (D15). Он лишь загружает и проверяет
+/// форму, а фабрика агента (`codelab_agent_acp/test/conformance_test.dart`)
+/// строит из этого `FakeMcpServer`.
+final class FixtureMcpServer {
+  const FixtureMcpServer({
+    required this.era,
+    required this.tools,
+    required this.results,
+  });
+
+  factory FixtureMcpServer._parse(
+    _Reader r,
+    Map<String, Object?> json,
+    String path,
+  ) {
+    r.closed(json, path, 'mcpServer');
+    final era = switch (r.string(json, path, 'era')) {
+      null || 'modern' => FixtureMcpEra.modern,
+      'legacy' => FixtureMcpEra.legacy,
+      _ => r.fail('$path.era', 'must be "modern" or "legacy"'),
+    };
+    final tools = r.list(json, path, 'tools') ?? const [];
+    final results = r.object(json, path, 'results') ?? const {};
+    return FixtureMcpServer(
+      era: era,
+      tools: [
+        for (final (i, tool) in tools.indexed)
+          r.asObject(tool, '$path.tools[$i]'),
+      ],
+      results: {
+        for (final MapEntry(:key, :value) in results.entries)
+          key: r.asObject(value, '$path.results${_key(key)}'),
+      },
+    );
+  }
+
+  /// По умолчанию `modern`.
+  final FixtureMcpEra era;
+
+  /// Инструменты в форме MCP `Tool` (`name`, `inputSchema`, ...).
+  final List<Map<String, Object?>> tools;
+
+  /// `CallToolResult` по имени инструмента.
+  final Map<String, Map<String, Object?>> results;
+}
+
+/// Ожидаемый вызов `tools/call` fake MCP-сервера (`after.mcpCalls`).
+final class FixtureMcpCall {
+  const FixtureMcpCall({required this.name, required this.arguments});
+
+  factory FixtureMcpCall._parse(
+    _Reader r,
+    Map<String, Object?> json,
+    String path,
+  ) {
+    r.closed(json, path, 'mcpCall');
+    return FixtureMcpCall(
+      name: r.string(json, path, 'name', required: true)!,
+      arguments: r.object(json, path, 'arguments') ?? const {},
+    );
+  }
+
+  final String name;
+  final Map<String, Object?> arguments;
+}
+
 final class FixtureAfter {
-  const FixtureAfter({required this.files});
+  const FixtureAfter({required this.files, this.mcpCalls = const {}});
 
   factory FixtureAfter._parse(
     _Reader r,
@@ -598,11 +693,37 @@ final class FixtureAfter {
     String path,
   ) {
     r.closed(json, path, 'after');
-    return FixtureAfter(files: r.stringMap(json, path, 'files') ?? const {});
+    final mcpCalls = <String, List<FixtureMcpCall>>{};
+    final raw = r.object(json, path, 'mcpCalls');
+    if (raw != null) {
+      for (final MapEntry(:key, :value) in raw.entries) {
+        final callsPath = '$path.mcpCalls${_key(key)}';
+        if (value is! List<Object?>) {
+          r.fail(callsPath, 'must be a list of calls');
+        }
+        mcpCalls[key] = [
+          for (final (i, call) in value.indexed)
+            FixtureMcpCall._parse(
+              r,
+              r.asObject(call, '$callsPath[$i]'),
+              '$callsPath[$i]',
+            ),
+        ];
+      }
+    }
+    return FixtureAfter(
+      files: r.stringMap(json, path, 'files') ?? const {},
+      mcpCalls: mcpCalls,
+    );
   }
 
   /// Expected content of working-directory files after the scenario.
   final Map<String, String> files;
+
+  /// Точный список вызовов `tools/call` по имени fake MCP-сервера; пустой
+  /// список — «сервер вызова не получил». Проверяет `AgentUnderTest.verify()`
+  /// фабрики агента (design.md change `add-agent-mcp-client`, D15).
+  final Map<String, List<FixtureMcpCall>> mcpCalls;
 }
 
 /// `packages/dart/codelab_acp_testing/fixtures/acp`, resolved through the package

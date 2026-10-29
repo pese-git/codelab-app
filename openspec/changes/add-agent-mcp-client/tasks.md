@@ -198,7 +198,7 @@
 
 ## 5. stdio-транспорт (D9; E-02)
 
-- [ ] 5.1 `[agent]` Тест `codelab_agent_io/test/mcp/stdio_process_transport_test.dart` на скрипте `test/support/line_echo.dart` (agent-mcp-client «stdio-транспорт MCP», все сценарии):
+- [x] 5.1 `[agent]` Тест `codelab_agent_io/test/mcp/stdio_process_transport_test.dart` на скрипте `test/support/line_echo.dart` (agent-mcp-client «stdio-транспорт MCP», все сценарии):
   - окружение — только allowlist и `env` сервера (`SECRET_X` не виден);
   - строка туда и обратно;
   - строка длиннее 16 МиБ закрывает транспорт;
@@ -208,13 +208,13 @@
   - `done` при выходе процесса.
 
   Красный.
-- [ ] 5.2 `[agent]` `lib/src/mcp/stdio_process_transport.dart` (`StdioProcessTransport`, `StdioMcpTransportFactory`) на `process_tree.dart`; экспорт из бареля `codelab_agent_io`; dev-зависимость `codelab_agent_mcp` не нужна — 5.1 зелёный.
+- [x] 5.2 `[agent]` `lib/src/mcp/stdio_process_transport.dart` (`StdioProcessTransport`, `StdioMcpTransportFactory`) на `process_tree.dart`; экспорт из бареля `codelab_agent_io`; dev-зависимость `codelab_agent_mcp` не нужна — 5.1 зелёный.
 
 ## 6. ACP-адаптер (D11; R-24, E-03)
 
-- [ ] 6.1 `[protocol]` Тест `codelab_agent_acp/test/initialize_test.dart` (agent-acp-server «initialize», сценарии «Ответ codelab-app», «Ядро без MCP»): `mcpCapabilities.http` по плану ядра. Ожидаемый кадр `acp/initialize-capabilities` → `http: true` со ссылкой `02-Initialization.md#mcp-capabilities` (правило изменения фикстур). Красный.
-- [ ] 6.2 `[protocol]` `_initialize` читает capability `mcp` из `BuiltAgentCore.plan.profile` — 6.1 зелёный.
-- [ ] 6.3 `[protocol]` Тесты `session_new_test.dart` и `session_load_test.dart` (agent-acp-server «session/new», «session/load и реплей», новые сценарии):
+- [x] 6.1 `[protocol]` Тест `codelab_agent_acp/test/initialize_test.dart` (agent-acp-server «initialize», сценарии «Ответ codelab-app», «Ядро без MCP»): `mcpCapabilities.http` по плану ядра. Ожидаемый кадр `acp/initialize-capabilities` → `http: true` со ссылкой `02-Initialization.md#mcp-capabilities` (правило изменения фикстур). Красный.
+- [x] 6.2 `[protocol]` `_initialize` читает capability `mcp` из `BuiltAgentCore.plan.profile` — 6.1 зелёный.
+- [x] 6.3 `[protocol]` Тесты `session_new_test.dart` и `session_load_test.dart` (agent-acp-server «session/new», «session/load и реплей», новые сценарии):
   - stdio и http отображаются в `McpServerConfig`;
   - `sse` → `mcp.server.skipped`; тест «an MCP server is skipped with mcp.server.skipped» переписан на `sse` (R-02, D11);
   - неизвестный `type` → `mcp.server.skipped` с `reason: unknown transport`, сессия создана; `type: http` без `url` → `-32602` (agent-acp-server «Неизвестный транспорт MCP-сервера», сценарии «Сервер будущего транспорта», «Известный тип по-прежнему строг»);
@@ -223,29 +223,29 @@
   - повторная загрузка открытой сессии с другим набором.
 
   Красный.
-- [ ] 6.4 `[agent]` Тест `codelab_agent_core/test/runtime/set_mcp_servers_test.dart` (agent-runtime «MCP-серверы сессии», `setMcpServers`):
+- [x] 6.4 `[agent]` Тест `codelab_agent_core/test/runtime/set_mcp_servers_test.dart` (agent-runtime «MCP-серверы сессии», `setMcpServers`):
   - совпавшие остаются;
   - исчезнувшие закрыты, новые подключены;
   - серверы конфига не тронуты;
   - во время хода — после `TurnEnded`.
 
   Красный.
-- [ ] 6.5 `[agent]` `AgentSession.setMcpServers`, `McpSessionTools.replaceServers` — заглушка итерации 1 (`UnsupportedError` в `connector.dart`) заменяется реализацией D11 — 6.4 зелёный.
-- [ ] 6.6 `[protocol]` Тест `codelab_acp_protocol/test/session_test.dart` (agent-acp-server «Неизвестный транспорт MCP-сервера», сценарий «Модель сохраняет неизвестный сервер»): `{"type":"websocket","name":"future","extra":1}` → `McpServerUnknown`, `toJson()` равен исходному; известные типы с лишним ключом и нестроковый `type` — по-прежнему ошибка; прежний тест «unknown type throws» переписан. Красный.
-- [ ] 6.7 `[protocol]` Вариант `McpServer.unknown({type, name?, raw})` в `codelab_acp_protocol/lib/src/acp/session.dart` (freezed, `toJson` — `raw`), ветки `McpServerUnknown` в исчерпывающих `switch`; перегенерация `session.freezed.dart`; `melos run protocol-conformance` зелёный — 6.6 зелёный.
-- [ ] 6.8 `[protocol]` Отображение `acp.McpServer` → `McpServerConfig` в `agent_server.dart` (`McpServerUnknown` и `McpServerSse` — пропуск с причиной), передача в `createSession` / `loadSession`, `setMcpServers` при открытой сессии; удаление пропуска этапа 4 — 6.3 зелёный.
+- [x] 6.5 `[agent]` `AgentSession.setMcpServers`, `McpSessionTools.replaceServers` — заглушка итерации 1 (`UnsupportedError` в `connector.dart`) заменяется реализацией D11 — 6.4 зелёный.
+- [x] 6.6 `[protocol]` Тест `codelab_acp_protocol/test/session_test.dart` (agent-acp-server «Неизвестный транспорт MCP-сервера», сценарий «Модель сохраняет неизвестный сервер»): `{"type":"websocket","name":"future","extra":1}` → `McpServerUnknown`, `toJson()` равен исходному; известные типы с лишним ключом и нестроковый `type` — по-прежнему ошибка; прежний тест «unknown type throws» переписан. Красный.
+- [x] 6.7 `[protocol]` Вариант `McpServer.unknown({type, name?, raw})` в `codelab_acp_protocol/lib/src/acp/session.dart` (freezed, `toJson` — `raw`), ветки `McpServerUnknown` в исчерпывающих `switch`; перегенерация `session.freezed.dart`; `melos run protocol-conformance` зелёный — 6.6 зелёный.
+- [x] 6.8 `[protocol]` Отображение `acp.McpServer` → `McpServerConfig` в `agent_server.dart` (`McpServerUnknown` и `McpServerSse` — пропуск с причиной), передача в `createSession` / `loadSession`, `setMcpServers` при открытой сессии; удаление пропуска этапа 4 — 6.3 зелёный.
 
 ## 7. Формат и фикстуры MCP (D15; P-01, P-16, E-02, R-24)
 
-- [ ] 7.1 `[protocol]` Тест согласованности схемы и загрузчика (acp-golden-fixtures «Формат golden-фикстуры ACP», сценарий «Схема и загрузчик согласованы»): ключи `setup.mcp`, `after.mcpCalls`; `AgentFixtureSetup` отдаёт их фабрике. Красный.
-- [ ] 7.2 `[protocol]` `_schema.json`, `fixture.dart`, `agent_conformance.dart` — 7.1 зелёный.
-- [ ] 7.3 `[protocol]` Фабрика `codelab_agent_acp/test/conformance_test.dart`:
+- [x] 7.1 `[protocol]` Тест согласованности схемы и загрузчика (acp-golden-fixtures «Формат golden-фикстуры ACP», сценарий «Схема и загрузчик согласованы»): ключи `setup.mcp`, `after.mcpCalls`; `AgentFixtureSetup` отдаёт их фабрике. Красный.
+- [x] 7.2 `[protocol]` `_schema.json`, `fixture.dart`, `agent_conformance.dart` — 7.1 зелёный.
+- [x] 7.3 `[protocol]` Фабрика `codelab_agent_acp/test/conformance_test.dart`:
   - dev-зависимость `codelab_agent_mcp`;
   - fake `McpTransportFactory` по `setup.mcp`: stdio — пара в памяти `FakeMcpServer`;
   - `verify()` сверяет `after.mcpCalls`.
 
   Тест (сценарий «Лишний вызов MCP-сервера»): фикстура с `after.mcpCalls: {"fake": []}` и вызовом падает с именем сервера.
-- [ ] 7.4 `[protocol]` Фикстуры (acp-golden-fixtures «MCP-фикстуры этапа 8»), сначала красные в агентском прогоне, затем зелёные:
+- [x] 7.4 `[protocol]` Фикстуры (acp-golden-fixtures «MCP-фикстуры этапа 8»), сначала красные в агентском прогоне, затем зелёные:
   - `acp/session-new-with-mcp` (R-24; серверы обеих эпох — modern `fake` и legacy `old`);
   - `acp/mcp-tool-permission` (P-01);
   - `acp/mcp-stdio-tool-call` (E-02);
@@ -256,14 +256,14 @@
 
 ## 8. Бинарь `codelab-agent` (D3; E-02, R-24)
 
-- [ ] 8.1 `[agent]` Тест `apps/codelab_agent/test/mcp_stdio_process_test.dart` (agent-binary «MCP-серверы в бинаре», сценарий «Реальный stdio-сервер»):
+- [x] 8.1 `[agent]` Тест `apps/codelab_agent/test/mcp_stdio_process_test.dart` (agent-binary «MCP-серверы в бинаре», сценарий «Реальный stdio-сервер»):
   - реальный бинарь с `--llm-script` и реальный `fake_mcp_stdio_server.dart`;
   - `mcp__fake__echo` после одобрения → `completed` с `hi`;
   - после EOF stdin агента процесс сервера по pid не жив не позже 10 с.
 
   Красный.
-- [ ] 8.2 `[agent]` Сборка в `agent_host.dart`: `McpClientConnector(transports: McpTransports(stdio: StdioMcpTransportFactory(…)))` в `AgentCoreServices.mcp`; зависимость `codelab_agent_mcp` в `pubspec.yaml` бинаря (allowlist из 1.1); точка входа `test/support/fake_mcp_stdio_server.dart` — 8.1 зелёный. До группы 9 профиль сужается до `mcp: {stdio}` с причиной «HTTP-транспорт — итерация 3».
-- [ ] 8.3 Проверка итерации 2:
+- [x] 8.2 `[agent]` Сборка в `agent_host.dart`: `McpClientConnector(transports: McpTransports(stdio: StdioMcpTransportFactory(…)))` в `AgentCoreServices.mcp`; зависимость `codelab_agent_mcp` в `pubspec.yaml` бинаря (allowlist из 1.1); точка входа `test/support/fake_mcp_stdio_server.dart` — 8.1 зелёный. До группы 9 профиль сужается до `mcp: {stdio}` с причиной «HTTP-транспорт — итерация 3».
+- [x] 8.3 Проверка итерации 2:
   - проверки затронутого: `codelab_agent_io`, `codelab_agent_acp`, `codelab_acp_testing`, `apps/codelab_agent`;
   - `fvm dart run melos run conformance:agent`, `guard`;
   - PR итерации 2.

@@ -45,3 +45,39 @@ final class LogRecord {
       '${time.toIso8601String()} ${level.name} $event $fields'
       '${error == null ? '' : ' error=$error'}';
 }
+
+/// Логгер с постоянными полями записей поверх другого логгера.
+///
+/// Почему: код, не знающий сессии (транспорт MCP из `codelab_agent_io`),
+/// обязан писать `session_id` в каждую запись (D13 change
+/// `add-agent-mcp-client`, §12.3), а порт транспорта не должен тащить id
+/// сессии отдельным параметром.
+///
+/// Как использовать: владелец контекста оборачивает логгер один раз —
+/// `BoundLogger(logger, {'session_id': id.value})` — и отдаёт его дальше.
+/// Поля вызова `log` перекрывают связанные при совпадении ключей.
+final class BoundLogger implements Logger {
+  BoundLogger(this._inner, Map<String, Object?> fields)
+    : _fields = Map.unmodifiable(fields);
+
+  final Logger _inner;
+  final Map<String, Object?> _fields;
+
+  @override
+  bool isEnabled(LogLevel level) => _inner.isEnabled(level);
+
+  @override
+  void log(
+    LogLevel level,
+    String event, {
+    Map<String, Object?> fields = const {},
+    Object? error,
+    StackTrace? stack,
+  }) => _inner.log(
+    level,
+    event,
+    fields: {..._fields, ...fields},
+    error: error,
+    stack: stack,
+  );
+}
