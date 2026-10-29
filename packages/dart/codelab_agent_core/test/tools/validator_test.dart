@@ -221,11 +221,14 @@ void main() {
       ),
       ('properties is a list', {'type': 'object', 'properties': []}),
       (
-        'nested items is a string',
+        'nested items has a numeric type',
         {
           'type': 'object',
           'properties': {
-            'a': {'type': 'array', 'items': 'x'},
+            'a': {
+              'type': 'array',
+              'items': {'type': 5},
+            },
           },
         },
       ),
@@ -249,6 +252,34 @@ void main() {
           (result as Err<Map<String, Object?>, List<String>>).error,
           isNotEmpty,
         );
+      });
+    }
+
+    for (final (label, items) in <(String, Object)>[
+      ('true', true),
+      ('false', false),
+      (
+        'a tuple list',
+        [
+          {'type': 'string'},
+        ],
+      ),
+      ('a string', 'x'),
+    ]) {
+      test('items that is not an object ($label) is ignored', () {
+        final result = validateArguments(
+          {
+            'type': 'object',
+            'properties': {
+              'a': {'type': 'array', 'items': items},
+            },
+          },
+          {
+            'a': ['q'],
+          },
+        );
+
+        expect(result, isA<Ok<Map<String, Object?>, List<String>>>());
       });
     }
 

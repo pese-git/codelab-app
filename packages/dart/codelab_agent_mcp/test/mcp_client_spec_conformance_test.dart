@@ -8,15 +8,14 @@ import 'package:test/test.dart';
 
 import 'support/harness.dart';
 
-/// Итерация 1б change `add-agent-mcp-client`: отступления клиента от
-/// нормативного текста MCP (`2026-07-28` и legacy `2025-11-25`), найденные
-/// аудитом. Каждый тест назван по пункту спецификации.
-
 const _echo = FakeMcpTool('echo');
 
 Object _lastId(FakeMcpServer server, String method) =>
     server.requests.lastWhere((r) => r['method'] == method)['id']!;
 
+// Итерация 1б change `add-agent-mcp-client`: отступления клиента от
+// нормативного текста MCP (`2026-07-28` и legacy `2025-11-25`), найденные
+// аудитом. Каждый тест назван по пункту спецификации.
 void main() {
   late McpHarness h;
   setUp(() => h = McpHarness());
@@ -258,7 +257,10 @@ void main() {
 
       expect(server.cancelledRequestIds, [_lastId(server, 'tools/list')]);
       expect(client.tools, hasLength(1));
-      expect(h.logger.eventsOf('mcp.tools.refresh_failed'), hasLength(1));
+      expect(
+        h.logger.eventsOf('mcp.tools.refresh_failed').single.fields['reason'],
+        'no answer to tools/list',
+      );
     });
 
     test('tools/list refresh timeout on http', () async {

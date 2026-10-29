@@ -16,6 +16,7 @@ final class ExecutorHarness {
     this.executor,
     this.clock,
     this.plan,
+    this.logger,
   );
 
   static Future<ExecutorHarness> create(
@@ -29,16 +30,13 @@ final class ExecutorHarness {
     final registry = ToolRegistry();
     tools.forEach(registry.register);
     final plan = PlanService();
+    final logger = RecordingLogger();
     final executor = ToolCallExecutor(
       registry: registry,
       env: env,
-      services: ToolServices(
-        clock: clock,
-        logger: RecordingLogger(),
-        plan: plan,
-      ),
+      services: ToolServices(clock: clock, logger: logger, plan: plan),
     );
-    final h = ExecutorHarness._(env, registry, executor, clock, plan);
+    final h = ExecutorHarness._(env, registry, executor, clock, plan, logger);
     // План публикуется в ту же запись событий, что и события вызова.
     plan.publish = (entries) =>
         h.events.add(PlanUpdated(session, entries: entries));
@@ -50,6 +48,7 @@ final class ExecutorHarness {
   final ToolCallExecutor executor;
   final FakeClock clock;
   final PlanService plan;
+  final RecordingLogger logger;
   final events = <AgentEvent>[];
 
   ToolInvocation invocation({
