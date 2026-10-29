@@ -333,16 +333,17 @@ AssistantMessageEventStream runProvider(ModelRef model, CancelToken? cancel, Clo
 
 ## 2.6. Алгоритм: SSE-декодер
 
-SSE-декодер — `StreamTransformer<String, ServerSentEvent>`. Байты тела ответа декодируются выше
+SSE-декодер — `StreamTransformer<String, ServerSentEvent>`. `SseDecoder` и `ServerSentEvent` экспортируются из бареля ядра: ими же читает потоки streamable HTTP пакет `codelab_agent_mcp` (второй реализации SSE нет; change `add-agent-mcp-client`, D10). Байты тела ответа декодируются выше
 по цепочке: `response.stream.transform(const Utf8Decoder(allowMalformed: true))` — декодер UTF-8
 сам склеивает многобайтовые символы, разрезанные границей чанка.
 
 ```dart
 final class ServerSentEvent {
-  const ServerSentEvent({this.event, required this.data, this.id});
+  const ServerSentEvent({this.event, required this.data, this.id, this.retry});
   final String? event;    // поле event:, null = "message"
   final String data;      // строки data:, склеенные через \n
   final String? id;
+  final Duration? retry;  // последнее поле retry: (только ASCII-цифры, мс); для MCP legacy
 }
 ```
 
@@ -352,8 +353,8 @@ final class ServerSentEvent {
 2. **BOM.** Если самый первый символ потока — `U+FEFF`, он отбрасывается. Пустые чанки в начале не считаются «первым символом».
 3. **Комментарии.** Строка, начинающаяся с `:`, игнорируется (keep-alive провайдеров).
 4. **Поле и значение.** Строка делится по первому `:`. Нет двоеточия — вся строка = имя поля, значение пустое. Если значение начинается с одного пробела, он срезается (ровно один).
-5. **Поля.** `event` — тип события; `data` — значение добавляется в список строк данных; `id` — запоминается, если не содержит `U+0000`; `retry` — игнорируется (ядро не переподключается); прочие поля — игнорируются.
-6. **Диспетчеризация.** Пустая строка завершает событие: если список `data` непуст, выдаётся `ServerSentEvent(event, data.join('\n'), id)`; затем `event` и `data` сбрасываются (`id` сохраняется). Пустая строка без накопленных `data` ничего не выдаёт.
+5. **Поля.** `event` — тип события; `data` — значение добавляется в список строк данных; `id` — запоминается, если не содержит `U+0000`; `retry` — запоминается как `Duration` в миллисекундах, если значение непусто, состоит только из ASCII-цифр и не больше `maxSseRetry` = 24 ч (`int.tryParse`; сверх предела или при переполнении поле игнорируется, а не бросает исключение), иначе игнорируется; LLM-провайдеры его не используют (ядро не переподключается), а MCP-транспорт legacy берёт из него паузу возобновления потока (change `add-agent-mcp-client`, D10); прочие поля — игнорируются.
+6. **Диспетчеризация.** Пустая строка завершает событие: если список `data` непуст, выдаётся `ServerSentEvent(event, data.join('\n'), id, retry)`; затем `event` и `data` сбрасываются (`id` и `retry` сохраняются между событиями потока). Пустая строка без накопленных `data` ничего не выдаёт.
 7. **Конец потока.** Незавершённая строка и незавершённое событие (нет финальной пустой строки) отбрасываются.
 
 ```dart

@@ -95,7 +95,7 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp.server.era` | info | `transport`, `era` (`modern`/`legacy`), `protocol_version`, `probe` (`discover_result`, `modern_error`, `fallback_error`, `fallback_timeout`, `cached`) |
 | `mcp.server.connect` | info | `transport`, `era`, `protocol_version`, `server_info` (`name`/`version`, только для диагностики), `tools`, `duration_ms` |
 | `mcp.server.failed` | warning | `transport`, `reason` (≤ 200 символов, правила ниже) |
-| `mcp.server.closed` | info | `transport`, `exit_code` (stdio); пишет транспорт через логгер сессии из `McpTransportFactory.open` |
+| `mcp.server.closed` | info | `transport`, `exit_code` (stdio) или `reason` (HTTP: `HTTP session expired`); пишет транспорт через логгер сессии из `McpTransportFactory.open` |
 | `mcp.server.stderr` | trace | `line` (≤ 4 КиБ); пишет транспорт через логгер сессии. Уровень trace, а не debug: профиль `--stdio` по умолчанию включает debug, а логгер хоста секреты не редактирует (до 8.11) |
 | `mcp.servers.replace_failed` | warning | `error` (`runtimeType`) — `AgentSession.setMcpServers` бросил при `session/load` открытой сессии (§13.5) |
 | `mcp.tools.changed` | info | `added`, `removed` |
@@ -103,7 +103,7 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp.tool.invalid` | warning | `tool` (имя от сервера, ≤ 64 рун), `reason` |
 | `mcp.tool.description_truncated` | info | `tool`, `length` |
 | `mcp.call.cancelled`, `mcp.call.timeout` | info | `tool_call_id`, `request_id` |
-| `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`, `subscription_failed`, `server_request`); у `server_request` — `method` запроса сервера, не длиннее 64 символов (рун) |
+| `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`, `subscription_failed`, `server_request`, `notification_stream_closed` — конец legacy GET-потока, поле `reason` (`stream closed`, `stream error`, `event too large`, `HTTP <status>`, `connection failed: <runtimeType>`), `stream_resume_failed` — неудачное возобновление потока ответа); у `subscription_failed` при сбое переиздания подписки — `error` (`runtimeType`); у `server_request` — `method` запроса сервера, не длиннее 64 символов (рун) |
 
 В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов
 и ответов; причины ошибок транспорта формирует наш код, без текста заголовков (OBS-инварианты,
@@ -114,7 +114,7 @@ final class LogRecord {           // то, что получает sink хост
 `serverInfo` в причину не входят. Версии протокола сервера (`protocolVersion`, `supportedVersions`)
 входят только после проверки формата `YYYY-MM-DD`, остальные отбрасываются. Имя метода запроса сервера
 входит только в `mcp.message.ignored` с `kind: server_request` (debug, ≤ 64 рун). Ошибка JSON-RPC описывается методом и кодом
-(`'<method> failed (code N)'`), отказ modern-сервера на пробе `-32020`/`-32021` — `server rejected the probe (code N)`, непредвиденное исключение — `unexpected error: <runtimeType>`;
+(`'<method> failed (code N)'`), локальный сбой HTTP-транспорта без JSON-RPC-тела — методом и причиной транспорта без кода (`'<method> failed: <reason>'`, например `tools/list failed: HTTP 500`), отказ modern-сервера на пробе `-32020`/`-32021` — `server rejected the probe (code N)`, непредвиденное исключение — `unexpected error: <runtimeType>`;
 обрезка до 200 символов — по рунам Unicode. Полный список причин — design.md change
 `add-agent-mcp-client`, D13.
 

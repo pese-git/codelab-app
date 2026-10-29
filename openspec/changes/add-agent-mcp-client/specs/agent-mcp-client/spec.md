@@ -118,6 +118,7 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 - **Обрыв.** Закрытие транспорта (`done`) или обрыв потока ответа запроса при живом транспорте (`abortedRequests` порта `McpTransport`) во время вызова SHALL давать результат-ошибку `MCP server <id> disconnected during the call: <reason>` без автоматического повтора `tools/call`. Вызов сервера, упавшего раньше, — `MCP server <id> is not connected. Continue without it.`
 - **Ошибки ответа:**
   - ошибка JSON-RPC — `MCP server <id> returned an error: <message> (code <code>)`;
+  - локальный сбой HTTP-транспорта без JSON-RPC-тела — `MCP server <id> transport error: <reason>`, без кода;
   - ответ не по схеме или неизвестный `resultType` — `MCP server <id> returned an invalid tools/call result.`;
   - `resultType: input_required` — `MCP server <id> asked for client input, which is not supported.`
 
@@ -199,18 +200,24 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 - **Обе эпохи.**
   - Каждое сообщение — `POST` с `Content-Type: application/json` и `Accept: application/json, text/event-stream`; заголовки сервера идут вместе со служебными, служебные их перекрывают.
   - Ответ запроса принимается как `application/json` или как поток `text/event-stream` (`SseDecoder` ядра, комментарии keep-alive пропускаются); для уведомлений — `202 Accepted`.
-  - Редиректы не выполняются. Принимаются только схемы `http` и `https`. Тело ответа больше 16 МиБ отклоняется.
+  - Редиректы не выполняются: `3xx` закрывает соединение, лог `mcp.server.failed` с причиной `disconnected: HTTP redirect (<status>) is not followed` без URL и `Location`. Сбой соединения — `disconnected: connection failed: <runtimeType>`.
+  - Лимит 16 МиБ SHALL применяться к телу JSON-ответа и к одному событию SSE-потока (поток ответа, `subscriptions/listen`, legacy GET), а не ко всему потоку.
+  - `200 application/json` без ответа на id своего запроса: JSON-RPC-ошибка с `id: null` SHALL привязываться к запросу с кодом сервера, иначе — локальный сбой `unexpected response (HTTP 200)`.
+  - Отмена в modern SHALL прерывать HTTP-запрос и до получения заголовков ответа.
+  - Принимаются только схемы `http` и `https`: иначе `open` отказывает с `invalid url`, и коннектор пишет `mcp.server.failed` с этой причиной.
+  - Ответ без JSON-RPC-тела НЕ SHALL оформляться JSON-RPC-ошибкой: транспорт SHALL сообщать его типизированным сбоем запроса через порт `McpTransport` (id, причина, признак повторяемости) с причиной `HTTP <status>`, `response body too large` (тело больше 16 МиБ), `invalid JSON in the response` или `unexpected response (HTTP <status>)`. Модель видит `MCP server <id> transport error: <reason>` без кода, лог — `'<method> failed: <reason>'`. Ошибка с JSON-RPC-телом, в том числе с `id: null`, SHALL привязываться к id запроса своего POST.
 - **Modern.**
   - Каждый POST несёт `MCP-Protocol-Version: 2026-07-28` и `Mcp-Method`, `tools/call` — ещё `Mcp-Name` и `Mcp-Param-<имя>` для свойств `inputSchema` с `x-mcp-header`. Значения вне безопасного ASCII кодируются `=?base64?…?=`.
-  - Ответ `-32020` на `tools/call` SHALL давать один `tools/list` и один повтор вызова с новым id.
+  - Ответ `-32020` на `tools/call` SHALL давать один `tools/list` и один повтор вызова с новым id; перечитывание идёт через общий цикл обновления: изменение набора сообщается ядру только при реальном изменении, сбой — `mcp.tools.refresh_failed`.
+  - Свойство с `x-mcp-header` без `type` SHALL считаться невалидным: инструмент исключается с `mcp.tool.invalid` и `reason: invalid x-mcp-header`.
   - `Mcp-Session-Id`, GET и `DELETE` НЕ SHALL использоваться.
 - **Legacy.**
-  - `Mcp-Session-Id` из ответа на `initialize` шлётся в следующих запросах; `MCP-Protocol-Version` — для `2025-06-18` и `2025-11-25`.
+  - `Mcp-Session-Id` из ответа на `initialize` шлётся в следующих запросах; `MCP-Protocol-Version` — для `2025-06-18` и `2025-11-25`, его ставит транспорт по ответу `initialize` и только из принятого набора версий; `McpClient` зеркалит заголовки только в modern.
   - GET-поток уведомлений открывается при `tools.listChanged` (`405` — потока нет).
-  - `404` при выданном `Mcp-Session-Id` — конец соединения (сознательное отступление от повторного `initialize` legacy: переподключения в MVP нет).
-  - При закрытии — `DELETE` (best effort, 2 с).
-  - Поток ответа, закрытый сервером до ответа после события с `id`, SHALL возобновляться `GET` с `Last-Event-ID` после паузы `retry` (без `retry` — 1 с), не больше 5 раз на запрос (`docs/protocols/mcp/specification/2025-11-25/basic/transports.md`). Это дочитывание того же ответа, а не новый `tools/call`.
-- **Повтор после обрыва** (`changelog.md`, п. 9). Без возобновления оборванный запрос `tools/list`, `server/discover` и `subscriptions/listen` SHALL повторяться один раз с новым id; новый id `subscriptions/listen` становится `subscriptionId`; после подтверждения переизданной подписки клиент SHALL один раз перечитать `tools/list`, чтобы не потерять изменения из окна обрыва; повторный обрыв подписки — жизнь без обновлений. `tools/call` НЕ SHALL повторяться автоматически, результат — «disconnected during the call».
+  - `404` при выданном `Mcp-Session-Id` — конец соединения с `mcp.server.closed {transport: http, reason: HTTP session expired}` (сознательное отступление от повторного `initialize` legacy: переподключения в MVP нет).
+  - При закрытии — `DELETE` (best effort, ожидание не дольше 2 с).
+  - Поток ответа, закрытый сервером до ответа после события с `id`, SHALL возобновляться `GET` с `Last-Event-ID` после паузы `retry` (без `retry` — 1 с; `retry` больше 24 ч игнорируется, пауза зажата `connectTimeout` сервера), не больше 5 раз на запрос; неудачное возобновление — debug-лог `mcp.message.ignored` с `kind: stream_resume_failed`, конец GET-потока — с `kind: notification_stream_closed` и `reason` (`docs/protocols/mcp/specification/2025-11-25/basic/transports.md`). Это дочитывание того же ответа, а не новый `tools/call`.
+- **Повтор после обрыва** (`changelog.md`, п. 9). Без возобновления оборванный запрос `tools/list`, `server/discover` и `subscriptions/listen` SHALL повторяться один раз с новым id; новый id `subscriptions/listen` становится `subscriptionId`, `list_changed` со старым id НЕ SHALL приниматься. Для подписки, оборванной после подтверждения, клиент SHALL после подтверждения переизданной ровно один раз перечитать `tools/list`, чтобы не потерять изменения из окна обрыва; переиздание до первого `tools/list` подключения отдельного перечитывания не даёт. Ожидание подтверждения переизданной подписки после подключения — `min(5 с, connectTimeout / 2)`. Повторный обрыв подписки — жизнь без обновлений (`subscription_failed` до подтверждения, `subscription_closed` после). `tools/call` НЕ SHALL повторяться автоматически, результат — «disconnected during the call».
 
 #### Scenario: Ответ потоком SSE
 - **WHEN** `MockClient` отвечает на `tools/call` потоком `text/event-stream` с уведомлением `notifications/progress` и затем ответом
@@ -226,7 +233,15 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 
 #### Scenario: Редирект не выполняется
 - **WHEN** сервер отвечает `307` с `Location` на другой хост
-- **THEN** запрос на другой хост не отправлен, подключение заканчивается `mcp.server.failed`
+- **THEN** запрос на другой хост не отправлен, подключение заканчивается `mcp.server.failed` с причиной `disconnected: HTTP redirect (307) is not followed`, в которой нет URL
+
+#### Scenario: Схема URL не http
+- **WHEN** HTTP-сервер задан с `url` `ftp://example.com/mcp`
+- **THEN** подключение заканчивается `mcp.server.failed` с причиной `invalid url`, запрос не отправлен
+
+#### Scenario: Ответ без JSON-RPC-тела
+- **WHEN** сервер отвечает на `tools/list` статусом `500` без тела
+- **THEN** запрос завершён локальным сбоем транспорта с причиной `HTTP 500`, JSON-RPC-кода нет, причина в логе — `tools/list failed: HTTP 500`
 
 #### Scenario: Опрос legacy-потока
 - **WHEN** legacy-сервер `2025-11-25` отправляет событие `id: e1` с `retry: 100` и закрывает соединение потока ответа на `tools/call` до ответа
@@ -237,8 +252,8 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 - **THEN** результат — «disconnected during the call», повторного `tools/call` нет; оборванный `tools/list` повторён один раз с новым id
 
 #### Scenario: Оборванная подписка переиздаётся
-- **WHEN** поток ответа modern-сервера на `subscriptions/listen` обрывается без ответа
-- **THEN** клиент один раз отправляет `subscriptions/listen` с новым id, после его подтверждения один раз перечитывает `tools/list`, принимает `list_changed` только с новым `subscriptionId`; при втором обрыве сервер остаётся подключённым без обновлений
+- **WHEN** поток ответа modern-сервера на `subscriptions/listen` обрывается без ответа после подтверждения
+- **THEN** клиент один раз отправляет `subscriptions/listen` с новым id, после его подтверждения ровно один раз перечитывает `tools/list`, принимает `list_changed` только с новым `subscriptionId`; при втором обрыве сервер остаётся подключённым без обновлений
 
 #### Scenario: Истёкшая legacy-сессия
 - **WHEN** после legacy-подключения `POST` получает `404`

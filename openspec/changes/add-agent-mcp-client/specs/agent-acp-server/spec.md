@@ -7,7 +7,7 @@
 
 #### Scenario: Ответ codelab-app
 - **WHEN** клиент присылает `initialize` с `protocolVersion: 1` и `fs`/`terminal` capabilities
-- **THEN** ответ совпадает с фикстурой `acp/initialize-capabilities`, где `mcpCapabilities` — `{"http": true, "sse": false}` (с задач 9.5–9.6; до них ядро агентского прогона сужает `mcp` до `{stdio}`, и кадр — `{"http": false, "sse": false}`)
+- **THEN** ответ совпадает с фикстурой `acp/initialize-capabilities`, где `mcpCapabilities` — `{"http": true, "sse": false}`
 
 #### Scenario: Сессия до initialize
 - **WHEN** первым кадром соединения приходит `session/new`

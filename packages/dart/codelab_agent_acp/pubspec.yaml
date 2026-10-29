@@ -26,5 +26,6 @@ dev_dependencies:
     path: ../codelab_agent_mcp
   codelab_client_acp:
     path: ../codelab_client_acp
+  http: ^1.5.0
   lints: ^6.0.0
   test: ^1.26.3

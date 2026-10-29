@@ -10,5 +10,6 @@ library;
 // выходят, тесты пакета импортируют `src/`.
 export 'src/connector.dart' show McpClientConnector, McpTransports;
 export 'src/mcp_client.dart' show McpClientOptions, McpEraCache;
+export 'src/streamable_http.dart' show StreamableHttpTransportFactory;
 
 const codelabAgentMcpPackageName = 'codelab_agent_mcp';

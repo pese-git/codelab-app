@@ -279,7 +279,7 @@
 
 ## 9. Streamable HTTP и `tools/list_changed` (D6, D10; E-03)
 
-- [ ] 9.1 `[agent]` Тест DoD `codelab_agent_mcp/test/streamable_http_test.dart` на `MockClient` / `MockClient.streaming` с HTTP-обработчиком `FakeMcpServer` обеих эпох (agent-mcp-client «Транспорт streamable HTTP», «Эпоха сервера и версия протокола», сценарий «Legacy-сервер по HTTP»):
+- [x] 9.1 `[agent]` Тест DoD `codelab_agent_mcp/test/streamable_http_test.dart` на `MockClient` / `MockClient.streaming` с HTTP-обработчиком `FakeMcpServer` обеих эпох (agent-mcp-client «Транспорт streamable HTTP», «Эпоха сервера и версия протокола», сценарий «Legacy-сервер по HTTP»):
   - **обе эпохи:** заголовки `POST`, `202` для уведомлений, ответ JSON, ответ SSE с промежуточным уведомлением и keep-alive-комментарием; `307` не выполняется; схема `ftp` → `invalid url`; тело больше 16 МиБ → ошибка;
   - **modern:** `MCP-Protocol-Version: 2026-07-28`, `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*` из `x-mcp-header` с кодированием `=?base64?…?=` (в том числе для значения, похожего на маркер; `null` — без заголовка); инструмент с невалидным `x-mcp-header` исключён из `tools/list` с `mcp.tool.invalid`; `-32020` → один `tools/list` и повтор с новым id; нет `Mcp-Session-Id`, GET и `DELETE`; `subscriptions/listen` — долгий поток с `list_changed`; отмена — закрытие потока ответа без POST `notifications/cancelled`;
   - **проба эпохи:** `400` (а также `404`, `405`) с телом `-32022` → нет общей версии без отката; `400` с пустым телом, `404`, `405` и `404` с `-32601` → откат на `initialize`;
@@ -287,8 +287,8 @@
   - **обрыв без возобновления:** `tools/call` — `disconnected during the call` без повтора; `tools/list`, `server/discover` и `subscriptions/listen` — один повтор с новым id (D10, «Повтор после обрыва»; agent-mcp-client, сценарий «Оборванная подписка переиздаётся»): после подтверждения переизданной подписки — ровно один `tools/list` перечитывания (изменения из окна обрыва не теряются), `list_changed` принимается только с новым `subscriptionId`, второй обрыв подписки — без обновлений; тест 3.3 об обрыве подписки уточняется — `subscription_failed` только после второго обрыва.
 
   Красный.
-- [ ] 9.2 `[agent]` `lib/src/streamable_http.dart` (обе эпохи), зеркальные заголовки modern в `McpClient`, один повтор оборванного `subscriptions/listen` с новым id и одно перечитывание `tools/list` после его подтверждения в `McpClient` (D10), `StreamableHttpTransportFactory`, `McpTransports`; экспорт `SseDecoder` и `ServerSentEvent` из бареля ядра; HTTP-обработчик `FakeMcpServer` для `MockClient` — 9.1 зелёный.
-- [ ] 9.3 `[agent]` Тест `codelab_agent_mcp/test/mcp_list_changed_boundary_test.dart` (agent-mcp-client «Обновление списка инструментов», оба сценария; D6):
+- [x] 9.2 `[agent]` `lib/src/streamable_http.dart` (обе эпохи), зеркальные заголовки modern в `McpClient`, один повтор оборванного `subscriptions/listen` с новым id и одно перечитывание `tools/list` после его подтверждения в `McpClient` (D10), `StreamableHttpTransportFactory`, `McpTransports`; экспорт `SseDecoder` и `ServerSentEvent` из бареля ядра; HTTP-обработчик `FakeMcpServer` для `MockClient` — 9.1 зелёный.
+- [x] 9.3 `[agent]` Тест `codelab_agent_mcp/test/mcp_list_changed_boundary_test.dart` (agent-mcp-client «Обновление списка инструментов», оба сценария; D6):
   - уведомление посреди пакета вызовов применяется к следующему запросу;
   - modern — принимается только с `subscriptionId` своей подписки, legacy — с общего канала;
   - два уведомления → не больше двух `tools/list`;
@@ -296,11 +296,19 @@
   - секция `mcp` пересобрана;
   - лог `mcp.tools.changed`.
 
-  Красный.
-- [ ] 9.4 `[agent]` Перечитывание в `McpClient`, `McpSessionTools.takeUpdate`, применение в `prepareNextStep` → `StepUpdate.tools` и `StepUpdate.systemPrompt` и перед ходом — 9.3 зелёный.
-- [ ] 9.5 `[protocol]` Фикстура `acp/mcp-http-tool-call` (E-03; сценарий «HTTP-сервер и пропуск SSE»): сервер `web` типа `http` (modern), `old` типа `sse` и `future` неизвестного типа `websocket` (D11). В фабрике conformance http — `StreamableHttpTransport` на `MockClient` с обработчиком `FakeMcpServer`. Сначала красная, затем зелёная. Вместе с ней фабрика агентского прогона получает транспорт `http`, и кадры `initialize` фикстур `initialize-capabilities`, `session-new-modes-config`, `set-config-option-model` переходят на `mcpCapabilities.http: true` (acp-golden-fixtures «MCP-фикстуры этапа 8»; agent-acp-server, сценарий «Ответ codelab-app»).
-- [ ] 9.6 `[agent]` Бинарь: HTTP-транспорт на HTTP-клиенте хоста, сужение `mcp` из 8.2 снято. Тест `agent_host_test.dart`: `initialize` даёт `mcpCapabilities.http: true` (agent-binary, сценарий «Возможности MCP в initialize»). WS-профиль остаётся без MCP (D3).
-- [ ] 9.7 Проверка итерации 3: проверки затронутого, `conformance:agent`, `guard`, `web-compile`; PR итерации 3.
+  Зелёный сразу: поведение реализовано в итерации 1 (перечитывание в `McpClient` — 3.4 и 4б; `McpSessionTools.takeUpdate` в `connector.dart` и применение в `prepareNextStep` → `StepUpdate.tools`/`StepUpdate.systemPrompt` — 4.4), тест фиксирует его на границе шага.
+- [x] 9.4 `[agent]` (Реализовано в итерации 1, задачи 3.4, 4б и 4.4; в итерации 3 нового кода не потребовалось.) Перечитывание в `McpClient`, `McpSessionTools.takeUpdate`, применение в `prepareNextStep` → `StepUpdate.tools` и `StepUpdate.systemPrompt` и перед ходом — 9.3 зелёный.
+- [x] 9.5 `[protocol]` Фикстура `acp/mcp-http-tool-call` (E-03; сценарий «HTTP-сервер и пропуск SSE»): сервер `web` типа `http` (modern), `old` типа `sse` и `future` неизвестного типа `websocket` (D11). В фабрике conformance http — `StreamableHttpTransport` на `MockClient` с обработчиком `FakeMcpServer`. Сначала красная, затем зелёная. Вместе с ней фабрика агентского прогона получает транспорт `http`, и кадры `initialize` фикстур `initialize-capabilities`, `session-new-modes-config`, `set-config-option-model` переходят на `mcpCapabilities.http: true` (acp-golden-fixtures «MCP-фикстуры этапа 8»; agent-acp-server, сценарий «Ответ codelab-app»).
+- [x] 9.6 `[agent]` Бинарь: HTTP-транспорт на HTTP-клиенте хоста, сужение `mcp` из 8.2 снято. Тест `agent_host_test.dart`: `initialize` даёт `mcpCapabilities.http: true` (agent-binary, сценарий «Возможности MCP в initialize»). WS-профиль остаётся без MCP (D3).
+- [x] 9.8 Исправления по ревью итерации 3 (PR итерации 3), тест → код:
+  - `[agent]` причины `disconnected: HTTP redirect (<status>) is not followed` и `disconnected: connection failed: <runtimeType>` (agent-mcp-client, сценарий «Редирект не выполняется»; D10, D13);
+  - `[protocol]` выбор fake-сервера фикстур строго по первой метке хоста (http) и по `name` (stdio), без отката «единственный сервер» (acp-golden-fixtures «Формат golden-фикстуры ACP»; D15);
+  - `[agent]` лимит 16 МиБ — на событие SSE-потока и на тело JSON-ответа (D10);
+  - `[agent]` `retry` в `SseDecoder` через `int.tryParse` с верхним пределом, пауза возобновления зажата, ошибка потока событий не роняет процесс (§2.6, D10);
+  - `[agent]` отмена в modern прерывает запрос до заголовков (`AbortableRequest`); отправка `subscriptions/listen`, `notifications/initialized`, legacy `notifications/cancelled` не блокирует таймеры (D8, D10);
+  - `[agent]` `200 application/json` без ответа на свой id → привязка ошибки без id или `unexpected response (HTTP 200)` (D10);
+  - `[agent]` legacy: версия заголовка только из принятого набора; конец GET-потока и возобновления — `mcp.message.ignored` `notification_stream_closed` (D10, D13).
+- [x] 9.7 Проверка итерации 3: проверки затронутого, `conformance:agent`, `guard`, `web-compile`; PR итерации 3.
 
 ## 10. Документы и Definition of Done
 

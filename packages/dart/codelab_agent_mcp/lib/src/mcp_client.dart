@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'json_rpc.dart';
+import 'mirror_headers.dart';
 import 'protocol.dart';
 import 'text.dart';
 
@@ -103,6 +105,28 @@ final class _Aborted implements Exception {
   const _Aborted();
 }
 
+/// Локальный сбой транспорта на запросе (`HTTP 500` без тела ошибки): без
+/// кода JSON-RPC, не повторяется (D8, D10; `basic/index.md`, «Error Codes»).
+final class _TransportFailure implements Exception {
+  const _TransportFailure(this.method, this.reason);
+
+  final String method;
+  final String reason;
+}
+
+/// Исход ожидания подтверждения `subscriptions/listen`.
+enum _Ack {
+  /// Подтверждено с `toolsListChanged`.
+  accepted,
+
+  /// Подписки не будет: ошибка, закрытие, молчание, подтверждение без
+  /// `toolsListChanged`.
+  declined,
+
+  /// Поток ответа оборван, подписку можно переиздать (HTTP, D10).
+  aborted,
+}
+
 final class _Pending {
   final String method;
   final completer = Completer<Map<String, Object?>>();
@@ -200,9 +224,13 @@ final class McpClient {
   /// Подписка, уведомления которой принимаются; `null` — живём без обновлений.
   int? _subscriptionId;
   final _subscriptions = <StreamSubscription<Object?>>[];
-  Completer<bool>? _ack;
+  Completer<_Ack>? _ack;
   var _refreshing = false;
   var _refreshAgain = false;
+
+  /// Идущее перечитывание: `-32020` присоединяется к нему, а не стартует
+  /// второе (старый ответ не должен перезаписать новый набор).
+  Future<bool>? _refreshRun;
   Map<String, Object?>? _serverInfo;
   var _tasksForToolsCall = false;
 
@@ -276,6 +304,8 @@ final class McpClient {
       return _fail('response stream closed');
     } on _RpcError catch (rpc) {
       return _fail('${rpc.method} failed (code ${rpc.error.code})');
+    } on _TransportFailure catch (failure) {
+      return _fail('${failure.method} failed: ${failure.reason}');
     } on McpSchemaException catch (schema) {
       return _fail('invalid server answer: ${schema.message}');
     } on Object catch (error) {
@@ -326,6 +356,9 @@ final class McpClient {
         'server/discover',
         const {},
         timeout: probe,
+        // Запрос без побочных эффектов: после обрыва потока ответа — один
+        // повтор с новым id (D10, `changelog.md`, п. 9).
+        retryOnAbort: true,
       );
       parseResultType(result);
       discover = DiscoverResult.fromJson(result);
@@ -349,6 +382,10 @@ final class McpClient {
       }
       probeOutcome = 'fallback_error';
     } on McpSchemaException {
+      probeOutcome = 'fallback_error';
+    } on _TransportFailure {
+      // `4xx` без тела JSON-RPC (`404`, `405`, пустой `400`) — не modern-
+      // ошибка: откат на `initialize` (D2).
       probeOutcome = 'fallback_error';
     } on _Timeout {
       probeOutcome = 'fallback_timeout';
@@ -407,14 +444,51 @@ final class McpClient {
   /// Подписка — необязательное удобство: ошибка, результат или обрыв ответа
   /// на `subscriptions/listen` до подтверждения, а также молчание дольше
   /// `min(5 с, connectTimeout / 2)` означают «сервер подключён, живём без
-  /// обновлений».
+  /// обновлений». Исключение — первый обрыв потока ответа (HTTP): подписка
+  /// переиздаётся один раз с новым id (D10, «Повтор после обрыва»); сначала
+  /// читать `tools/list` повторно не нужно — он идёт следом за подпиской.
   Future<void> _subscribe() async {
+    final outcome = await _listenAttempt(reissued: false);
+    if (outcome == _Ack.aborted) {
+      await _listenAttempt(reissued: true);
+    }
+  }
+
+  /// Подписка, оборванная после подтверждения, переиздаётся один раз; после
+  /// подтверждения новой подписки набор перечитывается: уведомления из окна
+  /// обрыва потеряны, и без перечитывания набор мог бы устареть до конца
+  /// сессии (D10; `AGENTS.md` §2, приоритет 4).
+  Future<void> _reissueSubscription() async {
+    if (_closing || _closedReason != null) {
+      return;
+    }
+    try {
+      if (await _listenAttempt(reissued: true) == _Ack.accepted) {
+        _onToolsListChanged();
+      }
+    } on Object catch (error) {
+      // Транспорт закрыт или сломан: обычный обрыв D5 уже обработан; здесь
+      // только след для диагностики.
+      _log(LogLevel.debug, 'mcp.message.ignored', {
+        'kind': 'subscription_failed',
+        'method': 'subscriptions/listen',
+        'error': error.runtimeType.toString(),
+      });
+    }
+  }
+
+  /// Одна попытка `subscriptions/listen` с ожиданием подтверждения.
+  ///
+  /// [reissued] — это повтор после обрыва: второй обрыв подписки уже не
+  /// переиздаётся, клиент живёт без обновлений (`subscription_failed` до
+  /// подтверждения, `subscription_closed` после).
+  Future<_Ack> _listenAttempt({required bool reissued}) async {
     final encoded = _outbound.request('subscriptions/listen', {
       'notifications': {'toolsListChanged': true},
     });
     final entry = _Pending('subscriptions/listen');
     _pending[encoded.id] = entry;
-    final ack = _ack = Completer<bool>();
+    final ack = _ack = Completer<_Ack>();
     ack.future.ignore();
     _listenId = encoded.id;
     // Ответ на `subscriptions/listen` приходит только при закрытии подписки
@@ -428,11 +502,16 @@ final class McpClient {
           if (before) 'method': 'subscriptions/listen',
         });
         if (before) {
-          ack.complete(false);
+          ack.complete(_Ack.declined);
         }
       },
       onError: (Object error) {
         if (error is _Disconnected) {
+          return;
+        }
+        if (error is _Aborted) {
+          _pending.remove(encoded.id);
+          _onListenAborted(ack, reissued: reissued);
           return;
         }
         _endSubscription();
@@ -442,27 +521,46 @@ final class McpClient {
           if (error is _RpcError) 'code': error.error.code,
         });
         if (!ack.isCompleted) {
-          ack.complete(false);
+          ack.complete(_Ack.declined);
         }
       },
     );
-    await _send(encoded.text, 'subscriptions/listen');
+    // Не ждём заголовков ответа: у подписки они приходят вместе с потоком, а
+    // молчащий сервер не должен съедать `connectTimeout` до таймера
+    // подтверждения (D5). Сбой отправки — тот же путь, что обрыв запроса.
+    unawaited(
+      _send(
+        encoded.text,
+        'subscriptions/listen',
+        _mirrorHeaders('subscriptions/listen', const {}),
+      ).then<void>(
+        (_) {},
+        onError: (Object error) {
+          if (!entry.completer.isCompleted) {
+            entry.completer.completeError(error);
+          }
+        },
+      ),
+    );
     var timedOut = false;
-    final timer = _clock.timer(_probeTimeout(), () {
+    final timer = _clock.timer(_ackTimeout(), () {
       if (!ack.isCompleted) {
         timedOut = true;
         _log(LogLevel.debug, 'mcp.message.ignored', {
           'kind': 'subscription_failed',
           'method': 'subscriptions/listen',
         });
-        ack.complete(false);
+        ack.complete(_Ack.declined);
       }
     });
+    final _Ack outcome;
     try {
-      await ack.future;
+      outcome = await ack.future;
     } finally {
       timer.cancel();
-      _ack = null;
+      if (identical(_ack, ack)) {
+        _ack = null;
+      }
     }
     if (timedOut) {
       // Молчание дольше предела: живём без обновлений, а запрос подписки
@@ -471,6 +569,44 @@ final class McpClient {
       _pending.remove(encoded.id);
       _endSubscription();
       await _signalCancel(encoded.id, 'timeout');
+    }
+    return outcome;
+  }
+
+  /// Срок подтверждения подписки: при подключении — как у пробы эпохи, после
+  /// него (переизданная подписка) — без остатка `connectTimeout`, который к
+  /// тому времени исчерпан.
+  Duration _ackTimeout() {
+    if (!_connected) {
+      return _probeTimeout();
+    }
+    final half = Duration(
+      microseconds: server.connectTimeout.inMicroseconds ~/ 2,
+    );
+    return half < const Duration(seconds: 5)
+        ? half
+        : const Duration(seconds: 5);
+  }
+
+  /// Поток ответа `subscriptions/listen` оборван (D10).
+  void _onListenAborted(Completer<_Ack> ack, {required bool reissued}) {
+    final before = !ack.isCompleted;
+    _endSubscription();
+    if (!reissued) {
+      if (before) {
+        // Подключение переиздаст подписку само.
+        ack.complete(_Ack.aborted);
+      } else {
+        unawaited(_reissueSubscription());
+      }
+      return;
+    }
+    _log(LogLevel.debug, 'mcp.message.ignored', {
+      'kind': before ? 'subscription_failed' : 'subscription_closed',
+      if (before) 'method': 'subscriptions/listen',
+    });
+    if (before) {
+      ack.complete(_Ack.declined);
     }
   }
 
@@ -501,9 +637,10 @@ final class McpClient {
     _serverInfo = init.serverInfo;
     _tasksForToolsCall = init.tasksForToolsCall;
     // `initialized` — после ответа на `initialize` (lifecycle.md).
-    await _send(
+    await _sendWithin(
       _outbound.notification('notifications/initialized'),
       'notifications/initialized',
+      _remaining(),
     );
     _log(LogLevel.info, 'mcp.server.era', {
       'era': 'legacy',
@@ -552,6 +689,17 @@ final class McpClient {
   List<McpToolDefinition> _filter(List<McpToolDefinition> tools) {
     final kept = <McpToolDefinition>[];
     for (final tool in tools) {
+      // HTTP (обе эпохи): клиент MUST исключить инструмент с нарушением
+      // `x-mcp-header` (`streamable-http.md`, «Schema Extension»); stdio
+      // аннотации игнорирует (MAY).
+      if (_transport.kind == 'http' &&
+          parseMirroredParams(tool.inputSchema) == null) {
+        _log(LogLevel.warning, 'mcp.tool.invalid', {
+          'tool': truncateRunes(tool.name, 64),
+          'reason': 'invalid x-mcp-header',
+        });
+        continue;
+      }
       if (_era == McpEra.legacy &&
           _tasksForToolsCall &&
           tool.taskSupport == 'required') {
@@ -568,11 +716,65 @@ final class McpClient {
 
   // --- запросы ---------------------------------------------------------
 
+  /// Зеркальные заголовки modern-запроса по HTTP (`streamable-http.md`,
+  /// «Request Metadata»; D10): `MCP-Protocol-Version`, `Mcp-Method`, у
+  /// `tools/call` — `Mcp-Name` и `Mcp-Param-*` из `x-mcp-header` схемы
+  /// инструмента. Legacy и stdio заголовков от клиента не получают: версию и
+  /// сессию legacy ведёт транспорт, у stdio заголовков нет.
+  Map<String, String> _mirrorHeaders(
+    String method,
+    Map<String, Object?> params,
+  ) {
+    if (_transport.kind != 'http' || _outbound.era != McpEra.modern) {
+      return const {};
+    }
+    final headers = {
+      'MCP-Protocol-Version': modernProtocolVersion,
+      'Mcp-Method': method,
+    };
+    if (method == 'tools/call') {
+      final name = params['name'];
+      if (name is String) {
+        headers['Mcp-Name'] = encodeHeaderValue(name);
+        final definition = _tools.where((t) => t.name == name).firstOrNull;
+        for (final param
+            in parseMirroredParams(definition?.inputSchema) ??
+                const <MirroredParam>[]) {
+          final value = mirroredValue(params['arguments'], param.path);
+          if (value != null) {
+            headers['Mcp-Param-${param.header}'] = encodeHeaderValue(value);
+          }
+        }
+      }
+    }
+    return headers;
+  }
+
+  /// Отправка, ограниченная [limit]: HTTP-транспорт возвращается после
+  /// заголовков ответа, а сервер может их не отдать. Просрочка — `_Timeout`,
+  /// запоздавший результат отправки игнорируется.
+  Future<void> _sendWithin(String text, String method, Duration limit) async {
+    final sent = _send(text, method);
+    final expired = Completer<void>();
+    final timer = _clock.timer(limit, expired.complete);
+    var done = false;
+    sent.whenComplete(() => done = true).ignore();
+    try {
+      await Future.any([sent, expired.future]);
+    } finally {
+      timer.cancel();
+    }
+    if (!done) {
+      sent.ignore();
+      throw _Timeout(method);
+    }
+  }
+
   Future<void> _send(
     String text,
-    String method, {
+    String method, [
     Map<String, String> headers = const {},
-  }) async {
+  ]) async {
     try {
       await _transport.send(text, headers: headers);
     } on McpTransportException catch (error) {
@@ -642,7 +844,19 @@ final class McpClient {
       }
     });
     try {
-      await _send(encoded.text, method);
+      // Отправка не блокирует ожидание: HTTP-транспорт возвращается, когда
+      // получены заголовки ответа, а долгий ответ не должен мешать таймауту
+      // и отмене. Сбой отправки приходит тем же путём, что обрыв.
+      unawaited(
+        _send(encoded.text, method, _mirrorHeaders(method, params)).then<void>(
+          (_) {},
+          onError: (Object error) {
+            if (!entry.completer.isCompleted) {
+              entry.completer.completeError(error);
+            }
+          },
+        ),
+      );
       return await entry.completer.future;
     } on _Timeout {
       if (signalCancel) {
@@ -666,11 +880,17 @@ final class McpClient {
     final http = _transport.kind == 'http';
     try {
       if (!http || _era == McpEra.legacy) {
-        await _transport.send(
-          _outbound.notification('notifications/cancelled', {
-            'requestId': id,
-            'reason': reason,
-          }),
+        // Не ждём `202`: медленный сервер не должен задерживать отмену
+        // (D8); сбой отправки — отправлять уже некому.
+        unawaited(
+          _transport
+              .send(
+                _outbound.notification('notifications/cancelled', {
+                  'requestId': id,
+                  'reason': reason,
+                }),
+              )
+              .catchError((Object _) {}),
         );
       }
       if (http) {
@@ -702,50 +922,83 @@ final class McpClient {
       );
     }
     int? requestId;
-    try {
-      final result = await _request(
-        'tools/call',
-        {'name': name, 'arguments': arguments},
-        timeout: options.callTimeout,
-        cancel: cancel,
-        signalCancel: true,
-        onId: (id) => requestId = id,
-      );
-      if (parseResultType(result) == ResultType.inputRequired) {
+    var relisted = false;
+    while (true) {
+      try {
+        final result = await _request(
+          'tools/call',
+          {'name': name, 'arguments': arguments},
+          timeout: options.callTimeout,
+          cancel: cancel,
+          signalCancel: true,
+          onId: (id) => requestId = id,
+        );
+        if (parseResultType(result) == ResultType.inputRequired) {
+          return McpCallError(
+            'MCP server $_id asked for client input, which is not supported.',
+          );
+        }
+        return McpCallDone(CallToolResult.fromJson(result));
+      } on CancelledException {
+        _log(LogLevel.info, 'mcp.call.cancelled', {
+          'tool_call_id': ?toolCallId,
+          'request_id': ?requestId,
+        });
+        rethrow;
+      } on _Timeout {
+        _log(LogLevel.info, 'mcp.call.timeout', {
+          'tool_call_id': ?toolCallId,
+          'request_id': ?requestId,
+        });
         return McpCallError(
-          'MCP server $_id asked for client input, which is not supported.',
+          'MCP server $_id did not answer tools/call within '
+          '${options.callTimeout.inSeconds} s.',
+        );
+      } on _Disconnected catch (gone) {
+        return McpCallError(
+          'MCP server $_id disconnected during the call: ${gone.reason}',
+        );
+      } on _TransportFailure catch (failure) {
+        return McpCallError(
+          'MCP server $_id transport error: ${failure.reason}',
+        );
+      } on _RpcError catch (rpc) {
+        // `-32020` `HeaderMismatch`: схема инструмента могла измениться, а
+        // клиент послал устаревшие `Mcp-Param-*`. Один `tools/list` и один
+        // повтор вызова с новым id (`streamable-http.md`, «Client
+        // Behavior»); второй отказ — обычная ошибка.
+        if (rpc.error.code == mcpHeaderMismatch &&
+            !relisted &&
+            _transport.kind == 'http' &&
+            _era == McpEra.modern &&
+            await _relistAfterMismatch()) {
+          relisted = true;
+          continue;
+        }
+        return McpCallError(
+          'MCP server $_id returned an error: ${rpc.error.message} '
+          '(code ${rpc.error.code})',
+        );
+      } on McpSchemaException {
+        return McpCallError(
+          'MCP server $_id returned an invalid tools/call result.',
         );
       }
-      return McpCallDone(CallToolResult.fromJson(result));
-    } on CancelledException {
-      _log(LogLevel.info, 'mcp.call.cancelled', {
-        'tool_call_id': ?toolCallId,
-        'request_id': ?requestId,
-      });
-      rethrow;
-    } on _Timeout {
-      _log(LogLevel.info, 'mcp.call.timeout', {
-        'tool_call_id': ?toolCallId,
-        'request_id': ?requestId,
-      });
-      return McpCallError(
-        'MCP server $_id did not answer tools/call within '
-        '${options.callTimeout.inSeconds} s.',
-      );
-    } on _Disconnected catch (gone) {
-      return McpCallError(
-        'MCP server $_id disconnected during the call: ${gone.reason}',
-      );
-    } on _RpcError catch (rpc) {
-      return McpCallError(
-        'MCP server $_id returned an error: ${rpc.error.message} '
-        '(code ${rpc.error.code})',
-      );
-    } on McpSchemaException {
-      return McpCallError(
-        'MCP server $_id returned an invalid tools/call result.',
-      );
     }
+  }
+
+  /// Перечитывает `tools/list` после `-32020`; `false` — не удалось, вызов
+  /// получает исходную ошибку. Идёт через общий цикл перечитывания, чтобы
+  /// запоздавший старый ответ не перезаписал новый набор; набор сессии
+  /// обновляется (`onToolsChanged`) только если схемы действительно
+  /// изменились.
+  Future<bool> _relistAfterMismatch() async {
+    final running = _refreshRun;
+    if (running != null) {
+      _refreshAgain = true;
+      return running;
+    }
+    return _refreshLoop(onlyIfChanged: true);
   }
 
   // --- входящие --------------------------------------------------------
@@ -851,7 +1104,7 @@ final class McpClient {
           final accepted = filter is Map && filter['toolsListChanged'] == true;
           // Подтверждение без toolsListChanged: живём без обновлений (D5).
           _subscriptionId = accepted ? _listenId : null;
-          ack.complete(accepted);
+          ack.complete(accepted ? _Ack.accepted : _Ack.declined);
         }
       case 'notifications/tools/list_changed':
         // Modern: только с `subscriptionId` нашей подписки; legacy — с
@@ -877,7 +1130,7 @@ final class McpClient {
             'kind': 'subscription_closed',
           });
           if (_ack case final ack? when !ack.isCompleted) {
-            ack.complete(false);
+            ack.complete(_Ack.declined);
           }
         } else {
           _log(LogLevel.debug, 'mcp.message.ignored', {
@@ -910,20 +1163,33 @@ final class McpClient {
     unawaited(_refreshLoop());
   }
 
-  Future<void> _refreshLoop() async {
+  Future<bool> _refreshLoop({bool onlyIfChanged = false}) {
+    final run = _refreshLoopBody(onlyIfChanged);
+    _refreshRun = run;
+    return run.whenComplete(() => _refreshRun = null);
+  }
+
+  Future<bool> _refreshLoopBody(bool onlyIfChanged) async {
     _refreshing = true;
     try {
       do {
         _refreshAgain = false;
         final fresh = _filter(await _listAll());
+        final changed =
+            jsonEncode([for (final t in fresh) t.raw]) !=
+            jsonEncode([for (final t in _tools) t.raw]);
         _tools = fresh;
-        onToolsChanged?.call(List.unmodifiable(fresh));
+        if (changed || !onlyIfChanged) {
+          onToolsChanged?.call(List.unmodifiable(fresh));
+        }
       } while (_refreshAgain);
+      return true;
     } on Object catch (error) {
       // Прежний набор остаётся; причина — только наш код, без тела ответа.
       _log(LogLevel.warning, 'mcp.tools.refresh_failed', {
         'reason': _describe(error),
       });
+      return false;
     } finally {
       _refreshing = false;
     }
@@ -935,14 +1201,21 @@ final class McpClient {
     _Disconnected(:final reason) => 'disconnected: $reason',
     _RpcError(:final error, :final method) =>
       '$method failed (code ${error.code})',
+    _TransportFailure(:final method, :final reason) =>
+      '$method failed: $reason',
     McpSchemaException(:final message) => message,
     _ => 'unexpected error',
   };
 
-  void _onAborted(Object id) {
+  void _onAborted(McpRequestAbort abort) {
+    final id = abort.id;
     final entry = id is int ? _pending[id] : null;
     if (entry != null && !entry.completer.isCompleted) {
-      entry.completer.completeError(const _Aborted());
+      entry.completer.completeError(
+        abort.retryable
+            ? const _Aborted()
+            : _TransportFailure(entry.method, abort.reason ?? 'request failed'),
+      );
     }
   }
 

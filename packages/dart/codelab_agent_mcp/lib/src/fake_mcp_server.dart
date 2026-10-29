@@ -2,8 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
+import 'json_rpc.dart' show jsonRpcMethodNotFound;
 import 'protocol.dart';
+
+part 'fake_mcp_http.dart';
 
 /// Какой эпохи притворяется [FakeMcpServer] (design.md change
 /// `add-agent-mcp-client`, D15).
@@ -168,6 +173,16 @@ final class FakeMcpServer {
     this.probeErrorCode,
     this.pingBeforeInitializeResult = false,
     this.serverName = 'fake-mcp-server',
+    this.httpStyle = FakeHttpStyle.json,
+    this.httpSessionId,
+    this.probeReply,
+    this.allowGetStream = true,
+    this.allowDelete = true,
+    this.pollCloses = 0,
+    this.pollRetry = const Duration(milliseconds: 100),
+    this.abortDiscover = 0,
+    this.abortListens = 0,
+    this.abortListResponses = 0,
   }) : _tools = [...tools],
        _responses = {...responses};
 
@@ -178,7 +193,10 @@ final class FakeMcpServer {
   final bool listChanged;
   final bool advertiseTools;
   final bool acknowledgeToolsListChanged;
-  final FakeListen listen;
+
+  /// Реакция на `subscriptions/listen`; тест может сменить её на лету
+  /// (например, чтобы переизданная подписка осталась без подтверждения).
+  FakeListen listen;
 
   /// Подтверждение подписки приходит дважды подряд.
   final bool duplicateAck;
@@ -201,6 +219,35 @@ final class FakeMcpServer {
   /// id `handshake-ping` (окно рукопожатия, `basic/utilities/ping.md`).
   final bool pingBeforeInitializeResult;
   final String serverName;
+
+  /// HTTP: как отвечать на запрос, ответ на который готов сразу (D10, D15).
+  final FakeHttpStyle httpStyle;
+
+  /// HTTP legacy: `Mcp-Session-Id`, выдаваемый в ответе на `initialize`.
+  final String? httpSessionId;
+
+  /// HTTP: ответ на `server/discover` вместо эпохи сервера (статус и тело
+  /// пробы, D2).
+  final FakeHttpReply? probeReply;
+
+  /// HTTP legacy: `false` — `GET` получает `405` (потока уведомлений нет).
+  final bool allowGetStream;
+
+  /// HTTP legacy: `false` — `DELETE` получает `405`.
+  final bool allowDelete;
+
+  /// HTTP legacy: сколько раз соединение потока ответа на `tools/call`
+  /// закрывается после события с `id` и до ответа (опрос SSE, D10).
+  final int pollCloses;
+
+  /// Значение `retry` в событиях опроса; `null` — без поля `retry`.
+  final Duration? pollRetry;
+
+  /// Сколько следующих `server/discover` оборвать без ответа.
+  int abortDiscover;
+
+  /// Сколько следующих `subscriptions/listen` оборвать без ответа.
+  int abortListens;
 
   final List<FakeMcpTool> _tools;
   final Map<String, FakeToolResponse> _responses;
@@ -225,7 +272,7 @@ final class FakeMcpServer {
 
   /// Сколько следующих `tools/list` оборвать без ответа (поток ответа
   /// закрыт, транспорт жив): проверка единственного повтора (D8, D10).
-  var abortListResponses = 0;
+  int abortListResponses;
 
   /// Сколько следующих `tools/list` оставить без ответа (молчание сервера):
   /// проверка таймаута и сигнала отмены (`cancellation.md`, Timeouts).
@@ -244,6 +291,7 @@ final class FakeMcpServer {
   final sentHeaders = <Map<String, String>>[];
 
   _FakeTransport? _transport;
+  _FakeHttp? _http;
   Object? _subscriptionId;
   Object? _silentProbeId;
   var _initialized = false;
@@ -298,11 +346,52 @@ final class FakeMcpServer {
       _push(jsonEncode({'jsonrpc': '2.0', 'id': id, 'method': method}));
 
   /// Сервер падает: транспорт закрывается с [reason].
-  void crash({String reason = 'process exited with code 1'}) =>
-      _transport?._closeFromServer(reason);
+  void crash({String reason = 'process exited with code 1'}) {
+    _transport?._closeFromServer(reason);
+    _http?.crash();
+  }
 
   /// Поток ответа запроса [id] оборвался, транспорт жив (HTTP).
-  void abortResponse(Object id) => _transport?._aborted.add(id);
+  void abortResponse(Object id) {
+    if (_http case final http?) {
+      http.abort(id);
+    } else {
+      _transport?._aborted.add(McpRequestAbort(id));
+    }
+  }
+
+  /// HTTP-запросы клиента в порядке прихода (`POST`, `GET`, `DELETE`).
+  final httpLog = <FakeHttpRequest>[];
+
+  /// Сколько раз клиент возобновил поток `GET` с `Last-Event-ID`.
+  var resumes = 0;
+
+  /// HTTP-клиент поверх [handleHttp]: `MockClient.streaming`, ни сети, ни
+  /// сокетов (PKG-6). Передаётся в `StreamableHttpTransport`.
+  http.Client httpClient() => MockClient.streaming(handleHttp);
+
+  /// HTTP-обработчик сервера (streamable HTTP, обе эпохи; D10, D15).
+  ///
+  /// Для тестов, которые подменяют часть ответов: прочитать тело запроса и
+  /// передать его сюда как `Stream.value(bytes)`.
+  Future<http.StreamedResponse> handleHttp(
+    http.BaseRequest request,
+    Stream<List<int>> body,
+  ) => (_http ??= _FakeHttp(this)).handle(request, body);
+
+  /// Сервер закрывает поток `GET` уведомлений (legacy).
+  void closeGetStream() => _http?.closeGet();
+
+  /// Сервер завершил HTTP-сессию: запросы с `Mcp-Session-Id` получают `404`.
+  void expireSession() => (_http ??= _FakeHttp(this)).expired = true;
+
+  /// Заменяет набор инструментов без уведомления: клиент узнает об этом
+  /// только перечитыванием (окно обрыва, устаревшая схема; D10).
+  void setTools(List<FakeMcpTool> newTools) {
+    _tools
+      ..clear()
+      ..addAll(newTools);
+  }
 
   /// Поздний ответ на молчаливую пробу `server/discover`.
   void answerSilentProbe() {
@@ -321,7 +410,13 @@ final class FakeMcpServer {
       (era == FakeMcpEra.dualEra && _subscriptionId != null) ||
       (era == FakeMcpEra.dualEra && !_initialized);
 
-  void _push(String text) => _transport?._deliver(text);
+  void _push(String text) {
+    if (_http case final http?) {
+      http.route(text);
+      return;
+    }
+    _transport?._deliver(text);
+  }
 
   void _handleRaw(String text, Map<String, String> headers) {
     sentHeaders.add(headers);
@@ -413,6 +508,11 @@ final class FakeMcpServer {
   }
 
   void _discover(Object id, Map<String, Object?>? meta) {
+    if (abortDiscover > 0) {
+      abortDiscover--;
+      abortResponse(id);
+      return;
+    }
     if (era == FakeMcpEra.legacy) {
       switch (legacyProbe) {
         case FakeLegacyProbe.silent:
@@ -484,6 +584,11 @@ final class FakeMcpServer {
     subscriptions++;
     _subscriptionId = id;
     _listenId = id;
+    if (abortListens > 0) {
+      abortListens--;
+      abortResponse(id);
+      return;
+    }
     switch (listen) {
       case FakeListen.acknowledge:
         sendAck();
@@ -670,7 +775,7 @@ final class _FakeTransport implements McpTransport {
 
   final FakeMcpServer _server;
   final _incoming = StreamController<String>();
-  final _aborted = StreamController<Object>.broadcast();
+  final _aborted = StreamController<McpRequestAbort>.broadcast();
   final _done = Completer<McpTransportClosed>();
   var _closed = false;
 
@@ -681,7 +786,7 @@ final class _FakeTransport implements McpTransport {
   Stream<String> get incoming => _incoming.stream;
 
   @override
-  Stream<Object> get abortedRequests => _aborted.stream;
+  Stream<McpRequestAbort> get abortedRequests => _aborted.stream;
 
   @override
   Future<McpTransportClosed> get done => _done.future;

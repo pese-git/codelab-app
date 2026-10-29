@@ -7,7 +7,7 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 
 `setup.transport` МОЖЕТ задавать транспорт сценария (design.md change `add-codelab-agent-binary`, D8): `{"kind": "stdio"}` или `{"kind": "ws", "attempts": [...]}`, где попытка — `{"authorization": "none" | "wrong" | "valid", "expectStatus": <HTTP-код>}`; попытки играются по порядку до основного подключения, основное — с верным токеном. Значение `{"$repeat": {"text": "<s>", "times": <n>}}` в кадре SHALL означать строку `<s>`, повторённую `<n>` раз: в кадре `c2a` она материализуется до отправки, в кадре `a2c` сравнивается как точная строка.
 
-`setup.mcp` МОЖЕТ задавать fake MCP-серверы сценария (design.md change `add-agent-mcp-client`, D15): имя сервера → `{"era"?: "modern" | "legacy", "tools": [...], "results": {"<инструмент>": <CallToolResult>}}`, по умолчанию `modern`. Сервер выбирается по `name` из `mcpServers` кадра; `command` и `url` кадра игнорируются. `after.mcpCalls` МОЖЕТ задавать точный список полученных сервером вызовов: имя сервера → `[{"name", "arguments"}]`, пустой список означает «сервер вызова не получил». Оба ключа читает только агентский прогон: драйвер отдаёт их фабрике агента, а `after.mcpCalls` проверяет `AgentUnderTest.verify()`.
+`setup.mcp` МОЖЕТ задавать fake MCP-серверы сценария (design.md change `add-agent-mcp-client`, D15): имя сервера → `{"era"?: "modern" | "legacy", "tools": [...], "results": {"<инструмент>": <CallToolResult>}}`, эпоха по умолчанию `modern`. Fake-сервер для элемента `mcpServers` кадра SHALL выбираться строго, без отката на единственный сервер: stdio — по `name` (`command` игнорируется); http — по первой метке хоста `url` вида `https://<имя>.mcp.test/mcp`. `after.mcpCalls` МОЖЕТ задавать точный список полученных сервером вызовов: имя сервера → `[{"name", "arguments"}]`, пустой список означает «сервер вызова не получил». Оба ключа читает только агентский прогон: драйвер отдаёт их фабрике агента, а `after.mcpCalls` проверяет `AgentUnderTest.verify()`.
 
 #### Scenario: Полная фикстура загружается
 - **WHEN** загрузчик читает фикстуру со всеми обязательными полями
@@ -44,7 +44,7 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 - `acp/mcp-result-fenced` (P-16);
 - `acp/set-mode-plan-rejects-mcp-write` (P-01).
 
-Ожидаемые кадры `initialize` в `acp/initialize-capabilities`, `acp/session-new-modes-config` и `acp/set-config-option-model` SHALL содержать ссылку `02-Initialization.md#mcp-capabilities` и `mcpCapabilities: {"http": true, "sse": false}` с задач 9.5–9.6 (HTTP-транспорт); до них — `{"http": false, "sse": false}`, а фабрика агентского прогона SHALL сужать `mcp` до `{stdio}`, как бинарь. Агентский прогон этих фикстур SHALL проходить HTTP-сервер через настоящий `StreamableHttpTransport` на `MockClient`.
+Ожидаемые кадры `initialize` в `acp/initialize-capabilities`, `acp/session-new-modes-config` и `acp/set-config-option-model` SHALL содержать ссылку `02-Initialization.md#mcp-capabilities` и `mcpCapabilities: {"http": true, "sse": false}`: фабрика агентского прогона собирает ядро с транспортами `stdio` и `http`, как бинарь `serve --stdio`. Агентский прогон этих фикстур SHALL проходить HTTP-сервер через настоящий `StreamableHttpTransport` на `MockClient` (dev-зависимость `http` у `codelab_agent_acp`). `acp/mcp-http-tool-call` — шестая MCP-фикстура: сервер `web` типа `http` (modern, `url` `https://web.mcp.test/mcp`), `old` типа `sse` и `future` неизвестного типа `websocket`.
 
 #### Scenario: Разрешение до сервера
 - **WHEN** агентский драйвер проигрывает `acp/mcp-tool-permission`

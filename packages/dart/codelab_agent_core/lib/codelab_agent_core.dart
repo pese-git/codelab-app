@@ -24,6 +24,9 @@ export 'src/llm/model_ref.dart';
 export 'src/llm/overflow.dart' show isContextOverflow;
 export 'src/llm/provider_config.dart';
 export 'src/llm/provider_factory.dart';
+// Декодер SSE нужен транспортам других пакетов (MCP streamable HTTP): второй
+// реализации нет (§2.6, change `add-agent-mcp-client`, D10).
+export 'src/llm/sse.dart' show ServerSentEvent, SseDecoder;
 export 'src/llm/stream_function.dart';
 export 'src/llm/usage.dart';
 export 'src/loop/agent_events.dart';

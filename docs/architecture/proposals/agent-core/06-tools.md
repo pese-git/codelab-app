@@ -764,6 +764,7 @@ inputSchema`), если ключевое слово, понятное валид
 | транспорт закрылся или поток ответа оборвался во время вызова (без повтора) | `MCP server <id> disconnected during the call: <reason>` |
 | таймаут | `MCP server <id> did not answer tools/call within <n> s.` |
 | ошибка JSON-RPC | `MCP server <id> returned an error: <message> (code <code>)` |
+| локальный сбой HTTP-транспорта без JSON-RPC-тела | `MCP server <id> transport error: <reason>` |
 | ответ не по схеме | `MCP server <id> returned an invalid tools/call result.` |
 | сервер просит ввод клиента (`input_required`) | `MCP server <id> asked for client input, which is not supported.` |
 
