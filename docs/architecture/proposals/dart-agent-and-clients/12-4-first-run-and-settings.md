@@ -31,7 +31,6 @@
   `RemoveMcpServer`, `RemoveTable`) описывают правку. `ConfigWriter` (`codelab_agent_io`) применяет
   её к YAML-документу через `yaml_edit` с сохранением форматирования, порядка ключей и
   комментариев, проверяет итог валидатором ядра и атомарно заменяет файл. Ошибки — исключения
-  `ConfigLegacyReadOnlyException` (конфиг прочитан из устаревшего `codelab.toml`, §15.7),
   `ConfigConflictException` (файл изменился после чтения), `ConfigInlineSecretException` и
   `ConfigException(issues)` (в том числе правка, которую редактор не может выполнить:
   `edit the file manually`).
@@ -57,15 +56,22 @@
 
 Мастер и страницы пишут только схему ядра (§15.4): `providers.<id>` с `kind`,
 `agent.default_model`, файл `config.yaml` (YAML). TOML клиенты не пишут никогда. Старый
-`codelab.toml` Python-агента агент читает только для чтения, пока нет YAML-конфига (§15.7); в
-этом режиме мастер и страницы только показывают значения и предлагают действие «Migrate to
-config.yaml» (§12.4.5, SETUP-15); перенос из CLI — `codelab config migrate`.
+Старый `codelab.toml` Python-агента не читается и не переводится (решение 2026-10-29, change
+`add-agent-configuration`, D14): режима «только чтение», действия «Migrate to config.yaml» и
+команды `codelab config migrate` нет (SETUP-15).
 
 ## 12.4.2. Контракт
 
 **Где живёт общая логика.** Мастер и модели страниц настроек нужны обоим клиентам. Они не
 относятся к ACP и не нужны внешнему агенту. Решение — новый пакет
-`packages/dart/codelab_setup` с двумя барелями, по образцу `codelab_embedded`:
+`packages/dart/codelab_setup` с двумя барелями, по образцу `codelab_embedded`.
+
+**Минимальный состав в этапе 8 (задача 8.5, OQ2 (а) change `add-agent-configuration`).** Пакет
+создаётся сразу, но с минимумом: основной барель реэкспортирует только чистые типы ядра
+`ConfigIssue` и `ConfigLoadResult`; `io.dart` реэкспортирует `ConfigCommands` из `codelab_agent_io`
+(вход для `codelab config check`). Мастер, `AgentConfigStore`, `SettingsAccess`, `FileAgentConfigStore`
+и остальное ниже приходят со своими потребителями (задачи 8.10, 9.6), без абстракций «на вырост».
+Таблица ниже — полный состав.
 
 | Барель | Содержимое | Можно | Нельзя |
 |---|---|---|---|
@@ -77,7 +83,7 @@ config.yaml» (§12.4.5, SETUP-15); перенос из CLI — `codelab config 
 presentation app не импортирует `package:codelab_setup/io.dart`. Клиенты по-прежнему не
 импортируют `codelab_agent_*` напрямую: нужные типы ядра приходят реэкспортом из
 `codelab_setup`, как `ProviderConfig` через `codelab_embedded`. `ConfigWriter`, бэкенды секретов и
-исключения писателя (`ConfigConflictException`, `ConfigLegacyReadOnlyException`) видит только
+исключения писателя (`ConfigConflictException`) видит только
 `io.dart`.
 
 Почему не другие места:
@@ -131,9 +137,6 @@ abstract interface class AgentConfigStore {
   Future<AgentConfigSnapshot> snapshot({required String cwd});
   /// base — ConfigSnapshot нужного слоя из snapshot(); его fingerprint защищает от конфликта.
   Future<ConfigSaveOutcome> apply(ConfigSnapshot base, List<ConfigEdit> edits);
-  /// Действие «Migrate to config.yaml»: тот же перевод, что `codelab config migrate` (§15.7),
-  /// запись ConfigWriter.writeMigrated; codelab.toml не меняется. Только при loaded.legacy.
-  Future<ConfigSaveOutcome> migrateLegacy({required String cwd});
 }
 
 /// Результат порта; исключения ConfigWriter.apply (§17.5.2) сюда переводит FileAgentConfigStore.
@@ -144,7 +147,6 @@ final class ConfigSaved extends ConfigSaveOutcome {
 final class ConfigConflict extends ConfigSaveOutcome { final String path; }      // файл изменился после чтения
 final class ConfigRejected extends ConfigSaveOutcome { final List<ConfigIssue> issues; }
 final class ConfigInlineSecret extends ConfigSaveOutcome { final String key; final String suggestedSecretName; }
-final class ConfigLegacyReadOnly extends ConfigSaveOutcome { final List<String> legacyFiles; }   // codelab.toml активен
 
 /// Значение секрета в памяти клиента. toString и JSON — всегда «***».
 final class SecretValue {
@@ -166,7 +168,6 @@ final class SecretValue {
 | `ConfigConflictException(path)` | `ConfigConflict(path)` | баннер конфликта, черновик сохранён (SETUP-6) |
 | `ConfigInlineSecretException(key, suggestedSecretName)` | `ConfigInlineSecret(key, suggestedSecretName)` | подсказка сохранить значение как секрет `suggestedSecretName` |
 | `ConfigException(issues)` | `ConfigRejected(issues)` | баннер `rejected` со списком проблем |
-| `ConfigLegacyReadOnlyException(legacyFiles)` | `ConfigLegacyReadOnly(legacyFiles)` | баннер `This configuration is read from codelab.toml (read-only).` и действие «Migrate to config.yaml» (SETUP-15) |
 
 **Мастер провайдера.** Один автомат на оба клиента. Побочные эффекты — только через порты:
 проверка (`ProviderCheck`) и запись (`ProviderSetupCommitter`).
@@ -321,8 +322,7 @@ final class ProviderSettingsReady extends ProviderSettingsState {
   final ConfigTarget target;
   final SecretBackendInfo secretBackend;   // строка «Key storage» страницы
   final SettingsBanner? banner;            // saved | conflict(path) | rejected(issues) | inlineSecret(key, name)
-                                           // | legacyReadOnly(files) | storeUnavailable(reason)
-  final List<String> legacyFiles;          // не пусто — конфиг из codelab.toml: только чтение, «Migrate to config.yaml»
+                                           // | storeUnavailable(reason)
   final Map<String, ProviderCheckView> lastChecks;           // id → ok(n моделей) | failed(kind)
 }
 
@@ -333,7 +333,6 @@ final class McpSettingsLoading extends McpSettingsState {}
 final class McpSettingsReadOnly extends McpSettingsState { final SettingsAccess access; final McpAgentStatus status; }
 final class McpSettingsReady extends McpSettingsState {
   final List<McpServerEntryView> servers;
-  final List<String> legacyFiles;          // как у ProviderSettingsReady: не пусто — только чтение
   final McpServerDraft? editing;           // открыт редактор
   final McpAgentStatus status;
   final SettingsBanner? banner;
@@ -389,9 +388,6 @@ final class BootWatchdog {
    `checkProviderReadiness`. `ProviderReady` → обычный старт.
 2. `ConfigBroken` → мастер не запускается. В stderr печатаются ошибки с путём ключа (как
    `codelab config check`), выход с кодом `64` (agent-core-architecture §13.10, §9.11). Мастер НЕ ДОЛЖЕН переписывать сломанный файл.
-   Конфиг получен из устаревшего `codelab.toml` (`snapshot.loaded.legacy`) и провайдер не готов →
-   мастер тоже не запускается: в stderr `Run "codelab config migrate" first: codelab.toml is
-   read-only.`, выход с кодом `1` (SETUP-15).
 3. Нет TTY на stdin или stdout (`-p`, pipe, CI) → мастер не запускается. В stderr:
    `No model provider is configured. Run "codelab provider add" or set OPENAI_API_KEY / ANTHROPIC_API_KEY.`,
    выход с кодом `1`, как при неудачном подключении (§9.11).
@@ -429,7 +425,7 @@ stateDiagram-v2
     EnteringModelDetails --> Reviewing: ModelDetailsSubmitted
     Reviewing --> Saving: ConfirmSave
     Saving --> Done: ConfigSaved
-    Saving --> SaveFailed: Conflict / Rejected / InlineSecret / LegacyReadOnly
+    Saving --> SaveFailed: Conflict / Rejected / InlineSecret
     SaveFailed --> Reviewing: Back
     Done --> [*]
     Cancelled --> [*]
@@ -572,14 +568,6 @@ stateDiagram-v2
    удаляется только после `ConfigSaved`.
 7. Страница подписана на `WorkspaceState`. После `config_option_update` строка «Active in this
    session» показывает текущую модель активной сессии. Отдельный запрос не нужен.
-8. **Устаревший конфиг.** `snapshot.loaded.legacy` → `ProviderSettingsReady.legacyFiles` не
-   пусто: строки провайдеров показываются с источником `codelab.toml`, «Add provider», «Edit»,
-   «Remove» и выбор модели по умолчанию неактивны, баннер `legacyReadOnly` — `This configuration
-   is read from codelab.toml (read-only).` с кнопкой «Migrate to config.yaml» (`settings-migrate`).
-   Кнопка вызывает `AgentConfigStore.migrateLegacy(cwd)`; `ConfigSaved` → снимок перечитывается,
-   агент подхватывает `config.yaml` перезагрузкой (§17.5.6), страница становится редактируемой;
-   отказ (цель уже существует, литеральный ключ в `auth.toml`) → баннер `rejected` с текстом
-   ошибки, ничего не записано. Мастер провайдера в этом режиме не открывается (SETUP-15).
 
 ## 12.4.6. Алгоритм: страница MCP-серверов (E-13)
 
@@ -617,9 +605,6 @@ stateDiagram-v2
    пометить его «Secret». `validate()` выполняется до записи; запись — одна правка
    `UpsertMcpServer(map)`. Сохранение идёт тем же порядком «секрет → конфиг → откат секрета», что
    в §12.4.4, шаг 8.
-   При `McpSettingsReady.legacyFiles` не пустом редактор не открывается: страница показывает
-   тот же баннер `legacyReadOnly` и действие «Migrate to config.yaml», что страница провайдеров
-   (§12.4.5, шаг 8).
 4. **Удаление.** Правка `RemoveMcpServer(name)`. Затем, после `ConfigSaved`, удаляются секреты с
    префиксом `codelab/mcp/<name>/`. Сервер из слоя 3 удалить нельзя; можно выключить его в
    `ConfigTarget.projectLocal(cwd)` правкой `UpsertMcpServer({"name": name, "enabled": false})`
@@ -957,13 +942,6 @@ mcp:
         Authorization: "${secret:codelab/mcp/github/authorization}"
 ```
 
-**Устаревший конфиг в app** (у пользователя только `~/.codelab/codelab.toml`): страница
-«Providers» показывает `openai · OpenAI-compatible · Key: env OPENAI_API_KEY (set) · from
-codelab.toml`, кнопки записи неактивны, сверху баннер `This configuration is read from
-codelab.toml (read-only).` и кнопка «Migrate to config.yaml». После нажатия — баннер
-`saved` со строкой `Created ~/.codelab/config.yaml; codelab.toml is now ignored and can be
-deleted.`, кнопки записи активны.
-
 **Экраны app.**
 
 * **Settings → Providers** (`settings-providers`):
@@ -1034,11 +1012,9 @@ deleted.`, кнопки записи активны.
 14. **SETUP-14.** Ни одна часть этого раздела НЕ ДОЛЖНА требовать расширения ACP. Изменения
     конфигурации доходят до клиентов стандартными `config_option_update` и
     `available_commands_update`, команды — обычным `session/prompt`.
-15. **SETUP-15.** Клиенты НЕ ДОЛЖНЫ писать TOML. Пока конфиг агента получен из устаревшего
-    `codelab.toml` (agent-core-architecture §15.7), мастер, страницы настроек app, `/settings` и
-    подкоманды записи CLI НЕ ДОЛЖНЫ менять конфиг: страницы показывают значения только для
-    чтения с действием «Migrate to config.yaml», CLI печатает подсказку `codelab config
-    migrate`. Миграция НЕ ДОЛЖНА удалять или менять `codelab.toml`.
+15. **SETUP-15.** Клиенты НЕ ДОЛЖНЫ писать TOML и читать устаревший `codelab.toml`: он
+    игнорируется целиком, режима «только чтение», действия «Migrate to config.yaml» и команды
+    `codelab config migrate` нет (решение 2026-10-29, D14 change `add-agent-configuration`).
 16. **SETUP-16.** Ослабление редакции (§12.4.9, страница «Redaction», шаг 4) НЕ ДОЛЖНО
     записываться без подтверждения пользователя, перечисляющего каждое ослабление. Слой `exact`
     НЕ ДОЛЖЕН выключаться из UI.
@@ -1140,7 +1116,6 @@ allowlist ядра). В app — `http` для `IOClient` в infrastructure, ес
 | `settings_access_test.dart: embedded editable, codelab-agent stdio editable, third-party not managed, ws read-only` | SETUP-2 |
 | `settings_access_test.dart: targets never include project layer or --config file` | SETUP-3 |
 | `file_agent_config_store_test.dart` (`test/io/`): `each ConfigWriter exception maps to its outcome, inline secret before generic config exception` | SETUP-6 |
-| `file_agent_config_store_test.dart` (`test/io/`): `legacy codelab.toml snapshot is read-only, apply maps to ConfigLegacyReadOnly, migrateLegacy writes config.yaml and leaves codelab.toml unchanged` | SETUP-15 |
 | `provider_remove_test.dart: remove uses RemoveTable and a new default model, last provider cannot be removed` | D-05 |
 
 **E2E CLI** (`apps/codelab_cli/test/e2e/`, PTY, временный `CODELAB_HOME`). Связка ключей в CI
@@ -1167,13 +1142,6 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
   при недоступном сервере → код `1`, файл не изменён (SETUP-4).
 * `cli/settings-remote-read-only`: REPL с `ws://` scripted-агентом, `/provider add` → сообщение
   read-only, локальный конфиг не изменён (SETUP-2).
-* `cli/config-legacy-read-only` (R-16): в `CODELAB_HOME` только `codelab.toml` с провайдером
-  scripted-сервера → REPL стартует на этом провайдере, в stderr подсказка `codelab config
-  migrate`; `codelab config set budget.max_steps 80` и `codelab provider add …` → код `1` с
-  подсказкой, `config.yaml` не создан, `codelab.toml` побайтово тот же; `codelab config migrate`
-  → создан `config.yaml`, совпадающий с golden `test/e2e/golden/migrated_config.yaml`;
-  повторный `config set` проходит; при обоих файлах действует `config.yaml`, в логе одно
-  `config.legacy_ignored` (SETUP-15).
 
 **Интеграционные тесты app** (`apps/codelab_desktop/integration_test/`, macOS). В scope зависимостей
 подменяются `SecretStore` (в памяти) и `CODELAB_HOME` (временный каталог). `/models` отдаёт
@@ -1187,10 +1155,6 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
   4. файл изменён тестом между чтением и записью → баннер конфликта, черновик на месте (SETUP-6);
   5. «Remove» с флажком → провайдер и секрет удалены;
   6. WebSocket-профиль → кнопок записи нет, баннер read-only (SETUP-2);
-  7. в `CODELAB_HOME` только `codelab.toml` → строки провайдеров с источником `codelab.toml`,
-     кнопки записи неактивны, баннер `legacyReadOnly`; «Migrate to config.yaml» → создан
-     `config.yaml`, `codelab.toml` не изменён, страница редактируема, модель в селекторе
-     композера та же (SETUP-15).
 * `app:mcp_settings_flow_test.dart` (E-13):
   1. добавить `http`-сервер с секретным заголовком → в конфиге
      `Authorization: "${secret:codelab/mcp/github/authorization}"`, значение только в хранилище;

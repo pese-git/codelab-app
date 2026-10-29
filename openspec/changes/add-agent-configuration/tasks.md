@@ -33,7 +33,7 @@
 
 ## 0. Документы и матрица (без кода)
 
-- [ ] 0.1 `[agent]` Точечные правки `agent-core/15-configuration.md`:
+- [x] 0.1 `[agent]` Точечные правки `agent-core/15-configuration.md`:
   - §15.1 — `ConfigTree.kind` (`ConfigLayerKind`), `ConfigIssue.kind`, `HostSettings` (D3); без `package:toml` и `yaml_edit` в 8.5 (D2);
   - §15.2 — абзац о `codelab.toml` заменяется ссылкой на §15.7: файл не читается (D12);
   - §15.4:
@@ -45,7 +45,7 @@
   - §15.10 — CFG-20 переписывается: агент и клиенты читают и пишут только YAML, `codelab.toml` не читается и даёт `config.legacy_found`;
   - §15.11 — абзац «Устаревший файл — только чтение» заменяется обоснованием решения 2026-10-29;
   - §15.12 — тесты `codelab.toml` и `migrate` заменяются на `config_legacy_found_test.dart` (D17).
-- [ ] 0.2 `[agent]` Точечные правки:
+- [x] 0.2 `[agent]` Точечные правки:
   - `agent-core/17-5-agent-setup.md` §17.5.2 — `ConfigIssue.kind`, без поля `ConfigLoadResult.legacy` и `ConfigLegacyReadOnlyException`; `suggestedSecretName` добавляет change 8.9 (D3, D8); §17.5.5 — без `config migrate`, `writeMigrated` и отказа записи при активном `codelab.toml`;
   - `agent-core/01-layers-and-packages.md` §1.2 — allowlist `codelab_agent_io` без `toml`; §1.3 — состав `config/` ядра и `config/`, `cli/` пакета `_io` (D1);
   - `agent-core/10-core-assembly-and-profiles.md` §10.3 — `CoreConfig.projectRoot`/`withoutProject` до снимков по корням 8.10 (D9);
@@ -53,15 +53,15 @@
   - `agent-core/02-llm-contract.md` §2.10 — `createRoutedStreamFunction` (D11);
   - `agent-core/16-non-mvp-and-open-questions.md` — строки об удалении читателя `codelab.toml` и о формате конфига;
   - ADR-0001, п. 11 — примечание о решении 2026-10-29 со ссылкой на этот change (текст решения ADR не переписывается).
-- [ ] 0.3 `[agent]` План:
+- [x] 0.3 `[agent]` План:
   - `09-13-stage-8-mcp-config.md`, задача 8.5 — без чтения `codelab.toml`, `ConfigLegacyReadOnlyException`, `config migrate`, `toml`; с `config.legacy_found`; ссылка на этот change; DoD — `config_loader_test.dart`, строки R-16, E-02, E-03; абзац «OpenSpec change» — scope `add-agent-configuration` без `toml`;
   - `09-14-stage-9-switch-default.md` — задача 9.7: пользовательская документация описывает ручной перенос настроек по таблице §15.7 вместо `codelab config migrate`, `technology-stack.md` без `toml`; задача 9.10 удаляется (читателя нет).
-- [ ] 0.4 `[agent]` `agent-parity-goals.md` (решение пользователя 2026-10-29, Must-строка меняется явно):
+- [x] 0.4 `[agent]` `agent-parity-goals.md` (решение пользователя 2026-10-29, Must-строка меняется явно):
   - R-16 — новый текст: «`codelab.toml` не читается; если `config.yaml` нет, одно предупреждение `config.legacy_found` с путём и ссылкой на таблицу ручного переноса §15.7; при `config.yaml` — без предупреждения»; критерий — `core/config-legacy-found-warning` (`config_legacy_found_test.dart`); пометка «изменено решением пользователя 2026-10-29, change `add-agent-configuration`»; сценарий R-16 таблицы сценариев переписывается так же;
   - DF-12 — TOML-определения убраны, критерий — `core/config-rejects-yaml-agent-definitions` (ключ `agents.definitions` в YAML);
   - DF-15 — «неизвестный вид провайдера в `config.yaml` — ошибка конфигурации», критерий `core/config-unknown-provider-error`;
   - §6 «Критерий вывода Python-агента», п. 5 — пользовательская документация говорит, что настройки Python-агента переносятся вручную по таблице §15.7 (вместо миграции командой).
-- [ ] 0.5 `[client]` `09-11-stage-6-cli-mvp.md` — `codelab config check` через `codelab_setup/io.dart` в составе 8.5, `--cwd`; строка `config migrate` и упоминания `codelab.toml` удаляются (D14); `12-4-first-run-and-settings.md` — минимальный состав `codelab_setup` в 8.5 (§12.4.2), действие «Migrate to config.yaml» и `ConfigLegacyReadOnly` удаляются.
+- [x] 0.5 `[client]` `09-11-stage-6-cli-mvp.md` — `codelab config check` через `codelab_setup/io.dart` в составе 8.5, `--cwd`; строка `config migrate` и упоминания `codelab.toml` удаляются (D14); `12-4-first-run-and-settings.md` — минимальный состав `codelab_setup` в 8.5 (§12.4.2), действие «Migrate to config.yaml» и `ConfigLegacyReadOnly` удаляются.
 
 ## 1. Сторож ядра (D1)
 

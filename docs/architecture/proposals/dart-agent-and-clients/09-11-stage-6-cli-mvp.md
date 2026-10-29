@@ -106,8 +106,7 @@ codelab -p "<промпт>" [опции]             headless: один ход, 
 codelab sessions [--cwd <dir>] [--json]   список сессий агента для папки
 codelab profiles list|show <id>|add <id> ...|remove <id>
 codelab test-scenario <путь>... --agent <профиль> [опции]
-codelab config get|set|unset|path|check ...   конфиг встроенного агента (§12.4.8)
-codelab config migrate [<путь>] [--print] [--project|--local]   codelab.toml → config.yaml (agent-core §15.7; флаги слоя — этап 8, agent-core §17.5)
+codelab config get|set|unset|path|check ...   конфиг встроенного агента (§12.4.8); в 8.5 — только check [--cwd <dir>]
 codelab config export-providers|import-providers ...   обмен провайдерами без секретов (agent-core §17.14.4)
 codelab provider add|list|remove ...          провайдеры; add без флагов на TTY — мастер (§12.4.4)
 codelab mcp add|list|remove ...               MCP-серверы в конфиге
@@ -119,19 +118,21 @@ codelab trajectory export [<id>|--last] [флаги]   траектория се
 codelab --version | --help
 ```
 
-Подкоманды `config`, `provider`, `mcp` и `secret` по этапам: `config get|path|check` и
-`config migrate` — этап 8, задача 8.5 (чтение и проверка; план сборки встроенного агента в
-`config check` — этап 7, задача 7.6); `secret set|delete|list` — этап 8, задача 8.9 (нужна MVP);
+Подкоманды `config`, `provider`, `mcp` и `secret` по этапам: `config check [--cwd <dir>]` — этап 8,
+задача 8.5 (проверка; `get|path` — позже; план сборки встроенного агента в `config check` — этап 7,
+задача 7.6); `secret set|delete|list` — этап 8, задача 8.9 (нужна MVP);
 `config set|unset`, `provider add|list|remove`, `mcp add|list|remove` — этап 8, задача 8.10
 (Should — не блокирует MVP); мастер `provider add` — этап 9 (задача 9.6, Should);
 `config export-providers|import-providers` — после MVP (E-14). До своего этапа подкоманда не
 регистрируется (`codelab <команда>` → код 64 `Unknown command`). Это общая реализация ядра
 (agent-core-architecture §17.5.4, §17.5.5: флаги `--project`/`--local`, тексты, коды выхода
 0/1/2); CLI вызывает её через `codelab_setup/io.dart` и добавляет только мастер и проверку
-адреса к `provider add` (§12.4.4, §12.4.8). Они работают без запуска агента. Пока конфиг
-получен из устаревшего `codelab.toml`, подкоманды записи выходят с кодом 1 и подсказкой
-`Run "codelab config migrate" first: codelab.toml is read-only.`; `config migrate` — тот же
-перевод, что при чтении, и запись `config.yaml` (agent-core-architecture §15.7).
+адреса к `provider add` (§12.4.4, §12.4.8). Они работают без запуска агента. `codelab.toml` не читается и не
+переводится: команды `config migrate` нет (решение 2026-10-29, change `add-agent-configuration`,
+D14). В 8.5 создаётся минимальный пакет `codelab_setup` (§12.4.2): `codelab config check`
+регистрируется в `apps/codelab_cli` и вызывает `ConfigCommands` через `package:codelab_setup/io.dart`;
+корень состояния — `CODELAB_HOME`, как у `codelab-agent`, `cwd` — флаг `--cwd` (по умолчанию текущий
+каталог). Остальные подкоманды `config` до своих задач дают код 64 `Unknown command`.
 
 Скрипт прогона Terminal-Bench (`tool/bench/`, H-06) вызывает обычный `codelab -f …
 --output-format stream-json --approve allow-all` только внутри контейнера задачи

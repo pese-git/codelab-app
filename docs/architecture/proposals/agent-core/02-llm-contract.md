@@ -716,6 +716,8 @@ StreamFunction withFallback(List<ModelRef> chain, StreamFunction Function(ModelR
 StreamFunction withCredentials(CredentialSource? source, StreamFunction Function(String? credential) adapterFor, {required Logger logger});   // после MVP (§17.10.4, §17.10.6)
 StreamFunction withPromptTools(StreamFunction inner, {required Random random, required Logger logger});   // после MVP (§17.10.11)
 StreamFunction createStreamFunction(ProviderConfig config, CoreLlmServices services);   // собирает всю цепочку
+StreamFunction createRoutedStreamFunction(List<ProviderConfig> providers, CoreLlmServices services,
+    {Map<String, String> unavailable = const {}});   // несколько провайдеров конфига; этап 8.5, D11 change add-agent-configuration
 // CoreLlmServices — порты хоста для LLM (http.Client, Clock, Random, Logger); после MVP —
 // поле final LlmDiagnostics? diagnostics;   // снимки зависаний (§17.10.10), из AgentCoreServices.llmDiagnostics (§10.3)
 
@@ -742,8 +744,18 @@ final class FallbackNotice { final ModelRef from, to; final LlmErrorClass cause;
 
 Порядок обёрток (изнутри наружу): адаптер провайдера → `withCredentials` (§17.10.4, §17.10.6) →
 `withWatchdogs` → `withPromptTools` (только при `supportsTools == false`, §17.10.11) →
-`withTransientRetry` → `withFallback`; цепочку `withFallback` даёт `ModelRoleResolver` (§17.10.5). Хост получает уже собранную функцию из `createStreamFunction`. Цикл получает
+`withTransientRetry` → `withFallback`; цепочку `withFallback` даёт `ModelRoleResolver` (§17.10.5). Хост получает уже собранную функцию из `createStreamFunction` (один провайдер) или `createRoutedStreamFunction` (несколько). Цикл получает
 `FallbackNotice` через `onNotice` и эмитит `AgentError(cls: fallback, retrying: true)`.
+
+**Маршрутизация по провайдерам** (`createRoutedStreamFunction`, change `add-agent-configuration`, D11).
+Конфиг (§15.4) задаёт несколько провайдеров, а `ModelRef.provider` уже называет провайдера
+(§2.12.2). Фабрика строит по одной цепочке `createStreamFunction` на провайдера лениво, при первом
+запросе, и выбирает её по `model.provider`; внутренности адаптеров остаются закрытыми (PKG-5), а
+второй копии маршрута у хостов (бинарь, встроенный хост этапа 7) нет. Провайдер из `unavailable`
+(`CoreConfig.providerProblems`: незаданная `api_key_env`, недоступный `api_key_secret`) даёт поток с
+ошибкой класса `auth` и текстом причины (`API key variable <VAR> is not set`) без HTTP-запроса;
+неизвестный провайдер — `badRequest` `unknown provider <id>`. Цепочку `withFallback` фабрика не
+строит: это делает `ModelRoleResolver` (§17.10.5), ключ `agent.fallback` до него не применяется.
 
 ### 2.10.1. Watchdogs
 

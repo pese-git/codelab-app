@@ -93,9 +93,11 @@ final class SecretResolver {
 `ConfigWatcher` из `codelab_agent_io`; мобильный и web-хосты — поверх хранилища приложения.
 
 ```dart
+enum ConfigIssueKind { syntax, profile, unknownKey, type, value, inlineSecret, semantic }
 final class ConfigIssue {          // одна проблема валидации (§15.5)
-  final String key;                // путь ключа: "mcp.servers[github].url"
-  final String source;             // путь файла, "legacy:<путь codelab.toml>" или "env:CODELAB_PROVIDER_CONFIG"
+  final ConfigIssueKind kind;      // класс проблемы: тестам и ConfigInlineSecretException не нужен разбор текста
+  final String key;                // путь ключа: "mcp.servers[github].url"; "" — файл целиком (синтаксис)
+  final String source;             // путь файла, "env", "flags", "app-storage" или "env:CODELAB_PROVIDER_CONFIG"
   final int? line, column;         // из ConfigTree.positions (§15.1); null — у слоя без позиций
   final String message;            // для человека; никогда не содержит значения секрета
 }
@@ -103,8 +105,11 @@ final class ConfigLoadResult {
   final CoreConfig? config;        // null ⇔ issues не пусто
   final List<ConfigIssue> issues, warnings;
   final List<String> sources;      // слои по порядку: "defaults", пути файлов, "env:…", "flags"
-  final bool legacy;               // слои 2–4 прочитаны из codelab.toml (§15.7): запись запрещена
 }
+// codelab.toml не читается (§15.7, решение пользователя 2026-10-29): поля legacy нет, найденный
+// файл — предупреждение config.legacy_found в warnings.
+// ConfigInlineSecretException.suggestedSecretName добавляет change add-agent-secret-store (8.9)
+// вместе с SecretNames; в 8.5 исключение несёт только key первой проблемы inlineSecret.
 abstract interface class ConfigSource {
   Future<ConfigLoadResult> load({required String cwd});
   /// Изменился один из файлов, прочитанных для этого cwd (уже после debounce 300 мс).
@@ -199,22 +204,15 @@ final class ConfigWriter {
       required ConfigLoader loader, required Logger logger});
   Future<ConfigSnapshot> read(ConfigTarget target);
   /// Применяет правки к YAML-документу base через YamlEditor, проверяет итог и атомарно
-  /// заменяет файл (§17.5.5). ConfigLegacyReadOnlyException — активный конфиг cwd прочитан из
-  /// codelab.toml (§15.7); ConfigConflictException — файл изменился после read;
+  /// заменяет файл (§17.5.5). ConfigConflictException — файл изменился после read;
   /// ConfigInlineSecretException; ConfigException(issues) — итог невалиден или правку нельзя
   /// выполнить без потери структуры документа. Файл при ошибке не меняется.
   Future<ConfigWriteResult> apply(ConfigSnapshot base, List<ConfigEdit> edits);
-  /// Только для `config migrate` (§15.7): создаёт новые файлы целиком, все или ни одного;
-  /// существующая цель — ConfigConflictException. Тот же .lock, tmp + fsync + rename.
-  Future<List<ConfigWriteResult>> writeMigrated(Map<ConfigTarget, String> documents);
 }
 final class ConfigConflictException implements Exception { final String path; }
-/// Конфиг получен из устаревшего codelab.toml; запись — только после `codelab config migrate`.
-final class ConfigLegacyReadOnlyException implements Exception { final List<String> legacyFiles; }
 ```
 
-Исключения `apply` — контракт для вызывающих: `ConfigLegacyReadOnlyException`,
-`ConfigConflictException`, `ConfigInlineSecretException` (подкласс `ConfigException`, поэтому
+Исключения `apply` — контракт для вызывающих: `ConfigConflictException`, `ConfigInlineSecretException` (подкласс `ConfigException`, поэтому
 проверяется раньше него), `ConfigException(issues)`. Клиентский порт `AgentConfigStore`
 переводит каждое в свой результат сохранения (dart-agent-and-clients §12.4.2).
 
@@ -387,8 +385,6 @@ TTY — весь stdin, один завершающий `\n` отбрасыва�
 
 ```text
 apply(base, edits):
-0. loader.legacyActive(base.target.cwd) → ConfigLegacyReadOnlyException(файлы); ничего не пишется
-     (§15.7: первый config.yaml молча выключил бы настройки из codelab.toml)
 1. для каждой правки SetValue/UpsertMcpServer: d := SettingsRegistry.lookup(key); нет →
      ConfigException("неизвестный ключ …"); UnsetValue принимает и ключ вне реестра, если он есть
      в файле (так удаляются опечатки и запрещённые ключи вроде api_key)
@@ -447,8 +443,10 @@ apply(base, edits):
 7. После правок документ разбирается заново (`package:yaml`, профиль §15.5) и проверяется на шаге
    6 алгоритма выше; результат, не прошедший проверку, не пишется.
 
-**Подкоманды CLI** (общая реализация в `codelab_agent_io/lib/src/cli/`, у `codelab` и
-`codelab-agent` одинаковые; слой по умолчанию — `user`, `--project` и `--local` — слои 3 и 4
+**Подкоманды CLI** (общая реализация в `codelab_agent_io/lib/src/cli/` — типизированные методы
+`ConfigCommands` с результатом `{exitCode, stdout, stderr}`; аргументы разбирают сами приложения
+своим `package:args`, которого в allowlist `codelab_agent_io` нет; `codelab` вызывает реализацию
+через `package:codelab_setup/io.dart`; у `codelab` и `codelab-agent` подкоманды одинаковые; слой по умолчанию — `user`, `--project` и `--local` — слои 3 и 4
 для текущего `cwd`; код выхода 0 — успех, 1 — ошибка валидации или конфликт, 64 — ошибка
 использования, как у `codelab -p`, dart-agent-and-clients §9.11):
 
@@ -458,8 +456,7 @@ apply(base, edits):
 | `config get <key> [--layer user\|project\|local\|merged]` | значение (по умолчанию итоговое) и слой-источник; секреты — только имя |
 | `config set <key> <value> [--project\|--local]` | `SetValue`; значение разбирает `SettingsRegistry.parseCliValue` (списки и таблицы — JSON) |
 | `config unset <key> [--project\|--local]` | `UnsetValue` |
-| `config check` | полная загрузка §15.5 для `cwd`; печать проблем и предупреждений; при активном `codelab.toml` — строка `Source: legacy codelab.toml (read-only)` |
-| `config migrate [<path>] [--print] [--project\|--local]` | перевод `codelab.toml` в `config.yaml` (§15.7): пишет новые файлы через `writeMigrated`, `--print` — только в stdout; `codelab.toml` не трогает |
+| `config check [--cwd <dir>]` | полная загрузка §15.5 для `cwd`; печать слоёв, проблем и предупреждений (включая `config.legacy_found`, §15.7), последняя строка `Config: valid` или `Config: invalid (issues: <n>)`; код выхода `0` / `1` / `64`; ничего не пишет. Появляется первой, в change `add-agent-configuration` (8.5, D13) |
 | `provider add <id> --kind <kind> [--base-url U] --model M --context-window N [--api-key-secret S \| --api-key-env V \| --api-key-stdin] [--default]` | одна `apply` со списком `SetValue` ключей `providers.<id>.*` и `providers.<id>.models.<M>.*`; `--api-key-stdin` сначала пишет секрет `codelab/<id>`; `--default` — `SetValue("agent.default_model", "<id>/<M>")` |
 | `provider list` | id, kind, base_url, модели, источник ключа (`secret codelab/openai: found`); первая строка — `Secrets: <backend.id>`, при `unavailableReason` — `Secrets: env (<причина>)` |
 | `provider remove <id>` | `RemoveTable("providers.<id>")`; ссылка из `agent.*` или `llm.roles.*` → ошибка валидации с подсказкой сменить модель |
@@ -470,13 +467,8 @@ apply(base, edits):
 | `config export-providers [--layer user\|project\|local\|merged] [--output F] [--provider ID]…` | после MVP: файл обмена провайдеров без значений секретов (§17.14.4.3) |
 | `config import-providers <file\|-> [--force] [--dry-run] [--skip-agent] [--map-secret OLD=NEW]… [--project\|--local]` | после MVP: слияние провайдеров, моделей и ролей одной `apply`; существующее не меняется без `--force` (§17.14.4.4) |
 
-Пока активный конфиг получен из `codelab.toml`, подкоманды записи (`config set|unset`,
-`provider add|remove`, `mcp add|remove`, после MVP — `config import-providers`) получают
-`ConfigLegacyReadOnlyException`, печатают
-`Run "codelab config migrate" first: codelab.toml is read-only.` и выходят с кодом 1;
-`config export-providers` работает;
-`secret set|delete` хранилище секретов меняют (это не конфиг), а `provider add --api-key-stdin`
-отказывает до записи секрета.
+Команды `config migrate` нет: `codelab.toml` не читается и не переводится (§15.7), запись конфига
+от его наличия не зависит.
 
 Клиент `codelab` дополняет `provider add` мастером: без обязательных флагов на TTY подкоманда
 запускает общий автомат клиентов, а с флагами проверяет адрес запросом списка моделей до записи
@@ -915,26 +907,6 @@ agent:
   fallback: [anthropic/claude-sonnet-4]
 ```
 
-**Устаревший файл.** У пользователя только `~/.codelab/codelab.toml`; `codelab config set
-budget.max_steps 80`:
-
-```text
-Run "codelab config migrate" first: codelab.toml is read-only.
-```
-
-`codelab config migrate --print` печатает (фрагмент):
-
-```yaml
-# --- /Users/me/.codelab/config.yaml
-agent:
-  # migrate: dropped llm.temperature (not configurable)
-  default_model: openai/gpt-4o
-providers:
-  openai:
-    kind: openai-compatible
-    api_key_env: OPENAI_API_KEY
-```
-
 **`--debug-secrets`.** Строки лога одного запроса:
 
 ```json
@@ -1026,11 +998,11 @@ Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.ya
 * `config_reload_test.dart`: правка `permissions.deny` → действует на следующем вызове; `agent.default_model` → только новые сессии; `logging.file` → `Restart required: logging.file` в `/config reload` и `/status`; невалидная правка → прежний снимок, ни одного кадра клиенту, `/status` со строкой `Config: reload failed`; правка списка моделей → `config_option_update` с полным снимком (CFG-15, CFG-16).
 * `mcp_apply_config_test.dart`: изменён `url` одного сервера → переподключён только он; удалён сервер → инструменты убраны после вызовов в полёте; одноимённый `session`-сервер не тронут; backoff неизменённого сервера продолжается (CFG-17).
 * `config_watcher_test.dart` (`codelab_agent_io`): три записи за 200 мс → одна перезагрузка через 300 мс после последней; замена через rename замечена; файл появился после старта — замечен; та же sha256 — без перезагрузки; режим опроса на временном каталоге.
-* `config_writer_test.dart`: комментарии (в том числе хвостовые), пустые строки, порядок ключей и CRLF сохранены побайтово вне изменённого узла; новый ключ — в конец своего отображения, недостающие предки — в блочном стиле с отступом файла; правка внутри flow-списка `[…]` сохраняет flow-стиль; строки `off`, `yes`, `${VAR}` записаны в кавычках и читаются обратно строками; элемент `mcp.servers` находится и заменяется по `name`, новый — в конец списка; `RemoveTable("providers.local")` удаляет `providers.local` вместе с `models."qwen2.5-coder-32b"` и комментариями внутри, комментарий над следующим ключом сохранён; `RemoveTable` несуществующего ключа и ключа вне схемы → `ConfigException`; сегмент в кавычках (`models."qwen2.5-coder-32b"`) находится и создаётся одним ключом; отказ `YamlEditor` → `ConfigException` с `edit the file manually`, файл не изменён; невалидный итог → файл не изменён; правка файла между `read` и `apply` → `ConfigConflictException`; `mcp.servers` в недоверенный проектный слой → отказ с подсказкой `--local`; `trusted_projects` в проектный слой → отказ; при активном `codelab.toml` → `ConfigLegacyReadOnlyException`, файлов не создано (CFG-13, CFG-20).
+* `config_writer_test.dart`: комментарии (в том числе хвостовые), пустые строки, порядок ключей и CRLF сохранены побайтово вне изменённого узла; новый ключ — в конец своего отображения, недостающие предки — в блочном стиле с отступом файла; правка внутри flow-списка `[…]` сохраняет flow-стиль; строки `off`, `yes`, `${VAR}` записаны в кавычках и читаются обратно строками; элемент `mcp.servers` находится и заменяется по `name`, новый — в конец списка; `RemoveTable("providers.local")` удаляет `providers.local` вместе с `models."qwen2.5-coder-32b"` и комментариями внутри, комментарий над следующим ключом сохранён; `RemoveTable` несуществующего ключа и ключа вне схемы → `ConfigException`; сегмент в кавычках (`models."qwen2.5-coder-32b"`) находится и создаётся одним ключом; отказ `YamlEditor` → `ConfigException` с `edit the file manually`, файл не изменён; невалидный итог → файл не изменён; правка файла между `read` и `apply` → `ConfigConflictException`; `mcp.servers` в недоверенный проектный слой → отказ с подсказкой `--local`; `trusted_projects` в проектный слой → отказ(CFG-13).
 * `config_writer_atomic_test.dart`: сбой после записи tmp и до rename → исходный файл цел, tmp удалён при следующей записи; символическая ссылка сохраняется, правится цель.
 * `secret_store_backends_test.dart`: fake `ProcessRunner` — значение секрета ни разу не встречается в argv `security` и `secret-tool`, только в stdin; таймаут 10 с → `SecretStoreUnavailableException`; `auto` без D-Bus → `env` с предупреждением; `file` с правами `0644` → отказ чтения (CFG-10, CFG-11). Реальные хранилища ОС — интеграционные тесты с тегом `os-keychain`, вне обязательного CI.
 * `secret_resolver_test.dart`: `CODELAB_SECRET_CODELAB_OPENAI` побеждает хранилище; отсутствие → `AgentError` с текстом `codelab secret set`; `invalidate` после перезагрузки перечитывает; коллизия `envOverride` при `secret set` отклонена; `SecretNames.forMcp("GitHub", "Authorization") == "codelab/mcp/github/authorization"` и `suggestFor` для пути MCP-заголовка дают одно имя, проходящее `pattern`.
-* `cli_config_commands_test.dart`: `codelab config set|get|unset|path|check`, `provider add --api-key-stdin` (секрет записан, в конфиге только имя), `mcp add|list|remove`, `secret set` со значением аргументом → код 64; при активном `codelab.toml` `config set` и `provider add` → код 1 с подсказкой `codelab config migrate`, `provider add --api-key-stdin` не пишет секрет; `config migrate` пишет `config.yaml`, повторный запуск → код 1 `already exists`, `--print` ничего не пишет (CFG-20).
+* `cli_config_commands_test.dart`: `codelab config set|get|unset|path|check`, `provider add --api-key-stdin` (секрет записан, в конфиге только имя), `mcp add|list|remove`, `secret set` со значением аргументом → код 64.
 
 ---
 

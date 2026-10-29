@@ -38,24 +38,26 @@
    Отступление: в `codelab-agent serve --ws` MCP выключен (D3, §13.15 документа ядра). Серверы
    из конфигурации ядро принимает, но читает их только change `add-agent-configuration` (8.5).
    Отметки DoD — ниже.
-5. **8.5. Конфигурация:** модель и валидация — `packages/dart/codelab_agent_core/lib/src/config/core_config.dart` (agent-core-architecture §1.3)
-   (`CoreConfig`, `validate()` → список `ConfigIssue(path, message)`); загрузка —
+5. **8.5. Конфигурация** (change [`add-agent-configuration`](../../../../openspec/changes/add-agent-configuration/)):
+   модель и валидация — `packages/dart/codelab_agent_core/lib/src/config/` (agent-core-architecture §1.3):
+   `ConfigTree`, `ConfigIssue` (с `kind`), чистая функция `CoreConfig.fromLayers(List<ConfigTree>)` →
+   `ConfigLoadResult` (проблемы с файлом, строкой, столбцом и путём ключа); загрузка —
    `packages/dart/codelab_agent_io/lib/src/config/config_loader.dart`. Порядок слоёв: значения по
    умолчанию < `~/.codelab/config.yaml` < `<cwd>/.codelab/config.yaml` <
-   `<cwd>/.codelab/config.local.yaml` < переменные `CODELAB_*` < флаги командной строки
-   (agent-core-architecture §15.2). Формат — YAML в строгом профиле (§15.5): разбор
-   `package:yaml` с позициями ошибок, запись `package:yaml_edit` (§17.5.5). Старый `codelab.toml`
-   Python-агента читается только для чтения и только пока нет ни одного YAML-файла
-   (`lib/src/config/legacy/`, `package:toml`); при любом YAML-файле он игнорируется с
-   предупреждением `config.legacy_ignored`, а пока он активен, запись конфига отклоняется
-   (`ConfigLegacyReadOnlyException`). Команда `codelab config migrate [путь]` (и
-   `codelab-agent config migrate`) пишет `config.yaml` с YAML-комментарием о каждом
-   отброшенном ключе, `--print` — только печатает; `codelab.toml` не удаляется
-   (agent-core-architecture §15.7; см. также §7б). Команды `codelab-agent config check` и
-   `codelab config check`. Тесты: `core/config-reads-legacy-codelab-toml`,
-   `config_yaml_profile_test.dart`, `config_legacy_ignored_test.dart`. Здесь же читаются ключи
-   `redact.*` редакции секретов (задача 8.11; agent-core-architecture §12.4.3, правило доверия
-   проекту §15.3).
+   `<cwd>/.codelab/config.local.yaml` < `--config`/`CODELAB_CONFIG` < переменные `CODELAB_*` <
+   флаги командной строки (agent-core-architecture §15.2). Формат — YAML в строгом профиле (§15.5):
+   разбор `package:yaml` с позициями ошибок (единственная новая зависимость пакета; `yaml_edit`
+   приходит с записью в 8.10). Старый `codelab.toml` Python-агента **не читается** (решение
+   пользователя 2026-10-29): если нет ни одного YAML-файла слоёв 2–4 и не задан `--config`,
+   загрузчик пишет одно предупреждение `config.legacy_found` с путями найденных файлов и ссылкой
+   на таблицу ручного переноса (agent-core-architecture §15.7; см. также §7б); `toml`,
+   `ConfigLegacyReadOnlyException` и `config migrate` не вводятся. Подключаются MCP-серверы
+   конфигурации (`mcp.servers`, `call_timeout`) и несколько провайдеров
+   (`createRoutedStreamFunction`). Подкоманды `codelab-agent config check` и
+   `codelab config check [--cwd <dir>]` (через мост `codelab_setup`). Тесты:
+   `core/config-legacy-found-warning`, `config_yaml_profile_test.dart`,
+   `config_legacy_found_test.dart`. Здесь же читаются ключи `redact.*` редакции секретов
+   (задача 8.11; agent-core-architecture §12.4.3, правило доверия проекту §15.3).
 6. **8.6. Инструкции проекта** (agent-core-architecture §11.5): `ProjectContextLoader` хоста
    читает через `ExecutionEnv` (граница `BoundedEnv` соблюдается) файлы от `cwd` вверх до корня
    git-репозитория (без репозитория — только `cwd`), на каждом уровне `AGENTS.md` и `CLAUDE.md`,
@@ -105,9 +107,10 @@
 
 **OpenSpec change.** [`add-agent-mcp-client`](../../../../openspec/changes/archive/2026-10-29-add-agent-mcp-client/) (8.1–8.4; scope: протокол MCP, транспорты, имена и
 виды MCP-инструментов, проверка разрешений; решение о библиотеке MCP — в его `design.md`),
-`add-agent-configuration` (8.5; scope: файлы, порядок слоёв, формат YAML и его профиль, чтение
-`codelab.toml` только для чтения, новые зависимости `yaml_edit` и `toml` как решение о
-технологии по `AGENTS.md` §4), `add-project-instructions-and-commands` (8.6–8.8),
+`add-agent-configuration` (8.5; scope: файлы, порядок слоёв, формат YAML и его профиль,
+предупреждение `config.legacy_found` вместо чтения `codelab.toml`, подкоманда `config check`,
+минимальный `codelab_setup`; новая зависимость `yaml` как решение о технологии по
+`AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), `add-project-instructions-and-commands` (8.6–8.8),
 `add-agent-secret-store` (8.9; scope: имена секретов, порядок разрешения, бэкенды ОС, команды
 `secret`, диагностика без значений) и `add-config-writer-and-reload` (8.10, Should; scope:
 запись конфига, наблюдатель и перезагрузка, реестр настроек, `McpSupervisor`, команды
@@ -151,7 +154,7 @@ stdio MUST) записано в §13.15, включение явным флаг�
 
 * `packages/dart/codelab_agent_mcp/test/mcp_tool_goes_through_policy_test.dart: MCP tool is not executed without a permission decision` (закрывает F5.1). **Выполнено** (8.3, change `add-agent-mcp-client`).
 * `packages/dart/codelab_agent_mcp/test/streamable_http_test.dart` на `MockClient`. **Выполнено** (8.1, обе эпохи MCP; change `add-agent-mcp-client`).
-* `packages/dart/codelab_agent_io/test/config/config_loader_test.dart: invalid config reports key path and line` — битый конфиг даёт ошибку с путём ключа, а не исключение при первом ходе.
+* `packages/dart/codelab_agent_io/test/config/config_loader_test.dart: invalid config reports key path and line` — битый конфиг даёт ошибку с путём ключа, а не исключение при первом ходе (8.5, change `add-agent-configuration`).
 * Фикстуры `acp/session-new-with-mcp`, `acp/available-commands-no-tools` зелёные. `acp/session-new-with-mcp` — **выполнено** (8.4, change `add-agent-mcp-client`); `acp/available-commands-no-tools` — задачи 8.6–8.8.
 * `melos run guard`: `codelab_agent_mcp` без `dart:io`. **Выполнено**: правило пакета в `packages/dart/codelab_architecture_tests/test/support/rules.dart`, allowlist — `pubspec_allowlist_test.dart` (D14 change `add-agent-mcp-client`).
 * Чек-лист библиотеки MCP заполнен в `design.md`, решение записано. **Выполнено**: D1 change `add-agent-mcp-client` — у каждого кандидата есть «нет», свой минимальный клиент; `THIRD_PARTY_NOTICES.md` не меняется.
@@ -172,7 +175,7 @@ stdio MUST) записано в §13.15, включение явным флаг�
   | R-08 | `acp/slash-help`, `acp/slash-mode-plan`, `acp/mcp-prompt-command` | встроенные команды агента и команды из MCP-промптов выполняются |
   | R-14 | `core/litellm-proxy-base-url` | LiteLLM Proxy как OpenAI-совместимый `baseUrl` из конфигурации |
   | R-15 | `core/agent-definition-markdown-frontmatter`, `acp/set-config-option-agent` | опция `agent` содержит определение из `.codelab/agents/*.md`, многострочный `tools` разобран, битый YAML — диагностика с именем файла |
-  | R-16 | `core/config-reads-legacy-codelab-toml`, `cli/config-legacy-read-only` | `codelab.toml` читается без `config.yaml`; неизвестный провайдер — ошибка, не mock; рядом с `config.yaml` — одно предупреждение `config.legacy_ignored`; `config migrate` пишет `config.yaml`. Отказ записи при активном `codelab.toml` проверяется, когда есть команды записи (8.10); до 8.10 команд записи нет |
+  | R-16 | `core/config-legacy-found-warning` | `codelab.toml` не читается: без `config.yaml` — одно предупреждение `config.legacy_found` с путём и ссылкой на таблицу ручного переноса §15.7; при `config.yaml` предупреждения нет. Изменено решением пользователя 2026-10-29 (change `add-agent-configuration`); строки DF-12 и DF-15 — `core/config-rejects-yaml-agent-definitions`, `core/config-unknown-provider-error` |
   | R-24 | `acp/session-new-with-mcp` | сервер из `session/new.mcpServers` подключается, его инструмент доступен модели в этой сессии; на этапе 4 такие серверы только пропускались с `mcp.server.skipped` (R-02) |
 * 8.9 (MVP): `secret_resolver_test.dart`, `secret_store_backends_test.dart`,
   `debug_secrets_test.dart` зелёные; `codelab secret set codelab/openai` с ключом из stdin, затем

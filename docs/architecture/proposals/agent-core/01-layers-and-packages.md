@@ -53,7 +53,7 @@ flowchart TB
 | Пакет | Разрешённые `dependencies` |
 |---|---|
 | `codelab_agent_core` | `http`, `meta`, `collection`, `async`, `crypto` (SHA-256: суффикс имени MCP-инструмента §6.4, ключ картинки C-16 §17.11.2.2, PKCE §17.10.6, снимок запроса §17.10.10; официальный пакет dart-lang на чистом Dart, работает в web) |
-| `codelab_agent_io` | `codelab_agent_core`, `path`, `meta`, `async`, `yaml` (разбор конфига и frontmatter определений агентов и skills с позициями ошибок, §15, §15.8), `yaml_edit` (запись конфига с сохранением форматирования, §17.5.5), `toml` (только чтение устаревшего `codelab.toml`, §15.7) |
+| `codelab_agent_io` | `codelab_agent_core`, `path`, `meta`, `async`, `yaml` (разбор конфига и frontmatter определений агентов и skills с позициями ошибок, §15, §15.8), `yaml_edit` (запись конфига с сохранением форматирования, §17.5.5; в `pubspec.yaml` появляется вместе с первой записью, change 8.10). `toml` в allowlist нет: `codelab.toml` не читается (§15.7, решение пользователя 2026-10-29) |
 | `codelab_agent_mcp` | `codelab_agent_core`, `http`, `meta`, `async` |
 | `codelab_agent_lsp` (после MVP, §17.8.2) | `codelab_agent_core`, `meta`, `async` |
 | `codelab_agent_a2a` (после MVP, §17.15.2) | `codelab_agent_core`, `http`, `meta`, `async` |
@@ -125,7 +125,8 @@ packages/dart/codelab_agent_core/
     host/      host_profile.dart build_agent_core.dart services.dart
     mcp/       mcp_server_config.dart mcp_transport.dart mcp_connector.dart mcp_tool_name.dart
                (этап 8: порты и правило имён без протокола MCP; клиент — в codelab_agent_mcp)
-    config/    core_config.dart config_tree.dart validate.dart (CoreConfig.fromLayers, §15)
+    config/    config_tree.dart config_issue.dart schema.dart core_config.dart
+               resolve.dart (CoreConfig.fromLayers) redact_settings.dart (§15; без разборщиков и файлов, CFG-5)
     prompts/   prompts.g.dart compose.dart template.dart
     runtime/   agent_runtime.dart agent_session.dart
     testing/   scripted_stream_function.dart fake_clock.dart sequential_id_generator.dart
@@ -138,7 +139,9 @@ packages/dart/codelab_agent_io/
                     file_session_lease_store.dart process_probe.dart (после MVP, §17.6.8)
   lib/src/spill/    local_spill_store.dart (этап 3, §17.4)
   lib/src/secrets/  env_secret_store.dart keychain_secret_store.dart
-  lib/src/config/   config_loader.dart yaml_reader.dart legacy_toml_reader.dart config_writer.dart (§15, §17.5)
+  lib/src/config/   config_loader.dart yaml_reader.dart environment_layer.dart
+                    legacy_notice.dart (наличие codelab.toml без чтения, §15.7) config_writer.dart (§15, §17.5)
+  lib/src/cli/      config_commands.dart (общая логика подкоманд `config`, §17.5.5)
   lib/src/mcp/      stdio_process_transport.dart
   lib/src/process/  local_process_launcher.dart (после MVP, §17.8.2)
 

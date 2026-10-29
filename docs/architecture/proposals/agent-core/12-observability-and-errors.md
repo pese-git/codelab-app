@@ -83,8 +83,8 @@ final class LogRecord {           // то, что получает sink хост
 | `compaction` | `compaction.start`, `compaction.end`, `compaction.failed` |
 | `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`trace`), `mcp.servers.replace_failed`, `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
 | `acp` | `acp.frame.in`, `acp.frame.out`, `acp.frame.bad`, `acp.cancel.no_turn`, `acp.prompt.rejected`, `acp.detached`, `acp.client_capabilities.absent` (§13.2), `acp.terminal.release_failed` (§13.9) |
-| `host` | `host.plan`, `host.config.loaded` |
-| `config` | `config.project.untrusted_key` (§15.3), `config.legacy_ignored`, `config.legacy_key_dropped`, `config.legacy_active` (§15.7) |
+| `host` | `host.plan`, `host.config.loaded`, `serve.config.invalid` (бинарь `serve`, ошибка загрузки конфига) |
+| `config` | `config.env.unknown`, `config.project.untrusted_key` (§15.3), `config.key.not_applied` (§15.5), `config.provider.key_missing`, `config.secret.unavailable`, `config.file.ignored`, `config.legacy_found` (§15.7), `config.session.outside_root` (§10.3); таблица ниже |
 
 События `mcp.*` (этап 8; `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md`, D13). `session_id` есть
 всегда, `server` — `name` сервера:
@@ -104,6 +104,27 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp.tool.description_truncated` | info | `tool`, `length` |
 | `mcp.call.cancelled`, `mcp.call.timeout` | info | `tool_call_id`, `request_id` |
 | `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`, `subscription_failed`, `server_request`, `notification_stream_closed` — конец legacy GET-потока, поле `reason` (`stream closed`, `stream error`, `event too large`, `HTTP <status>`, `connection failed: <runtimeType>`), `stream_resume_failed` — неудачное возобновление потока ответа); у `subscription_failed` при сбое переиздания подписки — `error` (`runtimeType`); у `server_request` — `method` запроса сервера, не длиннее 64 символов (рун) |
+
+События `config.*` и загрузки конфига (change `add-agent-configuration`, D16; новые отмечены).
+Значения ключей, переменных и секретов в поля не попадают: только пути ключей, имена переменных и
+секретов, источники и пути файлов:
+
+| Событие | Уровень | Поля |
+|---|---|---|
+| `host.config.loaded` | info | `sources`, `warnings` (число), `project_root` |
+| `serve.config.invalid` | error | `issues` — список `{source, line, column, key, kind}`; те же строки в stderr, код выхода `64` |
+| `config.env.unknown` | warning | `message` |
+| `config.project.untrusted_key` | warning | `key`, `source` |
+| `config.key.not_applied` (новое) | warning | `key`, `source`; ключ без потребителя или раздел «после MVP», один раз на ключ за загрузку (§15.5) |
+| `config.provider.key_missing` (новое) | warning | `provider`, `variable` |
+| `config.secret.unavailable` (новое) | warning | `key` |
+| `config.file.ignored` (новое) | warning | `path`, `hint` (`config.yml` рядом с `config.yaml`) |
+| `config.legacy_found` (новое) | warning | `files` (только пути; содержимое файла не читается, §15.7) |
+| `config.session.outside_root` (новое) | info | `session_id`, `cwd`, `config_root` |
+| `mcp.server.skipped` | info | `server`, `reason: "disabled in config"` (новая причина для `enabled: false`) |
+
+Прежние `config.legacy_ignored`, `config.legacy_key_dropped` и `config.legacy_active` удалены:
+`codelab.toml` не читается (§15.7).
 
 В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов
 и ответов; причины ошибок транспорта формирует наш код, без текста заголовков (OBS-инварианты,

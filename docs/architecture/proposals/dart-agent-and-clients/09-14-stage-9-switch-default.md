@@ -47,10 +47,12 @@
    матрицы до кода, пары "тест → реализация" в `tasks.md`; и правило итераций §9.0 п.8: unit-тесты
    на каждое новое поведение, интеграционные — на каждую пересечённую границу), `platform-integration.md`,
    `technology-stack.md`
-   (`args`, `yaml`, `yaml_edit`, `toml` только для чтения `codelab.toml`); пользовательская
+   (`args`, `yaml`, `yaml_edit`; без `toml` — `codelab.toml` не читается, решение пользователя
+   2026-10-29, change `add-agent-configuration`); пользовательская
    документация: установка (скрипты §12.7.5, проверка подписи вручную — `docs/release/verify.md`),
-   README репозитория со ссылками на установку и `PRIVACY.md` (D-18), конфигурация (`config.yaml`), LiteLLM Proxy как `baseUrl`, миграция с
-   `codelab.toml` командой `codelab config migrate`.
+   README репозитория со ссылками на установку и `PRIVACY.md` (D-18), конфигурация (`config.yaml`), LiteLLM Proxy как `baseUrl`, ручной перенос настроек Python-агента
+   из `codelab.toml` по таблице соответствия ключей (agent-core-architecture §15.7) вместо команды
+   `codelab config migrate`, которой нет.
 8. **9.8. Ручная проверка совместимости с Zed** — чек-лист ниже («Чек-лист Zed»); проводит
    ответственный за релиз. Сверка с другим ACP-агентом — не на глаз, а диффом trace на том же
    сценарии (там же).
@@ -61,11 +63,6 @@
    со строкой Must матрицы. Тогда Python-агент удаляется вместе с Python TUI отдельным change
    `retire-python-agent`; команда `codelab` принадлежит CLI, `codelab serve` — алиас на
    `codelab-agent serve` в течение этой одной `stable`-версии.
-10. **9.10. Чтение `codelab.toml`:** после переключения по умолчанию чтение устаревшего файла
-    объявляется устаревшим — подсказка при старте (agent-core-architecture §15.7) называет срок
-    удаления. Само удаление читателя, `package:toml` и команды `config migrate` — отдельный
-    OpenSpec change `remove-legacy-codelab-toml` после вывода Python-агента (9.9); до него
-    `core/config-reads-legacy-codelab-toml` остаётся обязательным тестом.
 11. **9.11. Решение о песочнице ОС (P-13):** пересмотреть Won't «сейчас» по модели угроз после
     переключения по умолчанию: оставить границу папки и одобрения, песочница только на macOS или
     полноценная песочница на трёх ОС (agent-core-architecture §16.3). Итог — ADR; при решении
