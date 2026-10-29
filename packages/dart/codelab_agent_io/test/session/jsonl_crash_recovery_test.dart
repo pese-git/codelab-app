@@ -6,6 +6,7 @@ import 'package:codelab_agent_core/testing.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:test/test.dart';
 
+import '../support/dart_executable.dart';
 import 'journal_helpers.dart';
 
 /// Задача 6.2: журнал на диске после сбоя загружается через
@@ -42,7 +43,7 @@ void main() {
   });
 
   test('core/session-crash-mid-turn-loads: SIGKILL mid-write', () async {
-    final child = await Process.start(_dartExecutable(), [
+    final child = await Process.start(dartExecutable(), [
       'test/session/crash_child.dart',
       root,
       id,
@@ -127,23 +128,6 @@ void _expectReadable(File file) {
   for (final line in file.readAsLinesSync()) {
     expect(() => jsonDecode(line), returnsNormally, reason: line);
   }
-}
-
-/// Исполняемый `dart`: под `flutter test` (`melos run check`)
-/// `Platform.resolvedExecutable` — это `flutter_tester`, который не
-/// запускает скрипты, поэтому SDK ищется через `FLUTTER_ROOT`, как в
-/// `acp_transports_test.dart`.
-String _dartExecutable() {
-  final name = Platform.isWindows ? 'dart.exe' : 'dart';
-  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
-  if (flutterRoot != null) {
-    final dart = File('$flutterRoot/bin/cache/dart-sdk/bin/$name');
-    if (dart.existsSync()) {
-      return dart.path;
-    }
-  }
-  final current = File(Platform.resolvedExecutable);
-  return current.uri.pathSegments.last == name ? current.path : name;
 }
 
 String _ioPackageDir() {

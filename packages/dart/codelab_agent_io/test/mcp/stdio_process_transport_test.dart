@@ -6,6 +6,8 @@ import 'package:codelab_agent_core/testing.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:test/test.dart';
 
+import '../support/dart_executable.dart';
+
 /// stdio-транспорт MCP на настоящих процессах (agent-mcp-client «stdio-
 /// транспорт MCP»; design.md change `add-agent-mcp-client`, D9). Дочерний
 /// процесс — `test/support/line_echo.dart`, оболочка — `/bin/sh`.
@@ -61,7 +63,7 @@ void main() {
   McpStdioServerConfig echo({Map<String, String> env = const {}}) =>
       McpStdioServerConfig(
         name: 'echo',
-        command: Platform.resolvedExecutable,
+        command: dartExecutable(),
         args: [script],
         env: env,
       );
