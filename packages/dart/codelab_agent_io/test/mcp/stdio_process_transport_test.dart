@@ -20,6 +20,25 @@ Future<bool> _alive(String marker) async {
       .any((line) => line.contains(marker) && !line.contains('ps -A'));
 }
 
+/// Ждёт, пока процесс с [marker] появится ([alive] `true`) или исчезнет.
+///
+/// Почему не один `ps`: после `cmd &` оболочка печатает `up` раньше, чем
+/// потомок выполнит `exec`, и на Linux `ps` ещё видит его под именем `sh`
+/// (CI PR #158); после `SIGKILL` запись живёт, пока init не подберёт процесс.
+/// Опрос ограничен [within], так что тест не висит.
+Future<bool> _becomes(
+  String marker, {
+  required bool alive,
+  Duration within = const Duration(seconds: 5),
+}) async {
+  final watch = Stopwatch()..start();
+  while (true) {
+    if (await _alive(marker) == alive) return true;
+    if (watch.elapsed > within) return false;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+}
+
 void main() {
   late Directory tmp;
   late String cwd;
@@ -286,13 +305,20 @@ void main() {
         ),
       );
       expect(await transport.incoming.first, 'up');
-      expect(await _alive(held.command), isTrue);
+      expect(await _becomes(held.command, alive: true), isTrue);
       final watch = Stopwatch()..start();
 
       await transport.close();
 
       expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
-      expect(await _alive(held.command), isFalse);
+      expect(
+        await _becomes(
+          held.command,
+          alive: false,
+          within: const Duration(seconds: 2),
+        ),
+        isTrue,
+      );
       final closed = await transport.done;
       expect(closed.exitCode, isNot(0));
     }, timeout: const Timeout(Duration(seconds: 40)));
@@ -310,13 +336,20 @@ void main() {
         ),
       );
       expect(await transport.incoming.first, 'up');
-      expect(await _alive(held.command), isTrue);
+      expect(await _becomes(held.command, alive: true), isTrue);
       final watch = Stopwatch()..start();
 
       await transport.close();
 
       expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
-      expect(await _alive(held.command), isFalse);
+      expect(
+        await _becomes(
+          held.command,
+          alive: false,
+          within: const Duration(seconds: 2),
+        ),
+        isTrue,
+      );
       expect((await transport.done).exitCode, 0, reason: 'the root left');
     }, timeout: const Timeout(Duration(seconds: 40)));
   });
