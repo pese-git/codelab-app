@@ -23,6 +23,10 @@ const _exitAfterEof = Duration(seconds: 2);
 /// шаг 4).
 const _exitAfterTerm = Duration(seconds: 5);
 
+/// Сколько ждать выхода процесса после `SIGKILL`, прежде чем завершить
+/// закрытие без кода выхода.
+const _exitAfterKill = Duration(seconds: 2);
+
 /// Потомок мог унаследовать канал и держать его открытым после выхода
 /// процесса: дочитываем не дольше этого (`agent-core-architecture` §4.6,
 /// шаг 7).
@@ -40,7 +44,7 @@ const _pipeGrace = Duration(seconds: 1);
 /// — окружение хоста, из которого берутся только имена allowlist (по
 /// умолчанию настоящее; тесты передают своё). Логгер приходит в `open`
 /// вместе с `session_id` (`BoundLogger`): транспорт пишет через него
-/// `mcp.server.stderr` (debug) и `mcp.server.closed` (info) с полем `server`.
+/// `mcp.server.stderr` (trace) и `mcp.server.closed` (info) с полем `server`.
 final class StdioMcpTransportFactory implements McpTransportFactory {
   StdioMcpTransportFactory({Map<String, String>? hostEnvironment})
     : _hostEnvironment = hostEnvironment ?? io.Platform.environment;
@@ -88,7 +92,7 @@ final class StdioMcpTransportFactory implements McpTransportFactory {
 /// * кадры — одна строка UTF-8 на сообщение; строка длиннее 16 МиБ закрывает
 ///   транспорт с причиной `message too large`;
 /// * stderr читается всегда, чтобы процесс не завис на полном буфере; в лог
-///   строки идут только уровнем debug и не длиннее 4 КиБ;
+///   строки идут только уровнем trace и не длиннее 4 КиБ;
 /// * [close] — EOF, 2 с, `SIGTERM` дереву, 5 с, `SIGKILL`.
 ///
 /// Как использовать: создаётся через [StdioMcpTransportFactory.open]; [done]
@@ -107,7 +111,7 @@ final class StdioProcessTransport implements McpTransport {
     );
     _stdoutSubscription = _process.stdout.listen(
       stdoutLines.add,
-      onDone: _stdoutDone.complete,
+      onDone: () => _completeOnce(_stdoutDone),
       onError: (Object _) => _completeOnce(_stdoutDone),
     );
     // stderr читается всегда (D9): без этого процесс блокируется на записи
@@ -120,7 +124,7 @@ final class StdioProcessTransport implements McpTransport {
     );
     _stderrSubscription = _process.stderr.listen(
       stderrLines.add,
-      onDone: _stderrDone.complete,
+      onDone: () => _completeOnce(_stderrDone),
       onError: (Object _) => _completeOnce(_stderrDone),
     );
     // Запись в закрывшийся канал приходит ошибкой `done`; её отдаёт `send`,
@@ -231,6 +235,10 @@ final class StdioProcessTransport implements McpTransport {
   /// EOF → 2 с → `SIGTERM` дереву → 5 с → `SIGKILL` (D9, «Закрытие»).
   Future<void> _shutdown() async {
     _closeRequested = true;
+    // Потомков снимаем ДО закрытия stdin: если корень выйдет по EOF, они
+    // отдадутся init, и найти их по дереву уже нельзя. `npx`-обёртка
+    // порождает сервер, который может пережить корень.
+    final family = await descendantsOf(_process.pid);
     // Не ждём закрытия: при полном канале и сервере, который не читает,
     // `close()` stdin зависло бы навсегда.
     _process.stdin.close().then<void>((_) {}, onError: (Object _) {});
@@ -238,13 +246,15 @@ final class StdioProcessTransport implements McpTransport {
     if (exited == null) {
       await terminateTree(_process, grace: _exitAfterTerm);
       // `terminateTree` шлёт `SIGKILL` и не ждёт выхода.
-      final killed = await _exitCode(_exitAfterEof);
+      final killed = await _exitCode(_exitAfterKill);
       if (killed == null) {
         // Процесс не отдаёт код (не должно случаться после SIGKILL): не
         // подвешиваем закрытие сессии.
         unawaited(_complete(null));
       }
     }
+    // Потомки, пережившие корень (проигнорировали EOF): SIGTERM, 5 с, SIGKILL.
+    await terminatePids(family, grace: _exitAfterTerm);
     await _done.future;
   }
 
@@ -287,7 +297,9 @@ final class StdioProcessTransport implements McpTransport {
   }
 
   void _logStderr(String line) => _logger.log(
-    LogLevel.debug,
+    // trace, а не debug: stderr сервера может нести секреты, а профиль stdio
+    // по умолчанию пишет debug и не редактирует поля (ревью PR #158).
+    LogLevel.trace,
     'mcp.server.stderr',
     fields: {'server': _server, 'line': line},
   );

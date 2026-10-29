@@ -290,11 +290,13 @@ final class _Connection {
     final request = acp.acpSessionNew.decodeParams(params);
     final cwd = request.cwd;
     await _checkCwd(cwd);
-    final mcpServers = _mapMcpServers(request.mcpServers);
+    final mapped = _mapMcpServers(request.mcpServers);
     final wiring = _wire(cwd);
     final session = await _server._runtime.createSession(
-      SessionSpec(cwd: cwd, ports: wiring.ports, mcpServers: mcpServers),
+      SessionSpec(cwd: cwd, ports: wiring.ports, mcpServers: mapped.servers),
     );
+    // Пропуски пишутся после создания: id сессии известен только теперь.
+    _logMcpSkips(session.id.value, mapped.skips);
     wiring.link.sessionId = session.id.value;
     wiring.bridge.attach(session);
     _server._sessions[session.id.value] = wiring.bridge;
@@ -323,12 +325,12 @@ final class _Connection {
   /// (D6), поэтому правила одинаковы для ACP, встроенного режима и конфига.
   /// Пропуск — не ошибка запроса: остальные серверы и сессия живут.
   /// `_meta` серверов игнорируется.
-  List<McpServerConfig> _mapMcpServers(List<acp.McpServer> servers) {
-    void skip(String server, String transport, String reason) => _logger.log(
-      LogLevel.info,
-      'mcp.server.skipped',
-      fields: {'server': server, 'transport': transport, 'reason': reason},
-    );
+  ({List<McpServerConfig> servers, List<_McpSkip> skips}) _mapMcpServers(
+    List<acp.McpServer> servers,
+  ) {
+    final skips = <_McpSkip>[];
+    void skip(String server, String transport, String reason) =>
+        skips.add(_McpSkip(server, transport, reason));
     final result = <McpServerConfig>[];
     for (final server in servers) {
       switch (server) {
@@ -363,7 +365,25 @@ final class _Connection {
           skip(name ?? '', type, 'unknown transport');
       }
     }
-    return result;
+    return (servers: result, skips: skips);
+  }
+
+  /// Пишет пропуски `mcp.server.skipped` с `session_id`. `name` и `type`
+  /// пришли от клиента, поэтому в лог идут обрезанными до 64 рун (как
+  /// `method` в D13).
+  void _logMcpSkips(String sessionId, List<_McpSkip> skips) {
+    for (final skip in skips) {
+      _logger.log(
+        LogLevel.info,
+        'mcp.server.skipped',
+        fields: {
+          'session_id': sessionId,
+          'server': _capRunes(skip.server),
+          'transport': _capRunes(skip.transport),
+          'reason': skip.reason,
+        },
+      );
+    }
   }
 
   /// Env, gate и мост сессии этого соединения (D5, D6): файлы и команды —
@@ -412,7 +432,9 @@ final class _Connection {
     final cwd = request.cwd;
     await _checkCwd(cwd);
     final id = request.sessionId.value;
-    final mcpServers = _mapMcpServers(request.mcpServers);
+    final mapped = _mapMcpServers(request.mcpServers);
+    _logMcpSkips(id, mapped.skips);
+    final mcpServers = mapped.servers;
     var reconnect = false;
     var bridge = _server._sessions[id];
     if (bridge != null) {
@@ -425,6 +447,16 @@ final class _Connection {
           },
         );
       }
+      // Сначала проверка и `reattach` без `await` между ними: пока набор
+      // серверов применяется (подключение бывает долгим), сессия уже
+      // принадлежит этому соединению, и параллельный `session/load` другого
+      // соединения упрётся в `sessionBusy` (шаг 3c), а не перехватит ход.
+      reconnect = bridge.reattach(
+        owner: this,
+        requests: _requests,
+        capabilities: _client!,
+        sink: _notify,
+      );
       // Открытая сессия: серверы клиента заменяются без пересоздания (D11).
       // Без хода набор применяется до ответа; во время хода метод
       // возвращается сразу, набор применит ядро после `TurnEnded`.
@@ -438,12 +470,6 @@ final class _Connection {
           fields: {'session_id': id, 'error': error.runtimeType.toString()},
         );
       }
-      reconnect = bridge.reattach(
-        owner: this,
-        requests: _requests,
-        capabilities: _client!,
-        sink: _notify,
-      );
     } else {
       final wiring = _wire(cwd)..link.sessionId = id;
       final AgentSession session;
@@ -644,4 +670,19 @@ final class _Connection {
   }
 
   static bool _isAbsolute(String path) => path.startsWith('/');
+}
+
+/// Пропущенный MCP-сервер до записи в лог: `session_id` на `session/new`
+/// появляется только после `createSession`.
+final class _McpSkip {
+  const _McpSkip(this.server, this.transport, this.reason);
+
+  final String server;
+  final String transport;
+  final String reason;
+}
+
+String _capRunes(String value, [int max = 64]) {
+  final runes = value.runes;
+  return runes.length <= max ? value : String.fromCharCodes(runes.take(max));
 }

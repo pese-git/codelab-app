@@ -51,6 +51,14 @@ final class ScenarioAgent {
       return null;
     }
     final setup = fixture.setup;
+    // Fake MCP-серверы `setup.mcp` живут в памяти фабрики агентского прогона
+    // (design.md change `add-agent-mcp-client`, D15) и в процесс настоящего
+    // агента не передаются: без пропуска он упал бы с `spawn failed` на
+    // несуществующей команде fake-сервера. Агент-повторитель (`{fixture}`)
+    // отсеян выше — он играет фикстуру сам.
+    if (setup.mcp.isNotEmpty) {
+      return 'setup.mcp cannot be passed to the agent process';
+    }
     if (isCodelabAgent) {
       final unsupported = [
         if (setup.sessions.isNotEmpty) 'setup.sessions',

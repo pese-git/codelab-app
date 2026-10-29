@@ -110,7 +110,7 @@ final class McpClientConnector implements McpConnector {
           'session_id': request.sessionId.value,
         }),
       );
-      state.client = await McpClient.connect(
+      final connecting = McpClient.connect(
         server: server,
         transport: transport,
         clock: clock,
@@ -124,6 +124,21 @@ final class McpClientConnector implements McpConnector {
             ..dirty = true;
         },
       );
+      // Отмена сессии (`close()`, `dispose()`) прерывает рукопожатие: сервер,
+      // зависший до `connectTimeout`, не должен держать закрытие сессии.
+      final client = await Future.any<McpClient?>([
+        connecting,
+        request.cancel.onCancel.then<McpClient?>((_) => null),
+      ]);
+      if (client == null) {
+        await transport.close();
+        // Клиент, который достроится или упадёт позже, никому не нужен.
+        unawaited(
+          connecting.then<void>((late) => late.close(), onError: (Object _) {}),
+        );
+        return null;
+      }
+      state.client = client;
     } on McpConnectException {
       // Клиент уже записал `mcp.server.failed` и закрыл транспорт.
       return null;

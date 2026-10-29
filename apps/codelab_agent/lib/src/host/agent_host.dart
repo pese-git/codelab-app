@@ -67,12 +67,18 @@ final class AgentHost {
         HostCapability.fileListing: const CapabilityOff(
           'WebSocket: клиент может быть не на этой машине',
         ),
-      // HTTP-транспорт MCP появляется в итерации 3 (задача 9.6, change
-      // `add-agent-mcp-client`): до неё `initialize` не обещает `http`, а
-      // сервер типа `http` пропускается с причиной профиля (D3, D11).
-      HostCapability.mcp: const CapabilityTransport({
-        'stdio',
-      }, 'HTTP-транспорт — итерация 3'),
+      // По WebSocket клиент может быть на другой машине, а описание stdio-
+      // сервера пришло бы из сети: запускать по нему процессы на машине
+      // агента нельзя (решение по ревью PR #158). Профиль выключает `mcp`
+      // целиком, поэтому `initialize` не обещает и `http`.
+      // По stdio клиент — локальный хозяин процесса: stdio разрешён, а
+      // HTTP-транспорт появляется в итерации 3 (задача 9.6, change
+      // `add-agent-mcp-client`): до неё `initialize` не обещает `http`.
+      HostCapability.mcp: stdio
+          ? const CapabilityTransport({'stdio'}, 'HTTP-транспорт — итерация 3')
+          : const CapabilityOff(
+              'stdio MCP servers are disabled over WebSocket',
+            ),
     };
 
     final ModelCatalog catalog;

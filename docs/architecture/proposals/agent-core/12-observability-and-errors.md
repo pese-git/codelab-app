@@ -81,7 +81,7 @@ final class LogRecord {           // то, что получает sink хост
 | `permission` | `permission.request`, `permission.decision`, `permission.denied` |
 | `session` | `session.create`, `session.open`, `session.repair`, `session.leaf.healed`, `session.append.failed`, `session.cycle`, `session.broken_link`, `session.compaction.lost_anchor` (§8.7); после MVP `session.origin.unknown` {`origin`} (§8.2.5) |
 | `compaction` | `compaction.start`, `compaction.end`, `compaction.failed` |
-| `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`debug`), `mcp.servers.replace_failed`, `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
+| `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`trace`), `mcp.servers.replace_failed`, `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
 | `acp` | `acp.frame.in`, `acp.frame.out`, `acp.frame.bad`, `acp.cancel.no_turn`, `acp.prompt.rejected`, `acp.detached`, `acp.client_capabilities.absent` (§13.2), `acp.terminal.release_failed` (§13.9) |
 | `host` | `host.plan`, `host.config.loaded` |
 | `config` | `config.project.untrusted_key` (§15.3), `config.legacy_ignored`, `config.legacy_key_dropped`, `config.legacy_active` (§15.7) |
@@ -91,12 +91,12 @@ final class LogRecord {           // то, что получает sink хост
 
 | Событие | Уровень | Поля |
 |---|---|---|
-| `mcp.server.skipped` | info | `transport`, `reason` |
+| `mcp.server.skipped` | info | `transport`, `reason`; из ACP-адаптера — тоже с `session_id`, строки клиента `type` и `name` обрезаются до 64 рун |
 | `mcp.server.era` | info | `transport`, `era` (`modern`/`legacy`), `protocol_version`, `probe` (`discover_result`, `modern_error`, `fallback_error`, `fallback_timeout`, `cached`) |
 | `mcp.server.connect` | info | `transport`, `era`, `protocol_version`, `server_info` (`name`/`version`, только для диагностики), `tools`, `duration_ms` |
 | `mcp.server.failed` | warning | `transport`, `reason` (≤ 200 символов, правила ниже) |
 | `mcp.server.closed` | info | `transport`, `exit_code` (stdio); пишет транспорт через логгер сессии из `McpTransportFactory.open` |
-| `mcp.server.stderr` | debug | `line` (≤ 4 КиБ); пишет транспорт через логгер сессии |
+| `mcp.server.stderr` | trace | `line` (≤ 4 КиБ); пишет транспорт через логгер сессии. Уровень trace, а не debug: профиль `--stdio` по умолчанию включает debug, а логгер хоста секреты не редактирует (до 8.11) |
 | `mcp.servers.replace_failed` | warning | `error` (`runtimeType`) — `AgentSession.setMcpServers` бросил при `session/load` открытой сессии (§13.5) |
 | `mcp.tools.changed` | info | `added`, `removed` |
 | `mcp.tools.refresh_failed` | warning | `reason` (`tools/list failed (code N)`, `no answer to tools/list`) — перечитывание `tools/list` после `list_changed` не удалось, прежний набор инструментов остаётся |

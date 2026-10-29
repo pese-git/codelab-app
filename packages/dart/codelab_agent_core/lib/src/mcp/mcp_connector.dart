@@ -51,8 +51,10 @@ final class McpConnectRequest {
   final Set<String> reservedNames;
   final Logger logger;
 
-  /// Отменяется при `AgentRuntime.dispose()`: подключение, начатое до выхода
-  /// хоста, прерывается. Закрытие отдельной сессии токен не отменяет.
+  /// Токен сессии: отменяется при `AgentSession.close()` и
+  /// `AgentRuntime.dispose()`. Подключение (первое и в `replaceServers`)
+  /// прерывается: не завершённый сервер закрывается, а закрытие сессии не
+  /// ждёт `connectTimeout`.
   final CancelToken cancel;
 }
 

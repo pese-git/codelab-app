@@ -71,3 +71,59 @@ Future<Map<int, List<int>>> _table() async {
   }
   return children;
 }
+
+/// Потомки [root] (без него самого) на сейчас; пусто на Windows, где дерево
+/// снимает `taskkill /T`.
+///
+/// Зачем отдельно от [terminateTree]: снимок берётся ДО того, как корень
+/// выйдет, — после выхода корня потомки отдаются init и в таблице процессов
+/// уже не связаны с ним (stdio-транспорт MCP, D9).
+Future<List<int>> descendantsOf(int root) async {
+  if (Platform.isWindows) {
+    return const [];
+  }
+  return (await _descendants(root)).skip(1).toList();
+}
+
+/// Завершает [pids], если они ещё живы: `SIGTERM`, ожидание до [grace] и
+/// `SIGKILL` оставшимся. Для потомков, переживших корень: они уже не наши
+/// дети, поэтому выход определяется по таблице процессов.
+Future<void> terminatePids(
+  List<int> pids, {
+  Duration grace = const Duration(seconds: 5),
+}) async {
+  var alive = await _alive(pids);
+  if (alive.isEmpty) {
+    return;
+  }
+  for (final pid in alive) {
+    Process.killPid(pid, ProcessSignal.sigterm);
+  }
+  final deadline = DateTime.now().add(grace);
+  while (DateTime.now().isBefore(deadline)) {
+    alive = await _alive(alive);
+    if (alive.isEmpty) {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+  for (final pid in await _alive(alive)) {
+    Process.killPid(pid, ProcessSignal.sigkill);
+  }
+}
+
+/// Из [pids] — те, что есть в таблице процессов.
+Future<List<int>> _alive(List<int> pids) async {
+  if (pids.isEmpty) {
+    return const [];
+  }
+  final result = await Process.run('ps', ['-A', '-o', 'pid=']);
+  final present = {
+    for (final line in '${result.stdout}'.split('\n'))
+      ?int.tryParse(line.trim()),
+  };
+  return [
+    for (final pid in pids)
+      if (present.contains(pid)) pid,
+  ];
+}

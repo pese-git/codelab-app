@@ -225,7 +225,9 @@ final class AcpServerConfig {
    применяется после `TurnEnded` (последний вызов побеждает, следующий `session/prompt` ждёт
    применения). Исключение `setMcpServers` не роняет `session/load`: лог
    `mcp.servers.replace_failed {session_id, error: <runtimeType>}` (warning), ответ уходит как
-   обычно; сбой подключения отдельного сервера — `mcp.server.failed` из ядра.
+   обычно; сбой подключения отдельного сервера — `mcp.server.failed` из ядра. Проверка «сессия
+   занята» (шаг 3c) и `reattach` атомарны относительно `setMcpServers`: ожидание замены не
+   разделяет проверку и переподключение (иначе `reattach` шёл бы по устаревшей проверке).
    После MVP большой или сегментированный журнал открывается `openWindowed` (§17.13.2).
 5. Реплей `buildReplay(snapshot)` по активной ветке в порядке записей:
    * после MVP при `window.replayFromPathIndex > 0` — первым маркер `agent_message_chunk`
@@ -619,6 +621,7 @@ JSON-RPC id исходящих запросов — строки `perm-<n>`, `fs
 | Повторная доставка разрешения | при переподключении неотвеченный `session/request_permission` отправляется заново с новым id и тем же `toolCallId`; решение принимается один раз (PERM-4) |
 | Безопасное завершение | `shutdown()`: новые запросы → `-32603` «shutting down»; ожидающие разрешения → `cancelled`; активные ходы отменяются и дожидаются `TurnEnded` (не дольше `grace`); журналы дописываются; после MVP освобождаются lease сессий (§17.6.8); затем `transport.close()` |
 | Нет тихих no-op | `session/cancel` без хода, `session/prompt` при активном ходе, ответ на устаревший запрос — каждое логируется отдельным событием |
+| MCP по WebSocket | в `codelab-agent serve --ws` capability `mcp` выключена: серверы `mcpServers` пропускаются `mcp.server.skipped` с причиной профиля, `mcpCapabilities.http: false`; держатель токена WebSocket не может запускать команды на машине агента (отклонение §13.15, D3 change `add-agent-mcp-client`) |
 
 **Коды ошибок:**
 
@@ -966,7 +969,7 @@ sequenceDiagram
 
 | Требование ACP | Отклонение | Почему и до каких пор |
 |---|---|---|
-| `03-Session Setup.md`: агент MUST подключать MCP-серверы по stdio | только профиль без транспорта `stdio` в capability `mcp` (`mobile`) пропускает серверы с логом `mcp.server.skipped` | запуск процессов там недоступен. В профилях `agent-serve` и `embedded-cli` stdio-серверы подключаются (change `add-agent-mcp-client`, R-24); пропускаются только `sse` и неизвестный `type` (§13.4, шаг 2) |
+| `03-Session Setup.md`: агент MUST подключать MCP-серверы по stdio | профиль без транспорта `stdio` в capability `mcp` (`mobile`) и WS-профиль бинаря (`codelab-agent serve --ws`, capability `mcp` выключена) пропускают серверы с логом `mcp.server.skipped` и причиной профиля | `mobile`: запуск процессов недоступен. `--ws`: безопасность выше протокола (`AGENTS.md` §2) — держатель токена WebSocket иначе запускал бы произвольные команды на машине агента, а клиент может быть на другой машине (решение пользователя, D3 change `add-agent-mcp-client`); включение явным флагом хоста — отдельный change. В `serve --stdio` и `embedded-cli` stdio-серверы подключаются (R-24); пропускаются только `sse` и неизвестный `type` (§13.4, шаг 2) |
 | `03-Session Setup.md`: `cwd` MUST быть абсолютным путём — на Windows это `C:\…` | абсолютным считается только путь с `/`; `C:\…` — `-32602` | ядро в MVP работает только с POSIX-путями (§4.4, §4.7); перевод путей Windows на границе ACP — открытый вопрос §16.3, до поддержки Windows-хоста |
 
 ## 13.16. Как проверить
