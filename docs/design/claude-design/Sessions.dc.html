@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sessions — search</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{height:900px;display:flex;flex-direction:column;overflow:hidden}
+.tools{display:flex;align-items:center;gap:2px}
+.tool{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;border-radius:4px;border:1px solid transparent;background:transparent;color:var(--text2);font-size:12px;cursor:pointer}
+.tool:hover{background:var(--hover)}
+.tool.on{background:var(--accent-weak);color:var(--accent-text);border-color:transparent}
+.side{width:272px}
+.grp{display:flex;align-items:center;gap:8px;min-height:32px;margin:2px 0;padding:0 8px;border:0;background:transparent;color:var(--text);border-radius:4px;width:100%;box-sizing:border-box;text-align:left;font-weight:600;cursor:pointer}
+.grp:hover{background:var(--hover)}
+.sess{padding-left:30px;gap:10px;min-height:32px}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sessarea{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.dock{position:relative;width:400px;flex:none;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--stroke);background:var(--layer)}
+.grip{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;display:flex;align-items:center;justify-content:center}
+.grip i{width:2px;height:28px;border-radius:1px;background:var(--cstroke2)}
+.dpane{display:flex;flex-direction:column;min-height:0}
+.dhead{display:flex;align-items:flex-end;gap:2px;padding:6px 8px 0;background:var(--mica);border-bottom:1px solid var(--stroke);flex:none}
+.dtab{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 4px 0 10px;border-radius:6px 6px 0 0;border:1px solid transparent;border-bottom:0;color:var(--text2);font-size:13px;text-decoration:none}
+.fx a.dtab{color:var(--text2)}
+.fx a.dtab.on{background:var(--layer);color:var(--text);border-color:var(--stroke)}
+.hsplit{height:7px;flex:none;border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);background:var(--mica);cursor:row-resize;display:flex;align-items:center;justify-content:center}
+.hsplit i{width:28px;height:2px;border-radius:1px;background:var(--cstroke2)}
+.res{display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-radius:4px;position:relative;text-decoration:none}
+.fx a.res{color:var(--text)}
+.res.on{background:var(--sel)}
+.res.on::before{content:'';position:absolute;left:0;top:14px;width:3px;height:16px;border-radius:2px;background:var(--accent)}
+.snip{font-size:12px;line-height:16px;color:var(--text2)}
+.snip b{color:var(--text);font-weight:600}
+.hit{background:var(--sel);font-weight:600;border-radius:2px;padding:0 1px}
+@media (max-width:760px){.root{height:auto}.f-pane,.side{width:100%}.f-nv{flex-wrap:wrap}.dock{width:100%}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <span class="f-logo">CL</span>
+  <span class="t-cap">CodeLab</span>
+  <span style="flex: 1"></span>
+  <label class="f-tb" data-fluent="AutoSuggestBox (Ctrl+K)" style="width: 360px">
+    <input type="search" placeholder="Search or run a command" aria-label="Command palette">
+    <span class="t-cap">Ctrl+K</span>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+  </label>
+  <span style="flex: 1"></span>
+  <div class="tools" role="toolbar" aria-label="Tool panes" data-fluent="CommandBar of ToggleButton (tool panes)">
+    <button class="tool" aria-pressed="false" title="Files (Ctrl+Shift+E)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files</button>
+    <button class="tool" aria-pressed="false" title="Diff"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 4v8M8 8h8M8 18h8"/></svg>Diff</button>
+    <a href="Terminal.dc.html" class="tool" aria-pressed="false" title="Terminal (Ctrl+`)" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8"/></svg>Terminal</a>
+    <button class="tool" aria-pressed="false" title="Plan"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>Plan</button>
+    <a href="Agents.dc.html" class="tool" aria-pressed="false" title="Agents" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Agents<span class="f-badge" data-fluent="InfoBadge">2</span></a>
+    <a href="Usage.dc.html" class="tool" aria-pressed="false" title="Usage" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Usage</a>
+  </div>
+  <span class="tag ok"><span class="f-dot"></span>Connected · in-process</span>
+</header>
+
+<div class="f-nv" data-fluent="NavigationView">
+  <nav class="f-pane side" aria-label="Sessions" data-fluent="NavigationPane (open, search mode)">
+    <div style="display: flex; gap: 4px; align-items: center; padding: 4px 4px 2px">
+      <button class="f-pi" data-fluent="PaneItemAction" style="flex: 1; margin: 0"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session<span class="t-cap t2" style="margin-left: auto">Ctrl+N</span></button>
+      <button class="f-btn subtle icon" aria-label="Collapse sidebar (Ctrl+B)" title="Collapse sidebar (Ctrl+B)" data-fluent="IconButton (toggle pane)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+    </div>
+    <label class="f-tb focus" data-fluent="AutoSuggestBox" style="margin: 4px 8px 8px">
+      <input type="search" value="sso" aria-label="Search sessions">
+      <button class="f-btn subtle icon" style="width: 24px; height: 24px" aria-label="Clear search (Esc)">×</button>
+    </label>
+    <div role="radiogroup" aria-label="Date filter" style="display: flex; gap: 4px; padding: 0 8px 6px; flex-wrap: wrap" data-fluent="ToggleButton row">
+      <button class="f-btn toggle on" style="height: 28px; padding: 0 8px" aria-pressed="true">All</button>
+      <button class="f-btn toggle" style="height: 28px; padding: 0 8px">Today</button>
+      <button class="f-btn toggle" style="height: 28px; padding: 0 8px">7 days</button>
+      <button class="f-btn toggle" style="height: 28px; padding: 0 8px">Range…</button>
+    </div>
+    <div role="radiogroup" aria-label="Search scope" style="display: flex; gap: 4px; padding: 0 8px 6px" data-fluent="ToggleButton ×2">
+      <button class="f-btn toggle" style="flex: 1; height: 28px">This project</button>
+      <button class="f-btn toggle on" style="flex: 1; height: 28px" aria-pressed="true">All projects</button>
+    </div>
+    <span role="status" class="t-cap t2" style="padding: 2px 12px 6px">4 sessions in 2 projects · titles and messages</span>
+    <div style="flex: 1; overflow: auto; min-height: 0" data-acp="AcpSessionSearchResults (grouped by project)">
+      <div class="f-ph" style="display: flex; align-items: center; gap: 6px" data-fluent="PaneItemHeader (project group)"><svg class="ic" style="width: 14px; height: 14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>codelab-app<span class="t-cap t2" style="margin-left: auto; font-weight: 400">3</span></div>
+      <a href="Sessions.dc.html" class="res">
+        <span style="display: flex; justify-content: space-between; gap: 8px"><span>Enterprise <b class="hit">SSO</b> for the WebSocket profile</span><span class="t-cap t2">10:05</span></span>
+        <span class="snip"><b>You:</b> the agent behind corporate <b class="hit">SSO</b> rejects the token…</span>
+        <span class="snip"><b>Agent:</b> read the <b class="hit">SSO</b> cookie once, store it in the keychain <span class="tag" style="height: 18px">earlier branch</span></span>
+      </a>
+      <a href="Sessions.dc.html" class="res on">
+        <span style="display: flex; justify-content: space-between; gap: 8px"><span>Provider wizard: <b class="hit">SSO</b> sign-in step</span><span class="t-cap t2">Tue</span></span>
+        <span class="snip"><b>Agent:</b> add a "Sign in" key source next to Store in keychain (<b class="hit">sso</b> presets)</span>
+      </a>
+      <a href="Sessions.dc.html" class="res">
+        <span style="display: flex; justify-content: space-between; gap: 8px"><span>Stage 7: embedded profile</span><span class="t-cap t2">Mon</span></span>
+        <span class="snip"><b>You:</b> keep <b class="hit">sso</b> secrets out of profiles.json</span>
+      </a>
+      <div class="f-ph" style="display: flex; align-items: center; gap: 6px" data-fluent="PaneItemHeader (project group)"><svg class="ic" style="width: 14px; height: 14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>codelab-cli<span class="t-cap t2" style="margin-left: auto; font-weight: 400">1</span></div>
+      <a href="Sessions.dc.html" class="res">
+        <span style="display: flex; justify-content: space-between; gap: 8px"><span>Headless login without <b class="hit">SSO</b></span><span class="t-cap t2">Oct 18</span></span>
+        <span class="snip"><b>Agent:</b> <span class="mono">codelab -p</span> fails fast when the provider needs <b class="hit">SSO</b></span>
+      </a>
+      <button class="f-hl" style="margin: 4px 8px" data-fluent="HyperlinkButton">Load more</button>
+      <p class="t-cap t2" style="margin: 6px 12px">No sessions match — shown when the list is empty. Titles only — the agent does not support text search — when it lacks search.</p>
+    </div>
+    <div class="f-psep" data-fluent="PaneItemSeparator"></div>
+    <a href="Connection.dc.html" class="f-pi" data-fluent="PaneItem (footer)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
+  </nav>
+
+  <section class="f-content" data-fluent="NavigationBody" style="flex-direction: row">
+    <div class="sessarea" data-acp="session pane (full width, dock closed)">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px 8px; border-bottom: 1px solid var(--stroke); flex-wrap: wrap" data-fluent="PageHeader">
+        <h1 class="t-sub" style="margin: 0; font-size: 17px; line-height: 22px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto">Provider wizard: SSO sign-in step</h1>
+        <span class="tag"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>codelab-app</span>
+        <span class="tag acc">standard</span><span class="tag warn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Open in CLI · read-only</span>
+        <span style="flex: 1"></span>
+        <div class="f-cb" data-fluent="CommandBar">
+          <button class="f-cbb" disabled style="opacity: .45" title="Read-only session"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Rename</button>
+          <button class="f-cbb"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H6"/></svg>Fork</button>
+          <button class="f-cbb" title="Open to the side (Ctrl+\)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>Split</button>
+          <button class="f-cbb" aria-label="More options"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+        </div>
+      </div>
+
+      <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0">
+        <div style="padding: 12px 20px; display: flex; flex-direction: column; gap: 12px; max-width: 860px; width: 100%; box-sizing: border-box; margin: 0 auto">
+          <section aria-label="You" style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px">
+            <div class="acp-bubble">Add an SSO sign-in step to the provider wizard for corporate presets.</div>
+            <div class="f-cb"><button class="f-cbb" style="height: 28px; font-size: 12px">Copy</button></div>
+          </section>
+          <section aria-label="Agent reply">
+            <p style="margin: 0 0 8px">The wizard gets a fourth key source, shown only for presets that support it. Two changes, in order:</p>
+            <ol style="margin: 0; padding-left: 20px">
+              <li>Add <b>Sign in</b> next to Store in keychain in the key step of <b>ProviderSetupFlow</b>.</li>
+              <li>Keep the issued key in the secret store; <code class="ic-code">profiles.json</code> holds only its name.</li>
+            </ol>
+          </section>
+          <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--text2)"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span style="flex: 1">Edit <span class="mono" style="font-size: 13px">provider_setup_flow.dart <span style="color: var(--ok)">+24</span> <span style="color: var(--bad)">−3</span></span></span><span class="tag ok">Done</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div></section>
+        </div>
+      </div>
+
+      <div style="padding: 0 20px 14px; max-width: 860px; width: 100%; box-sizing: border-box; margin: 0 auto; display: flex; flex-direction: column; gap: 8px">
+          <div class="f-ib warning" role="alert" data-fluent="InfoBar (warning)">
+            <span class="f-ibi">!</span>
+            <div style="flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0"><span class="ttl">Read-only:</span><span>this session is open in codelab_cli. Fork to continue here.</span></div>
+            <button class="f-btn">Try again</button>
+            <button class="f-btn accent">Fork</button>
+          </div>
+          <div class="f-card" style="padding: 8px; opacity: .55">
+            <label class="f-tb" style="align-items: flex-start"><textarea rows="2" disabled aria-label="Prompt (disabled)" placeholder="Composer is disabled while another client owns this session"></textarea></label>
+          </div>
+          <span class="t-cap t2">Tool panes are closed: the session pane uses the full width. Search: Ctrl+Shift+F · Esc clears the field, then returns focus to the composer.</span>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

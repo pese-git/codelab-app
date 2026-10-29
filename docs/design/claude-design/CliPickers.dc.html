@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — slash menu and pickers</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli pickers: earlier /model, /mode and /agents results in the transcript, and the slash menu open over the composer with fuzzy matches for /mo from client, agent, skill and template commands">
+    <div class="grow">
+      <div class="ln"><span class="ac b">&gt;</span> /model</div>
+      <div class="ln mu">  anthropic</div>
+      <div class="ln">  <span class="ac">*</span> claude-sonnet-5-5        <span class="mu">ctx 200k · effort low|medium|high</span></div>
+      <div class="ln">    claude-opus-5-5          <span class="mu">ctx 200k · effort low|medium|high</span></div>
+      <div class="ln mu">  ollama (local)</div>
+      <div class="ln">    qwen3-coder:30b          <span class="mu">ctx 32k (from /v1/models)</span></div>
+      <div class="ln"><span class="ok">✓</span> Model: claude-sonnet-5-5 · effort high <span class="mu">(remembered for this folder)</span></div>
+      <div class="ln"><span class="ac b">&gt;</span> /mode</div>
+      <div class="ln">    plan           <span class="mu">read and plan; no edits or commands</span></div>
+      <div class="ln">    ask            <span class="mu">ask before every tool call</span></div>
+      <div class="ln">  <span class="ac">*</span> standard       <span class="mu">reads free; edits and commands ask</span></div>
+      <div class="ln">    accept-edits   <span class="mu">edits without asking; commands ask</span></div>
+      <div class="ln">    bypass         <span class="mu">no questions except critical patterns</span></div>
+      <div class="ln"><span class="ac b">&gt;</span> /agents</div>
+      <div class="ln mu">    name        source                           model</div>
+      <div class="ln">  <span class="ac">*</span> default     built-in                         claude-sonnet-5-5</div>
+      <div class="ln">    architect   built-in                         claude-opus-5-5</div>
+      <div class="ln">    reviewer    .codelab/agents/reviewer.md      claude-sonnet-5-5</div>
+      <div class="ln"> </div>
+      <div class="ln"><span class="ac">┌─</span> <span class="b">Commands</span> <span class="mu">· "mo" · 6 matches</span> <span class="ac">─────────────────────────────────────────────────────────────────────────────────</span></div>
+      <div class="ln sel"><span class="ac">│</span> <span class="ac b">›</span> /<span class="u b">mo</span>del [name]           <span class="mu">client    </span>choose the model and effort for this session</div>
+      <div class="ln"><span class="ac">│</span>   /<span class="u b">mo</span>de [name]            <span class="mu">client    </span>permission mode: plan ask standard accept-edits bypass</div>
+      <div class="ln"><span class="ac">│</span>   /<span class="u b">mo</span>use [on|off]         <span class="mu">client    </span>mouse capture and click-to-select</div>
+      <div class="ln"><span class="ac">│</span>   /<span class="u b">m</span>em<span class="u b">o</span>ry list            <span class="mu">agent     </span>long-term memory entries</div>
+      <div class="ln"><span class="ac">│</span>   /skill:<span class="u b">m</span>igrate-<span class="u b">o</span>penspec <span class="mu">skill     </span>&lt;change-id&gt; · move a proposal to OpenSpec</div>
+      <div class="ln"><span class="ac">│</span>   /release-<span class="u b">no</span>tes          <span class="mu">template  </span>&lt;from&gt; &lt;to&gt; · .codelab/prompts/release-notes.md</div>
+      <div class="ln"><span class="ac">└──────────────────────────────────────────────────────────────────────────────────────────────────────────</span></div>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln"><span class="ac b">&gt;</span> /mo<span class="cur"> </span></div>
+    <div class="ln mu">↑↓ move · tab complete · enter run · esc close · agent commands come from available_commands_update</div>
+    <div class="ln"><span class="mu">idle</span>  standard · claude-sonnet-5-5 high · agent default · ctx 18% · ⎇ develop</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

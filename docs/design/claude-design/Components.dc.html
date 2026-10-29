@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fluent component map</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.root{min-height:1100px;padding:40px;box-sizing:border-box;display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start}
+.spec{display:flex;flex-direction:column;gap:6px}
+.lbl{font-size:12px;line-height:16px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.map{width:100%;border-collapse:collapse;font-size:13px;line-height:18px}
+.map th,.map td{border-top:1px solid var(--stroke);padding:10px 12px;text-align:left;vertical-align:top}
+.map th{font-weight:600;background:var(--card2)}
+.map td:first-child{font-weight:600;white-space:nowrap}
+.w{font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace;font-size:12px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <section aria-label="Component sheet" class="f-card" style="flex: 1 1 520px; max-width: 600px; padding: 24px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box">
+    <h1 class="t-sub" style="margin: 0">fluent_ui — component sheet</h1>
+    <div class="spec"><span class="lbl">Typography · body 14 · bodyStrong · subtitle 20 · title 28 · titleLarge 40</span>
+      <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap"><span>Body</span><span class="t-strong">Body strong</span><span class="t-sub">Subtitle</span><span class="t-title">Title</span><span class="t-tl">Large</span></div>
+    </div>
+    <div class="spec"><span class="lbl">Button · FilledButton · HyperlinkButton · ToggleButton · SplitButton · IconButton</span>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center"><button class="f-btn">Button</button><button class="f-btn accent">FilledButton</button><button class="f-hl">Hyperlink</button><button class="f-btn toggle on">Toggle on</button><span class="f-split"><button class="f-btn accent">Queue</button><button class="f-btn accent" aria-label="More">▾</button></span><button class="f-btn subtle icon" aria-label="Icon button">⋯</button></div>
+    </div>
+    <div class="spec"><span class="lbl">TextBox · AutoSuggestBox · ComboBox / DropDownButton</span>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap"><label class="f-tb" style="width: 180px"><input placeholder="TextBox" aria-label="TextBox"></label><label class="f-tb focus" style="width: 180px"><input value="Focused" aria-label="Focused TextBox"></label><button class="f-cbx">ComboBox <span aria-hidden="true">▾</span></button></div>
+    </div>
+    <div class="spec"><span class="lbl">ToggleSwitch · RadioButton · Checkbox</span>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: center"><label class="f-ts"><input type="checkbox" checked>On</label><label class="f-ts"><input type="checkbox">Off</label><label class="f-rb"><input type="radio" name="r" checked>Selected</label><label class="f-rb"><input type="radio" name="r">Option</label><label class="f-chk"><input type="checkbox" checked>Checked</label></div>
+    </div>
+    <div class="spec"><span class="lbl">InfoBar · informational / success / warning / error</span>
+      <div class="f-ib"><span class="f-ibi">i</span><div><span class="ttl">Info</span>Live status from the embedded agent</div></div>
+      <div class="f-ib success"><span class="f-ibi">✓</span><div><span class="ttl">Saved</span>Agent reloaded config.yaml</div></div>
+      <div class="f-ib warning"><span class="f-ibi">!</span><div><span class="ttl">Read-only</span>This session is open in the CLI</div></div>
+      <div class="f-ib error"><span class="f-ibi">✕</span><div><span class="ttl">Config invalid</span>${PG_URL} is not set</div></div>
+    </div>
+    <div class="spec"><span class="lbl">Expander · Card (settings row) · InfoBadge · ProgressBar · ProgressRing</span>
+      <div class="f-exp"><div class="f-exph"><span style="flex: 1">Expander header</span><span class="f-badge">3</span><span class="f-chev" aria-hidden="true">▾</span></div></div>
+      <div style="display: flex; gap: 16px; align-items: center"><div class="f-pb" style="width: 160px"><i style="width: 62%"></i></div><span class="f-pr"></span><span class="tag ok">tag ok</span><span class="tag warn">warn</span><span class="tag bad">bad</span><span class="tag acc">accent</span></div>
+    </div>
+  </section>
+
+  <section aria-label="Mapping" class="f-card" style="flex: 999 1 640px; min-width: 0; overflow: hidden">
+    <div style="padding: 20px 20px 12px"><h2 class="t-sub" style="margin: 0">Screens → widgets</h2><p class="t2" style="margin: 4px 0 0">Left column — stock <b style="color: var(--text)">fluent_ui</b>; right — custom <b style="color: var(--text)">acp_ui</b> widgets that fluent_ui does not provide.</p></div>
+    <table class="map">
+      <thead><tr><th>Screen</th><th>fluent_ui</th><th>acp_ui (custom)</th></tr></thead>
+      <tbody>
+        <tr><td>01 Workbench</td><td class="w">NavigationView (open) · NavigationAppBar · AutoSuggestBox · PaneItemHeader · PaneItem + infoBadge · PaneItemAction · footerItems · TabView · PageHeader · CommandBar · Expander · Card · FilledButton · ToggleButton · DropDownButton · SplitButton · TextBox · Checkbox · ProgressBar · ProgressRing</td><td class="w">AcpTranscriptPanel rows · AcpMarkdownBlockView · AcpCodeBlock · AcpDiffView · AcpTranscriptApproval · AcpAttachmentChip · AcpSessionStatusBar · turn timeline</td></tr>
+        <tr><td>02 Running turn</td><td class="w">Expander (streaming header with ProgressRing) · CommandBar · InfoBadge · HyperlinkButton</td><td class="w">steer bubble · queue rows · image block (D-23)</td></tr>
+        <tr><td>03 Project files</td><td class="w">TreeView · BreadcrumbBar · ToggleButton · ToggleSwitch · Card</td><td class="w">AcpFilePreview (markdown)</td></tr>
+        <tr><td>04 Sessions</td><td class="w">AutoSuggestBox · ComboBox · MenuFlyout · InfoBar (warning) · ListView</td><td class="w">AcpSessionSearchResults (highlight, snippets)</td></tr>
+        <tr><td>05, 05b Settings</td><td class="w">NavigationView · ScaffoldPage · PageHeader · CommandBar · Card rows · Expander + ToggleSwitch · InfoBar · RadioButton · PasswordBox · ComboBox · GridView</td><td class="w">JSON issue view · contrast check</td></tr>
+        <tr><td>06 Wizard</td><td class="w">ContentDialog (primary / secondary / close) · ProgressBar · InfoBar · RadioButton</td><td class="w">—</td></tr>
+        <tr><td>07–08 First run</td><td class="w">Card rows · Expander · InfoBar · Button</td><td class="w">terminal block</td></tr>
+        <tr><td>09 Narrow</td><td class="w">NavigationView displayMode: minimal (overlay pane)</td><td class="w">—</td></tr>
+        <tr><td>10 Appearance</td><td class="w">Expander + RadioButton · Card row + ToggleSwitch · GridView of selectable Card · InfoBar (warning) · HyperlinkButton</td><td class="w">JSON issue view · theme preview · contrast check</td></tr>
+        <tr><td>11 Project picker</td><td class="w">Card · ListView · RadioButton · FilledButton · HyperlinkButton</td><td class="w">drop target</td></tr>
+        <tr><td>12–13 Palette, composer</td><td class="w">AutoSuggestBox · MenuFlyout · SplitButton · ComboBox · DropDownButton · InfoBadge</td><td class="w">AcpAttachmentChip · queue rows · steer bubble · AcpSessionStatusBar</td></tr>
+        <tr><td>14–15 History, ask</td><td class="w">ContentDialog · MenuFlyout · TextBox (inline rename) · RadioButton · Checkbox · InfoBar</td><td class="w">rewind dry-run list · branch rows · approval card</td></tr>
+        <tr><td>16–19 Boards, usage, inspector, states</td><td class="w">CommandBar · TabView · ProgressBar · ProgressRing · InfoBar · Card</td><td class="w">subagent / job tables · JSON frame view · log view · transcript notices</td></tr>
+        <tr><td>20–27 Settings</td><td class="w">NavigationView (settings) · Card rows · Expander · ToggleSwitch · RadioButton · ComboBox · TextBox · PasswordBox</td><td class="w">regex test panel · key caps</td></tr>
+      </tbody>
+    </table>
+    <div style="padding: 16px 20px 20px; border-top: 1px solid var(--stroke); display: flex; flex-direction: column; gap: 6px">
+      <span class="t-strong">Theme</span>
+      <span class="t2 w">FluentThemeData(brightness, accentColor: AccentColor.swatch(system accent), typography: default) — fonts: Segoe UI Variable on Windows, system UI font on macOS / Linux; code font bundled as an asset.</span>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

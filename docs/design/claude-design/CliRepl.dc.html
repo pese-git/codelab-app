@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — line REPL</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>zsh — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli line REPL on the ansi surface: appended output with dim thoughts, reply, tool rows and the after-turn status line">
+    <div class="grow">
+      <div class="ln"><span class="mu">~/codelab-app $</span> codelab</div>
+      <div class="ln mu">codelab 0.9.0 · embedded · claude-sonnet-5-5 · /help for commands, ctrl+d to exit</div>
+      <div class="ln"> </div>
+      <div class="ln"><span class="ac b">&gt;</span> Why does the reconnect test flake?</div>
+      <div class="ln mu i">┆ The test reconnects twice within 50 ms. If the old subscription is still alive,</div>
+      <div class="ln mu i">┆ its late session/update lands in the new state — that matches the "2 updates" assert.</div>
+      <div class="ln mu i">┆ Check where ConnectionCubit cancels it.</div>
+      <div class="ln"> </div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Read</span> lib/features/workbench/application/connection_cubit.dart:1-120</span><span class="mu">0.1s</span></div>
+      <div class="ln row"><span><span class="er">✗</span> <span class="b">Run</span> fvm flutter test test/reconnect_test.dart</span><span class="mu">4.8s</span></div>
+      <div class="ln mu">  └ Expected: &lt;1&gt;</div>
+      <div class="ln mu">      Actual: &lt;2&gt; — duplicate session/update after reconnect</div>
+      <div class="ln"> </div>
+      <div class="ln"><span class="ac b">Cause</span></div>
+      <div class="ln">The restorer re-subscribes before the old <span class="inv">StreamSubscription</span> is cancelled. Two fixes, in order:</div>
+      <div class="ln">  1. Cancel and await the previous subscription in <span class="b">ConnectionCubit</span> before connecting.</div>
+      <div class="ln">  2. Drop updates whose <span class="inv">requestId</span> is not the active one.</div>
+      <div class="ln"> </div>
+      <div class="ln mu">─ standard · claude-sonnet-5-5 · ctx 18% · ↑12.3k ↓1.1k · $0.04 · ⎇ main</div>
+      <div class="ln"><span class="ac b">&gt;</span> Fix it, then rerun the test</div>
+      <div class="ln mu i">┆ Cancel the old subscription before connect; keep the requestId guard as a second line.</div>
+      <div class="ln"> </div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Edit</span> connection_cubit.dart  <span class="ok">+9</span> <span class="er">-2</span></span><span class="mu">0.0s</span></div>
+      <div class="ln in">  @@ -58,6 +58,13 @@</div>
+      <div class="ln"><span class="mu">    58  58</span>   Future&lt;void&gt; connect(Profile profile) async {</div>
+      <div class="ln addbg"><span class="mu">        59</span><span class="ok"> +    await _subscription?.cancel();</span></div>
+      <div class="ln addbg"><span class="mu">        60</span><span class="ok"> +    _subscription = null;</span></div>
+      <div class="ln mu">  … 7 more lines (/inspect call_3)</div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Run</span> fvm flutter test test/reconnect_test.dart</span><span class="mu">4.1s</span></div>
+      <div class="ln"> </div>
+      <div class="ln">Fixed: the test passes 20/20 runs locally.</div>
+      <div class="ln mu">─ standard · claude-sonnet-5-5 · ctx 24% · ↑16.0k ↓1.7k · $0.05 · ⎇ main</div>
+      <div class="ln"><span class="ac b">&gt;</span> <span class="cur"> </span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

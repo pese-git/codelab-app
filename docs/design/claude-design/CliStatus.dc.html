@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — status and usage</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli /status output with agent, model, tools, hooks, deadline and config files, then /usage per turn and per model, and a status line with context at 81 percent in warning color">
+    <div class="grow">
+      <div class="ln"><span class="ac b">&gt;</span> /status</div>
+      <div class="ln"><span class="mu">  Agent     </span> codelab-agent 1.0.2 · embedded · pid 9120</div>
+      <div class="ln"><span class="mu">  Profile   </span> embedded <span class="mu">(~/.codelab/profiles.json)</span></div>
+      <div class="ln"><span class="mu">  Session   </span> Fix reconnect race · branch main · 14 messages</div>
+      <div class="ln"><span class="mu">  Mode      </span> standard · agent default</div>
+      <div class="ln"><span class="mu">  Model     </span> anthropic/claude-sonnet-5-5 · effort high · ctx 200k (from catalog) · out 64k</div>
+      <div class="ln"><span class="mu">  Roles     </span> compact → claude-haiku-5-5 · subagent → claude-sonnet-5-5</div>
+      <div class="ln"><span class="mu">  Tools     </span> 14 on / 2 off <span class="mu">(/tools)</span></div>
+      <div class="ln"><span class="mu">  MCP       </span> 2 servers · github connected (9 tools) · linear <span class="er">failed</span></div>
+      <div class="ln"><span class="mu">  Hooks     </span> 1 before, 0 after</div>
+      <div class="ln"><span class="mu">  Plugins   </span> none</div>
+      <div class="ln"><span class="mu">  Deadline  </span> 18:30 (/timer) · 1h12m left</div>
+      <div class="ln"><span class="mu">  Config    </span> ~/.codelab/config.yaml · ./.codelab/config.yaml</div>
+      <div class="ln"> </div>
+      <div class="ln"><span class="ac b">&gt;</span> /usage</div>
+      <div class="ln mu">  turn  model                       input   cache r/w    output   cost</div>
+      <div class="ln">     1  claude-sonnet-5-5          18.4k   0 / 18.1k      1.1k   $0.072</div>
+      <div class="ln">     2  claude-sonnet-5-5          24.9k   18.1k / 6.2k   2.3k   $0.051</div>
+      <div class="ln">     3  claude-haiku-5-5 (compact) 41.0k   0 / 0          3.0k   $0.011</div>
+      <div class="ln">     4  qwen3-coder:30b (fallback)  9.7k   –              0.8k   <span class="wa">~ $0.000</span></div>
+      <div class="ln mu">  ─────────────────────────────────────────────────────────────────────────────</div>
+      <div class="ln">  <span class="b">by model</span>  claude-sonnet-5-5 $0.123 · claude-haiku-5-5 $0.011 · qwen3-coder:30b ~</div>
+      <div class="ln">  <span class="b">session</span>   ↑94.0k ↓7.2k · cache hit 39% · <span class="b">$0.134 ~</span></div>
+      <div class="ln mu">  ~ partial: the provider did not report usage for turn 4. /usage rebuild re-reads the session log.</div>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln"><span class="ac b">&gt;</span> <span class="cur"> </span></div>
+    <div class="ln mu">enter send · esc cancel turn · / commands · @ files · /compact to free context</div>
+    <div class="ln"><span class="mu">idle</span>  standard · claude-sonnet-5-5 · <span class="wa b">ctx 81%</span> · ↑94.0k ↓7.2k · $0.13 ~ · deadline 1h12m · ⎇ develop</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

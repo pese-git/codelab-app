@@ -1,0 +1,1213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live workbench prototype</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.stage{height:100vh;min-height:600px;box-sizing:border-box;display:flex;gap:24px;padding:24px;background:#E6E8EA;overflow:auto;align-items:flex-start;justify-content:center;font-family:'Segoe UI Variable Text','Segoe UI',-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+.stage.dk{background:#141414}
+.devwrap{flex:1 1 auto;min-width:0;display:flex;justify-content:center}
+.devbox{position:relative;flex:none}
+.device{position:absolute;left:0;top:0;transform-origin:top left;box-sizing:border-box;overflow:hidden;display:flex;flex-direction:column}
+.device.phone{border:12px solid #1A1A1A;border-radius:48px;box-shadow:0 24px 64px rgba(0,0,0,.25)}
+.device.tablet{border:12px solid #1A1A1A;border-radius:32px;box-shadow:0 24px 64px rgba(0,0,0,.25)}
+.device.desktop{border-radius:10px;box-shadow:0 24px 64px rgba(0,0,0,.22),0 0 0 1px rgba(0,0,0,.18)}
+.device.fluid{border-radius:8px;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+.wbar{height:32px;flex:none;display:flex;align-items:center;gap:10px;padding:0 0 0 12px;font-size:12px}
+.wbar .sp{flex:1}
+.wbar i{width:46px;height:32px;display:inline-flex;align-items:center;justify-content:center;font-style:normal;color:var(--text2)}
+.ctl{width:280px;flex:none;max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;background:#FFFFFF;color:#1A1C1E;border-radius:16px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.08);font-size:13px;line-height:18px}
+.stage.dk .ctl{background:#262626;color:#EDEDED}
+.ctl h2{margin:0;font-size:16px;line-height:24px}
+.ctl .h{font-size:11px;line-height:16px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:#5F6368;margin:16px 0 6px}
+.stage.dk .ctl .h,.stage.dk .ctl .cur{color:#A8ACB0}
+.ctl .cur{font-size:12px;color:#5F6368;margin-top:4px}
+.seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;background:#F1F3F4;border-radius:8px;padding:3px;margin:4px 0}
+.seg.dev{grid-template-columns:repeat(6,minmax(0,1fr))}
+.seg.dev button{grid-column:span 2}
+.seg.dev button:nth-child(n+4){grid-column:span 3}
+.stage.dk .seg{background:#333}
+.seg button{min-width:0;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent;border-radius:6px;padding:6px 2px;font-size:12px;line-height:16px;font-weight:500;font-family:inherit;color:#5F6368;cursor:pointer;min-height:28px;white-space:nowrap}
+.stage.dk .seg button{color:#C8C8C8}
+.seg button.on{background:#FFFFFF;color:#1A1C1E;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.stage.dk .seg button.on{background:#4A4A4A;color:#FFF}
+.row{display:flex;justify-content:space-between;align-items:center;width:100%;padding:6px 0;border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;text-align:left;min-height:32px}
+.row:disabled{opacity:.4;cursor:default}
+.sw{width:32px;height:18px;border-radius:9px;background:#DADCE0;position:relative;flex:none}
+.sw::after{content:'';position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#FFF;transition:left .15s}
+.sw.on{background:#0067C0}.sw.on::after{left:16px}
+.stage.dk .sw{background:#5A5A5A}.stage.dk .sw.on{background:#4CA0E0}
+.stage.dk .cbtn{border-color:#4A4A4A}
+.stage.dk .device.phone,.stage.dk .device.tablet{border-color:#3A3A3A;box-shadow:0 0 0 1px #555,0 24px 64px rgba(0,0,0,.5)}
+.stage.dk .device.desktop,.stage.dk .device.fluid{box-shadow:0 0 0 1px #4A4A4A,0 24px 64px rgba(0,0,0,.5)}
+.cbtn{display:block;width:100%;margin:4px 0;padding:7px 10px;border:1px solid #DADCE0;border-radius:8px;background:transparent;font-size:12px;line-height:16px;font-weight:500;font-family:inherit;color:inherit;cursor:pointer;text-align:left;min-height:32px}
+.cbtn:disabled{opacity:.4;cursor:default}
+.sws{display:flex;gap:8px;margin:6px 0}
+.swc{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.swc.on{border-color:#1A1C1E;box-shadow:inset 0 0 0 2px #FFF}
+.app{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.hide{display:none !important}
+.tools{display:flex;align-items:center;gap:2px}
+.tool{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;border-radius:4px;border:1px solid transparent;background:transparent;color:var(--text2);font-size:12px;cursor:pointer}
+.tool:hover{background:var(--hover)}
+.tool.on{background:var(--accent-weak);color:var(--accent-text)}
+.app.slim .tool .lbl{display:none}
+.palbtn{flex:0 1 360px;min-width:0;cursor:pointer;justify-content:flex-start}
+.palbtn .ph2{flex:1;text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.body{flex:1;min-height:0;display:flex;position:relative}
+.side{width:272px}
+.side.over{position:absolute;left:0;top:0;bottom:0;z-index:6;background:var(--solid);box-shadow:var(--shadow-flyout);border-right:1px solid var(--stroke);width:300px;max-width:86%}
+.side.full{width:100%;flex:1;background:var(--layer)}
+.rail{width:48px;flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 0}
+.scrim{position:absolute;inset:0;z-index:5;background:var(--smoke);border:0;padding:0;cursor:default}
+.scrim.clear{background:transparent}
+.grp{display:flex;align-items:center;gap:8px;min-height:32px;margin:2px 0;padding:0 8px;border:0;background:transparent;color:var(--text);border-radius:4px;width:100%;box-sizing:border-box;text-align:left;font-weight:600;cursor:pointer}
+.grp:hover{background:var(--hover)}
+.sess{padding-left:30px;gap:10px;min-height:32px}
+.touch .f-pi{min-height:44px}
+.touch .grp{min-height:44px}
+.pin{gap:10px;min-height:32px}
+.f-pi.vis{background:var(--hover)}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pn{font-size:11px;line-height:16px;min-width:16px;height:16px;border-radius:3px;border:1px solid var(--cstroke2);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.content{flex:1;min-width:0;background:var(--layer);display:flex;min-height:0;position:relative}
+.content.inset{border-top:1px solid var(--stroke);border-left:1px solid var(--stroke);border-top-left-radius:8px}
+.sessarea{flex:1;min-width:0;display:flex;min-height:0}
+.spane{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;position:relative}
+.spane+.spane{border-left:1px solid var(--stroke)}
+.spane.foc::before{content:'';position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent);z-index:1}
+.dock{position:relative;flex:none;min-width:0;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--stroke);background:var(--layer)}
+.dock.over{position:absolute;right:0;top:0;bottom:0;z-index:6;box-shadow:var(--shadow-flyout);max-width:calc(100% - 48px)}
+.dock.full{width:auto !important;flex:1 1 0;border-left:0;max-width:none;overflow:hidden}
+.is-phone .acp-status{flex-wrap:nowrap;white-space:nowrap;overflow:hidden}
+.is-phone .acp-status .cost{display:none}
+.dock.full .dhead,.dock.full .grip{display:none}
+.dock.max{width:auto !important;flex:1;border-left:0}
+.grip{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;display:flex;align-items:center;justify-content:center;z-index:2;touch-action:none}
+.grip i{width:2px;height:28px;border-radius:1px;background:var(--cstroke2)}
+.grip:hover i{background:var(--accent)}
+.dpane{display:flex;flex-direction:column;min-height:0;min-width:0}
+.dhead{display:flex;align-items:flex-end;gap:2px;padding:6px 8px 0;background:var(--mica);border-bottom:1px solid var(--stroke);flex:none;overflow:hidden}
+.dtab{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;border-radius:6px 6px 0 0;border:1px solid transparent;border-bottom:0;color:var(--text2);font-size:12px;background:transparent;cursor:pointer;white-space:nowrap}
+.dtab:hover{background:var(--hover)}
+.dtab.on{background:var(--layer);color:var(--text);border-color:var(--stroke)}
+.hsplit{height:8px;flex:none;border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);background:var(--mica);cursor:row-resize;display:flex;align-items:center;justify-content:center;touch-action:none}
+.hsplit i{width:28px;height:2px;border-radius:1px;background:var(--cstroke2)}
+.sm{width:28px;height:28px;margin-bottom:2px}
+.stab{height:28px;gap:8px;font-size:12px;padding:0 6px 0 10px}
+.x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:3px;border:0;background:transparent;color:inherit;cursor:pointer;padding:0;font-size:13px;line-height:1}
+.x:hover{background:var(--hover)}
+.tbody{flex:1;min-height:0;margin:8px;padding:8px 10px;border-radius:4px;background:var(--term-bg);color:var(--term-fg);font-size:12px;line-height:18px;overflow:auto;display:flex;flex-direction:column-reverse}
+.tbody .ln{white-space:pre-wrap;word-break:break-all}
+.tbody .pr{color:#7FB3E6}.tbody .t3{color:#9AA0A6}.tbody .mo{color:#E3B341}.tbody .fl{color:#F28B82}.tbody .okl{color:#81C995}
+.tin{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--term-fg) !important;font:inherit;padding:0;caret-color:var(--term-fg)}
+.trow{display:flex;gap:6px;align-items:baseline}
+.tree{flex:1;min-height:0;overflow:auto;padding:6px 8px;font-size:13px}
+.f-tv{border:0;background:transparent;color:var(--text);width:100%;text-align:left;cursor:pointer;box-sizing:border-box;font:inherit}
+.f-tv:hover{background:var(--hover)}
+.touch .f-tv{height:44px}
+.prev{flex:none;max-height:45%;overflow:auto;border-top:1px solid var(--stroke);background:var(--code-bg)}
+.prev pre{margin:0;padding:8px 12px;font:12px/18px 'Cascadia Code','JetBrains Mono',Consolas,monospace;color:var(--code-fg);white-space:pre-wrap}
+.lrow{display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:4px 10px;border:0;border-radius:4px;background:transparent;color:var(--text);text-align:left;cursor:pointer;box-sizing:border-box;font:inherit}
+.lrow:hover{background:var(--hover)}
+.lrow.on{background:var(--sel)}
+.touch .lrow{min-height:44px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;font-size:13px}
+.pal{position:absolute;top:44px;left:50%;width:580px;max-width:calc(100% - 24px);transform:translateX(-50%);z-index:20;padding:6px;gap:2px;box-sizing:border-box}
+.palbg{position:absolute;inset:0;z-index:19;background:transparent;border:0;cursor:default}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text2);text-align:center;padding:24px}
+.trans{flex:1;overflow:auto;display:flex;flex-direction:column-reverse;min-height:0}
+.msgs{padding:12px 20px;display:flex;flex-direction:column;gap:12px;max-width:760px;width:100%;box-sizing:border-box;margin:0 auto}
+.touch .msgs{padding:12px}
+.comp{padding:0 20px 10px;max-width:760px;width:100%;box-sizing:border-box;margin:0 auto}
+.touch .comp{padding:0 8px 8px}
+.ph{display:flex;align-items:center;gap:10px;padding:10px 12px 8px 16px;border-bottom:1px solid var(--stroke);flex-wrap:wrap}
+.ph h2{margin:0;font-size:16px;line-height:22px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
+.mbar{height:52px;flex:none;display:flex;align-items:center;gap:4px;padding:0 6px;border-bottom:1px solid var(--stroke);background:var(--mica)}
+.mbar h1{margin:0;font-size:16px;line-height:22px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 6px}
+.ib44{width:44px;height:44px;padding:0}
+.appr{display:flex;gap:8px;flex-wrap:wrap}
+.appr.col{flex-direction:column}
+.appr.col .f-btn{height:44px;width:100%}
+.menu{position:absolute;right:6px;top:50px;z-index:8;min-width:220px}
+.menu .f-mi{height:44px}
+.thought{display:flex;flex-direction:column;gap:4px}
+.thought-h{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:0;border:0;background:transparent;color:var(--text2);font:inherit;font-size:12px;line-height:16px;cursor:pointer}
+.thought-b{margin-left:6px;padding-left:14px;border-left:1px solid var(--stroke);color:var(--text2);font-size:12px;line-height:18px;white-space:pre-line}
+.dbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:4px;border-top:1px solid var(--stroke);background:var(--card2)}
+.dbtn{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;border:0;border-radius:4px;background:transparent;color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.dbtn:hover{background:var(--hover)}
+.dbtn .k{font-size:12px;color:var(--text2)}
+</style>
+</helmet>
+<div class="{{stageCls}}">
+  <div class="devwrap">
+    <div class="devbox" style="width: {{boxW}}px; height: {{boxH}}px">
+      <div class="{{deviceCls}}" style="width: {{outW}}px; height: {{outH}}px; transform: scale({{scale}})">
+        <div class="{{appClass}}" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}; width: {{appW}}px; height: {{devH}}px">
+          <sc-if value="{{isDesktopWin}}" hint-placeholder-val="{{ true }}">
+            <div class="wbar" style="background: var(--mica); color: var(--text)" aria-hidden="true"><span class="f-logo" style="width: 16px; height: 16px; font-size: 8px">CL</span><span>CodeLab</span><span class="sp"></span><i>—</i><i>☐</i><i>✕</i></div>
+          </sc-if>
+
+          <sc-if value="{{isPhone}}" hint-placeholder-val="{{ false }}">
+            <header class="mbar" data-fluent="NavigationAppBar (phone)">
+              <sc-if value="{{phoneBack}}" hint-placeholder-val="{{ false }}">
+                <button class="f-btn subtle icon ib44" onClick="{{goBack}}" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+              </sc-if>
+              <sc-if value="{{phoneMenu}}" hint-placeholder-val="{{ true }}">
+                <button class="f-btn subtle icon ib44" onClick="{{openNav}}" aria-label="Open navigation"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+              </sc-if>
+              <h1>{{phoneTitle}}</h1>
+              <button class="f-btn subtle icon ib44" onClick="{{openPal}}" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg></button>
+              <sc-if value="{{phoneOnSession}}" hint-placeholder-val="{{ false }}">
+                <button class="f-btn subtle ib44" style="width: auto; padding: 0 10px" onClick="{{togglePanesMenu}}" aria-haspopup="menu" aria-expanded="{{panesMenuExp}}">Panes</button>
+              </sc-if>
+              <sc-if value="{{phoneOnList}}" hint-placeholder-val="{{ true }}">
+                <button class="f-btn subtle icon ib44" onClick="{{newSession}}" aria-label="New session"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+              </sc-if>
+            </header>
+            <sc-if value="{{panesMenu}}" hint-placeholder-val="{{ false }}">
+              <button class="scrim clear" onClick="{{closePanesMenu}}" aria-label="Close menu"></button>
+              <div class="f-fly menu" role="menu" aria-label="Panes">
+                <sc-for list="{{phonePanes}}" as="pp" hint-placeholder-count="6">
+                  <button class="f-mi" role="menuitem" onClick="{{pp.open}}">{{pp.label}}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <sc-if value="{{notPhone}}" hint-placeholder-val="{{ true }}">
+          <header class="f-appbar" data-fluent="NavigationAppBar">
+            <sc-if value="{{showHamburger}}" hint-placeholder-val="{{ false }}">
+              <button class="f-btn subtle icon" onClick="{{openNav}}" aria-label="Open sessions"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </sc-if>
+            <span class="f-logo">CL</span>
+            <span class="t-cap">CodeLab</span>
+            <span style="flex: 1"></span>
+            <button class="f-tb palbtn" onClick="{{openPal}}" aria-label="Open command palette (Ctrl+K)">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+              <span class="ph2">Search or run a command</span>
+              <span class="t-cap">Ctrl+K</span>
+            </button>
+            <span style="flex: 1"></span>
+            <div class="tools" role="toolbar" aria-label="Tool panes">
+              <button class="{{tb.files}}" onClick="{{tg.files}}" aria-pressed="{{tp.files}}" title="Files (Ctrl+Shift+E)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="lbl">Files</span></button>
+              <button class="{{tb.diff}}" onClick="{{tg.diff}}" aria-pressed="{{tp.diff}}" title="Diff (Ctrl+Shift+D)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 4v8M8 8h8M8 18h8"/></svg><span class="lbl">Diff</span></button>
+              <sc-if value="{{termAllowed}}" hint-placeholder-val="{{ true }}">
+                <button class="{{tb.terminal}}" onClick="{{tg.terminal}}" aria-pressed="{{tp.terminal}}" title="Terminal (Ctrl+`)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8"/></svg><span class="lbl">Terminal</span></button>
+              </sc-if>
+              <button class="{{tb.plan}}" onClick="{{tg.plan}}" aria-pressed="{{tp.plan}}" title="Plan"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg><span class="lbl">Plan</span></button>
+              <button class="{{tb.agents}}" onClick="{{tg.agents}}" aria-pressed="{{tp.agents}}" title="Agents"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="2"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg><span class="lbl">Agents</span></button>
+              <button class="{{tb.usage}}" onClick="{{tg.usage}}" aria-pressed="{{tp.usage}}" title="Usage"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="lbl">Usage</span></button>
+              <button class="{{tb.protocol}}" onClick="{{tg.protocol}}" aria-pressed="{{tp.protocol}}" title="Protocol (Ctrl+Shift+I)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg><span class="lbl">Protocol</span></button>
+            </div>
+            <sc-if value="{{showConnTag}}" hint-placeholder-val="{{ true }}"><span class="{{conn.tagCls}}"><span class="f-dot"></span>{{conn.tag}}</span></sc-if>
+          </header>
+          </sc-if>
+
+          <div class="body">
+            <sc-if value="{{sideOpenCol}}" hint-placeholder-val="{{ true }}">
+              <sc-if value="{{sideOver}}" hint-placeholder-val="{{ false }}"><button class="scrim" onClick="{{closeNav}}" aria-label="Close navigation"></button></sc-if>
+              <nav class="{{sideCls}}" aria-label="Sessions">
+                <div style="display: flex; gap: 4px; align-items: center; padding: 4px 4px 2px">
+                  <button class="f-pi" onClick="{{newSession}}" style="flex: 1; margin: 0"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session</button>
+                  <sc-if value="{{canCollapse}}" hint-placeholder-val="{{ true }}">
+                    <button class="f-btn subtle icon" onClick="{{toggleSide}}" aria-label="Collapse sidebar (Ctrl+B)" title="Collapse sidebar (Ctrl+B)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+                  </sc-if>
+                </div>
+                <label class="f-tb" style="margin: 4px 8px 6px">
+                  <input type="search" placeholder="Search sessions" aria-label="Search sessions" value="{{query}}" onChange="{{onQuery}}">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+                </label>
+                <div style="flex: 1; overflow: auto; min-height: 0">
+                  <sc-if value="{{hasPinned}}" hint-placeholder-val="{{ true }}">
+                    <div class="f-ph">Pinned</div>
+                    <sc-for list="{{pinned}}" as="x" hint-placeholder-count="1">
+                      <button class="{{x.pinCls}}" onClick="{{x.open}}"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 6 4 3H6l4-3zM12 13v7"/></svg><span class="nm">{{x.title}}</span><sc-if value="{{x.isRunning}}" hint-placeholder-val="{{ false }}"><span class="f-pr" style="width: 14px; height: 14px" role="img" aria-label="Turn running"></span></sc-if></button>
+                    </sc-for>
+                  </sc-if>
+                  <div class="f-ph">Projects</div>
+                  <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+                    <div>
+                      <button class="grp" onClick="{{g.toggle}}" aria-expanded="{{g.expanded}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: {{g.chev}}"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">{{g.name}}</span><span class="t-cap t2" style="font-weight: 400">{{g.count}}</span></button>
+                      <sc-if value="{{g.open}}" hint-placeholder-val="{{ true }}">
+                        <sc-for list="{{g.items}}" as="x" hint-placeholder-count="2">
+                          <button class="{{x.cls}}" onClick="{{x.open}}"><span class="nm">{{x.title}}</span><sc-if value="{{x.hasPane}}" hint-placeholder-val="{{ false }}"><span class="pn" title="Open in pane">{{x.paneNo}}</span></sc-if><sc-if value="{{x.isApproval}}" hint-placeholder-val="{{ false }}"><span class="tag acc" style="height: 18px; padding: 0 6px" role="img" aria-label="Waiting for approval">approval</span></sc-if><sc-if value="{{x.isRunning}}" hint-placeholder-val="{{ false }}"><span class="f-pr" style="width: 14px; height: 14px" role="img" aria-label="Turn running"></span></sc-if><sc-if value="{{x.isError}}" hint-placeholder-val="{{ false }}"><span class="tag bad" style="height: 18px; padding: 0 6px" role="img" aria-label="Error">error</span></sc-if></button>
+                        </sc-for>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{navPanes}}" hint-placeholder-val="{{ false }}">
+                    <div class="f-ph">Panes</div>
+                    <sc-for list="{{phonePanes}}" as="pp" hint-placeholder-count="6">
+                      <button class="f-pi" onClick="{{pp.open}}">{{pp.label}}</button>
+                    </sc-for>
+                  </sc-if>
+                </div>
+                <div class="f-psep"></div>
+                <a href="General.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
+                <div class="t-cap t2" style="padding: 4px 12px 6px">{{profileLine}}</div>
+              </nav>
+            </sc-if>
+            <sc-if value="{{sideRail}}" hint-placeholder-val="{{ false }}">
+              <nav class="rail" aria-label="Sessions (collapsed)">
+                <button class="f-btn subtle icon" onClick="{{toggleSide}}" aria-label="Expand sidebar (Ctrl+B)" title="Expand sidebar (Ctrl+B)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+                <button class="f-btn subtle icon" onClick="{{newSession}}" aria-label="New session (Ctrl+N)" title="New session (Ctrl+N)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                <button class="f-btn subtle icon" onClick="{{openPal}}" aria-label="Search (Ctrl+K)" title="Search (Ctrl+K)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg></button>
+              </nav>
+            </sc-if>
+
+            <sc-if value="{{showContent}}" hint-placeholder-val="{{ true }}">
+            <section class="{{contentCls}}">
+              <div class="{{sessCls}}">
+                <sc-for list="{{panes}}" as="p" hint-placeholder-count="1">
+                  <section class="{{p.cls}}" onMouseDown="{{p.focus}}" aria-label="Session pane">
+                    <sc-if value="{{p.showHeader}}" hint-placeholder-val="{{ true }}">
+                    <div class="ph">
+                      <h2>{{p.title}}</h2>
+                      <span class="tag">{{p.project}}</span>
+                      <span class="tag acc">{{p.mode}}</span>
+                      <span style="flex: 1"></span>
+                      <div class="f-cb">
+                        <sc-if value="{{p.canSplit}}" hint-placeholder-val="{{ true }}">
+                          <button class="f-cbb" onClick="{{p.split}}" title="{{p.splitTitle}}"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>Split</button>
+                        </sc-if>
+                        <sc-if value="{{p.canClose}}" hint-placeholder-val="{{ false }}">
+                          <button class="f-btn subtle icon" onClick="{{p.close}}" aria-label="Close this pane"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+                        </sc-if>
+                      </div>
+                    </div>
+                    </sc-if>
+                    <sc-if value="{{conn.bar}}" hint-placeholder-val="{{ false }}">
+                      <div class="{{conn.barCls}}" style="margin: 8px 12px 0; align-items: center">
+                        <span class="f-ibi">!</span>
+                        <div class="t-cap" style="flex: 1"><span class="ttl">{{conn.barTitle}}</span>{{conn.barText}}</div>
+                        <sc-if value="{{conn.canRetry}}" hint-placeholder-val="{{ false }}"><button class="f-btn" style="height: 28px" onClick="{{reconnect}}">Reconnect</button></sc-if>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{p.isEmpty}}" hint-placeholder-val="{{ false }}">
+                      <div class="empty">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/></svg>
+                        <div class="t-strong" style="color: var(--text)">New session in {{p.project}}</div>
+                        <div class="t-cap">Describe a task below. The agent works in {{p.cwd}}.</div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{p.hasMsgs}}" hint-placeholder-val="{{ true }}">
+                    <div class="trans">
+                      <div class="msgs">
+                        <sc-for list="{{p.msgs}}" as="m" hint-placeholder-count="3">
+                          <div style="display: flex; flex-direction: column">
+                            <sc-if value="{{m.isUser}}" hint-placeholder-val="{{ false }}"><div class="acp-bubble">{{m.text}}</div></sc-if>
+                            <sc-if value="{{m.isAgent}}" hint-placeholder-val="{{ true }}"><p style="margin: 0">{{m.text}}</p></sc-if>
+                            <sc-if value="{{m.isTool}}" hint-placeholder-val="{{ false }}">
+                              <div class="f-exp"><div class="f-exph" style="min-height: 40px">
+                                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--text2)"><path d="m4 17 6-6-6-6M12 19h8"/></svg>
+                                <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"><span>{{m.verb}}</span> <span class="mono t2" style="font-size: 13px">{{m.target}}</span></span>
+                                <span class="{{m.tagCls}}">{{m.result}}</span>
+                              </div></div>
+                            </sc-if>
+                            <sc-if value="{{m.isThinking}}" hint-placeholder-val="{{ false }}">
+                              <div style="display: flex; align-items: center; gap: 8px; color: var(--text2)"><span class="f-pr" style="width: 14px; height: 14px"></span>Working…</div>
+                            </sc-if>
+                            <sc-if value="{{m.isApproval}}" hint-placeholder-val="{{ false }}">
+                              <section aria-label="Permission request" class="f-exp" data-acp="AcpToolCallRow + AcpApprovalPrompt">
+                                <div class="f-exph" style="min-height: 40px">
+                                  <sc-if value="{{m.pending}}" hint-placeholder-val="{{ true }}"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg></sc-if>
+                                  <span style="flex: 1; min-width: 0; overflow-wrap: anywhere"><span>{{m.verb}}</span> <span class="mono t2" style="font-size: 13px">{{m.cmd}}</span></span>
+                                  <span class="{{m.tagCls}}">{{m.result}}</span>
+                                </div>
+                                <sc-if value="{{m.pending}}" hint-placeholder-val="{{ true }}">
+                                  <div class="dbar" role="group" aria-label="Decision" data-acp="decision bar: decision × scope">
+                                    <button class="dbtn" onClick="{{m.allow}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">{{m.allowKey}}</span></button>
+                                    <button class="dbtn" onClick="{{m.reject}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">{{m.rejectKey}}</span></button>
+                                    <span style="flex: 1"></span>
+                                    <button class="f-btn subtle icon" aria-label="View raw input" title="View raw input" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 4c-2 0-2 2-2 4s-2 4-2 4 2 0 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 0-2 4 0 4-2 4"/></svg></button>
+                                    <button class="f-cbx" data-fluent="DropDownButton (scope: Only this time / Always)" style="min-width: 0; height: 32px; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+                                  </div>
+                                </sc-if>
+                              </section>
+                            </sc-if>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                    </sc-if>
+                    <div class="comp">
+                      <div class="f-card" style="padding: 8px; display: flex; flex-direction: column; gap: 8px">
+                        <label class="{{p.tbCls}}" style="align-items: flex-start; padding-top: 2px">
+                          <textarea rows="2" aria-label="Prompt" placeholder="Ask the agent" value="{{p.draft}}" onChange="{{p.onDraft}}" onKeyDown="{{p.onKey}}" onFocus="{{p.focus}}" style="font-size: 14px"></textarea>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+                          <button class="f-btn subtle icon mono" aria-label="Commands">/</button>
+                          <button class="f-cbx" style="min-width: 0">{{p.model}}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+                          <span style="flex: 1"></span>
+                          <button class="f-btn accent" onClick="{{p.send}}">{{p.sendLabel}}</button>
+                        </div>
+                      </div>
+                      <div role="status" class="acp-status" style="padding: 8px 4px 0">
+                        <span style="color: var(--text)">{{p.model}}</span>
+                        <span style="display: flex; align-items: center; gap: 8px"><span class="f-pb" style="width: 56px"><i style="width: {{p.ctx}}%"></i></span>{{p.ctx}}%</span>
+                        <span class="cost">{{p.cost}}</span>
+                        <span style="flex: 1"></span>
+                        <span style="color: {{p.statusColor}}">{{p.statusText}}</span>
+                      </div>
+                    </div>
+                  </section>
+                </sc-for>
+              </div>
+              <sc-if value="{{dockScrim}}" hint-placeholder-val="{{ false }}"><button class="scrim clear" onClick="{{closeDock}}" aria-label="Close tool panes"></button></sc-if>
+            </section>
+            </sc-if>
+
+            <sc-if value="{{dockVisible}}" hint-placeholder-val="{{ true }}">
+            <aside class="{{dockCls}}" style="width: {{dockW}}px" aria-label="Tool panes">
+              <div class="grip" role="separator" aria-orientation="vertical" aria-label="Drag to resize tool panes" title="Drag to resize · double-click to reset" onPointerDown="{{dragDock}}" onDoubleClick="{{resetDock}}"><i></i></div>
+              <sc-if value="{{topOpen}}" hint-placeholder-val="{{ true }}">
+              <section class="dpane" style="flex: {{topFlex}}" aria-label="Tool pane">
+                <div class="dhead" role="tablist">
+                  <button role="tab" class="{{dt.files}}" onClick="{{st.files}}">Files</button>
+                  <button role="tab" class="{{dt.diff}}" onClick="{{st.diff}}">Diff<span class="t2">{{diffCount}}</span></button>
+                  <button role="tab" class="{{dt.plan}}" onClick="{{st.plan}}">Plan</button>
+                  <button role="tab" class="{{dt.agents}}" onClick="{{st.agents}}">Agents</button>
+                  <button role="tab" class="{{dt.usage}}" onClick="{{st.usage}}">Usage</button>
+                  <button role="tab" class="{{dt.protocol}}" onClick="{{st.protocol}}">Protocol</button>
+                  <span style="flex: 1"></span>
+                  <button class="f-btn subtle icon sm" onClick="{{closeTop}}" aria-label="Close pane"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+                </div>
+                <div class="t-cap t2" style="padding: 6px 12px 0; flex: none">{{dockFollow}}</div>
+
+                <sc-if value="{{isFiles}}" hint-placeholder-val="{{ true }}">
+                  <div class="tree" role="tree" aria-label="Project files">
+                    <sc-for list="{{tree}}" as="r" hint-placeholder-count="6">
+                      <button role="treeitem" class="{{r.cls}}" style="padding-left: {{r.pad}}px" onClick="{{r.click}}">
+                        <sc-if value="{{r.dir}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: {{r.chev}}"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--text2)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></sc-if>
+                        <sc-if value="{{r.file}}" hint-placeholder-val="{{ true }}"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--text2)"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></sc-if>
+                        <span class="nm">{{r.name}}</span>
+                        <sc-if value="{{r.changed}}" hint-placeholder-val="{{ false }}"><span class="mono t-cap" style="color: var(--warn)">M</span></sc-if>
+                      </button>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{hasPreview}}" hint-placeholder-val="{{ false }}">
+                    <div class="prev" aria-label="File preview">
+                      <div class="acp-codeh"><span class="mono">{{previewName}}</span><span class="t-cap">read-only</span></div>
+                      <pre>{{previewText}}</pre>
+                    </div>
+                  </sc-if>
+                </sc-if>
+
+                <sc-if value="{{isDiff}}" hint-placeholder-val="{{ false }}">
+                  <div style="flex: 1; min-height: 0; overflow: auto; padding: 6px 8px">
+                    <sc-if value="{{noDiff}}" hint-placeholder-val="{{ false }}"><div class="empty t-cap">No changes in this session yet.</div></sc-if>
+                    <sc-for list="{{diffs}}" as="d" hint-placeholder-count="2">
+                      <button class="{{d.cls}}" onClick="{{d.pick}}"><span class="nm mono" style="font-size: 13px">{{d.f}}</span><span class="mono t-cap" style="color: var(--ok)">+{{d.a}}</span><span class="mono t-cap" style="color: var(--bad)">−{{d.d}}</span></button>
+                    </sc-for>
+                    <sc-if value="{{hasDiffSel}}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top: 8px; border: 1px solid var(--stroke); border-radius: 4px; overflow: auto; background: var(--code-bg)">
+                        <div class="acp-hunk">@@ −41,6 +41,10 @@ {{diffSelName}}</div>
+                        <sc-for list="{{uni}}" as="u" hint-placeholder-count="6">
+                          <div class="{{u.cls}}"><span>{{u.o}}</span><span>{{u.n}}</span><span>{{u.s}}</span><span>{{u.t}}</span></div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{isPlan}}" hint-placeholder-val="{{ false }}">
+                  <div style="flex: 1; min-height: 0; overflow: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px">
+                    <div class="t-cap t2">{{planDone}} of {{planTotal}} done</div>
+                    <sc-for list="{{plan}}" as="s" hint-placeholder-count="4">
+                      <label class="f-chk" style="min-height: 36px"><input type="checkbox" checked="{{s.done}}" onChange="{{s.toggle}}"><span style="color: {{s.color}}; text-decoration: {{s.deco}}">{{s.t}}</span></label>
+                    </sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{isAgents}}" hint-placeholder-val="{{ false }}">
+                  <div style="flex: 1; min-height: 0; overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px">
+                    <sc-if value="{{noAgents}}" hint-placeholder-val="{{ false }}"><div class="empty t-cap">No subagents in this session.</div></sc-if>
+                    <sc-for list="{{agents}}" as="a" hint-placeholder-count="2">
+                      <div class="f-card" style="padding: 10px 12px; display: flex; flex-direction: column; gap: 4px">
+                        <div style="display: flex; align-items: center; gap: 8px"><span class="t-strong mono" style="flex: 1; font-size: 13px">{{a.n}}</span><span class="{{a.tagCls}}">{{a.st}}</span></div>
+                        <div class="t-cap t2">{{a.task}}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{isUsage}}" hint-placeholder-val="{{ false }}">
+                  <div style="flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px">
+                    <div>
+                      <div style="display: flex; justify-content: space-between" class="t-cap"><span>Context window</span><span>{{usage.ctx}}%</span></div>
+                      <div class="f-pb" style="margin-top: 8px"><i style="width: {{usage.ctx}}%"></i></div>
+                    </div>
+                    <div class="kv">
+                      <span class="t2">Model</span><span class="mono">{{usage.model}}</span>
+                      <span class="t2">Input tokens</span><span class="mono">{{usage.inT}}</span>
+                      <span class="t2">Output tokens</span><span class="mono">{{usage.outT}}</span>
+                      <span class="t2">Turns</span><span class="mono">{{usage.turns}}</span>
+                      <span class="t2">Cost (estimate)</span><span class="mono">{{usage.cost}}</span>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{isProtocol}}" hint-placeholder-val="{{ false }}">
+                  <div class="mono" style="flex: 1; min-height: 0; overflow: auto; padding: 8px 12px; font-size: 12px; line-height: 20px">
+                    <sc-for list="{{proto}}" as="l" hint-placeholder-count="6">
+                      <div style="display: flex; gap: 10px; white-space: nowrap"><span class="t2">{{l.t}}</span><span style="color: {{l.color}}">{{l.dir}}</span><span>{{l.m}}</span><span class="t2" style="overflow: hidden; text-overflow: ellipsis">{{l.x}}</span></div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </section>
+              </sc-if>
+
+              <sc-if value="{{bothOpen}}" hint-placeholder-val="{{ true }}">
+                <div class="hsplit" role="separator" aria-orientation="horizontal" aria-label="Drag to resize stacked panes" onPointerDown="{{dragSplit}}"><i></i></div>
+              </sc-if>
+
+              <sc-if value="{{termShown}}" hint-placeholder-val="{{ true }}">
+              <section class="dpane" style="flex: 1 1 auto" aria-label="Terminal pane">
+                <div class="dhead">
+                  <span class="dtab on">Terminal</span>
+                  <span style="flex: 1"></span>
+                  <button class="f-btn subtle icon sm" onClick="{{toggleMax}}" aria-label="{{maxLabel}}" title="{{maxLabel}}"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="{{maxIcon}}"/></svg></button>
+                  <button class="f-btn subtle icon sm" onClick="{{closeTerm}}" aria-label="Close terminal pane"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--stroke); flex-wrap: wrap" role="tablist" aria-label="Shell tabs">
+                  <sc-for list="{{shells}}" as="t" hint-placeholder-count="2">
+                    <span class="{{t.cls}}" style="display: inline-flex; align-items: center"><button class="x" style="width: auto; padding: 0 4px; font-size: 12px" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}">{{t.name}}</button><button class="x t2" onClick="{{t.close}}" aria-label="Close {{t.name}}">×</button></span>
+                  </sc-for>
+                  <button class="f-btn subtle icon" style="width: 28px; height: 28px" onClick="{{addShell}}" aria-label="New terminal tab">+</button>
+                  <span style="flex: 1"></span>
+                  <button class="f-cbb" style="height: 28px; font-size: 12px" onClick="{{clearTerm}}">Clear</button>
+                </div>
+                <sc-if value="{{showBanner}}" hint-placeholder-val="{{ true }}">
+                  <div class="f-ib warning" style="margin: 8px 8px 0; padding: 8px 8px 8px 12px; align-items: center">
+                    <span class="f-ibi">!</span>
+                    <div class="t-cap" style="flex: 1"><span class="ttl">Outside the agent</span>Commands run as you, bypass approvals, output is not redacted.</div>
+                    <button class="f-btn" style="height: 28px" onClick="{{dismissBanner}}">Dismiss</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{noShell}}" hint-placeholder-val="{{ false }}">
+                  <div class="empty t-cap">No terminal tabs. <button class="f-btn" onClick="{{addShell}}">New terminal</button></div>
+                </sc-if>
+                <sc-if value="{{hasShell}}" hint-placeholder-val="{{ true }}">
+                <div class="tbody mono" role="log" aria-label="Terminal output">
+                  <div>
+                    <sc-for list="{{termLines}}" as="l" hint-placeholder-count="4">
+                      <div class="ln"><sc-if value="{{l.isCmd}}" hint-placeholder-val="{{ true }}"><span class="pr">{{cwd}}</span> <span class="t3">({{branch}})</span> % {{l.text}}</sc-if><sc-if value="{{l.isOut}}" hint-placeholder-val="{{ false }}"><span class="{{l.cls}}">{{l.text}}</span></sc-if></div>
+                    </sc-for>
+                    <div class="trow"><span class="pr" style="white-space: nowrap">{{cwd}}</span><span class="t3" style="white-space: nowrap">({{branch}}) %</span><input class="tin" aria-label="Terminal input" spellcheck="false" autocomplete="off" placeholder="try: git status, ls, melos test, help" value="{{termDraft}}" onChange="{{onTermDraft}}" onKeyDown="{{onTermKey}}"></div>
+                  </div>
+                </div>
+                </sc-if>
+              </section>
+              </sc-if>
+            </aside>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{palOpen}}" hint-placeholder-val="{{ false }}">
+            <button class="palbg" onClick="{{closePal}}" aria-label="Close command palette"></button>
+            <div class="f-fly pal" role="dialog" aria-label="Command palette">
+              <label class="f-tb focus" style="margin: 2px 2px 6px">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+                <input autoFocus="{{ true }}" aria-label="Command" placeholder="Command or session · Enter runs the first, Esc closes" value="{{palQ}}" onChange="{{onPalQ}}" onKeyDown="{{onPalKey}}">
+              </label>
+              <sc-for list="{{palItems}}" as="c" hint-placeholder-count="6">
+                <button class="{{c.cls}}" onClick="{{c.run}}"><span class="nm">{{c.label}}</span><span class="k">{{c.hint}}</span></button>
+              </sc-for>
+              <sc-if value="{{palNone}}" hint-placeholder-val="{{ false }}"><div class="t-cap t2" style="padding: 8px 12px">Nothing matches.</div></sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="ctl" aria-label="Prototype states">
+    <h2>Состояния прототипа</h2>
+    <div class="h">Устройство</div>
+    <div class="seg dev" role="group" aria-label="Device">
+      <sc-for list="{{devices}}" as="d" hint-placeholder-count="5">
+        <button class="{{d.cls}}" aria-pressed="{{d.pressed}}" onClick="{{d.pick}}">{{d.label}}</button>
+      </sc-for>
+    </div>
+    <div class="cur">{{geomLine}}</div>
+    <div class="cur">{{layoutLine}}</div>
+    <div class="cur">{{screenLine}}</div>
+
+    <div class="h">Вид</div>
+    <div class="seg" role="group" aria-label="Theme">
+      <sc-for list="{{themes}}" as="t" hint-placeholder-count="3">
+        <button class="{{t.cls}}" aria-pressed="{{t.pressed}}" onClick="{{t.pick}}">{{t.label}}</button>
+      </sc-for>
+    </div>
+    <div class="sws" role="group" aria-label="Accent color">
+      <sc-for list="{{accents}}" as="a" hint-placeholder-count="4">
+        <button class="{{a.cls}}" style="background: {{a.hex}}" aria-label="Accent {{a.hex}}" aria-pressed="{{a.pressed}}" onClick="{{a.pick}}"></button>
+      </sc-for>
+    </div>
+
+    <div class="h">Соединение с агентом</div>
+    <div class="seg" role="group" aria-label="Connection">
+      <sc-for list="{{conns}}" as="c" hint-placeholder-count="3">
+        <button class="{{c.cls}}" aria-pressed="{{c.pressed}}" onClick="{{c.pick}}">{{c.label}}</button>
+      </sc-for>
+    </div>
+
+    <div class="h">Раскладка</div>
+    <button class="row" onClick="{{toggleSide}}" disabled="{{noCollapse}}"><span>Сайдбар развёрнут</span><span class="{{swSide}}"></span></button>
+    <button class="row" onClick="{{toggleDock}}" disabled="{{isPhone}}"><span>Док панелей открыт</span><span class="{{swDock}}"></span></button>
+    <button class="row" onClick="{{tg.terminal}}" disabled="{{noTerm}}"><span>Терминал</span><span class="{{swTerm}}"></span></button>
+    <button class="cbtn" onClick="{{splitFromCtl}}" disabled="{{noSplit}}">{{splitBtn}}</button>
+    <button class="cbtn" onClick="{{newSession}}">Новая сессия</button>
+    <div class="cur">{{splitNote}}</div>
+
+    <div class="h">Ход</div>
+    <button class="cbtn" onClick="{{requestApproval}}">Агент просит одобрение (сессия 1)</button>
+    <button class="cbtn" onClick="{{failTurn}}">Ход завершился ошибкой</button>
+
+    <div style="margin-top: 16px"><button class="cbtn" onClick="{{resetAll}}">Сбросить прототип</button></div>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+const DEVICES = [
+  { id: 'phone', label: 'Смартфон', w: 390, h: 844, k: 'phone' },
+  { id: 'tabletP', label: 'Планшет ↕', w: 834, h: 1194, k: 'tablet' },
+  { id: 'tabletL', label: 'Планшет ↔', w: 1194, h: 834, k: 'tablet' },
+  { id: 'desktop', label: 'Десктоп', w: 1440, h: 900, k: 'desktop' },
+  { id: 'fluid', label: 'Под окно', k: 'fluid' }
+];
+const ACCENTS = ['#0078D4', '#0099BC', '#8764B8', '#CA5010'];
+const PREFS_KEY = 'codelab-proto-prefs';
+const PROJECTS = [
+  { id: 'app', name: 'codelab-app', cwd: '~/Projects/codelab-app', mcwd: 'Documents/codelab-app', branch: 'develop' },
+  { id: 'agent', name: 'codelab-agent', cwd: '~/Projects/codelab-agent', mcwd: 'Documents/codelab-agent', branch: 'feature/compaction' },
+  { id: 'web', name: 'codelab-web', cwd: '~/Projects/codelab-web', mcwd: 'Documents/codelab-web', branch: 'main' }
+];
+const FILES = {
+  app: ['lib/features/workbench/workbench_page.dart', 'lib/features/workbench/ui_mappers.dart', 'lib/features/terminal/terminal_pane.dart', 'packages/codelab_ui/lib/codelab_transcript_panel.dart', 'packages/codelab_ui/lib/codelab_tool_dock.dart', 'packages/codelab_ui/test/codelab_diff_view_test.dart', 'pubspec.yaml', 'README.md'],
+  agent: ['lib/src/compaction/thresholds.dart', 'lib/src/providers/provider_wizard.dart', 'lib/src/runtime/agent_runtime.dart', 'test/compaction_test.dart', 'pubspec.yaml'],
+  web: ['lib/main.dart', 'web/index.html', 'pubspec.yaml']
+};
+const DIFFS = {
+  s1: [{ f: 'codelab_transcript_panel.dart', a: 18, d: 6 }, { f: 'ui_mappers.dart', a: 4, d: 1 }],
+  s2: [{ f: 'workspace_restorer.dart', a: 9, d: 3 }],
+  s3: [{ f: 'workbench_page.dart', a: 41, d: 57 }, { f: 'shell_cubit.dart', a: 0, d: 212 }, { f: 'session_cubit.dart', a: 130, d: 0 }],
+  s4: [{ f: 'provider_wizard.dart', a: 12, d: 2 }],
+  s5: [{ f: 'thresholds.dart', a: 3, d: 3 }]
+};
+const PLANS = {
+  s1: [['Split transcript into typed rows', true], ['Render markdown blocks', true], ['Diff inside the approval card', false], ['Run codelab_ui tests', false]],
+  s2: [['Reproduce double reconnect', true], ['Trace timers after dispose', true], ['Guard late events by connection id', false]],
+  s3: [['Extract WorkspaceCubit', true], ['Extract SessionCubit', true], ['Fix analyze errors', false], ['Update widget tests', false]],
+  s4: [['Detect missing /v1', true], ['Show hint under Base URL', true]],
+  s5: [['Measure compaction at 70/80/90%', true], ['Pick 80% default', true]]
+};
+const AGENTS = {
+  s2: [{ n: 'explore-restorer', task: 'Trace reconnect paths in WorkspaceRestorer', st: 'running' }, { n: 'check-timers', task: 'Find timers that outlive dispose()', st: 'done' }],
+  s3: [{ n: 'fix-analyze', task: 'Fix 3 analyzer errors in workbench_page.dart', st: 'failed' }]
+};
+const USAGE = {
+  s1: { ctx: 62, inT: '11.9k', outT: '1.2k', turns: 4, cost: '$0.042' },
+  s2: { ctx: 38, inT: '7.4k', outT: '0.9k', turns: 3, cost: '$0.027' },
+  s3: { ctx: 81, inT: '24.6k', outT: '3.1k', turns: 9, cost: '$0.118' },
+  s4: { ctx: 22, inT: '4.1k', outT: '0.6k', turns: 2, cost: '$0.013' },
+  s5: { ctx: 45, inT: '9.0k', outT: '1.0k', turns: 3, cost: '$0.031' }
+};
+const UNI = [
+  { o: '42', n: '42', s: ' ', t: '  Widget build(BuildContext context) {', c: '' },
+  { o: '43', n: '', s: '−', t: '    return ListView.separated(', c: 'del' },
+  { o: '44', n: '', s: '−', t: '      itemCount: entries.length,', c: 'del' },
+  { o: '', n: '43', s: '+', t: '    return ListView.builder(', c: 'add' },
+  { o: '', n: '44', s: '+', t: '      itemCount: rows.length,', c: 'add' },
+  { o: '46', n: '50', s: ' ', t: '    );', c: '' }
+];
+const REPLIES = [
+  'Done. I read the relevant files and made the change; the diff is in the Diff pane.',
+  'I checked the call sites. Two places need the same guard; both are updated and tests pass.',
+  'Good question. The state lives in the session cubit, so the widget only renders it.'
+];
+const PANE_LABELS = { files: 'Files', diff: 'Diff', plan: 'Plan', agents: 'Agents', usage: 'Usage', protocol: 'Protocol' };
+function initialState() {
+  const tool = (verb, target, result, ok) => ({ kind: 'tool', verb: verb, target: target, result: result, ok: ok });
+  return {
+    sessions: [
+      { id: 's1', project: 'app', title: 'Markdown & diff in transcript', status: 'approval' },
+      { id: 's2', project: 'app', title: 'Fix reconnect race in WorkspaceRestorer', status: 'running', pinned: true },
+      { id: 's3', project: 'app', title: 'Stage 5: split CodeLabShellCubit', status: 'error' },
+      { id: 's4', project: 'agent', title: 'Provider wizard: /v1 hint', status: 'idle' },
+      { id: 's5', project: 'agent', title: 'Compaction thresholds', status: 'idle' },
+      { id: 's6', project: 'web', title: 'Web build smoke test', status: 'idle' }
+    ],
+    msgs: {
+      s1: [
+        { kind: 'user', text: 'Render agent replies as markdown with code highlighting, and show edits as a diff right in the approval card.' },
+        { kind: 'agent', text: 'I split the transcript into typed rows so markdown, thoughts and tool calls render independently. Streaming now rebuilds only the tail.' },
+        tool('Edit', 'codelab_transcript_panel.dart +18 −6', 'Done', true),
+        { kind: 'approval', decision: null }
+      ],
+      s2: [
+        { kind: 'user', text: 'The restorer sometimes reconnects twice after sleep. Find the race.' },
+        tool('Read', 'workspace_restorer.dart · 188 lines', 'Done', true),
+        { kind: 'agent', text: 'Two subagents are tracing reconnect paths and timers. See the Agents pane.' },
+        { kind: 'thinking' }
+      ],
+      s3: [
+        { kind: 'user', text: 'Split CodeLabShellCubit into workspace and session cubits.' },
+        tool('Run', 'melos analyze', 'Failed · 3 errors', false),
+        { kind: 'agent', text: 'Analyze failed with 3 errors in workbench_page.dart. Want me to fix them?' }
+      ],
+      s4: [
+        { kind: 'user', text: 'Show a hint when the base URL lacks /v1.' },
+        { kind: 'agent', text: 'Added the hint under the Base URL field. It appears once the field loses focus.' }
+      ],
+      s5: [
+        { kind: 'user', text: 'Tune the compaction thresholds for long sessions.' },
+        { kind: 'agent', text: 'Done. Compaction now starts at 80% of the context window, with a warning at 70%.' }
+      ],
+      s6: []
+    },
+    panes: ['s1'], focus: 0, sideOpen: true, navOpen: false, collapsed: {}, query: '',
+    dockOpen: true, topTab: 'files', termOpen: true, termMax: false, dockW: 420, topH: 250,
+    phoneScreen: 'list', phonePane: 'files', panesMenu: false,
+    shells: {
+      app: { list: [
+        { id: 't1', name: 'zsh', lines: [
+          { cmd: true, text: 'git status --short' },
+          { text: ' M lib/features/workbench/ui_mappers.dart', cls: 'mo' },
+          { text: ' M packages/codelab_ui/lib/codelab_transcript_panel.dart', cls: 'mo' }
+        ] },
+        { id: 't2', name: 'zsh 2', lines: [] }
+      ], active: 't1' },
+      agent: { list: [{ id: 't3', name: 'zsh', lines: [] }], active: 't3' },
+      web: { list: [], active: null }
+    },
+    termDraft: '', drafts: {}, selFile: {}, openDirs: {}, selDiff: {}, plans: {},
+    palOpen: false, palQ: '', banner: true, nextId: 7, replyN: 0, conn: 'ok'
+  };
+}
+function readPrefs() {
+  try { return JSON.parse(window.localStorage.getItem(PREFS_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+class Component extends DCLogic {
+  componentDidMount() {
+    this._onResize = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
+    window.addEventListener('resize', this._onResize);
+    try {
+      this._mq = window.matchMedia('(prefers-color-scheme: dark)');
+      this._onMq = () => this.forceUpdate();
+      this._mq.addEventListener('change', this._onMq);
+    } catch (e) { this._mq = null; }
+    const p = readPrefs();
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight, device: p.device || 'desktop', theme: p.theme || 'light', accentHex: p.accent || ACCENTS[0] });
+  }
+  componentWillUnmount() {
+    window.removeEventListener('resize', this._onResize);
+    if (this._mq) this._mq.removeEventListener('change', this._onMq);
+  }
+  savePrefs(patch) {
+    const s = this.S();
+    const next = Object.assign({ device: s.device, theme: s.theme, accent: s.accentHex }, patch);
+    try { window.localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch (e) { /* без хранилища — только до перезагрузки */ }
+    const st = {};
+    // Смена устройства начинает с исходного экрана класса: выдвижные панели закрыты.
+    if (patch.device) Object.assign(st, { device: patch.device, navOpen: false, panesMenu: false, phoneScreen: 'list', dockOpen: patch.device === 'desktop' });
+    if (patch.theme) st.theme = patch.theme;
+    if (patch.accent) st.accentHex = patch.accent;
+    this.setState(st);
+  }
+  palette(dark, raw) {
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  S() {
+    if (!this._init) this._init = Object.assign(initialState(), { vw: 1440, vh: 900, device: 'desktop', theme: 'light', accentHex: ACCENTS[0] });
+    return Object.assign({}, this._init, this.state || {});
+  }
+  sess(s, id) { return s.sessions.find((x) => x.id === id); }
+  proj(id) { return PROJECTS.find((p) => p.id === id); }
+  setMsgs(id, fn) {
+    const s = this.S();
+    const msgs = Object.assign({}, s.msgs);
+    msgs[id] = fn((msgs[id] || []).slice());
+    this.setState({ msgs: msgs });
+  }
+  setStatus(id, status) {
+    const s = this.S();
+    this.setState({ sessions: s.sessions.map((x) => (x.id === id ? Object.assign({}, x, { status: status }) : x)) });
+  }
+  open(id) {
+    const s = this.S();
+    const i = s.panes.indexOf(id);
+    const extra = { palOpen: false, navOpen: false, phoneScreen: 'session', panesMenu: false };
+    if (i >= 0) { this.setState(Object.assign({ focus: i }, extra)); return; }
+    const panes = s.panes.slice();
+    panes[s.focus] = id;
+    this.setState(Object.assign({ panes: panes }, extra));
+  }
+  split() {
+    const s = this.S();
+    if (s.panes.length > 1) return;
+    const cur = this.sess(s, s.panes[0]);
+    const other = s.sessions.find((x) => x.id !== cur.id && x.project === cur.project) || s.sessions.find((x) => x.id !== cur.id);
+    if (!other) return;
+    this.setState({ panes: [cur.id, other.id], focus: 1, palOpen: false });
+  }
+  closePane(i) {
+    const s = this.S();
+    if (s.panes.length < 2) return;
+    this.setState({ panes: s.panes.filter((_, k) => k !== i), focus: 0 });
+  }
+  newSession() {
+    const s = this.S();
+    const cur = this.sess(s, s.panes[s.focus]);
+    const pid = cur ? cur.project : 'app';
+    const id = 's' + s.nextId;
+    const msgs = Object.assign({}, s.msgs);
+    msgs[id] = [];
+    const panes = s.panes.slice();
+    panes[s.focus] = id;
+    const collapsed = Object.assign({}, s.collapsed);
+    collapsed[pid] = false;
+    this.setState({ sessions: s.sessions.concat([{ id: id, project: pid, title: 'New session', status: 'idle' }]), msgs: msgs, panes: panes, nextId: s.nextId + 1, collapsed: collapsed, palOpen: false, navOpen: false, phoneScreen: 'session' });
+  }
+  send(id) {
+    const s = this.S();
+    const text = (s.drafts[id] || '').trim();
+    if (!text) return;
+    const drafts = Object.assign({}, s.drafts);
+    drafts[id] = '';
+    const queued = s.conn !== 'ok';
+    const sessions = s.sessions.map((x) => (x.id === id ? Object.assign({}, x, { status: queued ? x.status : 'running', title: x.title === 'New session' ? text.slice(0, 40) : x.title }) : x));
+    const msgs = Object.assign({}, s.msgs);
+    msgs[id] = (msgs[id] || []).filter((m) => m.kind !== 'thinking').concat(queued ? [{ kind: 'user', text: text }, { kind: 'tool', verb: 'Queued', target: 'sends when the agent is back', result: 'Waiting', ok: true }] : [{ kind: 'user', text: text }, { kind: 'thinking' }]);
+    this.setState({ drafts: drafts, sessions: sessions, msgs: msgs });
+    if (queued) return;
+    setTimeout(() => {
+      const s2 = this.S();
+      const p = this.proj((this.sess(s2, id) || {}).project) || PROJECTS[0];
+      const file = FILES[p.id][0].split('/').pop();
+      this.setMsgs(id, (list) => list.filter((m) => m.kind !== 'thinking').concat([
+        { kind: 'tool', verb: 'Read', target: file, result: 'Done · 0.2 s', ok: true },
+        { kind: 'agent', text: REPLIES[s2.replyN % REPLIES.length] }
+      ]));
+      this.setStatus(id, 'idle');
+      this.setState({ replyN: s2.replyN + 1 });
+    }, 1400);
+  }
+  decide(id, idx, allow, mobile) {
+    this.setMsgs(id, (list) => list.map((m, k) => (k === idx ? Object.assign({}, m, { decision: allow ? 'allow' : 'reject' }) : m)).concat(allow ? [{ kind: 'thinking' }] : [{ kind: 'agent', text: 'Okay, I will not do it. Tell me how you want to proceed instead.' }]));
+    this.setStatus(id, allow ? 'running' : 'idle');
+    if (allow) {
+      setTimeout(() => {
+        this.setMsgs(id, (list) => list.filter((m) => m.kind !== 'thinking').concat(mobile
+          ? [{ kind: 'tool', verb: 'Write', target: 'codelab_diff_view.dart +12 −2', result: 'Done', ok: true }, { kind: 'agent', text: 'The diff now renders inside the approval card.' }]
+          : [{ kind: 'tool', verb: 'Run', target: 'fvm flutter test … codelab_diff_view_test.dart', result: 'Done · 4 s', ok: true }, { kind: 'agent', text: 'All 29 tests pass. The diff now renders inside the approval card.' }]));
+        this.setStatus(id, 'idle');
+      }, 1500);
+    }
+  }
+  toggleTool(t, L) {
+    const s = this.S();
+    if (L.isPhone) { this.setState({ phoneScreen: 'pane', phonePane: t === 'terminal' ? 'files' : t, palOpen: false }); return; }
+    if (t === 'terminal') {
+      if (!L.termAllowed) return;
+      const on = !(s.dockOpen && s.termOpen);
+      this.setState({ termOpen: on, dockOpen: on || !!s.topTab, termMax: on ? s.termMax : false, palOpen: false });
+      return;
+    }
+    const showing = s.dockOpen && s.topTab === t;
+    const top = showing ? null : t;
+    this.setState({ topTab: top, dockOpen: !!top || (s.termOpen && L.termAllowed), termMax: top ? false : s.termMax, palOpen: false });
+  }
+  shellsFor(s, pid) { return s.shells[pid] || { list: [], active: null }; }
+  setShells(pid, v) {
+    const shells = Object.assign({}, this.S().shells);
+    shells[pid] = v;
+    this.setState({ shells: shells });
+  }
+  run(pid, cmd) {
+    const s = this.S();
+    const sh = this.shellsFor(s, pid);
+    const p = this.proj(pid);
+    const c = cmd.trim();
+    const out = (text, cls) => ({ text: text, cls: cls || '' });
+    let res = [];
+    let clear = false;
+    if (c === 'clear') clear = true;
+    else if (c === 'pwd') res = [out(p.cwd.replace('~', '/Users/you'))];
+    else if (c === 'ls') res = [out(Array.from(new Set(FILES[pid].map((f) => f.split('/')[0]))).join('   '))];
+    else if (c.indexOf('git status') === 0) res = [out(' M ' + FILES[pid][1], 'mo'), out(' M ' + FILES[pid][0], 'mo')];
+    else if (c.indexOf('git branch') === 0) res = [out('* ' + p.branch, 'okl'), out('  develop')];
+    else if (c.indexOf('melos test') === 0 || c.indexOf('flutter test') >= 0 || c.indexOf('dart test') >= 0) res = [out('00:02 +12: loading tests', 't3'), out('00:05 +29: All tests passed!', 'okl')];
+    else if (c.indexOf('echo ') === 0) res = [out(c.slice(5))];
+    else if (c === 'help') res = [out('Prototype shell: git status, git branch, ls, pwd, melos test, echo, clear', 't3')];
+    else if (c !== '') res = [out('zsh: command not found: ' + c.split(' ')[0], 'fl')];
+    const list = sh.list.map((t) => (t.id === sh.active ? Object.assign({}, t, { lines: clear ? [] : t.lines.concat([{ cmd: true, text: c }]).concat(res).slice(-200) }) : t));
+    this.setShells(pid, { list: list, active: sh.active });
+    this.setState({ termDraft: '' });
+  }
+  layout(s) {
+    // Классы ширины — §12.8.3; док колонкой и split view — §12.3, A13, шаг 6b (DSK-29).
+    const dev = DEVICES.find((d) => d.id === s.device) || DEVICES[3];
+    const panelW = s.vw >= 900 ? 304 : 0;
+    const aw = Math.max(320, s.vw - 48 - panelW);
+    const ah = Math.max(400, s.vh - 48);
+    const bz = dev.k === 'phone' || dev.k === 'tablet' ? 12 : 0;
+    const w = dev.k === 'fluid' ? Math.max(360, aw) : dev.w;
+    const h = dev.k === 'fluid' ? Math.max(560, ah) : dev.h;
+    const outW = w + bz * 2, outH = h + bz * 2;
+    const scale = dev.k === 'fluid' ? 1 : Math.min(1, aw / outW, ah / outH);
+    const cls = w < 641 ? 'phone' : w < 900 ? 'narrow' : w < 1280 ? 'medium' : 'wide';
+    const mobile = dev.k === 'phone' || dev.k === 'tablet';
+    const isPhone = cls === 'phone';
+    const sideMode = isPhone ? (s.phoneScreen === 'list' ? 'full' : s.navOpen ? 'over' : 'none')
+      : cls === 'narrow' ? (s.navOpen ? 'over' : 'none')
+      : s.sideOpen ? 'open' : 'rail';
+    const sideW = sideMode === 'open' ? 272 : sideMode === 'rail' ? 48 : 0;
+    const center = w - sideW;
+    const splitOK = (cls === 'wide' || cls === 'medium') && center >= 1120;
+    const twoPanes = splitOK && s.panes.length > 1;
+    const dockCol = cls === 'wide' && center - s.dockW >= (twoPanes ? 1120 : 560);
+    return { dev: dev, w: w, h: h, outW: outW, outH: outH, scale: scale, cls: cls, mobile: mobile, isPhone: isPhone, sideMode: sideMode, splitOK: splitOK, twoPanes: twoPanes, dockCol: dockCol, termAllowed: !mobile, center: center };
+  }
+  renderVals() {
+    const s = this.S();
+    const L = this.layout(s);
+    const sysDark = !!(this._mq && this._mq.matches);
+    const dark = s.theme === 'dark' || (s.theme === 'system' && sysDark);
+    const focusIdx = L.twoPanes ? s.focus : Math.min(s.focus, s.panes.length - 1);
+    const focusedId = s.panes[focusIdx] || s.panes[0];
+    const fs = this.sess(s, focusedId) || s.sessions[0];
+    const fp = this.proj(fs.project);
+    const q = (s.query || '').toLowerCase();
+    const paneNo = (id) => { const i = s.panes.indexOf(id); return i >= 0 && L.twoPanes ? String(i + 1) : ''; };
+    const item = (x, pinned) => {
+      const visible = s.panes.indexOf(x.id) >= 0;
+      const focused = x.id === focusedId;
+      const base = pinned ? 'f-pi pin' : 'f-pi sess';
+      const mark = (L.isPhone && s.phoneScreen === 'list') ? '' : focused ? ' on' : visible && L.twoPanes ? ' vis' : '';
+      return {
+        title: x.title, cls: base + mark, pinCls: base + mark,
+        open: () => this.open(x.id),
+        hasPane: paneNo(x.id) !== '', paneNo: paneNo(x.id),
+        isApproval: x.status === 'approval', isRunning: x.status === 'running', isError: x.status === 'error'
+      };
+    };
+    const groups = PROJECTS.map((p) => {
+      const items = s.sessions.filter((x) => x.project === p.id && (!q || x.title.toLowerCase().indexOf(q) >= 0));
+      const open = q ? true : !s.collapsed[p.id];
+      return {
+        name: p.name, count: String(items.length), open: open, expanded: open ? 'true' : 'false',
+        chev: open ? 'rotate(90deg)' : 'none',
+        toggle: () => { const c = Object.assign({}, this.S().collapsed); c[p.id] = !c[p.id]; this.setState({ collapsed: c }); },
+        items: items.map((x) => item(x, false))
+      };
+    }).filter((g) => !q || g.items.length);
+    const pinned = s.sessions.filter((x) => x.pinned && (!q || x.title.toLowerCase().indexOf(q) >= 0)).map((x) => item(x, true));
+
+    const statusInfo = (st) => st === 'approval' ? ['Waiting for approval', 'var(--accent-text)']
+      : st === 'running' ? ['Working…', 'var(--accent-text)']
+      : st === 'error' ? ['Turn failed', 'var(--bad)'] : ['Ready', 'var(--text2)'];
+    const shownIds = L.twoPanes ? s.panes : [focusedId];
+    const panes = shownIds.map((id) => {
+      const i = s.panes.indexOf(id);
+      const x = this.sess(s, id) || s.sessions[0];
+      const p = this.proj(x.project);
+      const list = s.msgs[id] || [];
+      const u = USAGE[id] || { ctx: 3, cost: '$0.000' };
+      const si = statusInfo(x.status);
+      return {
+        title: x.title, project: p.name, cwd: L.mobile ? p.mcwd : p.cwd, mode: 'standard', model: 'claude-sonnet-5-5',
+        cls: 'spane' + (L.twoPanes && i === s.focus ? ' foc' : ''),
+        tbCls: i === focusIdx ? 'f-tb focus' : 'f-tb',
+        focus: () => { if (this.S().focus !== i) this.setState({ focus: i }); },
+        showHeader: !L.isPhone,
+        canSplit: !L.twoPanes, canClose: L.twoPanes,
+        splitTitle: L.splitOK ? 'Open to the side (Ctrl+\\)' : 'Not enough width: opens instead of the current session',
+        split: () => (L.splitOK ? this.split() : this.setState({ palOpen: true, palQ: 'Go to' })),
+        close: () => this.closePane(i),
+        isEmpty: list.length === 0, hasMsgs: list.length > 0,
+        msgs: list.map((m, k) => {
+          const dec = m.decision;
+          return {
+            isUser: m.kind === 'user', isAgent: m.kind === 'agent', isTool: m.kind === 'tool',
+            isThinking: m.kind === 'thinking', isApproval: m.kind === 'approval',
+            text: m.text || '', target: m.target || '',
+            verb: m.kind === 'approval' ? (L.mobile ? 'Write' : 'Run') : (m.verb || ''),
+            cmd: L.mobile ? 'lib/src/organisms/codelab_diff_view.dart  +12 −2' : 'fvm flutter test packages/codelab_ui/test/codelab_diff_view_test.dart',
+            allowKey: L.mobile ? '' : 'Ctrl+Enter', rejectKey: L.mobile ? '' : 'Ctrl+Backspace',
+            result: m.kind === 'approval' ? (dec === 'allow' ? 'Allow once' : dec === 'reject' ? 'Reject' : (L.mobile ? 'Local write' : 'Shell')) : (m.result || ''),
+            tagCls: m.kind === 'approval' ? (dec === 'allow' ? 'tag ok' : dec === 'reject' ? 'tag bad' : (L.mobile ? 'tag warn' : 'tag bad')) : (m.ok ? 'tag ok' : 'tag bad'),
+            pending: m.kind === 'approval' && !dec,
+            allow: () => this.decide(id, k, true, L.mobile),
+            reject: () => this.decide(id, k, false, L.mobile)
+          };
+        }),
+        draft: s.drafts[id] || '',
+        onDraft: (e) => { const d = Object.assign({}, this.S().drafts); d[id] = e.target.value; this.setState({ drafts: d }); },
+        onKey: (e) => { if (e.key === 'Enter' && !e.shiftKey && !L.isPhone) { e.preventDefault(); this.send(id); } },
+        send: () => this.send(id),
+        sendLabel: s.conn === 'ok' ? 'Send' : 'Queue',
+        ctx: String(u.ctx), cost: u.cost,
+        statusText: si[0], statusColor: si[1]
+      };
+    });
+
+    const top = L.isPhone ? s.phonePane : (s.dockOpen ? s.topTab : null);
+    const dockVisible = L.isPhone ? s.phoneScreen === 'pane' : s.dockOpen && (!!s.topTab || (s.termOpen && L.termAllowed));
+    const termShown = !L.isPhone && L.termAllowed && s.dockOpen && s.termOpen;
+    const termMax = termShown && s.termMax && L.dockCol;
+    const tools = ['files', 'diff', 'terminal', 'plan', 'agents', 'usage', 'protocol'];
+    const tb = {}, tg = {}, tp = {}, dt = {}, stt = {};
+    tools.forEach((t) => {
+      const on = t === 'terminal' ? termShown : top === t && dockVisible;
+      tb[t] = on ? 'tool on' : 'tool';
+      tp[t] = on ? 'true' : 'false';
+      tg[t] = () => this.toggleTool(t, L);
+      dt[t] = top === t ? 'dtab on' : 'dtab';
+      stt[t] = () => this.setState({ topTab: t });
+    });
+
+    // Files: дерево из путей проекта сессии в фокусе.
+    const changed = (DIFFS[fs.id] || []).map((d) => d.f);
+    const root = {};
+    FILES[fp.id].forEach((path) => {
+      let node = root;
+      path.split('/').forEach((part, k, arr) => {
+        node[part] = node[part] || { _file: k === arr.length - 1, _kids: {} };
+        node = node[part]._kids;
+      });
+    });
+    const tree = [];
+    const sel = s.selFile[fp.id] || null;
+    const walk = (node, prefix, depth) => {
+      Object.keys(node).sort((a, b) => (node[a]._file - node[b]._file) || a.localeCompare(b)).forEach((name) => {
+        const key = prefix ? prefix + '/' + name : name;
+        const n = node[name];
+        const dkey = fp.id + ':' + key;
+        const isOpen = s.openDirs[dkey] ?? depth < 2;
+        tree.push({
+          name: name, dir: !n._file, file: n._file, pad: String(4 + depth * 16 + (n._file ? 18 : 0)),
+          chev: isOpen ? 'rotate(90deg)' : 'none', cls: 'f-tv' + (key === sel ? ' on' : ''),
+          changed: n._file && changed.indexOf(name) >= 0,
+          click: () => {
+            if (n._file) { const sf = Object.assign({}, this.S().selFile); sf[fp.id] = key; this.setState({ selFile: sf }); }
+            else { const od = Object.assign({}, this.S().openDirs); od[dkey] = !isOpen; this.setState({ openDirs: od }); }
+          }
+        });
+        if (!n._file && isOpen) walk(n._kids, key, depth + 1);
+      });
+    };
+    walk(root, '', 0);
+    const previewName = sel ? sel.split('/').pop() : '';
+    const pascal = previewName.replace(/\.[a-z]+$/, '').split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+    const previewText = !sel ? '' : /\.dart$/.test(sel)
+      ? "import 'package:fluent_ui/fluent_ui.dart';\n\nclass " + pascal + " extends StatelessWidget {\n  const " + pascal + "({super.key});\n\n  @override\n  Widget build(BuildContext context) => const SizedBox();\n}"
+      : /\.yaml$/.test(sel) ? 'name: ' + fp.name.replace('-', '_') + '\npublish_to: none\nresolution: workspace'
+      : /\.md$/.test(sel) ? '# ' + fp.name + '\n\nFlutter client for ACP agents.' : '<!doctype html>\n<html>…</html>';
+
+    const diffs = DIFFS[fs.id] || [];
+    const ds = s.selDiff[fs.id] ?? (diffs.length ? 0 : null);
+    const planSrc = s.plans[fs.id] || (PLANS[fs.id] || []).map((r) => r[1]);
+    const plan = (PLANS[fs.id] || []).map((r, k) => ({
+      t: r[0], done: !!planSrc[k],
+      color: planSrc[k] ? 'var(--text2)' : 'var(--text)', deco: planSrc[k] ? 'line-through' : 'none',
+      toggle: () => { const pl = Object.assign({}, this.S().plans); const arr = planSrc.slice(); arr[k] = !arr[k]; pl[fs.id] = arr; this.setState({ plans: pl }); }
+    }));
+    const agents = (AGENTS[fs.id] || []).map((a) => Object.assign({}, a, { tagCls: a.st === 'running' ? 'tag acc' : a.st === 'done' ? 'tag ok' : 'tag bad' }));
+    const u = USAGE[fs.id] || { ctx: 3, inT: '0.2k', outT: '0.0k', turns: 0, cost: '$0.000' };
+    const proto = [
+      { t: '12:04:11', dir: '→', m: 'session/prompt', x: '{"sessionId":"' + fs.id + '"}' },
+      { t: '12:04:11', dir: '←', m: 'session/update', x: 'agent_message_chunk' },
+      { t: '12:04:12', dir: '←', m: 'session/update', x: 'tool_call · read' },
+      { t: '12:04:13', dir: '←', m: 'session/request_permission', x: L.mobile ? 'edit' : 'execute' },
+      { t: '12:04:20', dir: '→', m: 'result', x: 'allow_once' }
+    ].map((l) => Object.assign({}, l, { color: l.dir === '→' ? 'var(--accent-text)' : 'var(--ok)' }));
+
+    const sh = this.shellsFor(s, fp.id);
+    const active = sh.list.find((t) => t.id === sh.active) || null;
+    const shells = sh.list.map((t) => ({
+      name: t.name, sel: t.id === sh.active ? 'true' : 'false',
+      cls: 'f-btn toggle stab' + (t.id === sh.active ? ' on' : ''),
+      pick: () => this.setShells(fp.id, { list: this.shellsFor(this.S(), fp.id).list, active: t.id }),
+      close: () => {
+        const cur = this.shellsFor(this.S(), fp.id);
+        const list = cur.list.filter((y) => y.id !== t.id);
+        this.setShells(fp.id, { list: list, active: cur.active === t.id ? (list[0] ? list[0].id : null) : cur.active });
+      }
+    }));
+
+    const q2 = (s.palQ || '').toLowerCase();
+    const cmds = [
+      { label: 'Toggle terminal', hint: 'Ctrl+`', run: () => this.toggleTool('terminal', L), ok: L.termAllowed && !L.isPhone },
+      { label: 'Toggle sidebar', hint: 'Ctrl+B', run: () => this.setState({ sideOpen: !s.sideOpen, palOpen: false }), ok: L.cls === 'wide' || L.cls === 'medium' },
+      { label: 'Split: open session to the side', hint: 'Ctrl+\\', run: () => this.split(), ok: L.splitOK },
+      { label: 'New session', hint: 'Ctrl+N', run: () => this.newSession(), ok: true },
+      { label: 'Show Files', hint: 'Ctrl+Shift+E', run: () => this.toggleTool('files', L), ok: true },
+      { label: 'Show Diff', hint: 'Ctrl+Shift+D', run: () => this.toggleTool('diff', L), ok: true },
+      { label: 'Show Usage', hint: '', run: () => this.toggleTool('usage', L), ok: true }
+    ].filter((c) => c.ok).concat(s.sessions.map((x) => ({ label: 'Go to: ' + x.title, hint: this.proj(x.project).name, run: () => this.open(x.id) })));
+    const palItems = cmds.filter((c) => !q2 || c.label.toLowerCase().indexOf(q2) >= 0).slice(0, 9).map((c, k) => Object.assign({}, c, { cls: 'f-mi' + (k === 0 ? ' on' : '') }));
+
+    const startDrag = (e, axis, from, set) => {
+      e.preventDefault();
+      const x0 = axis === 'x' ? e.clientX : e.clientY;
+      const k = L.scale || 1;
+      const mv = (ev) => set(from, ((axis === 'x' ? ev.clientX : ev.clientY) - x0) / k);
+      const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+    };
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+    const connMap = {
+      ok: { tag: L.mobile ? 'Connected · on device' : 'Connected · in-process', tagCls: 'tag ok', bar: false },
+      retry: { tag: 'Reconnecting…', tagCls: 'tag warn', bar: true, barCls: 'f-ib warning', barTitle: 'Reconnecting', barText: 'Prompts are queued and sent when the agent is back.', canRetry: false },
+      lost: { tag: 'Disconnected', tagCls: 'tag bad', bar: true, barCls: 'f-ib error', barTitle: 'Connection lost', barText: 'The queue is kept. Reconnect to continue.', canRetry: true }
+    };
+    const conn = connMap[s.conn] || connMap.ok;
+    const phonePanes = ['files', 'diff', 'plan', 'agents', 'usage', 'protocol'].map((k) => ({ label: PANE_LABELS[k], open: () => this.setState({ phoneScreen: 'pane', phonePane: k, panesMenu: false, navOpen: false }) }));
+    const clsName = { phone: 'телефон (< 641)', narrow: 'узкий (641–899)', medium: 'средний (900–1279)', wide: 'широкий (≥ 1280)' }[L.cls];
+    const dockMode = L.isPhone ? 'панели — отдельные экраны' : L.dockCol ? 'док колонкой' : 'док выдвигается поверх ленты';
+    const screen = L.isPhone ? (s.phoneScreen === 'list' ? 'P1 сессии' : s.phoneScreen === 'session' ? 'P2 сессия «' + fs.title + '»' : 'P6 панель ' + PANE_LABELS[s.phonePane]) : 'сессия «' + fs.title + '»' + (dockVisible && top ? ' · ' + PANE_LABELS[top] : '');
+    const wide = L.cls === 'wide' || L.cls === 'medium';
+
+    const pal = this.palette(dark, s.accentHex);
+    return Object.assign(pal, {
+      appClass: pal.themeCls + ' app' + (L.cls === 'wide' ? '' : ' slim') + (L.mobile ? ' touch' : '') + (L.isPhone ? ' is-phone' : ''),
+      stageCls: 'stage' + (dark ? ' dk' : ''),
+      boxW: String(Math.round(L.outW * L.scale)), boxH: String(Math.round(L.outH * L.scale)),
+      outW: String(L.outW), outH: String(L.outH), scale: String(L.scale),
+      deviceCls: 'device ' + L.dev.k,
+      appW: String(L.w), devH: String(L.h),
+      appCls: '',
+      isDesktopWin: L.dev.k === 'desktop',
+      isPhone: L.isPhone, notPhone: !L.isPhone,
+      phoneBack: L.isPhone && s.phoneScreen !== 'list',
+      phoneMenu: false,
+      phoneTitle: s.phoneScreen === 'list' ? 'Sessions' : s.phoneScreen === 'pane' ? PANE_LABELS[s.phonePane] : fs.title,
+      phoneOnSession: L.isPhone && s.phoneScreen === 'session',
+      phoneOnList: L.isPhone && s.phoneScreen === 'list',
+      goBack: () => this.setState({ phoneScreen: s.phoneScreen === 'pane' ? 'session' : 'list', panesMenu: false }),
+      panesMenu: L.isPhone && s.panesMenu, panesMenuExp: s.panesMenu ? 'true' : 'false',
+      togglePanesMenu: () => this.setState({ panesMenu: !this.S().panesMenu }),
+      closePanesMenu: () => this.setState({ panesMenu: false }),
+      phonePanes: phonePanes, navPanes: L.isPhone && s.phoneScreen !== 'list',
+      showHamburger: L.cls === 'narrow',
+      openNav: () => this.setState({ navOpen: true, panesMenu: false }),
+      closeNav: () => this.setState({ navOpen: false }),
+      showConnTag: L.cls === 'wide' || s.conn !== 'ok',
+      conn: conn, reconnect: () => this.setState({ conn: 'ok' }),
+      termAllowed: L.termAllowed,
+      sideOpenCol: L.sideMode === 'open' || L.sideMode === 'over' || L.sideMode === 'full',
+      sideOver: L.sideMode === 'over',
+      sideCls: 'f-pane side' + (L.sideMode === 'over' ? ' over' : L.sideMode === 'full' ? ' full' : ''),
+      sideRail: L.sideMode === 'rail',
+      canCollapse: L.sideMode === 'open',
+      toggleSide: () => this.setState({ sideOpen: !this.S().sideOpen }),
+      newSession: () => this.newSession(),
+      query: s.query, onQuery: (e) => this.setState({ query: e.target.value }),
+      hasPinned: pinned.length > 0, pinned: pinned, groups: groups,
+      profileLine: L.mobile ? 'Agent profile: mobile · no shell or terminal' : 'Agent profile: desktop · in-process',
+      showContent: !L.isPhone || s.phoneScreen === 'session',
+      contentCls: 'content' + (L.sideMode === 'open' || L.sideMode === 'rail' ? ' inset' : ''),
+      sessCls: termMax ? 'sessarea hide' : 'sessarea',
+      panes: panes, apprCls: L.isPhone ? 'appr col' : 'appr',
+      dockScrim: !L.isPhone && dockVisible && !L.dockCol,
+      closeDock: () => this.setState({ dockOpen: false }),
+      dockVisible: dockVisible,
+      dockCls: 'dock' + (L.isPhone ? ' full' : L.dockCol ? '' : ' over') + (termMax ? ' max' : ''),
+      dockW: String(L.isPhone ? L.w : Math.min(s.dockW, L.w - 48)),
+      dragDock: (e) => startDrag(e, 'x', s.dockW, (w0, dx) => this.setState({ dockW: clamp(w0 - dx, 320, 760) })),
+      resetDock: () => this.setState({ dockW: 420 }),
+      dragSplit: (e) => startDrag(e, 'y', s.topH, (h0, dy) => this.setState({ topH: clamp(h0 + dy, 110, 620) })),
+      topOpen: !!top && !termMax,
+      bothOpen: !!top && termShown && !termMax,
+      topFlex: termShown ? '0 0 ' + s.topH + 'px' : '1 1 auto',
+      closeTop: () => this.setState({ topTab: null, dockOpen: this.S().termOpen && L.termAllowed }),
+      dockFollow: 'Follows the focused session · ' + fs.title,
+      tb: tb, tg: tg, tp: tp, dt: dt, st: stt,
+      isFiles: top === 'files', isDiff: top === 'diff', isPlan: top === 'plan', isAgents: top === 'agents', isUsage: top === 'usage', isProtocol: top === 'protocol',
+      tree: tree, hasPreview: !!sel, previewName: previewName, previewText: previewText,
+      diffCount: diffs.length ? ' ' + diffs.length : '',
+      diffs: diffs.map((d, k) => Object.assign({}, d, { cls: 'lrow' + (k === ds ? ' on' : ''), a: String(d.a), d: String(d.d), pick: () => { const sd = Object.assign({}, this.S().selDiff); sd[fs.id] = k; this.setState({ selDiff: sd }); } })),
+      noDiff: diffs.length === 0, hasDiffSel: ds !== null && !!diffs[ds], diffSelName: ds !== null && diffs[ds] ? diffs[ds].f : '', uni: UNI.map((r) => Object.assign({ cls: 'acp-dl ' + r.c }, r)),
+      plan: plan, planDone: String(plan.filter((p) => p.done).length), planTotal: String(plan.length),
+      agents: agents, noAgents: agents.length === 0,
+      usage: { ctx: String(u.ctx), inT: u.inT, outT: u.outT, turns: String(u.turns), cost: u.cost, model: 'claude-sonnet-5-5' },
+      proto: proto,
+      termShown: termShown,
+      toggleMax: () => this.setState({ termMax: !this.S().termMax }),
+      maxLabel: termMax ? 'Restore terminal' : 'Maximize terminal over the sessions',
+      maxIcon: termMax ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+      closeTerm: () => this.setState({ termOpen: false, termMax: false, dockOpen: !!this.S().topTab }),
+      shells: shells, noShell: !active, hasShell: !!active,
+      addShell: () => {
+        const cur = this.shellsFor(this.S(), fp.id);
+        const id = 't' + Date.now();
+        this.setShells(fp.id, { list: cur.list.concat([{ id: id, name: 'zsh ' + (cur.list.length + 1), lines: [] }]), active: id });
+      },
+      clearTerm: () => this.run(fp.id, 'clear'),
+      showBanner: s.banner, dismissBanner: () => this.setState({ banner: false }),
+      termLines: active ? active.lines.map((l) => ({ isCmd: !!l.cmd, isOut: !l.cmd, text: l.text, cls: l.cls || '' })) : [],
+      cwd: fp.cwd, branch: fp.branch,
+      termDraft: s.termDraft,
+      onTermDraft: (e) => this.setState({ termDraft: e.target.value }),
+      onTermKey: (e) => { if (e.key === 'Enter') { e.preventDefault(); this.run(fp.id, e.target.value); } },
+      palOpen: s.palOpen,
+      openPal: () => this.setState({ palOpen: true, palQ: '', panesMenu: false }),
+      closePal: () => this.setState({ palOpen: false }),
+      palQ: s.palQ, onPalQ: (e) => this.setState({ palQ: e.target.value }),
+      onPalKey: (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); this.setState({ palOpen: false }); }
+        if (e.key === 'Enter' && palItems[0]) { e.preventDefault(); palItems[0].run(); }
+      },
+      palItems: palItems, palNone: palItems.length === 0,
+
+      devices: DEVICES.map((d) => ({ label: d.label, cls: s.device === d.id ? 'on' : '', pressed: s.device === d.id ? 'true' : 'false', pick: () => this.savePrefs({ device: d.id }) })),
+      geomLine: L.w + '×' + L.h + ' · ' + clsName + (L.scale < 1 ? ' · масштаб ' + Math.round(L.scale * 100) + '%' : ''),
+      layoutLine: (L.mobile ? 'Профиль mobile: нет терминала и shell' : 'Профиль desktop') + ' · ' + dockMode + (L.splitOK ? ' · split доступен' : ''),
+      screenLine: 'Экран: ' + screen,
+      themes: [['light', 'Светлая'], ['dark', 'Тёмная'], ['system', 'Система']].map((t) => ({ label: t[1], cls: s.theme === t[0] ? 'on' : '', pressed: s.theme === t[0] ? 'true' : 'false', pick: () => this.savePrefs({ theme: t[0] }) })),
+      accents: ACCENTS.map((hx) => ({ hex: hx, cls: 'swc' + (s.accentHex === hx ? ' on' : ''), pressed: s.accentHex === hx ? 'true' : 'false', pick: () => this.savePrefs({ accent: hx }) })),
+      conns: [['ok', 'Онлайн'], ['retry', 'Переподкл.'], ['lost', 'Офлайн']].map((c) => ({ label: c[1], cls: s.conn === c[0] ? 'on' : '', pressed: s.conn === c[0] ? 'true' : 'false', pick: () => this.setState({ conn: c[0] }) })),
+      noCollapse: !wide, swSide: 'sw' + (wide && s.sideOpen ? ' on' : ''),
+      swDock: 'sw' + (!L.isPhone && dockVisible ? ' on' : ''),
+      toggleDock: () => this.setState({ dockOpen: !(this.S().dockOpen && dockVisible), topTab: this.S().topTab || 'files' }),
+      noTerm: !L.termAllowed || L.isPhone, swTerm: 'sw' + (termShown ? ' on' : ''),
+      noSplit: !L.splitOK && !L.twoPanes,
+      splitBtn: L.twoPanes ? 'Закрыть вторую панель' : 'Открыть сессию сбоку (split)',
+      splitFromCtl: () => (L.twoPanes ? this.closePane(1) : this.split()),
+      splitNote: L.splitOK ? 'Центр ' + L.center + ' px ≥ 2 × 560' : 'Split недоступен: центр ' + L.center + ' px < 2 × 560 (A13, шаг 6b)',
+      requestApproval: () => {
+        const cur = this.S();
+        this.setMsgs('s1', (list) => list.concat([{ kind: 'approval', decision: null }]));
+        this.setState({ sessions: cur.sessions.map((x) => (x.id === 's1' ? Object.assign({}, x, { status: 'approval' }) : x)) });
+      },
+      failTurn: () => {
+        this.setMsgs(focusedId, (list) => list.filter((m) => m.kind !== 'thinking').concat([{ kind: 'tool', verb: 'Turn', target: 'provider returned 529 overloaded', result: 'Failed', ok: false }]));
+        this.setStatus(focusedId, 'error');
+      },
+      resetAll: () => { this._init = null; const keep = { vw: s.vw, vh: s.vh, device: s.device, theme: s.theme, accentHex: s.accentHex }; this.setState(Object.assign(initialState(), keep)); }
+    });
+  }
+}
+</script>
+</body>
+</html>

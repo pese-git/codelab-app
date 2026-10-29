@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Connection</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.card{display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--card);border:1px solid var(--stroke);border-radius:6px}
+.card.on{border:2px solid var(--accent)}
+.kv{display:grid;grid-template-columns:92px 1fr;gap:8px;align-items:center}
+.tbtn{min-height:44px;min-width:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneSettings.dc.html" class="f-btn subtle icon tbtn" aria-label="Back to Settings"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+    <h1 class="t-strong" style="margin: 0; flex: 1; font-size: 16px">Connection</h1>
+  </header>
+  <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 12px">
+    <p class="t-cap t2" style="margin: 0">Profiles for new sessions. Phones have no local processes, so there is no stdio profile.</p>
+    <section class="card on" aria-label="On this device" data-fluent="RadioButton card">
+      <label class="f-rb" style="min-height: 44px"><input type="radio" name="p" checked><span class="t-strong">On this device</span></label>
+      <span class="t-cap t2" style="margin-top: -8px">Embedded agent · works in the app's Documents folder · no shell, MCP over HTTP only</span>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap"><span class="tag acc">Default</span><span class="tag ok"><span class="f-dot"></span>Connected</span></div>
+    </section>
+    <section class="card" aria-label="devbox" data-fluent="RadioButton card + Expander">
+      <label class="f-rb" style="min-height: 44px"><input type="radio" name="p"><span class="t-strong">devbox</span></label>
+      <span class="t-cap t2" style="margin-top: -8px">Shared agent over WebSocket — runs on another machine with its own tools</span>
+      <div class="kv">
+        <label class="t2 t-cap" for="u">URL</label><label class="f-tb" style="min-height: 44px"><input id="u" value="wss://devbox.local:7420"></label>
+        <label class="t2 t-cap" for="t">Token secret</label><label class="f-tb" style="min-height: 44px"><input id="t" value="codelab/ws-devbox"></label>
+        <span class="t2 t-cap">Stored</span><span class="tag ok mono">Keychain · set</span>
+      </div>
+      <div style="display: flex; gap: 8px"><button class="f-btn tbtn" style="flex: 1">Test connection</button><button class="f-btn subtle danger tbtn">Remove</button></div>
+    </section>
+    <a href="PhoneAddProfile.dc.html" class="f-btn tbtn" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add WebSocket agent</a>
+    <div class="f-ib warning" data-fluent="InfoBar (warning)"><span class="f-ibi">!</span><div class="t-cap"><span class="ttl">When devbox is active</span>Read-only: this agent runs on wss://devbox.local:7420. Change providers and MCP on that host: codelab provider add | mcp add | config set.</div></div>
+    <div class="f-sc" style="min-height: 56px">
+      <div style="flex: 1"><div>Restart agent</div><div class="t-cap t2">Reloads open sessions; queued prompts stay</div></div>
+      <button class="f-btn tbtn">Restart</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Provider wizard</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.steps{display:grid;grid-template-columns:repeat(7, minmax(0, 1fr));gap:4px}
+.steps i{height:4px;border-radius:2px;background:var(--sel)}
+.steps i.done{background:var(--accent)}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:6px 10px}
+.tbtn{min-height:44px;min-width:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneProviders.dc.html" class="f-btn subtle icon tbtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></a>
+    <h1 class="t-strong" style="margin: 0; flex: 1; font-size: 16px">Choose a model</h1>
+    <span class="t-cap t2" style="padding-right: 8px">Step 4 of 7</span>
+  </header>
+  <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 14px 12px">
+    <div class="steps" role="img" aria-label="Steps: API type, Base URL, API key done; Check current; Model, Review, Save next"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i></div>
+    <div class="t-cap t2">API type → Base URL → API key → <b style="color: var(--text)">Check</b> → Model → Review → Save</div>
+    <h2 class="t-sub" style="margin: 0">Check</h2>
+    <div class="f-card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px">
+      <div class="kv t-cap">
+        <span class="t2">API type</span><span>Anthropic</span>
+        <span class="t2">Base URL</span><span class="mono">https://api.anthropic.com</span>
+        <span class="t2">API key</span><span>Store in Keychain as <span class="mono">codelab/anthropic</span></span>
+      </div>
+      <div class="f-ib success" data-fluent="InfoBar (success)"><span class="f-ibi">✓</span><div><span class="ttl">Checked</span><span class="mono">GET https://api.anthropic.com/v1/models</span> — ok, 12 models</div></div>
+    </div>
+    <p class="t-cap t2" style="margin: 0">If the check fails: “Retry” and “Back”; an unreachable server also offers “Save without check”, which asks to confirm and adds a warning. Key sources on a phone: Store in Keychain or No key — there is no environment for env variables.</p>
+    <div class="f-card" style="padding: 12px; display: flex; flex-direction: column; gap: 6px">
+      <span class="t-strong">First run</span>
+      <span class="t-cap t2">What CodeLab does → Permissions → <b style="color: var(--text)">Choose a model</b> → Privacy</span>
+      <span class="t-cap t2">The agent runs on this phone, reads and edits files in the app's Documents folder and asks before writing. It has no shell.</span>
+    </div>
+    <span style="flex: 1"></span>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <button class="f-btn tbtn">Back</button>
+      <a href="#" class="f-btn accent tbtn" style="text-decoration: none; justify-content: center">Next: Model</a>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — settings</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli /settings full-screen view: section list on the left, setting rows with value and source on the right, one row being edited, footer key hints">
+    <div class="ln"><span class="ac b u">Settings</span>  <span class="mu">· /settings · user ~/.codelab/config.yaml · project ./.codelab/config.yaml</span></div>
+    <div class="ln"> </div>
+    <div class="ln"><span class="mu">  sections        </span><span class="mu">│</span> <span class="mu">key                          value                         source</span></div>
+    <div class="ln">    General       <span class="mu">│</span> <span class="b">Display</span></div>
+    <div class="ln sel">  <span class="ac b">› Display</span>       <span class="mu">│</span>   display.language           auto (en)                     <span class="mu">default</span></div>
+    <div class="ln">    Input         <span class="mu">│</span>   display.theme              codelab-dark                  <span class="ac">user</span></div>
+    <div class="ln">    Agent         <span class="mu">│</span>   display.view               normal                        <span class="mu">default</span></div>
+    <div class="ln">    Providers     <span class="mu">│</span>   display.thoughts           collapsed                     <span class="ac">user</span></div>
+    <div class="ln">    MCP           <span class="mu">│</span>   display.mouse              on                            <span class="mu">default</span></div>
+    <div class="ln">    Updates       <span class="mu">│</span>   display.hyperlinks         auto (OSC 8 detected)         <span class="mu">default</span></div>
+    <div class="ln">                  <span class="mu">│</span></div>
+    <div class="ln">                  <span class="mu">│</span> <span class="b">Input</span></div>
+    <div class="ln">                  <span class="mu">│</span>   input.enter_while_running  <span class="inv"> queue </span> steer                 <span class="wa">project</span>  <span class="mu">editing</span></div>
+    <div class="ln">                  <span class="mu">│</span>   input.history_size         1000                          <span class="mu">default</span></div>
+    <div class="ln">                  <span class="mu">│</span>   input.secret_warning       on                            <span class="mu">default</span></div>
+    <div class="ln">                  <span class="mu">│</span></div>
+    <div class="ln">                  <span class="mu">│</span> <span class="b">Agent</span></div>
+    <div class="ln">                  <span class="mu">│</span>   agent.profile              embedded                      <span class="ac">user</span></div>
+    <div class="ln">                  <span class="mu">│</span>   agent.mode                 standard                      <span class="mu">default</span></div>
+    <div class="ln">                  <span class="mu">│</span>   agent.max_steps            25                            <span class="mu">default</span></div>
+    <div class="ln">                  <span class="mu">│</span>   power                      turn (keep awake during a turn) <span class="ac">user</span></div>
+    <div class="ln">                  <span class="mu">│</span></div>
+    <div class="ln">                  <span class="mu">│</span> <span class="b">Updates</span></div>
+    <div class="ln">                  <span class="mu">│</span>   update.channel             stable                        <span class="mu">default</span></div>
+    <div class="ln">                  <span class="mu">│</span>   update.check               daily · last 09:12, up to date <span class="mu">default</span></div>
+    <div class="grow">
+      <div class="ln wa">  input.enter_while_running is set by the project file; your choice is saved there. ctrl+u saves to user instead.</div>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln mu">↑↓ move · enter edit · ←→ choose · tab section · r reset · esc close · changes saved to ~/.codelab/config.yaml</div>
+    <div class="ln"><span class="mu">idle</span>  standard · claude-sonnet-5-5 · ctx 18% · ⎇ develop</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

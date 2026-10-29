@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Ask</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;position:relative;box-sizing:border-box}
+.bar{display:flex;align-items:center;gap:4px;height:56px;padding:0 4px;flex:none;border-bottom:1px solid var(--stroke)}
+.tap{min-width:44px;min-height:44px;justify-content:center}
+.smoke{position:absolute;inset:0;background:var(--smoke)}
+.dlg{position:absolute;left:12px;right:12px;top:72px}
+.opt{display:flex;align-items:flex-start;gap:10px;min-height:44px;padding:4px 0}
+.full{min-height:44px;justify-content:center;width:100%}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneChat.dc.html" class="f-btn subtle icon tap" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+    <span class="t-strong" style="flex: 1">Plan the trip checklist</span>
+  </header>
+  <main style="flex: 1; padding: 12px; background: var(--layer); display: flex; flex-direction: column; gap: 10px">
+    <div class="acp-bubble" style="align-self: flex-end; max-width: 85%">Turn notes/trip.md into a packing checklist.</div>
+    <div class="f-card" style="padding: 10px 12px; display: flex; gap: 8px; align-items: center"><span class="tag acc">Question pending</span><span class="t-cap t2">A second question waits in the transcript</span></div>
+  </main>
+
+  <div class="smoke" aria-hidden="true"></div>
+  <section class="f-dlg dlg" role="dialog" aria-modal="true" aria-labelledby="askTitle" data-fluent="ContentDialog">
+    <div class="f-dlgb" style="padding: 20px; gap: 10px">
+      <h2 id="askTitle" class="t-sub" style="margin: 0; font-size: 18px">The agent has a question</h2>
+      <span class="tag acc" style="align-self: flex-start">Checklist format</span>
+      <div class="t-strong">How should the checklist be grouped?</div>
+      <div role="radiogroup" aria-label="Grouping">
+        <label class="f-rb opt"><input type="radio" name="g" checked><span><span style="display: block">By day</span><span class="t-cap t2">One section per travel day</span></span></label>
+        <label class="f-rb opt"><input type="radio" name="g"><span><span style="display: block">By bag</span><span class="t-cap t2">Carry-on, checked bag, backpack</span></span></label>
+        <label class="f-rb opt"><input type="radio" name="g"><span><span style="display: block">Other…</span><span class="t-cap t2">Type your own answer</span></span></label>
+      </div>
+      <label class="f-tb" style="min-height: 44px"><input placeholder="Other: type your answer" aria-label="Other answer"></label>
+    </div>
+    <div class="f-dlgf" style="padding: 16px 20px; grid-template-columns: 1fr">
+      <button class="f-btn accent full">Submit</button>
+      <button class="f-btn full">Decline</button>
+      <button class="f-btn subtle full" style="color: var(--bad)">Cancel turn</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

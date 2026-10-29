@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — first run</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>zsh — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli first run: provider wizard questions in the terminal — API type, base URL, key source, hidden key, check before save, model, review and save">
+    <div class="ln"><span class="mu">~/codelab-app $</span> codelab</div>
+    <div class="ln b">No model provider is configured for the embedded agent.</div>
+    <div class="ln">Let's set one up. Press Ctrl+C to quit; run "codelab provider add" later to change it.</div>
+    <div class="ln"> </div>
+    <div class="ln"><span class="ac b">?</span> <span class="b">API type</span></div>
+    <div class="ln">    OpenAI</div>
+    <div class="ln sel"><span class="ac">  › Anthropic</span></div>
+    <div class="ln">    OpenRouter</div>
+    <div class="ln">    Ollama (local, no key)</div>
+    <div class="ln">    Custom OpenAI-compatible endpoint</div>
+    <div class="ln">    Custom Anthropic-compatible endpoint</div>
+    <div class="ln"><span class="ac b">?</span> <span class="b">Base URL</span> <span class="mu">›</span> https://api.anthropic.com</div>
+    <div class="ln"><span class="ac b">?</span> <span class="b">API key source</span></div>
+    <div class="ln sel"><span class="ac">  › Store in keychain-macos as "codelab/anthropic"</span></div>
+    <div class="ln">    Read from environment variable (ANTHROPIC_API_KEY)</div>
+    <div class="ln">    No key</div>
+    <div class="ln"><span class="ac b">?</span> <span class="b">API key</span> <span class="mu">›</span> ****************************</div>
+    <div class="ln">Checking https://api.anthropic.com/v1/models … <span class="ok">ok, 12 models</span></div>
+    <div class="ln"><span class="ac b">?</span> <span class="b">Model (type to filter)</span> <span class="mu">›</span> son</div>
+    <div class="ln sel"><span class="ac">  › claude-sonnet-5-5</span></div>
+    <div class="ln">    claude-sonnet-4-5</div>
+    <div class="ln mu">    Enter model id manually</div>
+    <div class="ln"><span class="b">Provider "anthropic"</span>  <span class="mu">(anthropic, https://api.anthropic.com)</span></div>
+    <div class="ln">  <span class="mu">key  </span>  secret "codelab/anthropic" (keychain-macos)</div>
+    <div class="ln">  <span class="mu">model</span>  anthropic/claude-sonnet-5-5  <span class="ac">(default)</span></div>
+    <div class="ln">  <span class="mu">file </span>  /Users/me/.codelab/config.yaml</div>
+    <div class="ln"><span class="ac b">?</span> <span class="b">Save?</span> <span class="mu">[Y/n]</span> y</div>
+    <div class="ln ok">Saved provider "anthropic". Starting the embedded agent…</div>
+    <div class="ln"><span class="ac b">&gt;</span> <span class="cur"> </span></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

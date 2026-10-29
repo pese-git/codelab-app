@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Approval and running turn</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;position:relative;box-sizing:border-box}
+.bar{display:flex;align-items:center;gap:4px;height:56px;padding:0 4px;flex:none;border-bottom:1px solid var(--stroke)}
+.tap{min-width:44px;min-height:44px;justify-content:center}
+.feed{flex:1;overflow:hidden;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--layer)}
+.dl{font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace;font-size:12px;line-height:18px;white-space:pre;overflow:hidden;padding:0 10px}
+.add{background:var(--add-bg)}.del{background:var(--del-bg)}
+.full{min-height:44px;justify-content:center;width:100%}
+.comp{flex:none;padding:8px 12px 12px;border-top:1px solid var(--stroke);display:flex;flex-direction:column;gap:8px;background:var(--mica)}
+.thought{display:flex;flex-direction:column;gap:4px}
+.thought-h{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:transparent;color:var(--text2);font:inherit;font-size:12px;line-height:16px;cursor:pointer}
+.thought-b{margin-left:6px;padding-left:14px;border-left:1px solid var(--stroke);color:var(--text2);font-size:12px;line-height:18px;white-space:pre-line}
+.dbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:4px;border-top:1px solid var(--stroke);background:var(--card2)}
+.dbtn{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:0;border-radius:4px;background:transparent;color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.dbtn:hover{background:var(--hover)}
+.dbtn .k{font-size:12px;color:var(--text2)}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneSessions.dc.html" class="f-btn subtle icon tap" aria-label="Back to sessions"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+    <span class="t-strong" style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Draft release notes for 1.0</span>
+    <span class="tag acc" style="margin-right: 8px">Waiting for approval</span>
+  </header>
+
+  <main class="feed" aria-label="Transcript">
+    <div class="acp-bubble" style="align-self: flex-end; max-width: 85%">Write the release notes into lib/notes.md.</div>
+    <section class="thought" data-acp="AcpThoughtBlock (streaming)"><button class="thought-h" aria-expanded="true"><span class="f-pr" style="width: 14px; height: 14px" aria-hidden="true"></span><span>Thinking…</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></button><div class="thought-b">Group changes by area; keep it short; the user wants it in lib/notes.md.</div></section>
+
+    <section class="f-exp" aria-label="Permission request" data-acp="AcpToolCallRow + AcpDiffView + AcpApprovalPrompt">
+      <div class="f-exph" style="min-height: 44px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1; min-width: 0">Write <span class="mono t2" style="font-size: 13px">lib/notes.md</span></span><span class="tag warn">Local write</span></div>
+      <div style="border-top: 1px solid var(--stroke); padding: 4px 0; background: var(--card)">
+        <div class="dl t2">new file, 6 lines</div>
+        <div class="dl add">+ 1   # CodeLab 1.0</div>
+        <div class="dl add">+ 2   - Embedded agent on desktop</div>
+        <div class="dl add">+ 3   - Session search and rewind</div>
+        <div style="padding: 0 10px"><button class="f-hl" style="min-height: 44px">Show full</button></div>
+      </div>
+      <div class="dbar" role="group" aria-label="Decision" data-acp="decision bar: decision × scope"><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow</button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject</button><span style="flex: 1"></span><button class="f-btn subtle icon tap" aria-label="View raw input" title="View raw input" style=""><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 4c-2 0-2 2-2 4s-2 4-2 4 2 0 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 0-2 4 0 4-2 4"/></svg></button><button class="f-cbx" data-fluent="DropDownButton (scope: Only this time / Always)" style="min-width: 0; min-height: 44px; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+    </section>
+  </main>
+
+  <footer class="comp" data-acp="AcpPromptComposer">
+    <div class="f-card" data-acp="queue" style="display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 12px">
+      <span style="flex: 1; min-width: 0"><span class="t-cap t2" style="display: block">1 queued · sent when the turn ends</span><span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Also add a short changelog</span></span>
+      <button class="f-btn subtle icon tap" aria-label="Edit queued message"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+      <button class="f-btn subtle icon tap" aria-label="Delete queued message"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+      <button class="f-btn subtle" style="min-height: 44px">Send now</button>
+    </div>
+    <label class="f-tb" style="min-height: 44px"><input placeholder="Message the agent" aria-label="Message"></label>
+    <div style="display: flex; align-items: center; gap: 6px">
+      <button class="f-btn subtle icon tap" aria-label="Attach"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M21 11.5 12.5 20a5 5 0 0 1-7-7l9-9a3.3 3.3 0 0 1 4.7 4.7l-9 9a1.7 1.7 0 0 1-2.4-2.4L16 7.4"/></svg></button>
+      <button class="f-btn subtle" style="min-height: 44px; color: var(--bad)">Stop</button>
+      <span style="flex: 1"></span>
+      <span class="f-split" data-fluent="SplitButton"><button class="f-btn accent" style="min-height: 44px">Queue</button><button class="f-btn accent tap" aria-label="More send options: Steer">▾</button></span>
+    </div>
+    <span class="t-cap t2">Steer appears only when the agent supports steering.</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Settings</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.grp{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--stroke);border-radius:6px;overflow:hidden}
+.fx a.it,.it{display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 12px;text-decoration:none;color:var(--text);border-top:1px solid var(--stroke)}
+.it:first-child{border-top:0}
+.tbtn{min-height:44px;min-width:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneChat.dc.html" class="f-btn subtle icon tbtn" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+    <h1 class="t-strong" style="margin: 0; flex: 1; font-size: 16px">Settings</h1>
+  </header>
+  <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 12px">
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="min-height: 44px"><input type="search" placeholder="Find a setting" aria-label="Find a setting"></label>
+    <div class="f-ph" style="padding: 0 4px">Agent</div>
+    <nav class="grp" aria-label="Agent settings" data-fluent="ListView">
+      <a href="PhoneConnection.dc.html" class="it"><span style="flex: 1"><span style="display: block">Connection</span><span class="t-cap t2">On this device</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="PhoneProviders.dc.html" class="it"><span style="flex: 1"><span style="display: block">Providers</span><span class="t-cap t2">2 providers · default anthropic</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="#" class="it"><span style="flex: 1"><span style="display: block">MCP servers</span><span class="t-cap t2">1 server · HTTP only</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="#" class="it"><span style="flex: 1"><span style="display: block">Agents &amp; modes</span><span class="t-cap t2">standard · effort medium</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="#" class="it"><span style="flex: 1"><span style="display: block">Permissions &amp; tools</span><span class="t-cap t2">2 tool policies · 1 deny rule</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="#" class="it"><span style="flex: 1"><span style="display: block">Redaction</span><span class="t-cap t2">6 of 7 layers on</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="#" class="it"><span style="flex: 1"><span style="display: block">Code &amp; web</span><span class="t-cap t2">Memory on · web_fetch asks</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+    </nav>
+    <div class="f-ph" style="padding: 0 4px">App</div>
+    <nav class="grp" aria-label="App settings" data-fluent="ListView">
+      <a href="#" class="it"><span style="flex: 1"><span style="display: block">General</span><span class="t-cap t2">Enter queues · About 1.0.0</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="#" class="it"><span style="flex: 1"><span style="display: block">Appearance</span><span class="t-cap t2">Match system · Fluent</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+    </nav>
+    <div class="f-ib" data-fluent="InfoBar (informational)"><span class="f-ibi">i</span><div class="t-cap"><span class="ttl">Not available on this device</span>commands, background jobs, language servers, hooks, skills — the platform has no shell or processes.</div></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — composer and completion</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli TUI composer: attachment chips, secrets warning, @ path completion menu, multi-line input">
+    <div class="grow">
+      <div class="ln"><span class="ac b">&gt;</span> Why does the reconnect test flake?</div>
+      <div class="ln"> </div>
+      <div class="ln mu">▸ thought 4s</div>
+      <div class="ln"> </div>
+      <div class="ln">The restorer re-subscribes before the old <span class="inv">StreamSubscription</span> is cancelled. Two fixes, in order:</div>
+      <div class="ln">  1. Cancel and await the previous subscription in <span class="b">ConnectionCubit</span>.</div>
+      <div class="ln">  2. Drop updates whose <span class="inv">requestId</span> is not the active one.</div>
+      <div class="ln"> </div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Edit</span> connection_cubit.dart  <span class="ok">+9</span> <span class="er">-2</span></span><span class="mu">0.0s</span></div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Run</span> fvm flutter test test/reconnect_test.dart</span><span class="mu">4.1s</span></div>
+      <div class="ln"> </div>
+    </div>
+    <div class="ln mu">  @packages/flutter/acp_ui/lib/src/</div>
+    <div class="ln sel"><span class="ac">  ▸ molecules/</span></div>
+    <div class="ln">    organisms/</div>
+    <div class="ln">    atomics/</div>
+    <div class="ln">    rendering/</div>
+    <div class="ln">    models/</div>
+    <div class="ln mu">    acp_ui.dart</div>
+    <div class="ln"> </div>
+    <div class="ln wa">⚠ .env.local may contain secrets — check it before sending</div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln mu">[file .env.local] [img clipboard-1.png 34 KB] [file lib/features/workbench/application/connection_cubit.dart]</div>
+    <div class="ln"><span class="ac b">&gt;</span> Compare the reconnect handling with the transcript panel in</div>
+    <div class="ln">  @packages/flutter/acp_ui/lib/src/<span class="cur">m</span></div>
+    <div class="ln mu">tab accept · ↑↓ select · esc close · shift+enter newline · ctrl+v image · backspace remove chip</div>
+    <div class="ln">standard · claude-sonnet-5-5 · ctx 31% · ↑19.4k ↓2.0k · $0.06 · ⎇ develop</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

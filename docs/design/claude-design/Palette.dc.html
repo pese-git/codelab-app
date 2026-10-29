@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Command palette</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{height:900px;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.smoke{position:absolute;inset:0;background:var(--smoke)}
+.pal{position:absolute;top:44px;left:50%;transform:translateX(-50%);width:min(680px,calc(100% - 32px));max-height:780px;display:flex;flex-direction:column;padding:0;overflow:hidden}
+.grp{padding:8px 16px 4px;font-size:12px;line-height:16px;font-weight:600;color:var(--text2)}
+.pal .f-mi{height:36px;text-decoration:none;margin:0 4px;width:calc(100% - 8px);flex:none}
+.sketch{height:12px;border-radius:6px;background:var(--sel)}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <span class="f-logo">CL</span><span class="t-cap">CodeLab</span><span class="t-strong">codelab-app</span>
+  <span style="flex: 1"></span>
+  <span class="tag ok"><span class="f-dot"></span>Connected · in-process</span>
+</header>
+<div class="f-nv" aria-hidden="true">
+  <div class="f-pane" style="gap: 10px; padding-top: 16px">
+    <div class="sketch" style="width: 80%"></div><div class="sketch" style="width: 65%"></div><div class="sketch" style="width: 72%"></div><div class="sketch" style="width: 58%"></div>
+  </div>
+  <div class="f-content" style="padding: 32px 40px; gap: 14px">
+    <div class="sketch" style="width: 40%; height: 20px"></div>
+    <div class="sketch" style="width: 70%"></div><div class="sketch" style="width: 64%"></div><div class="sketch" style="width: 76%"></div>
+    <div class="f-card" style="height: 120px; width: 70%"></div>
+  </div>
+</div>
+<div class="smoke" aria-hidden="true"></div>
+
+<section class="f-fly pal" role="dialog" aria-label="Command palette" data-fluent="AutoSuggestBox + MenuFlyout (Ctrl+K)">
+  <div style="padding: 8px; border-bottom: 1px solid var(--stroke)">
+    <label class="f-tb focus" data-fluent="TextBox"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg><input value="/comp" aria-label="Search or run a command"><span class="t-cap t2">Esc</span></label>
+  </div>
+  <div style="overflow: auto; padding: 4px 0 8px">
+    <div class="grp">Agent commands · from the agent</div>
+    <button class="f-mi on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16"/></svg><span><b>/comp</b>act <span class="t2">— summarize history to free context</span></span><span class="tag acc" style="margin-left: auto">agent</span><span class="k">Enter</span></button>
+    <button class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16"/></svg><span>/plan <span class="t2">— show the current plan</span></span><span class="tag acc" style="margin-left: auto">agent</span></button>
+    <button class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16"/></svg><span>/status <span class="t2">— config, roles, tools, deadline</span></span><span class="tag acc" style="margin-left: auto">agent</span></button>
+    <button class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16"/></svg><span>/review <span class="t2 mono" style="font-size: 12px">&lt;path&gt;</span> <span class="t2">— prompt from MCP server</span></span><span class="tag" style="margin-left: auto">mcp</span></button>
+
+    <div class="grp">Session</div>
+    <button class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Rename session</button>
+    <a href="History.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H6"/></svg>Fork session</a>
+    <a href="History.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Rewind to a message…</a>
+    <button class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Export to Markdown…</button>
+    <button class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>Copy as Markdown</button>
+
+    <div class="grp">Go to</div>
+    <a href="Sessions.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Sessions<span class="k">Ctrl+Shift+F</span></a>
+    <a href="Files.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Project files<span class="k">Ctrl+Shift+E</span></a>
+    <a href="Agents.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Agents &amp; tasks</a>
+    <a href="Usage.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Usage &amp; cost</a>
+    <a href="Inspector.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m8 8-4 4 4 4M16 8l4 4-4 4"/></svg>Protocol inspector<span class="k">Ctrl+Shift+I</span></a>
+    <a href="Terminal.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8"/></svg>Terminal<span class="k">Ctrl+`</span></a>
+    <a href="Connection.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>Settings<span class="k">Ctrl+,</span></a>
+
+    <div class="grp">App</div>
+    <button class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/></svg>Restart agent <span class="t2">— reloads the session</span></button>
+    <a href="Keyboard.dc.html" class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M7 14h10"/></svg>Keyboard shortcuts<span class="k">Ctrl+/</span></a>
+    <button class="f-mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></svg>Switch theme: Light · Dark · System</button>
+  </div>
+  <div class="t-cap t2" style="padding: 8px 16px; border-top: 1px solid var(--stroke); background: var(--card2); display: flex; gap: 16px; flex-wrap: wrap">
+    <span>↑↓ select</span><span>Enter run</span><span>Tab complete args</span><span>Esc close</span><span style="margin-left: auto">Agent commands are sent as a prompt; /compact and /plan run directly</span>
+  </div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

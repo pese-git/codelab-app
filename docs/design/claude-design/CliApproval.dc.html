@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — approval zone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli TUI: approval zone replaces the composer while a command waits for permission">
+    <div class="grow">
+      <div class="ln"><span class="ac b">&gt;</span> Run the diff view tests and fix whatever fails.</div>
+      <div class="ln"> </div>
+      <div class="ln mu">▸ thought 3s</div>
+      <div class="ln"> </div>
+      <div class="ln">The golden for side-by-side is stale after the gutter change. I'll update the widget,</div>
+      <div class="ln">then run the suite.</div>
+      <div class="ln"> </div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Read</span> packages/flutter/acp_ui/test/acp_diff_view_test.dart:1-88</span><span class="mu">0.1s</span></div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Edit</span> acp_diff_view.dart  <span class="ok">+4</span> <span class="er">-2</span></span><span class="mu">0.0s</span></div>
+      <div class="ln in">  @@ -118,4 +118,6 @@</div>
+      <div class="ln"><span class="mu">   118 118</span>     final gutter = Text(sign, style: muted);</div>
+      <div class="ln delbg"><span class="mu">   119    </span><span class="er"> -    return Row(children: [gutter, body]);</span></div>
+      <div class="ln addbg"><span class="mu">       119</span><span class="ok"> +    return Semantics(</span></div>
+      <div class="ln addbg"><span class="mu">       120</span><span class="ok"> +      label: op.semanticsLabel,</span></div>
+      <div class="ln addbg"><span class="mu">       121</span><span class="ok"> +      child: Row(children: [gutter, body]),</span></div>
+      <div class="ln addbg"><span class="mu">       122</span><span class="ok"> +    );</span></div>
+      <div class="ln row"><span><span class="er">✗</span> <span class="b">Run</span> fvm flutter test packages/flutter/acp_ui/test/acp_diff_view_test.dart</span><span class="mu">6.4s</span></div>
+      <div class="ln mu">  └ Golden "diff_side_by_side.png" differs by 0.42%</div>
+      <div class="ln mu">    00:06 +13 -1: Some tests failed.</div>
+      <div class="ln row"><span><span class="mu">○</span> <span class="b">Run</span> fvm flutter test --update-goldens …/acp_diff_view_test.dart</span><span class="mu"></span></div>
+      <div class="ln"> </div>
+    </div>
+    <div class="ln"><span class="ap">╭─</span> <span class="b">Permission: exec fvm flutter test --update-goldens</span>                                          <span class="wa">risk: medium</span></div>
+    <div class="ln"><span class="ap">│</span>  command: fvm flutter test --update-goldens packages/flutter/acp_ui/test/acp_diff_view_test.dart</div>
+    <div class="ln"><span class="ap">│</span>  folder:  /Users/me/Projects/OpenIdeaLab/CodeLab/codelab-app</div>
+    <div class="ln"><span class="ap">╰─</span> <span class="ac b">[y]</span> allow once  <span class="ac b">[a]</span> always allow  <span class="ac b">[n]</span> reject  <span class="ac b">[N]</span> always reject  <span class="ac b">[?]</span> details</div>
+    <div class="ln mu">  1 more permission request queued · esc cancels the turn</div>
+    <div class="ln"><span class="ac">⠼</span> <span class="mu">41s</span>  standard · claude-sonnet-5-5 · <span class="wa">ctx 84%</span> · ↑38.0k ↓3.1k · $0.11 · ⎇ develop</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

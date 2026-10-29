@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Project picker</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:900px;display:flex;flex-direction:column}
+.wrap{flex:1;display:flex;justify-content:center;padding:40px 24px;box-sizing:border-box}
+.col{width:100%;max-width:960px;display:flex;flex-direction:column;gap:16px}
+.cols{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.recent{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:4px;padding:8px}
+.side{flex:1 1 280px;display:flex;flex-direction:column;gap:16px}
+.prow{display:grid;grid-template-columns:20px 1fr auto;gap:4px 12px;align-items:center;padding:10px 12px;border-radius:4px;text-decoration:none}
+.prow:hover{background:var(--hover)}
+.drop{border:1px dashed var(--strong);border-radius:6px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <span class="f-logo">CL</span><span class="t-cap">CodeLab</span>
+  <span style="flex: 1"></span>
+  <span class="tag ok"><span class="f-dot"></span>Embedded agent ready</span>
+</header>
+<div class="wrap" data-fluent="ScaffoldPage">
+  <div class="col">
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap" data-fluent="PageHeader">
+      <div style="flex: 1; min-width: 260px"><h1 class="t-title" style="margin: 0">Open a project</h1><p class="t2" style="margin: 4px 0 0">The folder becomes the session's working directory (cwd). The agent can't read or write outside it.</p></div>
+      <div class="f-cb" data-fluent="CommandBar">
+        <button class="f-btn accent"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Open folder…</button>
+      </div>
+    </div>
+
+    <div class="cols">
+      <section class="f-card recent" aria-label="Recent projects" data-fluent="ListView">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 4px 4px 8px">
+          <h2 class="t-strong" style="font-size: 14px; margin: 0; flex: 1">Recent projects</h2>
+          <label class="f-tb" data-fluent="AutoSuggestBox" style="width: 220px"><input type="search" placeholder="Filter" aria-label="Filter recent projects"></label>
+        </div>
+        <a href="Main.dc.html" class="prow f-li" data-fluent="ListTile">
+          <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="color: var(--accent-text)"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>
+          <span style="min-width: 0"><span class="t-strong">codelab-agent-workspace</span><span class="t-cap t2 mono" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">~/Projects/OpenIdeaLab/CodeLab/codelab-agent-workspace</span></span>
+          <span style="display: flex; gap: 6px; align-items: center"><span class="tag">⎇ feature/add-workspace-ci</span><span class="tag acc">14 sessions</span><span class="t-cap t2">2 min ago</span></span>
+        </a>
+        <a href="Main.dc.html" class="prow f-li" data-fluent="ListTile">
+          <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="color: var(--accent-text)"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>
+          <span style="min-width: 0"><span class="t-strong">codelab-app</span><span class="t-cap t2 mono" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">~/Projects/OpenIdeaLab/CodeLab/codelab-workspace/codelab-app</span></span>
+          <span style="display: flex; gap: 6px; align-items: center"><span class="tag">⎇ develop</span><span class="tag acc">31 sessions</span><span class="t-cap t2">yesterday</span></span>
+        </a>
+        <a href="Main.dc.html" class="prow f-li" data-fluent="ListTile">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--text2)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <span style="min-width: 0"><span>flutter-agent-harness</span><span class="t-cap t2 mono" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">~/Projects/OpenIdeaLab/CodeLab/flutter-agent-harness</span></span>
+          <span style="display: flex; gap: 6px; align-items: center"><span class="tag">⎇ main</span><span class="tag">3 sessions</span><span class="t-cap t2">Oct 20</span></span>
+        </a>
+        <a href="Main.dc.html" class="prow f-li" data-fluent="ListTile">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--text2)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <span style="min-width: 0"><span>notes</span><span class="t-cap t2 mono" style="display: block">~/notes</span></span>
+          <span style="display: flex; gap: 6px; align-items: center"><span class="tag">not a git repo</span><span class="tag">1 session</span><span class="t-cap t2">Oct 2</span></span>
+        </a>
+        <div class="prow" style="opacity: .9" data-fluent="ListTile (missing)">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn)"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <span style="min-width: 0"><span class="t2">legacy-python-agent</span><span class="t-cap mono" style="display: block; color: var(--warn)">/Volumes/Work/legacy-python-agent — The session folder is not on this computer.</span></span>
+          <span style="display: flex; gap: 4px"><button class="f-btn">Locate…</button><button class="f-btn subtle">Remove from list</button></span>
+        </div>
+      </section>
+
+      <div class="side">
+        <section class="f-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px" aria-label="Agent connection">
+          <h2 class="t-strong" style="font-size: 14px; margin: 0">Agent connection</h2>
+          <p class="t-cap t2" style="margin: 0">Profile for new sessions in this project (U-06). Edit profiles in Settings › Connection.</p>
+          <label class="f-rb"><input type="radio" name="prof" checked>Embedded agent <span class="t-cap t2">in-process</span></label>
+          <label class="f-rb"><input type="radio" name="prof">py-stdio <span class="t-cap t2 mono">codelab-agent --stdio</span></label>
+          <label class="f-rb"><input type="radio" name="prof">ws-local <span class="t-cap t2 mono">ws://127.0.0.1:7777</span></label>
+          <a href="Connection.dc.html" class="f-hl">Manage profiles</a>
+        </section>
+        <div class="drop" data-fluent="DropTarget">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="width: 24px; height: 24px; color: var(--text2)"><path d="M12 15V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
+          <span>Drop a folder here to open it</span>
+          <span class="t-cap t2">or press Ctrl+O from the workbench</span>
+        </div>
+        <div class="f-ib" data-fluent="InfoBar"><span class="f-ibi">i</span><div><span class="ttl">Sessions follow the folder</span>Sessions are listed per working directory. Open another project to see its sessions.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

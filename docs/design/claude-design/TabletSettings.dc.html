@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tablet settings</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:1180px;height:820px;display:flex;flex-direction:column;overflow:hidden;border-radius:18px}
+.master{width:300px;flex:none;display:flex;flex-direction:column;padding:8px 6px;gap:2px;overflow:auto}
+.master .f-pi{min-height:48px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th,.tbl td{text-align:left;padding:10px 12px;border-top:1px solid var(--stroke)}
+.tbl th{font-weight:600;color:var(--text2);font-size:12px;border-top:0}
+.touch{min-height:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar" style="height: 52px">
+  <a href="TabletWorkbench.dc.html" class="f-btn subtle icon touch" style="width: 44px" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+  <span class="t-strong">Settings</span>
+</header>
+<div class="f-nv" data-fluent="NavigationView (master–detail)">
+  <nav class="master" aria-label="Settings sections" data-fluent="NavigationPane (open)">
+    <label class="f-tb" style="margin: 4px 6px 6px; min-height: 40px"><input type="search" placeholder="Find a setting" aria-label="Find a setting"></label>
+    <div class="f-ph">Agent</div>
+    <a href="#" class="f-pi">Connection</a>
+    <a href="#" class="f-pi">Providers</a>
+    <a href="#" class="f-pi on" aria-current="page">MCP servers</a>
+    <a href="#" class="f-pi">Agents &amp; modes</a>
+    <a href="#" class="f-pi">Permissions &amp; tools</a>
+    <a href="#" class="f-pi">Redaction</a>
+    <a href="#" class="f-pi">Code &amp; web</a>
+    <div class="f-ph">App</div>
+    <a href="#" class="f-pi">General</a>
+    <a href="#" class="f-pi">Appearance</a>
+    <a href="#" class="f-pi">Keyboard</a>
+    <p class="t-cap t2" style="margin: 8px 10px 0">Skills &amp; extensions is hidden here: skills, hooks and plugins need local folders or processes (profile mobile, SETUP-17).</p>
+  </nav>
+  <section class="f-content" style="overflow: auto" data-fluent="ScaffoldPage">
+    <div style="padding: 24px 32px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 12px" data-fluent="PageHeader">
+        <h1 class="t-title" style="margin: 0; flex: 1">MCP servers</h1>
+        <button class="f-btn accent touch">Add server</button>
+      </div>
+      <div class="f-ib" data-fluent="InfoBar"><span class="f-ibi">i</span><div><span class="ttl">HTTP only on this device</span>stdio needs processes — not available on this device. A stdio server in the config is rejected with the config error, not silently dropped (agent-core §10.4).</div></div>
+      <section class="f-exp" data-fluent="Expander (expanded)">
+        <div class="f-exph" style="min-height: 52px"><span style="flex: 1"><span class="t-strong">linear</span> <span class="tag">http</span><br><span class="t-cap t2 mono">https://mcp.linear.app/mcp</span></span><label class="f-ts"><input type="checkbox" checked>On</label></div>
+        <div class="f-expc" style="display: grid; grid-template-columns: 120px 1fr; gap: 10px 16px; align-items: center">
+          <span class="t2">Type</span><span><label class="f-rb" style="margin-right: 16px"><input type="radio" name="t" checked>http</label><label class="f-rb" style="opacity: .5"><input type="radio" name="t" disabled>stdio — not available on this device</label></span>
+          <label class="t2" for="u">URL</label><label class="f-tb touch"><input id="u" value="https://mcp.linear.app/mcp"></label>
+          <span class="t2">Headers</span><span>Authorization · <span class="t2">stored in the device keychain as codelab/mcp/linear/authorization</span></span>
+          <span></span><span style="display: flex; gap: 8px"><button class="f-btn accent touch">Save</button><button class="f-btn touch">Reconnect</button></span>
+        </div>
+      </section>
+      <section class="f-exp"><div class="f-exph" style="min-height: 52px"><span style="flex: 1"><span class="t-strong">sentry</span> <span class="tag">http</span><br><span class="t-cap t2 mono">https://mcp.sentry.dev/mcp</span></span><label class="f-ts"><input type="checkbox">Off</label></div></section>
+      <h2 class="t-strong" style="font-size: 14px; margin: 12px 0 0">Agent status <span class="t-cap t2">· live from the agent on this device</span></h2>
+      <div class="f-card">
+        <table class="tbl">
+          <thead><tr><th>Server</th><th>State</th><th>Tools</th><th>Last error</th><th><span style="position: absolute; left: -9999px">Actions</span></th></tr></thead>
+          <tbody>
+            <tr><td class="mono">linear</td><td><span class="tag ok">connected</span></td><td>14</td><td>—</td><td><button class="f-btn subtle touch">Reconnect</button></td></tr>
+            <tr><td class="mono">sentry</td><td><span class="tag">disabled</span></td><td>—</td><td>—</td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1180,"height":820}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

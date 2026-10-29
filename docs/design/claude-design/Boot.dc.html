@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Startup diagnostics</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:900px;display:flex;flex-direction:column}
+.row{display:grid;grid-template-columns:20px 90px 1fr auto;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid var(--stroke)}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="f-appbar"><span class="f-logo">CL</span><span class="t-cap">CodeLab</span></header>
+  <section class="f-content" style="border-left: 0; border-top-left-radius: 0; align-items: center; padding: 48px 24px">
+    <div style="width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 16px">
+      <h1 class="t-title" style="margin: 0">CodeLab could not finish starting</h1>
+      <div class="f-ib error" role="alert" data-fluent="InfoBar (error, isLong)">
+        <span class="f-ibi">✕</span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span class="ttl">Step: routes</span><span class="mono" style="font-size: 13px">Timed out after 20s while connecting to "Embedded agent"</span></div>
+      </div>
+      <section class="f-card" aria-label="Startup steps" data-fluent="Card + ListView">
+        <div class="row" style="border-top: 0"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Done" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span class="mono">window</span><span class="t2">First frame, support directory <span class="tag">critical</span></span><span class="mono t-cap t2">0.18 s</span></div>
+        <div class="row"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Done" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span class="mono">services</span><span class="t2">Root scope: transports, platform, workspace <span class="tag">critical</span></span><span class="mono t-cap t2">0.41 s</span></div>
+        <div class="row"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Done" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span class="mono">stores</span><span class="t2">Profiles, recent projects, settings access, key storage <span class="tag">degradable</span></span><span class="mono t-cap t2">0.09 s</span></div>
+        <div class="row"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Done" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span class="mono">logging</span><span class="t2">File log in &lt;support&gt;/logs <span class="tag">degradable</span></span><span class="mono t-cap t2">0.03 s</span></div>
+        <div class="row" style="background: var(--bad-bg)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" role="img" aria-label="Timed out" style="color: var(--bad)"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="mono t-strong" style="color: var(--bad)">routes</span><span>Last project and profile; connect to the agent <span class="tag">degradable</span></span><span class="mono t-cap" style="color: var(--bad)">20.00 s</span></div>
+      </section>
+      <section class="f-exp" data-fluent="Expander (expanded)">
+        <div class="f-exph"><span style="flex: 1"><span style="display: block">Boot log</span><span class="t-cap t2">Step events with durations; secrets redacted</span></span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span></div>
+        <div class="acp-term" style="border-radius: 0; padding: 12px 16px; font-size: 12.5px; line-height: 1.65; white-space: pre-wrap">14:02:11.204  app.boot.step.completed  step=window    durationMs=182
+14:02:11.615  app.boot.step.completed  step=services  durationMs=411
+14:02:11.706  app.boot.step.completed  step=stores    durationMs=91
+14:02:11.738  app.boot.step.completed  step=logging   durationMs=32
+14:02:21.740  app.boot.step.slow       step=routes    durationMs=10002
+14:02:31.738  app.boot.step.timed_out  step=routes    durationMs=20000</div>
+      </section>
+      <p class="t-cap t2" style="margin: 0">“Start without auto-connect” runs the fallback of the failed step and opens the workbench disconnected; the next launch tries to connect again. Critical steps offer only Retry, Copy diagnostics and Quit.</p>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+        <button class="f-btn accent">Start without auto-connect</button>
+        <button class="f-btn">Retry</button>
+        <button class="f-btn">Copy diagnostics</button>
+        <span style="flex: 1"></span>
+        <button class="f-btn subtle">Quit</button>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

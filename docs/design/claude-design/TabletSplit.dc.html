@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tablet — split view</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{height:1024px;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.tools{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+.tool{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border-radius:4px;border:1px solid transparent;background:transparent;color:var(--text2);font-size:13px;cursor:pointer;text-decoration:none}
+.fx a.tool{color:var(--text2)}
+.tool.on,.fx a.tool.on{background:var(--accent-weak);color:var(--accent-text)}
+.side{width:248px}
+.rail{width:52px;flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;background:var(--mica)}
+.rail .f-btn{width:44px;height:44px}
+.grp{display:flex;align-items:center;gap:8px;min-height:44px;margin:2px 0;padding:0 8px;border:0;background:transparent;color:var(--text);border-radius:4px;width:100%;box-sizing:border-box;text-align:left;font-weight:600;cursor:pointer}
+.sess{padding-left:30px;gap:10px;min-height:44px}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sessarea{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;position:relative}
+.dock{position:absolute;top:0;right:0;bottom:0;width:400px;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--stroke);background:var(--layer);box-shadow:var(--shadow-flyout);z-index:3}
+.smoke{position:absolute;inset:0;background:var(--smoke);z-index:2}
+.grip{position:absolute;left:-3px;top:0;bottom:0;width:6px;display:flex;align-items:center;justify-content:center}
+.grip i{width:2px;height:28px;border-radius:1px;background:var(--cstroke2)}
+.dpane{display:flex;flex-direction:column;min-height:0}
+.dhead{display:flex;align-items:flex-end;gap:2px;padding:6px 8px 0;background:var(--mica);border-bottom:1px solid var(--stroke);flex:none}
+.dtab{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 4px 0 10px;border-radius:6px 6px 0 0;border:1px solid transparent;border-bottom:0;color:var(--text2);font-size:13px;text-decoration:none}
+.fx a.dtab{color:var(--text2)}
+.fx a.dtab.on{background:var(--layer);color:var(--text);border-color:var(--stroke)}
+.hsplit{height:9px;flex:none;border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);background:var(--mica);display:flex;align-items:center;justify-content:center}
+.hsplit i{width:28px;height:2px;border-radius:1px;background:var(--cstroke2)}
+.touch{min-height:44px}
+.dl{display:grid;grid-template-columns:36px 1fr;font:12px/22px 'Cascadia Code','JetBrains Mono',Consolas,monospace;padding-right:8px;white-space:pre}
+.dl span:first-child{color:var(--code-muted);text-align:right;padding-right:8px}
+.dl.add{background:var(--add-bg)} .dl.del{background:var(--del-bg)}
+.code{display:grid;align-content:start;white-space:pre;grid-template-columns:32px 1fr;font:12px/20px 'Cascadia Code','JetBrains Mono',Consolas,monospace;padding:8px 10px}
+.code span:nth-child(odd){color:var(--text2);text-align:right;padding-right:10px}
+.cap{position:absolute;left:16px;top:56px;z-index:4;font-size:12px;line-height:16px;color:var(--text2);background:var(--card);border:1px solid var(--stroke);border-radius:4px;padding:4px 8px}
+.pane2{flex:1;min-width:560px;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--stroke)}
+.pane2.focus{box-shadow:inset 0 2px 0 var(--accent)}
+.vgrip{width:7px;flex:none;background:var(--mica);display:flex;align-items:center;justify-content:center}
+.vgrip i{width:2px;height:28px;background:var(--cstroke2);border-radius:1px}
+.thought{display:flex;flex-direction:column;gap:4px}
+.thought-h{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:transparent;color:var(--text2);font:inherit;font-size:12px;line-height:16px;cursor:pointer}
+.thought-b{margin-left:6px;padding-left:14px;border-left:1px solid var(--stroke);color:var(--text2);font-size:12px;line-height:18px;white-space:pre-line}
+.dbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:4px;border-top:1px solid var(--stroke);background:var(--card2)}
+.dbtn{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:0;border-radius:4px;background:transparent;color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.dbtn:hover{background:var(--hover)}
+.dbtn .k{font-size:12px;color:var(--text2)}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar"><span class="f-logo">CL</span><span class="t-cap">CodeLab</span><span style="flex: 1"></span><a href="TabletPalette.dc.html" class="f-btn subtle touch" style="text-decoration: none" aria-label="Search or run a command (Cmd+K)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg><span class="t-cap t2">⌘K</span></a><div class="tools" role="toolbar" aria-label="Tool panes" data-fluent="CommandBar of ToggleButton (tool panes)"><button class="tool" aria-pressed="false" title="Files (Ctrl+Shift+E)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files</button><button class="tool" aria-pressed="false" title="Diff (Ctrl+Shift+D)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v8M8 8h8M8 18h8"/></svg>Diff</button><button class="tool" aria-pressed="false" title="Plan"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>Plan</button><button class="tool" aria-pressed="false" title="Agents"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Agents</button><button class="tool" aria-pressed="false" title="Usage"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Usage</button></div><span class="tag ok"><span class="f-dot"></span>On this device</span></header>
+<div class="f-nv">  <nav class="rail" aria-label="Sessions (compact)" data-fluent="NavigationPane (compact)">
+    <button class="f-btn subtle icon" aria-label="Expand sidebar (Cmd+B)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <button class="f-btn subtle icon" aria-label="New session"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+    <a href="TabletWorkbench.dc.html" class="f-btn subtle icon on" aria-label="Sort notes by last edit · notes-app"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg></a>
+    <a href="TabletWorkbench.dc.html" class="f-btn subtle icon" aria-label="Explain the sync conflict · notes-app"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg></a>
+    <span style="flex: 1"></span>
+    <a href="TabletSettings.dc.html" class="f-btn subtle icon" aria-label="Settings"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></a>
+  </nav>
+<section class="f-content" style="flex-direction: row"><div class="pane2 focus" data-fluent="Session pane (focused)">    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 16px 6px; flex-wrap: wrap" data-fluent="PageHeader">
+      <h1 class="t-sub" style="margin: 0; flex: 1; min-width: 0; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Sort notes by last edit</h1>
+      <span class="tag">notes-app</span><span class="tag acc">standard</span>
+      <div class="f-cb" data-fluent="CommandBar"><button class="f-cbb touch"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H6"/></svg> Fork</button></div>
+    </div>
+    <div style="flex: 1; overflow: hidden; padding: 4px 16px; display: flex; flex-direction: column; gap: 10px; justify-content: flex-end">
+      <div style="align-self: flex-end" class="acp-bubble">Sort the note list by last edit, newest first, and keep pinned notes on top.</div>
+      <p style="margin: 0">The list is built in <code class="ic-code">note_list.dart</code>. I'll change the comparator and leave pinned notes first.</p>
+      <section class="f-exp" data-acp="AcpToolCallRow"><div class="f-exph" style="min-height: 48px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--text2)"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span style="flex: 1">Read <span class="mono t2" style="font-size: 13px">lib/note_list.dart · 86 lines</span></span><span class="tag ok">Done · 0.1 s</span></div></section>
+      <section class="f-exp" data-acp="AcpToolCallRow + AcpDiffView + AcpApprovalPrompt">
+        <div class="f-exph" style="min-height: 48px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1">Edit <span class="mono" style="font-size: 13px">lib/note_list.dart <span style="color: var(--ok)">+3</span> <span style="color: var(--bad)">−1</span></span></span><span class="tag warn">Local write</span></div>
+        <div style="border-top: 1px solid var(--stroke); background: var(--code-bg)">
+          <div class="dl"><span>21</span><span>  final notes = repo.all();</span></div>
+          <div class="dl del"><span>22</span><span>− notes.sort((a, b) =&gt; a.title.compareTo(b.title));</span></div>
+          <div class="dl add"><span>22</span><span>+ notes.sort((a, b) {</span></div>
+          <div class="dl add"><span>23</span><span>+   if (a.pinned != b.pinned) return a.pinned ? -1 : 1;</span></div>
+          <div class="dl add"><span>24</span><span>+   return b.editedAt.compareTo(a.editedAt); });</span></div>
+        </div>
+        <div class="dbar" role="group" aria-label="Decision" data-acp="decision bar: decision × scope"><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">⌘↩</span></button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">⌘⌫</span></button><span style="flex: 1"></span><button class="f-btn subtle icon touch" aria-label="View raw input" title="View raw input" style="width: 44px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 4c-2 0-2 2-2 4s-2 4-2 4 2 0 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 0-2 4 0 4-2 4"/></svg></button><button class="f-cbx touch" data-fluent="DropDownButton (scope: Only this time / Always)" style="min-width: 0; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+      </section>
+    </div>
+    <div style="padding: 8px 16px 12px; border-top: 1px solid var(--stroke); display: flex; flex-direction: column; gap: 8px" data-fluent="Composer">
+      <label class="f-tb" style="min-height: 52px; align-items: flex-start"><textarea rows="2" placeholder="Message the agent — @ to mention a file, / for commands" aria-label="Message"></textarea></label>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+        <button class="f-cbx touch" style="min-width: 0">standard</button><button class="f-cbx touch" style="min-width: 0">claude-sonnet-5-5</button>
+        <span style="flex: 1"></span><span class="t-cap t2">ctx 31% · $0.02</span>
+        <span class="f-split"><button class="f-btn accent touch">Queue</button><button class="f-btn accent touch" aria-label="Steer (when the agent supports it)">▾</button></span>
+      </div>
+    </div>
+</div><div class="vgrip" role="separator" aria-label="Resize session panes"><i></i></div><div class="pane2" data-fluent="Session pane">    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 16px 6px; flex-wrap: wrap" data-fluent="PageHeader">
+      <h1 class="t-sub" style="margin: 0; flex: 1; min-width: 0; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Explain the sync conflict</h1>
+      <span class="tag">notes-app</span><span class="tag acc">standard</span>
+      <div class="f-cb" data-fluent="CommandBar"><button class="f-cbb touch"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H6"/></svg> Fork</button></div>
+    </div>
+    <div style="flex: 1; overflow: hidden; padding: 4px 16px; display: flex; flex-direction: column; gap: 10px; justify-content: flex-end">
+      <div style="align-self: flex-end" class="acp-bubble">Why did two devices keep different copies of the same note?</div>
+      <p style="margin: 0">The list is built in <code class="ic-code">note_list.dart</code>. I'll change the comparator and leave pinned notes first.</p>
+      <section class="f-exp" data-acp="AcpToolCallRow"><div class="f-exph" style="min-height: 48px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--text2)"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span style="flex: 1">Read <span class="mono t2" style="font-size: 13px">lib/note_list.dart · 86 lines</span></span><span class="tag ok">Done · 0.1 s</span></div></section>
+      <section class="f-exp" data-acp="AcpToolCallRow + AcpDiffView + AcpApprovalPrompt">
+        <div class="f-exph" style="min-height: 48px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1">Edit <span class="mono" style="font-size: 13px">lib/note_list.dart <span style="color: var(--ok)">+3</span> <span style="color: var(--bad)">−1</span></span></span><span class="tag warn">Local write</span></div>
+        <div style="border-top: 1px solid var(--stroke); background: var(--code-bg)">
+          <div class="dl"><span>21</span><span>  final notes = repo.all();</span></div>
+          <div class="dl del"><span>22</span><span>− notes.sort((a, b) =&gt; a.title.compareTo(b.title));</span></div>
+          <div class="dl add"><span>22</span><span>+ notes.sort((a, b) {</span></div>
+          <div class="dl add"><span>23</span><span>+   if (a.pinned != b.pinned) return a.pinned ? -1 : 1;</span></div>
+          <div class="dl add"><span>24</span><span>+   return b.editedAt.compareTo(a.editedAt); });</span></div>
+        </div>
+        <div class="dbar" role="group" aria-label="Decision" data-acp="decision bar: decision × scope"><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">⌘↩</span></button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">⌘⌫</span></button><span style="flex: 1"></span><button class="f-btn subtle icon touch" aria-label="View raw input" title="View raw input" style="width: 44px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 4c-2 0-2 2-2 4s-2 4-2 4 2 0 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 0-2 4 0 4-2 4"/></svg></button><button class="f-cbx touch" data-fluent="DropDownButton (scope: Only this time / Always)" style="min-width: 0; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+      </section>
+    </div>
+    <div style="padding: 8px 16px 12px; border-top: 1px solid var(--stroke); display: flex; flex-direction: column; gap: 8px" data-fluent="Composer">
+      <label class="f-tb" style="min-height: 52px; align-items: flex-start"><textarea rows="2" placeholder="Message the agent — @ to mention a file, / for commands" aria-label="Message"></textarea></label>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+        <button class="f-cbx touch" style="min-width: 0">standard</button><button class="f-cbx touch" style="min-width: 0">claude-sonnet-5-5</button>
+        <span style="flex: 1"></span><span class="t-cap t2">ctx 31% · $0.02</span>
+        <span class="f-split"><button class="f-btn accent touch">Queue</button><button class="f-btn accent touch" aria-label="Steer (when the agent supports it)">▾</button></span>
+      </div>
+    </div>
+</div></section></div><span class="cap">Split view: 2 × 560 px fits at 1366 with a compact sidebar; the dock is closed (it would slide over)</span></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1366,"height":1024}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>
