@@ -226,7 +226,7 @@ macOS и Linux, ручная проверка Windows откладывается
 * запускать ли встроенное ядро в отдельном isolate — решается на этапе 7 по замеру задачи 7.8
   (agent-core-architecture [§16.3](agent-core/16-non-mvp-and-open-questions.md#163-открытые-вопросы));
 * готовый MCP-клиент на pub.dev или свой — короткая разведка в начале этапа 8 (риски §9.13).
-  **Решено:** свой клиент, D1 change [`add-agent-mcp-client`](../../../openspec/changes/add-agent-mcp-client/design.md)
+  **Решено:** свой клиент, D1 change [`add-agent-mcp-client`](../../../openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md)
   (задачи 8.1–8.4 этапа 8; [итог в §9.13](dart-agent-and-clients/09-13-stage-8-mcp-config.md)).
 
 ### 4.5. M4 — Продукт 1.0

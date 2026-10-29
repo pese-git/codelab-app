@@ -4,7 +4,7 @@
 
 Источники:
 - `docs/architecture/proposals/agent-core-architecture.md` — §1.2 (пакеты и allowlist), §6.4 (MCP-инструменты), §10.3 (`AgentCoreServices.mcp`), §11.5 (секция `mcp`), §12.2 (события);
-- `openspec/changes/add-agent-mcp-client/design.md` — решения D1–D15;
+- `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md` — решения D1–D15;
 - нормативный текст MCP — `docs/protocols/mcp/specification/` (ревизия `2026-07-28`, modern) и `docs/protocols/mcp/specification/2025-11-25/` (legacy). Методы, поля, коды и `_meta`-ключи, которых там нет, не вводятся (по аналогии с корневым `AGENTS.md` §3.4).
 
 Если документов не хватает, сначала дополняется документация, потом пишется код.
