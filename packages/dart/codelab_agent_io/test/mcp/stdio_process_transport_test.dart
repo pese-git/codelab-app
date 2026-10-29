@@ -13,30 +13,37 @@ import '../support/dart_executable.dart';
 /// процесс — `test/support/line_echo.dart`, оболочка — `/bin/sh`.
 const _maxLine = 16 * 1024 * 1024;
 
-Future<bool> _alive(String marker) async {
-  final ps = await Process.run('ps', ['-A', '-o', 'args=']);
-  return '${ps.stdout}'
-      .split('\n')
-      .any((line) => line.contains(marker) && !line.contains('ps -A'));
+/// Жив ли процесс [pid]: есть в таблице процессов и не зомби.
+///
+/// Почему по pid, а не по строке `ps -A -o args`: имя и аргументы потомка
+/// по-разному видны на macOS и Linux (CI PR #158 не находил потомка по
+/// имени), а pid потомка сценарий печатает сам (`$!`). Зомби считается
+/// мёртвым: после `SIGKILL` запись живёт, пока init её не подберёт.
+Future<bool> _alive(int pid) async {
+  final ps = await Process.run('ps', ['-o', 'stat=', '-p', '$pid']);
+  final stat = '${ps.stdout}'.trim();
+  return stat.isNotEmpty && !stat.startsWith('Z');
 }
 
-/// Ждёт, пока процесс с [marker] появится ([alive] `true`) или исчезнет.
-///
-/// Почему не один `ps`: после `cmd &` оболочка печатает `up` раньше, чем
-/// потомок выполнит `exec`, и на Linux `ps` ещё видит его под именем `sh`
-/// (CI PR #158); после `SIGKILL` запись живёт, пока init не подберёт процесс.
-/// Опрос ограничен [within], так что тест не висит.
+/// Ждёт, пока [pid] станет живым ([alive] `true`) или мёртвым, не дольше
+/// [within], чтобы тест не висел.
 Future<bool> _becomes(
-  String marker, {
+  int pid, {
   required bool alive,
   Duration within = const Duration(seconds: 5),
 }) async {
   final watch = Stopwatch()..start();
   while (true) {
-    if (await _alive(marker) == alive) return true;
+    if (await _alive(pid) == alive) return true;
     if (watch.elapsed > within) return false;
     await Future<void>.delayed(const Duration(milliseconds: 50));
   }
+}
+
+/// Pid потомка из первой строки сценария `up <pid>`.
+int _upPid(String line) {
+  expect(line, startsWith('up '));
+  return int.parse(line.substring(3));
 }
 
 void main() {
@@ -283,40 +290,29 @@ void main() {
       expect(logger.eventsOf('mcp.server.closed'), hasLength(1));
     });
 
-    /// Сценарий в файле и уникальное имя команды потомка (симлинк на
-    /// `sleep`): имя не входит в аргументы `sh`, поэтому `ps` находит только
-    /// самого потомка.
-    ({String command, String script}) hold(String body) {
+    /// Сценарий в файле: первой строкой он печатает `up <pid потомка>`.
+    String hold(String body) {
       final id = '${DateTime.now().microsecondsSinceEpoch}';
-      final link = Link('$cwd/held_sleep_$id')..createSync('/bin/sleep');
-      final file = File('$cwd/hold_$id.sh')
-        ..writeAsStringSync(body.replaceAll(r'$HELD', link.path));
-      return (command: 'held_sleep_$id', script: file.path);
+      return (File('$cwd/hold_$id.sh')..writeAsStringSync(body)).path;
     }
 
     test('a server that ignores EOF and SIGTERM is killed with its '
         'descendants within 10 s', () async {
-      final held = hold('trap "" TERM\n\$HELD 600 &\necho up\nwait\n');
-      final transport = await open(
-        McpStdioServerConfig(
-          name: 'sh',
-          command: '/bin/sh',
-          args: [held.script],
-        ),
+      final script = hold(
+        'trap "" TERM\n/bin/sleep 600 &\necho "up \$!"\nwait\n',
       );
-      expect(await transport.incoming.first, 'up');
-      expect(await _becomes(held.command, alive: true), isTrue);
+      final transport = await open(
+        McpStdioServerConfig(name: 'sh', command: '/bin/sh', args: [script]),
+      );
+      final child = _upPid(await transport.incoming.first);
+      expect(await _becomes(child, alive: true), isTrue);
       final watch = Stopwatch()..start();
 
       await transport.close();
 
       expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
       expect(
-        await _becomes(
-          held.command,
-          alive: false,
-          within: const Duration(seconds: 2),
-        ),
+        await _becomes(child, alive: false, within: const Duration(seconds: 2)),
         isTrue,
       );
       final closed = await transport.done;
@@ -325,29 +321,22 @@ void main() {
 
     test('a descendant that ignores EOF and SIGTERM does not outlive a root '
         'that left on EOF', () async {
-      final held = hold(
-        '( trap "" TERM; exec \$HELD 600 ) &\necho up\nread x\nexit 0\n',
+      final script = hold(
+        '( trap "" TERM; exec /bin/sleep 600 ) &\necho "up \$!"\n'
+        'read x\nexit 0\n',
       );
       final transport = await open(
-        McpStdioServerConfig(
-          name: 'sh',
-          command: '/bin/sh',
-          args: [held.script],
-        ),
+        McpStdioServerConfig(name: 'sh', command: '/bin/sh', args: [script]),
       );
-      expect(await transport.incoming.first, 'up');
-      expect(await _becomes(held.command, alive: true), isTrue);
+      final child = _upPid(await transport.incoming.first);
+      expect(await _becomes(child, alive: true), isTrue);
       final watch = Stopwatch()..start();
 
       await transport.close();
 
       expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
       expect(
-        await _becomes(
-          held.command,
-          alive: false,
-          within: const Duration(seconds: 2),
-        ),
+        await _becomes(child, alive: false, within: const Duration(seconds: 2)),
         isTrue,
       );
       expect((await transport.done).exitCode, 0, reason: 'the root left');
