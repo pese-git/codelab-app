@@ -67,7 +67,7 @@
 - `transformContext` — перед каждым запросом, меняет только payload;
 - цепочку `beforeToolCall` — после валидации аргументов, до исполнения; первый `Block(reason)` останавливает цепочку;
 - цепочку `afterToolCall` — после исполнения, переопределение по полям;
-- `prepareNextStep` — после `StepEnded`, может заменить контекст или модель;
+- `prepareNextStep` — после `StepEnded`, может заменить контекст или модель, а также набор инструментов (`StepUpdate.tools`) и системный промпт (`StepUpdate.systemPrompt`) со следующего запроса. `tools` и `systemPrompt` применяются поверх `context` и транскрипт цикла не меняют (design.md change `add-agent-mcp-client`, D6: обновление MCP-инструментов по `tools/list_changed`);
 - `beforeFinalResponse` — в MVP только интерфейс; без хука поведение совпадает с `Accept` (LOOP-13);
 - `estimateTokens(LlmContext)` — оценка размера payload (§9.3);
 - `emergencyCompact(EmergencyCause, CancelToken)` — аварийное сжатие с причиной `preflight` или `overflow`; возвращает новый `LoopContext` или `null`, если сжать нечего или сжатие не удалось; `contextWindowCap` ограничивает окно проверки перед запросом (CMP-6).
@@ -96,6 +96,10 @@ Payload каждого запроса SHALL собираться по §5.2:
 #### Scenario: Payload больше окна
 - **WHEN** `estimateTokens` возвращает значение больше окна модели, а `emergencyCompact` возвращает `null`
 - **THEN** провайдер не вызывается, шаг завершается ошибкой `overflow`, ход — `TurnEnded(failed)`
+
+#### Scenario: Новые инструменты без замены транскрипта
+- **WHEN** `prepareNextStep` возвращает `StepUpdate(tools: [read, mcp__fake__lookup], systemPrompt: 'P2')` без `context`
+- **THEN** следующий запрос к модели содержит схемы `read` и `mcp__fake__lookup` и системный промпт `P2`, а транскрипт `Agent` не изменился
 
 ### Requirement: Бюджет хода
 `TurnBudget` (`maxSteps` по умолчанию 50, необязательные `maxTokens`, `maxCost`, `maxDuration`) SHALL проверяться только на границе шага: после `StepEnded` и до следующего запроса к модели. Исполняемый инструмент не прерывается.

@@ -167,7 +167,7 @@ render(template, values):
 
 Значения не обрабатываются как шаблон: `{{` внутри содержимого `AGENTS.md` останется текстом.
 
-Полный текст `mcp.md` (этап 8, `openspec/changes/add-agent-mcp-client/design.md`, D12; секция
+Полный текст `mcp.md` (этап 8, `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md`, D12; секция
 собирается в шаге 9 §11.5 и пересобирается при создании и загрузке сессии и при изменении набора
 инструментов по `tools/list_changed` на границе шага, §6.4):
 

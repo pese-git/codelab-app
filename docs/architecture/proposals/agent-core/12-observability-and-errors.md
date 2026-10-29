@@ -86,7 +86,7 @@ final class LogRecord {           // то, что получает sink хост
 | `host` | `host.plan`, `host.config.loaded` |
 | `config` | `config.project.untrusted_key` (§15.3), `config.legacy_ignored`, `config.legacy_key_dropped`, `config.legacy_active` (§15.7) |
 
-События `mcp.*` (этап 8; `openspec/changes/add-agent-mcp-client/design.md`, D13). `session_id` есть
+События `mcp.*` (этап 8; `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md`, D13). `session_id` есть
 всегда, `server` — `name` сервера:
 
 | Событие | Уровень | Поля |

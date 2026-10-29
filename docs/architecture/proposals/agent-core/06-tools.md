@@ -190,7 +190,7 @@ flowchart LR
 `maximum`, `minLength`, `format`, `anyOf`, `oneOf`, `allOf`, `additionalProperties` — ключи
 остаются в схеме для модели, но валидатор их игнорирует. Лишние ключи аргументов проходят как есть.
 
-Схема разбирается терпимо (`openspec/changes/add-agent-mcp-client/design.md`, D7): ключевое слово
+Схема разбирается терпимо (`openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md`, D7): ключевое слово
 подмножества неверного типа (`type` — не строка и не список строк, `required` — не список строк,
 `properties` — не объект, `enum` — не список) не бросает исключение, а даёт нарушение
 `<where>: "<keyword>" must be <expected>`, где `<where>` — `schema` для корня и путь свойства для
@@ -669,7 +669,7 @@ MCP-селектор, которому при создании сессии не
 
 ### MCP-инструменты
 
-Решения — `openspec/changes/add-agent-mcp-client/design.md` (D6–D8). Инструменты серверов сессии
+Решения — `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md` (D6–D8). Инструменты серверов сессии
 собирает `McpConnector` (порт ядра, §10.3) как `AgentTool` с именем `mcp__<server>__<tool>`; клиент
 MCP живёт в `codelab_agent_mcp` (§1.2). Реестр собирается **на сессию**: копия базового реестра
 (§10.7, шаги 5a–5b) плюс инструменты её серверов, и именно он уходит в `ToolCallExecutor`,

@@ -17,7 +17,7 @@
    `McpTransportFactory`) и порт подключения серверов сессии (`McpConnector`) лежат не в
    `protocol.dart`, а в ядре — `codelab_agent_core/lib/src/mcp/` (agent-core-architecture §1.3,
    §10.3): `codelab_agent_io` реализует порты ядра и не зависит от MCP-пакета, а MCP-клиента ядро
-   создать не может. Решения — [`design.md`](../../../../openspec/changes/add-agent-mcp-client/design.md)
+   создать не может. Решения — [`design.md`](../../../../openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md)
    change `add-agent-mcp-client` (D3).
 2. **8.2. stdio-транспорт MCP** в `packages/dart/codelab_agent_io/lib/src/mcp/stdio_process_transport.dart`
    (процесс с `env` по allowlist, остановка при завершении сессии).
@@ -103,7 +103,7 @@
     результата (задача 3.8, change `add-agent-core-output-spill`) идёт после неё: файл выноса не
     должен содержать сырых секретов (SPL-3).
 
-**OpenSpec change.** [`add-agent-mcp-client`](../../../../openspec/changes/add-agent-mcp-client/) (8.1–8.4; scope: протокол MCP, транспорты, имена и
+**OpenSpec change.** [`add-agent-mcp-client`](../../../../openspec/changes/archive/2026-10-29-add-agent-mcp-client/) (8.1–8.4; scope: протокол MCP, транспорты, имена и
 виды MCP-инструментов, проверка разрешений; решение о библиотеке MCP — в его `design.md`),
 `add-agent-configuration` (8.5; scope: файлы, порядок слоёв, формат YAML и его профиль, чтение
 `codelab.toml` только для чтения, новые зависимости `yaml_edit` и `toml` как решение о

@@ -165,7 +165,7 @@ followed`, `connection failed: <runtimeType>`, `HTTP session expired`; в лог
 (коллизия отключает новый сервер), отключённый или не подключившийся сервер пробуется заново; сбой
 сервера — `mcp.server.failed`, а не исключение.
 
-Решения — `openspec/changes/add-agent-mcp-client/design.md` (D3, D6).
+Решения — `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md` (D3, D6).
 
 Реализации: связка ключей ОС в `codelab_agent_io` (Keychain, Secret Service, Credential Manager) и
 хранилище в памяти для тестов. Значения секретов никогда не попадают в логи: каждое прочитанное
