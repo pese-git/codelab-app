@@ -9,6 +9,7 @@
 Итерации — тонкие сквозные срезы, каждая отдельным PR (или 2–3 PR) в `develop`:
 - итерация 0 — группа 0: нормативный текст MCP и правки документов, без кода;
 - итерация 1 — группы 1–4: пакет, порты ядра, клиент и проекция в памяти — MCP-инструмент через политику на `FakeMcpServer`;
+- итерация 1б — группа 4б: соответствие спецификации MCP по итогам аудита итерации 1 (запросы сервера, снятие подписки, недоверенная схема, причины пробы, отмена по таймауту служебных запросов);
 - итерация 2 — группы 5–8: stdio-транспорт, ACP, фикстуры, бинарь — реальный stdio-сервер из `session/new`;
 - итерация 3 — группа 9: streamable HTTP и `tools/list_changed`, фикстура HTTP;
 - итерация 4 — группа 10: матрица, документы и Definition of Done.
@@ -160,6 +161,38 @@
   - `fvm dart run melos run guard`, `fvm dart run melos run web-compile`;
   - PR итерации 1, который называет следующую итерацию.
 
+## 4б. Соответствие спецификации MCP (итерация 1б; D2, D5, D7, D8, D13)
+
+Аудит итерации 1 против `docs/protocols/mcp/specification/` и `.../2025-11-25/` (решения одобрены пользователем). Повтор оборванного `subscriptions/listen` — HTTP-сценарий, он в 9.1/9.2.
+
+- [x] 4б.1 `[agent]` Тест `codelab_agent_mcp/test/mcp_client_spec_conformance_test.dart` (agent-mcp-client «Эпоха сервера и версия протокола», сценарии «Запрос modern-сервера без ответа», «Ping в окне рукопожатия», «Сервер снял подписку», «Probe отклонён modern-ошибкой», «Подтверждения подписки нет»; «Обновление списка инструментов», сценарий «Таймаут перечитывания шлёт отмену»):
+  - запросы modern-сервера (`ping`, `sampling/createMessage`) → ответов в транспорте нет, `mcp.message.ignored` `server_request` с `method`; legacy-`ping` и `-32601` на прочее — тест 3.3;
+  - legacy-`ping` в окне рукопожатия (после отправки `initialize`) → пустой `result`;
+  - серверный `notifications/cancelled` с id `subscriptions/listen` → `subscription_closed`, `list_changed` больше не перечитывает, сервер подключён; `close()` не шлёт отмену на этот id;
+  - `-32020` и `-32021` на пробе → `server rejected the probe (code N)` без отката; `-32022` — как раньше;
+  - таймаут подтверждения подписки и таймаут `tools/list` перечитывания на живом соединении → один сигнал отмены (stdio — `notifications/cancelled`, транспорт `kind: http` — `abandon(id)`), `mcp.tools.refresh_failed` с `no answer to tools/list`; таймаут пробы — без сигнала.
+
+  Красный.
+- [x] 4б.2 `[agent]` `lib/src/mcp_client.dart` (ветка ответов на запросы сервера по `_outbound.era` с отправки `initialize`, `notifications/cancelled` сервера, сигнал отмены по таймауту служебных запросов, причина `server rejected the probe`), при необходимости `FakeMcpServer` — 4б.1 зелёный.
+- [x] 4б.3 `[agent]` Тест `codelab_agent_mcp/test/mcp_tool_adapter_test.dart` (agent-tools «MCP-инструменты», сценарий «Кривая схема инструмента»): ключевые слова `type`, `required`, `properties`, `items`, `enum` неверного типа в корне и во вложенной схеме → `mcp.tool.invalid` `malformed inputSchema`, соседний инструмент зарегистрирован. Красный.
+- [x] 4б.4 `[agent]` Рекурсивная проверка схемы в `lib/src/mcp_tool.dart` — 4б.3 зелёный.
+- [x] 4б.5 `[agent]` Тесты ядра (agent-tools «Валидация и приведение аргументов», сценарии «Некорректное ключевое слово схемы», «Исключение при валидации»):
+  - `codelab_agent_core/test/tools/validator_test.dart` — неверный тип `type`, `required`, `properties`, `items`, `enum` в корне и вложенно → нарушение `schema: "<keyword>" must be <expected>` (вложенные — с путём), без исключения;
+  - `codelab_agent_core/test/tools/tool_throws_test.dart` — исключение геттера `parameters` → результат-ошибка `failed`, `ToolCallFinished`, ход продолжается.
+
+  Красный.
+- [x] 4б.6 `[agent]` Терпимый разбор схемы в `lib/src/tools/validator.dart`, перехват исключения валидации в `lib/src/tools/executor.dart` — 4б.5 зелёный.
+- [x] 4б.7 `[agent]` Документы ядра: `agent-core/06-tools.md` §6.3.1–§6.3.2 (терпимый валидатор, исключение валидации) и §6.4 «MCP-инструменты» (недоверенная схема, отступления D7, запросы сервера, снятие подписки, отмена по таймауту); `12-observability-and-errors.md` §12.3 (`server_request` и `method`, причины `server rejected the probe`, `no answer to tools/list`).
+- [x] 4б.8 `[agent]` Добор тестов к уже реализованному поведению (должны быть зелёными без нового кода; красный — исправление в 4б.2/4б.4/4б.6):
+  - `mcp_client_spec_conformance_test.dart`: запрос сервера во время пробы `server/discover` остаётся без ответа (D5); `notifications/cancelled` сервера с чужим `requestId` → `unknown_notification`, подписка жива; `notifications/cancelled` на id подписки до подтверждения → подключение без обновлений; `method` длиннее 64 рун обрезается;
+  - `mcp_tool_adapter_test.dart`: boolean-схема свойства (`properties.flag: true`) — инструмент зарегистрирован; схема глубже 32 уровней → `malformed inputSchema` (сценарий «Кривая схема инструмента»);
+  - `tool_throws_test.dart`: исключение валидации не меняет счётчик `MisuseBreaker`, а нарушение ключевого слова схемы (`schema: "required" must be …`) — меняет, как любая ошибка шага 3 (agent-tools, сценарии «Исключение при валидации», «Некорректное ключевое слово схемы»).
+- [x] 4б.9 Проверка итерации 1б:
+  - проверки затронутого (`AGENTS.md` §21): `fvm dart format`, `fvm dart analyze` и `fvm dart test` в `codelab_agent_core`, `codelab_agent_mcp`;
+  - `fvm dart run melos run guard`, `fvm dart run melos run web-compile`;
+  - `openspec validate add-agent-mcp-client --strict`;
+  - PR итерации 1б, который называет следующую итерацию (2).
+
 ## 5. stdio-транспорт (D9; E-02)
 
 - [ ] 5.1 `[agent]` Тест `codelab_agent_io/test/mcp/stdio_process_transport_test.dart` на скрипте `test/support/line_echo.dart` (agent-mcp-client «stdio-транспорт MCP», все сценарии):
@@ -239,10 +272,10 @@
   - **modern:** `MCP-Protocol-Version: 2026-07-28`, `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*` из `x-mcp-header` с кодированием `=?base64?…?=` (в том числе для значения, похожего на маркер; `null` — без заголовка); инструмент с невалидным `x-mcp-header` исключён из `tools/list` с `mcp.tool.invalid`; `-32020` → один `tools/list` и повтор с новым id; нет `Mcp-Session-Id`, GET и `DELETE`; `subscriptions/listen` — долгий поток с `list_changed`; отмена — закрытие потока ответа без POST `notifications/cancelled`;
   - **проба эпохи:** `400` (а также `404`, `405`) с телом `-32022` → нет общей версии без отката; `400` с пустым телом, `404`, `405` и `404` с `-32601` → откат на `initialize`;
   - **legacy:** `Mcp-Session-Id` и `MCP-Protocol-Version` (`2025-06-18`) в следующих запросах, без `MCP-Protocol-Version` для `2025-03-26`; GET-поток при `listChanged`, `405` без потока; `404` → `HTTP session expired`; `DELETE` при закрытии; отмена — `notifications/cancelled` и закрытие потока; поток ответа, закрытый после события `id: e1` с `retry: 100`, возобновлён `GET` с `Last-Event-ID: e1` через 100 мс без второго `tools/call`, не больше 5 возобновлений;
-  - **обрыв без возобновления:** `tools/call` — `disconnected during the call` без повтора; `tools/list` и `server/discover` — один повтор с новым id.
+  - **обрыв без возобновления:** `tools/call` — `disconnected during the call` без повтора; `tools/list`, `server/discover` и `subscriptions/listen` — один повтор с новым id (D10, «Повтор после обрыва»; agent-mcp-client, сценарий «Оборванная подписка переиздаётся»): после подтверждения переизданной подписки — ровно один `tools/list` перечитывания (изменения из окна обрыва не теряются), `list_changed` принимается только с новым `subscriptionId`, второй обрыв подписки — без обновлений; тест 3.3 об обрыве подписки уточняется — `subscription_failed` только после второго обрыва.
 
   Красный.
-- [ ] 9.2 `[agent]` `lib/src/streamable_http.dart` (обе эпохи), зеркальные заголовки modern в `McpClient`, `StreamableHttpTransportFactory`, `McpTransports`; экспорт `SseDecoder` и `ServerSentEvent` из бареля ядра; HTTP-обработчик `FakeMcpServer` для `MockClient` — 9.1 зелёный.
+- [ ] 9.2 `[agent]` `lib/src/streamable_http.dart` (обе эпохи), зеркальные заголовки modern в `McpClient`, один повтор оборванного `subscriptions/listen` с новым id и одно перечитывание `tools/list` после его подтверждения в `McpClient` (D10), `StreamableHttpTransportFactory`, `McpTransports`; экспорт `SseDecoder` и `ServerSentEvent` из бареля ядра; HTTP-обработчик `FakeMcpServer` для `MockClient` — 9.1 зелёный.
 - [ ] 9.3 `[agent]` Тест `codelab_agent_mcp/test/mcp_list_changed_boundary_test.dart` (agent-mcp-client «Обновление списка инструментов», оба сценария; D6):
   - уведомление посреди пакета вызовов применяется к следующему запросу;
   - modern — принимается только с `subscriptionId` своей подписки, legacy — с общего канала;

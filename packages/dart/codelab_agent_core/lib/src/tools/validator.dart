@@ -10,11 +10,17 @@ import '../util/result.dart';
 /// §6.3.2 when the meaning is unambiguous (`"42"` → 42).
 ///
 /// Returns the coerced arguments or every violation as `<path>: <text>`.
+///
+/// Схема приходит и от недоверенных источников (инструменты MCP-серверов,
+/// `agent-core-architecture` §6.4), поэтому разбор терпимый: ключевое слово
+/// неверного типа (`required` не список строк, `type` не строка и т. п.) —
+/// нарушение в списке ошибок, а не исключение `as` в цикле агента.
 Result<Map<String, Object?>, List<String>> validateArguments(
   Map<String, Object?> schema,
   Map<String, Object?> args,
 ) {
   final violations = <String>[];
+  _checkKeywords(schema, '', violations);
   final value = _validateObject(schema, args, '', violations);
   return violations.isEmpty ? Ok(value) : Err(violations);
 }
@@ -42,8 +48,9 @@ Map<String, Object?> _validateObject(
       ? schema['properties']! as Map<String, Object?>
       : const <String, Object?>{};
   final required = {
-    for (final name in schema['required'] as List<Object?>? ?? const [])
-      '$name',
+    // Неверный `required` уже записан нарушением в `_checkKeywords`.
+    if (schema['required'] case final List<Object?> names)
+      for (final name in names) '$name',
   };
   final out = <String, Object?>{...value};
   for (final MapEntry(key: name, value: raw) in properties.entries) {
@@ -72,6 +79,40 @@ Map<String, Object?> _validateObject(
   return out;
 }
 
+/// Типы ключевых слов, которые понимает валидатор. Нарушение — схема
+/// неверна, а не аргументы; путь пустой у корня схемы.
+void _checkKeywords(
+  Map<String, Object?> schema,
+  String path,
+  List<String> violations,
+) {
+  final where = path.isEmpty ? 'schema' : path;
+  void bad(String keyword, String expected) =>
+      violations.add('$where: "$keyword" must be $expected');
+  if (schema.containsKey('type')) {
+    final type = schema['type'];
+    if (type is! String && !(type is List && type.every((t) => t is String))) {
+      bad('type', 'a string or a list of strings');
+    }
+  }
+  if (schema.containsKey('required')) {
+    final names = schema['required'];
+    if (names is! List || !names.every((n) => n is String)) {
+      bad('required', 'a list of strings');
+    }
+  }
+  if (schema.containsKey('properties') &&
+      schema['properties'] is! Map<String, Object?>) {
+    bad('properties', 'an object');
+  }
+  if (schema.containsKey('items') && schema['items'] is! Map<String, Object?>) {
+    bad('items', 'an object');
+  }
+  if (schema.containsKey('enum') && schema['enum'] is! List) {
+    bad('enum', 'a list');
+  }
+}
+
 List<String> _types(Map<String, Object?> schema) => switch (schema['type']) {
   final String type => [type],
   final List<Object?> types => [for (final t in types) '$t'],
@@ -84,6 +125,7 @@ Object? _validate(
   String path,
   List<String> violations,
 ) {
+  _checkKeywords(schema, path, violations);
   final types = _types(schema);
   var result = value;
   if (types.isNotEmpty && !types.any((t) => _matches(t, value))) {

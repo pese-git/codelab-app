@@ -165,6 +165,8 @@ final class FakeMcpServer {
     this.legacyProbe = FakeLegacyProbe.methodNotFound,
     this.silentInitialize = false,
     this.declareTaskCalls = false,
+    this.probeErrorCode,
+    this.pingBeforeInitializeResult = false,
     this.serverName = 'fake-mcp-server',
   }) : _tools = [...tools],
        _responses = {...responses};
@@ -190,6 +192,14 @@ final class FakeMcpServer {
   final FakeLegacyProbe legacyProbe;
   final bool silentInitialize;
   final bool declareTaskCalls;
+
+  /// Если задан, проба `server/discover` получает ошибку с этим кодом без
+  /// `data.supported` (например, `-32020`/`-32021`).
+  final int? probeErrorCode;
+
+  /// Legacy: перед ответом на `initialize` сервер шлёт клиенту `ping` с
+  /// id `handshake-ping` (окно рукопожатия, `basic/utilities/ping.md`).
+  final bool pingBeforeInitializeResult;
   final String serverName;
 
   final List<FakeMcpTool> _tools;
@@ -216,6 +226,10 @@ final class FakeMcpServer {
   /// Сколько следующих `tools/list` оборвать без ответа (поток ответа
   /// закрыт, транспорт жив): проверка единственного повтора (D8, D10).
   var abortListResponses = 0;
+
+  /// Сколько следующих `tools/list` оставить без ответа (молчание сервера):
+  /// проверка таймаута и сигнала отмены (`cancellation.md`, Timeouts).
+  var silentLists = 0;
 
   /// Сколько следующих `tools/list` ответить ошибкой `-32603`.
   var failListErrors = 0;
@@ -410,6 +424,10 @@ final class FakeMcpServer {
       }
       return;
     }
+    if (probeErrorCode case final code?) {
+      _error(id, code, 'Probe rejected');
+      return;
+    }
     if (refuseWithUnsupportedVersion) {
       _error(
         id,
@@ -443,6 +461,9 @@ final class FakeMcpServer {
   void _initialize(Object id) {
     if (silentInitialize) {
       return;
+    }
+    if (pingBeforeInitializeResult) {
+      sendRequest('ping', id: 'handshake-ping');
     }
     _result(id, {
       'protocolVersion': legacyVersion,
@@ -508,6 +529,17 @@ final class FakeMcpServer {
     }),
   );
 
+  /// Сервер снимает подписку уведомлением `notifications/cancelled` с id
+  /// `subscriptions/listen` (`cancellation.md`: сервер MUST слать его при
+  /// разрыве потока подписки).
+  void cancelSubscription() => _push(
+    jsonEncode({
+      'jsonrpc': '2.0',
+      'method': 'notifications/cancelled',
+      'params': {'requestId': _listenId},
+    }),
+  );
+
   /// Произвольный текст клиенту (пакеты, мусор).
   void pushRaw(String text) => _push(text);
 
@@ -521,6 +553,10 @@ final class FakeMcpServer {
     if (abortListResponses > 0) {
       abortListResponses--;
       abortResponse(id);
+      return;
+    }
+    if (silentLists > 0) {
+      silentLists--;
       return;
     }
     if (failListErrors > 0) {

@@ -340,9 +340,13 @@ final class McpClient {
           'era': 'modern',
           'probe': 'modern_error',
         });
+        // `-32020`/`-32021` не про версии: «supports []» вводил бы в
+        // заблуждение (`basic/versioning.md`, D13).
         throw _Failure(
-          'no common protocol version: server supports '
-          '[${_safeVersions(rpc.error.supportedVersions)}]',
+          rpc.error.code == mcpUnsupportedProtocolVersion
+              ? 'no common protocol version: server supports '
+                    '[${_safeVersions(rpc.error.supportedVersions)}]'
+              : 'server rejected the probe (code ${rpc.error.code})',
         );
       }
       probeOutcome = 'fallback_error';
@@ -445,8 +449,10 @@ final class McpClient {
       },
     );
     await _send(encoded.text, 'subscriptions/listen');
+    var timedOut = false;
     final timer = _clock.timer(_probeTimeout(), () {
       if (!ack.isCompleted) {
+        timedOut = true;
         _log(LogLevel.debug, 'mcp.message.ignored', {
           'kind': 'subscription_failed',
           'method': 'subscriptions/listen',
@@ -459,6 +465,14 @@ final class McpClient {
     } finally {
       timer.cancel();
       _ack = null;
+    }
+    if (timedOut) {
+      // Молчание дольше предела: живём без обновлений, а запрос подписки
+      // отменяется сигналом своего транспорта (`cancellation.md`, Timeouts;
+      // D8). Окончание подписки до сигнала — `close()` не пошлёт второй.
+      _pending.remove(encoded.id);
+      _endSubscription();
+      await _signalCancel(encoded.id, 'timeout');
     }
   }
 
@@ -519,6 +533,9 @@ final class McpClient {
         {'cursor': ?cursor},
         timeout: _connected ? server.connectTimeout : _remaining(),
         retryOnAbort: true,
+        // На живом соединении таймаут запроса — отмена по таблице D8
+        // (`cancellation.md`, Timeouts); при подключении сервер закрывается.
+        signalCancel: _connected,
       );
       if (parseResultType(result) != ResultType.complete) {
         throw const McpSchemaException('tools/list asked for client input');
@@ -792,17 +809,33 @@ final class McpClient {
     complete(entry);
   }
 
+  /// Запрос сервера клиенту (`ping`, `sampling/createMessage`, ...).
+  ///
+  /// Modern: клиент НЕ пишет JSON-RPC-ответов (`stdio.md`; `streamable-http.md`,
+  /// п. 4), запрос только логируется. Legacy: `ping` — пустой результат
+  /// (`2025-11-25/basic/utilities/ping.md`), остальное — `-32601`. Ветка
+  /// выбирается по `_outbound.era` — она фиксируется с отправки `initialize`,
+  /// а `_era` становится legacy лишь после ответа, то есть `ping` в окне
+  /// рукопожатия иначе получил бы `-32601`.
   void _answerServerRequest(Object id, String method) {
-    final String reply;
-    if (method == 'ping' && _era == McpEra.legacy) {
-      reply = _outbound.response(id, const {});
-    } else {
-      reply = _outbound.errorResponse(
-        id,
-        jsonRpcMethodNotFound,
-        'Method not found',
-      );
+    if (_outbound.era != McpEra.legacy) {
+      // Метод — строка сервера: обрезается, чтобы не раздувать лог (D13).
+      final runes = method.runes.toList();
+      _log(LogLevel.debug, 'mcp.message.ignored', {
+        'kind': 'server_request',
+        'method': runes.length > 64
+            ? String.fromCharCodes(runes.take(64))
+            : method,
+      });
+      return;
     }
+    final reply = method == 'ping'
+        ? _outbound.response(id, const {})
+        : _outbound.errorResponse(
+            id,
+            jsonRpcMethodNotFound,
+            'Method not found',
+          );
     unawaited(
       _transport.send(reply).catchError((Object _) {
         // Транспорт закрыт: ответ уже не нужен.
@@ -833,6 +866,24 @@ final class McpClient {
             : subscription != null && subscription == _subscriptionId;
         if (ours) {
           _onToolsListChanged();
+        } else {
+          _log(LogLevel.debug, 'mcp.message.ignored', {
+            'kind': 'unknown_notification',
+          });
+        }
+      case 'notifications/cancelled':
+        // Сервер MUST слать его при снятии подписки с id запроса
+        // `subscriptions/listen` и ни для чего другого (`cancellation.md`).
+        final listen = _listenId;
+        if (listen != null && params['requestId'] == listen) {
+          _pending.remove(listen);
+          _endSubscription();
+          _log(LogLevel.debug, 'mcp.message.ignored', {
+            'kind': 'subscription_closed',
+          });
+          if (_ack case final ack? when !ack.isCompleted) {
+            ack.complete(false);
+          }
         } else {
           _log(LogLevel.debug, 'mcp.message.ignored', {
             'kind': 'unknown_notification',
