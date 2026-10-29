@@ -4,6 +4,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'json_rpc.dart';
 import 'protocol.dart';
+import 'text.dart';
 
 /// Настройки клиента, общие для серверов (design.md change
 /// `add-agent-mcp-client`, D8).
@@ -285,10 +286,7 @@ final class McpClient {
   }
 
   Future<McpClient> _fail(String reason) async {
-    final runes = reason.runes.toList();
-    final text = runes.length > 200
-        ? String.fromCharCodes(runes.take(200))
-        : reason;
+    final text = truncateRunes(reason, 200);
     _log(LogLevel.warning, 'mcp.server.failed', {'reason': text});
     await close();
     throw McpConnectException(text);
@@ -820,12 +818,9 @@ final class McpClient {
   void _answerServerRequest(Object id, String method) {
     if (_outbound.era != McpEra.legacy) {
       // Метод — строка сервера: обрезается, чтобы не раздувать лог (D13).
-      final runes = method.runes.toList();
       _log(LogLevel.debug, 'mcp.message.ignored', {
         'kind': 'server_request',
-        'method': runes.length > 64
-            ? String.fromCharCodes(runes.take(64))
-            : method,
+        'method': truncateRunes(method, 64),
       });
       return;
     }

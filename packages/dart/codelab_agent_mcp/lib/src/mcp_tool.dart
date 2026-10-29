@@ -4,6 +4,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'mcp_client.dart';
 import 'protocol.dart';
+import 'text.dart';
 
 /// Предел описания инструмента в схеме для модели, в рунах Unicode (D7).
 const mcpDescriptionLimit = 2048;
@@ -51,7 +52,8 @@ final class McpTool extends AgentTool {
       fields: {
         'session_id': sessionId.value,
         'server': server,
-        'tool': definition.name,
+        // Имя приходит от недоверенного сервера (D13).
+        'tool': truncateRunes(definition.name, 64),
         'reason': reason,
       },
     );
@@ -65,7 +67,7 @@ final class McpTool extends AgentTool {
       invalid('inputSchema is not an object');
       return null;
     }
-    if (!_isWellFormed(schema)) {
+    if (schemaKeywordViolations(schema).isNotEmpty) {
       invalid('malformed inputSchema');
       return null;
     }
@@ -102,55 +104,6 @@ final class McpTool extends AgentTool {
       kind: _kindOf(definition.annotations),
     );
   }
-
-  /// Ключевые слова схемы, которые понимает валидатор ядра (`type`,
-  /// `properties`, `required`, `items`, `enum`), имеют верный тип на всех
-  /// уровнях вложенности (design.md D7).
-  ///
-  /// Почему на регистрации: схему присылает недоверенный сервер, а кривой
-  /// `required: "x"` иначе всплыл бы при первом вызове как ошибка валидации
-  /// на каждый вызов. Остальные ключевые слова не проверяются (полный JSON
-  /// Schema 2020-12 вне объёма).
-  static bool _isWellFormed(Map<Object?, Object?> schema, [int depth = 0]) {
-    if (depth > _maxSchemaDepth) {
-      return false;
-    }
-    final type = schema['type'];
-    if (schema.containsKey('type') &&
-        type is! String &&
-        !(type is List && type.every((t) => t is String))) {
-      return false;
-    }
-    final required = schema['required'];
-    if (schema.containsKey('required') &&
-        (required is! List || !required.every((n) => n is String))) {
-      return false;
-    }
-    if (schema.containsKey('enum') && schema['enum'] is! List) {
-      return false;
-    }
-    if (schema.containsKey('properties')) {
-      final properties = schema['properties'];
-      if (properties is! Map) {
-        return false;
-      }
-      for (final property in properties.values) {
-        // Булева схема (`true`) допустима, валидатор её пропускает.
-        if (property is Map && !_isWellFormed(property, depth + 1)) {
-          return false;
-        }
-      }
-    }
-    if (schema.containsKey('items')) {
-      final items = schema['items'];
-      if (items is! Map || !_isWellFormed(items, depth + 1)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static const _maxSchemaDepth = 32;
 
   /// `name` сервера (часть префикса).
   final String serverName;

@@ -1,20 +1,26 @@
 import 'dart:convert';
 
 import '../util/result.dart';
+import 'schema_shape.dart';
 
-/// Validation and coercion of tool arguments (`agent-core-architecture`
-/// §6.3.2). The supported subset is `type` (a string or a list, `"null"`
-/// included), `properties`, `required`, `items`, `enum` and `default`;
-/// other keywords stay in the schema for the model and are ignored, extra
-/// arguments pass as is. A mismatched type is coerced by the table of
-/// §6.3.2 when the meaning is unambiguous (`"42"` → 42).
+/// Валидация и приведение аргументов инструмента (`agent-core-architecture`
+/// §6.3.2).
 ///
-/// Returns the coerced arguments or every violation as `<path>: <text>`.
+/// Почему: аргументы присылает модель, а схему — иногда недоверенный источник
+/// (инструменты MCP-серверов, §6.4; design.md change `add-agent-mcp-client`,
+/// D7), поэтому разбор терпимый и не бросает.
 ///
-/// Схема приходит и от недоверенных источников (инструменты MCP-серверов,
-/// `agent-core-architecture` §6.4), поэтому разбор терпимый: ключевое слово
-/// неверного типа (`required` не список строк, `type` не строка и т. п.) —
-/// нарушение в списке ошибок, а не исключение `as` в цикле агента.
+/// Для чего: поддерживается подмножество `type` (строка или список, включая
+/// `"null"`), `properties`, `required`, `items`, `enum`, `default`; остальные
+/// ключевые слова остаются в схеме для модели и игнорируются, лишние
+/// аргументы проходят как есть. Несовпавший тип приводится по таблице §6.3.2,
+/// если смысл однозначен (`"42"` → 42). `items`, не являющийся объектом
+/// (булева схема, tuple-список), игнорируется.
+///
+/// Как использовать: возвращает приведённые аргументы или все нарушения в
+/// виде `<путь>: <текст>`. Ключевое слово неверного типа (`required` не
+/// список строк, `type` не строка и т. п.) — нарушение, а не исключение `as`
+/// в цикле агента.
 Result<Map<String, Object?>, List<String>> validateArguments(
   Map<String, Object?> schema,
   Map<String, Object?> args,
@@ -79,37 +85,21 @@ Map<String, Object?> _validateObject(
   return out;
 }
 
-/// Типы ключевых слов, которые понимает валидатор. Нарушение — схема
-/// неверна, а не аргументы; путь пустой у корня схемы.
+/// Проверяет форму ключевых слов схемы в одном узле и дописывает нарушения
+/// в [violations] с префиксом [path] (у корня — `schema`).
+///
+/// Как используется: `validateArguments` зовёт её для корня, `_validate` — для
+/// каждой вложенной схемы по мере обхода значения, поэтому вложенная схема
+/// проверяется лениво, только там, где есть аргумент. Полную проверку всей
+/// схемы при регистрации делает `schemaKeywordViolations` (D7). Не бросает.
 void _checkKeywords(
   Map<String, Object?> schema,
   String path,
   List<String> violations,
 ) {
   final where = path.isEmpty ? 'schema' : path;
-  void bad(String keyword, String expected) =>
-      violations.add('$where: "$keyword" must be $expected');
-  if (schema.containsKey('type')) {
-    final type = schema['type'];
-    if (type is! String && !(type is List && type.every((t) => t is String))) {
-      bad('type', 'a string or a list of strings');
-    }
-  }
-  if (schema.containsKey('required')) {
-    final names = schema['required'];
-    if (names is! List || !names.every((n) => n is String)) {
-      bad('required', 'a list of strings');
-    }
-  }
-  if (schema.containsKey('properties') &&
-      schema['properties'] is! Map<String, Object?>) {
-    bad('properties', 'an object');
-  }
-  if (schema.containsKey('items') && schema['items'] is! Map<String, Object?>) {
-    bad('items', 'an object');
-  }
-  if (schema.containsKey('enum') && schema['enum'] is! List) {
-    bad('enum', 'a list');
+  for (final problem in schemaNodeProblems(schema)) {
+    violations.add('$where: $problem');
   }
 }
 

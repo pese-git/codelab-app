@@ -74,7 +74,7 @@ final class LogRecord {           // то, что получает sink хост
 |---|---|
 | `llm` | `llm.request.start`, `llm.request.end`, `llm.retry`, `llm.fallback`, `llm.finish_reason.unknown` (§2.7) |
 | `turn` | `turn.start`, `turn.end`, `turn.budget_exceeded` |
-| `tool` | `tool.start`, `tool.end`, `tool.validation_failed`, `tool.pairing_repaired`, `tool.misuse.warned`, `tool.misuse.blocked` (§6.3.7) |
+| `tool` | `tool.start`, `tool.end`, `tool.validation_failed`, `tool.validate.error` (`debug`; `tool`, `tool_call_id` — исключение при валидации, §6.3.1 шаг 3), `tool.pairing_repaired`, `tool.misuse.warned`, `tool.misuse.blocked` (§6.3.7) |
 | `tools` | `tools.switch.no_match` (§6.3.8) |
 | `loop` | `loop.empty_response`, `loop.empty_response.stopped` (§5.4.1) |
 | `prompts` | `prompts.override` (§11.6.1) |
@@ -99,7 +99,7 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp.server.stderr` | debug | `line` (≤ 4 КиБ) |
 | `mcp.tools.changed` | info | `added`, `removed` |
 | `mcp.tools.refresh_failed` | warning | `reason` (`tools/list failed (code N)`, `no answer to tools/list`) — перечитывание `tools/list` после `list_changed` не удалось, прежний набор инструментов остаётся |
-| `mcp.tool.invalid` | warning | `tool`, `reason` |
+| `mcp.tool.invalid` | warning | `tool` (имя от сервера, ≤ 64 рун), `reason` |
 | `mcp.tool.description_truncated` | info | `tool`, `length` |
 | `mcp.call.cancelled`, `mcp.call.timeout` | info | `tool_call_id`, `request_id` |
 | `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`, `subscription_failed`, `server_request`); у `server_request` — `method` запроса сервера, не длиннее 64 символов (рун) |
