@@ -39,8 +39,13 @@ final class ServerHarness {
     this.store,
     this.clock,
     this.model,
+    this.toolsSeen,
   );
 
+  /// [mcp] — коннектор MCP для `AgentCoreServices.mcp` (design.md change
+  /// `add-agent-mcp-client`, D11); без него capability `mcp` выключена и
+  /// `mcpCapabilities.http` — `false`.
+  ///
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
   static Future<ServerHarness> start({
@@ -53,6 +58,7 @@ final class ServerHarness {
     bool slow = false,
     ModelCatalog? models,
     Duration detachGrace = const Duration(seconds: 30),
+    McpConnector Function(Clock clock)? mcp,
   }) async {
     final clock = FakeClock();
     final logger = RecordingLogger();
@@ -60,6 +66,9 @@ final class ServerHarness {
     final model = ScriptedStreamFunction.fromJson({
       'steps': steps,
     }, clock: clock);
+    // Имена инструментов каждого запроса к модели: так тесты MCP видят,
+    // что получила модель, не зная точного состава встроенных инструментов.
+    final toolsSeen = <List<String>>[];
     final core = buildAgentCore(
       profile: HostProfile.of(profile).narrowed({
         if (localListing == null)
@@ -76,9 +85,13 @@ final class ServerHarness {
         ids: SequentialIdGenerator(),
         sessions: store,
         models: models,
+        mcp: mcp?.call(clock),
       ),
       config: CoreConfig(defaultModel: scriptedModel, budget: budget),
-      streamFunction: model.call,
+      streamFunction: (model_, context, {cancel}) {
+        toolsSeen.add([for (final tool in context.tools) tool.name]);
+        return model.call(model_, context, cancel: cancel);
+      },
     );
     final server = AcpAgentServer(
       core: core,
@@ -94,7 +107,16 @@ final class ServerHarness {
     unawaited(server.serve(slow ? SlowTransport(link.agent) : link.agent));
     final client = TestClient(link.client);
     await client.start();
-    return ServerHarness._(core, server, client, logger, store, clock, model);
+    return ServerHarness._(
+      core,
+      server,
+      client,
+      logger,
+      store,
+      clock,
+      model,
+      toolsSeen,
+    );
   }
 
   final BuiltAgentCore core;
@@ -104,6 +126,9 @@ final class ServerHarness {
   final JournalStore store;
   final FakeClock clock;
   final ScriptedStreamFunction model;
+
+  /// Имена инструментов в каждом запросе к модели, по порядку запросов.
+  final List<List<String>> toolsSeen;
 
   /// Новое соединение к тому же серверу, уже после `initialize`.
   Future<TestClient> connect() async {
@@ -419,4 +444,56 @@ extension ResponseParts on JsonRpcResponse {
   Map<String, Object?> get resultMap => result! as Map<String, Object?>;
 
   int? get errorCode => error?.code;
+}
+
+/// Коннектор MCP для тестов: записывает запросы ядра и ничего не подключает
+/// (design.md change `add-agent-mcp-client`, D11).
+///
+/// Для чего: проверить отображение `acp.McpServer` в `McpServerConfig` и
+/// вызовы `replaceServers`, не поднимая клиент MCP.
+final class SpyMcpConnector implements McpConnector {
+  SpyMcpConnector({this.transports = const {'stdio', 'http'}});
+
+  @override
+  final Set<String> transports;
+
+  /// Запросы `connect` в порядке прихода.
+  final requests = <McpConnectRequest>[];
+
+  /// Серверы сессий, уже закрытых или заменённых, — для проверки порядка.
+  final sessions = <SpyMcpSession>[];
+
+  @override
+  Future<McpSessionTools> connect(McpConnectRequest request) async {
+    requests.add(request);
+    final session = SpyMcpSession();
+    sessions.add(session);
+    return session;
+  }
+}
+
+/// Подключённые серверы одной сессии для [SpyMcpConnector].
+final class SpyMcpSession implements McpSessionTools {
+  /// Аргументы каждого вызова `replaceServers`.
+  final replaced = <List<McpServerConfig>>[];
+  var closed = false;
+
+  @override
+  List<AgentTool> get tools => const [];
+
+  @override
+  List<McpServerSummary> get servers => const [];
+
+  @override
+  McpToolsUpdate? takeUpdate() => null;
+
+  @override
+  Future<void> replaceServers(List<McpServerConfig> servers) async {
+    replaced.add(servers);
+  }
+
+  @override
+  Future<void> close() async {
+    closed = true;
+  }
 }

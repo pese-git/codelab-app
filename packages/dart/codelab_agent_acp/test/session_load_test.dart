@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show JsonRpcMessage, JsonRpcNotification, JsonRpcResponse;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
+import 'package:codelab_agent_mcp/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/server_harness.dart';
@@ -22,10 +24,11 @@ void main() {
     TestClient client,
     String sessionId, {
     String cwd = '/work/demo',
+    List<Object?> mcpServers = const [],
   }) => client.request('session/load', {
     'sessionId': sessionId,
     'cwd': cwd,
-    'mcpServers': <Object?>[],
+    'mcpServers': mcpServers,
   });
 
   List<Map<String, Object?>> updatesBefore(
@@ -304,4 +307,175 @@ void main() {
       hasLength(1),
     );
   });
+
+  // --- MCP-серверы загруженной сессии (D11; agent-acp-server «session/load») ---
+
+  Map<String, Object?> stdioServer(String name) => {
+    'name': name,
+    'command': 'mcp-$name',
+    'args': <Object?>[],
+    'env': <Object?>[],
+  };
+
+  const okStep = {
+    'reply': [
+      {'text': 'ok'},
+    ],
+  };
+
+  McpConnector Function(Clock) realConnector(Map<String, FakeMcpServer> by) =>
+      (clock) => McpClientConnector(
+        transports: McpTransports(
+          stdio: FakeMcpTransportFactory(by),
+          http: FakeMcpTransportFactory({}),
+        ),
+        clock: clock,
+      );
+
+  test(
+    'servers of a loaded session reach the model from the first turn',
+    () async {
+      h = await ServerHarness.start();
+      await h.initialize();
+      final sessionId = await h.newSession();
+      final fake = FakeMcpServer(tools: [const FakeMcpTool('echo')]);
+      second = await ServerHarness.start(
+        sessions: h.store,
+        steps: [okStep],
+        mcp: realConnector({'fake': fake}),
+      );
+      final s = second!;
+      await s.initialize();
+
+      final response = await load(
+        s.client,
+        sessionId,
+        mcpServers: [stdioServer('fake')],
+      );
+      await s.client.drain();
+      final prompt = await s.client.request('session/prompt', {
+        'sessionId': sessionId,
+        'prompt': [
+          {'type': 'text', 'text': 'hi'},
+        ],
+      });
+
+      expect(response.error, isNull);
+      expect(prompt.error, isNull);
+      expect(s.toolsSeen.single, contains('mcp__fake__echo'));
+    },
+  );
+
+  test('sse and unknown servers of session/load are skipped', () async {
+    h = await ServerHarness.start();
+    await h.initialize();
+    final sessionId = await h.newSession();
+    final spy = SpyMcpConnector();
+    second = await ServerHarness.start(sessions: h.store, mcp: (_) => spy);
+    final s = second!;
+    await s.initialize();
+
+    final response = await load(
+      s.client,
+      sessionId,
+      mcpServers: [
+        {
+          'type': 'sse',
+          'name': 'old',
+          'url': 'https://example.com/sse',
+          'headers': <Object?>[],
+        },
+        {'type': 'websocket', 'name': 'future'},
+        stdioServer('fake'),
+      ],
+    );
+
+    expect(response.error, isNull);
+    expect(
+      [
+        for (final e in s.logger.eventsOf('mcp.server.skipped'))
+          e.fields['reason'],
+      ],
+      ['transport sse is not supported', 'unknown transport'],
+    );
+    expect([for (final x in spy.requests.single.servers) x.name], ['fake']);
+  });
+
+  test(
+    'reloading an open session replaces its servers before the answer',
+    () async {
+      final a = FakeMcpServer(tools: [const FakeMcpTool('echo')]);
+      final b = FakeMcpServer(tools: [const FakeMcpTool('ping_tool')]);
+      h = await ServerHarness.start(
+        steps: [okStep],
+        mcp: realConnector({'a': a, 'b': b}),
+      );
+      await h.initialize();
+      final sessionId =
+          (await h.client.request('session/new', {
+                'cwd': '/work/demo',
+                'mcpServers': [stdioServer('a')],
+              })).resultMap['sessionId']!
+              as String;
+      await h.client.next();
+      expect(a.closedTransports, 0);
+
+      final response = await load(
+        h.client,
+        sessionId,
+        mcpServers: [stdioServer('b')],
+      );
+
+      expect(response.error, isNull);
+      // До ответа: a закрыт, b подключён (D11).
+      expect(a.closedTransports, 1);
+      expect(b.methods, isNotEmpty);
+      await h.client.drain();
+      await h.client.request('session/prompt', {
+        'sessionId': sessionId,
+        'prompt': [
+          {'type': 'text', 'text': 'hi'},
+        ],
+      });
+      expect(h.toolsSeen.single, contains('mcp__b__ping_tool'));
+      expect(h.toolsSeen.single, isNot(contains('mcp__a__echo')));
+    },
+  );
+
+  test(
+    'reloading an open session with the same set keeps the servers',
+    () async {
+      final a = FakeMcpServer(tools: [const FakeMcpTool('echo')]);
+      h = await ServerHarness.start(
+        steps: [okStep],
+        mcp: realConnector({'a': a}),
+      );
+      await h.initialize();
+      final sessionId =
+          (await h.client.request('session/new', {
+                'cwd': '/work/demo',
+                'mcpServers': [stdioServer('a')],
+              })).resultMap['sessionId']!
+              as String;
+      await h.client.next();
+
+      final response = await load(
+        h.client,
+        sessionId,
+        mcpServers: [stdioServer('a')],
+      );
+
+      expect(response.error, isNull);
+      expect(a.closedTransports, 0);
+      // Набор не изменился: инструменты `a` на месте, сервер не закрывали.
+      await h.client.drain();
+      await h.client.request('session/prompt', {
+        'sessionId': sessionId,
+        'prompt': [
+          {'type': 'text', 'text': 'hi'},
+        ],
+      });
+      expect(h.toolsSeen.single, contains('mcp__a__echo'));
+    },
+  );
 }

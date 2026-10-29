@@ -1,0 +1,27 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "mcp__fake__echo",
+              "arguments": { "text": "hi" }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "reply": [{ "text": "Сервер ответил." }],
+        "stopReason": "stop"
+      }
+    ]
+  }
+}

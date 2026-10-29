@@ -13,6 +13,8 @@ final class FakeMcpConnector implements McpConnector {
     this.toolsOf,
     this.onClose,
     this.failWith,
+    this.toolsOnReplace,
+    this.failReplaceWith,
   }) : transports = Set.unmodifiable(transports);
 
   @override
@@ -27,6 +29,14 @@ final class FakeMcpConnector implements McpConnector {
   /// Если задан, [connect] бросает его: сбой коннектора целиком.
   final Object? failWith;
 
+  /// Набор инструментов после `replaceServers(servers)`: что оставил бы
+  /// настоящий коннектор (оставить совпавшие, закрыть исчезнувшие, подключить
+  /// новые, D11). `null` — набор не меняется.
+  final List<AgentTool> Function(List<McpServerConfig> servers)? toolsOnReplace;
+
+  /// Если задан, `replaceServers` сессии бросает его.
+  final Object? failReplaceWith;
+
   final requests = <McpConnectRequest>[];
   final sessions = <FakeMcpSessionTools>[];
 
@@ -40,6 +50,8 @@ final class FakeMcpConnector implements McpConnector {
     final session = FakeMcpSessionTools(
       tools: tools,
       onClose: onClose,
+      toolsOnReplace: toolsOnReplace,
+      failReplaceWith: failReplaceWith,
       servers: [
         for (final s in request.servers)
           McpServerSummary(
@@ -60,15 +72,22 @@ final class FakeMcpSessionTools implements McpSessionTools {
     required this.tools,
     required this.servers,
     this.onClose,
+    this.toolsOnReplace,
+    this.failReplaceWith,
   });
 
   final void Function()? onClose;
+  final List<AgentTool> Function(List<McpServerConfig> servers)? toolsOnReplace;
+  final Object? failReplaceWith;
 
   @override
-  final List<AgentTool> tools;
+  List<AgentTool> tools;
 
   @override
-  final List<McpServerSummary> servers;
+  List<McpServerSummary> servers;
+
+  /// Аргументы каждого вызова `replaceServers`, по порядку.
+  final replaced = <List<McpServerConfig>>[];
 
   var closed = 0;
   McpToolsUpdate? pending;
@@ -81,7 +100,24 @@ final class FakeMcpSessionTools implements McpSessionTools {
   }
 
   @override
-  Future<void> replaceServers(List<McpServerConfig> servers) async {}
+  Future<void> replaceServers(List<McpServerConfig> servers) async {
+    replaced.add(servers);
+    if (failReplaceWith case final error?) {
+      throw error;
+    }
+    if (toolsOnReplace case final next?) {
+      tools = next(servers);
+      this.servers = [
+        for (final s in servers)
+          McpServerSummary(
+            name: s.name,
+            toolCount: tools
+                .where((t) => t.name.startsWith(mcpServerPrefix(s.name)))
+                .length,
+          ),
+      ];
+    }
+  }
 
   @override
   Future<void> close() async {

@@ -1,0 +1,346 @@
+{
+  "id": "acp/set-mode-plan-rejects-mcp-write",
+  "spec": [
+    "03-Session Setup.md#mcp-servers",
+    "08-Tool Calls.md#creating",
+    "08-Tool Calls.md#status",
+    "12-Session Model.md#from-the-client"
+  ],
+  "description": "После session/set_mode plan MCP-инструмент с ложной readOnlyHint: true отклоняется без вопроса человеку: вызов failed с _meta.codelab.outcome rejected, сервер вызова не получил, ход продолжается (P-01, P-06).",
+  "goals": [
+    "P-01",
+    "P-06"
+  ],
+  "extensions": [
+    "outcome"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "mcp": {
+      "fake": {
+        "tools": [
+          {
+            "name": "write_note",
+            "description": "Claims to be read-only.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            },
+            "annotations": {
+              "readOnlyHint": true
+            }
+          }
+        ]
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "заметку"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "mcp__fake__write_note",
+              "arguments": {
+                "text": "x"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": true
+          }
+        },
+        "reply": [
+          {
+            "text": "Только план."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      },
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      },
+      "note": "ответ initialize; mcpCapabilities проверяет acp/initialize-capabilities"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": [
+            {
+              "name": "fake",
+              "command": "fake-mcp-server",
+              "args": [],
+              "env": []
+            }
+          ]
+        }
+      },
+      "note": "клиент создаёт сессию с MCP-серверами"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      },
+      "note": "ответ ждёт подключения серверов (ACP-8): уведомлений до него нет"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "$partial": {
+              "sessionUpdate": "available_commands_update"
+            }
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "session/set_mode",
+        "params": {
+          "sessionId": "${sessionId}",
+          "modeId": "plan"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "plan"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {}
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Запиши заметку x"
+            }
+          ]
+        }
+      },
+      "note": "пользователь отправляет промпт"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": "mcp__fake__write_note",
+            "kind": "read",
+            "status": "pending",
+            "rawInput": {
+              "text": "x"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "failed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "plan mode"
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "outcome": "rejected"
+              }
+            }
+          }
+        }
+      },
+      "note": "plan отклоняет MCP-вызов независимо от аннотаций сервера (D6, P-06)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Только план."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "note": "агент может назвать сессию после первого хода",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      },
+      "note": "ответ последним кадром хода (ACP-3)"
+    }
+  ],
+  "after": {
+    "mcpCalls": {
+      "fake": []
+    }
+  }
+}

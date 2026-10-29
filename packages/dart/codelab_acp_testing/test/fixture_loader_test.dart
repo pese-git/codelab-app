@@ -331,6 +331,119 @@ void main() {
     });
   });
 
+  // acp-golden-fixtures «Формат golden-фикстуры ACP»: `setup.mcp` и
+  // `after.mcpCalls` (design.md change `add-agent-mcp-client`, D15).
+  group('setup.mcp and after.mcpCalls', () {
+    Map<String, Object?> withMcp({
+      Map<String, Object?>? mcp,
+      Map<String, Object?>? mcpCalls,
+    }) {
+      final json = _minimalFixture();
+      if (mcp != null) {
+        json['setup'] = <String, Object?>{'cwd': '/work/demo', 'mcp': mcp};
+      }
+      if (mcpCalls != null) {
+        json['after'] = {'mcpCalls': mcpCalls};
+      }
+      return json;
+    }
+
+    AcpFixture parse(Map<String, Object?> json) =>
+        AcpFixture.fromJson(json, fileName: 'minimal.json');
+
+    test('are parsed; era defaults to modern', () {
+      final fixture = parse(
+        withMcp(
+          mcp: {
+            'fake': {
+              'tools': [
+                {
+                  'name': 'echo',
+                  'inputSchema': {'type': 'object'},
+                },
+              ],
+              'results': {
+                'echo': {
+                  'content': [
+                    {'type': 'text', 'text': 'hi'},
+                  ],
+                },
+              },
+            },
+            'old': {'era': 'legacy', 'tools': <Object?>[]},
+          },
+          mcpCalls: {
+            'fake': [
+              {
+                'name': 'echo',
+                'arguments': {'text': 'hi'},
+              },
+            ],
+            'old': <Object?>[],
+          },
+        ),
+      );
+
+      final fake = fixture.setup.mcp['fake']!;
+      expect(fake.era, FixtureMcpEra.modern);
+      expect(fake.tools.single['name'], 'echo');
+      expect(fake.results['echo'], isA<Map<String, Object?>>());
+      expect(fixture.setup.mcp['old']!.era, FixtureMcpEra.legacy);
+      final calls = fixture.after!.mcpCalls;
+      expect(calls['fake']!.single.name, 'echo');
+      expect(calls['fake']!.single.arguments, {'text': 'hi'});
+      expect(calls['old'], isEmpty);
+    });
+
+    test('are empty when the fixture has no MCP', () {
+      final fixture = parse(_minimalFixture());
+
+      expect(fixture.setup.mcp, isEmpty);
+      expect(fixture.after, isNull);
+    });
+
+    test('an unknown key of an MCP server fails with the path', () {
+      expect(
+        () => parse(
+          withMcp(
+            mcp: {
+              'fake': {'tools': <Object?>[], 'command': 'x'},
+            },
+          ),
+        ),
+        throwsA(_formatError(path: r'$.setup.mcp.fake.command')),
+      );
+    });
+
+    test('an unknown era fails with the path', () {
+      expect(
+        () => parse(
+          withMcp(
+            mcp: {
+              'fake': {'era': 'future', 'tools': <Object?>[]},
+            },
+          ),
+        ),
+        throwsA(_formatError(path: r'$.setup.mcp.fake.era')),
+      );
+    });
+
+    test('a call without a name fails with the path', () {
+      expect(
+        () => parse(
+          withMcp(
+            mcpCalls: {
+              'fake': [
+                {'arguments': <String, Object?>{}},
+              ],
+            },
+          ),
+        ),
+        throwsA(_formatError(path: r'$.after.mcpCalls.fake[0].name')),
+      );
+    });
+  });
+
   group('loadFixtureCorpus', () {
     late Directory dir;
 

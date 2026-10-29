@@ -1,0 +1,405 @@
+{
+  "id": "acp/mcp-stdio-tool-call",
+  "spec": [
+    "03-Session Setup.md#mcp-servers",
+    "08-Tool Calls.md#creating",
+    "08-Tool Calls.md#status",
+    "08-Tool Calls.md#requesting-permission"
+  ],
+  "description": "Модель вызывает mcp__fake__echo; пользователь разрешает (allow_once); сервер получает один вызов, а tool_call_update completed содержит «hi» внутри ограды untrusted-content (E-02).",
+  "goals": [
+    "E-02"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "mcp": {
+      "fake": {
+        "tools": [
+          {
+            "name": "echo",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          }
+        ],
+        "results": {
+          "echo": {
+            "content": [
+              {
+                "type": "text",
+                "text": "hi"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "hi"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "mcp__fake__echo",
+              "arguments": {
+                "text": "hi"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Сервер ответил: hi."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      },
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      },
+      "note": "ответ initialize; mcpCapabilities проверяет acp/initialize-capabilities"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": [
+            {
+              "name": "fake",
+              "command": "fake-mcp-server",
+              "args": [],
+              "env": []
+            }
+          ]
+        }
+      },
+      "note": "клиент создаёт сессию с MCP-серверами"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      },
+      "note": "ответ ждёт подключения серверов (ACP-8): уведомлений до него нет"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "$partial": {
+              "sessionUpdate": "available_commands_update"
+            }
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Повтори hi через echo"
+            }
+          ]
+        }
+      },
+      "note": "пользователь отправляет промпт"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": "mcp__fake__echo",
+            "kind": "other",
+            "status": "pending",
+            "rawInput": {
+              "text": "hi"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "permId"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "toolCallId": "call_1",
+            "title": "mcp__fake__echo",
+            "kind": "other",
+            "status": "pending",
+            "rawInput": {
+              "text": "hi"
+            }
+          },
+          "options": [
+            {
+              "optionId": {
+                "$capture": "permAllowOnce"
+              },
+              "name": {
+                "$any": true
+              },
+              "kind": "allow_once"
+            },
+            {
+              "optionId": {
+                "$capture": "permAllowAlways"
+              },
+              "name": {
+                "$any": true
+              },
+              "kind": "allow_always"
+            },
+            {
+              "optionId": {
+                "$capture": "permRejectOnce"
+              },
+              "name": {
+                "$any": true
+              },
+              "kind": "reject_once"
+            },
+            {
+              "optionId": {
+                "$capture": "permRejectAlways"
+              },
+              "name": {
+                "$any": true
+              },
+              "kind": "reject_always"
+            }
+          ]
+        }
+      },
+      "note": "запрос разрешения идёт до обращения к MCP-серверу (P-01)"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${permId}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "${permAllowOnce}"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "hi"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "note": "результат MCP приходит в ограде source=mcp__fake__echo"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Сервер ответил: hi."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "note": "агент может назвать сессию после первого хода",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      },
+      "note": "ответ последним кадром хода (ACP-3)"
+    }
+  ],
+  "after": {
+    "mcpCalls": {
+      "fake": [
+        {
+          "name": "echo",
+          "arguments": {
+            "text": "hi"
+          }
+        }
+      ]
+    }
+  }
+}
