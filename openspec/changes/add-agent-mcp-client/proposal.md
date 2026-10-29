@@ -95,7 +95,7 @@ Dart-агент принимает `mcpServers` в `session/new` и `session/loa
   - экспорт `SseDecoder`;
   - новая зависимость `crypto` (уже в allowlist, PKG-2).
 - **`codelab_agent_io`**: `lib/src/mcp/stdio_process_transport.dart` на существующем `process_tree.dart`; без новых зависимостей. dev — `codelab_agent_mcp`.
-- **`codelab_agent_acp`**: отображение `acp.McpServer` → `McpServerConfig` (неизвестный `type` — пропуск), `mcpCapabilities.http` по плану ядра, `session/load` открытой сессии. Без новых зависимостей; dev — `codelab_agent_mcp`.
+- **`codelab_agent_acp`**: отображение `acp.McpServer` → `McpServerConfig` (неизвестный `type` — пропуск), `mcpCapabilities.http` по плану ядра, `session/load` открытой сессии. Без новых рабочих зависимостей; dev — `codelab_agent_mcp` и `http` (`MockClient` для HTTP-фикстуры).
 - **`apps/codelab_agent`**: зависимость `codelab_agent_mcp`, сборка `McpClientConnector`.
 - **`codelab_acp_protocol`**: вариант `McpServer.unknown({type, name?, raw})` — неизвестный транспорт сервера разбирается, а не роняет запрос; известные типы проверяются строго, как раньше.
 - **`apps/codelab_cli`**: драйвер `codelab test-scenario` с внешним агентом пропускает фикстуры с непустым `setup.mcp` с причиной (fake MCP-серверы процессу агента не передать; дельта `cli-scenario-driver`).

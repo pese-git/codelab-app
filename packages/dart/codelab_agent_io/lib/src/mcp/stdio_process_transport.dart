@@ -192,7 +192,7 @@ final class StdioProcessTransport implements McpTransport {
 
   /// У stdio обрыва потока ответа отдельного запроса нет (D8).
   @override
-  Stream<Object> get abortedRequests => const Stream.empty();
+  Stream<McpRequestAbort> get abortedRequests => const Stream.empty();
 
   /// Отмена запроса stdio — уведомление клиента, а не действие транспорта.
   @override

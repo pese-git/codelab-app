@@ -26,11 +26,14 @@ abstract interface class McpTransport {
   /// которые считает клиент по эпохе (D10); stdio их игнорирует.
   Future<void> send(String message, {Map<String, String> headers = const {}});
 
-  /// Идентификаторы запросов, чей поток ответа оборвался без ответа, пока сам
-  /// транспорт жив (HTTP: обрыв SSE-потока). Клиент завершает такой запрос
-  /// «disconnected during the call» (`tools/call`) или повторяет один раз
-  /// (`tools/list`, `server/discover`; D8, D10). Для stdio — пустой поток.
-  Stream<Object> get abortedRequests;
+  /// Запросы, оставшиеся без ответа при живом транспорте (HTTP): оборвался
+  /// поток ответа или произошёл локальный сбой (`HTTP 500` без тела ошибки
+  /// JSON-RPC, слишком большое тело). Клиент завершает такой запрос
+  /// «disconnected during the call» / «transport error» (`tools/call`) или
+  /// повторяет один раз, если [McpRequestAbort.retryable] (`tools/list`,
+  /// `server/discover`, `subscriptions/listen`; D8, D10). Для stdio — пустой
+  /// поток.
+  Stream<McpRequestAbort> get abortedRequests;
 
   /// Перестать ждать ответ на запрос [requestId]: HTTP закрывает поток
   /// ответа этого запроса (в modern это и есть отмена), stdio ничего не
@@ -43,6 +46,32 @@ abstract interface class McpTransport {
 
   /// Идемпотентно; останавливает процесс или HTTP-сессию.
   Future<void> close();
+}
+
+/// Запрос остался без ответа при живом транспорте.
+///
+/// Почему отдельный тип, а не ошибка JSON-RPC: локальный сбой транспорта не
+/// должен выглядеть как ответ сервера и не может занимать коды JSON-RPC
+/// (`basic/index.md`, «Error Codes»: диапазон -32000…-32019 — legacy, а
+/// локальные ошибки нельзя спутать с ошибками собеседника).
+///
+/// Как использовать: транспорт эмитит значение в `abortedRequests`.
+/// [retryable] — обрыв потока ответа, запрос без побочных эффектов можно
+/// повторить один раз; `false` — локальная ошибка, повтор бесполезен.
+/// [reason] — текст этого кода без секретов (`HTTP 500`), только для
+/// неповторяемых сбоев.
+final class McpRequestAbort {
+  const McpRequestAbort(this.id, {this.reason, this.retryable = true});
+
+  /// Идентификатор запроса, оставшегося без ответа.
+  final Object id;
+
+  /// Причина локального сбоя (`HTTP 500`); `null` у обрыва потока.
+  final String? reason;
+
+  /// `true` — обрыв потока, запрос без побочных эффектов можно повторить;
+  /// `false` — локальный сбой, повтор бесполезен.
+  final bool retryable;
 }
 
 /// Почему транспорт закрыт: текст попадает в `mcp.server.failed` и в

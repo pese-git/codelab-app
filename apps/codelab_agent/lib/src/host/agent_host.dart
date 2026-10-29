@@ -35,7 +35,7 @@ final class AgentHost {
     required this.serverConfig,
     required Logger logger,
     required Clock clock,
-    required http.Client? httpClient,
+    required http.Client httpClient,
   }) : _logger = logger,
        _clock = clock,
        _httpClient = httpClient;
@@ -44,7 +44,7 @@ final class AgentHost {
   final AcpServerConfig serverConfig;
   final Logger _logger;
   final Clock _clock;
-  final http.Client? _httpClient;
+  final http.Client _httpClient;
   final _servers = <AcpAgentServer>[];
 
   static Future<AgentHost> build(
@@ -70,15 +70,14 @@ final class AgentHost {
       // По WebSocket клиент может быть на другой машине, а описание stdio-
       // сервера пришло бы из сети: запускать по нему процессы на машине
       // агента нельзя (решение по ревью PR #158). Профиль выключает `mcp`
-      // целиком, поэтому `initialize` не обещает и `http`.
-      // По stdio клиент — локальный хозяин процесса: stdio разрешён, а
-      // HTTP-транспорт появляется в итерации 3 (задача 9.6, change
-      // `add-agent-mcp-client`): до неё `initialize` не обещает `http`.
-      HostCapability.mcp: stdio
-          ? const CapabilityTransport({'stdio'}, 'HTTP-транспорт — итерация 3')
-          : const CapabilityOff(
-              'stdio MCP servers are disabled over WebSocket',
-            ),
+      // целиком, поэтому `initialize` не обещает и `http`. По stdio клиент —
+      // локальный хозяин процесса: профиль `agent-serve` оставляет `stdio` и
+      // `http`, и `initialize` объявляет `mcpCapabilities.http: true`
+      // (задача 9.6, change `add-agent-mcp-client`, D3).
+      if (!stdio)
+        HostCapability.mcp: const CapabilityOff(
+          'stdio MCP servers are disabled over WebSocket',
+        ),
     };
 
     final ModelCatalog catalog;
@@ -145,6 +144,9 @@ final class AgentHost {
         logger: logger,
       );
     }
+    // HTTP-клиент хоста: один на процесс, им пользуются провайдер LLM и
+    // streamable HTTP MCP-серверов; закрывается в `shutdown` (PKG-6).
+    httpClient ??= http.Client();
     final defaultModel = catalog.resolve(catalog.models.first.id)!;
     logger.log(
       LogLevel.info,
@@ -174,10 +176,17 @@ final class AgentHost {
         platform: Platform.operatingSystem,
         models: catalog,
         // MCP-серверы сессии: процессы stdio запускает `codelab_agent_io`,
+        // streamable HTTP — `codelab_agent_mcp` на HTTP-клиенте хоста;
         // закрываются они вместе с сессией (design.md change
-        // `add-agent-mcp-client`, D3, D6, D9).
+        // `add-agent-mcp-client`, D3, D6, D9, D10).
         mcp: McpClientConnector(
-          transports: McpTransports(stdio: StdioMcpTransportFactory()),
+          transports: McpTransports(
+            stdio: StdioMcpTransportFactory(),
+            http: StreamableHttpTransportFactory(
+              client: httpClient,
+              clock: clock,
+            ),
+          ),
           clock: clock,
         ),
       ),
@@ -224,14 +233,15 @@ final class AgentHost {
   }
 
   /// Безопасное завершение (§13.10): ходы отменяются и ждутся не дольше
-  /// [grace], соединения закрываются, HTTP-клиент провайдера освобождается.
+  /// [grace], соединения закрываются, общий HTTP-клиент хоста (провайдер LLM
+  /// и streamable HTTP MCP-серверов) освобождается после закрытия сессий.
   Future<void> shutdown({Duration grace = const Duration(seconds: 5)}) async {
     for (final server in _servers) {
       await server.shutdown(grace: grace);
     }
     _servers.clear();
     await core.runtime.dispose();
-    _httpClient?.close();
+    _httpClient.close();
   }
 }
 

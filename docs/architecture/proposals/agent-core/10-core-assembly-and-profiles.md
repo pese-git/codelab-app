@@ -136,7 +136,7 @@ abstract interface class McpTransport {            // транспорт уро�
   String get kind;                                 // 'stdio' | 'http'
   Stream<String> get incoming;
   Future<void> send(String message, {Map<String, String> headers = const {}});
-  Stream<Object> get abortedRequests;              // id запросов, чей поток ответа оборвался при живом транспорте (HTTP)
+  Stream<McpRequestAbort> get abortedRequests;     // сбои отдельных запросов при живом транспорте (HTTP): id, reason, retryable
   Future<void> abandon(Object requestId);          // HTTP: закрыть поток ответа; stdio: ничего; в abortedRequests не эмитит
   Future<McpTransportClosed> get done;             // транспорт закрыт: причина и exitCode (stdio)
   Future<void> close();                            // идемпотентно
@@ -149,8 +149,13 @@ abstract interface class McpTransportFactory {     // реализует хос�
 ```
 
 Единственное исключение `open` и `send` — `McpTransportException` с текстом нашего кода (`spawn
-failed: …`, `invalid url`). Ошибка в потоках `incoming` или `abortedRequests` переводит клиент
+failed: …`, `cancelled`, `invalid url` — схема URL не `http`/`https`, `HTTP redirect (<status>) is not
+followed`, `connection failed: <runtimeType>`, `HTTP session expired`; в логе последние три — с префиксом `disconnected:`). Ошибка в потоках `incoming` или `abortedRequests` переводит клиент
 сервера в «не подключён» (`mcp.server.failed` с причиной `disconnected: transport error`).
+Локальные сбои HTTP-транспорта без JSON-RPC-тела (`HTTP <status>`, `response body too large`,
+`invalid JSON in the response`, `unexpected response (HTTP <status>)`) не выдаются за JSON-RPC-ошибку:
+транспорт сообщает их типизированным сбоем запроса (id, причина, признак повторяемости; обрыв
+потока — повторяемый), точная форма — design.md change `add-agent-mcp-client`, D10.
 `open` получает логгер сессии (`BoundLogger` с `session_id`): через него транспорт пишет
 `mcp.server.stderr` и `mcp.server.closed` (§12.3).
 

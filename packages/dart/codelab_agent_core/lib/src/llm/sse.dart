@@ -1,37 +1,57 @@
 import 'dart:async';
 
-/// One server-sent event (`agent-core-architecture` §2.6).
+/// Одно событие SSE (`agent-core-architecture` §2.6).
+///
+/// Почему отдельный тип: провайдеры LLM и транспорт MCP читают один и тот же
+/// формат, второй реализации SSE нет.
+///
+/// Как использовать: значения выдаёт [SseDecoder]; руками создаются только в
+/// тестах.
 final class ServerSentEvent {
-  const ServerSentEvent({this.event, required this.data, this.id});
+  const ServerSentEvent({this.event, required this.data, this.id, this.retry});
 
-  /// The `event:` field; `null` means `message`.
+  /// Поле `event:`; `null` означает `message`.
   final String? event;
 
-  /// `data:` lines joined with `\n`.
+  /// Строки `data:`, склеенные через `\n`.
   final String data;
   final String? id;
 
+  /// Последнее принятое поле `retry` (только цифры, миллисекунды) — пауза
+  /// перед переподключением. Нужна MCP-клиенту для опроса legacy-потока
+  /// (change `add-agent-mcp-client`, D10); провайдеры LLM его не читают.
+  final Duration? retry;
+
   @override
-  String toString() => 'ServerSentEvent(event: $event, id: $id, data: $data)';
+  String toString() =>
+      'ServerSentEvent(event: $event, id: $id, retry: $retry, data: $data)';
 }
 
-/// Decodes a stream of text chunks into [ServerSentEvent]s by the rules of
-/// §2.6. The UTF-8 decoding happens upstream
-/// (`Utf8Decoder(allowMalformed: true)`), which also joins multi-byte
-/// characters split between chunks.
+/// Предел `retry`: паузу длиннее суток поле не задаёт (сервер недоверенный).
+const maxSseRetry = Duration(hours: 24);
+
+final _digits = RegExp(r'^[0-9]+$');
+
+/// Превращает поток текстовых кусков в [ServerSentEvent] по правилам §2.6.
 ///
-/// * Lines end with `\n`, `\r` or `\r\n`; a `\r\n` split between chunks is
-///   one line break.
-/// * `U+FEFF` is dropped only as the very first character of the stream.
-/// * Lines starting with `:` are comments (provider keep-alive).
-/// * A line splits at its first `:`; without one the whole line is the field
-///   name with an empty value; exactly one leading space of the value is
-///   dropped.
-/// * `event` sets the type, `data` adds a line, `id` is kept unless it
-///   contains `U+0000`; `retry` and other fields are ignored.
-/// * An empty line dispatches the event if it has data and resets `event`
-///   and the data; `id` persists.
-/// * An unfinished line or event at the end of the stream is dropped.
+/// Почему текст на входе: декодирование UTF-8 выполняется выше по потоку
+/// (`Utf8Decoder(allowMalformed: true)`), оно же склеивает многобайтные
+/// символы, разрезанные границей куска.
+///
+/// Правила:
+/// * строки оканчиваются `\n`, `\r` или `\r\n`; `\r\n`, разрезанный границей
+///   кусков, — один перевод строки;
+/// * `U+FEFF` отбрасывается только как самый первый символ потока;
+/// * строки с `:` в начале — комментарии (keep-alive провайдера);
+/// * строка делится по первому `:`; без него вся строка — имя поля с пустым
+///   значением; ровно один пробел в начале значения отбрасывается;
+/// * `event` задаёт тип, `data` добавляет строку, `id` запоминается, если не
+///   содержит `U+0000`; `retry` запоминается, если это только цифры, не
+///   больше [maxSseRetry] (как `id`, живёт между событиями); остальные поля
+///   игнорируются;
+/// * пустая строка отправляет событие, если в нём есть данные, и сбрасывает
+///   `event` и данные; `id` и `retry` остаются;
+/// * незаконченная строка или событие в конце потока отбрасываются.
 final class SseDecoder extends StreamTransformerBase<String, ServerSentEvent> {
   const SseDecoder();
 
@@ -41,6 +61,7 @@ final class SseDecoder extends StreamTransformerBase<String, ServerSentEvent> {
     final data = <String>[];
     String? event;
     String? id;
+    Duration? retry;
     var skipLf = false;
     var atStart = true;
 
@@ -54,6 +75,7 @@ final class SseDecoder extends StreamTransformerBase<String, ServerSentEvent> {
           event: event,
           data: data.join('\n'),
           id: id,
+          retry: retry,
         );
         data.clear();
         event = null;
@@ -76,6 +98,13 @@ final class SseDecoder extends StreamTransformerBase<String, ServerSentEvent> {
         case 'id':
           if (!value.contains('\u0000')) {
             id = value;
+          }
+        case 'retry':
+          // Сверхбольшое число (`int.parse` бросил бы FormatException внутри
+          // `async*` и уронил бы процесс) и всё выше предела игнорируются.
+          final ms = _digits.hasMatch(value) ? int.tryParse(value) : null;
+          if (ms != null && ms <= maxSseRetry.inMilliseconds) {
+            retry = Duration(milliseconds: ms);
           }
       }
       return null;

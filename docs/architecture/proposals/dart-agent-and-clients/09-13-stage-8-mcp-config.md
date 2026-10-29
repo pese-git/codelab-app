@@ -109,10 +109,10 @@
 `redact.*`). `tasks.md` — пары "тест → реализация" со ссылкой на
 критерий (§9.0, правило 3).
 
-Промежуточное состояние `add-agent-mcp-client` после итерации 2: бинарь собирает
-`McpClientConnector` только со `StdioMcpTransportFactory`, профиль сужает capability `mcp` до
-`{stdio}`, и `initialize` бинаря объявляет `mcpCapabilities.http: false`. HTTP-транспорт и
-`http: true` в бинаре — итерация 3 (задача 9.6). В `serve --ws` capability `mcp` выключена
+Бинарь (`add-agent-mcp-client`, итерация 3) собирает `McpClientConnector` со
+`StdioMcpTransportFactory` и `StreamableHttpTransportFactory` на одном `http.Client` процесса
+(общем с LLM-провайдером, закрывается при завершении хоста); профиль `agent-serve` даёт `mcp:
+{stdio, http}`, и `initialize` по `--stdio` объявляет `mcpCapabilities.http: true`. В `serve --ws` capability `mcp` выключена
 совсем (решение пользователя по ревью PR #158, D3 change): держатель токена WebSocket иначе
 запускал бы произвольные команды на машине агента; это отступление от ACP (`03-Session Setup.md`,
 stdio MUST) записано в §13.15, включение явным флагом хоста — отдельный change.
