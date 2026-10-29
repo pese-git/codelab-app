@@ -85,14 +85,15 @@
 ### Requirement: MCP-серверы сессии
 `createSession(SessionSpec)` и `loadSession(id, ports, mcpServers: …)` SHALL подключать MCP-серверы сессии до возврата сессии (design.md change `add-agent-mcp-client`, D6).
 
-1. **Список.** Серверы `CoreConfig.mcpServers`, затем `SessionSpec.mcpServers`. Сервер клиента с тем же `name` заменяет сервер конфига (§13.4, шаг 2). Второй сервер с тем же `name` внутри одного источника и сервер с пустым `name` пропускаются с `mcp.server.skipped`.
+1. **Список.** Серверы `CoreConfig.mcpServers`, затем `SessionSpec.mcpServers`. Сервер клиента с тем же `name` заменяет сервер конфига (§13.4, шаг 2); сервер конфига пропускается с `mcp.server.skipped` и причиной `replaced by a server of the client with the same name`. Второй сервер с тем же `name` внутри одного источника (`duplicate server name in the same source`) и сервер с пустым `name` (`empty server name`) пропускаются с `mcp.server.skipped`.
 2. **Фильтр.** При выключенной capability `mcp` каждый сервер пропускается с `mcp.server.skipped` и причиной выключения. Сервер с транспортом вне набора capability пропускается с причиной, называющей транспорт и профиль.
-3. **Подключение.** `services.mcp.connect` подключает серверы параллельно, каждый в своём `connectTimeout`. Сбой сервера SHALL давать `mcp.server.failed` и сессию без его инструментов.
+3. **Подключение.** `services.mcp.connect` подключает серверы параллельно, каждый в своём `connectTimeout`. Сбой сервера SHALL давать `mcp.server.failed` и сессию без его инструментов. Исключение `connect` целиком SHALL давать `mcp.server.failed` с причиной `MCP connector failed: <runtimeType>` и сессию без MCP-инструментов, а не ошибку `createSession` / `loadSession`.
 4. **Регистрация.** После всех подключений, в порядке списка, внутри сервера — в порядке `tools/list`, в реестр сессии поверх копии базового реестра.
-5. **Коллизия имени** MCP-инструмента со встроенным или с уже зарегистрированным SHALL отключать весь более поздний сервер (транспорт закрыт, инструменты не зарегистрированы) с `mcp.server.failed`, причина которого называет оба источника. Сессия SHALL создаваться (HOST-5).
+5. **Коллизия имени** MCP-инструмента со встроенным или с уже зарегистрированным SHALL отключать весь более поздний сервер (транспорт закрыт, инструменты не зарегистрированы) с `mcp.server.failed`, причина которого называет оба источника. Сессия SHALL создаваться (HOST-5). Независимо от проверки коннектора ядро SHALL отклонять с `mcp.tool.invalid` инструмент коннектора без префикса `mcp__` или с именем встроенного инструмента (защита в глубину).
 6. **Изоляция.** Инструменты одной сессии НЕ SHALL быть видны другим сессиям.
-7. **Закрытие.** `AgentSession.close()` и `AgentRuntime.dispose()` SHALL закрывать транспорты серверов сессии после остановки хода.
-8. **Журнал.** Описания серверов НЕ SHALL записываться в журнал.
+7. **Закрытие.** `AgentSession.close()` и `AgentRuntime.dispose()` SHALL закрывать транспорты серверов сессии после остановки хода. Если `createSession` / `loadSession` падает после подключения серверов, подключения SHALL закрываться до проброса ошибки: сессия, не возвращённая вызывающему, не оставляет живых процессов.
+8. **Обновление набора.** Ожидающее обновление `McpSessionTools.takeUpdate()` ядро SHALL применять на границе шага через `prepareNextStep` полями `StepUpdate.tools` и `StepUpdate.systemPrompt` (транскрипт цикла не меняется), а между ходами — перед началом хода.
+9. **Журнал.** Описания серверов НЕ SHALL записываться в журнал.
 
 `AgentSession.setMcpServers(servers)` SHALL заменять серверы с `origin: session`:
 - совпавшие по `name` и параметрам остаются;
@@ -118,6 +119,18 @@
 #### Scenario: Процессы закрываются вместе с сессией
 - **WHEN** сессия с stdio-сервером закрывается `AgentSession.close()`
 - **THEN** `close()` транспорта вызван после окончания хода, лог `mcp.server.closed`
+
+#### Scenario: Сбой после подключения закрывает серверы
+- **WHEN** сессия подключила stdio-сервер, а запись журнала в `createSession` бросает исключение
+- **THEN** `createSession` пробрасывает ошибку, а `close()` транспорта сервера вызван до этого
+
+#### Scenario: Коннектор бросил
+- **WHEN** `McpConnector.connect` бросает исключение
+- **THEN** `createSession` возвращает сессию без инструментов `mcp__`, лог `mcp.server.failed` с причиной `MCP connector failed: <runtimeType>`
+
+#### Scenario: Коннектор отдал инструмент без префикса
+- **WHEN** fake `McpConnector` возвращает инструменты `read` и `mcp__x__t`
+- **THEN** в реестре сессии только `mcp__x__t` от коннектора, встроенный `read` не подменён, лог `mcp.tool.invalid` для `read`
 
 #### Scenario: Capability выключена
 - **WHEN** ядро собрано без `services.mcp`, а `SessionSpec.mcpServers` содержит сервер

@@ -81,7 +81,7 @@ final class LogRecord {           // то, что получает sink хост
 | `permission` | `permission.request`, `permission.decision`, `permission.denied` |
 | `session` | `session.create`, `session.open`, `session.repair`, `session.leaf.healed`, `session.append.failed`, `session.cycle`, `session.broken_link`, `session.compaction.lost_anchor` (§8.7); после MVP `session.origin.unknown` {`origin`} (§8.2.5) |
 | `compaction` | `compaction.start`, `compaction.end`, `compaction.failed` |
-| `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`debug`), `mcp.tools.changed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
+| `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`debug`), `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
 | `acp` | `acp.frame.in`, `acp.frame.out`, `acp.frame.bad`, `acp.cancel.no_turn`, `acp.prompt.rejected`, `acp.detached`, `acp.client_capabilities.absent` (§13.2), `acp.terminal.release_failed` (§13.9) |
 | `host` | `host.plan`, `host.config.loaded` |
 | `config` | `config.project.untrusted_key` (§15.3), `config.legacy_ignored`, `config.legacy_key_dropped`, `config.legacy_active` (§15.7) |
@@ -94,18 +94,27 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp.server.skipped` | info | `transport`, `reason` |
 | `mcp.server.era` | info | `transport`, `era` (`modern`/`legacy`), `protocol_version`, `probe` (`discover_result`, `modern_error`, `fallback_error`, `fallback_timeout`, `cached`) |
 | `mcp.server.connect` | info | `transport`, `era`, `protocol_version`, `server_info` (`name`/`version`, только для диагностики), `tools`, `duration_ms` |
-| `mcp.server.failed` | warning | `transport`, `reason` (≤ 200 символов) |
+| `mcp.server.failed` | warning | `transport`, `reason` (≤ 200 символов, правила ниже) |
 | `mcp.server.closed` | info | `transport`, `exit_code` (stdio) |
 | `mcp.server.stderr` | debug | `line` (≤ 4 КиБ) |
 | `mcp.tools.changed` | info | `added`, `removed` |
+| `mcp.tools.refresh_failed` | warning | `reason` — перечитывание `tools/list` после `list_changed` не удалось, прежний набор инструментов остаётся |
 | `mcp.tool.invalid` | warning | `tool`, `reason` |
 | `mcp.tool.description_truncated` | info | `tool`, `length` |
 | `mcp.call.cancelled`, `mcp.call.timeout` | info | `tool_call_id`, `request_id` |
-| `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`) |
+| `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`, `subscription_failed`) |
 
 В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов
 и ответов; причины ошибок транспорта формирует наш код, без текста заголовков (OBS-инварианты,
 тест `mcp_logs_no_secrets_test.dart`). Редакция секретов MCP в журнале — 8.11.
+
+`reason` событий `mcp.server.skipped`, `mcp.server.failed` и `mcp.tools.refresh_failed` содержит
+только текст нашего кода: `message` и `data` ошибки сервера, неизвестный `resultType` и
+`serverInfo` в причину не входят. Версии протокола сервера (`protocolVersion`, `supportedVersions`)
+входят только после проверки формата `YYYY-MM-DD`, остальные отбрасываются. Ошибка JSON-RPC описывается методом и кодом
+(`'<method> failed (code N)'`), непредвиденное исключение — `unexpected error: <runtimeType>`;
+обрезка до 200 символов — по рунам Unicode. Полный список причин — design.md change
+`add-agent-mcp-client`, D13.
 
 После MVP (§17) добавляются области:
 

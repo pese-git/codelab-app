@@ -36,12 +36,12 @@
 
 ## 1. Пакет `codelab_agent_mcp` и сторож (D14)
 
-- [ ] 1.1 `[agent]` Тест (workspace-architecture «Автоматический сторож границ пакетов», сценарии «MCP-клиент импортирует dart:io», «Зависимость MCP-клиента вне allowlist»):
+- [x] 1.1 `[agent]` Тест (workspace-architecture «Автоматический сторож границ пакетов», сценарии «MCP-клиент импортирует dart:io», «Зависимость MCP-клиента вне allowlist»):
   - `pubspec_allowlist_test.dart` — `mcpAllowlist = {codelab_agent_core, http, meta, async}` и `codelab_agent_mcp` в `binaryAllowlist`;
   - `import_guard_test.dart` — правило пакета на временном пакете с `import 'dart:io'` и `package:codelab_acp_protocol/` даёт два нарушения.
 
   Красный: пакета и правила нет.
-- [ ] 1.2 `[agent]` Пакет `packages/dart/codelab_agent_mcp`:
+- [x] 1.2 `[agent]` Пакет `packages/dart/codelab_agent_mcp`:
   - `pubspec.yaml` с allowlist и комментарием `# allowlist §1.2; расширение — только через OpenSpec`;
   - барель, `lib/testing.dart`, вложенный `AGENTS.md`;
   - `workspace:` корневого `pubspec.yaml`;
@@ -52,15 +52,15 @@
 
 ## 2. Порты ядра, имена и capability (D3, D6, D7)
 
-- [ ] 2.1 `[agent]` Тест `codelab_agent_core/test/mcp/mcp_tool_name_test.dart` — критерий `core/mcp-tool-name-sanitized` (E-05; agent-tools «MCP-инструменты», сценарии «Замена символов», «Длинное имя»):
+- [x] 2.1 `[agent]` Тест `codelab_agent_core/test/mcp/mcp_tool_name_test.dart` — критерий `core/mcp-tool-name-sanitized` (E-05; agent-tools «MCP-инструменты», сценарии «Замена символов», «Длинное имя»):
   - `my.srv` + `get issue` → `mcp__my_srv__get_issue`;
   - 100 символов → ровно 64 = 56 + `_` + 7 hex SHA-256 полного имени;
   - два имени с общими 56 символами различаются;
   - `a.b` и `a_b` дают разные хэши.
 
   Красный.
-- [ ] 2.2 `[agent]` `lib/src/mcp/mcp_tool_name.dart` и зависимость `crypto` в `pubspec.yaml` ядра (в allowlist PKG-2) — 2.1 зелёный.
-- [ ] 2.3 `[agent]` Тесты (agent-runtime «Профили хостов и сужение», сценарий «Сужение транспортов MCP»; «Минимальная сборка buildAgentCore», сценарии «Матрица профиля», «Коннектор без нужного транспорта»):
+- [x] 2.2 `[agent]` `lib/src/mcp/mcp_tool_name.dart` и зависимость `crypto` в `pubspec.yaml` ядра (в allowlist PKG-2) — 2.1 зелёный.
+- [x] 2.3 `[agent]` Тесты (agent-runtime «Профили хостов и сужение», сценарий «Сужение транспортов MCP»; «Минимальная сборка buildAgentCore», сценарии «Матрица профиля», «Коннектор без нужного транспорта»):
   - `agent-serve` и `embedded-cli` имеют `mcp: {stdio, http}`;
   - расширение до `{http, stdio}` из `{http}` — `HostWiringException`;
   - без `services.mcp` — `offReasons[mcp]`;
@@ -68,14 +68,14 @@
   - golden профилей обновлён.
 
   Красный.
-- [ ] 2.4 `[agent]` Реализация, экспорт из бареля — 2.3 зелёный:
+- [x] 2.4 `[agent]` Реализация, экспорт из бареля — 2.3 зелёный:
   - `HostCapability.mcp` и состояния профилей;
   - `lib/src/mcp/`: `McpServerConfig`, `McpServerOrigin`, `McpTransport`, `McpTransportFactory`, `McpTransportClosed`, `McpConnector`, `McpConnectRequest`, `McpSessionTools`, `McpToolsUpdate`, `McpServerSummary`;
   - `AgentCoreServices.mcp`, `CoreConfig.mcpServers`, шаги 1–2 `buildAgentCore`.
 
 ## 3. Кодек JSON-RPC и `McpClient` (D2, D4, D5, D8)
 
-- [ ] 3.1 `[agent]` Тест `codelab_agent_mcp/test/json_rpc_test.dart`:
+- [x] 3.1 `[agent]` Тест `codelab_agent_mcp/test/json_rpc_test.dart`:
   - запрос, уведомление, ответ, ошибка — туда и обратно;
   - modern `_meta` (`protocolVersion`, `clientCapabilities`, `clientInfo`) добавляется к каждому modern-запросу и не добавляется к legacy;
   - распознавание modern-ошибок `-32020`, `-32021`, `-32022` с `data.supported`;
@@ -85,8 +85,8 @@
   - исходящие id растут без повторов.
 
   Красный.
-- [ ] 3.2 `[agent]` `lib/src/json_rpc.dart` и модели `lib/src/protocol.dart` (`server/discover`, `DiscoverResult`, `initialize`, `tools/list`, `tools/call`, `CallToolResult`, `resultType`, `Tool`, аннотации, `x-mcp-header`, `subscriptions/listen`, уведомления, эпохи и наборы версий) — 3.1 зелёный.
-- [ ] 3.3 `[agent]` Тест `test/mcp_client_connect_test.dart` на `FakeMcpServer` в памяти обеих эпох (agent-mcp-client «Эпоха сервера и версия протокола», все сценарии):
+- [x] 3.2 `[agent]` `lib/src/json_rpc.dart` и модели `lib/src/protocol.dart` (`server/discover`, `DiscoverResult`, `initialize`, `tools/list`, `tools/call`, `CallToolResult`, `resultType`, `Tool`, аннотации, `x-mcp-header`, `subscriptions/listen`, уведомления, эпохи и наборы версий) — 3.1 зелёный.
+- [x] 3.3 `[agent]` Тест `test/mcp_client_connect_test.dart` на `FakeMcpServer` в памяти обеих эпох (agent-mcp-client «Эпоха сервера и версия протокола», все сценарии):
   - **modern:** без `initialize`, `_meta` на каждом запросе, `subscriptions/listen` при `listChanged`, две страницы `tools/list`;
   - **legacy со stdio-откатом** по ошибке `-32601` и по молчанию (таймаут пробы на `FakeClock`): `initialize` `2025-11-25`, `initialized` после ответа, поздний ответ на пробу → `mcp.message.ignored`;
   - **legacy-версии:** ответ `2025-06-18` и `2025-03-26` принимается, `2024-11-05` → `mcp.server.failed`;
@@ -94,11 +94,15 @@
   - таймаут `initialize` без `notifications/cancelled`; 100 страниц; legacy-`ping`; другой запрос сервера → `-32601`;
   - пустая строка как `nextCursor` — следующая страница, а не конец; legacy-инструмент с `execution.taskSupport: "required"` при `tasks.requests.tools.call` пропущен с `mcp.tool.invalid`;
   - логи `mcp.server.era` с `probe` каждого исхода;
-  - кэш эпохи HTTP по `origin`, повторная проба после неподтверждённого кэша.
+  - кэш эпохи HTTP по `origin`: `cached` только у legacy, modern-сервер получает `server/discover` всегда; повторная проба после неподтверждённого кэша;
+  - подписка (D5): ошибка, успешный ответ или обрыв ответа на `subscriptions/listen` до подтверждения и молчание дольше `min(5 с, connectTimeout / 2)` → сервер подключён без обновлений, `mcp.message.ignored` `subscription_failed`;
+  - `list_changed` во время подключения → одно перечитывание после рукопожатия; сбой перечитывания → `mcp.tools.refresh_failed`, прежний набор (D6, п. 1);
+  - ошибка потока `incoming` → `disconnected: transport error` (D3); нестроковые `title`/`description` инструмента игнорируются (D7);
+  - `reason` без текстов и значений сервера (D13).
 
   Красный.
-- [ ] 3.4 `[agent]` `McpClient.connect` (проба эпохи, modern и legacy ветки, кэш эпохи в `McpClientConnector`) и `FakeMcpServer` эпох `modern`/`legacy`/`dualEra` (`lib/testing.dart`, вход в памяти; свой код, D15) — 3.3 зелёный.
-- [ ] 3.5 `[agent]` Тест `test/mcp_client_call_test.dart` (agent-mcp-client «Вызов инструмента, отмена и таймаут»):
+- [x] 3.4 `[agent]` `McpClient.connect` (проба эпохи, modern и legacy ветки, кэш эпохи в `McpClientConnector`) и `FakeMcpServer` эпох `modern`/`legacy`/`dualEra` (`lib/testing.dart`, вход в памяти; свой код, D15) — 3.3 зелёный.
+- [x] 3.5 `[agent]` Тест `test/mcp_client_call_test.dart` (agent-mcp-client «Вызов инструмента, отмена и таймаут»):
   - результат;
   - отмена на stdio (обе эпохи) → одно `notifications/cancelled` и `CancelledException`; на транспорте `kind: http` modern → только `abandon(id)`, legacy → уведомление и `abandon(id)` (fake-транспорт записывает вызовы);
   - ответ после отмены → `mcp.message.ignored` `late_response`, итог `cancelled`;
@@ -108,15 +112,15 @@
   - `-32602` → текст с кодом;
   - ответ не по схеме и неизвестный `resultType` → `invalid tools/call result`;
   - `resultType: input_required` → `asked for client input`, повтора нет;
-  - обрыв транспорта на `tools/call` → `disconnected during the call` без повтора; оборванный `tools/list` повторён один раз с новым id;
+  - обрыв транспорта и обрыв потока ответа (`abortedRequests`) на `tools/call` → `disconnected during the call` без повтора; оборванный `tools/list` повторён один раз с новым id; `abandon(id)` не даёт события в `abortedRequests`;
   - таймаут — константа 10 минут (`McpClientOptions.callTimeout` без ключа конфига).
 
   Красный.
-- [ ] 3.6 `[agent]` `McpClient.callTool`, `McpClientOptions.callTimeout` (10 мин) — 3.5 зелёный.
+- [x] 3.6 `[agent]` `McpClient.callTool`, `McpClientOptions.callTimeout` (10 мин) — 3.5 зелёный.
 
 ## 4. Проекция в `AgentTool`, реестр сессии, политика, промпт (D6, D7, D12, D13)
 
-- [ ] 4.1 `[agent]` Тест `codelab_agent_mcp/test/mcp_tool_adapter_test.dart` (agent-tools «MCP-инструменты», сценарии «Вид по аннотациям», «Длинное описание обрезается»; agent-mcp-client «Проекция результата MCP-инструмента»; §6.7 документа ядра):
+- [x] 4.1 `[agent]` Тест `codelab_agent_mcp/test/mcp_tool_adapter_test.dart` (agent-tools «MCP-инструменты», сценарии «Вид по аннотациям», «Длинное описание обрезается»; agent-mcp-client «Проекция результата MCP-инструмента»; §6.7 документа ядра):
   - `kind` по аннотациям, `tier == exec`, `outputTrust == untrusted` при любых аннотациях;
   - `present().title` — полное имя;
   - `permissionPattern` — канонический JSON;
@@ -125,30 +129,33 @@
   - описание 5 000 символов → 2048 символов + `[Description truncated: 2952 characters omitted.]` и лог `mcp.tool.description_truncated`; ровно 2048 — без изменений; эмодзи на границе не разрывается;
 
   Красный.
-- [ ] 4.2 `[agent]` `lib/src/mcp_tool.dart` — 4.1 зелёный.
-- [ ] 4.3 `[agent]` Тесты ядра и коннектора (agent-runtime «MCP-серверы сессии», все сценарии; agent-tools «Ограда недоверенного вывода», сценарии «Результат MCP в одной ограде», «MCP-инструмент не объявляет себя доверенным»):
-  - `codelab_agent_core/test/runtime/session_mcp_test.dart` на fake `McpConnector`: слияние с конфигом, пропуски, изоляция сессий, порядок закрытия, в журнале нет `command`/`env`/`url`/`headers`;
-  - `codelab_agent_mcp/test/connector_test.dart`: коллизия двух серверов при обратном порядке подключения, коллизия внутри сервера, порядок регистрации;
+- [x] 4.2 `[agent]` `lib/src/mcp_tool.dart` — 4.1 зелёный.
+- [x] 4.3 `[agent]` Тесты ядра и коннектора (agent-runtime «MCP-серверы сессии», все сценарии; agent-tools «Ограда недоверенного вывода», сценарии «Результат MCP в одной ограде», «MCP-инструмент не объявляет себя доверенным»):
+  - `codelab_agent_core/test/runtime/session_mcp_test.dart` на fake `McpConnector`: слияние с конфигом, пропуски с причинами D6, изоляция сессий, порядок закрытия, в журнале нет `command`/`env`/`url`/`headers`; исключение коннектора → сессия без MCP; сбой `createSession` / `loadSession` после подключения закрывает серверы; инструмент коннектора без `mcp__` или с именем встроенного → `mcp.tool.invalid` (agent-runtime «MCP-серверы сессии», сценарии «Сбой после подключения закрывает серверы», «Коннектор бросил», «Коннектор отдал инструмент без префикса»);
+  - `codelab_agent_core/test/loop/step_update_tools_test.dart`: `StepUpdate.tools` и `StepUpdate.systemPrompt` меняют следующий запрос без замены транскрипта (agent-loop «Хуки и сборка payload», сценарий «Новые инструменты без замены транскрипта»);
+  - `codelab_agent_mcp/test/connector_test.dart`: коллизия двух серверов при обратном порядке подключения, коллизия внутри сервера, порядок регистрации; коллизия в обновлении отключает сервер, чьё обновление её вызвало; непредвиденное исключение одного сервера → `unexpected error: <runtimeType>`;
   - `fence_test.dart`: `core/mcp-tool-cannot-declare-trusted`, одна ограда.
 
   Красный.
-- [ ] 4.4 `[agent]` Реализация — 4.3 зелёный:
+- [x] 4.4 `[agent]` Реализация — 4.3 зелёный:
   - реестр на сессию в `AgentRuntimeImpl._open`;
   - `SessionSpec.mcpServers`, `loadSession(..., mcpServers:)`;
   - закрытие транспортов в `AgentSession.close()` после простоя хода;
   - правило префикса `mcp__` в `ToolCallExecutor`;
+  - `StepUpdate.tools` и `StepUpdate.systemPrompt` в `loop_config.dart` и их применение в цикле;
+  - `McpSessionTools.replaceServers` — заглушка, бросающая `UnsupportedError`, до задачи 6.5;
   - `McpClientConnector` (`lib/src/connector.dart`);
   - при необходимости — `$textContains` для `toolResult` в `expect.lastMessage` `ScriptedStreamFunction` (§14.7, D15).
-- [ ] 4.5 `[agent]` Тест DoD (agent-permissions «MCP-вызов только после решения политики», все сценарии):
+- [x] 4.5 `[agent]` Тест DoD (agent-permissions «MCP-вызов только после решения политики», все сценарии):
   - `codelab_agent_mcp/test/mcp_tool_goes_through_policy_test.dart: MCP tool is not executed without a permission decision` (закрывает F5.1, P-01): `buildAgentCore` + `McpClientConnector` + `FakeMcpServer`, gate `reject_once` → `FakeMcpServer.calls` пуст, вопрос задан до вызова сервера;
   - режим `plan` с ложной `readOnlyHint` — отказ без вопроса;
   - `no_bypass_test.dart` (`core/no-tool-bypasses-gate`) с fake MCP-инструментами.
 
   Должен быть зелёным без нового кода; если красный — исправление в 4.4.
-- [ ] 4.6 `[agent]` Тест `prompt_mcp_section_test.dart` (agent-prompts «Секция mcp», оба сценария; PR-6): строка `- fake: 2 tools, prefix mcp__fake__`; без серверов нет `mcp__`; сторож PR-6 зелёный. Красный.
-- [ ] 4.7 `[agent]` `prompts/mcp.md` (текст D12), `PromptInputs.mcpServers`, перегенерация `prompts.g.dart` — 4.6 зелёный.
-- [ ] 4.8 `[agent]` Тест `codelab_agent_mcp/test/mcp_logs_no_secrets_test.dart` (agent-mcp-client «Наблюдаемость MCP без секретов»): значения `env` и `headers` упавших серверов не встречаются в `RecordingLogger` и журнале. Красный, если утечка есть; затем поля логов по D13.
-- [ ] 4.9 Проверка итерации 1:
+- [x] 4.6 `[agent]` Тест `prompt_mcp_section_test.dart` (agent-prompts «Секция mcp», оба сценария; PR-6): строка `- fake: 2 tools, prefix mcp__fake__`; без серверов нет `mcp__`; сторож PR-6 зелёный. Красный.
+- [x] 4.7 `[agent]` `prompts/mcp.md` (текст D12), `PromptInputs.mcpServers`, перегенерация `prompts.g.dart` — 4.6 зелёный.
+- [x] 4.8 `[agent]` Тест `codelab_agent_mcp/test/mcp_logs_no_secrets_test.dart` (agent-mcp-client «Наблюдаемость MCP без секретов»): значения `env` и `headers` упавших серверов не встречаются в `RecordingLogger` и журнале. Красный, если утечка есть; затем поля логов по D13.
+- [x] 4.9 Проверка итерации 1:
   - `fvm dart analyze` и `fvm dart test` в `codelab_agent_core`, `codelab_agent_mcp`;
   - `fvm dart run melos run guard`, `fvm dart run melos run web-compile`;
   - PR итерации 1, который называет следующую итерацию.
@@ -187,7 +194,7 @@
   - во время хода — после `TurnEnded`.
 
   Красный.
-- [ ] 6.5 `[agent]` `AgentSession.setMcpServers`, `McpSessionTools.replaceServers` — 6.4 зелёный.
+- [ ] 6.5 `[agent]` `AgentSession.setMcpServers`, `McpSessionTools.replaceServers` — заглушка итерации 1 (`UnsupportedError` в `connector.dart`) заменяется реализацией D11 — 6.4 зелёный.
 - [ ] 6.6 `[protocol]` Тест `codelab_acp_protocol/test/session_test.dart` (agent-acp-server «Неизвестный транспорт MCP-сервера», сценарий «Модель сохраняет неизвестный сервер»): `{"type":"websocket","name":"future","extra":1}` → `McpServerUnknown`, `toJson()` равен исходному; известные типы с лишним ключом и нестроковый `type` — по-прежнему ошибка; прежний тест «unknown type throws» переписан. Красный.
 - [ ] 6.7 `[protocol]` Вариант `McpServer.unknown({type, name?, raw})` в `codelab_acp_protocol/lib/src/acp/session.dart` (freezed, `toJson` — `raw`), ветки `McpServerUnknown` в исчерпывающих `switch`; перегенерация `session.freezed.dart`; `melos run protocol-conformance` зелёный — 6.6 зелёный.
 - [ ] 6.8 `[protocol]` Отображение `acp.McpServer` → `McpServerConfig` в `agent_server.dart` (`McpServerUnknown` и `McpServerSse` — пропуск с причиной), передача в `createSession` / `loadSession`, `setMcpServers` при открытой сессии; удаление пропуска этапа 4 — 6.3 зелёный.
@@ -240,12 +247,12 @@
   - уведомление посреди пакета вызовов применяется к следующему запросу;
   - modern — принимается только с `subscriptionId` своей подписки, legacy — с общего канала;
   - два уведомления → не больше двух `tools/list`;
-  - коллизия в новом наборе отключает сервер;
+  - коллизия в новом наборе отключает сервер, чьё обновление её вызвало;
   - секция `mcp` пересобрана;
   - лог `mcp.tools.changed`.
 
   Красный.
-- [ ] 9.4 `[agent]` Перечитывание в `McpClient`, `McpSessionTools.takeUpdate`, применение в `prepareNextStep` → `StepUpdate.context` и перед ходом — 9.3 зелёный.
+- [ ] 9.4 `[agent]` Перечитывание в `McpClient`, `McpSessionTools.takeUpdate`, применение в `prepareNextStep` → `StepUpdate.tools` и `StepUpdate.systemPrompt` и перед ходом — 9.3 зелёный.
 - [ ] 9.5 `[protocol]` Фикстура `acp/mcp-http-tool-call` (E-03; сценарий «HTTP-сервер и пропуск SSE»): сервер `web` типа `http` (modern), `old` типа `sse` и `future` неизвестного типа `websocket` (D11). В фабрике conformance http — `StreamableHttpTransport` на `MockClient` с обработчиком `FakeMcpServer`. Сначала красная, затем зелёная.
 - [ ] 9.6 `[agent]` Бинарь: HTTP-транспорт на HTTP-клиенте хоста, сужение `mcp` из 8.2 снято. Тест `agent_host_test.dart`: `initialize` даёт `mcpCapabilities.http: true` (agent-binary, сценарий «Возможности MCP в initialize»).
 - [ ] 9.7 Проверка итерации 3: проверки затронутого, `conformance:agent`, `guard`, `web-compile`; PR итерации 3.

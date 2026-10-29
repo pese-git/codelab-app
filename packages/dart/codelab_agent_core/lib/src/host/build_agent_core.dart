@@ -75,6 +75,8 @@ BuiltAgentCore buildAgentCore({
       ),
     if (!config.compaction.enabled)
       HostCapability.compaction: const CapabilityOff('выключено конфигом'),
+    if (services.mcp == null)
+      HostCapability.mcp: const CapabilityOff('сервис MCP не передан'),
   });
   // §10.8: журнал на постоянном носителе требует хранилища, которое не
   // теряет записи при выходе процесса.
@@ -84,6 +86,18 @@ BuiltAgentCore buildAgentCore({
       'capability sessionPersistence требует постоянного SessionStore: '
       'MemorySessionStore теряет журнал при выходе процесса',
     );
+  }
+  // HOST-3: коннектор обязан уметь каждый транспорт включённой capability.
+  if (narrowed.states[HostCapability.mcp] case CapabilityTransport(
+    :final transports,
+  ) when services.mcp != null) {
+    final missing = transports.difference(services.mcp!.transports);
+    if (missing.isNotEmpty) {
+      throw HostWiringException(
+        'capability mcp требует транспорты ${(transports.toList()..sort()).join(', ')}: '
+        'McpConnector не умеет ${(missing.toList()..sort()).join(', ')}',
+      );
+    }
   }
   if (narrowed.isOn(HostCapability.shellExec) &&
       services.baseEnv is MemoryExecutionEnv) {

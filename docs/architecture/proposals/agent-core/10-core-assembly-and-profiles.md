@@ -136,8 +136,9 @@ abstract interface class McpTransport {            // транспорт уро�
   String get kind;                                 // 'stdio' | 'http'
   Stream<String> get incoming;
   Future<void> send(String message, {Map<String, String> headers = const {}});
-  Future<void> abandon(Object requestId);          // HTTP: закрыть поток ответа; stdio: ничего
-  Future<void> get done;
+  Stream<Object> get abortedRequests;              // id запросов, чей поток ответа оборвался при живом транспорте (HTTP)
+  Future<void> abandon(Object requestId);          // HTTP: закрыть поток ответа; stdio: ничего; в abortedRequests не эмитит
+  Future<McpTransportClosed> get done;             // транспорт закрыт: причина и exitCode (stdio)
   Future<void> close();                            // идемпотентно
 }
 abstract interface class McpTransportFactory {     // реализует хост; stdio — в codelab_agent_io
@@ -145,6 +146,10 @@ abstract interface class McpTransportFactory {     // реализует хос�
   Future<McpTransport> open(McpServerConfig server, {required String cwd, required CancelToken cancel});
 }
 ```
+
+Единственное исключение `open` и `send` — `McpTransportException` с текстом нашего кода (`spawn
+failed: …`, `invalid url`). Ошибка в потоках `incoming` или `abortedRequests` переводит клиент
+сервера в «не подключён» (`mcp.server.failed` с причиной `disconnected: transport error`).
 
 Решения — `openspec/changes/add-agent-mcp-client/design.md` (D3, D6).
 

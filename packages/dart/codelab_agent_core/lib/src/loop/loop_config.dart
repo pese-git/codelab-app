@@ -88,10 +88,19 @@ final class ResultOverride {
 }
 
 final class StepUpdate {
-  const StepUpdate({this.context, this.model});
+  const StepUpdate({this.context, this.model, this.tools, this.systemPrompt});
 
   final LoopContext? context;
   final ModelRef? model;
+
+  /// Новый набор инструментов со следующего запроса, транскрипт цикла не
+  /// трогается (в отличие от [context]). Так MCP-инструменты сессии
+  /// обновляются по `notifications/tools/list_changed` на границе шага
+  /// (design.md change `add-agent-mcp-client`, D6).
+  final List<AgentTool>? tools;
+
+  /// Новый системный промпт со следующего запроса (секция `mcp`, §11.5).
+  final String? systemPrompt;
 }
 
 final class StepResult {

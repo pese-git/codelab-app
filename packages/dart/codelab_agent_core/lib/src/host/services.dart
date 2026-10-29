@@ -2,6 +2,8 @@ import '../env/execution_env.dart';
 import '../llm/model_catalog.dart';
 import '../llm/model_ref.dart';
 import '../loop/turn_budget.dart';
+import '../mcp/mcp_connector.dart';
+import '../mcp/mcp_server_config.dart';
 import '../permissions/gate.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
@@ -27,6 +29,7 @@ final class AgentCoreServices {
     this.gate,
     this.platform = 'unknown',
     this.models,
+    this.mcp,
   });
 
   /// Local | ACP client | memory (tests).
@@ -55,6 +58,12 @@ final class AgentCoreServices {
   /// хосты без конфига провайдеров (design.md change
   /// `add-dart-agent-acp-server`, D3).
   final ModelCatalog? models;
+
+  /// Подключение MCP-серверов сессии (§10.3; design.md change
+  /// `add-agent-mcp-client`, D3). `null` — capability `mcp` выключена с
+  /// причиной «сервис MCP не передан»: серверы сессии пропускаются, сессия
+  /// создаётся.
+  final McpConnector? mcp;
 }
 
 /// The permissions part of the configuration.
@@ -90,6 +99,7 @@ final class CoreConfig {
     this.budget = const TurnBudget(),
     this.compaction = const CompactionOverrides(),
     this.effort = ReasoningEffort.medium,
+    this.mcpServers = const [],
   });
 
   final ModelRef defaultModel;
@@ -102,6 +112,11 @@ final class CoreConfig {
 
   /// Настройки сжатия контекста (§9.4, §15).
   final CompactionOverrides compaction;
+
+  /// MCP-серверы конфигурации (`origin: config`); пусто, пока ключи
+  /// `mcp.servers` не читаются из файлов (этап 8.5). Сервер клиента с тем же
+  /// `name` заменяет сервер конфига (§13.4, шаг 2; D6).
+  final List<McpServerConfig> mcpServers;
 }
 
 /// Переопределения порогов сжатия из конфигурации (`agent-core-architecture`

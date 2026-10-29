@@ -674,7 +674,10 @@ MCP живёт в `codelab_agent_mcp` (§1.2). Реестр собирается
 `tools/list`. Сервер, чей инструмент пришёл позже, отключается целиком: транспорт закрывается,
 инструменты не регистрируются, лог `mcp.server.failed` с причиной, называющей оба источника
 (`tool name mcp__a__x collides with built-in tool x` или `… with MCP server "b"`); сессия создаётся
-(HOST-5, §10.7, шаг 5e). Критерий E-05.
+(HOST-5, §10.7, шаг 5e). Критерий E-05. Коллизия в обновлении по `tools/list_changed` отключает
+сервер, чьё обновление её вызвало, а не стоящий позже в списке. Защита в глубину: ядро при
+регистрации само отклоняет инструмент коннектора без префикса `mcp__` или с именем встроенного
+(`mcp.tool.invalid`), потому что порт `McpConnector` открыт для других реализаций.
 
 **Вид, уровень, доверие.** `tier: exec` всегда, `tierOf` не переопределяется. `kind` — только по
 явным значениям аннотаций сервера, без значений по умолчанию спецификации MCP: `readOnlyHint: true`
@@ -714,7 +717,8 @@ MCP живёт в `codelab_agent_mcp` (§1.2). Реестр собирается
 `\n[Description truncated: <n> characters omitted.]`, лог `mcp.tool.description_truncated`. Описание
 уходит в схемах каждого запроса и не огораживается, поэтому длинный текст сервера тратит контекст
 и расширяет поверхность prompt injection; описания вложенных свойств `inputSchema` не обрезаются.
-Инструмент без `name` или с `inputSchema` не-объектом пропускается (`mcp.tool.invalid`).
+Инструмент без `name` или с `inputSchema` не-объектом пропускается (`mcp.tool.invalid`);
+нестроковые `title` и `description` игнорируются как отсутствующие.
 
 **Отмена, таймаут, ошибки.** Отмена хода доходит до сервера сигналом своего транспорта и эпохи
 (stdio — `notifications/cancelled`; streamable HTTP modern — закрытие потока ответа), ожидание
@@ -726,15 +730,16 @@ MCP живёт в `codelab_agent_mcp` (§1.2). Реестр собирается
 | Ситуация | Текст |
 |---|---|
 | сервер упал после подключения | `MCP server <id> is not connected. Continue without it.` |
-| транспорт закрылся во время вызова (без повтора) | `MCP server <id> disconnected during the call: <reason>` |
+| транспорт закрылся или поток ответа оборвался во время вызова (без повтора) | `MCP server <id> disconnected during the call: <reason>` |
 | таймаут | `MCP server <id> did not answer tools/call within <n> s.` |
 | ошибка JSON-RPC | `MCP server <id> returned an error: <message> (code <code>)` |
 | ответ не по схеме | `MCP server <id> returned an invalid tools/call result.` |
 | сервер просит ввод клиента (`input_required`) | `MCP server <id> asked for client input, which is not supported.` |
 
 Обновление набора по `notifications/tools/list_changed` применяется на границе шага
-(`prepareNextStep`, §5), внутри пакета вызовов набор не меняется; вызов уже объявленного инструмента,
-удалённого из набора, исполняется своим объектом.
+(`prepareNextStep` → `StepUpdate.tools` и `StepUpdate.systemPrompt`, §5.2), внутри пакета вызовов
+набор не меняется; вызов уже объявленного инструмента, удалённого из набора, исполняется своим
+объектом. Сбой перечитывания `tools/list` оставляет прежний набор (`mcp.tools.refresh_failed`).
 
 После MVP (§17.5.7) соединения ведёт `McpSupervisor` сессии: упавший сервер переподключается с
 задержкой 1…30 с, `notifications/tools/list_changed` заменяет инструменты сервера на границе

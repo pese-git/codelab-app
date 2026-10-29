@@ -7,6 +7,7 @@ import '../llm/usage.dart';
 import '../loop/agent_events.dart';
 import '../loop/loop_config.dart';
 import '../loop/turn_budget.dart';
+import '../mcp/mcp_server_config.dart';
 import '../permissions/gate.dart';
 import '../permissions/modes.dart';
 import '../util/logger.dart';
@@ -113,8 +114,10 @@ final class SessionSpec {
     this.ports = const SessionHostPorts(),
     List<BeforeToolCallHook> extraBeforeToolCall = const [],
     List<AfterToolCallHook> extraAfterToolCall = const [],
+    List<McpServerConfig> mcpServers = const [],
   }) : extraBeforeToolCall = List.unmodifiable(extraBeforeToolCall),
-       extraAfterToolCall = List.unmodifiable(extraAfterToolCall);
+       extraAfterToolCall = List.unmodifiable(extraAfterToolCall),
+       mcpServers = List.unmodifiable(mcpServers);
 
   /// The absolute root of the session.
   final String cwd;
@@ -131,4 +134,9 @@ final class SessionSpec {
 
   /// Host hooks; they go first in `afterToolCall`.
   final List<AfterToolCallHook> extraAfterToolCall;
+
+  /// MCP-серверы клиента (`origin: session`), в порядке запроса; сервер с тем
+  /// же `name`, что в `CoreConfig.mcpServers`, заменяет серверы конфига
+  /// (§13.4, шаг 2; design.md change `add-agent-mcp-client`, D6).
+  final List<McpServerConfig> mcpServers;
 }

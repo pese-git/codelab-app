@@ -3,7 +3,7 @@ import '../permissions/modes.dart';
 /// Capabilities and profiles of hosts (`agent-core-architecture` §10.2,
 /// §10.4). Значения появляются вместе с подсистемами: три — этап 2,
 /// `compaction` и `sessionPersistence` — этап 3 (design.md change
-/// `add-agent-core-sessions-and-compaction`, D12).
+/// `add-agent-core-sessions-and-compaction`, D12), `mcp` — этап 8.
 enum HostCapability {
   shellExec,
   fileListing,
@@ -16,6 +16,11 @@ enum HostCapability {
   /// Выключенная — журнал в памяти (`MemorySessionStore`): тесты и хосты
   /// без носителя.
   sessionPersistence,
+
+  /// Подключение MCP-серверов сессии (§10.2; design.md change
+  /// `add-agent-mcp-client`, D3). Транспорты — `stdio` (процесс) и `http`
+  /// (streamable HTTP); профиль без процессов сужается до `{http}`.
+  mcp,
 }
 
 sealed class CapabilityState {
@@ -75,6 +80,10 @@ final class HostProfile {
       HostCapability.sessionPersistence: CapabilityTransport({
         'jsonl-file',
       }, 'журнал JSONL в \$CODELAB_HOME/sessions'),
+      HostCapability.mcp: CapabilityTransport({
+        'stdio',
+        'http',
+      }, 'серверы MCP: процесс клиента и streamable HTTP'),
     }, ModeId.standard),
     'embedded-cli' => HostProfile._(name, const {
       HostCapability.shellExec: CapabilityTransport({
@@ -88,6 +97,10 @@ final class HostProfile {
       HostCapability.sessionPersistence: CapabilityTransport({
         'jsonl-file',
       }, 'журнал JSONL в \$CODELAB_HOME/sessions'),
+      HostCapability.mcp: CapabilityTransport({
+        'stdio',
+        'http',
+      }, 'серверы MCP: процессы хоста и streamable HTTP'),
     }, ModeId.standard),
     _ => throw ArgumentError.value(name, 'name', 'unknown host profile'),
   };

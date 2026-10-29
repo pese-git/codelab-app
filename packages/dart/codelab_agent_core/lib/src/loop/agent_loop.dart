@@ -402,6 +402,13 @@ final class _Turn {
         ..clear()
         ..addAll(context.messages);
     }
+    if (update.tools != null || update.systemPrompt != null) {
+      _context = LoopContext(
+        systemPrompt: update.systemPrompt ?? _context.systemPrompt,
+        messages: _context.messages,
+        tools: update.tools ?? _context.tools,
+      );
+    }
   }
 
   /// Один запрос к модели; 400 из-за парности повторяется один раз с

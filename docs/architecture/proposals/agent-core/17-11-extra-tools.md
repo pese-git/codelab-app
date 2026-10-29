@@ -1039,7 +1039,7 @@ discover_tools без mount:
 discover_tools mount: [..]:
 1. каждое имя: уже видно → в "Already mounted"; выключено или неизвестно → "Unknown tool <x>"
    (выключенные не упоминаются как выключенные, TOOL-12); допускается шаблон mcp__<server>__*
-2. append tools_mount {names}; AgentSession в prepareNextStep отдаёт StepUpdate(context.tools):
+2. append tools_mount {names}; AgentSession в prepareNextStep отдаёт StepUpdate(tools):
    схемы меняются со следующего шага (запрос идущего шага не меняется)
 3. результат: "Mounted: <names>. They are available from your next step." и для инструментов
    с секцией промпта — её текст после строки "Rules:" (системный промпт не меняется)

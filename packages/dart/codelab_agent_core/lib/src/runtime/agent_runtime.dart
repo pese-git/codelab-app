@@ -14,6 +14,9 @@ import '../llm/stream_function.dart';
 import '../loop/agent.dart';
 import '../loop/agent_events.dart';
 import '../loop/loop_config.dart';
+import '../mcp/mcp_connector.dart';
+import '../mcp/mcp_server_config.dart';
+import '../mcp/mcp_tool_name.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
 import '../prompts/compose.dart';
@@ -33,7 +36,11 @@ import '../host/services.dart';
 import 'agent_session.dart';
 
 /// Кто пишет журналы этого ядра (поле `agent` заголовка, §8.2.1).
-const coreAgentInfo = AgentInfo(name: 'codelab-agent', version: '0.1.0');
+const coreAgentVersion = '0.1.0';
+const coreAgentInfo = AgentInfo(
+  name: 'codelab-agent',
+  version: coreAgentVersion,
+);
 
 /// Среда выполнения ядра (`agent-core-architecture` §5.6): создаёт,
 /// открывает и перечисляет сессии этого процесса.
@@ -61,11 +68,17 @@ abstract interface class AgentRuntime {
   /// `add-dart-agent-acp-server`, D3). [cwd] — рабочая папка клиента: если
   /// она не совпадает с заголовком, сессия работает в ней и пишет `custom`
   /// `codelab.cwd_changed` (§13.5, шаг 2).
+  ///
+  /// [mcpServers] — серверы MCP, которые клиент прислал в `session/load`
+  /// (`origin: session`); описания серверов в журнал не пишутся, поэтому
+  /// клиент присылает их заново (§13.5; design.md change
+  /// `add-agent-mcp-client`, D6).
   Future<AgentSession> loadSession(
     SessionId id,
     SessionHostPorts ports, {
     ModelRef? model,
     String? cwd,
+    List<McpServerConfig> mcpServers = const [],
   });
 
   /// Страница сводок хранилища; неверный курсор — `InvalidCursor`.
@@ -100,6 +113,10 @@ final class AgentRuntimeImpl implements AgentRuntime {
   final ModelCatalog models;
   final _sessions = <_Session>[];
 
+  /// Отменяется в [dispose]: подключение MCP-серверов не должно пережить
+  /// рантайм (`McpConnectRequest.cancel`).
+  final _shutdown = CancelTokenSource();
+
   SessionStore get _store => services.sessions;
 
   @override
@@ -128,11 +145,37 @@ final class AgentRuntimeImpl implements AgentRuntime {
         ...spec.extraAfterToolCall,
         ...spec.ports.extraAfterToolCall,
       ],
+      mcpServers: spec.mcpServers,
     );
-    await session._writer.append(
-      (id, parent, at) => _modelChange(id, parent, at, model),
-    );
+    try {
+      await session._writer.append(
+        (id, parent, at) => _modelChange(id, parent, at, model),
+      );
+    } on Object {
+      await _abandon(session);
+      rethrow;
+    }
     return session;
+  }
+
+  /// Сессия не вернулась вызывающему: серверы MCP, подключённые в `_open`,
+  /// закрываются, иначе их процессы пережили бы неудавшийся `session/new`.
+  Future<void> _abandon(_Session session) async {
+    _sessions.remove(session);
+    try {
+      await session._mcp.close();
+    } on Object catch (error, stack) {
+      session._logger.log(
+        LogLevel.warning,
+        'mcp.server.failed',
+        fields: {
+          'session_id': session.id.value,
+          'reason': 'closing MCP servers failed: ${error.runtimeType}',
+        },
+        error: error.runtimeType,
+        stack: stack,
+      );
+    }
   }
 
   @override
@@ -141,6 +184,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     SessionHostPorts ports, {
     ModelRef? model,
     String? cwd,
+    List<McpServerConfig> mcpServers = const [],
   }) async {
     final snapshot = await _store.open(id);
     final restored = buildLlmContext(snapshot);
@@ -174,35 +218,41 @@ final class AgentRuntimeImpl implements AgentRuntime {
       ports: ports,
       extraBeforeToolCall: ports.extraBeforeToolCall,
       extraAfterToolCall: ports.extraAfterToolCall,
+      mcpServers: mcpServers,
     );
-    await session._heal();
-    if (restored.model case final journal?
-        when journal.provider != chosen.provider ||
-            journal.modelId != chosen.id) {
-      session._logger.log(
-        LogLevel.warning,
-        'session.model.not_restored',
-        fields: {
-          'session_id': id.value,
-          'journal': '${journal.provider}/${journal.modelId}',
-          'model': '${chosen.provider}/${chosen.id}',
-        },
-      );
-      await session._writer.append(
-        (id, parent, at) => _modelChange(id, parent, at, chosen),
-      );
-    }
-    session._restoreHistory();
-    if (cwd != null && cwd != header) {
-      await session._writer.append(
-        (id, parent, at) => CustomRecord(
-          id: id,
-          parentId: parent,
-          timestamp: at,
-          customType: 'codelab.cwd_changed',
-          data: {'from': header, 'to': cwd},
-        ),
-      );
+    try {
+      await session._heal();
+      if (restored.model case final journal?
+          when journal.provider != chosen.provider ||
+              journal.modelId != chosen.id) {
+        session._logger.log(
+          LogLevel.warning,
+          'session.model.not_restored',
+          fields: {
+            'session_id': id.value,
+            'journal': '${journal.provider}/${journal.modelId}',
+            'model': '${chosen.provider}/${chosen.id}',
+          },
+        );
+        await session._writer.append(
+          (id, parent, at) => _modelChange(id, parent, at, chosen),
+        );
+      }
+      session._restoreHistory();
+      if (cwd != null && cwd != header) {
+        await session._writer.append(
+          (id, parent, at) => CustomRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            customType: 'codelab.cwd_changed',
+            data: {'from': header, 'to': cwd},
+          ),
+        );
+      }
+    } on Object {
+      await _abandon(session);
+      rethrow;
     }
     return session;
   }
@@ -225,6 +275,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
 
   @override
   Future<void> dispose() async {
+    _shutdown.cancel(const ShutdownCancel());
     for (final session in _sessions) {
       await session.close();
     }
@@ -256,10 +307,28 @@ final class AgentRuntimeImpl implements AgentRuntime {
     required SessionHostPorts ports,
     List<BeforeToolCallHook> extraBeforeToolCall = const [],
     List<AfterToolCallHook> extraAfterToolCall = const [],
+    List<McpServerConfig> mcpServers = const [],
   }) async {
     final id = snapshot.header.id;
     final env = await BoundedEnv.wrap(ports.env ?? services.baseEnv, cwd);
     final logger = ports.logger ?? services.logger;
+    // Реестр сессии: копия базового плюс MCP-инструменты её серверов, чужие
+    // сессии их не видят (design.md change `add-agent-mcp-client`, D6).
+    final sessionRegistry = ToolRegistry();
+    for (final tool in registry.tools) {
+      sessionRegistry.register(tool);
+    }
+    final mcp = _McpState(
+      baseNames: {for (final tool in registry.tools) tool.name},
+    );
+    await _connectMcp(
+      id: id,
+      cwd: cwd,
+      servers: mcpServers,
+      logger: logger,
+      registry: sessionRegistry,
+      state: mcp,
+    );
     final tools = ToolServices(clock: services.clock, logger: logger);
     final gate = profile.isOn(HostCapability.interactiveApproval)
         ? ports.gate ?? services.gate
@@ -280,7 +349,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         model: model,
         stream: stream,
         executor: ToolCallExecutor(
-          registry: registry,
+          registry: sessionRegistry,
           env: env,
           services: tools,
         ),
@@ -288,13 +357,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
         ids: services.ids,
         budget: config.budget,
         beforeToolCall: [
-          policy.asHook(registry.lookup),
+          policy.asHook(sessionRegistry.lookup),
           ...extraBeforeToolCall,
         ],
         afterToolCall: extraAfterToolCall,
         // Смена модели или усилия посреди хода действует со следующего шага
         // (§13.6): идущий запрос не прерывается.
-        prepareNextStep: (_) async => session._takeModelUpdate(),
+        prepareNextStep: (_) async => session._takeStepUpdate(),
         approvalWait: tools.approvalWait,
         logger: logger,
         // Без capability compaction — поведение этапа 2: размер не
@@ -305,8 +374,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
             : null,
         contextWindowCap: config.compaction.contextWindowCap,
       ),
-      systemPrompt: _systemPrompt(cwd, mode),
-      tools: registry.tools,
+      systemPrompt: _systemPrompt(cwd, mode, sessionRegistry, mcp),
+      tools: sessionRegistry.tools,
     );
     // План эмитится через очередь агента: PlanUpdated приходит подписчикам
     // между ToolCallStarted и ToolCallFinished своего вызова (design.md
@@ -324,10 +393,11 @@ final class AgentRuntimeImpl implements AgentRuntime {
       policy: policy,
       tools: tools,
       env: env,
-      registry: registry,
+      registry: sessionRegistry,
+      mcp: mcp,
       services: services,
       logger: logger,
-      compose: _systemPrompt,
+      compose: (cwd, mode) => _systemPrompt(cwd, mode, sessionRegistry, mcp),
       snapshot: snapshot,
       stream: stream,
       compaction: compaction ? config.compaction : null,
@@ -355,16 +425,196 @@ final class AgentRuntimeImpl implements AgentRuntime {
 
   /// Системный промпт сессии (§11.5): собирается при создании и загрузке
   /// сессии и при смене режима; дата — по часам хоста.
-  String _systemPrompt(String cwd, ModeId mode) => composeSystemPrompt(
+  String _systemPrompt(
+    String cwd,
+    ModeId mode,
+    ToolRegistry sessionRegistry,
+    _McpState mcp,
+  ) => composeSystemPrompt(
     PromptInputs(
       cwd: cwd,
       platform: services.platform,
       today: services.clock.now(),
       mode: mode,
       profile: profile,
-      toolNames: {for (final tool in registry.tools) tool.name},
+      toolNames: {for (final tool in sessionRegistry.tools) tool.name},
+      mcpServers: mcp.summaries,
     ),
   );
+
+  /// Подключает MCP-серверы сессии до возврата сессии (D6): слияние
+  /// конфигурации и клиента, фильтр по capability `mcp`, подключение
+  /// коннектором, регистрация инструментов в реестре сессии.
+  Future<void> _connectMcp({
+    required SessionId id,
+    required String cwd,
+    required List<McpServerConfig> servers,
+    required Logger logger,
+    required ToolRegistry registry,
+    required _McpState state,
+  }) async {
+    final all = [...config.mcpServers, ...servers];
+    if (all.isEmpty) {
+      return;
+    }
+    void skipped(McpServerConfig server, String reason) => logger.log(
+      LogLevel.info,
+      'mcp.server.skipped',
+      fields: {
+        'session_id': id.value,
+        'server': server.name,
+        'transport': server.transport,
+        'reason': reason,
+      },
+    );
+
+    // Серверы клиента заменяют серверы конфига с тем же именем; дубликаты и
+    // пустые имена внутри источника пропускаются (§13.4, шаг 2).
+    final clientNames = {for (final s in servers) s.name};
+    final merged = <McpServerConfig>[];
+    for (final (source, list) in [
+      (McpServerOrigin.config, config.mcpServers),
+      (McpServerOrigin.session, servers),
+    ]) {
+      final seen = <String>{};
+      for (final server in list) {
+        if (server.name.isEmpty) {
+          skipped(server, 'empty server name');
+        } else if (!seen.add(server.name)) {
+          skipped(server, 'duplicate server name in the same source');
+        } else if (source == McpServerOrigin.config &&
+            clientNames.contains(server.name)) {
+          skipped(
+            server,
+            'replaced by a server of the client with the same name',
+          );
+        } else {
+          merged.add(server);
+        }
+      }
+    }
+
+    final connector = services.mcp;
+    final capability = profile.states[HostCapability.mcp];
+    final accepted = <McpServerConfig>[];
+    for (final server in merged) {
+      switch (capability) {
+        case CapabilityOff(:final reason):
+          skipped(server, reason);
+        case CapabilityTransport(:final transports, :final reason)
+            when !transports.contains(server.transport):
+          skipped(
+            server,
+            'transport ${server.transport} is off in profile '
+            '${profile.name}: $reason',
+          );
+        case _ when connector == null:
+          skipped(server, 'сервис MCP не передан');
+        case _:
+          accepted.add(server);
+      }
+    }
+    if (accepted.isEmpty || connector == null) {
+      return;
+    }
+    try {
+      final connected = await connector.connect(
+        McpConnectRequest(
+          sessionId: id,
+          cwd: cwd,
+          servers: accepted,
+          reservedNames: state.baseNames,
+          logger: logger,
+          cancel: _shutdown.token,
+        ),
+      );
+      state.apply(connected, registry, logger, id);
+    } on Object catch (error, stack) {
+      // Сбой коннектора не должен ронять `session/new` (§13.4, шаг 4).
+      logger.log(
+        LogLevel.warning,
+        'mcp.server.failed',
+        fields: {
+          'session_id': id.value,
+          'server': accepted.map((s) => s.name).join(','),
+          'transport': accepted.map((s) => s.transport).toSet().join(','),
+          'reason': 'MCP connector failed: ${error.runtimeType}',
+        },
+        error: error.runtimeType,
+        stack: stack,
+      );
+    }
+  }
+}
+
+/// MCP-часть состояния сессии: подключённые серверы и имена их
+/// инструментов в реестре сессии (design.md change `add-agent-mcp-client`,
+/// D6).
+final class _McpState {
+  _McpState({required this.baseNames});
+
+  /// Имена базового реестра: инструмент MCP с таким именем не регистрируется.
+  final Set<String> baseNames;
+  McpSessionTools? tools;
+  var summaries = const <McpServerSummary>[];
+  var _names = <String>[];
+
+  /// Первая регистрация после подключения.
+  void apply(
+    McpSessionTools connected,
+    ToolRegistry registry,
+    Logger logger,
+    SessionId id,
+  ) {
+    tools = connected;
+    _replace(connected.tools, connected.servers, registry, logger, id);
+  }
+
+  /// Ожидающее `tools/list_changed`; `true` — набор сессии изменился.
+  bool takeUpdate(ToolRegistry registry, Logger logger, SessionId id) {
+    final update = tools?.takeUpdate();
+    if (update == null) {
+      return false;
+    }
+    _replace(update.tools, update.servers, registry, logger, id);
+    return true;
+  }
+
+  void _replace(
+    List<AgentTool> next,
+    List<McpServerSummary> nextSummaries,
+    ToolRegistry registry,
+    Logger logger,
+    SessionId id,
+  ) {
+    for (final name in _names) {
+      registry.unregister(name);
+    }
+    final accepted = <AgentTool>[];
+    for (final tool in next) {
+      // Защита в глубину: коннектор уже проверил коллизии, но порт открыт
+      // для других реализаций (HOST-5, TOOL-10).
+      final reason = !isMcpToolName(tool.name)
+          ? 'name has no mcp__ prefix'
+          : baseNames.contains(tool.name) || registry.lookup(tool.name) != null
+          ? 'name collides with a built-in tool'
+          : null;
+      if (reason != null) {
+        logger.log(
+          LogLevel.warning,
+          'mcp.tool.invalid',
+          fields: {'session_id': id.value, 'tool': tool.name, 'reason': reason},
+        );
+        continue;
+      }
+      registry.register(tool);
+      accepted.add(tool);
+    }
+    _names = [for (final tool in accepted) tool.name];
+    summaries = List.unmodifiable(nextSummaries);
+  }
+
+  Future<void> close() async => tools?.close();
 }
 
 final class _Session implements AgentSession {
@@ -380,6 +630,7 @@ final class _Session implements AgentSession {
     required ToolServices tools,
     required ExecutionEnv env,
     required ToolRegistry registry,
+    required _McpState mcp,
     required AgentCoreServices services,
     required Logger logger,
     required String Function(String cwd, ModeId mode) compose,
@@ -397,6 +648,7 @@ final class _Session implements AgentSession {
        _tools = tools,
        _env = env,
        _registry = registry,
+       _mcp = mcp,
        _services = services,
        _logger = logger,
        _compose = compose,
@@ -429,6 +681,7 @@ final class _Session implements AgentSession {
   final ToolServices _tools;
   final ExecutionEnv _env;
   final ToolRegistry _registry;
+  final _McpState _mcp;
   final AgentCoreServices _services;
   final Logger _logger;
   late final SessionWriter _writer;
@@ -503,10 +756,32 @@ final class _Session implements AgentSession {
     }
   }
 
-  Future<StepUpdate?> _takeModelUpdate() async {
+  /// Граница шага: новая модель и новый набор MCP-инструментов действуют со
+  /// следующего запроса, внутри пакета вызовов набор не меняется (D6).
+  Future<StepUpdate?> _takeStepUpdate() async {
     final model = _pendingModel;
     _pendingModel = null;
-    return model == null ? null : StepUpdate(model: model);
+    final mcpChanged = _applyMcpUpdate();
+    if (model == null && !mcpChanged) {
+      return null;
+    }
+    return StepUpdate(
+      model: model,
+      tools: mcpChanged ? _registry.tools : null,
+      systemPrompt: mcpChanged ? _agent.systemPrompt : null,
+    );
+  }
+
+  /// Забирает ожидающее обновление MCP-инструментов: реестр сессии, набор
+  /// агента и системный промпт (секция `mcp`, §11.5).
+  bool _applyMcpUpdate() {
+    if (!_mcp.takeUpdate(_registry, _logger, id)) {
+      return false;
+    }
+    _agent
+      ..tools = _registry.tools
+      ..systemPrompt = _compose(cwd, _mode);
+    return true;
   }
 
   @override
@@ -535,6 +810,8 @@ final class _Session implements AgentSession {
     _policy.clearTurnGrants();
     _tools.approvalWait.reset();
     _ended = null;
+    // Между ходами изменение набора применяется перед началом хода (D6).
+    _applyMcpUpdate();
     cancel?.onCancel.then((_) => _agent.abort(cancel.reason));
     await _agent.prompt([
       UserMessage(content, timestamp: _services.clock.now()),
@@ -574,6 +851,22 @@ final class _Session implements AgentSession {
     _backgroundCancel?.cancel(const ShutdownCancel());
     await _agent.waitForIdle();
     await _background;
+    // Транспорты MCP закрываются после простоя хода: идущий вызов успевает
+    // получить отмену (design.md change `add-agent-mcp-client`, D6).
+    try {
+      await _mcp.close();
+    } on Object catch (error, stack) {
+      _logger.log(
+        LogLevel.warning,
+        'mcp.server.failed',
+        fields: {
+          'session_id': id.value,
+          'reason': 'closing MCP servers failed: ${error.runtimeType}',
+        },
+        error: error,
+        stack: stack,
+      );
+    }
     await _services.sessions.close(id);
     if (!_live.isClosed) {
       await _live.close();

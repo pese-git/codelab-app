@@ -1,4 +1,6 @@
 import '../host/host_profile.dart';
+import '../mcp/mcp_connector.dart';
+import '../mcp/mcp_tool_name.dart';
 import '../permissions/modes.dart';
 import '../tools/truncate.dart';
 import 'prompts.g.dart';
@@ -24,7 +26,9 @@ final class PromptInputs {
     required this.mode,
     required this.profile,
     required Set<String> toolNames,
-  }) : toolNames = Set.unmodifiable(toolNames);
+    List<McpServerSummary> mcpServers = const [],
+  }) : toolNames = Set.unmodifiable(toolNames),
+       mcpServers = List.unmodifiable(mcpServers);
 
   final String cwd;
 
@@ -36,6 +40,12 @@ final class PromptInputs {
   final ModeId mode;
   final HostProfile profile;
   final Set<String> toolNames;
+
+  /// Подключённые MCP-серверы сессии и число их включённых инструментов
+  /// (`McpSessionTools.servers`, §10.3); в секцию `mcp` входят серверы с
+  /// хотя бы одним инструментом (PR-6; design.md change
+  /// `add-agent-mcp-client`, D12).
+  final List<McpServerSummary> mcpServers;
 }
 
 /// Лимит записей `ls` для секции `tools/listing`.
@@ -51,6 +61,10 @@ List<(String, String)> _sections(PromptInputs inputs) {
   final shell = inputs.profile.isOn(HostCapability.shellExec);
   final maxLines = '$defaultMaxLines';
   final maxKb = '${defaultMaxBytes ~/ 1024}';
+  final servers = [
+    for (final s in inputs.mcpServers)
+      if (s.toolCount > 0) s,
+  ];
   return [
     (
       Prompts.systemBase.id,
@@ -86,6 +100,19 @@ List<(String, String)> _sections(PromptInputs inputs) {
       ),
     if (on(Prompts.toolsPlan))
       (Prompts.toolsPlan.id, Prompts.toolsPlan.render({})),
+    // Шаг 9 §11.5: секция `mcp` только при включённой capability и хотя бы
+    // одном сервере с инструментами, строки — в порядке регистрации.
+    if (inputs.profile.isOn(HostCapability.mcp) && servers.isNotEmpty)
+      (
+        Prompts.mcp.id,
+        Prompts.mcp.render({
+          'servers': [
+            for (final server in servers)
+              '- ${server.name}: ${server.toolCount} tools, '
+                  'prefix ${mcpServerPrefix(server.name)}',
+          ].join('\n'),
+        }),
+      ),
   ];
 }
 

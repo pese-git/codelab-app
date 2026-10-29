@@ -87,7 +87,18 @@ const rules = [
       'package:codelab_ui/',
     ],
   ),
-  // stage 8: codelab_agent_mcp — webUnsafe
+  // MCP-клиент агента — web-безопасен, `lib/testing.dart` тоже; ему нельзя
+  // ACP, клиентские пакеты и IO-пакет агента (PKG-3; design.md change
+  // `add-agent-mcp-client`, D14).
+  PackageRule(
+    'packages/dart/codelab_agent_mcp',
+    forbidden: [
+      ...webUnsafe,
+      'package:codelab_acp_',
+      'package:codelab_client_',
+      'package:codelab_agent_io/',
+    ],
+  ),
   // Терминальный клиент — чистый Dart и composition root: dart:io и
   // IO-транспорты разрешены, Flutter, UI и ядро агента — нет (design.md change
   // `add-codelab-cli`, D3).

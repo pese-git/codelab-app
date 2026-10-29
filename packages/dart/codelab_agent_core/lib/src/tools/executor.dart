@@ -5,6 +5,7 @@ import '../env/execution_env.dart';
 import '../llm/messages.dart';
 import '../loop/agent_events.dart';
 import '../loop/loop_config.dart';
+import '../mcp/mcp_tool_name.dart';
 import '../util/logger.dart';
 import '../util/posix_path.dart';
 import '../util/result.dart';
@@ -314,7 +315,12 @@ final class ToolCallExecutor implements ToolExecutor {
     if (!tool.truncatesOutput) {
       result = _limit(result);
     }
-    if (tool.outputTrust(args) == ContentTrust.untrusted) {
+    // Защита в глубину (P-16, TOOL-10): результат любого инструмента с
+    // именем `mcp__…` огораживается независимо от его `outputTrust` — сервер
+    // MCP не может объявить себя доверенным (design.md change
+    // `add-agent-mcp-client`, D7; `core/mcp-tool-cannot-declare-trusted`).
+    if (tool.outputTrust(args) == ContentTrust.untrusted ||
+        isMcpToolName(tool.name)) {
       result = _fence(result, tool.name);
     }
     for (final hook in handle.invocation.afterToolCall) {
