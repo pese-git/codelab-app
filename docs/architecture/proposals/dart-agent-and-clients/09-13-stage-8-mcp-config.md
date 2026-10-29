@@ -31,6 +31,13 @@
    Регистрация — только через `ToolRegistry` и `buildAgentCore` (capability `mcp`).
 4. **8.4. ACP:** параметр `mcpServers` из `session/new` и `session/load` передаётся в сессию;
    `agentCapabilities.mcpCapabilities` объявляет поддерживаемые транспорты.
+
+   **Итог 8.1–8.4.** Сделано change `add-agent-mcp-client` (итерации 0–4): свой клиент dual-era
+   в `codelab_agent_mcp` (D1, D2), stdio-транспорт в `codelab_agent_io` (D9), streamable HTTP
+   обеих эпох (D10), проекция в `AgentTool` (D7), подключение `mcpServers` в ACP-адаптере (D11).
+   Отступление: в `codelab-agent serve --ws` MCP выключен (D3, §13.15 документа ядра). Серверы
+   из конфигурации ядро принимает, но читает их только change `add-agent-configuration` (8.5).
+   Отметки DoD — ниже.
 5. **8.5. Конфигурация:** модель и валидация — `packages/dart/codelab_agent_core/lib/src/config/core_config.dart` (agent-core-architecture §1.3)
    (`CoreConfig`, `validate()` → список `ConfigIssue(path, message)`); загрузка —
    `packages/dart/codelab_agent_io/lib/src/config/config_loader.dart`. Порядок слоёв: значения по
@@ -142,13 +149,15 @@ stdio MUST) записано в §13.15, включение явным флаг�
 
 **Definition of Done.**
 
-* `packages/dart/codelab_agent_mcp/test/mcp_tool_goes_through_policy_test.dart: MCP tool is not executed without a permission decision` (закрывает F5.1).
-* `packages/dart/codelab_agent_mcp/test/streamable_http_test.dart` на `MockClient`.
+* `packages/dart/codelab_agent_mcp/test/mcp_tool_goes_through_policy_test.dart: MCP tool is not executed without a permission decision` (закрывает F5.1). **Выполнено** (8.3, change `add-agent-mcp-client`).
+* `packages/dart/codelab_agent_mcp/test/streamable_http_test.dart` на `MockClient`. **Выполнено** (8.1, обе эпохи MCP; change `add-agent-mcp-client`).
 * `packages/dart/codelab_agent_io/test/config/config_loader_test.dart: invalid config reports key path and line` — битый конфиг даёт ошибку с путём ключа, а не исключение при первом ходе.
-* Фикстуры `acp/session-new-with-mcp`, `acp/available-commands-no-tools` зелёные.
-* `melos run guard`: `codelab_agent_mcp` без `dart:io`.
-* Чек-лист библиотеки MCP заполнен в `design.md`, решение записано.
-* Все Must-строки матрицы этапа 8 зелёные; критерий — сценарий строки в матрице:
+* Фикстуры `acp/session-new-with-mcp`, `acp/available-commands-no-tools` зелёные. `acp/session-new-with-mcp` — **выполнено** (8.4, change `add-agent-mcp-client`); `acp/available-commands-no-tools` — задачи 8.6–8.8.
+* `melos run guard`: `codelab_agent_mcp` без `dart:io`. **Выполнено**: правило пакета в `packages/dart/codelab_architecture_tests/test/support/rules.dart`, allowlist — `pubspec_allowlist_test.dart` (D14 change `add-agent-mcp-client`).
+* Чек-лист библиотеки MCP заполнен в `design.md`, решение записано. **Выполнено**: D1 change `add-agent-mcp-client` — у каждого кандидата есть «нет», свой минимальный клиент; `THIRD_PARTY_NOTICES.md` не меняется.
+* Все Must-строки матрицы этапа 8 зелёные; критерий — сценарий строки в матрице. Строки P-01,
+  P-16, E-02, E-03, E-05, R-24 закрыты change `add-agent-mcp-client` (файлы тестов и фикстур —
+  в колонке «Критерий приёмки» матрицы; серверы конфигурации в E-02 и E-03 — после 8.5):
 
   | Строка | Проверка | Критерий (кратко) |
   |---|---|---|
