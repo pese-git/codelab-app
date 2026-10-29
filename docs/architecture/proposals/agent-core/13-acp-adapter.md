@@ -67,7 +67,7 @@ final class AcpServerConfig {
 | `promptCapabilities.image` | `true` | картинки хранятся в транскрипте; для модели без `image` адаптер провайдера ставит плейсхолдер (§2.5) |
 | `promptCapabilities.audio` | `false` | аудио ни один адаптер провайдера MVP не передаёт |
 | `promptCapabilities.embeddedContext` | `true` | `resource` с `text` превращается в текстовый блок с путём (§13.4) |
-| `mcpCapabilities.http` | `true` при capability `mcp` с транспортом `http`; до этапа 8 (MCP) — `false` | |
+| `mcpCapabilities.http` | `true`, если в `plan.profile` capability `mcp` — `CapabilityTransport` с `http` (профили `agent-serve`, `embedded-cli`); иначе `false` | MCP-клиент (change `add-agent-mcp-client`, D11) подключает streamable HTTP. Флага stdio в ACP нет: stdio обязателен для любого агента (`03-Session Setup.md`), поэтому профиль без stdio — отклонение §13.15. Ожидаемый кадр `acp/initialize-capabilities` ссылается на `02-Initialization.md#mcp-capabilities` |
 | `mcpCapabilities.sse` | `false` | транспорт SSE устарел в MCP; клиент MVP умеет stdio и streamable HTTP |
 | `sessionCapabilities.list` | `{}` | `session/list` (§13.5); без `sessionPersistence` — поле `list` отсутствует, `sessionCapabilities` — `{}` |
 | `authMethods` | `[]`; после MVP при `services.login != null` — по методу `codelab-login-<id>` на провайдер с входом по подписке (§17.10.6) | аутентификации на уровне ACP нет (§13.3) |
@@ -118,14 +118,26 @@ final class AcpServerConfig {
 1. `cwd` не абсолютный → `-32602` «cwd must be an absolute path». Каталог не существует
    (проверка через env) → `-32602`.
 2. `mcpServers`: каждый декодируется моделью `McpServer` (`McpServerStdio`, `McpServerHttp`,
-   `McpServerSse`). Транспорт, не разрешённый профилем (stdio в `mobile`, sse везде), не ошибка
-   запроса: сервер пропускается, лог `mcp.server.skipped` с причиной. Серверы из конфига (§15)
-   добавляются к серверам клиента; при совпадении `name` побеждает сервер клиента.
+   `McpServerSse`, а для неизвестного `type` — `McpServer.unknown` с сохранением `raw`:
+   совместимость вперёд, иначе весь запрос получил бы `-32602`; D11 change
+   `add-agent-mcp-client`). Адаптер отображает их в `McpServerConfig` и передаёт в
+   `SessionSpec.mcpServers`:
+   * `McpServerStdio` → stdio-сервер (`origin: session`), `McpServerHttp` → HTTP-сервер с
+     порядком заголовков;
+   * `McpServerSse` не отображается: `mcp.server.skipped {transport: sse, reason: "transport sse
+     is not supported"}` (SSE объявлен устаревшим в MCP);
+   * неизвестный `type` не отображается: `mcp.server.skipped {transport: <type>, reason:
+     "unknown transport"}`;
+   * транспорт, не разрешённый профилем (stdio в `mobile`), пропускает уже ядро по тому же
+     событию.
+
+   Пропуск не ошибка запроса: сессия создаётся. Серверы из конфига (§15) добавляются к серверам
+   клиента; при совпадении `name` побеждает сервер клиента.
 3. `runtime.createSession(SessionSpec(cwd, mode: config.permissions.mode ?? profile.defaultMode (§10.5), model: config.defaultModel,
    env: из clientCapabilities, gate: AcpPermissionGate(connection)))`. Сессия пишет заголовок и
    `model_change`.
-4. MCP-серверы подключаются параллельно, не дольше `mcpConnectTimeout` (10 с) каждый; сбой
-   сервера — лог `mcp.server.failed`, сессия создаётся без его инструментов. После MVP сбой не
+4. MCP-серверы подключаются параллельно, не дольше `mcpConnectTimeout` (10 с) каждый; ответ
+   `session/new` ждёт подключения (уведомлений до ответа нет, ACP-8); сбой сервера — лог `mcp.server.failed`, сессия создаётся без его инструментов. После MVP сбой не
    окончателен: сервер переходит в `failed` и переподключается с задержкой 1…30 с, пока жива
    сессия; инструменты появляются на границе шага после первого успешного подключения (§17.5.7).
 5. Ответ `NewSessionResponse(sessionId, modes, configOptions)`.
@@ -185,9 +197,11 @@ final class AcpServerConfig {
    спецификация: рабочая папка задаётся клиентом), в журнал пишется `custom` с
    `customType: "codelab.cwd_changed"`; граница `BoundedEnv` — по новому `cwd`.
 3. Сессия уже открыта в этом процессе:
-   a. ход не идёт → открыть заново не нужно, перейти к шагу 5 с текущим снимком;
+   a. ход не идёт → открыть заново не нужно, перейти к шагу 5 с текущим снимком; набор
+      `mcpServers` запроса применяется до ответа: `AgentSession.setMcpServers(servers)`;
    b. ход идёт, его соединение в состоянии detached (§13.10) → **переподключение**: сессия
-      переходит к новому соединению, шаги 5–8, затем шаг 9;
+      переходит к новому соединению, шаги 5–8, затем шаг 9; `setMcpServers` вызывается сразу,
+      но набор применяется после `TurnEnded`: инструменты посреди хода не меняются;
    c. ход идёт в другом живом соединении → в MVP `-32602` с `data: {"codelab": {"reason":
       "sessionBusy"}}`. После MVP (§17.6.9) соединение подключается к сессии **вторым клиентом**:
       оно добавляется в множество подключённых, получает реплей (шаги 5–7), затем буфер событий
@@ -201,6 +215,11 @@ final class AcpServerConfig {
    ремонта на диске, `healInterruptedTurn`, `SpillService.attach` и MCP, SESM-12), ответ несёт
    `_meta.codelab.readOnly: {owner}`. Затем `open()` с ремонтом (§8.6), `healInterruptedTurn`
    (§8.8), `SpillService.attach` (§17.4.5), подключение MCP (как в `session/new`).
+
+   `setMcpServers` (шаги 3a и 3b) сравнивает серверы по `name` и параметрам с серверами
+   `origin: session`: совпавшие остаются, исчезнувшие закрываются, новые подключаются; серверы
+   конфига не трогаются. Иначе клиент, пересоздавший соединение с другим набором серверов,
+   получил бы инструменты прежнего клиента (D11 change `add-agent-mcp-client`).
    После MVP большой или сегментированный журнал открывается `openWindowed` (§17.13.2).
 5. Реплей `buildReplay(snapshot)` по активной ветке в порядке записей:
    * после MVP при `window.replayFromPathIndex > 0` — первым маркер `agent_message_chunk`
@@ -941,7 +960,7 @@ sequenceDiagram
 
 | Требование ACP | Отклонение | Почему и до каких пор |
 |---|---|---|
-| `03-Session Setup.md`: агент MUST подключать MCP-серверы по stdio | серверы из `mcpServers` пропускаются с логом `mcp.server.skipped` | MCP — этап 8 (§13.4, шаг 2); в профиле `mobile` stdio пропускается и после этапа 8 — запуск процессов там недоступен |
+| `03-Session Setup.md`: агент MUST подключать MCP-серверы по stdio | только профиль без транспорта `stdio` в capability `mcp` (`mobile`) пропускает серверы с логом `mcp.server.skipped` | запуск процессов там недоступен. В профилях `agent-serve` и `embedded-cli` stdio-серверы подключаются (change `add-agent-mcp-client`, R-24); пропускаются только `sse` и неизвестный `type` (§13.4, шаг 2) |
 | `03-Session Setup.md`: `cwd` MUST быть абсолютным путём — на Windows это `C:\…` | абсолютным считается только путь с `/`; `C:\…` — `-32602` | ядро в MVP работает только с POSIX-путями (§4.4, §4.7); перевод путей Windows на границе ACP — открытый вопрос §16.3, до поддержки Windows-хоста |
 
 ## 13.16. Как проверить
@@ -952,7 +971,7 @@ sequenceDiagram
 * Contract test: `AcpClientApplication` codelab-app через `InProcessAcpLink()` (копирование сообщений по умолчанию) против адаптера на scripted LLM.
 * Fuzz-тест кадров: мусор, неполный JSON, массив вместо объекта, неизвестный метод, ответ на неизвестный id — соединение живо, ход продолжается (ACP-4).
 * Тест порядка: медленный транспорт и 1 000 дельт — ответ `session/prompt` последний кадр хода (ACP-3).
-* Тест `session/new`: уведомлений до ответа нет (ACP-8); stdio-MCP в профиле `mobile` пропущен с логом.
+* Тест `session/new`: уведомлений до ответа нет (ACP-8); stdio-MCP в профиле `mobile` пропущен с логом; `sse` и неизвестный `type` пропущены с `mcp.server.skipped`, сессия создана; повторный `session/load` открытой сессии применяет новый набор серверов (D11).
 * Тест отсоединения (`AcpAgentServer` с `detachGrace` по умолчанию): WebSocket закрыт во время ожидания разрешения → через 30 с ход `cancelled`, журнал содержит `rejected`; повтор с переподключением в пределах окна → новый `session/request_permission` с тем же `toolCallId`.
 * Тест `terminal/*`: таймаут `exec`, отмена, ошибка `wait_for_exit` → `release` всегда (ACP-9).
 * Тест кодов выхода `codelab -p` на каждую строку таблицы §13.10.

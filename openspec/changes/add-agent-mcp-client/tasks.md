@@ -15,21 +15,21 @@
 
 ## 0. Источник истины и документы (без кода)
 
-- [ ] 0.1 `[agent]` Сверить D2–D10 с нормативными текстами в ветке, без скачивания нового: modern `2026-07-28` (`docs/protocols/mcp/specification/`: `basic/index.md`, `basic/versioning.md`, `basic/transports/{stdio,streamable-http}.md`, `basic/patterns/{cancellation,subscriptions,mrtr}.md`, `server/{discover,tools}.md`, `server/utilities/pagination.md`, `schema.md`) и legacy `2025-11-25` (`docs/protocols/mcp/specification/2025-11-25/`: `basic/lifecycle.md`, `basic/transports.md`, `basic/utilities/{cancellation,ping}.md`, `server/tools.md`, `server/utilities/pagination.md`, `schema.md`, `changelog.md`). Расхождения — правкой design.md до кода групп 3 и 9.
-- [ ] 0.2 `[agent]` Точечные правки документа ядра:
+- [x] 0.1 `[agent]` Сверить D2–D10 с нормативными текстами в ветке, без скачивания нового: modern `2026-07-28` (`docs/protocols/mcp/specification/`: `basic/index.md`, `basic/versioning.md`, `basic/transports/{stdio,streamable-http}.md`, `basic/patterns/{cancellation,subscriptions,mrtr}.md`, `server/{discover,tools}.md`, `server/utilities/pagination.md`, `schema.md`) и legacy `2025-11-25` (`docs/protocols/mcp/specification/2025-11-25/`: `basic/lifecycle.md`, `basic/transports.md`, `basic/utilities/{cancellation,ping}.md`, `server/tools.md`, `server/utilities/pagination.md`, `schema.md`, `changelog.md`). Расхождения — правкой design.md до кода групп 3 и 9.
+- [x] 0.2 `[agent]` Точечные правки документа ядра:
   - `agent-core/01-layers-and-packages.md` §1.2–§1.3 — каталог `codelab_agent_core/lib/src/mcp/`, порт транспорта в ядре, раскладка `codelab_agent_mcp` (D3);
   - `06-tools.md` §6.4 — одна ограда, правило префикса `mcp__` в точке исполнения, проекция содержимого, обрезка описания до 2048 символов, тексты ошибок, коллизия по порядку списка (D6–D8);
   - `10-core-assembly-and-profiles.md` §10.3, §10.8 — `AgentCoreServices.mcp: McpConnector?` вместо `McpTransportFactory?` (D3);
   - `11-prompts.md` — полный текст `mcp.md` (D12);
   - `12-observability-and-errors.md` §12.2 — события D13.
-- [ ] 0.3 `[protocol]` Точечные правки:
+- [x] 0.3 `[protocol]` Точечные правки:
   - `agent-core/13-acp-adapter.md`:
     - §13.2 — `mcpCapabilities.http` по плану;
     - §13.4, шаги 2–4 — отображение, `sse` и неизвестный `type` (`unknown transport`, D11);
     - §13.5 — `setMcpServers` открытой сессии (D11);
     - §13.15 — отклонение сужается до профиля без stdio;
   - `14-golden-fixtures.md` — `setup.mcp`, `after.mcpCalls`, состав MCP-фикстур (D15).
-- [ ] 0.4 `[agent]` `09-13-stage-8-mcp-config.md`:
+- [x] 0.4 `[agent]` `09-13-stage-8-mcp-config.md`:
   - задача 8.1 — порт транспорта в ядре (D3);
   - DoD этапа и критерий E-05 — «коллизия имени отключает сервер с причиной, называющей оба источника, сессия создаётся» вместо «ошибка сборки» (D6, решение пользователя 2026-10-29);
   - ссылка на этот change.
@@ -92,6 +92,7 @@
   - **legacy-версии:** ответ `2025-06-18` и `2025-03-26` принимается, `2024-11-05` → `mcp.server.failed`;
   - **нет общей версии:** `-32022` с `data.supported: ["2027-01-01"]` → без отката на `initialize`;
   - таймаут `initialize` без `notifications/cancelled`; 100 страниц; legacy-`ping`; другой запрос сервера → `-32601`;
+  - пустая строка как `nextCursor` — следующая страница, а не конец; legacy-инструмент с `execution.taskSupport: "required"` при `tasks.requests.tools.call` пропущен с `mcp.tool.invalid`;
   - логи `mcp.server.era` с `probe` каждого исхода;
   - кэш эпохи HTTP по `origin`, повторная проба после неподтверждённого кэша.
 
@@ -228,8 +229,8 @@
 
 - [ ] 9.1 `[agent]` Тест DoD `codelab_agent_mcp/test/streamable_http_test.dart` на `MockClient` / `MockClient.streaming` с HTTP-обработчиком `FakeMcpServer` обеих эпох (agent-mcp-client «Транспорт streamable HTTP», «Эпоха сервера и версия протокола», сценарий «Legacy-сервер по HTTP»):
   - **обе эпохи:** заголовки `POST`, `202` для уведомлений, ответ JSON, ответ SSE с промежуточным уведомлением и keep-alive-комментарием; `307` не выполняется; схема `ftp` → `invalid url`; тело больше 16 МиБ → ошибка;
-  - **modern:** `MCP-Protocol-Version: 2026-07-28`, `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*` из `x-mcp-header` с кодированием `=?base64?…?=`; `-32020` → один `tools/list` и повтор с новым id; нет `Mcp-Session-Id`, GET и `DELETE`; `subscriptions/listen` — долгий поток с `list_changed`; отмена — закрытие потока ответа без POST `notifications/cancelled`;
-  - **проба эпохи:** `400` с телом `-32022` → нет общей версии без отката; `400` с пустым телом, `404`, `405` → откат на `initialize`;
+  - **modern:** `MCP-Protocol-Version: 2026-07-28`, `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*` из `x-mcp-header` с кодированием `=?base64?…?=` (в том числе для значения, похожего на маркер; `null` — без заголовка); инструмент с невалидным `x-mcp-header` исключён из `tools/list` с `mcp.tool.invalid`; `-32020` → один `tools/list` и повтор с новым id; нет `Mcp-Session-Id`, GET и `DELETE`; `subscriptions/listen` — долгий поток с `list_changed`; отмена — закрытие потока ответа без POST `notifications/cancelled`;
+  - **проба эпохи:** `400` (а также `404`, `405`) с телом `-32022` → нет общей версии без отката; `400` с пустым телом, `404`, `405` и `404` с `-32601` → откат на `initialize`;
   - **legacy:** `Mcp-Session-Id` и `MCP-Protocol-Version` (`2025-06-18`) в следующих запросах, без `MCP-Protocol-Version` для `2025-03-26`; GET-поток при `listChanged`, `405` без потока; `404` → `HTTP session expired`; `DELETE` при закрытии; отмена — `notifications/cancelled` и закрытие потока; поток ответа, закрытый после события `id: e1` с `retry: 100`, возобновлён `GET` с `Last-Event-ID: e1` через 100 мс без второго `tools/call`, не больше 5 возобновлений;
   - **обрыв без возобновления:** `tools/call` — `disconnected during the call` без повтора; `tools/list` и `server/discover` — один повтор с новым id.
 
