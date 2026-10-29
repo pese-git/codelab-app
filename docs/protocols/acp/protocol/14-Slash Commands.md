@@ -6,13 +6,13 @@
 
 > Advertise available slash commands to clients
 
-Agents can advertise a set of slash commands that users can invoke. These commands provide quick access to specific agent capabilities and workflows. Commands are run as part of regular [prompt](./prompt-turn) requests where the Client includes the command text in the prompt.
+Agents can advertise a set of slash commands that users can invoke. These commands provide quick access to specific agent capabilities and workflows. Commands are run as part of regular [prompt](https://agentclientprotocol.com/protocol/v1/prompt-turn.md) requests where the Client includes the command text in the prompt.
 
 ## Advertising commands
 
 After creating a session, the Agent **MAY** send a list of available commands via the `available_commands_update` session notification:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "method": "session/update",
@@ -45,31 +45,31 @@ After creating a session, the Agent **MAY** send a list of available commands vi
 }
 ```
 
-<ResponseField name="availableCommands" type="AvailableCommand[]">
-  The list of commands available in this session
-</ResponseField>
+**availableCommands** `AvailableCommand[]`
+
+The list of commands available in this session
 
 ### AvailableCommand
 
-<ResponseField name="name" type="string" required>
-  The command name (e.g., "web", "test", "plan")
-</ResponseField>
+**name** `string` *required*
 
-<ResponseField name="description" type="string" required>
-  Human-readable description of what the command does
-</ResponseField>
+The command name (e.g., "web", "test", "plan")
 
-<ResponseField name="input" type="AvailableCommandInput">
-  Optional input specification for the command
-</ResponseField>
+**description** `string` *required*
+
+Human-readable description of what the command does
+
+**input** `AvailableCommandInput`
+
+Optional input specification for the command
 
 ### AvailableCommandInput
 
 Currently supports unstructured text input:
 
-<ResponseField name="hint" type="string" required>
-  A hint to display when the input hasn't been provided yet
-</ResponseField>
+**hint** `string` *required*
+
+A hint to display when the input hasn't been provided yet
 
 ## Dynamic updates
 
@@ -79,7 +79,7 @@ The Agent can update the list of available commands at any time during a session
 
 Commands are included as regular user messages in prompt requests:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 3,
@@ -99,4 +99,4 @@ Commands are included as regular user messages in prompt requests:
 The Agent recognizes the command prefix and processes it accordingly. Commands may be accompanied by any other user message content types (images, audio, etc.) in the same prompt array.
 
 
-Built with [Mintlify](https://mintlify.com).
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.

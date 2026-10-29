@@ -6,13 +6,13 @@
 
 > Creating and loading sessions
 
-Sessions represent a specific conversation or thread between the [Client](./overview#client) and [Agent](./overview#agent). Each session maintains its own context, conversation history, and state, allowing multiple independent interactions with the same Agent.
+Sessions represent a specific conversation or thread between the [Client](https://agentclientprotocol.com/protocol/v1/overview.md#client) and [Agent](https://agentclientprotocol.com/protocol/v1/overview.md#agent). Each session maintains its own context, conversation history, and state, allowing multiple independent interactions with the same Agent.
 
-Before creating a session, Clients **MUST** first complete the [initialization](./initialization) phase to establish protocol compatibility and capabilities.
+Before creating a session, Clients **MUST** first complete the [initialization](https://agentclientprotocol.com/protocol/v1/initialization.md) phase to establish protocol compatibility and capabilities.
 
-<br />
+If the Agent requires authentication, `session/new` may fail with an `auth_required` error until the Client completes the [authentication flow](https://agentclientprotocol.com/protocol/v1/authentication.md).
 
-```mermaid  theme={null}
+```mermaid theme={null}
 sequenceDiagram
     participant Client
     participant Agent
@@ -33,12 +33,15 @@ sequenceDiagram
         Agent->>Client: session/update
         Note over Agent,Client: All content streamed
         Agent-->>Client: session/load response
+    else
+        Client->>Agent: session/resume (sessionId)
+        Note over Agent: Restore session context
+        Note over Agent: Connect to MCP servers
+        Agent-->>Client: session/resume response
     end
 
     Note over Client,Agent: Ready for prompts
 ```
-
-<br />
 
 ## Creating a Session
 
@@ -47,7 +50,7 @@ Clients create a new session by calling the `session/new` method with:
 * The [working directory](#working-directory) for the session
 * A list of [MCP servers](#mcp-servers) the Agent should connect to
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -68,7 +71,7 @@ Clients create a new session by calling the `session/new` method with:
 
 The Agent **MUST** respond with a unique [Session ID](#session-id) that identifies this conversation:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -80,7 +83,7 @@ The Agent **MUST** respond with a unique [Session ID](#session-id) that identifi
 
 ## Loading Sessions
 
-Agents that support the `loadSession` capability allow Clients to resume previous conversations. This feature enables persistence across restarts and sharing sessions between different Client instances.
+Agents that support the `loadSession` capability allow Clients to resume previous conversations with history replay. This feature enables persistence across restarts and sharing sessions between different Client instances.
 
 ### Checking Support
 
@@ -109,7 +112,7 @@ To load an existing session, Clients **MUST** call the `session/load` method wit
 * [MCP servers](#mcp-servers) to connect to
 * The [working directory](#working-directory)
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -131,9 +134,20 @@ To load an existing session, Clients **MUST** call the `session/load` method wit
 
 The Agent **MUST** replay the entire conversation to the Client in the form of `session/update` notifications (like `session/prompt`).
 
+[Session compactions](https://agentclientprotocol.com/protocol/v1/prompt-turn.md#session-compaction) are
+replayed using the same update, chunk, and patch semantics as live delivery.
+The Client's `session.compaction` capability is required for replay as well as
+live delivery.
+
+Live-only [notices](https://agentclientprotocol.com/protocol/v1/prompt-turn.md#session-notices) are not
+conversation history and **SHOULD NOT** be replayed. If the underlying
+condition is still relevant after loading finishes, the Agent may emit a new
+notice as a new live event, subject to the Client's `session.notices`
+capability.
+
 For example, a user message from the conversation history:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "method": "session/update",
@@ -141,6 +155,7 @@ For example, a user message from the conversation history:
     "sessionId": "sess_789xyz",
     "update": {
       "sessionUpdate": "user_message_chunk",
+      "messageId": "msg_user_8f7a1",
       "content": {
         "type": "text",
         "text": "What's the capital of France?"
@@ -152,7 +167,7 @@ For example, a user message from the conversation history:
 
 Followed by the agent's response:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "method": "session/update",
@@ -160,6 +175,7 @@ Followed by the agent's response:
     "sessionId": "sess_789xyz",
     "update": {
       "sessionUpdate": "agent_message_chunk",
+      "messageId": "msg_agent_c42b9",
       "content": {
         "type": "text",
         "text": "The capital of France is Paris."
@@ -169,17 +185,180 @@ Followed by the agent's response:
 }
 ```
 
+If the Agent provides message IDs during replay, each `messageId` is an opaque, unique identifier for the replayed message.
+
 When **all** the conversation entries have been streamed to the Client, the Agent **MUST** respond to the original `session/load` request.
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "result": null
+  "result": {}
 }
 ```
 
+The response **MAY** also include initial mode, model, or session configuration state when those features are supported by the Agent.
+
 The Client can then continue sending prompts as if the session was never interrupted.
+
+## Resuming Sessions
+
+Agents that advertise `sessionCapabilities.resume` allow Clients to reconnect to an existing session without replaying the conversation history.
+
+### Checking Support
+
+Before attempting to resume a session, Clients **MUST** verify that the Agent supports this capability by checking for the `sessionCapabilities.resume` field in the `initialize` response:
+
+```json highlight={7-9} theme={null}
+{
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "protocolVersion": 1,
+    "agentCapabilities": {
+      "sessionCapabilities": {
+        "resume": {}
+      }
+    }
+  }
+}
+```
+
+If `sessionCapabilities.resume` is not present, the Agent does not support resuming sessions and Clients **MUST NOT** attempt to call `session/resume`.
+
+### Resuming a Session
+
+To resume an existing session without replaying prior messages, Clients **MUST** call the `session/resume` method with:
+
+* The [Session ID](#session-id) to resume
+* [MCP servers](#mcp-servers) to connect to
+* The [working directory](#working-directory)
+
+```json theme={null}
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "session/resume",
+  "params": {
+    "sessionId": "sess_789xyz",
+    "cwd": "/home/user/project",
+    "mcpServers": [
+      {
+        "name": "filesystem",
+        "command": "/path/to/mcp-server",
+        "args": ["--mode", "filesystem"],
+        "env": []
+      }
+    ]
+  }
+}
+```
+
+Unlike `session/load`, the Agent **MUST NOT** replay the conversation history via `session/update` notifications before responding. Instead, it restores the session context, reconnects to the requested MCP servers, and returns once the session is ready to continue.
+
+```json theme={null}
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {}
+}
+```
+
+The response **MAY** also include initial mode, model, or session configuration state when those features are supported by the Agent.
+
+## Closing Active Sessions
+
+Agents that advertise `sessionCapabilities.close` allow Clients to tell the Agent to cancel any ongoing work for a session and free any resources associated with that active session.
+
+### Checking Support
+
+Before attempting to close a session, Clients **MUST** verify that the Agent supports this capability by checking the `sessionCapabilities.close` field in the `initialize` response:
+
+```json highlight={7-9} theme={null}
+{
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "protocolVersion": 1,
+    "agentCapabilities": {
+      "sessionCapabilities": {
+        "close": {}
+      }
+    }
+  }
+}
+```
+
+If `sessionCapabilities.close` is not present, the Agent does not support closing sessions and Clients **MUST NOT** attempt to call `session/close`.
+
+### Closing a Session
+
+To close an active session, Clients **MUST** call the `session/close` method with the session ID:
+
+```json theme={null}
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "session/close",
+  "params": {
+    "sessionId": "sess_789xyz"
+  }
+}
+```
+
+**sessionId** `SessionId` *required*
+
+The ID of the active session to close.
+
+The Agent **MUST** cancel any ongoing work for that session as if [`session/cancel`](https://agentclientprotocol.com/protocol/v1/prompt-turn#cancellation) had been called, then free the resources associated with the session.
+
+On success, the Agent responds with an empty result object:
+
+```json theme={null}
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {}
+}
+```
+
+Closing is idempotent. If the session does not exist or is not active, for
+example because it was already closed, the Agent **SHOULD** respond with the
+same empty result. Clients **SHOULD** treat a `-32002` response to
+`session/close` as a successful close. See [Unknown Sessions](https://agentclientprotocol.com/protocol/v1/error.md#unknown-sessions).
+
+## Additional Workspace Roots
+
+Agents that advertise `sessionCapabilities.additionalDirectories` allow Clients
+to include `additionalDirectories` on supported session lifecycle requests to
+expand the session's effective filesystem root set. Supported stable lifecycle
+requests include `session/new`, `session/load`, and `session/resume`.
+
+```json theme={null}
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "session/load",
+  "params": {
+    "sessionId": "sess_789xyz",
+    "cwd": "/home/user/project",
+    "additionalDirectories": [
+      "/home/user/shared-lib",
+      "/home/user/product-docs"
+    ],
+    "mcpServers": []
+  }
+}
+```
+
+When present, `additionalDirectories` has the following behavior:
+
+* `cwd` remains the primary working directory and the base for relative paths
+* each `additionalDirectories` entry **MUST** be an absolute path
+* omitting the field or providing an empty array activates no additional roots for the resulting session
+* on `session/load` and `session/resume`, Clients must send the full intended additional-root list again; that list may differ from any previous or reported list as long as the request `cwd` matches the session's `cwd`, and omitting the field or providing an empty array does not restore stored roots implicitly
+
+Clients **MUST** only send `additionalDirectories` when the Agent advertises `sessionCapabilities.additionalDirectories`.
 
 ## Session ID
 
@@ -190,14 +369,27 @@ Clients use this ID to:
 * Send prompt requests via `session/prompt`
 * Cancel ongoing operations via `session/cancel`
 * Load previous sessions via `session/load` (if the Agent supports the `loadSession` capability)
+* Resume previous sessions via `session/resume` (if the Agent supports the `sessionCapabilities.resume` capability)
+* Close active sessions via `session/close` (if the Agent supports the `sessionCapabilities.close` capability)
 
 ## Working Directory
 
-The `cwd` (current working directory) parameter establishes the file system context for the session. This directory:
+The `cwd` (current working directory) parameter establishes the primary file system context for the session. This directory:
 
 * **MUST** be an absolute path
 * **MUST** be used for the session regardless of where the Agent subprocess was spawned
-* **SHOULD** serve as a boundary for tool operations on the file system
+* **MUST** remain the base for relative-path resolution
+* **MUST** be part of the session's effective root set
+
+When `sessionCapabilities.additionalDirectories` is in use, the session's effective root set is `[cwd, ...additionalDirectories]`. This root set **SHOULD** serve as a boundary for tool operations on the file system.
+
+### Workspace Root Security
+
+The root set declares the session's scope. It confines shell commands only when a sandbox enforces it.
+
+* Clients **SHOULD** only include directories the user expects the Agent to access, such as the workspace or directories the Client provides, like skills.
+* Agents **SHOULD NOT** treat model output, Agent content, or replayed history as granting access outside the root set. Access outside it goes through a permission request.
+* Implementations that enforce the root set **SHOULD** check the resolved path at the time of use, compare paths by component, and fail closed.
 
 ## MCP Servers
 
@@ -213,35 +405,35 @@ While they are not required to by the spec, new Agents **SHOULD** support the HT
 
 All Agents **MUST** support connecting to MCP servers via stdio (standard input/output). This is the default transport mechanism.
 
-<ParamField path="name" type="string" required>
-  A human-readable identifier for the server
-</ParamField>
+**name** `string` *required*
 
-<ParamField path="command" type="string" required>
-  The absolute path to the MCP server executable
-</ParamField>
+A human-readable identifier for the server
 
-<ParamField path="args" type="array" required>
-  Command-line arguments to pass to the server
-</ParamField>
+**command** `string` *required*
 
-<ParamField path="env" type="EnvVariable[]">
-  Environment variables to set when launching the server
+The absolute path to the MCP server executable
 
-  <Expandable title="EnvVariable">
-    <ParamField path="name" type="string">
-      The name of the environment variable.
-    </ParamField>
+**args** `array` *required*
 
-    <ParamField path="value" type="string">
-      The value of the environment variable.
-    </ParamField>
-  </Expandable>
-</ParamField>
+Command-line arguments to pass to the server
+
+**env** `EnvVariable[]`
+
+Environment variables to set when launching the server
+
+**EnvVariable**
+
+**name** `string` *required*
+
+The name of the environment variable.
+
+**value** `string` *required*
+
+The value of the environment variable.
 
 Example stdio transport configuration:
 
-```json  theme={null}
+```json theme={null}
 {
   "name": "filesystem",
   "command": "/path/to/mcp-server",
@@ -259,35 +451,35 @@ Example stdio transport configuration:
 
 When the Agent supports `mcpCapabilities.http`, Clients can specify MCP servers configurations using the HTTP transport.
 
-<ParamField path="type" type="string" required>
-  Must be `"http"` to indicate HTTP transport
-</ParamField>
+**type** `string` *required*
 
-<ParamField path="name" type="string" required>
-  A human-readable identifier for the server
-</ParamField>
+Must be `"http"` to indicate HTTP transport
 
-<ParamField path="url" type="string" required>
-  The URL of the MCP server
-</ParamField>
+**name** `string` *required*
 
-<ParamField path="headers" type="HttpHeader[]" required>
-  HTTP headers to include in requests to the server
+A human-readable identifier for the server
 
-  <Expandable title="HttpHeader">
-    <ParamField path="name" type="string">
-      The name of the HTTP header.
-    </ParamField>
+**url** `string` *required*
 
-    <ParamField path="value" type="string">
-      The value to set for the HTTP header.
-    </ParamField>
-  </Expandable>
-</ParamField>
+The URL of the MCP server
+
+**headers** `HttpHeader[]` *required*
+
+HTTP headers to include in requests to the server
+
+**HttpHeader**
+
+**name** `string` *required*
+
+The name of the HTTP header.
+
+**value** `string` *required*
+
+The value to set for the HTTP header.
 
 Example HTTP transport configuration:
 
-```json  theme={null}
+```json theme={null}
 {
   "type": "http",
   "name": "api-server",
@@ -309,37 +501,39 @@ Example HTTP transport configuration:
 
 When the Agent supports `mcpCapabilities.sse`, Clients can specify MCP servers configurations using the SSE transport.
 
-<Warning>This transport was deprecated by the MCP spec.</Warning>
+> [!WARNING]
+>
+> This transport was deprecated by the MCP spec.
 
-<ParamField path="type" type="string" required>
-  Must be `"sse"` to indicate SSE transport
-</ParamField>
+**type** `string` *required*
 
-<ParamField path="name" type="string" required>
-  A human-readable identifier for the server
-</ParamField>
+Must be `"sse"` to indicate SSE transport
 
-<ParamField path="url" type="string" required>
-  The URL of the SSE endpoint
-</ParamField>
+**name** `string` *required*
 
-<ParamField path="headers" type="HttpHeader[]" required>
-  HTTP headers to include when establishing the SSE connection
+A human-readable identifier for the server
 
-  <Expandable title="HttpHeader">
-    <ParamField path="name" type="string">
-      The name of the HTTP header.
-    </ParamField>
+**url** `string` *required*
 
-    <ParamField path="value" type="string">
-      The value to set for the HTTP header.
-    </ParamField>
-  </Expandable>
-</ParamField>
+The URL of the SSE endpoint
+
+**headers** `HttpHeader[]` *required*
+
+HTTP headers to include when establishing the SSE connection
+
+**HttpHeader**
+
+**name** `string` *required*
+
+The name of the HTTP header.
+
+**value** `string` *required*
+
+The value to set for the HTTP header.
 
 Example SSE transport configuration:
 
-```json  theme={null}
+```json theme={null}
 {
   "type": "sse",
   "name": "event-stream",
@@ -380,5 +574,15 @@ Agents **SHOULD** connect to all MCP servers specified by the Client.
 
 Clients **MAY** use this ability to provide tools directly to the underlying language model by including their own MCP server.
 
+### Security
 
-Built with [Mintlify](https://mintlify.com).
+MCP server configurations can launch processes, and their `env` and `headers` values are credentials.
+
+* Agents **SHOULD** launch `command` with `args` as separate arguments, without a shell.
+* Clients **SHOULD NOT** send a stdio server from workspace files or Agent output until the user has approved its exact command, arguments, and environment variable names.
+* Agents **SHOULD NOT** include `env` or `headers` values in session updates, errors, `_meta`, `session/list` results, replayed history, model context, or command lines, and **SHOULD NOT** log or persist them.
+* Agents **SHOULD** send `headers` only to the configured origin.
+* Clients that persist `mcpServers` **SHOULD** keep credentials in operating-system secret storage and **SHOULD NOT** log them.
+
+
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.
