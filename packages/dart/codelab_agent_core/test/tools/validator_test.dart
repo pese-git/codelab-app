@@ -201,4 +201,81 @@ void main() {
       'Received arguments: {"limit":"ten"}',
     );
   });
+
+  group('malformed schema keywords are violations, not exceptions', () {
+    for (final (label, schema) in <(String, Map<String, Object?>)>[
+      ('required is a string', {'type': 'object', 'required': 'x'}),
+      (
+        'required has a number',
+        {
+          'type': 'object',
+          'required': [1],
+        },
+      ),
+      ('type is a number', {'type': 5}),
+      (
+        'type list has a number',
+        {
+          'type': ['object', 5],
+        },
+      ),
+      ('properties is a list', {'type': 'object', 'properties': []}),
+      (
+        'nested items is a string',
+        {
+          'type': 'object',
+          'properties': {
+            'a': {'type': 'array', 'items': 'x'},
+          },
+        },
+      ),
+      (
+        'nested enum is a string',
+        {
+          'type': 'object',
+          'properties': {
+            'a': {'enum': 'x'},
+          },
+        },
+      ),
+    ]) {
+      test(label, () {
+        final result = validateArguments(schema, {
+          'a': ['q'],
+        });
+
+        expect(result, isA<Err<Map<String, Object?>, List<String>>>());
+        expect(
+          (result as Err<Map<String, Object?>, List<String>>).error,
+          isNotEmpty,
+        );
+      });
+    }
+
+    test('a violation names the keyword and the path', () {
+      final result = validateArguments({'type': 'object', 'required': 'x'}, {});
+
+      expect((result as Err<Map<String, Object?>, List<String>>).error, [
+        'schema: "required" must be a list of strings',
+      ]);
+    });
+
+    test('a well-formed schema is unaffected', () {
+      expect(
+        validateArguments(
+          _schema(
+            {
+              'a': {
+                'type': ['string', 'null'],
+                'enum': ['x'],
+              },
+            },
+            required: const ['a'],
+          ),
+          {'a': 'x'},
+        ),
+        isA<Ok<Map<String, Object?>, List<String>>>(),
+      );
+    });
+  });
 }

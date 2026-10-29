@@ -177,6 +177,93 @@ void main() {
       expect(fields['server'], 'fake');
     });
 
+    for (final (label, schema) in <(String, Object)>[
+      ('required is not a list', {'type': 'object', 'required': 'x'}),
+      (
+        'required has a non-string',
+        {
+          'type': 'object',
+          'required': [1],
+        },
+      ),
+      ('properties is not an object', {'type': 'object', 'properties': []}),
+      ('type is a number', {'type': 5}),
+      (
+        'type is a list with a number',
+        {
+          'type': ['string', 5],
+        },
+      ),
+      (
+        'items is not an object',
+        {
+          'type': 'object',
+          'properties': {
+            'a': {'type': 'array', 'items': 'string'},
+          },
+        },
+      ),
+      (
+        'enum is not a list',
+        {
+          'type': 'object',
+          'properties': {
+            'a': {'enum': 'x'},
+          },
+        },
+      ),
+    ]) {
+      test('a malformed inputSchema ($label) is skipped', () async {
+        final tools = await _tools(h, [
+          FakeMcpTool('bad', inputSchema: schema),
+          const FakeMcpTool('good'),
+        ]);
+
+        expect([for (final t in tools) t.name], ['mcp__fake__good']);
+        final fields = h.logger.eventsOf('mcp.tool.invalid').single.fields;
+        expect(fields['tool'], 'bad');
+        expect(fields['reason'], 'malformed inputSchema');
+      });
+    }
+
+    test('a boolean property schema is allowed', () async {
+      final tools = await _tools(h, [
+        const FakeMcpTool(
+          'flagged',
+          inputSchema: {
+            'type': 'object',
+            'properties': {'flag': true},
+          },
+        ),
+      ]);
+
+      expect([for (final t in tools) t.name], ['mcp__fake__flagged']);
+      expect(h.logger.eventsOf('mcp.tool.invalid'), isEmpty);
+    });
+
+    test('a schema nested deeper than 32 levels is malformed', () async {
+      Map<String, Object?> nested(int levels) {
+        var schema = <String, Object?>{'type': 'string'};
+        for (var i = 0; i < levels; i++) {
+          schema = {
+            'type': 'object',
+            'properties': {'p': schema},
+          };
+        }
+        return schema;
+      }
+
+      final tools = await _tools(h, [
+        FakeMcpTool('deep', inputSchema: nested(40)),
+        FakeMcpTool('shallow', inputSchema: nested(5)),
+      ]);
+
+      expect([for (final t in tools) t.name], ['mcp__fake__shallow']);
+      final fields = h.logger.eventsOf('mcp.tool.invalid').single.fields;
+      expect(fields['tool'], 'deep');
+      expect(fields['reason'], 'malformed inputSchema');
+    });
+
     test('a tool without a name is skipped', () async {
       final tools = await _tools(h, [const FakeMcpTool('')]);
 
