@@ -129,23 +129,29 @@ void main() {
     });
 
     test('a server of the client replaces the config one with the same '
-        'name', () async {
+        'name; the skip of the config server is logged once, at the '
+        'creation', () async {
       final mcp = FakeMcpConnector(toolsOf: (_) => const []);
       final h = harness(
         const [],
         mcp: mcp,
         config: [_stdio('github', origin: McpServerOrigin.config)],
       );
-      final session = await open(h);
+      final session = await open(h, [_stdio('github')]);
+      List<Object?> skips() => h.logger
+          .eventsOf('mcp.server.skipped')
+          .map((r) => r.fields['reason'])
+          .toList();
+      expect(skips(), [
+        'replaced by a server of the client with the same name',
+      ]);
 
       await session.setMcpServers([_stdio('github')]);
+      await session.setMcpServers([_stdio('github')]);
 
-      final list = mcp.sessions.single.replaced.single;
+      final list = mcp.sessions.single.replaced.last;
       expect(list.single.origin, McpServerOrigin.session);
-      expect(
-        h.logger.eventsOf('mcp.server.skipped').map((r) => r.fields['reason']),
-        contains('replaced by a server of the client with the same name'),
-      );
+      expect(skips(), hasLength(1), reason: 'not logged again by the update');
     });
 
     test('a session that had no servers connects on the first call', () async {
@@ -225,6 +231,57 @@ void main() {
         throwsA(isA<StateError>()),
       );
       expect(mcp.sessions.single.replaced, isEmpty);
+    });
+  });
+
+  group('races and failures', () {
+    test('of two calls without waiting the last one wins', () async {
+      final mcp = FakeMcpConnector(toolsOf: (_) => [_mcpTool('mcp__a__t')]);
+      final h = harness(const [], mcp: mcp);
+      final session = await open(h, [_stdio('a')]);
+
+      final first = session.setMcpServers([_stdio('b')]);
+      final second = session.setMcpServers([_stdio('c')]);
+      await Future.wait([first, second]);
+
+      expect(mcp.sessions.single.replaced.map(names), [
+        ['c'],
+      ], reason: 'the stale set is not applied after the newer one');
+    });
+
+    test('close during a connection of a new server cancels it and does not '
+        'wait for connectTimeout', () async {
+      final mcp = FakeMcpConnector(
+        toolsOf: (_) => [_mcpTool('mcp__a__t')],
+        replaceBlocksUntilCancel: true,
+      );
+      final h = harness(const [], mcp: mcp);
+      final session = await open(h, [_stdio('a')]);
+      final applying = session.setMcpServers([_stdio('b')]);
+      await pumpEventQueue();
+      expect(mcp.sessions.single.replaced, hasLength(1), reason: 'in flight');
+
+      await session.close();
+      await applying;
+
+      expect(mcp.requests.single.cancel.isCancelled, isTrue);
+      expect(mcp.sessions.single.closed, 1);
+    }, timeout: const Timeout(Duration(seconds: 10)));
+
+    test('a failing refresh is logged with server and transport', () async {
+      final mcp = FakeMcpConnector(
+        toolsOf: (_) => [_mcpTool('mcp__a__t')],
+        failToolsReadAfterReplace: true,
+      );
+      final h = harness(const [], mcp: mcp);
+      final session = await open(h, [_stdio('a')]);
+
+      await session.setMcpServers([_stdio('b'), _stdio('c')]);
+
+      final failed = h.logger.eventsOf('mcp.server.failed').single.fields;
+      expect(failed['server'], 'b,c');
+      expect(failed['transport'], 'stdio');
+      expect(failed['reason'], 'MCP connector failed: StateError');
     });
   });
 

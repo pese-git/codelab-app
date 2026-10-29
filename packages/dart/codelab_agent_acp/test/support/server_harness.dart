@@ -454,6 +454,10 @@ extension ResponseParts on JsonRpcResponse {
 final class SpyMcpConnector implements McpConnector {
   SpyMcpConnector({this.transports = const {'stdio', 'http'}});
 
+  /// Если задан, `replaceServers` ждёт его завершения (медленное
+  /// подключение серверов).
+  Completer<void>? replaceGate;
+
   @override
   final Set<String> transports;
 
@@ -466,7 +470,7 @@ final class SpyMcpConnector implements McpConnector {
   @override
   Future<McpSessionTools> connect(McpConnectRequest request) async {
     requests.add(request);
-    final session = SpyMcpSession();
+    final session = SpyMcpSession(this);
     sessions.add(session);
     return session;
   }
@@ -474,6 +478,10 @@ final class SpyMcpConnector implements McpConnector {
 
 /// Подключённые серверы одной сессии для [SpyMcpConnector].
 final class SpyMcpSession implements McpSessionTools {
+  SpyMcpSession(this._owner);
+
+  final SpyMcpConnector _owner;
+
   /// Аргументы каждого вызова `replaceServers`.
   final replaced = <List<McpServerConfig>>[];
   var closed = false;
@@ -490,6 +498,9 @@ final class SpyMcpSession implements McpSessionTools {
   @override
   Future<void> replaceServers(List<McpServerConfig> servers) async {
     replaced.add(servers);
+    if (_owner.replaceGate case final gate?) {
+      await gate.future;
+    }
   }
 
   @override

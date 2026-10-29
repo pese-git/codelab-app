@@ -42,16 +42,18 @@ void main() {
     clock: h.clock,
   );
 
+  var cancelSource = CancelTokenSource();
   McpConnectRequest request(List<McpServerConfig> servers) => McpConnectRequest(
     sessionId: const SessionId('s1'),
     cwd: '/proj',
     servers: servers,
     reservedNames: const {'read', 'write'},
     logger: h.logger,
-    cancel: CancelToken.none,
+    cancel: cancelSource.token,
   );
 
   setUp(() {
+    cancelSource = CancelTokenSource();
     fakes = {
       'a': _server(['t']),
       'b': _server(['t']),
@@ -185,5 +187,24 @@ void main() {
     await session.replaceServers([_stdio('b')]);
 
     expect(factory.opened, ['a']);
+  });
+
+  test('a cancelled token abandons a hanging new server at once: transport '
+      'closed, no wait for connectTimeout', () async {
+    fakes['hang'] = FakeMcpServer(
+      era: FakeMcpEra.legacy,
+      silentInitialize: true,
+      tools: [const FakeMcpTool('t')],
+    );
+    final session = await connector().connect(request([_stdio('a')]));
+
+    final replacing = session.replaceServers([_stdio('a'), _stdio('hang')]);
+    await h.clock.elapse(Duration.zero);
+    cancelSource.cancel();
+    await replacing;
+
+    expect(fakes['hang']!.closedTransports, 1);
+    expect(_names(session), ['mcp__a__t']);
+    expect(fakes['a']!.closedTransports, 0);
   });
 }

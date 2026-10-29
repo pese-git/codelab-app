@@ -203,11 +203,12 @@ void main() {
 
     expect(response.error, isNull);
     expect(skipped(), [containsPair('server', 'old')]);
-    expect(skipped().single, {
-      'server': 'old',
-      'transport': 'sse',
-      'reason': 'transport sse is not supported',
-    });
+    expect(skipped().single, containsPair('transport', 'sse'));
+    expect(
+      skipped().single,
+      containsPair('reason', 'transport sse is not supported'),
+    );
+    expect(skipped().single, contains('session_id'));
     // Остальные серверы передаются ядру.
     expect([for (final s in spy.requests.single.servers) s.name], ['fake']);
   });
@@ -227,13 +228,69 @@ void main() {
 
     expect(response.error, isNull);
     expect(response.resultMap['sessionId'], isA<String>());
-    expect(skipped().single, {
-      'server': 'future',
-      'transport': 'websocket',
-      'reason': 'unknown transport',
-    });
+    expect(skipped().single, containsPair('server', 'future'));
+    expect(skipped().single, containsPair('transport', 'websocket'));
+    expect(skipped().single, containsPair('reason', 'unknown transport'));
     expect([for (final s in spy.requests.single.servers) s.name], ['fake']);
   });
+
+  test('an unparsable http url is skipped and stdio still connects', () async {
+    final spy = SpyMcpConnector();
+    h = await ServerHarness.start(mcp: (_) => spy);
+    await h.initialize();
+
+    final response = await newSession(
+      '/work/demo',
+      mcpServers: [
+        {
+          'type': 'http',
+          'name': 'web',
+          'url': 'http://[',
+          'headers': <Object?>[],
+        },
+        stdioFake,
+      ],
+    );
+
+    expect(response.error, isNull);
+    expect(skipped().single, containsPair('reason', 'invalid url'));
+    expect(skipped().single, containsPair('server', 'web'));
+    expect([for (final s in spy.requests.single.servers) s.name], ['fake']);
+  });
+
+  test(
+    'skip logs carry session_id and cap client strings at 64 runes',
+    () async {
+      h = await ServerHarness.start(mcp: (_) => SpyMcpConnector());
+      await h.initialize();
+      final long = 'я' * 200;
+
+      final response = await newSession(
+        '/work/demo',
+        mcpServers: [
+          {'type': 'websocket', 'name': long},
+          {'type': long, 'name': 'future'},
+        ],
+      );
+
+      final sessionId = response.resultMap['sessionId']! as String;
+      final logs = skipped();
+      expect(logs, hasLength(2));
+      for (final fields in logs) {
+        expect(fields['session_id'], sessionId);
+        expect(
+          (fields['server']! as String).runes.length,
+          lessThanOrEqualTo(64),
+        );
+        expect(
+          (fields['transport']! as String).runes.length,
+          lessThanOrEqualTo(64),
+        );
+      }
+      expect(logs[0]['server'], 'я' * 64);
+      expect(logs[1]['transport'], 'я' * 64);
+    },
+  );
 
   test('an unknown transport without a name is skipped too', () async {
     h = await ServerHarness.start(mcp: (_) => SpyMcpConnector());

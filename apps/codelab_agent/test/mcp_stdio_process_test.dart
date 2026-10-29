@@ -14,10 +14,9 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('codelab_agent_mcp_');
-  });
-
-  tearDown(() async {
-    await temp.delete(recursive: true);
+    // Регистрируется первым, поэтому выполняется последним: каталог нужен
+    // уборке процессов теста (файл с pid сервера).
+    addTearDown(() => temp.delete(recursive: true));
   });
 
   Map<String, Object?> request(int id, String method, Object? params) => {
@@ -37,6 +36,16 @@ void main() {
       ['serve', '--stdio', '--llm-script', 'test/llm_scripts/mcp_echo.json'],
       environment: {'CODELAB_HOME': '${temp.path}/home'},
     );
+    // При падении теста ни агент, ни процесс сервера не должны остаться.
+    addTearDown(() async {
+      agent.kill(ProcessSignal.sigkill);
+      if (pidFile.existsSync()) {
+        final pid = int.tryParse(pidFile.readAsStringSync());
+        if (pid != null) {
+          Process.killPid(pid, ProcessSignal.sigkill);
+        }
+      }
+    });
     agent.sendJson(request(1, 'initialize', {'protocolVersion': 1}));
     final initialized = await agent.responseTo(1);
     // До итерации 3 (HTTP-транспорт, задача 9.6) бинарь объявляет только stdio.

@@ -314,5 +314,30 @@ void main() {
       expect(host.serverConfig.localListing, isNull);
       expect(host.serverConfig.detachGrace, Duration.zero);
     });
+
+    // Клиент по WebSocket может быть на другой машине: процессы stdio-серверов
+    // запускались бы на машине агента по описанию из сети (решение по ревью
+    // PR #158; design.md change `add-agent-mcp-client`, D3).
+    test(
+      'ws: mcp is off with a reason; stdio keeps the stdio transport',
+      () async {
+        final script = writeScript({'steps': <Object?>[]});
+
+        final (ws, _) = await start(scriptedOptions(script, transport: '--ws'));
+        final (stdio, _) = await start(scriptedOptions(script));
+
+        expect(
+          ws.core.plan.offReasons[HostCapability.mcp],
+          'stdio MCP servers are disabled over WebSocket',
+        );
+        expect(stdio.core.plan.offReasons, isNot(contains(HostCapability.mcp)));
+        expect(
+          stdio.core.plan.profile.states[HostCapability.mcp],
+          isA<CapabilityTransport>().having((c) => c.transports, 'transports', {
+            'stdio',
+          }),
+        );
+      },
+    );
   });
 }

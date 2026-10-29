@@ -15,6 +15,8 @@ final class FakeMcpConnector implements McpConnector {
     this.failWith,
     this.toolsOnReplace,
     this.failReplaceWith,
+    this.replaceBlocksUntilCancel = false,
+    this.failToolsReadAfterReplace = false,
   }) : transports = Set.unmodifiable(transports);
 
   @override
@@ -37,6 +39,14 @@ final class FakeMcpConnector implements McpConnector {
   /// Если задан, `replaceServers` сессии бросает его.
   final Object? failReplaceWith;
 
+  /// `replaceServers` не возвращается, пока не отменён токен запроса
+  /// подключения: имитация подключения нового сервера, зависшего до
+  /// `connectTimeout`.
+  final bool replaceBlocksUntilCancel;
+
+  /// После `replaceServers` чтение `tools` бросает (сбой чужой реализации).
+  final bool failToolsReadAfterReplace;
+
   final requests = <McpConnectRequest>[];
   final sessions = <FakeMcpSessionTools>[];
 
@@ -52,6 +62,8 @@ final class FakeMcpConnector implements McpConnector {
       onClose: onClose,
       toolsOnReplace: toolsOnReplace,
       failReplaceWith: failReplaceWith,
+      blockReplaceUntil: replaceBlocksUntilCancel ? request.cancel : null,
+      failToolsReadAfterReplace: failToolsReadAfterReplace,
       servers: [
         for (final s in request.servers)
           McpServerSummary(
@@ -69,19 +81,34 @@ final class FakeMcpConnector implements McpConnector {
 
 final class FakeMcpSessionTools implements McpSessionTools {
   FakeMcpSessionTools({
-    required this.tools,
+    required List<AgentTool> tools,
     required this.servers,
     this.onClose,
     this.toolsOnReplace,
     this.failReplaceWith,
-  });
+    this.blockReplaceUntil,
+    this.failToolsReadAfterReplace = false,
+  }) : _tools = tools;
+
+  final CancelToken? blockReplaceUntil;
+  final bool failToolsReadAfterReplace;
+  var _replacedOnce = false;
 
   final void Function()? onClose;
   final List<AgentTool> Function(List<McpServerConfig> servers)? toolsOnReplace;
   final Object? failReplaceWith;
 
+  List<AgentTool> _tools;
+
   @override
-  List<AgentTool> tools;
+  List<AgentTool> get tools {
+    if (failToolsReadAfterReplace && _replacedOnce) {
+      throw StateError('tools are unreadable');
+    }
+    return _tools;
+  }
+
+  set tools(List<AgentTool> value) => _tools = value;
 
   @override
   List<McpServerSummary> servers;
@@ -102,6 +129,8 @@ final class FakeMcpSessionTools implements McpSessionTools {
   @override
   Future<void> replaceServers(List<McpServerConfig> servers) async {
     replaced.add(servers);
+    await blockReplaceUntil?.onCancel;
+    _replacedOnce = true;
     if (failReplaceWith case final error?) {
       throw error;
     }
