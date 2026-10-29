@@ -264,7 +264,14 @@ final class ToolCallExecutor implements ToolExecutor {
             formatInvalidArguments(call.name, error, call.arguments),
           );
       }
-    } on Object catch (error) {
+    } on Object catch (error, stack) {
+      services.logger.log(
+        LogLevel.debug,
+        'tool.validate.error',
+        fields: {'tool': call.name, 'tool_call_id': call.id},
+        error: error,
+        stack: stack,
+      );
       // Схема инструмента (в том числе MCP-сервера, недоверенного) не должна
       // ронять цикл: это сбой инструмента, а не неверный вызов модели, поэтому
       // он не считается в `MisuseBreaker` (TOOL-3).

@@ -192,6 +192,9 @@
   - `fvm dart run melos run guard`, `fvm dart run melos run web-compile`;
   - `openspec validate add-agent-mcp-client --strict`;
   - PR итерации 1б, который называет следующую итерацию (2).
+- [x] 4б.10 `[agent]` Исправления по ревью итерации 1б (PR #156), тесты до кода:
+  - тесты: `mcp_tool_adapter_test.dart` — `items: true`, `items: false` и tuple-форма `items: [...]` не отклоняют инструмент; схема ровно 32 уровней (корень — 0) регистрируется, 33 → `malformed inputSchema`; длинное имя инструмента в `mcp.tool.invalid` обрезано до 64 рун (agent-tools, сценарии «Boolean и tuple-форма items допустимы», «Граница глубины схемы»); `validator_test.dart` — не-объект `items` игнорируется, вложенная схема проверяется лениво (сценарий «Вложенная схема проверяется лениво»); `tool_throws_test.dart` — `tool.validate.error` с `tool` и `tool_call_id`; `mcp_client_spec_conformance_test.dart` — `notifications/cancelled` с `requestId: "5"` при id подписки `5` → `unknown_notification`, подписка жива (agent-mcp-client «Эпоха сервера и версия протокола», снятие подписки);
+  - реализация: одна функция формы ключевых слов в ядре (например, `schemaKeywordViolations`) рядом с `validator.dart`, `McpTool` применяет её рекурсивно с границей глубины 32 вместо своей копии правил (D7, §6.3.2); не-объект `items` игнорируется валидатором; лог `tool.validate.error` в `executor.dart` (D13); обрезка `tool` в `mcp.tool.invalid`; строгое сравнение id подписки по типу (D5).
 
 ## 5. stdio-транспорт (D9; E-02)
 
