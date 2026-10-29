@@ -3,8 +3,9 @@
 Метки исполнителей:
 - `[agent]` — `codelab_agent_mcp`, `codelab_agent_core`, `codelab_agent_io`, `apps/codelab_agent`, сторож агентских пакетов и документы ядра;
 - `[protocol]` — `codelab_agent_acp`, фикстуры и драйвер `codelab_acp_testing`, документы §13–§14.
+- `[client]` — `apps/codelab_cli` (драйвер `test-scenario`).
 
-Задач `[client]` и `[desktop]` нет (proposal, «Не входит»).
+Задач `[desktop]` нет (proposal, «Не входит»). `[client]` — `apps/codelab_cli`: единственная правка — пропуск фикстур с `setup.mcp` в `test-scenario` (задача 8.4).
 
 Итерации — тонкие сквозные срезы, каждая отдельным PR (или 2–3 PR) в `develop`:
 - итерация 0 — группа 0: нормативный текст MCP и правки документов, без кода;
@@ -267,6 +268,14 @@
   - проверки затронутого: `codelab_agent_io`, `codelab_agent_acp`, `codelab_acp_testing`, `apps/codelab_agent`;
   - `fvm dart run melos run conformance:agent`, `guard`;
   - PR итерации 2.
+- [x] 8.4 Исправления по ревью итерации 2 (PR #158), тест → код:
+  - `[agent]` WS-профиль: в `serve --ws` capability `mcp` выключена с причиной профиля, серверы клиента — `mcp.server.skipped`, `initialize` — `http: false` (agent-binary, сценарий «WS-профиль не запускает MCP-серверы»; D3);
+  - `[protocol]` кадры `initialize` фикстур `initialize-capabilities`, `session-new-modes-config`, `set-config-option-model` возвращены к `http: false`; фабрика агентского прогона сужает `mcp` до `{stdio}`, как бинарь (acp-golden-fixtures «MCP-фикстуры этапа 8»; agent-acp-server, сценарий «Ответ codelab-app»);
+  - `[client]` `codelab test-scenario`: фикстура с непустым `setup.mcp` пропускается для агента без `{fixture}` с причиной `setup.mcp cannot be passed to the agent process` (cli-scenario-driver, сценарии «Фикстура с fake MCP-серверами», «Повторитель играет фикстуру с MCP»);
+  - `[agent]` `mcp.server.stderr` на уровне trace (D9, D13);
+  - `[protocol]` `session/load`: проверка «сессия занята» и `reattach` атомарны относительно `setMcpServers`; `mcp.server.skipped` адаптера с `session_id`, `type`/`name` клиента обрезаны до 64 рун (D11, D13; agent-acp-server «session/new», «session/load и реплей»);
+  - `[agent]` `setMcpServers`: счётчик поколений для «последний вызов побеждает», отмена идущей замены токеном сессии в `close()` (D6; agent-runtime, сценарий «Закрытие во время замены»);
+  - `[agent]` stdio `close()`: потомки, пережившие выход корня до 2 с, получают SIGTERM/SIGKILL (D9).
 
 ## 9. Streamable HTTP и `tools/list_changed` (D6, D10; E-03)
 
@@ -289,8 +298,8 @@
 
   Красный.
 - [ ] 9.4 `[agent]` Перечитывание в `McpClient`, `McpSessionTools.takeUpdate`, применение в `prepareNextStep` → `StepUpdate.tools` и `StepUpdate.systemPrompt` и перед ходом — 9.3 зелёный.
-- [ ] 9.5 `[protocol]` Фикстура `acp/mcp-http-tool-call` (E-03; сценарий «HTTP-сервер и пропуск SSE»): сервер `web` типа `http` (modern), `old` типа `sse` и `future` неизвестного типа `websocket` (D11). В фабрике conformance http — `StreamableHttpTransport` на `MockClient` с обработчиком `FakeMcpServer`. Сначала красная, затем зелёная.
-- [ ] 9.6 `[agent]` Бинарь: HTTP-транспорт на HTTP-клиенте хоста, сужение `mcp` из 8.2 снято. Тест `agent_host_test.dart`: `initialize` даёт `mcpCapabilities.http: true` (agent-binary, сценарий «Возможности MCP в initialize»).
+- [ ] 9.5 `[protocol]` Фикстура `acp/mcp-http-tool-call` (E-03; сценарий «HTTP-сервер и пропуск SSE»): сервер `web` типа `http` (modern), `old` типа `sse` и `future` неизвестного типа `websocket` (D11). В фабрике conformance http — `StreamableHttpTransport` на `MockClient` с обработчиком `FakeMcpServer`. Сначала красная, затем зелёная. Вместе с ней фабрика агентского прогона получает транспорт `http`, и кадры `initialize` фикстур `initialize-capabilities`, `session-new-modes-config`, `set-config-option-model` переходят на `mcpCapabilities.http: true` (acp-golden-fixtures «MCP-фикстуры этапа 8»; agent-acp-server, сценарий «Ответ codelab-app»).
+- [ ] 9.6 `[agent]` Бинарь: HTTP-транспорт на HTTP-клиенте хоста, сужение `mcp` из 8.2 снято. Тест `agent_host_test.dart`: `initialize` даёт `mcpCapabilities.http: true` (agent-binary, сценарий «Возможности MCP в initialize»). WS-профиль остаётся без MCP (D3).
 - [ ] 9.7 Проверка итерации 3: проверки затронутого, `conformance:agent`, `guard`, `web-compile`; PR итерации 3.
 
 ## 10. Документы и Definition of Done

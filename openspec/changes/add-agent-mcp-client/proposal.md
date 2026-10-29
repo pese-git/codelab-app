@@ -78,7 +78,8 @@ Dart-агент принимает `mcpServers` в `session/new` и `session/loa
 - `agent-prompts`: новое требование «Секция mcp».
 - `acp-golden-fixtures`: «Формат golden-фикстуры ACP» — `setup.mcp` и `after.mcpCalls`; новое требование «MCP-фикстуры этапа 8».
 - `workspace-architecture`: «Границы пакетов monorepo» и «Автоматический сторож границ пакетов» — пакет `codelab_agent_mcp`, его правило и allowlist, `codelab_agent_mcp` в allowlist бинаря.
-- `agent-binary`: новое требование «MCP-серверы в бинаре».
+- `agent-binary`: новое требование «MCP-серверы в бинаре» (WS-профиль без MCP).
+- `cli-scenario-driver`: «Команда test-scenario» — фикстура с непустым `setup.mcp` пропускается для процессного агента.
 
 ## Impact
 
@@ -97,6 +98,8 @@ Dart-агент принимает `mcpServers` в `session/new` и `session/loa
 - **`codelab_agent_acp`**: отображение `acp.McpServer` → `McpServerConfig` (неизвестный `type` — пропуск), `mcpCapabilities.http` по плану ядра, `session/load` открытой сессии. Без новых зависимостей; dev — `codelab_agent_mcp`.
 - **`apps/codelab_agent`**: зависимость `codelab_agent_mcp`, сборка `McpClientConnector`.
 - **`codelab_acp_protocol`**: вариант `McpServer.unknown({type, name?, raw})` — неизвестный транспорт сервера разбирается, а не роняет запрос; известные типы проверяются строго, как раньше.
+- **`apps/codelab_cli`**: драйвер `codelab test-scenario` с внешним агентом пропускает фикстуры с непустым `setup.mcp` с причиной (fake MCP-серверы процессу агента не передать; дельта `cli-scenario-driver`).
+- **WS-профиль бинаря** (`serve --ws`): capability `mcp` выключена — отступление от ACP (stdio MUST) ради безопасности, design.md D3.
 - **`codelab_acp_testing`**:
   - ключи `setup.mcp` и `after.mcpCalls` в `_schema.json` и загрузчике;
   - шесть новых фикстур;

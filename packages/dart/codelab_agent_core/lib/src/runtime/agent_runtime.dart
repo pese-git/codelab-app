@@ -320,6 +320,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
     }
     final mcp = _McpState(
       baseNames: {for (final tool in registry.tools) tool.name},
+      // Токен сессии: `close()` отменяет подключение серверов, не дожидаясь
+      // `connectTimeout`; отмена рантайма доходит через родителя.
+      cancel: CancelTokenSource(parent: _shutdown.token),
     );
     await _connectMcp(
       id: id,
@@ -482,21 +485,31 @@ final class AgentRuntimeImpl implements AgentRuntime {
   List<McpServerConfig> _planMcp(
     SessionId id,
     Logger logger,
-    List<McpServerConfig> servers,
-  ) {
+    List<McpServerConfig> servers, {
+    bool logConfigSkips = true,
+  }) {
     if (config.mcpServers.isEmpty && servers.isEmpty) {
       return const [];
     }
-    void skipped(McpServerConfig server, String reason) => logger.log(
-      LogLevel.info,
-      'mcp.server.skipped',
-      fields: {
-        'session_id': id.value,
-        'server': server.name,
-        'transport': server.transport,
-        'reason': reason,
-      },
-    );
+    // Повторная смена набора не переписывает в лог пропуски серверов
+    // конфига: они уже записаны при создании сессии.
+    final configServers = Set<McpServerConfig>.identity()
+      ..addAll(config.mcpServers);
+    void skipped(McpServerConfig server, String reason) {
+      if (!logConfigSkips && configServers.contains(server)) {
+        return;
+      }
+      logger.log(
+        LogLevel.info,
+        'mcp.server.skipped',
+        fields: {
+          'session_id': id.value,
+          'server': server.name,
+          'transport': server.transport,
+          'reason': reason,
+        },
+      );
+    }
 
     // Серверы клиента заменяют серверы конфига с тем же именем; дубликаты и
     // пустые имена внутри источника пропускаются (§13.4, шаг 2).
@@ -568,7 +581,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
           servers: accepted,
           reservedNames: state.baseNames,
           logger: logger,
-          cancel: _shutdown.token,
+          cancel: state.cancel.token,
         ),
       );
       state.apply(connected, registry, logger, id);
@@ -592,7 +605,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     required ToolRegistry registry,
     required _McpState state,
   }) async {
-    final accepted = _planMcp(id, logger, servers);
+    final accepted = _planMcp(id, logger, servers, logConfigSkips: false);
     final current = state.tools;
     if (current == null) {
       // Сессия начиналась без серверов: подключаем как при создании.
@@ -643,7 +656,11 @@ final class AgentRuntimeImpl implements AgentRuntime {
 /// инструментов в реестре сессии (design.md change `add-agent-mcp-client`,
 /// D6).
 final class _McpState {
-  _McpState({required this.baseNames});
+  _McpState({required this.baseNames, required this.cancel});
+
+  /// Отмена подключений серверов этой сессии (первого и замен): `close()`
+  /// сессии отменяет её до ожидания идущей замены.
+  final CancelTokenSource cancel;
 
   /// Имена базового реестра: инструмент MCP с таким именем не регистрируется.
   final Set<String> baseNames;
@@ -794,6 +811,10 @@ final class _Session implements AgentSession {
   /// Набор, присланный во время хода: применяется после `TurnEnded`; поздний
   /// вызов заменяет ранний.
   List<McpServerConfig>? _pendingMcp;
+
+  /// Номер последнего вызова `setMcpServers`: устаревший набор, стоявший в
+  /// очереди, не применяется после нового (последний вызов побеждает).
+  var _mcpGeneration = 0;
   var _closed = false;
   final AgentCoreServices _services;
   final Logger _logger;
@@ -960,38 +981,44 @@ final class _Session implements AgentSession {
       throw StateError('the session is closed');
     }
     final next = List<McpServerConfig>.unmodifiable(servers);
+    _mcpGeneration++;
     if (_agent.isRunning) {
       _pendingMcp = next;
       return;
     }
-    await _enqueueMcp(next);
+    await _enqueueMcp(next, _mcpGeneration);
   }
 
   void _startPendingMcp() {
     final pending = _pendingMcp;
     _pendingMcp = null;
     if (pending != null && !_closed) {
-      unawaited(_enqueueMcp(pending));
+      unawaited(_enqueueMcp(pending, _mcpGeneration));
     }
   }
 
   /// Смены идут по одной в порядке вызовов; [_mcpWork] — их хвост.
-  Future<void> _enqueueMcp(List<McpServerConfig> servers) {
+  Future<void> _enqueueMcp(List<McpServerConfig> servers, int generation) {
     final previous = _mcpWork ?? Future<void>.value();
     late final Future<void> work;
-    work = previous.then((_) => _applyMcpServers(servers)).whenComplete(() {
-      if (identical(_mcpWork, work)) {
-        _mcpWork = null;
-      }
-    });
+    work = previous
+        .then((_) => _applyMcpServers(servers, generation))
+        .whenComplete(() {
+          if (identical(_mcpWork, work)) {
+            _mcpWork = null;
+          }
+        });
     _mcpWork = work;
     return work;
   }
 
   /// Не бросает: сбой смены — запись в лог, а прежний набор остаётся
   /// (`session/load` не должен падать из-за сервера MCP, §13.4, шаг 4).
-  Future<void> _applyMcpServers(List<McpServerConfig> servers) async {
-    if (_closed) {
+  Future<void> _applyMcpServers(
+    List<McpServerConfig> servers,
+    int generation,
+  ) async {
+    if (_closed || generation != _mcpGeneration) {
       return;
     }
     try {
@@ -1005,6 +1032,8 @@ final class _Session implements AgentSession {
         'mcp.server.failed',
         fields: {
           'session_id': id.value,
+          'server': servers.map((s) => s.name).join(','),
+          'transport': servers.map((s) => s.transport).toSet().join(','),
           'reason': 'MCP connector failed: ${error.runtimeType}',
         },
         error: error.runtimeType,
@@ -1033,6 +1062,8 @@ final class _Session implements AgentSession {
   Future<void> close() async {
     _closed = true;
     _pendingMcp = null;
+    // Идущая замена серверов не должна держать закрытие до `connectTimeout`.
+    _mcp.cancel.cancel(const ShutdownCancel());
     _agent.abort(const ShutdownCancel());
     _backgroundCancel?.cancel(const ShutdownCancel());
     await _agent.waitForIdle();

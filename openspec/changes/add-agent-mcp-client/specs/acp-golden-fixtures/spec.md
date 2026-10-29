@@ -44,7 +44,7 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 - `acp/mcp-result-fenced` (P-16);
 - `acp/set-mode-plan-rejects-mcp-write` (P-01).
 
-Ожидаемый кадр `acp/initialize-capabilities` SHALL содержать `mcpCapabilities: {"http": true, "sse": false}` со ссылкой `02-Initialization.md#mcp-capabilities`. Агентский прогон этих фикстур SHALL проходить HTTP-сервер через настоящий `StreamableHttpTransport` на `MockClient`.
+Ожидаемые кадры `initialize` в `acp/initialize-capabilities`, `acp/session-new-modes-config` и `acp/set-config-option-model` SHALL содержать ссылку `02-Initialization.md#mcp-capabilities` и `mcpCapabilities: {"http": true, "sse": false}` с задач 9.5–9.6 (HTTP-транспорт); до них — `{"http": false, "sse": false}`, а фабрика агентского прогона SHALL сужать `mcp` до `{stdio}`, как бинарь. Агентский прогон этих фикстур SHALL проходить HTTP-сервер через настоящий `StreamableHttpTransport` на `MockClient`.
 
 #### Scenario: Разрешение до сервера
 - **WHEN** агентский драйвер проигрывает `acp/mcp-tool-permission`

@@ -112,7 +112,10 @@
 Промежуточное состояние `add-agent-mcp-client` после итерации 2: бинарь собирает
 `McpClientConnector` только со `StdioMcpTransportFactory`, профиль сужает capability `mcp` до
 `{stdio}`, и `initialize` бинаря объявляет `mcpCapabilities.http: false`. HTTP-транспорт и
-`http: true` в бинаре — итерация 3 (задача 9.6).
+`http: true` в бинаре — итерация 3 (задача 9.6). В `serve --ws` capability `mcp` выключена
+совсем (решение пользователя по ревью PR #158, D3 change): держатель токена WebSocket иначе
+запускал бы произвольные команды на машине агента; это отступление от ACP (`03-Session Setup.md`,
+stdio MUST) записано в §13.15, включение явным флагом хоста — отдельный change.
 
 **Решение о библиотеке MCP** — чек-лист, который заполняется в `design.md` change
 `add-agent-mcp-client` в начале этапа, до кода (разведка не дольше двух дней, исключение (д)
