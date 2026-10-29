@@ -11,6 +11,8 @@ import 'package:codelab_agent_core/testing.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
 import 'package:codelab_agent_mcp/testing.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/server_harness.dart' show JournalStore;
@@ -91,13 +93,7 @@ Future<AgentUnderTest> startAgent(
   );
   final mcp = _FixtureMcp(setup);
   final core = buildAgentCore(
-    // Как бинарь до итерации 3: HTTP-транспорта нет, `mcpCapabilities.http`
-    // — `false` (задача 8.2; переход на `true` — задачи 9.5–9.6).
-    profile: HostProfile.of(setup.profile).narrowed(const {
-      HostCapability.mcp: CapabilityTransport({
-        'stdio',
-      }, 'HTTP-транспорт — итерация 3'),
-    }),
+    profile: HostProfile.of(setup.profile),
     services: AgentCoreServices(
       baseEnv: LocalExecutionEnv(cwd: setup.cwd),
       // Сессии спрашивают через AcpPermissionGate соединения.
@@ -111,7 +107,15 @@ Future<AgentUnderTest> startAgent(
       // от него (design.md change `add-agent-mcp-client`, D11), а серверы
       // фикстуры берутся из `setup.mcp`.
       mcp: McpClientConnector(
-        transports: McpTransports(stdio: mcp.transports),
+        transports: McpTransports(
+          stdio: mcp.transports,
+          // HTTP-сервер фикстуры — настоящий `StreamableHttpTransport` на
+          // `MockClient` над `FakeMcpServer` (D15, задача 9.5).
+          http: StreamableHttpTransportFactory(
+            client: mcp.httpClient(),
+            clock: clock,
+          ),
+        ),
         clock: clock,
       ),
     ),
@@ -331,6 +335,22 @@ final class _FixtureMcp {
     }
     transports = FakeMcpTransportFactory(servers);
   }
+
+  /// Клиент HTTP, который направляет запрос серверу по первой метке хоста
+  /// (`https://<имя>.mcp.test/mcp`): `url` кадра `session/new` другого
+  /// способа выбрать fake-сервер не даёт (D15). Отката «единственный сервер»
+  /// нет: он маскировал бы неверный url фикстуры.
+  http.Client httpClient() => MockClient.streaming((request, body) {
+    final name = request.url.host.split('.').first;
+    final server = servers[name];
+    if (server == null) {
+      throw http.ClientException(
+        'fixture error: no setup.mcp server "$name" for ${request.url}; '
+        'use https://<name>.mcp.test/mcp',
+      );
+    }
+    return server.handleHttp(request, body);
+  });
 
   final Map<String, List<FixtureMcpCall>> _expected;
   final servers = <String, FakeMcpServer>{};

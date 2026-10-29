@@ -331,12 +331,34 @@ void main() {
           'stdio MCP servers are disabled over WebSocket',
         );
         expect(stdio.core.plan.offReasons, isNot(contains(HostCapability.mcp)));
+        // С задачи 9.6 по stdio доступны и процессы, и streamable HTTP.
         expect(
           stdio.core.plan.profile.states[HostCapability.mcp],
           isA<CapabilityTransport>().having((c) => c.transports, 'transports', {
             'stdio',
+            'http',
           }),
         );
+      },
+    );
+
+    // agent-binary «Возможности MCP в initialize» (задача 9.6; design.md
+    // change `add-agent-mcp-client`, D3): HTTP-транспорт на HTTP-клиенте
+    // хоста, поэтому `initialize` обещает `http`; по WebSocket MCP выключен.
+    test(
+      'initialize: mcpCapabilities.http is true over stdio, false over ws',
+      () async {
+        final script = writeScript({'steps': <Object?>[]});
+
+        for (final (transport, http) in [('--stdio', true), ('--ws', false)]) {
+          final (_, peer) = await start(
+            scriptedOptions(script, transport: transport),
+          );
+          final init = await peer.call('initialize', {'protocolVersion': 1});
+
+          final caps = init['agentCapabilities']! as Map<String, Object?>;
+          expect(caps['mcpCapabilities'], {'http': http, 'sse': false});
+        }
       },
     );
   });

@@ -66,14 +66,15 @@ const _stage4Fixtures = {
 };
 
 /// MCP-фикстуры этапа 8 итерации 2 (design.md change `add-agent-mcp-client`,
-/// D15): все с ролью `agent`. `acp/mcp-http-tool-call` придёт в итерации 3
-/// вместе с настоящим `StreamableHttpTransport`.
+/// D15): все с ролью `agent`. `acp/mcp-http-tool-call` проходит через
+/// настоящий `StreamableHttpTransport` (итерация 3).
 const _stage8McpFixtures = {
   'acp/session-new-with-mcp',
   'acp/mcp-tool-permission',
   'acp/mcp-stdio-tool-call',
   'acp/mcp-result-fenced',
   'acp/set-mode-plan-rejects-mcp-write',
+  'acp/mcp-http-tool-call',
 };
 
 void main() {
