@@ -39,6 +39,18 @@ void main() {
     expect((h.events.last as ToolCallFinished).outcome, ToolOutcome.failed);
   });
 
+  test('a validation exception is logged as tool.validate.error', () async {
+    final h = await ExecutorHarness.create([_BrokenSchemaTool()]);
+
+    await h.run('broken', const {}, id: 'call_7');
+
+    final record = h.logger.eventsOf('tool.validate.error').single;
+    expect(record.level, LogLevel.debug);
+    expect(record.fields['tool'], 'broken');
+    expect(record.fields['tool_call_id'], 'call_7');
+    expect(record.error, contains('schema is broken'));
+  });
+
   test('a validation exception does not count in the MisuseBreaker', () async {
     final h = await ExecutorHarness.create([_BrokenSchemaTool()]);
     final breaker = MisuseBreaker(const MisuseLimits());
