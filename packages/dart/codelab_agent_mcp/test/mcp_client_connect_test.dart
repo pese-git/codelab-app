@@ -591,6 +591,9 @@ void main() {
               .eventsOf('mcp.message.ignored')
               .where((r) => r.fields['kind'] == 'subscription_failed');
           expect(ignored, hasLength(1));
+          // Обрыв потока ответа переиздаёт подписку один раз; `failed` —
+          // только после второго обрыва (D5, D10; задача 9.1).
+          expect(server.subscriptions, listen == FakeListen.abort ? 2 : 1);
         },
       );
     }

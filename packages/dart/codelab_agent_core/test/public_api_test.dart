@@ -19,6 +19,12 @@ void main() {
     expect(barrel, isNot(contains("export 'src/testing/")));
   });
 
+  // Второй реализации SSE нет: MCP-клиент читает потоки тем же декодером
+  // (change `add-agent-mcp-client`, D10; §2.6).
+  test('the barrel exports the SSE decoder for the MCP transport', () {
+    expect(barrel, contains("export 'src/llm/sse.dart'"));
+  });
+
   test('the barrel exports the factory and its configuration', () {
     expect(barrel, contains("export 'src/llm/provider_factory.dart'"));
     expect(barrel, contains("export 'src/llm/provider_config.dart'"));

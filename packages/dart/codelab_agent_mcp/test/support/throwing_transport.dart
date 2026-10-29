@@ -15,7 +15,7 @@ final class ThrowingTransport implements McpTransport {
   Stream<String> get incoming => inner.incoming;
 
   @override
-  Stream<Object> get abortedRequests => inner.abortedRequests;
+  Stream<McpRequestAbort> get abortedRequests => inner.abortedRequests;
 
   @override
   Future<McpTransportClosed> get done => inner.done;

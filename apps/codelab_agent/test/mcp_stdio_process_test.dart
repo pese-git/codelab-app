@@ -48,11 +48,11 @@ void main() {
     });
     agent.sendJson(request(1, 'initialize', {'protocolVersion': 1}));
     final initialized = await agent.responseTo(1);
-    // До итерации 3 (HTTP-транспорт, задача 9.6) бинарь объявляет только stdio.
+    // С задачи 9.6 бинарь по stdio объявляет и streamable HTTP.
     expect(
       ((initialized['result']! as Map)['agentCapabilities']!
           as Map)['mcpCapabilities'],
-      {'http': false, 'sse': false},
+      {'http': true, 'sse': false},
     );
 
     agent.sendJson(

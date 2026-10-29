@@ -102,8 +102,48 @@ void main() {
     expect(await _decode(['event\ndata: a\n\n']), [_event('a', event: '')]);
   });
 
-  test('retry and unknown fields are ignored', () async {
-    expect(await _decode(['retry: 10\nfoo: bar\ndata: a\n\n']), [_event('a')]);
+  test('unknown fields are ignored', () async {
+    expect(await _decode(['foo: bar\ndata: a\n\n']), [_event('a')]);
+  });
+
+  // MCP legacy возобновляет поток по `retry` (change `add-agent-mcp-client`,
+  // D10): событие `id` + `retry` + пустой `data` — «заправка» (priming).
+  test('retry is exposed in milliseconds, digits only, and persists', () async {
+    final events = await _decode([
+      'id: e1\nretry: 100\ndata:\n\ndata: b\n\nretry: 1x\ndata: c\n\n',
+    ]);
+    expect(events.map((e) => (e.data, e.id, e.retry)), [
+      ('', 'e1', const Duration(milliseconds: 100)),
+      ('b', 'e1', const Duration(milliseconds: 100)),
+      ('c', 'e1', const Duration(milliseconds: 100)),
+    ]);
+  });
+
+  // `int.parse` на 20+ цифрах бросал FormatException внутри async* и ронял
+  // процесс (ревью итерации 3): такой `retry` игнорируется, поток живёт.
+  test('an absurd retry is ignored and does not break the stream', () async {
+    final huge = '9' * 25;
+    final events = await _decode(['retry: $huge\ndata: a\n\ndata: b\n\n']);
+    expect(events.map((e) => (e.data, e.retry)), [('a', null), ('b', null)]);
+    // Предел — сутки: больше игнорируется, ровно сутки принимается.
+    expect(
+      (await _decode(['retry: 86400001\ndata: a\n\n'])).single.retry,
+      isNull,
+    );
+    expect(
+      (await _decode(['retry: 86400000\ndata: a\n\n'])).single.retry,
+      const Duration(hours: 24),
+    );
+  });
+
+  test('toString shows retry', () {
+    expect(
+      const ServerSentEvent(
+        data: 'x',
+        retry: Duration(milliseconds: 5),
+      ).toString(),
+      contains('retry: 0:00:00.005000'),
+    );
   });
 
   test('an empty line without data dispatches nothing', () async {

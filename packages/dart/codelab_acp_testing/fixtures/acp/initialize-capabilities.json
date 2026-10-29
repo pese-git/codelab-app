@@ -58,7 +58,7 @@
               "embeddedContext": true
             },
             "mcpCapabilities": {
-              "http": false,
+              "http": true,
               "sse": false
             },
             "sessionCapabilities": {
