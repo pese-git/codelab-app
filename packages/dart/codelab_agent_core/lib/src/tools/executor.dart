@@ -255,13 +255,20 @@ final class ToolCallExecutor implements ToolExecutor {
       );
     }
     final Map<String, Object?> args;
-    switch (validateArguments(tool.parameters, call.arguments)) {
-      case Ok(:final value):
-        args = value;
-      case Err(:final error):
-        return _invalid(
-          formatInvalidArguments(call.name, error, call.arguments),
-        );
+    try {
+      switch (validateArguments(tool.parameters, call.arguments)) {
+        case Ok(:final value):
+          args = value;
+        case Err(:final error):
+          return _invalid(
+            formatInvalidArguments(call.name, error, call.arguments),
+          );
+      }
+    } on Object catch (error) {
+      // Схема инструмента (в том числе MCP-сервера, недоверенного) не должна
+      // ронять цикл: это сбой инструмента, а не неверный вызов модели, поэтому
+      // он не считается в `MisuseBreaker` (TOOL-3).
+      return _valid(_error(errorText(error), ToolOutcome.failed));
     }
     try {
       if (tool.preflight(args) case final text?) {

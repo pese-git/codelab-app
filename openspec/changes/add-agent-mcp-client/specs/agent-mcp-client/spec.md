@@ -20,16 +20,20 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 
 - **Эпоха.** Первая посылка — `server/discover` с modern `_meta`.
   - `DiscoverResult` с `2026-07-28` в `supportedVersions` → modern.
-  - Распознанная modern-ошибка (`-32020`, `-32021`, `-32022`) или `DiscoverResult` без `2026-07-28` → нет общей версии. Соединение закрывается с `mcp.server.failed` и причиной `no common protocol version: server supports [...]`, где перечислены только версии сервера формата `YYYY-MM-DD`; отката на `initialize` НЕТ.
+  - `-32022` или `DiscoverResult` без `2026-07-28` → нет общей версии. Соединение закрывается с `mcp.server.failed` и причиной `no common protocol version: server supports [...]`, где перечислены только версии сервера формата `YYYY-MM-DD`; отката на `initialize` НЕТ.
+  - `-32020` или `-32021` на пробе → сервер modern отверг пробу. Соединение закрывается с `mcp.server.failed` и причиной `server rejected the probe (code <N>)`; отката на `initialize` НЕТ.
   - stdio: любая другая ошибка или отсутствие ответа за `min(5 с, connectTimeout / 2)` → legacy.
   - HTTP: `4xx` без распознанной modern-ошибки (`-32020`, `-32021`, `-32022`) в теле → legacy; решает тело, а не статус, поэтому `400`, `404` или `405` с такой ошибкой — modern. `-32601` modern-ошибкой пробы не считается.
   - Эпоха SHALL кэшироваться на время жизни процесса (stdio) или на `origin` URL (HTTP) в памяти. Кэш SHALL пропускать пробу только для `legacy`: modern-сервер SHALL получать `server/discover` всегда, потому что только он даёт `capabilities`. Неподтвердившийся кэш (`initialize` вернул ошибку) SHALL удаляться, и эпоха определяется пробой заново один раз.
 - **Modern.** Каждый запрос SHALL нести `_meta` с `io.modelcontextprotocol/protocolVersion: "2026-07-28"`, `io.modelcontextprotocol/clientCapabilities: {}` и `io.modelcontextprotocol/clientInfo` (`version` — версия агента из ядра). Клиент SHALL трактовать отсутствующий `resultType` как `complete`, а неизвестный — как ответ не по схеме. При `capabilities.tools.listChanged` клиент SHALL открывать `subscriptions/listen` с `toolsListChanged: true` и ждать `notifications/subscriptions/acknowledged`. Неудача подписки НЕ SHALL отключать сервер:
-  - ошибка, успешный ответ или обрыв потока ответа на `subscriptions/listen` до подтверждения → сервер подключён без обновлений, лог `mcp.message.ignored` с `kind: subscription_failed`;
-  - подтверждения нет за `min(5 с, connectTimeout / 2)` → так же, без обновлений;
+  - ошибка или успешный ответ на `subscriptions/listen` до подтверждения → сервер подключён без обновлений, лог `mcp.message.ignored` с `kind: subscription_failed`;
+  - подтверждения нет за `min(5 с, connectTimeout / 2)` → так же, без обновлений, и запросу подписки SHALL уходить сигнал отмены своего транспорта (stdio — `notifications/cancelled`, HTTP — закрытие потока ответа; `basic/patterns/cancellation.md`, «Timeouts»);
   - подтверждение без `toolsListChanged` → без обновлений.
-- **Legacy.** Клиент SHALL выполнить `initialize` с `protocolVersion: "2025-11-25"` и пустыми `capabilities`, принять в ответе `2025-11-25`, `2025-06-18` или `2025-03-26` (иначе `mcp.server.failed` с причиной `unsupported protocol version <v>`, где `<v>` — версия формата `YYYY-MM-DD` или `(unrecognized)`) и отправить `notifications/initialized`. `initialize` НЕ SHALL отменяться уведомлением. Клиент SHALL отвечать на `ping` пустым результатом и принимать входящие пакеты JSON-RPC (массив).
-- **Обе эпохи.** `tools/list` SHALL читаться по всем страницам `nextCursor`, не больше 100 страниц. Запросы сервера, кроме legacy-`ping`, SHALL получать `-32601`. Исходящие id SHALL быть целыми числами без повторов в пределах соединения. Пустая строка SHALL считаться допустимым курсором, а не концом списка. Инструмент с невалидным `x-mcp-header` (HTTP) или с `execution.taskSupport: "required"` при объявленном `tasks.requests.tools.call` (legacy) SHALL пропускаться с `mcp.tool.invalid` и `reason`, остальные инструменты регистрируются.
+
+  Подписку, снятую сервером — успешным ответом на `subscriptions/listen` или `notifications/cancelled` с `requestId`, равным id `subscriptions/listen` (`cancellation.md`), — клиент SHALL считать завершённой: сервер подключён без обновлений, лог `mcp.message.ignored` с `kind: subscription_closed`, при `close()` сигнал отмены на этот id НЕ SHALL отправляться. `notifications/cancelled` с другим `requestId` SHALL игнорироваться с `kind: unknown_notification`.
+- **Legacy.** Клиент SHALL выполнить `initialize` с `protocolVersion: "2025-11-25"` и пустыми `capabilities`, принять в ответе `2025-11-25`, `2025-06-18` или `2025-03-26` (иначе `mcp.server.failed` с причиной `unsupported protocol version <v>`, где `<v>` — версия формата `YYYY-MM-DD` или `(unrecognized)`) и отправить `notifications/initialized`. `initialize` НЕ SHALL отменяться уведомлением. Legacy-ветка SHALL считаться выбранной с момента отправки `initialize`: с этого момента клиент SHALL отвечать на `ping` сервера пустым результатом (в том числе в окне рукопожатия), на прочие запросы сервера — `-32601`, и принимать входящие пакеты JSON-RPC (массив).
+- **Modern и окно пробы.** На запрос сервера в modern-эпохе и до отправки `initialize` клиент НЕ SHALL отвечать (`basic/transports/stdio.md`, «Sending Messages»; `basic/transports/streamable-http.md`, «Sending Messages», п. 4): лог `mcp.message.ignored` с `kind: server_request` и `method` не длиннее 64 символов, соединение не рвётся.
+- **Обе эпохи.** `tools/list` SHALL читаться по всем страницам `nextCursor`, не больше 100 страниц. Исходящие id SHALL быть целыми числами без повторов в пределах соединения. Пустая строка SHALL считаться допустимым курсором, а не концом списка. Инструмент с невалидным `x-mcp-header` (HTTP) или с `execution.taskSupport: "required"` при объявленном `tasks.requests.tools.call` (legacy) SHALL пропускаться с `mcp.tool.invalid` и `reason`, остальные инструменты регистрируются.
 
 Определённая эпоха SHALL логироваться `mcp.server.era`. Deprecated HTTP+SSE и `2024-11-05` НЕ SHALL поддерживаться.
 
@@ -82,8 +86,24 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 - **THEN** сервер подключён с инструментами из `tools/list`, лог `mcp.message.ignored` с `kind: subscription_failed`, `mcp.server.failed` нет
 
 #### Scenario: Подтверждения подписки нет
-- **WHEN** modern-сервер принимает `subscriptions/listen`, но не присылает подтверждение
-- **THEN** не позже `min(5 с, connectTimeout / 2)` клиент продолжает подключение без обновлений и читает `tools/list`
+- **WHEN** modern-сервер на stdio принимает `subscriptions/listen`, но не присылает подтверждение
+- **THEN** не позже `min(5 с, connectTimeout / 2)` клиент отправляет одно `notifications/cancelled` с `requestId` подписки, продолжает подключение без обновлений и читает `tools/list`; при `close()` второго `notifications/cancelled` на этот id нет
+
+#### Scenario: Probe отклонён modern-ошибкой
+- **WHEN** сервер отвечает на `server/discover` ошибкой `-32021`
+- **THEN** `initialize` не отправлен, соединение закрыто, `mcp.server.failed` с причиной `server rejected the probe (code -32021)`
+
+#### Scenario: Запрос modern-сервера без ответа
+- **WHEN** modern-сервер после подключения присылает запрос `{"id": 7, "method": "sampling/createMessage"}`
+- **THEN** клиент не пишет в транспорт ни ответа, ни ошибки с `id: 7`, лог `mcp.message.ignored` с `kind: server_request` и `method: sampling/createMessage`, сервер подключён
+
+#### Scenario: Ping в окне рукопожатия
+- **WHEN** legacy-сервер после отката на `initialize` присылает `ping` до ответа на `initialize`
+- **THEN** клиент отвечает на `ping` пустым `result` с тем же `id`, затем рукопожатие завершается как обычно
+
+#### Scenario: Сервер снял подписку
+- **WHEN** modern-сервер после подтверждения подписки присылает `notifications/cancelled` с `requestId`, равным id `subscriptions/listen`, а затем `notifications/tools/list_changed` с тем же `subscriptionId`
+- **THEN** лог `mcp.message.ignored` с `kind: subscription_closed`, сервер подключён, уведомление `list_changed` не вызывает `tools/list`, при `close()` клиент не отправляет `notifications/cancelled` на id подписки
 
 ### Requirement: Вызов инструмента, отмена и таймаут
 `McpClient.callTool` SHALL отправлять `tools/call {name, arguments}` с исходным именем инструмента сервера (в modern — с `_meta` протокола).
@@ -128,7 +148,7 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 - **THEN** результат — ошибка `… asked for client input, which is not supported.`, повторного `tools/call` нет
 
 ### Requirement: Обновление списка инструментов
-По `notifications/tools/list_changed` клиент SHALL перечитать `tools/list`; в modern уведомление принимается только с `io.modelcontextprotocol/subscriptionId` своей подписки `subscriptions/listen`, в legacy — с общего канала stdio или GET-потока HTTP. Уведомление во время перечитывания SHALL ставить один повтор, а не параллельное перечитывание. Уведомление, пришедшее во время подключения, SHALL вызывать одно перечитывание сразу после рукопожатия. Сбой перечитывания SHALL оставлять прежний набор и сервер подключённым, с логом `mcp.tools.refresh_failed {server, reason}` (warning). Новый набор SHALL проходить те же правила имён и коллизий, что при подключении; коллизия в обновлении SHALL отключать сервер, чьё обновление её вызвало. Ядро SHALL применять его только на границе шага, до сборки запроса к модели, и никогда внутри пакета вызовов. Применение SHALL сопровождаться логом `mcp.tools.changed` с добавленными и удалёнными именами.
+По `notifications/tools/list_changed` клиент SHALL перечитать `tools/list`; в modern уведомление принимается только с `io.modelcontextprotocol/subscriptionId` своей подписки `subscriptions/listen`, в legacy — с общего канала stdio или GET-потока HTTP. Уведомление во время перечитывания SHALL ставить один повтор, а не параллельное перечитывание. Уведомление, пришедшее во время подключения, SHALL вызывать одно перечитывание сразу после рукопожатия. Сбой перечитывания SHALL оставлять прежний набор и сервер подключённым, с логом `mcp.tools.refresh_failed {server, reason}` (warning). Таймаут страницы `tools/list` перечитывания (`connectTimeout` сервера) SHALL сопровождаться одним сигналом отмены своего транспорта на id этой страницы (stdio — `notifications/cancelled`, HTTP — закрытие потока ответа; `cancellation.md`, «Timeouts»); причина — `no answer to tools/list`. Новый набор SHALL проходить те же правила имён и коллизий, что при подключении; коллизия в обновлении SHALL отключать сервер, чьё обновление её вызвало. Ядро SHALL применять его только на границе шага, до сборки запроса к модели, и никогда внутри пакета вызовов. Применение SHALL сопровождаться логом `mcp.tools.changed` с добавленными и удалёнными именами.
 
 #### Scenario: Новый инструмент между шагами
 - **WHEN** сервер присылает `list_changed` с новым инструментом `lookup` во время исполнения пакета вызовов
@@ -145,6 +165,10 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 #### Scenario: Перечитывание не удалось
 - **WHEN** после `list_changed` сервер отвечает на `tools/list` ошибкой `-32603`
 - **THEN** набор инструментов сервера прежний, сервер подключён, лог `mcp.tools.refresh_failed` с причиной `tools/list failed (code -32603)` без текста ошибки сервера
+
+#### Scenario: Таймаут перечитывания шлёт отмену
+- **WHEN** после `list_changed` stdio-сервер не отвечает на `tools/list` дольше `connectTimeout`
+- **THEN** клиент отправляет одно `notifications/cancelled` с `requestId` этого `tools/list`, набор прежний, сервер подключён, лог `mcp.tools.refresh_failed` с причиной `no answer to tools/list`
 
 #### Scenario: Коллизия в обновлении
 - **WHEN** сервер `b`, стоящий в списке позже `a`, работает, а `a` присылает `list_changed` с инструментом, чьё имя совпало с инструментом `b`
@@ -186,7 +210,7 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
   - `404` при выданном `Mcp-Session-Id` — конец соединения (сознательное отступление от повторного `initialize` legacy: переподключения в MVP нет).
   - При закрытии — `DELETE` (best effort, 2 с).
   - Поток ответа, закрытый сервером до ответа после события с `id`, SHALL возобновляться `GET` с `Last-Event-ID` после паузы `retry` (без `retry` — 1 с), не больше 5 раз на запрос (`docs/protocols/mcp/specification/2025-11-25/basic/transports.md`). Это дочитывание того же ответа, а не новый `tools/call`.
-- **Повтор после обрыва.** Без возобновления оборванный запрос `tools/list` и `server/discover` SHALL повторяться один раз с новым id. `tools/call` НЕ SHALL повторяться автоматически, результат — «disconnected during the call».
+- **Повтор после обрыва** (`changelog.md`, п. 9). Без возобновления оборванный запрос `tools/list`, `server/discover` и `subscriptions/listen` SHALL повторяться один раз с новым id; новый id `subscriptions/listen` становится `subscriptionId`; после подтверждения переизданной подписки клиент SHALL один раз перечитать `tools/list`, чтобы не потерять изменения из окна обрыва; повторный обрыв подписки — жизнь без обновлений. `tools/call` НЕ SHALL повторяться автоматически, результат — «disconnected during the call».
 
 #### Scenario: Ответ потоком SSE
 - **WHEN** `MockClient` отвечает на `tools/call` потоком `text/event-stream` с уведомлением `notifications/progress` и затем ответом
@@ -211,6 +235,10 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 #### Scenario: Обрыв modern-потока на вызове
 - **WHEN** поток ответа modern-сервера на `tools/call` обрывается без ответа
 - **THEN** результат — «disconnected during the call», повторного `tools/call` нет; оборванный `tools/list` повторён один раз с новым id
+
+#### Scenario: Оборванная подписка переиздаётся
+- **WHEN** поток ответа modern-сервера на `subscriptions/listen` обрывается без ответа
+- **THEN** клиент один раз отправляет `subscriptions/listen` с новым id, после его подтверждения один раз перечитывает `tools/list`, принимает `list_changed` только с новым `subscriptionId`; при втором обрыве сервер остаётся подключённым без обновлений
 
 #### Scenario: Истёкшая legacy-сессия
 - **WHEN** после legacy-подключения `POST` получает `404`
@@ -242,7 +270,7 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 - **THEN** `tool_call_update` — `failed`, модель получает огороженный текст `not found`
 
 ### Requirement: Наблюдаемость MCP без секретов
-Клиент, транспорты и ядро SHALL писать события `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (debug), `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (debug) с полями design.md, D13, `session_id` и `server`. Значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*` и тела сообщений НЕ SHALL попадать ни в одно поле лога. Поле `reason` SHALL содержать только текст кода CodeLab: `message` и `data` ошибки сервера, неизвестный `resultType` и `serverInfo` в него НЕ SHALL входить. Версии протокола от сервера (`protocolVersion`, `supportedVersions`) SHALL входить только после проверки формата `YYYY-MM-DD`; не прошедшие проверку SHALL отбрасываться; ошибка JSON-RPC описывается как `'<method> failed (code N)'`, непредвиденное исключение — `unexpected error: <runtimeType>`; длина — не больше 200 символов с обрезкой по рунам. Описания серверов НЕ SHALL записываться в журнал сессии.
+Клиент, транспорты и ядро SHALL писать события `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (debug), `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (debug) с полями design.md, D13, `session_id` и `server`. Значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*` и тела сообщений НЕ SHALL попадать ни в одно поле лога. Поле `reason` SHALL содержать только текст кода CodeLab: `message` и `data` ошибки сервера, неизвестный `resultType` и `serverInfo` в него НЕ SHALL входить. Версии протокола от сервера (`protocolVersion`, `supportedVersions`) SHALL входить только после проверки формата `YYYY-MM-DD`; не прошедшие проверку SHALL отбрасываться. Имя метода запроса сервера SHALL попадать только в `mcp.message.ignored` с `kind: server_request` (debug), не длиннее 64 символов по рунам; ошибка JSON-RPC описывается как `'<method> failed (code N)'`, непредвиденное исключение — `unexpected error: <runtimeType>`; длина — не больше 200 символов с обрезкой по рунам. Описания серверов НЕ SHALL записываться в журнал сессии.
 
 #### Scenario: Секреты не в логе
 - **WHEN** сессия подключает stdio-сервер с `env` `API_KEY=sk-123` и HTTP-сервер с заголовком `Authorization: Bearer t-456`, оба сервера падают

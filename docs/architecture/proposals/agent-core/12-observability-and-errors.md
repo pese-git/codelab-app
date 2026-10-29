@@ -98,11 +98,11 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp.server.closed` | info | `transport`, `exit_code` (stdio) |
 | `mcp.server.stderr` | debug | `line` (≤ 4 КиБ) |
 | `mcp.tools.changed` | info | `added`, `removed` |
-| `mcp.tools.refresh_failed` | warning | `reason` — перечитывание `tools/list` после `list_changed` не удалось, прежний набор инструментов остаётся |
+| `mcp.tools.refresh_failed` | warning | `reason` (`tools/list failed (code N)`, `no answer to tools/list`) — перечитывание `tools/list` после `list_changed` не удалось, прежний набор инструментов остаётся |
 | `mcp.tool.invalid` | warning | `tool`, `reason` |
 | `mcp.tool.description_truncated` | info | `tool`, `length` |
 | `mcp.call.cancelled`, `mcp.call.timeout` | info | `tool_call_id`, `request_id` |
-| `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`, `subscription_failed`) |
+| `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`, `subscription_failed`, `server_request`); у `server_request` — `method` запроса сервера, не длиннее 64 символов (рун) |
 
 В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов
 и ответов; причины ошибок транспорта формирует наш код, без текста заголовков (OBS-инварианты,
@@ -111,8 +111,9 @@ final class LogRecord {           // то, что получает sink хост
 `reason` событий `mcp.server.skipped`, `mcp.server.failed` и `mcp.tools.refresh_failed` содержит
 только текст нашего кода: `message` и `data` ошибки сервера, неизвестный `resultType` и
 `serverInfo` в причину не входят. Версии протокола сервера (`protocolVersion`, `supportedVersions`)
-входят только после проверки формата `YYYY-MM-DD`, остальные отбрасываются. Ошибка JSON-RPC описывается методом и кодом
-(`'<method> failed (code N)'`), непредвиденное исключение — `unexpected error: <runtimeType>`;
+входят только после проверки формата `YYYY-MM-DD`, остальные отбрасываются. Имя метода запроса сервера
+входит только в `mcp.message.ignored` с `kind: server_request` (debug, ≤ 64 рун). Ошибка JSON-RPC описывается методом и кодом
+(`'<method> failed (code N)'`), отказ modern-сервера на пробе `-32020`/`-32021` — `server rejected the probe (code N)`, непредвиденное исключение — `unexpected error: <runtimeType>`;
 обрезка до 200 символов — по рунам Unicode. Полный список причин — design.md change
 `add-agent-mcp-client`, D13.
 
