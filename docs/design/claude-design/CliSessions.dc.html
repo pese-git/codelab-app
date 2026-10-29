@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — sessions</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli sessions: rename, branches and rewind output in the transcript, a read-only lease notice, and the /sessions --all picker open over the composer">
+    <div class="grow">
+      <div class="ln"><span class="ac b">&gt;</span> /rename "Fix reconnect race"</div>
+      <div class="ln"><span class="ok">✓</span> Session renamed: <span class="b">Fix reconnect race</span></div>
+      <div class="ln"><span class="ac b">&gt;</span> /branches</div>
+      <div class="ln mu">  branch   messages  updated   preview</div>
+      <div class="ln"><span class="ac">*</span> main         14     14:02    "Retry the restore only after the lease is free"</div>
+      <div class="ln">  b2           9      13:40    "Try a mutex instead"  <span class="mu">[label: mutex-try]</span></div>
+      <div class="ln"><span class="ac b">&gt;</span> /rewind 3</div>
+      <div class="ln wa">  Files will not be restored: lib/a.dart, test/a_test.dart. Rewind? [y/N] <span class="b">n</span></div>
+      <div class="ln mu">  Rewind cancelled.</div>
+      <div class="ln"><span class="ac b">&gt;</span> /resume provider-wizard</div>
+      <div class="ln wa">! Session is open in codelab_app (pid 4182). Opened read-only; /fork to continue here.</div>
+      <div class="ln"> </div>
+      <div class="ln"><span class="ac">┌─</span> <span class="b">Sessions</span> <span class="mu">· all folders · 6 of 41 · sorted by last change</span> <span class="ac">──────────────────────────────────────────────</span></div>
+      <div class="ln"><span class="ac">│</span> filter: <span class="b">rec</span><span class="cur"> </span></div>
+      <div class="ln"><span class="ac">│</span> <span class="mu">  title                             folder                         branches  when     </span></div>
+      <div class="ln sel"><span class="ac">│</span> <span class="ac b">›</span> Fix <span class="u b">rec</span>onnect race                ~/…/codelab-app                     2    14:02</div>
+      <div class="ln"><span class="ac">│</span>   <span class="u b">Rec</span>ent projects list              ~/…/codelab-app                     1    yesterday</div>
+      <div class="ln"><span class="ac">│</span>   WS <span class="u b">rec</span>onnect backoff              ~/…/codelab-agent                   3    Mon      <span class="wa">open in app</span></div>
+      <div class="ln"><span class="ac">│</span>   Session <span class="u b">rec</span>ord format (JSONL)     ~/…/codelab-agent                   1    Oct 18</div>
+      <div class="ln"><span class="ac">│</span>   <span class="u b">Rec</span>ap of stage 5                  ~/…/docs                            1    Oct 12</div>
+      <div class="ln"><span class="ac">│</span>   Pre<span class="u b">rec</span>onditions for lease         ~/…/codelab-agent                   2    Oct 09</div>
+      <div class="ln"><span class="ac">└──────────────────────────────────────────────────────────────────────────────────────────────────────────</span></div>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln"><span class="ac b">&gt;</span> /sessions --all rec<span class="cur"> </span></div>
+    <div class="ln mu">↑↓ move · enter resume · f fork · r rename · tab this folder / all · --since --until --more · esc close</div>
+    <div class="ln"><span class="mu">idle</span>  standard · claude-sonnet-5-5 · ctx 31% · ⎇ develop · <span class="wa">read-only</span></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

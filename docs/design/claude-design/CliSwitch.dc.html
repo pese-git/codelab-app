@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — switching sessions in the TUI</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.tb{font:inherit;color:inherit;background:transparent;border:0;padding:0 1ch 0 0;margin:0;cursor:pointer;white-space:pre}
+.tb:hover{text-decoration:underline}
+.strip{display:flex;gap:2ch;white-space:pre;overflow:hidden}
+.pal{position:absolute;left:12ch;right:12ch;top:72px;border:1px solid var(--t-accent);background:var(--t-bg);padding:6px 1ch;z-index:2}
+.pi{display:flex;gap:2ch;width:100%;text-align:left}
+.pi.on{background:var(--t-sel)}
+.qin{font:inherit;color:var(--t-fg);background:transparent;border:0;outline:0;flex:1;padding:0;caret-color:var(--t-fg)}
+.box{border:1px solid var(--t-appr);padding:4px 1ch;display:flex;flex-direction:column}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px; position: relative">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" aria-label="codelab_cli full-screen TUI with three open sessions">
+    <div class="ln strip" role="tablist" aria-label="Open sessions">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+        <button class="tb" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}"><span class="mu">{{t.no}}</span> <span class="{{t.mkCls}}">{{t.mk}}</span> <span class="{{t.titleCls}}">{{t.title}}</span></button>
+      </sc-for>
+      <span style="flex: 1"></span>
+      <button class="tb mu" onClick="{{openSw}}">ctrl+g sessions</button>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="grow">
+      <sc-for list="{{lines}}" as="l" hint-placeholder-count="8">
+        <div class="ln {{l.c}}">{{l.t}}</div>
+      </sc-for>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <sc-if value="{{showApproval}}" hint-placeholder-val="{{ false }}">
+      <div class="box" role="group" aria-label="Permission request">
+        <div class="ln"><span class="ap b">Run a command?</span>  <span class="mu">session 1 · tool call_12</span></div>
+        <div class="ln">  $ fvm flutter test packages/codelab_ui</div>
+        <div class="ln"><button class="tb ac" onClick="{{allow}}">[y] allow once</button>  <button class="tb">[a] always</button>  <button class="tb er" onClick="{{deny}}">[n] reject</button>  <span class="mu">[N] always reject  [?] details</span></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{showComposer}}" hint-placeholder-val="{{ true }}">
+      <div class="ln"><span class="ac b">&gt;</span> {{draft}}<span class="cur"> </span></div>
+    </sc-if>
+    <div class="ln mu">{{hints}}</div>
+    <div class="ln"><span class="{{statusCls}}">{{statusLead}}</span>{{status}}</div>
+  </div>
+
+  <sc-if value="{{swOpen}}" hint-placeholder-val="{{ false }}">
+    <div class="pal" role="dialog" aria-label="Session switcher">
+      <div class="ln"><span class="ac b">Switch session</span>  <span class="mu">type to filter · enter switch · del close · esc</span></div>
+      <div class="ln" style="display: flex"><span class="ac">/ </span><input class="qin" aria-label="Filter sessions" value="{{q}}" onChange="{{onQ}}" onKeyDown="{{onKey}}" autoFocus="{{ true }}"></div>
+      <sc-for list="{{swItems}}" as="s" hint-placeholder-count="3">
+        <button class="{{s.cls}}" onClick="{{s.pick}}"><span class="mu">{{s.no}}</span><span class="{{s.mkCls}}">{{s.mk}}</span><span style="flex: 1; overflow: hidden">{{s.title}}</span><span class="mu">{{s.when}}</span></button>
+      </sc-for>
+      <div class="ln mu">  Open another session…   (/sessions)</div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+const SESS = [
+  { title: 'Markdown & diff in transcript', when: 'now', draft: '' },
+  { title: 'Fix reconnect race in WorkspaceRestorer', when: '2m ago', draft: 'also check timers after dispose()' },
+  { title: 'Stage 5: split CodeLabShellCubit', when: '5m ago', draft: '' }
+];
+const BODY = [
+  [
+    { t: '> Render agent replies as markdown, and show edits as a diff in the approval.', c: '' },
+    { t: ' ', c: '' },
+    { t: '✓ Edit codelab_transcript_panel.dart  +18 -6                                                    0.0s', c: '' },
+    { t: '⠹ Run fvm flutter test packages/codelab_ui                                            waiting', c: 'ap' }
+  ],
+  [
+    { t: '> The restorer sometimes reconnects twice after sleep. Find the race.', c: '' },
+    { t: ' ', c: '' },
+    { t: '✓ Read workspace_restorer.dart:1-188                                                         0.1s', c: '' },
+    { t: 'Two reconnect paths race: the sleep timer and the transport close event both call', c: '' },
+    { t: 'restore(). I guard late events by connection generation; see the diff below.', c: '' },
+    { t: '✓ Edit workspace_restorer.dart  +9 -3                                                        0.0s', c: '' }
+  ],
+  [
+    { t: '> Split CodeLabShellCubit into workspace and session cubits.', c: '' },
+    { t: ' ', c: '' },
+    { t: '✓ Run melos analyze                                                                           6.2s', c: '' },
+    { t: 'Done. WorkspaceCubit and SessionCubit replace the shell cubit; analyze is clean.', c: '' }
+  ]
+];
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const active = s.active ?? 1;
+    const appr = s.appr ?? 'pending';
+    const seen = s.seen ?? { 0: true, 1: true, 2: false };
+    const swOpen = s.swOpen ?? false;
+    const q = (s.q ?? '').toLowerCase();
+    const st = (i) => i === 0 ? (appr === 'pending' ? 'approval' : 'running') : i === 2 && !seen[2] ? 'bg' : 'idle';
+    const mk = (x) => x === 'approval' ? ['!', 'ap b'] : x === 'running' ? ['⟳', 'ac'] : x === 'bg' ? ['•', 'ok'] : [' ', 'mu'];
+    const go = (i) => { const sn = Object.assign({}, seen); sn[i] = true; this.setState({ active: i, seen: sn, swOpen: false, q: '' }); };
+    const tabs = SESS.map((x, i) => {
+      const m = mk(st(i));
+      return {
+        no: String(i + 1), mk: m[0], mkCls: m[1], title: x.title.length > 26 ? x.title.slice(0, 25) + '…' : x.title,
+        titleCls: i === active ? 'ac b' : '', sel: i === active ? 'true' : 'false', pick: () => go(i)
+      };
+    });
+    let lines = BODY[active].slice();
+    if (active === 0 && appr === 'allow') lines = lines.slice(0, 3).concat([{ t: '✓ Run fvm flutter test packages/codelab_ui   +29: All tests passed!                             4.1s', c: 'ok' }]);
+    if (active === 0 && appr === 'deny') lines = lines.slice(0, 3).concat([{ t: '✗ Run fvm flutter test packages/codelab_ui   rejected by user', c: 'er' }]);
+    const bgAppr = active !== 0 && appr === 'pending';
+    const items = SESS.map((x, i) => ({ i: i, x: x })).filter((o) => !q || o.x.title.toLowerCase().indexOf(q) >= 0);
+    const swItems = items.map((o, k) => {
+      const m = mk(st(o.i));
+      return { no: String(o.i + 1), mk: m[0], mkCls: m[1], title: o.x.title, when: o.x.when, cls: 'tb pi' + (k === 0 ? ' on' : ''), pick: () => go(o.i) };
+    });
+    return {
+      cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term',
+      tabs: tabs, lines: lines,
+      showApproval: active === 0 && appr === 'pending',
+      showComposer: !(active === 0 && appr === 'pending'),
+      allow: () => this.setState({ appr: 'allow' }),
+      deny: () => this.setState({ appr: 'deny' }),
+      draft: SESS[active].draft,
+      hints: active === 0 && appr === 'pending' ? 'y allow · a always · n reject · ? details · alt+1…3 sessions · ctrl+g switcher' : 'enter send · ctrl+g sessions · alt+1…3 switch · ctrl+pgup/pgdn prev/next · /close',
+      statusLead: bgAppr ? '! ' : '',
+      statusCls: bgAppr ? 'ap b' : 'mu',
+      status: bgAppr ? 'Session 1 is waiting for approval · alt+1     standard · claude-sonnet-5-5 · ctx 38%' : 'standard · claude-sonnet-5-5 · ctx ' + ['62', '38', '81'][active] + '% · ⎇ develop',
+      swOpen: swOpen,
+      openSw: () => this.setState({ swOpen: true, q: '' }),
+      q: s.q ?? '', onQ: (e) => this.setState({ q: e.target.value }),
+      onKey: (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); this.setState({ swOpen: false }); }
+        if (e.key === 'Enter' && items[0]) { e.preventDefault(); go(items[0].i); }
+      },
+      swItems: swItems
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agents and tasks board</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{height:900px;display:flex;flex-direction:column;overflow:hidden}
+.tools{display:flex;align-items:center;gap:2px}
+.tool{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;border-radius:4px;border:1px solid transparent;background:transparent;color:var(--text2);font-size:12px;cursor:pointer}
+.tool:hover{background:var(--hover)}
+.tool.on{background:var(--accent-weak);color:var(--accent-text);border-color:transparent}
+.side{width:272px}
+.grp{display:flex;align-items:center;gap:8px;min-height:32px;margin:2px 0;padding:0 8px;border:0;background:transparent;color:var(--text);border-radius:4px;width:100%;box-sizing:border-box;text-align:left;font-weight:600;cursor:pointer}
+.grp:hover{background:var(--hover)}
+.sess{padding-left:30px;gap:10px;min-height:32px}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sessarea{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.dock{position:relative;width:400px;flex:none;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--stroke);background:var(--layer)}
+.grip{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;display:flex;align-items:center;justify-content:center}
+.grip i{width:2px;height:28px;border-radius:1px;background:var(--cstroke2)}
+.dpane{display:flex;flex-direction:column;min-height:0}
+.dhead{display:flex;align-items:flex-end;gap:2px;padding:6px 8px 0;background:var(--mica);border-bottom:1px solid var(--stroke);flex:none}
+.dtab{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 4px 0 10px;border-radius:6px 6px 0 0;border:1px solid transparent;border-bottom:0;color:var(--text2);font-size:13px;text-decoration:none}
+.fx a.dtab{color:var(--text2)}
+.fx a.dtab.on{background:var(--layer);color:var(--text);border-color:var(--stroke)}
+.hsplit{height:7px;flex:none;border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);background:var(--mica);cursor:row-resize;display:flex;align-items:center;justify-content:center}
+.hsplit i{width:28px;height:2px;border-radius:1px;background:var(--cstroke2)}
+
+@media (max-width:760px){.root{height:auto}.f-pane,.side{width:100%}.f-nv{flex-wrap:wrap}.dock{width:100%}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <span class="f-logo">CL</span>
+  <span class="t-cap">CodeLab</span>
+  <span style="flex: 1"></span>
+  <label class="f-tb" data-fluent="AutoSuggestBox (Ctrl+K)" style="width: 360px">
+    <input type="search" placeholder="Search or run a command" aria-label="Command palette">
+    <span class="t-cap">Ctrl+K</span>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+  </label>
+  <span style="flex: 1"></span>
+  <div class="tools" role="toolbar" aria-label="Tool panes" data-fluent="CommandBar of ToggleButton (tool panes)">
+    <button class="tool" aria-pressed="false" title="Files (Ctrl+Shift+E)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files</button>
+    <button class="tool" aria-pressed="false" title="Diff"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 4v8M8 8h8M8 18h8"/></svg>Diff</button>
+    <a href="Terminal.dc.html" class="tool" aria-pressed="false" title="Terminal (Ctrl+`)" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8"/></svg>Terminal</a>
+    <button class="tool" aria-pressed="false" title="Plan"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>Plan</button>
+    <a href="Agents.dc.html" class="tool on" aria-pressed="true" title="Agents" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Agents<span class="f-badge" data-fluent="InfoBadge">2</span></a>
+    <a href="Usage.dc.html" class="tool" aria-pressed="false" title="Usage" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Usage</a>
+  </div>
+  <span class="tag ok"><span class="f-dot"></span>Connected · in-process</span>
+</header>
+
+<div class="f-nv" data-fluent="NavigationView">
+  <nav class="f-pane side" aria-label="Sessions" data-fluent="NavigationPane (open, collapsible)">
+    <div style="display: flex; gap: 4px; align-items: center; padding: 4px 4px 2px">
+      <button class="f-pi" data-fluent="PaneItemAction" style="flex: 1; margin: 0"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session<span class="t-cap t2" style="margin-left: auto">Ctrl+N</span></button>
+      <button class="f-btn subtle icon" aria-label="Collapse sidebar (Ctrl+B)" title="Collapse sidebar (Ctrl+B)" data-fluent="IconButton (toggle pane)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+    </div>
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="margin: 4px 8px 6px">
+      <input type="search" placeholder="Search sessions" aria-label="Search sessions">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+    </label>
+    <div style="flex: 1; overflow: auto; min-height: 0">
+      <div class="f-ph" data-fluent="PaneItemHeader">Pinned</div>
+      <a href="Main.dc.html" class="f-pi" data-fluent="PaneItem (pinned)" style="gap: 10px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 6 4 3H6l4-3zM12 13v7"/></svg><span class="nm">Release 1.0 checklist</span><span class="t-cap t2">codelab-app</span></a>
+
+      <div class="f-ph" data-fluent="PaneItemHeader">Projects</div>
+      <div data-fluent="PaneItemExpander (expanded)">
+        <button class="grp" aria-expanded="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">codelab-app</span><span class="t-cap t2">3</span></button>
+        <a href="Main.dc.html" class="f-pi on sess" data-fluent="PaneItem"><span class="nm">Markdown &amp; diff in transcript</span><span class="tag acc" style="height: 18px; padding: 0 6px" role="img" aria-label="Waiting for approval">approval</span></a>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Fix reconnect race in WorkspaceRestorer</span><span class="f-pr" style="width: 14px; height: 14px" role="img" aria-label="Turn running"></span></a>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Stage 5: split CodeLabShellCubit</span><span class="tag bad" style="height: 18px; padding: 0 6px" role="img" aria-label="Error">error</span></a>
+      </div>
+      <div data-fluent="PaneItemExpander (expanded)">
+        <button class="grp" aria-expanded="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">codelab-cli</span><span class="t-cap t2">1</span></button>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Provider wizard: /v1 hint</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" role="img" aria-label="Open in CLI, read-only" style="color: var(--warn)"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></a>
+      </div>
+      <div data-fluent="PaneItemExpander (collapsed)">
+        <button class="grp" aria-expanded="false"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">notes-app</span><span class="f-badge" style="background: var(--text2)">4</span></button>
+      </div>
+    </div>
+    <div class="f-psep" data-fluent="PaneItemSeparator"></div>
+    <a href="Connection.dc.html" class="f-pi" data-fluent="PaneItem (footer)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
+  </nav>
+
+  <section class="f-content" data-fluent="NavigationBody" style="flex-direction: row">
+    <div class="sessarea" data-acp="session pane (parent)">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px 8px; border-bottom: 1px solid var(--stroke); flex-wrap: wrap; position: relative" data-fluent="PageHeader">
+        <h1 class="t-sub" style="margin: 0; font-size: 17px; line-height: 22px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto">Review stage 6 CLI MVP</h1>
+        <span class="tag"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>codelab-app</span>
+        <span class="tag acc">standard</span>
+        <span style="flex: 1"></span>
+        <div class="f-cb" data-fluent="CommandBar">
+          <button class="f-cbb"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Rename</button>
+          <button class="f-cbb"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H6"/></svg>Fork</button>
+          <button class="f-cbb" title="Open to the side (Ctrl+\)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>Split</button>
+          <button class="f-cbb" aria-label="More options"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+        </div>
+
+      </div>
+      <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column-reverse; min-height: 0">
+        <div style="padding: 8px 20px 12px; display: flex; flex-direction: column; gap: 12px; max-width: 760px; width: 100%; box-sizing: border-box; margin: 0 auto">
+          <section aria-label="You" style="display: flex; flex-direction: column; align-items: flex-end"><div class="acp-bubble">Review the stage 6 CLI MVP against 09-11: commands, keys and the approval zone.</div></section>
+          <p style="margin: 0">I'll split this between two subagents — one reviews the key table, one maps the REPL command parsers — and ask docs-bot for the ACP 0.7 changes.</p>
+          <section class="f-exp" data-fluent="Expander (collapsed)" data-acp="AcpToolCallRow (task)"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg><span style="flex: 1; min-width: 0">Task <span class="mono t2" style="font-size: 13px">reviewer · Review CLI key table</span></span><span class="f-pr" style="width: 12px; height: 12px" role="img" aria-label="running"></span><span class="tag">running</span></div></section>
+          <section class="f-exp" data-fluent="Expander (collapsed)" data-acp="AcpToolCallRow (task)"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg><span style="flex: 1; min-width: 0">Task <span class="mono t2" style="font-size: 13px">explore · Find REPL command parsers</span></span><span class="f-pr" style="width: 12px; height: 12px" role="img" aria-label="running"></span><span class="tag">running</span></div></section>
+          <section class="f-ib warning" role="alert" data-fluent="InfoBar (warning)" data-acp="child permission request">
+          <span class="f-ibi">!</span>
+          <div style="flex: 1">
+            <span class="ttl">reviewer · wants to run <span class="mono">melos analyze</span></span>Permission requested by a subagent; no tool call was announced before it.
+            <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap"><button class="f-btn accent">Allow once</button><button class="f-btn">Always allow</button><button class="f-btn">Reject</button><button class="f-hl">Open reviewer</button><span class="tag warn" style="margin-left: 4px">needs you</span></div>
+          </div>
+        </section>
+        </div>
+      </div>
+      <div style="padding: 0 20px 10px; max-width: 760px; width: 100%; box-sizing: border-box; margin: 0 auto">
+        <div class="f-card" style="padding: 8px; display: flex; flex-direction: column; gap: 8px" data-acp="AcpPromptComposer">
+          <div role="list" aria-label="Attachments" style="display: flex; gap: 6px; flex-wrap: wrap">
+            <span role="listitem" class="acp-chip" data-acp="AcpAttachmentChip">acp_transcript_panel_test.dart<span class="t2">6 KB · embedded</span><button class="f-btn subtle icon" style="width: 24px; height: 24px" aria-label="Remove acp_transcript_panel_test.dart">×</button></span>
+          </div>
+          <label class="f-tb focus" data-fluent="TextBox (multiline)" style="align-items: flex-start; padding-top: 2px">
+            <textarea rows="1" aria-label="Prompt" style="font-size: 14px">After the tests pass, add a “Copy reply” button under the last block.</textarea>
+          </label>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+            <button class="f-btn subtle icon" aria-label="Attach files" data-fluent="IconButton"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15.5 7"/></svg></button>
+            <button class="f-btn subtle icon mono" aria-label="Commands" data-fluent="IconButton">/</button>
+            <button class="f-cbx" data-fluent="DropDownButton" style="min-width: 0">claude-sonnet-5-5<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            <button class="f-cbx" data-fluent="DropDownButton" style="min-width: 0">standard<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            <span style="flex: 1"></span>
+            <div class="f-split" data-fluent="SplitButton">
+              <button class="f-btn accent">Queue<span class="t-cap" style="opacity: .8">Enter</span></button>
+              <button class="f-btn accent" aria-label="More send options: Steer (Ctrl+Shift+Enter)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            </div>
+            <button class="f-btn icon" aria-label="Cancel turn (Esc)" data-fluent="IconButton"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="color: var(--bad)"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+          </div>
+        </div>
+        <div role="status" class="acp-status" style="padding: 8px 4px 0" data-acp="AcpSessionStatusBar">
+          <span style="color: var(--text)">claude-sonnet-5-5</span>
+          <span>standard</span>
+          <span style="display: flex; align-items: center; gap: 8px"><span class="f-pb" style="width: 56px" data-fluent="ProgressBar"><i style="width: 62%"></i></span>62% context</span>
+          <span class="mono" title="input 11.9k · cache read 0.4k · output 1.2k · reasoning 0.3k">12.3k → 1.2k</span>
+          <span><span style="color: var(--text)">$0.042</span></span>
+          <span style="flex: 1"></span>
+          <span style="display: flex; align-items: center; gap: 6px; color: var(--accent-text)"><span class="f-pr" style="width: 12px; height: 12px"></span>Waiting for approval</span>
+        </div>
+      </div>
+    </div>
+
+    <aside class="dock" aria-label="Tool panes" data-acp="AcpToolDock" data-fluent="TabView per pane, AcpResizeHandle" style="width: 520px">
+      <div class="grip" role="separator" aria-orientation="vertical" aria-label="Resize tool panes" data-acp="AcpResizeHandle"><i></i></div>
+      <section class="dpane" style="flex: 1 1 60%" aria-label="Agents pane" data-acp="AcpTaskBoard (A15)">
+        <div class="dhead" role="tablist" data-fluent="TabView">
+          <a href="Agents.dc.html" role="tab" aria-selected="true" class="dtab on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Agents<span class="f-btn subtle icon" style="width: 22px; height: 22px" aria-hidden="true">×</span></a>
+          <span style="flex: 1"></span>
+          <button class="f-btn subtle icon" aria-label="Pane options" style="width: 28px; height: 28px; margin-bottom: 2px"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+        </div>
+        <div style="overflow: auto; min-height: 0">
+          <section aria-labelledby="sa-h" data-acp="AcpSubagentBoard (snapshot _codelab/subagents/update)">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px 4px"><h2 id="sa-h" class="t-strong" style="margin: 0; font-size: 13px; flex: 1">Subagents</h2><span class="tag">2 running · 1 done · 1 failed</span></div>
+            <a href="#" class="f-li on" data-fluent="ListTile (selected)" style="flex-direction: column; align-items: stretch; gap: 2px; padding: 8px 12px">
+              <span style="display: flex; gap: 8px; align-items: center"><span class="tag acc">reviewer</span><span class="t-strong" style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Review CLI key table</span><span class="f-pr" style="width: 12px; height: 12px" role="img" aria-label="running"></span><span class="mono t-cap">2:14</span></span>
+              <span class="t-cap t2">run 1 · 3 steps · 4 tools · 12.0k tok · $0.03 · <span style="color: var(--warn)">waiting for approval</span></span>
+            </a>
+            <a href="#" class="f-li" data-fluent="ListTile" style="flex-direction: column; align-items: stretch; gap: 2px; padding: 8px 12px">
+              <span style="display: flex; gap: 8px; align-items: center"><span class="tag">explore</span><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Find REPL command parsers</span><span class="f-pr" style="width: 12px; height: 12px" role="img" aria-label="running"></span><span class="mono t-cap">0:41</span></span>
+              <span class="t-cap t2">search “SlashCommand” <span style="color: var(--warn)">(running 30 s, no output for 25 s)</span></span>
+            </a>
+            <a href="#" class="f-li" data-fluent="ListTile" style="flex-direction: column; align-items: stretch; gap: 2px; padding: 8px 12px">
+              <span style="display: flex; gap: 8px; align-items: center"><span class="tag">a2a:docs-bot</span><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Summarize ACP 0.7 changes</span><span class="tag ok">done</span><span class="mono t-cap">1:05</span></span>
+              <span class="t-cap t2">result 2.1 KB · addressable as task_3 (C-18)</span>
+            </a>
+            <a href="#" class="f-li" data-fluent="ListTile" style="flex-direction: column; align-items: stretch; gap: 2px; padding: 8px 12px">
+              <span style="display: flex; gap: 8px; align-items: center"><span class="tag">explore</span><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Map dart_tui widgets</span><span class="tag bad">failed</span><span class="mono t-cap">0:19</span></span>
+              <span class="t-cap t2">provider error 529 after 2 retries</span>
+            </a>
+            <div style="display: flex; gap: 8px; padding: 6px 12px"><button class="f-btn">Open transcript</button><button class="f-btn subtle danger">Stop</button></div>
+          </section>
+          <section aria-labelledby="jb-h" data-acp="AcpJobsBoard (snapshot _codelab/jobs/update)" style="border-top: 1px solid var(--stroke)">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px 4px"><h2 id="jb-h" class="t-strong" style="margin: 0; font-size: 13px; flex: 1">Background jobs</h2><span class="tag">1 running · 1 exited</span></div>
+            <div class="f-li" data-fluent="ListTile" style="flex-direction: column; align-items: stretch; gap: 2px; padding: 8px 12px">
+              <span style="display: flex; gap: 8px; align-items: center"><span class="mono t-cap">job_1</span><span class="mono" style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px">fvm flutter run -d macos</span><span class="f-pr" style="width: 12px; height: 12px" role="img" aria-label="running"></span><span class="mono t-cap">6:02</span><button class="f-btn subtle" style="height: 26px">Output</button><button class="f-btn subtle danger" style="height: 26px">Kill</button></span>
+              <span class="mono t-cap t2" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Flutter run key commands. r Hot reload. R Hot restart.</span>
+            </div>
+            <div class="f-li" data-fluent="ListTile" style="flex-direction: column; align-items: stretch; gap: 2px; padding: 8px 12px">
+              <span style="display: flex; gap: 8px; align-items: center"><span class="mono t-cap">job_2</span><span class="mono" style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px">melos test --watch</span><span class="tag bad">exit 1</span><button class="f-btn subtle" style="height: 26px">Output</button></span>
+              <span class="mono t-cap t2" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">00:14 +212 −1: Some tests failed.</span>
+            </div>
+            <p class="t-cap t2" style="margin: 0; padding: 4px 12px 10px">Unknown id → hint, not a crash (T-34). No Message button: §17.3.7 has no method for it.</p>
+          </section>
+        </div>
+      </section>
+      <div class="hsplit" role="separator" aria-orientation="horizontal" aria-label="Resize stacked panes" data-acp="AcpResizeHandle (horizontal)"><i></i></div>
+      <section class="dpane" style="flex: 1 1 40%" aria-label="Subagent transcript, read-only" data-acp="AcpTranscriptPanel (read-only child, _codelab/subagents/history)">
+        <div class="dhead" role="tablist" data-fluent="TabView">
+          <a href="#" role="tab" aria-selected="true" class="dtab on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>reviewer · read-only<span class="f-btn subtle icon" style="width: 22px; height: 22px" aria-hidden="true">×</span></a>
+          <span style="flex: 1"></span>
+          <button class="f-btn subtle icon" aria-label="Pane options" style="width: 28px; height: 28px; margin-bottom: 2px"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+        </div>
+        <div style="flex: 1; overflow: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; min-height: 0">
+          <div class="acp-bubble" style="max-width: 92%">Check that every key in 09-11 §9.11 has a hint in the help line.</div>
+          <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--text2)"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span style="flex: 1">Read <span class="mono t2">09-11-stage-6-cli-mvp.md</span></span><span class="tag ok">Done</span></div></section>
+          <p style="margin: 0">Two keys lack hints: <code class="ic-code">ctrl+o</code> and <code class="ic-code">ctrl+t</code>. Checking the TUI help model next.</p>
+          <section class="f-exp"><div class="f-exph"><span class="f-pr" style="width: 14px; height: 14px"></span><span style="flex: 1">Run <span class="mono t2">melos analyze</span></span><span class="tag warn">Awaiting approval</span></div></section>
+        </div>
+      </section>
+      <div class="t-cap t2" style="padding: 6px 12px; border-top: 1px solid var(--stroke); background: var(--mica)">Board appears only with subagentBoard / jobBoard · replay never enters the parent transcript</div>
+    </aside>
+  </section>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

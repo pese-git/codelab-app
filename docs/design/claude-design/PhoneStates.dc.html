@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — States</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.lbl{font-size:11px;line-height:14px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.div{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)}
+.div::before,.div::after{content:'';flex:1;height:1px;background:var(--stroke)}
+.tbtn{min-height:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <h1 class="t-strong" style="margin: 0; flex: 1; font-size: 16px">Fix sync conflict</h1>
+    <span class="tag warn"><span class="f-pr" style="width: 12px; height: 12px"></span>Reconnecting · attempt 2, next in 2 s</span>
+  </header>
+  <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 12px">
+    <span class="lbl">L-04 · turn error</span>
+    <div class="f-ib error"><span class="f-ibi">✕</span><div class="t-cap"><span class="ttl">Turn ended with an error</span>provider · HTTP 500 from api.anthropic.com. Output above was kept.<div style="margin-top: 6px"><button class="f-btn tbtn">Retry turn</button></div></div></div>
+    <span class="lbl">L-32 · rate limit</span>
+    <div class="f-ib warning"><span class="f-ibi">!</span><div class="t-cap"><span class="ttl">Request limit reached</span>resets in 3 h. Queued prompts stay queued.</div></div>
+    <span class="lbl">K-01 · compaction</span>
+    <div class="div">Context compacted · 42 messages summarized</div>
+    <span class="lbl">U-26 · restart</span>
+    <div class="f-ib success"><span class="f-ibi">✓</span><div class="t-cap"><span class="ttl">Agent restarted</span>Session reloaded.</div></div>
+    <span class="lbl">WebSocket agent · commands run on its machine</span>
+    <section class="f-exp" data-fluent="Expander" data-acp="AcpToolCallRow">
+      <div class="f-exph" style="min-height: 52px">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--text2)"><path d="m4 17 6-6-6-6M12 19h8"/></svg>
+        <span style="flex: 1; min-width: 0">Run <span class="mono t2" style="font-size: 12px">npm test</span> <span class="t-cap t2">on devbox</span></span>
+        <span class="tag ok">Done · 8.2 s</span>
+      </div>
+    </section>
+    <p class="t-cap t2" style="margin: 0">The phone declares no <span class="mono">terminal</span>. A WebSocket agent offers commands only if it was started with <span class="mono">--local-exec</span>, and they run on its machine; otherwise the model has no <span class="mono">exec</span> tool at all (agent-core §10.4).</p>
+    <span class="lbl">Detached</span>
+    <div class="f-ib error"><span class="f-ibi">✕</span><div class="t-cap"><span class="ttl">Agent connection lost</span>2 queued prompts kept, not sent.<div style="margin-top: 6px; display: flex; gap: 8px"><button class="f-btn accent tbtn">Reconnect</button><a href="PhoneConnection.dc.html" class="f-hl" style="min-height: 44px; display: inline-flex; align-items: center">Connection settings</a></div></div></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

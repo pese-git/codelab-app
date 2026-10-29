@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Composer menus</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:1100px;display:flex;flex-direction:column;gap:20px;padding:32px 40px;box-sizing:border-box}
+.sheet{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:start}
+.sheet .f-fly{position:static;min-width:0}
+.spec{display:flex;flex-direction:column;gap:6px}
+.lbl{font-size:12px;line-height:16px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.f-mi .d{display:block;font-size:12px;line-height:16px;color:var(--text2)}
+.f-mi.tall{height:auto;min-height:44px;padding-top:4px;padding-bottom:4px}
+.comp{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:8px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media (max-width:1100px){.sheet{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.sheet{grid-template-columns:1fr}.root{padding:16px}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <div><h1 class="t-sub" style="margin: 0">Composer — menus, attachments, queue and steering</h1><p class="t2" style="margin: 4px 0 0">Each flyout opens from a button in the composer row below. Options come from the agent's config options (model, mode, effort, agent), never hard-coded.</p></div>
+
+  <div class="sheet">
+    <div class="spec"><span class="lbl">Mode · session/set_mode (P-05, P-06)</span>
+      <div class="f-fly" data-fluent="MenuFlyout (RadioMenuFlyoutItem)">
+        <button class="f-mi tall"><span><b>plan</b><span class="d">Reads only, writes a plan</span></span></button>
+        <button class="f-mi tall"><span><b>ask</b><span class="d">Asks before every tool, web search too</span></span></button>
+        <button class="f-mi tall on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--accent-text)"><path d="m5 12 5 5 9-10"/></svg><span><b>standard</b><span class="d">Reads freely, asks before edits and commands</span></span></button>
+        <button class="f-mi tall"><span><b>accept-edits</b><span class="d">Edits without asking, commands still ask</span></span></button>
+        <button class="f-mi tall"><span><b style="color: var(--warn)">bypass</b><span class="d">No questions except critical patterns</span></span><span class="tag warn" style="margin-left: auto">risky</span></button>
+      </div>
+    </div>
+
+    <div class="spec"><span class="lbl">Model · config option model (U-05, L-15)</span>
+      <div class="f-fly" data-fluent="MenuFlyout">
+        <label class="f-tb" style="margin: 4px"><input type="search" placeholder="Filter models" aria-label="Filter models"></label>
+        <div class="t-cap t2" style="padding: 6px 12px 2px; font-weight: 600">anthropic</div>
+        <button class="f-mi on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--accent-text)"><path d="m5 12 5 5 9-10"/></svg>claude-sonnet-5-5<span class="k">200k</span></button>
+        <button class="f-mi"><span style="width: 16px"></span>claude-opus-5-5<span class="k">200k</span></button>
+        <div class="t-cap t2" style="padding: 6px 12px 2px; font-weight: 600">openrouter</div>
+        <button class="f-mi"><span style="width: 16px"></span>qwen3-coder<span class="k">256k</span></button>
+        <div class="t-cap t2" style="padding: 6px 12px 2px; font-weight: 600">ollama · unreachable</div>
+        <button class="f-mi" disabled style="opacity: .55"><span style="width: 16px"></span>llama3.3:70b<span class="k">128k</span></button>
+        <div style="border-top: 1px solid var(--stroke); margin: 4px 0"></div>
+        <a href="Providers.dc.html" class="f-mi" style="text-decoration: none">Manage providers…</a>
+        <span class="t-cap t2" style="padding: 4px 12px 6px">Remembered for this folder (U-27)</span>
+      </div>
+    </div>
+
+    <div class="spec"><span class="lbl">Effort · config option (L-16)</span>
+      <div class="f-fly" data-fluent="MenuFlyout">
+        <button class="f-mi">low<span class="k">fast</span></button>
+        <button class="f-mi on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--accent-text)"><path d="m5 12 5 5 9-10"/></svg>medium</button>
+        <button class="f-mi">high<span class="k">more thinking</span></button>
+      </div>
+      <span class="lbl" style="margin-top: 12px">Agent profile · config option agent (C-04, R-15, U-31)</span>
+      <div class="f-fly" data-fluent="MenuFlyout">
+        <button class="f-mi on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--accent-text)"><path d="m5 12 5 5 9-10"/></svg>default<span class="tag" style="margin-left: auto">built-in</span></button>
+        <button class="f-mi">architect<span class="tag" style="margin-left: auto">built-in</span></button>
+        <button class="f-mi">review<span class="tag" style="margin-left: auto">built-in</span></button>
+        <button class="f-mi">reviewer<span class="tag acc" style="margin-left: auto">.codelab/agents/reviewer.md</span></button>
+        <a href="Modes.dc.html" class="f-mi" style="text-decoration: none">Manage agents…</a>
+      </div>
+    </div>
+
+    <div class="spec"><span class="lbl">Slash menu · fuzzy (U-03, E-06, E-07)</span>
+      <div class="f-fly" data-fluent="AutoSuggestBox flyout">
+        <button class="f-mi on"><span class="mono"><b>/re</b>view</span><span class="tag" style="margin-left: auto">template</span></button>
+        <button class="f-mi"><span class="mono">/skill:<b>re</b>lease-notes <span class="t2">&lt;version&gt;</span></span><span class="tag acc" style="margin-left: auto">skill</span></button>
+        <button class="f-mi"><span class="mono">/<b>re</b>wind</span><span class="tag" style="margin-left: auto">app</span></button>
+        <button class="f-mi"><span class="mono">/<b>re</b>start</span><span class="tag" style="margin-left: auto">app</span></button>
+        <span class="t-cap t2" style="padding: 4px 12px 6px">Tab inserts, Enter runs</span>
+      </div>
+      <span class="lbl" style="margin-top: 12px">@ file completion (U-24)</span>
+      <div class="f-fly" data-fluent="AutoSuggestBox flyout">
+        <button class="f-mi on"><span class="mono" style="font-size: 13px">@lib/…/<b>acp_tr</b>anscript_panel.dart</span></button>
+        <button class="f-mi"><span class="mono" style="font-size: 13px">@test/<b>acp_tr</b>anscript_panel_test.dart</span></button>
+        <span class="t-cap t2" style="padding: 4px 12px 6px">.gitignore respected</span>
+      </div>
+    </div>
+  </div>
+
+  <section class="f-card" aria-label="Queue" data-fluent="ListView (queue)" style="padding: 8px 12px; display: flex; flex-direction: column; gap: 4px">
+    <div class="row"><span class="t-strong" style="flex: 1">Queued · 2</span><span class="t-cap t2">sent in order when the turn ends (R-18)</span></div>
+    <div class="row" style="min-height: 40px"><span class="tag">1</span><span style="flex: 1; min-width: 0">After the tests pass, add a "Copy reply" button under the last block</span><span class="tag">1 file</span><button class="f-btn subtle">Edit</button><button class="f-btn subtle">Delete</button><button class="f-btn">Steer</button><button class="f-btn">Send now</button></div>
+    <div class="row" style="min-height: 40px"><span class="tag">2</span><span style="flex: 1; min-width: 0">Then update the golden screenshots</span><button class="f-btn subtle">Edit</button><button class="f-btn subtle">Delete</button><button class="f-btn">Steer</button><button class="f-btn">Send now</button></div>
+    <span class="t-cap t2">Send now cancels the running turn first.</span>
+  </section>
+
+  <div class="row" style="justify-content: flex-end"><div class="acp-bubble" style="opacity: .7" data-acp="pending steer bubble">Use ListView.builder, not separated<span class="tag" style="margin-left: 8px">steer · waiting for tools</span></div></div>
+
+  <section class="f-card comp" aria-label="Composer" data-fluent="Composer (drop target active)" style="border: 2px solid var(--accent)">
+    <div class="row">
+      <span class="acp-chip" data-acp="AcpAttachmentChip"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>transcript-before.png<span class="t2">340 KB · image</span></span>
+      <span class="acp-chip"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>12-3-desktop-display.md<span class="t2">81 KB · embedded</span></span>
+      <span class="acp-chip" style="border-color: var(--warn)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn)"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg>.env.local<span class="t2">2 KB · may contain secrets</span><button class="f-btn subtle icon" aria-label="Remove attachment" style="width: 24px; height: 24px">×</button></span>
+      <span class="acp-chip" style="border-color: var(--warn)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></svg>~/Downloads/spec.pdf<span class="t2">link · outside project folder</span></span>
+      <span class="t-cap" style="margin-left: auto; color: var(--accent-text)">Drop files to attach · 4 of 10</span>
+    </div>
+    <label class="f-tb" style="min-height: 64px; align-items: flex-start; padding-top: 8px"><textarea aria-label="Message" rows="2" style="border: 0; outline: 0; background: transparent; resize: none; flex: 1">Also check @lib/…/acp_tr</textarea></label>
+    <div class="row">
+      <button class="f-btn subtle"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>Attach</button>
+      <button class="f-cbx" data-fluent="DropDownButton">standard<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="f-cbx" data-fluent="DropDownButton">claude-sonnet-5-5<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="f-cbx" data-fluent="DropDownButton">medium<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="f-cbx" data-fluent="DropDownButton">default<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <span style="flex: 1"></span>
+      <button class="f-btn subtle danger">Stop<span class="t-cap t2" style="margin-left: 6px">Esc</span></button>
+      <span class="f-split" data-fluent="SplitButton"><button class="f-btn accent">Queue<span class="t-cap" style="margin-left: 6px; opacity: .8">Enter</span></button><button class="f-btn accent" aria-label="Steer instead: Ctrl+Shift+Enter">▾</button></span>
+    </div>
+    <div class="acp-status" data-acp="AcpSessionStatusBar"><span>claude-sonnet-5-5</span><span>standard</span><span style="color: var(--text)">ctx 62%</span><span>12.3k → 1.2k</span><span>$0.042 · session $1.20</span><span>⎇ develop</span><span>queued: 2 · steered: 1</span></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

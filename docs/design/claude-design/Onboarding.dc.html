@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Onboarding — permissions</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.root{min-height:900px;display:flex;flex-direction:column}
+.step{display:flex;gap:12px;align-items:center;color:var(--text2)}
+.step i{width:24px;height:24px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;font-weight:600;border:1px solid var(--strong);box-sizing:border-box}
+.step.done i{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.step.cur{color:var(--text);font-weight:600}
+.step.cur i{border:2px solid var(--accent);color:var(--accent-text)}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="f-appbar"><span class="f-logo">CL</span><span class="t-cap">Welcome to CodeLab</span></header>
+  <section class="f-content" style="border-left: 0; border-top-left-radius: 0; align-items: center; padding: 48px 24px">
+    <div style="width: 100%; max-width: 920px; display: flex; flex-direction: column; gap: 24px">
+      <ol aria-label="Setup steps" style="list-style: none; margin: 0; padding: 0; display: flex; gap: 28px; flex-wrap: wrap">
+        <li class="step done"><i>✓</i>What CodeLab does</li>
+        <li class="step cur" aria-current="step"><i>2</i>Permissions</li>
+        <li class="step"><i>3</i>Choose a model</li>
+        <li class="step"><i>4</i>Privacy</li>
+      </ol>
+      <div>
+        <h1 class="t-tl" style="margin: 0 0 8px">The agent asks before it changes anything</h1>
+        <p class="t-bl t2" style="margin: 0; max-width: 720px">Approvals appear in the conversation next to the action, with the exact command or diff. A decision applies to that one call only.</p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><div style="flex: 1"><div>Read files in the project</div><div class="t-cap t2">Search and read anything under the project folder</div></div><span class="tag ok">No prompt</span></div>
+        <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><div style="flex: 1"><div>Edit and create files</div><div class="t-cap t2">You see the diff before it is written</div></div><span class="tag acc">Asks each time</span></div>
+        <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8"/></svg><div style="flex: 1"><div>Run commands</div><div class="t-cap t2">You see the full command and working folder</div></div><span class="tag acc">Asks each time</span></div>
+        <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><div style="flex: 1"><div>Anything outside the project folder</div><div class="t-cap t2">Paths are confined to the session's working folder</div></div><span class="tag bad">Blocked</span></div>
+      </div>
+      <div class="f-ib" data-fluent="InfoBar (informational)">
+        <span class="f-ibi">i</span>
+        <div><span class="ttl">New sessions start in standard mode</span>Reads run freely; edits, commands and web access ask. Change the default in Settings › Agents &amp; modes, or per session from the composer.</div>
+      </div>
+      <div style="display: flex; gap: 8px; justify-content: flex-end">
+        <button class="f-btn" style="min-width: 120px">Back</button>
+        <button class="f-btn accent" style="min-width: 120px">Next</button>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

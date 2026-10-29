@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Composer menus</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;position:relative;box-sizing:border-box}
+.bar{display:flex;align-items:center;gap:4px;height:56px;padding:0 4px;flex:none;border-bottom:1px solid var(--stroke)}
+.tap{min-width:44px;min-height:44px;justify-content:center}
+.feed{flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--layer)}
+.smoke{position:absolute;inset:0;background:var(--smoke)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--solid);border-top:1px solid var(--stroke);border-radius:12px 12px 0 0;box-shadow:var(--shadow-dialog);padding:8px 8px 16px;display:flex;flex-direction:column;gap:2px}
+.mi{display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 12px;border-radius:6px;border:0;background:transparent;color:var(--text);text-align:left;font:inherit;width:100%;box-sizing:border-box}
+.mi.on{background:var(--sel)}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--strong);align-self:center;margin:2px 0 6px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneChat.dc.html" class="f-btn subtle icon tap" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+    <span class="t-strong" style="flex: 1">Summarize meeting notes</span>
+  </header>
+  <main class="feed" aria-label="Transcript">
+    <div class="acp-bubble" style="align-self: flex-end; max-width: 85%">Summarize notes/meeting-10-22.md into decisions and action items.</div>
+  </main>
+  <footer style="flex: none; padding: 8px 12px 12px; border-top: 1px solid var(--stroke); display: flex; flex-direction: column; gap: 8px; background: var(--mica)">
+    <div style="display: flex; gap: 6px; flex-wrap: wrap" aria-label="Attachments">
+      <span class="acp-chip" data-acp="AcpAttachmentChip"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg>IMG_2041.jpg<span class="t2">1.2 MB · image</span><button class="f-btn subtle icon" style="width: 32px; height: 32px" aria-label="Remove IMG_2041.jpg">×</button></span>
+      <span class="acp-chip" data-acp="AcpAttachmentChip"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>spec.md<span class="t2">6 KB · embedded</span><button class="f-btn subtle icon" style="width: 32px; height: 32px" aria-label="Remove spec.md">×</button></span>
+    </div>
+    <label class="f-tb" style="min-height: 44px"><input placeholder="Message the agent" aria-label="Message"></label>
+  </footer>
+
+  <div class="smoke" aria-hidden="true"></div>
+  <section class="sheet" role="dialog" aria-label="Session mode" data-fluent="MenuFlyout (full width)">
+    <span class="grab" aria-hidden="true"></span>
+    <div style="padding: 4px 12px 6px; display: flex; justify-content: space-between; align-items: baseline"><span class="t-strong">Mode</span><span class="t-cap t2">session/set_mode</span></div>
+    <button class="mi"><span style="flex: 1"><b>plan</b><span class="t-cap t2" style="display: block">Reads and searches; no edits</span></span></button>
+    <button class="mi"><span style="flex: 1"><b>ask</b><span class="t-cap t2" style="display: block">Asks before every tool call</span></span></button>
+    <button class="mi on" aria-current="true"><span style="flex: 1"><b>standard</b><span class="t-cap t2" style="display: block">Reads freely, asks before writing files</span></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></button>
+    <button class="mi"><span style="flex: 1"><b>accept-edits</b><span class="t-cap t2" style="display: block">Writes files without asking</span></span></button>
+    <button class="mi"><span style="flex: 1"><b style="color: var(--warn)">bypass</b><span class="t-cap t2" style="display: block">No questions except critical patterns</span></span><span class="tag warn">risky</span></button>
+    <div class="f-psep" style="margin: 6px 0"></div>
+    <div style="padding: 0 12px 4px" class="t-strong">Attach</div>
+    <button class="mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg><span style="flex: 1">Photo library</span><span class="t-cap t2">image</span></button>
+    <button class="mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span style="flex: 1">Camera</span><span class="t-cap t2">image</span></button>
+    <button class="mi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><span style="flex: 1">Files</span><span class="t-cap t2">embedded or link</span></button>
+    <span class="t-cap t2" style="padding: 4px 12px 0">Photo library and Camera appear only when the agent accepts images.</span>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

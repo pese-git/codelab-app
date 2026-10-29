@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — headless</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>zsh — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="Headless codelab runs in a plain shell: text output, stream-json NDJSON events, permission denied by default with exit code 1, the exit code table, version as JSON, and an update notice">
+    <div class="ln"><span class="ok">$</span> codelab -p "summarize CHANGELOG"</div>
+    <div class="ln">1.0.2 fixes reconnect after sleep, adds session search and the Appearance page.</div>
+    <div class="ln"><span class="ok">$</span> echo "list failing tests" | codelab -p - --output-format stream-json --include-thoughts</div>
+    <div class="ln mu">{"type":"init","v":1,"session_id":"s_7f2c","model":"claude-sonnet-5-5","mode":"standard"}</div>
+    <div class="ln mu">{"type":"turn_start","turn":1}</div>
+    <div class="ln mu">{"type":"thought_delta","text":"Run the suite once, then read the failures."}</div>
+    <div class="ln mu">{"type":"tool_call","id":"call_1","kind":"execute","title":"Run melos test","status":"pending"}</div>
+    <div class="ln mu">{"type":"tool_result","id":"call_1","status":"completed","exit_code":1,"output_tail":"2 tests failed"}</div>
+    <div class="ln mu">{"type":"text_delta","text":"Two tests fail in acp_ui: "}</div>
+    <div class="ln mu">{"type":"turn_end","turn":1,"stop_reason":"end_turn"}</div>
+    <div class="ln mu">{"type":"result","exit_code":0,"usage":{"input":18412,"output":1102,"cost_usd":0.072}}</div>
+    <div class="ln"><span class="ok">$</span> codelab -p "write out.txt with the summary"</div>
+    <div class="ln er">✗ Permission denied: write out.txt — no interactive approval in -p mode (standard).</div>
+    <div class="ln mu">  Allow it with --approve write or --permission-mode accept-edits.</div>
+    <div class="ln"><span class="ok">$</span> echo $?</div>
+    <div class="ln">1</div>
+    <div class="ln"><span class="ok">$</span> codelab --help exit-codes</div>
+    <div class="ln">  <span class="b">0</span>    turn ended normally (end_turn)</div>
+    <div class="ln">  <span class="b">1</span>    agent or provider error, refused or denied, step limit</div>
+    <div class="ln">  <span class="b">64</span>   usage error: bad flags or arguments</div>
+    <div class="ln">  <span class="b">130</span>  interrupted (Ctrl+C, SIGINT)</div>
+    <div class="ln">  <span class="b">143</span>  terminated (SIGTERM)</div>
+    <div class="ln"><span class="ok">$</span> codelab --version --json</div>
+    <div class="ln mu">{"version":"1.0.2","channel":"stable","agent":"1.0.2","acp":1,"commit":"89df306","install":"installer"}</div>
+    <div class="ln wa">codelab 1.1.0 is available (current 1.0.2). Run /update.</div>
+    <div class="grow"><div class="ln"><span class="ok">$</span> <span class="cur"> </span></div></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

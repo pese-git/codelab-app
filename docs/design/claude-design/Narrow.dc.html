@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Narrow layout</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{height:900px;display:flex;flex-direction:column;overflow:hidden;position:relative}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="f-appbar" data-fluent="NavigationAppBar (minimal)">
+    <button class="f-btn subtle icon" aria-label="Open navigation" aria-expanded="false" data-fluent="PaneToggleButton"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <span class="f-logo">CL</span>
+    <span class="t-strong" style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Markdown &amp; diff in transcript</span>
+    <button class="f-cbx on" aria-haspopup="menu" aria-expanded="false" data-fluent="DropDownButton" style="min-width: 0; background: var(--accent-weak); color: var(--accent-text)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>Panes · 2<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+  </header>
+
+  <section class="f-content" style="border-left: 0; border-top-left-radius: 0">
+    <div style="flex: 1; overflow: hidden; padding: 16px; display: flex; flex-direction: column; gap: 12px; justify-content: flex-end">
+      <div class="acp-bubble" style="max-width: 85%">Show edits as a diff right in the approval card.</div>
+      <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--text2)"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg><span style="flex: 1">Thoughts <span class="t-cap t2">· 6 s</span></span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div></section>
+      <section class="f-exp">
+        <div class="f-exph"><span style="flex: 1">Edit <span class="mono" style="font-size: 13px">acp_transcript_panel.dart <span style="color: var(--ok)">+18</span> <span style="color: var(--bad)">−6</span></span></span><span class="tag">Unified</span></div>
+        <div style="border-top: 1px solid var(--stroke); background: var(--code-bg); overflow-x: auto"><div class="acp-dl del"><span>43</span><span></span><span>−</span><span>    return ListView.separated(</span></div><div class="acp-dl add"><span></span><span>43</span><span>+</span><span>    return ListView.builder(</span></div><div class="acp-dl add"><span></span><span>44</span><span>+</span><span>      itemCount: rows.length,</span></div></div>
+      </section>
+      <section class="f-card" style="border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); padding: 12px; display: flex; flex-direction: column; gap: 8px">
+        <span class="t-strong">Run a command?</span>
+        <div class="acp-term" style="padding: 8px 10px; font-size: 13px; overflow-x: auto; white-space: nowrap">$ fvm flutter test packages/flutter/acp_ui</div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap"><button class="f-btn accent">Allow once</button><button class="f-btn">Always allow</button><button class="f-btn">Reject</button></div>
+      </section>
+      <div class="f-card" style="padding: 8px; display: flex; align-items: center; gap: 8px">
+        <button class="f-btn subtle icon" aria-label="Attach files"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15.5 7"/></svg></button>
+        <label class="f-tb" style="flex: 1"><input aria-label="Prompt" value="After the tests pass, add a Copy reply button"></label>
+        <button class="f-btn accent">Queue</button>
+      </div>
+      <div role="status" class="acp-status"><span style="color: var(--text)">sonnet-5-5</span><span style="display: flex; align-items: center; gap: 8px"><span class="f-pb" style="width: 48px"><i style="width: 62%"></i></span>62%</span><span>$0.042 · $1.20</span></div>
+    </div>
+  </section>
+
+  <div class="smoke" aria-hidden="true" style="position: absolute; top: 48px; bottom: 0; left: 0; right: 360px; background: var(--smoke)"></div>
+  <aside aria-label="Tool panes" data-acp="AcpToolDock (slide-over)" style="position: absolute; top: 48px; bottom: 0; right: 0; width: 360px; background: var(--layer); border-left: 1px solid var(--stroke); box-shadow: var(--shadow-dialog); display: flex; flex-direction: column; box-sizing: border-box">
+    <div role="tablist" class="f-tabs" data-fluent="TabView" style="padding: 6px 6px 0; display: flex; gap: 2px; align-items: flex-end; border-bottom: 1px solid var(--stroke); background: var(--mica)">
+      <a href="#" role="tab" aria-selected="true" class="f-tab on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files<span class="t2" aria-hidden="true">×</span></a>
+      <a href="#" role="tab" aria-selected="false" class="f-tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h.01"/></svg>Plan<span class="t2" aria-hidden="true">×</span></a>
+      <span style="flex: 1"></span>
+      <button class="f-btn subtle icon" aria-label="Close panes (Esc)" style="margin-bottom: 4px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div style="padding: 10px 12px 6px; display: flex; align-items: center; gap: 8px"><span class="t-cap t2" style="flex: 1">codelab-app › packages › <b style="color: var(--text)">acp_ui</b></span><label class="f-ts t-cap"><input type="checkbox">Ignored</label></div>
+    <nav aria-label="Project files" data-fluent="TreeView" style="flex: 1; overflow: auto; padding: 0 6px; display: flex; flex-direction: column">
+          <a href="#" class="f-tv" style="padding-left: 8px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>lib</a>
+          <a href="#" class="f-tv" style="padding-left: 24px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>src/organisms</a>
+          <a href="#" class="f-tv on" style="padding-left: 40px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>acp_transcript_panel.dart</a>
+          <a href="#" class="f-tv" style="padding-left: 40px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>acp_diff_view.dart</a>
+          <a href="#" class="f-tv" style="padding-left: 8px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>test</a>
+          <a href="#" class="f-tv" style="padding-left: 8px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>pubspec.yaml</a>
+    </nav>
+    <p class="t-cap t2" style="margin: 0; padding: 10px 12px; border-top: 1px solid var(--stroke)">Under 900 px the dock slides over the transcript (D-21). Panes follow this session · Esc closes · Ctrl+` terminal.</p>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":820,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

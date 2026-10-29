@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Navigation pane</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;position:relative;box-sizing:border-box}
+.bar{display:flex;align-items:center;gap:8px;height:56px;padding:0 8px;flex:none}
+.smoke{position:absolute;inset:0;background:var(--smoke)}
+.pane{position:absolute;left:0;top:0;bottom:0;width:304px;background:var(--mica);border-right:1px solid var(--stroke);box-shadow:var(--shadow-dialog);display:flex;flex-direction:column;padding:8px 6px 12px;box-sizing:border-box}
+.pi{min-height:44px}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:0 4px}
+.tile{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 10px;border-radius:6px;text-decoration:none;color:var(--text);background:var(--card);border:1px solid var(--stroke)}
+.fx a.tile{color:var(--text)}
+.prof{display:flex;align-items:center;gap:10px;min-height:46px;padding:6px 10px;border-radius:6px;border:1px solid var(--stroke);background:var(--card);color:var(--text);text-align:left;font:inherit;width:100%;box-sizing:border-box}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" aria-hidden="true"><span style="width: 44px"></span><span class="t-sub" style="font-size: 18px">CodeLab</span></header>
+  <div style="flex: 1; background: var(--layer)"></div>
+  <div class="smoke" aria-hidden="true"></div>
+  <nav class="pane" aria-label="Navigation" data-fluent="NavigationView (minimal, pane open)">
+    <div style="display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 4px">
+      <a href="PhoneSessions.dc.html" class="f-btn subtle icon" style="min-width: 44px; min-height: 44px; justify-content: center" aria-label="Close navigation"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></a>
+      <span class="f-logo">CL</span><span class="t-strong">CodeLab</span>
+    </div>
+    <a href="PhoneChat.dc.html" class="f-pi pi" data-fluent="PaneItemAction"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session</a>
+    <div class="f-ph" style="padding-left: 8px">Sessions</div>
+    <a href="PhoneChat.dc.html" class="f-pi pi" data-fluent="PaneItem"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3H7l3-3zM12 15v5"/></svg><span style="flex: 1">Pinned</span><span class="t-cap t2">1</span></a>
+    <a href="PhoneSessions.dc.html" class="f-pi pi on" aria-current="page" data-fluent="PaneItemExpander"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span style="flex: 1">notes-app</span><span class="f-pr" style="width: 14px; height: 14px" role="img" aria-label="Turn running"></span></a>
+    <a href="PhoneSessions.dc.html" class="f-pi pi" data-fluent="PaneItemExpander"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span style="flex: 1">codelab-app</span><span class="f-badge">5</span></a>
+    <a href="PhoneSessions.dc.html" class="f-pi pi" data-fluent="PaneItemExpander"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span style="flex: 1">trip-planner</span><span class="t-cap t2">2</span></a>
+    <div class="f-ph" style="padding-left: 8px">Panes · current session</div>
+    <div class="tiles">
+      <a href="PhoneFiles.dc.html" class="tile" data-fluent="PaneItem"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Files</span></a>
+      <a href="#diff" class="tile" data-fluent="PaneItem"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v6M9 8h6M9 17h6M6 3h9l4 4v14H6z"/></svg><span>Diff</span></a>
+      <a href="#plan" class="tile" data-fluent="PaneItem"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h.01"/></svg><span>Plan</span></a>
+      <a href="#agents" class="tile" data-fluent="PaneItem"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg><span>Agents</span></a>
+      <a href="#usage" class="tile" data-fluent="PaneItem"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Usage</span></a>
+      <a href="#branches" class="tile" data-fluent="PaneItem"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H6"/></svg><span>Branches</span></a>
+      <a href="#protocol" class="tile" data-fluent="PaneItem"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 8-4 4 4 4M16 8l4 4-4 4"/></svg><span>Protocol</span></a>
+    </div>
+    <span style="flex: 1"></span>
+    <a href="PhoneSettings.dc.html" class="f-pi pi" data-fluent="PaneItem (footer)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
+    <div class="f-psep" style="margin: 8px 4px"></div>
+    <div role="radiogroup" aria-label="Agent connection" style="display: flex; flex-direction: column; gap: 6px; padding: 0 4px">
+      <span class="t-cap t2">Agent</span>
+      <button class="prof" role="radio" aria-checked="true" style="border-color: var(--accent)"><span class="f-dot" style="color: var(--ok)"></span><span style="flex: 1"><span style="display: block">On this device</span><span class="t-cap t2">Embedded · no shell · HTTP MCP</span></span></button>
+      <button class="prof" role="radio" aria-checked="false"><span class="f-dot" style="color: var(--text2)"></span><span style="flex: 1"><span style="display: block">devbox</span><span class="t-cap t2">WebSocket · wss://devbox:7420</span></span></button>
+    </div>
+    <span class="t-cap t2" style="padding: 10px 8px 0">CodeLab 1.0.0 · stable</span>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

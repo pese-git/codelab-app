@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Connection and error states</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:960px;padding:32px 40px 40px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+.tile{padding:16px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box}
+.lbl{font-size:12px;line-height:16px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.note{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:4px;border:1px solid var(--stroke);background:var(--card2);font-size:13px;line-height:18px}
+.div{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2)}
+.div::before,.div::after{content:'';flex:1;height:1px;background:var(--divider)}
+@media (max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){.root{padding:16px}.grid{grid-template-columns:repeat(1,minmax(0,1fr))}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap">
+    <h1 class="t-title" style="margin: 0">Connection &amp; error states</h1>
+    <span class="t2">Every failure is a visible state with a next action — never a frozen spinner or a silent drop.</span>
+  </div>
+
+  <div class="grid">
+    <section class="f-card tile" aria-label="Status badge" data-acp="connection badge (app bar)">
+      <span class="lbl">App bar badge · ConnectionState</span>
+      <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start">
+        <span class="tag ok"><span class="f-dot"></span>Connected · in-process</span>
+        <span class="tag acc"><span class="f-pr" style="width: 12px; height: 12px"></span>Connecting…</span>
+        <span class="tag warn"><span class="f-pr" style="width: 12px; height: 12px; border-color: var(--warn); border-right-color: transparent"></span>Reconnecting · attempt 3, next in 4 s</span>
+        <span style="display: flex; gap: 8px; align-items: center"><span class="tag bad"><span class="f-dot"></span>Connection failed · ws closed 1006</span><button class="f-btn" style="height: 28px">Retry</button></span>
+      </div>
+      <span class="t-cap t2">Backoff 1, 2, 4, 8 s. Click the badge for details and the profile in use.</span>
+    </section>
+
+    <section class="f-card tile" aria-label="Turn error" data-acp="AcpNoticeRow (error)">
+      <span class="lbl">L-04 · turn ended with an error</span>
+      <div class="f-ib error" role="alert"><span class="f-ibi">×</span><div style="flex: 1"><span class="ttl">Turn ended with an error</span>provider · HTTP 500 from api.anthropic.com after the first step. Output above was kept.<div style="display: flex; gap: 8px; margin-top: 8px"><button class="f-btn">Retry turn</button><a href="Inspector.dc.html" class="f-hl">Open inspector</a></div></div></div>
+      <span class="t-cap t2">errorClass is shown as a short word; the raw message is in the inspector.</span>
+    </section>
+
+    <section class="f-card tile" aria-label="Rate limit" data-acp="AcpNoticeRow (rate limit)">
+      <span class="lbl">L-32 · rate limit (429)</span>
+      <div class="f-ib warning" role="status"><span class="f-ibi">!</span><div><span class="ttl">Request limit reached</span>resets in 3 h · kind: requests</div></div>
+      <span class="t-cap t2">One line, no live countdown. Queued prompts stay queued.</span>
+    </section>
+
+    <section class="f-card tile" aria-label="Fallback model" data-acp="FallbackNotice">
+      <span class="lbl">L-08 · fallback model</span>
+      <div class="note"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn); margin-top: 1px"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg><span>Switched to fallback model <b>gpt-5-mini</b> — primary returned 529. <span class="t2">Status bar shows the active model.</span></span></div>
+      <span class="t-cap t2">Never a silent downgrade: the note is part of the transcript.</span>
+    </section>
+
+    <section class="f-card tile" aria-label="Compaction" data-acp="compaction divider">
+      <span class="lbl">K-01 auto · K-02 /compact</span>
+      <div class="div" role="separator">Context compacted · 42 messages summarized</div>
+      <div class="div" role="separator">Compacted by /compact · 61% → 18% context</div>
+      <span class="t-cap t2">Divider in the transcript; earlier rows stay visible and searchable.</span>
+    </section>
+
+    <section class="f-card tile" aria-label="Overflow" data-acp="AcpNoticeRow (overflow)">
+      <span class="lbl">K-04 · overflow, errorClass overflow</span>
+      <div class="f-ib error" role="alert"><span class="f-ibi">×</span><div style="flex: 1"><span class="ttl">Context overflow — compaction failed</span>The history is larger than the model window even after summarizing.<div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap"><button class="f-btn">Compact now</button><button class="f-btn">New session</button></div></div></div>
+    </section>
+
+    <section class="f-card tile" aria-label="Stop reasons" data-acp="stop reason rows">
+      <span class="lbl">C-02 · C-13 · L-05 stop reasons</span>
+      <div class="note"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn); margin-top: 1px"><rect x="6" y="6" width="12" height="12" rx="1"/></svg><span>Stopped: step limit reached (25 steps). <button class="f-hl">Continue</button></span></div>
+      <div class="note"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn); margin-top: 1px"><rect x="6" y="6" width="12" height="12" rx="1"/></svg><span>Stopped: budget exceeded — cost $0.50.</span></div>
+      <div class="note"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--text2); margin-top: 1px"><path d="M6 6l12 12M18 6 6 18"/></svg><span>Cancelled by you. <span class="t2">Running command was killed.</span></span></div>
+    </section>
+
+    <section class="f-card tile" aria-label="Held answer" data-acp="held answer (C-14)">
+      <span class="lbl">C-14 · answer held for approval</span>
+      <div class="f-ib" role="status"><span class="f-ibi">i</span><div style="flex: 1"><span class="ttl">Answer held for approval</span>A check flagged the reply: “claims tests pass, last run failed”.<div style="display: flex; gap: 8px; margin-top: 8px"><button class="f-btn accent">Approve</button><button class="f-btn">Edit</button><button class="f-btn subtle">Ask to fix</button></div></div></div>
+      <span class="t-cap t2">Same as /approve in the CLI.</span>
+    </section>
+
+    <section class="f-card tile" aria-label="Agent restarted" data-acp="AcpNoticeRow (restart)">
+      <span class="lbl">U-26 · Restart agent (palette)</span>
+      <div class="f-ib success" role="status"><span class="f-ibi">✓</span><div><span class="ttl">Agent restarted</span>pid 9120. Session reloaded.</div></div>
+      <div class="note"><span>Agent restarted, session could not be reloaded. <button class="f-hl">New session</button></span></div>
+    </section>
+
+    <section class="f-card tile" aria-label="Read-only session" data-acp="read-only banner" style="grid-column: span 2">
+      <span class="lbl">S-09 · D-10 · lease held by another client</span>
+      <div class="f-ib warning" role="status"><span class="f-ibi">!</span><div style="flex: 1"><span class="ttl">Read-only</span>This session is open in CLI (pid 4182). Fork to continue here.<div style="display: flex; gap: 8px; margin-top: 8px"><button class="f-btn accent">Fork</button><button class="f-btn">Try again</button></div></div></div>
+      <div style="display: flex; flex-direction: column; gap: 6px; opacity: .55" aria-disabled="true">
+        <label class="f-tb" style="min-height: 64px; align-items: flex-start; padding-top: 6px"><textarea rows="2" disabled placeholder="Composer is disabled while another client holds the session" aria-label="Message (disabled)"></textarea></label>
+        <div style="display: flex; gap: 8px; justify-content: flex-end"><button class="f-btn" disabled>Attach</button><button class="f-btn accent" disabled>Send</button></div>
+      </div>
+    </section>
+
+    <section class="f-card tile" aria-label="Detached" data-acp="AcpNoticeRow (detached)">
+      <span class="lbl">Detached session</span>
+      <div class="f-ib error" role="alert"><span class="f-ibi">×</span><div style="flex: 1"><span class="ttl">Agent connection lost</span>2 queued prompts kept, not sent.<div style="display: flex; gap: 8px; margin-top: 8px"><button class="f-btn accent">Reconnect</button><a href="Connection.dc.html" class="f-hl">Connection settings</a></div></div></div>
+      <span class="t-cap t2">Pending approvals are closed as cancelled; nothing is sent until you reconnect.</span>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

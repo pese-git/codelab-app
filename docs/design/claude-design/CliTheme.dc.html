@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — theme picker</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.pick{display:flex;width:100%;border:0;padding:0;margin:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;white-space:pre;min-height:19px}
+.pick[disabled]{cursor:not-allowed}
+</style>
+</helmet>
+<div class="term" style="width: 1000px; height: 720px; border-radius: 10px; --t-bg: {{p.bg}}; --t-fg: {{p.fg}}; --t-accent: {{p.accent}}; --t-muted: {{p.muted}}; --t-ok: {{p.ok}}; --t-err: {{p.err}}; --t-warn: {{p.warn}}; --t-info: {{p.info}}; --t-add: {{p.add}}; --t-del: {{p.del}}; --t-sel: {{p.sel}}; --t-chrome: {{p.chrome}}; --t-chrome-fg: {{p.chromeFg}}">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen">
+    <div class="grow">
+      <div class="ln"><span class="ac b">&gt;</span> Rename the diff layout preference to AcpDiffLayout.</div>
+      <div class="ln mu">▸ thought 2s</div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Edit</span> acp_diff_view.dart  <span class="ok">+3</span> <span class="er">-3</span></span><span class="mu">0.0s</span></div>
+      <div class="ln in">  @@ -12,3 +12,3 @@</div>
+      <div class="ln delbg"><span class="mu">    12    </span><span class="er"> -enum AcpDiffLayoutPreference { auto, unified, sideBySide }</span></div>
+      <div class="ln addbg"><span class="mu">        12</span><span class="ok"> +enum AcpDiffLayout { auto, unified, sideBySide }</span></div>
+      <div class="ln row"><span><span class="wa">⊘</span> <span class="b">Run</span> melos run analyze</span><span class="mu"></span></div>
+      <div class="ln mu">  └ Rejected by user</div>
+      <div class="ln"> </div>
+      <div class="ln"><span class="ac b">&gt;</span> /theme</div>
+      <div class="ln">{{message}}</div>
+      <div class="ln mu">{{hint}}</div>
+      <div class="ln"> </div>
+    </div>
+    <div class="ln"><span class="b">Theme</span>  <span class="mu">enter apply for this run · esc close</span></div>
+    <div role="listbox" aria-label="Themes">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+        <button class="pick {{r.selCls}}" role="option" aria-selected="{{r.selected}}" onClick="{{r.pick}}" disabled="{{r.disabled}}"><span class="{{r.markCls}}">{{r.mark}}</span><span class="{{r.nameCls}}">{{r.name}}</span><span style="color: {{r.c1}}">■</span> <span style="color: {{r.c2}}">■</span> <span style="color: {{r.c3}}">■</span> <span style="color: {{r.c4}}">■</span>  <span class="{{r.noteCls}}">{{r.note}}</span></button>
+      </sc-for>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln"><span class="ac b">&gt;</span> <span class="cur"> </span></div>
+    <div class="ln mu">↑↓ select · enter apply · esc close · /help keys</div>
+    <div class="ln">standard · claude-sonnet-5-5 · ctx 12% · ↑8.1k ↓0.6k · $0.02 · ⎇ develop</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const cur = s.cur ?? 'auto';
+    const P = {
+      dark: { bg: '#15171C', fg: '#D5D8DE', accent: '#56C2D6', muted: '#8A909A', ok: '#7BCB7B', err: '#EE7B7B', warn: '#E3C07A', info: '#8BDDEA', add: '#0F3D1A', del: '#4A1515', sel: '#3A3D44', chrome: '#26292F', chromeFg: '#9AA0AA' },
+      light: { bg: '#FFFFFF', fg: '#1F2328', accent: '#0969DA', muted: '#6E7781', ok: '#1A7F37', err: '#CF222E', warn: '#9A6700', info: '#0550AE', add: '#DAFBE1', del: '#FFEBE9', sel: '#DDF4FF', chrome: '#E8EAED', chromeFg: '#57606A' },
+      hc: { bg: '#000000', fg: '#FFFFFF', accent: '#5FFFFF', muted: '#D0D0D0', ok: '#5FFF5F', err: '#FF5F5F', warn: '#FFFF5F', info: '#5FFFFF', add: 'transparent', del: 'transparent', sel: '#303030', chrome: '#1A1A1A', chromeFg: '#D0D0D0' },
+      mono: { bg: '#15171C', fg: '#D5D8DE', accent: '#D5D8DE', muted: '#D5D8DE', ok: '#D5D8DE', err: '#D5D8DE', warn: '#D5D8DE', info: '#D5D8DE', add: 'transparent', del: 'transparent', sel: '#3A3D44', chrome: '#26292F', chromeFg: '#9AA0AA' },
+      solar: { bg: '#002B36', fg: '#B5C2C4', accent: '#268BD2', muted: '#8C9C9E', ok: '#9DB30F', err: '#F0544F', warn: '#D7A71C', info: '#2AA198', add: '#0B3A1F', del: '#4A1A1A', sel: '#0B4555', chrome: '#00212A', chromeFg: '#8C9C9E' }
+    };
+    const themes = [
+      { id: 'auto', name: 'auto', pal: 'dark', note: 'terminal background is dark → dark' },
+      { id: 'dark', name: 'dark', pal: 'dark', note: '16 ANSI, follows the terminal palette' },
+      { id: 'light', name: 'light', pal: 'light', note: 'truecolor' },
+      { id: 'high-contrast', name: 'high-contrast', pal: 'hc', note: 'bright ANSI, no diff backgrounds' },
+      { id: 'mono', name: 'mono', pal: 'mono', note: 'bold, italic and dim only' },
+      { id: 'solarized-dark', name: 'solarized-dark', pal: 'solar', note: '~/.codelab/themes/solarized-dark.json' },
+      { id: 'acme-night', name: 'acme-night', pal: null, note: 'invalid: acme-night.json:6:5 unknown key "acent"' }
+    ];
+    const curTheme = themes.find((t) => t.id === cur) || themes[0];
+    const p = P[curTheme.pal];
+    const pad = (x) => (x + '                ').slice(0, 16);
+    const rows = themes.map((t) => {
+      const tp = t.pal ? P[t.pal] : null;
+      const invalid = !tp;
+      return {
+        name: pad(t.name),
+        mark: t.id === cur ? ' * ' : (invalid ? ' ✗ ' : '   '),
+        markCls: invalid ? 'er' : 'ac b',
+        nameCls: invalid ? 'mu' : (t.id === cur ? 'ac b' : ''),
+        noteCls: invalid ? 'er' : 'mu',
+        note: t.note,
+        c1: invalid ? 'transparent' : tp.accent,
+        c2: invalid ? 'transparent' : tp.ok,
+        c3: invalid ? 'transparent' : tp.err,
+        c4: invalid ? 'transparent' : tp.warn,
+        selCls: t.id === cur ? 'sel' : '',
+        selected: t.id === cur ? 'true' : 'false',
+        disabled: invalid,
+        pick: () => { if (!invalid) this.setState({ cur: t.id }); }
+      };
+    });
+    const applied = cur === 'auto'
+      ? 'Theme: auto (dark).'
+      : 'Theme: ' + cur + '. To keep it, set display.theme: ' + cur + ' in ~/.codelab/cli.yaml.';
+    return {
+      p: p,
+      rows: rows,
+      message: applied,
+      hint: 'Theme "acme-night" is invalid: ~/.codelab/themes/acme-night.json:6:5 unknown key "acent". Using "dark".'
+    };
+  }
+}
+</script>
+</body>
+</html>

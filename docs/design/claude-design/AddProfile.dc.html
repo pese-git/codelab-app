@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add connection profile</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ap-root{position:relative}
+.ap-root.desk{min-height:1120px}
+.ap-root.phone{width:390px;height:844px;overflow:hidden;display:flex;flex-direction:column}
+.ap-smoke{position:absolute;inset:0;background:var(--smoke);display:flex;align-items:flex-start;justify-content:center;padding-top:120px;z-index:5}
+.ap-dlg{width:560px;max-width:calc(100% - 32px)}
+.ap-form{display:grid;grid-template-columns:132px minmax(0,1fr);gap:10px 14px;align-items:start}
+.ap-form>.lbl{padding-top:6px;color:var(--text2)}
+.ap-col{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ap-err{color:var(--bad);font-size:12px;line-height:16px}
+.ap-hint{color:var(--text2);font-size:12px;line-height:16px}
+.ap-seg{display:inline-flex;gap:4px;padding:3px;border-radius:6px;background:var(--sel)}
+.ap-seg button{border:0;background:transparent;color:var(--text2);border-radius:4px;padding:5px 12px;font:inherit;cursor:pointer}
+.ap-seg button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow-card)}
+.ap-radios{display:flex;flex-direction:column;gap:6px}
+.ap-res{display:flex;align-items:center;gap:8px;min-height:28px}
+.ap-top{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.ap-body{flex:1;min-height:0;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
+.ap-ph .ap-form{grid-template-columns:minmax(0,1fr);gap:4px}
+.ap-ph .ap-form>.lbl{padding-top:8px}
+.ap-ph .f-tb{min-height:44px}
+.ap-ph .f-btn{min-height:44px}
+.ap-ph .f-rb{min-height:40px}
+.ap-foot{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ap-foot.ap-ph{padding:12px;border-top:1px solid var(--stroke);background:var(--card2)}
+a.ap-a{text-decoration:none}
+</style>
+</helmet>
+<div class="{{rootCls}}" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+
+<sc-if value="{{isDesk}}" hint-placeholder-val="{{ true }}">
+  <dc-import name="Connection" theme="{{theme}}" hint-size="100%,1120px"></dc-import>
+  <div class="ap-smoke">
+    <section class="f-dlg ap-dlg" role="dialog" aria-modal="true" aria-labelledby="ap-title" data-fluent="ContentDialog">
+      <sc-if value="{{editing}}" hint-placeholder-val="{{ true }}">
+        <div class="f-dlgb">
+          <h2 id="ap-title" class="t-sub" style="margin: 0">Add connection profile</h2>
+          <p class="t-cap t2" style="margin: 0 0 4px">Saved to <span class="mono">~/.codelab/profiles.json</span> and shared with codelab_cli as <span class="mono">codelab -a {{idShown}}</span>.</p>
+          <div class="ap-form">
+            <span class="lbl">Type</span>
+            <div class="ap-col">
+              <div class="ap-seg" role="radiogroup" aria-label="Profile type">
+                <button class="{{segStdio}}" role="radio" aria-checked="{{isStdioStr}}" onClick="{{pickStdio}}">Local stdio</button>
+                <button class="{{segWs}}" role="radio" aria-checked="{{isWsStr}}" onClick="{{pickWs}}">WebSocket</button>
+              </div>
+              <span class="ap-hint">{{typeHint}}</span>
+            </div>
+
+            <label class="lbl" for="ap-name">Name</label>
+            <div class="ap-col">
+              <label class="f-tb"><input id="ap-name" value="{{name}}" onChange="{{onName}}" placeholder="devbox 2"></label>
+              <span class="ap-hint">id <span class="mono">{{idShown}}</span> · cannot change after saving</span>
+              <sc-if value="{{nameErr}}" hint-placeholder-val="{{ false }}"><span class="ap-err" role="alert">{{nameErrText}}</span></sc-if>
+            </div>
+
+            <sc-if value="{{isStdio}}" hint-placeholder-val="{{ false }}">
+              <label class="lbl" for="ap-cmd">Command</label>
+              <div class="ap-col">
+                <label class="f-tb"><input id="ap-cmd" class="mono" style="font-size: 13px" value="{{cmd}}" onChange="{{onCmd}}" placeholder="codelab-agent"></label>
+                <sc-if value="{{cmdErr}}" hint-placeholder-val="{{ false }}"><span class="ap-err" role="alert">Enter the command that starts the agent.</span></sc-if>
+              </div>
+              <label class="lbl" for="ap-args">Arguments</label>
+              <div class="ap-col">
+                <label class="f-tb"><input id="ap-args" class="mono" style="font-size: 13px" value="{{args}}" onChange="{{onArgs}}" placeholder="serve --stdio"></label>
+                <span class="ap-hint">Parsed like a shell: quotes and escapes work.</span>
+              </div>
+              <span class="lbl">Folder</span>
+              <label class="f-chk" style="padding-top: 6px"><input type="checkbox" checked="{{inProject}}" onChange="{{toggleInProject}}"><span>Run in the project folder</span></label>
+              <span class="lbl">Environment</span>
+              <div class="ap-col">
+                <label class="f-tb"><input class="mono" style="font-size: 13px" value="{{env}}" onChange="{{onEnv}}" placeholder="RUST_LOG=info" aria-label="Environment variables"></label>
+                <sc-if value="{{envErr}}" hint-placeholder-val="{{ false }}"><span class="ap-err" role="alert">{{envErrText}}</span></sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{isWs}}" hint-placeholder-val="{{ true }}">
+              <label class="lbl" for="ap-url">URL</label>
+              <div class="ap-col">
+                <label class="f-tb"><input id="ap-url" class="mono" style="font-size: 13px" value="{{url}}" onChange="{{onUrl}}" placeholder="wss://host:7420"></label>
+                <sc-if value="{{urlErr}}" hint-placeholder-val="{{ false }}"><span class="ap-err" role="alert">Use ws:// or wss:// with a host.</span></sc-if>
+                <sc-if value="{{insecure}}" hint-placeholder-val="{{ false }}"><span class="ap-err" style="color: var(--warn)">ws:// to another machine: the token is sent unencrypted.</span></sc-if>
+              </div>
+              <span class="lbl">Token</span>
+              <div class="ap-col">
+                <div class="ap-radios" role="radiogroup" aria-label="Token">
+                  <label class="f-rb"><input type="radio" name="tok" checked="{{tokNone}}" onChange="{{pickTokNone}}"><span>No token</span></label>
+                  <label class="f-rb"><input type="radio" name="tok" checked="{{tokStored}}" onChange="{{pickTokStored}}"><span>Use stored secret</span></label>
+                  <sc-if value="{{tokStored}}" hint-placeholder-val="{{ false }}">
+                    <label class="f-tb" style="margin-left: 28px"><select aria-label="Stored secret" style="border: 0; background: transparent; flex: 1; padding: 5px 0" onChange="{{onStored}}"><option value="codelab/ws-devbox">codelab/ws-devbox</option><option value="codelab/ws-ci">codelab/ws-ci</option></select></label>
+                  </sc-if>
+                  <label class="f-rb"><input type="radio" name="tok" checked="{{tokNew}}" onChange="{{pickTokNew}}"><span>Store a new token</span></label>
+                  <sc-if value="{{tokNew}}" hint-placeholder-val="{{ true }}">
+                    <label class="f-tb" style="margin-left: 28px"><input type="password" autocomplete="off" value="{{tokVal}}" onChange="{{onTok}}" placeholder="Paste the token" aria-label="New token"></label>
+                    <span class="ap-hint" style="margin-left: 28px">Saved as <span class="mono">codelab/profiles/{{idShown}}/token</span> in {{backend}}. The value is never shown again or written to profiles.json.</span>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-if>
+
+            <span class="lbl">Check</span>
+            <div class="ap-col">
+              <div class="ap-res">
+                <button class="f-btn" onClick="{{test}}" disabled="{{noTest}}">Test connection</button>
+                <sc-if value="{{probeRun}}" hint-placeholder-val="{{ false }}"><span class="f-pr"></span><span class="t2">initialize…</span></sc-if>
+                <sc-if value="{{probeDone}}" hint-placeholder-val="{{ false }}"><span class="{{probeCls}}">{{probeText}}</span></sc-if>
+              </div>
+              <span class="ap-hint">Sends initialize only: no session is created, the process or socket closes right after.</span>
+            </div>
+
+            <span class="lbl">After saving</span>
+            <label class="f-chk" style="padding-top: 6px"><input type="checkbox" checked="{{useNew}}" onChange="{{toggleUseNew}}"><span>Use for new windows</span></label>
+          </div>
+          <sc-if value="{{askInsecure}}" hint-placeholder-val="{{ false }}">
+            <div class="f-ib warning" role="alert"><span class="f-ibi">!</span><div class="t-cap" style="flex: 1"><span class="ttl">Unencrypted connection</span>The token for {{url}} will travel in clear text. Use wss:// if the host supports it.</div><button class="f-btn" onClick="{{saveAnyway}}">Save anyway</button></div>
+          </sc-if>
+        </div>
+        <div class="f-dlgf ap-foot">
+          <button class="f-btn accent" onClick="{{save}}" disabled="{{noSave}}">{{saveLabel}}</button>
+          <a href="Connection.dc.html" class="f-btn ap-a">Cancel</a>
+        </div>
+      </sc-if>
+      <sc-if value="{{saved}}" hint-placeholder-val="{{ false }}">
+        <div class="f-dlgb">
+          <h2 class="t-sub" style="margin: 0">Profile saved</h2>
+          <div class="f-ib success"><span class="f-ibi">✓</span><div class="t-cap" style="flex: 1"><span class="ttl">{{name}}</span>Added to profiles.json as <span class="mono">{{idShown}}</span>{{savedTail}}</div></div>
+          <p class="t-cap t2" style="margin: 0">The current connection is unchanged. Use Connect in the profile row to switch now.</p>
+        </div>
+        <div class="f-dlgf ap-foot">
+          <a href="Connection.dc.html" class="f-btn accent ap-a">Done</a>
+          <button class="f-btn" onClick="{{again}}">Add another</button>
+        </div>
+      </sc-if>
+    </section>
+  </div>
+</sc-if>
+
+<sc-if value="{{isPhone}}" hint-placeholder-val="{{ false }}">
+  <header class="ap-top">
+    <a href="PhoneConnection.dc.html" class="f-btn subtle icon" style="min-width: 44px; min-height: 44px" aria-label="Cancel"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></a>
+    <h1 class="t-strong" style="margin: 0; flex: 1; font-size: 16px">Add WebSocket agent</h1>
+  </header>
+  <sc-if value="{{editing}}" hint-placeholder-val="{{ true }}">
+    <div class="ap-body ap-ph">
+      <p class="t-cap t2" style="margin: 0">This device has no local processes, so only an agent on another machine can be added (codelab-agent serve --ws).</p>
+      <div class="ap-form">
+        <label class="lbl" for="pp-name">Name</label>
+        <label class="f-tb"><input id="pp-name" value="{{name}}" onChange="{{onName}}" placeholder="devbox 2"></label>
+        <span class="ap-hint">id <span class="mono">{{idShown}}</span></span>
+        <sc-if value="{{nameErr}}" hint-placeholder-val="{{ false }}"><span class="ap-err" role="alert">{{nameErrText}}</span></sc-if>
+        <label class="lbl" for="pp-url">URL</label>
+        <label class="f-tb"><input id="pp-url" class="mono" style="font-size: 13px" value="{{url}}" onChange="{{onUrl}}" placeholder="wss://host:7420" inputmode="url"></label>
+        <sc-if value="{{urlErr}}" hint-placeholder-val="{{ false }}"><span class="ap-err" role="alert">Use ws:// or wss:// with a host.</span></sc-if>
+        <sc-if value="{{insecure}}" hint-placeholder-val="{{ false }}"><span class="ap-err" style="color: var(--warn)">ws:// to another machine: the token is sent unencrypted.</span></sc-if>
+        <span class="lbl">Token</span>
+        <div class="ap-radios" role="radiogroup" aria-label="Token">
+          <label class="f-rb"><input type="radio" name="ptok" checked="{{tokNone}}" onChange="{{pickTokNone}}"><span>No token</span></label>
+          <label class="f-rb"><input type="radio" name="ptok" checked="{{tokNew}}" onChange="{{pickTokNew}}"><span>Store a new token</span></label>
+        </div>
+        <sc-if value="{{tokNew}}" hint-placeholder-val="{{ true }}">
+          <label class="f-tb"><input type="password" autocomplete="off" value="{{tokVal}}" onChange="{{onTok}}" placeholder="Paste the token" aria-label="New token"></label>
+          <span class="ap-hint">Saved in {{backend}}; never shown again.</span>
+        </sc-if>
+      </div>
+      <button class="f-btn" onClick="{{test}}" disabled="{{noTest}}">Test connection</button>
+      <div class="ap-res" aria-live="polite">
+        <sc-if value="{{probeRun}}" hint-placeholder-val="{{ false }}"><span class="f-pr"></span><span class="t2">initialize…</span></sc-if>
+        <sc-if value="{{probeDone}}" hint-placeholder-val="{{ false }}"><span class="{{probeCls}}">{{probeText}}</span></sc-if>
+      </div>
+      <label class="f-chk"><input type="checkbox" checked="{{useNew}}" onChange="{{toggleUseNew}}"><span>Use for new sessions</span></label>
+      <sc-if value="{{askInsecure}}" hint-placeholder-val="{{ false }}">
+        <div class="f-ib warning" role="alert"><span class="f-ibi">!</span><div class="t-cap" style="flex: 1"><span class="ttl">Unencrypted connection</span>The token will travel in clear text.</div></div>
+        <button class="f-btn" onClick="{{saveAnyway}}">Save anyway</button>
+      </sc-if>
+    </div>
+    <div class="ap-foot ap-ph">
+      <button class="f-btn accent" onClick="{{save}}" disabled="{{noSave}}">{{saveLabel}}</button>
+      <a href="PhoneConnection.dc.html" class="f-btn ap-a">Cancel</a>
+    </div>
+  </sc-if>
+  <sc-if value="{{saved}}" hint-placeholder-val="{{ false }}">
+    <div class="ap-body ap-ph">
+      <div class="f-ib success"><span class="f-ibi">✓</span><div class="t-cap" style="flex: 1"><span class="ttl">{{name}}</span>Profile saved{{savedTail}}</div></div>
+      <a href="PhoneConnection.dc.html" class="f-btn accent ap-a">Done</a>
+    </div>
+  </sc-if>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["desktop","phone"],"default":"desktop"},"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":1120}}'>
+const TAKEN = ['embedded', 'local-stdio', 'devbox'];
+const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/;
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    const s = this.state || {};
+    const phone = (this.props.mode ?? 'desktop') === 'phone';
+    const type = phone ? 'ws' : (s.type ?? 'ws');
+    const name = s.name ?? 'build box';
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const nameErrText = !id ? 'Enter a name.' : id === 'embedded' ? '"embedded" is reserved for the built-in agent.' : TAKEN.indexOf(id) >= 0 ? 'A profile with id "' + id + '" already exists.' : '';
+    const url = s.url ?? 'wss://buildbox.lan:7420';
+    const m = /^(wss?):\/\/([^/:]+)(:\d+)?(\/.*)?$/.exec(url.trim());
+    const urlErr = type === 'ws' && !m;
+    const insecure = type === 'ws' && !!m && m[1] === 'ws' && !LOCAL.test(m[2]);
+    const cmd = s.cmd ?? 'codelab-agent';
+    const env = s.env ?? '';
+    const envBad = env.split(/\s+/).filter(Boolean).find((kv) => /^[A-Z0-9_]*(KEY|TOKEN|SECRET)=/.test(kv));
+    const tok = s.tok ?? 'new';
+    const tokVal = s.tokVal ?? '';
+    const cmdErr = type === 'stdio' && !cmd.trim();
+    const invalid = !!nameErrText || urlErr || cmdErr || !!envBad || (type === 'ws' && tok === 'new' && !tokVal);
+    const probe = s.probe ?? 'idle';
+    const view = s.view ?? 'edit';
+    const backend = phone ? 'Keychain' : 'keychain-macos';
+    const set = (p) => this.setState(Object.assign({ probe: 'idle', ask: false }, p));
+    const runProbe = () => {
+      this.setState({ probe: 'run' });
+      setTimeout(() => {
+        let r;
+        if (type === 'stdio') r = /^codelab-agent$|^python3?$|^npx$/.test(cmd.trim()) ? ['ok', 'Reachable · 120 ms · codelab-agent 1.0.0'] : ['fail', 'Command not found: ' + cmd.trim().split(' ')[0]];
+        else if (tok === 'none') r = ['fail', 'Unauthorized: the agent requires a token'];
+        else if (/unreachable|offline/.test(url)) r = ['fail', 'Unreachable: connection refused'];
+        else r = ['ok', 'Reachable · 41 ms · codelab-agent 1.0.0'];
+        this.setState({ probe: r[0], probeText: r[1] });
+      }, 900);
+    };
+    const doSave = (force) => {
+      if (invalid) return;
+      if (insecure && tok !== 'none' && !force) { this.setState({ ask: true }); return; }
+      this.setState({ view: 'saved', ask: false, savedProbe: probe });
+    };
+    const pal = this.palette();
+    return Object.assign(pal, {
+      rootCls: pal.themeCls + ' ap-root ' + (phone ? 'phone' : 'desk'),
+      theme: this.props.theme ?? 'light',
+      isDesk: !phone, isPhone: phone,
+      editing: view === 'edit', saved: view === 'saved',
+      isStdio: type === 'stdio', isWs: type === 'ws', isStdioStr: type === 'stdio' ? 'true' : 'false', isWsStr: type === 'ws' ? 'true' : 'false',
+      segStdio: type === 'stdio' ? 'on' : '', segWs: type === 'ws' ? 'on' : '',
+      pickStdio: () => set({ type: 'stdio' }), pickWs: () => set({ type: 'ws' }),
+      typeHint: type === 'stdio' ? 'Starts the agent as a child process per window and talks ACP over stdin/stdout.' : 'Connects to codelab-agent serve --ws on this or another machine.',
+      name: name, onName: (e) => set({ name: e.target.value }),
+      idShown: id || '…', nameErr: !!nameErrText, nameErrText: nameErrText,
+      cmd: cmd, onCmd: (e) => set({ cmd: e.target.value }), cmdErr: cmdErr,
+      args: s.args ?? 'serve --stdio', onArgs: (e) => set({ args: e.target.value }),
+      inProject: s.inProject ?? true, toggleInProject: () => set({ inProject: !(s.inProject ?? true) }),
+      env: env, onEnv: (e) => set({ env: e.target.value }), envErr: !!envBad,
+      envErrText: envBad ? envBad.split('=')[0] + ' looks like a secret. Set it in the system environment or reference it from the agent config as ${secret:…}.' : '',
+      url: url, onUrl: (e) => set({ url: e.target.value }), urlErr: urlErr, insecure: insecure,
+      tokNone: tok === 'none', tokStored: tok === 'stored', tokNew: tok === 'new',
+      pickTokNone: () => set({ tok: 'none' }), pickTokStored: () => set({ tok: 'stored' }), pickTokNew: () => set({ tok: 'new' }),
+      onStored: () => set({}),
+      tokVal: tokVal, onTok: (e) => set({ tokVal: e.target.value }), backend: backend,
+      test: runProbe, noTest: urlErr || cmdErr || probe === 'run',
+      probeRun: probe === 'run', probeDone: probe === 'ok' || probe === 'fail',
+      probeCls: probe === 'ok' ? 'tag ok' : 'tag bad', probeText: s.probeText ?? '',
+      useNew: s.useNew ?? false, toggleUseNew: () => this.setState({ useNew: !(s.useNew ?? false) }),
+      askInsecure: !!s.ask, saveAnyway: () => doSave(true),
+      save: () => doSave(false), noSave: invalid,
+      saveLabel: probe === 'ok' ? 'Save' : 'Save without test',
+      savedTail: (s.savedProbe === 'ok' ? '' : ' · marked "Not tested"') + ((s.useNew ?? false) ? ' · used for new windows' : ''),
+      again: () => this.setState({ view: 'edit', name: '', probe: 'idle', tokVal: '', ask: false })
+    });
+  }
+}
+</script>
+</body>
+</html>

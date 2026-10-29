@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings — Redaction</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:1800px;display:flex;flex-direction:column}
+.tblw{overflow-x:auto;border:1px solid var(--stroke);border-radius:4px;background:var(--card)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;line-height:18px}
+.tbl th,.tbl td{padding:8px 12px;text-align:left;border-top:1px solid var(--stroke);vertical-align:middle;white-space:nowrap}
+.tbl thead th{border-top:0;font-weight:600;background:var(--card2)}
+.test{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pane{border:1px solid var(--cstroke);border-radius:4px;background:var(--code-bg);color:var(--code-fg);padding:10px 12px;font-size:12.5px;line-height:19px;white-space:pre-wrap;min-height:120px}
+.m{background:var(--hl);border-radius:2px}
+.r{color:var(--accent-text);font-weight:600}
+@media (max-width:760px){.f-pane{width:100%}.f-nv{flex-wrap:wrap}.test{grid-template-columns:1fr}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <a href="Main.dc.html" class="f-btn subtle icon" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+  <span class="f-logo">CL</span><span class="t-cap">Settings</span>
+</header>
+<div class="f-nv" data-fluent="NavigationView">
+  <nav class="f-pane" aria-label="Settings sections" data-fluent="NavigationPane (open)">
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="margin: 4px 8px 6px"><input type="search" placeholder="Find a setting" aria-label="Find a setting"></label>
+    <div class="f-ph">Agent</div>
+    <a href="Connection.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>Connection</a>
+    <a href="Providers.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg>Providers</a>
+    <a href="Mcp.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M8 7h.01M8 17h.01"/></svg>MCP servers</a>
+    <a href="Modes.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M3 13v2M21 13v2"/></svg>Agents &amp; modes</a>
+    <a href="Permissions.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Permissions &amp; tools</a>
+    <a href="Redaction.dc.html" class="f-pi on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.5 7.6C4 9.3 2.5 12 2.5 12s3.5 6 9.5 6a9.6 9.6 0 0 0 4.1-.9"/></svg>Redaction</a>
+    <a href="Extensions.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 4a2 2 0 1 1 4 0v2h4v4h-2a2 2 0 1 0 0 4h2v4h-4v-2a2 2 0 1 0-4 0v2H6v-4h2a2 2 0 1 0 0-4H6V6h4z"/></svg>Skills &amp; extensions</a>
+    <a href="CodeWeb.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/></svg>Code &amp; web</a>
+    <div class="f-ph">App</div>
+    <a href="General.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>General</a>
+    <a href="Appearance.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.5 0-1.2-1-1.5-1-2.5s.8-1.5 2-1.5H17a4 4 0 0 0 4-4c0-4.7-4-8.5-9-8.5z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg>Appearance</a>
+    <a href="Keyboard.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Keyboard</a>
+  </nav>
+
+  <section class="f-content" data-fluent="ScaffoldPage">
+    <div style="padding: 28px 40px 40px; display: flex; flex-direction: column; gap: 6px; max-width: 1000px; box-sizing: border-box; width: 100%">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px" data-fluent="PageHeader">
+        <h1 class="t-title" style="margin: 0; flex: 1">Redaction</h1>
+      </div>
+
+      <div class="f-sc" data-fluent="Card (settings row)">
+        <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+        <div style="flex: 1"><div>Replacements in this session: 14 — exact 1 · formats 9 · pem 1 · key_values 3</div><div class="t-cap t2">Same as <span class="mono">/redact stats</span>. Values and positions of secrets are never shown.</div></div>
+      </div>
+      <div class="f-sc" data-fluent="Card (settings row)">
+        <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>
+        <div style="flex: 1"><label for="ren">Redaction</label><div class="t-cap t2"><span class="mono">redact.enabled</span> — off leaves only <span class="mono">exact</span> (known secrets) active</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="ren" type="checkbox" checked>On</label>
+      </div>
+
+      <h2 class="t-strong" style="font-size: 14px; margin: 18px 0 4px">Layers · priority order</h2>
+      <div class="f-sc" style="min-height: 56px">
+        <span class="tag mono" style="min-width: 22px; justify-content: center">1</span>
+        <div style="flex: 1"><label for="ly1" class="mono" style="font-size: 13px">exact</label><div class="t-cap t2">Known secret values from the secret store, MCP and config · always on</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="ly1" type="checkbox" checked disabled>On</label>
+      </div>
+      <div class="f-sc" style="min-height: 56px">
+        <span class="tag mono" style="min-width: 22px; justify-content: center">2</span>
+        <div style="flex: 1"><label for="ly2" class="mono" style="font-size: 13px">credential_files</label><div class="t-cap t2">Values in .env, id_rsa*, *.pem, .aws/credentials … read by the agent</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="ly2" type="checkbox" checked>On</label>
+      </div>
+      <div class="f-sc" style="min-height: 56px">
+        <span class="tag mono" style="min-width: 22px; justify-content: center">3</span>
+        <div style="flex: 1"><label for="ly3" class="mono" style="font-size: 13px">formats</label><div class="t-cap t2">sk-…, GitHub, AWS, Google, Slack, JWT, Bearer</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="ly3" type="checkbox" checked>On</label>
+      </div>
+      <div class="f-sc" style="min-height: 56px">
+        <span class="tag mono" style="min-width: 22px; justify-content: center">4</span>
+        <div style="flex: 1"><label for="ly4" class="mono" style="font-size: 13px">pem</label><div class="t-cap t2">Private key blocks</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="ly4" type="checkbox" checked>On</label>
+      </div>
+      <div class="f-sc" style="min-height: 56px">
+        <span class="tag mono" style="min-width: 22px; justify-content: center">5</span>
+        <div style="flex: 1"><label for="ly5" class="mono" style="font-size: 13px">connection_strings</label><div class="t-cap t2">URLs with a password, Password=… in DSNs</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="ly5" type="checkbox" checked>On</label>
+      </div>
+      <div class="f-sc" style="min-height: 56px">
+        <span class="tag mono" style="min-width: 22px; justify-content: center">6</span>
+        <div style="flex: 1"><label for="ly6" class="mono" style="font-size: 13px">key_values</label><div class="t-cap t2">api_key = …, &quot;token&quot;: &quot;…&quot; assignments</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="ly6" type="checkbox" checked>On</label>
+      </div>
+      <div class="f-sc" style="min-height: 56px; flex-wrap: wrap">
+        <span class="tag mono" style="min-width: 22px; justify-content: center">7</span>
+        <div style="flex: 1"><label for="ly7" class="mono" style="font-size: 13px">entropy</label><div class="t-cap t2">Long random strings · off by default</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="ly7" type="checkbox">Off</label>
+        <div class="f-ib warning" role="alertdialog" aria-label="Confirm weakening redaction" data-fluent="InfoBar (warning, inline confirm)" style="flex-basis: 100%; margin-top: 4px">
+          <span class="f-ibi">!</span>
+          <div style="flex: 1"><span class="ttl">Weakening redaction</span>Turning off <span class="mono">entropy</span>, adding allowlist pattern <span class="mono">pk_test_…</span>. Secrets may reach the provider and logs. Confirm?</div>
+          <div style="display: flex; gap: 8px"><button class="f-btn accent">Confirm</button><button class="f-btn">Cancel</button></div>
+        </div>
+      </div>
+      <div class="f-sc" style="min-height: 48px">
+        <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <div style="flex: 1"><div>Set by project: <span class="mono">entropy</span> on</div><div class="t-cap t2">./.codelab/config.yaml can only tighten redaction; edit it there</div></div>
+        <span class="tag acc">set by project</span>
+      </div>
+
+      <h2 class="t-strong" style="font-size: 14px; margin: 18px 0 4px">Allowlist</h2>
+      <p class="t-cap t2" style="margin: 0 0 6px">Applies to layers 3–7, never to exact and credential_files. A pattern must match the whole secret.</p>
+      <div class="f-card" style="padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; gap: 24px; flex-wrap: wrap"><label class="f-ts"><input type="checkbox" checked><span class="mono">git_sha</span></label><label class="f-ts"><input type="checkbox" checked><span class="mono">uuid</span></label><span class="t-cap t2" style="align-self: center">built-in · redact.allowlist.builtin</span></div>
+        <div style="display: flex; align-items: center; gap: 12px"><span class="mono" style="flex: 1; font-size: 13px">pk_test_[A-Za-z0-9]{24,}</span><span class="tag warn">new · weakens</span><button class="f-btn subtle" aria-label="Remove pattern">Remove</button></div>
+        <div style="display: flex; flex-direction: column; gap: 4px; max-width: 560px">
+          <div style="display: flex; gap: 8px"><label class="f-tb" style="flex: 1; border-color: var(--bad)"><input class="mono" value="(sandbox_[a-z0-9]+" aria-label="New allowlist pattern" aria-invalid="true" style="font-size: 13px"></label><button class="f-btn" disabled>Add</button></div>
+          <span class="t-cap" style="color: var(--bad)">Invalid regular expression: unterminated group</span>
+        </div>
+      </div>
+
+      <h2 class="t-strong" style="font-size: 14px; margin: 18px 0 4px">Exempt tools and enforcement</h2>
+      <div class="f-card" style="padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+        <span class="t-cap t2 mono" style="min-width: 150px">redact.exempt_tools</span><span class="tag mono">write</span><span class="tag mono">edit</span><span class="t-cap t2">fixed</span><span class="tag acc mono">mcp__files__write_file</span><button class="f-btn subtle" aria-label="Remove mcp__files__write_file">Remove</button>
+      </div>
+      <div class="f-sc">
+        <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg>
+        <div style="flex: 1"><label for="rblock">Block reading credential files</label><div class="t-cap t2"><span class="mono">redact.block</span> — read, search and reader commands fail on credential files (P-18)</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="rblock" type="checkbox" checked>On</label>
+      </div>
+      <div class="f-sc">
+        <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>
+        <div style="flex: 1"><label for="rcmd">Rewrite secrets in commands</label><div class="t-cap t2"><span class="mono">redact.command_rewrite</span> — a secret in an exec command becomes an env reference (P-14)</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="rcmd" type="checkbox" checked>On</label>
+      </div>
+
+      <h2 class="t-strong" style="font-size: 14px; margin: 18px 0 4px">Test</h2>
+      <p class="t-cap t2" style="margin: 0 0 6px">Runs the agent's Redactor on this draft. The sample is never saved or logged.</p>
+      <div class="test">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="sample" class="t-cap t2">Sample text — matches highlighted with their layer</label>
+          <div id="sample" class="pane mono" role="textbox" aria-multiline="true" tabindex="0" data-fluent="TextBox (multiline)">export OPENAI_API_KEY=<span class="m">sk-proj-4fJ2kQ9xVb7LmN0pR3sT</span> <span class="tag">formats</span>
+DATABASE_URL=postgres://app:<span class="m">s3cr3t-pa55</span>@db/app <span class="tag">connection_strings</span>
+build sha 9f2c1e7a4b… <span class="tag ok">allowlist git_sha</span></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span class="t-cap t2">What the provider and logs receive</span>
+          <div class="pane mono" aria-label="Redacted output">export OPENAI_API_KEY=<span class="r">[REDACTED:sk]</span>
+DATABASE_URL=postgres://app:<span class="r">[REDACTED]</span>@db/app
+build sha 9f2c1e7a4b…</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":1800}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

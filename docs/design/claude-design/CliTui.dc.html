@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — TUI transcript</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli full-screen TUI: transcript with markdown reply, tool rows, diff, running command, composer, key hints and status line">
+    <div class="grow">
+      <div class="ln"><span class="ac b">&gt;</span> Render agent replies as markdown, and show edits as a diff in the approval.</div>
+      <div class="ln mu">  [file 12-3-desktop-display.md 81 KB]</div>
+      <div class="ln"> </div>
+      <div class="ln mu">▸ thought 6s</div>
+      <div class="ln"> </div>
+      <div class="ln"><span class="ac b u">Plan</span></div>
+      <div class="ln">I'll split the transcript into typed rows so markdown, thoughts and tool calls render</div>
+      <div class="ln">independently. The mapper reuses unchanged rows by <span class="inv">identical</span>, so streaming rebuilds the tail.</div>
+      <div class="ln"> </div>
+      <div class="ln">  • <span class="b">AcpAgentBlockRow</span> — one markdown block per row</div>
+      <div class="ln">  • <span class="b">AcpThoughtRow</span> — muted, collapses when the stream ends</div>
+      <div class="ln">  • <span class="b">AcpToolCallRow</span> — header, diff preview, inline approval</div>
+      <div class="ln"> </div>
+      <div class="ln mu">  dart</div>
+      <div class="ln"><span class="mu">│</span> sealed class AcpTranscriptRow { String get id; }</div>
+      <div class="ln"><span class="mu">│</span> final class AcpThoughtRow extends AcpTranscriptRow {</div>
+      <div class="ln"><span class="mu">│</span>   final String text;   // as-is, never parsed as markdown</div>
+      <div class="ln"><span class="mu">│</span> }</div>
+      <div class="ln"> </div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Read</span> packages/flutter/acp_ui/lib/…/acp_transcript_panel.dart:1-212</span><span class="mu">0.1s</span></div>
+      <div class="ln row"><span><span class="ok">✓</span> <span class="b">Edit</span> acp_transcript_panel.dart  <span class="ok">+18</span> <span class="er">-6</span></span><span class="mu">0.0s</span></div>
+      <div class="ln in">  @@ -41,6 +41,10 @@</div>
+      <div class="ln"><span class="mu">    42  42</span>   Widget build(BuildContext context) {</div>
+      <div class="ln delbg"><span class="mu">    43    </span><span class="er"> -    return ListView.separated(</span></div>
+      <div class="ln addbg"><span class="mu">        43</span><span class="ok"> +    return ListView.builder(</span></div>
+      <div class="ln addbg"><span class="mu">        44</span><span class="ok"> +      itemCount: rows.length,</span></div>
+      <div class="ln mu">  … 11 more lines (/inspect call_7)</div>
+      <div class="ln row"><span><span class="ac">⠹</span> <span class="b">Run</span> fvm flutter test packages/flutter/acp_ui</span><span class="mu">3.2s</span></div>
+      <div class="ln mu">  00:07 +12: transcript renders thought block collapsed</div>
+      <div class="ln mu">  00:08 +13: diff preview switches to side-by-side at 960 px</div>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln mu">[img transcript-before.png 340 KB] [file acp_transcript_panel_test.dart]</div>
+    <div class="ln"><span class="ac b">&gt;</span> After the tests pass, add a “Copy reply” button under the last block<span class="cur"> </span></div>
+    <div class="ln mu">enter queue · ctrl+enter steer · esc cancel turn · ctrl+o thoughts · / commands · @ files</div>
+    <div class="ln"><span class="ac">⠹</span> <span class="mu">12s</span>  standard · claude-sonnet-5-5 · ctx 62% · ↑12.3k ↓1.2k · $0.04 · ⎇ develop · queued: 1</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — MCP and tools</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli /mcp list table with server states and errors, /mcp reload and disable results, and the /tools toggle list open over the composer">
+    <div class="grow">
+      <div class="ln"><span class="ac b">&gt;</span> /mcp list</div>
+      <div class="ln mu">  name        type    state        tools  target / last error</div>
+      <div class="ln">  github      http    <span class="ok">connected</span>        9  https://api.githubcopilot.com/mcp/</div>
+      <div class="ln">  linear      stdio   <span class="er">failed</span>           –  npx -y linear-mcp · <span class="er">exited 1: LINEAR_API_KEY is not set</span></div>
+      <div class="ln">  postgres    stdio   <span class="mu">disabled</span>         –  ./tools/pg-mcp --ro</div>
+      <div class="ln mu">  source: ~/.codelab/config.yaml (github, linear) · ./.codelab/config.yaml (postgres)</div>
+      <div class="ln"><span class="ac b">&gt;</span> /mcp reload</div>
+      <div class="ln"><span class="ok">✓</span> Config re-read. github reconnected (9 tools) · linear <span class="er">failed again</span> · commands updated (+1 /pr-review)</div>
+      <div class="ln"><span class="ac b">&gt;</span> /mcp disable github</div>
+      <div class="ln"><span class="ok">✓</span> github disabled for this session. 9 tools removed. <span class="mu">/mcp enable github to undo.</span></div>
+      <div class="ln"><span class="ac b">&gt;</span> /mcp enable github</div>
+      <div class="ln"><span class="ok">✓</span> github connected (9 tools).</div>
+      <div class="ln"> </div>
+      <div class="ln"><span class="ac">┌─</span> <span class="b">Tools</span> <span class="mu">· this session · 14 on / 2 off · changes apply from the next model step</span> <span class="ac">──────────────────────────────────</span></div>
+      <div class="ln"><span class="ac">│</span> <span class="mu">built-in</span></div>
+      <div class="ln"><span class="ac">│</span>   [x] read     [x] write    [x] edit     [x] ls       [x] search   [x] exec</div>
+      <div class="ln"><span class="ac">│</span>   [ ] web_fetch           [ ] web_search          [x] update_plan   [x] task</div>
+      <div class="ln"><span class="ac">│</span> <span class="mu">mcp · github</span></div>
+      <div class="ln"><span class="ac">│</span>   [x] mcp__github__get_issue          [x] mcp__github__list_pull_requests</div>
+      <div class="ln sel"><span class="ac">│</span> <span class="ac b">›</span> [x] mcp__github__create_issue       <span class="wa">asks before each call (standard)</span></div>
+      <div class="ln"><span class="ac">│</span>   [x] mcp__github__search_code        <span class="mu">… 5 more</span></div>
+      <div class="ln"><span class="ac">└──────────────────────────────────────────────────────────────────────────────────────────────────────────</span></div>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln"><span class="ac b">&gt;</span> /tools<span class="cur"> </span></div>
+    <div class="ln mu">↑↓ move · space toggle · a all in group · enter apply · esc close without changes</div>
+    <div class="ln"><span class="mu">idle</span>  standard · claude-sonnet-5-5 · ctx 22% · mcp 1/2 · ⎇ develop</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

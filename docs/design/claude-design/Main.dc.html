@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CodeLab workbench</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{height:900px;display:flex;flex-direction:column;overflow:hidden}
+.tools{display:flex;align-items:center;gap:2px}
+.tool{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;border-radius:4px;border:1px solid transparent;background:transparent;color:var(--text2);font-size:12px;cursor:pointer}
+.tool:hover{background:var(--hover)}
+.tool.on{background:var(--accent-weak);color:var(--accent-text);border-color:transparent}
+.side{width:272px}
+.grp{display:flex;align-items:center;gap:8px;min-height:32px;margin:2px 0;padding:0 8px;border:0;background:transparent;color:var(--text);border-radius:4px;width:100%;box-sizing:border-box;text-align:left;font-weight:600;cursor:pointer}
+.grp:hover{background:var(--hover)}
+.sess{padding-left:30px;gap:10px;min-height:32px}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sessarea{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.dock{position:relative;width:400px;flex:none;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--stroke);background:var(--layer)}
+.grip{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;display:flex;align-items:center;justify-content:center}
+.grip i{width:2px;height:28px;border-radius:1px;background:var(--cstroke2)}
+.dpane{display:flex;flex-direction:column;min-height:0}
+.dhead{display:flex;align-items:flex-end;gap:2px;padding:6px 8px 0;background:var(--mica);border-bottom:1px solid var(--stroke);flex:none}
+.dtab{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 4px 0 10px;border-radius:6px 6px 0 0;border:1px solid transparent;border-bottom:0;color:var(--text2);font-size:13px;text-decoration:none}
+.fx a.dtab{color:var(--text2)}
+.fx a.dtab.on{background:var(--layer);color:var(--text);border-color:var(--stroke)}
+.hsplit{height:7px;flex:none;border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);background:var(--mica);cursor:row-resize;display:flex;align-items:center;justify-content:center}
+.hsplit i{width:28px;height:2px;border-radius:1px;background:var(--cstroke2)}
+.thought{display:flex;flex-direction:column;gap:4px}
+.thought-h{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;padding:4px 0;border:0;background:transparent;color:var(--text2);font:inherit;font-size:12px;line-height:16px;cursor:pointer}
+.thought-b{margin-left:6px;padding-left:14px;border-left:1px solid var(--stroke);color:var(--text2);font-size:12px;line-height:18px;white-space:pre-line}
+.dbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:4px;border-top:1px solid var(--stroke);background:var(--card2)}
+.dbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.dbtn:hover{background:var(--hover)}
+.dbtn .k{font-size:12px;color:var(--text2)}
+@media (max-width:760px){.root{height:auto}.f-pane,.side{width:100%}.f-nv{flex-wrap:wrap}.dock{width:100%}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <span class="f-logo">CL</span>
+  <span class="t-cap">CodeLab</span>
+  <span style="flex: 1"></span>
+  <label class="f-tb" data-fluent="AutoSuggestBox (Ctrl+K)" style="width: 360px">
+    <input type="search" placeholder="Search or run a command" aria-label="Command palette">
+    <span class="t-cap">Ctrl+K</span>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+  </label>
+  <span style="flex: 1"></span>
+  <div class="tools" role="toolbar" aria-label="Tool panes" data-fluent="CommandBar of ToggleButton (tool panes)">
+    <button class="tool on" aria-pressed="true" title="Files (Ctrl+Shift+E)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files</button>
+    <button class="tool" aria-pressed="false" title="Diff"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 4v8M8 8h8M8 18h8"/></svg>Diff</button>
+    <a href="Terminal.dc.html" class="tool" aria-pressed="false" title="Terminal (Ctrl+`)" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8"/></svg>Terminal</a>
+    <button class="tool on" aria-pressed="true" title="Plan"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>Plan</button>
+    <a href="Agents.dc.html" class="tool" aria-pressed="false" title="Agents" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Agents<span class="f-badge" data-fluent="InfoBadge">2</span></a>
+    <a href="Usage.dc.html" class="tool" aria-pressed="false" title="Usage" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Usage</a>
+  </div>
+  <span class="tag ok"><span class="f-dot"></span>Connected · in-process</span>
+</header>
+
+<div class="f-nv" data-fluent="NavigationView">
+  <nav class="f-pane side" aria-label="Sessions" data-fluent="NavigationPane (open, collapsible)">
+    <div style="display: flex; gap: 4px; align-items: center; padding: 4px 4px 2px">
+      <button class="f-pi" data-fluent="PaneItemAction" style="flex: 1; margin: 0"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session<span class="t-cap t2" style="margin-left: auto">Ctrl+N</span></button>
+      <button class="f-btn subtle icon" aria-label="Collapse sidebar (Ctrl+B)" title="Collapse sidebar (Ctrl+B)" data-fluent="IconButton (toggle pane)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+    </div>
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="margin: 4px 8px 6px">
+      <input type="search" placeholder="Search sessions" aria-label="Search sessions">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+    </label>
+    <div style="flex: 1; overflow: auto; min-height: 0">
+      <div class="f-ph" data-fluent="PaneItemHeader">Pinned</div>
+      <a href="Main.dc.html" class="f-pi" data-fluent="PaneItem (pinned)" style="gap: 10px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 6 4 3H6l4-3zM12 13v7"/></svg><span class="nm">Release 1.0 checklist</span><span class="t-cap t2">codelab-app</span></a>
+
+      <div class="f-ph" data-fluent="PaneItemHeader">Projects</div>
+      <div data-fluent="PaneItemExpander (expanded)">
+        <button class="grp" aria-expanded="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">codelab-app</span><span class="t-cap t2">3</span></button>
+        <a href="Main.dc.html" class="f-pi on sess" data-fluent="PaneItem"><span class="nm">Markdown &amp; diff in transcript</span><span class="tag acc" style="height: 18px; padding: 0 6px" role="img" aria-label="Waiting for approval">approval</span></a>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Fix reconnect race in WorkspaceRestorer</span><span class="f-pr" style="width: 14px; height: 14px" role="img" aria-label="Turn running"></span></a>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Stage 5: split CodeLabShellCubit</span><span class="tag bad" style="height: 18px; padding: 0 6px" role="img" aria-label="Error">error</span></a>
+      </div>
+      <div data-fluent="PaneItemExpander (expanded)">
+        <button class="grp" aria-expanded="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">codelab-cli</span><span class="t-cap t2">1</span></button>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Provider wizard: /v1 hint</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" role="img" aria-label="Open in CLI, read-only" style="color: var(--warn)"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></a>
+      </div>
+      <div data-fluent="PaneItemExpander (collapsed)">
+        <button class="grp" aria-expanded="false"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">notes-app</span><span class="f-badge" style="background: var(--text2)">4</span></button>
+      </div>
+    </div>
+    <div class="f-psep" data-fluent="PaneItemSeparator"></div>
+    <a href="Connection.dc.html" class="f-pi" data-fluent="PaneItem (footer)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
+  </nav>
+
+  <section class="f-content" data-fluent="NavigationBody" style="flex-direction: row">
+    <div class="sessarea" data-acp="session pane (split view host)">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px 8px; border-bottom: 1px solid var(--stroke); flex-wrap: wrap" data-fluent="PageHeader">
+        <h1 class="t-sub" style="margin: 0; font-size: 17px; line-height: 22px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto">Markdown &amp; diff in transcript</h1>
+        <span class="tag"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>codelab-app</span>
+        <span class="tag acc">standard</span>
+        <span style="flex: 1"></span>
+        <div class="f-cb" data-fluent="CommandBar">
+          <button class="f-cbb"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Rename</button>
+          <button class="f-cbb"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H6"/></svg>Fork</button>
+          <button class="f-cbb" title="Open to the side (Ctrl+\)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>Split</button>
+          <button class="f-cbb" aria-label="More options"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+        </div>
+      </div>
+
+      <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column-reverse; min-height: 0">
+        <div style="padding: 8px 20px 12px; display: flex; flex-direction: column; gap: 12px; max-width: 760px; width: 100%; box-sizing: border-box; margin: 0 auto">
+
+          <section aria-label="You" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-end">
+            <div class="acp-bubble">Render agent replies as markdown with code highlighting, and show edits as a diff right in the approval card.</div>
+          </section>
+
+          <section class="thought" data-acp="AcpThoughtBlock (collapsed after streaming)">
+            <button class="thought-h" onClick="{{toggleThought}}" aria-expanded="{{thoughtExpanded}}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg>
+              <span>Thoughts</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: {{chevronTurn}}"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <sc-if value="{{thoughtOpen}}" hint-placeholder-val="{{ false }}">
+              <div class="thought-b">The panel draws one AcpText per entry, so streaming re-lays out the whole reply.
+Split into typed rows: one markdown block per row; only the unstable tail is rebuilt.
+Thoughts must not land in "Copy reply". Keep approval auto-scroll (D-01) intact.</div>
+            </sc-if>
+          </section>
+
+          <section aria-label="Agent reply" style="display: flex; flex-direction: column; gap: 10px">
+            <p style="margin: 0">I'll split the transcript into typed rows so markdown, thoughts and tool calls render independently. The mapper reuses unchanged rows by <code class="ic-code">identical</code>, so streaming rebuilds only the tail.</p>
+            <div class="acp-code" data-acp="AcpCodeBlock">
+              <div class="acp-codeh"><span class="mono">dart</span><button class="f-cbb" style="height: 28px; font-size: 12px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>Copy</button></div>
+<pre><span class="k">sealed class</span> <span class="t">AcpTranscriptRow</span> { <span class="t">String</span> <span class="k">get</span> id; }
+<span class="k">final class</span> <span class="t">AcpThoughtRow</span> <span class="k">extends</span> <span class="t">AcpTranscriptRow</span> { … }</pre>
+            </div>
+            <div><button class="f-cbb" style="height: 28px; font-size: 12px" data-fluent="CommandBarButton" data-acp="Copy reply (last block of the reply)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>Copy reply</button></div>
+          </section>
+
+          <section class="f-exp" data-fluent="Expander (collapsed)" data-acp="AcpToolCallRow">
+            <div class="f-exph">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--text2)"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span style="flex: 1; min-width: 0"><span>Read</span> <span class="mono t2" style="font-size: 13px">acp_transcript_panel.dart · 212 lines</span></span>
+              <span class="tag ok">Done · 0.1 s</span>
+              <span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+          </section>
+
+          <section class="f-exp" data-fluent="Expander (expanded)" data-acp="AcpToolCallRow + AcpDiffView">
+            <div class="f-exph">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--text2)"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+              <span style="flex: 1; min-width: 0"><span>Edit</span> <span class="mono" style="font-size: 13px">acp_transcript_panel.dart <span style="color: var(--ok)">+18</span> <span style="color: var(--bad)">−6</span></span></span>
+              <span class="tag ok">Done</span>
+              <span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <div style="border-top: 1px solid var(--stroke)">
+              <div style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--card2); border-bottom: 1px solid var(--stroke); flex-wrap: wrap">
+                <span class="mono t2 t-cap" style="flex: 1">@@ −41,6 +41,10 @@ Widget build(BuildContext context)</span>
+                <div role="group" aria-label="Diff layout" style="display: flex; gap: 4px" data-fluent="ToggleButton ×2">
+                  <button class="{{uniCls}}" onClick="{{setUnified}}" style="height: 28px">Unified</button>
+                  <button class="{{splitCls}}" onClick="{{setSplit}}" style="height: 28px">Side by side</button>
+                </div>
+              </div>
+              <sc-if value="{{isUnified}}" hint-placeholder-val="{{ true }}">
+                <div style="overflow-x: auto; background: var(--code-bg)">
+                  <sc-for list="{{uni}}" as="r" hint-placeholder-count="7">
+                    <div class="acp-dl {{r.c}}"><span>{{r.o}}</span><span>{{r.n}}</span><span>{{r.s}}</span><span>{{r.t}}</span></div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{isSplit}}" hint-placeholder-val="{{ false }}">
+                <div style="background: var(--code-bg)">
+                  <sc-for list="{{split}}" as="r" hint-placeholder-count="5">
+                    <div class="acp-sbs"><span class="ln {{r.lc}}">{{r.lo}}</span><span class="ln {{r.lc}}">{{r.ls}}</span><span class="{{r.lc}}">{{r.lt}}</span><span class="ln {{r.rc}}">{{r.ro}}</span><span class="ln {{r.rc}}">{{r.rs}}</span><span class="{{r.rc}}">{{r.rt}}</span></div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; border-top: 1px solid var(--stroke)">
+                <span class="t-cap t2">Preview · 1 of 2 hunks</span>
+                <button class="f-hl" data-fluent="HyperlinkButton">Show full</button>
+              </div>
+            </div>
+          </section>
+
+          <section aria-label="Permission request" class="f-exp" data-fluent="Expander (expanded, awaiting approval)" data-acp="AcpToolCallRow + AcpApprovalPrompt">
+            <div class="f-exph">
+              <sc-if value="{{pending}}" hint-placeholder-val="{{ true }}"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg></sc-if>
+              <sc-if value="{{allowed}}" hint-placeholder-val="{{ false }}"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg></sc-if>
+              <sc-if value="{{rejected}}" hint-placeholder-val="{{ false }}"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/></svg></sc-if>
+              <span style="flex: 1; min-width: 0"><span>Run</span> <span class="mono t2" style="font-size: 13px">fvm flutter test packages/flutter/acp_ui/test/acp_diff_view_test.dart</span></span>
+              <sc-if value="{{pending}}" hint-placeholder-val="{{ true }}"><span class="tag bad">Shell</span></sc-if>
+              <sc-if value="{{allowed}}" hint-placeholder-val="{{ false }}"><span class="tag ok">{{decisionLabel}}</span><span class="tag ok">Done</span></sc-if>
+              <sc-if value="{{rejected}}" hint-placeholder-val="{{ false }}"><span class="tag bad">{{decisionLabel}}</span><span class="tag bad">Failed</span></sc-if>
+            </div>
+            <sc-if value="{{pending}}" hint-placeholder-val="{{ true }}">
+              <div class="dbar" role="group" aria-label="Decision" data-acp="decision bar: decision × scope">
+                <button class="dbtn" onClick="{{allow}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">{{allowKey}}</span></button>
+                <button class="dbtn" onClick="{{reject}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">{{rejectKey}}</span></button>
+                <span style="flex: 1"></span>
+                <button class="f-btn subtle icon" aria-label="View raw input" title="View raw input" style="width: 28px; height: 28px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 4c-2 0-2 2-2 4s-2 4-2 4 2 0 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 0-2 4 0 4-2 4"/></svg></button>
+                <button class="f-cbx" onClick="{{toggleScope}}" data-fluent="DropDownButton (scope: Only this time / Always)" aria-label="Scope: {{scopeLabel}}" style="min-width: 0; height: 28px; color: var(--text2)">{{scopeLabel}}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              </div>
+            </sc-if>
+          </section>
+        </div>
+      </div>
+
+      <div style="padding: 0 20px 10px; max-width: 760px; width: 100%; box-sizing: border-box; margin: 0 auto">
+        <div class="f-card" style="padding: 8px; display: flex; flex-direction: column; gap: 8px" data-acp="AcpPromptComposer">
+          <div role="list" aria-label="Attachments" style="display: flex; gap: 6px; flex-wrap: wrap">
+            <span role="listitem" class="acp-chip" data-acp="AcpAttachmentChip">acp_transcript_panel_test.dart<span class="t2">6 KB · embedded</span><button class="f-btn subtle icon" style="width: 24px; height: 24px" aria-label="Remove acp_transcript_panel_test.dart">×</button></span>
+          </div>
+          <label class="f-tb focus" data-fluent="TextBox (multiline)" style="align-items: flex-start; padding-top: 2px">
+            <textarea rows="1" aria-label="Prompt" style="font-size: 14px">After the tests pass, add a “Copy reply” button under the last block.</textarea>
+          </label>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+            <button class="f-btn subtle icon" aria-label="Attach files" data-fluent="IconButton"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15.5 7"/></svg></button>
+            <button class="f-btn subtle icon mono" aria-label="Commands" data-fluent="IconButton">/</button>
+            <button class="f-cbx" data-fluent="DropDownButton" style="min-width: 0">claude-sonnet-5-5<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            <button class="f-cbx" data-fluent="DropDownButton" style="min-width: 0">standard<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            <span style="flex: 1"></span>
+            <div class="f-split" data-fluent="SplitButton">
+              <button class="f-btn accent">Queue<span class="t-cap" style="opacity: .8">Enter</span></button>
+              <button class="f-btn accent" aria-label="More send options: Steer (Ctrl+Shift+Enter)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            </div>
+            <button class="f-btn icon" aria-label="Cancel turn (Esc)" data-fluent="IconButton"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="color: var(--bad)"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+          </div>
+        </div>
+        <div role="status" class="acp-status" style="padding: 8px 4px 0" data-acp="AcpSessionStatusBar">
+          <span style="color: var(--text)">claude-sonnet-5-5</span>
+          <span>standard</span>
+          <span style="display: flex; align-items: center; gap: 8px"><span class="f-pb" style="width: 56px" data-fluent="ProgressBar"><i style="width: 62%"></i></span>62% context</span>
+          <span class="mono" title="input 11.9k · cache read 0.4k · output 1.2k · reasoning 0.3k">12.3k → 1.2k</span>
+          <span><span style="color: var(--text)">$0.042</span></span>
+          <span style="flex: 1"></span>
+          <span style="display: flex; align-items: center; gap: 6px; color: var(--accent-text)"><span class="f-pr" style="width: 12px; height: 12px"></span>Waiting for approval</span>
+        </div>
+      </div>
+    </div>
+
+    <aside class="dock" aria-label="Tool panes" data-acp="AcpToolDock" data-fluent="TabView per pane, AcpResizeHandle">
+      <div class="grip" role="separator" aria-orientation="vertical" aria-label="Resize tool panes" data-acp="AcpResizeHandle"><i></i></div>
+
+      <section class="dpane" style="flex: 1 1 58%" aria-label="Files pane">
+        <div class="dhead" role="tablist" data-fluent="TabView">
+          <a href="Files.dc.html" role="tab" aria-selected="true" class="dtab on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files<span class="f-btn subtle icon" style="width: 22px; height: 22px" aria-hidden="true">×</span></a>
+          <span style="flex: 1"></span>
+          <button class="f-btn subtle icon" aria-label="Pane options" style="width: 28px; height: 28px; margin-bottom: 2px"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px 4px; flex-wrap: wrap">
+          <nav class="f-bc t-cap" aria-label="Breadcrumb" data-fluent="BreadcrumbBar" style="flex: 1; min-width: 0"><span>codelab-app</span><span>›</span><span>packages</span><span>›</span><b>acp_ui</b></nav>
+          <label class="f-ts t-cap" data-fluent="ToggleSwitch"><input type="checkbox" aria-label="Show ignored files">Show ignored</label>
+        </div>
+        <div role="tree" aria-label="Project files" style="flex: 1; min-height: 0; overflow: auto; padding: 0 8px 8px; font-size: 13px" data-fluent="TreeView">
+          <div role="treeitem" aria-expanded="true" class="f-tv" style="padding-left: 4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>lib</div>
+          <div role="treeitem" aria-expanded="true" class="f-tv" style="padding-left: 22px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>src/organisms</div>
+          <a href="Files.dc.html" role="treeitem" aria-selected="true" class="f-tv on" style="padding-left: 58px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>acp_transcript_panel.dart<span class="t-cap" style="margin-left: auto; color: var(--warn)">M</span></a>
+          <a href="Files.dc.html" role="treeitem" class="f-tv" style="padding-left: 58px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>acp_workbench_layout.dart</a>
+          <a href="Files.dc.html" role="treeitem" class="f-tv" style="padding-left: 58px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>acp_diff_view.dart</a>
+          <div role="treeitem" aria-expanded="false" class="f-tv" style="padding-left: 22px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>src/molecules</div>
+          <div role="treeitem" aria-expanded="false" class="f-tv" style="padding-left: 4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>test</div>
+          <div role="treeitem" class="f-tv" style="padding-left: 22px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>pubspec.yaml</div>
+          <div role="treeitem" class="f-tv" style="padding-left: 22px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>AGENTS.md</div>
+        </div>
+      </section>
+
+      <div class="hsplit" role="separator" aria-orientation="horizontal" aria-label="Resize stacked panes" data-acp="AcpResizeHandle (horizontal)"><i></i></div>
+
+      <section class="dpane" style="flex: 1 1 42%" aria-label="Plan pane">
+        <div class="dhead" role="tablist" data-fluent="TabView">
+          <a href="#" role="tab" aria-selected="true" class="dtab on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>Plan<span class="f-btn subtle icon" style="width: 22px; height: 22px" aria-hidden="true">×</span></a>
+        </div>
+        <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; overflow: auto; min-height: 0" data-acp="plan checklist (R-19)">
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><span class="t-strong">Plan</span><span class="t-cap t2">2 / 3 · from the agent (R-19)</span></div>
+          <label class="f-chk" data-fluent="Checkbox"><input type="checkbox" checked disabled><span class="t2" style="text-decoration: line-through">Split transcript into typed rows</span></label>
+          <label class="f-chk" data-fluent="Checkbox"><input type="checkbox" checked disabled><span class="t2" style="text-decoration: line-through">TranscriptRowMapper with row reuse</span></label>
+          <span style="display: flex; gap: 8px; align-items: center"><span class="f-pr" style="width: 20px; height: 20px" data-fluent="ProgressRing"></span>Diff preview in approval card <span class="tag acc">high</span></span>
+        </div>
+      </section>
+      <div class="t-cap t2" style="padding: 6px 12px; border-top: 1px solid var(--stroke); background: var(--mica)">Panes follow the focused session · Ctrl+` terminal</div>
+    </aside>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    const s = this.state || {};
+    const open = s.thoughtOpen ?? false;
+    const layout = s.layout ?? 'unified';
+    const decision = s.decision ?? null;
+    const scope = s.scope ?? 'once';
+    const always = scope === 'always';
+    const uni = [
+      { o: '42', n: '42', s: ' ', t: '  Widget build(BuildContext context) {', c: '' },
+      { o: '43', n: '', s: '−', t: '    return ListView.separated(', c: 'del' },
+      { o: '44', n: '', s: '−', t: '      itemCount: entries.length,', c: 'del' },
+      { o: '', n: '43', s: '+', t: '    return ListView.builder(', c: 'add' },
+      { o: '', n: '44', s: '+', t: '      itemCount: rows.length,', c: 'add' },
+      { o: '', n: '45', s: '+', t: '      itemBuilder: (context, i) => switch (rows[i]) {', c: 'add' },
+      { o: '46', n: '50', s: ' ', t: '    );', c: '' }
+    ];
+    const split = [
+      { lo: '42', ls: ' ', lt: '  Widget build(BuildContext context) {', lc: '', ro: '42', rs: ' ', rt: '  Widget build(BuildContext context) {', rc: '' },
+      { lo: '43', ls: '−', lt: '    return ListView.separated(', lc: 'del', ro: '43', rs: '+', rt: '    return ListView.builder(', rc: 'add' },
+      { lo: '44', ls: '−', lt: '      itemCount: entries.length,', lc: 'del', ro: '44', rs: '+', rt: '      itemCount: rows.length,', rc: 'add' },
+      { lo: '', ls: '', lt: '', lc: 'gap', ro: '45', rs: '+', rt: '      itemBuilder: (context, i) => switch (…) {', rc: 'add' },
+      { lo: '46', ls: ' ', lt: '    );', lc: '', ro: '50', rs: ' ', rt: '    );', rc: '' }
+    ];
+    return {
+      ...this.palette(),
+      thoughtOpen: open,
+      thoughtExpanded: open ? 'true' : 'false',
+      chevronTurn: open ? 'rotate(180deg)' : 'none',
+      toggleThought: () => this.setState({ thoughtOpen: !open }),
+      isUnified: layout === 'unified',
+      isSplit: layout === 'split',
+      uniCls: layout === 'unified' ? 'f-btn toggle on' : 'f-btn toggle',
+      splitCls: layout === 'split' ? 'f-btn toggle on' : 'f-btn toggle',
+      setUnified: () => this.setState({ layout: 'unified' }),
+      setSplit: () => this.setState({ layout: 'split' }),
+      uni: uni,
+      split: split,
+      pending: decision === null,
+      allowed: decision === 'allow',
+      rejected: decision === 'reject',
+      scopeLabel: always ? 'Always' : 'Only this time',
+      allowKey: always ? 'Alt+Ctrl+Enter' : 'Ctrl+Enter',
+      rejectKey: always ? 'Alt+Ctrl+Backspace' : 'Ctrl+Backspace',
+      decisionLabel: decision === 'allow' ? (always ? 'Always allow' : 'Allow once') : (always ? 'Always reject' : 'Reject'),
+      toggleScope: () => this.setState({ scope: always ? 'once' : 'always' }),
+      allow: () => this.setState({ decision: 'allow' }),
+      reject: () => this.setState({ decision: 'reject' })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Transcript rows</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:2000px;padding:40px;box-sizing:border-box;display:flex;gap:32px;align-items:flex-start;background:var(--mica)}
+.col{display:flex;flex-direction:column;gap:28px;min-width:0}
+.grp{display:flex;flex-direction:column;gap:14px}
+.spec{display:flex;flex-direction:column;gap:6px}
+.lbl{font-size:12px;line-height:16px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.lbl b{color:var(--text);font-weight:500}
+.thought{display:flex;flex-direction:column;gap:4px}
+.thought-h{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;padding:4px 0;border:0;background:transparent;color:var(--text2);font:inherit;font-size:12px;line-height:16px;cursor:pointer}
+.thought-b{margin-left:6px;padding-left:14px;border-left:1px solid var(--stroke);color:var(--text2);font-size:12px;line-height:18px;white-space:pre-line}
+.dbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:4px;border-top:1px solid var(--stroke);background:var(--card2)}
+.dbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.dbtn:hover{background:var(--hover)}
+.dbtn .k{font-size:12px;color:var(--text2)}
+.dbtn:disabled{color:var(--text2);cursor:not-allowed}
+.dbtn:disabled svg{opacity:.4}
+.out{border-top:1px solid var(--stroke);background:var(--card2);padding:16px;display:flex;flex-direction:column;gap:8px}
+.outm{font:12.5px/18px 'Cascadia Code','JetBrains Mono',Consolas,monospace;white-space:pre}
+.det{font-size:13px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.raw{margin:4px 8px 4px;border:1px solid var(--stroke);border-radius:4px;padding:8px;font:12.5px/18px 'Cascadia Code','JetBrains Mono',Consolas,monospace;white-space:pre;background:var(--card)}
+.clip{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+h2{margin:0}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+
+  <div class="col" style="width: 560px; flex: none">
+    <section class="grp" aria-label="Messages">
+      <h2 class="t-sub">Messages</h2>
+      <div class="spec"><span class="lbl"><b>CodeLabUserRow</b> · bubble on the right, up to 78 % (90 % below 560 px), no «You» label</span>
+        <div class="acp-bubble" style="align-self: flex-end">Run the analyzer and fix what it reports.</div>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabUserRow</b> · multi-line prompt</span>
+        <div class="acp-bubble" style="align-self: flex-end; white-space: pre-line">Sort the note list by last edit, newest first.
+Keep pinned notes on top and update the widget test.</div>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabAgentTextRow</b> · plain text, no card, no «Agent» label</span>
+        <p style="margin: 0">I'll split the transcript into typed rows so markdown, thoughts and tool calls render independently.</p>
+      </div>
+    </section>
+
+    <section class="grp" aria-label="Thoughts">
+      <h2 class="t-sub">Thoughts</h2>
+      <div class="spec"><span class="lbl"><b>CodeLabThoughtRow</b> · streaming: expanded, last 6 lines</span>
+        <section class="thought">
+          <button class="thought-h" aria-expanded="true"><span class="f-pr" style="width: 14px; height: 14px" aria-hidden="true"></span><span>Thinking…</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="thought-b">The build runs build_runner for every package.
+Only three packages have generated files.
+Check melos.yaml for the bootstrap hook.</div>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabThoughtRow</b> · done: collapsed by default</span>
+        <section class="thought">
+          <button class="thought-h" aria-expanded="false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg><span>Thoughts</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabThoughtRow</b> · done, opened by the user (or verbose)</span>
+        <section class="thought">
+          <button class="thought-h" aria-expanded="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg><span>Thoughts</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="thought-b">The panel draws one text per entry, so streaming re-lays out the whole reply.
+Split into typed rows; only the unstable tail is rebuilt.</div>
+        </section>
+      </div>
+    </section>
+
+    <section class="grp" aria-label="Notices">
+      <h2 class="t-sub">Notices</h2>
+      <div class="spec"><span class="lbl"><b>CodeLabNoticeRow</b> · info: new session after restore, turn without a reply</span>
+        <div style="display: flex; gap: 8px; align-items: flex-start; color: var(--text2); font-size: 12px; line-height: 16px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span>The agent cannot restore sessions; a new session was started.</span></div>
+        <div style="display: flex; gap: 8px; align-items: flex-start; color: var(--text2); font-size: 12px; line-height: 16px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span>The agent ended the turn without a reply.</span></div>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabNoticeRow</b> · warning: session detached</span>
+        <div class="f-ib warning"><span class="f-ibi">!</span><div><span class="ttl">Session detached</span>The agent process exited. Reconnect to continue this session.</div></div>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabNoticeRow</b> · error: failed turn with Details and Retry</span>
+        <div class="f-ib error" style="flex-direction: row"><span class="f-ibi">✕</span><div style="flex: 1; display: flex; flex-direction: column; gap: 8px"><div><span class="ttl">The agent could not complete the turn</span></div><span>scripted model: request 5: the script has only 4 steps</span><button class="f-btn" style="justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>Details</button><div><button class="f-btn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/></svg>Retry</button></div></div></div>
+      </div>
+    </section>
+
+    <section class="grp" aria-label="Empty transcript">
+      <h2 class="t-sub">Empty transcript</h2>
+      <div class="spec"><span class="lbl"><b>CodeLabTranscriptPanel</b> · connected, no rows yet</span>
+        <div class="f-card" style="height: 120px; display: flex; align-items: center; justify-content: center"><span class="t-cap t2">Send a message to start.</span></div>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabSessionPaneHeader</b> · turn chip</span>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap"><span class="tag"><span class="f-pr" style="width: 12px; height: 12px"></span>Turn running</span><span class="tag acc">Waiting for approval</span><span class="tag">Cancelling…</span></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="col" style="width: 760px; flex: none">
+    <section class="grp" aria-label="Tool calls">
+      <h2 class="t-sub">Tool calls</h2>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow</b> · status glyph, label, detail, status tag, chevron when there is more</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--text2)"><circle cx="12" cy="12" r="8"/></svg><span style="flex: 1; min-width: 0">Search <span class="det">"TODO" in lib</span></span><span class="tag">Queued</span></div></section>
+        <section class="f-exp"><div class="f-exph"><span class="f-pr" style="width: 16px; height: 16px" aria-hidden="true"></span><span style="flex: 1; min-width: 0">Run <span class="det">fvm flutter test</span></span><span class="tag acc">Running</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div></section>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Read <span class="det">lib/main.dart</span></span><span class="tag ok">Done</span></div></section>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/></svg><span style="flex: 1; min-width: 0">Read <span class="det">lib/missing.dart</span></span><span class="tag bad">Failed</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div></section>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn)"><circle cx="12" cy="12" r="8.5"/><path d="m6 18 12-12"/></svg><span style="flex: 1; min-width: 0">Fetch <span class="det">pub.dev/packages/fluent_ui</span></span><span class="tag warn">Cancelled</span></div></section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow</b> · label by kind: Read · Edit · Delete · Move · Search · Run · Fetch · Think · title for other</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Edit <span class="det">lib/note_list.dart</span></span><span class="tag ok">Done</span></div></section>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Move <span class="det">lib/a.dart → lib/b.dart</span></span><span class="tag ok">Done</span></div></section>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Think <span class="det">Update plan</span></span><span class="tag ok">Done</span></div></section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow</b> · expanded: tail of the text output (20 lines)</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Run <span class="det">fvm flutter test</span></span><span class="tag ok">Done</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span></div>
+          <div class="out"><div class="outm">00:07 +12: transcript renders thought block collapsed
+00:08 +13: diff preview switches to side-by-side at 960 px
+00:08 +14: All tests passed!</div></div>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow</b> · failed, expanded: the reason in red, output only if it adds to it</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/></svg><span style="flex: 1; min-width: 0">Read <span class="det">lib/missing.dart</span></span><span class="tag bad">Failed</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span></div>
+          <div class="out"><span style="color: var(--bad)">File not found: lib/missing.dart</span></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="grp" aria-label="Approvals">
+      <h2 class="t-sub">Approvals</h2>
+      <div class="spec"><span class="lbl"><b>CodeLabApprovalPrompt</b> · pending: full command, risk tag, Allow · Reject · scope «Only this time»</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1; min-width: 0">Run <span class="det">echo running tests</span></span><span class="tag bad">Shell</span></div>
+          <div class="dbar" role="group" aria-label="Decision"><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">Ctrl+Enter</span></button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">Ctrl+Backspace</span></button><span style="flex: 1"></span><button class="f-btn subtle icon" aria-label="View raw input" title="View raw input" style="width: 28px; height: 28px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 4c-2 0-2 2-2 4s-2 4-2 4 2 0 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 0-2 4 0 4-2 4"/></svg></button><button class="f-cbx" aria-label="Scope: Only this time" style="min-width: 0; height: 28px; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabApprovalPrompt</b> · scope menu: «Always» names what becomes permanent</span>
+        <div style="display: flex; gap: 16px; align-items: flex-start">
+          <div class="f-card" style="width: 300px; padding: 4px; display: flex; flex-direction: column; box-shadow: var(--shadow-flyout)" data-fluent="MenuFlyout">
+            <div style="padding: 8px 12px; border-radius: 4px; background: var(--hover)">Only this time</div>
+            <div style="padding: 8px 12px; display: flex; flex-direction: column; gap: 2px"><span>Always</span><span class="t-cap t2">Always allow echo running tests</span><span class="t-cap t2">Always reject echo running tests</span></div>
+          </div>
+          <span class="t-cap t2" style="flex: 1">Allow and Reject answer with the agent's option of the chosen scope: allow_once · reject_once or allow_always · reject_always. The scope starts at «Only this time» for every approval.</span>
+        </div>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabApprovalPrompt</b> · scope «Always»: hints of the always options</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1; min-width: 0">Run <span class="det">echo running tests</span></span><span class="tag bad">Shell</span></div>
+          <div class="dbar" role="group" aria-label="Decision"><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">Alt+Ctrl+Enter</span></button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">Alt+Ctrl+Backspace</span></button><span style="flex: 1"></span><button class="f-btn subtle icon" aria-label="View raw input" title="View raw input" style="width: 28px; height: 28px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 4c-2 0-2 2-2 4s-2 4-2 4 2 0 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 0-2 4 0 4-2 4"/></svg></button><button class="f-cbx" aria-label="Scope: Always" style="min-width: 0; height: 28px; color: var(--text2)">Always<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabApprovalPrompt</b> · edit with a reason and the raw input opened</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1; min-width: 0">Edit <span class="det">lib/note_list.dart</span></span><span class="tag warn">Local write</span></div>
+          <div style="border-top: 1px solid var(--stroke); background: var(--card2)">
+            <div class="t-cap t2" style="padding: 6px 8px 0">The comparator change needs pinned notes first.</div>
+            <div class="raw">{
+  "path": "lib/note_list.dart",
+  "old_text": "a.title.compareTo(b.title)",
+  "new_text": "b.editedAt.compareTo(a.editedAt)"
+}</div>
+            <div class="dbar" role="group" aria-label="Decision" style="border-top: 0"><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">Ctrl+Enter</span></button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">Ctrl+Backspace</span></button><span style="flex: 1"></span><button class="f-btn subtle icon on" aria-label="Hide raw input" title="Hide raw input" style="width: 28px; height: 28px; background: var(--hover)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 4c-2 0-2 2-2 4s-2 4-2 4 2 0 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 0-2 4 0 4-2 4"/></svg></button><button class="f-cbx" aria-label="Scope: Only this time" style="min-width: 0; height: 28px; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+          </div>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabApprovalPrompt</b> · no option for the scope: the button is disabled and says why</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1; min-width: 0">Fetch <span class="det">api.github.com/repos/pese-git/codelab-app</span></span><span class="tag warn">Network</span></div>
+          <div class="dbar" role="group" aria-label="Decision"><button class="dbtn" disabled title="The agent offers no such option"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow</button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">Ctrl+Backspace</span></button><span class="t-cap t2" style="margin-left: 8px">The agent offers no such option</span><span style="flex: 1"></span><button class="f-cbx" aria-label="Scope: Only this time" style="min-width: 0; height: 28px; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow</b> · long command: three lines, then «Show full command» — never an ellipsis before the decision</span>
+        <section class="f-exp"><div class="f-exph" style="align-items: flex-start"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text); margin-top: 10px"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 6px 0"><span class="clip">Run <span class="det">melos exec --scope=codelab_ui -- fvm flutter test --coverage --reporter expanded --concurrency=4 test/codelab_transcript_test.dart test/codelab_organisms_test.dart test/codelab_molecules_test.dart test/codelab_previews_test.dart &amp;&amp; genhtml coverage/lcov.info -o coverage/html &amp;&amp; open coverage/html/index.html</span></span><button class="f-hl" style="align-self: flex-start; padding: 0">Show full command</button></span><span class="tag bad" style="margin-top: 10px">Shell</span></div>
+          <div class="dbar" role="group" aria-label="Decision"><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">Ctrl+Enter</span></button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">Ctrl+Backspace</span></button><span style="flex: 1"></span><button class="f-btn subtle icon" aria-label="View raw input" title="View raw input" style="width: 28px; height: 28px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 4c-2 0-2 2-2 4s-2 4-2 4 2 0 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 0-2 4 0 4-2 4"/></svg></button><button class="f-cbx" aria-label="Scope: Only this time" style="min-width: 0; height: 28px; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabTranscriptApproval.resolved</b> · after the decision: outcome tag next to the status</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Run <span class="det">echo running tests</span></span><span class="tag ok">Allow once</span><span class="tag ok">Done</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div></section>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Run <span class="det">melos analyze</span></span><span class="tag ok">Always allow melos analyze</span><span class="tag ok">Done</span></div></section>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/></svg><span style="flex: 1; min-width: 0">Run <span class="det">rm -rf build</span></span><span class="tag bad">Reject</span><span class="tag bad">Failed</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div></section>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn)"><circle cx="12" cy="12" r="8.5"/><path d="m6 18 12-12"/></svg><span style="flex: 1; min-width: 0">Edit <span class="det">lib/main.dart</span></span><span class="tag warn">Cancelled</span></div></section>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":2000}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

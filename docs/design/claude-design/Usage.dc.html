@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Usage and cost</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{height:1240px;display:flex;flex-direction:column;overflow:hidden}
+.tools{display:flex;align-items:center;gap:2px}
+.tool{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;border-radius:4px;border:1px solid transparent;background:transparent;color:var(--text2);font-size:12px;cursor:pointer}
+.tool:hover{background:var(--hover)}
+.tool.on{background:var(--accent-weak);color:var(--accent-text);border-color:transparent}
+.side{width:272px}
+.grp{display:flex;align-items:center;gap:8px;min-height:32px;margin:2px 0;padding:0 8px;border:0;background:transparent;color:var(--text);border-radius:4px;width:100%;box-sizing:border-box;text-align:left;font-weight:600;cursor:pointer}
+.grp:hover{background:var(--hover)}
+.sess{padding-left:30px;gap:10px;min-height:32px}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sessarea{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.dock{position:relative;width:400px;flex:none;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--stroke);background:var(--layer)}
+.grip{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;display:flex;align-items:center;justify-content:center}
+.grip i{width:2px;height:28px;border-radius:1px;background:var(--cstroke2)}
+.dpane{display:flex;flex-direction:column;min-height:0}
+.dhead{display:flex;align-items:flex-end;gap:2px;padding:6px 8px 0;background:var(--mica);border-bottom:1px solid var(--stroke);flex:none}
+.dtab{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 4px 0 10px;border-radius:6px 6px 0 0;border:1px solid transparent;border-bottom:0;color:var(--text2);font-size:13px;text-decoration:none}
+.fx a.dtab{color:var(--text2)}
+.fx a.dtab.on{background:var(--layer);color:var(--text);border-color:var(--stroke)}
+.hsplit{height:7px;flex:none;border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);background:var(--mica);cursor:row-resize;display:flex;align-items:center;justify-content:center}
+.hsplit i{width:28px;height:2px;border-radius:1px;background:var(--cstroke2)}
+.grid2u{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.grid2u .t-sub{font-size:17px;line-height:22px}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;line-height:16px}
+.tbl th,.tbl td{text-align:left;padding:5px 8px;border-top:1px solid var(--stroke);white-space:nowrap}
+.tbl td:first-child{white-space:normal}
+.tbl th{font-weight:600;color:var(--text2);font-size:12px;border-top:0}
+.tbl td.n,.tbl th.n{text-align:right;font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.tbl tr.step td{color:var(--text2);font-size:12px}
+.scroll{overflow-x:auto}
+@media (max-width:760px){.root{height:auto}.f-pane,.side{width:100%}.f-nv{flex-wrap:wrap}.dock{width:100%}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <span class="f-logo">CL</span>
+  <span class="t-cap">CodeLab</span>
+  <span style="flex: 1"></span>
+  <label class="f-tb" data-fluent="AutoSuggestBox (Ctrl+K)" style="width: 360px">
+    <input type="search" placeholder="Search or run a command" aria-label="Command palette">
+    <span class="t-cap">Ctrl+K</span>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+  </label>
+  <span style="flex: 1"></span>
+  <div class="tools" role="toolbar" aria-label="Tool panes" data-fluent="CommandBar of ToggleButton (tool panes)">
+    <button class="tool" aria-pressed="false" title="Files (Ctrl+Shift+E)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files</button>
+    <button class="tool" aria-pressed="false" title="Diff"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 4v8M8 8h8M8 18h8"/></svg>Diff</button>
+    <a href="Terminal.dc.html" class="tool" aria-pressed="false" title="Terminal (Ctrl+`)" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8"/></svg>Terminal</a>
+    <button class="tool" aria-pressed="false" title="Plan"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>Plan</button>
+    <a href="Agents.dc.html" class="tool" aria-pressed="false" title="Agents" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Agents<span class="f-badge" data-fluent="InfoBadge">2</span></a>
+    <a href="Usage.dc.html" class="tool on" aria-pressed="true" title="Usage" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Usage</a>
+  </div>
+  <span class="tag ok"><span class="f-dot"></span>Connected · in-process</span>
+</header>
+
+<div class="f-nv" data-fluent="NavigationView">
+  <nav class="f-pane side" aria-label="Sessions" data-fluent="NavigationPane (open, collapsible)">
+    <div style="display: flex; gap: 4px; align-items: center; padding: 4px 4px 2px">
+      <button class="f-pi" data-fluent="PaneItemAction" style="flex: 1; margin: 0"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session<span class="t-cap t2" style="margin-left: auto">Ctrl+N</span></button>
+      <button class="f-btn subtle icon" aria-label="Collapse sidebar (Ctrl+B)" title="Collapse sidebar (Ctrl+B)" data-fluent="IconButton (toggle pane)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+    </div>
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="margin: 4px 8px 6px">
+      <input type="search" placeholder="Search sessions" aria-label="Search sessions">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+    </label>
+    <div style="flex: 1; overflow: auto; min-height: 0">
+      <div class="f-ph" data-fluent="PaneItemHeader">Pinned</div>
+      <a href="Main.dc.html" class="f-pi" data-fluent="PaneItem (pinned)" style="gap: 10px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 6 4 3H6l4-3zM12 13v7"/></svg><span class="nm">Release 1.0 checklist</span><span class="t-cap t2">codelab-app</span></a>
+
+      <div class="f-ph" data-fluent="PaneItemHeader">Projects</div>
+      <div data-fluent="PaneItemExpander (expanded)">
+        <button class="grp" aria-expanded="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">codelab-app</span><span class="t-cap t2">3</span></button>
+        <a href="Main.dc.html" class="f-pi on sess" data-fluent="PaneItem"><span class="nm">Markdown &amp; diff in transcript</span><span class="tag acc" style="height: 18px; padding: 0 6px" role="img" aria-label="Waiting for approval">approval</span></a>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Fix reconnect race in WorkspaceRestorer</span><span class="f-pr" style="width: 14px; height: 14px" role="img" aria-label="Turn running"></span></a>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Stage 5: split CodeLabShellCubit</span><span class="tag bad" style="height: 18px; padding: 0 6px" role="img" aria-label="Error">error</span></a>
+      </div>
+      <div data-fluent="PaneItemExpander (expanded)">
+        <button class="grp" aria-expanded="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">codelab-cli</span><span class="t-cap t2">1</span></button>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Provider wizard: /v1 hint</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" role="img" aria-label="Open in CLI, read-only" style="color: var(--warn)"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></a>
+      </div>
+      <div data-fluent="PaneItemExpander (collapsed)">
+        <button class="grp" aria-expanded="false"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">notes-app</span><span class="f-badge" style="background: var(--text2)">4</span></button>
+      </div>
+    </div>
+    <div class="f-psep" data-fluent="PaneItemSeparator"></div>
+    <a href="Connection.dc.html" class="f-pi" data-fluent="PaneItem (footer)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
+  </nav>
+
+  <section class="f-content" data-fluent="NavigationBody" style="flex-direction: row">
+    <div class="sessarea" data-acp="session pane">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px 8px; border-bottom: 1px solid var(--stroke); flex-wrap: wrap; position: relative" data-fluent="PageHeader">
+        <h1 class="t-sub" style="margin: 0; font-size: 17px; line-height: 22px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto">Markdown &amp; diff in transcript</h1>
+        <span class="tag"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>codelab-app</span>
+        <span class="tag acc">standard</span>
+        <span style="flex: 1"></span>
+        <div class="f-cb" data-fluent="CommandBar">
+          <button class="f-cbb"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Rename</button>
+          <button class="f-cbb"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9a6 6 0 0 1-6 6H6"/></svg>Fork</button>
+          <button class="f-cbb" title="Open to the side (Ctrl+\)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>Split</button>
+          <button class="f-cbb" aria-label="More options"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+        </div>
+
+      </div>
+      <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column-reverse; min-height: 0">
+        <div style="padding: 8px 20px 12px; display: flex; flex-direction: column; gap: 12px; max-width: 760px; width: 100%; box-sizing: border-box; margin: 0 auto">
+          <section aria-label="You" style="display: flex; flex-direction: column; align-items: flex-end"><div class="acp-bubble">After the tests pass, add a “Copy reply” button under the last block.</div></section>
+          <p style="margin: 0">Done — the button sits under the last markdown block of each reply and copies the raw markdown without thoughts.</p>
+          <section class="f-card" aria-label="Status bar states" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px" data-acp="AcpSessionStatusBar">
+        <span class="t-cap t2">Status bar under the composer — click opens this page</span>
+        <div role="status" class="acp-status"><span style="color: var(--text)">claude-sonnet-5-5</span><span>standard</span><span style="display: flex; align-items: center; gap: 8px"><span class="f-pb" style="width: 64px"><i style="width: 62%"></i></span>62% context</span><span class="mono">12.3k → 1.2k</span><span><span style="color: var(--text)">$0.042</span> · session $1.20</span></div>
+        <div role="status" class="acp-status"><span style="color: var(--text)">claude-sonnet-5-5</span><span>standard</span><span style="display: flex; align-items: center; gap: 8px; color: var(--warn)"><span class="f-pb warn" style="width: 64px"><i style="width: 84%"></i></span>84% context · compaction soon</span><span class="mono">~41.0k → 2.3k</span><span title="one step did not report cache tokens"><span style="color: var(--text)">~$0.19</span> · session ~$2.05</span></div>
+        <div role="status" class="acp-status"><span style="color: var(--text)">claude-sonnet-5-5</span><span>standard</span><span style="display: flex; align-items: center; gap: 8px; color: var(--bad)"><span class="f-pb" style="width: 64px"><i style="width: 96%; background: var(--bad)"></i></span>96% context</span><span class="mono">48.7k → 0.9k</span><span><span style="color: var(--text)">$0.21</span> · session $2.26</span></div>
+        <div role="status" class="acp-status"><span style="color: var(--text)">llama3.1:70b</span><span>ask</span><span title="agent does not report usage">usage: —</span><span class="t-cap t2">tooltip: “agent does not report usage” — never shown as zeros</span></div>
+      </section>
+        </div>
+      </div>
+      <div style="padding: 0 20px 10px; max-width: 760px; width: 100%; box-sizing: border-box; margin: 0 auto">
+        <div class="f-card" style="padding: 8px; display: flex; flex-direction: column; gap: 8px" data-acp="AcpPromptComposer">
+          <div role="list" aria-label="Attachments" style="display: flex; gap: 6px; flex-wrap: wrap">
+            <span role="listitem" class="acp-chip" data-acp="AcpAttachmentChip">acp_transcript_panel_test.dart<span class="t2">6 KB · embedded</span><button class="f-btn subtle icon" style="width: 24px; height: 24px" aria-label="Remove acp_transcript_panel_test.dart">×</button></span>
+          </div>
+          <label class="f-tb focus" data-fluent="TextBox (multiline)" style="align-items: flex-start; padding-top: 2px">
+            <textarea rows="1" aria-label="Prompt" style="font-size: 14px">After the tests pass, add a “Copy reply” button under the last block.</textarea>
+          </label>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+            <button class="f-btn subtle icon" aria-label="Attach files" data-fluent="IconButton"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15.5 7"/></svg></button>
+            <button class="f-btn subtle icon mono" aria-label="Commands" data-fluent="IconButton">/</button>
+            <button class="f-cbx" data-fluent="DropDownButton" style="min-width: 0">claude-sonnet-5-5<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            <button class="f-cbx" data-fluent="DropDownButton" style="min-width: 0">standard<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            <span style="flex: 1"></span>
+            <div class="f-split" data-fluent="SplitButton">
+              <button class="f-btn accent">Queue<span class="t-cap" style="opacity: .8">Enter</span></button>
+              <button class="f-btn accent" aria-label="More send options: Steer (Ctrl+Shift+Enter)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            </div>
+            <button class="f-btn icon" aria-label="Cancel turn (Esc)" data-fluent="IconButton"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="color: var(--bad)"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+          </div>
+        </div>
+        <div role="status" class="acp-status" style="padding: 8px 4px 0" data-acp="AcpSessionStatusBar">
+          <span style="color: var(--text)">claude-sonnet-5-5</span>
+          <span>standard</span>
+          <span style="display: flex; align-items: center; gap: 8px; color: var(--warn)"><span class="f-pb warn" style="width: 56px" data-fluent="ProgressBar"><i style="width: 84%"></i></span>84% context · compaction soon</span>
+          <span class="mono">41.0k → 2.3k</span>
+          <a href="Usage.dc.html" style="color: var(--text)">~$0.19 · session ~$2.26</a>
+          <span style="flex: 1"></span>
+          <span style="display: flex; align-items: center; gap: 6px; color: var(--accent-text)"><span class="f-pr" style="width: 12px; height: 12px"></span>Waiting for approval</span>
+        </div>
+      </div>
+    </div>
+
+    <aside class="dock" aria-label="Tool panes" data-acp="AcpToolDock" data-fluent="TabView per pane, AcpResizeHandle" style="width: 460px">
+      <div class="grip" role="separator" aria-orientation="vertical" aria-label="Resize tool panes" data-acp="AcpResizeHandle"><i></i></div>
+      <section class="dpane" style="flex: 1" aria-label="Usage pane" data-acp="Usage pane (D-09, L-29)">
+        <div class="dhead" role="tablist" data-fluent="TabView">
+          <a href="Usage.dc.html" role="tab" aria-selected="true" class="dtab on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Usage<span class="f-btn subtle icon" style="width: 22px; height: 22px" aria-hidden="true">×</span></a>
+          <span style="flex: 1"></span>
+          <button class="f-btn subtle icon" aria-label="Pane options" style="width: 28px; height: 28px; margin-bottom: 2px"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px 0; flex-wrap: wrap" data-fluent="CommandBar">
+          <button class="f-cbx" data-fluent="ComboBox" style="min-width: 0">This session<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <span style="flex: 1"></span>
+          <button class="f-cbb">Rebuild from log</button>
+          <button class="f-cbb">Export CSV</button>
+        </div>
+        <div style="overflow: auto; min-height: 0; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px">
+          <div class="grid2u">
+        <div class="f-card" style="padding: 14px 16px"><div class="t-cap t2">Input</div><div class="t-sub mono">184.2k</div><div class="t-cap t2">cache read 121.0k · write 18.4k</div></div>
+        <div class="f-card" style="padding: 14px 16px"><div class="t-cap t2">Output</div><div class="t-sub mono">14.9k</div><div class="t-cap t2">reasoning 4.1k</div></div>
+        <div class="f-card" style="padding: 14px 16px"><div class="t-cap t2">Cost</div><div class="t-sub mono">~$2.26</div><div class="t-cap t2">“~” — one step reported no cache tokens</div></div>
+        <div class="f-card" style="padding: 14px 16px"><div class="t-cap t2">Turns · steps</div><div class="t-sub mono">9 · 41</div><div class="t-cap t2">avg 4.6 steps per turn</div></div>
+      </div>
+          <section class="f-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px" aria-labelledby="bud" data-acp="turn budget">
+          <div style="display: flex; align-items: center; gap: 8px"><h2 id="bud" class="t-strong" style="margin: 0; font-size: 14px; flex: 1">Turn budget</h2><span class="tag">C-13 · config agent.budget</span></div>
+          <div style="display: grid; grid-template-columns: 80px 1fr 120px; gap: 8px 12px; align-items: center; font-size: 13px">
+            <span class="t2">Tokens</span><span class="f-pb"><i style="width: 46%"></i></span><span class="mono">92k / 200k</span>
+            <span class="t2">Cost</span><span class="f-pb warn"><i style="width: 82%"></i></span><span class="mono">$0.41 / $0.50</span>
+            <span class="t2">Time</span><span class="f-pb"><i style="width: 30%"></i></span><span class="mono">3:00 / 10:00</span>
+          </div>
+          <p class="t-cap t2" style="margin: 0">When a limit is hit the turn stops with “budget exceeded: cost”; the transcript keeps everything done so far.</p>
+        </section>
+          <section class="f-card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px" aria-labelledby="dl" data-acp="session deadline">
+          <div style="display: flex; align-items: center; gap: 8px"><h2 id="dl" class="t-strong" style="margin: 0; font-size: 14px; flex: 1">Session deadline</h2><span class="tag acc">/timer</span></div>
+          <div style="display: flex; align-items: baseline; gap: 10px"><span class="t-sub">Stops at 18:30</span><span class="t-cap t2">set by /timer until 18:30 · 1 h 12 min left</span></div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap"><button class="f-btn">Extend 30 min</button><button class="f-btn">Change…</button><button class="f-btn subtle danger">Turn off</button></div>
+          <p class="t-cap t2" style="margin: 0">At the deadline the running turn finishes its tool call and stops with reason “deadline”.</p>
+        </section>
+          <section class="f-card" aria-labelledby="pt" data-acp="turn timeline (D-22)">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 14px 16px 6px"><h2 id="pt" class="t-strong" style="margin: 0; font-size: 14px; flex: 1">Per turn</h2><span class="t-cap t2">Expand a turn for its steps</span></div>
+        <div class="scroll">
+        <table class="tbl">
+          <thead><tr><th>Turn</th><th class="n">Input</th><th class="n">Output</th><th class="n">Cost</th></tr></thead>
+          <tbody>
+            <tr><td>9 · “After the tests pass, add Copy reply”</td><td class="n">41.0k</td><td class="n">2.3k</td><td class="n">~$0.19</td></tr>
+            <tr class="step"><td style="padding-left: 28px">step 1 · read acp_transcript_panel.dart</td><td class="n">12.1k</td><td class="n">0.4k</td><td class="n">$0.02</td></tr>
+            <tr class="step"><td style="padding-left: 28px">step 2 · edit acp_transcript_panel.dart</td><td class="n">13.6k</td><td class="n">1.1k</td><td class="n">$0.05</td></tr>
+            <tr class="step"><td style="padding-left: 28px">step 3 · exec fvm flutter test</td><td class="n">15.3k</td><td class="n">0.8k</td><td class="n" title="cache tokens not reported">~$0.12</td></tr>
+            <tr><td>8 · “Render agent replies as markdown”</td><td class="n">38.4k</td><td class="n">3.9k</td><td class="n">$0.24</td></tr>
+            <tr><td>7 · “Try the local model”</td><td class="n t2">—</td><td class="n t2">—</td><td class="n t2">—</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+          <section class="f-card" aria-labelledby="pm">
+        <div style="padding: 14px 16px 6px"><h2 id="pm" class="t-strong" style="margin: 0; font-size: 14px">Per model</h2></div>
+        <table class="tbl">
+          <thead><tr><th>Model</th><th class="n">Input</th><th class="n">Output</th><th class="n">Cost</th></tr></thead>
+          <tbody>
+            <tr><td>anthropic / claude-sonnet-5-5</td><td class="n">171.4k</td><td class="n">13.2k</td><td class="n">~$2.18</td></tr>
+            <tr><td>openai / gpt-5-mini <span class="tag">fallback</span></td><td class="n">12.8k</td><td class="n">1.7k</td><td class="n">$0.08</td></tr>
+            <tr><td>ollama / llama3.1:70b</td><td class="n t2">—</td><td class="n t2">—</td><td class="n t2">—</td></tr>
+          </tbody>
+        </table>
+      </section>
+        </div>
+      </section>
+      <div class="t-cap t2" style="padding: 6px 12px; border-top: 1px solid var(--stroke); background: var(--mica)">Unknown usage shows “usage: —”, never zeros (DSK-11)</div>
+    </aside>
+  </section>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

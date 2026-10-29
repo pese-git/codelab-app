@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goal coverage</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.root{min-height:2200px;padding:40px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px}
+.cols{columns:3 420px;column-gap:20px}
+.blk{break-inside:avoid;margin:0 0 20px;overflow:hidden}
+.cov{width:100%;border-collapse:collapse;font-size:12px;line-height:16px}
+.cov th,.cov td{border-top:1px solid var(--stroke);padding:5px 8px;text-align:left;vertical-align:top}
+.cov th{font-weight:600;background:var(--card2);color:var(--text2)}
+.cov td:first-child{white-space:nowrap;width:92px}
+.cov td:nth-child(3),.cov td:nth-child(4){white-space:nowrap;width:64px;color:var(--accent-text)}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header style="display: flex; flex-direction: column; gap: 6px">
+<h1 class="t-title" style="margin: 0">Goal coverage — agent-parity-goals.md</h1>
+<p class="t2" style="margin: 0; max-width: 1100px">138 client-visible rows mapped to screens. App: 01–27 (light and dark pages). CLI: C1–C14. “—” means the client does not show it; a /command means it lives in the slash menu without its own screen.</p>
+</header>
+<div class="cols">
+<section class="f-card blk" aria-label="LLM">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">LLM</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">L-01</td><td>Streaming reply</td><td class="mono">01</td><td class="mono">C1 C4</td></tr>
+<tr><td class="mono">L-02</td><td>Thinking stream</td><td class="mono">01 02</td><td class="mono">C1</td></tr>
+<tr><td class="mono">L-04</td><td>Provider error, turn survives</td><td class="mono">19</td><td class="mono">C12</td></tr>
+<tr><td class="mono">L-05</td><td>Cancel reaches HTTP</td><td class="mono">02</td><td class="mono">C1</td></tr>
+<tr><td class="mono">L-08</td><td>Fallback model notice</td><td class="mono">19</td><td class="mono">C12</td></tr>
+<tr><td class="mono">L-10</td><td>Model roles</td><td class="mono">21</td><td class="mono">C10</td></tr>
+<tr><td class="mono">L-11</td><td>Usage and cost</td><td class="mono">17</td><td class="mono">C1 C10</td></tr>
+<tr><td class="mono">L-15</td><td>Model catalog</td><td class="mono">13</td><td class="mono">C8</td></tr>
+<tr><td class="mono">L-16</td><td>Reasoning effort</td><td class="mono">13 21</td><td class="mono">C8</td></tr>
+<tr><td class="mono">L-17</td><td>Subscription sign-in</td><td class="mono">06</td><td class="mono">C5</td></tr>
+<tr><td class="mono">L-24</td><td>Custom provider wizard</td><td class="mono">06</td><td class="mono">C5</td></tr>
+<tr><td class="mono">L-29</td><td>Session usage log</td><td class="mono">17</td><td class="mono">C10</td></tr>
+<tr><td class="mono">L-31</td><td>Long thinking ≠ hang</td><td class="mono">02</td><td class="mono">C12</td></tr>
+<tr><td class="mono">L-32</td><td>Rate-limit message</td><td class="mono">19</td><td class="mono">C12</td></tr>
+<tr><td class="mono">L-34</td><td>Window source in status</td><td class="mono">17</td><td class="mono">C10</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="Agent loop">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">Agent loop</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">C-02</td><td>Step limit stop</td><td class="mono">19</td><td class="mono">C12</td></tr>
+<tr><td class="mono">C-03</td><td>Steering</td><td class="mono">02 13</td><td class="mono">C1</td></tr>
+<tr><td class="mono">C-04</td><td>architect / review modes</td><td class="mono">13 21</td><td class="mono">C8</td></tr>
+<tr><td class="mono">C-05</td><td>Plan checklist</td><td class="mono">01</td><td class="mono">C1</td></tr>
+<tr><td class="mono">C-06</td><td>Subagents</td><td class="mono">16</td><td class="mono">C9</td></tr>
+<tr><td class="mono">C-08</td><td>Repeated bad calls</td><td class="mono">01</td><td class="mono">C1</td></tr>
+<tr><td class="mono">C-09</td><td>Stuck tool supervision</td><td class="mono">16</td><td class="mono">C9</td></tr>
+<tr><td class="mono">C-13</td><td>Turn budget</td><td class="mono">17 19</td><td class="mono">C10</td></tr>
+<tr><td class="mono">C-14</td><td>Answer held for approval</td><td class="mono">19</td><td class="mono">C12</td></tr>
+<tr><td class="mono">C-15</td><td>Session deadline /timer</td><td class="mono">17</td><td class="mono">C10</td></tr>
+<tr><td class="mono">C-17</td><td>Message a subagent</td><td class="mono">16</td><td class="mono">C9</td></tr>
+<tr><td class="mono">C-18</td><td>Addressable results</td><td class="mono">16</td><td class="mono">C9</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="Tools">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">Tools</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">T-01…T-09</td><td>read · write · edit · ls · search · exec</td><td class="mono">01</td><td class="mono">C1</td></tr>
+<tr><td class="mono">T-10</td><td>Background commands</td><td class="mono">16</td><td class="mono">C9</td></tr>
+<tr><td class="mono">T-13</td><td>web_fetch approval</td><td class="mono">15 25</td><td class="mono">C2</td></tr>
+<tr><td class="mono">T-14</td><td>web_search</td><td class="mono">25</td><td class="mono">C2</td></tr>
+<tr><td class="mono">T-15</td><td>LSP</td><td class="mono">25</td><td class="mono">C1</td></tr>
+<tr><td class="mono">T-17</td><td>Long-term memory</td><td class="mono">25</td><td class="mono">/memory</td></tr>
+<tr><td class="mono">T-22</td><td>ask — questions</td><td class="mono">15</td><td class="mono">C12</td></tr>
+<tr><td class="mono">T-26</td><td>Tools on / off</td><td class="mono">22</td><td class="mono">C11</td></tr>
+<tr><td class="mono">T-28</td><td>Huge output to file</td><td class="mono">01</td><td class="mono">C1</td></tr>
+<tr><td class="mono">T-34</td><td>Wrong job id hint</td><td class="mono">16</td><td class="mono">C9</td></tr>
+<tr><td class="mono">T-35</td><td>Tools mid-session</td><td class="mono">22</td><td class="mono">C11</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="Permissions">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">Permissions</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">P-02</td><td>Arguments in approval</td><td class="mono">01 15</td><td class="mono">C2</td></tr>
+<tr><td class="mono">P-03</td><td>Always allow rules</td><td class="mono">22</td><td class="mono">C2</td></tr>
+<tr><td class="mono">P-04</td><td>Reject keeps the turn</td><td class="mono">01</td><td class="mono">C2</td></tr>
+<tr><td class="mono">P-05</td><td>Permission modes</td><td class="mono">13 21</td><td class="mono">C8</td></tr>
+<tr><td class="mono">P-06</td><td>accept-edits mode</td><td class="mono">21</td><td class="mono">C8</td></tr>
+<tr><td class="mono">P-07</td><td>Critical patterns</td><td class="mono">15 22</td><td class="mono">C2</td></tr>
+<tr><td class="mono">P-08</td><td>Folder boundary</td><td class="mono">22</td><td class="mono">C1</td></tr>
+<tr><td class="mono">P-09</td><td>Headless denies</td><td class="mono">—</td><td class="mono">C14</td></tr>
+<tr><td class="mono">P-12</td><td>Secrets in OS store</td><td class="mono">05 20</td><td class="mono">C5</td></tr>
+<tr><td class="mono">P-18</td><td>Credential files denied</td><td class="mono">22</td><td class="mono">C1</td></tr>
+<tr><td class="mono">P-19</td><td>Extra redaction layers</td><td class="mono">23</td><td class="mono">C13</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="Sessions">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">Sessions</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">S-02</td><td>Load with replay</td><td class="mono">04</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-03</td><td>Session list</td><td class="mono">04</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-04</td><td>Resume last</td><td class="mono">11</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-05</td><td>Session title</td><td class="mono">01 04</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-06</td><td>Rename</td><td class="mono">14</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-07</td><td>Fork, branches, labels</td><td class="mono">14</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-08</td><td>Rewind</td><td class="mono">14</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-09</td><td>One writer (lease)</td><td class="mono">19</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-14 S-17</td><td>Named sessions</td><td class="mono">04</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-18</td><td>Sessions of all folders</td><td class="mono">04</td><td class="mono">C7</td></tr>
+<tr><td class="mono">S-21</td><td>Export to Markdown</td><td class="mono">12 14</td><td class="mono">/export</td></tr>
+<tr><td class="mono">K-01 K-02</td><td>Compaction, /compact</td><td class="mono">12 19</td><td class="mono">C12</td></tr>
+<tr><td class="mono">K-04</td><td>Overflow failure</td><td class="mono">19</td><td class="mono">C12</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="Extensions">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">Extensions</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">E-01 E-17</td><td>Context files</td><td class="mono">24</td><td class="mono">C10</td></tr>
+<tr><td class="mono">E-02…E-05</td><td>MCP stdio / http</td><td class="mono">05b</td><td class="mono">C11</td></tr>
+<tr><td class="mono">E-06 E-18 E-19</td><td>Skills</td><td class="mono">24 13</td><td class="mono">C8</td></tr>
+<tr><td class="mono">E-07</td><td>Prompt templates</td><td class="mono">24 13</td><td class="mono">C8</td></tr>
+<tr><td class="mono">E-08</td><td>System prompt override</td><td class="mono">24</td><td class="mono">flag</td></tr>
+<tr><td class="mono">E-09</td><td>Hooks</td><td class="mono">24</td><td class="mono">C10</td></tr>
+<tr><td class="mono">E-10</td><td>Dart plugins</td><td class="mono">24</td><td class="mono">C10</td></tr>
+<tr><td class="mono">E-12</td><td>Language servers</td><td class="mono">25</td><td class="mono">C13</td></tr>
+<tr><td class="mono">E-13</td><td>Manage MCP servers</td><td class="mono">05b</td><td class="mono">C11</td></tr>
+<tr><td class="mono">E-15</td><td>Shared settings registry</td><td class="mono">26</td><td class="mono">C13</td></tr>
+<tr><td class="mono">E-16</td><td>Log to file</td><td class="mono">18</td><td class="mono">C13</td></tr>
+<tr><td class="mono">E-22</td><td>A2A remote agents</td><td class="mono">16 21</td><td class="mono">C9</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="Headless">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">Headless</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">H-01</td><td>-p, -f, stdin</td><td class="mono">—</td><td class="mono">C14</td></tr>
+<tr><td class="mono">H-02</td><td>Exit codes</td><td class="mono">—</td><td class="mono">C14</td></tr>
+<tr><td class="mono">H-03</td><td>stream-json</td><td class="mono">—</td><td class="mono">C14</td></tr>
+<tr><td class="mono">H-05</td><td>Wait for tasks</td><td class="mono">—</td><td class="mono">C9 C14</td></tr>
+<tr><td class="mono">H-08</td><td>Thoughts in output</td><td class="mono">—</td><td class="mono">C14</td></tr>
+<tr><td class="mono">H-09</td><td>Version in JSON</td><td class="mono">—</td><td class="mono">C14</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="CLI / TUI">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">CLI / TUI</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">U-01</td><td>REPL streaming</td><td class="mono">—</td><td class="mono">C4</td></tr>
+<tr><td class="mono">U-02</td><td>y / a / n approval</td><td class="mono">—</td><td class="mono">C2</td></tr>
+<tr><td class="mono">U-03</td><td>Slash menu, fuzzy</td><td class="mono">12</td><td class="mono">C8</td></tr>
+<tr><td class="mono">U-04</td><td>Client commands</td><td class="mono">12</td><td class="mono">C7 C8</td></tr>
+<tr><td class="mono">U-05</td><td>Model and mode</td><td class="mono">13</td><td class="mono">C8</td></tr>
+<tr><td class="mono">U-06</td><td>Connection profiles</td><td class="mono">11 20</td><td class="mono">C13</td></tr>
+<tr><td class="mono">U-07</td><td>Esc, Ctrl+C ×2, history</td><td class="mono">—</td><td class="mono">C1</td></tr>
+<tr><td class="mono">U-08 U-09</td><td>Thoughts, tool rows</td><td class="mono">01</td><td class="mono">C1</td></tr>
+<tr><td class="mono">U-10 U-11</td><td>Markdown, diff</td><td class="mono">01</td><td class="mono">C1</td></tr>
+<tr><td class="mono">U-12 U-13</td><td>Full-screen, status line</td><td class="mono">—</td><td class="mono">C1</td></tr>
+<tr><td class="mono">U-14</td><td>Attachments</td><td class="mono">13</td><td class="mono">C3</td></tr>
+<tr><td class="mono">U-15</td><td>Prompt queue</td><td class="mono">02</td><td class="mono">C1</td></tr>
+<tr><td class="mono">U-16</td><td>!cmd shell</td><td class="mono">—</td><td class="mono">C3</td></tr>
+<tr><td class="mono">U-17</td><td>First-run wizard</td><td class="mono">07 06</td><td class="mono">C5</td></tr>
+<tr><td class="mono">U-18</td><td>Themes</td><td class="mono">10</td><td class="mono">C6</td></tr>
+<tr><td class="mono">U-19</td><td>Settings screen</td><td class="mono">05–27</td><td class="mono">C13</td></tr>
+<tr><td class="mono">U-20 U-29</td><td>Updates, channels</td><td class="mono">26</td><td class="mono">C13 C14</td></tr>
+<tr><td class="mono">U-21</td><td>Tasks board</td><td class="mono">16</td><td class="mono">C9</td></tr>
+<tr><td class="mono">U-22 U-28</td><td>Mouse, copy</td><td class="mono">—</td><td class="mono">C1</td></tr>
+<tr><td class="mono">U-23 U-32</td><td>Keys</td><td class="mono">—</td><td class="mono">C3</td></tr>
+<tr><td class="mono">U-24</td><td>Tab path completion</td><td class="mono">13</td><td class="mono">C3</td></tr>
+<tr><td class="mono">U-25</td><td>Keep awake</td><td class="mono">—</td><td class="mono">C13</td></tr>
+<tr><td class="mono">U-26</td><td>/restart</td><td class="mono">12 20</td><td class="mono">C12</td></tr>
+<tr><td class="mono">U-27</td><td>Model per folder</td><td class="mono">21</td><td class="mono">C13</td></tr>
+<tr><td class="mono">U-30</td><td>Window override</td><td class="mono">21</td><td class="mono">C8</td></tr>
+<tr><td class="mono">U-31</td><td>/agents</td><td class="mono">13 21</td><td class="mono">C8</td></tr>
+<tr><td class="mono">U-36</td><td>Clickable links</td><td class="mono">01</td><td class="mono">C1</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="Desktop app">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">Desktop app</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">D-01 D-02</td><td>Chat, approvals, args</td><td class="mono">01</td><td class="mono">C2</td></tr>
+<tr><td class="mono">D-03</td><td>Sessions in sidebar</td><td class="mono">01 04</td><td class="mono">C7</td></tr>
+<tr><td class="mono">D-04</td><td>Embedded agent</td><td class="mono">20</td><td class="mono">—</td></tr>
+<tr><td class="mono">D-05</td><td>Provider and key</td><td class="mono">05</td><td class="mono">C5</td></tr>
+<tr><td class="mono">D-06 D-07</td><td>Markdown, diff</td><td class="mono">01</td><td class="mono">C1</td></tr>
+<tr><td class="mono">D-08</td><td>Thoughts apart</td><td class="mono">01</td><td class="mono">C1</td></tr>
+<tr><td class="mono">D-09</td><td>Usage in UI</td><td class="mono">17</td><td class="mono">C10</td></tr>
+<tr><td class="mono">D-10</td><td>Join a CLI session</td><td class="mono">04 19 20</td><td class="mono">C7</td></tr>
+<tr><td class="mono">D-11</td><td>Onboarding</td><td class="mono">07</td><td class="mono">C5</td></tr>
+<tr><td class="mono">D-12</td><td>Attachments</td><td class="mono">13</td><td class="mono">C3</td></tr>
+<tr><td class="mono">D-13</td><td>File browser</td><td class="mono">03</td><td class="mono">C3</td></tr>
+<tr><td class="mono">D-15</td><td>Boot watchdog</td><td class="mono">08</td><td class="mono">—</td></tr>
+<tr><td class="mono">D-16 D-18</td><td>Builds, privacy</td><td class="mono">26</td><td class="mono">—</td></tr>
+<tr><td class="mono">D-17</td><td>Session search</td><td class="mono">04</td><td class="mono">C7</td></tr>
+<tr><td class="mono">D-19</td><td>Localization</td><td class="mono">26</td><td class="mono">C13</td></tr>
+<tr><td class="mono">D-20</td><td>Themes</td><td class="mono">10</td><td class="mono">C6</td></tr>
+<tr><td class="mono">D-21</td><td>Narrow layout</td><td class="mono">09</td><td class="mono">—</td></tr>
+<tr><td class="mono">D-22</td><td>Turn timeline</td><td class="mono">01 17</td><td class="mono">C10</td></tr>
+<tr><td class="mono">D-23</td><td>Images</td><td class="mono">02</td><td class="mono">C3</td></tr>
+<tr><td class="mono">D-24</td><td>Redaction editor</td><td class="mono">23</td><td class="mono">C13</td></tr>
+<tr><td class="mono">D-25</td><td>Subagent board</td><td class="mono">16</td><td class="mono">C9</td></tr>
+<tr><td class="mono">D-28</td><td>In-app terminal</td><td class="mono">28</td><td class="mono">—</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="Existing app (R)">
+<h2 class="t-strong" style="margin: 0; padding: 12px 14px 8px; font-size: 14px">Existing app (R)</h2>
+<table class="cov"><thead><tr><th>ID</th><th>Capability</th><th>App</th><th>CLI</th></tr></thead><tbody>
+<tr><td class="mono">R-05 R-06</td><td>Mode, config options</td><td class="mono">13</td><td class="mono">C8</td></tr>
+<tr><td class="mono">R-12</td><td>WebSocket + auth</td><td class="mono">20</td><td class="mono">C13</td></tr>
+<tr><td class="mono">R-15</td><td>Agent definitions</td><td class="mono">21</td><td class="mono">C8</td></tr>
+<tr><td class="mono">R-18</td><td>Prompt queue</td><td class="mono">02 13</td><td class="mono">C1</td></tr>
+<tr><td class="mono">R-19</td><td>Plan checklist</td><td class="mono">01</td><td class="mono">C1</td></tr>
+<tr><td class="mono">R-20</td><td>Command palette</td><td class="mono">12</td><td class="mono">C8</td></tr>
+<tr><td class="mono">R-21</td><td>Session status dots</td><td class="mono">01</td><td class="mono">—</td></tr>
+<tr><td class="mono">R-22</td><td>Project picker</td><td class="mono">11</td><td class="mono">—</td></tr>
+<tr><td class="mono">R-23</td><td>Protocol inspector</td><td class="mono">18</td><td class="mono">/inspect</td></tr>
+</tbody></table>
+</section>
+<section class="f-card blk" aria-label="Not visible in clients" style="padding: 12px 14px">
+<h2 class="t-strong" style="margin: 0 0 6px; font-size: 14px">No UI — agent-internal or out of scope</h2>
+<p class="t-cap t2 mono" style="margin: 0">L-03 L-06 L-07 L-09 L-13 L-14 L-18–L-20 L-25 L-27 L-30 L-33 L-35 · C-01 C-07 C-12 C-16 C-19 · T-05 T-11 T-12 T-16 T-18 T-20 T-24 T-27 T-29–T-33 · P-01 P-10 P-11 P-13–P-17 · S-01 S-10–S-13 S-15 S-16 S-19 S-20 K-03 K-05–K-08 · E-14 E-20 · R-01–R-04 R-07–R-11 R-13 R-14 R-16 R-17</p>
+<p class="t-cap t2" style="margin: 8px 0 0">Rows with priority “—” (D-14, D-26, D-27, L-12, L-21–L-23, U-33–U-35…) are not drawn.</p>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":2200}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

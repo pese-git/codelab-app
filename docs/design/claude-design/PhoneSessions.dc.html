@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Sessions</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;position:relative;box-sizing:border-box}
+.bar{display:flex;align-items:center;gap:8px;height:56px;padding:0 8px;flex:none}
+.tap{min-width:44px;min-height:44px;justify-content:center}
+.row{display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 16px;text-decoration:none;color:var(--text);border-radius:6px}
+.row .txt{flex:1;min-width:0}
+.row .ttl{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.grp{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:6px 16px;border:0;background:transparent;color:var(--text);text-align:left;border-radius:6px;cursor:pointer;box-sizing:border-box}
+.grp .txt{flex:1;min-width:0}
+.grp .ttl{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub{padding-left:46px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhonePane.dc.html" class="f-btn subtle icon tap" aria-label="Open navigation"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></a>
+    <span class="t-sub" style="flex: 1; font-size: 18px">CodeLab</span>
+    <span class="tag ok" style="height: 28px"><span class="f-dot"></span>On this device</span>
+  </header>
+  <div style="padding: 4px 16px 8px; display: flex; flex-direction: column; gap: 10px; flex: none">
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="min-height: 44px"><input type="search" placeholder="Search sessions" aria-label="Search sessions"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg></label>
+    <a href="PhoneChat.dc.html" class="f-btn accent" style="min-height: 44px; justify-content: center; text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session</a>
+  </div>
+  <nav aria-label="Sessions" data-fluent="ListView" style="flex: 1; overflow: auto; padding: 0 4px 12px">
+    <div class="f-ph" data-fluent="PaneItemHeader" style="padding-left: 16px">Pinned</div>
+    <a href="PhoneChat.dc.html" class="row f-li" data-fluent="ListTile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3H7l3-3zM12 15v5"/></svg><span class="txt"><span class="ttl">Release 1.0 checklist</span><span class="t-cap t2">codelab-app · Mon</span></span></a>
+    <div class="f-ph" data-fluent="PaneItemHeader" style="padding-left: 16px">Projects</div>
+    <button class="grp" aria-expanded="true" data-fluent="PaneItemExpander"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="txt"><span class="ttl">notes-app</span><span class="t-cap t2">Documents › CodeLab › notes-app</span></span><span class="t-cap t2">3</span></button>
+    <a href="PhoneChat.dc.html" class="row f-li on sub" data-fluent="ListTile"><span class="txt"><span class="ttl">Summarize meeting notes</span><span class="t-cap t2">Running · 2 min ago</span></span><span class="f-pr" style="width: 16px; height: 16px" role="img" aria-label="Turn running"></span></a>
+    <a href="PhoneApproval.dc.html" class="row f-li sub" data-fluent="ListTile"><span class="txt"><span class="ttl">Draft release notes for 1.0</span><span class="t-cap t2">Waiting for approval · 14:02</span></span><span class="tag warn">approval</span></a>
+    <a href="PhoneChat.dc.html" class="row f-li sub" data-fluent="ListTile"><span class="txt"><span class="ttl">Translate onboarding copy</span><span class="t-cap t2">Turn ended with an error · 11:40</span></span><span class="tag bad">error</span></a>
+    <button class="grp" aria-expanded="false" data-fluent="PaneItemExpander"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="txt"><span class="ttl">codelab-app</span><span class="t-cap t2">Documents › CodeLab › codelab-app</span></span><span class="f-badge">5</span></button>
+    <button class="grp" aria-expanded="false" data-fluent="PaneItemExpander"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="txt"><span class="ttl">trip-planner</span><span class="t-cap t2">Documents › CodeLab › trip-planner</span></span><span class="f-badge">2</span></button>
+    <p class="t-cap t2" style="margin: 12px 16px 0">Each project is a folder in the app's Documents; sessions are grouped by project, newest first.</p>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Files</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.row{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:4px;text-decoration:none;color:var(--text)}
+.row.on{background:var(--sel)}
+.tbtn{min-height:44px;min-width:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneChat.dc.html" class="f-btn subtle icon tbtn" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+    <h1 class="t-strong" style="margin: 0; flex: 1; font-size: 16px">Files</h1>
+    <button class="f-btn subtle icon tbtn" aria-label="Import from Files"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
+  </header>
+  <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px">
+    <nav class="f-bc t-cap" aria-label="Path" data-fluent="BreadcrumbBar"><span>Documents</span><span>›</span><span>CodeLab</span><span>›</span><b>notes-app</b></nav>
+    <div class="f-sc" style="min-height: 52px; padding: 6px 12px; gap: 10px">
+      <div style="flex: 1"><div>Show ignored files</div><div class="t-cap t2">.gitignore respected · .git never shown</div></div>
+      <label class="f-ts" data-fluent="ToggleSwitch"><input type="checkbox" aria-label="Show ignored files"></label>
+    </div>
+    <div class="f-card" style="padding: 4px" data-fluent="TreeView">
+      <a href="#" class="row"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--warn)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>lib</a>
+      <a href="#" class="row" style="padding-left: 40px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/></svg>main.dart</a>
+      <a href="#" class="row on" aria-current="true" style="padding-left: 40px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/></svg>note_store.dart</a>
+      <a href="#" class="row"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--warn)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>docs</a>
+      <a href="#" class="row"><span style="width: 16px"></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/></svg>README.md</a>
+      <a href="#" class="row"><span style="width: 16px"></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/></svg>pubspec.yaml</a>
+    </div>
+    <section class="f-card" aria-label="Preview" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--stroke)">
+        <span class="mono t-cap" style="flex: 1">lib/note_store.dart</span><span class="tag">Read-only</span>
+      </div>
+      <pre class="mono" style="margin: 0; padding: 10px 12px; font-size: 12px; line-height: 18px; flex: 1; overflow: hidden; background: var(--code-bg); color: var(--code-fg)"><span style="color: var(--syn-k)">final class</span> <span style="color: var(--syn-t)">NoteStore</span> {
+  <span style="color: var(--syn-k)">final</span> <span style="color: var(--syn-t)">Directory</span> root;
+  <span style="color: var(--syn-t)">Future</span>&lt;<span style="color: var(--syn-t)">List</span>&lt;<span style="color: var(--syn-t)">Note</span>&gt;&gt; load() <span style="color: var(--syn-k)">async</span> {
+    <span style="color: var(--syn-c)">// one JSON file per note</span>
+  }
+}</pre>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px 12px; border-top: 1px solid var(--stroke)">
+        <button class="f-btn accent tbtn">Insert as mention</button>
+        <button class="f-btn tbtn">Share</button>
+      </div>
+    </section>
+    <p class="t-cap t2" style="margin: 0">The agent works only inside the app's Documents folder. “Import from Files…” copies files here with the system picker.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

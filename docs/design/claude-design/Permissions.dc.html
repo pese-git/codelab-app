@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings — Permissions and tools</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:1600px;display:flex;flex-direction:column}
+.tblw{overflow-x:auto;border:1px solid var(--stroke);border-radius:4px;background:var(--card)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;line-height:18px}
+.tbl th,.tbl td{padding:8px 12px;text-align:left;border-top:1px solid var(--stroke);vertical-align:middle;white-space:nowrap}
+.tbl thead th{border-top:0;font-weight:600;background:var(--card2)}
+.tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.grp{display:flex;flex-direction:column;gap:10px;padding:14px 16px;background:var(--card);border:1px solid var(--stroke);border-radius:4px}
+.grp .f-ts{justify-content:space-between;width:100%;flex-direction:row-reverse}
+@media (max-width:760px){.f-pane{width:100%}.f-nv{flex-wrap:wrap}.tools{grid-template-columns:1fr}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <a href="Main.dc.html" class="f-btn subtle icon" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+  <span class="f-logo">CL</span><span class="t-cap">Settings</span>
+</header>
+<div class="f-nv" data-fluent="NavigationView">
+  <nav class="f-pane" aria-label="Settings sections" data-fluent="NavigationPane (open)">
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="margin: 4px 8px 6px"><input type="search" placeholder="Find a setting" aria-label="Find a setting"></label>
+    <div class="f-ph">Agent</div>
+    <a href="Connection.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>Connection</a>
+    <a href="Providers.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg>Providers</a>
+    <a href="Mcp.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M8 7h.01M8 17h.01"/></svg>MCP servers</a>
+    <a href="Modes.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M3 13v2M21 13v2"/></svg>Agents &amp; modes</a>
+    <a href="Permissions.dc.html" class="f-pi on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Permissions &amp; tools</a>
+    <a href="Redaction.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.5 7.6C4 9.3 2.5 12 2.5 12s3.5 6 9.5 6a9.6 9.6 0 0 0 4.1-.9"/></svg>Redaction</a>
+    <a href="Extensions.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 4a2 2 0 1 1 4 0v2h4v4h-2a2 2 0 1 0 0 4h2v4h-4v-2a2 2 0 1 0-4 0v2H6v-4h2a2 2 0 1 0 0-4H6V6h4z"/></svg>Skills &amp; extensions</a>
+    <a href="CodeWeb.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/></svg>Code &amp; web</a>
+    <div class="f-ph">App</div>
+    <a href="General.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>General</a>
+    <a href="Appearance.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.5 0-1.2-1-1.5-1-2.5s.8-1.5 2-1.5H17a4 4 0 0 0 4-4c0-4.7-4-8.5-9-8.5z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg>Appearance</a>
+    <a href="Keyboard.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Keyboard</a>
+  </nav>
+
+  <section class="f-content" data-fluent="ScaffoldPage">
+    <div style="padding: 28px 40px 40px; display: flex; flex-direction: column; gap: 6px; max-width: 1000px; box-sizing: border-box; width: 100%">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px" data-fluent="PageHeader">
+        <h1 class="t-title" style="margin: 0; flex: 1">Permissions &amp; tools</h1>
+      </div>
+
+      <div class="f-ib" data-fluent="InfoBar (informational)" style="margin-bottom: 8px"><span class="f-ibi">i</span><div><span class="ttl">Always allow is per session</span>Always allow lasts until the session closes (P-03). It is never written to config.</div></div>
+
+      <div style="display: flex; align-items: center; gap: 12px; margin: 4px 0 4px">
+        <h2 class="t-strong" style="font-size: 14px; margin: 0; flex: 1">Tool policies</h2>
+        <button class="f-btn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add tool policy</button>
+      </div>
+      <p class="t-cap t2" style="margin: 0 0 6px"><span class="mono">permissions.tools</span> — allow, ask or deny per tool, MCP tools included. Critical patterns are asked even when <span class="mono">exec</span> is allow. A project layer can only tighten.</p>
+      <div class="tblw">
+        <table class="tbl" data-fluent="ListView (table)">
+          <thead><tr><th scope="col">Tool</th><th scope="col">Policy</th><th scope="col">Source</th><th scope="col"><span class="t2" style="font-weight: 400">Action</span></th></tr></thead>
+          <tbody>
+            <tr><td class="t-strong mono" style="font-size: 13px">read</td><td><button class="f-cbx" data-fluent="ComboBox" aria-label="Policy for read" style="min-width: 110px">allow<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></td><td><span class="tag">user</span></td><td><button class="f-btn subtle" aria-label="Remove policy for read">Remove</button></td></tr>
+            <tr><td class="t-strong mono" style="font-size: 13px">exec</td><td><button class="f-cbx" data-fluent="ComboBox" aria-label="Policy for exec" style="min-width: 110px">ask<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></td><td><span class="tag">user</span></td><td><button class="f-btn subtle" aria-label="Remove policy for exec">Remove</button></td></tr>
+            <tr><td class="t-strong mono" style="font-size: 13px">web_fetch</td><td><button class="f-cbx" data-fluent="ComboBox" aria-label="Policy for web_fetch" style="min-width: 110px">ask<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></td><td><span class="tag">user</span></td><td><button class="f-btn subtle" aria-label="Remove policy for web_fetch">Remove</button></td></tr>
+            <tr><td class="t-strong mono" style="font-size: 13px">mcp__github__create_issue</td><td><button class="f-cbx" data-fluent="ComboBox" aria-label="Policy for mcp__github__create_issue" style="min-width: 110px">deny<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></td><td><span class="tag acc">project</span></td><td><button class="f-btn subtle" aria-label="Remove policy for mcp__github__create_issue">Remove</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 class="t-strong" style="font-size: 14px; margin: 18px 0 4px">Deny rules</h2>
+      <p class="t-cap t2" style="margin: 0 0 6px"><span class="mono">permissions.deny</span> — <span class="mono">&lt;tool&gt;:&lt;pattern&gt;</span>; stronger than any mode or policy.</p>
+      <div class="f-card" style="padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 12px"><span class="mono" style="flex: 1; font-size: 13px">exec:git push --force</span><span class="tag">user</span><button class="f-btn subtle" aria-label="Remove exec:git push --force">Remove</button></div>
+        <div style="display: flex; align-items: center; gap: 12px"><span class="mono" style="flex: 1; font-size: 13px">write:.env</span><span class="tag acc">project</span><button class="f-btn subtle" aria-label="Remove write:.env" disabled>Remove</button></div>
+        <div style="display: flex; gap: 8px; max-width: 560px"><label class="f-tb" style="flex: 1"><input class="mono" placeholder="tool:pattern, e.g. exec:dropdb *" aria-label="New deny rule" style="font-size: 13px"></label><button class="f-btn">Add</button></div>
+      </div>
+
+      <section class="f-exp" data-fluent="Expander (expanded)" style="margin-top: 14px">
+        <div class="f-exph">
+          <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <span style="flex: 1"><span style="display: block">Critical patterns</span><span class="t-cap t2">Built into the agent. Always asked, even in bypass and after Always allow (P-07).</span></span>
+          <span class="tag">read-only</span>
+          <span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span>
+        </div>
+        <div class="f-expc" style="padding-left: 52px; display: flex; gap: 8px; flex-wrap: wrap">
+          <span class="tag">recursive delete of a protected path</span><span class="tag">deletion of a .git directory</span><span class="tag">privileged command</span><span class="tag">download and execute</span><span class="tag">write to a disk device</span><span class="tag">filesystem format or wipe</span><span class="tag">git force push or remote branch deletion</span><span class="tag">git history rewrite</span><span class="tag">write to agent configuration</span><span class="tag">write to ssh configuration</span><span class="tag">host shutdown or reboot</span><span class="tag">fork bomb</span><span class="t-cap t2" style="align-self: center">… agent-core §7.6</span>
+        </div>
+      </section>
+
+      <div class="f-sc">
+        <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <div style="flex: 1"><div>Working-folder boundary</div><div class="t-cap t2">Tools can't leave <span class="mono">/Users/…/codelab-app</span>; symlinks are resolved first, so <span class="mono">/proj_evil</span> is outside (P-08). Not configurable.</div></div>
+        <span class="tag ok">Enforced</span>
+      </div>
+      <div class="f-sc">
+        <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg>
+        <div style="flex: 1"><div>Credential files: blocked (<span class="mono">redact.block</span>)</div><div class="t-cap t2"><span class="mono">.env*</span> · <span class="mono">id_rsa*</span> · <span class="mono">*.pem</span> · <span class="mono">*.key</span> · <span class="mono">.aws/credentials</span> — the call fails with the reason (P-18)</div></div>
+        <a href="Redaction.dc.html" class="f-hl" data-fluent="HyperlinkButton">Change in Redaction</a>
+      </div>
+      <div class="f-sc">
+        <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>
+        <div style="flex: 1"><div>When nobody can answer</div><div class="t-cap t2">Headless runs reject approvals with a reason unless --approve or --permission-mode is passed (P-09)</div></div>
+        <span class="tag">Reject</span>
+      </div>
+
+      <h2 class="t-strong" style="font-size: 14px; margin: 18px 0 4px">Tools</h2>
+      <p class="t-cap t2" style="margin: 0 0 6px">Writes <span class="mono">tools.disabled</span> (T-26). An off tool is not offered to the model; this narrows the tool set and does not change permissions. Mid-session: <span class="mono">/tools</span> (T-35).</p>
+      <div class="tools">
+        <div class="grp"><span class="t-strong">Files</span>
+          <label class="f-ts"><input type="checkbox" checked>read</label>
+          <label class="f-ts"><input type="checkbox" checked>write · edit</label>
+          <label class="f-ts"><input type="checkbox" checked>ls · search</label>
+        </div>
+        <div class="grp"><span class="t-strong">Shell</span>
+          <label class="f-ts"><input type="checkbox" checked>exec</label>
+          <label class="f-ts"><input type="checkbox" checked>background commands</label>
+          <span class="t-cap t2">Edits to one file are serialized (T-05)</span>
+        </div>
+        <div class="grp"><span class="t-strong">Web</span>
+          <label class="f-ts"><input type="checkbox" checked>web_fetch</label>
+          <label class="f-ts"><input type="checkbox">web_search</label>
+        </div>
+        <div class="grp"><span class="t-strong">Code</span>
+          <label class="f-ts"><input type="checkbox" checked>lsp</label>
+          <label class="f-ts"><input type="checkbox" checked>subagents (task)</label>
+        </div>
+        <div class="grp"><span class="t-strong">Memory</span>
+          <label class="f-ts"><input type="checkbox">memory</label>
+          <label class="f-ts"><input type="checkbox" checked>ask (questions)</label>
+        </div>
+        <div class="grp"><span class="t-strong">MCP</span>
+          <label class="f-ts"><input type="checkbox" checked>github · 14 tools</label>
+          <label class="f-ts"><input type="checkbox" checked>postgres · 3 tools</label>
+          <span class="t-cap t2">MCP calls go through the same approvals (P-01)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":1600}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

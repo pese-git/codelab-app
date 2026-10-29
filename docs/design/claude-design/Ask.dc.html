@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ask and web approval</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:960px;display:flex;flex-direction:column}
+.stage{flex:1;display:flex;gap:24px;flex-wrap:wrap;padding:32px 40px;box-sizing:border-box;align-items:flex-start}
+.half{flex:1 1 560px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.dim{position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--stroke);background:var(--layer);padding:48px 32px;display:flex;justify-content:center;min-height:760px;box-sizing:border-box}
+.dim::before{content:'';position:absolute;inset:0;background:var(--smoke)}
+.dim .f-dlg{position:relative;width:100%;max-width:520px;align-self:flex-start}
+.q{display:flex;flex-direction:column;gap:8px}
+.opt{display:flex;flex-direction:column;gap:0}
+.opt .d{font-size:12px;line-height:16px;color:var(--text2);padding-left:28px;margin-top:-2px}
+.lbl{font-size:12px;line-height:16px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.feed{display:flex;flex-direction:column;gap:12px;padding:20px;border-radius:8px;border:1px solid var(--stroke);background:var(--layer);min-height:760px;box-sizing:border-box}
+.kv{display:grid;grid-template-columns:90px 1fr;gap:4px 12px;font-size:13px}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <span class="f-logo">CL</span><span class="t-cap">CodeLab</span><span class="t-strong">codelab-app</span>
+  <span style="flex: 1"></span>
+  <span class="tag warn"><span class="f-dot"></span>Waiting for you</span>
+</header>
+<div class="stage">
+  <div class="half">
+    <span class="lbl">T-22 · ask tool → ContentDialog over the workbench</span>
+    <div class="dim">
+      <section class="f-dlg" role="dialog" aria-labelledby="askt" data-fluent="ContentDialog">
+        <div class="f-dlgb">
+          <h2 id="askt" class="t-sub" style="margin: 0">The agent has 2 questions</h2>
+          <p class="t2" style="margin: 0">Asked by the agent in “Markdown &amp; diff in transcript”. The turn waits for your answer.</p>
+          <div class="q">
+            <span class="tag acc" style="align-self: flex-start">Diff layout</span>
+            <span class="t-strong">Which diff layout should the approval card use?</span>
+            <div class="opt"><label class="f-rb"><input type="radio" name="q1" checked>Unified</label><span class="d">One column; fits narrow transcripts</span></div>
+            <div class="opt"><label class="f-rb"><input type="radio" name="q1">Side by side</label><span class="d">Two columns from 960 px</span></div>
+            <div class="opt"><label class="f-rb"><input type="radio" name="q1">Other…</label></div>
+          </div>
+          <div class="q">
+            <span class="tag acc" style="align-self: flex-start">Tests to update</span>
+            <span class="t-strong">Which tests should I update? <span class="t-cap t2">Choose any</span></span>
+            <div class="opt"><label class="f-chk"><input type="checkbox" checked>Widget tests</label><span class="d">acp_ui transcript panel</span></div>
+            <div class="opt"><label class="f-chk"><input type="checkbox" checked>Golden screenshots</label><span class="d">12 files under test/goldens</span></div>
+            <div class="opt"><label class="f-chk"><input type="checkbox">E2E flows</label><span class="d">Slower, run in CI</span></div>
+            <label class="f-tb"><input placeholder="Other: type your own answer" aria-label="Other answer"></label>
+          </div>
+        </div>
+        <div class="f-dlgf" style="grid-template-columns: 1fr 1fr 1fr">
+          <button class="f-btn accent">Submit</button>
+          <button class="f-btn">Decline</button>
+          <button class="f-btn">Cancel turn</button>
+        </div>
+      </section>
+    </div>
+    <span class="t-cap t2">Dialogs never stack: a second ask waits in the transcript as a “Question pending” row.</span>
+  </div>
+
+  <div class="half">
+    <span class="lbl">T-13, P-02, P-07 · approvals inline in the transcript</span>
+    <div class="feed">
+      <section class="f-exp" data-fluent="Expander (pending)" data-acp="AcpTranscriptApproval" style="border-color: var(--accent)">
+        <div class="f-exph">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--accent-text)"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+          <span style="flex: 1; min-width: 0"><span>Fetch</span> <span class="mono t2" style="font-size: 13px">docs.flutter.dev</span></span>
+          <span class="tag acc">Needs approval</span>
+        </div>
+        <div class="f-expc" style="display: flex; flex-direction: column; gap: 12px">
+          <div class="kv">
+            <span class="t2">URL</span><span class="mono" style="word-break: break-all">https://docs.flutter.dev/ui/layout/scrolling/slivers</span>
+            <span class="t2">Method</span><span class="mono">GET</span>
+            <span class="t2">Reason</span><span>Check how SliverList reuses rows before changing the panel</span>
+          </div>
+          <div class="acts">
+            <button class="f-btn accent">Allow once<span class="t-cap" style="margin-left: 6px; opacity: .8">Ctrl+Enter</span></button>
+            <button class="f-btn">Always allow docs.flutter.dev</button>
+            <button class="f-btn">Reject<span class="t-cap t2" style="margin-left: 6px">Ctrl+Backspace</span></button>
+          </div>
+          <span class="t-cap t2">The page text reaches the model fenced as untrusted content (P-16).</span>
+        </div>
+      </section>
+
+      <section class="f-exp" data-fluent="Expander (pending)" data-acp="AcpTranscriptApproval" style="border-color: var(--bad)">
+        <div class="f-exph">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="m4 17 6-6-6-6M12 19h8"/></svg>
+          <span style="flex: 1; min-width: 0"><span>Run</span> <span class="mono" style="font-size: 13px">rm -rf build</span></span>
+          <span class="tag bad">Needs approval</span>
+        </div>
+        <div class="f-expc" style="display: flex; flex-direction: column; gap: 12px">
+          <div class="f-ib error" data-fluent="InfoBar (error)"><span class="f-ibi">!</span><div><span class="ttl">Always asks</span>Matches a critical pattern (rm -rf). Asked even in bypass and after “Always allow”.</div></div>
+          <div class="kv">
+            <span class="t2">Command</span><span class="mono">rm -rf build</span>
+            <span class="t2">Folder</span><span class="mono">~/…/codelab-app/apps/codelab_app</span>
+            <span class="t2">Timeout</span><span>120 s</span>
+          </div>
+          <div class="acts">
+            <button class="f-btn accent">Allow once</button>
+            <button class="f-btn">Reject</button>
+          </div>
+          <span class="t-cap t2">No “always” option for critical patterns.</span>
+        </div>
+      </section>
+
+      <section class="f-exp" data-fluent="Expander (collapsed)">
+        <div class="f-exph">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--text2)"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+          <span style="flex: 1; min-width: 0"><span>Search the web</span> <span class="mono t2" style="font-size: 13px">“SliverList findChildIndexCallback”</span></span>
+          <span class="tag ok">Done · 5 results</span>
+        </div>
+      </section>
+      <span class="t-cap t2">web_search asks only in ask mode (T-14); web_fetch always asks unless the host is allowed.</span>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

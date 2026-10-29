@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — ask, errors, reconnect</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli states: long thinking, fallback model note, rate limit, compaction marker, provider error, step limit, agent restart, reconnecting, and an ask question open in place of the composer">
+    <div class="grow">
+      <div class="ln mu">▸ thinking 48s <span class="dim">· still streaming, not a hang</span></div>
+      <div class="ln mu i">┆ The lease can be held by the CLI; restore must wait for it or open read-only…</div>
+      <div class="ln wa">! Model switched: claude-sonnet-5-5 overloaded (529) → fallback qwen3-coder:30b for this turn.</div>
+      <div class="ln er">✗ Request limit reached, resets in 3 h. <span class="mu">(anthropic · requests per day)</span></div>
+      <div class="ln mu">──────────────────────── context compacted: 42 messages summarized · 61% → 18% ────────────────────────</div>
+      <div class="ln er">✗ turn ended with an error (provider): HTTP 500 from api.anthropic.com · <span class="mu">already shown output kept</span></div>
+      <div class="ln wa">■ Stopped: step limit 25 reached. <span class="mu">Send "continue" or raise agent.max_steps.</span></div>
+      <div class="ln er">✗ Context overflow: compaction could not free enough space (errorClass overflow). <span class="mu">/compact or /new</span></div>
+      <div class="ln mu">■ Cancelled by you (esc). Running command killed.</div>
+      <div class="ln ok">✓ Agent restarted (pid 9120). Session reloaded.</div>
+      <div class="ln wa">! connection lost — reconnecting (attempt 2, next in 2s) · queued prompts are kept</div>
+      <div class="ln ok">✓ reconnected · session reloaded from the agent journal</div>
+      <div class="ln"> </div>
+      <div class="ln"><span class="b">Fix reconnect race</span> — I found two ways to stop the double restore.</div>
+      <div class="ln"> </div>
+      <div class="ln ap">┌─ Question 1 of 2 · <span class="b">Restore</span> ───────────────────────────────────────────────────────────────────────────</div>
+      <div class="ln"><span class="ap">│</span> <span class="b">How should a tab restore behave while another client holds the session lease?</span></div>
+      <div class="ln sel"><span class="ap">│</span> <span class="ac b">›</span> 1  Open read-only          <span class="mu">show the banner, offer Fork; nothing waits</span></div>
+      <div class="ln"><span class="ap">│</span>   2  Wait for the lease      <span class="mu">retry every 2 s up to 30 s, then read-only</span></div>
+      <div class="ln"><span class="ap">│</span>   3  Take over               <span class="mu">ask the other client to release (needs lease v2)</span></div>
+      <div class="ln"><span class="ap">│</span>   4  other: <span class="mu">type your answer</span></div>
+      <div class="ln ap">└──────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln mu">1-4 pick · space toggle · enter submit · tab next question · esc decline</div>
+    <div class="ln"><span class="ap">◆</span> <span class="mu">waiting for you</span>  standard · qwen3-coder:30b (fallback) · ctx 18% · ↑71.2k ↓5.0k · $0.09 · ⎇ develop</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

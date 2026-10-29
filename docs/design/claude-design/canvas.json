@@ -1,0 +1,1444 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Agents-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "16 Agents pane — dark",
+      "w": 1440,
+      "x": 1520,
+      "y": 7100
+    },
+    "Agents.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "16 Agents pane — subagents and jobs",
+      "w": 1440,
+      "x": 1520,
+      "y": 7100
+    },
+    "Appearance-dark.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "dark",
+      "title": "10 Appearance — dark",
+      "w": 1440,
+      "x": 900,
+      "y": 4260
+    },
+    "Appearance.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "title": "10 Settings — Appearance",
+      "w": 1440,
+      "x": 900,
+      "y": 4260
+    },
+    "Ask-dark.dc.html": {
+      "expand": "fill",
+      "h": 960,
+      "page": "dark",
+      "title": "15 Ask dialog and web / critical approvals — dark",
+      "w": 1440,
+      "x": 4560,
+      "y": 5580
+    },
+    "Ask.dc.html": {
+      "expand": "fill",
+      "h": 960,
+      "title": "15 Ask dialog and web / critical approvals",
+      "w": 1440,
+      "x": 4560,
+      "y": 5580
+    },
+    "Boot-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "08 Boot watchdog — dark",
+      "w": 1440,
+      "x": 7600,
+      "y": 2640
+    },
+    "Boot.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "08 Boot watchdog — diagnostics",
+      "w": 1440,
+      "x": 7600,
+      "y": 2640
+    },
+    "CliApproval.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C2 TUI — approval zone",
+      "w": 1000,
+      "x": 1080,
+      "y": 0
+    },
+    "CliHeadless.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C14 Headless: -p, stream-json, exit codes",
+      "w": 1000,
+      "x": 1080,
+      "y": 6840
+    },
+    "CliInput.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C3 TUI — composer, @ completion, attachments",
+      "w": 1000,
+      "x": 0,
+      "y": 1140
+    },
+    "CliMcp.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C11 /mcp and /tools",
+      "w": 1000,
+      "x": 0,
+      "y": 5700
+    },
+    "CliPickers.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C8 Slash menu, /model, /mode, /agents",
+      "w": 1000,
+      "x": 1080,
+      "y": 3420
+    },
+    "CliRepl.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C4 Line REPL (ansi surface)",
+      "w": 1000,
+      "x": 1080,
+      "y": 1140
+    },
+    "CliSessions.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C7 /sessions, /resume, /rewind, /fork",
+      "w": 1000,
+      "x": 0,
+      "y": 3420
+    },
+    "CliSettings.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C13 /settings",
+      "w": 1000,
+      "x": 0,
+      "y": 6840
+    },
+    "CliSetup.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C5 First run — provider wizard",
+      "w": 1000,
+      "x": 0,
+      "y": 2280
+    },
+    "CliStates.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C12 Ask, errors, reconnect",
+      "w": 1000,
+      "x": 1080,
+      "y": 5700
+    },
+    "CliStatus.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C10 /status and /usage",
+      "w": 1000,
+      "x": 1080,
+      "y": 4560
+    },
+    "CliTasks.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C9 Tasks & subagents board",
+      "w": 1000,
+      "x": 0,
+      "y": 4560
+    },
+    "CliTheme.dc.html": {
+      "h": 720,
+      "is_interactive": true,
+      "page": "cli",
+      "title": "C6 /theme picker",
+      "w": 1000,
+      "x": 1080,
+      "y": 2280
+    },
+    "CliTui.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C1 TUI — transcript, tool rows, diff, status line",
+      "w": 1000,
+      "x": 0,
+      "y": 0
+    },
+    "CodeWeb-dark.dc.html": {
+      "expand": "fill",
+      "h": 1400,
+      "page": "dark",
+      "title": "25 Settings — dark",
+      "w": 1440,
+      "x": 1520,
+      "y": 10980
+    },
+    "CodeWeb.dc.html": {
+      "expand": "fill",
+      "h": 1400,
+      "title": "25 Settings — Code & web",
+      "w": 1440,
+      "x": 1520,
+      "y": 10980
+    },
+    "Components-dark.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "page": "dark",
+      "title": "00 fluent_ui — dark",
+      "w": 1440,
+      "x": 0,
+      "y": -1700
+    },
+    "Components.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "title": "00 fluent_ui — component sheet and screen map",
+      "w": 1440,
+      "x": 0,
+      "y": -1700
+    },
+    "Composer-dark.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "page": "dark",
+      "title": "13 Composer menus — dark",
+      "w": 1440,
+      "x": 3040,
+      "y": 5580
+    },
+    "Composer.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "title": "13 Composer menus — mode, model, /, @, queue",
+      "w": 1440,
+      "x": 3040,
+      "y": 5580
+    },
+    "Connection-dark.dc.html": {
+      "expand": "fill",
+      "h": 1120,
+      "page": "dark",
+      "title": "20 Settings — dark",
+      "w": 1440,
+      "x": 0,
+      "y": 2640
+    },
+    "Connection.dc.html": {
+      "expand": "fill",
+      "h": 1120,
+      "title": "20 Settings — Connection",
+      "w": 1440,
+      "x": 0,
+      "y": 2640
+    },
+    "Coverage.dc.html": {
+      "expand": "fill",
+      "h": 2200,
+      "page": "nav",
+      "title": "Goal coverage — goal → screen",
+      "w": 1440,
+      "x": 2240,
+      "y": 0
+    },
+    "Extensions-dark.dc.html": {
+      "expand": "fill",
+      "h": 1620,
+      "page": "dark",
+      "title": "24 Settings — dark",
+      "w": 1440,
+      "x": 0,
+      "y": 10980
+    },
+    "Extensions.dc.html": {
+      "expand": "fill",
+      "h": 1620,
+      "title": "24 Settings — Skills & extensions",
+      "w": 1440,
+      "x": 0,
+      "y": 10980
+    },
+    "Files-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "03 Files pane — dark",
+      "w": 1440,
+      "x": 0,
+      "y": 1320
+    },
+    "Files.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "03 Files pane — tree and preview in the dock",
+      "w": 1440,
+      "x": 0,
+      "y": 1320
+    },
+    "General-dark.dc.html": {
+      "expand": "fill",
+      "h": 1480,
+      "page": "dark",
+      "title": "26 Settings — dark",
+      "w": 1440,
+      "x": 3040,
+      "y": 10980
+    },
+    "General.dc.html": {
+      "expand": "fill",
+      "h": 1480,
+      "title": "26 Settings — General",
+      "w": 1440,
+      "x": 3040,
+      "y": 10980
+    },
+    "History-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "14 Session history — dark",
+      "w": 1440,
+      "x": 0,
+      "y": 7100
+    },
+    "History.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "14 Session history — Branches pane, rewind",
+      "w": 1440,
+      "x": 0,
+      "y": 7100
+    },
+    "Inspector-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "18 Protocol pane — dark",
+      "w": 1440,
+      "x": 4560,
+      "y": 7100
+    },
+    "Inspector.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "18 Protocol pane — frames and log",
+      "w": 1440,
+      "x": 4560,
+      "y": 7100
+    },
+    "Keyboard-dark.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "page": "dark",
+      "title": "27 Settings — dark",
+      "w": 1440,
+      "x": 4560,
+      "y": 10980
+    },
+    "Keyboard.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "title": "27 Settings — Keyboard",
+      "w": 1440,
+      "x": 4560,
+      "y": 10980
+    },
+    "Main-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "dark",
+      "title": "01 Workbench — dark",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "01 Workbench — sidebar by project, session, tool dock",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Mcp-dark.dc.html": {
+      "expand": "fill",
+      "h": 1240,
+      "page": "dark",
+      "title": "05b MCP servers — dark",
+      "w": 1440,
+      "x": 3040,
+      "y": 2640
+    },
+    "Mcp.dc.html": {
+      "expand": "fill",
+      "h": 1240,
+      "title": "05b Settings — MCP servers",
+      "w": 1440,
+      "x": 3040,
+      "y": 2640
+    },
+    "Modes-dark.dc.html": {
+      "expand": "fill",
+      "h": 1800,
+      "page": "dark",
+      "title": "21 Settings — dark",
+      "w": 1440,
+      "x": 0,
+      "y": 8760
+    },
+    "Modes.dc.html": {
+      "expand": "fill",
+      "h": 1800,
+      "title": "21 Settings — Agents & modes",
+      "w": 1440,
+      "x": 0,
+      "y": 8760
+    },
+    "Narrow-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "09 Narrow layout — dark",
+      "w": 820,
+      "x": 0,
+      "y": 4260
+    },
+    "Narrow.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "09 Narrow layout < 900 px",
+      "w": 820,
+      "x": 0,
+      "y": 4260
+    },
+    "NavApp.dc.html": {
+      "h": 1760,
+      "page": "nav",
+      "title": "Navigation graph — codelab_app",
+      "w": 2160,
+      "x": 0,
+      "y": 0
+    },
+    "NavCli.dc.html": {
+      "h": 1340,
+      "page": "nav",
+      "title": "Navigation graph — codelab_cli",
+      "w": 1920,
+      "x": 0,
+      "y": 1880
+    },
+    "Onboarding-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "07 Onboarding — dark",
+      "w": 1440,
+      "x": 6080,
+      "y": 2640
+    },
+    "Onboarding.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "07 Onboarding — first run",
+      "w": 1440,
+      "x": 6080,
+      "y": 2640
+    },
+    "Palette-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "12 Command palette — dark",
+      "w": 1440,
+      "x": 1520,
+      "y": 5580
+    },
+    "Palette.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "12 Command palette — Ctrl+K",
+      "w": 1440,
+      "x": 1520,
+      "y": 5580
+    },
+    "Permissions-dark.dc.html": {
+      "expand": "fill",
+      "h": 1600,
+      "page": "dark",
+      "title": "22 Settings — dark",
+      "w": 1440,
+      "x": 1520,
+      "y": 8760
+    },
+    "Permissions.dc.html": {
+      "expand": "fill",
+      "h": 1600,
+      "title": "22 Settings — Permissions & tools",
+      "w": 1440,
+      "x": 1520,
+      "y": 8760
+    },
+    "Projects-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "11 Project picker — dark",
+      "w": 1440,
+      "x": 0,
+      "y": 5580
+    },
+    "Projects.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "11 Project picker — recent projects, profile",
+      "w": 1440,
+      "x": 0,
+      "y": 5580
+    },
+    "Providers-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "05 Providers — dark",
+      "w": 1440,
+      "x": 1520,
+      "y": 2640
+    },
+    "Providers.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "05 Settings — Providers",
+      "w": 1440,
+      "x": 1520,
+      "y": 2640
+    },
+    "Redaction-dark.dc.html": {
+      "expand": "fill",
+      "h": 1800,
+      "page": "dark",
+      "title": "23 Settings — dark",
+      "w": 1440,
+      "x": 3040,
+      "y": 8760
+    },
+    "Redaction.dc.html": {
+      "expand": "fill",
+      "h": 1800,
+      "title": "23 Settings — Redaction",
+      "w": 1440,
+      "x": 3040,
+      "y": 8760
+    },
+    "Sessions-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "04 Session search in the sidebar, read-only session — dark",
+      "w": 1440,
+      "x": 1520,
+      "y": 1320
+    },
+    "Sessions.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "04 Session search in the sidebar, read-only session",
+      "w": 1440,
+      "x": 1520,
+      "y": 1320
+    },
+    "States-dark.dc.html": {
+      "expand": "fill",
+      "h": 960,
+      "page": "dark",
+      "title": "19 Connection & error states — dark",
+      "w": 1440,
+      "x": 6080,
+      "y": 7100
+    },
+    "States.dc.html": {
+      "expand": "fill",
+      "h": 960,
+      "title": "19 Connection & error states",
+      "w": 1440,
+      "x": 6080,
+      "y": 7100
+    },
+    "Turn-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "02 Running turn — dark",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Turn.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "02 Running turn — Agents and Plan panes",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Usage-dark.dc.html": {
+      "expand": "fill",
+      "h": 1240,
+      "page": "dark",
+      "title": "17 Usage pane — dark",
+      "w": 1440,
+      "x": 3040,
+      "y": 7100
+    },
+    "Usage.dc.html": {
+      "expand": "fill",
+      "h": 1240,
+      "title": "17 Usage pane",
+      "w": 1440,
+      "x": 3040,
+      "y": 7100
+    },
+    "Wizard-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "06 Provider wizard — dark",
+      "w": 1440,
+      "x": 4560,
+      "y": 2640
+    },
+    "Wizard.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "06 Provider wizard — check before save",
+      "w": 1440,
+      "x": 4560,
+      "y": 2640
+    },
+    "PhoneSessions.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P1 Sessions (home)",
+      "page": "phone"
+    },
+    "PhoneChat.dc.html": {
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P2 Session",
+      "page": "phone"
+    },
+    "PhoneApproval.dc.html": {
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P3 Approval and running turn",
+      "page": "phone"
+    },
+    "PhoneComposer.dc.html": {
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P4 Composer menus",
+      "page": "phone"
+    },
+    "PhoneAsk.dc.html": {
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P5 Ask (T-22)",
+      "page": "phone"
+    },
+    "PhonePane.dc.html": {
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P6 Navigation pane",
+      "page": "phone"
+    },
+    "PhoneFiles.dc.html": {
+      "x": 0,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P7 Files (Documents)",
+      "page": "phone"
+    },
+    "PhoneSettings.dc.html": {
+      "x": 470,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P8 Settings",
+      "page": "phone"
+    },
+    "PhoneConnection.dc.html": {
+      "x": 940,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P9 Settings › Connection",
+      "page": "phone"
+    },
+    "PhoneProviders.dc.html": {
+      "x": 1410,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P10 Settings › Providers",
+      "page": "phone"
+    },
+    "PhoneWizard.dc.html": {
+      "x": 1880,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P11 First run — provider wizard",
+      "page": "phone"
+    },
+    "PhoneStates.dc.html": {
+      "x": 2350,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P12 States",
+      "page": "phone"
+    },
+    "NavPhone.dc.html": {
+      "x": 0,
+      "y": 2528,
+      "w": 1920,
+      "h": 1080,
+      "title": "Navigation graph — phone",
+      "page": "phone"
+    },
+    "TabletWorkbench.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1180,
+      "h": 820,
+      "title": "T1 Tablet landscape — workbench",
+      "page": "tablet"
+    },
+    "TabletPortrait.dc.html": {
+      "x": 1260,
+      "y": 0,
+      "w": 820,
+      "h": 1180,
+      "title": "T2 Tablet portrait — narrow layout (D-21)",
+      "page": "tablet"
+    },
+    "TabletSettings.dc.html": {
+      "x": 0,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T3 Tablet — Settings (master–detail)",
+      "page": "tablet"
+    },
+    "TabletFiles.dc.html": {
+      "x": 1260,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T4 Tablet — Files and preview",
+      "page": "tablet"
+    },
+    "TabletPalette.dc.html": {
+      "x": 2520,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T5 Tablet — command palette",
+      "page": "tablet"
+    },
+    "Terminal.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "28 Terminal pane (D-28)",
+      "expand": "fill"
+    },
+    "Terminal-dark.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "28 Terminal pane (D-28) — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    "SplitView.dc.html": {
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "29 Split view — two sessions side by side",
+      "expand": "fill"
+    },
+    "SplitView-dark.dc.html": {
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "29 Split view — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    "TabletSplit.dc.html": {
+      "x": 2160,
+      "y": 0,
+      "w": 1366,
+      "h": 1024,
+      "title": "T6 Tablet — split view at 1366 px",
+      "page": "tablet"
+    },
+    "Prototype.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "page": "proto",
+      "title": "Live prototype — desktop · tablet · phone (A13, §12.8)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "CliSwitch.dc.html": {
+      "x": 2160,
+      "y": 3420,
+      "w": 1000,
+      "h": 720,
+      "page": "cli",
+      "title": "C15 TUI — several open sessions, switcher (U-37)",
+      "is_interactive": true
+    },
+    "AddProfile.dc.html": {
+      "x": 9120,
+      "y": 2640,
+      "w": 1440,
+      "h": 1120,
+      "title": "20a Settings — Add connection profile (§12.4.9)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "AddProfile-dark.dc.html": {
+      "x": 9120,
+      "y": 2640,
+      "w": 1440,
+      "h": 1120,
+      "page": "dark",
+      "title": "20a Add connection profile — dark",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "PhoneAddProfile.dc.html": {
+      "x": 2820,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "page": "phone",
+      "title": "P9a Connection › Add WebSocket agent",
+      "is_interactive": true
+    },
+    "TranscriptRows.dc.html": {
+      "expand": "fill",
+      "h": 2000,
+      "title": "00a Transcript rows — every widget and state",
+      "w": 1440,
+      "x": 0,
+      "y": -4400
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-22T17:30:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "c-row1": {
+      "kind": "title1",
+      "maxW": 2080,
+      "page": "cli",
+      "text": "codelab_cli — полноэкранный TUI (dart_tui)",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "c-row1s": {
+      "fill": "blue",
+      "page": "cli",
+      "size": 24,
+      "text": "§12.2.7: транскрипт с кэшем переносов, композер, строка подсказок HelpModel, статус-строка последней строкой.\n\nC1 — §12.2.2 markdown (│ у кода, инверсия у inline-кода), §12.2.3 «▸ thought 6s», §12.2.4 строки инструментов (⠹ SpinnerModel, последние строки вывода), §12.2.5 diff с номерами и фоном 256:22/52, §12.2.6 статус.\nC2 — зона одобрения §9.11 вместо композера: [y] [a] [n] [N] [?], Enter ничего не делает.",
+      "w": 460,
+      "x": 2160,
+      "y": 0
+    },
+    "c-row2": {
+      "kind": "title1",
+      "maxW": 2080,
+      "page": "cli",
+      "text": "Ввод и построчный режим",
+      "w": 240,
+      "x": 0,
+      "y": 840
+    },
+    "c-row2s": {
+      "fill": "teal",
+      "page": "cli",
+      "size": 24,
+      "text": "C3 — §12.2.8: чипы вложений над текстом, @-дополнение (меню над композером, Tab принимает), предупреждение о секретах строкой над композером, Shift+Enter — новая строка.\nC4 — поверхность ansi: вывод только дописывается; мысли «┆ » приглушённым курсивом; итоговая строка инструмента; после хода «─ статус».",
+      "w": 460,
+      "x": 2160,
+      "y": 1140
+    },
+    "c-row3": {
+      "kind": "title1",
+      "maxW": 2080,
+      "page": "cli",
+      "text": "Первый запуск и темы",
+      "w": 240,
+      "x": 0,
+      "y": 1980
+    },
+    "c-row3s": {
+      "fill": "purple",
+      "page": "cli",
+      "size": 24,
+      "text": "C5 — §12.4.3–12.4.4: мастер провайдера вопросами в терминале, ключ без эха, проверка /models до сохранения.\nC6 — §12.6.3: /theme в TUI — SelectListModel; текущая отмечена *, у каждой образец accent success error warning. Строгий разбор: невалидная тема в списке не применяется. Выбор живёт до конца процесса. Кликните строку, чтобы сменить тему.\n\nТвик theme (dark / light) есть у C1–C5.\n\nЯзык: строки CLI английские по умолчанию, русский — каталог ru (display.language / --lang, §12.2.10). Экраны показывают en.",
+      "w": 460,
+      "x": 2160,
+      "y": 2280
+    },
+    "c-row4": {
+      "kind": "title1",
+      "maxW": 3160,
+      "page": "cli",
+      "text": "Сессии и команды",
+      "w": 240,
+      "x": 0,
+      "y": 3120
+    },
+    "c-row5": {
+      "kind": "title1",
+      "maxW": 2080,
+      "page": "cli",
+      "text": "Задачи, статус и usage",
+      "w": 240,
+      "x": 0,
+      "y": 4260
+    },
+    "c-row6": {
+      "kind": "title1",
+      "maxW": 2080,
+      "page": "cli",
+      "text": "MCP, ask и ошибки",
+      "w": 240,
+      "x": 0,
+      "y": 5400
+    },
+    "c-row7": {
+      "kind": "title1",
+      "maxW": 2080,
+      "page": "cli",
+      "text": "Настройки и headless",
+      "w": 240,
+      "x": 0,
+      "y": 6540
+    },
+    "d-note": {
+      "fill": "gray",
+      "page": "dark",
+      "size": 24,
+      "text": "Эти экраны — те же файлы, открытые с theme = dark: правка светлого экрана сразу видна здесь.\n\nАкцент в тёмной теме осветляется автоматически, текст на нём тёмный — контраст ≥ 4,5:1.",
+      "w": 440,
+      "x": 6080,
+      "y": 0
+    },
+    "d-row0": {
+      "kind": "title1",
+      "maxW": 1440,
+      "page": "dark",
+      "text": "fluent_ui — тёмная тема",
+      "w": 240,
+      "x": 0,
+      "y": -2000
+    },
+    "d-row1": {
+      "kind": "title1",
+      "maxW": 5920,
+      "page": "dark",
+      "text": "Тёмная тема — рабочее место",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "d-row2": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "dark",
+      "text": "Тёмная тема — проект и сессии",
+      "w": 240,
+      "x": 0,
+      "y": 1020
+    },
+    "d-row3": {
+      "kind": "title1",
+      "maxW": 9040,
+      "page": "dark",
+      "text": "Тёмная тема — настройка и запуск",
+      "w": 240,
+      "x": 0,
+      "y": 2340
+    },
+    "d-row4": {
+      "kind": "title1",
+      "maxW": 2340,
+      "page": "dark",
+      "text": "Тёмная тема — узкий макет и оформление",
+      "w": 240,
+      "x": 0,
+      "y": 3960
+    },
+    "d-row5": {
+      "kind": "title1",
+      "maxW": 6000,
+      "page": "dark",
+      "text": "Тёмная тема — вход, команды и диалоги",
+      "w": 240,
+      "x": 0,
+      "y": 5280
+    },
+    "d-row6": {
+      "kind": "title1",
+      "maxW": 7520,
+      "page": "dark",
+      "text": "Тёмная тема — сессия, агенты, usage и диагностика",
+      "w": 240,
+      "x": 0,
+      "y": 6800
+    },
+    "d-row7": {
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "dark",
+      "text": "Тёмная тема — настройки агента",
+      "w": 240,
+      "x": 0,
+      "y": 8460
+    },
+    "d-row8": {
+      "kind": "title1",
+      "maxW": 6000,
+      "page": "dark",
+      "text": "Тёмная тема — расширения и настройки приложения",
+      "w": 240,
+      "x": 0,
+      "y": 10680
+    },
+    "n-note": {
+      "fill": "blue",
+      "page": "nav",
+      "size": 24,
+      "text": "Граф app: один хаб — рабочее место; всё остальное в один переход (панель, Ctrl+K, сочетание клавиш), настройки — в два. Карточки — ссылки на артборды: в режиме Play по ним можно пройти.\n\nГраф CLI: один экран TUI и оверлеи над композером; Esc закрывает оверлей, затем отменяет ход.\n\nПокрытие: 137 видимых клиенту строк agent-parity-goals.md → номер экрана app (01–27) и CLI (C1–C14).",
+      "w": 460,
+      "x": 3760,
+      "y": 0
+    },
+    "row0": {
+      "kind": "title1",
+      "maxW": 1440,
+      "text": "fluent_ui: компоненты и карта экранов",
+      "w": 240,
+      "x": 0,
+      "y": -2000
+    },
+    "row0s": {
+      "fill": "blue",
+      "size": 24,
+      "text": "Все экраны app собраны из виджетов fluent_ui: NavigationView, NavigationAppBar, TabView, CommandBar, InfoBar, ToggleSwitch, Expander, ContentDialog, MenuFlyout, TreeView, BreadcrumbBar…\n\nСвоё (acp_ui) — только то, чего в fluent_ui нет: строки ленты, код, diff, чипы вложений, статус-строка.\n\nКлассы в fluent.css названы по виджетам; у элементов есть data-fluent / data-acp.",
+      "w": 440,
+      "x": 1520,
+      "y": -1700
+    },
+    "row1": {
+      "kind": "title1",
+      "maxW": 5920,
+      "text": "Рабочее место: сайдбар по проектам, сессии, док панелей",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "row1s": {
+      "fill": "blue",
+      "size": 24,
+      "text": "Раскладка как в Claude desktop, на виджетах fluent_ui (§12.3 A13, шаг 0): слева — NavigationView с разделом Pinned и сессиями всех проектов (PaneItemExpander по проекту, S-18); в центре — одна или две панели сессии (split view, 29); справа — док панелей инструментов (TabView + вертикальное разбиение, AcpResizeHandle): Files, Diff, Terminal, Plan, Timeline, Agents, Usage, Branches, Protocol. Панели следуют за сессией в фокусе.\n\n01 — D-01…D-09, R-19, R-21; 02 — C-03, R-18, D-23, D-25; 28 — D-28 терминал как панель дока; 29 — split view.\n\nВынос панели в отдельное окно — открытый вопрос (§11): Flutter desktop без нескольких окон.",
+      "w": 440,
+      "x": 6080,
+      "y": 0
+    },
+    "row2": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Проект и сессии",
+      "w": 240,
+      "x": 0,
+      "y": 1020
+    },
+    "row2s": {
+      "fill": "teal",
+      "size": 24,
+      "text": "03 — панель Files в доке: дерево и предпросмотр (D-13, change add-file-preview-and-tree)\n04 — поиск сессий в сайдбаре (D-17), сессия только для чтения (D-10, S-09)",
+      "w": 440,
+      "x": 3040,
+      "y": 1320
+    },
+    "row3": {
+      "kind": "title1",
+      "maxW": 9040,
+      "text": "Настройка и запуск",
+      "w": 240,
+      "x": 0,
+      "y": 2350
+    },
+    "row3s": {
+      "fill": "purple",
+      "size": 24,
+      "text": "20 — U-06, D-04, D-10, R-12 подключение: профили встроенный / stdio / WebSocket (общие с CLI), «Test connection», «Restart agent»; первая страница настроек\n05 — D-05 провайдеры, статус ключа без чтения значения\n05b — E-13 MCP-серверы: состав из конфига, живой статус от агента, Reconnect / Reload all, секреты заголовков в keychain, отказ /config check\n06 — L-24 мастер: Preset → URL → Key → Check → Model → Review\n07 — D-11 onboarding\n08 — D-15 сторож запуска",
+      "w": 440,
+      "x": 9120,
+      "y": 2640
+    },
+    "row4": {
+      "kind": "title1",
+      "maxW": 2340,
+      "text": "Узкий макет и оформление",
+      "w": 240,
+      "x": 0,
+      "y": 3960
+    },
+    "row4s": {
+      "fill": "orange",
+      "size": 24,
+      "text": "09 — D-21: сайдбар и инспектор — выдвижные панели, лента и композер на всю ширину. Основа для этапа 10 (mobile/web).\n\n10 — D-20 Appearance: режим Light / Dark / Match system, встроенные темы, импорт JSON (неизвестный ключ — предупреждение, недостающая роль — из extends), предпросмотр палитры кода и проверка контраста. Карточки тем кликабельны.",
+      "w": 440,
+      "x": 2420,
+      "y": 4260
+    },
+    "row5": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Вход, команды и диалоги",
+      "w": 240,
+      "x": 0,
+      "y": 5280
+    },
+    "row5s": {
+      "fill": "blue",
+      "size": 24,
+      "text": "11 — R-22 выбор проекта и профиля подключения\n12 — R-20 палитра Ctrl+K: команды агента, сессии, переходы, Restart agent\n13 — меню композера: режим, модель, effort, профиль агента, /, @, вложения, Queue / Steer\n15 — T-22 ask и одобрение web_fetch / критичных шаблонов",
+      "w": 440,
+      "x": 6080,
+      "y": 5580
+    },
+    "row6": {
+      "kind": "title1",
+      "maxW": 7520,
+      "text": "Сессия, агенты, usage и диагностика",
+      "w": 240,
+      "x": 0,
+      "y": 6800
+    },
+    "row6s": {
+      "fill": "teal",
+      "size": 24,
+      "text": "14 — S-06…S-08 rename, fork, ветки, rewind с dry run; S-21 экспорт\n16 — D-25 / T-10 доска субагентов и фоновых задач\n17 — D-09 / L-29 usage, бюджет хода, дедлайн\n18 — R-23 инспектор протокола и логи, секреты замаскированы\n19 — состояния соединения и ошибки хода",
+      "w": 440,
+      "x": 7600,
+      "y": 7100
+    },
+    "row7": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Настройки агента",
+      "w": 240,
+      "x": 0,
+      "y": 8460
+    },
+    "row7s": {
+      "fill": "purple",
+      "size": 24,
+      "text": "Единая панель настроек: Agent — Connection (20, ряд «Настройка и запуск»), Providers, MCP, Agents & modes, Permissions & tools, Redaction, Skills & extensions, Code & web; App — General, Appearance, Keyboard.\n21 — режимы, определения агентов, роли моделей, A2A\n22 — правила «всегда», критичные шаблоны, инструменты\n23 — D-24 редактор редакции секретов",
+      "w": 440,
+      "x": 4560,
+      "y": 8760
+    },
+    "row8": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Расширения и настройки приложения",
+      "w": 240,
+      "x": 0,
+      "y": 10680
+    },
+    "row8s": {
+      "fill": "orange",
+      "size": 24,
+      "text": "24 — AGENTS.md, skills, шаблоны, хуки, плагины\n25 — LSP, память, web-инструменты\n26 — язык (D-19), Enter во время хода, сон, приватность, About; app не обновляет себя сам\n27 — сочетания клавиш",
+      "w": 440,
+      "x": 6080,
+      "y": 10980
+    },
+    "theme": {
+      "fill": "gray",
+      "size": 24,
+      "text": "D-20 — у каждого экрана твики theme (light / dark) и accent (по умолчанию системный акцент Fluent #0078D4).\n\nЦвета — токены Fluent (mica, layer, card, stroke, text primary / secondary, severity) плюс роли тем CLI (U-18) для кода и diff. Тёмные варианты — на странице «Тёмная тема».",
+      "w": 440,
+      "x": 6600,
+      "y": 0
+    },
+    "p-row1": {
+      "x": 0,
+      "y": -300,
+      "text": "Смартфон: сессии, лента, одобрение, диалоги",
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "phone"
+    },
+    "p-row2": {
+      "x": 0,
+      "y": 964,
+      "text": "Смартфон: файлы, настройки, первый запуск, состояния",
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "phone"
+    },
+    "p-note": {
+      "x": 2820,
+      "y": 0,
+      "text": "Этап 10 (§9.15) и профиль mobile ядра (agent-core §10.4–10.5): встроенный агент, рабочая папка — каталог документов приложения, сессии там же. Нет shell, фоновых задач, языковых серверов, хуков, skills и AGENTS.md; MCP только по HTTP; сеть, память и ask есть. Режим по умолчанию — standard.\n\nПодключение: «On this device» или WebSocket к агенту на десктопе; stdio нет, terminal клиент не объявляет.\n\nНавигация — как у десктопа (§12.3 A13): хаб — сессии и открытая сессия, сайдбар заменяет выдвижная панель (D-21): «Pinned» и группы по проектам; панели дока (Files, Diff, Plan, Agents, Usage, Branches) — отдельные экраны из панели и меню «Panes». Граф — внизу страницы.",
+      "w": 460,
+      "size": "m",
+      "fill": "blue",
+      "page": "phone"
+    },
+    "t-row1": {
+      "x": 0,
+      "y": -300,
+      "text": "Планшет: рабочее место — сайдбар по проектам, док выдвигается",
+      "kind": "title1",
+      "maxW": 3446,
+      "page": "tablet"
+    },
+    "t-row2": {
+      "x": 0,
+      "y": 1300,
+      "text": "Планшет: настройки, файлы, палитра",
+      "kind": "title1",
+      "maxW": 3700,
+      "page": "tablet"
+    },
+    "t-note": {
+      "x": 3780,
+      "y": 0,
+      "text": "Раскладка та же, что у десктопа (§12.3 A13): сайдбар с Pinned и проектами, панель сессии, док панелей инструментов. Профиль mobile: панели Files, Diff, Plan, Agents, Usage, Branches, Protocol — Terminal нет.\n\nШирина (§12.8.3): ≥ 1280 — док колонкой и split view; 900–1279 — док выдвигается поверх ленты; < 900 — узкий макет D-21.\n\nС аппаратной клавиатурой работают сочетания A13 (Cmd+K, Cmd+B, Cmd+Shift+E/D/I).",
+      "w": 460,
+      "size": "m",
+      "fill": "teal",
+      "page": "tablet"
+    },
+    "p-how": {
+      "x": 1520,
+      "y": 0,
+      "w": 400,
+      "page": "proto",
+      "fill": "blue",
+      "text": "Как пользоваться (Play, лучше на весь экран):\n• справа панель «Состояния прототипа», как в Amperic: устройство (смартфон, планшет ↕/↔, десктоп, под окно), тема (светлая, тёмная, система), акцент, соединение, раскладка, ход; выбор устройства и темы запоминается\n• раскладка меняется по ширине (§12.8.3): < 641 — стек экранов P1 → P2 → панель; 641–899 — сайдбар и док выдвигаются; 900–1279 — сайдбар, док поверх ленты; ≥ 1280 — док колонкой\n• split и док колонкой — по правилу A13 шаг 6b: лента не уже 560 px\n• на смартфоне и планшете профиль mobile: нет терминала, одобряется запись файла, а не команда\n• остальное как раньше: сессии, split, док, терминал, палитра, отправка промпта"
+    },
+    "c-row4s": {
+      "x": 3240,
+      "y": 3420,
+      "w": 460,
+      "page": "cli",
+      "fill": "orange",
+      "size": 24,
+      "text": "C15 — §12.6.13, U-37: в TUI открыто несколько сессий. Полоса сессий над транскриптом (с двух сессий): номер, маркер ⟳ ход · ! ждёт одобрения · ✗ ошибка · • закончилась в фоне. Ctrl+G — переключатель с фильтром, Alt+1…9, Ctrl+PgUp/PgDn, /switch, /close. Фоновый ход идёт дальше; одобрение фоновой сессии — только строкой статуса, зона появляется после перехода в неё (UX-28). Черновик и прокрутка у каждой сессии свои (UX-30).\n\nКликабельно: полоса, ctrl+g, [y]/[n]."
+    },
+    "rowT": {
+      "kind": "title1",
+      "maxW": 1440,
+      "text": "Лента: все виджеты строк и их состояния",
+      "x": 0,
+      "y": -4700
+    }
+  },
+  "order": [
+    "CliTui.dc.html",
+    "CliApproval.dc.html",
+    "CliInput.dc.html",
+    "CliRepl.dc.html",
+    "CliSetup.dc.html",
+    "CliTheme.dc.html",
+    "Components-dark.dc.html",
+    "Main-dark.dc.html",
+    "Turn-dark.dc.html",
+    "Files-dark.dc.html",
+    "Sessions-dark.dc.html",
+    "Providers-dark.dc.html",
+    "Mcp-dark.dc.html",
+    "Wizard-dark.dc.html",
+    "Onboarding-dark.dc.html",
+    "Boot-dark.dc.html",
+    "Narrow-dark.dc.html",
+    "Appearance-dark.dc.html",
+    "Projects-dark.dc.html",
+    "Palette-dark.dc.html",
+    "Composer-dark.dc.html",
+    "Ask-dark.dc.html",
+    "History-dark.dc.html",
+    "Agents-dark.dc.html",
+    "Usage-dark.dc.html",
+    "Inspector-dark.dc.html",
+    "States-dark.dc.html",
+    "Connection-dark.dc.html",
+    "Modes-dark.dc.html",
+    "Permissions-dark.dc.html",
+    "Redaction-dark.dc.html",
+    "Extensions-dark.dc.html",
+    "CodeWeb-dark.dc.html",
+    "General-dark.dc.html",
+    "Keyboard-dark.dc.html",
+    "CliSessions.dc.html",
+    "CliPickers.dc.html",
+    "CliTasks.dc.html",
+    "CliStatus.dc.html",
+    "CliMcp.dc.html",
+    "CliStates.dc.html",
+    "CliSettings.dc.html",
+    "CliHeadless.dc.html",
+    "NavApp.dc.html",
+    "NavCli.dc.html",
+    "Coverage.dc.html",
+    "Components.dc.html",
+    "Main.dc.html",
+    "Turn.dc.html",
+    "Files.dc.html",
+    "Sessions.dc.html",
+    "Providers.dc.html",
+    "Mcp.dc.html",
+    "Wizard.dc.html",
+    "Onboarding.dc.html",
+    "Boot.dc.html",
+    "Narrow.dc.html",
+    "Appearance.dc.html",
+    "Projects.dc.html",
+    "Palette.dc.html",
+    "Composer.dc.html",
+    "Ask.dc.html",
+    "History.dc.html",
+    "Agents.dc.html",
+    "Usage.dc.html",
+    "Inspector.dc.html",
+    "States.dc.html",
+    "Connection.dc.html",
+    "Modes.dc.html",
+    "Permissions.dc.html",
+    "Redaction.dc.html",
+    "Extensions.dc.html",
+    "CodeWeb.dc.html",
+    "General.dc.html",
+    "Keyboard.dc.html",
+    "PhoneSessions.dc.html",
+    "PhoneChat.dc.html",
+    "PhoneApproval.dc.html",
+    "PhoneComposer.dc.html",
+    "PhoneAsk.dc.html",
+    "PhonePane.dc.html",
+    "PhoneFiles.dc.html",
+    "PhoneSettings.dc.html",
+    "PhoneConnection.dc.html",
+    "PhoneProviders.dc.html",
+    "PhoneWizard.dc.html",
+    "PhoneStates.dc.html",
+    "NavPhone.dc.html",
+    "TabletWorkbench.dc.html",
+    "TabletPortrait.dc.html",
+    "TabletSettings.dc.html",
+    "TabletFiles.dc.html",
+    "TabletPalette.dc.html",
+    "Terminal.dc.html",
+    "Terminal-dark.dc.html",
+    "SplitView.dc.html",
+    "SplitView-dark.dc.html",
+    "TabletSplit.dc.html",
+    "Prototype.dc.html",
+    "CliSwitch.dc.html",
+    "AddProfile.dc.html",
+    "AddProfile-dark.dc.html",
+    "PhoneAddProfile.dc.html",
+    "TranscriptRows.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "light",
+      "name": "Светлая тема"
+    },
+    {
+      "id": "dark",
+      "name": "Тёмная тема"
+    },
+    {
+      "id": "cli",
+      "name": "codelab_cli"
+    },
+    {
+      "id": "nav",
+      "name": "Навигация и покрытие"
+    },
+    {
+      "id": "phone",
+      "name": "Смартфон"
+    },
+    {
+      "id": "tablet",
+      "name": "Планшет"
+    },
+    {
+      "id": "proto",
+      "name": "Прототип"
+    }
+  ],
+  "title": "CodeLab Desktop — Feature UI/UX"
+}

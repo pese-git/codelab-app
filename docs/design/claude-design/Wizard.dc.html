@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add provider wizard</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:900px;position:relative;display:flex;align-items:center;justify-content:center;padding:40px 16px;box-sizing:border-box}
+.smoke{position:absolute;inset:0;background:var(--smoke)}
+.st{display:flex;align-items:center;gap:6px;font-size:12px;line-height:16px;color:var(--text2);white-space:nowrap}
+.st.cur{color:var(--text);font-weight:600}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <div class="smoke" aria-hidden="true" data-fluent="ContentDialog barrier (smoke)"></div>
+  <div class="f-dlg" role="dialog" aria-modal="true" aria-labelledby="wz-title" data-fluent="ContentDialog" style="position: relative; width: 100%; max-width: 560px">
+    <div class="f-dlgb">
+      <h2 id="wz-title" class="t-sub" style="margin: 0">Add provider</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <ol aria-label="Steps" style="list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap">
+          <li class="st">API type ›</li><li class="st">Base URL ›</li><li class="st">Key ›</li><li class="st cur" aria-current="step">Check ›</li><li class="st">Model ›</li><li class="st">Review</li>
+        </ol>
+        <div class="f-pb" data-fluent="ProgressBar" role="progressbar" aria-valuenow="4" aria-valuemin="1" aria-valuemax="6" aria-label="Step 4 of 6"><i style="width: 58%"></i></div>
+      </div>
+      <dl style="margin: 4px 0 0; display: grid; grid-template-columns: 96px 1fr; row-gap: 6px; column-gap: 12px">
+        <dt class="t2">Type</dt><dd style="margin: 0">Custom OpenAI-compatible</dd>
+        <dt class="t2">Base URL</dt><dd class="mono" style="margin: 0; font-size: 13px">https://llm.internal.example</dd>
+        <dt class="t2">Key</dt><dd style="margin: 0">Store in keychain-macos as <span class="mono" style="font-size: 13px">codelab/llm-internal-example</span></dd>
+      </dl>
+      <div class="f-ib warning" role="alert" data-fluent="InfoBar (warning, isLong)">
+        <span class="f-ibi">!</span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <span class="ttl">Model list not found (404)</span>
+          <span>The server answered, but <span class="mono" style="font-size: 13px">GET /models</span> does not exist. OpenAI-compatible servers usually live under <span class="mono" style="font-size: 13px">/v1</span>.</span>
+          <span class="mono t2 t-cap">GET https://llm.internal.example/models → 404 · 212 ms</span>
+        </div>
+      </div>
+      <fieldset style="border: 0; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 10px" data-fluent="RadioButton ×2">
+        <legend class="t-strong" style="margin-bottom: 8px">How do you want to continue?</legend>
+        <label class="f-rb" style="align-items: flex-start"><input type="radio" name="next" checked><span><span style="display: block">Use https://llm.internal.example/v1</span><span class="t-cap t2">Re-run the check with the suggested address</span></span></label>
+        <label class="f-rb" style="align-items: flex-start"><input type="radio" name="next"><span><span style="display: block">Enter the model manually</span><span class="t-cap t2">The address is alive; you will also set the context window</span></span></label>
+      </fieldset>
+    </div>
+    <div class="f-dlgf" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
+      <button class="f-btn accent" data-fluent="primaryButton">Retry</button>
+      <button class="f-btn" data-fluent="secondaryButton">Back</button>
+      <button class="f-btn" data-fluent="closeButton">Cancel</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

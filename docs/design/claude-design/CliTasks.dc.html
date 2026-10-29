@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — tasks and subagents</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli tasks board: subagents with state, steps, tokens and cost; background jobs with exit code and output tail; a pending child permission request; selection keys">
+    <div class="ln"><span class="ac b u">Tasks</span>  <span class="mu">· session "Fix reconnect race" · 3 subagents (2 running) · 2 jobs · ctrl+t or /tasks</span></div>
+    <div class="ln"> </div>
+    <div class="ln b">Subagents</div>
+    <div class="ln mu">    id    type            state        time   steps  tools  tokens   cost    last activity</div>
+    <div class="ln sel"><span class="ac b">›</span> <span class="ac">⠹</span> t1    explore         running      1m12s     7     11   38.2k   $0.06   search "WorkspaceRestorer" (14 hits)</div>
+    <div class="ln">  <span class="ap">◆</span> t2    reviewer        needs you      42s     3      4   12.0k   $0.03   asks: exec "fvm flutter test"</div>
+    <div class="ln">  <span class="ok">✓</span> t3    a2a:docs-bot    done · run 2   2m03s     –      –       –       –   result: 3 links to ACP lease notes</div>
+    <div class="ln"> </div>
+    <div class="ln b">Background jobs</div>
+    <div class="ln mu">    id    command                                   state       exit   tail</div>
+    <div class="ln">  <span class="ac">⠹</span> j1    fvm flutter run -d macos                  running        –   flutter: Reload took 412ms</div>
+    <div class="ln">  <span class="er">✗</span> j2    melos run analyze                          failed         1   1 issue found. (ran in 18.4s)</div>
+    <div class="ln"> </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln"><span class="b">t1 explore</span> <span class="mu">· read-only transcript · started by call_12 "find every caller of restore()"</span></div>
+    <div class="ln"><span class="ok">✓</span> <span class="b">Search</span> restore\( in lib/  <span class="mu">14 matches</span></div>
+    <div class="ln"><span class="ok">✓</span> <span class="b">Read</span> lib/features/workspace/application/workspace_restorer.dart:1-180</div>
+    <div class="ln"><span class="ok">✓</span> <span class="b">Read</span> lib/features/sessions/application/session_lease.dart:40-96</div>
+    <div class="ln"><span class="ac">⠹</span> <span class="b">Search</span> WorkspaceRestorer in test/</div>
+    <div class="ln mu">  Two callers race: _onReconnect and the tab restore both call restore() without awaiting the lease.</div>
+    <div class="ln"> </div>
+    <div class="grow">
+      <div class="ln ap">┌─ [reviewer] Permission: exec · risk: medium ──────────────────────────────────────────────────────────────</div>
+      <div class="ln"><span class="ap">│</span> fvm flutter test packages/flutter/acp_ui   <span class="mu">cwd ~/…/codelab-app</span></div>
+      <div class="ln"><span class="ap">│</span> [y] allow once  [a] always allow  [n] reject  [N] always reject  [?] details</div>
+      <div class="ln ap">└───────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    </div>
+    <div class="ln mu">enter open · m message · x stop · o output · ↑↓ move · esc back</div>
+    <div class="ln"><span class="ac">⠹</span> <span class="mu">2m14s</span>  standard · claude-sonnet-5-5 · ctx 44% · ↑58.1k ↓4.0k · $0.11 · tasks: 2 running, 1 waiting</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>
