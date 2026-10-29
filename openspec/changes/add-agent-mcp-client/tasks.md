@@ -312,14 +312,14 @@
 
 ## 10. Документы и Definition of Done
 
-- [ ] 10.1 `[agent]` `agent-parity-goals.md`:
+- [x] 10.1 `[agent]` `agent-parity-goals.md`:
   - критерии P-01, P-16, E-02, E-03, E-05, R-24 — пометка «закрыто change `add-agent-mcp-client`» с файлами тестов и фикстур;
   - R-02 — сценарий и критерий без «сервер пропущен» для поддерживаемых транспортов, пропуск — для `sse`;
   - сценарий E-05 (строка 723) — «конфликтующий сервер отключён с причиной, называющей оба источника, сессия создана» (D6);
   - E-02 — пометка, что серверы конфигурации подключаются после change `add-agent-configuration`.
-- [ ] 10.2 `[protocol]` `13-acp-adapter.md` §13.15 и `14-golden-fixtures.md` §14.2 сверены с итогом реализации; Purpose спецификации `agent-acp-server` при архивации — без отклонения «MCP по stdio не подключаются».
-- [ ] 10.3 `[agent]` `09-13-stage-8-mcp-config.md` — DoD 8.1–8.4 отмечены; `delivery-roadmap.md` — ссылка на change, если в вехе MVP есть пункт MCP; `THIRD_PARTY_NOTICES.md` не меняется (D1).
-- [ ] 10.4 Проверка DoD:
+- [x] 10.2 `[protocol]` `13-acp-adapter.md` §13.15 и `14-golden-fixtures.md` §14.2 сверены с итогом реализации; Purpose спецификации `agent-acp-server` при архивации — без отклонения «MCP по stdio не подключаются». Дельта OpenSpec Purpose не меняет, поэтому при архивации он правится вручную; текст — design.md, «Migration Plan», абзац «Архивация».
+- [x] 10.3 `[agent]` `09-13-stage-8-mcp-config.md` — DoD 8.1–8.4 отмечены; `delivery-roadmap.md` — ссылка на change, если в вехе MVP есть пункт MCP; `THIRD_PARTY_NOTICES.md` не меняется (D1).
+- [x] 10.4 Проверка DoD:
   - проверки затронутого (`AGENTS.md` §21) зелёные локально и в CI pull request; полный `melos run check` — зелёный в CI на `develop` после merge, локально — только по просьбе пользователя;
   - `mcp_tool_goes_through_policy_test.dart` и `streamable_http_test.dart` зелёные;
   - `melos run guard` — `codelab_agent_mcp` без `dart:io`;
