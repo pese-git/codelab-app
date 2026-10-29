@@ -123,7 +123,8 @@ final class AcpServerConfig {
    `add-agent-mcp-client`). Адаптер отображает их в `McpServerConfig` и передаёт в
    `SessionSpec.mcpServers`:
    * `McpServerStdio` → stdio-сервер (`origin: session`), `McpServerHttp` → HTTP-сервер с
-     порядком заголовков;
+     порядком заголовков; `url`, который не разбирается (`Uri.tryParse` → `null`), не
+     отображается: `mcp.server.skipped {transport: http, reason: "invalid url"}`;
    * `McpServerSse` не отображается: `mcp.server.skipped {transport: sse, reason: "transport sse
      is not supported"}` (SSE объявлен устаревшим в MCP);
    * неизвестный `type` не отображается: `mcp.server.skipped {transport: <type>, reason:
@@ -219,7 +220,12 @@ final class AcpServerConfig {
    `setMcpServers` (шаги 3a и 3b) сравнивает серверы по `name` и параметрам с серверами
    `origin: session`: совпавшие остаются, исчезнувшие закрываются, новые подключаются; серверы
    конфига не трогаются. Иначе клиент, пересоздавший соединение с другим набором серверов,
-   получил бы инструменты прежнего клиента (D11 change `add-agent-mcp-client`).
+   получил бы инструменты прежнего клиента (D11 change `add-agent-mcp-client`). Без хода
+   `setMcpServers` завершается после применения набора; во время хода возвращается сразу, набор
+   применяется после `TurnEnded` (последний вызов побеждает, следующий `session/prompt` ждёт
+   применения). Исключение `setMcpServers` не роняет `session/load`: лог
+   `mcp.servers.replace_failed {session_id, error: <runtimeType>}` (warning), ответ уходит как
+   обычно; сбой подключения отдельного сервера — `mcp.server.failed` из ядра.
    После MVP большой или сегментированный журнал открывается `openWindowed` (§17.13.2).
 5. Реплей `buildReplay(snapshot)` по активной ветке в порядке записей:
    * после MVP при `window.replayFromPathIndex > 0` — первым маркер `agent_message_chunk`

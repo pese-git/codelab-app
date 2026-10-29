@@ -161,7 +161,10 @@ flowchart TB
     }
     abstract interface class McpTransportFactory {
       Set<String> get transports;         // 'stdio', 'http'
-      Future<McpTransport> open(McpServerConfig server, {required String cwd, required CancelToken cancel});
+      /// logger — логгер сессии с session_id (BoundLogger): через него транспорт пишет
+      /// mcp.server.stderr и mcp.server.closed (D9, D13).
+      Future<McpTransport> open(McpServerConfig server,
+          {required String cwd, required CancelToken cancel, required Logger logger});
     }
     ```
 
@@ -176,12 +179,20 @@ flowchart TB
       List<AgentTool> get tools;                      // в порядке регистрации (D6)
       List<McpServerSummary> get servers;             // для секции mcp (§11.5)
       McpToolsUpdate? takeUpdate();                   // ожидающее tools/list_changed (D6)
-      Future<void> replaceServers(List<McpServerConfig> servers);   // повторный session/load (D11)
+      Future<void> replaceServers(List<McpServerConfig> servers);   // повторный session/load (D11, контракт ниже)
       Future<void> close();
     }
     ```
 
     `McpConnectRequest` несёт `sessionId`, `cwd`, `servers`, `reservedNames` (имена базового реестра), `logger`, `cancel`.
+
+    **Контракт `replaceServers(servers)`** (итерация 2):
+    - `servers` — полный желаемый список сессии **после** слияния и фильтра ядра (D6): серверы конфига, затем серверы клиента в порядке регистрации; ядро не передаёт «только серверы клиента»;
+    - серверы конфига в списке совпадают с подключёнными и не трогаются; сервер конфига, вытесненный сервером клиента с тем же `name`, в списке отсутствует и закрывается;
+    - сервер, совпавший с подключённым по `name` и параметрам (`McpServerConfig.sameConnection`), остаётся без переподключения; исчезнувший закрывается; новый подключается;
+    - новые серверы занимают имена инструментов **последними**: коллизия отключает новый сервер, а не работающий (D6);
+    - сервер из списка, который раньше был отключён коллизией или не подключился, пробуется заново;
+    - сбой сервера — `mcp.server.failed`, а не исключение.
 
     Ошибки транспорта:
     - `McpTransportException` — единственное исключение `open` и `send`; текст формирует наш код (`spawn failed: …`, `invalid url`), он идёт в `mcp.server.failed` (D13);
@@ -308,7 +319,11 @@ flowchart TB
   4. Внутри пакета вызовов набор не меняется. Вызов уже объявленного инструмента, удалённого из набора, исполняется своим объектом `McpTool`.
   5. Лог `mcp.tools.changed {server, added, removed}`.
 - **Закрытие.** `AgentSession.close()`: отмена хода → ожидание простоя → `McpSessionTools.close()` (параллельно по серверам) → закрытие журнала. `AgentRuntime.dispose` закрывает сессии и, значит, процессы серверов (E-02). Сбой `createSession` / `loadSession` после подключения закрывает серверы так же (выше, «Сбой после подключения»).
-- **`replaceServers`** до задачи 6.5 бросает `UnsupportedError` (заглушка итерации 1: ACP-адаптер ещё не зовёт `setMcpServers`); задача 6.5 заменяет её реализацией D11.
+- **`AgentSession.setMcpServers(servers)`** (итерация 2, задачи 6.4–6.5) заменяет серверы клиента (`origin: session`). Список проходит те же слияние и фильтр, что при `createSession` (пустое и повторное имя, выключенная capability, чужой транспорт → `mcp.server.skipped`), и уходит в `replaceServers` полным списком (D3):
+  - без хода — набор меняется до завершения возвращённого `Future`;
+  - во время хода — вызов возвращается сразу, набор применяется после `TurnEnded` (набор посреди хода не меняется); последний вызов за ход побеждает; следующий `prompt` дожидается применения; `close()` сессии отбрасывает ожидающее применение;
+  - на закрытой сессии — `StateError`;
+  - сбой коннектора не пробрасывается: прежний набор остаётся, лог `mcp.server.failed`.
 - **Журнал.** Описания серверов (`command`, `args`, `env`, `url`, `headers`) в журнал НЕ пишутся: в них секреты, а при `session/load` клиент присылает серверы заново (§13.5). Вызовы и результаты MCP-инструментов пишутся как у любого инструмента.
 
 Альтернатива — регистрировать MCP-инструменты в общем реестре ядра — отклонена: инструменты одной сессии стали бы видны другим, а закрытие сессии ломало бы чужие ходы.
@@ -411,18 +426,19 @@ flowchart TB
 - **Запуск:**
   - `Process.start(command, args, workingDirectory: toHostPath(cwd), environment: env, includeParentEnvironment: false, runInShell: false)`;
   - `command` берётся как прислал клиент. ACP называет его абсолютным путём, но не требует отказа для другого значения, поэтому относительное имя не отклоняется и ищется по `PATH` окружения ниже;
-  - ошибка запуска → `mcp.server.failed` с причиной `spawn failed: <сообщение ОС>`.
-- **Окружение (allowlist, ENV-6):** имена базового набора §4.5 (`PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `TMPDIR`, `SHELL`) со значениями хоста, если заданы, плюс `env` сервера поверх. Фиксированные `TERM=dumb`, `PAGER=cat` и прочие — для команд `exec`, серверу они не передаются. Остальное окружение хоста серверу не видно. Набор переменных для Windows не входит в change: Windows не целевая платформа агента (proposal, «Не входит»).
-- **Кадры:** NDJSON — одна строка UTF-8 на сообщение, `\n`; при отправке перевод строки внутри сообщения недопустим, `jsonEncode` его не даёт. Входящая строка длиннее 16 МиБ → транспорт закрывается с причиной `message too large`.
+  - ошибка запуска → `McpTransportException('spawn failed: <сообщение ОС>')` → `mcp.server.failed` с этой причиной; отменённый до запуска `cancel` → `McpTransportException('cancelled')`;
+  - `open` получает логгер сессии (`BoundLogger` с `session_id`, D3), события транспорта пишутся через него.
+- **Окружение (allowlist, ENV-6):** имена базового набора §4.5 (`PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `TMPDIR`, `SHELL`) со значениями хоста, если заданы, плюс `env` сервера поверх. Список — общая константа `codelab_agent_io` (`lib/src/env/host_variables.dart`), её же использует `LocalExecutionEnv`: allowlist один на пакет. Фиксированные `TERM=dumb`, `PAGER=cat` и прочие — для команд `exec`, серверу они не передаются. Остальное окружение хоста серверу не видно. Набор переменных для Windows не входит в change: Windows не целевая платформа агента (proposal, «Не входит»).
+- **Кадры:** NDJSON — одна строка UTF-8 на сообщение, `\n`. Исходящее сообщение с `\n` или `\r` отклоняется `McpTransportException('message contains a newline')` до записи (`stdio.md`: сообщения MUST NOT contain embedded newlines; `jsonEncode` их не даёт, проверка — защита от чужого кода). Входящая строка ровно 16 МиБ проходит, длиннее → транспорт закрывается с причиной `message too large` (длина считается до конца строки, бесконечная строка без `\n` не копится в памяти).
 - **stderr** читается всегда, чтобы процесс не блокировался на полном буфере. Строки пишутся в лог `mcp.server.stderr` только уровнем debug, не больше 4 КиБ на строку: в stderr могут быть секреты.
 - **Закрытие** (`close()`, §17.5.7, шаг 6):
   1. закрыть stdin;
   2. ждать выхода 2 с;
-  3. `SIGTERM` дереву процессов (`process_tree.dart`: сервер через `npx` порождает потомков);
+  3. `terminateTree` (`process_tree.dart`): `SIGTERM` дереву процессов (сервер через `npx` порождает потомков);
   4. ждать 5 с;
   5. `SIGKILL` оставшимся.
 
-  Итого не дольше ~8 с. Лог `mcp.server.closed {server, exit_code}`. Выход процесса сам по себе завершает `done`.
+  Итого не дольше ~8 с. Лог `mcp.server.closed {server, transport: stdio, exit_code}` с `session_id` (логгер сессии из `open`). Выход процесса сам по себе завершает `done`.
 
 - **Время жизни процесса — одна ACP-сессия** (сознательное отступление, итерация 1б). `basic/index.md` («Statelessness»): «Clients **SHOULD NOT** use an individual task, thread, or conversation as the lifetime boundary for the stdio process». CodeLab запускает процесс stdio-сервера на сессию и закрывает его с сессией (D6, «Закрытие»). Обоснование: `mcpServers` приходят в `session/new` / `session/load` вместе с `cwd` сессии, а `env` — часть описания сервера в этом запросе (`docs/protocols/acp/protocol/03-Session Setup.md`, «Working Directory», «MCP Servers»); процесс запускается в рабочей папке сессии с её окружением (выше). Общий процесс для двух сессий с одинаковым `name`, но разными `cwd` или `env`, смешал бы окружения и рабочие папки (в том числе секреты одной сессии в процессе другой), а сравнение «одинаковых» серверов по всем полям — это уже пул процессов. Пул с ключом по `(command, args, env, cwd)` — после MVP вместе с супервизором (§17.5.7).
 
@@ -470,7 +486,7 @@ flowchart TB
 
 - **Отображение `acp.McpServer` в `McpServerConfig`:**
   - `McpServerStdio` → `McpStdioServerConfig(origin: session)`; `env` списка в отображение, при повторе имени побеждает последнее;
-  - `McpServerHttp` → `McpHttpServerConfig` с порядком заголовков;
+  - `McpServerHttp` → `McpHttpServerConfig` с порядком заголовков; `url`, который не разбирается (`Uri.tryParse` → `null`), → `mcp.server.skipped {transport: http, reason: "invalid url"}` в адаптере; проверку схемы (`http`/`https`) делает транспорт (D10);
   - `McpServerSse` → не отображается: `mcp.server.skipped {server, transport: sse, reason: "transport sse is not supported"}` (E-03; MCP объявил SSE устаревшим);
   - **неизвестный `type`** → сервер пропускается с `mcp.server.skipped {server, transport: <type>, reason: "unknown transport"}`, сессия создаётся (решение пользователя 2026-10-29). Сейчас отказ происходит в протоколе: `McpServer.fromJson` (`codelab_acp_protocol/lib/src/acp/session.dart`) бросает `JsonRpcProtocolException.invalidShape` «mcpServer.type … is not supported», и весь `session/new` / `session/load` получает `-32602`. Чтобы сохранить типизированные модели и совместимость вперёд (`AGENTS.md` §7), модель получает вариант `McpServer.unknown({required String type, String? name, required JsonObject raw})`: известные типы разбираются строго, как раньше; для неизвестного `type` (строки) проверка допустимых ключей не применяется, `raw` хранит объект целиком, `toJson()` возвращает `raw` без изменений. Нестроковый `type` и отсутствующие обязательные поля известных типов остаются `-32602`. Исчерпывающие `switch` по `McpServer` (сейчас только в самом `session.dart` и его тестах) получают ветку `McpServerUnknown`. Это задачи `[protocol]` 6.6–6.7, пропуск в адаптере — 6.8. Альтернатива — ловить исключение в адаптере — отклонена: разбор всего запроса уже провален, а остальные поля `session/new` потерялись бы;
   - `_meta` серверов игнорируется.
@@ -480,7 +496,7 @@ flowchart TB
 - **`session/new`:** `cwd` → отображение серверов → `createSession(SessionSpec(..., mcpServers))` → ответ → `available_commands_update`. Ответ ждёт подключения (≤ `connectTimeout` на сервер, параллельно); уведомлений до ответа нет (ACP-8). Сбой сервера не ошибка запроса (§13.4, шаг 4).
 - **`session/load`:**
   - новая сессия → `loadSession(..., mcpServers)`;
-  - сессия уже открыта в процессе (шаги 3a и 3b §13.5) → `AgentSession.setMcpServers(servers)`. Это сравнение по `name` и параметрам с серверами `origin: session`: совпавшие остаются, исчезнувшие закрываются, новые подключаются, серверы конфига не трогаются;
+  - сессия уже открыта в процессе (шаги 3a и 3b §13.5) → `AgentSession.setMcpServers(servers)` (семантика — D6). Исключение `setMcpServers` не роняет `session/load`: лог `mcp.servers.replace_failed {session_id, error: <runtimeType>}` (warning, D13), ответ уходит как обычно. Это сравнение по `name` и параметрам с серверами `origin: session`: совпавшие остаются, исчезнувшие закрываются, новые подключаются, серверы конфига не трогаются;
   - без хода изменения применяются до ответа `session/load`; во время хода (переподключение 3b) — после `TurnEnded`: набор инструментов посреди хода не меняется (D6).
 
   Альтернатива — игнорировать `mcpServers` у открытой сессии — отклонена: клиент, пересоздавший соединение с другим набором серверов, получил бы инструменты прежнего клиента.
@@ -518,8 +534,9 @@ results are untrusted content.
 | `mcp.server.era` | info | `transport`, `era` (`modern`/`legacy`), `protocol_version`, `probe` (`discover_result`, `modern_error`, `fallback_error`, `fallback_timeout`, `cached`) |
 | `mcp.server.connect` | info | `transport`, `era`, `protocol_version`, `server_info` (`name`/`version`, только для диагностики), `tools`, `duration_ms` |
 | `mcp.server.failed` | warning | `transport`, `reason` (≤ 200 символов, правила ниже) |
-| `mcp.server.closed` | info | `transport`, `exit_code` (stdio) |
-| `mcp.server.stderr` | debug | `line` (≤ 4 КиБ) |
+| `mcp.server.closed` | info | `transport`, `exit_code` (stdio); пишет транспорт через логгер сессии из `open` (D3) |
+| `mcp.server.stderr` | debug | `line` (≤ 4 КиБ); пишет транспорт через логгер сессии |
+| `mcp.servers.replace_failed` | warning | `error` (`runtimeType`) — `setMcpServers` бросил при `session/load` открытой сессии (D11) |
 | `mcp.tools.changed` | info | `added`, `removed` |
 | `mcp.tools.refresh_failed` | warning | `reason` (те же правила: `tools/list failed (code N)`, `no answer to tools/list` по таймауту, D8) — перечитывание `tools/list` после `list_changed` не удалось, прежний набор остаётся (D6, п. 1) |
 | `mcp.tool.invalid` | warning | `tool` (имя от сервера, не длиннее 64 символов по рунам), `reason` |

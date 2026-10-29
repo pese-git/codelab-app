@@ -6,22 +6,12 @@ import 'dart:typed_data';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'host_path.dart';
+import 'host_variables.dart';
 import 'output_buffer.dart';
 import 'process_tree.dart';
 
 const _tailLimit = 64 * 1024;
 const _pipeGrace = Duration(seconds: 1);
-
-/// Variables of the host passed to every command (§4.5, step 1).
-const _hostVariables = [
-  'PATH',
-  'HOME',
-  'USER',
-  'LANG',
-  'LC_ALL',
-  'TMPDIR',
-  'SHELL',
-];
 
 /// Fixed variables: commands must not wait for interactive input.
 const _fixedVariables = {
@@ -287,7 +277,7 @@ final class LocalExecutionEnv
   }
 
   Map<String, String> _environment(Map<String, String> extra) => {
-    for (final name in _hostVariables) name: ?_hostEnvironment[name],
+    for (final name in hostEnvironmentAllowlist) name: ?_hostEnvironment[name],
     ..._fixedVariables,
     ...extra,
   };

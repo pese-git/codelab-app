@@ -22,6 +22,7 @@
 1. `cwd` не абсолютный → `-32602`; при локальном листинге несуществующий каталог → `-32602` (design.md change `add-dart-agent-acp-server`, D5).
 2. `mcpServers` декодируются и отображаются в `McpServerConfig` с `origin: session` (design.md change `add-agent-mcp-client`, D11):
    - сервер `sse` пропускается с логом `mcp.server.skipped` и причиной `transport sse is not supported`;
+   - сервер `http`, чей `url` не разбирается (`Uri.tryParse` → `null`), пропускается с логом `mcp.server.skipped` и причиной `invalid url`;
    - сервер неизвестного `type` (вариант `McpServer.unknown`) пропускается с логом `mcp.server.skipped` и причиной `unknown transport`;
    - остальные правила (capability, транспорт профиля, дубликаты, коллизии имён) применяет ядро;
    - сбой или пропуск сервера НЕ SHALL быть ошибкой запроса.
@@ -51,6 +52,10 @@
 - **WHEN** `session/new` содержит HTTP-сервер `web` и сервер `legacy` типа `sse`
 - **THEN** ответ содержит `sessionId`, `legacy` пропущен с `mcp.server.skipped`, инструменты `web` доступны модели (фикстура `acp/mcp-http-tool-call`, E-03)
 
+#### Scenario: Неразбираемый url HTTP-сервера
+- **WHEN** `session/new` содержит сервер `type: "http"` с `url`, который `Uri.tryParse` не разбирает, и stdio-сервер `fake`
+- **THEN** ответ успешен, первый сервер пропущен с `mcp.server.skipped` и причиной `invalid url`, `fake` подключён
+
 #### Scenario: Сервер не подключился
 - **WHEN** процесс stdio-сервера из `mcpServers` не запускается
 - **THEN** ответ `session/new` успешен, лог `mcp.server.failed`, инструментов сервера в сессии нет
@@ -60,7 +65,8 @@
 - совпавшие по `name` и параметрам остаются подключёнными;
 - исчезнувшие закрываются, новые подключаются;
 - серверы конфигурации не трогаются;
-- без хода изменения применяются до ответа `session/load`, во время хода — после его окончания.
+- без хода изменения применяются до ответа `session/load`, во время хода — после его окончания;
+- исключение `setMcpServers` НЕ SHALL ронять `session/load`: лог `mcp.servers.replace_failed` (warning, `session_id`, `error` — тип исключения), ответ отправляется как обычно.
 
 Описания серверов НЕ SHALL читаться из журнала. Реплей SHALL идти по активной ветке:
 - слова пользователя → `user_message_chunk` на каждый блок; прочие user-записи пропускаются;

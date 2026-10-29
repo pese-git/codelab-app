@@ -83,6 +83,20 @@ sealed class HttpHeader with _$HttpHeader {
   }
 }
 
+/// Описание MCP-сервера из `mcpServers` запросов `session/new` и `session/load`.
+///
+/// Почему: ACP может добавить новые транспорты, а отказ всего запроса из-за
+/// одного неизвестного сервера теряет остальные поля `session/new`
+/// (design.md change `add-agent-mcp-client`, D11; `AGENTS.md` §7,
+/// совместимость вперёд).
+///
+/// Для чего: типизированная модель известных транспортов (`stdio`, `http`,
+/// `sse`) плюс вариант [McpServerUnknown] для неизвестного строкового `type`.
+///
+/// Как использовать: `fromJson` разбирает известные типы строго (лишний ключ,
+/// нет обязательного поля, нестроковый `type` — `invalidShape`); потребитель
+/// обязан обработать [McpServerUnknown] (агент пропускает его с логом,
+/// клиент пересылает как есть через `toJson`).
 @freezed
 sealed class McpServer with _$McpServer {
   const McpServer._();
@@ -109,11 +123,38 @@ sealed class McpServer with _$McpServer {
     @JsonKey(name: '_meta') JsonObject? meta,
   }) = McpServerSse;
 
+  /// Сервер неизвестного транспорта: [raw] хранит объект целиком, `toJson`
+  /// возвращает его без изменений. Проверка допустимых ключей не применяется.
+  const factory McpServer.unknown({
+    required String type,
+    String? name,
+    required JsonObject raw,
+  }) = McpServerUnknown;
+
   factory McpServer.fromJson(Object? value) {
-    final source = requireAcpObject(
-      value,
+    final source = requireJsonObject(value, path: 'mcpServer');
+
+    // У stdio-сервера в ACP нет дискриминатора: `type` обязателен только
+    // для `http` и `sse` (`03-Session Setup.md`, «Stdio Transport»;
+    // `17-Schema.md`, McpServer). Без `type` — stdio; явное `"stdio"`
+    // принимается для совместимости с клиентами, которые его пишут.
+    final type = source.containsKey('type')
+        ? _requiredString(source, 'type')
+        : 'stdio';
+    // Строгая проверка ключей — только для известных типов; неизвестный
+    // `type` сохраняется целиком (D11).
+    if (type != 'stdio' && type != 'http' && type != 'sse') {
+      final name = source['name'];
+      return McpServer.unknown(
+        type: type,
+        name: name is String ? name : null,
+        raw: source,
+      );
+    }
+    requireOnlyRootKeys(
+      source,
       path: 'mcpServer',
-      allowedKeys: {
+      allowedKeys: const {
         'type',
         'name',
         'command',
@@ -124,14 +165,6 @@ sealed class McpServer with _$McpServer {
         '_meta',
       },
     );
-
-    // У stdio-сервера в ACP нет дискриминатора: `type` обязателен только
-    // для `http` и `sse` (`03-Session Setup.md`, «Stdio Transport»;
-    // `17-Schema.md`, McpServer). Без `type` — stdio; явное `"stdio"`
-    // принимается для совместимости с клиентами, которые его пишут.
-    final type = source.containsKey('type')
-        ? _requiredString(source, 'type')
-        : 'stdio';
     return switch (type) {
       'stdio' => McpServer.stdio(
         name: _requiredString(source, 'name'),
@@ -152,9 +185,7 @@ sealed class McpServer with _$McpServer {
         headers: _objectList(source, 'headers', HttpHeader.fromJson),
         meta: _optionalObject(source, '_meta'),
       ),
-      final type => throw JsonRpcProtocolException.invalidShape(
-        'mcpServer.type "$type" is not supported.',
-      ),
+      _ => throw StateError('unreachable mcpServer.type "$type"'),
     };
   }
 
@@ -189,6 +220,7 @@ sealed class McpServer with _$McpServer {
         'headers': headers.map((header) => header.toJson()).toList(),
         '_meta': ?meta,
       },
+      McpServerUnknown(:final raw) => raw,
     };
   }
 }

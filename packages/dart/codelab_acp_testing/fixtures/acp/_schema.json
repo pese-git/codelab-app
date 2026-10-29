@@ -75,7 +75,34 @@
           "type": "object",
           "additionalProperties": {"type": "array", "minItems": 1, "items": {"type": "object"}}
         },
-        "transport": {"$ref": "#/$defs/transport"}
+        "transport": {"$ref": "#/$defs/transport"},
+        "mcp": {
+          "description": "Agent run only: fake MCP servers, server name from mcpServers -> description; command and url of the frame are ignored (change add-agent-mcp-client, D15).",
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/mcpServer"}
+        }
+      }
+    },
+    "mcpServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "era": {"enum": ["modern", "legacy"], "default": "modern"},
+        "tools": {"type": "array", "items": {"type": "object"}},
+        "results": {
+          "description": "CallToolResult by tool name.",
+          "type": "object",
+          "additionalProperties": {"type": "object"}
+        }
+      }
+    },
+    "mcpCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string"},
+        "arguments": {"type": "object"}
       }
     },
     "transport": {
@@ -220,6 +247,11 @@
         "files": {
           "type": "object",
           "additionalProperties": {"type": "string"}
+        },
+        "mcpCalls": {
+          "description": "Agent run only: exact list of tools/call received by each fake MCP server; an empty list means no call (change add-agent-mcp-client, D15).",
+          "type": "object",
+          "additionalProperties": {"type": "array", "items": {"$ref": "#/$defs/mcpCall"}}
         }
       }
     }

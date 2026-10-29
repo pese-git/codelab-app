@@ -395,6 +395,14 @@ final class AgentRuntimeImpl implements AgentRuntime {
       env: env,
       registry: sessionRegistry,
       mcp: mcp,
+      replaceMcp: (servers) => _replaceMcp(
+        id: id,
+        cwd: cwd,
+        servers: servers,
+        logger: logger,
+        registry: sessionRegistry,
+        state: mcp,
+      ),
       services: services,
       logger: logger,
       compose: (cwd, mode) => _systemPrompt(cwd, mode, sessionRegistry, mcp),
@@ -453,9 +461,31 @@ final class AgentRuntimeImpl implements AgentRuntime {
     required ToolRegistry registry,
     required _McpState state,
   }) async {
-    final all = [...config.mcpServers, ...servers];
-    if (all.isEmpty) {
+    final accepted = _planMcp(id, logger, servers);
+    if (accepted.isEmpty) {
       return;
+    }
+    await _connectAccepted(
+      id: id,
+      cwd: cwd,
+      accepted: accepted,
+      logger: logger,
+      registry: registry,
+      state: state,
+    );
+  }
+
+  /// Слияние и фильтр списка серверов (D6) — общая часть первого подключения
+  /// и `AgentSession.setMcpServers`, поэтому правила у них одни. Возвращает
+  /// принятые серверы в порядке регистрации: серверы конфига, затем серверы
+  /// клиента; отброшенные пишутся `mcp.server.skipped`.
+  List<McpServerConfig> _planMcp(
+    SessionId id,
+    Logger logger,
+    List<McpServerConfig> servers,
+  ) {
+    if (config.mcpServers.isEmpty && servers.isEmpty) {
+      return const [];
     }
     void skipped(McpServerConfig server, String reason) => logger.log(
       LogLevel.info,
@@ -514,7 +544,20 @@ final class AgentRuntimeImpl implements AgentRuntime {
           accepted.add(server);
       }
     }
-    if (accepted.isEmpty || connector == null) {
+    return accepted;
+  }
+
+  /// Подключает принятые серверы; сбой коннектора целиком не роняет сессию.
+  Future<void> _connectAccepted({
+    required SessionId id,
+    required String cwd,
+    required List<McpServerConfig> accepted,
+    required Logger logger,
+    required ToolRegistry registry,
+    required _McpState state,
+  }) async {
+    final connector = services.mcp;
+    if (connector == null) {
       return;
     }
     try {
@@ -530,20 +573,69 @@ final class AgentRuntimeImpl implements AgentRuntime {
       );
       state.apply(connected, registry, logger, id);
     } on Object catch (error, stack) {
-      // Сбой коннектора не должен ронять `session/new` (§13.4, шаг 4).
-      logger.log(
-        LogLevel.warning,
-        'mcp.server.failed',
-        fields: {
-          'session_id': id.value,
-          'server': accepted.map((s) => s.name).join(','),
-          'transport': accepted.map((s) => s.transport).toSet().join(','),
-          'reason': 'MCP connector failed: ${error.runtimeType}',
-        },
-        error: error.runtimeType,
-        stack: stack,
-      );
+      _logConnectorFailure(id, logger, accepted, error, stack);
     }
+  }
+
+  /// `AgentSession.setMcpServers` (D11): тот же список, что при создании
+  /// сессии, но из новых серверов клиента. Коннектору отдаётся полный
+  /// желаемый список — серверы конфига и клиента в порядке регистрации, —
+  /// поэтому серверы конфига остаются нетронутыми, а вытесненный клиентом
+  /// сервер конфига закрывается и возвращается, когда клиент перестаёт его
+  /// присылать. Реестр сессии обновляется по итогу, даже если коннектор
+  /// сломался на полпути: правдой остаётся то, что он сейчас держит.
+  Future<void> _replaceMcp({
+    required SessionId id,
+    required String cwd,
+    required List<McpServerConfig> servers,
+    required Logger logger,
+    required ToolRegistry registry,
+    required _McpState state,
+  }) async {
+    final accepted = _planMcp(id, logger, servers);
+    final current = state.tools;
+    if (current == null) {
+      // Сессия начиналась без серверов: подключаем как при создании.
+      if (accepted.isNotEmpty) {
+        await _connectAccepted(
+          id: id,
+          cwd: cwd,
+          accepted: accepted,
+          logger: logger,
+          registry: registry,
+          state: state,
+        );
+      }
+      return;
+    }
+    try {
+      await current.replaceServers(accepted);
+    } on Object catch (error, stack) {
+      _logConnectorFailure(id, logger, accepted, error, stack);
+    }
+    state.refresh(registry, logger, id);
+  }
+
+  void _logConnectorFailure(
+    SessionId id,
+    Logger logger,
+    List<McpServerConfig> servers,
+    Object error,
+    StackTrace stack,
+  ) {
+    // Сбой коннектора не должен ронять `session/new` (§13.4, шаг 4).
+    logger.log(
+      LogLevel.warning,
+      'mcp.server.failed',
+      fields: {
+        'session_id': id.value,
+        'server': servers.map((s) => s.name).join(','),
+        'transport': servers.map((s) => s.transport).toSet().join(','),
+        'reason': 'MCP connector failed: ${error.runtimeType}',
+      },
+      error: error.runtimeType,
+      stack: stack,
+    );
   }
 }
 
@@ -568,6 +660,15 @@ final class _McpState {
   ) {
     tools = connected;
     _replace(connected.tools, connected.servers, registry, logger, id);
+  }
+
+  /// Набор после `replaceServers` (D11): реестр сессии снова равен тому, что
+  /// держит коннектор.
+  void refresh(ToolRegistry registry, Logger logger, SessionId id) {
+    final connected = tools;
+    if (connected != null) {
+      _replace(connected.tools, connected.servers, registry, logger, id);
+    }
   }
 
   /// Ожидающее `tools/list_changed`; `true` — набор сессии изменился.
@@ -631,6 +732,7 @@ final class _Session implements AgentSession {
     required ExecutionEnv env,
     required ToolRegistry registry,
     required _McpState mcp,
+    required Future<void> Function(List<McpServerConfig> servers) replaceMcp,
     required AgentCoreServices services,
     required Logger logger,
     required String Function(String cwd, ModeId mode) compose,
@@ -649,6 +751,7 @@ final class _Session implements AgentSession {
        _env = env,
        _registry = registry,
        _mcp = mcp,
+       _replaceMcp = replaceMcp,
        _services = services,
        _logger = logger,
        _compose = compose,
@@ -682,6 +785,16 @@ final class _Session implements AgentSession {
   final ExecutionEnv _env;
   final ToolRegistry _registry;
   final _McpState _mcp;
+  final Future<void> Function(List<McpServerConfig> servers) _replaceMcp;
+
+  /// Хвост очереди смен MCP-серверов: смены идут по одной, а ход и закрытие
+  /// сессии ждут её хвост, чтобы набор не менялся посреди хода (D11).
+  Future<void>? _mcpWork;
+
+  /// Набор, присланный во время хода: применяется после `TurnEnded`; поздний
+  /// вызов заменяет ранний.
+  List<McpServerConfig>? _pendingMcp;
+  var _closed = false;
   final AgentCoreServices _services;
   final Logger _logger;
   late final SessionWriter _writer;
@@ -804,6 +917,12 @@ final class _Session implements AgentSession {
     if (_background case final background?) {
       await background;
     }
+    // Смена MCP-серверов, начатая между ходами, заканчивается до хода: иначе
+    // набор поменялся бы посреди него (D11). Цикл — на случай новой смены,
+    // поставленной, пока ждали прежнюю.
+    for (var work = _mcpWork; work != null; work = _mcpWork) {
+      await work;
+    }
     if (_agent.isRunning) {
       throw StateError('a turn is already running');
     }
@@ -813,9 +932,15 @@ final class _Session implements AgentSession {
     // Между ходами изменение набора применяется перед началом хода (D6).
     _applyMcpUpdate();
     cancel?.onCancel.then((_) => _agent.abort(cancel.reason));
-    await _agent.prompt([
-      UserMessage(content, timestamp: _services.clock.now()),
-    ]);
+    try {
+      await _agent.prompt([
+        UserMessage(content, timestamp: _services.clock.now()),
+      ]);
+    } finally {
+      // `TurnEnded` уже опубликован: набор, присланный во время хода,
+      // применяется теперь, а не в ответе на запрос (D11).
+      _startPendingMcp();
+    }
     final ended = _ended!;
     if (ended.reason == TurnEndReason.completed ||
         ended.reason == TurnEndReason.maxTokens) {
@@ -827,6 +952,65 @@ final class _Session implements AgentSession {
       budgetExceeded: ended.budgetExceeded,
       held: ended.held,
     );
+  }
+
+  @override
+  Future<void> setMcpServers(List<McpServerConfig> servers) async {
+    if (_closed) {
+      throw StateError('the session is closed');
+    }
+    final next = List<McpServerConfig>.unmodifiable(servers);
+    if (_agent.isRunning) {
+      _pendingMcp = next;
+      return;
+    }
+    await _enqueueMcp(next);
+  }
+
+  void _startPendingMcp() {
+    final pending = _pendingMcp;
+    _pendingMcp = null;
+    if (pending != null && !_closed) {
+      unawaited(_enqueueMcp(pending));
+    }
+  }
+
+  /// Смены идут по одной в порядке вызовов; [_mcpWork] — их хвост.
+  Future<void> _enqueueMcp(List<McpServerConfig> servers) {
+    final previous = _mcpWork ?? Future<void>.value();
+    late final Future<void> work;
+    work = previous.then((_) => _applyMcpServers(servers)).whenComplete(() {
+      if (identical(_mcpWork, work)) {
+        _mcpWork = null;
+      }
+    });
+    _mcpWork = work;
+    return work;
+  }
+
+  /// Не бросает: сбой смены — запись в лог, а прежний набор остаётся
+  /// (`session/load` не должен падать из-за сервера MCP, §13.4, шаг 4).
+  Future<void> _applyMcpServers(List<McpServerConfig> servers) async {
+    if (_closed) {
+      return;
+    }
+    try {
+      await _replaceMcp(servers);
+      _agent
+        ..tools = _registry.tools
+        ..systemPrompt = _compose(cwd, _mode);
+    } on Object catch (error, stack) {
+      _logger.log(
+        LogLevel.warning,
+        'mcp.server.failed',
+        fields: {
+          'session_id': id.value,
+          'reason': 'MCP connector failed: ${error.runtimeType}',
+        },
+        error: error.runtimeType,
+        stack: stack,
+      );
+    }
   }
 
   @override
@@ -847,10 +1031,15 @@ final class _Session implements AgentSession {
 
   @override
   Future<void> close() async {
+    _closed = true;
+    _pendingMcp = null;
     _agent.abort(const ShutdownCancel());
     _backgroundCancel?.cancel(const ShutdownCancel());
     await _agent.waitForIdle();
     await _background;
+    // Идущая смена серверов доходит до конца, иначе её новые процессы
+    // остались бы без владельца.
+    await _mcpWork;
     // Транспорты MCP закрываются после простоя хода: идущий вызов успевает
     // получить отмену (design.md change `add-agent-mcp-client`, D6).
     try {

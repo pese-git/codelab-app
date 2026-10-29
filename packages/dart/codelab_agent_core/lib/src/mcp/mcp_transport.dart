@@ -1,4 +1,5 @@
 import '../cancel/cancel_token.dart';
+import '../util/logger.dart';
 import 'mcp_server_config.dart';
 
 /// Транспорт MCP уровня сообщений (design.md change `add-agent-mcp-client`,
@@ -64,6 +65,11 @@ final class McpTransportClosed {
 /// Как использовать: хост регистрирует по фабрике на каждый ключ
 /// [transports] (`stdio`, `http`) в `McpClientConnector`. Ошибка запуска —
 /// исключение [McpTransportException] с текстом для `mcp.server.failed`.
+///
+/// `logger` — логгер сессии, уже несущий `session_id` (`BoundLogger`): через
+/// него транспорт пишет свои события (`mcp.server.stderr`,
+/// `mcp.server.closed`), добавляя только `server` (D13). Транспорт держит его
+/// на всё время жизни соединения.
 abstract interface class McpTransportFactory {
   Set<String> get transports;
 
@@ -71,6 +77,7 @@ abstract interface class McpTransportFactory {
     McpServerConfig server, {
     required String cwd,
     required CancelToken cancel,
+    required Logger logger,
   });
 }
 

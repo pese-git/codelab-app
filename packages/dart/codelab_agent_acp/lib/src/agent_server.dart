@@ -101,6 +101,12 @@ final class AcpAgentServer {
 
   AgentRuntime get _runtime => _core.runtime;
 
+  /// Принимает ли план ядра HTTP-серверы MCP (`mcpCapabilities.http`).
+  bool get _mcpHttp => switch (_core.plan.profile.states[HostCapability.mcp]) {
+    CapabilityTransport(:final transports) => transports.contains('http'),
+    _ => false,
+  };
+
   bool get _persistent =>
       _core.plan.profile.isOn(HostCapability.sessionPersistence);
 
@@ -265,8 +271,11 @@ final class _Connection {
           image: true,
           embeddedContext: true,
         ),
-        // MCP — этап 8: до него серверы из session/new не подключаются.
-        mcpCapabilities: const acp.McpCapabilities(),
+        // `http` — по плану ядра: capability `mcp` с транспортом `http`;
+        // `sse` всегда `false` (MCP объявил его устаревшим). Флага stdio в
+        // ACP нет: он обязателен (`02-Initialization.md#mcp-capabilities`;
+        // design.md change `add-agent-mcp-client`, D11).
+        mcpCapabilities: acp.McpCapabilities(http: _server._mcpHttp),
         sessionCapabilities: acp.SessionCapabilities(
           list: persistent ? const acp.SessionListCapabilities() : null,
         ),
@@ -281,16 +290,10 @@ final class _Connection {
     final request = acp.acpSessionNew.decodeParams(params);
     final cwd = request.cwd;
     await _checkCwd(cwd);
-    for (final server in request.mcpServers) {
-      _logger.log(
-        LogLevel.info,
-        'mcp.server.skipped',
-        fields: {'name': server.name, 'reason': 'MCP is not available yet'},
-      );
-    }
+    final mcpServers = _mapMcpServers(request.mcpServers);
     final wiring = _wire(cwd);
     final session = await _server._runtime.createSession(
-      SessionSpec(cwd: cwd, ports: wiring.ports),
+      SessionSpec(cwd: cwd, ports: wiring.ports, mcpServers: mcpServers),
     );
     wiring.link.sessionId = session.id.value;
     wiring.bridge.attach(session);
@@ -309,6 +312,58 @@ final class _Connection {
         const acp.SessionUpdate.availableCommandsUpdate(availableCommands: []),
       ),
     );
+  }
+
+  /// Отображает `mcpServers` запроса в `McpServerConfig` с `origin: session`
+  /// (§13.4, шаг 2; design.md change `add-agent-mcp-client`, D11).
+  ///
+  /// Почему здесь пропускаются только `sse` и неизвестный `type`: это
+  /// решение протокольного слоя (транспорт не поддерживается ACP-адаптером);
+  /// capability, транспорт профиля, дубликаты и коллизии имён решает ядро
+  /// (D6), поэтому правила одинаковы для ACP, встроенного режима и конфига.
+  /// Пропуск — не ошибка запроса: остальные серверы и сессия живут.
+  /// `_meta` серверов игнорируется.
+  List<McpServerConfig> _mapMcpServers(List<acp.McpServer> servers) {
+    void skip(String server, String transport, String reason) => _logger.log(
+      LogLevel.info,
+      'mcp.server.skipped',
+      fields: {'server': server, 'transport': transport, 'reason': reason},
+    );
+    final result = <McpServerConfig>[];
+    for (final server in servers) {
+      switch (server) {
+        case acp.McpServerStdio(:final name, :final command, :final args):
+          result.add(
+            McpStdioServerConfig(
+              name: name,
+              command: command,
+              args: args,
+              // При повторе имени переменной побеждает последняя (D11).
+              env: {for (final v in server.env) v.name: v.value},
+            ),
+          );
+        case acp.McpServerHttp(:final name, :final url, :final headers):
+          final uri = Uri.tryParse(url);
+          if (uri == null) {
+            skip(name, 'http', 'invalid url');
+            continue;
+          }
+          result.add(
+            McpHttpServerConfig(
+              name: name,
+              url: uri,
+              headers: [for (final h in headers) (h.name, h.value)],
+            ),
+          );
+        case acp.McpServerSse(:final name):
+          skip(name, 'sse', 'transport sse is not supported');
+        case acp.McpServerUnknown(:final type, :final name):
+          // Совместимость вперёд (`AGENTS.md` §7): неизвестный транспорт не
+          // роняет запрос.
+          skip(name ?? '', type, 'unknown transport');
+      }
+    }
+    return result;
   }
 
   /// Env, gate и мост сессии этого соединения (D5, D6): файлы и команды —
@@ -357,13 +412,7 @@ final class _Connection {
     final cwd = request.cwd;
     await _checkCwd(cwd);
     final id = request.sessionId.value;
-    for (final server in request.mcpServers) {
-      _logger.log(
-        LogLevel.info,
-        'mcp.server.skipped',
-        fields: {'name': server.name, 'reason': 'MCP is not available yet'},
-      );
-    }
+    final mcpServers = _mapMcpServers(request.mcpServers);
     var reconnect = false;
     var bridge = _server._sessions[id];
     if (bridge != null) {
@@ -374,6 +423,19 @@ final class _Connection {
           data: {
             'codelab': {'reason': 'sessionBusy'},
           },
+        );
+      }
+      // Открытая сессия: серверы клиента заменяются без пересоздания (D11).
+      // Без хода набор применяется до ответа; во время хода метод
+      // возвращается сразу, набор применит ядро после `TurnEnded`.
+      try {
+        await bridge.session.setMcpServers(mcpServers);
+      } on Object catch (error) {
+        // Сбой замены не должен ронять `session/load`, но и теряться не может.
+        _logger.log(
+          LogLevel.warning,
+          'mcp.servers.replace_failed',
+          fields: {'session_id': id, 'error': error.runtimeType.toString()},
         );
       }
       reconnect = bridge.reattach(
@@ -390,6 +452,7 @@ final class _Connection {
           SessionId(id),
           wiring.ports,
           cwd: cwd,
+          mcpServers: mcpServers,
         );
       } on SessionNotFound {
         throw AcpRequestError.notFound('Session not found: $id');

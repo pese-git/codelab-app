@@ -23,6 +23,8 @@ dependencies: # allowlist — workspace-architecture «Автоматическ�
     path: ../../packages/dart/codelab_agent_core
   codelab_agent_io:
     path: ../../packages/dart/codelab_agent_io
+  codelab_agent_mcp:
+    path: ../../packages/dart/codelab_agent_mcp
   http: ^1.5.0
   meta: ^1.16.0
 

@@ -66,7 +66,7 @@ final class McpClientConnector implements McpConnector {
     final connecting = await Future.wait([
       for (final server in request.servers) _connectOne(request, server),
     ]);
-    final session = _ConnectedSession(request);
+    final session = _ConnectedSession(request, _connectOne);
     for (final state in connecting) {
       if (state != null) {
         session._states.add(state);
@@ -105,6 +105,10 @@ final class McpClientConnector implements McpConnector {
         server,
         cwd: request.cwd,
         cancel: request.cancel,
+        // Транспорт не знает сессии: `session_id` записей — от логгера (D13).
+        logger: BoundLogger(request.logger, {
+          'session_id': request.sessionId.value,
+        }),
       );
       state.client = await McpClient.connect(
         server: server,
@@ -159,9 +163,14 @@ final class _ServerState {
 }
 
 final class _ConnectedSession implements McpSessionTools {
-  _ConnectedSession(this._request);
+  _ConnectedSession(this._request, this._connectOne);
 
   final McpConnectRequest _request;
+
+  /// Подключение одного сервера коннектора — им же `replaceServers`
+  /// подключает новые серверы, чтобы у них были те же правила и логи.
+  final Future<_ServerState?> Function(McpConnectRequest, McpServerConfig)
+  _connectOne;
   final _states = <_ServerState>[];
   var _closed = false;
 
@@ -305,13 +314,87 @@ final class _ConnectedSession implements McpSessionTools {
     return McpToolsUpdate(tools: tools, servers: servers);
   }
 
+  /// Приводит серверы к [servers] (D11; порт `McpSessionTools`).
+  ///
+  /// Почему сравнение по `sameConnection`: сервер с тем же `name`, но другими
+  /// `command`, `args`, `env` или `url`, — другой сервер, и держать процесс
+  /// со старыми параметрами нельзя (в `env` могут быть новые секреты).
+  /// Совпавший остаётся как есть: перезапуск процесса стёр бы его состояние и
+  /// отнял бы инструменты у модели без причины.
+  ///
+  /// Порядок: сначала закрываются исчезнувшие и изменившиеся, затем
+  /// параллельно подключаются новые; список строится в порядке [servers].
+  /// Новые серверы занимают имена инструментов последними (как обновление
+  /// `list_changed`, D6): коллизия отключает новый сервер, а не работающий.
+  /// Сервер, отключённый ранее коллизией или не подключившийся, в
+  /// подключённых не числится и пробуется снова, если он есть в списке: то,
+  /// что его вытесняло, могло исчезнуть.
   @override
-  Future<void> replaceServers(List<McpServerConfig> servers) =>
-      Future<void>.error(
-        UnsupportedError(
-          'replaceServers is implemented by task 6.5 of add-agent-mcp-client',
-        ),
-      );
+  Future<void> replaceServers(List<McpServerConfig> servers) async {
+    if (_closed) {
+      return;
+    }
+    final live = {
+      for (final state in _states)
+        if (!state.disabled) state.config.name: state,
+    };
+    final kept = <String, _ServerState>{};
+    final fresh = <McpServerConfig>[];
+    final names = <String>{};
+    for (final server in servers) {
+      if (!names.add(server.name)) {
+        continue;
+      }
+      final current = live[server.name];
+      if (current != null && current.config.sameConnection(server)) {
+        kept[server.name] = current;
+      } else {
+        fresh.add(server);
+      }
+    }
+    final leaving = [
+      for (final state in _states)
+        if (!state.disabled && kept[state.config.name] != state) state,
+    ];
+    await Future.wait([for (final state in leaving) _closeLogged(state)]);
+    final connected = await Future.wait([
+      for (final server in fresh) _connectOne(_request, server),
+    ]);
+    final added = <String, _ServerState>{
+      for (final state in connected) ?state?.config.name: ?state,
+    };
+    if (_closed) {
+      // `close()` пришёл, пока подключались: новые процессы без владельца
+      // не оставляем.
+      await Future.wait([for (final s in added.values) _closeLogged(s)]);
+      return;
+    }
+    _states
+      ..clear()
+      ..addAll([
+        for (final server in servers)
+          if (names.remove(server.name))
+            ?(kept[server.name] ?? added[server.name]),
+      ]);
+    final rejected = _resolve(added.values.toSet());
+    await Future.wait([for (final state in rejected) _closeLogged(state)]);
+  }
+
+  /// Закрывает сервер; сбой закрытия — запись в лог, а не исключение: смена
+  /// набора не должна падать из-за процесса, который уже мёртв.
+  Future<void> _closeLogged(_ServerState state) =>
+      state.client.close().catchError((Object error) {
+        _request.logger.log(
+          LogLevel.warning,
+          'mcp.server.failed',
+          fields: {
+            'session_id': _request.sessionId.value,
+            'server': state.config.name,
+            'transport': state.config.transport,
+            'reason': 'closing failed: ${error.runtimeType}',
+          },
+        );
+      });
 
   @override
   Future<void> close() async {

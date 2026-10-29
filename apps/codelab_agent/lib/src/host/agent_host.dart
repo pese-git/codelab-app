@@ -6,6 +6,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
 import 'package:codelab_agent_acp/codelab_agent_acp.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
+import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
 import 'package:http/http.dart' as http;
 
 import '../cli/serve_args.dart';
@@ -66,6 +67,12 @@ final class AgentHost {
         HostCapability.fileListing: const CapabilityOff(
           'WebSocket: клиент может быть не на этой машине',
         ),
+      // HTTP-транспорт MCP появляется в итерации 3 (задача 9.6, change
+      // `add-agent-mcp-client`): до неё `initialize` не обещает `http`, а
+      // сервер типа `http` пропускается с причиной профиля (D3, D11).
+      HostCapability.mcp: const CapabilityTransport({
+        'stdio',
+      }, 'HTTP-транспорт — итерация 3'),
     };
 
     final ModelCatalog catalog;
@@ -160,6 +167,13 @@ final class AgentHost {
         sessions: sessions,
         platform: Platform.operatingSystem,
         models: catalog,
+        // MCP-серверы сессии: процессы stdio запускает `codelab_agent_io`,
+        // закрываются они вместе с сессией (design.md change
+        // `add-agent-mcp-client`, D3, D6, D9).
+        mcp: McpClientConnector(
+          transports: McpTransports(stdio: StdioMcpTransportFactory()),
+          clock: clock,
+        ),
       ),
       config: CoreConfig(
         defaultModel: defaultModel,

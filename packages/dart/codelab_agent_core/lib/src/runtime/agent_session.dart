@@ -57,6 +57,24 @@ abstract interface class AgentSession {
   /// эмитит [ModeChanged].
   Future<void> setMode(ModeId mode);
 
+  /// Заменяет MCP-серверы клиента (`origin: session`) на [servers] — повторный
+  /// `session/load` открытой сессии с другим набором (design.md change
+  /// `add-agent-mcp-client`, D11).
+  ///
+  /// Совпавшие по `name` и параметрам серверы остаются подключёнными,
+  /// исчезнувшие закрываются, новые подключаются; серверы конфига
+  /// (`CoreConfig.mcpServers`) не затрагиваются. Список проходит те же
+  /// слияние и фильтр, что при `createSession` (D6): пустое и повторное имя,
+  /// выключенная capability и чужой транспорт дают `mcp.server.skipped`.
+  ///
+  /// Без хода набор меняется до завершения возвращённого `Future`. Во время
+  /// хода вызов возвращается сразу, а набор меняется после `TurnEnded`
+  /// (последний вызов за ход побеждает): набор инструментов посреди хода не
+  /// меняется (D6). Следующий [prompt] дожидается применения. Сбой
+  /// подключения не бросается: он пишется в лог, как при `createSession`.
+  /// Вызов на закрытой сессии — [StateError].
+  Future<void> setMcpServers(List<McpServerConfig> servers);
+
   /// События журнала активной ветки для `session/load` (§8.3, D4).
   Iterable<AgentEvent> replay();
 
