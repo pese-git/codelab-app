@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
@@ -476,6 +477,110 @@ void main() {
         ],
       });
       expect(h.toolsSeen.single, contains('mcp__a__echo'));
+    },
+  );
+
+  test(
+    'a failing setMcpServers is logged and session/load still answers',
+    () async {
+      final spy = SpyMcpConnector();
+      h = await ServerHarness.start(mcp: (_) => spy);
+      await h.initialize();
+      final sessionId =
+          (await h.client.request('session/new', {
+                'cwd': '/work/demo',
+                'mcpServers': [stdioServer('a')],
+              })).resultMap['sessionId']!
+              as String;
+      await h.client.next();
+      // Закрытая сессия: `setMcpServers` бросает `StateError` (контракт ядра);
+      // ответ `session/load` всё равно уходит, сбой пишется в лог.
+      await h.core.runtime.dispose();
+
+      final response = await load(
+        h.client,
+        sessionId,
+        mcpServers: [stdioServer('b')],
+      );
+
+      expect(response.error, isNull);
+      final logs = h.logger.eventsOf('mcp.servers.replace_failed');
+      expect(logs, hasLength(1));
+      expect(logs.single.fields['session_id'], sessionId);
+      expect(logs.single.fields['error'], 'StateError');
+    },
+  );
+
+  test(
+    'a skip in session/load carries session_id and capped strings',
+    () async {
+      h = await ServerHarness.start();
+      await h.initialize();
+      final sessionId = await h.newSession();
+      second = await ServerHarness.start(
+        sessions: h.store,
+        mcp: (_) => SpyMcpConnector(),
+      );
+      final s = second!;
+      await s.initialize();
+
+      await load(
+        s.client,
+        sessionId,
+        mcpServers: [
+          {'type': 'websocket', 'name': 'ж' * 100},
+        ],
+      );
+
+      final fields = s.logger.eventsOf('mcp.server.skipped').single.fields;
+      expect(fields['session_id'], sessionId);
+      expect(fields['server'], 'ж' * 64);
+    },
+  );
+
+  // §13.5 шаг 3c: пока набор серверов применяется (медленное подключение),
+  // идущий ход другого соединения не отдаётся третьему.
+  test(
+    'a load during a slow MCP replace does not take a running turn',
+    () async {
+      final spy = SpyMcpConnector();
+      h = await ServerHarness.start(
+        steps: [
+          {
+            'reply': [
+              {'text': 'working'},
+            ],
+            'waitForCancel': true,
+          },
+        ],
+        mcp: (_) => spy,
+      );
+      await h.initialize();
+      final sessionId = await h.newSession();
+      final other = await h.connect();
+      final third = await h.connect();
+      spy.replaceGate = Completer<void>();
+      final slowLoad = load(other, sessionId, mcpServers: [stdioServer('b')]);
+      await pumpEventQueue();
+      final turn = h.client.request('session/prompt', {
+        'sessionId': sessionId,
+        'prompt': [
+          {'type': 'text', 'text': 'go'},
+        ],
+      });
+      await pumpEventQueue();
+
+      final busy = await load(third, sessionId);
+
+      expect(busy.errorCode, -32602);
+      expect(
+        (busy.error!.data! as Map)['codelab'],
+        containsPair('reason', 'sessionBusy'),
+      );
+      spy.replaceGate!.complete();
+      expect((await slowLoad).error, isNull);
+      await h.client.notify('session/cancel', {'sessionId': sessionId});
+      expect((await turn).resultMap['stopReason'], 'cancelled');
     },
   );
 }

@@ -196,7 +196,7 @@ void main() {
       await lines.cancel();
     });
 
-    test('lines go to the log at debug level only, cut to 4 KiB', () async {
+    test('lines go to the log at trace level only, cut to 4 KiB', () async {
       final transport = await open(
         shell("printf '%10000s' '' | tr ' ' s >&2; echo >&2; echo ready"),
       );
@@ -206,7 +206,9 @@ void main() {
 
       final records = logger.eventsOf('mcp.server.stderr');
       expect(records, isNotEmpty);
-      expect(records.every((r) => r.level == LogLevel.debug), isTrue);
+      // trace, а не debug: stderr сервера может нести секреты, а профиль
+      // stdio по умолчанию пишет debug (ревью PR #158).
+      expect(records.every((r) => r.level == LogLevel.trace), isTrue);
       expect(records.first.fields['server'], 'sh');
       expect(records.first.fields['session_id'], 's1');
       expect((records.first.fields['line'] as String).length, 4096);
@@ -229,10 +231,15 @@ void main() {
     test('a server that leaves on EOF is closed quickly; the log has '
         'mcp.server.closed', () async {
       final transport = await open(echo());
+      // Старт VM занимает заметное время: засекаем после готовности процесса.
+      final lines = StreamIterator(transport.incoming);
+      await transport.send('ready?');
+      await lines.moveNext();
       final watch = Stopwatch()..start();
 
       await transport.close();
       final closed = await transport.done;
+      await lines.cancel();
 
       expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
       expect(closed.exitCode, 0);
@@ -255,22 +262,60 @@ void main() {
       expect(logger.eventsOf('mcp.server.closed'), hasLength(1));
     });
 
+    /// Сценарий в файле и уникальное имя команды потомка (симлинк на
+    /// `sleep`): имя не входит в аргументы `sh`, поэтому `ps` находит только
+    /// самого потомка.
+    ({String command, String script}) hold(String body) {
+      final id = '${DateTime.now().microsecondsSinceEpoch}';
+      final link = Link('$cwd/held_sleep_$id')..createSync('/bin/sleep');
+      final file = File('$cwd/hold_$id.sh')
+        ..writeAsStringSync(body.replaceAll(r'$HELD', link.path));
+      return (command: 'held_sleep_$id', script: file.path);
+    }
+
     test('a server that ignores EOF and SIGTERM is killed with its '
         'descendants within 10 s', () async {
-      const marker = '71237';
+      final held = hold('trap "" TERM\n\$HELD 600 &\necho up\nwait\n');
       final transport = await open(
-        shell('trap "" TERM; sleep $marker & echo up; wait'),
+        McpStdioServerConfig(
+          name: 'sh',
+          command: '/bin/sh',
+          args: [held.script],
+        ),
       );
       expect(await transport.incoming.first, 'up');
-      expect(await _alive('sleep $marker'), isTrue);
+      expect(await _alive(held.command), isTrue);
       final watch = Stopwatch()..start();
 
       await transport.close();
 
       expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
-      expect(await _alive('sleep $marker'), isFalse);
+      expect(await _alive(held.command), isFalse);
       final closed = await transport.done;
       expect(closed.exitCode, isNot(0));
+    }, timeout: const Timeout(Duration(seconds: 40)));
+
+    test('a descendant that ignores EOF and SIGTERM does not outlive a root '
+        'that left on EOF', () async {
+      final held = hold(
+        '( trap "" TERM; exec \$HELD 600 ) &\necho up\nread x\nexit 0\n',
+      );
+      final transport = await open(
+        McpStdioServerConfig(
+          name: 'sh',
+          command: '/bin/sh',
+          args: [held.script],
+        ),
+      );
+      expect(await transport.incoming.first, 'up');
+      expect(await _alive(held.command), isTrue);
+      final watch = Stopwatch()..start();
+
+      await transport.close();
+
+      expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
+      expect(await _alive(held.command), isFalse);
+      expect((await transport.done).exitCode, 0, reason: 'the root left');
     }, timeout: const Timeout(Duration(seconds: 40)));
   });
 

@@ -91,7 +91,13 @@ Future<AgentUnderTest> startAgent(
   );
   final mcp = _FixtureMcp(setup);
   final core = buildAgentCore(
-    profile: HostProfile.of(setup.profile),
+    // Как бинарь до итерации 3: HTTP-транспорта нет, `mcpCapabilities.http`
+    // — `false` (задача 8.2; переход на `true` — задачи 9.5–9.6).
+    profile: HostProfile.of(setup.profile).narrowed(const {
+      HostCapability.mcp: CapabilityTransport({
+        'stdio',
+      }, 'HTTP-транспорт — итерация 3'),
+    }),
     services: AgentCoreServices(
       baseEnv: LocalExecutionEnv(cwd: setup.cwd),
       // Сессии спрашивают через AcpPermissionGate соединения.
@@ -105,13 +111,7 @@ Future<AgentUnderTest> startAgent(
       // от него (design.md change `add-agent-mcp-client`, D11), а серверы
       // фикстуры берутся из `setup.mcp`.
       mcp: McpClientConnector(
-        transports: McpTransports(
-          stdio: mcp.transports,
-          // HTTP-сервер фикстуры проходит через настоящий
-          // `StreamableHttpTransport` в итерации 3 (D15); до неё — пара в
-          // памяти.
-          http: mcp.transports,
-        ),
+        transports: McpTransports(stdio: mcp.transports),
         clock: clock,
       ),
     ),
