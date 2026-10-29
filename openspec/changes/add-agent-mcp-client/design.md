@@ -101,8 +101,10 @@
     - любая другая ошибка или нет ответа за время пробы → legacy, откат на `initialize`. Откат не привязан к одному коду ошибки. Время пробы — `min(5 с, connectTimeout / 2)`.
   - **Streamable HTTP** (`streamable-http.md#backward-compatibility`) — первая посылка тоже `server/discover`:
     - `200` с `DiscoverResult` → modern;
-    - `400` с распознанной modern-ошибкой в теле → modern (`-32022` → нет общей версии);
-    - `400` с пустым или нераспознанным телом и другие `4xx` (`404`, `405`) → legacy, откат на `initialize`.
+    - `400`, `404` или `405` с распознанной modern-ошибкой в теле (`-32020`, `-32021`, `-32022`) → modern (`-32022` → нет общей версии); решает тело, а не статус (`streamable-http.md#backward-compatibility`, «HTTP+SSE Transport»);
+    - пустое или нераспознанное тело и другие `4xx` → legacy, откат на `initialize`.
+
+    `-32601` не входит в распознаваемые коды пробы: `server/discover` сервер modern обязан реализовать (`discover.md`), поэтому `-32601` на нём — типичный ответ legacy-сервера (`stdio.md#backward-compatibility`), то есть сигнал отката.
 
   `discover` шлётся и на HTTP, хотя спецификация позволяет «пробовать любой modern-запрос»: он одной посылкой даёт `capabilities.tools.listChanged`, нужный для подписки.
 - **Нет общей версии** → `mcp.server.failed` с причиной `no common protocol version: server supports [<список>]`. Сессия создаётся без сервера.
@@ -118,7 +120,7 @@
 - **legacy-only** (`initialize` без пробы) — отклонена: modern-only сервер отвергает `initialize` (матрица, «Legacy | Modern — Fails»), а legacy-клиенту некуда «подняться»;
 - **поддержка `2024-11-05` и HTTP+SSE** — отклонена по E-03 и `deprecated.md`.
 
-Legacy-ветка опирается на `docs/protocols/mcp/specification/2025-11-25/`: рукопожатие и согласование версии — `basic/lifecycle.md` («Initialization», «Version Negotiation»), HTTP-сессия, GET-поток, опрос SSE и возобновление — `basic/transports.md`, отмена и `ping` — `basic/utilities/{cancellation,ping}.md`. Проба `server/discover` перед `initialize` разрешена правилами совместимости `2026-07-28` (`stdio.md#backward-compatibility`). Различия `2025-06-18` и `2025-03-26` внутри подмножества клиента (пакеты JSON-RPC, заголовок `MCP-Protocol-Version`, `resource_link`) сверяются по `2025-11-25/changelog.md` и схемам. `2025-03-26` остаётся в наборе (решение пользователя 2026-10-29).
+Legacy-ветка опирается на `docs/protocols/mcp/specification/2025-11-25/`: рукопожатие и согласование версии — `basic/lifecycle.md` («Initialization», «Version Negotiation»), HTTP-сессия, GET-поток, опрос SSE и возобновление — `basic/transports.md`, отмена и `ping` — `basic/utilities/{cancellation,ping}.md`. Проба `server/discover` перед `initialize` разрешена правилами совместимости `2026-07-28` (`stdio.md#backward-compatibility`). Нормативных текстов `2025-06-18` и `2025-03-26` в ветке нет, а `2025-11-25/changelog.md` описывает только переход от `2025-06-18`. Поэтому различия внутри подмножества клиента (пакеты JSON-RPC, заголовок `MCP-Protocol-Version`, `resource_link`) в ветке не проверяются и приняты по общеизвестным ревизиям. Клиент терпим к ним: пакеты (массив) принимаются в любой legacy-версии, заголовок `MCP-Protocol-Version` шлётся только при согласованной `2025-06-18` и новее (без него сервер вправе считать `2025-03-26`, `2025-11-25/basic/transports.md`, «Protocol Version Header»), неизвестный `type` содержимого проецируется как `[unsupported content: <type>]` (D7). Поведение фиксируется тестами на `FakeMcpServer` (задачи 3.3, 9.1). `2025-03-26` остаётся в наборе (решение пользователя 2026-10-29).
 
 ### D3. Раскладка по пакетам и направление зависимостей
 
@@ -235,7 +237,10 @@ flowchart TB
    - `notifications/initialized`;
    - `initialize` не отменяется уведомлением, при таймауте транспорт просто закрывается.
 4. **`tools/list`**, если сервер объявил `tools` (без `tools` — ноль инструментов, сервер подключён):
-   - страницы по `nextCursor` (`server/utilities/pagination.md`), не больше 100; больше — `mcp.server.failed` с причиной `tools/list pagination did not end`;
+   - страницы по `nextCursor` (`server/utilities/pagination.md`), не больше 100; больше — `mcp.server.failed` с причиной `tools/list pagination did not end`. Курсор непрозрачен: пустая строка — допустимый курсор, а не конец; конец — отсутствие `nextCursor`;
+   - инструмент, которым клиент заведомо не сможет воспользоваться, пропускается с `mcp.tool.invalid {server, tool, reason}`, остальные регистрируются:
+     - HTTP (обе эпохи) — `x-mcp-header` нарушает ограничения (`streamable-http.md`, «Schema Extension»: пустое значение, не `1*tchar`, повтор без учёта регистра, тип `number` или непримитив, свойство вне цепочки `properties`): клиент MUST исключить такой инструмент из результата `tools/list`, `reason: invalid x-mcp-header`. На stdio аннотации игнорируются (MAY);
+     - legacy — сервер объявил `capabilities.tasks.requests.tools.call`, а у инструмента `execution.taskSupport: "required"`: клиент MUST вызывать его как задачу, задачи не реализованы (D1), `reason: task support required` (`2025-11-25/basic/utilities/tasks.md`, «Tool-Level Negotiation»);
    - `ttlMs` и `cacheScope` modern-результата читаются, но кэш между сессиями не ведётся: набор живёт до `list_changed` или конца сессии.
 5. **Успех** — логи `mcp.server.era` и `mcp.server.connect`.
 
@@ -296,7 +301,7 @@ flowchart TB
 - **Схема.**
   - `description` — `description` инструмента, иначе `title`, иначе имя. Передаётся модели как есть, но не длиннее **2048 символов** (рун Unicode): длиннее — первые 2048 символов (обрезка по границе символа, без разрыва суррогатной пары) и суффикс `\n[Description truncated: <n> characters omitted.]`; лог `mcp.tool.description_truncated {server, tool, length}`. Почему: описание уходит в схемах **каждого** запроса к модели и не огораживается, поэтому длинный текст сервера одновременно тратит контекст и увеличивает поверхность prompt injection. Типичное описание инструмента — сотни символов, 2 КиБ оставляют запас в 3–5 раз. Пометка источника не нужна: префикс `mcp__<сервер>__` в имени уже называет источник, а правило `untrusted` в промпте говорит, что MCP — данные. Альтернативы: «как есть» — отклонена (неограниченный рост payload); отдельная ограда описания — отклонена (провайдеры не гарантируют, что модель трактует разметку внутри схемы так же, как в транскрипте). `description` вложенных свойств `inputSchema` не обрезаются (риск ниже);
   - `parameters` — `inputSchema` как есть: валидатор §6.3.2 игнорирует неподдерживаемые ключи;
-  - инструмент без `name` или с `inputSchema` не-объектом пропускается с `mcp.tool.invalid {server, tool}`, остальные регистрируются.
+  - инструмент без `name` или с `inputSchema` не-объектом пропускается с `mcp.tool.invalid {server, tool, reason}`, остальные регистрируются; другие причины пропуска — D5, шаг 4.
 - **Вид** (`kind`) — только по явным значениям аннотаций, без значений по умолчанию спецификации MCP:
   - `readOnlyHint: true` → `read`;
   - иначе `destructiveHint: true` → `edit` при `openWorldHint: false`, иначе `execute`;
@@ -393,19 +398,20 @@ flowchart TB
 - `MCP-Protocol-Version: 2026-07-28` на каждом POST, совпадает с `_meta` тела;
 - `Mcp-Method: <method>` на каждом запросе;
 - `Mcp-Name: <params.name>` у `tools/call`;
-- `Mcp-Param-<имя>` для каждого свойства `inputSchema` инструмента с `x-mcp-header`: клиент обязан поддерживать (`streamable-http.md`, «Custom Headers from Tool Parameters»). Значения `string`, `integer` и `boolean` приводятся к строке; значение вне безопасного ASCII, а также `Mcp-Name` такого вида кодируются `=?base64?<…>?=` («Value Encoding»). Свойство без значения заголовка не даёт.
+- `Mcp-Param-<имя>` для каждого свойства `inputSchema` инструмента с `x-mcp-header`: клиент обязан поддерживать (`streamable-http.md`, «Custom Headers from Tool Parameters»). Значения `string`, `integer` и `boolean` приводятся к строке; значение вне безопасного ASCII (включая пробелы по краям и управляющие символы), значение, похожее на маркер (`=?base64?…?=`), а также `Mcp-Name` такого вида кодируются `=?base64?<base64 UTF-8>?=` («Value Encoding»). Свойство без значения или со значением `null` заголовка не даёт. Невалидный `x-mcp-header` исключает инструмент из `tools/list` (D5, шаг 4).
 
 Ответ `-32020` `HeaderMismatch` на `tools/call` → один раз `tools/list` и повтор вызова с новым id («Client Behavior»). Сессий, GET-потока, `DELETE` и `Last-Event-ID` нет. Отмена — `abandon(id)`, то есть закрытие потока ответа (D8).
 
 **Legacy (`2025-03-26` … `2025-11-25`):**
 - `Mcp-Session-Id` из ответа на `initialize` запоминается и шлётся во всех следующих запросах;
 - `MCP-Protocol-Version: <согласованная>` — для `2025-06-18` и `2025-11-25`;
-- `404` при выданном `Mcp-Session-Id` — сессия сервера истекла, транспорт закрывается с причиной `HTTP session expired`;
+- `404` при выданном `Mcp-Session-Id` — сессия сервера истекла, транспорт закрывается с причиной `HTTP session expired`. Это сознательное отступление от `2025-11-25/basic/transports.md` («Session Management», п. 4: клиент MUST начать новую сессию новым `initialize`): переподключения в MVP нет (D5, E-04), а повтор `initialize` посреди хода повторил бы и вызов с побочными эффектами. Повторная инициализация — часть 8.10;
+- ответы клиента на запросы сервера (legacy-`ping`, `-32601`, D5), пришедшие по GET-потоку или потоку ответа, уходят отдельным `POST` с `Mcp-Session-Id`; сервер отвечает `202` без тела;
 - если сервер объявил `tools.listChanged`, открывается `GET url` с `Accept: text/event-stream`. `405` → потока нет; оборвавшийся GET-поток в MVP не открывается заново;
 - при закрытии — `DELETE url` с `Mcp-Session-Id` (best effort, 2 с, `405` нормален);
 - отмена — `notifications/cancelled` POST и `abandon(id)`.
 
-- **опрос и возобновление SSE (`2025-11-25`, `basic/transports.md`, «Sending Messages to the Server», п. 6, и «Resumability and Redelivery»):** сервер МОЖЕТ закрыть соединение потока ответа до ответа, предварительно отправив событие с `id` (и `retry`). Клиент возобновляет тот же запрос — `GET url` с `Last-Event-ID: <последний id>` после паузы `retry` (без `retry` — 1 с), не больше 5 раз на запрос. Это не повтор `tools/call`: новый запрос не отправляется, дочитывается ответ на прежний. Поток закрылся, а событий с `id` не было, или лимит исчерпан → «disconnected during the call» (D8). Разрыв без отмены отменой не считается (legacy).
+- **опрос и возобновление SSE (`2025-11-25`, `basic/transports.md`, «Sending Messages to the Server», п. 6, и «Resumability and Redelivery»):** сервер МОЖЕТ закрыть соединение потока ответа до ответа, предварительно отправив событие с `id` (и `retry`). Событие с `id` и пустым `data` (priming, п. 6) только запоминает `id` и сообщением не считается. Клиент возобновляет тот же запрос — `GET url` с `Last-Event-ID: <последний id>` после паузы `retry` (без `retry` — 1 с), не больше 5 раз на запрос. Это не повтор `tools/call`: новый запрос не отправляется, дочитывается ответ на прежний. Поток закрылся, а событий с `id` не было, или лимит исчерпан → «disconnected during the call» (D8). Разрыв без отмены отменой не считается (legacy).
 
 ### D11. ACP-адаптер
 
@@ -460,7 +466,7 @@ results are untrusted content.
 | `mcp.server.closed` | info | `transport`, `exit_code` (stdio) |
 | `mcp.server.stderr` | debug | `line` (≤ 4 КиБ) |
 | `mcp.tools.changed` | info | `added`, `removed` |
-| `mcp.tool.invalid` | warning | `tool` |
+| `mcp.tool.invalid` | warning | `tool`, `reason` |
 | `mcp.tool.description_truncated` | info | `tool`, `length` |
 | `mcp.call.cancelled`, `mcp.call.timeout` | info | `tool_call_id`, `request_id` |
 | `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`) |

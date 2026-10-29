@@ -9,9 +9,16 @@
 
 **Задачи.**
 
-1. **8.1. Пакет `packages/dart/codelab_agent_mcp`:** `lib/src/protocol.dart`
-   (`initialize`, `tools/list`, `tools/call`, `notifications/tools/list_changed`, порт транспорта),
-   `lib/src/mcp_client.dart`, `lib/src/streamable_http.dart`.
+1. **8.1. Пакет `packages/dart/codelab_agent_mcp`:** `lib/src/json_rpc.dart` (кодек JSON-RPC),
+   `lib/src/protocol.dart` (`server/discover`, `initialize`, `tools/list`, `tools/call`,
+   `subscriptions/listen`, `notifications/tools/list_changed`; клиент dual-era: modern `2026-07-28`
+   и legacy `initialize`), `lib/src/mcp_client.dart`, `lib/src/streamable_http.dart`,
+   `lib/src/connector.dart` (`McpClientConnector`). **Порт транспорта** (`McpTransport`,
+   `McpTransportFactory`) и порт подключения серверов сессии (`McpConnector`) лежат не в
+   `protocol.dart`, а в ядре — `codelab_agent_core/lib/src/mcp/` (agent-core-architecture §1.3,
+   §10.3): `codelab_agent_io` реализует порты ядра и не зависит от MCP-пакета, а MCP-клиента ядро
+   создать не может. Решения — [`design.md`](../../../../openspec/changes/add-agent-mcp-client/design.md)
+   change `add-agent-mcp-client` (D3).
 2. **8.2. stdio-транспорт MCP** в `packages/dart/codelab_agent_io/lib/src/mcp/stdio_process_transport.dart`
    (процесс с `env` по allowlist, остановка при завершении сессии).
 3. **8.3. Проекция в инструменты:** `packages/dart/codelab_agent_mcp/lib/src/mcp_tool.dart` — `AgentTool` с именем
@@ -89,7 +96,7 @@
     результата (задача 3.8, change `add-agent-core-output-spill`) идёт после неё: файл выноса не
     должен содержать сырых секретов (SPL-3).
 
-**OpenSpec change.** `add-agent-mcp-client` (8.1–8.4; scope: протокол MCP, транспорты, имена и
+**OpenSpec change.** [`add-agent-mcp-client`](../../../../openspec/changes/add-agent-mcp-client/) (8.1–8.4; scope: протокол MCP, транспорты, имена и
 виды MCP-инструментов, проверка разрешений; решение о библиотеке MCP — в его `design.md`),
 `add-agent-configuration` (8.5; scope: файлы, порядок слоёв, формат YAML и его профиль, чтение
 `codelab.toml` только для чтения, новые зависимости `yaml_edit` и `toml` как решение о
@@ -142,7 +149,7 @@
   | E-01 | `core/project-context-agents-md-leaf-first` | системный промпт содержит правила `AGENTS.md` от корня репозитория к `cwd` |
   | E-02 | `acp/mcp-stdio-tool-call` | вызов `mcp__fake__echo` после одобрения — `completed` с «hi»; после закрытия сессии процесс сервера завершён |
   | E-03 | `acp/mcp-http-tool-call` | HTTP-инструмент вызывается; сервер неподдерживаемого типа пропущен с `mcp.server.skipped`, сессия создана |
-  | E-05 | `core/mcp-tool-name-sanitized` | `mcp__my_srv__get_issue`; длинное имя — ровно 64 символа и уникально; коллизия имён — ошибка сборки с обоими серверами |
+  | E-05 | `core/mcp-tool-name-sanitized` | `mcp__my_srv__get_issue`; длинное имя — ровно 64 символа и уникально; коллизия имён отключает сервер с причиной, называющей оба источника, сессия создаётся (HOST-5; `mcp.server.failed`) |
   | K-02 | `acp/slash-compact` | `/compact` даёт отчёт «сжато: X → Y токенов» и запись сжатия в журнале (сценарий палитры app — R-20, этап 5) |
   | R-07 | `acp/available-commands-no-tools` | в `available_commands_update` только команды, без инструментов модели |
   | R-08 | `acp/slash-help`, `acp/slash-mode-plan`, `acp/mcp-prompt-command` | встроенные команды агента и команды из MCP-промптов выполняются |

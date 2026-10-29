@@ -81,10 +81,31 @@ final class LogRecord {           // то, что получает sink хост
 | `permission` | `permission.request`, `permission.decision`, `permission.denied` |
 | `session` | `session.create`, `session.open`, `session.repair`, `session.leaf.healed`, `session.append.failed`, `session.cycle`, `session.broken_link`, `session.compaction.lost_anchor` (§8.7); после MVP `session.origin.unknown` {`origin`} (§8.2.5) |
 | `compaction` | `compaction.start`, `compaction.end`, `compaction.failed` |
-| `mcp` | `mcp.server.connect`, `mcp.server.failed`, `mcp.server.skipped` |
+| `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`debug`), `mcp.tools.changed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
 | `acp` | `acp.frame.in`, `acp.frame.out`, `acp.frame.bad`, `acp.cancel.no_turn`, `acp.prompt.rejected`, `acp.detached`, `acp.client_capabilities.absent` (§13.2), `acp.terminal.release_failed` (§13.9) |
 | `host` | `host.plan`, `host.config.loaded` |
 | `config` | `config.project.untrusted_key` (§15.3), `config.legacy_ignored`, `config.legacy_key_dropped`, `config.legacy_active` (§15.7) |
+
+События `mcp.*` (этап 8; `openspec/changes/add-agent-mcp-client/design.md`, D13). `session_id` есть
+всегда, `server` — `name` сервера:
+
+| Событие | Уровень | Поля |
+|---|---|---|
+| `mcp.server.skipped` | info | `transport`, `reason` |
+| `mcp.server.era` | info | `transport`, `era` (`modern`/`legacy`), `protocol_version`, `probe` (`discover_result`, `modern_error`, `fallback_error`, `fallback_timeout`, `cached`) |
+| `mcp.server.connect` | info | `transport`, `era`, `protocol_version`, `server_info` (`name`/`version`, только для диагностики), `tools`, `duration_ms` |
+| `mcp.server.failed` | warning | `transport`, `reason` (≤ 200 символов) |
+| `mcp.server.closed` | info | `transport`, `exit_code` (stdio) |
+| `mcp.server.stderr` | debug | `line` (≤ 4 КиБ) |
+| `mcp.tools.changed` | info | `added`, `removed` |
+| `mcp.tool.invalid` | warning | `tool`, `reason` |
+| `mcp.tool.description_truncated` | info | `tool`, `length` |
+| `mcp.call.cancelled`, `mcp.call.timeout` | info | `tool_call_id`, `request_id` |
+| `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`) |
+
+В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов
+и ответов; причины ошибок транспорта формирует наш код, без текста заголовков (OBS-инварианты,
+тест `mcp_logs_no_secrets_test.dart`). Редакция секретов MCP в журнале — 8.11.
 
 После MVP (§17) добавляются области:
 
@@ -96,7 +117,7 @@ final class LogRecord {           // то, что получает sink хост
 | `spill` | `spill.write`, `spill.failed`, `spill.missing`, `spill.orphan_deleted` (§17.4) |
 | `config` | `config.reload.applied`, `config.reload.failed`, `config.reload.noop`, `config.reload.restart_required`, `config.preconfig.shadowed`, `config.write` (§17.5) |
 | `secrets` | `secrets.lookup` (только `--debug-secrets`), `secrets.backend.unavailable`, `secrets.backend.plaintext` (§17.5.4) |
-| `mcp` (дополнение) | `mcp.server.state`, `mcp.server.retry`, `mcp.tools.changed` (§17.5.7) |
+| `mcp` (дополнение) | `mcp.server.state`, `mcp.server.retry` (§17.5.7); `mcp.tools.changed` уже в MVP |
 | `session` (дополнение) | `session.lease.takeover`, `session.lease.lost`, `session.branch_summary.failed`, `session.fork.start`, `session.fork.end`, `session.fork.failed` (§17.6); `session.sealed` (info), `session.sealed.dropped` (warning, один раз на вид записи), `session.title_probe` (debug) (§8.5.1, §8.10.1); `session.search` (debug: `scope`, `terms` — число, `scanned`, `hits`, `truncated`, `skipped`, `durationMs`; без текста запроса и сниппетов) (§17.6.17) |
 | `steer` | `steer.accepted`, `steer.refused` (§17.7.3.1) |
 | `lsp` | `lsp.server.start`, `lsp.server.ready`, `lsp.server.stop`, `lsp.server.crash`, `lsp.server.failed`, `lsp.server.stderr` (`debug`), `lsp.request.timeout`, `lsp.frame.bad`, `lsp.sync.failed`, `lsp.edit.rollback` (§17.8.10) |

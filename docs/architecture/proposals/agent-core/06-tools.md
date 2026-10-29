@@ -655,24 +655,92 @@ MCP-селектор, которому при создании сессии не
 
 ### MCP-инструменты
 
-Регистрируются в тот же `ToolRegistry` как `AgentTool` с именем `mcp__<server>__<tool>` (символы
-вне `[A-Za-z0-9_-]` → `_`). Имя длиннее 64 символов сокращается детерминированно: первые 56
-символов, `_` и первые 7 hex-символов SHA-256 от полного несокращённого имени `mcp__<server>__<tool>`
-до замены символов (UTF-8), всего ровно 64; поэтому коллизия после сокращения практически
-невозможна. Любое совпадение имени MCP-инструмента после сокращения или замены символов (с
-встроенным инструментом, инструментом плагина или другого MCP-сервера) — не ошибка сборки: этот
-MCP-сервер отключается с причиной, сессия продолжает работу (HOST-5, §10.7, шаг 5e). `tier: exec` всегда; `kind` — из аннотаций сервера: `readOnlyHint: true` → `read`,
-`destructiveHint: true` → `edit` при `openWorldHint: false` и `execute` в остальных случаях, иначе
-`other` (как в dart-agent-and-clients §9.13). Аннотации — недоверенные подсказки сервера: они
-влияют только на `kind` для отображения и не меняют `tier`, решения `PermissionPolicy` и
-`outputTrust`. `outputTrust: untrusted`, `permissionPattern` — канонический JSON
-аргументов. Отдельного пути исполнения у них нет. MCP-инструменты `spillable` (`spillDirection: head`): огромный результат выносится в файл (§17.4), повторный вызов сервера не нужен.
+Решения — `openspec/changes/add-agent-mcp-client/design.md` (D6–D8). Инструменты серверов сессии
+собирает `McpConnector` (порт ядра, §10.3) как `AgentTool` с именем `mcp__<server>__<tool>`; клиент
+MCP живёт в `codelab_agent_mcp` (§1.2). Реестр собирается **на сессию**: копия базового реестра
+(§10.7, шаги 5a–5b) плюс инструменты её серверов, и именно он уходит в `ToolCallExecutor`,
+`policy.asHook(registry.lookup)`, `Agent.tools` и промпт; базовый реестр ядра и `CorePlan.toolNames`
+не меняются. Инструменты одной сессии не видны другой, а закрытие сессии не ломает чужие ходы.
+
+**Имя.** `mcpToolName(server, tool)` ядра: символы вне `[A-Za-z0-9_-]` → `_`. Имя длиннее 64
+символов сокращается детерминированно: первые 56 символов, `_` и первые 7 hex-символов SHA-256 от
+полного несокращённого имени `mcp__<server>__<tool>` до замены символов (UTF-8), всего ровно 64;
+поэтому `a.b` и `a_b` дают разные хэши.
+
+**Коллизия.** Любое совпадение имени после сокращения или замены символов (со встроенным
+инструментом, инструментом плагина, другим MCP-сервером или внутри одного сервера) — не ошибка
+сборки и не ошибка `session/new`. Регистрация идёт после завершения всех подключений в порядке
+списка серверов (сначала серверы конфига, затем серверы клиента), внутри сервера — в порядке
+`tools/list`. Сервер, чей инструмент пришёл позже, отключается целиком: транспорт закрывается,
+инструменты не регистрируются, лог `mcp.server.failed` с причиной, называющей оба источника
+(`tool name mcp__a__x collides with built-in tool x` или `… with MCP server "b"`); сессия создаётся
+(HOST-5, §10.7, шаг 5e). Критерий E-05.
+
+**Вид, уровень, доверие.** `tier: exec` всегда, `tierOf` не переопределяется. `kind` — только по
+явным значениям аннотаций сервера, без значений по умолчанию спецификации MCP: `readOnlyHint: true`
+→ `read`, иначе `destructiveHint: true` → `edit` при `openWorldHint: false` и `execute` в остальных
+случаях, иначе `other` (как в dart-agent-and-clients §9.13). Аннотации — недоверенные подсказки
+сервера: они влияют только на `kind` для отображения и не меняют `tier`, решения `PermissionPolicy` и
+`outputTrust`. `outputTrust: untrusted`, `permissionPattern` — канонический JSON аргументов,
+`present().title` — полное имя инструмента. Отдельного пути исполнения у них нет (TOOL-1).
+
+**Одна ограда (P-16, TOOL-10).** Единая точка исполнения (§6.3.1) огораживает результат любого
+инструмента с именем на `mcp__` независимо от `outputTrust`: правило стоит в точке исполнения по
+префиксу, поэтому инструмент с таким именем не может объявить себя доверенным. Весь результат
+внутри одной ограды обеспечивает проекция содержимого: `CallToolResult` сводится в один
+`TextContent` (части через `\n`, порядок блоков сохраняется), а §6.3.6 остаётся без изменений —
+каждый `TextContent` оборачивается отдельно, картинки не меняются.
+
+| Блок MCP | Текст в результате |
+|---|---|
+| `text` | как есть |
+| `image` при `ctx.supportsImages` | отдельный `ImageContent` (вне ограды) |
+| `image` без поддержки картинок | `[image omitted: the model does not accept images (<mimeType>)]` |
+| `audio` | `[audio omitted: <mimeType>, <n> bytes]` |
+| `resource` с `text` | `<resource uri="<uri>">\n<text>\n</resource>` |
+| `resource` с `blob` | `[binary resource <uri>, <n> bytes, not shown]` |
+| `resource_link` | `[resource link: <uri> (<name>)]` |
+| неизвестный `type` | `[unsupported content: <type>]` |
+| пустой `content` и есть `structuredContent` | канонический JSON `structuredContent` |
+| пустой `content` без `structuredContent` | `[MCP tool returned no content]` |
+
+`isError: true` → `ToolExecutionResult(isError: true)`, outcome `failed`; содержимое тоже
+огораживается. Усечение — общее правило головы (§6.3.5). MCP-инструменты станут `spillable`
+(`spillDirection: head`, §17.4) с change `add-agent-core-output-spill`; до него огромный результат
+усекается.
+
+**Описание инструмента** передаётся модели как есть, но не длиннее 2048 символов (рун Unicode):
+длиннее — первые 2048 символов (по границе символа) и суффикс
+`\n[Description truncated: <n> characters omitted.]`, лог `mcp.tool.description_truncated`. Описание
+уходит в схемах каждого запроса и не огораживается, поэтому длинный текст сервера тратит контекст
+и расширяет поверхность prompt injection; описания вложенных свойств `inputSchema` не обрезаются.
+Инструмент без `name` или с `inputSchema` не-объектом пропускается (`mcp.tool.invalid`).
+
+**Отмена, таймаут, ошибки.** Отмена хода доходит до сервера сигналом своего транспорта и эпохи
+(stdio — `notifications/cancelled`; streamable HTTP modern — закрытие потока ответа), ожидание
+снимается сразу, outcome `cancelled`. Таймаут `tools/call` — константа 10 минут (ключ конфигурации
+вводит `add-agent-configuration`). После обрыва потока `tools/call` не повторяется: повтор может
+удвоить побочный эффект. Сбои — значения результата (TOOL-3), ход продолжается; тексты `isError`
+видит модель:
+
+| Ситуация | Текст |
+|---|---|
+| сервер упал после подключения | `MCP server <id> is not connected. Continue without it.` |
+| транспорт закрылся во время вызова (без повтора) | `MCP server <id> disconnected during the call: <reason>` |
+| таймаут | `MCP server <id> did not answer tools/call within <n> s.` |
+| ошибка JSON-RPC | `MCP server <id> returned an error: <message> (code <code>)` |
+| ответ не по схеме | `MCP server <id> returned an invalid tools/call result.` |
+| сервер просит ввод клиента (`input_required`) | `MCP server <id> asked for client input, which is not supported.` |
+
+Обновление набора по `notifications/tools/list_changed` применяется на границе шага
+(`prepareNextStep`, §5), внутри пакета вызовов набор не меняется; вызов уже объявленного инструмента,
+удалённого из набора, исполняется своим объектом.
 
 После MVP (§17.5.7) соединения ведёт `McpSupervisor` сессии: упавший сервер переподключается с
 задержкой 1…30 с, `notifications/tools/list_changed` заменяет инструменты сервера на границе
 шага, а вызов упавшего сервера возвращает фиксированный текст `isError`:
-`MCP server <id> is not connected (retry in <n>s). Continue without it or try later.` (сервер
-упал до вызова) или `MCP server <id> disconnected during the call: <reason>` (во время вызова,
+`MCP server <id> is not connected (retry in <n>s). Continue without it or try later.` вместо
+текста MVP (сервер упал до вызова); текст `disconnected during the call` остаётся (во время вызова,
 без повтора).
 
 ### lsp (после MVP) — tier `read`, у `rename` — `write`

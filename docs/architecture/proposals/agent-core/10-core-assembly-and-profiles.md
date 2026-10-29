@@ -82,7 +82,7 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final SessionStore sessions;
   final PermissionGate? gate;                      // null → interactiveApproval off
   final SecretStore? secrets;
-  final McpTransportFactory? mcp;                  // null → mcp off
+  final McpConnector? mcp;                         // null → mcp off; McpClientConnector из codelab_agent_mcp (этап 8, ниже)
   final ProjectContextLoader? projectContext;      // читает AGENTS.md через env хоста
   final NetworkAddressResolver? resolver;          // после MVP (§17.1.2): null → проверка SSRF только по литералам
   final SpillStore? spills;                        // этап 3 (§17.4.2): null → outputSpill off
@@ -112,6 +112,41 @@ abstract interface class SecretStore {
   Future<List<String>> names();
 }
 ```
+
+**Порты MCP (этап 8).** Ядро не создаёт MCP-клиента: клиент живёт в пакете над ядром
+(`codelab_agent_mcp`, §1.2), а ядру нужна одна точка, которая по списку серверов сессии отдаёт её
+инструменты. Поэтому в `AgentCoreServices.mcp` лежит `McpConnector`, а не фабрика транспортов;
+фабрика транспортов (`stdio` — `StdioMcpTransportFactory` из `codelab_agent_io`, `http` —
+`StreamableHttpTransportFactory` на `services.http`) уходит внутрь `McpClientConnector`. Порты
+(`lib/src/mcp/` ядра, без протокола MCP и JSON-RPC):
+
+```dart
+abstract interface class McpConnector {            // AgentCoreServices.mcp
+  Set<String> get transports;                      // 'stdio', 'http' — для проверки HOST-3
+  Future<McpSessionTools> connect(McpConnectRequest request);   // sessionId, cwd, servers, reservedNames, logger, cancel
+}
+abstract interface class McpSessionTools {         // объект MCP-части одной сессии
+  List<AgentTool> get tools;                       // в порядке регистрации (§6.4)
+  List<McpServerSummary> get servers;              // для секции mcp (§11.5)
+  McpToolsUpdate? takeUpdate();                    // ожидающее tools/list_changed; ядро забирает на границе шага
+  Future<void> replaceServers(List<McpServerConfig> servers);   // повторный session/load открытой сессии (§13.5)
+  Future<void> close();
+}
+abstract interface class McpTransport {            // транспорт уровня сообщений: одно сообщение — один JSON-текст
+  String get kind;                                 // 'stdio' | 'http'
+  Stream<String> get incoming;
+  Future<void> send(String message, {Map<String, String> headers = const {}});
+  Future<void> abandon(Object requestId);          // HTTP: закрыть поток ответа; stdio: ничего
+  Future<void> get done;
+  Future<void> close();                            // идемпотентно
+}
+abstract interface class McpTransportFactory {     // реализует хост; stdio — в codelab_agent_io
+  Set<String> get transports;
+  Future<McpTransport> open(McpServerConfig server, {required String cwd, required CancelToken cancel});
+}
+```
+
+Решения — `openspec/changes/add-agent-mcp-client/design.md` (D3, D6).
 
 Реализации: связка ключей ОС в `codelab_agent_io` (Keychain, Secret Service, Credential Manager) и
 хранилище в памяти для тестов. Значения секретов никогда не попадают в логи: каждое прочитанное
@@ -281,7 +316,8 @@ buildAgentCore(profile, services, config, streamFunction):
 5. реестр инструментов:
      a. базовые: read, write, edit, update_plan
      b. shellExec → exec;  fileListing → ls, search
-     c. mcp → фабрика MCP-инструментов на сессию (подключаются при session/new, §13)
+     c. mcp → McpConnector: инструменты серверов подключаются на сессию (session/new, §13) и кладутся
+        в реестр сессии поверх базового (§6.4)
      d. после MVP: network и tools.web.enabled → web_fetch, web_search (после ls/search, до MCP, §17.1.2);
         skills → skill (на сессию, если SkillCatalog.modelVisible не пуст, §17.2.3);
         subagents.enabled → task (на сессию, enum типов из определений агентов, §17.3.2; при
@@ -328,7 +364,7 @@ buildAgentCore(profile, services, config, streamFunction):
 |---|---|
 | `shellExec` | `baseEnv` с настоящим `Shell.exec` (`LocalExecutionEnv` или `AcpClientExecutionEnv` при `terminal: true`) |
 | `fileListing` | `baseEnv is DirectoryListing` |
-| `mcp` | `McpTransportFactory`, умеющая каждый транспорт из набора capability |
+| `mcp` | `McpConnector`, у которого `transports` содержит каждый транспорт из набора capability (HOST-3) |
 | `compaction` | `StreamFunction` (всегда есть); модель резюме из каталога |
 | `sessionPersistence` | `SessionStore`, не являющийся `MemorySessionStore`, если transport не `memory`; после MVP для lease `file` — `SessionLeaseStore` (`FileSessionLeaseStore`) и `ProcessProbe` из `codelab_agent_io` (§17.6.8), без них lease — `process` |
 | `interactiveApproval` | `PermissionGate` |

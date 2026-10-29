@@ -14,9 +14,9 @@
 
 | Пакет | Ответственность | Зависит от | Запрещено |
 |---|---|---|---|
-| `packages/dart/codelab_agent_core` | типы сообщений, LLM-контракт и адаптеры провайдеров (HTTP через внедрённый клиент), цикл, инструменты, разрешения, сессии (формат и проекции), сжатие, промпты, `MemoryExecutionEnv`, `AgentRuntime` | чистый Dart, `package:http` (только интерфейс `Client`) | `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web`, `package:flutter`, `codelab_acp_protocol`, `codelab_acp_transports` |
-| `packages/dart/codelab_agent_io` | `LocalExecutionEnv` (файлы, процессы), файловый `JsonlSessionStore`, секреты из env и keychain, процессный транспорт для MCP stdio; после MVP — `LocalProcessLauncher` (§17.8.2), `FileSessionLeaseStore` и `ProcessProbe` (§17.6.8) | ядро, `dart:io` | Flutter, ACP |
-| `packages/dart/codelab_agent_mcp` | MCP-клиент: протокол, streamable HTTP, проекция MCP-инструментов в `AgentTool` | ядро | `dart:io` (stdio-процесс приходит портом из `_io`), Flutter, ACP |
+| `packages/dart/codelab_agent_core` | типы сообщений, LLM-контракт и адаптеры провайдеров (HTTP через внедрённый клиент), цикл, инструменты, разрешения, сессии (формат и проекции), сжатие, промпты, `MemoryExecutionEnv`, `AgentRuntime`, порты MCP (`McpConnector`, `McpTransport`, `McpTransportFactory`, `McpServerConfig`, правило имён `mcpToolName`; без протокола MCP, §6.4) | чистый Dart, `package:http` (только интерфейс `Client`) | `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web`, `package:flutter`, `codelab_acp_protocol`, `codelab_acp_transports` |
+| `packages/dart/codelab_agent_io` | `LocalExecutionEnv` (файлы, процессы), файловый `JsonlSessionStore`, секреты из env и keychain, `StdioMcpTransportFactory` — реализация порта `McpTransportFactory` ядра для MCP stdio (процесс, окружение по allowlist, завершение дерева); после MVP — `LocalProcessLauncher` (§17.8.2), `FileSessionLeaseStore` и `ProcessProbe` (§17.6.8) | ядро, `dart:io` | Flutter, ACP |
+| `packages/dart/codelab_agent_mcp` | MCP-клиент dual-era (modern `2026-07-28` и legacy `initialize`): кодек JSON-RPC, `McpClient`, streamable HTTP на внедрённом `http.Client`, проекция MCP-инструментов в `AgentTool` (`McpTool`), `McpClientConnector` — реализация порта `McpConnector` ядра, `FakeMcpServer` (`lib/testing.dart`) | ядро | `dart:io` (stdio-процесс приходит портом `McpTransportFactory` ядра, реализация — в `_io`), Flutter, ACP, клиентские пакеты |
 | `packages/dart/codelab_agent_lsp` | после MVP (§17.8): кадрирование `Content-Length`, JSON-RPC, `LspClient`, `LspPool`, кодеки позиций, планировщик `WorkspaceEdit`, инструмент `lsp`, `LspToolFactory` | ядро | `dart:io` (процесс приходит портом `ByteProcessLauncher`), Flutter, ACP |
 | `packages/dart/codelab_agent_a2a` | после MVP (§17.15): модели A2A в ProtoJSON, `A2aClient`, `A2aRemoteAgentConnector` (порт `RemoteAgentConnector` ядра), транспортно-независимый A2A-сервер `A2aRequestHandler`, `A2aPermissionGate` | ядро, `package:http` (интерфейс `Client`) | `dart:io` (HTTP-сервер — в `apps/codelab_agent`), Flutter, ACP |
 | `packages/dart/codelab_agent_acp` | ACP-сервер поверх `AgentRuntime`: `initialize`, `session/*`, проекция событий, `AcpClientExecutionEnv`, `AcpPermissionGate`, реплей `session/load` | ядро, `codelab_acp_protocol`, `codelab_acp_transports` | `dart:io`, Flutter |
@@ -52,7 +52,7 @@ flowchart TB
 
 | Пакет | Разрешённые `dependencies` |
 |---|---|
-| `codelab_agent_core` | `http`, `meta`, `collection`, `async`, `crypto` (SHA-256: ключ картинки C-16 §17.11.2.2, PKCE §17.10.6, снимок запроса §17.10.10; официальный пакет dart-lang на чистом Dart, работает в web) |
+| `codelab_agent_core` | `http`, `meta`, `collection`, `async`, `crypto` (SHA-256: суффикс имени MCP-инструмента §6.4, ключ картинки C-16 §17.11.2.2, PKCE §17.10.6, снимок запроса §17.10.10; официальный пакет dart-lang на чистом Dart, работает в web) |
 | `codelab_agent_io` | `codelab_agent_core`, `path`, `meta`, `async`, `yaml` (разбор конфига и frontmatter определений агентов и skills с позициями ошибок, §15, §15.8), `yaml_edit` (запись конфига с сохранением форматирования, §17.5.5), `toml` (только чтение устаревшего `codelab.toml`, §15.7) |
 | `codelab_agent_mcp` | `codelab_agent_core`, `http`, `meta`, `async` |
 | `codelab_agent_lsp` (после MVP, §17.8.2) | `codelab_agent_core`, `meta`, `async` |
@@ -95,7 +95,8 @@ packages/dart/codelab_agent_core/
   prompts/                         Markdown-исходники промптов (§11)
   tool/gen_prompts.dart            генератор prompts.g.dart (§11)
   lib/codelab_agent_core.dart      публичный экспорт: runtime/, события, порты, типы сообщений;
-                                   после MVP — SseDecoder и ServerSentEvent (§2.6) для codelab_agent_a2a
+                                   SseDecoder и ServerSentEvent (§2.6) — для codelab_agent_mcp (этап 8) и,
+                                   после MVP, codelab_agent_a2a
   lib/testing.dart                 только для тестов: ScriptedStreamFunction, FakeClock, … (§14.2)
   lib/src/
     util/      clock.dart ids.dart logger.dart canonical_json.dart posix_path.dart result.dart
@@ -122,6 +123,8 @@ packages/dart/codelab_agent_core/
     spill/     spill_store.dart spill_service.dart (этап 3, §17.4)
     subagents/ remote_agent.dart (после MVP: порт RemoteAgentConnector, §17.15.2)
     host/      host_profile.dart build_agent_core.dart services.dart
+    mcp/       mcp_server_config.dart mcp_transport.dart mcp_connector.dart mcp_tool_name.dart
+               (этап 8: порты и правило имён без протокола MCP; клиент — в codelab_agent_mcp)
     config/    core_config.dart config_tree.dart validate.dart (CoreConfig.fromLayers, §15)
     prompts/   prompts.g.dart compose.dart template.dart
     runtime/   agent_runtime.dart agent_session.dart
@@ -140,8 +143,10 @@ packages/dart/codelab_agent_io/
   lib/src/process/  local_process_launcher.dart (после MVP, §17.8.2)
 
 packages/dart/codelab_agent_mcp/
-  lib/codelab_agent_mcp.dart
-  lib/src/          protocol.dart streamable_http.dart mcp_client.dart mcp_tool.dart
+  lib/codelab_agent_mcp.dart       McpClientConnector, StreamableHttpTransportFactory, McpTransports
+  lib/testing.dart                 FakeMcpServer: в памяти и HTTP-обработчик для MockClient (§14)
+  lib/src/          json_rpc.dart protocol.dart mcp_client.dart streamable_http.dart
+                    mcp_tool.dart connector.dart
 
 packages/dart/codelab_agent_images/              после MVP (T-29, §17.11.2.1)
   lib/codelab_agent_images.dart    PureDartImagePreparer

@@ -22,11 +22,11 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
   - `DiscoverResult` с `2026-07-28` в `supportedVersions` → modern.
   - Распознанная modern-ошибка (`-32020`, `-32021`, `-32022`) или `DiscoverResult` без `2026-07-28` → нет общей версии. Соединение закрывается с `mcp.server.failed` и причиной `no common protocol version: server supports [...]`, отката на `initialize` НЕТ.
   - stdio: любая другая ошибка или отсутствие ответа за `min(5 с, connectTimeout / 2)` → legacy.
-  - HTTP: `400` без распознанной modern-ошибки в теле, другой `4xx` → legacy.
+  - HTTP: `4xx` без распознанной modern-ошибки (`-32020`, `-32021`, `-32022`) в теле → legacy; решает тело, а не статус, поэтому `400`, `404` или `405` с такой ошибкой — modern. `-32601` modern-ошибкой пробы не считается.
   - Эпоха SHALL кэшироваться на время жизни процесса (stdio) или на `origin` URL (HTTP) в памяти и определяться заново один раз, если кэш не подтвердился.
 - **Modern.** Каждый запрос SHALL нести `_meta` с `io.modelcontextprotocol/protocolVersion: "2026-07-28"`, `io.modelcontextprotocol/clientCapabilities: {}` и `io.modelcontextprotocol/clientInfo`. Клиент SHALL трактовать отсутствующий `resultType` как `complete`, а неизвестный — как ответ не по схеме. При `capabilities.tools.listChanged` клиент SHALL открывать `subscriptions/listen` с `toolsListChanged: true`.
 - **Legacy.** Клиент SHALL выполнить `initialize` с `protocolVersion: "2025-11-25"` и пустыми `capabilities`, принять в ответе `2025-11-25`, `2025-06-18` или `2025-03-26` (иначе `mcp.server.failed` с `unsupported protocol version <v>`) и отправить `notifications/initialized`. `initialize` НЕ SHALL отменяться уведомлением. Клиент SHALL отвечать на `ping` пустым результатом и принимать входящие пакеты JSON-RPC (массив).
-- **Обе эпохи.** `tools/list` SHALL читаться по всем страницам `nextCursor`, не больше 100 страниц. Запросы сервера, кроме legacy-`ping`, SHALL получать `-32601`. Исходящие id SHALL быть целыми числами без повторов в пределах соединения.
+- **Обе эпохи.** `tools/list` SHALL читаться по всем страницам `nextCursor`, не больше 100 страниц. Запросы сервера, кроме legacy-`ping`, SHALL получать `-32601`. Исходящие id SHALL быть целыми числами без повторов в пределах соединения. Пустая строка SHALL считаться допустимым курсором, а не концом списка. Инструмент с невалидным `x-mcp-header` (HTTP) или с `execution.taskSupport: "required"` при объявленном `tasks.requests.tools.call` (legacy) SHALL пропускаться с `mcp.tool.invalid` и `reason`, остальные инструменты регистрируются.
 
 Определённая эпоха SHALL логироваться `mcp.server.era`. Deprecated HTTP+SSE и `2024-11-05` НЕ SHALL поддерживаться.
 
@@ -152,7 +152,7 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 - **Legacy.**
   - `Mcp-Session-Id` из ответа на `initialize` шлётся в следующих запросах; `MCP-Protocol-Version` — для `2025-06-18` и `2025-11-25`.
   - GET-поток уведомлений открывается при `tools.listChanged` (`405` — потока нет).
-  - `404` при выданном `Mcp-Session-Id` — конец соединения.
+  - `404` при выданном `Mcp-Session-Id` — конец соединения (сознательное отступление от повторного `initialize` legacy: переподключения в MVP нет).
   - При закрытии — `DELETE` (best effort, 2 с).
   - Поток ответа, закрытый сервером до ответа после события с `id`, SHALL возобновляться `GET` с `Last-Event-ID` после паузы `retry` (без `retry` — 1 с), не больше 5 раз на запрос (`docs/protocols/mcp/specification/2025-11-25/basic/transports.md`). Это дочитывание того же ответа, а не новый `tools/call`.
 - **Повтор после обрыва.** Без возобновления оборванный запрос `tools/list` и `server/discover` SHALL повторяться один раз с новым id. `tools/call` НЕ SHALL повторяться автоматически, результат — «disconnected during the call».
