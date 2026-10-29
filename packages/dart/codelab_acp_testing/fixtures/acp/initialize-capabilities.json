@@ -5,7 +5,8 @@
     "02-Initialization.md#version-negotiation",
     "02-Initialization.md#client-capabilities",
     "02-Initialization.md#agent-capabilities",
-    "02-Initialization.md#implementation-information"
+    "02-Initialization.md#implementation-information",
+    "02-Initialization.md#mcp-capabilities"
   ],
   "description": "Клиент запрашивает версию 1 и объявляет fs.readTextFile, fs.writeTextFile и terminal; агент отвечает версией 1, capabilities loadSession, promptCapabilities, mcpCapabilities и sessionCapabilities.list, agentInfo и пустыми authMethods.",
   "goals": [
@@ -57,7 +58,7 @@
               "embeddedContext": true
             },
             "mcpCapabilities": {
-              "http": false,
+              "http": true,
               "sse": false
             },
             "sessionCapabilities": {

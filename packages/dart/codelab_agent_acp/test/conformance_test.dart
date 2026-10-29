@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show Implementation;
@@ -7,6 +9,8 @@ import 'package:codelab_agent_acp/codelab_agent_acp.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
+import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
+import 'package:codelab_agent_mcp/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/server_harness.dart' show JournalStore;
@@ -28,6 +32,39 @@ void main() {
       }
     });
   }
+
+  // acp-golden-fixtures «Формат golden-фикстуры ACP», сценарий «Лишний
+  // вызов MCP-сервера»: `after.mcpCalls` проверяет `verify()` фабрики.
+  test(
+    'an unexpected tools/call of a fake MCP server fails verify()',
+    () async {
+      final source = loadFixtureCorpus().firstWhere(
+        (f) => f.id == 'acp/mcp-stdio-tool-call',
+      );
+      final json =
+          jsonDecode(File(source.sourcePath!).readAsStringSync())
+              as Map<String, Object?>;
+      json['id'] = 'acp/mcp-extra-call';
+      json['after'] = {
+        'mcpCalls': {'fake': <Object?>[]},
+      };
+      final fixture = AcpFixture.fromJson(
+        json,
+        fileName: 'mcp-extra-call.json',
+      );
+
+      await expectLater(
+        runAgentFixture(fixture, startAgent),
+        throwsA(
+          isA<AgentFixtureFailure>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(contains('fake'), contains('echo')),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 /// Фабрика агента для драйвера (§14.9, шаг 5).
@@ -52,6 +89,7 @@ Future<AgentUnderTest> startAgent(
     clock: clock,
     cwd: setup.cwd,
   );
+  final mcp = _FixtureMcp(setup);
   final core = buildAgentCore(
     profile: HostProfile.of(setup.profile),
     services: AgentCoreServices(
@@ -63,6 +101,19 @@ Future<AgentUnderTest> startAgent(
       ids: SequentialIdGenerator(),
       sessions: store,
       models: FixedModelCatalog(config.models),
+      // Коннектор есть всегда: `mcpCapabilities.http` в `initialize` зависит
+      // от него (design.md change `add-agent-mcp-client`, D11), а серверы
+      // фикстуры берутся из `setup.mcp`.
+      mcp: McpClientConnector(
+        transports: McpTransports(
+          stdio: mcp.transports,
+          // HTTP-сервер фикстуры проходит через настоящий
+          // `StreamableHttpTransport` в итерации 3 (D15); до неё — пара в
+          // памяти.
+          http: mcp.transports,
+        ),
+        clock: clock,
+      ),
     ),
     config: CoreConfig(
       defaultModel: config.defaultModel,
@@ -89,17 +140,21 @@ Future<AgentUnderTest> startAgent(
     clock: clock,
   );
   unawaited(server.serve(transport));
-  return _ServedAgent(server, model);
+  return _ServedAgent(server, model, mcp);
 }
 
 final class _ServedAgent implements AgentUnderTest {
-  _ServedAgent(this._server, this._model);
+  _ServedAgent(this._server, this._model, this._mcp);
 
   final AcpAgentServer _server;
   final ScriptedStreamFunction _model;
+  final _FixtureMcp _mcp;
 
   @override
-  void verify() => _model.verify();
+  void verify() {
+    _model.verify();
+    _mcp.verify();
+  }
 
   @override
   Future<void> stop() => _server.shutdown(grace: Duration.zero);
@@ -246,6 +301,80 @@ final class _FixtureConfig {
       if (!known.contains(key)) {
         throw FormatException(
           '$path.$key: the fixture driver does not support this key',
+        );
+      }
+    }
+  }
+}
+
+/// Fake MCP-серверы фикстуры: `setup.mcp` → `FakeMcpServer`, `after.mcpCalls`
+/// → проверка в `verify()` (design.md change `add-agent-mcp-client`, D15).
+///
+/// Почему здесь, а не в драйвере: `codelab_acp_testing` не зависит от
+/// пакетов агента и MCP; он лишь отдаёт данные фабрике.
+final class _FixtureMcp {
+  _FixtureMcp(AgentFixtureSetup setup)
+    : _expected = setup.after?.mcpCalls ?? const {} {
+    for (final MapEntry(key: name, value: description) in setup.mcp.entries) {
+      servers[name] = FakeMcpServer(
+        era: switch (description.era) {
+          FixtureMcpEra.modern => FakeMcpEra.modern,
+          FixtureMcpEra.legacy => FakeMcpEra.legacy,
+        },
+        tools: [for (final tool in description.tools) _tool(tool)],
+        responses: {
+          for (final MapEntry(key: tool, value: result)
+              in description.results.entries)
+            tool: FakeToolResponse.result(result),
+        },
+      );
+    }
+    transports = FakeMcpTransportFactory(servers);
+  }
+
+  final Map<String, List<FixtureMcpCall>> _expected;
+  final servers = <String, FakeMcpServer>{};
+  late final FakeMcpTransportFactory transports;
+
+  static FakeMcpTool _tool(Map<String, Object?> json) => FakeMcpTool(
+    json['name']! as String,
+    title: json['title'] as String?,
+    description: json['description'] as String?,
+    inputSchema: json['inputSchema'] ?? const {'type': 'object'},
+    annotations: json['annotations'] as Map<String, Object?>?,
+    extra: {
+      for (final MapEntry(:key, :value) in json.entries)
+        if (!const {
+          'name',
+          'title',
+          'description',
+          'inputSchema',
+          'annotations',
+        }.contains(key))
+          key: value,
+    },
+  );
+
+  /// `after.mcpCalls`: точный список `tools/call` каждого сервера.
+  void verify() {
+    for (final MapEntry(key: name, value: expected) in _expected.entries) {
+      final server = servers[name];
+      if (server == null) {
+        throw StateError(
+          'after.mcpCalls names the MCP server "$name" that setup.mcp lacks',
+        );
+      }
+      final actual = [
+        for (final call in server.calls)
+          '${call['name']} ${jsonEncode(call['arguments'])}',
+      ];
+      final wanted = [
+        for (final call in expected)
+          '${call.name} ${jsonEncode(call.arguments)}',
+      ];
+      if (jsonEncode(actual) != jsonEncode(wanted)) {
+        throw StateError(
+          'MCP server "$name": expected tools/call $wanted, got $actual',
         );
       }
     }

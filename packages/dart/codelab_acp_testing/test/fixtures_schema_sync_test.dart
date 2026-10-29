@@ -79,4 +79,18 @@ void main() {
       fixtureLlmStopReasons,
     );
   });
+
+  // acp-golden-fixtures «Формат golden-фикстуры ACP», сценарий «Схема и
+  // загрузчик согласованы» (design.md change `add-agent-mcp-client`, D15).
+  test('setup.mcp and after.mcpCalls are in the schema and the loader', () {
+    expect(properties(objectSchema('setup')), contains('mcp'));
+    expect(properties(objectSchema('after')), contains('mcpCalls'));
+    expect(fixtureFormatKeys['setup'], contains('mcp'));
+    expect(fixtureFormatKeys['after'], contains('mcpCalls'));
+    expect(properties(objectSchema('mcpServer')), {'era', 'tools', 'results'});
+    expect(properties(objectSchema('mcpCall')), {'name', 'arguments'});
+    final era =
+        (objectSchema('mcpServer')['properties']! as Map)['era']! as Map;
+    expect((era['enum']! as List).toSet(), {'modern', 'legacy'});
+  });
 }

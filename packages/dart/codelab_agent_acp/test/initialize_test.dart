@@ -1,5 +1,7 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' hide SessionId;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
+import 'package:codelab_agent_mcp/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/server_harness.dart';
@@ -25,7 +27,8 @@ void main() {
           'audio': false,
           'embeddedContext': true,
         },
-        // MCP — этап 8: до него HTTP-серверы не подключаются (design.md, D12).
+        // Ядро без MCP (`AgentCoreServices.mcp == null`): HTTP-серверы не
+        // подключаются, поэтому `http: false` (design.md `add-agent-mcp-client`, D11).
         'mcpCapabilities': {'http': false, 'sse': false},
         'sessionCapabilities': {'list': <String, Object?>{}},
       },
@@ -36,6 +39,55 @@ void main() {
       },
       'authMethods': <Object?>[],
     });
+  });
+
+  // agent-acp-server «initialize», «Ответ codelab-app»: `http` — по плану
+  // ядра (capability `mcp` с транспортом `http`), `sse` — всегда `false`
+  // (`02-Initialization.md#mcp-capabilities`).
+  McpConnector fakeConnector(Clock clock) => McpClientConnector(
+    transports: McpTransports(
+      stdio: FakeMcpTransportFactory({}),
+      http: FakeMcpTransportFactory({}),
+    ),
+    clock: clock,
+  );
+
+  test('http is true when the core plan has the mcp transport http', () async {
+    h = await ServerHarness.start(mcp: fakeConnector);
+
+    final caps =
+        (await h.initialize()).resultMap['agentCapabilities']!
+            as Map<String, Object?>;
+
+    expect(caps['mcpCapabilities'], {'http': true, 'sse': false});
+  });
+
+  test('http is false when the profile narrows mcp to stdio', () async {
+    h = await ServerHarness.start(
+      mcp: fakeConnector,
+      narrow: const {
+        HostCapability.mcp: CapabilityTransport({'stdio'}, 'тест'),
+      },
+    );
+
+    final caps =
+        (await h.initialize()).resultMap['agentCapabilities']!
+            as Map<String, Object?>;
+
+    expect(caps['mcpCapabilities'], {'http': false, 'sse': false});
+  });
+
+  test('http is false when the mcp capability is off', () async {
+    h = await ServerHarness.start(
+      mcp: fakeConnector,
+      narrow: const {HostCapability.mcp: CapabilityOff('тест')},
+    );
+
+    final caps =
+        (await h.initialize()).resultMap['agentCapabilities']!
+            as Map<String, Object?>;
+
+    expect(caps['mcpCapabilities'], {'http': false, 'sse': false});
   });
 
   test('without sessionPersistence there is no load and no list', () async {

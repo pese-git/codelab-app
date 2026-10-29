@@ -77,6 +77,72 @@ void main() {
       );
     });
 
+    // design.md change `add-agent-mcp-client`, D11: неизвестный `type`
+    // не роняет весь `session/new`, а сохраняется как вариант `unknown`.
+    test('an MCP server of unknown type is kept as McpServerUnknown', () {
+      final raw = <String, Object?>{
+        'type': 'websocket',
+        'name': 'future',
+        'extra': 1,
+      };
+      final server = McpServer.fromJson(raw);
+
+      expect(server, isA<McpServerUnknown>());
+      final unknown = server as McpServerUnknown;
+      expect(unknown.type, 'websocket');
+      expect(unknown.name, 'future');
+      expect(server.toJson(), raw);
+    });
+
+    test('an unknown MCP server without a string name keeps name null', () {
+      final server = McpServer.fromJson({
+        'type': 'websocket',
+        'url': 'wss://x',
+      });
+
+      expect(server, isA<McpServerUnknown>());
+      expect((server as McpServerUnknown).name, isNull);
+    });
+
+    test('a new session request with an unknown MCP server round-trips', () {
+      final json = <String, Object?>{
+        'cwd': '/workspace/project',
+        'mcpServers': [
+          {'type': 'websocket', 'name': 'future', 'url': 'wss://x'},
+        ],
+      };
+      final request = NewSessionRequest.fromJson(json);
+
+      expect(request.mcpServers.single, isA<McpServerUnknown>());
+      expect(request.toJson()['mcpServers'], json['mcpServers']);
+    });
+
+    test('known MCP types stay strict: extra key, missing field', () {
+      expect(
+        () => McpServer.fromJson({
+          'type': 'http',
+          'name': 'web',
+          'url': 'https://x',
+          'headers': <Object?>[],
+          'extra': 1,
+        }),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => McpServer.fromJson({'type': 'http', 'name': 'web'}),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+      expect(
+        () => McpServer.fromJson({
+          'type': 'sse',
+          'name': 'e',
+          'url': 'https://x',
+          'extra': 1,
+        }),
+        throwsA(isA<JsonRpcProtocolException>()),
+      );
+    });
+
     test('an MCP server without type and command is rejected', () {
       expect(
         () => McpServer.fromJson({
@@ -320,7 +386,7 @@ void main() {
         throwsA(isA<JsonRpcProtocolException>()),
       );
       expect(
-        () => McpServer.fromJson({'type': 'websocket'}),
+        () => McpServer.fromJson({'type': 42, 'name': 'x'}),
         throwsA(isA<JsonRpcProtocolException>()),
       );
       expect(

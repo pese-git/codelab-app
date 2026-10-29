@@ -6,7 +6,8 @@
     "13-Session Config Options.md#initial-state",
     "13-Session Config Options.md#option-ordering",
     "13-Session Config Options.md#relationship-to-session-modes",
-    "14-Slash Commands.md#advertising-commands"
+    "14-Slash Commands.md#advertising-commands",
+    "02-Initialization.md#mcp-capabilities"
   ],
   "description": "После initialize клиент создаёт сессию с абсолютным cwd и без MCP-серверов; агент отвечает sessionId, режимами (modes) и configOptions mode и model в порядке важности, затем после ответа присылает available_commands_update.",
   "setup": {
@@ -60,7 +61,7 @@
               "embeddedContext": true
             },
             "mcpCapabilities": {
-              "http": false,
+              "http": true,
               "sse": false
             },
             "sessionCapabilities": {

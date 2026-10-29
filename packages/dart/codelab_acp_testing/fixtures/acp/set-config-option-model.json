@@ -4,7 +4,8 @@
     "13-Session Config Options.md#from-the-client",
     "13-Session Config Options.md#initial-state",
     "13-Session Config Options.md#configoptionvalue",
-    "01-Overview.md#error-handling"
+    "01-Overview.md#error-handling",
+    "02-Initialization.md#mcp-capabilities"
   ],
   "description": "Сессия с опциями mode и model (scripted/m1, scripted/m2); клиент меняет model на scripted/m2 и получает ответ с полным снимком всех опций без отдельного config_option_update; затем просит scripted/m9, которого нет в options, и получает ошибку -32602, значение остаётся scripted/m2.",
   "goals": [
@@ -69,7 +70,7 @@
               "embeddedContext": true
             },
             "mcpCapabilities": {
-              "http": false,
+              "http": true,
               "sse": false
             },
             "sessionCapabilities": {

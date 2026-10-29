@@ -1,0 +1,13 @@
+{
+  "tools": [
+    {
+      "name": "echo",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "text": { "type": "string" } },
+        "required": ["text"]
+      }
+    }
+  ],
+  "results": { "echo": "hi" }
+}

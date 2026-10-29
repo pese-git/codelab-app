@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' hide SessionId;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
+import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
+import 'package:codelab_agent_mcp/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/server_harness.dart';
@@ -126,24 +128,219 @@ void main() {
     expect(present.error, isNull);
   });
 
-  test('an MCP server is skipped with mcp.server.skipped', () async {
-    h = await ServerHarness.start();
+  // --- MCP-серверы сессии (agent-acp-server «session/new», шаг 2; D11) ---
+
+  const stdioFake = {
+    'name': 'fake',
+    'command': 'fake-mcp',
+    'args': ['--stdio'],
+    'env': [
+      {'name': 'TOKEN', 'value': 'first'},
+      {'name': 'TOKEN', 'value': 'last'},
+    ],
+  };
+  const httpWeb = {
+    'type': 'http',
+    'name': 'web',
+    'url': 'https://example.com/mcp',
+    'headers': [
+      {'name': 'Authorization', 'value': 'Bearer x'},
+      {'name': 'X-Second', 'value': '2'},
+    ],
+  };
+
+  List<Map<String, Object?>> skipped() => [
+    for (final e in h.logger.eventsOf('mcp.server.skipped')) e.fields,
+  ];
+
+  test(
+    'stdio and http servers map to McpServerConfig of the session',
+    () async {
+      final spy = SpyMcpConnector();
+      h = await ServerHarness.start(mcp: (_) => spy);
+      await h.initialize();
+
+      final response = await newSession(
+        '/work/demo',
+        mcpServers: [stdioFake, httpWeb],
+      );
+
+      expect(response.error, isNull);
+      final servers = spy.requests.single.servers;
+      expect(servers, hasLength(2));
+      final stdio = servers[0] as McpStdioServerConfig;
+      expect(stdio.name, 'fake');
+      expect(stdio.command, 'fake-mcp');
+      expect(stdio.args, ['--stdio']);
+      // При повторе имени побеждает последнее значение.
+      expect(stdio.env, {'TOKEN': 'last'});
+      expect(stdio.origin, McpServerOrigin.session);
+      final http = servers[1] as McpHttpServerConfig;
+      expect(http.url, Uri.parse('https://example.com/mcp'));
+      expect(http.headers, [('Authorization', 'Bearer x'), ('X-Second', '2')]);
+      expect(http.origin, McpServerOrigin.session);
+      expect(skipped(), isEmpty);
+    },
+  );
+
+  test('an sse server is skipped with mcp.server.skipped', () async {
+    final spy = SpyMcpConnector();
+    h = await ServerHarness.start(mcp: (_) => spy);
     await h.initialize();
 
     final response = await newSession(
       '/work/demo',
       mcpServers: [
         {
-          'name': 'github',
-          'type': 'http',
-          'url': 'https://example.com/mcp',
+          'type': 'sse',
+          'name': 'old',
+          'url': 'https://example.com/sse',
           'headers': <Object?>[],
         },
+        stdioFake,
       ],
     );
 
     expect(response.error, isNull);
-    expect(h.logger.eventsOf('mcp.server.skipped'), hasLength(1));
+    expect(skipped(), [containsPair('server', 'old')]);
+    expect(skipped().single, {
+      'server': 'old',
+      'transport': 'sse',
+      'reason': 'transport sse is not supported',
+    });
+    // Остальные серверы передаются ядру.
+    expect([for (final s in spy.requests.single.servers) s.name], ['fake']);
+  });
+
+  test('an unknown transport is skipped and the session is created', () async {
+    final spy = SpyMcpConnector();
+    h = await ServerHarness.start(mcp: (_) => spy);
+    await h.initialize();
+
+    final response = await newSession(
+      '/work/demo',
+      mcpServers: [
+        {'type': 'websocket', 'name': 'future', 'url': 'wss://x', 'extra': 1},
+        stdioFake,
+      ],
+    );
+
+    expect(response.error, isNull);
+    expect(response.resultMap['sessionId'], isA<String>());
+    expect(skipped().single, {
+      'server': 'future',
+      'transport': 'websocket',
+      'reason': 'unknown transport',
+    });
+    expect([for (final s in spy.requests.single.servers) s.name], ['fake']);
+  });
+
+  test('an unknown transport without a name is skipped too', () async {
+    h = await ServerHarness.start(mcp: (_) => SpyMcpConnector());
+    await h.initialize();
+
+    final response = await newSession(
+      '/work/demo',
+      mcpServers: [
+        {'type': 'websocket', 'url': 'wss://x'},
+      ],
+    );
+
+    expect(response.error, isNull);
+    expect(skipped().single, containsPair('reason', 'unknown transport'));
+  });
+
+  test('a known type stays strict: http without url is -32602', () async {
+    h = await ServerHarness.start(mcp: (_) => SpyMcpConnector());
+    await h.initialize();
+
+    final response = await newSession(
+      '/work/demo',
+      mcpServers: [
+        {'type': 'http', 'name': 'web', 'headers': <Object?>[]},
+      ],
+    );
+
+    expect(response.errorCode, jsonRpcInvalidParamsCode);
+    expect(
+      await h.store.list(),
+      isA<SessionPage>().having((p) => p.items, 'items', isEmpty),
+    );
+  });
+
+  test('a server that fails to connect is not a request error', () async {
+    h = await ServerHarness.start(
+      mcp: (clock) => McpClientConnector(
+        transports: McpTransports(
+          stdio: FakeMcpTransportFactory(
+            {},
+            failures: {'fake': 'spawn failed: not found'},
+          ),
+        ),
+        clock: clock,
+      ),
+      narrow: const {
+        HostCapability.mcp: CapabilityTransport({'stdio'}, 'тест'),
+      },
+    );
+    await h.initialize();
+
+    final response = await newSession('/work/demo', mcpServers: [stdioFake]);
+
+    expect(response.error, isNull);
+    expect(h.logger.eventsOf('mcp.server.failed'), hasLength(1));
+  });
+
+  test('tools of a connected server are visible from the first turn', () async {
+    final fake = FakeMcpServer(tools: [const FakeMcpTool('echo')]);
+    final old = FakeMcpServer(
+      era: FakeMcpEra.legacy,
+      tools: [const FakeMcpTool('echo')],
+    );
+    h = await ServerHarness.start(
+      steps: [
+        {
+          'reply': [
+            {'text': 'ok'},
+          ],
+        },
+      ],
+      mcp: (clock) => McpClientConnector(
+        transports: McpTransports(
+          stdio: FakeMcpTransportFactory({'fake': fake, 'old': old}),
+          http: FakeMcpTransportFactory({}),
+        ),
+        clock: clock,
+      ),
+    );
+    await h.initialize();
+    final id =
+        (await newSession(
+              '/work/demo',
+              mcpServers: [
+                {
+                  'name': 'fake',
+                  'command': 'x',
+                  'args': <Object?>[],
+                  'env': <Object?>[],
+                },
+                {
+                  'name': 'old',
+                  'command': 'y',
+                  'args': <Object?>[],
+                  'env': <Object?>[],
+                },
+              ],
+            )).resultMap['sessionId']!
+            as String;
+    await h.client.next();
+
+    expect((await h.prompt(id, 'hi')).error, isNull);
+
+    expect(
+      h.toolsSeen.single,
+      containsAll(['mcp__fake__echo', 'mcp__old__echo']),
+    );
   });
 
   test('the session journal starts with model_change', () async {

@@ -71,6 +71,42 @@ void main() {
     },
   ];
 
+  // design.md change `add-agent-mcp-client`, D15: драйвер только загружает
+  // `setup.mcp` и `after.mcpCalls` и отдаёт их фабрике агента.
+  test('setup.mcp and after.mcpCalls reach the agent factory', () async {
+    late AgentFixtureSetup seen;
+
+    await runAgentFixture(
+      fixture(
+        promptFrames,
+        setup: const {
+          'cwd': '/work/demo',
+          'mcp': {
+            'fake': {
+              'tools': [
+                {
+                  'name': 'echo',
+                  'inputSchema': {'type': 'object'},
+                },
+              ],
+            },
+          },
+        },
+        after: const {
+          'mcpCalls': {'fake': <Object?>[]},
+        },
+      ),
+      (transport, setup) async {
+        seen = setup;
+        return _StubAgent(transport, chunks: ['Hello ', 'there']);
+      },
+    );
+
+    expect(seen.mcp['fake']!.era, FixtureMcpEra.modern);
+    expect(seen.mcp['fake']!.tools.single['name'], 'echo');
+    expect(seen.after!.mcpCalls['fake'], isEmpty);
+  });
+
   test('matching frames pass; the setup reaches the agent', () async {
     late _StubAgent agent;
     late AgentFixtureSetup seen;

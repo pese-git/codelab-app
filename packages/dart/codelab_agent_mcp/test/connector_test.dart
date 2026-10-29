@@ -66,6 +66,27 @@ void main() {
     expect(connector({}).transports, {'stdio', 'http'});
   });
 
+  test(
+    'the transport gets a logger that carries the session_id (D13)',
+    () async {
+      final factory = FakeMcpTransportFactory({
+        'fake': _server(['t']),
+      });
+      final c = McpClientConnector(
+        transports: McpTransports(stdio: factory),
+        clock: h.clock,
+      );
+
+      await c.connect(request([_stdio('fake')]));
+      factory.loggers.single.log(LogLevel.info, 'mcp.server.closed');
+
+      expect(
+        h.logger.eventsOf('mcp.server.closed').single.fields['session_id'],
+        's1',
+      );
+    },
+  );
+
   group('registration order', () {
     test('follows the list, not the order of connections', () async {
       final slow = _server(['slow_tool'], slow: true);

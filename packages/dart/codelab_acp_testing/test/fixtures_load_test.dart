@@ -65,16 +65,36 @@ const _stage4Fixtures = {
   'acp/ws-auth-bearer-required',
 };
 
+/// MCP-фикстуры этапа 8 итерации 2 (design.md change `add-agent-mcp-client`,
+/// D15): все с ролью `agent`. `acp/mcp-http-tool-call` придёт в итерации 3
+/// вместе с настоящим `StreamableHttpTransport`.
+const _stage8McpFixtures = {
+  'acp/session-new-with-mcp',
+  'acp/mcp-tool-permission',
+  'acp/mcp-stdio-tool-call',
+  'acp/mcp-result-fenced',
+  'acp/set-mode-plan-rejects-mcp-write',
+};
+
 void main() {
   final corpus = loadFixtureCorpus();
   final protocolDirectory = protocolSpecDirectory();
 
-  test('the corpus holds exactly the stage 0 and stage 4 fixtures', () {
+  test('the corpus holds exactly the stage 0, stage 4 and MCP fixtures', () {
     expect(_stage4Fixtures, hasLength(35));
     expect(corpus.map((f) => f.id).toSet(), {
       ..._stage0Fixtures,
       ..._stage4Fixtures,
+      ..._stage8McpFixtures,
     });
+  });
+
+  test('MCP fixtures are played by the agent role only', () {
+    for (final fixture in corpus.where(
+      (f) => _stage8McpFixtures.contains(f.id),
+    )) {
+      expect(fixture.roles, {FixtureRole.agent}, reason: fixture.id);
+    }
   });
 
   for (final fixture in corpus) {

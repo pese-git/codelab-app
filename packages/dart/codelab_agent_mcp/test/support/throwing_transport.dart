@@ -54,8 +54,14 @@ final class ThrowingFactory implements McpTransportFactory {
     McpServerConfig server, {
     required String cwd,
     required CancelToken cancel,
+    required Logger logger,
   }) async {
-    final transport = await inner.open(server, cwd: cwd, cancel: cancel);
+    final transport = await inner.open(
+      server,
+      cwd: cwd,
+      cancel: cancel,
+      logger: logger,
+    );
     if (failOpen && throwingFor.contains(server.name)) {
       throw StateError('open failed');
     }
