@@ -79,6 +79,8 @@ Date: 2026-10-21
 10. Наработки Python-агента — **второй источник решений** (proposal §7б): берутся по необходимости, только при условиях из §7б. Он работает параллельно, пока не закрыты цели уровня Must, затем удаляется вместе с Python TUI.
 11. **Конфигурация агента — YAML** (`config.yaml`, строгий профиль YAML 1.2; разбор и запись — в `codelab_agent_io`, agent-core-architecture §15). Устаревший `codelab.toml` Python-агента читается только для чтения, пока нет YAML-конфига, и переводится командой `codelab config migrate`; чтение удаляется отдельным OpenSpec change после этапа 9 (agent-core-architecture §15.7).
 
+    > Примечание (2026-10-29): решением пользователя в change `add-agent-configuration` чтение `codelab.toml`, зависимость `package:toml` и команда `codelab config migrate` отменены. Агент `codelab.toml` не читает; при его наличии без YAML-конфига пишет одно предупреждение `config.legacy_found`, настройки переносятся вручную по таблице agent-core-architecture §15.7. Это же относится к упоминаниям чтения `codelab.toml` в «Последствиях» и в плане этапов ниже. Текст решения выше не изменён: это историческая запись, действует примечание.
+
 Новые пакеты и направления зависимостей:
 
 ```text
@@ -196,6 +198,8 @@ apps/codelab_agent      → codelab_agent_acp, codelab_agent_io, codelab_agent_m
 * дисциплина атрибуции: проверка лицензий и `THIRD_PARTY_NOTICES.md` для воспроизведённых алгоритмов;
 * до удаления читателя `codelab.toml` агент поддерживает два входных формата конфига (YAML и устаревший TOML только для чтения) и зависимость `package:toml`.
 
+  > Примечание (2026-10-29, change `add-agent-configuration`): это последствие отменено — агент читает только `config.yaml`, второго входного формата и `package:toml` нет (см. примечание к п. 11 решения).
+
 * после принятия ADR нужно обновить:
   * `AGENTS.md` — §5 структура monorepo дополняется агентскими пакетами и правилами ядра (задача 0.11);
   * `docs/architecture/technology-stack.md`;
@@ -231,6 +235,8 @@ ADR принимается (Status: Accepted) **до начала этапа 0**
    * выделение `acp_client_kit` и `acp_client_io`;
    * первая версия `codelab_cli`, которая работает с Python-агентом.
 4. **Этап 8** (после этапа 4). MCP, единая конфигурация (`config.yaml`; `codelab.toml` — только чтение до `codelab config migrate`), хранилище секретов, `AGENTS.md`.
+
+   > Примечание (2026-10-29, change `add-agent-configuration`): `codelab.toml` не читается и `codelab config migrate` нет; при его наличии без `config.yaml` — одно предупреждение `config.legacy_found` и ручной перенос по agent-core-architecture §15.7 (см. примечание к п. 11 решения).
 5. **Этап 7** (после этапов 6 и 8: нужны загрузка конфига и хранилище секретов). `codelab_embedded` и `InProcessAcpLink` в обоих клиентах.
 6. **Этап 9 (MVP).** Цели уровня Must закрыты:
    * профиль по умолчанию в обоих клиентах — Dart-агент;

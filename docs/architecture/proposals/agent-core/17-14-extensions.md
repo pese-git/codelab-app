@@ -728,8 +728,6 @@ codelab config import-providers <file|-> [--force] [--dry-run] [--skip-agent]
 
 Правила доверия действуют как у `config set`: импорт в `--project` недоверенного проекта
 отклоняется шагом 2 `ConfigWriter.apply` (§17.5.5) — `providers.*` в слое 3 требует доверия.
-Пока активен `codelab.toml`, импорт получает `ConfigLegacyReadOnlyException` и печатает
-`Run "codelab config migrate" first: codelab.toml is read-only.` (код 1); экспорт из него работает.
 
 ### 17.14.4.5. Пример файла
 
@@ -780,7 +778,7 @@ required_env: []
   конфиге новое имя, строка `secret team/openrouter: missing — run: …`; файл с `api_key: sk-…` →
   `ConfigInlineSecretException`, код 1, конфиг не изменён (EXT-13).
 * `providers_import_trust_test.dart`: `--project` в недоверенном проекте → код 1 с подсказкой
-  `--local`; активный `codelab.toml` → код 1 и текст миграции.
+  `--local`.
 * `providers_roundtrip_test.dart`: экспорт с машины A, импорт в пустой конфиг B → итоговый
   `CoreConfig` B совпадает с A по `ModelCatalog`, `agent.*` и `llm.roles.*`.
 
@@ -1193,9 +1191,7 @@ capability нет; если параллельные разделы §17.10–§
 
 * §17.5.5, таблица подкоманд, строки:
   `| config export-providers [--layer user\|project\|local\|merged] [--output F] [--provider ID]… | файл обмена провайдеров без значений секретов (§17.14.4.3) |` и
-  `| config import-providers <file\|-> [--force] [--dry-run] [--skip-agent] [--map-secret OLD=NEW]… [--project\|--local] | слияние провайдеров, моделей и ролей одной apply; существующее не меняется без --force (§17.14.4.4) |`;
-  в абзац о `codelab.toml`: подкоманда записи `config import-providers` получает
-  `ConfigLegacyReadOnlyException`, `config export-providers` работает.
+  `| config import-providers <file\|-> [--force] [--dry-run] [--skip-agent] [--map-secret OLD=NEW]… [--project\|--local] | слияние провайдеров, моделей и ролей одной apply; существующее не меняется без --force (§17.14.4.4) |`.
 * §17.5.6, таблица применения: строки `| hooks.* (после MVP, §17.14.2.4) | следующий вызов инструмента |`
   и `| plugins.<name>.* (после MVP, §17.14.3.4) | новые сессии |`; в строку «только после
   перезапуска» добавить `plugins.enabled`.

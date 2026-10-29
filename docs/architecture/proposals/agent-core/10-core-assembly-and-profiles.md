@@ -181,6 +181,17 @@ followed`, `connection failed: <runtimeType>`, `HTTP session expired`; в лог
 (глобальный слой общий): проектные слои у каждого `cwd` свои, и правка проектного файла касается
 только сессий этого корня (§15.2, §17.5.6).
 
+**До снимков по корням (change `add-agent-configuration`, D9; снимки на каждый корень приходят с
+`ConfigSource` change 8.10).** `buildAgentCore` принимает один `CoreConfig` на процесс. Загрузчик
+читает проектные слои 3–4 для корня запуска хоста и возвращает два снимка: полный в
+`CoreConfig` и снимок без проектных слоёв в `CoreConfig.withoutProject`; `CoreConfig.projectRoot` —
+канонический корень запуска. `AgentRuntimeImpl` для `createSession` и `loadSession` берёт ключи
+сессии (`defaultModel`, `effort`, `permissions`, `budget`, `compaction`, `mcpServers`, `redact`) из
+`withoutProject`, если канонический `cwd` сессии не равен `projectRoot` (равенство, не
+вложенность), и пишет `config.session.outside_root` один раз на `cwd`. Ключи сборки (провайдеры и
+каталог, capability, сужение профиля, журналы) берутся из полного снимка. Так MCP-серверы и
+разрешения `allow` из `config.local.yaml` проекта `/A` не применяются к сессии в `/B`.
+
 ```dart
 final class CoreConfig {                           // результат загрузки конфига (§15), уже провалидирован
   final ModelCatalog models;                       // — ModelCatalog, §2.12.2
@@ -189,6 +200,9 @@ final class CoreConfig {                           // результат заг�
   final ToolsConfig tools;                         // в том числе switches: List<ToolSwitch> (§6.3.8)
   final PromptOverrides prompts; final List<McpServerConfig> mcpServers;
   final HooksConfig hooks; final PluginsConfig plugins;   // после MVP (§17.14)
+  // с change add-agent-configuration (8.5): providers: List<CatalogProvider>,
+  // providerProblems: Map<String, String> (id провайдера → причина недоступности ключа),
+  // redact: RedactSettings, projectRoot: String?, withoutProject: CoreConfig? (см. выше)
 }
 final class CorePlan {                             // что включено и почему
   final HostProfile profile;                       // уже суженный

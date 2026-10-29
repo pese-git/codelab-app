@@ -9,27 +9,38 @@
 Конфигурация задаёт провайдеров и модели, режим одобрения, бюджет хода, сжатие, MCP-серверы,
 лимиты инструментов, окружение команд и сужение профиля. Формат — YAML 1.2 в строгом профиле
 (§15.5, «Профиль YAML»); это единственный формат, который агент и клиенты читают и пишут.
-Устаревший `codelab.toml` Python-агента только читается, и только пока YAML-конфига нет (§15.7).
+`codelab.toml` Python-агента не читается: агент только предупреждает, что нашёл его, а перенос
+настроек делает пользователь вручную (§15.7, решение пользователя 2026-10-29).
 Конфиг читает **хост** (`apps/codelab_agent`, `codelab_embedded`) через `ConfigLoader` из
-`codelab_agent_io`. Там же три разборщика: `package:yaml` — чтение YAML с позициями узлов для
+`codelab_agent_io`. Там же два разборщика: `package:yaml` — чтение YAML с позициями узлов для
 сообщений об ошибках (тот же разборщик и тот же профиль читают frontmatter определений агентов,
-§15.8, и skills, §17.2.2); `package:yaml_edit` — запись с сохранением форматирования (§17.5.5);
-`package:toml` — только чтение устаревшего `codelab.toml` (§15.7). Схема и валидатор — чистая
-функция ядра `CoreConfig.fromLayers(List<ConfigTree>)` над уже разобранным деревом и позициями
-его узлов: мобильный и web-хосты передают ей настройки из хранилища приложения (без позиций) и
-получают ту же проверку. Ядро получает готовый провалидированный `CoreConfig` (§10.3), файлов не
-читает и разборщиков YAML и TOML не импортирует (CFG-5). Любая ошибка конфига — отказ при старте
+§15.8, и skills, §17.2.2); `package:yaml_edit` — запись с сохранением форматирования (§17.5.5;
+в зависимости пакета появляется вместе с первой записью конфига, не в этапе 8.5). Схема и
+валидатор — чистая функция ядра `CoreConfig.fromLayers(List<ConfigTree>)` над уже разобранным
+деревом и позициями его узлов: мобильный и web-хосты передают ей настройки из хранилища
+приложения (без позиций) и получают ту же проверку. Ядро получает готовый провалидированный
+`CoreConfig` (§10.3), файлов не читает и разборщиков YAML не импортирует (CFG-5). Любая ошибка конфига — отказ при старте
 с указанием файла, строки, столбца и ключа, а не тихое значение по умолчанию.
 
 ```dart
+/// Вид слоя: порядок и правила доверия (§15.2, §15.3).
+enum ConfigLayerKind { defaults, user, project, projectLocal, extra, environment, flags, appStorage }
+
 /// Разобранный слой конфига (codelab_agent_core/lib/src/config/config_tree.dart).
 final class ConfigTree {
-  final String source;                         // путь файла, "defaults", "env:…", "flags", "app-storage"
+  final ConfigLayerKind kind;
+  final String source;                         // путь файла, "defaults", "env", "flags", "app-storage"
   final Map<String, Object?> values;           // ключи — только String; значения — String, int, double, bool, List, Map
   final Map<String, ConfigPosition> positions; // путь ключа ("mcp.servers[github].url") → позиция; пусто — без строк
 }
 final class ConfigPosition { final int line, column; }   // нумерация с 1, как у package:yaml + 1
 ```
+
+Результат проверки — `ConfigLoadResult {config, host, issues, warnings, sources}` (§17.5.2).
+`ConfigIssue.kind` (`syntax | profile | unknownKey | type | value | inlineSecret | semantic`)
+даёт тестам и `ConfigInlineSecretException` класс проблемы без разбора текста. Ключи, которые
+читает хост, а не ядро (`sessions.dir`, `sessions.fsync`, `logging.level`, `logging.file`,
+сужение `profile.<name>.*`), лежат в `HostSettings` результата, а не в `CoreConfig`.
 
 ## 15.2. Расположение и приоритет
 
@@ -55,8 +66,11 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 (§17.11.10). После MVP списки `hooks.before_tool` и `hooks.after_tool` сливаются по `name`, как
 `mcp.servers` (§17.14.2.4).
 
-Файлы `codelab.toml` Python-агента в этой таблице отсутствуют: они не дополняют YAML-слои, а
-занимают места слоёв 2–4 целиком, только когда ни одного YAML-файла нет (§15.7).
+Файлы `codelab.toml` Python-агента в этой таблице отсутствуют: агент их не читает. Если нет ни
+одного YAML-файла слоёв 2–4 и не задан `--config`, загрузчик пишет одно предупреждение
+`config.legacy_found` (§15.7).
+Дополнительный слой 4а — `--config <path>` / `CODELAB_CONFIG` — читается всегда, когда задан,
+и не подчиняется правилам доверия §15.3: файл назвал тот, кто запускает агента.
 
 ## 15.3. Доверие к проектному конфигу
 
@@ -359,6 +373,11 @@ providers:
 | `url`, `headers` | string, map string→string | — | для `http`; `${ENV}` допустим; после MVP в значениях `headers` — и `${secret:<name>}` |
 | `enabled` | bool | `true` | выключение сервера без удаления |
 | `connect_timeout` | duration | `"10s"` | подключение при создании сессии |
+| `call_timeout` | duration | `"10m"`; допустимо `1s..24h`, иначе ошибка | срок одного вызова `tools/call` этого сервера; `McpClientConnector` берёт `server.callTimeout ?? options.callTimeout` (change `add-agent-configuration`, D10). У серверов из `session/new` ключа нет: в ACP такого параметра нет, у них действует умолчание коннектора |
+
+Другой `type` (`sse`, `websocket` и т. п.) в конфиге — ошибка: `mcp.servers[<name>].type: only stdio
+and http are supported`. В `session/new` неизвестный тип сервера пропускается, а конфиг — файл
+самого пользователя, и опечатка в нём не должна молча отключать сервер (CFG-1).
 
 **`sessions`**
 
@@ -523,9 +542,11 @@ loadConfig(cwd, env, flags):
      если файла нет → пропустить; иначе разобрать YAML (codelab_agent_io, package:yaml)
      и проверить профиль YAML (ниже) → ConfigTree(values, positions)
      синтаксическая ошибка или нарушение профиля → ConfigException(путь, строка, столбец, сообщение)
-   ни одного файла не найдено → legacyLayers(home, cwd) (§15.7): найденные codelab.toml
-     читаются в память как слои 2–4; YAML найден → legacy-файлы не читаются,
-     при их наличии — одно предупреждение config.legacy_ignored
+     config.yml рядом с config.yaml не читается: предупреждение config.file.ignored
+       {path, hint} с подсказкой переименовать файл (читать оба — значит выбирать между ними)
+   ни одного YAML-файла не найдено и --config не задан → проверка наличия codelab.toml,
+     auth.toml, codelab.local.toml (§15.7) без чтения: найден хотя бы один → одно
+     предупреждение config.legacy_found {files} на процесс и cwd; YAML найден → предупреждения нет
 3. для каждого слоя: validateKeys(layer, schema)          // строгость, ниже; позиции — из positions
      после MVP: проверка встроенных секретов (CFG-9, §17.5.4) → ConfigInlineSecretException
 4. для слоёв 3–4: применить правила доверия §15.3
@@ -537,6 +558,7 @@ loadConfig(cwd, env, flags):
 8. семантическая проверка:
      default_model, fallback, summary_model (если задан) и после MVP llm.roles.*.models существуют в каталоге моделей
      у каждого openai-compatible провайдера есть base_url
+     providers.<id>.kind — известный вид, иначе ошибка со списком видов (подмены mock нет, DF-15)
      api_key_env указывает на существующую переменную → иначе предупреждение (не ошибка:
        ключ может понадобиться только при выборе этой модели), ошибка — при выборе
      mcp.servers: уникальные name; stdio имеет command; http имеет url
@@ -579,12 +601,13 @@ loadConfig(cwd, env, flags):
          SecretNames.pattern; client_id и https-token_url ровно при oauth2_client_credentials;
          timeout ∈ 1m..24h; poll_interval ≤ poll_max_interval ∈ 1s..60s; server.skills — известные
          определения или general; server.permission_mode != autopilot; approval_timeout ∈ 10s..1h
-9. вернуть CoreConfig + список предупреждений (лог host.config.loaded)
+9. вернуть ConfigLoadResult (§17.5.2): CoreConfig и HostSettings либо список проблем, плюс
+   предупреждения (лог host.config.loaded)
 ```
 
 **Строгая валидация.** Неизвестный ключ в любом отображении — `ConfigException` с путём ключа и
 подсказкой ближайшего известного (расстояние Левенштейна ≤ 2):
-`config.yaml:12:3: неизвестный ключ compaction.reserve_token (может быть, reserve_tokens?)`.
+`config.yaml:12:3: compaction.reserve_token: unknown key (did you mean reserve_tokens?)`.
 Неверный тип — ошибка с ожидаемым типом. Исключения: отображения, чьи ключи — имена
 (`providers`, `models`, `headers`, `env`, `profile`, после MVP — `tools.web.search.backends`,
 `lsp.servers`, `lsp.servers.*.language_ids`, `a2a.agents`), проверяются по формату имени; значения
@@ -592,6 +615,18 @@ loadConfig(cwd, env, flags):
 `buildAgentCore` по `CodelabPlugin.settings` (§17.14.3.3). Строка и столбец
 берутся из `ConfigTree.positions`; у слоя без позиций (хранилище приложения, окружение, флаги)
 сообщение называет источник и путь ключа без строки.
+
+**Ключи без потребителя (`config.key.not_applied`).** Ключ, который есть в схеме §15.4, но которого
+пока никто не читает (на этапе 8.5: `tools.*`, `loop.*`, `exec.*`, `prompts.*`, `agent.fallback`,
+`agent.summary_model`, `permissions.timeout`, `model_catalog.*`, `providers.*.list_models*`,
+`logging.trace*`, `redact.*` и др.), проверяется по схеме, а явно заданный даёт одно предупреждение
+`config.key.not_applied {key, source}` на ключ за загрузку; значение по умолчанию предупреждения не
+даёт. Раздел верхнего уровня «после MVP» (`llm`, `images`, `skills`, `subagents`, `jobs`, `hooks`,
+`plugins`, `a2a`, `memory`, `steering`, `lsp`, `secrets`, `config` и др.) распознаётся по имени и
+даёт то же предупреждение без проверки типов: его схему введёт change, который добавит потребителя.
+Ключ, которого нет ни в схеме, ни в списке разделов после MVP, — `unknownKey` (CFG-1). Ошибка на
+документированном ключе сломала бы старт пользователю, который следует документу, а тихий приём
+противоречил бы CFG-1; предупреждение называет ключ и источник и запуск не ломает.
 
 **Профиль YAML.** Конфиг — YAML 1.2 с семантикой core schema; ограничения проверяет
 `codelab_agent_io` при разборе, до валидатора ядра, и каждое нарушение — `ConfigException` с
@@ -630,7 +665,7 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 2. Синтаксис — только `${NAME}`, где `NAME` — `[A-Za-z_][A-Za-z0-9_]*`; форма `$NAME` без скобок
    не поддерживается (это литерал).
 3. `$${` — литерал `${`.
-4. Переменная не задана → `ConfigException("mcp.servers[github].headers.Authorization: переменная GITHUB_TOKEN не задана")`.
+4. Переменная не задана → ошибка `mcp.servers[github].headers.Authorization: variable GITHUB_TOKEN is not set`.
    Пустая строка вместо отсутствующей переменной — источник тихих отказов авторизации.
 5. Результат подстановки повторно не раскрывается.
 6. Значения, полученные подстановкой в `headers` и `env`, добавляются в набор точных секретов
@@ -647,12 +682,12 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | Переменная | Флаг | Ключ |
 |---|---|---|
 | `CODELAB_HOME` | — | корень состояния |
-| `CODELAB_CONFIG` | `--config <path>` | дополнительный файл с приоритетом выше слоя 4; расширение `.yaml` или `.yml`, иначе ошибка использования (для `.toml` — с подсказкой `codelab config migrate <path>`, §15.7) |
-| `CODELAB_MODEL` | `--model <provider/model>` | `agent.default_model` |
+| `CODELAB_CONFIG` | `--config <path>` | дополнительный файл (слой 4а) с приоритетом выше слоя 4; расширение `.yaml` или `.yml`, иначе ошибка использования; для `.toml` — `--config needs a .yaml file; codelab.toml is not supported, see agent-core-architecture §15.7` (без подсказки `migrate`: команды нет) |
+| `CODELAB_MODEL` | `--model <provider/model>` | `agent.default_model`; без `--provider` выбирает модель из конфига, а `--model gpt` без косой черты — ошибка использования `--model needs <provider>/<model> without --provider` |
 | — | `--provider <openai-compatible\|anthropic>` (с этапа 4) | провайдер из флагов с id `cli`: `providers.cli.kind`; с ним `--model <model>` — id модели этого провайдера (`agent.default_model = "cli/<model>"`), флаг можно повторять: первое значение — модель по умолчанию, все — модели `providers.cli.models` |
 | — | `--base-url <url>` (с этапа 4) | `providers.cli.base_url` |
 | `CODELAB_API_KEY` | — (с этапа 4) | ключ провайдера `cli`: `providers.cli.api_key_env = "CODELAB_API_KEY"`; значение в флаги и логи не попадает |
-| — | `--llm-script <file.json>` (с этапа 4, только тесты) | вместо провайдера — `ScriptedStreamFunction` из файла `{"llm": {...}}` формата §14.7; провайдер `scripted`, `--model` — его модели; в справке бинаря скрыт |
+| — | `--llm-script <file.json>` (с этапа 4, только тесты) | вместо провайдера — `ScriptedStreamFunction` из файла `{"llm": {...}}` формата §14.7; провайдер `scripted`, `--model` — его модели; слои 2–4 (`$CODELAB_HOME` и проектные файлы) не читаются — конфиг подаётся явно `--config`, окружением и флагами; в справке бинаря скрыт |
 | — | `--sessions-dir <path>` (только тесты, только с `--llm-script`) | корень `JsonlSessionStore` сессий сценария вместо памяти: `loadSession` и `session/list` объявлены, `$CODELAB_HOME` не трогается; в справке бинаря скрыт (change `add-llm-script-session-store`) |
 | `CODELAB_PERMISSION_MODE` | `--permission-mode <mode>` | `permissions.mode` (`plan`, `ask`, `standard`, `accept-edits`, `bypass`); флаг допускает `autopilot` |
 | `CODELAB_PROFILE` | `--profile <name>` | профиль хоста (`agent-serve` у бинаря) |
@@ -662,7 +697,7 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | — | `--system-prompt <text>` | `prompts.system_text` (перекрывает и `prompts.system`); вместе с `--system-prompt-file` — ошибка (§11.6.1, E-08) |
 | — | `--system-prompt-file <path>` | `prompts.system` (перекрывает и `prompts.system_text`) |
 | — | `--append-system-prompt <text>` | `prompts.append_system_text` (перекрывает и `prompts.append_system`) |
-| `CODELAB_MAX_STEPS` | `--max-steps <n>` | `budget.max_steps` |
+| `CODELAB_MAX_STEPS` | `--max-steps <n>` (`codelab-agent serve`, этап 8.5) | `budget.max_steps` |
 | — | `--local-exec` | `exec.local_fallback = true` |
 | — | `--cwd <path>` | `cwd` для `codelab -p` |
 | — | `--role <role>=<provider/model>` (после MVP, L-10; можно повторять; в том числе `--role vision=<provider/model>`, §17.11.5) | `llm.roles.<role>.models = ["<provider/model>"]` на прогон |
@@ -676,8 +711,8 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | — | `--debug-llm-snapshot[=headers\|body]` (после MVP, L-27) | `logging.llm_snapshot` |
 | `CODELAB_DEBUG_LLM_SNAPSHOT` | — | `logging.llm_snapshot` |
 
-**До этапа 8 действуют только флаги и переменные этой таблицы.** Бинарь `codelab-agent` этапа 4
-файлы конфига (§15.2) не читает: провайдер, модель и ключ задаются `--provider`, `--base-url`,
+**До этапа 8 действуют только флаги и переменные этой таблицы** (с этапа 8.5 бинарь читает и файлы
+конфига; это абзац о прежнем минимуме). Бинарь `codelab-agent` этапа 4 файлы конфига (§15.2) не читает: провайдер, модель и ключ задаются `--provider`, `--base-url`,
 `--model` и `CODELAB_API_KEY`, режим — `--permission-mode`, остальные ключи — значения по
 умолчанию §15.4 (dart-agent-and-clients §9.9, задача 4.6). На этапе 8 YAML-конфиг (§15.2–§15.5)
 заменяет этот минимум, а флаги остаются переопределениями слоя 6. Флаги `--provider` и
@@ -699,129 +734,86 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true`; в обычной сборке она не читается и, как любая
 неизвестная `CODELAB_*`, даёт предупреждение.
 
-## 15.7. Совместимость с `codelab.toml` (только чтение)
+## 15.7. Перенос настроек Python-агента
 
-Пользователи Python-агента хранят настройки в `codelab.toml`. Новый агент читает эти файлы
-**только для чтения** и только пока у пользователя нет YAML-конфига; ни агент, ни клиенты TOML
-не пишут. Перевод в `config.yaml` — команда `codelab config migrate` (ниже). Конфиг нового
-агента в TOML никогда не выпускался, поэтому совместимость нужна только для `codelab.toml`.
+Пользователи Python-агента хранят настройки в `codelab.toml`. Dart-агент этот файл **не читает**:
+не разбирает, не переводит и не пишет (решение пользователя 2026-10-29, change
+`add-agent-configuration`, D12). Единственный формат конфига — YAML (§15.1). Чтобы пользователь не
+потерял настройки молча, агент только предупреждает, что нашёл старые файлы, а перенос он делает
+вручную по таблице ниже. Конфиг нового агента в TOML никогда не выпускался.
 
-**Где ищутся устаревшие файлы** — те же места и тот же порядок, что у Python-агента; каждый файл
-занимает место соответствующего YAML-слоя §15.2 и подчиняется его правилам доверия (§15.3):
+**Где ищутся файлы** — те же места, что у Python-агента (список путей; код Python-агента не
+копируется). Проверяется только существование файла (`isFileSync`): содержимое и размер не читаются
+и в лог не попадают, только пути.
 
-| Устаревший файл | Место слоя | Цель `config migrate` |
-|---|---|---|
-| `$CODELAB_HOME/codelab.toml` | слой 2 | `$CODELAB_HOME/config.yaml` |
-| `$CODELAB_HOME/auth.toml` | слой 2, поверх `codelab.toml` | тот же `$CODELAB_HOME/config.yaml` |
-| `<cwd>/codelab.toml` | слой 3 | `<cwd>/.codelab/config.yaml` |
-| `<cwd>/codelab.local.toml` | слой 4 | `<cwd>/.codelab/config.local.yaml` |
+| Файл | Куда переносить |
+|---|---|
+| `$CODELAB_HOME/codelab.toml` | `$CODELAB_HOME/config.yaml` (слой 2) |
+| `$CODELAB_HOME/auth.toml` | тот же `$CODELAB_HOME/config.yaml`: ключи — только ссылками, см. таблицу |
+| `<cwd>/codelab.toml` | `<cwd>/.codelab/config.yaml` (слой 3, правила доверия §15.3) |
+| `<cwd>/codelab.local.toml` | `<cwd>/.codelab/config.local.yaml` (слой 4) |
 
-`codelab.toml.example` не читается никогда — это шаблон.
+`codelab.toml.example` не ищется никогда — это шаблон.
 
-**Выбор источника** (шаг 2 §15.5, для каждого `cwd`):
+**Когда предупреждает.** Только если нет ни одного YAML-файла слоёв 2–4 и не задан `--config`
+(шаг 2 §15.5): одно предупреждение `config.legacy_found {files}` на процесс и `cwd`. При любом
+YAML-файле предупреждения нет: пользователь уже перешёл, повторять подсказку на каждом старте —
+шум. С `--llm-script` файлы не ищутся (слои 2–4 не читаются, §15.6). Текст предупреждения:
 
 ```text
-legacyLayers(home, cwd):
-1. yamlFound := существует хотя бы один из $CODELAB_HOME/config.yaml,
-     <cwd>/.codelab/config.yaml, <cwd>/.codelab/config.local.yaml или задан --config
-2. yamlFound:
-     устаревшие файлы не читаются; если хотя бы один существует — одно предупреждение
-     config.legacy_ignored {files} в логе (один раз на процесс и cwd)
-     вернуть []
-3. legacy := существующие файлы из таблицы выше, в её порядке; пусто → вернуть []
-4. для каждого файла: разобрать TOML (package:toml, codelab_agent_io);
-     синтаксическая ошибка → ConfigException(путь, строка, столбец, сообщение)
-5. перевести дерево по таблице соответствия ниже — тем же кодом, что и config migrate:
-     ключ из столбца «отброшен» → предупреждение config.legacy_key_dropped {file, key, reason}
-     неизвестный ключ → ConfigException("<файл>:<строка>: неизвестный ключ <путь>") —
-       ни подмены на значение по умолчанию, ни mock-провайдера (R-16, DF-15)
-     провайдер вне списка таблицы → ConfigException("llm.providers.foo: неизвестный провайдер")
-     [agents.definitions.*] → ConfigException с подсказкой перенести определения в
-       .codelab/agents/<name>.md (§15.8; config migrate делает это сам), как в YAML (DF-12)
-     литеральный api_key → ConfigInlineSecretException (CFG-9) с подсказкой
-       codelab secret set <name>; "${VAR}" → api_key_env = "VAR"
-6. результат — ConfigTree с source "legacy:<путь>" (позиции — строки TOML-файла); дальше —
-   шаги 3–9 §15.5 без изменений: строгая проверка, доверие, слияние, подстановка ${ENV}
-7. при старте одна подсказка в лог (warning config.legacy_active {files}) и, у CLI и
-   `codelab-agent` с TTY на stderr, строка:
-     Run "codelab config migrate" to convert codelab.toml to config.yaml.
+codelab.toml is not used by the Dart agent: <files>. Move the settings to config.yaml manually; the key mapping is in docs/architecture/proposals/agent-core/15-configuration.md, section 15.7.
 ```
 
-`ConfigWatcher` (§17.5.6) следит и за устаревшими файлами, и за путями YAML-слоёв: правка
-`codelab.toml` перечитывается как обычный слой, появление `config.yaml` переключает источник при
-следующей перезагрузке (и `codelab.toml` с этого момента игнорируется с предупреждением).
+`codelab-agent config check` и `codelab config check` печатают ту же строку как предупреждение
+(`warning: …`); код выхода от неё не меняется. Агент без `config.yaml` и без флагов провайдера
+стартует с ошибкой `agent.default_model: required` (код `64`), и предупреждение стоит рядом в stderr.
 
-**Только чтение.** Пока активный конфиг `cwd` получен из `codelab.toml`
-(`ConfigLoadResult.legacy == true`), `ConfigWriter.apply` в любой слой отказывает исключением
-`ConfigLegacyReadOnlyException(legacyFiles)` и ничего не пишет (§17.5.5): запись первого
-`config.yaml` молча выключила бы все настройки из `codelab.toml`. CLI на `config set|unset`,
-`provider add|remove`, `mcp add|remove` и `secret set`, если она меняла бы конфиг, печатает
-подсказку `Run "codelab config migrate" first: codelab.toml is read-only.` и выходит с кодом 1;
-страницы настроек и мастер провайдера в app показывают значения только для чтения с действием
-«Migrate to config.yaml» ([`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §12.4).
+**Как переносить.** Ключ из столбца «Новый ключ» записывается в `config.yaml` по схеме §15.4;
+строки с прочерком не переносятся. Отдельных правил для старых ключей нет: файл `config.yaml`
+проходит обычную строгую проверку (§15.5), поэтому неизвестный ключ, вид провайдера вне
+`openai-compatible | anthropic | gemini` и определения агентов в YAML (`agents.definitions`, DF-12)
+дают ошибку, а не подмену значением по умолчанию или провайдером `mock` (DF-15). Литеральный ключ API в
+конфиг не переносят (CFG-2): `api_key = "${VAR}"` превращается в `api_key_env: VAR`, а литерал
+хранится в переменной окружения или в хранилище секретов.
 
-**Команда `codelab config migrate [<путь>] [--print] [--project|--local]`** (та же у `codelab-agent`):
-
-1. Без `<путь>` — переводит все устаревшие файлы, найденные для текущего `cwd`, каждый в свою цель
-   по таблице выше (`codelab.toml` и `auth.toml` из `$CODELAB_HOME` — в один файл). С `<путь>` —
-   один указанный файл в `$CODELAB_HOME/config.yaml` (`--project` и `--local` выбирают слой 3 или 4).
-2. Перевод — та же функция, что в `legacyLayers` шаг 5; итог проходит валидацию §15.5 до записи.
-   Литеральный ключ API не переносится: команда завершается кодом 1, ничего не пишет и называет
-   ключ и команду `codelab secret set <name>`; значение в вывод не попадает.
-3. Запись — через `ConfigWriter` (`.lock`, временный файл, `fsync`, `rename`, §17.5.5), все цели
-   одной командой или ни одной. Цель уже существует → код 1, `<путь> already exists; nothing
-   written (use --print)`.
-4. Каждый отброшенный ключ — YAML-комментарий в начале соответствующего отображения:
-   `# migrate: dropped llm.temperature (not configurable)`. Определения
-   `[agents.definitions.*]` — файлы `.codelab/agents/<name>.md` (для глобального файла —
-   `$CODELAB_HOME/agents/<name>.md`); существующий файл не перезаписывается.
-5. `--print` печатает результат в stdout (перед каждой целью — комментарий `# --- <путь цели>`) и
-   ничего не пишет.
-6. `codelab.toml` и `auth.toml` не удаляются и не меняются. После записи команда печатает, что
-   устаревшие файлы теперь игнорируются и их можно удалить вручную.
-
-**Срок поддержки.** Чтение `codelab.toml` живёт, пока поддерживается Python-агент. После этапа 9
-(переключение профиля по умолчанию на Dart-агента, proposal §9.14) чтение объявляется устаревшим:
-к подсказке при старте добавляется срок удаления. Удаление читателя и зависимости `package:toml`
-из `codelab_agent_io` — отдельный OpenSpec change; команда `config migrate` удаляется вместе с ним.
-
-**Таблица соответствия** (общая для чтения в память и для `config migrate`):
+**Таблица соответствия** (для ручного переноса; своя запись схемы, не алгоритм чтения):
 
 | Старый ключ | Новый ключ | Примечание |
 |---|---|---|
-| `[llm] provider`, `model` | `agent.default_model = "<provider>/<model>"` | |
-| `[llm] temperature` | — (отброшен) | в MVP температура не настраивается; модели с рассуждениями её не принимают |
+| `[llm] provider`, `model` | `agent.default_model: "<provider>/<model>"` | модель всегда с префиксом провайдера: `openai/gpt-4o`, а не `gpt-4o` |
+| `[llm] temperature` | — (не переносится) | в MVP температура не настраивается; модели с рассуждениями её не принимают |
 | `[llm] max_tokens` | `providers.<id>.models.<m>.max_output_tokens` | для активной модели |
-| `[llm.timeout] connect` | `providers.<id>.connect_timeout` | для всех провайдеров |
+| `[llm.timeout] connect` | `providers.<id>.connect_timeout` | для каждого провайдера |
 | `[llm.timeout] read` | `providers.<id>.idle_timeout` | смысл уже: пауза между событиями потока |
 | `[llm.timeout] write`, `pool` | — | не нужны HTTP-клиенту Dart |
-| `[llm.providers.<id>] api_key = "${VAR}"` | `api_key_env = "VAR"` | литеральный ключ не переносится: печатается ошибка с просьбой перенести его в env или keychain |
+| `[llm.providers.<id>] api_key = "${VAR}"` | `api_key_env: VAR` | литеральный ключ не переносится: переменная окружения или хранилище секретов (CFG-2) |
 | `[llm.providers.<id>] base_url` | `providers.<id>.base_url` | |
 | `[llm.providers.<id>] default_model` | — | модель по умолчанию одна — `agent.default_model` |
-| провайдеры `openai`, `openrouter`, `zen`, `go`, `ollama`, `lmstudio` | `kind = "openai-compatible"` | |
-| провайдер `anthropic` | `kind = "anthropic"` | |
-| провайдер `litellm` | `kind = "openai-compatible"`, `base_url` прокси | вызов библиотеки заменён прокси LiteLLM как OpenAI-совместимым эндпоинтом |
+| провайдеры `openai`, `openrouter`, `zen`, `go`, `ollama`, `lmstudio` | `kind: openai-compatible` | |
+| провайдер `anthropic` | `kind: anthropic` | |
+| провайдер `litellm` | `kind: openai-compatible`, `base_url` прокси | вызов библиотеки заменён прокси LiteLLM как OpenAI-совместимым эндпоинтом |
+| провайдер `mock` | — (не переносится) | вида `mock` в `config.yaml` нет: `providers.<id>.kind: mock` — ошибка со списком видов (DF-15); для тестов есть `--llm-script` |
 | `[llm.providers.<id>.models.<m>] context_window`, `max_output_tokens` | те же ключи | |
-| `cost_per_input_token`, `cost_per_output_token` | `cost_input`, `cost_output` | ×1 000 000 (цена за токен → за миллион) |
-| `[llm.fallback] enabled`, `order` | `agent.fallback = [...]` | при `enabled = false` — пустой массив; `order` перечислял провайдеров, новый ключ — модели: берётся `default_model` каждого провайдера |
+| `cost_per_input_token`, `cost_per_output_token` | `cost_input`, `cost_output` | умножить на 1 000 000 (цена за токен → за миллион) |
+| `[llm.fallback] enabled`, `order` | `agent.fallback: [...]` | ключ проверяется, но до `ModelRoleResolver` не применяется (`config.key.not_applied`); `order` перечислял провайдеров, новый ключ — модели |
 | `[llm.fallback] strategy`, `max_attempts`, `retry_on` | — | повторы задаются `transient_retries`, `rate_limit_retries` |
-| `[agents] default_model` | `agent.default_model` | если отличается от `[llm]`, побеждает `[agents]` |
+| `[agents] default_model` | `agent.default_model` | если отличается от `[llm]`, берут значение из `[agents]` |
 | `[agents] context_window_limit` | `compaction.context_window_cap` | |
 | `[agents] max_steps` | — | это шаги мультиагентной оркестрации, не хода; `budget.max_steps` задаётся отдельно |
-| `[agents] strategy`, `fallback_strategy`, `slicer_*`, `max_sliced_tokens`, `debug` | — | мультиагентности и Token-Slicing нет в MVP |
-| `[agents.context]` | — | Context Manager вне MVP |
-| `[agents.definitions.*]` | Markdown-файлы `.codelab/agents/<name>.md` (§15.8) | `config migrate` создаёт по файлу на определение; при чтении `codelab.toml` в память и в `config.yaml` (ключ `agents.definitions`) — ошибка с подсказкой о переносе (DF-12) |
+| `[agents] strategy`, `fallback_strategy`, `slicer_*`, `max_sliced_tokens`, `debug` | — | разделы Python-рантайма: мультиагентности и Token-Slicing нет в MVP |
+| `[agents.context]` | — | Context Manager вне MVP (раздел Python-рантайма) |
+| `[agents.definitions.*]` | Markdown-файлы `.codelab/agents/<name>.md` (§15.8) | по файлу на определение вручную; ключ `agents.definitions` в `config.yaml` — ошибка с этой подсказкой (DF-12) |
 | `[tui]` | — | настройки клиента, не агента |
-| `[[mcp.servers]]` | `mcp.servers` (список) | поля совпадают; `env` и `headers` — из массива `{name, value}` в отображение; `${VAR}` без значения теперь ошибка |
+| `[[mcp.servers]]` | `mcp.servers` (список) | поля совпадают; `env` и `headers` — из массива `{name, value}` в отображение; `${VAR}` без значения — ошибка; `type` только `stdio` или `http` |
 | `codelab.local.toml` | `.codelab/config.local.yaml` | |
-| `~/.codelab/auth.toml` | слой 2 вместе с `$CODELAB_HOME/codelab.toml` | `api_key = "${VAR}"` → `api_key_env`; литеральный ключ — ошибка (CFG-9): ключи — только env или хранилище секретов |
+| `~/.codelab/auth.toml` | слой 2 вместе с `$CODELAB_HOME/codelab.toml` | `api_key = "${VAR}"` → `api_key_env`; литеральный ключ не переносят (CFG-2) |
 
 ## 15.8. Определения агентов в Markdown
 
 **Назначение.** Пользователь описывает специализированного агента (ревьюер, архитектор,
 документатор) одним Markdown-файлом: промпт, модель, разрешённые инструменты и режим. Клиент
 выбирает агента опцией конфигурации `agent`. Это сохраняет возможность текущего CodeLab и
-заменяет секции `[agents.definitions.*]` устаревшего `codelab.toml` (§15.7).
+заменяет секции `[agents.definitions.*]` не читаемого более `codelab.toml` (§15.7).
 
 **Расположение и приоритет.**
 
@@ -1096,10 +1088,10 @@ compaction:
 2. **CFG-2.** Ключ API не хранится в конфиге значением; только `api_key_env` или `api_key_secret`.
 3. **CFG-3.** Проектный конфиг без доверия не может расширить права агента: разрешающие правила, MCP-серверы, провайдеры и промпты из него игнорируются с предупреждением; режим одобрения — только ужесточается.
 4. **CFG-4.** `autopilot` включается только флагом запуска.
-5. **CFG-5.** Ядро получает только провалидированный `CoreConfig` и не читает файлы конфига; разборщики YAML и TOML (`yaml`, `yaml_edit`, `toml`) живут только в `codelab_agent_io`.
+5. **CFG-5.** Ядро получает только провалидированный `CoreConfig` и не читает файлы конфига; разборщики YAML (`yaml`, `yaml_edit`) живут только в `codelab_agent_io`; TOML агент не разбирает.
 6. CFG-6 … CFG-8 — определения агентов, §15.8.
 7. CFG-9 … CFG-19 — секреты, предконфигурация, запись и живая перезагрузка конфига, MCP-супервизор, реестр настроек (после MVP), §17.5.11.
-8. **CFG-20.** Агент и клиенты пишут конфиг только в YAML. Устаревший `codelab.toml` читается только при отсутствии YAML-файлов слоёв 2–4 и `--config`, через ту же таблицу соответствия, что `config migrate`, с той же строгостью (неизвестный ключ или провайдер — ошибка, не mock); при любом YAML-файле он игнорируется с одним предупреждением `config.legacy_ignored`; пока он активен, любая запись конфига отклоняется `ConfigLegacyReadOnlyException`; `config migrate` не меняет и не удаляет `codelab.toml`.
+8. **CFG-20.** Агент и клиенты читают и пишут конфиг только в YAML. `codelab.toml` Python-агента не читается; если нет ни одного YAML-файла слоёв 2–4 и не задан `--config`, а старый файл найден, загрузчик пишет одно предупреждение `config.legacy_found` с путями и ссылкой на §15.7 (решение пользователя 2026-10-29).
 9. **CFG-21.** Конфиг и YAML-frontmatter разбираются в одном профиле (§15.5): один документ, без якорей, ссылок, ключей слияния и тегов, ключи — только строки и без повторов, логические — только `true` и `false`; нарушение — ошибка с файлом, строкой и столбцом, а не тихое значение.
 
 ## 15.11. Обоснование решения
@@ -1117,12 +1109,14 @@ compaction:
   (`package:yaml_edit`), поэтому писателю (§17.5.5) не нужен собственный построчный редактор.
   Строгий профиль снимает известные ловушки YAML: `no`/`off` как логическое значение, скрытые
   связи через якоря, повторяющиеся ключи, которые молча перекрывают друг друга.
-* **Устаревший файл — только чтение, перевод — командой.** Пользователь Python-агента запускает
-  новый агент без подготовки: его `codelab.toml` читается через ту же таблицу, что и
-  `config migrate`, поэтому чтение и миграция не расходятся. Половина старых ключей не
-  действовала или меняет смысл: предупреждения при чтении и комментарии миграции показывают, что
-  отброшено. Запись в TOML потребовала бы второго писателя и второго формата навсегда; запрет
-  записи до миграции не даёт первому `config.yaml` молча отключить настройки из `codelab.toml`.
+* **Старый файл не читается, а только замечается.** Поддержка `codelab.toml` потребовала бы
+  второго формата и второй таблицы перевода ради временной совместимости: читателя, зависимости
+  `package:toml`, правил записи при активном старом файле и команды `config migrate`. Решение
+  пользователя 2026-10-29: файл не читается; взамен одно предупреждение `config.legacy_found` не
+  даёт потерять настройки молча, а таблица §15.7 делает ручной перенос быстрым. Половина старых
+  ключей не действовала или меняет смысл, и перенос вручную заставляет увидеть это. Прежняя
+  редакция (чтение в память и `config migrate`) снята этим решением; вернуть чтение можно только
+  отдельным OpenSpec change.
 
 ## 15.12. Как проверить
 
@@ -1133,13 +1127,13 @@ compaction:
 * `config_yaml_profile_test.dart` (`codelab_agent_io`): якорь и ссылка, `<<: *base`, тег `!!str`, второй документ, ключ `1:` и составной ключ, повторяющийся ключ (обе позиции в сообщении) → `ConfigException` со строкой и столбцом; `compaction.enabled: yes`, `on`, `off` → ошибка типа с подсказкой `use true or false`, а `shell_exec: off` в `profile.*` — строка; `"30s"` и `30s` равны; `output.max_lines: 2000` внутри `tools:` → неизвестный ключ с подсказкой вложенной формы; `key:` без значения → ошибка типа; пустой файл и файл из комментариев → пустой слой; flow-стиль и CRLF читаются так же, как блочный стиль и LF (CFG-21).
 * `config_validator_positions_test.dart` (ядро): `ConfigTree` с позициями → `ConfigIssue` со строкой и столбцом; тот же слой без позиций (хранилище приложения) → сообщение с источником и путём ключа без строки (CFG-1).
 * `agent_definition_parse_test.dart` и `skill_parse_test.dart` дополнены: якорь во frontmatter и `disable-model-invocation: yes` → ошибка по профилю §15.5 (CFG-21).
-* `config_reads_legacy_codelab_toml_test.dart` — критерий **`core/config-reads-legacy-codelab-toml`** (R-16): только `codelab.toml` с `[llm.providers.local]`, `[[mcp.servers]]` и `api_key = "${API_KEY}"` → провайдер с ключом из окружения и MCP-сервер, предупреждения `config.legacy_key_dropped` для `temperature`, подсказка `config migrate`; неизвестный провайдер `foo` → `ConfigException("llm.providers.foo: неизвестный провайдер")`, агент не стартует; неизвестный ключ → ошибка с путём и строкой; `[agents.definitions.reviewer]` → ошибка с подсказкой о Markdown (DF-12); литеральный ключ → `ConfigInlineSecretException` без значения; `<cwd>/codelab.toml` с `mcp.servers` без доверия → предупреждение, сервера нет (CFG-3).
-* `config_legacy_ignored_test.dart`: есть `$CODELAB_HOME/config.yaml` и `codelab.toml` → действует только YAML, ровно одно предупреждение `config.legacy_ignored`; появление `config.yaml` при живом агенте → перезагрузка переключает источник (CFG-20).
-* `config_writer_legacy_test.dart`: при активном `codelab.toml` `ConfigWriter.apply` в каждый слой → `ConfigLegacyReadOnlyException`, ни одного файла не создано; байты `codelab.toml` не изменились (CFG-20).
-* Golden-тест `config migrate` на `codelab.toml.example` Python-агента: результат — `config.yaml`, совпадающий с golden, проходит валидацию, каждый отброшенный ключ упомянут YAML-комментарием; `--print` ничего не пишет; существующая цель → код 1, ничего не записано; `codelab.toml` после команды побайтово тот же (CFG-20).
+* `config_legacy_found_test.dart` (`codelab_agent_io`) — критерий **`core/config-legacy-found-warning`** (R-16): только `<cwd>/codelab.toml` (даже с синтаксической ошибкой TOML) и нет `config.yaml` → загрузка без проблем из этого файла, ровно одно `config.legacy_found` с путём файла и ссылкой на §15.7, содержимое в лог не попало; `config.yaml` рядом с `codelab.toml` → предупреждения нет; с `--llm-script` файлы не ищутся (CFG-20).
+* `core/config-rejects-yaml-agent-definitions` (DF-12): `agents.definitions.reviewer` в `config.yaml` → проблема с ключом и подсказкой `.codelab/agents/reviewer.md`.
+* `core/config-unknown-provider-error` (DF-15): `providers.foo.kind: mock` → проблема `providers.foo.kind` со списком известных видов, агент не стартует, провайдер `mock` не подставлен.
+* Тест `config.yml`: рядом с `config.yaml` или без него → предупреждение `config.file.ignored` с подсказкой переименовать, файл не читается.
 * После MVP: `config_sessions_test.dart` — `sessions.lease.stale_after < 3 × heartbeat` → `ConfigException`, `sessions.lease` в проектном конфиге игнорируется с предупреждением (§17.6.16); `config_steering_test.dart` — `yield_long_tools: true` при `jobs.enabled: false` → `ConfigException`, увеличение `steering.max_steps` в проектном конфиге без доверия отклонено, уменьшение принято (§17.7.11); `lsp_config_test.dart` — серверы из недоверенного проекта игнорируются, одно расширение у двух серверов → `ConfigException` (§17.8.14); `config_jobs_test.dart` (§17.9.16).
 * `config_loop_test.dart`: диапазоны `loop.empty_response_retries` и `loop.misuse.*`; `warn_after > block_after` → `ConfigException` (C-07, C-08).
-* Тест-сторож: `codelab_agent_core` не импортирует `package:yaml`, `package:yaml_edit` и `package:toml`; `package:toml` импортируется только из `codelab_agent_io/lib/src/config/legacy/` (CFG-5).
+* Тест-сторож: `codelab_agent_core` не импортирует `package:yaml`, `package:yaml_edit` и `package:toml`; `package:toml` нет в allowlist `codelab_agent_io` (CFG-5).
 
 ---
 
