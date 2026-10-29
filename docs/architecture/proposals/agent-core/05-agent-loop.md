@@ -102,7 +102,13 @@ typedef BeforeFinalResponseHook = Future<ResponseVerdict> Function(AssistantMess
 
 final class Block { const Block(this.reason, {this.outcome = ToolOutcome.rejected}); final String reason; final ToolOutcome outcome; }
 final class ResultOverride { const ResultOverride({this.content, this.isError}); final List<ContentBlock>? content; final bool? isError; }
-final class StepUpdate { const StepUpdate({this.context, this.model}); final LoopContext? context; final ModelRef? model; }
+final class StepUpdate {
+  const StepUpdate({this.context, this.model, this.tools, this.systemPrompt});
+  final LoopContext? context;        // заменить контекст целиком (сжатие); транскрипт цикла заменяется
+  final ModelRef? model;
+  final List<AgentTool>? tools;      // новый набор инструментов со следующего запроса; транскрипт не трогается (MCP list_changed)
+  final String? systemPrompt;        // новый системный промпт со следующего запроса (секция mcp, §11.5)
+}
 final class StepResult { final int stepIndex; final AssistantMessage response; final List<ToolResultMessage> results; final Usage usage; }
 
 sealed class ResponseVerdict { const ResponseVerdict(); }
@@ -135,7 +141,7 @@ enum BudgetLimit { steps, tokens, cost, duration, deadline }   // deadline — �
 | `transformContext` | перед **каждым** запросом к модели, включая повтор после ремонта пар | меняет только payload, не транскрипт; исключение = сбой хода (`TurnEnded(failed)`) |
 | `beforeToolCall` (цепочка) | после поиска инструмента и валидации аргументов, до исполнения | первый вернувший `Block(reason)` останавливает цепочку: результат-ошибка с текстом `reason`, инструмент не исполняется. **Первым** в цепочке всегда стоит проверка разрешений (§7). После MVP вторым звеном идут пользовательские хуки `before_tool` (§17.14.2), хуки хоста — последними |
 | `afterToolCall` (цепочка) | после исполнения, до `ToolCallFinished` | хуки вызываются по порядку, каждый видит результат после переопределений предыдущих; переопределение по полям (`content`, `isError`); исключение = результат-ошибка с текстом исключения. Порядок: хуки хоста, затем (после MVP) хук сессии языковых серверов `LanguageServerSession.afterToolCall` — синхронизация документов и диагностика после правок (§17.8.5) |
-| `prepareNextStep` | после `StepEnded`, до опроса steering | заменить контекст (сжатие) или модель для следующего шага |
+| `prepareNextStep` | после `StepEnded`, до опроса steering | заменить контекст (сжатие), модель, набор инструментов или системный промпт для следующего шага; `tools` и `systemPrompt` применяются поверх `context` и транскрипт не меняют |
 | `beforeFinalResponse` | шаг завершился без вызовов инструментов, ход готов остановиться, до `TurnEnded` | `Accept` — ход завершается; `Revise(note)` — заметка добавляется в payload следующего шага последним `user`-сообщением, не более `maxResponseRevisions` раз за ход; `Hold(reason)` — ход завершается с ответом, помеченным `TurnEnded.held = reason`. В MVP — только интерфейс, хук не регистрируется; после MVP — составной хук проверок `FinalResponseCheck` с лимитом ревизий и политикой `loop.final_response.on_revise_limit` (§17.12.4) |
 
 **Бюджет хода.** Проверяется на границе шага: после `StepEnded` и до следующего запроса к модели.
@@ -160,8 +166,10 @@ ACP-адаптер отдаёт `stopReason: max_turn_requests`, а вид ли�
 4. Оценка размера `estimateTokens(LlmContext)`; если больше окна `effectiveContextWindow(model, cap: contextWindowCap)` — один вызов `emergencyCompact(preflight, …)` за ход (CMP-8) и пересборка с шага 1; если сжатие не помогло или его нет — синтетический `AssistantMessage(stopReason: error, errorClass: overflow, errorMessage: 'context window exhausted')` без обращения к провайдеру и без `ModelRequested`.
 5. `LlmContext(systemPrompt, messages, tools.map(toSchema))` → `ModelRequested` → `stream(...)`.
 
-`systemPrompt` берётся из текущего `LoopContext` и между шагами меняется только через
-`prepareNextStep` (`StepUpdate.context`). В MVP он постоянен в пределах хода; после MVP
+`systemPrompt` и `tools` берутся из текущего `LoopContext` и между шагами меняются только через
+`prepareNextStep` (`StepUpdate.context`, `StepUpdate.tools`, `StepUpdate.systemPrompt`). В MVP
+промпт меняется в пределах хода только при обновлении MCP-инструментов по `tools/list_changed`
+(секция `mcp`, design.md change `add-agent-mcp-client`, D6); после MVP
 `AgentSession` пересобирает его перед запросом, когда меняются закреплённые строки skills
 (§11.5, §17.2.7).
 
@@ -326,7 +334,7 @@ runAgentLoop(prompts, context, config, emit, cancel):
         verdict = beforeFinalResponse?(response) ?? Accept
         if verdict is Revise and revisions < maxResponseRevisions: revisions++; note = verdict.note; pendingCalls = true
         if verdict is Hold: held = verdict.reason        # составной хук §17.12.4 уже учёл лимит ревизий
-23    update = prepareNextStep?(stepResult); применить update.context / update.model
+23    update = prepareNextStep?(stepResult); применить update.context / update.model / update.tools / update.systemPrompt
 24    if cancel.isCancelled: reason = cancelled; break
 25    pollSteering()
 26  emit TurnEnded(reason ?? fromStopReason(lastResponse), usage, budgetExceeded, held)

@@ -7,7 +7,7 @@
   - `mcp__<server>__<tool>`, символы вне `[A-Za-z0-9_-]` заменены на `_`;
   - имя длиннее 64 символов — первые 56 символов, `_` и первые 7 hex-символов SHA-256 от UTF-8 полного имени до замены символов, ровно 64 символа;
   - сокращение детерминировано между запусками.
-- **Схема.** `description` — описание инструмента, иначе `title`, иначе имя, передаётся модели как есть, но не длиннее 2048 символов: длиннее — первые 2048 символов (по границе символа) и суффикс `\n[Description truncated: <n> characters omitted.]`, лог `mcp.tool.description_truncated` (design.md change `add-agent-mcp-client`, D7). `parameters` — `inputSchema` сервера. Инструмент без имени или с `inputSchema` не-объектом пропускается с `mcp.tool.invalid`.
+- **Схема.** `description` — описание инструмента, иначе `title`, иначе имя, передаётся модели как есть, но не длиннее 2048 символов: длиннее — первые 2048 символов (по границе символа) и суффикс `\n[Description truncated: <n> characters omitted.]`, лог `mcp.tool.description_truncated` (design.md change `add-agent-mcp-client`, D7). `parameters` — `inputSchema` сервера. Инструмент без имени или с `inputSchema` не-объектом пропускается с `mcp.tool.invalid`. Нестроковые `title` и `description` SHALL игнорироваться как отсутствующие, инструмент регистрируется.
 - **Вид** — только по явным значениям аннотаций:
   - `readOnlyHint: true` → `read`;
   - иначе `destructiveHint: true` → `edit` при `openWorldHint: false`, иначе `execute`;
@@ -31,6 +31,10 @@
 #### Scenario: Длинное описание обрезается
 - **WHEN** сервер отдаёт инструмент с описанием из 5 000 символов
 - **THEN** `description` схемы — первые 2048 символов и строка `[Description truncated: 2952 characters omitted.]`, лог `mcp.tool.description_truncated`; описание из 2048 символов не меняется
+
+#### Scenario: Нестроковое описание
+- **WHEN** сервер отдаёт инструмент `t` с `description: 42` и без `title`
+- **THEN** инструмент зарегистрирован, `description` схемы — `t`
 
 #### Scenario: Подсказка «только чтение» не снимает одобрения
 - **WHEN** в режиме `standard` модель вызывает MCP-инструмент с `readOnlyHint: true`

@@ -37,11 +37,15 @@ export 'src/loop/loop_config.dart'
         StepResult,
         StepUpdate;
 export 'src/loop/turn_budget.dart';
+export 'src/mcp/mcp_connector.dart';
+export 'src/mcp/mcp_server_config.dart';
+export 'src/mcp/mcp_tool_name.dart';
+export 'src/mcp/mcp_transport.dart';
 export 'src/permissions/gate.dart';
 export 'src/permissions/modes.dart';
 export 'src/permissions/pattern.dart';
 export 'src/permissions/policy.dart' show PolicyRules;
-export 'src/runtime/agent_runtime.dart' show AgentRuntime;
+export 'src/runtime/agent_runtime.dart' show AgentRuntime, coreAgentVersion;
 export 'src/runtime/agent_session.dart';
 export 'src/session/memory_session_store.dart';
 export 'src/session/parse.dart';
@@ -50,6 +54,7 @@ export 'src/session/session_store.dart';
 export 'src/session/slug.dart';
 export 'src/session/summary.dart';
 export 'src/tools/agent_tool.dart';
+export 'src/util/canonical_json.dart' show canonicalJson;
 export 'src/util/clock.dart' show Clock, ClockTimer, SystemClock;
 export 'src/util/ids.dart';
 export 'src/util/logger.dart';

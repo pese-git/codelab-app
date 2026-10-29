@@ -72,6 +72,7 @@ Dart-агент принимает `mcpServers` в `session/new` и `session/loa
   - «Профили хостов и сужение» — capability `mcp`;
   - «Минимальная сборка buildAgentCore» — сервис `McpConnector`, сужение по транспортам, реестр на сессию;
   - новое требование «MCP-серверы сессии».
+- `agent-loop`: «Хуки и сборка payload» — `StepUpdate` получает поля `tools` и `systemPrompt`: набор инструментов и промпт меняются на границе шага без замены транскрипта (обновление по `tools/list_changed`).
 - `agent-tools`: новое требование «MCP-инструменты» (имена, коллизии, вид и уровень, исполнение); «Ограда недоверенного вывода» — MCP всегда огорожен одной оградой независимо от `outputTrust`.
 - `agent-permissions`: новое требование «MCP-вызов только после решения политики» (P-01).
 - `agent-prompts`: новое требование «Секция mcp».
@@ -89,6 +90,7 @@ Dart-агент принимает `mcpServers` в `session/new` и `session/loa
   - порты `lib/src/mcp/`, `HostCapability.mcp`, `AgentCoreServices.mcp`, `CoreConfig.mcpServers`, `SessionSpec.mcpServers`;
   - `AgentSession.setMcpServers` — набор серверов при повторном `session/load`;
   - реестр на сессию, правило ограды `mcp__*` в `ToolCallExecutor`, секция `prompts/mcp.md`;
+  - поля `StepUpdate.tools` и `StepUpdate.systemPrompt` цикла;
   - экспорт `SseDecoder`;
   - новая зависимость `crypto` (уже в allowlist, PKG-2).
 - **`codelab_agent_io`**: `lib/src/mcp/stdio_process_transport.dart` на существующем `process_tree.dart`; без новых зависимостей. dev — `codelab_agent_mcp`.

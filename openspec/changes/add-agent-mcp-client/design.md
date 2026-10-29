@@ -85,7 +85,7 @@
 - **Modern:** единственная версия `2026-07-28`, она же предпочтительная. Каждый запрос несёт `params._meta`:
   - `io.modelcontextprotocol/protocolVersion: "2026-07-28"`;
   - `io.modelcontextprotocol/clientCapabilities: {}`;
-  - `io.modelcontextprotocol/clientInfo: {name: "codelab-agent", version: <agentVersion>}`.
+  - `io.modelcontextprotocol/clientInfo: {name: "codelab-agent", version: <agentVersion>}`, где `<agentVersion>` — версия агента из ядра (`coreAgentVersion`), та же уходит в `clientInfo` legacy-`initialize`.
 
   Остальные ключи (`logLevel`, trace context) не шлются. Поэтому сервер НЕ ДОЛЖЕН слать `notifications/message` (`changelog.md`, п. 5), а `InputRequiredResult` невозможен без объявленных capabilities (`basic/index.md`, `MissingRequiredClientCapability`).
 - **Legacy:** в `initialize` запрашивается `2025-11-25`, в ответе принимаются `2025-11-25`, `2025-06-18` и `2025-03-26`. Различия внутри подмножества клиента:
@@ -93,7 +93,7 @@
   - `2025-06-18` и `2025-11-25` — заголовок `MCP-Protocol-Version`, `resource_link`;
   - у всех трёх — `Mcp-Session-Id`, GET-поток уведомлений и `DELETE` в streamable HTTP (`streamable-http.md`, «Earlier Streamable HTTP Revisions»).
 
-  Другая версия в ответе `initialize` → соединение закрывается, `mcp.server.failed` с причиной `unsupported protocol version <v>`. `2024-11-05` и deprecated HTTP+SSE не поддерживаются (E-03, `deprecated.md`).
+  Другая версия в ответе `initialize` → соединение закрывается, `mcp.server.failed` с причиной `unsupported protocol version <v>`; `<v>` — версия ответа, если она прошла проверку формата `YYYY-MM-DD`, иначе `(unrecognized)` (D13). `2024-11-05` и deprecated HTTP+SSE не поддерживаются (E-03, `deprecated.md`).
 - **Определение эпохи** (`basic/versioning.md`, «Backward Compatibility…»):
   - **stdio** (`stdio.md#backward-compatibility`) — первая посылка — `server/discover` с modern `_meta`:
     - `DiscoverResult` → modern; `supportedVersions` без `2026-07-28` → нет общей версии;
@@ -107,13 +107,13 @@
     `-32601` не входит в распознаваемые коды пробы: `server/discover` сервер modern обязан реализовать (`discover.md`), поэтому `-32601` на нём — типичный ответ legacy-сервера (`stdio.md#backward-compatibility`), то есть сигнал отката.
 
   `discover` шлётся и на HTTP, хотя спецификация позволяет «пробовать любой modern-запрос»: он одной посылкой даёт `capabilities.tools.listChanged`, нужный для подписки.
-- **Нет общей версии** → `mcp.server.failed` с причиной `no common protocol version: server supports [<список>]`. Сессия создаётся без сервера.
+- **Нет общей версии** → `mcp.server.failed` с причиной `no common protocol version: server supports [<список>]`; в список входят только версии `supportedVersions` (из `DiscoverResult` или `data.supported` ошибки `-32022`), прошедшие проверку формата `YYYY-MM-DD`, не больше 10; остальные отбрасываются (D13). Сессия создаётся без сервера.
 - **Кэш эпохи.** Эпоха — свойство сервера:
   - stdio — на время жизни процесса, то есть транспорта сессии;
   - HTTP — на `origin` URL в памяти `McpClientConnector`, на время жизни процесса агента, без сохранения на диск.
 
-  Если закэшированное предположение не подтвердилось (modern-кэш, а `server/discover` вернул не-modern ошибку, или наоборот), эпоха определяется заново один раз.
-- **Наблюдаемость.** `mcp.server.era {server, transport, era: modern|legacy, protocol_version, probe: discover_result|modern_error|fallback_error|fallback_timeout|cached}` — после определения эпохи (D13).
+  Кэш экономит только пробу legacy-сервера: закэшированный `legacy` → сразу `initialize` без `server/discover` (`probe: cached`). Modern-сервер `server/discover` получает всегда: только он даёт `capabilities` (`tools`, `tools.listChanged`), без которых нельзя решить про `tools/list` и подписку, поэтому `probe: cached` у modern не бывает. Если закэшированное `legacy` не подтвердилось (`initialize` вернул ошибку), запись кэша удаляется и эпоха определяется пробой заново один раз.
+- **Наблюдаемость.** `mcp.server.era {server, transport, era: modern|legacy, protocol_version, probe: discover_result|modern_error|fallback_error|fallback_timeout|cached}` — после определения эпохи (D13); `cached` — только legacy.
 
 Альтернативы:
 - **modern-only** — отклонена: не работает с сегодняшними серверами;
@@ -149,10 +149,14 @@ flowchart TB
       /// Один JSON-текст. headers — зеркальные заголовки запроса (MCP-Protocol-Version,
       /// Mcp-Method, Mcp-Name, Mcp-Param-*), их считает клиент по эпохе (D10); stdio их игнорирует.
       Future<void> send(String message, {Map<String, String> headers = const {}});
+      /// id запросов, чей поток ответа оборвался без ответа при живом транспорте
+      /// (HTTP: обрыв SSE-потока); у stdio — пустой поток (D8, D10).
+      Stream<Object> get abortedRequests;
       /// Перестать ждать ответ на запрос id: HTTP закрывает поток ответа этого запроса
       /// (в modern это и есть отмена), stdio — ничего (отмена — уведомление клиента, D8).
+      /// В abortedRequests не эмитит: отказ от ответа — решение клиента, а не обрыв.
       Future<void> abandon(Object requestId);
-      Future<void> get done;               // транспорт закрыт; причина — McpTransportClosed
+      Future<McpTransportClosed> get done; // транспорт закрыт: reason и exitCode (stdio); завершается нормально
       Future<void> close();                // идемпотентно; останавливает процесс или HTTP-сессию
     }
     abstract interface class McpTransportFactory {
@@ -178,13 +182,17 @@ flowchart TB
     ```
 
     `McpConnectRequest` несёт `sessionId`, `cwd`, `servers`, `reservedNames` (имена базового реестра), `logger`, `cancel`.
+
+    Ошибки транспорта:
+    - `McpTransportException` — единственное исключение `open` и `send`; текст формирует наш код (`spawn failed: …`, `invalid url`), он идёт в `mcp.server.failed` (D13);
+    - ошибка в потоке `incoming` или `abortedRequests` переводит клиент сервера в «не подключён» (как обрыв, D5) с причиной транспорта `transport error` (в логе — `mcp.server.failed` с `disconnected: transport error`): текст исключения транспорта в лог и модели не попадает.
   - `mcp_tool_name.dart` — `mcpToolName(server, tool)` по §6.4 (D7); новая зависимость ядра `crypto` уже в allowlist (PKG-2).
 
   Без MCP-сообщений и JSON-RPC: ядро знает только «серверы, инструменты, транспорт строк».
 - **`codelab_agent_mcp`:**
 
   ```text
-  lib/codelab_agent_mcp.dart           барель: McpClientConnector, StreamableHttpTransportFactory, McpTransports
+  lib/codelab_agent_mcp.dart           барель через `show`: только то, что собирает хост (ниже)
   lib/testing.dart                     FakeMcpServer (in-memory и HTTP-обработчик для MockClient)
   lib/src/json_rpc.dart                кодек JSON-RPC 2.0 (D4)
   lib/src/protocol.dart                модели server/discover, initialize, tools/list, tools/call, subscriptions/listen, уведомлений, `_meta`; эпохи и версии (D2)
@@ -194,6 +202,7 @@ flowchart TB
   lib/src/connector.dart               McpClientConnector, McpSessionTools сессии (D6)
   ```
 
+  Барель экспортирует через `show` только типы сборки хоста: `McpClientConnector`, `McpTransports`, `McpClientOptions` (настройки клиента) и `McpEraCache` (кэш эпохи, который хост может разделить между коннекторами), а с итерации 3 — `StreamableHttpTransportFactory`. `McpClient`, `McpTool`, кодек JSON-RPC и модели протокола — внутренности пакета: ядро видит их только через порты (`McpSessionTools`, `AgentTool`), тесты пакета импортируют `lib/src/`. Почему: публичный API пакета — точка сборки, а не второй путь к MCP-серверу в обход `McpSessionTools` и `ToolExecutor` (TOOL-1); узкий барель не даёт хосту завязаться на внутренние модели, которые меняются вместе с ревизиями MCP. Тип, нужный хосту или тестам вне пакета, добавляется в `show` явно.
 - **`codelab_agent_io/lib/src/mcp/stdio_process_transport.dart`** — `StdioProcessTransport` и `StdioMcpTransportFactory` (D9) на существующем `process_tree.dart`.
 - **`apps/codelab_agent`** собирает `McpClientConnector(transports: McpTransports(stdio: StdioMcpTransportFactory(...), http: StreamableHttpTransportFactory(httpClient)))` и передаёт его в `AgentCoreServices.mcp`.
 - **`codelab_agent_acp`** отображает `acp.McpServer` в `McpServerConfig` (D11). Зависимостей не добавляет.
@@ -231,7 +240,12 @@ flowchart TB
 2. **Modern:**
    - `DiscoverResult` даёт `capabilities` и `_meta.io.modelcontextprotocol/serverInfo`; `serverInfo` — только для лога, поведение от него не зависит (`server/discover.md`);
    - каждый следующий запрос несёт `_meta` протокола (D2);
-   - если `capabilities.tools.listChanged`, открывается `subscriptions/listen {notifications: {toolsListChanged: true}}` (`basic/patterns/subscriptions.md`). Ждётся `notifications/subscriptions/acknowledged`; уведомления сопоставляются по `_meta.io.modelcontextprotocol/subscriptionId`. Подтверждение без `toolsListChanged` → живём без обновлений.
+   - если `capabilities.tools.listChanged`, открывается `subscriptions/listen {notifications: {toolsListChanged: true}}` (`basic/patterns/subscriptions.md`). Ждётся `notifications/subscriptions/acknowledged`; уведомления сопоставляются по `_meta.io.modelcontextprotocol/subscriptionId`. Подписка — улучшение, а не условие подключения, поэтому её неудача сервер не отключает:
+     - подтверждение без `toolsListChanged` → живём без обновлений (`subscriptions.md`, «Acknowledgment»: клиент SHOULD обработать неподдержанные типы мягко);
+     - ошибка JSON-RPC, успешный ответ или обрыв потока ответа (`abortedRequests`) на `subscriptions/listen` до подтверждения → сервер подключён, живём без обновлений, лог `mcp.message.ignored` с `kind: subscription_failed`;
+     - молчание без подтверждения → ожидание не дольше `min(5 с, connectTimeout / 2)` (как проба эпохи, D2), затем тоже без обновлений с `kind: subscription_failed`. Спецификация срока подтверждения не задаёт; без предела молчаливый сервер съедал бы весь `connectTimeout` и терял бы `tools/list`.
+
+     Почему не отказ подключения: инструменты сервера работают и без обновлений, а `session/new` не должен терять сервер из-за необязательной возможности. Цена — новые инструменты такого сервера видны только в следующей сессии.
 3. **Legacy:**
    - `initialize {protocolVersion: "2025-11-25", capabilities: {}, clientInfo}` и проверка версии ответа (D2);
    - `notifications/initialized`;
@@ -252,11 +266,11 @@ flowchart TB
 Входящие сообщения после подключения:
 - legacy-запрос `ping` → пустой `result`;
 - другие запросы сервера → `-32601`: modern-серверам слать запросы запрещено, legacy — capabilities клиента пусты;
-- `notifications/tools/list_changed` → перечитывание (D6). У modern — только с `subscriptionId` нашей подписки, у legacy — с общего канала или GET-потока;
+- `notifications/tools/list_changed` → перечитывание (D6). У modern — только с `subscriptionId` нашей подписки, у legacy — с общего канала или GET-потока. Уведомление, пришедшее во время подключения (после подписки или `notifications/initialized`, но до конца `tools/list`), не теряется: оно ставит флаг, и сразу после рукопожатия набор перечитывается один раз — иначе список, прочитанный до изменения, остался бы до конца сессии;
 - `notifications/message`, `notifications/progress` и прочие уведомления → `mcp.message.ignored` (debug);
 - ответ без ожидающего запроса (поздний после отмены или таймаута, поздний ответ на пробу `server/discover` после отката) → `mcp.message.ignored`, состояние не меняется (`AGENTS.md` §9).
 
-**Обрыв.** Закрытие транспорта сервером (выход процесса, ошибка HTTP) завершает все ожидающие запросы ошибкой «disconnected» (D8). Сервер переходит в состояние «не подключён» до конца сессии. Переподключения в MVP нет (E-04, 8.10), хотя `stdio.md` («Unexpected Termination») рекомендует перезапуск. Инструменты сервера остаются в реестре, схемы стабильны (§17.5.7, шаг 4).
+**Обрыв.** Закрытие транспорта сервером (`done` с `McpTransportClosed`: выход процесса, ошибка HTTP) или ошибка в потоке `incoming` / `abortedRequests` (причина `transport error`, D3) завершает все ожидающие запросы ошибкой «disconnected» (D8). Сервер переходит в состояние «не подключён» до конца сессии. Переподключения в MVP нет (E-04, 8.10), хотя `stdio.md` («Unexpected Termination») рекомендует перезапуск. Инструменты сервера остаются в реестре, схемы стабильны (§17.5.7, шаг 4).
 
 **Подписка, закрытая сервером** (успешный ответ на `subscriptions/listen`, `subscriptions.md`, «Graceful Closure»), в MVP не открывается заново; лог `mcp.message.ignored` с `kind: subscription_closed`.
 
@@ -266,25 +280,30 @@ flowchart TB
 
 - **Список серверов сессии:**
   - `CoreConfig.mcpServers` (пусто до 8.5) плюс `SessionSpec.mcpServers` / `loadSession(..., mcpServers:)`;
-  - сервер клиента побеждает сервер конфига с тем же `name` (§13.4, шаг 2);
-  - дубликат `name` внутри одного источника → второй пропускается с `mcp.server.skipped`;
-  - пустое `name` → `mcp.server.skipped`.
+  - сервер клиента побеждает сервер конфига с тем же `name` (§13.4, шаг 2): сервер конфига — `mcp.server.skipped` с причиной `replaced by a server of the client with the same name`;
+  - дубликат `name` внутри одного источника → второй пропускается с `mcp.server.skipped`, причина `duplicate server name in the same source`;
+  - пустое `name` → `mcp.server.skipped`, причина `empty server name`.
 - **Фильтр capability:**
   - `mcp` выключена → каждый сервер `mcp.server.skipped` с причиной из `CorePlan.offReasons`;
   - транспорт сервера вне `CapabilityTransport.transports` → `mcp.server.skipped` (`transport stdio is off in profile mobile: …`).
-- **Подключение.** `services.mcp.connect(...)` — внутри `createSession` / `loadSession` до возврата сессии. Серверы подключаются параллельно, каждый в своём `connectTimeout`. Сбой сервера → `mcp.server.failed`, сессия создаётся без его инструментов (§13.4, шаг 4).
+- **Подключение.** `services.mcp.connect(...)` — внутри `createSession` / `loadSession` до возврата сессии. Серверы подключаются параллельно, каждый в своём `connectTimeout`. Сбой сервера → `mcp.server.failed`, сессия создаётся без его инструментов (§13.4, шаг 4):
+  - непредвиденное исключение при подключении одного сервера → `mcp.server.failed` с причиной `unexpected error: <runtimeType>` (текст исключения не пишется, D13), остальные серверы подключаются;
+  - исключение коннектора целиком (`connect` бросил) → одна запись `mcp.server.failed` с именами принятых серверов и причиной `MCP connector failed: <runtimeType>`, сессия создаётся без MCP: порт чужой реализации не должен ронять `session/new`.
+- **Сбой после подключения.** Если `createSession` / `loadSession` падает после `connect` (например, запись журнала), сессия не возвращается вызывающему, а её `McpSessionTools.close()` вызывается до проброса ошибки: иначе процессы серверов пережили бы неудавшийся `session/new` (E-02). Ошибка самого закрытия пишется `mcp.server.failed` и не заменяет исходную.
 - **Детерминированная регистрация.** Порядок подключения недетерминирован, поэтому регистрация ждёт завершения всех подключений и идёт в порядке списка: серверы конфига, затем серверы клиента в порядке запроса; внутри сервера — порядок `tools/list`. Имя проверяется против `reservedNames` (встроенные инструменты) и уже зарегистрированных MCP-имён.
 - **Коллизия имён** (с встроенным, с другим сервером, внутри одного сервера после замены символов). Весь сервер, чей инструмент пришёл позже, отключается: транспорт закрывается, инструменты не регистрируются. Лог `mcp.server.failed` с причиной, называющей оба источника: `tool name mcp__a__x collides with built-in tool x` или `… with MCP server "b"`. Сессия создаётся (HOST-5, §6.4, §10.7, шаг 5e).
+- **Защита в глубину в ядре.** Порт `McpConnector` открыт для других реализаций, поэтому ядро при регистрации (и при применении обновления) само отклоняет инструмент коннектора с именем без префикса `mcp__` (`name has no mcp__ prefix`) или с именем встроенного инструмента (`name collides with a built-in tool`): лог `mcp.tool.invalid`, остальные инструменты регистрируются. Так MCP-инструмент не подменит встроенный и не уйдёт из-под правила ограды по префиксу (D7, TOOL-10).
 
   Расхождение матрицы решается в пользу документа ядра: строка E-05 (676) и HOST-5 — «сервер отключается»; сценарий строки 723 и DoD этапа исправляются в задачах 0.4 и 10.1. Альтернатива «ошибка сборки» отклонена: серверы приходят от клиента во время работы, и чужой сервер не должен ронять `session/new`.
 - **Реестр на сессию.** `AgentRuntimeImpl._open` создаёт `ToolRegistry` сессии: копия базового (`buildAgentCore`, шаги 5a–5b) плюс `McpSessionTools.tools`. Этот реестр получают `ToolCallExecutor`, `policy.asHook(registry.lookup)`, `Agent.tools` и промпт. Базовый реестр ядра не меняется. `CorePlan.toolNames` остаётся списком базовых инструментов: MCP-инструменты — свойство сессии.
 - **`tools/list_changed`:**
-  1. `McpClient` получает уведомление (modern — по подписке `subscriptions/listen`, legacy — по общему каналу или GET-потоку, D5) и перечитывает список; повторное уведомление во время перечитывания ставит флаг, и перечитывание повторяется один раз (§17.5.7, `onToolsListChanged`).
-  2. Новый набор с теми же правилами имён кладётся в ожидающее обновление; коллизия → сервер отключается, его инструменты удаляются.
-  3. Ядро забирает `takeUpdate()` на границе шага через `prepareNextStep` → `StepUpdate.context`, с новыми `tools` и пересобранным системным промптом (секция `mcp`, §11.5). Между ходами — перед началом хода.
+  1. `McpClient` получает уведомление (modern — по подписке `subscriptions/listen`, legacy — по общему каналу или GET-потоку, D5) и перечитывает список; повторное уведомление во время перечитывания ставит флаг, и перечитывание повторяется один раз (§17.5.7, `onToolsListChanged`). Сбой перечитывания (ошибка, таймаут, ответ не по схеме) сервер не отключает: прежний набор остаётся, лог `mcp.tools.refresh_failed {server, reason}` (warning, D13). Обрыв транспорта — обычный обрыв D5.
+  2. Новый набор с теми же правилами имён кладётся в ожидающее обновление. Коллизия при `takeUpdate()` отключает сервер, **чьё обновление её вызвало** (транспорт закрывается, его инструменты удаляются), а не сервер, стоящий в списке позже: уже работающий набор другого сервера модель видела, и чужое обновление не должно его отнимать. При подключении правило «позже в списке» (выше) остаётся.
+  3. Ядро забирает `takeUpdate()` на границе шага через `prepareNextStep` → `StepUpdate.tools` (новый набор реестра сессии) и `StepUpdate.systemPrompt` (пересобранный промпт с секцией `mcp`, §11.5). `StepUpdate.context` для этого не используется: он заменяет транскрипт цикла, а обновление инструментов транскрипт трогать не должно (§5.2). Между ходами — перед началом хода.
   4. Внутри пакета вызовов набор не меняется. Вызов уже объявленного инструмента, удалённого из набора, исполняется своим объектом `McpTool`.
   5. Лог `mcp.tools.changed {server, added, removed}`.
-- **Закрытие.** `AgentSession.close()`: отмена хода → ожидание простоя → `McpSessionTools.close()` (параллельно по серверам) → закрытие журнала. `AgentRuntime.dispose` закрывает сессии и, значит, процессы серверов (E-02).
+- **Закрытие.** `AgentSession.close()`: отмена хода → ожидание простоя → `McpSessionTools.close()` (параллельно по серверам) → закрытие журнала. `AgentRuntime.dispose` закрывает сессии и, значит, процессы серверов (E-02). Сбой `createSession` / `loadSession` после подключения закрывает серверы так же (выше, «Сбой после подключения»).
+- **`replaceServers`** до задачи 6.5 бросает `UnsupportedError` (заглушка итерации 1: ACP-адаптер ещё не зовёт `setMcpServers`); задача 6.5 заменяет её реализацией D11.
 - **Журнал.** Описания серверов (`command`, `args`, `env`, `url`, `headers`) в журнал НЕ пишутся: в них секреты, а при `session/load` клиент присылает серверы заново (§13.5). Вызовы и результаты MCP-инструментов пишутся как у любого инструмента.
 
 Альтернатива — регистрировать MCP-инструменты в общем реестре ядра — отклонена: инструменты одной сессии стали бы видны другим, а закрытие сессии ломало бы чужие ходы.
@@ -301,7 +320,8 @@ flowchart TB
 - **Схема.**
   - `description` — `description` инструмента, иначе `title`, иначе имя. Передаётся модели как есть, но не длиннее **2048 символов** (рун Unicode): длиннее — первые 2048 символов (обрезка по границе символа, без разрыва суррогатной пары) и суффикс `\n[Description truncated: <n> characters omitted.]`; лог `mcp.tool.description_truncated {server, tool, length}`. Почему: описание уходит в схемах **каждого** запроса к модели и не огораживается, поэтому длинный текст сервера одновременно тратит контекст и увеличивает поверхность prompt injection. Типичное описание инструмента — сотни символов, 2 КиБ оставляют запас в 3–5 раз. Пометка источника не нужна: префикс `mcp__<сервер>__` в имени уже называет источник, а правило `untrusted` в промпте говорит, что MCP — данные. Альтернативы: «как есть» — отклонена (неограниченный рост payload); отдельная ограда описания — отклонена (провайдеры не гарантируют, что модель трактует разметку внутри схемы так же, как в транскрипте). `description` вложенных свойств `inputSchema` не обрезаются (риск ниже);
   - `parameters` — `inputSchema` как есть: валидатор §6.3.2 игнорирует неподдерживаемые ключи;
-  - инструмент без `name` или с `inputSchema` не-объектом пропускается с `mcp.tool.invalid {server, tool, reason}`, остальные регистрируются; другие причины пропуска — D5, шаг 4.
+  - инструмент без `name` или с `inputSchema` не-объектом пропускается с `mcp.tool.invalid {server, tool, reason}`, остальные регистрируются; другие причины пропуска — D5, шаг 4;
+  - нестроковые `title` и `description` (число, объект, `null`) игнорируются, как отсутствующие: это необязательные поля `Tool` (`schema.md`), и ошибка типа в них не повод терять инструмент. Описание тогда берётся по цепочке выше.
 - **Вид** (`kind`) — только по явным значениям аннотаций, без значений по умолчанию спецификации MCP:
   - `readOnlyHint: true` → `read`;
   - иначе `destructiveHint: true` → `edit` при `openWorldHint: false`, иначе `execute`;
@@ -346,10 +366,10 @@ flowchart TB
 
   Лог `mcp.call.cancelled {server, tool_call_id, request_id}`. Гонка «отмена ↔ ответ» решается первым событием: ответ, пришедший раньше отмены, — обычный результат. Сигнал отмены отправляется не больше одного раза и только для запроса, который ещё в работе (`cancellation.md`, п. 1).
 - **Таймаут вызова** — `McpClientOptions.callTimeout`, по умолчанию 10 минут; константа MVP; ключ `mcp.servers.*.call_timeout` вводит change `add-agent-configuration` (8.5). По истечении — тот же сигнал отмены, что в таблице (`cancellation.md`, «Timeouts»), лог `mcp.call.timeout` и результат-ошибка.
-- **Обрыв потока ответа.** `changelog.md` (п. 9) говорит, что оборванный поток modern-ответа клиент MUST переотправить новым запросом. В тексте `streamable-http.md` этого правила нет. **Решение:** `tools/call` после обрыва не повторяется — автоматический повтор может удвоить побочный эффект, результат — «disconnected during the call». Повторяются только `tools/list` и `server/discover` (без побочных эффектов): один повтор с новым id. Это сознательное отступление от п. 9 `changelog.md` в пользу целостности данных (`AGENTS.md` §2, приоритет 3).
+- **Обрыв потока ответа.** Транспорт сообщает об обрыве потока ответа одного запроса при живом соединении через `abortedRequests` (D3); закрытие всего транспорта — через `done` (D5). Свой `abandon(id)` (отмена, таймаут) в `abortedRequests` не попадает, поэтому отменённый вызов не превращается в «disconnected». `changelog.md` (п. 9) говорит, что оборванный поток modern-ответа клиент MUST переотправить новым запросом. В тексте `streamable-http.md` этого правила нет. **Решение:** `tools/call` после обрыва не повторяется — автоматический повтор может удвоить побочный эффект, результат — «disconnected during the call». Повторяются только `tools/list` и `server/discover` (без побочных эффектов): один повтор с новым id. Обрыв `subscriptions/listen` до подтверждения — D5 (живём без обновлений). Это сознательное отступление от п. 9 `changelog.md` в пользу целостности данных (`AGENTS.md` §2, приоритет 3).
 - **Фиксированные тексты результатов-ошибок** (видит модель, `<id>` — `name` сервера):
   - сервер упал после подключения, а модель снова зовёт его инструмент (у сервера, который не подключился, инструментов нет): `MCP server <id> is not connected. Continue without it.`;
-  - транспорт закрылся во время вызова: `MCP server <id> disconnected during the call: <reason>` (§6.4; без повтора — у вызова могли быть побочные эффекты);
+  - транспорт закрылся или поток ответа оборвался (`abortedRequests`) во время вызова: `MCP server <id> disconnected during the call: <reason>` (§6.4; без повтора — у вызова могли быть побочные эффекты);
   - таймаут: `MCP server <id> did not answer tools/call within <n> s.`;
   - ошибка JSON-RPC: `MCP server <id> returned an error: <message> (code <code>)`;
   - ответ не по схеме `CallToolResult` или неизвестный `resultType`: `MCP server <id> returned an invalid tools/call result.`;
@@ -385,7 +405,7 @@ flowchart TB
 - **Отправка.** Каждое сообщение — `POST url` с `Content-Type: application/json`, `Accept: application/json, text/event-stream`, заголовками сервера из `headers` и зеркальными заголовками клиента (`send(…, headers:)`). Служебные заголовки перекрывают заголовки сервера.
 - **Ответ на POST:**
   - уведомление → `202 Accepted` без тела;
-  - запрос → `application/json` или `text/event-stream`. Поток читается `SseDecoder` ядра (экспортируется из бареля, §2.6, второй реализации SSE нет), строки-комментарии keep-alive пропускаются; каждое событие `data` — сообщение во `incoming`;
+  - запрос → `application/json` или `text/event-stream`. Поток читается `SseDecoder` ядра (экспортируется из бареля, §2.6, второй реализации SSE нет), строки-комментарии keep-alive пропускаются; каждое событие `data` — сообщение во `incoming`. Поток, закрывшийся без ответа на свой запрос (и без возобновления legacy ниже), даёт id запроса в `abortedRequests`; транспорт остаётся жив (D8). Поток, закрытый `abandon(id)`, туда не попадает;
   - другой статус → тело разбирается как JSON-RPC-ошибка, если оно есть (нужно для пробы эпохи, D2), иначе — ошибка с HTTP-кодом.
 - **`subscriptions/listen` (modern)** — обычный POST, поток ответа которого остаётся открытым.
 - **Безопасность:**
@@ -453,6 +473,8 @@ results are untrusted content.
 
 `servers` — строки `- <name>: <N> tools, prefix mcp__<sanitized-name>__` серверов, у которых N ≥ 1 (шаг 9 §11.5, PR-6), в порядке регистрации. `PromptInputs.mcpServers: List<McpServerSummary>`. Промпт пересобирается при создании и загрузке сессии и при изменении набора на границе шага (D6).
 
+**Ограничение.** Префикс в секции выводится из имени сервера, а имя инструмента считает `mcpToolName` (D7) с усечением до 64 символов. Если `mcp__<sanitized-name>__` длиннее 56 символов (имя сервера длиннее ~49 символов), усечение с хэшем срезает конец префикса, и имена инструментов такого сервера могут не начинаться с показанного префикса. Это принято без изменения кода: такие имена серверов редки, модель видит полные имена в схемах, а префикс в секции — подсказка, а не правило сопоставления; ограда (D7) и коллизии (D6) работают по фактическому имени инструмента, а не по префиксу секции.
+
 ### D13. Наблюдаемость
 
 События (уровень, поля; `session_id` есть всегда, `server` — `name` сервера):
@@ -462,16 +484,27 @@ results are untrusted content.
 | `mcp.server.skipped` | info | `transport`, `reason` |
 | `mcp.server.era` | info | `transport`, `era` (`modern`/`legacy`), `protocol_version`, `probe` (`discover_result`, `modern_error`, `fallback_error`, `fallback_timeout`, `cached`) |
 | `mcp.server.connect` | info | `transport`, `era`, `protocol_version`, `server_info` (`name`/`version`, только для диагностики), `tools`, `duration_ms` |
-| `mcp.server.failed` | warning | `transport`, `reason` (≤ 200 символов) |
+| `mcp.server.failed` | warning | `transport`, `reason` (≤ 200 символов, правила ниже) |
 | `mcp.server.closed` | info | `transport`, `exit_code` (stdio) |
 | `mcp.server.stderr` | debug | `line` (≤ 4 КиБ) |
 | `mcp.tools.changed` | info | `added`, `removed` |
+| `mcp.tools.refresh_failed` | warning | `reason` (те же правила) — перечитывание `tools/list` после `list_changed` не удалось, прежний набор остаётся (D6, п. 1) |
 | `mcp.tool.invalid` | warning | `tool`, `reason` |
 | `mcp.tool.description_truncated` | info | `tool`, `length` |
 | `mcp.call.cancelled`, `mcp.call.timeout` | info | `tool_call_id`, `request_id` |
-| `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`) |
+| `mcp.message.ignored` | debug | `kind` (`late_response`, `unknown_notification`, `parse_error`, `subscription_closed`, `subscription_failed`) |
 
-В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов и ответов. Причины ошибок транспорта формируются нашим кодом, без текста заголовков. Защита от утечки — тест `mcp_logs_no_secrets_test.dart`: значения `env` и `headers` нет ни в одной записи `RecordingLogger`. Словарь §12.2 дополняется событиями этой таблицы (задача 0.2). Редакция секретов в журнале — 8.11.
+В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов и ответов. Причины ошибок транспорта формируются нашим кодом, без текста заголовков.
+
+**Правила `reason`** (`mcp.server.skipped`, `mcp.server.failed`, `mcp.tools.refresh_failed`):
+- только тексты нашего кода; тексты и значения от сервера (`message` и прочие поля `data` ошибки JSON-RPC, неизвестный `resultType`, `serverInfo`) в причину не входят: сервер недоверенный, а лог — не место для его текста (секреты, prompt injection в инструменты чтения логов). Ошибка JSON-RPC описывается методом и кодом: `'<method> failed (code N)'`, например `tools/list failed (code -32603)`;
+- исключение — версии протокола от сервера (`protocolVersion` ответа `initialize`, `supportedVersions`): без них отказ по версии не диагностировать. Они входят в причину только после проверки формата `YYYY-MM-DD` (`^\d{4}-\d{2}-\d{2}$`); не прошедшие проверку отбрасываются (в списке) или заменяются на `(unrecognized)` (одна версия). Такая строка не несёт ни секрета, ни текста для модели;
+- непредвиденное исключение — `unexpected error: <runtimeType>`, без текста исключения;
+- обрезка до 200 символов по рунам Unicode, без разрыва суррогатной пары (как обрезка описания, D7);
+- фиксированные причины пропуска: `replaced by a server of the client with the same name`, `duplicate server name in the same source`, `empty server name` (D6), `transport sse is not supported`, `unknown transport` (D11), `invalid url` (D10), причины выключенной capability (D6);
+- причины отказа: `no common protocol version: server supports [<список>]`, `unsupported protocol version <v>` (D2), `tools/list pagination did not end` (D5), `disconnected: <причина транспорта>`, в том числе `disconnected: transport error` (D3, D5), коллизии имён (D6), `MCP connector failed: <runtimeType>` (D6).
+
+Тексты результатов-ошибок для модели (D8) — отдельный канал: они огораживаются как вывод MCP-инструмента и могут содержать `message` сервера. Защита от утечки — тест `mcp_logs_no_secrets_test.dart`: значения `env` и `headers` нет ни в одной записи `RecordingLogger`. Словарь §12.2 дополняется событиями этой таблицы (задача 0.2). Редакция секретов в журнале — 8.11.
 
 ### D14. Сторож, allowlist, workspace, README
 
