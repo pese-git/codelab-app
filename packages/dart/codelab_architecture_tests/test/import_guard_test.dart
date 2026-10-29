@@ -80,6 +80,46 @@ void main() {
     expect(violations.first, endsWith('lib/src/server.dart:1 -> dart:io'));
   });
 
+  test('reports dart:io and ACP in the MCP client of the agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_mcp_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'src', 'client.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'dart:io';\n"
+        "import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';\n",
+      );
+    final rule = rules.firstWhere(
+      (r) => r.dir == 'packages/dart/codelab_agent_mcp',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    // Клиент MCP web-безопасен и не знает ACP (PKG-3; design.md change
+    // `add-agent-mcp-client`, D14).
+    expect(violations, hasLength(2));
+    expect(violations.first, endsWith('lib/src/client.dart:1 -> dart:io'));
+  });
+
+  test('reports the IO package of the agent and client packages in the MCP '
+      'client', () {
+    final rule = rules.firstWhere(
+      (r) => r.dir == 'packages/dart/codelab_agent_mcp',
+    );
+
+    expect(
+      rule.forbidden,
+      containsAll([
+        'package:codelab_client_',
+        'package:codelab_agent_io/',
+        'package:flutter/',
+      ]),
+    );
+  });
+
   test('reports Flutter and client packages in the agent binary', () {
     final tmp = Directory.systemTemp.createTempSync('guard_bin_');
     addTearDown(() => tmp.deleteSync(recursive: true));

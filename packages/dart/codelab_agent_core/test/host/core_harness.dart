@@ -27,6 +27,8 @@ final class CoreHarness {
     CompactionOverrides compaction = const CompactionOverrides(),
     ModelCatalog? models,
     ReasoningEffort effort = ReasoningEffort.medium,
+    McpConnector? mcp,
+    List<McpServerConfig> mcpServers = const [],
   }) {
     final c = clock ?? FakeClock();
     final logger = RecordingLogger();
@@ -47,12 +49,14 @@ final class CoreHarness {
         ids: SequentialIdGenerator(),
         sessions: store,
         models: models,
+        mcp: mcp,
       ),
       config: CoreConfig(
         defaultModel: defaultModel ?? testModel,
         permissions: PermissionsConfig(modeOverride: modeOverride),
         compaction: compaction,
         effort: effort,
+        mcpServers: mcpServers,
       ),
       streamFunction: (ref, context, {cancel}) {
         requested.add(ref);

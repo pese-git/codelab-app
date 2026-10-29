@@ -105,4 +105,41 @@ void main() {
       throwsA(isA<HostWiringException>()),
     );
   });
+
+  test('mcp: {stdio, http} in both profiles (design.md change '
+      'add-agent-mcp-client, D3)', () {
+    for (final name in ['agent-serve', 'embedded-cli']) {
+      final state = HostProfile.of(name).states[HostCapability.mcp];
+
+      expect(state, isA<CapabilityTransport>(), reason: name);
+      expect((state! as CapabilityTransport).transports, {'stdio', 'http'});
+      expect((state as CapabilityTransport).reason, isNotEmpty);
+    }
+  });
+
+  test('the MCP transports narrow to a subset but never widen back', () {
+    final http = HostProfile.of('agent-serve').narrowed({
+      HostCapability.mcp: const CapabilityTransport({'http'}, 'только http'),
+    });
+
+    expect(
+      (http.states[HostCapability.mcp]! as CapabilityTransport).transports,
+      {'http'},
+    );
+    expect(
+      () => http.narrowed({
+        HostCapability.mcp: const CapabilityTransport({
+          'http',
+          'stdio',
+        }, 'назад'),
+      }),
+      throwsA(
+        isA<HostWiringException>().having(
+          (e) => e.message,
+          'message',
+          contains('mcp'),
+        ),
+      ),
+    );
+  });
 }

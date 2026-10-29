@@ -5,6 +5,7 @@ import 'package:test/test.dart';
 import '../permissions/fake_gate.dart';
 import '../support/models.dart';
 import '../tools/capability_envs.dart';
+import '../mcp/fake_mcp_connector.dart';
 import '../tools/fake_shell.dart';
 import 'core_harness.dart';
 
@@ -42,6 +43,7 @@ void main() {
     expect(h.core.plan.offReasons.keys, [
       HostCapability.shellExec,
       HostCapability.sessionPersistence,
+      HostCapability.mcp,
     ]);
     expect(h.logger.eventsOf('host.plan'), hasLength(1));
   });
@@ -267,6 +269,73 @@ void main() {
         core.plan.offReasons[HostCapability.sessionPersistence],
         isNotEmpty,
       );
+    });
+  });
+
+  group('capability mcp (design.md change add-agent-mcp-client, D3)', () {
+    test('without services.mcp the capability is off with a reason', () {
+      final h = CoreHarness.build(
+        baseEnv: MemoryExecutionEnv(cwd: '/proj'),
+        narrow: noExec,
+        gate: FakeGate(),
+        steps: const [],
+      );
+
+      expect(
+        h.core.plan.offReasons[HostCapability.mcp],
+        'сервис MCP не передан',
+      );
+      expect(h.core.plan.profile.isOn(HostCapability.mcp), isFalse);
+    });
+
+    test('a connector with both transports keeps the capability on', () {
+      final h = CoreHarness.build(
+        baseEnv: MemoryExecutionEnv(cwd: '/proj'),
+        narrow: noExec,
+        gate: FakeGate(),
+        steps: const [],
+        mcp: FakeMcpConnector(),
+      );
+
+      expect(h.core.plan.offReasons, isNot(contains(HostCapability.mcp)));
+      expect(h.core.plan.profile.isOn(HostCapability.mcp), isTrue);
+    });
+
+    test('a connector without a transport of the capability is a wiring '
+        'error that names mcp and the transport (HOST-3)', () {
+      expect(
+        () => CoreHarness.build(
+          baseEnv: MemoryExecutionEnv(cwd: '/proj'),
+          narrow: noExec,
+          gate: FakeGate(),
+          steps: const [],
+          mcp: FakeMcpConnector(transports: {'stdio'}),
+        ),
+        throwsA(
+          isA<HostWiringException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('mcp'), contains('http')),
+          ),
+        ),
+      );
+    });
+
+    test('a narrowed capability needs only its own transports', () {
+      final h = CoreHarness.build(
+        baseEnv: MemoryExecutionEnv(cwd: '/proj'),
+        narrow: {
+          ...noExec,
+          HostCapability.mcp: const CapabilityTransport({
+            'http',
+          }, 'профиль без процессов'),
+        },
+        gate: FakeGate(),
+        steps: const [],
+        mcp: FakeMcpConnector(transports: {'http'}),
+      );
+
+      expect(h.core.plan.profile.isOn(HostCapability.mcp), isTrue);
     });
   });
 }

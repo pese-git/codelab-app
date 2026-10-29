@@ -32,12 +32,18 @@ const acpAllowlist = {
   'async',
 };
 
+/// Dependencies of the MCP client of the agent (agent-core-architecture
+/// §1.2; design.md change `add-agent-mcp-client`, D14): the core, `http` for
+/// streamable HTTP, `meta` and `async`; no `dart:io`, ACP or client packages.
+const mcpAllowlist = {'codelab_agent_core', 'http', 'meta', 'async'};
+
 /// Dependencies of the agent binary (workspace-architecture «Автоматический
 /// сторож границ пакетов»; design.md change `add-codelab-agent-binary`, D11).
 const binaryAllowlist = {
   'codelab_agent_core',
   'codelab_agent_io',
   'codelab_agent_acp',
+  'codelab_agent_mcp',
   'codelab_acp_protocol',
   'codelab_acp_transports',
   'args',
@@ -139,6 +145,29 @@ void main() {
     final extra = dependencyKeys(pubspec).difference(acpAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('codelab_agent_mcp depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_agent_mcp/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(mcpAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('reports json_rpc_2 in the dependencies of the MCP client', () {
+    const pubspec = '''
+name: codelab_agent_mcp
+dependencies: # allowlist
+  codelab_agent_core:
+    path: ../codelab_agent_core
+  json_rpc_2: ^3.0.0
+  http: ^1.5.0
+''';
+
+    expect(dependencyKeys(pubspec).difference(mcpAllowlist), {'json_rpc_2'});
   });
 
   test('apps/codelab_agent depends only on its allowlist', () {
