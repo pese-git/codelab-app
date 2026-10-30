@@ -250,8 +250,11 @@ final class SlashCommand {
 }
 ```
 
-В MVP источник команд — только `builtin` и `mcpPrompt` (MCP prompts, §13.6); `template` и `skill`
-добавляет §17.2. `plugin` добавляет §17.14.3.
+В MVP источники команд — `template` (шаблоны промптов, этап 8.7; design.md change `add-agent-project-files`, D7), `builtin` и
+`mcpPrompt` (MCP prompts, §13.6; change встроенных команд); `skill` добавляет §17.2, `plugin` —
+§17.14.3. `CommandsChanged` на этапе 8.7 не эмитится: список шаблонов не меняется за жизнь сессии,
+и адаптер берёт его из `AgentSession.commands` после создания и загрузки сессии (design.md change `add-agent-project-files`, D9);
+событие вводит change, у которого набор меняется (MCP prompts, `/config reload`).
 
 | Событие | Когда | Payload |
 |---|---|---|

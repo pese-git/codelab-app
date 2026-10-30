@@ -58,16 +58,40 @@
    `core/config-legacy-found-warning`, `config_yaml_profile_test.dart`,
    `config_legacy_found_test.dart`. Здесь же читаются ключи `redact.*` редакции секретов
    (задача 8.11; agent-core-architecture §12.4.3, правило доверия проекту §15.3).
-6. **8.6. Инструкции проекта** (agent-core-architecture §11.5): `ProjectContextLoader` хоста
-   читает через `ExecutionEnv` (граница `BoundedEnv` соблюдается) файлы от `cwd` вверх до корня
-   git-репозитория (без репозитория — только `cwd`), на каждом уровне `AGENTS.md` и `CLAUDE.md`,
-   плюс `$CODELAB_HOME/AGENTS.md`; общий бюджет 32 КиБ (`project_context.max_bytes`), файл, не
-   поместившийся целиком, усекается с пометкой; секция системного промпта `project-context`.
-7. **8.7. Slash-команды агента:** шаблоны промптов `<cwd>/.codelab/prompts/*.md` (только для проекта в `trusted_projects`) и
-   `$CODELAB_HOME/prompts/*.md` (agent-core-architecture §17.2.2; frontmatter: `description`, `argument-hint`; тело — шаблон
-   промпта с `$ARGUMENTS`) → `available_commands_update` после `session/new`; вызов `/имя
-   аргументы` разворачивается в промпт.
-8. **8.8. Определения агентов в Markdown** (R-15, Must): загрузчик `$CODELAB_HOME/agents/*.md` и `<cwd>/.codelab/agents/*.md` (только для доверенного проекта), разбор YAML-frontmatter пакетом `yaml`, опция конфигурации `agent`, применение промпта, модели, режима и списка инструментов; определения `[agents.definitions.*]` из `codelab.toml` пользователь переписывает в Markdown вручную (agent-core-architecture §15.7: файл не читается, `config migrate` нет — решение 2026-10-29, change `add-agent-configuration`). Спецификация — agent-core-architecture §15.8; тесты `agent_definition_parse_test.dart`, `agent_definition_trust_test.dart`, `agent_select_test.dart`, фикстура `acp/set-config-option-agent`.
+6. **8.6. Инструкции проекта** (agent-core-architecture §11.5; change
+   [`add-agent-project-files`](../../../../openspec/changes/add-agent-project-files/), D2, D5):
+   `ProjectFilesLoader` (`codelab_agent_io`, порт ядра `ProjectFilesSource`) читает файлы с локальной
+   файловой системы процесса агента через `BoundedEnv` корня области — не через env сессии ACP: до
+   ответа `session/new` клиент не знает `sessionId` (ACP-8), а в ACP нет `stat` и листинга. Обход
+   идёт от канонического `cwd` вверх до корня git-репозитория (каталог с записью `.git`; без
+   репозитория — только `cwd`); единственная операция вне границы — проверка существования `.git`.
+   На каждом уровне берётся `AGENTS.md`, а если его нет — `CLAUDE.md` (алиас, решение пользователя 2026-10-30), плюс
+   `$CODELAB_HOME/AGENTS.md`; файлы читаются и для недоверенного проекта (D4; решение пользователя 2026-10-30). Общий бюджет —
+   `tools.project_context.max_bytes` (32 КиБ, `0` — выключено; из недоверенного проекта — только
+   уменьшение) раздаётся от ближнего файла к дальнему; файл, не поместившийся целиком, усекается по
+   границе строки с пометкой. Секция системного промпта — `project_context`. В `serve --ws` файлы
+   проекта и `$CODELAB_HOME` не читаются: клиент WebSocket выбирает `cwd`, а чтение шло бы с машины
+   агента (решение пользователя 2026-10-30; D2, D16), событие `project_files.skipped`.
+7. **8.7. Slash-команды агента** (agent-core-architecture §17.2.2, §17.2.6; change
+   `add-agent-project-files`, D7–D9): шаблоны промптов `<cwd>/.codelab/prompts/*.md` (только если
+   канонический `cwd` сессии в `trusted_projects`) и `$CODELAB_HOME/prompts/*.md`; frontmatter
+   (необязательный, строгий профиль YAML): `description`, `argument-hint`; тело — шаблон промпта с
+   `$ARGUMENTS`, `$1`…`$9`. Имена встроенных команд §13.4 зарезервированы уже сейчас. Список →
+   `available_commands_update` после `session/new` и в реплее `session/load`; вызов `/имя
+   аргументы` разворачивается в ядре в сообщение пользователя с полем записи `command`. Встроенные
+   команды (`/help`, `/status`, `/mode`, `/model`, `/compact`), MCP prompts и ответ «Unknown
+   command» — отдельный change (решение пользователя 2026-10-30, OQ1 change `add-agent-project-files`).
+8. **8.8. Определения агентов в Markdown** (R-15, Must; change `add-agent-project-files`, D10–D12):
+   загрузчик `$CODELAB_HOME/agents/*.md` и `<cwd>/.codelab/agents/*.md` (только для доверенного
+   проекта), разбор YAML-frontmatter пакетом `yaml` в `codelab_agent_io` в строгом профиле
+   конфига, проверка полей в ядре; опция конфигурации ACP `agent` (без `category`: категории без
+   `_` зарезервированы ACP); применение промпта, модели, режима (только не мягче режима конфига,
+   решение пользователя 2026-10-30) и списка инструментов; определения `[agents.definitions.*]` из `codelab.toml` пользователь
+   переписывает в Markdown вручную (agent-core-architecture §15.7: файл не читается, `config
+   migrate` нет — решение 2026-10-29, change `add-agent-configuration`). Спецификация —
+   agent-core-architecture §15.8; тесты `agent_definition_parse_test.dart`,
+   `agent_definition_trust_test.dart`, `agent_select_test.dart`, фикстура
+   `acp/set-config-option-agent`.
 9. **8.9. Хранилище секретов** (P-12, P-17; agent-core-architecture §17.5.4) — нужна MVP:
    встроенный агент этапа 7 берёт ключ провайдера отсюда. `SecretResolver` (порядок разрешения
    §17.5.4: кэш → переменная `CODELAB_SECRET_<…>` → хранилище ОС), бэкенды `keychain-macos`
@@ -110,7 +134,7 @@
 `add-agent-configuration` (8.5; scope: файлы, порядок слоёв, формат YAML и его профиль,
 предупреждение `config.legacy_found` вместо чтения `codelab.toml`, подкоманда `config check`,
 минимальный `codelab_setup`; новая зависимость `yaml` как решение о технологии по
-`AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), `add-project-instructions-and-commands` (8.6–8.8),
+`AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), [`add-agent-project-files`](../../../../openspec/changes/add-agent-project-files/) (8.6–8.8; scope: инструкции проекта, шаблоны промптов как команды, определения агентов в Markdown, порт `ProjectFilesSource`, `config check` с диагностикой файлов проекта; ACP не расширяется),
 `add-agent-secret-store` (8.9; scope: имена секретов, порядок разрешения, бэкенды ОС, команды
 `secret`, диагностика без значений) и `add-config-writer-and-reload` (8.10, Should; scope:
 запись конфига, наблюдатель и перезагрузка, реестр настроек, `McpSupervisor`, команды

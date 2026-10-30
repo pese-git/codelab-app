@@ -144,8 +144,10 @@ final class AcpServerConfig {
 5. Ответ `NewSessionResponse(sessionId, modes, configOptions)`.
 6. **После** ответа — уведомление `available_commands_update` (до ответа клиент не знает
    `sessionId`, ранние уведомления он отбросил бы). На этапе 4 встроенных команд ещё нет и
-   список пуст (`availableCommands: []`); встроенные команды и порядок ниже появляются на
-   этапе 8 (dart-agent-and-clients §9.13), фикстуры этапов 0 и 4 сверяют список через `$any` (§14.2).
+   список пуст (`availableCommands: []`). С этапа 8.7 список — команды шаблонов промптов
+   `AgentSession.commands` (§17.2.2; design.md change `add-agent-project-files`, D9); встроенные команды и порядок ниже добавляет
+   отдельный change встроенных команд (решение пользователя 2026-10-30, OQ1). Фикстуры этапов 0 и 4
+   сверяют список через `$any` (§14.2).
 
 ```json
 {"jsonrpc":"2.0","id":1,"result":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","modes":{"currentModeId":"standard","availableModes":[{"id":"plan","name":"Plan","description":"Read and plan only, no changes"},{"id":"ask","name":"Ask","description":"Approve every call, including reads"},{"id":"standard","name":"Standard","description":"Reads without asking, edits and commands with approval"},{"id":"accept-edits","name":"Accept edits","description":"Reads and edits without asking, commands and network with approval"},{"id":"bypass","name":"Bypass","description":"No approval except for critical commands, agent config edits and network access"}]},"configOptions":[{"id":"mode","name":"Mode","category":"mode","type":"select","currentValue":"standard","options":[{"value":"plan","name":"Plan"},{"value":"ask","name":"Ask"},{"value":"standard","name":"Standard"},{"value":"accept-edits","name":"Accept edits"},{"value":"bypass","name":"Bypass"}]},{"id":"model","name":"Model","category":"model","type":"select","currentValue":"openai/gpt-4o","options":[{"value":"openai/gpt-4o","name":"GPT-4o"},{"value":"anthropic/claude-sonnet-4","name":"Claude Sonnet 4"}]}]}}

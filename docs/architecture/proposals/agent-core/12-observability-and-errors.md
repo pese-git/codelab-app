@@ -141,6 +141,28 @@ final class LogRecord {           // то, что получает sink хост
 обрезка до 200 символов — по рунам Unicode. Полный список причин — design.md change
 `add-agent-mcp-client`, D13.
 
+Этап 8.6–8.8 (design.md change `add-agent-project-files`, D14; пишет логгер сессии; содержимое файлов, тела шаблонов и определений и
+аргументы команд в поля не попадают):
+
+| Событие | Уровень | Поля |
+|---|---|---|
+| `project_context.loaded` | info | `session_id`, `files`, `bytes`, `truncated`, `omitted`, `root` (`git` \| `cwd`) |
+| `commands.loaded` | info | `session_id`, `count`, `project` |
+| `agents.loaded` | info | `session_id`, `names` |
+| `project_files.diagnostic` | warning (`error`/`warning`), debug (`info`) | `session_id`, `path`, `line`, `column`, `code`, `message` |
+| `project_files.skipped` | info | `transport` (`ws`), `reason`; логгер хоста, один раз при запуске `serve --ws` (D16) |
+| `command.expanded` | info | `session_id`, `name`, `source`, `args_bytes` |
+| `agent.selected` | info | `session_id`, `agent`, `source`, `model`, `mode`, `mode_applied`, `tools` |
+| `agent.mode.not_applied` | warning | `session_id`, `agent`, `mode`, `floor` |
+| `agent.definition.missing` | warning | `session_id`, `agent` |
+
+Уровни диагностик файлов проекта (D3, D6): `outside_root`, `not_utf8`, `unreadable`, `timeout` —
+`warning`; `limit_exceeded` — `warning` для предела 100 файлов каталога шаблонов или агентов
+(отброшенные файлы видны в `config check`) и `info` для предела 64 уровней обхода; `shadowed` — `info`; `unexpected` — `error` (непредвиденное исключение
+порта; в поле `message` — только тип исключения). Коды проверки содержимого шаблонов и определений
+— по D7 и D10 того же change. Путь в `project_files.diagnostic` и `project_context.loaded` не
+экранируется, в отличие от атрибута `path` блока в промпте (§11.5).
+
 После MVP (§17) добавляются области:
 
 | Область | События |
