@@ -77,14 +77,17 @@ void main() {
     final warning = legacy(first).single;
     expect(warning.level, LogLevel.warning);
     expect(warning.fields['files'], ['$home/auth.toml', '$cwd/codelab.toml']);
+    // Первый файл — локация строки (`ConfigIssue.source`), в тексте его нет;
+    // остальные перечислены в тексте.
+    expect(warning.source, '$home/auth.toml');
     expect(
       warning.message,
-      'codelab.toml is not used by the Dart agent: '
-      '$home/auth.toml, $cwd/codelab.toml. Move the settings to config.yaml '
-      'manually; the key mapping is in '
+      'codelab.toml is not used by the Dart agent. Move the settings to '
+      'config.yaml manually; the key mapping is in '
       'docs/architecture/proposals/agent-core/15-configuration.md, '
-      'section 15.7.',
+      'section 15.7. Also found: $cwd/codelab.toml.',
     );
+    expect(warning.message, isNot(contains('$home/auth.toml')));
     expect(warning.toString(), isNot(contains('sk-toml-secret')));
     expect(warning.toString(), isNot(contains('sk-auth-secret')));
     expect(legacy(second), isEmpty, reason: 'once per process and cwd');
