@@ -24,6 +24,7 @@ final class PolicyHarness {
     PermissionMode? modeOverride,
     PermissionGate? gate,
     PolicyRules rules = const PolicyRules(),
+    Set<ToolTier> extraDeniedTiers = const {},
     MemoryExecutionEnv? memory,
   }) async {
     final h = await ExecutorHarness.create(
@@ -36,6 +37,7 @@ final class PolicyHarness {
       modeOverride: modeOverride,
       gate: gate,
       rules: rules,
+      extraDeniedTiers: extraDeniedTiers,
     );
   }
 
@@ -46,6 +48,7 @@ final class PolicyHarness {
     PermissionMode? modeOverride,
     PermissionGate? gate,
     PolicyRules rules = const PolicyRules(),
+    Set<ToolTier> extraDeniedTiers = const {},
   }) async {
     final logger = RecordingLogger();
     final policy = PermissionPolicy(
@@ -53,6 +56,7 @@ final class PolicyHarness {
       modeOverride: modeOverride,
       gate: gate,
       rules: rules,
+      extraDeniedTiers: extraDeniedTiers,
       logger: logger,
     );
     return PolicyHarness._(h, policy, logger);

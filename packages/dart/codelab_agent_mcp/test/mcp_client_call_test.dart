@@ -27,7 +27,8 @@ void main() {
   late McpHarness h;
   setUp(() => h = McpHarness());
 
-  test('callTimeout is a 10 minute constant without a config key', () {
+  test('callTimeout of the options is a 10 minute default for servers without '
+      'their own call_timeout (change `add-agent-configuration`, D10)', () {
     expect(const McpClientOptions().callTimeout, const Duration(minutes: 10));
   });
 

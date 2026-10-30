@@ -51,6 +51,31 @@ void main() {
     }
   });
 
+  // Конфигурация: хост видит типы входа и результата, а схема, обход слоя,
+  // доверие и слияние — внутренности проверки (change
+  // `add-agent-configuration`, D3; CFG-5).
+  test('the barrel exports the configuration contract, not its internals', () {
+    for (final public in [
+      'src/config/config_tree.dart',
+      'src/config/config_issue.dart',
+      'src/config/core_config.dart',
+      'src/config/host_settings.dart',
+      'src/config/redact_settings.dart',
+    ]) {
+      expect(barrel, contains("export '$public"), reason: public);
+    }
+    for (final internal in [
+      'src/config/schema.dart',
+      'src/config/validate.dart',
+      'src/config/trust.dart',
+      'src/config/merge.dart',
+      'src/config/interpolate.dart',
+      'src/config/resolve.dart',
+    ]) {
+      expect(barrel, isNot(contains("export '$internal")), reason: internal);
+    }
+  });
+
   test('the barrel exports the runtime and the assembly', () {
     expect(barrel, contains("export 'src/runtime/agent_runtime.dart'"));
     expect(barrel, contains("export 'src/runtime/agent_session.dart'"));
