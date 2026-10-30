@@ -171,4 +171,63 @@ void main() {
 
     expect(base.values['budget'], {'max_steps': 5});
   });
+
+  test('the flags layer replaces providers.cli as a whole, other providers '
+      'merge as before', () {
+    final merged = mergeLayers([
+      layer({
+        'providers': {
+          'cli': {
+            'kind': 'openai-compatible',
+            'base_url': 'https://old.test/v1',
+            'headers': {'X-Org': 'secret-org'},
+            'models': {'old': <String, Object?>{}},
+          },
+          'other': {
+            'kind': 'openai-compatible',
+            'headers': {'X-A': 'a'},
+          },
+        },
+      }),
+      layer({
+        'providers': {
+          'cli': {
+            'kind': 'openai-compatible',
+            'base_url': 'https://new.test/v1',
+            'models': {'new': <String, Object?>{}},
+          },
+        },
+      }, kind: ConfigLayerKind.flags),
+    ]);
+
+    final providers = merged['providers']! as Map<String, Object?>;
+    expect(providers['cli'], {
+      'kind': 'openai-compatible',
+      'base_url': 'https://new.test/v1',
+      'models': {'new': <String, Object?>{}},
+    });
+    expect((providers['other']! as Map)['headers'], {'X-A': 'a'});
+  });
+
+  test('a file layer still merges providers.cli recursively', () {
+    final merged = mergeLayers([
+      layer({
+        'providers': {
+          'cli': {
+            'headers': {'X-A': 'a'},
+          },
+        },
+      }),
+      layer({
+        'providers': {
+          'cli': {'base_url': 'https://x.test'},
+        },
+      }, kind: ConfigLayerKind.projectLocal),
+    ]);
+
+    expect(((merged['providers']! as Map)['cli'] as Map).keys, [
+      'headers',
+      'base_url',
+    ]);
+  });
 }
