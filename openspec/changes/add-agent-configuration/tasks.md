@@ -238,8 +238,8 @@
 
 ## 11. Мост `codelab_setup` и `codelab config check` (D14, OQ2 (а))
 
-- [ ] 11.1 `[agent]` Тесты сторожа (workspace-architecture, сценарий «Основной барель моста импортирует IO-пакет агента»): `import_guard_test.dart` на временном пакете с правилом `codelab_setup`; `pubspec_allowlist_test.dart` — `setupAllowlist = {codelab_agent_core, codelab_agent_io, meta}`, `codelab_setup` в `cliAllowlist`. Красные.
-- [ ] 11.2 `[agent]` Пакет `packages/dart/codelab_setup`:
+- [x] 11.1 `[agent]` Тесты сторожа (workspace-architecture, сценарий «Основной барель моста импортирует IO-пакет агента»): `import_guard_test.dart` на временном пакете с правилом `codelab_setup`; `pubspec_allowlist_test.dart` — `setupAllowlist = {codelab_agent_core, codelab_agent_io, meta}`, `codelab_setup` в `cliAllowlist`. Красные.
+- [x] 11.2 `[agent]` Пакет `packages/dart/codelab_setup`:
   - `pubspec.yaml` с комментарием allowlist;
   - `lib/codelab_setup.dart` — реэкспорт `ConfigIssue`, `ConfigIssueKind`, `ConfigLoadResult`;
   - `lib/io.dart` — реэкспорт `ConfigCommands`, `CheckOptions`, `ConfigCommandResult`;
@@ -250,8 +250,9 @@
   - `melos bootstrap`.
 
   11.1 зелёные, `package_naming_test.dart` зелёный.
-- [ ] 11.3 `[client]` Тест `apps/codelab_cli/test/config_command_test.dart` и e2e процесса `cli/config-check-reports-issues` (codelab-cli «Подкоманда codelab config», все сценарии): `check` на временных `CODELAB_HOME` и `--cwd` — проблема и код `1`, процесс агента не запускается; `config set` и `config migrate` → `64` `Unknown command`; вывод совпадает с `codelab-agent config check` для тех же каталогов (сценарий «Одинаковый вывод у двух бинарей»). Красные.
-- [ ] 11.4 `[client]` `apps/codelab_cli`: зависимость `codelab_setup` в `pubspec.yaml`; подкоманда `config check` в `cli_args.dart` и `run.dart` (`CliCommand.config`); вызов `package:codelab_setup/io.dart`; строка в `--help`; `dart:io` — только в точке входа и composition root (CLI `AGENTS.md` §2); вложенный `AGENTS.md` CLI — `codelab_setup` в списке зависимостей. 11.3 зелёные, `melos run guard` зелёный. **Конец итерации 4.**
+- [x] 11.3 `[client]` Тест `apps/codelab_cli/test/config_command_test.dart` и e2e процесса `cli/config-check-reports-issues` (codelab-cli «Подкоманда codelab config», все сценарии): `check` на временных `CODELAB_HOME` и `--cwd` — проблема и код `1`, процесс агента не запускается; `config set` и `config migrate` → `64` `Unknown command`; вывод совпадает с `codelab-agent config check` для тех же каталогов (сценарий «Одинаковый вывод у двух бинарей»). Красные.
+- [x] 11.4 `[client]` `apps/codelab_cli`: зависимость `codelab_setup` в `pubspec.yaml`; подкоманда `config check` в `cli_args.dart` и `run.dart` (`CliCommand.config`); вызов `package:codelab_setup/io.dart`; строка в `--help`; `dart:io` — только в точке входа и composition root (CLI `AGENTS.md` §2); вложенный `AGENTS.md` CLI — `codelab_setup` в списке зависимостей. 11.3 зелёные, `melos run guard` зелёный. **Конец итерации 4.**
+- [x] 11.5 `[client]` Исправления по ревью итерации 4 (codelab-cli «Подкоманда codelab config» — сценарии «Неизвестная подкоманда config», «config без подкоманды», «--cwd подкоманды сильнее общего», «Без --cwd подкоманды берётся общий», «Относительный путь и `..` канонизирует загрузчик», «Флаги подключения с config — ошибка использования», «config check не меняет CODELAB_HOME»; workspace-architecture — `package:codelab_setup/io.dart` только из `run.dart`): сначала красные тесты в `config_command_test.dart`, e2e процесса и стороже (`rules.dart`), затем код `cli_args.dart`/`run.dart`. `melos run guard` зелёный.
 
 ## 12. Матрица, документы и Definition of Done
 

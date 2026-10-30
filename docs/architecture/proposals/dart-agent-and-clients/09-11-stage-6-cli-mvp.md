@@ -131,8 +131,15 @@ codelab --version | --help
 переводится: команды `config migrate` нет (решение 2026-10-29, change `add-agent-configuration`,
 D14). В 8.5 создаётся минимальный пакет `codelab_setup` (§12.4.2): `codelab config check`
 регистрируется в `apps/codelab_cli` и вызывает `ConfigCommands` через `package:codelab_setup/io.dart`;
-корень состояния — `CODELAB_HOME`, как у `codelab-agent`, `cwd` — флаг `--cwd` (по умолчанию текущий
-каталог). Остальные подкоманды `config` до своих задач дают код 64 `Unknown command`.
+корень состояния — `CODELAB_HOME`, как у `codelab-agent` (`config check` его не изменяет: нет
+`sessions/`, `profiles.json`, `cli_history`), `cwd` — `--cwd` подкоманды, иначе общий `-C/--cwd`,
+иначе текущий каталог. Путь передаётся загрузчику как есть, канонизирует его загрузчик, поэтому
+вывод и код двух бинарей совпадают и для относительного пути с `..`. Проверяется окружение процесса
+`codelab`, профиль подключения не учитывается: `--agent`, `-p`/`--prompt`, `--prompt-file` вместе с
+`config` — ошибка использования, код 64. `codelab config` без подкоманды — код 64 и
+`config needs a subcommand: codelab config check [--cwd <dir>]`; остальные подкоманды `config` до своих
+задач дают код 64 `Unknown command config <sub>`. `package:codelab_setup/io.dart` импортируется в
+`apps/codelab_cli/lib/src` только из `run.dart` (сторож).
 
 Скрипт прогона Terminal-Bench (`tool/bench/`, H-06) вызывает обычный `codelab -f …
 --output-format stream-json --approve allow-all` только внутри контейнера задачи

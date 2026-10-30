@@ -1,0 +1,23 @@
+name: codelab_setup
+description: Setup bridge between the CodeLab clients and the Dart agent configuration — re-exports of the pure config types and the shared `config` subcommands.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+# allowlist — workspace-architecture «Автоматический сторож границ пакетов»
+# (setupAllowlist): ядро, IO-пакет агента (только lib/io.dart) и meta.
+# Расширение — только через OpenSpec change; `http` придёт с мастером
+# провайдера (этап 7, §12.4.2).
+dependencies:
+  codelab_agent_core:
+    path: ../codelab_agent_core
+  codelab_agent_io:
+    path: ../codelab_agent_io
+  meta: ^1.16.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.3
