@@ -17,6 +17,7 @@ Change закрывает задачи 8.6–8.8 этапа 8 (`09-13-stage-8-mc
   Выбор пишется в журнал (`config_change {optionId: "agent"}`) и восстанавливается при `session/load`. Определения `[agents.definitions.*]` из `codelab.toml` пользователь переносит вручную (§15.7).
 - **Общий загрузчик файлов проекта.** В ядре появляется порт `ProjectFilesSource` (`AgentCoreServices.projectFiles`); реализация `ProjectFilesLoader` живёт в `codelab_agent_io`. Чтение идёт через локальный `ExecutionEnv` хоста под `BoundedEnv` корня своей области (D2): путь или symlink наружу отклоняется. В `serve --ws` загрузчик не подключается: клиент WebSocket выбирает `cwd`, а читать пришлось бы файлы машины агента (решение пользователя 2026-10-30; D2, D16). Лимиты размера и числа файлов, ошибки кодировки и битый frontmatter дают диагностику, а не исключение; загрузка ограничена таймаутом 5 с: сессия создаётся всегда (D6).
 - **Конфигурация.** Ключ `tools.project_context.max_bytes` получает потребителя: диапазон `0..262144`, `0` выключает секцию. Из недоверенного проекта значение принимается только на уменьшение. В `CoreConfig` появляется список `trustedProjects` (канонические корни).
+- **`CODELAB_HOME` с тильдой.** Значение `~` или `~/…` (тильду не раскрыла оболочка: unit launchd/systemd, `env` профиля, кавычки) раскрывается в домашний каталог — `HOME`, иначе `USERPROFILE` — и в агенте (`codelabHomeOf`), и в CLI (`CodelabHome`). Раньше `~/x` давал относительный каталог `./~/x` у загрузчика конфига и сбой загрузчика файлов проекта (решение пользователя 2026-10-30; D17). `~user/…`, `~\…` и тильда без домашнего каталога — ошибка использования с кодом `64` в обоих бинарях.
 - **`config check`** печатает диагностику определений агентов и шаблонов команд для `--cwd` строками `warning:`. Коды выхода не меняются (D13).
 - **Наблюдаемость:** события `project_context.loaded`, `commands.loaded`, `agents.loaded`, `project_files.diagnostic`, `project_files.skipped`, `command.expanded`, `agent.selected`, `agent.mode.not_applied`, `agent.definition.missing` (D14). Содержимое файлов и аргументы команд в лог не попадают.
 
@@ -41,7 +42,8 @@ Change закрывает задачи 8.6–8.8 этапа 8 (`09-13-stage-8-mc
 - `agent-prompts`: в порядок сборки системного промпта добавляются секции `project_context` и `agent_profile`.
 - `agent-runtime`: порт `ProjectFilesSource`; файлы проекта читаются при создании и загрузке сессии; новые члены `AgentSession` — `commands`, `agents`, `agent`, `setAgent`.
 - `agent-acp-server`: `available_commands_update` несёт команды сессии; реплей команды показывает исходный текст; опция `agent` и её обработка в `session/set_config_option`.
-- `agent-configuration`: потребитель и правило доверия ключа `tools.project_context.max_bytes`; `CoreConfig.trustedProjects`; `config check` показывает диагностику файлов проекта.
+- `agent-configuration`: потребитель и правило доверия ключа `tools.project_context.max_bytes`; `CoreConfig.trustedProjects`; `config check` показывает диагностику файлов проекта; `CODELAB_HOME` с `~` раскрывается (D17).
+- `codelab-cli`: `CODELAB_HOME` со значением `~` или `~/…` раскрывается в домашний каталог (D17).
 - `agent-sessions`: поле записи `command` у сообщения пользователя, полученного из шаблона.
 - `agent-binary`: `serve --stdio` передаёт ядру `ProjectFilesLoader` с `$CODELAB_HOME` процесса; `serve --ws` файлы проекта не читает.
 - `acp-golden-fixtures`: фикстуры `acp/prompt-template-command`, `acp/available-commands-no-tools`, `acp/set-config-option-agent`; агентский драйвер принимает `trusted_projects` с `${cwd}`.
@@ -54,8 +56,9 @@ Change закрывает задачи 8.6–8.8 этапа 8 (`09-13-stage-8-mc
   - `codelab_agent_acp`: `agent_server.dart`, `session_bridge.dart`, `config_options.dart`, `replay.dart`; тест-фабрика conformance;
   - `apps/codelab_agent`: `host/agent_host.dart`;
   - `codelab_acp_testing`: три фикстуры;
-  - `apps/codelab_cli`: только тест вывода `codelab config check`.
-- **Клиенты** (app, CLI) не меняются. Они уже показывают команды из `available_commands_update` (`CommandCatalog`, change `add-command-palette-agent-commands`). Опцию `agent` desktop выводит общим селектором `configOptions`, CLI — командой `/config agent <имя>`.
+  - `apps/codelab_cli`: тест вывода `codelab config check`; раскрытие `~` в `CodelabHome.resolve` (`lib/src/home.dart`, D17);
+  - `codelab_agent_io`: также `codelabHomeOf` (`config/config_loader.dart`, D17).
+- **Клиенты:** desktop не меняется; в CLI меняется только раскрытие `~` в `CODELAB_HOME` (D17). Клиенты уже показывают команды из `available_commands_update` (`CommandCatalog`, change `add-command-palette-agent-commands`). Опцию `agent` desktop выводит общим селектором `configOptions`, CLI — командой `/config agent <имя>`.
 - **Public API ядра** — только добавления; используемые сигнатуры не меняются.
 - **Зависимости** не добавляются: `yaml` уже в `codelab_agent_io` (change `add-agent-configuration`, D2). PKG-2 не расширяется, ядро остаётся web-безопасным. Новое правило сторожа не нужно: новые каталоги лежат в существующих пакетах, и их уже покрывают PKG-1 и CFG-5.
 - **Журнал:** новое необязательное поле записи `command`. Старые журналы читаются без изменений; старое ядро сохраняет поле в `extra` (совместимость вперёд, §8).

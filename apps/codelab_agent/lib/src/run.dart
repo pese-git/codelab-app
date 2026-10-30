@@ -45,7 +45,7 @@ Future<int> runCodelabAgent(
   }
   if (top.command case final config? when config.name == 'config') {
     try {
-      return runConfigCommand(
+      return await runConfigCommand(
         config,
         environment: environment,
         cwd: Directory.current.path,

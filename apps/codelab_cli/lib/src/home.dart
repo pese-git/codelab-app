@@ -22,12 +22,40 @@ final class CodelabHome {
 
   /// `CODELAB_HOME`, иначе `$HOME/.codelab` (`%USERPROFILE%\.codelab` на
   /// Windows).
+  ///
+  /// `CODELAB_HOME` со значением `~` или `~/…` раскрывается в домашний каталог
+  /// пользователя: оболочка не раскрывает тильду в `CODELAB_HOME='~/x'` или
+  /// внутри кавычек, и без раскрытия путь стал бы относительным от текущего
+  /// каталога. Поведение и тексты ошибок совпадают с `codelabHomeOf` агента
+  /// (D17): любое значение на `~`, кроме `~` и `~/…`, и `~` без домашнего каталога —
+  /// [UsageError]. CLI не импортирует `codelab_agent_*`, поэтому логика здесь.
   factory CodelabHome.resolve(Map<String, String> environment) {
+    final userHome = [
+      environment['HOME'],
+      environment['USERPROFILE'],
+    ].firstWhere((v) => v != null && v.isNotEmpty, orElse: () => null);
     final explicit = environment['CODELAB_HOME'];
     if (explicit != null && explicit.isNotEmpty) {
+      if (explicit.length > 1 &&
+          explicit.startsWith('~') &&
+          explicit[1] != '/') {
+        throw const UsageError(
+          'CODELAB_HOME: ~user is not supported, use an absolute path',
+        );
+      }
+      if (explicit == '~' || explicit.startsWith('~/')) {
+        if (userHome == null) {
+          throw const UsageError(
+            'CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an '
+            'absolute path',
+          );
+        }
+        return CodelabHome._(
+          explicit == '~' ? userHome : p.join(userHome, explicit.substring(2)),
+        );
+      }
       return CodelabHome._(explicit);
     }
-    final userHome = environment['HOME'] ?? environment['USERPROFILE'];
     if (userHome == null || userHome.isEmpty) {
       throw const UsageError(
         'Cannot find the home folder: set CODELAB_HOME or HOME.',

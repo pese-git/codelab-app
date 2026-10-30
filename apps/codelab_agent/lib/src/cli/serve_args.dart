@@ -315,7 +315,18 @@ ServeOptions parseServeResults(
       LogLevel.values.where((l) => l.name == normalizedLevel).firstOrNull ??
       (throw UsageError('unknown log level: $levelName'));
 
-  final home = codelabHomeOf(environment);
+  // Под `--llm-script` `$CODELAB_HOME` не читается и не проверяется (D16,
+  // D17): значение не раскрывается, ошибка тильды не даёт код 64.
+  final String home;
+  if (llmScript != null) {
+    home = '';
+  } else {
+    try {
+      home = codelabHomeOf(environment);
+    } on ConfigUsageException catch (error) {
+      throw UsageError(error.message);
+    }
+  }
 
   final configPath = serve.option('config');
   if (configPath != null) {

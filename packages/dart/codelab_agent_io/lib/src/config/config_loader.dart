@@ -46,17 +46,69 @@ void checkConfigFileName(String path, {required String origin}) {
 /// architecture` §15.5). Настоящий конфиг на порядки меньше.
 const maxConfigBytes = 1024 * 1024;
 
-/// `CODELAB_HOME` или `~/.codelab` (`agent-core-architecture` §15.6).
+/// Домашний каталог пользователя: `HOME`, на Windows `USERPROFILE`.
+///
+/// Пустое значение считается отсутствующим: тильда с пустым `HOME` не должна
+/// превращаться в корень (`/x`), поэтому без домашнего каталога раскрытия нет.
+String? userHomeOf(Map<String, String> environment) {
+  for (final name in const ['HOME', 'USERPROFILE']) {
+    final value = environment[name];
+    if (value != null && value.isNotEmpty) {
+      return value;
+    }
+  }
+  return null;
+}
+
+/// Раскрывает `~` и `~/…` в [home]; прочее и пустой [home] — без изменений.
+///
+/// Почему: оболочка не раскрывает тильду в кавычках (`CODELAB_HOME='~/x'`), а
+/// относительный `~/x` молча указывал бы на `./~` (решение пользователя
+/// 2026-10-30; D17 change `add-agent-project-files`). Одна функция для
+/// `CODELAB_HOME` и `trusted_projects` (`agent-core-architecture` §15.6), чтобы
+/// формы не расходились. Ошибки использования для
+/// `CODELAB_HOME` бросает [codelabHomeOf], а запись `trusted_projects`, которую
+/// нельзя раскрыть, остаётся как есть и ничему не равна (fail-closed).
+String _expandHomeTilde(String path, String? home) {
+  if (home == null || home.isEmpty) {
+    return path;
+  }
+  if (path == '~' || path.startsWith('~/')) {
+    return '$home${path.substring(1)}';
+  }
+  return path;
+}
+
+/// `CODELAB_HOME` (с раскрытием `~`) или `~/.codelab`
+/// (`agent-core-architecture` §15.6).
 ///
 /// Для чего: один способ найти корень состояния у загрузчика и хостов
-/// (журналы сессий, пользовательский конфиг).
+/// (журналы сессий, пользовательский конфиг, файлы проекта); все места агента
+/// берут домашний каталог только отсюда.
+///
+/// Как использовать: `~` и `~/…` раскрываются в `HOME` (`USERPROFILE`). Без
+/// домашнего каталога и для любого значения на `~`, кроме `~` и `~/…`
+/// (`~bob/x`, `~\x`), бросает [ConfigUsageException] (хост
+/// превращает её в ошибку использования, код `64`): молча принять `~user`
+/// значило бы читать конфиг из каталога `./~user` (D17).
 String codelabHomeOf(Map<String, String> environment) {
+  final home = userHomeOf(environment);
   final explicit = environment['CODELAB_HOME'];
   if (explicit != null && explicit.isNotEmpty) {
-    return explicit;
+    if (explicit.startsWith('~') && explicit.length > 1 && explicit[1] != '/') {
+      throw const ConfigUsageException(
+        'CODELAB_HOME: ~user is not supported, use an absolute path',
+      );
+    }
+    if (home == null && (explicit == '~' || explicit.startsWith('~/'))) {
+      throw const ConfigUsageException(
+        'CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an '
+        'absolute path',
+      );
+    }
+    return _expandHomeTilde(explicit, home);
   }
-  final user = environment['HOME'] ?? environment['USERPROFILE'] ?? '.';
-  return '$user/.codelab';
+  return '${home ?? '.'}/.codelab';
 }
 
 /// Собирает конфигурацию из файлов, окружения и флагов (`agent-core-
@@ -129,7 +181,10 @@ final class ConfigLoader {
     }
 
     final root = _canonical(cwd);
-    final home = codelabHomeOf(environment);
+    // Под сценарием `--llm-script` `$CODELAB_HOME` не читается и не проверяется
+    // (D16, D17): неверная тильда не должна давать код 64. Пустой [home]
+    // используется только в ветках `!scripted`.
+    final home = scripted ? '' : codelabHomeOf(environment);
     final layers = <ConfigTree>[const ConfigTree.defaults()];
     final issues = <ConfigIssue>[];
     final warnings = <ConfigIssue>[];
@@ -298,7 +353,7 @@ final class ConfigLoader {
     if (roots is! List<Object?>) {
       return tree;
     }
-    final home = environment['HOME'] ?? environment['USERPROFILE'];
+    final home = userHomeOf(environment);
     final canonical = <Object?>[
       for (final root in roots)
         if (root is String) _canonicalEntry(root, home) else root,
@@ -312,9 +367,7 @@ final class ConfigLoader {
   }
 
   String _canonicalEntry(String entry, String? home) {
-    final expanded = home != null && (entry == '~' || entry.startsWith('~/'))
-        ? '$home${entry.substring(1)}'
-        : entry;
+    final expanded = _expandHomeTilde(entry, home);
     try {
       return Directory(expanded).resolveSymbolicLinksSync();
     } on FileSystemException {
