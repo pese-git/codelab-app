@@ -36,6 +36,8 @@ void main() {
 
     test('an unknown candidate never fits, an unknown floor admits nothing '
         '(fail-closed)', () {
+      // agent-definitions «Неизвестный режим»: пол `standard` из сценария.
+      expect(unknown.fitsFloor(ModeId.standard), isFalse);
       expect(unknown.fitsFloor(ModeId.bypass), isFalse);
       expect(unknown.fitsFloor(unknown), isFalse);
       expect(ModeId.plan.fitsFloor(unknown), isFalse);

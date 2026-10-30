@@ -150,6 +150,36 @@ agent:
     timeout: const Timeout(Duration(seconds: 90)),
   );
 
+  // agent-configuration «Тильда без домашнего каталога»: `~/x` без `HOME`
+  // (пустой) и `USERPROFILE` (не задан — `AgentProcess` его не передаёт) —
+  // ошибка использования, код 64, тот же текст, что у `codelab-agent serve`.
+  test(
+    'config check: CODELAB_HOME=~/x without HOME or USERPROFILE is code 64',
+    () async {
+      final agent = await AgentProcess.start(
+        ['config', 'check', '--cwd', project],
+        environment: {'CODELAB_HOME': '~/x', 'HOME': ''},
+        workingDirectory: project,
+      );
+      addTearDown(() async {
+        agent.kill(ProcessSignal.sigkill);
+        await agent.exitCode;
+      });
+      final code = await agent.exitCode.timeout(const Duration(seconds: 30));
+
+      expect(code, 64, reason: agent.stderrText);
+      expect(
+        agent.stderrText,
+        contains(
+          'CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an '
+          'absolute path',
+        ),
+      );
+      expect(await agent.nextStdoutLine(), isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
+
   // D17, 10.5 (защита от регрессий): `serve --stdio` с `~bob/cl` завершается
   // кодом 64 с текстом ошибки до чтения stdin.
   test(
