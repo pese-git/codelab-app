@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../agents/agent_definition.dart';
 import '../cancel/cancel_token.dart';
 import '../commands/command_template.dart';
 import '../commands/expand_command.dart';
@@ -280,6 +281,12 @@ final class AgentRuntimeImpl implements AgentRuntime {
         );
       }
       session._restoreHistory();
+      final base = _agentBaseOf(snapshot);
+      await session._restoreAgent(
+        restored.config['agent'],
+        baseMode: base.mode ?? settings.permissions.mode ?? profile.defaultMode,
+        baseModel: base.model ?? _resolve(settings.defaultModel, effort),
+      );
       if (cwd != null && cwd != header) {
         await session._writer.append(
           (id, parent, at) => CustomRecord(
@@ -296,6 +303,32 @@ final class AgentRuntimeImpl implements AgentRuntime {
       rethrow;
     }
     return session;
+  }
+
+  /// База агента из журнала: режим и модель до записи, которая перевела
+  /// сессию из `default` в агента (D11). Поля `null` — записей не было, и
+  /// вызывающий берёт значения конфигурации сессии.
+  ({ModeId? mode, ModelRef? model}) _agentBaseOf(SessionSnapshot snapshot) {
+    ModeId? mode;
+    ModelRef? model;
+    ({ModeId? mode, ModelRef? model}) base = (mode: null, model: null);
+    String current = defaultAgentName;
+    for (final record in pathToLeaf(snapshot)) {
+      switch (record) {
+        case ModeChangeRecord(:final modeId):
+          mode = ModeId.values.where((m) => m.value == modeId).firstOrNull;
+        case ModelChangeRecord(:final provider, modelId: final id):
+          model = models.resolve(ModelId('$provider/$id'));
+        case ConfigChangeRecord(optionId: 'agent', :final value):
+          if (current == defaultAgentName && value != defaultAgentName) {
+            base = (mode: mode, model: model);
+          }
+          current = value;
+        default:
+          break;
+      }
+    }
+    return base;
   }
 
   /// Ключи сессии из нужного снимка конфигурации (design.md change
@@ -470,6 +503,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
           registry: sessionRegistry,
           env: env,
           services: tools,
+          // Вызов инструмента вне набора агента (CFG-7, D11): текст ошибки
+          // строит сессия, она знает выбранного агента.
+          unavailableText: (name) => session._unavailableText(name),
         ),
         clock: services.clock,
         ids: services.ids,
@@ -530,12 +566,20 @@ final class AgentRuntimeImpl implements AgentRuntime {
       ),
       services: services,
       logger: logger,
-      compose: (cwd, mode) =>
-          _systemPrompt(cwd, mode, sessionRegistry, mcp, projectContext),
+      compose: (cwd, mode, agent) => _systemPrompt(
+        cwd,
+        mode,
+        sessionRegistry,
+        mcp,
+        projectContext,
+        agent: agent,
+      ),
       snapshot: snapshot,
       stream: stream,
       compaction: compaction ? settings.compaction : null,
       templates: project.templates,
+      agents: project.agents,
+      modeFloor: settings.permissions.mode ?? profile.defaultMode,
     );
     _sessions.add(session);
     return session;
@@ -565,19 +609,44 @@ final class AgentRuntimeImpl implements AgentRuntime {
     ModeId mode,
     ToolRegistry sessionRegistry,
     _McpState mcp,
-    ProjectContext? projectContext,
-  ) => composeSystemPrompt(
-    PromptInputs(
-      cwd: cwd,
-      platform: services.platform,
-      today: services.clock.now(),
-      mode: mode,
-      profile: profile,
-      toolNames: {for (final tool in sessionRegistry.tools) tool.name},
-      mcpServers: mcp.summaries,
-      projectContext: projectContext,
-    ),
-  );
+    ProjectContext? projectContext, {
+    AgentDefinition? agent,
+  }) {
+    // Инструменты вне набора агента не входят в промпт: секции инструментов
+    // и строки MCP-серверов описывают то, что модель реально видит (PR-6,
+    // D11).
+    final visible = [
+      for (final tool in sessionRegistry.tools)
+        if (agent?.allowsTool(tool.name) ?? true) tool.name,
+    ];
+    return composeSystemPrompt(
+      PromptInputs(
+        cwd: cwd,
+        platform: services.platform,
+        today: services.clock.now(),
+        mode: mode,
+        profile: profile,
+        toolNames: visible.toSet(),
+        mcpServers: agent?.tools == null
+            ? mcp.summaries
+            : [
+                for (final server in mcp.summaries)
+                  McpServerSummary(
+                    name: server.name,
+                    toolCount: visible
+                        .where(
+                          (n) => n.startsWith(mcpServerPrefix(server.name)),
+                        )
+                        .length,
+                  ),
+              ],
+        projectContext: projectContext,
+        agentProfile: agent == null
+            ? null
+            : (name: agent.name, body: agent.prompt),
+      ),
+    );
+  }
 
   /// Читает файлы проекта сессии портом и собирает контекст инструкций
   /// (design.md change `add-agent-project-files`, D1, D4, D5, D6, D14).
@@ -746,7 +815,29 @@ final class AgentRuntimeImpl implements AgentRuntime {
         'project': projectTrusted,
       },
     );
-    return _ProjectLoad(context, parsed.templates);
+    // Определения агентов: та же проверка и тот же канал диагностики. Каталог
+    // моделей сборки решает, существует ли модель определения (D10); тела
+    // определений в лог не пишутся (D14).
+    final agents = parseAgentDefinitions(files.agents, models: models);
+    for (final item in agents.diagnostics) {
+      diagnostic(
+        item.level,
+        item.path,
+        item.code,
+        item.message,
+        line: item.line,
+        column: item.column,
+      );
+    }
+    logger.log(
+      LogLevel.info,
+      'agents.loaded',
+      fields: {
+        'session_id': id.value,
+        'names': [for (final agent in agents.agents) agent.name],
+      },
+    );
+    return _ProjectLoad(context, parsed.templates, agents.sessionAgents);
   }
 
   /// Подключает MCP-серверы сессии до возврата сессии (D6): слияние
@@ -957,15 +1048,19 @@ final class AgentRuntimeImpl implements AgentRuntime {
   }
 }
 
-/// Итог фазы файлов проекта: контекст инструкций и шаблоны команд.
+/// Итог фазы файлов проекта: контекст инструкций, шаблоны команд и
+/// определения агентов.
 final class _ProjectLoad {
-  const _ProjectLoad(this.context, this.templates);
+  const _ProjectLoad(this.context, this.templates, this.agents);
 
   /// Порта нет, он упал или не уложился в таймаут: сессия без файлов проекта.
-  static const none = _ProjectLoad(null, []);
+  static const none = _ProjectLoad(null, [], []);
 
   final ProjectContext? context;
   final List<CommandTemplate> templates;
+
+  /// Определения для опции `agent` сессии (`scope` `session` и `both`).
+  final List<AgentDefinition> agents;
 }
 
 /// MCP-часть состояния сессии: подключённые серверы и имена их
@@ -1068,12 +1163,17 @@ final class _Session implements AgentSession {
     required Future<void> Function(List<McpServerConfig> servers) replaceMcp,
     required AgentCoreServices services,
     required Logger logger,
-    required String Function(String cwd, ModeId mode) compose,
+    required String Function(String cwd, ModeId mode, AgentDefinition? agent)
+    compose,
     required SessionSnapshot snapshot,
     required StreamFunction stream,
     required CompactionOverrides? compaction,
     required List<CommandTemplate> templates,
+    required List<AgentDefinition> agents,
+    required ModeId modeFloor,
   }) : _mode = mode,
+       _modeFloor = modeFloor,
+       agents = List.unmodifiable(agents),
        _effort = effort,
        _catalog = catalog,
        _stream = stream,
@@ -1114,6 +1214,28 @@ final class _Session implements AgentSession {
 
   @override
   final List<SlashCommand> commands;
+
+  @override
+  final List<AgentDefinition> agents;
+
+  /// Выбранный агент; `null` — `default`.
+  AgentDefinition? _activeAgent;
+
+  /// Агент, по набору которого проверяются вызовы. Совпадает с
+  /// [_activeAgent], кроме выбора посреди хода: пакет текущего шага
+  /// проверяется прежним набором, новый действует со следующего шага (D11,
+  /// как режим политики).
+  AgentDefinition? _enforcedAgent;
+
+  /// Режим и модель на момент перехода из `default` (D11): от них считаются
+  /// возврат к `default` и переход между агентами.
+  ({ModeId mode, ModelRef model})? _agentBase;
+
+  /// Режим конфигурации сессии — пол для режима определения агента (D11, OQ3).
+  final ModeId _modeFloor;
+
+  /// Агент выбран во время хода: схемы и промпт доедут на границе шага.
+  var _agentPending = false;
   ModeId _mode;
   ModelRef _model;
   ReasoningEffort _effort;
@@ -1154,7 +1276,8 @@ final class _Session implements AgentSession {
   CancelTokenSource? _backgroundCancel;
 
   /// Сборка системного промпта для нового режима.
-  final String Function(String cwd, ModeId mode) _compose;
+  final String Function(String cwd, ModeId mode, AgentDefinition? agent)
+  _compose;
   final _live = StreamController<AgentEvent>.broadcast(sync: true);
   final _turn = <AgentEvent>[];
   TurnEnded? _ended;
@@ -1171,11 +1294,47 @@ final class _Session implements AgentSession {
   @override
   ReasoningEffort get effort => _effort;
 
+  /// Очередь смен конфигурации: хвост предыдущей смены (см. [_serial]).
+  Future<void> _configTail = Future<void>.value();
+
+  /// Номер последней смены конфигурации (для [ConfigChangeResult.changeId]).
+  var _changeSeq = 0;
+
+  /// Выполняет смену конфигурации строго после всех ранее начатых.
+  ///
+  /// Почему: `setMode`, `setModel`, `setEffort` и `setAgent` читают состояние
+  /// сессии, делают `await` на запись журнала и только потом дописывают
+  /// результат; два параллельных вызова (два запроса клиента) перемешивались
+  /// и портили базу агента и режим (ревью итерации 3). Очередь делает итог
+  /// параллельных вызовов равным последовательному, а `next*`/`base`
+  /// вычисляются уже под очередью.
+  ///
+  /// Сбой операции возвращается её вызывающему и не блокирует хвост. Вызов
+  /// изнутри операции (вложенный `setMode`) запрещён: внутри используются
+  /// `_applyMode`/`_changeModel`, иначе очередь ждала бы сама себя.
+  Future<T> _serial<T>(Future<T> Function(int changeId) operation) {
+    final changeId = ++_changeSeq;
+    final run = _configTail.then((_) {
+      // Закрытие дожидается начатой смены, а стоявшие в очереди отклоняются.
+      if (_closed) {
+        throw StateError('the session is closed');
+      }
+      return operation(changeId);
+    });
+    _configTail = run.then<void>((_) {}, onError: (_) {});
+    return run;
+  }
+
   @override
-  Future<void> setModel(ModelId id) async {
+  Future<ConfigChangeResult> setModel(ModelId id) => _serial((changeId) async {
     final model =
         _catalog.resolve(id, effort: _effort) ??
         (throw ArgumentError.value(id.value, 'id', 'not in the model catalog'));
+    await _changeModel(model);
+    return ConfigChangeResult(changeId: changeId, model: model);
+  });
+
+  Future<void> _changeModel(ModelRef model) async {
     _apply(model);
     await _writer.append(
       (id, parent, at) => AgentRuntimeImpl._modelChange(id, parent, at, model),
@@ -1183,7 +1342,7 @@ final class _Session implements AgentSession {
   }
 
   @override
-  Future<void> setEffort(ReasoningEffort effort) async {
+  Future<void> setEffort(ReasoningEffort effort) => _serial((_) async {
     _effort = effort;
     _apply(
       _catalog.resolve(
@@ -1204,7 +1363,7 @@ final class _Session implements AgentSession {
         value: effort.name,
       ),
     );
-  }
+  });
 
   /// Модель следующего хода — сразу, идущего — на границе шага.
   void _apply(ModelRef model) {
@@ -1220,14 +1379,20 @@ final class _Session implements AgentSession {
   Future<StepUpdate?> _takeStepUpdate() async {
     final model = _pendingModel;
     _pendingModel = null;
+    final agentChanged = _agentPending;
+    _agentPending = false;
+    _flushPendingPolicyMode();
     final mcpChanged = _applyMcpUpdate();
-    if (model == null && !mcpChanged) {
+    if (model == null && !mcpChanged && !agentChanged) {
       return null;
     }
+    // Схемы и промпт встают вместе: после выбора агента или обновления MCP-
+    // инструментов модель видит согласованный набор (D11, D6).
+    final toolsChanged = mcpChanged || agentChanged;
     return StepUpdate(
       model: model,
-      tools: mcpChanged ? _registry.tools : null,
-      systemPrompt: mcpChanged ? _agent.systemPrompt : null,
+      tools: toolsChanged ? _visibleTools() : null,
+      systemPrompt: toolsChanged ? _agent.systemPrompt : null,
     );
   }
 
@@ -1238,8 +1403,8 @@ final class _Session implements AgentSession {
       return false;
     }
     _agent
-      ..tools = _registry.tools
-      ..systemPrompt = _compose(cwd, _mode);
+      ..tools = _visibleTools()
+      ..systemPrompt = _compose(cwd, _mode, _activeAgent);
     return true;
   }
 
@@ -1275,6 +1440,10 @@ final class _Session implements AgentSession {
     _policy.clearTurnGrants();
     _tools.approvalWait.reset();
     _ended = null;
+    // Выбор агента между ходами уже в `_agent`; отложенный флаг прошлого хода
+    // не нужен.
+    _agentPending = false;
+    _flushPendingPolicyMode();
     // Между ходами изменение набора применяется перед началом хода (D6).
     _applyMcpUpdate();
     cancel?.onCancel.then((_) => _agent.abort(cancel.reason));
@@ -1385,8 +1554,8 @@ final class _Session implements AgentSession {
     try {
       await _replaceMcp(servers);
       _agent
-        ..tools = _registry.tools
-        ..systemPrompt = _compose(cwd, _mode);
+        ..tools = _visibleTools()
+        ..systemPrompt = _compose(cwd, _mode, _activeAgent);
     } on Object catch (error, stack) {
       _logger.log(
         LogLevel.warning,
@@ -1407,12 +1576,217 @@ final class _Session implements AgentSession {
   Future<void> cancel() async => _agent.abort(const UserCancel());
 
   @override
-  Future<void> setMode(ModeId mode) async {
+  Future<ConfigChangeResult> setMode(ModeId mode) => _serial((changeId) async {
+    await _applyMode(mode, changeId, deferPolicy: false);
+    return ConfigChangeResult(changeId: changeId, mode: mode);
+  });
+
+  /// Режим политики, который выбор агента во время хода применит на границе
+  /// шага: вызовы текущего пакета решаются прежним режимом (D11).
+  ModeId? _pendingPolicyMode;
+
+  /// Ставит режим сессии. Сам режим и промпт меняются сразу; режим политики —
+  /// сразу для [setMode] (спека: «со следующего вызова инструмента») и на
+  /// границе шага для выбора агента во время хода ([deferPolicy]).
+  Future<void> _applyMode(
+    ModeId mode,
+    int changeId, {
+    required bool deferPolicy,
+  }) async {
     _mode = mode;
-    _policy.mode = mode;
+    if (deferPolicy && _agent.isRunning) {
+      _pendingPolicyMode = mode;
+    } else {
+      _pendingPolicyMode = null;
+      _policy.mode = mode;
+    }
     // Режим plan добавляет свою секцию: промпт меняется со следующего хода.
-    _agent.systemPrompt = _compose(cwd, mode);
-    await _sessionEvent(ModeChanged(id, mode: mode));
+    _agent.systemPrompt = _compose(cwd, mode, _activeAgent);
+    await _sessionEvent(ModeChanged(id, mode: mode, changeId: changeId));
+  }
+
+  void _flushPendingPolicyMode() {
+    _enforcedAgent = _activeAgent;
+    if (_pendingPolicyMode case final mode?) {
+      _policy.mode = mode;
+      _pendingPolicyMode = null;
+    }
+  }
+
+  @override
+  String get agent => _activeAgent?.name ?? defaultAgentName;
+
+  /// Схемы сессии за вычетом инструментов вне набора агента (CFG-7, D11).
+  List<AgentTool> _visibleTools() => [
+    for (final tool in _registry.tools)
+      if (_activeAgent?.allowsTool(tool.name) ?? true) tool,
+  ];
+
+  /// Текст отказа для инструмента реестра, которого нет в наборе агента;
+  /// `null` — инструмент не отфильтрован агентом (его просто нет).
+  String? _unavailableText(String toolName) {
+    final active = _enforcedAgent;
+    if (active == null ||
+        active.allowsTool(toolName) ||
+        _registry.lookup(toolName) == null) {
+      return null;
+    }
+    return 'Tool not available for agent ${active.name}: $toolName';
+  }
+
+  @override
+  Future<ConfigChangeResult> setAgent(String name) =>
+      _serial((changeId) => _setAgentNow(name, changeId));
+
+  Future<ConfigChangeResult> _setAgentNow(String name, int changeId) async {
+    if (_closed) {
+      throw StateError('the session is closed');
+    }
+    final AgentDefinition? target;
+    if (name == defaultAgentName) {
+      target = null;
+    } else {
+      target =
+          agents.where((a) => a.name == name).firstOrNull ??
+          (throw ArgumentError.value(
+            name,
+            'name',
+            'not an agent of the session',
+          ));
+    }
+    if (target?.name == _activeAgent?.name) {
+      return ConfigChangeResult(changeId: changeId);
+    }
+    // База запоминается только при переходе из `default`; `default` её
+    // возвращает и забывает (D11).
+    final base = _agentBase ?? (mode: _mode, model: _model);
+    final wantedMode = target?.mode;
+    // Пол режима — режим конфигурации, а не текущий: пользователь мог сам
+    // перейти в `accept-edits`, и агент `accept-edits` не должен отказывать;
+    // но смягчить режим ниже конфига выбор агента не может (OQ3).
+    final modeApplied = wantedMode == null || wantedMode.fitsFloor(_modeFloor);
+    final nextMode = target == null || !modeApplied || wantedMode == null
+        ? base.mode
+        : wantedMode;
+    // Ссылка пересобирается с усилием сессии: база из журнала хранится без
+    // него (§2.12.3).
+    final wanted = target?.model ?? base.model;
+    final nextModel =
+        _catalog.resolve(
+          ModelId('${wanted.provider}/${wanted.id}'),
+          effort: _effort,
+        ) ??
+        wanted;
+
+    // Состояние агента ставится до первого `await`: идущий ход получит его на
+    // ближайшей границе шага, а не вперемешку с записью журнала.
+    _activeAgent = target;
+    if (!_agent.isRunning) {
+      _enforcedAgent = target;
+    }
+    _agentBase = target == null ? null : base;
+    _agentPending = _agent.isRunning;
+    _agent
+      ..tools = _visibleTools()
+      ..systemPrompt = _compose(cwd, _mode, target);
+    // Запись выбора идёт раньше `model_change`/`mode_change`: по ней
+    // `loadSession` находит базу — режим и модель до этой записи (D11).
+    await _writer.append(
+      (id, parent, at) => ConfigChangeRecord(
+        id: id,
+        parentId: parent,
+        timestamp: at,
+        optionId: 'agent',
+        value: name,
+      ),
+    );
+    final modelChanged =
+        nextModel.provider != _model.provider || nextModel.id != _model.id;
+    if (modelChanged) {
+      await _changeModel(nextModel);
+    }
+    final modeChanged = nextMode != _mode;
+    if (modeChanged) {
+      // Режим политики — со следующего шага: остальные вызовы пакета решаются
+      // прежним режимом (D11).
+      await _applyMode(nextMode, changeId, deferPolicy: true);
+    }
+    if (!modeApplied) {
+      _logger.log(
+        LogLevel.warning,
+        'agent.mode.not_applied',
+        fields: {
+          'session_id': id.value,
+          'agent': name,
+          'mode': wantedMode!.value,
+          'floor': _modeFloor.value,
+        },
+      );
+    }
+    _logger.log(
+      LogLevel.info,
+      'agent.selected',
+      fields: {
+        'session_id': id.value,
+        'agent': name,
+        'source': target?.source,
+        'model': '${_model.provider}/${_model.id}',
+        'mode': _mode.value,
+        'mode_applied': modeApplied,
+        'tools': _visibleTools().length,
+      },
+    );
+
+    return ConfigChangeResult(
+      changeId: changeId,
+      mode: modeChanged ? nextMode : null,
+      model: modelChanged ? nextModel : null,
+    );
+  }
+
+  /// Возвращает агента журнала при `loadSession` (D11, D14): режим и модель
+  /// восстановлены из собственных записей, здесь только состояние агента.
+  ///
+  /// База режима зажимается полом конфигурации (fail-closed): конфигурацию
+  /// могли ужесточить после записи, и возврат к `default` не должен дать
+  /// режим мягче пола. Пропавшее определение пишет в журнал
+  /// `config_change {agent: default}` (как `session.model.not_restored`):
+  /// иначе поздний `loadSession` считал бы базу от устаревшего перехода.
+  Future<void> _restoreAgent(
+    String? name, {
+    required ModeId baseMode,
+    required ModelRef baseModel,
+  }) async {
+    if (name == null || name == defaultAgentName) {
+      return;
+    }
+    final definition = agents.where((a) => a.name == name).firstOrNull;
+    if (definition == null) {
+      _logger.log(
+        LogLevel.warning,
+        'agent.definition.missing',
+        fields: {'session_id': id.value, 'agent': name},
+      );
+      await _writer.append(
+        (id, parent, at) => ConfigChangeRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          optionId: 'agent',
+          value: defaultAgentName,
+        ),
+      );
+      return;
+    }
+    _activeAgent = definition;
+    _enforcedAgent = definition;
+    _agentBase = (
+      mode: baseMode.fitsFloor(_modeFloor) ? baseMode : _modeFloor,
+      model: baseModel,
+    );
+    _agent
+      ..tools = _visibleTools()
+      ..systemPrompt = _compose(cwd, _mode, definition);
   }
 
   @override
@@ -1429,6 +1803,9 @@ final class _Session implements AgentSession {
     _backgroundCancel?.cancel(const ShutdownCancel());
     await _agent.waitForIdle();
     await _background;
+    // Начатая смена конфигурации доходит до конца (запись журнала), стоявшие
+    // за ней получают StateError.
+    await _configTail;
     // Идущая смена серверов доходит до конца, иначе её новые процессы
     // остались бы без владельца.
     await _mcpWork;

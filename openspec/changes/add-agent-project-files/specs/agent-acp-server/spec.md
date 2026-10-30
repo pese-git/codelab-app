@@ -95,7 +95,9 @@
 ### Requirement: Режимы и опции сессии
 `configOptions` SHALL идти в порядке `mode`, `model`, `effort`, `agent` (§13.6): `mode` — пять режимов `ModeId`; `model` — модели каталога ядра в формате `provider/model`; `effort` (`low`, `medium`, `high`, категория `thought_level`) — только если у текущей модели `supportsReasoning` (ACP-10); `agent` — только если у сессии есть хотя бы одно определение агента: вариант `default` (имя `Default`), затем `AgentSession.agents` по имени с `description` определения, `currentValue` — `AgentSession.agent`, без поля `category` (зарезервированные категории ACP — только `mode`, `model`, `thought_level`; design.md change `add-agent-project-files`, D12). Устаревшие синонимы режимов (`architect`, `debug`, `acceptEdits`, `code`) SHALL приниматься на входе и не отправляться наружу.
 
-`session/set_config_option` SHALL: неизвестная сессия → `-32002`; неизвестный `configId` или значение вне `options` → `-32602`; `mode` → `AgentSession.setMode` и `current_mode_update`; `model` → `AgentSession.setModel`; `effort` → `AgentSession.setEffort`; `agent` → `AgentSession.setAgent`, и если режим сессии изменился — `current_mode_update` до ответа. Ответ — полный список опций, в том числе изменённые `mode` и `model`; `config_option_update` в ответ на запрос клиента НЕ SHALL дублироваться (ACP-11).
+`session/set_config_option` SHALL: неизвестная сессия → `-32002`; неизвестный `configId` или значение вне `options` → `-32602`; `mode` → `AgentSession.setMode` и `current_mode_update`; `model` → `AgentSession.setModel`; `effort` → `AgentSession.setEffort`; `agent` → `AgentSession.setAgent`, и если режим сессии изменился — `current_mode_update` до ответа. Ответ — полный список опций, в том числе изменённые `mode` и `model`; `config_option_update` в ответ на запрос клиента НЕ SHALL дублироваться (ACP-11). Смена модели через `agent` (выбор агента или возврат к `default`) SHALL ставить ту же заметку §2.12.3, что `configId: "model"`: переход на модель без `supportsReasoning` — заметка первым `agent_message_chunk` следующего хода, переход на модель с рассуждением — заметка снимается.
+
+`session/set_config_option` и `session/set_mode` одной сессии SHALL обрабатываться мостом строго по очереди в порядке прихода (design.md change `add-agent-project-files`, D12). Эхо `ModeChanged` SHALL относиться к запросу, чья смена его породила: оно проецируется только в `current_mode_update`, ответ на этот запрос уходит после него. На каждый запрос SHALL уходить ровно один ответ со снимком опций после своей смены; итоговое состояние сессии — результат последнего запроса. Ошибка одного запроса НЕ SHALL останавливать очередь.
 
 `session/set_mode` SHALL обрабатываться той же функцией, что `configId: "mode"`: ответ `{}`, затем `current_mode_update`.
 
@@ -110,6 +112,14 @@
 #### Scenario: Выбор агента опцией
 - **WHEN** у доверенного проекта есть `.codelab/agents/reviewer.md` с `mode: plan` и моделью каталога, а клиент присылает `session/set_config_option` с `configId: "agent"` и `value: "reviewer"`
 - **THEN** сначала уходит `current_mode_update` с `plan`, затем ответ с согласованными `agent: reviewer`, `model` из файла и `mode: plan`; `config_option_update` не отправляется (фикстура `acp/set-config-option-agent`, R-15)
+
+#### Scenario: Параллельные выбор агента и set_mode
+- **WHEN** режим конфигурации `standard`, у доверенного проекта есть `reviewer.md` с `mode: plan`, а клиент без ожидания ответов присылает `session/set_config_option` с `configId: "agent"`, `value: "reviewer"` и сразу `session/set_mode` с `modeId: "bypass"`
+- **THEN** кадры идут в порядке: `current_mode_update` с `plan`, ответ на первый запрос с `agent: reviewer` и `mode: plan`, `current_mode_update` с `bypass`, ответ `{}` на второй; `config_option_update` не отправляется ни разу; ход следующего `session/prompt` идёт в режиме `bypass` с профилем `reviewer`
+
+#### Scenario: Смена модели агентом и заметка effort
+- **WHEN** модель сессии поддерживает рассуждение, а клиент выбирает опцией `agent` определение, чья `model` без `supportsReasoning`, затем присылает `session/prompt`
+- **THEN** ответ на `set_config_option` не содержит опции `effort`, а первый `agent_message_chunk` хода — заметка `Reasoning effort is not supported by <provider/model>; …`, как при смене опцией `model`
 
 #### Scenario: Без определений опции нет
 - **WHEN** у сессии нет ни одного определения агента

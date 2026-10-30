@@ -18,8 +18,8 @@ import 'template.dart';
 /// режима. [profile] — уже суженный профиль: секции выключенных capability в
 /// промпт не входят (HOST-4). [toolNames] — итоговый набор инструментов
 /// сессии. [mcpServers] и [projectContext] входят в промпт секциями `mcp` и
-/// `project_context`; поля профиля агента и переопределений добавят
-/// следующие итерации этапа 8 и этапы после MVP.
+/// `project_context`; [agentProfile] — секцией `agent_profile` (шаг 10b);
+/// переопределения добавят этапы после MVP.
 final class PromptInputs {
   PromptInputs({
     required this.cwd,
@@ -30,6 +30,7 @@ final class PromptInputs {
     required Set<String> toolNames,
     List<McpServerSummary> mcpServers = const [],
     this.projectContext,
+    this.agentProfile,
   }) : toolNames = Set.unmodifiable(toolNames),
        mcpServers = List.unmodifiable(mcpServers);
 
@@ -54,6 +55,12 @@ final class PromptInputs {
   /// `add-agent-project-files`, D5); `null` или пустой список — секции
   /// `project_context` нет, промпт побайтово прежний (PR-3).
   final ProjectContext? projectContext;
+
+  /// Выбранный агент сессии: имя и тело определения (design.md change
+  /// `add-agent-project-files`, D11); `null` — агент `default`, секции нет и
+  /// промпт побайтово прежний (PR-3). Тело вставляется как значение и шаблоном
+  /// не обрабатывается (§11.4).
+  final ({String name, String body})? agentProfile;
 }
 
 /// Лимит записей `ls` для секции `tools/listing`.
@@ -134,6 +141,17 @@ List<(String, String)> _sections(PromptInputs inputs) {
                 'content': _escapeClosingTag(file.text),
               }),
           ].join('\n\n'),
+        }),
+      ),
+    // Шаг 10b §11.5: профиль агента идёт последним. База, правило ограды и
+    // секции инструментов остаются выше и не заменяются телом файла (CFG-8).
+    // Края тела обрезаются, чтобы пробелы файла не меняли границы секций.
+    if (inputs.agentProfile case final profile?)
+      (
+        Prompts.agentProfile.id,
+        Prompts.agentProfile.render({
+          'name': profile.name,
+          'body': profile.body.trim(),
         }),
       ),
   ];

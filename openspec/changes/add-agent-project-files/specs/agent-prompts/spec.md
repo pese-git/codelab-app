@@ -32,6 +32,10 @@
 - **WHEN** тест-сторож проверяет `system/base.md`, `system/untrusted.md`, `project_context.md`, `project_context_file.md` и `agent_profile.md`
 - **THEN** в них нет слов `exec`, `ls`, `update_plan` и подстроки `mcp__`
 
+#### Scenario: Контекст проекта без профиля
+- **WHEN** промпт собирается с двумя файлами контекста без выбранного агента
+- **THEN** последняя секция — `# Project instructions` с двумя блоками `<project-instructions>` в порядке от общего к частному, секции профиля нет; результат совпадает с `test/prompts/golden/agent-serve-standard-project.txt`
+
 #### Scenario: Контекст проекта и профиль агента
-- **WHEN** промпт собирается с двумя файлами контекста и выбранным агентом `reviewer`
-- **THEN** последние две секции — `# Project instructions` с двумя блоками `<project-instructions>` в порядке от общего к частному и `# Agent profile: reviewer`; результат совпадает с `test/prompts/golden/agent-serve-standard-project.txt`
+- **WHEN** промпт собирается с теми же двумя файлами контекста и выбранным агентом `reviewer`
+- **THEN** последние две секции — `# Project instructions` и `# Agent profile: reviewer`; результат совпадает с `test/prompts/golden/agent-serve-standard-project-agent.txt`, а без последней секции — с `agent-serve-standard-project.txt`

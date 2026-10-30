@@ -112,9 +112,20 @@ final class ToolCallExecutor implements ToolExecutor {
     required this.registry,
     required this.env,
     required this.services,
+    this.unavailableText,
   });
 
   final ToolRegistry registry;
+
+  /// Причина, по которой инструмент реестра недоступен в этой сессии, или
+  /// `null` — обычное «инструмента нет» (design.md change
+  /// `add-agent-project-files`, D11, CFG-7).
+  ///
+  /// Почему здесь: набор агента сужает схемы шага, и вызов инструмента вне
+  /// набора разрешается на шаге поиска инструмента — до `beforeToolCall`, как
+  /// неизвестный инструмент. Тогда политика разрешений не спрашивает
+  /// пользователя о вызове, который всё равно не исполнится.
+  final String? Function(String toolName)? unavailableText;
 
   /// Ограниченный env сессии (ENV-2).
   final ExecutionEnv env;
@@ -249,6 +260,9 @@ final class ToolCallExecutor implements ToolExecutor {
     final invocation = handle.invocation;
     final tool = handle.tool;
     if (tool == null) {
+      if (unavailableText?.call(call.name) case final text?) {
+        return _invalid(text);
+      }
       return _invalid(
         'Tool "${call.name}" is not available. '
         'Available tools: ${invocation.stepTools.join(', ')}.',

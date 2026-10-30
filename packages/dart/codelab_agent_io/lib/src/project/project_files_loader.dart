@@ -18,9 +18,10 @@ import 'frontmatter.dart';
 ///
 /// Для чего: реализация порта [ProjectFilesSource] для настольных хостов.
 /// Читает файлы инструкций `AGENTS.md`/`CLAUDE.md` (E-01) и шаблоны команд
-/// `*.md` из `$CODELAB_HOME/prompts` и `<cwd>/.codelab/prompts` (последний —
-/// только для доверенного проекта, D4); определения агентов добавит
-/// следующая итерация в тот же метод.
+/// `*.md` из `$CODELAB_HOME/prompts` и `<cwd>/.codelab/prompts`, а также
+/// определения агентов из `$CODELAB_HOME/agents` и `<cwd>/.codelab/agents`
+/// (каталоги проекта — только для доверенного проекта, D4, CFG-6). Оба вида
+/// файлов читаются одним кодом с одной границей и одними лимитами (D2, D6).
 ///
 /// Как использовать: хост создаёт один загрузчик —
 /// `ProjectFilesLoader(home: codelabHomeOf(env), local: LocalExecutionEnv(...))` —
@@ -50,10 +51,11 @@ final class ProjectFilesLoader implements ProjectFilesSource {
   /// Предел обхода вверх к корню репозитория (D5, пункт 1; D6).
   static const maxLevels = 64;
 
-  /// Предел числа `*.md` в каталоге шаблонов (D6).
+  /// Предел числа `*.md` в каталоге шаблонов или агентов (D6).
   static const maxTemplateFiles = 100;
 
-  /// Предел размера файла шаблона, байты (D6): больший файл не читается.
+  /// Предел размера файла шаблона или определения, байты (D6): больший файл не
+  /// читается.
   static const maxTemplateFileBytes = 64 * 1024;
 
   @override
@@ -65,65 +67,87 @@ final class ProjectFilesLoader implements ProjectFilesSource {
       root = await _loadContext(query, context, diagnostics);
     }
     final templates = <MarkdownFile>[];
-    await _loadTemplates(query, templates, diagnostics);
+    await _loadMarkdownDirs(
+      query,
+      subdir: 'prompts',
+      noun: 'prompt templates',
+      out: templates,
+      diagnostics: diagnostics,
+    );
+    final agents = <MarkdownFile>[];
+    await _loadMarkdownDirs(
+      query,
+      subdir: 'agents',
+      noun: 'agent definitions',
+      out: agents,
+      diagnostics: diagnostics,
+    );
     return ProjectFiles(
       context: context,
       contextRoot: root,
       templates: templates,
+      agents: agents,
       diagnostics: diagnostics,
     );
   }
 
-  /// Шаблоны команд: проект (только доверенный) и пользователь (D4, D7).
+  /// Каталог `.md`-файлов [subdir] (`prompts` или `agents`): проект (только
+  /// доверенный) и пользователь (D4, D7, D10). [noun] — как каталог назван в
+  /// сообщениях диагностики.
   ///
   /// Область проекта ограничена `cwd`, пользовательская — `$CODELAB_HOME`:
-  /// сначала каталог шаблонов проверяется относительно корня области, и только
-  /// потом файлы — относительно самого каталога (см. [_readTemplateDir]).
-  Future<void> _loadTemplates(
-    ProjectFilesQuery query,
-    List<MarkdownFile> out,
-    List<ExtensionDiagnostic> diagnostics,
-  ) async {
-    final projectDir = '${query.cwd == '/' ? '' : query.cwd}/.codelab/prompts';
+  /// сначала каталог проверяется относительно корня области, и только потом
+  /// файлы — относительно самого каталога (см. [_readMarkdownDir]).
+  Future<void> _loadMarkdownDirs(
+    ProjectFilesQuery query, {
+    required String subdir,
+    required String noun,
+    required List<MarkdownFile> out,
+    required List<ExtensionDiagnostic> diagnostics,
+  }) async {
+    final projectDir = '${query.cwd == '/' ? '' : query.cwd}/.codelab/$subdir';
     final projectArea = await BoundedEnv.wrap(_local, query.cwd);
     if (query.projectTrusted) {
-      await _readTemplateDir(
+      await _readMarkdownDir(
         projectArea,
         projectDir,
         ExtensionScope.project,
         query.cancel,
         out,
         diagnostics,
+        noun,
       );
     } else if (await _exists(projectArea, projectDir)) {
       // Файлы недоверенного репозитория не читаются: он не вправе добавить
-      // команды, которые выполнит модель (D4). Пользователь видит причину.
+      // команды и агентов, которые выберет пользователь не глядя (D4, CFG-6).
+      // Пользователь видит причину.
       diagnostics.add(
         ExtensionDiagnostic(
           path: projectDir,
           level: DiagnosticLevel.info,
           code: 'untrusted_project',
           message:
-              'the project is not in trusted_projects; its prompt templates '
-              'are not read',
+              'the project is not in trusted_projects; its $noun are not read',
         ),
       );
     }
 
     final homeDir = home;
     if (homeDir != null && !query.cancel.isCancelled) {
-      await _readTemplateDir(
+      await _readMarkdownDir(
         await BoundedEnv.wrap(_local, homeDir),
-        '$homeDir/prompts',
+        '$homeDir/$subdir',
         ExtensionScope.user,
         query.cancel,
         out,
         diagnostics,
+        noun,
       );
     }
   }
 
   /// Читает `*.md` первого уровня каталога [dir] (D3, D6, §17.2.2).
+  /// [noun] — название файлов в сообщении о превышении предела.
   ///
   /// Граница двухступенчатая. [area] — корень области (`cwd` или
   /// `$CODELAB_HOME`): каталог, чей `realpath` вне области, не читается
@@ -131,13 +155,14 @@ final class ProjectFilesLoader implements ProjectFilesSource {
   /// иначе сам стал бы корнем и проверка потеряла бы смысл). Файлы читаются
   /// через env с корнем в реальном каталоге шаблонов: symlink на файл вне
   /// каталога — `outside_root`.
-  Future<void> _readTemplateDir(
+  Future<void> _readMarkdownDir(
     ExecutionEnv area,
     String dir,
     ExtensionScope scope,
     CancelToken cancel,
     List<MarkdownFile> out,
     List<ExtensionDiagnostic> diagnostics,
+    String noun,
   ) async {
     void report(DiagnosticLevel level, String path, String code, String text) =>
         diagnostics.add(
@@ -219,7 +244,7 @@ final class ProjectFilesLoader implements ProjectFilesSource {
         DiagnosticLevel.warning,
         dir,
         'limit_exceeded',
-        'more than $maxTemplateFiles templates; the extra files are skipped',
+        'more than $maxTemplateFiles $noun; the extra files are skipped',
       );
     }
 

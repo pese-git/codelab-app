@@ -29,3 +29,14 @@
 #### Scenario: Диагностика без содержимого
 - **WHEN** порт возвращает определение агента с ошибкой frontmatter, а тело файла содержит строку `sk-test-secret`
 - **THEN** лог содержит `project_files.diagnostic` с путём и кодом и не содержит `sk-test-secret`
+
+### Requirement: Очередь смен конфигурации сессии
+`AgentSession.setMode`, `setModel`, `setEffort` и `setAgent` SHALL исполняться строго по одной в порядке вызова (очередь сессии; design.md change `add-agent-project-files`, D11). Новое значение (база агента, пол режима, итоговые режим и модель) SHALL вычисляться под очередью — от состояния после предыдущей смены, а не в момент вызова. Записи журнала и события `ModeChanged` SHALL идти в порядке очереди; итоговое состояние сессии SHALL быть результатом последнего вызова. Ошибка одного вызова (`ArgumentError`) НЕ SHALL останавливать очередь. Правило применения смены к идущему ходу у каждого метода прежнее: `setMode` — со следующего вызова инструмента, `setModel`, `setEffort` и `setAgent` (включая режим агента) — со следующего шага.
+
+#### Scenario: Параллельные setAgent и setMode
+- **WHEN** режим конфигурации `standard`, определение `reviewer` задаёт `mode: plan`, а хост без ожидания вызывает `setAgent('reviewer')` и сразу `setMode(bypass)`
+- **THEN** события `ModeChanged` идут в порядке `plan`, `bypass`; журнал содержит `config_change {optionId: "agent", value: "reviewer"}` и `mode_change plan` раньше `mode_change bypass`; итог — `agent == "reviewer"`, режим `bypass`
+
+#### Scenario: Ошибка не ломает очередь
+- **WHEN** без ожидания вызываются `setAgent('missing')` и `setMode(plan)`
+- **THEN** первый завершается `ArgumentError`, второй исполняется, режим `plan`

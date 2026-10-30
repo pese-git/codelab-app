@@ -152,7 +152,7 @@ final class LogRecord {           // то, что получает sink хост
 | `project_files.diagnostic` | warning (`error`/`warning`), debug (`info`) | `session_id`, `path`, `line`, `column`, `code`, `message` |
 | `project_files.skipped` | info | `transport` (`ws`), `reason`; логгер хоста, один раз при запуске `serve --ws` (D16) |
 | `command.expanded` | info | `session_id`, `name`, `source`, `args_bytes` |
-| `agent.selected` | info | `session_id`, `agent`, `source`, `model`, `mode`, `mode_applied`, `tools` |
+| `agent.selected` | info | `session_id`, `agent`, `source` (путь; `null` для `default`), `model`, `mode`, `mode_applied` (`false` только при отказе по полу; `true`, если у определения нет `mode`, и для `default`), `tools` |
 | `agent.mode.not_applied` | warning | `session_id`, `agent`, `mode`, `floor` |
 | `agent.definition.missing` | warning | `session_id`, `agent` |
 
@@ -162,7 +162,7 @@ final class LogRecord {           // то, что получает sink хост
 порта; в поле `message` — только тип исключения). Коды содержимого шаблонов (D3): `unknown_key`,
 `invalid_value`, `empty_body`, `too_large` — `error`; `invalid_name`, `reserved_name` — `warning`;
 `shadowed`, `untrusted_project` — `info`; запись `*.md`, которая не обычный файл (FIFO, сокет,
-устройство), — `unreadable` (`warning`). Коды определений агентов — по D10 того же change. Путь в `project_files.diagnostic` и `project_context.loaded` не
+устройство), — `unreadable` (`warning`). Коды определений агентов (D10): `invalid_value`, `unknown_key`, `empty_body`, `too_large`, `duplicate` (на каждый файл, оба пути в сообщении) — `error`; `shadowed`, `untrusted_project` — `info`. Путь в `project_files.diagnostic` и `project_context.loaded` не
 экранируется, в отличие от атрибута `path` блока в промпте (§11.5).
 
 После MVP (§17) добавляются области:

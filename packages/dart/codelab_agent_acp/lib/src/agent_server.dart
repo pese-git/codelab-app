@@ -510,11 +510,15 @@ final class _Connection {
           when _server._runtime.models.models.any((m) => m.id.value == value):
         await bridge.setModel(ModelId(value));
       case 'effort' when bridge.session.model.supportsReasoning:
-        await bridge.session.setEffort(
+        await bridge.setEffort(
           parseEffort(value) ??
               (throw AcpRequestError.invalidParams('unknown value: $value')),
         );
-      case 'model':
+      case agentConfigId
+          when bridge.session.agents.any((a) => a.name == value) ||
+              (bridge.session.agents.isNotEmpty && value == defaultAgentName):
+        await bridge.setAgent(value);
+      case 'model' || agentConfigId:
         throw AcpRequestError.invalidParams('unknown value: $value');
       default:
         throw AcpRequestError.invalidParams(
