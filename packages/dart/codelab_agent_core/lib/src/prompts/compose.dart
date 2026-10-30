@@ -2,6 +2,7 @@ import '../host/host_profile.dart';
 import '../mcp/mcp_connector.dart';
 import '../mcp/mcp_tool_name.dart';
 import '../permissions/modes.dart';
+import '../project/project_context.dart';
 import '../tools/truncate.dart';
 import 'prompts.g.dart';
 import 'template.dart';
@@ -16,8 +17,9 @@ import 'template.dart';
 /// Как использовать: сессия собирает значение при создании и при смене
 /// режима. [profile] — уже суженный профиль: секции выключенных capability в
 /// промпт не входят (HOST-4). [toolNames] — итоговый набор инструментов
-/// сессии. Поля MCP, контекста проекта и переопределений добавят этапы 8 и
-/// после MVP.
+/// сессии. [mcpServers] и [projectContext] входят в промпт секциями `mcp` и
+/// `project_context`; поля профиля агента и переопределений добавят
+/// следующие итерации этапа 8 и этапы после MVP.
 final class PromptInputs {
   PromptInputs({
     required this.cwd,
@@ -27,6 +29,7 @@ final class PromptInputs {
     required this.profile,
     required Set<String> toolNames,
     List<McpServerSummary> mcpServers = const [],
+    this.projectContext,
   }) : toolNames = Set.unmodifiable(toolNames),
        mcpServers = List.unmodifiable(mcpServers);
 
@@ -46,6 +49,11 @@ final class PromptInputs {
   /// хотя бы одним инструментом (PR-6; design.md change
   /// `add-agent-mcp-client`, D12).
   final List<McpServerSummary> mcpServers;
+
+  /// Инструкции проекта, собранные `assembleProjectContext` (design.md change
+  /// `add-agent-project-files`, D5); `null` или пустой список — секции
+  /// `project_context` нет, промпт побайтово прежний (PR-3).
+  final ProjectContext? projectContext;
 }
 
 /// Лимит записей `ls` для секции `tools/listing`.
@@ -113,6 +121,21 @@ List<(String, String)> _sections(PromptInputs inputs) {
           ].join('\n'),
         }),
       ),
+    // Шаг 10 §11.5: инструкции проекта идут последними среди секций этапа:
+    // они уточняют общие правила базы, а не наоборот (D5).
+    if (inputs.projectContext case final context? when context.files.isNotEmpty)
+      (
+        Prompts.projectContext.id,
+        Prompts.projectContext.render({
+          'files': [
+            for (final file in context.files)
+              Prompts.projectContextFile.render({
+                'path': _attributeSafe(file.path),
+                'content': _escapeClosingTag(file.text),
+              }),
+          ].join('\n\n'),
+        }),
+      ),
   ];
 }
 
@@ -126,6 +149,29 @@ String composeSystemPrompt(PromptInputs inputs) =>
 List<String> systemPromptSections(PromptInputs inputs) => [
   for (final (id, _) in _sections(inputs)) id,
 ];
+
+/// Любой открывающий или закрывающий тег блока файла в тексте файла:
+/// без учёта регистра и с пробелами внутри (`< / Project-Instructions`).
+/// Так файл не закроет свой блок и не откроет чужой, выдав продолжение за
+/// текст агента (D5; приоритет 1). Собственные теги шаблона в совпадение не
+/// попадают: экранируется только содержимое файла до подстановки.
+final _blockTag = RegExp(
+  r'<\s*/?\s*project-instructions',
+  caseSensitive: false,
+);
+
+/// Экранирование на рендере, а не при сборке: это последний рубеж перед
+/// промптом, и он действует для любого [ProjectContext], в том числе
+/// собранного хостом вручную. Между `<` и остальным вставляется `\`:
+/// `</project-instructions` превращается в `<\/project-instructions`, и
+/// разбор тега ломается при любом написании.
+String _escapeClosingTag(String text) =>
+    text.replaceAllMapped(_blockTag, (m) => '<\\${m[0]!.substring(1)}');
+
+/// Значение атрибута `path`: путь приходит из дерева репозитория, и символы
+/// разметки в нём не должны выводить текст за кавычки атрибута.
+String _attributeSafe(String path) =>
+    path.replaceAll(RegExp(r'["<>\r\n]'), '_');
 
 String _date(DateTime day) =>
     '${day.year.toString().padLeft(4, '0')}-'

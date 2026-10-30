@@ -183,13 +183,31 @@ final class AgentHost {
     // Сужение из `profile.agent-serve.*` применяется первым, сужение
     // транспорта — вторым: повторное сужение допустимо, расширить профиль
     // нельзя (HOST-2).
+    // Один локальный env хоста: и базовое окружение инструментов, и чтение
+    // файлов проекта идут через один и тот же экземпляр.
+    final localEnv = LocalExecutionEnv(cwd: Directory.current.path);
+    // По WebSocket клиент сам выбирает `cwd`, а читать пришлось бы с ФС
+    // машины агента: чужой каталог попал бы в промпт (change
+    // `add-agent-project-files`, D2). Файлы проекта и `$CODELAB_HOME/AGENTS.md`
+    // не читаются; пропуск пишется один раз на процесс, как `mcp.server.skipped`.
+    if (!stdio) {
+      logger.log(
+        LogLevel.info,
+        'project_files.skipped',
+        fields: {
+          'reason': 'project files are not read over WebSocket',
+          'transport': options.transport.name,
+        },
+      );
+    }
+
     final profile = HostProfile.of('agent-serve')
         .narrowed(settings.profileNarrowing['agent-serve'] ?? const {})
         .narrowed(narrowing);
     final core = buildAgentCore(
       profile: profile,
       services: AgentCoreServices(
-        baseEnv: LocalExecutionEnv(cwd: Directory.current.path),
+        baseEnv: localEnv,
         gate: const _ConnectionGate(),
         logger: logger,
         clock: clock,
@@ -197,6 +215,17 @@ final class AgentHost {
         sessions: sessions,
         platform: Platform.operatingSystem,
         models: catalog,
+        // Файлы проекта сессии: `AGENTS.md`/`CLAUDE.md` в системный промпт.
+        // Читаются с локальной ФС процесса только по stdio: по WebSocket
+        // загрузчик не передаётся (D2). Сценарий `--llm-script` не трогает `$CODELAB_HOME`
+        // (`home: null`) и читает только контекст проекта: так прогон
+        // детерминирован и не зависит от файлов разработчика (D16).
+        projectFiles: stdio
+            ? ProjectFilesLoader(
+                home: options.llmScript == null ? options.codelabHome : null,
+                local: localEnv,
+              )
+            : null,
         // MCP-серверы сессии: процессы stdio запускает `codelab_agent_io`,
         // streamable HTTP — `codelab_agent_mcp` на HTTP-клиенте хоста;
         // закрываются они вместе с сессией (design.md change

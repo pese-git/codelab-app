@@ -10,6 +10,13 @@ import 'config_tree.dart';
 import 'key_path.dart';
 import 'redact_settings.dart';
 import 'resolve.dart';
+import 'schema.dart' show defaultProjectContextMaxBytes;
+
+// Константы бюджета живут в `schema.dart`: правило доверия `trust.dart`
+// читает их оттуда, и цикл `core_config → resolve → trust → core_config`
+// не возникает. Публичный API прежний.
+export 'schema.dart'
+    show defaultProjectContextMaxBytes, maxProjectContextMaxBytes;
 
 /// Часть конфигурации, относящаяся к разрешениям (`agent-core-architecture`
 /// §7, §15.3, §15.4).
@@ -66,6 +73,8 @@ final class CoreConfig {
     this.providers = const [],
     this.providerProblems = const {},
     this.redact = const RedactSettings(),
+    this.projectContextMaxBytes = defaultProjectContextMaxBytes,
+    this.trustedProjects = const [],
     this.projectRoot,
     this.withoutProject,
   });
@@ -115,6 +124,19 @@ final class CoreConfig {
 
   /// Проверенные ключи `redact.*`.
   final RedactSettings redact;
+
+  /// Бюджет инструкций проекта в системном промпте, байты
+  /// (`tools.project_context.max_bytes`, `0` — выключено; design.md change
+  /// `add-agent-project-files`, D5). Runtime передаёт его порту файлов
+  /// проекта и `assembleProjectContext`.
+  final int projectContextMaxBytes;
+
+  /// Канонические корни `trusted_projects` глобального слоя (~ раскрыт,
+  /// symlink раскрыт `ConfigLoader`). Runtime сравнивает с ними канонический
+  /// `cwd` каждой сессии (D4): доверие сессии определяется её собственным
+  /// каталогом, а не корнем запуска хоста. Проектные слои список не меняют
+  /// (CFG-3).
+  final List<String> trustedProjects;
 
   /// Корень, для которого прочитаны проектные слои 3–4; `null` — проектных
   /// слоёв нет (design.md, D9).

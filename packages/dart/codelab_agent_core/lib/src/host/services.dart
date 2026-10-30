@@ -2,6 +2,7 @@ import '../env/execution_env.dart';
 import '../llm/model_catalog.dart';
 import '../mcp/mcp_connector.dart';
 import '../permissions/gate.dart';
+import '../project/project_files.dart';
 import '../session/session_store.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
@@ -25,6 +26,7 @@ final class AgentCoreServices {
     this.platform = 'unknown',
     this.models,
     this.mcp,
+    this.projectFiles,
   });
 
   /// Local | ACP client | memory (tests).
@@ -59,4 +61,10 @@ final class AgentCoreServices {
   /// причиной «сервис MCP не передан»: серверы сессии пропускаются, сессия
   /// создаётся.
   final McpConnector? mcp;
+
+  /// Чтение файлов проекта при создании и загрузке сессии (design.md change
+  /// `add-agent-project-files`, D1): `AGENTS.md`/`CLAUDE.md` в системный
+  /// промпт, позже — шаблоны команд и определения агентов. `null` — файлов
+  /// проекта нет (web, мобильные хосты, тесты): поведение прежнее.
+  final ProjectFilesSource? projectFiles;
 }

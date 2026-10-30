@@ -102,6 +102,7 @@ import 'validate.dart' show configModeId;
     _restrictPermissions(values, lower, warn, reason);
     _restrictRedact(values, lower, warn);
     _lowerBudget(values, lower, warn);
+    _lowerProjectContext(values, lower, warn);
   }
   if (!trusted || isProject) {
     _narrowMode(values, lower, warn);
@@ -275,6 +276,40 @@ void _lowerBudget(
             'global config is kept',
       );
     }
+  }
+}
+
+/// `tools.project_context.max_bytes` недоверенного проекта — только
+/// уменьшение (design.md change `add-agent-project-files`, D5): репозиторий
+/// не должен раздувать каждый запрос мегабайтом своего текста. Сравнивается с
+/// итогом слоёв ниже, а без значения там — с умолчанием.
+void _lowerProjectContext(
+  Map<String, Object?> values,
+  Map<String, Object?> lower,
+  void Function(String key, String reason) warn,
+) {
+  final tools = values['tools'];
+  final section = tools is Map<String, Object?>
+      ? tools['project_context']
+      : null;
+  if (section is! Map<String, Object?> || section['max_bytes'] is! int) {
+    return;
+  }
+  final lowerTools = lower['tools'];
+  final lowerSection = lowerTools is Map<String, Object?>
+      ? lowerTools['project_context']
+      : null;
+  final below = lowerSection is Map<String, Object?>
+      ? lowerSection['max_bytes']
+      : null;
+  final limit = below is int ? below : defaultProjectContextMaxBytes;
+  if ((section['max_bytes'] as int) > limit) {
+    section.remove('max_bytes');
+    warn(
+      'tools.project_context.max_bytes',
+      'a project config can only lower the project context budget; the '
+          'limit of the global config is kept',
+    );
   }
 }
 

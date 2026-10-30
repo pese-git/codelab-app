@@ -11,6 +11,7 @@ export 'src/config/core_config.dart';
 export 'src/config/host_settings.dart';
 export 'src/config/key_path.dart' show KeyPath;
 export 'src/config/redact_settings.dart';
+export 'src/env/bounded_env.dart' show BoundedEnv;
 export 'src/env/execution_env.dart';
 export 'src/env/listing_overlay_env.dart';
 export 'src/env/memory_env.dart'
@@ -54,6 +55,8 @@ export 'src/permissions/gate.dart';
 export 'src/permissions/modes.dart';
 export 'src/permissions/pattern.dart';
 export 'src/permissions/policy.dart' show PolicyRules;
+export 'src/project/project_context.dart';
+export 'src/project/project_files.dart';
 export 'src/runtime/agent_runtime.dart' show AgentRuntime, coreAgentVersion;
 export 'src/runtime/agent_session.dart';
 export 'src/session/memory_session_store.dart';
