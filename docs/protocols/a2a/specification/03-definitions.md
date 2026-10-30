@@ -7,7 +7,7 @@ The normative A2A protocol definition in Protocol Buffers (proto3 syntax). This 
 
 ### Download
 
-You can download the proto file directly: [a2a.proto](https://a2a-protocol.org/v1.0.0/spec/a2a.proto)
+You can download the proto file directly: [a2a.proto](https://a2a-protocol.org/latest/spec/a2a.proto)
 
 ### Definition
 
@@ -348,14 +348,20 @@ message AuthenticationInfo {
 // Declares a combination of a target URL, transport and protocol version for interacting with the agent.
 // This allows agents to expose the same functionality over multiple protocol binding mechanisms.
 message AgentInterface {
-  // The URL where this interface is available. Must be a valid absolute HTTPS URL in production.
-  // Example: "https://api.example.com/a2a/v1", "https://grpc.example.com/a2a"
+  // The URL or address where this interface is available. For HTTP-based transports, must be a valid absolute
+  // HTTPS URL in production. For gRPC, the address should be in the format "hostname:port".
+  // Example: "https://api.example.com/a2a/v1", "grpc.example.com:443"
   string url = 1 [(google.api.field_behavior) = REQUIRED];
   // The protocol binding supported at this URL. This is an open form string, to be
   // easily extended for other protocol bindings. The core ones officially
   // supported are `JSONRPC`, `GRPC` and `HTTP+JSON`.
   string protocol_binding = 2 [(google.api.field_behavior) = REQUIRED];
-  // Tenant ID to be used in the request when calling the agent.
+  // Optional. An opaque string used for routing requests to a specific agent
+  // or tenant when multiple agents are served behind a single A2A endpoint.
+  // When set, clients MUST include this value in the `tenant` field of all
+  // request messages sent to this interface. The server is responsible for
+  // interpreting the value and routing requests accordingly; the protocol
+  // does not define its format or semantics.
   string tenant = 3;
   // The version of the A2A protocol this interface exposes.
   // Use the latest supported minor version per major version.
@@ -476,7 +482,8 @@ message AgentCardSignature {
 
 // A container associating a push notification configuration with a specific task.
 message TaskPushNotificationConfig {
-  // Optional. Tenant ID.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 1;
   // The push notification configuration details.
   // A unique identifier (e.g. UUID) for this push notification configuration.
@@ -654,7 +661,8 @@ message DeviceCodeOAuthFlow {
 
 // Represents a request for the `SendMessage` method.
 message SendMessageRequest {
-  // Optional. Tenant ID, provided as a path parameter.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 1;
   // The message to send to the agent.
   Message message = 2 [(google.api.field_behavior) = REQUIRED];
@@ -666,7 +674,8 @@ message SendMessageRequest {
 
 // Represents a request for the `GetTask` method.
 message GetTaskRequest {
-  // Optional. Tenant ID, provided as a path parameter.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 1;
   // The resource ID of the task to retrieve.
   string id = 2 [(google.api.field_behavior) = REQUIRED];
@@ -679,7 +688,8 @@ message GetTaskRequest {
 
 // Parameters for listing tasks with optional filtering criteria.
 message ListTasksRequest {
-  // Tenant ID, provided as a path parameter.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 1;
   // Filter tasks by context ID to get tasks from a specific conversation or session.
   string context_id = 2;
@@ -718,7 +728,8 @@ message ListTasksResponse {
 
 // Represents a request for the `CancelTask` method.
 message CancelTaskRequest {
-  // Optional. Tenant ID, provided as a path parameter.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 1;
   // The resource ID of the task to cancel.
   string id = 2 [(google.api.field_behavior) = REQUIRED];
@@ -728,7 +739,8 @@ message CancelTaskRequest {
 
 // Represents a request for the `GetTaskPushNotificationConfig` method.
 message GetTaskPushNotificationConfigRequest {
-  // Optional. Tenant ID, provided as a path parameter.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 1;
   // The parent task resource ID.
   string task_id = 2 [(google.api.field_behavior) = REQUIRED];
@@ -738,7 +750,8 @@ message GetTaskPushNotificationConfigRequest {
 
 // Represents a request for the `DeleteTaskPushNotificationConfig` method.
 message DeleteTaskPushNotificationConfigRequest {
-  // Optional. Tenant ID, provided as a path parameter.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 1;
   // The parent task resource ID.
   string task_id = 2 [(google.api.field_behavior) = REQUIRED];
@@ -748,7 +761,8 @@ message DeleteTaskPushNotificationConfigRequest {
 
 // Represents a request for the `SubscribeToTask` method.
 message SubscribeToTaskRequest {
-  // Optional. Tenant ID, provided as a path parameter.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 1;
   // The resource ID of the task to subscribe to.
   string id = 2 [(google.api.field_behavior) = REQUIRED];
@@ -756,7 +770,8 @@ message SubscribeToTaskRequest {
 
 // Represents a request for the `ListTaskPushNotificationConfigs` method.
 message ListTaskPushNotificationConfigsRequest {
-  // Optional. Tenant ID, provided as a path parameter.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 4;
   // The parent task resource ID.
   string task_id = 1 [(google.api.field_behavior) = REQUIRED];
@@ -770,7 +785,8 @@ message ListTaskPushNotificationConfigsRequest {
 
 // Represents a request for the `GetExtendedAgentCard` method.
 message GetExtendedAgentCardRequest {
-  // Optional. Tenant ID, provided as a path parameter.
+  // Optional. Opaque routing identifier. Must match the `tenant` value from
+  // the selected `AgentInterface` in the Agent Card when that field is set.
   string tenant = 1;
 }
 
@@ -817,7 +833,7 @@ The A2A protocol JSON Schema definition (JSON Schema 2020-12 compliant). This sc
 
 ### Download
 
-You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v1.0.0/spec/a2a.json)
+You can download the schema file directly: [a2a.json](https://a2a-protocol.org/latest/spec/a2a.json)
 
 ### Definition
 
@@ -827,24 +843,8 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
   "title": "A2A Protocol Schemas",
   "description": "Non-normative JSON Schema bundle extracted from proto definitions.",
   "version": "v1",
-  "definitions": {
-    "Struct": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "Struct",
-      "type": "object"
-    },
-    "Timestamp": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "format": "date-time",
-      "title": "Timestamp",
-      "type": "string"
-    },
-    "Value": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "Value"
-    },
-    "API Key Security Scheme": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "APIKeySecurityScheme": {
       "additionalProperties": false,
       "description": "Defines a security scheme using an API key.",
       "properties": {
@@ -867,8 +867,11 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "API Key Security Scheme",
       "type": "object"
     },
-    "Agent Capabilities": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "Struct": {
+      "title": "Struct",
+      "type": "object"
+    },
+    "AgentCapabilities": {
       "additionalProperties": false,
       "description": "Defines optional capabilities supported by an agent.",
       "patternProperties": {
@@ -889,7 +892,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "extensions": {
           "description": "A list of protocol extensions supported by the agent.",
           "items": {
-            "$ref": "lf.a2a.v1.AgentExtension.jsonschema.json"
+            "$ref": "#/$defs/AgentExtension"
           },
           "type": "array"
         },
@@ -905,8 +908,34 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "Agent Capabilities",
       "type": "object"
     },
-    "Agent Card": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "AgentExtension": {
+      "additionalProperties": false,
+      "description": "A declaration of a protocol extension supported by an Agent.",
+      "properties": {
+        "description": {
+          "default": "",
+          "description": "A human-readable description of how this agent uses the extension.",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/Struct",
+          "description": "Optional. Extension-specific configuration parameters."
+        },
+        "required": {
+          "default": false,
+          "description": "If true, the client must understand and comply with the extension's requirements.",
+          "type": "boolean"
+        },
+        "uri": {
+          "default": "",
+          "description": "The unique URI identifying the extension.",
+          "type": "string"
+        }
+      },
+      "title": "Agent Extension",
+      "type": "object"
+    },
+    "AgentCard": {
       "additionalProperties": false,
       "description": "A self-describing manifest for an agent. It provides essential\n metadata including the agent's identity, capabilities, skills, supported\n communication methods, and security requirements.\n Next ID: 20",
       "patternProperties": {
@@ -935,13 +964,13 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "^(security_requirements)$": {
           "description": "Security requirements for contacting the agent.",
           "items": {
-            "$ref": "lf.a2a.v1.SecurityRequirement.jsonschema.json"
+            "$ref": "#/$defs/SecurityRequirement"
           },
           "type": "array"
         },
         "^(security_schemes)$": {
           "additionalProperties": {
-            "$ref": "lf.a2a.v1.SecurityScheme.jsonschema.json"
+            "$ref": "#/$defs/SecurityScheme"
           },
           "description": "The security scheme details used for authenticating with this agent.",
           "propertyNames": {
@@ -952,14 +981,14 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "^(supported_interfaces)$": {
           "description": "Ordered list of supported interfaces. The first entry is preferred.",
           "items": {
-            "$ref": "lf.a2a.v1.AgentInterface.jsonschema.json"
+            "$ref": "#/$defs/AgentInterface"
           },
           "type": "array"
         }
       },
       "properties": {
         "capabilities": {
-          "$ref": "lf.a2a.v1.AgentCapabilities.jsonschema.json",
+          "$ref": "#/$defs/AgentCapabilities",
           "description": "A2A Capability set supported by the agent."
         },
         "defaultInputModes": {
@@ -995,19 +1024,19 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
           "type": "string"
         },
         "provider": {
-          "$ref": "lf.a2a.v1.AgentProvider.jsonschema.json",
+          "$ref": "#/$defs/AgentProvider",
           "description": "The service provider of the agent."
         },
         "securityRequirements": {
           "description": "Security requirements for contacting the agent.",
           "items": {
-            "$ref": "lf.a2a.v1.SecurityRequirement.jsonschema.json"
+            "$ref": "#/$defs/SecurityRequirement"
           },
           "type": "array"
         },
         "securitySchemes": {
           "additionalProperties": {
-            "$ref": "lf.a2a.v1.SecurityScheme.jsonschema.json"
+            "$ref": "#/$defs/SecurityScheme"
           },
           "description": "The security scheme details used for authenticating with this agent.",
           "propertyNames": {
@@ -1018,21 +1047,21 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "signatures": {
           "description": "JSON Web Signatures computed for this `AgentCard`.",
           "items": {
-            "$ref": "lf.a2a.v1.AgentCardSignature.jsonschema.json"
+            "$ref": "#/$defs/AgentCardSignature"
           },
           "type": "array"
         },
         "skills": {
           "description": "Skills represent the abilities of an agent.\n It is largely a descriptive concept but represents a more focused set of behaviors that the\n agent is likely to succeed at.",
           "items": {
-            "$ref": "lf.a2a.v1.AgentSkill.jsonschema.json"
+            "$ref": "#/$defs/AgentSkill"
           },
           "type": "array"
         },
         "supportedInterfaces": {
           "description": "Ordered list of supported interfaces. The first entry is preferred.",
           "items": {
-            "$ref": "lf.a2a.v1.AgentInterface.jsonschema.json"
+            "$ref": "#/$defs/AgentInterface"
           },
           "type": "array"
         },
@@ -1045,13 +1074,12 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "Agent Card",
       "type": "object"
     },
-    "Agent Card Signature": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "AgentCardSignature": {
       "additionalProperties": false,
       "description": "AgentCardSignature represents a JWS signature of an AgentCard.\n This follows the JSON format of an RFC 7515 JSON Web Signature (JWS).",
       "properties": {
         "header": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
+          "$ref": "#/$defs/Struct",
           "description": "The unprotected JWS header values."
         },
         "protected": {
@@ -1068,36 +1096,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "Agent Card Signature",
       "type": "object"
     },
-    "Agent Extension": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "A declaration of a protocol extension supported by an Agent.",
-      "properties": {
-        "description": {
-          "default": "",
-          "description": "A human-readable description of how this agent uses the extension.",
-          "type": "string"
-        },
-        "params": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
-          "description": "Optional. Extension-specific configuration parameters."
-        },
-        "required": {
-          "default": false,
-          "description": "If true, the client must understand and comply with the extension's requirements.",
-          "type": "boolean"
-        },
-        "uri": {
-          "default": "",
-          "description": "The unique URI identifying the extension.",
-          "type": "string"
-        }
-      },
-      "title": "Agent Extension",
-      "type": "object"
-    },
-    "Agent Interface": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "AgentInterface": {
       "additionalProperties": false,
       "description": "Declares a combination of a target URL, transport and protocol version for interacting with the agent.\n This allows agents to expose the same functionality over multiple protocol binding mechanisms.",
       "patternProperties": {
@@ -1125,20 +1124,19 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         },
         "tenant": {
           "default": "",
-          "description": "Tenant ID to be used in the request when calling the agent.",
+          "description": "Optional. An opaque string used for routing requests to a specific agent\n or tenant when multiple agents are served behind a single A2A endpoint.\n When set, clients MUST include this value in the `tenant` field of all\n request messages sent to this interface. The server is responsible for\n interpreting the value and routing requests accordingly; the protocol\n does not define its format or semantics.",
           "type": "string"
         },
         "url": {
           "default": "",
-          "description": "The URL where this interface is available. Must be a valid absolute HTTPS URL in production.\n Example: \"https://api.example.com/a2a/v1\", \"https://grpc.example.com/a2a\"",
+          "description": "The URL or address where this interface is available. For HTTP-based transports, must be a valid absolute\n HTTPS URL in production. For gRPC, the address should be in the format \"hostname:port\".\n Example: \"https://api.example.com/a2a/v1\", \"grpc.example.com:443\"",
           "type": "string"
         }
       },
       "title": "Agent Interface",
       "type": "object"
     },
-    "Agent Provider": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "AgentProvider": {
       "additionalProperties": false,
       "description": "Represents the service provider of an agent.",
       "properties": {
@@ -1156,8 +1154,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "Agent Provider",
       "type": "object"
     },
-    "Agent Skill": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "AgentSkill": {
       "additionalProperties": false,
       "description": "Represents a distinct capability or function that an agent can perform.",
       "patternProperties": {
@@ -1178,7 +1175,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "^(security_requirements)$": {
           "description": "Security schemes necessary for this skill.",
           "items": {
-            "$ref": "lf.a2a.v1.SecurityRequirement.jsonschema.json"
+            "$ref": "#/$defs/SecurityRequirement"
           },
           "type": "array"
         }
@@ -1223,7 +1220,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "securityRequirements": {
           "description": "Security schemes necessary for this skill.",
           "items": {
-            "$ref": "lf.a2a.v1.SecurityRequirement.jsonschema.json"
+            "$ref": "#/$defs/SecurityRequirement"
           },
           "type": "array"
         },
@@ -1238,76 +1235,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "Agent Skill",
       "type": "object"
     },
-    "Artifact": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Artifacts represent task outputs.",
-      "patternProperties": {
-        "^(artifact_id)$": {
-          "default": "",
-          "description": "Unique identifier (e.g. UUID) for the artifact. It must be unique within a task.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "artifactId": {
-          "default": "",
-          "description": "Unique identifier (e.g. UUID) for the artifact. It must be unique within a task.",
-          "type": "string"
-        },
-        "description": {
-          "default": "",
-          "description": "Optional. A human readable description of the artifact.",
-          "type": "string"
-        },
-        "extensions": {
-          "description": "The URIs of extensions that are present or contributed to this Artifact.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "metadata": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
-          "description": "Optional. Metadata included with the artifact."
-        },
-        "name": {
-          "default": "",
-          "description": "A human readable name for the artifact.",
-          "type": "string"
-        },
-        "parts": {
-          "description": "The content of the artifact. Must contain at least one part.",
-          "items": {
-            "$ref": "lf.a2a.v1.Part.jsonschema.json"
-          },
-          "type": "array"
-        }
-      },
-      "title": "Artifact",
-      "type": "object"
-    },
-    "Authentication Info": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Defines authentication details, used for push notifications.",
-      "properties": {
-        "credentials": {
-          "default": "",
-          "description": "Push Notification credentials. Format depends on the scheme (e.g., token for Bearer).",
-          "type": "string"
-        },
-        "scheme": {
-          "default": "",
-          "description": "HTTP Authentication Scheme from the [IANA registry](https://www.iana.org/assignments/http-authschemes/).\n Examples: `Bearer`, `Basic`, `Digest`.\n Scheme names are case-insensitive per [RFC 9110 Section 11.1](https://www.rfc-editor.org/rfc/rfc9110#section-11.1).",
-          "type": "string"
-        }
-      },
-      "title": "Authentication Info",
-      "type": "object"
-    },
-    "Authorization CodeO Auth Flow": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "AuthorizationCodeOAuthFlow": {
       "additionalProperties": false,
       "description": "Defines configuration details for the OAuth 2.0 Authorization Code flow.",
       "patternProperties": {
@@ -1367,31 +1295,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "Authorization CodeO Auth Flow",
       "type": "object"
     },
-    "Cancel Task Request": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Represents a request for the `CancelTask` method.",
-      "properties": {
-        "id": {
-          "default": "",
-          "description": "The resource ID of the task to cancel.",
-          "type": "string"
-        },
-        "metadata": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
-          "description": "A flexible key-value map for passing additional context or parameters."
-        },
-        "tenant": {
-          "default": "",
-          "description": "Optional. Tenant ID, provided as a path parameter.",
-          "type": "string"
-        }
-      },
-      "title": "Cancel Task Request",
-      "type": "object"
-    },
-    "Client CredentialsO Auth Flow": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "ClientCredentialsOAuthFlow": {
       "additionalProperties": false,
       "description": "Defines configuration details for the OAuth 2.0 Client Credentials flow.",
       "patternProperties": {
@@ -1431,39 +1335,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "Client CredentialsO Auth Flow",
       "type": "object"
     },
-    "Delete Task Push Notification Config Request": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Represents a request for the `DeleteTaskPushNotificationConfig` method.",
-      "patternProperties": {
-        "^(task_id)$": {
-          "default": "",
-          "description": "The parent task resource ID.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "id": {
-          "default": "",
-          "description": "The resource ID of the configuration to delete.",
-          "type": "string"
-        },
-        "taskId": {
-          "default": "",
-          "description": "The parent task resource ID.",
-          "type": "string"
-        },
-        "tenant": {
-          "default": "",
-          "description": "Optional. Tenant ID, provided as a path parameter.",
-          "type": "string"
-        }
-      },
-      "title": "Delete Task Push Notification Config Request",
-      "type": "object"
-    },
-    "Device CodeO Auth Flow": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "DeviceCodeOAuthFlow": {
       "additionalProperties": false,
       "description": "Defines configuration details for the OAuth 2.0 Device Code flow (RFC 8628).\n This flow is designed for input-constrained devices such as IoT devices,\n and CLI tools where the user authenticates on a separate device.",
       "patternProperties": {
@@ -1513,22 +1385,489 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "Device CodeO Auth Flow",
       "type": "object"
     },
-    "Get Extended Agent Card Request": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "HTTPAuthSecurityScheme": {
+      "additionalProperties": false,
+      "description": "Defines a security scheme using HTTP authentication.",
+      "patternProperties": {
+        "^(bearer_format)$": {
+          "default": "",
+          "description": "A hint to the client to identify how the bearer token is formatted (e.g., \"JWT\").\n Primarily for documentation purposes.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "bearerFormat": {
+          "default": "",
+          "description": "A hint to the client to identify how the bearer token is formatted (e.g., \"JWT\").\n Primarily for documentation purposes.",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "description": "An optional description for the security scheme.",
+          "type": "string"
+        },
+        "scheme": {
+          "default": "",
+          "description": "The name of the HTTP Authentication scheme to be used in the Authorization header,\n as defined in RFC7235 (e.g., \"Bearer\").\n This value should be registered in the IANA Authentication Scheme registry.",
+          "type": "string"
+        }
+      },
+      "title": "HTTP Auth Security Scheme",
+      "type": "object"
+    },
+    "ImplicitOAuthFlow": {
+      "additionalProperties": false,
+      "description": "Deprecated: Use Authorization Code + PKCE instead.",
+      "patternProperties": {
+        "^(authorization_url)$": {
+          "default": "",
+          "description": "The authorization URL to be used for this flow. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS",
+          "type": "string"
+        },
+        "^(refresh_url)$": {
+          "default": "",
+          "description": "The URL to be used for obtaining refresh tokens. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "authorizationUrl": {
+          "default": "",
+          "description": "The authorization URL to be used for this flow. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS",
+          "type": "string"
+        },
+        "refreshUrl": {
+          "default": "",
+          "description": "The URL to be used for obtaining refresh tokens. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS.",
+          "type": "string"
+        },
+        "scopes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The available scopes for the OAuth2 security scheme. A map between the\n scope name and a short description for it. The map MAY be empty.",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "title": "ImplicitO Auth Flow",
+      "type": "object"
+    },
+    "MutualTlsSecurityScheme": {
+      "additionalProperties": false,
+      "description": "Defines a security scheme using mTLS authentication.",
+      "properties": {
+        "description": {
+          "default": "",
+          "description": "An optional description for the security scheme.",
+          "type": "string"
+        }
+      },
+      "title": "Mutual Tls Security Scheme",
+      "type": "object"
+    },
+    "OAuth2SecurityScheme": {
+      "additionalProperties": false,
+      "description": "Defines a security scheme using OAuth 2.0.",
+      "patternProperties": {
+        "^(oauth2_metadata_url)$": {
+          "default": "",
+          "description": "URL to the OAuth2 authorization server metadata [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414).\n TLS is required.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "description": {
+          "default": "",
+          "description": "An optional description for the security scheme.",
+          "type": "string"
+        },
+        "flows": {
+          "$ref": "#/$defs/OAuthFlows",
+          "description": "An object containing configuration information for the supported OAuth 2.0 flows."
+        },
+        "oauth2MetadataUrl": {
+          "default": "",
+          "description": "URL to the OAuth2 authorization server metadata [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414).\n TLS is required.",
+          "type": "string"
+        }
+      },
+      "title": "O Auth2 Security Scheme",
+      "type": "object"
+    },
+    "OAuthFlows": {
+      "additionalProperties": false,
+      "description": "Defines the configuration for the supported OAuth 2.0 flows.",
+      "patternProperties": {
+        "^(authorization_code)$": {
+          "$ref": "#/$defs/AuthorizationCodeOAuthFlow",
+          "description": "Configuration for the OAuth Authorization Code flow."
+        },
+        "^(client_credentials)$": {
+          "$ref": "#/$defs/ClientCredentialsOAuthFlow",
+          "description": "Configuration for the OAuth Client Credentials flow."
+        },
+        "^(device_code)$": {
+          "$ref": "#/$defs/DeviceCodeOAuthFlow",
+          "description": "Configuration for the OAuth Device Code flow."
+        }
+      },
+      "properties": {
+        "authorizationCode": {
+          "$ref": "#/$defs/AuthorizationCodeOAuthFlow",
+          "description": "Configuration for the OAuth Authorization Code flow."
+        },
+        "clientCredentials": {
+          "$ref": "#/$defs/ClientCredentialsOAuthFlow",
+          "description": "Configuration for the OAuth Client Credentials flow."
+        },
+        "deviceCode": {
+          "$ref": "#/$defs/DeviceCodeOAuthFlow",
+          "description": "Configuration for the OAuth Device Code flow."
+        },
+        "implicit": {
+          "$ref": "#/$defs/ImplicitOAuthFlow",
+          "description": "Deprecated: Use Authorization Code + PKCE instead."
+        },
+        "password": {
+          "$ref": "#/$defs/PasswordOAuthFlow",
+          "description": "Deprecated: Use Authorization Code + PKCE or Device Code."
+        }
+      },
+      "title": "O Auth Flows",
+      "type": "object"
+    },
+    "OpenIdConnectSecurityScheme": {
+      "additionalProperties": false,
+      "description": "Defines a security scheme using OpenID Connect.",
+      "patternProperties": {
+        "^(open_id_connect_url)$": {
+          "default": "",
+          "description": "The [OpenID Connect Discovery URL](https://openid.net/specs/openid-connect-discovery-1_0.html) for the OIDC provider's metadata.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "description": {
+          "default": "",
+          "description": "An optional description for the security scheme.",
+          "type": "string"
+        },
+        "openIdConnectUrl": {
+          "default": "",
+          "description": "The [OpenID Connect Discovery URL](https://openid.net/specs/openid-connect-discovery-1_0.html) for the OIDC provider's metadata.",
+          "type": "string"
+        }
+      },
+      "title": "Open Id Connect Security Scheme",
+      "type": "object"
+    },
+    "PasswordOAuthFlow": {
+      "additionalProperties": false,
+      "description": "Deprecated: Use Authorization Code + PKCE or Device Code.",
+      "patternProperties": {
+        "^(refresh_url)$": {
+          "default": "",
+          "description": "The URL to be used for obtaining refresh tokens. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS.",
+          "type": "string"
+        },
+        "^(token_url)$": {
+          "default": "",
+          "description": "The token URL to be used for this flow. This MUST be in the form of a URL.\n The OAuth2 standard requires the use of TLS.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "refreshUrl": {
+          "default": "",
+          "description": "The URL to be used for obtaining refresh tokens. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS.",
+          "type": "string"
+        },
+        "scopes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The available scopes for the OAuth2 security scheme. A map between the\n scope name and a short description for it. The map MAY be empty.",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "tokenUrl": {
+          "default": "",
+          "description": "The token URL to be used for this flow. This MUST be in the form of a URL.\n The OAuth2 standard requires the use of TLS.",
+          "type": "string"
+        }
+      },
+      "title": "PasswordO Auth Flow",
+      "type": "object"
+    },
+    "SecurityRequirement": {
+      "additionalProperties": false,
+      "description": "Defines the security requirements for an agent.",
+      "properties": {
+        "schemes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/StringList"
+          },
+          "description": "A map of security schemes to the required scopes.",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "title": "Security Requirement",
+      "type": "object"
+    },
+    "SecurityScheme": {
+      "additionalProperties": false,
+      "description": "Defines a security scheme that can be used to secure an agent's endpoints.\n This is a discriminated union type based on the OpenAPI 3.2 Security Scheme Object.\n See: https://spec.openapis.org/oas/v3.2.0.html#security-scheme-object",
+      "patternProperties": {
+        "^(api_key_security_scheme)$": {
+          "$ref": "#/$defs/APIKeySecurityScheme",
+          "description": "API key-based authentication."
+        },
+        "^(http_auth_security_scheme)$": {
+          "$ref": "#/$defs/HTTPAuthSecurityScheme",
+          "description": "HTTP authentication (Basic, Bearer, etc.)."
+        },
+        "^(mtls_security_scheme)$": {
+          "$ref": "#/$defs/MutualTlsSecurityScheme",
+          "description": "Mutual TLS authentication."
+        },
+        "^(oauth2_security_scheme)$": {
+          "$ref": "#/$defs/OAuth2SecurityScheme",
+          "description": "OAuth 2.0 authentication."
+        },
+        "^(open_id_connect_security_scheme)$": {
+          "$ref": "#/$defs/OpenIdConnectSecurityScheme",
+          "description": "OpenID Connect authentication."
+        }
+      },
+      "properties": {
+        "apiKeySecurityScheme": {
+          "$ref": "#/$defs/APIKeySecurityScheme",
+          "description": "API key-based authentication."
+        },
+        "httpAuthSecurityScheme": {
+          "$ref": "#/$defs/HTTPAuthSecurityScheme",
+          "description": "HTTP authentication (Basic, Bearer, etc.)."
+        },
+        "mtlsSecurityScheme": {
+          "$ref": "#/$defs/MutualTlsSecurityScheme",
+          "description": "Mutual TLS authentication."
+        },
+        "oauth2SecurityScheme": {
+          "$ref": "#/$defs/OAuth2SecurityScheme",
+          "description": "OAuth 2.0 authentication."
+        },
+        "openIdConnectSecurityScheme": {
+          "$ref": "#/$defs/OpenIdConnectSecurityScheme",
+          "description": "OpenID Connect authentication."
+        }
+      },
+      "title": "Security Scheme",
+      "type": "object"
+    },
+    "StringList": {
+      "additionalProperties": false,
+      "description": "A list of strings.",
+      "properties": {
+        "list": {
+          "description": "The individual string values.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "String List",
+      "type": "object"
+    },
+    "Value": {
+      "title": "Value"
+    },
+    "Artifact": {
+      "additionalProperties": false,
+      "description": "Artifacts represent task outputs.",
+      "patternProperties": {
+        "^(artifact_id)$": {
+          "default": "",
+          "description": "Unique identifier (e.g. UUID) for the artifact. It must be unique within a task.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "artifactId": {
+          "default": "",
+          "description": "Unique identifier (e.g. UUID) for the artifact. It must be unique within a task.",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "description": "Optional. A human readable description of the artifact.",
+          "type": "string"
+        },
+        "extensions": {
+          "description": "The URIs of extensions that are present or contributed to this Artifact.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Struct",
+          "description": "Optional. Metadata included with the artifact."
+        },
+        "name": {
+          "default": "",
+          "description": "A human readable name for the artifact.",
+          "type": "string"
+        },
+        "parts": {
+          "description": "The content of the artifact. Must contain at least one part.",
+          "items": {
+            "$ref": "#/$defs/Part"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Artifact",
+      "type": "object"
+    },
+    "Part": {
+      "additionalProperties": false,
+      "description": "`Part` represents a container for a section of communication content.\n Parts can be purely textual, some sort of file (image, video, etc) or\n a structured data blob (i.e. JSON).",
+      "patternProperties": {
+        "^(media_type)$": {
+          "default": "",
+          "description": "The `media_type` (MIME type) of the part content (e.g., \"text/plain\", \"application/json\", \"image/png\").\n This field is available for all part types.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/Value",
+          "description": "Arbitrary structured `data` as a JSON value (object, array, string, number, boolean, or null)."
+        },
+        "filename": {
+          "default": "",
+          "description": "An optional `filename` for the file (e.g., \"document.pdf\").",
+          "type": "string"
+        },
+        "mediaType": {
+          "default": "",
+          "description": "The `media_type` (MIME type) of the part content (e.g., \"text/plain\", \"application/json\", \"image/png\").\n This field is available for all part types.",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Struct",
+          "description": "Optional. metadata associated with this part."
+        },
+        "raw": {
+          "description": "The `raw` byte content of a file. In JSON serialization, this is encoded as a base64 string.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "text": {
+          "description": "The string content of the `text` part.",
+          "type": "string"
+        },
+        "url": {
+          "description": "A `url` pointing to the file's content.",
+          "type": "string"
+        }
+      },
+      "title": "Part",
+      "type": "object"
+    },
+    "AuthenticationInfo": {
+      "additionalProperties": false,
+      "description": "Defines authentication details, used for push notifications.",
+      "properties": {
+        "credentials": {
+          "default": "",
+          "description": "Push Notification credentials. Format depends on the scheme (e.g., token for Bearer).",
+          "type": "string"
+        },
+        "scheme": {
+          "default": "",
+          "description": "HTTP Authentication Scheme from the [IANA registry](https://www.iana.org/assignments/http-authschemes/).\n Examples: `Bearer`, `Basic`, `Digest`.\n Scheme names are case-insensitive per [RFC 9110 Section 11.1](https://www.rfc-editor.org/rfc/rfc9110#section-11.1).",
+          "type": "string"
+        }
+      },
+      "title": "Authentication Info",
+      "type": "object"
+    },
+    "CancelTaskRequest": {
+      "additionalProperties": false,
+      "description": "Represents a request for the `CancelTask` method.",
+      "properties": {
+        "id": {
+          "default": "",
+          "description": "The resource ID of the task to cancel.",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Struct",
+          "description": "A flexible key-value map for passing additional context or parameters."
+        },
+        "tenant": {
+          "default": "",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
+          "type": "string"
+        }
+      },
+      "title": "Cancel Task Request",
+      "type": "object"
+    },
+    "DeleteTaskPushNotificationConfigRequest": {
+      "additionalProperties": false,
+      "description": "Represents a request for the `DeleteTaskPushNotificationConfig` method.",
+      "patternProperties": {
+        "^(task_id)$": {
+          "default": "",
+          "description": "The parent task resource ID.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "id": {
+          "default": "",
+          "description": "The resource ID of the configuration to delete.",
+          "type": "string"
+        },
+        "taskId": {
+          "default": "",
+          "description": "The parent task resource ID.",
+          "type": "string"
+        },
+        "tenant": {
+          "default": "",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
+          "type": "string"
+        }
+      },
+      "title": "Delete Task Push Notification Config Request",
+      "type": "object"
+    },
+    "GetExtendedAgentCardRequest": {
       "additionalProperties": false,
       "description": "Represents a request for the `GetExtendedAgentCard` method.",
       "properties": {
         "tenant": {
           "default": "",
-          "description": "Optional. Tenant ID, provided as a path parameter.",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
           "type": "string"
         }
       },
       "title": "Get Extended Agent Card Request",
       "type": "object"
     },
-    "Get Task Push Notification Config Request": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "GetTaskPushNotificationConfigRequest": {
       "additionalProperties": false,
       "description": "Represents a request for the `GetTaskPushNotificationConfig` method.",
       "patternProperties": {
@@ -1551,15 +1890,14 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         },
         "tenant": {
           "default": "",
-          "description": "Optional. Tenant ID, provided as a path parameter.",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
           "type": "string"
         }
       },
       "title": "Get Task Push Notification Config Request",
       "type": "object"
     },
-    "Get Task Request": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "GetTaskRequest": {
       "additionalProperties": false,
       "description": "Represents a request for the `GetTask` method.",
       "patternProperties": {
@@ -1600,87 +1938,14 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         },
         "tenant": {
           "default": "",
-          "description": "Optional. Tenant ID, provided as a path parameter.",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
           "type": "string"
         }
       },
       "title": "Get Task Request",
       "type": "object"
     },
-    "HTTP Auth Security Scheme": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Defines a security scheme using HTTP authentication.",
-      "patternProperties": {
-        "^(bearer_format)$": {
-          "default": "",
-          "description": "A hint to the client to identify how the bearer token is formatted (e.g., \"JWT\").\n Primarily for documentation purposes.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "bearerFormat": {
-          "default": "",
-          "description": "A hint to the client to identify how the bearer token is formatted (e.g., \"JWT\").\n Primarily for documentation purposes.",
-          "type": "string"
-        },
-        "description": {
-          "default": "",
-          "description": "An optional description for the security scheme.",
-          "type": "string"
-        },
-        "scheme": {
-          "default": "",
-          "description": "The name of the HTTP Authentication scheme to be used in the Authorization header,\n as defined in RFC7235 (e.g., \"Bearer\").\n This value should be registered in the IANA Authentication Scheme registry.",
-          "type": "string"
-        }
-      },
-      "title": "HTTP Auth Security Scheme",
-      "type": "object"
-    },
-    "ImplicitO Auth Flow": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Deprecated: Use Authorization Code + PKCE instead.",
-      "patternProperties": {
-        "^(authorization_url)$": {
-          "default": "",
-          "description": "The authorization URL to be used for this flow. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS",
-          "type": "string"
-        },
-        "^(refresh_url)$": {
-          "default": "",
-          "description": "The URL to be used for obtaining refresh tokens. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "authorizationUrl": {
-          "default": "",
-          "description": "The authorization URL to be used for this flow. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS",
-          "type": "string"
-        },
-        "refreshUrl": {
-          "default": "",
-          "description": "The URL to be used for obtaining refresh tokens. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS.",
-          "type": "string"
-        },
-        "scopes": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "description": "The available scopes for the OAuth2 security scheme. A map between the\n scope name and a short description for it. The map MAY be empty.",
-          "propertyNames": {
-            "type": "string"
-          },
-          "type": "object"
-        }
-      },
-      "title": "ImplicitO Auth Flow",
-      "type": "object"
-    },
-    "List Task Push Notification Configs Request": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "ListTaskPushNotificationConfigsRequest": {
       "additionalProperties": false,
       "description": "Represents a request for the `ListTaskPushNotificationConfigs` method.",
       "patternProperties": {
@@ -1738,15 +2003,14 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         },
         "tenant": {
           "default": "",
-          "description": "Optional. Tenant ID, provided as a path parameter.",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
           "type": "string"
         }
       },
       "title": "List Task Push Notification Configs Request",
       "type": "object"
     },
-    "List Task Push Notification Configs Response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "ListTaskPushNotificationConfigsResponse": {
       "additionalProperties": false,
       "description": "Represents a successful response for the `ListTaskPushNotificationConfigs`\n method.",
       "patternProperties": {
@@ -1760,7 +2024,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "configs": {
           "description": "The list of push notification configurations.",
           "items": {
-            "$ref": "lf.a2a.v1.TaskPushNotificationConfig.jsonschema.json"
+            "$ref": "#/$defs/TaskPushNotificationConfig"
           },
           "type": "array"
         },
@@ -1773,8 +2037,56 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "List Task Push Notification Configs Response",
       "type": "object"
     },
-    "List Tasks Request": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "TaskPushNotificationConfig": {
+      "additionalProperties": false,
+      "description": "A container associating a push notification configuration with a specific task.",
+      "patternProperties": {
+        "^(task_id)$": {
+          "default": "",
+          "description": "The ID of the task this configuration is associated with.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "authentication": {
+          "$ref": "#/$defs/AuthenticationInfo",
+          "description": "Authentication information required to send the notification."
+        },
+        "id": {
+          "default": "",
+          "description": "The push notification configuration details.\n A unique identifier (e.g. UUID) for this push notification configuration.",
+          "type": "string"
+        },
+        "taskId": {
+          "default": "",
+          "description": "The ID of the task this configuration is associated with.",
+          "type": "string"
+        },
+        "tenant": {
+          "default": "",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
+          "type": "string"
+        },
+        "token": {
+          "default": "",
+          "description": "A token unique for this task or session.",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "description": "The URL where the notification should be sent.",
+          "type": "string"
+        }
+      },
+      "title": "Task Push Notification Config",
+      "type": "object"
+    },
+    "Timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "ListTasksRequest": {
       "additionalProperties": false,
       "description": "Parameters for listing tasks with optional filtering criteria.",
       "patternProperties": {
@@ -1821,7 +2133,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
           "type": "string"
         },
         "^(status_timestamp_after)$": {
-          "$ref": "google.protobuf.Timestamp.jsonschema.json",
+          "$ref": "#/$defs/Timestamp",
           "description": "Filter tasks which have a status updated after the provided timestamp in ISO 8601 format (e.g., \"2023-10-27T10:00:00Z\").\n Only tasks with a status timestamp time greater than or equal to this value will be returned."
         }
       },
@@ -1898,20 +2210,19 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
           "title": "Task State"
         },
         "statusTimestampAfter": {
-          "$ref": "google.protobuf.Timestamp.jsonschema.json",
+          "$ref": "#/$defs/Timestamp",
           "description": "Filter tasks which have a status updated after the provided timestamp in ISO 8601 format (e.g., \"2023-10-27T10:00:00Z\").\n Only tasks with a status timestamp time greater than or equal to this value will be returned."
         },
         "tenant": {
           "default": "",
-          "description": "Tenant ID, provided as a path parameter.",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
           "type": "string"
         }
       },
       "title": "List Tasks Request",
       "type": "object"
     },
-    "List Tasks Response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "ListTasksResponse": {
       "additionalProperties": false,
       "description": "Result object for `ListTasks` method containing an array of tasks and pagination information.",
       "patternProperties": {
@@ -1975,7 +2286,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "tasks": {
           "description": "Array of tasks matching the specified criteria.",
           "items": {
-            "$ref": "lf.a2a.v1.Task.jsonschema.json"
+            "$ref": "#/$defs/Task"
           },
           "type": "array"
         },
@@ -1999,7 +2310,6 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "type": "object"
     },
     "Message": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "description": "`Message` is one unit of communication between client and server. It can be\n associated with a context and/or a task. For server messages, `context_id` must\n be provided, and `task_id` only if a task was created. For client messages, both\n fields are optional, with the caveat that if both are provided, they have to\n match (the `context_id` has to be the one that is set on the task). If only\n `task_id` is provided, the server will infer `context_id` from it.",
       "patternProperties": {
@@ -2045,13 +2355,13 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
           "type": "string"
         },
         "metadata": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
+          "$ref": "#/$defs/Struct",
           "description": "Optional. Any metadata to provide along with the message."
         },
         "parts": {
           "description": "Parts is the container of the message content.",
           "items": {
-            "$ref": "lf.a2a.v1.Part.jsonschema.json"
+            "$ref": "#/$defs/Part"
           },
           "type": "array"
         },
@@ -2094,463 +2404,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
       "title": "Message",
       "type": "object"
     },
-    "Mutual Tls Security Scheme": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Defines a security scheme using mTLS authentication.",
-      "properties": {
-        "description": {
-          "default": "",
-          "description": "An optional description for the security scheme.",
-          "type": "string"
-        }
-      },
-      "title": "Mutual Tls Security Scheme",
-      "type": "object"
-    },
-    "O Auth2 Security Scheme": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Defines a security scheme using OAuth 2.0.",
-      "patternProperties": {
-        "^(oauth2_metadata_url)$": {
-          "default": "",
-          "description": "URL to the OAuth2 authorization server metadata [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414).\n TLS is required.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "description": {
-          "default": "",
-          "description": "An optional description for the security scheme.",
-          "type": "string"
-        },
-        "flows": {
-          "$ref": "lf.a2a.v1.OAuthFlows.jsonschema.json",
-          "description": "An object containing configuration information for the supported OAuth 2.0 flows."
-        },
-        "oauth2MetadataUrl": {
-          "default": "",
-          "description": "URL to the OAuth2 authorization server metadata [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414).\n TLS is required.",
-          "type": "string"
-        }
-      },
-      "title": "O Auth2 Security Scheme",
-      "type": "object"
-    },
-    "O Auth Flows": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Defines the configuration for the supported OAuth 2.0 flows.",
-      "patternProperties": {
-        "^(authorization_code)$": {
-          "$ref": "lf.a2a.v1.AuthorizationCodeOAuthFlow.jsonschema.json",
-          "description": "Configuration for the OAuth Authorization Code flow."
-        },
-        "^(client_credentials)$": {
-          "$ref": "lf.a2a.v1.ClientCredentialsOAuthFlow.jsonschema.json",
-          "description": "Configuration for the OAuth Client Credentials flow."
-        },
-        "^(device_code)$": {
-          "$ref": "lf.a2a.v1.DeviceCodeOAuthFlow.jsonschema.json",
-          "description": "Configuration for the OAuth Device Code flow."
-        }
-      },
-      "properties": {
-        "authorizationCode": {
-          "$ref": "lf.a2a.v1.AuthorizationCodeOAuthFlow.jsonschema.json",
-          "description": "Configuration for the OAuth Authorization Code flow."
-        },
-        "clientCredentials": {
-          "$ref": "lf.a2a.v1.ClientCredentialsOAuthFlow.jsonschema.json",
-          "description": "Configuration for the OAuth Client Credentials flow."
-        },
-        "deviceCode": {
-          "$ref": "lf.a2a.v1.DeviceCodeOAuthFlow.jsonschema.json",
-          "description": "Configuration for the OAuth Device Code flow."
-        },
-        "implicit": {
-          "$ref": "lf.a2a.v1.ImplicitOAuthFlow.jsonschema.json",
-          "description": "Deprecated: Use Authorization Code + PKCE instead."
-        },
-        "password": {
-          "$ref": "lf.a2a.v1.PasswordOAuthFlow.jsonschema.json",
-          "description": "Deprecated: Use Authorization Code + PKCE or Device Code."
-        }
-      },
-      "title": "O Auth Flows",
-      "type": "object"
-    },
-    "Open Id Connect Security Scheme": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Defines a security scheme using OpenID Connect.",
-      "patternProperties": {
-        "^(open_id_connect_url)$": {
-          "default": "",
-          "description": "The [OpenID Connect Discovery URL](https://openid.net/specs/openid-connect-discovery-1_0.html) for the OIDC provider's metadata.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "description": {
-          "default": "",
-          "description": "An optional description for the security scheme.",
-          "type": "string"
-        },
-        "openIdConnectUrl": {
-          "default": "",
-          "description": "The [OpenID Connect Discovery URL](https://openid.net/specs/openid-connect-discovery-1_0.html) for the OIDC provider's metadata.",
-          "type": "string"
-        }
-      },
-      "title": "Open Id Connect Security Scheme",
-      "type": "object"
-    },
-    "Part": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "`Part` represents a container for a section of communication content.\n Parts can be purely textual, some sort of file (image, video, etc) or\n a structured data blob (i.e. JSON).",
-      "patternProperties": {
-        "^(media_type)$": {
-          "default": "",
-          "description": "The `media_type` (MIME type) of the part content (e.g., \"text/plain\", \"application/json\", \"image/png\").\n This field is available for all part types.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "data": {
-          "$ref": "google.protobuf.Value.jsonschema.json",
-          "description": "Arbitrary structured `data` as a JSON value (object, array, string, number, boolean, or null)."
-        },
-        "filename": {
-          "default": "",
-          "description": "An optional `filename` for the file (e.g., \"document.pdf\").",
-          "type": "string"
-        },
-        "mediaType": {
-          "default": "",
-          "description": "The `media_type` (MIME type) of the part content (e.g., \"text/plain\", \"application/json\", \"image/png\").\n This field is available for all part types.",
-          "type": "string"
-        },
-        "metadata": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
-          "description": "Optional. metadata associated with this part."
-        },
-        "raw": {
-          "description": "The `raw` byte content of a file. In JSON serialization, this is encoded as a base64 string.",
-          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
-          "type": "string"
-        },
-        "text": {
-          "description": "The string content of the `text` part.",
-          "type": "string"
-        },
-        "url": {
-          "description": "A `url` pointing to the file's content.",
-          "type": "string"
-        }
-      },
-      "title": "Part",
-      "type": "object"
-    },
-    "PasswordO Auth Flow": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Deprecated: Use Authorization Code + PKCE or Device Code.",
-      "patternProperties": {
-        "^(refresh_url)$": {
-          "default": "",
-          "description": "The URL to be used for obtaining refresh tokens. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS.",
-          "type": "string"
-        },
-        "^(token_url)$": {
-          "default": "",
-          "description": "The token URL to be used for this flow. This MUST be in the form of a URL.\n The OAuth2 standard requires the use of TLS.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "refreshUrl": {
-          "default": "",
-          "description": "The URL to be used for obtaining refresh tokens. This MUST be in the\n form of a URL. The OAuth2 standard requires the use of TLS.",
-          "type": "string"
-        },
-        "scopes": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "description": "The available scopes for the OAuth2 security scheme. A map between the\n scope name and a short description for it. The map MAY be empty.",
-          "propertyNames": {
-            "type": "string"
-          },
-          "type": "object"
-        },
-        "tokenUrl": {
-          "default": "",
-          "description": "The token URL to be used for this flow. This MUST be in the form of a URL.\n The OAuth2 standard requires the use of TLS.",
-          "type": "string"
-        }
-      },
-      "title": "PasswordO Auth Flow",
-      "type": "object"
-    },
-    "Security Requirement": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Defines the security requirements for an agent.",
-      "properties": {
-        "schemes": {
-          "additionalProperties": {
-            "$ref": "lf.a2a.v1.StringList.jsonschema.json"
-          },
-          "description": "A map of security schemes to the required scopes.",
-          "propertyNames": {
-            "type": "string"
-          },
-          "type": "object"
-        }
-      },
-      "title": "Security Requirement",
-      "type": "object"
-    },
-    "Security Scheme": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Defines a security scheme that can be used to secure an agent's endpoints.\n This is a discriminated union type based on the OpenAPI 3.2 Security Scheme Object.\n See: https://spec.openapis.org/oas/v3.2.0.html#security-scheme-object",
-      "patternProperties": {
-        "^(api_key_security_scheme)$": {
-          "$ref": "lf.a2a.v1.APIKeySecurityScheme.jsonschema.json",
-          "description": "API key-based authentication."
-        },
-        "^(http_auth_security_scheme)$": {
-          "$ref": "lf.a2a.v1.HTTPAuthSecurityScheme.jsonschema.json",
-          "description": "HTTP authentication (Basic, Bearer, etc.)."
-        },
-        "^(mtls_security_scheme)$": {
-          "$ref": "lf.a2a.v1.MutualTlsSecurityScheme.jsonschema.json",
-          "description": "Mutual TLS authentication."
-        },
-        "^(oauth2_security_scheme)$": {
-          "$ref": "lf.a2a.v1.OAuth2SecurityScheme.jsonschema.json",
-          "description": "OAuth 2.0 authentication."
-        },
-        "^(open_id_connect_security_scheme)$": {
-          "$ref": "lf.a2a.v1.OpenIdConnectSecurityScheme.jsonschema.json",
-          "description": "OpenID Connect authentication."
-        }
-      },
-      "properties": {
-        "apiKeySecurityScheme": {
-          "$ref": "lf.a2a.v1.APIKeySecurityScheme.jsonschema.json",
-          "description": "API key-based authentication."
-        },
-        "httpAuthSecurityScheme": {
-          "$ref": "lf.a2a.v1.HTTPAuthSecurityScheme.jsonschema.json",
-          "description": "HTTP authentication (Basic, Bearer, etc.)."
-        },
-        "mtlsSecurityScheme": {
-          "$ref": "lf.a2a.v1.MutualTlsSecurityScheme.jsonschema.json",
-          "description": "Mutual TLS authentication."
-        },
-        "oauth2SecurityScheme": {
-          "$ref": "lf.a2a.v1.OAuth2SecurityScheme.jsonschema.json",
-          "description": "OAuth 2.0 authentication."
-        },
-        "openIdConnectSecurityScheme": {
-          "$ref": "lf.a2a.v1.OpenIdConnectSecurityScheme.jsonschema.json",
-          "description": "OpenID Connect authentication."
-        }
-      },
-      "title": "Security Scheme",
-      "type": "object"
-    },
-    "Send Message Configuration": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Configuration of a send message request.",
-      "patternProperties": {
-        "^(accepted_output_modes)$": {
-          "description": "A list of media types the client is prepared to accept for response parts.\n Agents SHOULD use this to tailor their output.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "^(history_length)$": {
-          "anyOf": [
-            {
-              "maximum": 2147483647,
-              "minimum": -2147483648,
-              "type": "integer"
-            },
-            {
-              "pattern": "^-?[0-9]+$",
-              "type": "string"
-            }
-          ],
-          "description": "The maximum number of most recent messages from the task's history to retrieve in\n the response. An unset value means the client does not impose any limit. A\n value of zero is a request to not include any messages. The server MUST NOT\n return more messages than the provided value, but MAY apply a lower limit."
-        },
-        "^(return_immediately)$": {
-          "default": false,
-          "description": "If `true`, the operation returns immediately after creating the task,\n even if processing is still in progress.\n If `false` (default), the operation MUST wait until the task reaches a\n terminal (`COMPLETED`, `FAILED`, `CANCELED`, `REJECTED`) or interrupted\n (`INPUT_REQUIRED`, `AUTH_REQUIRED`) state before returning.",
-          "type": "boolean"
-        },
-        "^(task_push_notification_config)$": {
-          "$ref": "lf.a2a.v1.TaskPushNotificationConfig.jsonschema.json",
-          "description": "Configuration for the agent to send push notifications for task updates.\n Task id should be empty when sending this configuration in a `SendMessage` request."
-        }
-      },
-      "properties": {
-        "acceptedOutputModes": {
-          "description": "A list of media types the client is prepared to accept for response parts.\n Agents SHOULD use this to tailor their output.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "historyLength": {
-          "anyOf": [
-            {
-              "maximum": 2147483647,
-              "minimum": -2147483648,
-              "type": "integer"
-            },
-            {
-              "pattern": "^-?[0-9]+$",
-              "type": "string"
-            }
-          ],
-          "description": "The maximum number of most recent messages from the task's history to retrieve in\n the response. An unset value means the client does not impose any limit. A\n value of zero is a request to not include any messages. The server MUST NOT\n return more messages than the provided value, but MAY apply a lower limit."
-        },
-        "returnImmediately": {
-          "default": false,
-          "description": "If `true`, the operation returns immediately after creating the task,\n even if processing is still in progress.\n If `false` (default), the operation MUST wait until the task reaches a\n terminal (`COMPLETED`, `FAILED`, `CANCELED`, `REJECTED`) or interrupted\n (`INPUT_REQUIRED`, `AUTH_REQUIRED`) state before returning.",
-          "type": "boolean"
-        },
-        "taskPushNotificationConfig": {
-          "$ref": "lf.a2a.v1.TaskPushNotificationConfig.jsonschema.json",
-          "description": "Configuration for the agent to send push notifications for task updates.\n Task id should be empty when sending this configuration in a `SendMessage` request."
-        }
-      },
-      "title": "Send Message Configuration",
-      "type": "object"
-    },
-    "Send Message Request": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Represents a request for the `SendMessage` method.",
-      "properties": {
-        "configuration": {
-          "$ref": "lf.a2a.v1.SendMessageConfiguration.jsonschema.json",
-          "description": "Configuration for the send request."
-        },
-        "message": {
-          "$ref": "lf.a2a.v1.Message.jsonschema.json",
-          "description": "The message to send to the agent."
-        },
-        "metadata": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
-          "description": "A flexible key-value map for passing additional context or parameters."
-        },
-        "tenant": {
-          "default": "",
-          "description": "Optional. Tenant ID, provided as a path parameter.",
-          "type": "string"
-        }
-      },
-      "title": "Send Message Request",
-      "type": "object"
-    },
-    "Send Message Response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Represents the response for the `SendMessage` method.",
-      "properties": {
-        "message": {
-          "$ref": "lf.a2a.v1.Message.jsonschema.json",
-          "description": "A message from the agent."
-        },
-        "task": {
-          "$ref": "lf.a2a.v1.Task.jsonschema.json",
-          "description": "The task created or updated by the message."
-        }
-      },
-      "title": "Send Message Response",
-      "type": "object"
-    },
-    "Stream Response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "A wrapper object used in streaming operations to encapsulate different types of response data.",
-      "patternProperties": {
-        "^(artifact_update)$": {
-          "$ref": "lf.a2a.v1.TaskArtifactUpdateEvent.jsonschema.json",
-          "description": "An event indicating a task artifact update."
-        },
-        "^(status_update)$": {
-          "$ref": "lf.a2a.v1.TaskStatusUpdateEvent.jsonschema.json",
-          "description": "An event indicating a task status update."
-        }
-      },
-      "properties": {
-        "artifactUpdate": {
-          "$ref": "lf.a2a.v1.TaskArtifactUpdateEvent.jsonschema.json",
-          "description": "An event indicating a task artifact update."
-        },
-        "message": {
-          "$ref": "lf.a2a.v1.Message.jsonschema.json",
-          "description": "A Message object containing a message from the agent."
-        },
-        "statusUpdate": {
-          "$ref": "lf.a2a.v1.TaskStatusUpdateEvent.jsonschema.json",
-          "description": "An event indicating a task status update."
-        },
-        "task": {
-          "$ref": "lf.a2a.v1.Task.jsonschema.json",
-          "description": "A Task object containing the current state of the task."
-        }
-      },
-      "title": "Stream Response",
-      "type": "object"
-    },
-    "String List": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "A list of strings.",
-      "properties": {
-        "list": {
-          "description": "The individual string values.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "title": "String List",
-      "type": "object"
-    },
-    "Subscribe To Task Request": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Represents a request for the `SubscribeToTask` method.",
-      "properties": {
-        "id": {
-          "default": "",
-          "description": "The resource ID of the task to subscribe to.",
-          "type": "string"
-        },
-        "tenant": {
-          "default": "",
-          "description": "Optional. Tenant ID, provided as a path parameter.",
-          "type": "string"
-        }
-      },
-      "title": "Subscribe To Task Request",
-      "type": "object"
-    },
     "Task": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "description": "`Task` is the core unit of action for A2A. It has a current status\n and when results are created for the task they are stored in the\n artifact. If there are multiple turns for a task, these are stored in\n history.",
       "patternProperties": {
@@ -2564,7 +2418,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "artifacts": {
           "description": "A set of output artifacts for a `Task`.",
           "items": {
-            "$ref": "lf.a2a.v1.Artifact.jsonschema.json"
+            "$ref": "#/$defs/Artifact"
           },
           "type": "array"
         },
@@ -2576,7 +2430,7 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         "history": {
           "description": "The history of interactions from a `Task`.",
           "items": {
-            "$ref": "lf.a2a.v1.Message.jsonschema.json"
+            "$ref": "#/$defs/Message"
           },
           "type": "array"
         },
@@ -2586,123 +2440,23 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
           "type": "string"
         },
         "metadata": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
+          "$ref": "#/$defs/Struct",
           "description": "A key/value object to store custom metadata about a task."
         },
         "status": {
-          "$ref": "lf.a2a.v1.TaskStatus.jsonschema.json",
+          "$ref": "#/$defs/TaskStatus",
           "description": "The current status of a `Task`, including `state` and a `message`."
         }
       },
       "title": "Task",
       "type": "object"
     },
-    "Task Artifact Update Event": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "A task delta where an artifact has been generated.",
-      "patternProperties": {
-        "^(context_id)$": {
-          "default": "",
-          "description": "The ID of the context that this task belongs to.",
-          "type": "string"
-        },
-        "^(last_chunk)$": {
-          "default": false,
-          "description": "If true, this is the final chunk of the artifact.",
-          "type": "boolean"
-        },
-        "^(task_id)$": {
-          "default": "",
-          "description": "The ID of the task for this artifact.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "append": {
-          "default": false,
-          "description": "If true, the content of this artifact should be appended to a previously\n sent artifact with the same ID.",
-          "type": "boolean"
-        },
-        "artifact": {
-          "$ref": "lf.a2a.v1.Artifact.jsonschema.json",
-          "description": "The artifact that was generated or updated."
-        },
-        "contextId": {
-          "default": "",
-          "description": "The ID of the context that this task belongs to.",
-          "type": "string"
-        },
-        "lastChunk": {
-          "default": false,
-          "description": "If true, this is the final chunk of the artifact.",
-          "type": "boolean"
-        },
-        "metadata": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
-          "description": "Optional. Metadata associated with the artifact update."
-        },
-        "taskId": {
-          "default": "",
-          "description": "The ID of the task for this artifact.",
-          "type": "string"
-        }
-      },
-      "title": "Task Artifact Update Event",
-      "type": "object"
-    },
-    "Task Push Notification Config": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "A container associating a push notification configuration with a specific task.",
-      "patternProperties": {
-        "^(task_id)$": {
-          "default": "",
-          "description": "The ID of the task this configuration is associated with.",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "authentication": {
-          "$ref": "lf.a2a.v1.AuthenticationInfo.jsonschema.json",
-          "description": "Authentication information required to send the notification."
-        },
-        "id": {
-          "default": "",
-          "description": "The push notification configuration details.\n A unique identifier (e.g. UUID) for this push notification configuration.",
-          "type": "string"
-        },
-        "taskId": {
-          "default": "",
-          "description": "The ID of the task this configuration is associated with.",
-          "type": "string"
-        },
-        "tenant": {
-          "default": "",
-          "description": "Optional. Tenant ID.",
-          "type": "string"
-        },
-        "token": {
-          "default": "",
-          "description": "A token unique for this task or session.",
-          "type": "string"
-        },
-        "url": {
-          "default": "",
-          "description": "The URL where the notification should be sent.",
-          "type": "string"
-        }
-      },
-      "title": "Task Push Notification Config",
-      "type": "object"
-    },
-    "Task Status": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "TaskStatus": {
       "additionalProperties": false,
       "description": "A container for the status of a task",
       "properties": {
         "message": {
-          "$ref": "lf.a2a.v1.Message.jsonschema.json",
+          "$ref": "#/$defs/Message",
           "description": "A message associated with the status."
         },
         "state": {
@@ -2735,15 +2489,212 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
           "title": "Task State"
         },
         "timestamp": {
-          "$ref": "google.protobuf.Timestamp.jsonschema.json",
+          "$ref": "#/$defs/Timestamp",
           "description": "ISO 8601 Timestamp when the status was recorded.\n Example: \"2023-10-27T10:00:00Z\""
         }
       },
       "title": "Task Status",
       "type": "object"
     },
-    "Task Status Update Event": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "SendMessageConfiguration": {
+      "additionalProperties": false,
+      "description": "Configuration of a send message request.",
+      "patternProperties": {
+        "^(accepted_output_modes)$": {
+          "description": "A list of media types the client is prepared to accept for response parts.\n Agents SHOULD use this to tailor their output.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(history_length)$": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "description": "The maximum number of most recent messages from the task's history to retrieve in\n the response. An unset value means the client does not impose any limit. A\n value of zero is a request to not include any messages. The server MUST NOT\n return more messages than the provided value, but MAY apply a lower limit."
+        },
+        "^(return_immediately)$": {
+          "default": false,
+          "description": "If `true`, the operation returns immediately after creating the task,\n even if processing is still in progress.\n If `false` (default), the operation MUST wait until the task reaches a\n terminal (`COMPLETED`, `FAILED`, `CANCELED`, `REJECTED`) or interrupted\n (`INPUT_REQUIRED`, `AUTH_REQUIRED`) state before returning.",
+          "type": "boolean"
+        },
+        "^(task_push_notification_config)$": {
+          "$ref": "#/$defs/TaskPushNotificationConfig",
+          "description": "Configuration for the agent to send push notifications for task updates.\n Task id should be empty when sending this configuration in a `SendMessage` request."
+        }
+      },
+      "properties": {
+        "acceptedOutputModes": {
+          "description": "A list of media types the client is prepared to accept for response parts.\n Agents SHOULD use this to tailor their output.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "historyLength": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "description": "The maximum number of most recent messages from the task's history to retrieve in\n the response. An unset value means the client does not impose any limit. A\n value of zero is a request to not include any messages. The server MUST NOT\n return more messages than the provided value, but MAY apply a lower limit."
+        },
+        "returnImmediately": {
+          "default": false,
+          "description": "If `true`, the operation returns immediately after creating the task,\n even if processing is still in progress.\n If `false` (default), the operation MUST wait until the task reaches a\n terminal (`COMPLETED`, `FAILED`, `CANCELED`, `REJECTED`) or interrupted\n (`INPUT_REQUIRED`, `AUTH_REQUIRED`) state before returning.",
+          "type": "boolean"
+        },
+        "taskPushNotificationConfig": {
+          "$ref": "#/$defs/TaskPushNotificationConfig",
+          "description": "Configuration for the agent to send push notifications for task updates.\n Task id should be empty when sending this configuration in a `SendMessage` request."
+        }
+      },
+      "title": "Send Message Configuration",
+      "type": "object"
+    },
+    "SendMessageRequest": {
+      "additionalProperties": false,
+      "description": "Represents a request for the `SendMessage` method.",
+      "properties": {
+        "configuration": {
+          "$ref": "#/$defs/SendMessageConfiguration",
+          "description": "Configuration for the send request."
+        },
+        "message": {
+          "$ref": "#/$defs/Message",
+          "description": "The message to send to the agent."
+        },
+        "metadata": {
+          "$ref": "#/$defs/Struct",
+          "description": "A flexible key-value map for passing additional context or parameters."
+        },
+        "tenant": {
+          "default": "",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
+          "type": "string"
+        }
+      },
+      "title": "Send Message Request",
+      "type": "object"
+    },
+    "SendMessageResponse": {
+      "additionalProperties": false,
+      "description": "Represents the response for the `SendMessage` method.",
+      "properties": {
+        "message": {
+          "$ref": "#/$defs/Message",
+          "description": "A message from the agent."
+        },
+        "task": {
+          "$ref": "#/$defs/Task",
+          "description": "The task created or updated by the message."
+        }
+      },
+      "title": "Send Message Response",
+      "type": "object"
+    },
+    "StreamResponse": {
+      "additionalProperties": false,
+      "description": "A wrapper object used in streaming operations to encapsulate different types of response data.",
+      "patternProperties": {
+        "^(artifact_update)$": {
+          "$ref": "#/$defs/TaskArtifactUpdateEvent",
+          "description": "An event indicating a task artifact update."
+        },
+        "^(status_update)$": {
+          "$ref": "#/$defs/TaskStatusUpdateEvent",
+          "description": "An event indicating a task status update."
+        }
+      },
+      "properties": {
+        "artifactUpdate": {
+          "$ref": "#/$defs/TaskArtifactUpdateEvent",
+          "description": "An event indicating a task artifact update."
+        },
+        "message": {
+          "$ref": "#/$defs/Message",
+          "description": "A Message object containing a message from the agent."
+        },
+        "statusUpdate": {
+          "$ref": "#/$defs/TaskStatusUpdateEvent",
+          "description": "An event indicating a task status update."
+        },
+        "task": {
+          "$ref": "#/$defs/Task",
+          "description": "A Task object containing the current state of the task."
+        }
+      },
+      "title": "Stream Response",
+      "type": "object"
+    },
+    "TaskArtifactUpdateEvent": {
+      "additionalProperties": false,
+      "description": "A task delta where an artifact has been generated.",
+      "patternProperties": {
+        "^(context_id)$": {
+          "default": "",
+          "description": "The ID of the context that this task belongs to.",
+          "type": "string"
+        },
+        "^(last_chunk)$": {
+          "default": false,
+          "description": "If true, this is the final chunk of the artifact.",
+          "type": "boolean"
+        },
+        "^(task_id)$": {
+          "default": "",
+          "description": "The ID of the task for this artifact.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "append": {
+          "default": false,
+          "description": "If true, the content of this artifact should be appended to a previously\n sent artifact with the same ID.",
+          "type": "boolean"
+        },
+        "artifact": {
+          "$ref": "#/$defs/Artifact",
+          "description": "The artifact that was generated or updated."
+        },
+        "contextId": {
+          "default": "",
+          "description": "The ID of the context that this task belongs to.",
+          "type": "string"
+        },
+        "lastChunk": {
+          "default": false,
+          "description": "If true, this is the final chunk of the artifact.",
+          "type": "boolean"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Struct",
+          "description": "Optional. Metadata associated with the artifact update."
+        },
+        "taskId": {
+          "default": "",
+          "description": "The ID of the task for this artifact.",
+          "type": "string"
+        }
+      },
+      "title": "Task Artifact Update Event",
+      "type": "object"
+    },
+    "TaskStatusUpdateEvent": {
       "additionalProperties": false,
       "description": "An event sent by the agent to notify the client of a change in a task's status.",
       "patternProperties": {
@@ -2765,11 +2716,11 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
           "type": "string"
         },
         "metadata": {
-          "$ref": "google.protobuf.Struct.jsonschema.json",
+          "$ref": "#/$defs/Struct",
           "description": "Optional. Metadata associated with the task update."
         },
         "status": {
-          "$ref": "lf.a2a.v1.TaskStatus.jsonschema.json",
+          "$ref": "#/$defs/TaskStatus",
           "description": "The new status of the task."
         },
         "taskId": {
@@ -2779,6 +2730,24 @@ You can download the schema file directly: [a2a.json](https://a2a-protocol.org/v
         }
       },
       "title": "Task Status Update Event",
+      "type": "object"
+    },
+    "SubscribeToTaskRequest": {
+      "additionalProperties": false,
+      "description": "Represents a request for the `SubscribeToTask` method.",
+      "properties": {
+        "id": {
+          "default": "",
+          "description": "The resource ID of the task to subscribe to.",
+          "type": "string"
+        },
+        "tenant": {
+          "default": "",
+          "description": "Optional. Opaque routing identifier. Must match the `tenant` value from\n the selected `AgentInterface` in the Agent Card when that field is set.",
+          "type": "string"
+        }
+      },
+      "title": "Subscribe To Task Request",
       "type": "object"
     }
   }
