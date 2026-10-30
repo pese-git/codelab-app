@@ -38,7 +38,7 @@
    Отступление: в `codelab-agent serve --ws` MCP выключен (D3, §13.15 документа ядра). Серверы
    из конфигурации читает и подключает change `add-agent-configuration` (8.5).
    Отметки DoD — ниже.
-5. **8.5. Конфигурация** (change [`add-agent-configuration`](../../../../openspec/changes/add-agent-configuration/)):
+5. **8.5. Конфигурация** (change [`add-agent-configuration`](../../../../openspec/changes/archive/2026-10-30-add-agent-configuration/)):
    модель и валидация — `packages/dart/codelab_agent_core/lib/src/config/` (agent-core-architecture §1.3):
    `ConfigTree`, `ConfigIssue` (с `kind`), чистая функция `CoreConfig.fromLayers(List<ConfigTree>)` →
    `ConfigLoadResult` (проблемы с файлом, строкой, столбцом и путём ключа); загрузка —
