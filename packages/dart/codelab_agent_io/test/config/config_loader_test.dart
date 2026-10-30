@@ -64,6 +64,21 @@ agent:
   ConfigTree flagsOf(Map<String, Object?> values) =>
       ConfigTree(kind: ConfigLayerKind.flags, source: 'flags', values: values);
 
+  // Защита от регрессий (D17, 10.5): `CODELAB_HOME='~/cl'` раскрывается в
+  // `HOME`, слой 2 читается оттуда, а каталог `<cwd>/~` не появляется.
+  test('CODELAB_HOME=~/cl reads layer 2 from <HOME>/cl', () {
+    final userHome = '${root.path}/uh';
+    write('$userHome/cl/config.yaml', provider);
+
+    final result = load(
+      environment: {'CODELAB_HOME': '~/cl', 'HOME': userHome},
+    );
+
+    expect(result.issues, isEmpty);
+    expect(result.config, isNotNull);
+    expect(Directory('$cwd/~').existsSync(), isFalse);
+  });
+
   // Ключ имени `invalid config reports key path and line` — критерий DoD
   // этапа 8 (09-13-stage-8-mcp-config.md).
   test('invalid config reports key path and line', () {

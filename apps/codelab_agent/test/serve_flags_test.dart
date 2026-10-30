@@ -419,16 +419,30 @@ void main() {
       // Неизвестные `CODELAB_*` распознаёт `ConfigLoader` (D13): разбор
       // флагов их не проверяет, чтобы правило было одно для `serve` и
       // `config check`.
-      final options = parse(scripted, {
+      final options = parse(provider, {
         'CODELAB_MODLE': 'x',
         'CODELAB_HOME': '/tmp/home',
       });
       expect(options.codelabHome, '/tmp/home');
     });
 
+    test('CODELAB_HOME is neither expanded nor checked under --llm-script', () {
+      // D17: под сценарием `$CODELAB_HOME` не читается, ошибки тильды нет.
+      expect(parse(scripted, {'CODELAB_HOME': '~bob/cl'}).codelabHome, isEmpty);
+    });
+
+    test('CODELAB_HOME with ~user is a usage error', () {
+      expect(
+        () => parse(provider, {'CODELAB_HOME': '~bob/cl', 'HOME': '/h'}),
+        usageError(
+          'CODELAB_HOME: ~user is not supported, use an absolute path',
+        ),
+      );
+    });
+
     test('CODELAB_HOME defaults to ~/.codelab', () {
       expect(
-        parse(scripted, {'HOME': '/home/u'}).codelabHome,
+        parse(provider, {'HOME': '/home/u'}).codelabHome,
         '/home/u/.codelab',
       );
     });

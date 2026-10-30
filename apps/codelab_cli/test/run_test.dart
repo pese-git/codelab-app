@@ -61,4 +61,24 @@ void main() {
       );
     }
   });
+
+  // D17, 10.5: `CODELAB_HOME=~bob/cl` — ошибка использования до запуска
+  // агента: команда агента несуществующая, и если бы CLI дошёл до запуска,
+  // текст ошибки был бы другим.
+  test('CODELAB_HOME=~user/cl exits with 64 before the agent starts', () async {
+    final io = FakeCliIo();
+
+    final code = await runCodelab(
+      ['--agent', 'stdio:/no/such/agent', '-p', 'hi'],
+      environment: {'CODELAB_HOME': '~bob/cl', 'HOME': '/Users/me'},
+      io: io,
+    );
+
+    expect(code, 64);
+    expect(io.stdoutText, isEmpty);
+    expect(
+      io.stderrText,
+      contains('CODELAB_HOME: ~user is not supported, use an absolute path'),
+    );
+  });
 }

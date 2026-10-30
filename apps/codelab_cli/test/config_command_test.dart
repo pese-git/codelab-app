@@ -85,6 +85,57 @@ void main() {
     expect(io.stdoutText, contains('budget.max_steps'));
   });
 
+  // Сценарий «Одинаково у двух бинарей» (change `add-agent-project-files`,
+  // D13): битый шаблон пользователя виден в `codelab config check` той же
+  // строкой `warning:`, что и в `codelab-agent config check`, потому что обе
+  // команды вызывают один `ConfigCommands` через мост `codelab_setup`.
+  test('check --cwd: a broken template in CODELAB_HOME/prompts is the same '
+      'warning line as in codelab-agent, code 0', () async {
+    Directory('$home/prompts').createSync(recursive: true);
+    File('$home/prompts/Review.md').writeAsStringSync('body sk-test-secret\n');
+
+    final (code, io) = await run(['config', 'check', '--cwd', project]);
+
+    expect(code, 0, reason: io.stderrText);
+    final lines = io.stdoutText.trimRight().split('\n');
+    final warning = lines.singleWhere((l) => l.startsWith('warning: '));
+    expect(warning, startsWith('warning: $home/prompts/Review.md: '));
+    expect(warning, contains('not a valid command name'));
+    expect(lines.last, 'Config: valid');
+    expect(io.stdoutText, isNot(contains('sk-test-secret')));
+
+    // Та же реализация, что вызывает `codelab-agent config check`.
+    final expected = await ConfigCommands().check(
+      CheckOptions(
+        cwd: project,
+        environment: {'CODELAB_HOME': home, 'HOME': '${temp.path}/no-home'},
+      ),
+    );
+    expect(code, expected.exitCode);
+    expect(lines, expected.stdout);
+  });
+
+  // D17: `CODELAB_HOME=~user/x` — ошибка использования, тот же текст и код 64,
+  // что у `codelab-agent config check`.
+  test('check: CODELAB_HOME=~user/x is the same usage error as in '
+      'codelab-agent, code 64', () async {
+    final env = {'CODELAB_HOME': '~bob/x', 'HOME': '${temp.path}/h'};
+    final io = FakeCliIo();
+    final code = await runCodelab(
+      ['config', 'check', '--cwd', project],
+      environment: env,
+      io: io,
+    );
+
+    final expected = await ConfigCommands().check(
+      CheckOptions(cwd: project, environment: env),
+    );
+    expect(code, 64);
+    expect(code, expected.exitCode);
+    expect(io.stdoutText, isEmpty);
+    expect(io.stderrText.trimRight().split('\n'), expected.stderr);
+  });
+
   test('a missing --cwd folder is a usage error, code 64', () async {
     final (code, io) = await run([
       'config',
@@ -186,7 +237,7 @@ void main() {
         'CODELAB_HOME': home,
         'HOME': '${temp.path}/no-home',
       };
-      final expected = ConfigCommands().check(
+      final expected = await ConfigCommands().check(
         CheckOptions(cwd: cwd, environment: environment),
       );
       final io = FakeCliIo();

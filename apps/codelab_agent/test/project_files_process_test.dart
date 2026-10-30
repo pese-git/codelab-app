@@ -87,6 +87,63 @@ void main() {
     expect(commands, isEmpty);
   }, timeout: const Timeout(Duration(seconds: 90)));
 
+  // D17: под `--llm-script` `CODELAB_HOME` не раскрывается и не проверяется:
+  // `~bob/cl` и `~/cl` без HOME не дают код 64, каталог `./~bob` не создаётся.
+  for (final (name, value, userHome) in [
+    ('~user/cl', '~bob/cl', null),
+    ('~/cl without HOME', '~/cl', ''),
+  ]) {
+    test(
+      '--llm-script with CODELAB_HOME=$name starts and runs a turn',
+      () async {
+        final agent = await AgentProcess.start(
+          [
+            'serve',
+            '--stdio',
+            '--llm-script',
+            '$appDirectory/test/llm_scripts/hello.json',
+          ],
+          environment: {'CODELAB_HOME': value, 'HOME': ?userHome},
+          workingDirectory: project,
+        );
+        addTearDown(agent.kill9);
+        agent.sendJson({
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'initialize',
+          'params': {'protocolVersion': 1},
+        });
+        await agent.responseTo(1);
+        agent.sendJson({
+          'jsonrpc': '2.0',
+          'id': 2,
+          'method': 'session/new',
+          'params': {'cwd': project, 'mcpServers': <Object?>[]},
+        });
+        final created = await agent.responseTo(2);
+        final sessionId = (created['result'] as Map)['sessionId'];
+        agent.sendJson({
+          'jsonrpc': '2.0',
+          'id': 3,
+          'method': 'session/prompt',
+          'params': {
+            'sessionId': sessionId,
+            'prompt': [
+              {'type': 'text', 'text': 'hi'},
+            ],
+          },
+        });
+        final done = await agent.responseTo(3);
+        expect(done['result'], isNotNull, reason: agent.stderrText);
+        await agent.closeStdin();
+        expect(await agent.exitCode, 0, reason: agent.stderrText);
+        expect(Directory('$project/~bob').existsSync(), isFalse);
+        expect(Directory('$project/~').existsSync(), isFalse);
+      },
+      timeout: const Timeout(Duration(seconds: 90)),
+    );
+  }
+
   test('serve --ws reads no project files and logs the skip once', () async {
     const token = 'secret-token';
     final agent = await AgentProcess.start(
