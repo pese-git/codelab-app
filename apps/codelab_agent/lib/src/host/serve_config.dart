@@ -41,6 +41,8 @@ ConfigLoadResult loadServeConfig(
       flags: flags,
       extraConfig: options.configPath,
       scripted: options.llmScript != null,
+      // Переменная токена WebSocket названа флагом — не опечатка (D13).
+      knownVariables: {options.tokenEnv},
     );
   } on ConfigUsageException catch (error) {
     throw UsageError(error.message);
@@ -98,26 +100,15 @@ ConfigTree _withScriptedProviders(ConfigTree flags, List<ModelRef> models) {
   );
 }
 
-/// Пишет предупреждения запуска в лог: неизвестные `CODELAB_*` и
-/// предупреждения загрузки конфига.
+/// Пишет предупреждения загрузки конфига в лог.
 ///
 /// Почему одна функция: валидный конфиг пишет их при сборке хоста, а
 /// невалидный — при отчёте об ошибках, и оба пути обязаны давать одни и те же
-/// события (D16). Неизвестная переменная — `config.env.unknown`; предупреждение
-/// загрузки — событие со своим именем. В `message` нет значений ключей, для
-/// `config.legacy_found` там ссылка на таблицу переноса (§15.7).
-void logStartupWarnings(
-  Logger logger,
-  ServeOptions options,
-  ConfigLoadResult loaded,
-) {
-  for (final warning in options.warnings) {
-    logger.log(
-      LogLevel.warning,
-      'config.env.unknown',
-      fields: {'message': warning},
-    );
-  }
+/// события (D16). Неизвестные `CODELAB_*` распознаёт `ConfigLoader` и кладёт
+/// их в те же `warnings` событием `config.env.unknown` (D13), поэтому каждое
+/// предупреждение пишется ровно один раз. Предупреждение — событие со своим
+/// именем; в `message` нет значений ключей.
+void logStartupWarnings(Logger logger, ConfigLoadResult loaded) {
   for (final warning in loaded.warnings) {
     logger.log(
       warning.level,

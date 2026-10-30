@@ -15,6 +15,7 @@
 - `LocalExecutionEnv` — файлы и процессы (с этапа 2);
 - `JsonlSessionStore` — журналы сессий в JSONL (этап 3);
 - конфигурация и хранилища секретов (этапы 4 и 8).
+- `lib/src/cli/` — общая реализация подкоманд `config` (`ConfigCommands.check` для `config check`): тексты, правила и коды выхода для `codelab-agent` и `codelab` в одном месте; аргументы разбирает каждое приложение своим `package:args` (design.md change `add-agent-configuration`, D13).
 
 Ядро от пакета не зависит. Хост передаёт реализации в `AgentCoreServices`.
 

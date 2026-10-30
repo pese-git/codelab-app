@@ -78,7 +78,7 @@
 - **THEN** ход проходит, каталог `<tmp>` не изменён
 
 ### Requirement: Подкоманда config бинаря
-`codelab-agent config check [--cwd <dir>]` SHALL работать без запуска сервера и без чтения stdin. Тексты, правила и коды выхода — общая реализация `ConfigCommands` (capability `agent-configuration`, требование «Подкоманда config check»). `codelab-agent config` без подкоманды или с неизвестной подкомандой — код `64` и справка в stderr.
+`codelab-agent config check [--cwd <dir>]` SHALL работать без запуска сервера, без открытия транспорта и без чтения stdin. Тексты, правила и коды выхода — общая реализация `ConfigCommands` (capability `agent-configuration`, требование «Подкоманда config check»); флагов `serve` у команды нет, окружение (включая `CODELAB_CONFIG`) учитывается. `codelab-agent config` без подкоманды, с неизвестной подкомандой, с лишними аргументами или с ошибкой разбора аргументов (неизвестный флаг, `--cwd` без значения) SHALL завершаться кодом `64` со справкой команды `config` в stderr. Общая справка бинаря (`serveUsage`, печатается при ошибке использования `serve`) SHALL упоминать `config check`.
 
 #### Scenario: Проверка без сервера
 - **WHEN** запускается `codelab-agent config check` в каталоге с валидным `config.yaml`
@@ -87,6 +87,14 @@
 #### Scenario: Неизвестная подкоманда
 - **WHEN** запускается `codelab-agent config set budget.max_steps 10` или `codelab-agent config migrate`
 - **THEN** код `64`, в stderr — справка подкоманды `config`; файл конфига не изменён
+
+#### Scenario: Ошибка разбора аргументов config
+- **WHEN** запускается `codelab-agent config check --bogus` или `codelab-agent config check --cwd` без значения
+- **THEN** код `64`, stderr содержит причину и справку команды `config` (`Usage: codelab-agent config check [--cwd <dir>]`), stdout пуст
+
+#### Scenario: Общая справка называет config check
+- **WHEN** бинарь запущен с неизвестным флагом `serve`, например `codelab-agent serve --stdio --bogus`
+- **THEN** код `64`, справка в stderr содержит `config check`
 
 ## MODIFIED Requirements
 

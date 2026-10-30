@@ -68,7 +68,7 @@ final class AgentHost {
     final loadedConfig = loaded;
     final config = loadedConfig.orThrow();
     final settings = loadedConfig.host!;
-    logStartupWarnings(logger, options, loadedConfig);
+    logStartupWarnings(logger, loadedConfig);
 
     final stdio = options.transport == ServeTransport.stdio;
     final narrowing = <HostCapability, CapabilityState>{

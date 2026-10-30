@@ -13,7 +13,8 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// `logging.level` и `logging.file`. Остальные переменные ключей не имеют:
 /// `CODELAB_HOME` и `CODELAB_CONFIG` читает загрузчик, `CODELAB_API_KEY` —
 /// ссылка `api_key_env` провайдера `cli` (её ставит слой флагов), а
-/// неизвестные `CODELAB_*` хост называет предупреждением `config.env.unknown`.
+/// неизвестные `CODELAB_*` называет предупреждением `config.env.unknown`
+/// [unknownEnvironmentWarnings] (его зовёт загрузчик).
 ///
 /// Как использовать: `buildEnvironmentLayer(environment)`. Пустое значение
 /// переменной равно её отсутствию. Нечисловой `CODELAB_MAX_STEPS` — проблема
@@ -72,3 +73,61 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
     issues: issues,
   );
 }
+
+/// Переменные `CODELAB_*`, которые знают ядро и его хосты (`agent-core-
+/// architecture` §15.6). Другие дают предупреждение: опечатка не должна
+/// молча игнорироваться.
+const _knownVariables = {
+  'CODELAB_HOME',
+  'CODELAB_CONFIG',
+  'CODELAB_MODEL',
+  'CODELAB_API_KEY',
+  'CODELAB_PERMISSION_MODE',
+  'CODELAB_PROFILE',
+  'CODELAB_LOG_LEVEL',
+  'CODELAB_LOG_FILE',
+  'CODELAB_TOOLS',
+  'CODELAB_MAX_STEPS',
+  'CODELAB_DEBUG_SECRETS',
+  'CODELAB_DEBUG_LLM_SNAPSHOT',
+  'CODELAB_AGENT_TOKEN',
+  'CODELAB_POWER_HELPER',
+  'CODELAB_TEST_SECRET_STORE',
+};
+
+/// Семейства переменных, известные целиком (§15.6).
+const _knownFamilies = [
+  'CODELAB_SECRET_',
+  'CODELAB_PROVIDER_',
+  'CODELAB_REDACTED_',
+];
+
+/// Предупреждения `config.env.unknown` о неизвестных `CODELAB_*`
+/// (design.md change `add-agent-configuration`, D13, D16).
+///
+/// Почему здесь, а не в разборе флагов `serve`: правило должно быть одно для
+/// `serve`, `codelab-agent config check` и `codelab config check`, иначе
+/// `check` промолчит об опечатке, которую `serve` покажет в логе.
+///
+/// Как использовать: [extraKnown] — имена, которые хост назвал сам
+/// (переменная токена `--token-env`). Имена идут по алфавиту; значение
+/// переменной не читается и в текст не попадает (она может быть секретом,
+/// CFG-2) — только имя.
+List<ConfigIssue> unknownEnvironmentWarnings(
+  Map<String, String> environment, {
+  Set<String> extraKnown = const {},
+}) => [
+  for (final name in environment.keys.toList()..sort())
+    if (name.startsWith('CODELAB_') &&
+        !_knownVariables.contains(name) &&
+        !extraKnown.contains(name) &&
+        !_knownFamilies.any(name.startsWith))
+      ConfigIssue(
+        kind: ConfigIssueKind.semantic,
+        key: '',
+        source: 'env',
+        message: 'unknown environment variable $name',
+        event: 'config.env.unknown',
+        fields: {'name': name},
+      ),
+];

@@ -99,13 +99,17 @@ final class ConfigLoader {
   /// [environment] — переменные процесса: из них берутся `CODELAB_HOME`,
   /// `CODELAB_CONFIG`, слой окружения и подстановка `${ENV}`. [extraConfig] —
   /// значение `--config` (приоритетнее `CODELAB_CONFIG`). [flags] — слой
-  /// флагов, `null` — флагов нет.
+  /// флагов, `null` — флагов нет. [knownVariables] — имена `CODELAB_*`,
+  /// которые назвал хост (переменная токена `--token-env`): они не опечатка.
+  /// Неизвестные `CODELAB_*` попадают в `warnings` событием
+  /// `config.env.unknown` (D13): правило одно для `serve` и `config check`.
   ConfigLoadResult load({
     required String cwd,
     required Map<String, String> environment,
     ConfigTree? flags,
     String? extraConfig,
     bool scripted = false,
+    Set<String> knownVariables = const {},
   }) {
     final extraPath =
         _nonEmpty(extraConfig) ?? _nonEmpty(environment['CODELAB_CONFIG']);
@@ -194,6 +198,9 @@ final class ConfigLoader {
       }
     }
 
+    warnings.addAll(
+      unknownEnvironmentWarnings(environment, extraKnown: knownVariables),
+    );
     final env = buildEnvironmentLayer(environment);
     issues.addAll(env.issues);
     if (env.layer case final layer?) {

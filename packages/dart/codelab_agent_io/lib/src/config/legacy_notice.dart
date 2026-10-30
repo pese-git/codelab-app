@@ -33,15 +33,20 @@ ConfigIssue? legacyConfigNotice({required String home, required String cwd}) {
   if (files.isEmpty) {
     return null;
   }
+  // Первый файл — `source` (локация строки `<location>: <message>`), поэтому
+  // в тексте его нет; остальные перечислены в тексте (D13). Полный список —
+  // в `fields['files']` для лога.
+  final others = files.skip(1).toList();
   return ConfigIssue(
     kind: ConfigIssueKind.semantic,
     key: '',
     source: files.first,
     message:
-        'codelab.toml is not used by the Dart agent: ${files.join(', ')}. '
+        'codelab.toml is not used by the Dart agent. '
         'Move the settings to config.yaml manually; the key mapping is in '
         'docs/architecture/proposals/agent-core/15-configuration.md, '
-        'section 15.7.',
+        'section 15.7.'
+        '${others.isEmpty ? '' : ' Also found: ${others.join(', ')}.'}',
     event: 'config.legacy_found',
     fields: {'files': files},
   );
