@@ -76,10 +76,12 @@ const clientIoAllowlist = {
   'meta',
 };
 
-/// Dependencies of the terminal client (workspace-architecture
-/// «Автоматический сторож границ пакетов»; design.md change
-/// `add-codelab-cli`, D3): the client layer, the ACP packages, the testing
-/// package for `test-scenario` and `args`; no Flutter and no agent packages.
+/// Допустимые зависимости терминального клиента (workspace-architecture
+/// «Автоматический сторож границ пакетов»; design.md change `add-codelab-cli`,
+/// D3): клиентский слой, ACP-пакеты, тестовый пакет для `test-scenario`,
+/// `args`, `dart_tui` для полноэкранного режима и мост `codelab_setup` для
+/// `codelab config check` (change `add-agent-configuration`, D14). Пакетов
+/// агента и Flutter здесь нет: к агенту CLI ходит только по ACP.
 const cliAllowlist = {
   'codelab_client_core',
   'codelab_client_io',
@@ -87,12 +89,21 @@ const cliAllowlist = {
   'codelab_acp_protocol',
   'codelab_acp_transports',
   'codelab_acp_testing',
+  'codelab_setup',
   'dart_tui',
   'args',
   'async',
   'path',
   'meta',
 };
+
+/// Допустимые зависимости моста настроек `codelab_setup` (workspace-
+/// architecture «Автоматический сторож границ пакетов»; design.md change
+/// `add-agent-configuration`, D14): ядро агента, его IO-пакет (используется
+/// только в `lib/io.dart`) и `meta`. Мост — единственное место, через которое
+/// клиенты (CLI, desktop) достают конфигурацию агента, не импортируя
+/// `package:codelab_agent_*` сами.
+const setupAllowlist = {'codelab_agent_core', 'codelab_agent_io', 'meta'};
 
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
@@ -222,6 +233,35 @@ dependencies: # allowlist
     final extra = dependencyKeys(pubspec).difference(cliAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('codelab_setup depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_setup/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(setupAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('reports http in the dependencies of the setup bridge', () {
+    // Мост не ходит в сеть до появления мастера провайдера (этап 7):
+    // `http` в allowlist не входит (change `add-agent-configuration`, D14).
+    const pubspec = '''
+name: codelab_setup
+dependencies: # allowlist
+  codelab_agent_core:
+    path: ../codelab_agent_core
+  http: ^1.5.0
+''';
+
+    expect(dependencyKeys(pubspec).difference(setupAllowlist), {'http'});
+  });
+
+  test('the terminal client may depend on the setup bridge', () {
+    expect(cliAllowlist, contains('codelab_setup'));
+    expect(cliAllowlist, isNot(contains('codelab_agent_io')));
   });
 
   test('reports a dependency outside the allowlist', () {
