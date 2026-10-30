@@ -162,7 +162,9 @@ final class LogRecord {           // то, что получает sink хост
 порта; в поле `message` — только тип исключения). Коды содержимого шаблонов (D3): `unknown_key`,
 `invalid_value`, `empty_body`, `too_large` — `error`; `invalid_name`, `reserved_name` — `warning`;
 `shadowed`, `untrusted_project` — `info`; запись `*.md`, которая не обычный файл (FIFO, сокет,
-устройство), — `unreadable` (`warning`). Коды определений агентов (D10): `invalid_value`, `unknown_key`, `empty_body`, `too_large`, `duplicate` (на каждый файл, оба пути в сообщении) — `error`; `shadowed`, `untrusted_project` — `info`. Путь в `project_files.diagnostic` и `project_context.loaded` не
+устройство), — `unreadable` (`warning`). Ошибки frontmatter шаблонов и определений (D3, пункт 1):
+`syntax` (незакрытый `---`, неверный YAML) и `profile` (нарушение строгого профиля CFG-21: якорь,
+тег, повторяющийся ключ) — `error`, с путём, строкой и столбцом в координатах файла. Коды определений агентов (D10): `invalid_value`, `unknown_key`, `empty_body`, `too_large`, `duplicate` (на каждый файл, оба пути в сообщении) — `error`; `shadowed`, `untrusted_project` — `info`. Путь в `project_files.diagnostic` и `project_context.loaded` не
 экранируется, в отличие от атрибута `path` блока в промпте (§11.5).
 
 После MVP (§17) добавляются области:

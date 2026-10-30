@@ -236,7 +236,9 @@ final class AcpServerConfig {
      `Earlier history of this session is not shown: <n> records before this point.` с
      `_meta.codelab.replayWindow`, затем реплей с границы хода (§17.13.2, SCL-6);
    * `user` → если `isUserWords(record)` (§8.2.5, SES-14) — `user_message_chunk` по одному на
-     каждый блок контента; у `origin: "steer"` каждый блок получает
+     каждый блок контента; у записи с полем `command` (§8.2.3, этап 8.7) первым блоком идёт
+     исходный текст `/<name>` или `/<name> <args>` вместо развёрнутого тела шаблона, затем
+     остальные блоки (design.md change `add-agent-project-files`, D8); у `origin: "steer"` каждый блок получает
      `_meta.codelab.steer: {"id": steerId}` (§17.7.5, STEER-9); прочие user-записи (уведомления
      субагентов и задач, подсказки цикла, уведомления дедлайна, §8.2.3) пропускаются;
    * `assistant` → по блокам: `thinking` → `agent_thought_chunk`, `text` → `agent_message_chunk`,
@@ -266,8 +268,12 @@ final class AcpServerConfig {
      реплея — `_meta.codelab.recordId` (id записи, для «перемотать сюда», §17.6.10); в режиме только
      чтения вызов без результата уходит со статусом `in_progress` (§17.6.8).
 6. После истории: последняя запись `plan` → `plan` (если план был); затем `current_mode_update`,
-   `config_option_update` (полный снимок), `available_commands_update`, `session_info_update`
-   (`title`, `updatedAt`) — если у сессии есть заголовок.
+   `config_option_update` (полный снимок; с этапа 8.8 — с опцией `agent` и восстановленным
+   агентом, если она есть), `available_commands_update` (команды `AgentSession.commands`),
+   `session_info_update` (`title`, `updatedAt`) — если у сессии есть заголовок. Повторный
+   `session/load` уже открытой в процессе сессии идёт через `reattach` без
+   `AgentRuntime.loadSession`: файлы проекта не перечитываются, команды и определения агентов
+   остаются прежними до закрытия сессии (design.md change `add-agent-project-files`, D6).
 7. Ответ `LoadSessionResponse(modes, configOptions)` — после всех уведомлений реплея; после MVP в
    `_meta.codelab` — `readOnly` (шаг 4) и `forkedFrom` (§17.6.10).
 8. Если сессия была переподключена (шаг 3b): каждому ожидающему `session/request_permission`
@@ -340,6 +346,10 @@ final class AcpServerConfig {
 6. Запросы `session/set_config_option` и `session/set_mode` одной сессии мост обрабатывает по
    очереди в порядке прихода: эхо `ModeChanged` принадлежит текущему запросу, на каждый запрос —
    один ответ, итог — последний запрос (design.md change `add-agent-project-files`, D12).
+7. `agent` (этап 8.8) → `AgentSession.setAgent` (§15.8): если режим сессии изменился —
+   `current_mode_update` до ответа; смена модели через `agent` ставит ту же заметку §2.12.3, что
+   `configId: "model"`; ответ — полный снимок с согласованными `agent`, `model`, `mode`, без
+   `config_option_update` (design.md change `add-agent-project-files`, D12).
 
 Смена модели или усилия посреди хода доходит до цикла хуком `prepareNextStep` сессии на границе
 шага. Заметку §2.12.3 о смене на модель без рассуждения ставит мост сессии ACP-адаптера: смена
@@ -352,6 +362,7 @@ final class AcpServerConfig {
 | `mode` | `mode` | режимы таблицы выше | всегда | последний `mode_change` ветки или режим профиля |
 | `model` | `model` | `ModelCatalog.models` (§2.12.2): `value` — `provider/model`, `name` — имя модели | всегда | последний `model_change` ветки или `agent.default_model` |
 | `effort` | `thought_level` | `low`, `medium`, `high` (имена `Low`, `Medium`, `High`) | только если у текущей модели `supportsReasoning` (§2.12.3) | последний `config_change` с `optionId: "effort"` на ветке или `agent.effort` |
+| `agent` | нет (категории без `_` зарезервированы ACP, D12) | `default` (имя `Default`), затем `AgentSession.agents` по имени с `description` определения | только если у сессии есть хотя бы одно определение со `scope` `session` или `both` (§15.8, этап 8.8) | `AgentSession.agent`: последний `config_change` с `optionId: "agent"` на ветке, если определение есть, иначе `default` |
 
 ```json
 {"id":"effort","name":"Reasoning effort","category":"thought_level","type":"select","currentValue":"medium","options":[{"value":"low","name":"Low"},{"value":"medium","name":"Medium"},{"value":"high","name":"High"}]}

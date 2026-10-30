@@ -11,7 +11,10 @@ final class MarkdownRead {
 
   const MarkdownRead.failed(this.diagnostics) : file = null;
 
+  /// Разобранный файл; `null`, если frontmatter не разобран.
   final MarkdownFile? file;
+
+  /// Причины отказа (позиции в файле); пусто, когда [file] есть.
   final List<ExtensionDiagnostic> diagnostics;
 }
 

@@ -21,6 +21,12 @@ enum SlashCommandSource {
 }
 
 /// Элемент `AgentSession.commands`.
+///
+/// Почему: клиенту нужно показать подсказку по `/`, а тело шаблона и пути
+/// файлов наружу уходить не должны (D9).
+///
+/// Как использовать: рантайм строит список из принятых шаблонов; ACP-адаптер
+/// превращает его в `available_commands_update`.
 final class SlashCommand {
   const SlashCommand({
     required this.name,
@@ -31,11 +37,16 @@ final class SlashCommand {
 
   /// Имя без `/`.
   final String name;
+
+  /// Описание для списка команд клиента (`description` из frontmatter).
   final String description;
 
   /// Подсказка ввода: `argument-hint`, иначе `"arguments"`, если тело
   /// использует плейсхолдеры, иначе `null` (D7).
   final String? inputHint;
+
+  /// Откуда команда: по нему журнал и клиент отличают шаблон от будущих
+  /// встроенных команд и skills.
   final SlashCommandSource source;
 
   @override

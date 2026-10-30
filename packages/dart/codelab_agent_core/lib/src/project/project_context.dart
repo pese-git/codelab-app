@@ -20,6 +20,12 @@ import 'dart:typed_data';
 import 'project_files.dart';
 
 /// Файл, вошедший в секцию.
+///
+/// Почему отдельно от `ContextFile`: после сборки по бюджету файл может быть
+/// усечён, и промпту нужны уже готовый блок и счётчики, а не исходный текст.
+///
+/// Как использовать: создаёт [assembleProjectContext]; потребители только
+/// читают поля (рендер секции `project_context`, лог).
 final class ProjectContextFile {
   const ProjectContextFile({
     required this.path,
@@ -42,14 +48,24 @@ final class ProjectContextFile {
 
   /// Полный размер файла (`M` пометки).
   final int totalBytes;
+
+  /// Файл усечён по бюджету: в [text] стоит пометка об усечении.
   final bool truncated;
 }
 
 /// Итог сборки: файлы секции от общего к частному и число пропущенных.
+///
+/// Почему отдельный тип: рендеру секции и логу `project_context.loaded`
+/// нужны одни и те же итоги (расход бюджета, усечённые, пропущенные), и
+/// считать их дважды значило бы получить расхождение.
+///
+/// Как использовать: результат [assembleProjectContext]; `null` там означает
+/// «секции нет».
 final class ProjectContext {
   ProjectContext({required List<ProjectContextFile> files, this.omitted = 0})
     : files = List.unmodifiable(files);
 
+  /// Файлы секции от общего к частному (порядок `ProjectFiles.context`).
   final List<ProjectContextFile> files;
 
   /// Файлы, не вошедшие из-за исчерпанного бюджета (D5, пункт 4).

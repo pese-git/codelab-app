@@ -11,7 +11,7 @@
 
 ## 1. Назначение
 
-`codelab_agent_acp` — проекция `AgentRuntime` в ACP: `AcpAgentServer` обслуживает соединения по любому `AcpTransport`, проецирует события ядра в `session/update` и исполняет файлы, команды и запросы разрешений через клиента. Транспорты (stdio, WebSocket) и локальный листинг передаёт хост — бинарь `apps/codelab_agent`, а с этапа 7 и `codelab_embedded` (ещё не создан).
+`codelab_agent_acp` — проекция `AgentRuntime` в ACP: `AcpAgentServer` обслуживает соединения по любому `AcpTransport`, проецирует события ядра в `session/update` и исполняет файлы, команды и запросы разрешений через клиента. Транспорты (stdio, WebSocket) и локальный листинг передаёт хост — бинарь `apps/codelab_agent`, а с этапа 7 и `codelab_embedded` (ещё не создан). Файлы проекта адаптер не читает: их загружает ядро через порт хоста, а адаптер публикует результат — `AgentSession.commands` в `available_commands_update` после `session/new` и в реплее, `AgentSession.agents` как опцию `agent` (design.md change `add-agent-project-files`, D9, D12).
 
 ## 2. Границы
 
@@ -25,3 +25,4 @@
 * TDD — по `packages/dart/codelab_agent_core/AGENTS.md` §2.
 * Сервер проверяется через пару транспортов в памяти `InProcessAcpLink` из `codelab_acp_testing`: кадры идут тем же кодеком, что на проводе, но без процессов и сокетов.
 * Модель — `ScriptedStreamFunction`, время — `FakeClock`, id — `SequentialIdGenerator`: тесты детерминированы.
+* Фабрика агентского прогона фикстур (`test/conformance_test.dart`) подключает `ProjectFilesLoader` (`codelab_agent_io`, только `dev_dependency`) с временным `CODELAB_HOME` и принимает в `setup.config` ключ `trusted_projects` с `${cwd}`; другой неизвестный ключ — провал (design.md change `add-agent-project-files`, D15).

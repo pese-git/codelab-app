@@ -20,7 +20,10 @@ import 'exit_codes.dart';
 final class CheckOptions {
   const CheckOptions({required this.cwd, required this.environment});
 
+  /// Каталог проекта: корень, от которого ищется `.codelab/config.yaml`.
   final String cwd;
+
+  /// Переменные процесса: из них берутся `CODELAB_HOME`, `HOME` и ключи API.
   final Map<String, String> environment;
 }
 
@@ -37,7 +40,12 @@ final class ConfigCommandResult {
 
   /// [configValidExit], [configInvalidExit] или [configUsageExit].
   final int exitCode;
-  final List<String> stdout, stderr;
+
+  /// Строки для stdout приложения (без перевода строки).
+  final List<String> stdout;
+
+  /// Строки для stderr приложения: тексты ошибок использования и сбоев.
+  final List<String> stderr;
 }
 
 /// Общая реализация подкоманд `config` для `codelab-agent` и `codelab`

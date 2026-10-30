@@ -3,6 +3,7 @@ import 'dart:io' as io;
 import 'dart:typed_data';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:meta/meta.dart';
 
 import '../env/host_path.dart';
 import '../env/local_execution_env.dart';
@@ -42,11 +43,35 @@ final class ProjectFilesLoader implements ProjectFilesSource {
   /// границу лексической, и symlink наружу прошёл бы незамеченным
   /// (приоритет 1). Поэтому тип сужен до реализации, которая резолвер имеет.
   ProjectFilesLoader({required this.home, required LocalExecutionEnv local})
-    : _local = local;
+    : _local = local,
+      _beforeOpen = null;
+
+  /// Точка внедрения для тестов fail-closed веток, недостижимых через
+  /// [ProjectFilesLoader.new] (agent-project-context «Окружение без
+  /// PathResolver», «Путь подменён после проверки»; D2).
+  ///
+  /// Почему отдельный конструктор: публичный тип [LocalExecutionEnv] намеренно
+  /// сужен, поэтому окружение без `PathResolver` через него не передать, а
+  /// подмену файла между проверкой и открытием иначе не воспроизвести
+  /// детерминированно. Продакшен-код этот конструктор не вызывает.
+  ///
+  /// Как использовать: [local] — любое окружение (в том числе без
+  /// `PathResolver`); [beforeOpen] вызывается с реальным путём файла после
+  /// `realpath` и `stat`, но до `open`, и может подменить файл на диске.
+  @visibleForTesting
+  ProjectFilesLoader.testing({
+    required this.home,
+    required ExecutionEnv local,
+    Future<void> Function(String path)? beforeOpen,
+  }) : _local = local,
+       _beforeOpen = beforeOpen;
 
   /// `$CODELAB_HOME`; `null` — пользовательская область не читается.
   final String? home;
-  final LocalExecutionEnv _local;
+  final ExecutionEnv _local;
+
+  /// Тестовый хук между проверкой и открытием файла; `null` в продакшене.
+  final Future<void> Function(String path)? _beforeOpen;
 
   /// Предел обхода вверх к корню репозитория (D5, пункт 1; D6).
   static const maxLevels = 64;
@@ -551,6 +576,7 @@ final class ProjectFilesLoader implements ProjectFilesSource {
   /// контейнмента для произвольных путей. FIFO отсекает `stat` до `open`
   /// (открытие FIFO на чтение блокируется).
   Future<Uint8List?> _readPrefix(String corePath, int count) async {
+    await _beforeOpen?.call(corePath);
     final host = toHostPath(corePath, windows: io.Platform.isWindows);
     final file = await io.File(host).open();
     try {

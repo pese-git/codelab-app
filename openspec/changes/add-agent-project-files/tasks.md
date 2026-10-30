@@ -98,7 +98,7 @@
   - [x] 3.5.1 `[agent]` WebSocket не читает файлы проекта (agent-binary «Файлы проекта в бинаре», сценарий «WebSocket не читает файлы проекта»; D2, D16): тест хоста `apps/codelab_agent/test/agent_host_project_files_test.dart` для `--ws` — `projectFiles == null`, одно событие `project_files.skipped` с `transport: ws`, нет `project_context.loaded`. Код — `AgentHost.build` передаёт загрузчик только для `--stdio`; документ `apps/codelab_agent/AGENTS.md` — при сверке 11.2.
   - [x] 3.5.2 `[agent]` Экранирование блока (agent-project-context «Секция project_context», сценарии «Тег в другом регистре и с пробелами», «Кавычка в имени каталога»; D5, D15): тест `codelab_agent_core/test/prompts/prompt_project_context_test.dart` — `</PROJECT-INSTRUCTIONS`, `< / project-instructions`, `<project-instructions`, атрибут `path` с `"<>\r\n`; лог хранит неэкранированный путь. Код — сборка блока в `compose.dart`.
   - [x] 3.5.3 `[agent]` Усечение (agent-project-context «Бюджет и усечение контекста проекта», сценарии «Длинная первая строка», «После усечения дальние файлы пропускаются»; D5 п. 3–4): тест `assemble_project_context_test.dart`. Код — `assembleProjectContext`.
-  - [x] 3.5.4 `[agent]` Чтение префикса (agent-project-context «Граница чтения файлов проекта», сценарии «Окружение без PathResolver», «Путь подменён после проверки»; D2, D5 п. 4): тест `codelab_agent_io/test/project/project_context_loader_test.dart` — окружение без `PathResolver` → `unreadable` без чтения; подмена пути между проверкой и открытием → содержимое внешнего файла не попадает; читается не больше `max_bytes + 1` байт по каноническому пути. Код — `ProjectFilesLoader` (`dart:io` по пути от `BoundedEnv.realpath`, повторная проверка после открытия).
+  - [x] 3.5.4 `[agent]` Чтение префикса (agent-project-context «Граница чтения файлов проекта», сценарии «Окружение без PathResolver», «Путь подменён после проверки»; D2, D5 п. 4): ветки fail-closed — `codelab_agent_io/test/project/project_files_loader_seam_test.dart` через `@visibleForTesting ProjectFilesLoader.testing(local:, beforeOpen:)`: окружение без `PathResolver` → `AGENTS.md` и каталоги шаблонов не читаются, `unreadable`; подмена пути symlink наружу между проверкой и открытием → содержимое внешнего файла не попадает, диагностика ровно `outside_root` (сценарий допускает и `unreadable`, тест строже); не больше `max_bytes + 1` байт по каноническому пути — `project_context_loader_test.dart` («at most max_bytes + 1 bytes are read»). Код — `ProjectFilesLoader` (`dart:io` по пути от `BoundedEnv.realpath`, повторная проверка после открытия). Тесты ветвей fail-closed добавлены в итерации 5 (11.3).
   - [x] 3.5.5 `[agent]` Таймаут и отмена загрузки (agent-project-context «Порт файлов проекта», сценарии «Таймаут загрузки», «Отмена рантайма во время загрузки»; D6): тест `project_files_runtime_test.dart` на фейковом порте, который не завершается, — без реального ожидания 5 с. Код — `_loadProjectFiles` ждёт первым из загрузки, отмены и таймаута; по таймауту токен запроса отменяется.
   - [x] 3.5.6 `[agent]` Fail-closed доверия (agent-runtime «Файлы проекта сессии», сценарий «cwd не раскрылся»; D4): тест `project_files_runtime_test.dart`. Код — `projectTrusted = false`, если `realpath` не удался или нет `PathResolver`.
   - [x] 3.5.7 `[agent]` Коды и уровни диагностик (agent-project-context «Порт файлов проекта»; D3, D6): тесты загрузчика и runtime — `unreadable`, `timeout` и `outside_root`, `not_utf8` — `warning`; `shadowed`, `limit_exceeded` (64 уровня) — `info`; `limit_exceeded` для 100 файлов каталога — `warning`, проверяется в 5.3 и 8.1; `unexpected` — `error`. Код — `ProjectFilesLoader`, `_loadProjectFiles`.
@@ -239,13 +239,29 @@
 
 ## 11. Матрица, сверка документов, DoD (итерация 5)
 
-- [ ] 11.1 `[agent]` Матрица этапа 8 в `09-13-stage-8-mcp-config.md`: E-01, E-07, R-15 — «выполнено» с файлами тестов и фикстур; R-07 — «часть шаблонов выполнена (`acp/available-commands-no-tools`); встроенные команды и MCP prompts — change встроенных команд»; DoD «Фикстуры `acp/available-commands-no-tools` зелёные» отмечен; итог 8.6–8.8 абзацем, как у 8.1–8.4.
-- [ ] 11.2 `[agent]` Сверка документов с кодом (`codelab_agent_core/AGENTS.md` §3, критерий (е)):
+- [x] 11.1 `[agent]` Матрица этапа 8 в `09-13-stage-8-mcp-config.md`: E-01, E-07, R-15 — «выполнено» с файлами тестов и фикстур; R-07 — «часть шаблонов выполнена (`acp/available-commands-no-tools`); встроенные команды и MCP prompts — change встроенных команд»; DoD «Фикстуры `acp/available-commands-no-tools` зелёные» отмечен; итог 8.6–8.8 абзацем, как у 8.1–8.4.
+- [x] 11.2 `[agent]` Сверка документов с кодом (`codelab_agent_core/AGENTS.md` §3, критерий (е)):
   - `agent-core` §11.2, §11.5, §11.7, §15.4, §15.8, §17.2.2, §17.2.6, §8.2.3, §5.3, §12.2, §13.4;
   - вложенные `AGENTS.md` `codelab_agent_io` (§1: `lib/src/project/`) и `apps/codelab_agent` (§1: загрузчик файлов проекта, `--llm-script`);
   - doc-комментарии новых сущностей на русском (`AGENTS.md` §15).
-- [ ] 11.3 `[agent]` Definition of Done change:
+- [x] 11.3 `[agent]` Definition of Done change:
   - все сценарии спецификаций этого change покрыты тестами из задач 1–10;
   - `melos run guard`, `web-compile`, `gen_prompts --check` зелёные;
   - сторож и allowlist не менялись (D1);
   - полный `melos run check` — в CI pull request последней итерации.
+
+  Сверка DoD 2026-10-30 (итерация 5). Сценарии, у которых покрытия не хватало при первой сверке, закрыты тестами:
+
+  | Сценарий | Тест |
+  |---|---|
+  | agent-project-context «Окружение без PathResolver» | `codelab_agent_io/test/project/project_files_loader_seam_test.dart`, группа `an environment without PathResolver` |
+  | agent-project-context «Путь подменён после проверки» | тот же файл, группа `the path is swapped after the check` (`beforeOpen`), диагностика ровно `outside_root` |
+  | agent-project-context «Кавычка в имени каталога» | `codelab_agent_core/test/runtime/project_files_runtime_test.dart`, группа `the log (D14)`: атрибут `a_b/AGENTS.md`, лог `a"b/AGENTS.md` |
+  | agent-configuration «Тильда без домашнего каталога» | `apps/codelab_agent/test/config_command_process_test.dart` — процесс `config check`, `HOME=''`, код `64`, текст stderr |
+  | codelab-cli «Тильда раскрывается в HOME», «Тильда без домашнего каталога» | `apps/codelab_cli/test/e2e/codelab_home_tilde_test.dart` — процессы `profiles add` и `-p hi`, пустые `HOME`/`USERPROFILE` |
+  | agent-definitions «Неизвестный режим» | `codelab_agent_core/test/permissions/modes_test.dart` (`fitsFloor(ModeId.standard)` — `false`); сценарий переписан на модульный уровень по решению пользователя 2026-10-30: разбор отвергает режим вне пяти `ModeId` (сценарий «Ошибки определения»), лог для него недостижим; D11 синхронизирован |
+
+  Остальные сценарии покрыты тестами задач 1–10 (ссылки — в самих задачах). Без `PathResolver` `unreadable` получают и каталоги `prompts`/`agents`: сценарий требует «есть диагностика `unreadable`» и это допускает.
+  - D1: `git log 59ff202^..HEAD` по `packages/dart/codelab_architecture_tests` и по `pubspec.yaml` пакетов и приложений пуст, незакоммиченных правок там нет — сторож и allowlist не менялись.
+  - Targeted-прогон оркестратора 2026-10-30, все команды — exit 0: тесты `codelab_agent_core` (1405), `codelab_agent_io` (307), `codelab_agent_mcp` (248), `codelab_agent_acp` (198), setup (2), `codelab_architecture_tests` (68), `apps/codelab_agent` (156), `apps/codelab_cli` (462); `melos run guard`, `prompts:check` (`gen_prompts.dart --check`), `web-compile`, `conformance:agent` (55), `test:e2e:cli` (57), `test:e2e:cli:dart-agent` (44), `openspec validate add-agent-project-files --strict`.
+  - Полный `melos run check` — подтверждается CI pull request.
