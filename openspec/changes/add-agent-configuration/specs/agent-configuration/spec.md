@@ -46,13 +46,13 @@
 - **THEN** первые два дают пустой слой, а остальные — одинаковые деревья
 
 ### Requirement: Схема и строгая проверка
-Ядро SHALL проверять каждый слой функцией `CoreConfig.fromLayers(layers, environment: …, projectRoot: …)` без файлов и без разборщиков (`codelab_agent_core/lib/src/config/`). Результат `ConfigLoadResult` SHALL содержать либо `CoreConfig`, либо непустой список `ConfigIssue {kind, key, source, line?, column?, message}`, а также предупреждения и список источников.
+Ядро SHALL проверять каждый слой функцией `CoreConfig.fromLayers(layers, environment: …, projectRoot: …)` без файлов и без разборщиков (`codelab_agent_core/lib/src/config/`). Результат `ConfigLoadResult` SHALL содержать либо `CoreConfig`, либо непустой список `ConfigIssue {kind, key, source, line?, column?, message}`, а также предупреждения (тот же тип с заполненными `event`, `fields`, `level`) и список источников. `ConfigLoadResult.orThrow()` SHALL возвращать `CoreConfig` или бросать `ConfigException` (`ConfigInlineSecretException`, если есть проблема `inlineSecret`). Проектные слои без `projectRoot` — ошибка программиста хоста (`ArgumentError`), а не `ConfigIssue`.
 
 - Неизвестный ключ SHALL давать проблему `unknownKey` с путём ключа и подсказкой ближайшего известного ключа (расстояние Левенштейна ≤ 2); ключ с точкой внутри — подсказку вложенной формы.
 - Неверный тип SHALL давать проблему `type` с ожидаемым типом. Для `bool` строки `yes`, `no`, `on`, `off`, `y`, `n` — ошибка с подсказкой `use true or false`. `null` у ключа схемы — ошибка. `int` НЕ SHALL принимать `2.0`, `float` SHALL принимать `2`. `30s` и `"30s"` SHALL быть равны.
 - `permissions.mode: autopilot` в любом файловом слое SHALL быть проблемой (CFG-4).
 - Семантические проверки §15.5, шаг 8:
-  - `agent.default_model` задан (`agent.default_model: required`) и есть в каталоге провайдеров;
+  - `agent.default_model` задан (`agent.default_model: required`), его провайдер объявлен, а модель есть в `providers.<p>.models`;
   - `openai-compatible` имеет `base_url`;
   - имена `mcp.servers` уникальны, `stdio` имеет `command`, `http` имеет `url`;
   - `reserve_tokens > 0`, `keep_recent_tokens > 0`, `max_steps ≥ 1`;
@@ -62,7 +62,7 @@
 
 Строка и столбец SHALL браться из позиций слоя. У слоя без позиций (окружение, флаги, хранилище приложения) сообщение SHALL называть источник и путь ключа без строки.
 
-Ключ схемы MVP без потребителя в этой сборке и ключ раздела после MVP SHALL приниматься с одним предупреждением `config.key.not_applied {key, source}` на явно заданный ключ; ключ вне схемы и вне списка разделов после MVP — проблема `unknownKey`.
+Ключ схемы MVP без потребителя в этой сборке и ключ раздела после MVP SHALL приниматься с одним предупреждением `config.key.not_applied {key, source}` на каждый явно заданный лист; ключ вне схемы и вне списка разделов после MVP — проблема `unknownKey`. В `profile.<name>` допустимы только встроенные профили и известные capability (иначе `unknownKey`); capability после MVP даёт `config.key.not_applied`; расширение профиля — проблема с ключом `profile.<name>.<capability>`.
 
 #### Scenario: Опечатка с подсказкой
 - **WHEN** `config.yaml` содержит в строке 12, столбце 3 ключ `compaction.reserve_token`
@@ -84,22 +84,42 @@
 - **WHEN** глобальный конфиг задаёт `loop.empty_response_retries: 3` и `skills.max_skills: 100`
 - **THEN** загрузка успешна, каждое значение даёт одно предупреждение `config.key.not_applied` с ключом и источником
 
+#### Scenario: Предупреждения по листьям
+- **WHEN** глобальный конфиг задаёт `loop: {misuse: {warn_after: 3, block_after: 6}}`
+- **THEN** два предупреждения `config.key.not_applied` с ключами `loop.misuse.warn_after` и `loop.misuse.block_after`
+
+#### Scenario: Сужение профиля
+- **WHEN** глобальный конфиг задаёт `profile.my-profile.mcp: off`, `profile.agent-serve.shell: off`, `profile.agent-serve.network: off` и `profile.agent-serve.mcp: [stdio, http, sse]`
+- **THEN** первые два — `unknownKey`, третье — `config.key.not_applied`, четвёртое — проблема с ключом `profile.agent-serve.mcp`
+
+#### Scenario: Модель вне каталога провайдера
+- **WHEN** `agent.default_model: openai/gpt-x`, а у провайдера `openai` в `models` только `gpt-4o`
+- **THEN** проблема `agent.default_model`, `CoreConfig` не построен
+
 #### Scenario: autopilot в файле
 - **WHEN** `config.yaml` задаёт `permissions.mode: autopilot`
 - **THEN** загрузка даёт проблему `permissions.mode`, а флаг `--permission-mode autopilot` того же запуска допустим
 
 ### Requirement: Доверие к проектному конфигу
-Слой `<cwd>/.codelab/config.yaml` SHALL подчиняться правилам доверия §15.3; проект доверенный, если его корень есть в `trusted_projects` глобального слоя. `trusted_projects` вне глобального слоя SHALL быть проблемой. Без доверия:
-- `mcp.servers`, `providers.*`, `model_catalog.*` и `permissions.tools` со значением `allow` SHALL отбрасываться с предупреждением `config.project.untrusted_key {key, source}`;
-- `sessions.*`, `logging.*`, `exec.*` SHALL отбрасываться так же и с доверием;
-- `permissions.mode` проекта SHALL только ужесточать итоговый режим (`narrow`), `budget.*` — только уменьшать;
+Оба проектных слоя — `<cwd>/.codelab/config.yaml` и `<cwd>/.codelab/config.local.yaml` — SHALL подчиняться правилам доверия §15.3, пока проект не в `trusted_projects` (решение пользователя 2026-10-30). Проект доверенный, если его канонический корень есть в `trusted_projects` глобального слоя (`user` или `appStorage`). В `trusted_projects` SHALL допускаться только абсолютные пути (относительный — проблема). Относительный путь SHALL давать проблему `expected an absolute path` с ключом `trusted_projects[i]`; `~` SHALL раскрываться. `trusted_projects` в проектных слоях SHALL отбрасываться с предупреждением `config.project.untrusted_key` (`ignored: trusted_projects is read only from the global config`), а в слое `--config` — быть проблемой. Без доверия:
+- `mcp.servers`, `providers.*`, `model_catalog.*`, `prompts.*` и разделы после MVP `hooks`, `plugins`, `a2a`, `lsp` SHALL отбрасываться с предупреждением `config.project.untrusted_key {key, source}`;
+- раздел `secrets` SHALL отбрасываться из обоих проектных слоёв всегда, и с доверием тоже, с предупреждением `config.project.untrusted_key` (`ignored: secrets is read only from the global config`);
+- `sessions.*`, `logging.*`, `exec.*` SHALL отбрасываться так же, а слоя `config.yaml` — и с доверием;
+- `permissions.mode` проекта SHALL только ужесточать итоговый режим (`narrow`); смягчение SHALL отбрасываться с `config.project.untrusted_key`. Сочетание `ask` и `plan` в любом порядке SHALL давать режим `ask` с дополнительно запрещёнными уровнями `write` и `exec` (`PermissionsConfig` — поле дополнительно запрещённых уровней);
+- `permissions.deny` проекта SHALL объединяться со списком нижних слоёв, а не заменять его;
+- `permissions.tools.<t>` проекта SHALL применяться, только если не мягче значения нижних слоёв (`deny` > `ask` > `allow`; нет значения — как `allow`; равное применяется), иначе отбрасываться с `config.project.untrusted_key`;
+- `budget.*` SHALL только уменьшаться;
 - ключи `redact.*` SHALL подчиняться правилам §12.4.3.
 
-Отброшенный ключ НЕ SHALL быть ошибкой загрузки (CFG-3). Слои `config.local.yaml`, `--config`, окружение и флаги правилам доверия НЕ SHALL подчиняться.
+Сравнение идёт с результатом слияния нижних слоёв. Отброшенный ключ НЕ SHALL быть ошибкой загрузки (CFG-3). Слои `--config`, окружение и флаги правилам доверия НЕ SHALL подчиняться.
 
 #### Scenario: MCP-сервер и allow из недоверенного проекта
 - **WHEN** `<cwd>/.codelab/config.yaml` объявляет `mcp.servers` и `permissions.tools.exec: allow`, а `trusted_projects` не содержит `<cwd>`
 - **THEN** итог не содержит ни сервера, ни правила `allow`, а лог содержит два `config.project.untrusted_key`
+
+#### Scenario: Локальный проектный слой без доверия
+- **WHEN** `<cwd>/.codelab/config.local.yaml` объявляет `mcp.servers` и `prompts.system_text`, а проект не в `trusted_projects`
+- **THEN** сервера и промпта в итоге нет, оба ключа — `config.project.untrusted_key`
 
 #### Scenario: Тот же проект с доверием
 - **WHEN** глобальный конфиг добавляет `<cwd>` в `trusted_projects`
@@ -107,7 +127,23 @@
 
 #### Scenario: Ужесточение режима
 - **WHEN** глобальный слой задаёт `permissions.mode: bypass`, а недоверенный проект — `ask`
-- **THEN** итоговый режим — `ask`; если проект задаёт `bypass` поверх глобального `ask`, итог — `ask`
+- **THEN** итоговый режим — `ask`; если проект задаёт `bypass` поверх глобального `ask`, итог — `ask` и предупреждение `config.project.untrusted_key` для `permissions.mode`
+
+#### Scenario: ask и plan
+- **WHEN** глобальный слой задаёт `permissions.mode: ask`, а недоверенный проект — `plan`; во втором варианте глобальный — `plan`, проект — `ask`
+- **THEN** в обоих вариантах режим — `ask`, дополнительно запрещённые уровни — `write` и `exec`: вызов `read` спрашивает, вызов `write` отклонён без вопроса
+
+#### Scenario: Проект не снимает глобальные запреты
+- **WHEN** глобальный слой задаёт `permissions.deny: ["exec:git push --force"]` и `permissions.tools.exec: deny`, а недоверенный проект — `permissions.deny: ["write:.env"]` и `permissions.tools.exec: allow`, `permissions.tools.read: ask`, а глобальный `permissions.tools.write: ask` проект повторяет как `ask`
+- **THEN** итоговый `deny` содержит оба шаблона, `exec` — `deny` с предупреждением `config.project.untrusted_key` для `permissions.tools.exec`, `read` — `ask`, `write` — `ask` без предупреждения (равное значение применяется)
+
+#### Scenario: trusted_projects не из глобального слоя
+- **WHEN** проектный слой задаёт `trusted_projects: [<cwd>]`, а глобальный — `trusted_projects: [relative/path]`
+- **THEN** проектный ключ отброшен с `config.project.untrusted_key` (`ignored: trusted_projects is read only from the global config`), проект не доверенный, а относительный путь глобального слоя — проблема `trusted_projects[0]: expected an absolute path`; `~/work/demo` раскрывается и проблемы не даёт
+
+#### Scenario: secrets только из глобального конфига
+- **WHEN** доверенный проект задаёт `secrets.backend: file` в `config.local.yaml`
+- **THEN** ключ отброшен с `config.project.untrusted_key` и текстом `ignored: secrets is read only from the global config`
 
 #### Scenario: Проект не увеличивает бюджет
 - **WHEN** глобальный слой задаёт `budget.max_steps: 30`, а проект — `budget.max_steps: 100`
@@ -125,7 +161,7 @@
 - **THEN** проблема — `mcp.servers[github].headers.Authorization: variable GITHUB_TOKEN is not set`, сервер не построен
 
 ### Requirement: Секреты только ссылками
-Конфигурация НЕ SHALL хранить ключи API значением (CFG-2). Ключи `api_key`, `apiKey`, `token`, `secret`, `password` в `providers.*` и в элементах `mcp.servers` SHALL давать проблему `inlineSecret`; хост SHALL отказывать в старте исключением `ConfigInlineSecretException` с путём ключа. Текст проблемы НЕ SHALL содержать значение. `api_key_env` и `api_key_secret` вместе SHALL быть проблемой.
+Конфигурация НЕ SHALL хранить ключи API значением (CFG-2). Ключи `api_key`, `apiKey`, `token`, `secret`, `password` в `providers.*` и в элементах `mcp.servers` SHALL давать проблему `inlineSecret`; хост SHALL отказывать в старте исключением `ConfigInlineSecretException` с путём ключа. Текст проблемы НЕ SHALL содержать значение; у элемента `mcp.servers` текст SHALL подсказывать `use ${NAME} in env or headers`. `api_key_env` и `api_key_secret` вместе SHALL быть проблемой с ключом `providers.<id>.api_key_secret`. Значение `api_key_env` SHALL быть именем переменной (`[A-Za-z_][A-Za-z0-9_]*`, иначе `expected an environment variable name`); `api_key_secret` и имя в `${secret:<name>}` — непустым именем секрета до 128 символов без пробелов и управляющих символов (иначе `expected a secret name (no spaces or control characters)`; точный pattern — change `add-agent-secret-store`). Неверный формат — проблема с путём ключа без значения в тексте.
 
 - `api_key_env` SHALL разрешаться из окружения при загрузке. Незаданная переменная SHALL давать предупреждение `config.provider.key_missing {provider, variable}` при загрузке и ошибку хода `API key variable <VAR> is not set` при выборе модели этого провайдера без HTTP-запроса.
 - До хранилища секретов (change `add-agent-secret-store`) `api_key_secret` и `${secret:<name>}` SHALL приниматься синтаксически:
@@ -135,6 +171,10 @@
 #### Scenario: Ключ значением
 - **WHEN** `config.yaml` задаёт `providers.openai.api_key: sk-test-secret`
 - **THEN** запуск отклонён с проблемой `providers.openai.api_key`, а stderr, лог и вывод `config check` не содержат `sk-test-secret`
+
+#### Scenario: Ключ вместо имени переменной
+- **WHEN** провайдер задаёт `api_key_env: sk-test-secret-123`
+- **THEN** проблема `providers.<id>.api_key_env` о формате имени, текст и лог не содержат `sk-test-secret-123`
 
 #### Scenario: Переменная ключа не задана
 - **WHEN** провайдер `openai` задаёт `api_key_env: OPENAI_API_KEY`, переменная не задана, а сессия выбирает модель `openai/gpt-4o`

@@ -11,9 +11,10 @@ import 'text.dart';
 /// Настройки клиента, общие для серверов (design.md change
 /// `add-agent-mcp-client`, D8).
 ///
-/// Как использовать: хост передаёт значение коннектору; ключ конфигурации
-/// `mcp.servers.*.call_timeout` появится в change `add-agent-configuration`
-/// (8.5), до тех пор [callTimeout] — константа MVP.
+/// Как использовать: хост передаёт значение коннектору. [callTimeout] —
+/// умолчание для серверов без собственного срока; ключ конфигурации
+/// `mcp.servers[*].call_timeout` попадает в `McpServerConfig.callTimeout` и
+/// сильнее этого значения (change `add-agent-configuration`, D10).
 final class McpClientOptions {
   const McpClientOptions({
     this.callTimeout = const Duration(minutes: 10),
@@ -21,7 +22,7 @@ final class McpClientOptions {
     this.clientVersion = coreAgentVersion,
   });
 
-  /// Предел одного `tools/call` (D8).
+  /// Предел одного `tools/call` сервера без собственного `callTimeout` (D8).
   final Duration callTimeout;
 
   /// `clientInfo` modern-запросов и `initialize` (D2).
@@ -242,6 +243,9 @@ final class McpClient {
 
   /// Транспорт жив и клиент не закрыт.
   bool get isConnected => _connected && !_closing;
+
+  /// Срок вызова: ключ сервера сильнее общего умолчания коннектора.
+  Duration get _callTimeout => server.callTimeout ?? options.callTimeout;
 
   String get _id => server.name;
 
@@ -928,7 +932,7 @@ final class McpClient {
         final result = await _request(
           'tools/call',
           {'name': name, 'arguments': arguments},
-          timeout: options.callTimeout,
+          timeout: _callTimeout,
           cancel: cancel,
           signalCancel: true,
           onId: (id) => requestId = id,
@@ -952,7 +956,7 @@ final class McpClient {
         });
         return McpCallError(
           'MCP server $_id did not answer tools/call within '
-          '${options.callTimeout.inSeconds} s.',
+          '${_callTimeout.inSeconds} s.',
         );
       } on _Disconnected catch (gone) {
         return McpCallError(

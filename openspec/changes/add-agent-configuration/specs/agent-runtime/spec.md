@@ -8,7 +8,7 @@
 - **THEN** сессия `/B` не подключает сервер проекта `/A`, лог `config.session.outside_root` с `cwd: /B`
 
 #### Scenario: Подкаталог — другой корень
-- **WHEN** проект `/A` задаёт `permissions.tools.exec: allow` в `config.local.yaml`, а сессия создана с `cwd: /A/sub`
+- **WHEN** доверенный проект `/A` задаёт `permissions.tools.exec: allow` в `config.local.yaml`, а сессия создана с `cwd: /A/sub`
 - **THEN** правило `allow` к сессии не применяется, режим и правила — из снимка без проекта
 
 #### Scenario: Сессия в корне запуска

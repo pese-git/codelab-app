@@ -130,7 +130,15 @@ alwaysAsk(0) < write(1) < acceptEdits(2) < yolo(3) < autopilot(4)
 ```
 
 `narrow(a, b)` (эффективный режим субагента, §17.3.3, шаг 4) берёт режим с меньшим номером и
-объединяет запреты уровней режима `plan`. Примеры с новым режимом: родитель `accept-edits` + тип
+объединяет запреты уровней режима `plan`.
+
+**Дополнительно запрещённые уровни конфигурации** (решение пользователя 2026-10-30, change `add-agent-configuration`, D7). Режим —
+одно значение, а `plan` — это запреты `write`/`exec` поверх режима. Чтобы ужесточение проектным
+конфигом не теряло ни вопроса `ask`, ни запретов `plan`, `PermissionsConfig` несёт множество
+`extraDeniedTiers` (точное имя — по коду): `ask` + `plan` и `plan` + `ask` дают режим `ask` и
+`extraDeniedTiers = {write, exec}` (§15.3). Политика отклоняет вызов без вопроса, если его уровень
+входит в `mode.deniedTiers ∪ extraDeniedTiers`, с причиной, как у `plan`. Смена режима сессии
+(`session/set_mode`) дополнительные запреты не снимает: они приходят из конфигурации проекта. Примеры с новым режимом: родитель `accept-edits` + тип
 `general` без режима → `acceptEdits`; родитель `bypass` + тип с `mode: accept-edits` →
 `acceptEdits`; родитель `accept-edits` + тип `standard` → `write`; родитель `standard` + тип
 `accept-edits` → `write` (ребёнок не мягче родителя, SUB-2).

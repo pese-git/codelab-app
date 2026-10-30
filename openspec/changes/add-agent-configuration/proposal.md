@@ -31,7 +31,7 @@
 - **MCP-серверы из конфигурации** (закрывают оставшуюся часть E-02 и E-03):
   - `mcp.servers` с `type: stdio | http`, `${ENV}` в `args`, `env`, `url`, `headers`, `enabled: false`, `connect_timeout`;
   - новый ключ `call_timeout` — таймаут `tools/call`, по умолчанию 10 минут (D8 архива `add-agent-mcp-client`). Для него `McpServerConfig` получает поле `callTimeout`, а `McpClientConnector` берёт его вместо общей константы;
-  - слои 2–4 сливаются по `name`; из недоверенного проектного слоя 3 серверы игнорируются с `config.project.untrusted_key` (CFG-3);
+  - слои 2–4 сливаются по `name`; из проектных слоёв недоверенного проекта серверы игнорируются с `config.project.untrusted_key` (CFG-3);
   - в `serve --ws` серверы конфига, как и серверы клиента, не запускаются: capability `mcp` выключена (D3 архива).
 - **Ключи `redact.*`** читаются, проверяются (известные слои, компилируемые выражения) и подчиняются правилам доверия §12.4.3. В `CoreConfig.redact` они ждут редактора задачи 8.11; до него явно заданный ключ даёт предупреждение `config.key.not_applied`.
 - **Секреты — только ссылками** (CFG-2):
@@ -70,6 +70,7 @@
 - `agent-llm`: фабрика `createRoutedStreamFunction` — несколько провайдеров конфигурации, отказ провайдера без ключа при выборе модели.
 - `agent-mcp-client`: таймаут `tools/call` берётся из `McpServerConfig.callTimeout` (ключ `call_timeout`), а не только из константы.
 - `agent-runtime`: сессия, чей `cwd` вне корня запуска хоста, не получает проектных слоёв корня запуска (D9).
+- `agent-permissions`: дополнительно запрещённые уровни `PermissionsConfig` (`ask` + `plan` из недоверенного проекта — `ask` с запретом `write`/`exec`; решение пользователя 2026-10-30).
 - `workspace-architecture`: ядро не импортирует `yaml`/`yaml_edit`/`toml`, `toml` убран из allowlist `codelab_agent_io`, правило и allowlist моста `codelab_setup`, `codelab_setup` в allowlist CLI.
 - `codelab-cli`: подкоманда `codelab config check`.
 

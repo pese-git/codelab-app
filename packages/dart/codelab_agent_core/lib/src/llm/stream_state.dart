@@ -9,6 +9,7 @@ import 'events.dart';
 import 'messages.dart';
 import 'model_ref.dart';
 import 'overflow.dart';
+import 'providers/http_support.dart' show ProviderHttpException;
 import 'usage.dart';
 
 /// Common frame of a provider adapter (`agent-core-architecture` §2.5).
@@ -38,12 +39,30 @@ AssistantMessageEventStream runProvider(
     } on CancelledException {
       state.fail(LlmErrorClass.aborted, 'Request was aborted', aborted: true);
     } catch (error) {
-      state.fail(classify?.call(error) ?? LlmErrorClass.unknown, '$error');
+      final errorClass = classify?.call(error) ?? LlmErrorClass.unknown;
+      state.fail(errorClass, _safeErrorText(error, errorClass));
     } finally {
       out.end();
     }
   });
   return out;
+}
+
+/// Текст исключения без URL: `base_url` и заголовки могут нести токен
+/// (`${ENV}`, change `add-agent-configuration`, D4), а `ClientException`
+/// печатает `uri=<полный URL>`.
+///
+/// Сетевой сбой — `connection failed: <тип>`, как в транспорте MCP; ошибка
+/// провайдера уже отредактирована и остаётся как есть; прочий текст
+/// сохраняется, но любой `http(s)://…` в нём заменяется на `<url>`.
+String _safeErrorText(Object error, LlmErrorClass errorClass) {
+  if (error is ProviderHttpException) {
+    return '$error';
+  }
+  if (errorClass == LlmErrorClass.network) {
+    return 'connection failed: ${error.runtimeType}';
+  }
+  return '$error'.replaceAll(RegExp(r'https?://\S+'), '<url>');
 }
 
 /// Mutable accumulator of one answer. Every method that emits pushes one

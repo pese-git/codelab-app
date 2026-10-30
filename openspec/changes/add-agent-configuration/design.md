@@ -131,12 +131,15 @@ final class ConfigIssue {
   final String key;                          // путь ключа; "" — файл целиком (синтаксис)
   final String source; final int? line, column;
   final String message;                      // никогда не содержит значения секрета
+  // только у предупреждений: имя события лога, его поля (без значений) и уровень
+  final String? event; final Map<String, Object?> fields; final LogLevel? level;
 }
 final class ConfigLoadResult {
   final CoreConfig? config;                  // null ⇔ issues не пусто
   final HostSettings? host;                  // ключи хоста: sessions.*, logging.*, profile.*
   final List<ConfigIssue> issues, warnings;
   final List<String> sources;                // слои по порядку
+  CoreConfig orThrow();                      // config или ConfigException/ConfigInlineSecretException
 }
 final class ConfigException implements Exception { final List<ConfigIssue> issues; }
 final class ConfigInlineSecretException extends ConfigException { final String key; }
@@ -147,7 +150,8 @@ static ConfigLoadResult CoreConfig.fromLayers(List<ConfigTree> layers,
 ```
 
 - **Сверка с планом.** «`validate()` → `ConfigIssue(path, message)`» плана — это `ConfigLoadResult.issues`. Поля `ConfigIssue` взяты по §17.5.2: путь ключа плана — `key`. Поле `kind` добавлено: тестам и `ConfigInlineSecretException` нужен класс проблемы, а не разбор текста. Поля `legacy` из §17.5.2 нет: `codelab.toml` не читается (D12). Документ §17.5.2 правится задачей 0.2. Отдельной публичной `validate()` нет: проверка без слияния никому не нужна (§13).
-- **Исключения.** `fromLayers` исключений не бросает. Хост, которому нужно исключение (`serve`), бросает `ConfigException(issues)`. Если среди проблем есть `inlineSecret`, бросается `ConfigInlineSecretException` с ключом первой из них — подкласс `ConfigException`, как в §17.5.2. Поле `suggestedSecretName` §17.5.2 добавит change 8.9 вместе с `SecretNames` (D8).
+- **Предупреждения — тоже `ConfigIssue`** (ревью итерации 1, 2026-10-30): у них заполнены `event` (имя события D16), `fields` (поля события без значений ключей) и `level`. Хост пишет их в лог как есть, не разбирая текст. У проблем эти поля пустые.
+- **Исключения.** `fromLayers` исключений не бросает. Хост, которому нужно исключение (`serve`), вызывает `ConfigLoadResult.orThrow()` (ревью итерации 1, 2026-10-30): она возвращает `CoreConfig` или бросает `ConfigException(issues)`. Если среди проблем есть `inlineSecret`, бросается `ConfigInlineSecretException` с ключом первой из них — подкласс `ConfigException`, как в §17.5.2. Поле `suggestedSecretName` §17.5.2 добавит change 8.9 вместе с `SecretNames` (D8).
 - **Раскладка.** `CoreConfig`, `PermissionsConfig`, `CompactionOverrides` переезжают в `config/core_config.dart` (§1.3). Экспорт бареля тот же, сигнатуры не меняются, существующие вызовы `const CoreConfig(defaultModel: …)` компилируются.
 - **Новые поля `CoreConfig`:**
   - `providers: List<CatalogProvider>` — существующий тип каталога;
@@ -155,7 +159,7 @@ static ConfigLoadResult CoreConfig.fromLayers(List<ConfigTree> layers,
   - `redact: RedactSettings`;
   - `projectRoot: String?` и `withoutProject: CoreConfig?` (D9).
 - **`HostSettings`** — ключи, которые читает хост, а не ядро:
-  - `sessionsDir`, `fsync`;
+  - `sessionsDir`, `fsync` — строкой (`checkpoints` | `always` | `never`) (ревью итерации 1, 2026-10-30): `FsyncPolicy` живёт в `codelab_agent_io`, ядро от него не зависит, хост переводит строку в enum;
   - `logLevel`, `logFile`;
   - `profileNarrowing: Map<String, Map<HostCapability, CapabilityState>>`.
 
@@ -164,11 +168,11 @@ static ConfigLoadResult CoreConfig.fromLayers(List<ConfigTree> layers,
 **Алгоритм `fromLayers`** — §15.5, шаги 3–9, над готовыми деревьями:
 1. Каждый слой проверяется по схеме (D6): неизвестный ключ — с подсказкой; неверный тип — с ожидаемым типом.
 2. Поля-секреты отклоняются (D8).
-3. К слоям `project` применяются правила доверия (D7). `trusted_projects` берётся только из слоя `user`; в остальных слоях этот ключ — проблема `value` с текстом `trusted_projects is read only from the global config`.
+3. К проектным слоям (`project` и `projectLocal`) применяются правила доверия (D7). `trusted_projects` берётся только из глобального слоя (`user` или `appStorage`) и содержит только абсолютные пути (`~` раскрывается): относительный путь — проблема `value` `expected an absolute path` с ключом `trusted_projects[i]` (ревью итерации 1, 2026-10-30). В проектных слоях этот ключ отбрасывается с предупреждением `config.project.untrusted_key` (`ignored: trusted_projects is read only from the global config`), в слое `extra` (`--config`) — проблема `value` с тем же текстом.
 4. Слияние по §15.2 (D4).
 5. Подстановка `${ENV}` из `environment` (D4).
 6. Семантические проверки §15.5, шаг 8, для ключей 8.5:
-   - `default_model` — в каталоге провайдеров;
+   - `default_model` — в каталоге: модель есть в `providers.<p>.models` своего провайдера (ревью итерации 1, 2026-10-30);
    - у `openai-compatible` есть `base_url`;
    - `mcp.servers`: уникальные `name`, `stdio` имеет `command`, `http` имеет `url`;
    - `reserve_tokens > 0`, `keep_recent_tokens > 0`, `max_steps ≥ 1`;
@@ -176,6 +180,8 @@ static ConfigLoadResult CoreConfig.fromLayers(List<ConfigTree> layers,
    - `permissions.mode != autopilot`;
    - `redact.*`.
 7. Сборка `CoreConfig` и `HostSettings`. Если есть проблемы, `config` и `host` равны `null`.
+
+**Имена ключей проблем** (ревью итерации 1, 2026-10-30): сужение профиля — `profile.<name>.<capability>`; элемент списка — с индексом (`redact.layers[1]`); взаимоисключение `api_key_env`/`api_key_secret` — ключ `providers.<id>.api_key_secret` (второй из пары). Тесты сверяют ключ, а не текст.
 
 Позиции берутся из `ConfigTree.positions`. У слоя без позиций (`environment`, `flags`, `appStorage`) сообщение называет источник и путь ключа без строки (`config_validator_positions_test.dart`, §15.12).
 
@@ -261,7 +267,7 @@ static ConfigLoadResult CoreConfig.fromLayers(List<ConfigTree> layers,
 - `mcp.servers` (D10);
 - `sessions.{dir, fsync}`;
 - `logging.{level, file}`;
-- `profile.<name>.*` — сужение. Расширение — проблема `value` с путём ключа: хост проверяет `HostProfile.of(name).narrowed(...)` и переводит `HostWiringException` в `ConfigIssue`.
+- `profile.<name>.*` — сужение. `<name>` — только встроенные профили (`agent-serve`, `embedded-app-desktop`, `embedded-cli`, `mobile`, `web`); другое имя — `unknownKey`. Неизвестная capability — `unknownKey`, capability после MVP (`network`, `skills`, `language_servers`, `background_jobs`, `memory`, `user_questions`, `user_hooks`) — `config.key.not_applied` (ревью итерации 1, 2026-10-30). Расширение — проблема `value` с ключом `profile.<name>.<capability>`: проверка `HostProfile.of(name).narrowed(...)`, `HostWiringException` переводится в `ConfigIssue`.
 
 **Проверяется по схеме, но не применяется:**
 - `providers.*.{list_models, list_models_include}`, `model_catalog.*` (L-15);
@@ -270,7 +276,7 @@ static ConfigLoadResult CoreConfig.fromLayers(List<ConfigTree> layers,
 - `logging.{trace, trace_payload}`;
 - `redact.*` — потребитель 8.11.
 
-Явно заданный такой ключ даёт одно предупреждение `config.key.not_applied {key, source}` на ключ за загрузку. Значение по умолчанию ключа без потребителя предупреждения не даёт.
+Явно заданный такой ключ даёт одно предупреждение `config.key.not_applied {key, source}` на **лист** за загрузку (ревью итерации 1, 2026-10-30): `loop: {misuse: {warn_after: 3, block_after: 6}}` — два предупреждения, с ключами `loop.misuse.warn_after` и `loop.misuse.block_after`. Значение по умолчанию ключа без потребителя предупреждения не даёт.
 
 **Ключи после MVP** (`llm`, `images`, `skills`, `subagents`, `jobs`, `hooks`, `plugins`, `a2a`, `memory`, `steering`, `lsp`, `secrets`, `config`, `tools.web`, `tools.spill`, `sessions.lease` и другие строки §15.4 с пометкой «после MVP» или «этап 3») распознаются по имени раздела. Они дают `config.key.not_applied` без проверки типов: их схему введут их change. Любой ключ, которого нет ни в схеме, ни в списке разделов после MVP, — проблема `unknownKey` (CFG-1).
 
@@ -278,27 +284,39 @@ static ConfigLoadResult CoreConfig.fromLayers(List<ConfigTree> layers,
 
 ### D7. Доверие к проектному конфигу (§15.3) для ключей 8.5
 
-Правила применяются к слою `project` до слияния. Слой `projectLocal` им подчиняется только в части `trusted_projects`. Проект доверенный, если канонический `projectRoot` есть в `trusted_projects` слоя `user`. Сравнение — по компонентам пути после нормализации, хост передаёт канонический путь.
+Правила применяются к **обоим проектным слоям** — `project` (`.codelab/config.yaml`) и `projectLocal` (`.codelab/config.local.yaml`) — до слияния, пока проект не в `trusted_projects` (решение пользователя 2026-10-30). Почему и `config.local.yaml`: файл лежит в дереве проекта, и склонированный репозиторий может принести его сам (`.gitignore` не мешает закоммитить файл или положить его архивом); различать «свой» и «чужой» файл в одном каталоге агент не может. Проект доверенный, если канонический `projectRoot` есть в `trusted_projects` глобального слоя (`user` или `appStorage`). Сравнение — по компонентам пути после нормализации, хост передаёт канонический путь; в `trusted_projects` допустимы только абсолютные пути.
 
-| Ключ слоя `project` | Без доверия | С доверием |
+| Ключ проектного слоя | Без доверия | С доверием |
 |---|---|---|
-| `agent.default_model`, `agent.effort`, `compaction.*`, `budget.*` | применяется; `budget.*` — только уменьшение, увеличение отбрасывается с `config.project.untrusted_key` | применяется |
-| `permissions.mode` | итог — `narrow(режим нижних слоёв, режим проекта)` по порядку `bypass → accept-edits → standard → ask`; `plan` добавляет запреты `write`/`exec` к режиму нижних слоёв | то же (правило не зависит от доверия) |
-| `permissions.deny`, `permissions.tools` = `ask`/`deny` | применяется | применяется |
-| `permissions.tools` = `allow` | отбрасывается с `config.project.untrusted_key` | применяется |
+| `agent.default_model`, `agent.effort`, `compaction.*` | применяется | применяется |
+| `budget.*` | только уменьшение; увеличение отбрасывается с `config.project.untrusted_key` | применяется |
+| `permissions.mode` | только ужесточение: итог — `narrow(режим нижних слоёв, режим проекта)` по порядку `bypass → accept-edits → standard → ask`; смягчение отбрасывается с `config.project.untrusted_key` (ревью итерации 1). `plan` с режимом нижних слоёв `ask` и `ask` проекта поверх `plan` дают `ask` с запретом `write`/`exec` (решение пользователя 2026-10-30, ниже) | то же |
+| `permissions.deny` | **объединяется** со списком нижних слоёв: проект добавляет запреты, но не снимает глобальные | применяется (заменяет, как список) |
+| `permissions.tools.<t>` | применяется, только если не мягче значения нижних слоёв (`deny` > `ask` > `allow`; нет значения — как `allow`; равное применяется); мягче — отбрасывается с `config.project.untrusted_key` | применяется |
 | `mcp.servers`, `providers.*`, `model_catalog.*` | отбрасывается с `config.project.untrusted_key` | применяется |
-| `sessions.*`, `logging.*`, `exec.*` | отбрасывается с `config.project.untrusted_key` | отбрасывается (§15.3: «нет» в столбце слоя 3) |
+| `prompts.*` и разделы после MVP `hooks`, `plugins`, `a2a`, `lsp` | отбрасывается с `config.project.untrusted_key` (а не `config.key.not_applied`) из обоих проектных слоёв | `prompts.*` — применяется; разделы после MVP — `config.key.not_applied` |
+| `secrets` (после MVP) | отбрасывается из обоих проектных слоёв с `config.project.untrusted_key`, текст `ignored: secrets is read only from the global config` | то же: только глобальный конфиг |
+| `sessions.*`, `logging.*`, `exec.*` | отбрасывается с `config.project.untrusted_key` | `project` — отбрасывается (§15.3: «нет» в столбце слоя 3); `projectLocal` — применяется |
 | `redact.enabled = true`, добавление слоёв, удаление записей `allowlist.*` | применяется | применяется |
 | `redact.enabled = false`, удаление слоёв, новые `allowlist.patterns`, `exempt_tools` | отбрасывается с `config.project.untrusted_key` | применяется |
-| `trusted_projects` | проблема `value` (только глобальный) | проблема `value` |
+| `trusted_projects` | отбрасывается из обоих проектных слоёв с `config.project.untrusted_key`, текст `ignored: trusted_projects is read only from the global config` (не ошибка) | то же |
 
-«Только уменьшение» и «удаление слоёв» сравниваются с результатом слияния слоёв 1–2: ниже проектного слоя стоят только умолчания и глобальный конфиг, а `extra`, окружение и флаги — выше. Так проектный конфиг сравнивается с тем, что дал пользователь, а не с самим собой.
+- **С чем сравнивается.** «Только уменьшение», «не мягче», «удаление слоёв» и объединение `deny` считаются относительно результата слияния нижних слоёв (умолчания, глобальный слой и для `projectLocal` — уже отфильтрованный `project`). `extra`, окружение и флаги стоят выше и правилам доверия не подчиняются.
+- **`plan` + `ask`** (решение пользователя 2026-10-30). Режим — одно значение, а `plan` — это «запрет `write`/`exec`» поверх режима. Поэтому `PermissionsConfig` получает поле дополнительно запрещённых уровней (`extraDeniedTiers: Set<ToolTier>`; точное имя — по коду итерации 1). Политика запрещает уровень, если он в `mode.deniedTiers ∪ extraDeniedTiers`. Сужение даёт:
+  - нижние `ask` + проект `plan` → режим `ask`, `extraDeniedTiers = {write, exec}`;
+  - нижние `plan` + проект `ask` → режим `ask`, `extraDeniedTiers = {write, exec}`;
+  - нижние `bypass`/`accept-edits`/`standard` + проект `plan` → режим `plan` (его `deniedTiers` уже содержит оба уровня).
+
+  Так ужесточение не теряет ни вопроса режима `ask`, ни запретов `plan`. Смена режима сессии (`session/set_mode`) `extraDeniedTiers` не снимает: это настройка проекта, а не режима.
+- **Почему недоверенный проект не снимает запретов.** Иначе склонированный репозиторий мог бы заменить глобальный `deny: ["exec:git push --force"]` пустым списком или `exec: deny` — на `allow` (CFG-3: проект без доверия не расширяет права агента).
 
 Правило для `mcp.servers` — CFG-3: репозиторий, который пользователь только что склонировал, не может запустить процесс на его машине (§15.11). Отброшенный ключ — предупреждение, а не ошибка: репозиторий не ломает запуск (§15.3, последний абзац).
 
 ### D8. Секреты только ссылками; зависимость от 8.9
 
 - **CFG-2.** Ключи `api_key`, `apiKey`, `token`, `secret`, `password` в `providers.*` и в элементах `mcp.servers` — проблема `inlineSecret` с текстом `<key>: secrets are not stored in the config; use api_key_env (or api_key_secret with the secret store)`; значение в текст не попадает. Это пункт 1 CFG-9 §17.5.4. Он дешёвый и даёт понятное сообщение вместо «unknown key». Пункты 2–3 (литеральные значения по шаблонам §12.4) — вместе с таблицей шаблонов редактора (8.11) и `SecretNames` (8.9).
+- **Формат имён** (ревью итерации 1, 2026-10-30): значение `api_key_env` — имя переменной `^[A-Za-z_][A-Za-z0-9_]*$` (иначе `expected an environment variable name`); значение `api_key_secret` и имя в `${secret:<name>}` — имя секрета: непустое, до 128 символов, без пробелов и управляющих символов (иначе `expected a secret name (no spaces or control characters)`); точный `SecretNames.pattern` — в change `add-agent-secret-store` (8.9). Неверный формат — проблема `value` с путём ключа; само значение в сообщение не попадает: в эти поля часто по ошибке вписывают сам ключ.
+- **MCP.** Поле-секрет в элементе `mcp.servers` даёт текст `<key>: secrets are not stored in the config; use ${NAME} in env or headers` (ревью итерации 1, 2026-10-30).
 - **`api_key_env`** разрешается из `environment` при загрузке в `ProviderConfig.apiKey`. Незаданная переменная — предупреждение `config.provider.key_missing {provider, variable}` и запись в `CoreConfig.providerProblems`. Выбор модели этого провайдера даёт ошибку хода `API key variable <VAR> is not set` (§15.5, шаг 8: «ошибка — при выборе»; D11). `api_key_env` вместе с `api_key_secret` — проблема `value`.
 - **`api_key_secret`** принимается как строка. До change `add-agent-secret-store` (8.9) значение прочитать нечем: предупреждение `config.secret.unavailable {key}` и запись в `providerProblems` с текстом `API key secret <name> cannot be read: the secret store is not available yet`. Запрос к провайдеру без ключа не уходит.
 - **`${secret:<name>}`** в разрешённых ключах (§15.5, п. 7) распознаётся. До 8.9 MCP-сервер с такой подстановкой в `env`/`headers` не передаётся ядру: предупреждение `config.secret.unavailable {key}` (в логе — путь ключа, а не значение), сервер пропущен. У провайдера — то же, что у `api_key_secret`.
@@ -310,9 +328,12 @@ static ConfigLoadResult CoreConfig.fromLayers(List<ConfigTree> layers,
 
 §10.3: «хост, который обслуживает сессии с разными `cwd`, держит один снимок `CoreConfig` на корень сессии». Полный механизм (`ConfigSource.load(cwd)`, перечитывание) — 8.10. В 8.5:
 - **Корень запуска.** Проектные слои 3–4 читаются для корня запуска хоста: у `serve` — канонический `Directory.current`, тот же каталог, что уже получает `LocalExecutionEnv`.
-- **Два снимка.** Загрузчик возвращает полный снимок (слои 1–6) и снимок без проектных слоёв (1, 2, 4а, 5, 6). Второй лежит в `CoreConfig.withoutProject`, а `CoreConfig.projectRoot` — корень запуска.
-- **Выбор снимка.** `AgentRuntimeImpl` для `createSession` и `loadSession` берёт ключи сессии из `withoutProject`, если канонический `cwd` сессии не равен `projectRoot`: `defaultModel`, `effort`, `permissions`, `budget`, `compaction`, `mcpServers`, `redact`. Сравнивается равенство, а не вложенность: у подкаталога может быть свой `.codelab/`, и чужой проектный конфиг к нему неприменим. При этом пишется лог `config.session.outside_root {session_id, cwd, config_root}` (info, один раз на `cwd`).
-- **Ключи сборки** берутся из полного снимка: провайдеры и каталог, capability `compaction`, сужение профиля, журналы, логи. Каталог полного снимка — надмножество каталога без проекта, поэтому `defaultModel` второго снимка всегда разрешается.
+- **Два снимка.** Полный снимок (слои 1–6) и снимок без проектных слоёв (1, 2, 4а, 5, 6). Второй — это второй проход `fromLayers` по тем же слоям без `project`/`projectLocal` (ревью итерации 1, 2026-10-30); он лежит в `CoreConfig.withoutProject`, а `CoreConfig.projectRoot` — корень запуска.
+  - Проблема в снимке без проекта (например, `agent.default_model` задан только в проекте) — проблема загрузки целиком: хост не стартует с конфигом, который сломается на первой сессии вне корня.
+  - Модель по умолчанию снимка без проекта может принадлежать провайдеру из проектного слоя: каталог — общий ключ сборки полного снимка. Если её нет в каталоге полного снимка, берётся модель по умолчанию полного снимка (`fallbackModel`).
+  - **Ошибка программиста хоста.** Проектные слои без `projectRoot` — `ArgumentError` в `fromLayers` (не `ConfigIssue`): без корня нельзя ни проверить доверие, ни выбрать снимок.
+- **Выбор снимка.** `AgentRuntimeImpl` для `createSession` и `loadSession` берёт ключи сессии из `withoutProject`, если канонический `cwd` сессии не равен `projectRoot`: `defaultModel`, `effort`, `permissions`, `budget`, `compaction`, `mcpServers`, `redact`. Сравнивается равенство, а не вложенность: у подкаталога может быть свой `.codelab/`, и чужой проектный конфиг к нему неприменим. При этом пишется лог `config.session.outside_root {session_id, cwd, config_root}` (info) логгером сессии, один раз на нормализованный `cwd` (ревью итерации 1, 2026-10-30).
+- **Ключи сборки** берутся из полного снимка: провайдеры и каталог, capability `compaction`, сужение профиля, журналы, логи.
 
 Альтернативы:
 - (а) один снимок на процесс: сессия в `/B` получала бы MCP-серверы и разрешения `allow` из `config.local.yaml` проекта `/A` (§10, приоритет 1 — безопасность);
@@ -404,15 +425,16 @@ StreamFunction createRoutedStreamFunction(
 |---|---|---|
 | `host.config.loaded` | info | `sources`, `warnings` (число), `project_root` |
 | `config.env.unknown` | warning | `message` (как сейчас) |
-| `config.project.untrusted_key` | warning | `key`, `source` |
+| `config.project.untrusted_key` (новое) | warning | `key`, `source` |
 | `config.key.not_applied` (новое) | warning | `key`, `source` |
 | `config.provider.key_missing` (новое) | warning | `provider`, `variable` |
 | `config.secret.unavailable` (новое) | warning | `key` |
 | `config.file.ignored` (новое) | warning | `path`, `hint` |
 | `config.legacy_found` (новое) | warning | `files` (только пути) |
-| `config.session.outside_root` (новое) | info | `session_id`, `cwd`, `config_root` |
+| `config.session.outside_root` (новое) | info, логгер сессии, один раз на нормализованный `cwd` | `session_id`, `cwd`, `config_root` |
 | `mcp.server.skipped` | info | `server`, `reason: "disabled in config"` (новая причина) |
 
+- **Как пишутся.** Предупреждения загрузки — `ConfigIssue` с `event`, `fields`, `level` (D3); хост пишет их событием `event` с полями `fields`.
 - **Без значений.** Значения ключей в логи не попадают: только пути, имена переменных и секретов, источники. Исключение — `sources` (пути файлов).
 - **Ошибка загрузки** в `serve` — `serve.config.invalid {issues: [{source, line, column, key, kind}]}` в лог и те же строки в stderr. Текст проблем значений секретов не содержит — это гарантирует `ConfigIssue.message` (D3).
 - **Документ.** Новые события вносятся в §12.2 задачей 0.2; `config.legacy_active`, `config.legacy_ignored`, `config.legacy_key_dropped` из §12.2 удаляются.

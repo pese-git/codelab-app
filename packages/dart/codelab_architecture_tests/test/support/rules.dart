@@ -46,6 +46,13 @@ const rules = [
       ...webUnsafe,
       'package:codelab_acp_protocol/',
       'package:codelab_acp_transports/',
+      // CFG-5: разборщики конфигурации — только в codelab_agent_io, ядро
+      // получает готовое ConfigTree. Allowlist PKG-2 их и так не пустит, но
+      // правило импорта даёт точное сообщение и ловит транзитивный export
+      // (change `add-agent-configuration`, D1).
+      'package:yaml/',
+      'package:yaml_edit/',
+      'package:toml/',
     ],
   ),
   PackageRule(
