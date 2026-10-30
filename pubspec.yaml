@@ -23,6 +23,7 @@ workspace:
   - packages/dart/codelab_agent_io
   - packages/dart/codelab_agent_mcp
   - packages/dart/codelab_architecture_tests
+  - packages/dart/codelab_setup
   - packages/flutter/codelab_ui
 
 melos:

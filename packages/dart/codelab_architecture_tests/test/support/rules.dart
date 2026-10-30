@@ -135,6 +135,15 @@ const rules = [
     exclude: ['tui/'],
     sealExclude: false,
   ),
+  // IO-барель моста настроек агента — только `run.dart` (`codelab config
+  // check`); остальной CLI не знает о нём (design.md change
+  // `add-agent-configuration`, D14).
+  PackageRule(
+    'apps/codelab_cli/lib/src',
+    forbidden: ['package:codelab_setup/io.dart'],
+    exclude: ['run.dart'],
+    sealExclude: false,
+  ),
   // Ядро экрана — чистые `reduce` и `render`: ни пакета TUI, ни dart:io
   // (TUI-5; design.md change `add-cli-tui`, D3).
   PackageRule(
@@ -143,7 +152,30 @@ const rules = [
   ),
   // stage 7: codelab_embedded — webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/'];
   //   apps/codelab_desktop — ['package:codelab_agent_'] already above
-  // stage 7: codelab_setup — [...webUnsafe, 'package:codelab_agent_io/', 'package:codelab_acp_', 'package:codelab_client_', 'package:flutter/'],
-  //   exclude: ['lib/io.dart', 'lib/src/io/'];
-  //   apps/codelab_desktop/lib/features/settings/presentation — ['package:codelab_setup/io.dart', 'dart:io'] (§12.4.2, SETUP-9)
+  // Мост настроек агента для клиентов (dart-agent-and-clients §12.4.2; design.md
+  // change `add-agent-configuration`, D14): основной барель чист и не знает
+  // IO-пакет агента, `lib/io.dart` и `lib/src/io/` — вне запретов
+  // `webUnsafe`, но без ссылок снаружи (sealExclude).
+  PackageRule(
+    'packages/dart/codelab_setup',
+    forbidden: [
+      ...webUnsafe,
+      'package:codelab_agent_io/',
+      'package:codelab_acp_',
+      'package:codelab_client_',
+    ],
+    exclude: ['lib/io.dart', 'lib/src/io/'],
+  ),
+  // `exclude` выше снимает запреты целиком; Flutter, ACP и клиентские пакеты
+  // не нужны и IO-барелю моста.
+  PackageRule(
+    'packages/dart/codelab_setup',
+    forbidden: [
+      'package:flutter/',
+      'package:codelab_acp_',
+      'package:codelab_client_',
+    ],
+  ),
+  // stage 7: apps/codelab_desktop/lib/features/settings/presentation —
+  //   ['package:codelab_setup/io.dart', 'dart:io'] (§12.4.2, SETUP-9)
 ];

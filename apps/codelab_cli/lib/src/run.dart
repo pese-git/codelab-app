@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_client_io/codelab_client_io.dart';
+import 'package:codelab_setup/io.dart';
 import 'package:path/path.dart' as p;
 
 import 'cli_args.dart';
@@ -79,6 +80,8 @@ Future<int> _run(
         environment: environment,
         stdout: io.stdout,
       );
+    case CliCommand.config:
+      return _runConfigCheck(options, environment, io);
     case CliCommand.headless:
       return _runHeadless(options, environment, io);
     case CliCommand.repl when options.ui == UiMode.tui:
@@ -95,6 +98,31 @@ Future<int> _run(
     case CliCommand.repl:
       return _runRepl(options, environment, io);
   }
+}
+
+/// `codelab config check`: загрузка конфигурации агента без запуска агента.
+///
+/// Почему через мост: клиент не импортирует `package:codelab_agent_*`, а вывод
+/// и коды обязаны совпасть с `codelab-agent config check` — реализация одна,
+/// `ConfigCommands` (design.md change `add-agent-configuration`, D13, D14).
+/// Ни `ClientWorkspace`, ни транспорт не создаются, поэтому процесс агента не
+/// стартует. Несуществующая папка `--cwd` даёт `64` внутри моста.
+int _runConfigCheck(
+  CliOptions options,
+  Map<String, String> environment,
+  CliIo io,
+) {
+  final result = ConfigCommands().check(
+    CheckOptions(
+      // Путь как есть, без normalize: `link/../proj` ОС разрешает через
+      // symlink, а текст ошибки совпадает с `codelab-agent` (D14).
+      cwd: options.cwd ?? Directory.current.path,
+      environment: environment,
+    ),
+  );
+  result.stdout.forEach(io.stdout.writeln);
+  result.stderr.forEach(io.stderr.writeln);
+  return result.exitCode;
 }
 
 Future<int> _runRepl(

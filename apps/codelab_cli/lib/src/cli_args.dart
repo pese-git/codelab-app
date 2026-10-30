@@ -18,7 +18,15 @@ final class UsageError implements Exception {
 }
 
 /// Что запускает `codelab`.
-enum CliCommand { repl, headless, profiles, testScenario, version, help }
+enum CliCommand {
+  repl,
+  headless,
+  profiles,
+  testScenario,
+  config,
+  version,
+  help,
+}
 
 /// Интерактивный режим `--ui`: построчный REPL или полноэкранный TUI.
 ///
@@ -124,7 +132,6 @@ final class CliOptions {
 /// своего change они дают `Unknown command`, а не уходят агенту первым
 /// сообщением (`09-11-stage-6-cli-mvp.md`, «Спецификация CLI»).
 const _laterCommands = {
-  'config',
   'provider',
   'mcp',
   'secret',
@@ -206,6 +213,19 @@ ArgParser _parser() {
   // профиля вроде `stdio:… --stdio` не должно попасть в флаги `codelab`.
   parser
     ..addCommand('profiles', ArgParser(allowTrailingOptions: false))
+    // Зарегистрирована только `check`: `set`, `migrate` и прочие остаются
+    // «Unknown command» (spec codelab-cli «Подкоманда codelab config»).
+    ..addCommand(
+      'config',
+      ArgParser()..addCommand(
+        'check',
+        ArgParser()..addOption(
+          'cwd',
+          valueHelp: 'dir',
+          help: 'Project directory to load config for (default: current).',
+        ),
+      ),
+    )
     ..addCommand(
       'test-scenario',
       ArgParser()
@@ -226,6 +246,7 @@ Usage:
   codelab [options] [first message]   interactive REPL
   codelab -p "<prompt>" [options]     headless: one turn, answer in stdout
   codelab profiles list|show <id>|add <id> <agent>|remove <id>
+  codelab config check [--cwd <dir>]
   codelab test-scenario <file-or-dir>... --agent <profile> [--filter <glob>] [--timeout <d>]
 
 Options:
@@ -263,6 +284,9 @@ CliOptions parseCliArgs(List<String> args) {
       ),
     );
   }
+  if (results.command case final command? when command.name == 'config') {
+    return _configOptions(results, command);
+  }
   if (results.command case final command?) {
     return _options(CliCommand.profiles, results, positional: command.rest);
   }
@@ -298,10 +322,60 @@ CliOptions parseCliArgs(List<String> args) {
   );
 }
 
+/// Флаги подключения и запроса, несовместимые с `codelab config check`.
+const _connectionFlags = [
+  'agent',
+  'model',
+  'mode',
+  'resume',
+  'continue',
+  'print',
+  'prompt-file',
+  'approve',
+  'timeout',
+  'ui',
+];
+
+/// `codelab config …`: только `check [--cwd]`.
+///
+/// Почему здесь, а не в `run.dart`: незарегистрированная подкоманда
+/// (`set`, `migrate`) — ошибка использования с кодом `64` до любого
+/// ввода-вывода (spec codelab-cli «Подкоманда codelab config»).
+///
+/// Приоритет папки (design.md change `add-agent-configuration`, D14):
+/// `--cwd` подкоманды сильнее общего `-C/--cwd`; общий флаг задаёт папку,
+/// только если подкоманда её не задала.
+///
+/// Флаги подключения и запроса (`--agent`, `-p`, `--model`, …) вместе с
+/// `config` — ошибка `64`: профиль подключения `config check` не учитывает
+/// (D14), и молчаливое игнорирование скрыло бы опечатку в команде.
+CliOptions _configOptions(ArgResults results, ArgResults config) {
+  for (final flag in _connectionFlags) {
+    if (results.wasParsed(flag)) {
+      throw UsageError('--$flag does not apply to config check');
+    }
+  }
+  final check = config.command;
+  if (check == null) {
+    throw UsageError(
+      config.rest.isEmpty
+          ? 'config needs a subcommand: codelab config check [--cwd <dir>]'
+          : 'Unknown command config ${config.rest.first}',
+    );
+  }
+  if (check.rest.isNotEmpty) {
+    throw UsageError(
+      'Unexpected arguments for config check: ${check.rest.join(' ')}',
+    );
+  }
+  return _options(CliCommand.config, results, cwd: check.option('cwd'));
+}
+
 CliOptions _options(
   CliCommand command,
   ArgResults results, {
   List<String> positional = const [],
+  String? cwd,
   String? agent,
   String? filter,
   Duration? timeout,
@@ -310,7 +384,7 @@ CliOptions _options(
   positional: List.unmodifiable(positional),
   agent: agent ?? results.option('agent'),
   filter: filter,
-  cwd: results.option('cwd'),
+  cwd: cwd ?? results.option('cwd'),
   model: results.option('model'),
   configMode: results.option('mode'),
   resume: results.option('resume'),

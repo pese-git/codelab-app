@@ -11,8 +11,9 @@
 ## 2. Границы
 
 * Чистый Dart: НЕ ДОЛЖЕН импортировать `package:flutter/`, `package:fluent_ui/`, `package:codelab_ui/` и `package:codelab_agent_*` — правило `apps/codelab_cli` в `packages/dart/codelab_architecture_tests/test/support/rules.dart`.
-* `dependencies` — только `codelab_client_core`, `codelab_client_io`, `codelab_client_acp`, `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_acp_testing`, `args`, `async`, `path`, `meta`, `dart_tui`. Расширение — только через OpenSpec change.
+* `dependencies` — только `codelab_client_core`, `codelab_client_io`, `codelab_client_acp`, `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_acp_testing`, `codelab_setup`, `args`, `async`, `path`, `meta`, `dart_tui`. Расширение — только через OpenSpec change.
 * `package:codelab_acp_testing/` импортируется только из `lib/src/scenario/` (драйвер фикстур, design.md, D3).
+* `package:codelab_setup/io.dart` (мост `ConfigCommands` для `codelab config check`, design.md change `add-agent-configuration`, D14) импортируется только из `lib/src/run.dart` — точки сборки режимов; вместо него прямой импорт `package:codelab_agent_*` запрещён.
 * `package:dart_tui/` импортируется только из `lib/src/tui/` (адаптер полноэкранного режима); чистое ядро экрана `lib/src/tui/core/` не импортирует ни пакет, ни `dart:io` (TUI-5) — два правила сторожа, design.md change `add-cli-tui`, D3.
 * `dart:io` — только в composition root, точке входа, порте терминала (`IoTerminal`), домашнем каталоге, сигналах, connector драйвера фикстур (design.md, D2) и запуске TUI (`TuiRunner`). Логика — рендер, декодер клавиш, редактор строки, политика одобрений, коды выхода — чистая и тестируется без процессов.
 * В headless stdout несёт только ответ агента; всё остальное — stderr. Ошибка использования оставляет stdout пустым.
