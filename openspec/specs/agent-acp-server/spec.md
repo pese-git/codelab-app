@@ -49,13 +49,13 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
    - сбой или пропуск сервера НЕ SHALL быть ошибкой запроса.
 3. Сессия создаётся через `AgentRuntime.createSession` с env и `AcpPermissionGate` соединения, хуком `markInProgress` и серверами шага 2. Создание ждёт подключения серверов (параллельно, каждый — не дольше своего `connectTimeout`).
 4. Ответ `NewSessionResponse(sessionId, modes, configOptions)`.
-5. После ответа — `available_commands_update` с `availableCommands: []`.
+5. После ответа — `available_commands_update` с командами `AgentSession.commands` в их порядке: элемент `AvailableCommand {name, description, input: {hint}?}`, поле `input` — только при `inputHint` (`14-Slash Commands.md`; design.md change `add-agent-project-files`, D9). Без команд список пуст. Инструменты модели в список НЕ SHALL попадать (R-07).
 
 До ответа на `session/new` уведомления этой сессии НЕ SHALL отправляться (ACP-8). Инструменты подключённых серверов SHALL быть доступны модели с первого хода этой сессии (R-24). Это заменяет поведение этапа 4, в котором каждый сервер пропускался (R-02).
 
 #### Scenario: Режимы и опции новой сессии
 - **WHEN** клиент создаёт сессию с абсолютным `cwd`
-- **THEN** ответ содержит `modes` с пятью режимами и `configOptions` `mode` и `model`, а следующий кадр — `available_commands_update` с пустым списком
+- **THEN** ответ содержит `modes` с пятью режимами и `configOptions` `mode` и `model`, а следующий кадр — `available_commands_update` с пустым списком, если у сессии нет шаблонов команд
 
 #### Scenario: Относительный cwd
 - **WHEN** `session/new` приходит с `cwd: "work/demo"`
@@ -81,6 +81,12 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 - **WHEN** процесс stdio-сервера из `mcpServers` не запускается
 - **THEN** ответ `session/new` успешен, лог `mcp.server.failed`, инструментов сервера в сессии нет
 
+#### Scenario: Команды шаблонов после session/new
+- **WHEN** у сессии есть встроенные инструменты, fake MCP-сервер с инструментом `echo` и шаблон `.codelab/prompts/review.md` доверенного проекта (`trusted_projects` с `${cwd}`) с `argument-hint: "<path> [focus]"`
+- **THEN** кадр после ответа `session/new` — `available_commands_update` ровно с одной командой `{"name":"review","description":…,"input":{"hint":"<path> [focus]"}}`, без имён `read`, `exec` и `mcp__fake__echo` (фикстура `acp/available-commands-no-tools`, R-07)
+
+Шаблон лежит в проекте, а не в `$CODELAB_HOME/prompts/`: формат фикстур пишет файлы только в `cwd` через `setup.files` (acp-golden-fixtures). Пользовательскую область (`$CODELAB_HOME/prompts/*.md`) покрывает тест хоста `apps/codelab_agent/test/agent_host_project_files_test.dart`.
+
 ### Requirement: session/load и реплей
 `session/load` SHALL выполнять алгоритм §13.5 в объёме MVP: неизвестный `sessionId` → `-32002`; `cwd` запроса выигрывает у `cwd` заголовка с записью `custom` `codelab.cwd_changed`; сессия открывается `AgentRuntime.loadSession` с env, gate и хуками соединения и с `mcpServers` запроса, отображёнными так же, как в `session/new`. Если сессия уже открыта в этом процессе, `mcpServers` запроса SHALL заменять серверы сессии с `origin: session` через `AgentSession.setMcpServers` (design.md change `add-agent-mcp-client`, D11):
 - совпавшие по `name` и параметрам остаются подключёнными;
@@ -90,12 +96,14 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 - проверка «сессия занята» и `reattach` SHALL быть атомарны относительно `setMcpServers`: ожидание замены не разделяет их;
 - исключение `setMcpServers` НЕ SHALL ронять `session/load`: лог `mcp.servers.replace_failed` (warning, `session_id`, `error` — тип исключения), ответ отправляется как обычно.
 
+Файлы проекта (agent-project-context) при повторном `session/load` уже открытой в процессе сессии НЕ SHALL перечитываться: адаптер переподключает открытую сессию (`reattach`) без вызова `AgentRuntime.loadSession`, поэтому `ProjectFilesSource.load` не вызывается, а команды и определения агентов сессии остаются прежними до её закрытия (design.md change `add-agent-project-files`, D6; §17.2.1 документа ядра: изменения файлов — со следующей сессии).
+
 Описания серверов НЕ SHALL читаться из журнала. Реплей SHALL идти по активной ветке:
-- слова пользователя → `user_message_chunk` на каждый блок; прочие user-записи пропускаются;
+- слова пользователя → `user_message_chunk` на каждый блок; у записи с полем `command` первым блоком идёт исходный текст `/<name>[ <args>]` вместо развёрнутого (agent-slash-commands «Исходный текст команды в журнале»); прочие user-записи пропускаются;
 - ответ модели → `agent_thought_chunk` и `agent_message_chunk` по блокам; вызов → один `tool_call` с итоговым статусом, `title`, `kind`, `locations`, `rawInput`, `content` результата, `diff` и `_meta.codelab.outcome` для `cancelled`/`rejected`/`interrupted`;
 - `compaction` не отправляется.
 
-После истории — последний `plan`, `current_mode_update`, `config_option_update`, `available_commands_update`, `session_info_update`; затем ответ `LoadSessionResponse(modes, configOptions)`.
+После истории — последний `plan`, `current_mode_update`, `config_option_update` (с опцией `agent` и восстановленным значением, если она есть), `available_commands_update` с `AgentSession.commands`, `session_info_update`; затем ответ `LoadSessionResponse(modes, configOptions)`.
 
 #### Scenario: Реплей двух ходов
 - **WHEN** сессия с двумя ходами, вызовом `read` и заголовком загружается в новом соединении
@@ -112,6 +120,14 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 #### Scenario: Повторная загрузка открытой сессии с другим набором
 - **WHEN** открытая сессия без хода с сервером `a` загружается заново с `mcpServers: [b]`
 - **THEN** до ответа `session/load` транспорт `a` закрыт, `b` подключён, а следующий запрос к модели содержит инструменты `b` и не содержит инструментов `a`
+
+#### Scenario: Повторная загрузка открытой сессии не читает файлы проекта
+- **WHEN** открытая в процессе сессия загружается заново через `session/load`, а `AGENTS.md` в её `cwd` между загрузками изменён
+- **THEN** фейковый `ProjectFilesSource` вызван ровно один раз — при первом открытии, системный промпт следующего хода содержит прежний текст файла
+
+#### Scenario: Реплей команды шаблона
+- **WHEN** сессия, в которой пользователь отправил `/review lib/parser "error handling"`, загружается в новом соединении
+- **THEN** реплей содержит `user_message_chunk` с этим текстом, `available_commands_update` содержит `review` (фикстура `acp/prompt-template-command`)
 
 ### Requirement: session/list
 `session/list` SHALL отдавать страницу `AgentRuntime.listSessions` (50 элементов): `sessionId`, `cwd`, `title`, `updatedAt` и `nextCursor`, если остались элементы. `cwd` не абсолютный или неразбираемый `cursor` → `-32602`; нет совпадений — пустой `sessions` без `nextCursor` (§13.5).
@@ -147,9 +163,11 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 - **THEN** агент отправляет `terminal/kill`, `terminal/output`, `terminal/release`, затем `tool_call_update` `failed` с `outcome: "cancelled"` и ответ `stopReason: cancelled`
 
 ### Requirement: Режимы и опции сессии
-`configOptions` SHALL идти в порядке `mode`, `model`, `effort` (§13.6): `mode` — пять режимов `ModeId`; `model` — модели каталога ядра в формате `provider/model`; `effort` (`low`, `medium`, `high`, категория `thought_level`) — только если у текущей модели `supportsReasoning` (ACP-10). Устаревшие синонимы режимов (`architect`, `debug`, `acceptEdits`, `code`) SHALL приниматься на входе и не отправляться наружу.
+`configOptions` SHALL идти в порядке `mode`, `model`, `effort`, `agent` (§13.6): `mode` — пять режимов `ModeId`; `model` — модели каталога ядра в формате `provider/model`; `effort` (`low`, `medium`, `high`, категория `thought_level`) — только если у текущей модели `supportsReasoning` (ACP-10); `agent` — только если у сессии есть хотя бы одно определение агента: вариант `default` (имя `Default`), затем `AgentSession.agents` по имени с `description` определения, `currentValue` — `AgentSession.agent`, без поля `category` (зарезервированные категории ACP — только `mode`, `model`, `thought_level`; design.md change `add-agent-project-files`, D12). Устаревшие синонимы режимов (`architect`, `debug`, `acceptEdits`, `code`) SHALL приниматься на входе и не отправляться наружу.
 
-`session/set_config_option` SHALL: неизвестная сессия → `-32002`; неизвестный `configId` или значение вне `options` → `-32602`; `mode` → `AgentSession.setMode` и `current_mode_update`; `model` → `AgentSession.setModel`; `effort` → `AgentSession.setEffort`. Ответ — полный список опций; `config_option_update` в ответ на запрос клиента НЕ SHALL дублироваться (ACP-11).
+`session/set_config_option` SHALL: неизвестная сессия → `-32002`; неизвестный `configId` или значение вне `options` → `-32602`; `mode` → `AgentSession.setMode` и `current_mode_update`; `model` → `AgentSession.setModel`; `effort` → `AgentSession.setEffort`; `agent` → `AgentSession.setAgent`, и если режим сессии изменился — `current_mode_update` до ответа. Ответ — полный список опций, в том числе изменённые `mode` и `model`; `config_option_update` в ответ на запрос клиента НЕ SHALL дублироваться (ACP-11). Смена модели через `agent` (выбор агента или возврат к `default`) SHALL ставить ту же заметку §2.12.3, что `configId: "model"`: переход на модель без `supportsReasoning` — заметка первым `agent_message_chunk` следующего хода, переход на модель с рассуждением — заметка снимается.
+
+`session/set_config_option` и `session/set_mode` одной сессии SHALL обрабатываться мостом строго по очереди в порядке прихода (design.md change `add-agent-project-files`, D12). Эхо `ModeChanged` SHALL относиться к запросу, чья смена его породила: оно проецируется только в `current_mode_update`, ответ на этот запрос уходит после него. На каждый запрос SHALL уходить ровно один ответ со снимком опций после своей смены; итоговое состояние сессии — результат последнего запроса. Ошибка одного запроса НЕ SHALL останавливать очередь.
 
 `session/set_mode` SHALL обрабатываться той же функцией, что `configId: "mode"`: ответ `{}`, затем `current_mode_update`.
 
@@ -160,6 +178,22 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 #### Scenario: Опция effort у модели без рассуждения
 - **WHEN** модель сессии сменена на модель без `supportsReasoning`, а клиент присылает `session/set_config_option` с `configId: "effort"`
 - **THEN** ответ — `-32602`, а в списке опций `effort` нет до смены обратно
+
+#### Scenario: Выбор агента опцией
+- **WHEN** у доверенного проекта есть `.codelab/agents/reviewer.md` с `mode: plan` и моделью каталога, а клиент присылает `session/set_config_option` с `configId: "agent"` и `value: "reviewer"`
+- **THEN** сначала уходит `current_mode_update` с `plan`, затем ответ с согласованными `agent: reviewer`, `model` из файла и `mode: plan`; `config_option_update` не отправляется (фикстура `acp/set-config-option-agent`, R-15)
+
+#### Scenario: Параллельные выбор агента и set_mode
+- **WHEN** режим конфигурации `standard`, у доверенного проекта есть `reviewer.md` с `mode: plan`, а клиент без ожидания ответов присылает `session/set_config_option` с `configId: "agent"`, `value: "reviewer"` и сразу `session/set_mode` с `modeId: "bypass"`
+- **THEN** кадры идут в порядке: `current_mode_update` с `plan`, ответ на первый запрос с `agent: reviewer` и `mode: plan`, `current_mode_update` с `bypass`, ответ `{}` на второй; `config_option_update` не отправляется ни разу; ход следующего `session/prompt` идёт в режиме `bypass` с профилем `reviewer`
+
+#### Scenario: Смена модели агентом и заметка effort
+- **WHEN** модель сессии поддерживает рассуждение, а клиент выбирает опцией `agent` определение, чья `model` без `supportsReasoning`, затем присылает `session/prompt`
+- **THEN** ответ на `set_config_option` не содержит опции `effort`, а первый `agent_message_chunk` хода — заметка `Reasoning effort is not supported by <provider/model>; …`, как при смене опцией `model`
+
+#### Scenario: Без определений опции нет
+- **WHEN** у сессии нет ни одного определения агента
+- **THEN** `configOptions` — `mode`, `model` и, при рассуждении, `effort`, как в фикстуре `acp/session-new-modes-config`
 
 ### Requirement: Запросы агента к клиенту
 `AcpClientExecutionEnv` SHALL исполнять файлы и команды через клиента по §4.7 и §13.9:
