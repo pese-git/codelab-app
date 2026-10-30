@@ -4,8 +4,8 @@
 
 Источники:
 - `docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md` §12.4.2 — полный состав моста;
-- `openspec/changes/add-agent-configuration/design.md` — D1, D13, D14, OQ2 (а);
-- `openspec/changes/add-agent-configuration/specs/workspace-architecture/spec.md` — правило сторожа.
+- `openspec/changes/archive/2026-10-30-add-agent-configuration/design.md` — D1, D13, D14, OQ2 (а);
+- `openspec/specs/workspace-architecture/spec.md` — правило сторожа.
 
 Если документов не хватает, сначала дополняется документация, потом пишется код.
 

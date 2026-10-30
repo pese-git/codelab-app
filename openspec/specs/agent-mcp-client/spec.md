@@ -117,7 +117,7 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
   - Streamable HTTP legacy — `notifications/cancelled` и закрытие потока ответа.
 
   Ответ, пришедший после отмены или таймаута, SHALL игнорироваться с `mcp.message.ignored` и не менять состояние.
-- **Таймаут** вызова по умолчанию — 10 минут. По истечении — тот же сигнал отмены и результат-ошибка `MCP server <id> did not answer tools/call within <n> s.`
+- **Таймаут** вызова — `McpServerConfig.callTimeout` сервера (ключ конфигурации `mcp.servers[*].call_timeout`, design.md change `add-agent-configuration`, D10). Если он `null` (серверы `session/new` и серверы конфига без ключа) — `McpClientOptions.callTimeout` коннектора, по умолчанию 10 минут. По истечении — тот же сигнал отмены и результат-ошибка `MCP server <id> did not answer tools/call within <n> s.`, где `<n>` — таймаут этого сервера в секундах.
 - **Обрыв.** Закрытие транспорта (`done`) или обрыв потока ответа запроса при живом транспорте (`abortedRequests` порта `McpTransport`) во время вызова SHALL давать результат-ошибку `MCP server <id> disconnected during the call: <reason>` без автоматического повтора `tools/call`. Вызов сервера, упавшего раньше, — `MCP server <id> is not connected. Continue without it.`
 - **Ошибки ответа:**
   - ошибка JSON-RPC — `MCP server <id> returned an error: <message> (code <code>)`;
@@ -150,6 +150,10 @@ MCP-клиент Dart-агента SHALL жить в пакете `packages/dart
 #### Scenario: Сервер просит ввод
 - **WHEN** modern-сервер отвечает на `tools/call` `resultType: "input_required"`
 - **THEN** результат — ошибка `… asked for client input, which is not supported.`, повторного `tools/call` нет
+
+#### Scenario: Таймаут сервера сильнее общего
+- **WHEN** `McpClientConnector` создан с `McpClientOptions(callTimeout: 10 min)`, сервер `a` имеет `callTimeout: 2 s`, сервер `b` — `null`, и оба не отвечают на `tools/call` на `FakeClock`
+- **THEN** через 2 с вызов `a` завершается ошибкой `… within 2 s.` и сигналом отмены, а вызов `b` ещё ждёт до 600 с
 
 ### Requirement: Обновление списка инструментов
 По `notifications/tools/list_changed` клиент SHALL перечитать `tools/list`; в modern уведомление принимается только с `io.modelcontextprotocol/subscriptionId` своей подписки `subscriptions/listen`, в legacy — с общего канала stdio или GET-потока HTTP. Уведомление во время перечитывания SHALL ставить один повтор, а не параллельное перечитывание. Уведомление, пришедшее во время подключения, SHALL вызывать одно перечитывание сразу после рукопожатия. Сбой перечитывания SHALL оставлять прежний набор и сервер подключённым, с логом `mcp.tools.refresh_failed {server, reason}` (warning). Таймаут страницы `tools/list` перечитывания (`connectTimeout` сервера) SHALL сопровождаться одним сигналом отмены своего транспорта на id этой страницы (stdio — `notifications/cancelled`, HTTP — закрытие потока ответа; `cancellation.md`, «Timeouts»); причина — `no answer to tools/list`. Новый набор SHALL проходить те же правила имён и коллизий, что при подключении; коллизия в обновлении SHALL отключать сервер, чьё обновление её вызвало. Ядро SHALL применять его только на границе шага, до сборки запроса к модели, и никогда внутри пакета вызовов. Применение SHALL сопровождаться логом `mcp.tools.changed` с добавленными и удалёнными именами.

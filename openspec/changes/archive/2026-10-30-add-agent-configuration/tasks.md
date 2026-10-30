@@ -266,4 +266,4 @@
   - спецификации, которые изменились по ходу реализации, правятся в этом change, а не молча (`AGENTS.md` §17).
 - [x] 12.3 `[client]` Сверка `09-11-stage-6-cli-mvp.md` и `apps/codelab_cli/AGENTS.md` с реализованной подкомандой.
 - [x] 12.4 `[agent]` DoD этапа 8 для 8.5 в `09-13-stage-8-mcp-config.md`: отметка «Выполнено» у `config_loader_test.dart: invalid config reports key path and line`, строки R-16 (новая редакция), E-02 и E-03 (серверы конфигурации).
-- [ ] 12.5 Полный melos run check зелёный в CI pull request. **Конец итерации 5.**
+- [x] 12.5 Полный melos run check зелёный в CI pull request (последний PR с кодом — #168, все проверки CI зелёные; #169 менял только документы). **Конец итерации 5.**
