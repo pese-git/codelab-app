@@ -99,6 +99,12 @@ final class AgentDefinition {
 }
 
 /// Результат [parseAgentDefinitions].
+///
+/// Почему пара: определение с ошибкой не прерывает загрузку, поэтому принятые
+/// определения и диагностики об отброшенных возвращаются вместе (D3, D6).
+///
+/// Как использовать: рантайм берёт [sessionAgents] для опции `agent`, а
+/// [diagnostics] пишет в лог; тексты файлов в них не попадают (D14).
 final class AgentParseResult {
   AgentParseResult(
     List<AgentDefinition> agents,

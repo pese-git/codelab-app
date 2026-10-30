@@ -16,6 +16,7 @@
 * `package:codelab_setup/io.dart` (мост `ConfigCommands` для `codelab config check`, design.md change `add-agent-configuration`, D14) импортируется только из `lib/src/run.dart` — точки сборки режимов; вместо него прямой импорт `package:codelab_agent_*` запрещён.
 * `package:dart_tui/` импортируется только из `lib/src/tui/` (адаптер полноэкранного режима); чистое ядро экрана `lib/src/tui/core/` не импортирует ни пакет, ни `dart:io` (TUI-5) — два правила сторожа, design.md change `add-cli-tui`, D3.
 * `dart:io` — только в composition root, точке входа, порте терминала (`IoTerminal`), домашнем каталоге, сигналах, connector драйвера фикстур (design.md, D2) и запуске TUI (`TuiRunner`). Логика — рендер, декодер клавиш, редактор строки, политика одобрений, коды выхода — чистая и тестируется без процессов.
+* Домашний каталог CLI — только `CodelabHome.resolve` (design.md change `add-agent-project-files`, D17): `CODELAB_HOME` вида `~` и `~/…` раскрывается в `HOME`, иначе `USERPROFILE`, как у `codelabHomeOf` агента; `~user/…`, `~\…` и тильда без домашнего каталога — `UsageError` (код `64`) с теми же текстами, что у агента. Логика продублирована, потому что CLI не импортирует `codelab_agent_*` (PKG-4); одинаковость проверяют `test/home_test.dart` и `test/config_command_test.dart`.
 * В headless stdout несёт только ответ агента; всё остальное — stderr. Ошибка использования оставляет stdout пустым.
 * Значение `CODELAB_AGENT_TOKEN` не попадает ни в вывод, ни в `profiles.json`.
 

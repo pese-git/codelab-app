@@ -2,7 +2,7 @@
 
 Правила этого приложения дополняют корневой `AGENTS.md` и `packages/dart/codelab_agent_core/AGENTS.md`.
 
-Источники: `docs/architecture/proposals/dart-agent-and-clients/09-09-stage-4-acp-adapter.md` (задачи 4.5, 4.6), документ ядра `agent-core-architecture.md` — §12.3 (логи), §13.1, §13.3, §13.10 (адаптер и транспорт), §15.6 (флаги и переменные), §14 (фикстуры); `design.md` OpenSpec change `add-codelab-agent-binary` и `add-agent-configuration` (D4, D10, D11, D16). Если документов не хватает, сначала дополняется документация, потом пишется код.
+Источники: `docs/architecture/proposals/dart-agent-and-clients/09-09-stage-4-acp-adapter.md` (задачи 4.5, 4.6), документ ядра `agent-core-architecture.md` — §12.3 (логи), §13.1, §13.3, §13.10 (адаптер и транспорт), §15.6 (флаги и переменные), §14 (фикстуры); `design.md` OpenSpec change `add-codelab-agent-binary`, `add-agent-configuration` (D4, D10, D11, D16) и `add-agent-project-files` (D16, D17). Если документов не хватает, сначала дополняется документация, потом пишется код.
 
 ## 1. Назначение
 
@@ -18,6 +18,8 @@
 * Флаги строят слой `ConfigTree` (`ServeOptions.flags`), а не модели: настройки ядра берутся из результата `loadServeConfig`. С `--llm-script` слои 2–4 не читаются; невалидный конфиг — код `64` до старта транспорта.
 * Файлы конфигурации (`agent-core-architecture` §15.2): `$CODELAB_HOME/config.yaml`, `<cwd>/.codelab/config.yaml`, `<cwd>/.codelab/config.local.yaml` и дополнительный файл `--config <path>` / `CODELAB_CONFIG` (только `.yaml`/`.yml`; `CODELAB_CONFIG` — только абсолютный путь, `--config` — от текущего каталога процесса; явно названный, но отсутствующий файл — код `64`). Файлы Python-агента (`$CODELAB_HOME/codelab.toml`, `$CODELAB_HOME/auth.toml`, `<cwd>/codelab.toml`, `<cwd>/codelab.local.toml`) не читаются: найденный файл даёт только предупреждение `config.legacy_found` (D12).
 * `--max-steps <n>` и `CODELAB_MAX_STEPS` — `budget.max_steps`, целое `≥ 1`: неверный флаг — ошибка использования, неверная переменная — проблема конфигурации `budget.max_steps`; в обоих случаях код `64`; `--model <provider>/<model>` без `--provider` выбирает модель конфига (§15.6; D4).
+* Файлы проекта (`agent-core-architecture` §11.5, §15.8, §17.2.2; design.md change `add-agent-project-files`, D2, D16): `AgentHost.build` передаёт `ProjectFilesLoader` из `codelab_agent_io` в `AgentCoreServices.projectFiles` только для `--stdio`; с `--llm-script` — `home: null`: `$CODELAB_HOME` не читается, а проект всегда недоверенный — `trusted_projects` берётся только из глобального слоя, который сценарий не читает, а в файле `--config`/`CODELAB_CONFIG` этот ключ — ошибка конфига (код `64`); поэтому `.codelab/prompts` и `.codelab/agents` проекта не загружаются (`untrusted_project`), читается только контекст `AGENTS.md` дерева `cwd`. `--ws` загрузчик не передаёт и один раз при запуске пишет `project_files.skipped {transport: ws}`: клиент WebSocket выбирает `cwd`, а чтение шло бы с машины агента.
+* `CODELAB_HOME` берётся только из `codelabHomeOf` (D17): `~` и `~/…` раскрываются в `HOME`/`USERPROFILE`; `~user/…`, `~\…` и тильда без домашнего каталога — код `64` и текст в stderr до чтения файлов и до старта транспорта. С `--llm-script` значение не раскрывается и не проверяется.
 * `config` — единственная подкоманда `check [--cwd <dir>]`; `set`, `migrate` и прочие не регистрируются и дают `64` со справкой. `config check` не запускает сервер, не читает stdin и ничего не пишет.
 
 ## 3. Тесты

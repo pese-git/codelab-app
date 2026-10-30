@@ -721,7 +721,7 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 
 | Переменная | Флаг | Ключ |
 |---|---|---|
-| `CODELAB_HOME` | — | корень состояния; по умолчанию `~/.codelab`. Значение `~` или `~/…` (тильду не раскрыла оболочка: unit launchd/systemd, `env` профиля, кавычки) раскрывается в домашний каталог — `HOME`, иначе `USERPROFILE`, — тем же правилом, что `trusted_projects` (§15.3). Прочие формы с `~` в начале (`~user/…`, `~\…`) — ошибка использования `CODELAB_HOME: ~user is not supported, use an absolute path`, код `64`; `~`/`~/…` без домашнего каталога — ошибка использования `CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an absolute path`, код `64`; одинаково у агента и CLI. Одно правило у `codelabHomeOf` (агент) и `CodelabHome` (CLI) (change `add-agent-project-files`, D17) |
+| `CODELAB_HOME` | — | корень состояния; по умолчанию `~/.codelab`. Значение `~` или `~/…` (тильду не раскрыла оболочка: unit launchd/systemd, `env` профиля, кавычки) раскрывается в домашний каталог — `HOME`, иначе `USERPROFILE`, — тем же правилом, что `trusted_projects` (§15.3). Прочие формы с `~` в начале (`~user/…`, `~\…`) — ошибка использования `CODELAB_HOME: ~user is not supported, use an absolute path`, код `64`; `~`/`~/…` без домашнего каталога — ошибка использования `CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an absolute path`, код `64`; одинаково у агента и CLI. Пустое значение — как незаданное. Со сценарием `--llm-script` `$CODELAB_HOME` не читается, поэтому значение не раскрывается и не проверяется (кода `64` нет, D16). Одно правило у `codelabHomeOf` (агент) и `CodelabHome` (CLI) (change `add-agent-project-files`, D17) |
 | `CODELAB_CONFIG` | `--config <path>` | дополнительный файл (слой 4а) с приоритетом выше слоя 4, флаг сильнее переменной; расширение `.yaml` или `.yml`, иначе ошибка использования; для `.toml` — `--config needs a .yaml file; codelab.toml is not supported, see agent-core-architecture §15.7` (без подсказки `migrate`: команды нет). `CODELAB_CONFIG` — только абсолютный путь (относительный — ошибка использования, текст называет переменную); `--config` может быть относительным — от текущего каталога процесса. Отсутствующий файл — проблема конфига `cannot read the file`, код `64` (§15.2) |
 | `CODELAB_MODEL` | `--model <provider/model>` | `agent.default_model`; без `--provider` выбирает модель из конфига, а `--model gpt` без косой черты — ошибка использования `--model needs <provider>/<model> without --provider`; повтор `--model` без `--provider` — ошибка использования `--model can be repeated only together with --provider`. Нет модели ни во флагах, ни в конфиге, ни в `--llm-script` — проблема `agent.default_model: required`, код `64` |
 | — | `--provider <openai-compatible\|anthropic>` (с этапа 4) | провайдер из флагов с id `cli`: `providers.cli.kind`; с ним `--model <model>` — id модели этого провайдера (`agent.default_model = "cli/<model>"`), флаг можно повторять: первое значение — модель по умолчанию, все — модели `providers.cli.models`. Слой флагов заменяет `providers.cli` из файлов целиком, а не сливается с ним по полям (§15.4) |
@@ -875,8 +875,8 @@ warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Mo
 Определение проекта с тем же `name` заменяет глобальное. Файлы читаются при создании и загрузке
 сессии; изменения действуют в новых сессиях.
 
-Встроенные профили сессии `architect` и `review` (§17.12.2) загружаются первыми; файл с тем же
-`name` и `scope` `session` или `both` заменяет профиль.
+После MVP встроенные профили сессии `architect` и `review` (§17.12.2) загружаются первыми; файл с тем же
+`name` и `scope` `session` или `both` заменяет профиль. На этапе 8.8 встроенных профилей нет.
 
 **Формат файла.** YAML-frontmatter между строками `---`, затем тело — инструкции агента.
 
@@ -927,8 +927,10 @@ final class AgentDefinition {
   final AgentScope scope;                   // после MVP: по умолчанию both (§17.3.2)
   final ModelRole? role;                    // после MVP: роль модели (L-10), если model не задана; только у встроенных типов
 }
-// SessionSpec получает список определений; ACP-адаптер строит из него опцию `agent`
-// (определения со scope session | both), TaskTool — enum типов (scope subagent | both, §17.3.2).
+// Определения сессии приходят из порта хоста ProjectFilesSource при createSession/loadSession
+// (parseAgentDefinitions → AgentSession.agents, design.md change add-agent-project-files, D1, D10);
+// ACP-адаптер строит из AgentSession.agents опцию `agent` (scope session | both),
+// после MVP TaskTool — enum типов (scope subagent | both, §17.3.2).
 ```
 
 **Алгоритм применения.**
@@ -981,7 +983,7 @@ selectAgent(session, name):            // session/set_config_option agent=<name>
 `mode`, `model`, `thought_level` (`13-Session Config Options.md`, «Option Categories»); своя
 категория `_codelab_*` была бы расширением протокола (design.md change `add-agent-project-files`,
 D12). Опция идёт после `mode`, `model`, `effort`. Опция присутствует, только если загружено хотя бы
-одно определение со `scope` `session` или `both` (со встроенными профилями — всегда). Выбранный агент пишется в
+одно определение со `scope` `session` или `both` (после MVP, со встроенными профилями — всегда). Выбранный агент пишется в
 журнал записью `config_change` (§8) и восстанавливается при `session/load`.
 
 **Инварианты.**
@@ -1001,7 +1003,7 @@ D12). Опция идёт после `mode`, `model`, `effort`. Опция пр�
   промпт с секцией профиля, модель и режим из файла, схемы только `read`, `search`, `ls` и
   инструментов `mcp__github__*`; вызов `write` → отказ; возврат к `default` восстанавливает всё
   (CFG-7, CFG-8).
-* `acp/set-config-option-agent`: `config_option_update` содержит согласованные `agent`, `model`, `mode`.
+* `acp/set-config-option-agent`: `current_mode_update` до ответа, ответ на `session/set_config_option` содержит согласованные `agent`, `model`, `mode`, `config_option_update` не отправляется (ACP-11); края опции — `codelab_agent_acp/test/config_options_agent_test.dart`.
 
 ## 15.9. Полный пример
 
