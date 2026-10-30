@@ -410,7 +410,7 @@ StreamFunction createRoutedStreamFunction(
 - **Где ищется.** Места поиска Python-агента: `$CODELAB_HOME/codelab.toml`, `$CODELAB_HOME/auth.toml`, `<cwd>/codelab.toml`, `<cwd>/codelab.local.toml`. `codelab.toml.example` не ищется: это шаблон.
 - **Когда.** Только если нет ни одного YAML-файла слоёв 2–4 и не задан `--config`. Тогда пишется ровно одно предупреждение `config.legacy_found {files}` на процесс и `cwd` с текстом:
 
-  `codelab.toml is not used by the Dart agent: <files>. Move the settings to config.yaml manually; the key mapping is in docs/architecture/proposals/agent-core/15-configuration.md, section 15.7.`
+  `codelab.toml is not used by the Dart agent. Move the settings to config.yaml manually; the key mapping is in docs/architecture/proposals/agent-core/15-configuration.md, section 15.7.` (хвост ` Also found: <other files>.` — только если найдено несколько файлов; полный список — в поле `files`)
 
   `config check` печатает ту же строку как предупреждение; код выхода от неё не меняется.
 - **Без чтения.** Проверяется только существование (`FileSystemEntity.isFileSync`). Файл не открывается и не разбирается, содержимое и размер в лог не попадают — только пути.
@@ -428,14 +428,16 @@ StreamFunction createRoutedStreamFunction(
 - возвращает `ConfigCommandResult {int exitCode, List<String> stdout, List<String> stderr}`;
 - аргументы разбирают приложения своим `package:args`. В allowlist `codelab_agent_io` пакета `args` нет, и расширять его ради одного флага не нужно (§13). Тексты, правила и коды выхода живут в одном месте (§17.5.5).
 
-**`config check [--cwd <dir>]`** — полная загрузка §15.5 для `cwd` (по умолчанию текущий):
-- stdout: строка `Sources:` со слоями по порядку;
-- затем проблемы (`<source>:<line>:<column>: <key>: <message>`) и предупреждения (`warning: …`), включая `config.legacy_found` (D12);
-- последняя строка — `Config: valid` или `Config: invalid (issues: <n>)`;
-- код `0` — валиден (предупреждения допустимы), `1` — есть проблемы, `64` — ошибка использования;
+**`config check [--cwd <dir>]`** — полная загрузка §15.5 для `cwd` (по умолчанию текущий). Окружение учитывается целиком, включая `CODELAB_CONFIG`; флагов `serve` нет — проверяется то, что увидит `serve` без флагов:
+- первая строка — `Sources: defaults, <канонический абсолютный путь>, …`: `ConfigLoadResult.sources` как есть;
+- затем проблемы — `ConfigIssue.toString()` (`<location>: [<key>: ]<message>`, подсказка `did you mean …?` — часть текста) и предупреждения — `warning: <location>: [<key>: ]<message>`, включая `config.legacy_found` (D12; текст не повторяет путь, уже стоящий в локации) и `config.env.unknown`;
+- последняя строка — `Config: valid` или `Config: invalid (issues: <n>)`; предупреждения проблемами не считаются;
+- код `0` — валиден (предупреждения допустимы), `1` — есть проблемы, `64` — ошибка использования: несуществующий `--cwd` или `ConfigUsageException` загрузчика (`CODELAB_CONFIG` с `.toml` или относительный) — текст в stderr, stdout пуст;
 - значения секретов не печатаются никогда; `check` ничего не пишет.
 
-**Регистрация.** `codelab-agent config check` — команда `config` парсера `run.dart` рядом с `serve`. `codelab config check` — D14.
+**Неизвестные `CODELAB_*`** распознаёт `ConfigLoader` (`codelab_agent_io`), а не `serve_args.dart`: иначе `codelab config check` (D14) не увидел бы `config.env.unknown`, и вывод двух бинарей разошёлся бы. Правило одно — для `serve` и обеих подкоманд.
+
+**Регистрация.** `codelab-agent config check` — команда `config` верхнего парсера рядом с `serve` (`apps/codelab_agent/lib/src/cli/config_cli.dart`, вызов из `run.dart`). Ошибка разбора аргументов `config …` (неизвестный флаг, `--cwd` без значения), отсутствующая или неизвестная подкоманда — код `64` и справка `config` в stderr; общая справка бинаря упоминает `config check`. `codelab config check` — D14.
 
 ### D14. Мост `codelab_setup` для CLI
 

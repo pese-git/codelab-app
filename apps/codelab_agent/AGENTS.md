@@ -6,7 +6,7 @@
 
 ## 1. Назначение
 
-`apps/codelab_agent` — бинарь `codelab-agent serve --stdio | --ws`: хост ядра в профиле `agent-serve`. Он разбирает флаги, загружает конфигурацию (`ConfigLoader` из `codelab_agent_io`: `config.yaml`, переменные `CODELAB_*`, флаги — `agent-core-architecture` §15; change `add-agent-configuration`), собирает ядро через `buildAgentCore`, поднимает `AcpAgentServer` на серверном транспорте и отвечает за логи, сигналы и коды выхода. Поведения агента здесь нет: оно в пакетах `codelab_agent_*`.
+`apps/codelab_agent` — бинарь `codelab-agent serve --stdio | --ws`: хост ядра в профиле `agent-serve`. Он разбирает флаги, загружает конфигурацию (`ConfigLoader` из `codelab_agent_io`: `config.yaml`, переменные `CODELAB_*`, флаги — `agent-core-architecture` §15; change `add-agent-configuration`), собирает ядро через `buildAgentCore`, поднимает `AcpAgentServer` на серверном транспорте и отвечает за логи, сигналы и коды выхода. Команда `codelab-agent config check [--cwd <dir>]` проверяет конфиг без запуска сервера: разбор аргументов — `lib/src/cli/config_cli.dart`, тексты, правила и коды выхода — общий `ConfigCommands` из `codelab_agent_io` (design.md change `add-agent-configuration`, D13); свой вывод здесь не формируется. Поведения агента здесь нет: оно в пакетах `codelab_agent_*`.
 
 ## 2. Границы
 

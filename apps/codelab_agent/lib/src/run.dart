@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:args/args.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
+import 'cli/config_cli.dart';
 import 'cli/serve_args.dart';
 import 'host/agent_host.dart';
 import 'host/serve_config.dart';
@@ -26,9 +28,42 @@ Future<int> runCodelabAgent(
   List<String> args, {
   required Map<String, String> environment,
 }) async {
+  // Командная строка разбирается один раз. `config` — отдельная команда рядом
+  // с `serve` (D13): сервер, транспорт и логи ей не нужны, поэтому она
+  // выходит до загрузки конфига `serve`.
+  final ArgResults top;
+  try {
+    top = parseCommandLine(args);
+  } on UsageError catch (error) {
+    // Справка той команды, которую пользователь начал писать: после
+    // `config check --bogus` флаги `serve` только запутали бы.
+    stderr
+      ..writeln('codelab-agent: ${error.message}')
+      ..writeln()
+      ..writeln(args.firstOrNull == 'config' ? configUsage() : serveUsage());
+    return usageExit;
+  }
+  if (top.command case final config? when config.name == 'config') {
+    try {
+      return runConfigCommand(
+        config,
+        environment: environment,
+        cwd: Directory.current.path,
+        out: stdout,
+        err: stderr,
+      );
+    } on Object catch (error) {
+      // Как у `serve` (`serve.failed`): неожиданное исключение — код `1` и
+      // одна строка в stderr, а не код `255` и трасса Dart. Трасса не
+      // печатается и в stdout ничего не попадает.
+      stderr.writeln('codelab-agent: config failed: $error');
+      return failureExit;
+    }
+  }
+
   final ServeOptions options;
   try {
-    options = parseServeArgs(args, environment: environment);
+    options = parseServeResults(top, environment: environment);
   } on UsageError catch (error) {
     stderr
       ..writeln('codelab-agent: ${error.message}')
@@ -96,7 +131,7 @@ int _reportInvalidConfig(
   ServeOptions options,
   Logger logger,
 ) {
-  logStartupWarnings(logger, options, loaded);
+  logStartupWarnings(logger, loaded);
   for (final issue in loaded.issues) {
     stderr.writeln('codelab-agent: $issue');
   }

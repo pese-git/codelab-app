@@ -224,16 +224,17 @@
 
 ## 10. Подкоманда `codelab-agent config check` (D13)
 
-- [ ] 10.1 `[agent]` Тест `codelab_agent_io/test/cli/config_commands_test.dart` (agent-configuration «Подкоманда config check», все сценарии):
+- [x] 10.1 `[agent]` Тест `codelab_agent_io/test/cli/config_commands_test.dart` (agent-configuration «Подкоманда config check», все сценарии):
   - `Sources:`, строки проблем с файлом, строкой, столбцом и подсказкой, предупреждения (включая `config.legacy_found`), итоговая строка;
   - коды `0`/`1`;
   - `check` ничего не пишет;
   - `sk-test-secret` из `api_key` не встречается в выводе.
 
   Красный.
-- [ ] 10.2 `[agent]` `lib/src/cli/config_commands.dart` (`ConfigCommands`, `CheckOptions`, `ConfigCommandResult`), экспорт из бареля `codelab_agent_io`. 10.1 зелёный.
-- [ ] 10.3 `[agent]` Процессный тест `apps/codelab_agent/test/config_command_process_test.dart` (agent-binary «Подкоманда config бинаря», оба сценария): `config check` без сервера — `Config: valid`, код `0`, stdin не читается; `config set …` и `config migrate` → `64` и справка. Красный.
-- [ ] 10.4 `[agent]` Команда `config` с единственной подкомандой `check` в `run.dart`/`serve_args.dart` (`package:args`), вызов `ConfigCommands`. 10.3 зелёный. **Конец итерации 3.**
+- [x] 10.2 `[agent]` `lib/src/cli/config_commands.dart` (`ConfigCommands`, `CheckOptions`, `ConfigCommandResult`), экспорт из бареля `codelab_agent_io`. 10.1 зелёный.
+- [x] 10.3 `[agent]` Процессный тест `apps/codelab_agent/test/config_command_process_test.dart` (agent-binary «Подкоманда config бинаря», оба сценария): `config check` без сервера — `Config: valid`, код `0`, stdin не читается; `config set …` и `config migrate` → `64` и справка. Красный.
+- [x] 10.4 `[agent]` Команда `config` с единственной подкомандой `check` в `run.dart`/`serve_args.dart` (`package:args`), вызов `ConfigCommands`. 10.3 зелёный. **Конец итерации 3.**
+- [x] 10.5 `[agent]` Исправления по ревью итерации 3 (agent-configuration «Подкоманда config check» — сценарии «Предупреждения не делают конфиг невалидным», «Подсказка о codelab.toml», «CODELAB_CONFIG учитывается», «Несуществующий каталог», «Ошибка использования из окружения»; agent-binary «Подкоманда config бинаря» — сценарии «Ошибка разбора аргументов config», «Общая справка называет config check»): сначала красные тесты в `config_commands_test.dart` и `config_command_process_test.dart`, затем код — распознавание неизвестных `CODELAB_*` в `ConfigLoader` (`config.env.unknown`, D13), текст `config.legacy_found` без повтора пути из локации, `ConfigUsageException` → `64` с пустым stdout, ошибка разбора `config …` → `64` и справка `config`, `config check` в общей справке бинаря.
 
 ## 11. Мост `codelab_setup` и `codelab config check` (D14, OQ2 (а))
 

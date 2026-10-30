@@ -800,11 +800,21 @@ YAML-файле предупреждения нет: пользователь у
 шум. С `--llm-script` файлы не ищутся (слои 2–4 не читаются, §15.6). Текст предупреждения:
 
 ```text
-codelab.toml is not used by the Dart agent: <files>. Move the settings to config.yaml manually; the key mapping is in docs/architecture/proposals/agent-core/15-configuration.md, section 15.7.
+codelab.toml is not used by the Dart agent. Move the settings to config.yaml manually; the key mapping is in docs/architecture/proposals/agent-core/15-configuration.md, section 15.7. Also found: <other files>.
 ```
 
-`codelab-agent config check` и `codelab config check` печатают ту же строку как предупреждение
-(`warning: …`); код выхода от неё не меняется. Агент без `config.yaml` и без флагов провайдера
+Хвост `Also found: …` печатается, только если найдено несколько файлов; первый файл — локация предупреждения, полный список — в поле `files` события.
+
+`codelab-agent config check` и `codelab config check` печатают его строкой
+`warning: <location>: <message>`, как любое предупреждение (`ConfigIssue.toString()` с префиксом
+`warning: `). Локация — первый найденный файл; текст не повторяет путь, уже стоящий в локации, и
+перечисляет только остальные найденные файлы, если они есть:
+
+```text
+warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Move the settings to config.yaml manually; …
+```
+
+Код выхода от предупреждения не меняется, в счётчик `Config: invalid (issues: <n>)` оно не входит. Агент без `config.yaml` и без флагов провайдера
 стартует с ошибкой `agent.default_model: required` (код `64`), и предупреждение стоит рядом в stderr.
 
 **Как переносить.** Ключ из столбца «Новый ключ» записывается в `config.yaml` по схеме §15.4;

@@ -3,6 +3,9 @@
 /// stdio-транспорт MCP-серверов (design.md change `add-agent-mcp-client`, D9).
 library;
 
+export 'src/cli/exit_codes.dart';
+export 'src/cli/config_commands.dart'
+    show CheckOptions, ConfigCommandResult, ConfigCommands;
 export 'src/config/config_loader.dart'
     show ConfigLoader, ConfigUsageException, checkConfigFileName, codelabHomeOf;
 export 'src/env/host_path.dart';

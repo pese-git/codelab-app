@@ -3,6 +3,8 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart'
     show ConfigUsageException, checkConfigFileName, codelabHomeOf;
 
+import 'config_cli.dart';
+
 /// Транспорт команды `serve`.
 enum ServeTransport { stdio, ws }
 
@@ -61,7 +63,6 @@ final class ServeOptions {
     required this.logLevel,
     required this.logFile,
     required this.codelabHome,
-    required this.warnings,
     required this.configPath,
     required this.flags,
     required this.environment,
@@ -98,9 +99,6 @@ final class ServeOptions {
   /// Корень состояния (`CODELAB_HOME`, по умолчанию `~/.codelab`).
   final String codelabHome;
 
-  /// Предупреждения разбора (неизвестные `CODELAB_*`) для лога.
-  final List<String> warnings;
-
   /// `--config <path>`: дополнительный файл конфигурации (слой 4а); `null` —
   /// флага нет (тогда действует `CODELAB_CONFIG`).
   final String? configPath;
@@ -125,33 +123,6 @@ final class ServeOptions {
 
 const _cli = 'cli';
 const _scripted = 'scripted';
-
-/// Переменные `CODELAB_*`, которые знает ядро и его хосты (§15.6); другие
-/// дают предупреждение — опечатка не должна молча игнорироваться.
-const _knownVariables = {
-  'CODELAB_HOME',
-  'CODELAB_CONFIG',
-  'CODELAB_MODEL',
-  'CODELAB_API_KEY',
-  'CODELAB_PERMISSION_MODE',
-  'CODELAB_PROFILE',
-  'CODELAB_LOG_LEVEL',
-  'CODELAB_LOG_FILE',
-  'CODELAB_TOOLS',
-  'CODELAB_MAX_STEPS',
-  'CODELAB_DEBUG_SECRETS',
-  'CODELAB_DEBUG_LLM_SNAPSHOT',
-  'CODELAB_AGENT_TOKEN',
-  'CODELAB_POWER_HELPER',
-  'CODELAB_TEST_SECRET_STORE',
-};
-
-/// Семейства переменных, известные целиком (§15.6).
-const _knownFamilies = [
-  'CODELAB_SECRET_',
-  'CODELAB_PROVIDER_',
-  'CODELAB_REDACTED_',
-];
 
 final ArgParser _serveParser = ArgParser()
   ..addFlag(
@@ -209,12 +180,27 @@ final ArgParser _serveParser = ArgParser()
   // `add-llm-script-session-store`).
   ..addOption('sessions-dir', hide: true);
 
-final ArgParser _parser = ArgParser()..addCommand('serve', _serveParser);
+final ArgParser _parser = ArgParser()
+  ..addCommand('serve', _serveParser)
+  ..addCommand('config', configParser);
+
+/// Разбирает верхний уровень командной строки: `serve` или `config`.
+///
+/// Почему отдельная функция: `run.dart` выбирает команду по результату, а
+/// каждая команда сама проверяет свои аргументы. Ошибка разбора — [UsageError].
+ArgResults parseCommandLine(List<String> args) {
+  try {
+    return _parser.parse(args);
+  } on ArgParserException catch (error) {
+    throw UsageError(error.message);
+  }
+}
 
 /// Текст справки `codelab-agent`; `--llm-script` и `--sessions-dir` в нём
 /// нет.
 String serveUsage() =>
-    'Usage: codelab-agent serve (--stdio | --ws) [options]\n\n'
+    'Usage: codelab-agent serve (--stdio | --ws) [options]\n'
+    '       codelab-agent config check [--cwd <dir>]\n\n'
     '${_serveParser.usage}';
 
 /// Разбирает [args] и [environment] по правилам §15.6: флаг сильнее
@@ -224,13 +210,16 @@ String serveUsage() =>
 ServeOptions parseServeArgs(
   List<String> args, {
   required Map<String, String> environment,
+}) => parseServeResults(parseCommandLine(args), environment: environment);
+
+/// То же, что [parseServeArgs], для уже разобранной командной строки [top].
+///
+/// Почему отдельная функция: `run.dart` разбирает аргументы один раз, чтобы
+/// выбрать между `serve` и `config`, и не должен парсить их второй раз.
+ServeOptions parseServeResults(
+  ArgResults top, {
+  required Map<String, String> environment,
 }) {
-  final ArgResults top;
-  try {
-    top = _parser.parse(args);
-  } on ArgParserException catch (error) {
-    throw UsageError(error.message);
-  }
   final serve = top.command;
   if (serve == null || serve.name != 'serve') {
     throw const UsageError('missing command: codelab-agent serve');
@@ -372,14 +361,6 @@ ServeOptions parseServeArgs(
     configPath: configPath,
     flags: flags,
     environment: Map.unmodifiable(environment),
-    warnings: [
-      for (final name in environment.keys.toList()..sort())
-        if (name.startsWith('CODELAB_') &&
-            !_knownVariables.contains(name) &&
-            !_knownFamilies.any(name.startsWith) &&
-            name != serve.option('token-env'))
-          'unknown environment variable $name',
-    ],
   );
 }
 
