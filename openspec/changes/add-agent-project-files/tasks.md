@@ -3,7 +3,7 @@
 Метки исполнителей:
 - `[agent]` — `codelab_agent_core`, `codelab_agent_io`, `apps/codelab_agent` и документы ядра;
 - `[protocol]` — `codelab_agent_acp` (публикация команд, реплей, опция `agent`, фабрика conformance) и фикстуры `codelab_acp_testing`;
-- `[client]` — `apps/codelab_cli`, только тест вывода `codelab config check` (D13).
+- `[client]` — `apps/codelab_cli`: тест вывода `codelab config check` (D13) и раскрытие `~` в `CODELAB_HOME` (D17).
 
 Задач `[desktop]` нет. Клиенты уже показывают `available_commands_update` (`CommandCatalog`) и любые `configOptions`, поэтому `codelab_client_*`, `apps/codelab_desktop` и `codelab_acp_protocol` не меняются (proposal, «Impact»).
 
@@ -215,17 +215,27 @@
 
 ## 10. config check (итерация 4; D13)
 
-- [ ] 10.1 `[agent]` Тесты `codelab_agent_io/test/cli/config_commands_test.dart` (agent-configuration «config check показывает диагностику файлов проекта»):
+- [x] 10.1 `[agent]` Тесты `codelab_agent_io/test/cli/config_commands_test.dart` (agent-configuration «config check показывает диагностику файлов проекта»):
   - битое определение → строка `warning:` с путём, строкой и столбцом, `Config: valid`, код `0`;
   - `info` не печатается;
   - невалидный конфиг → файлы не проверяются;
   - в выводе нет фрагментов файла.
 
   Красный.
-- [ ] 10.2 `[agent]` `ConfigCommands.check` вызывает `ProjectFilesLoader` и проверки ядра. 10.1 зелёный; `apps/codelab_agent/test/config_command_process_test.dart` дополнен сценарием с битым шаблоном.
-- [ ] 10.3 `[client]` Тест `apps/codelab_cli/test/config_command_test.dart`: `codelab config check --cwd` с `$CODELAB_HOME/prompts/Review.md` печатает ту же строку `warning:`, что `codelab-agent config check` (сценарий «Одинаково у двух бинарей»). Кода в CLI не требуется (мост `codelab_setup`); если тест красный — правка только в `codelab_agent_io`.
+- [x] 10.2 `[agent]` `ConfigCommands.check` вызывает `ProjectFilesLoader` и проверки ядра. 10.1 зелёный; `apps/codelab_agent/test/config_command_process_test.dart` дополнен сценарием с битым шаблоном.
+- [x] 10.3 `[client]` Тест `apps/codelab_cli/test/config_command_test.dart`: `codelab config check --cwd` с `$CODELAB_HOME/prompts/Review.md` печатает ту же строку `warning:`, что `codelab-agent config check` (сценарий «Одинаково у двух бинарей»). Кода в CLI не требуется (мост `codelab_setup`); если тест красный — правка только в `codelab_agent_io`.
+- [x] 10.4 Исправления по ревью итерации 4 (agent-configuration «config check показывает диагностику файлов проекта»; D13):
+  - [x] `[agent]` тесты `config_commands_test.dart`: сценарии «Битое определение агента» (префикс `unknown frontmatter key`, без имени ключа), «Недоверенный проект» (две строки `note:`, прочих `info` нет), «Сбой загрузчика» (`CODELAB_HOME='~/x'`), «Таймаут загрузки» (фейковый `ProjectFilesSource`); канонический `cwd` через `LocalExecutionEnv.realpath` (symlink на доверенный корень — доверен). Красные;
+  - [x] `[agent]` `ConfigCommands.check` → `Future<ConfigCommandResult>`, канонический `cwd`, строки `note:`, перехват исключения и таймаут 5 с; вызывающие `apps/codelab_agent` и мост `codelab_setup` ждут результат. Тесты выше зелёные;
+  - [x] `[client]` `apps/codelab_cli`: ожидание асинхронного `check`; `config_command_test.dart` — «Одинаково у двух бинарей» (`not a valid command name`) и сбой загрузчика с той же строкой, что у `codelab-agent`.
 
-**Критерий итерации 4.** Диагностика R-15 «битый YAML — диагностика с именем файла» видна в `config check` обоих бинарей; коды выхода прежние.
+- [x] 10.5 `CODELAB_HOME` с `~` раскрывается в домашний каталог (решение пользователя 2026-10-30; D17; agent-configuration «Корень состояния CODELAB_HOME», codelab-cli «Домашний каталог CLI CODELAB_HOME»):
+  - [x] `[agent]` тесты `codelab_agent_io/test/config/codelab_home_test.dart`: `~` → `HOME`, `~/x` → `HOME/x`, `USERPROFILE` при отсутствующем или пустом `HOME`, абсолютное значение — как есть; `~bob/x` и `~\x` — `ConfigUsageException` с `CODELAB_HOME: ~user is not supported, use an absolute path`; `~` и `~/x` при отсутствующих или пустых `HOME` и `USERPROFILE` — `ConfigUsageException` с `CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an absolute path`; тот же тест — `trusted_projects: [~/proj]` раскрывается тем же правилом. В `config_loader_test.dart` (или там же) — сценарий «Тильда раскрывается в HOME»: слой 2 из `<HOME>/cl/config.yaml`, каталог `<cwd>/~` не создан. В `config_commands_test.dart` — «Пользовательская область файлов проекта»: `CODELAB_HOME='~/cl'`, шаблон в `<HOME>/cl/prompts/`, строки `could not be read` нет; сценарий «Сбой загрузчика» переведён с `~/x` на относительный путь к несуществующему каталогу. Красные;
+  - [x] `[agent]` `codelabHomeOf` раскрывает `~` и `~/…` одной приватной функцией с `ConfigLoader._canonicalEntry` (`trusted_projects`): сейчас там `HOME ?? USERPROFILE` без проверки на пустой `HOME`, правило должно стать одним; doc-комментарий — почему/для чего/как (D17); `codelabHomeOf` бросает `ConfigUsageException` для `~user/…`, `~\…` и тильды без домашнего каталога; `apps/codelab_agent/test/config_command_process_test.dart` — процесс с `CODELAB_HOME='~/cl'` и `HOME=<tmp>` читает `<tmp>/cl/config.yaml`, а `config check` и `serve --stdio` с `CODELAB_HOME='~bob/cl'` — код `64` и текст в stderr (сценарии «~user — ошибка использования», «Тильда без домашнего каталога»); `serve --stdio --llm-script` с `CODELAB_HOME='~bob/cl'` запускается и проводит ход без кода `64` (сценарий «Сценарий --llm-script не проверяет CODELAB_HOME»; хост не вызывает `codelabHomeOf` в этом режиме). Тесты выше зелёные;
+  - [x] `[client]` тесты `apps/codelab_cli/test/home_test.dart` с теми же входами, что у агента: `~`, `~/x`, `USERPROFILE`; `~user/x` и `~\x` — `UsageError` с тем же текстом, что у агента; `~/x` без домашнего каталога — `UsageError` с тем же текстом, что у агента; процессный тест `codelab -p hi` с `CODELAB_HOME='~bob/cl'` — код `64`; `config_command_test.dart` — одинаковость вывода двух бинарей проверяется на ошибке `~bob/x` (код `64`, тот же текст, что у `codelab-agent`); сбой загрузчика проверяется только в `codelab_agent_io` на подменённом источнике. Красные;
+  - [x] `[client]` `CodelabHome.resolve` раскрывает `~` и `~/…`; `~user/…`, `~\…` и тильда без домашнего каталога — `UsageError` (код `64`) с текстами D17; doc-комментарий обновлён (D17). Тесты выше зелёные;
+
+**Критерий итерации 4.** Диагностика R-15 «битый YAML — диагностика с именем файла» видна в `config check` обоих бинарей; коды выхода прежние. `CODELAB_HOME='~/…'` указывает на домашний каталог у обоих бинарей.
 
 ## 11. Матрица, сверка документов, DoD (итерация 5)
 

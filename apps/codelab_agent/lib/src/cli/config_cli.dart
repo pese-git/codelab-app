@@ -34,13 +34,13 @@ String configUsage() =>
 /// парсером. Без подкоманды `check`, с неизвестной подкомандой или лишними
 /// аргументами — справка в stderr и [usageExit]. Тексты и коды `check` даёт
 /// общий `ConfigCommands` (D13): `codelab config check` печатает то же.
-int runConfigCommand(
+Future<int> runConfigCommand(
   ArgResults config, {
   required Map<String, String> environment,
   required String cwd,
   required IOSink out,
   required IOSink err,
-}) {
+}) async {
   final check = config.command;
   if (check == null || check.name != 'check' || check.rest.isNotEmpty) {
     final rest = check == null ? config.rest : check.rest;
@@ -54,7 +54,7 @@ int runConfigCommand(
       ..writeln(configUsage());
     return usageExit;
   }
-  final result = ConfigCommands().check(
+  final result = await ConfigCommands().check(
     CheckOptions(cwd: check.option('cwd') ?? cwd, environment: environment),
   );
   result.stdout.forEach(out.writeln);

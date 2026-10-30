@@ -10,9 +10,9 @@
 /// Для чего: единственная точка входа клиентов в `ConfigCommands`; импортируется
 /// только composition root клиента (точка входа CLI, `dart:io`).
 ///
-/// Как использовать: `ConfigCommands().check(CheckOptions(cwd: …, environment:
-/// Platform.environment))`, затем вывести `stdout`/`stderr` результата и
-/// завершиться с `exitCode` — одним из `configValidExit` (0),
+/// Как использовать: `await ConfigCommands().check(CheckOptions(cwd: …,
+/// environment: Platform.environment))`, затем вывести `stdout`/`stderr`
+/// результата и завершиться с `exitCode` — одним из `configValidExit` (0),
 /// `configInvalidExit` (1), `configUsageExit` (64). Остальное из §12.4.2
 /// (`FileAgentConfigStore`, `systemSecretStore()`) придёт со своими
 /// потребителями.

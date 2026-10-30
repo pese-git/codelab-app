@@ -107,22 +107,29 @@ Future<int> _run(
 /// `ConfigCommands` (design.md change `add-agent-configuration`, D13, D14).
 /// Ни `ClientWorkspace`, ни транспорт не создаются, поэтому процесс агента не
 /// стартует. Несуществующая папка `--cwd` даёт `64` внутри моста.
-int _runConfigCheck(
+Future<int> _runConfigCheck(
   CliOptions options,
   Map<String, String> environment,
   CliIo io,
-) {
-  final result = ConfigCommands().check(
-    CheckOptions(
-      // Путь как есть, без normalize: `link/../proj` ОС разрешает через
-      // symlink, а текст ошибки совпадает с `codelab-agent` (D14).
-      cwd: options.cwd ?? Directory.current.path,
-      environment: environment,
-    ),
-  );
-  result.stdout.forEach(io.stdout.writeln);
-  result.stderr.forEach(io.stderr.writeln);
-  return result.exitCode;
+) async {
+  try {
+    final result = await ConfigCommands().check(
+      CheckOptions(
+        // Путь как есть, без normalize: `link/../proj` ОС разрешает через
+        // symlink, а текст ошибки совпадает с `codelab-agent` (D14).
+        cwd: options.cwd ?? Directory.current.path,
+        environment: environment,
+      ),
+    );
+    result.stdout.forEach(io.stdout.writeln);
+    result.stderr.forEach(io.stderr.writeln);
+    return result.exitCode;
+  } on Object catch (error) {
+    // Как у `codelab-agent config`: неожиданное исключение — одна строка и
+    // код `1`, а не трасса Dart и код `255`.
+    io.stderr.writeln('codelab: config failed: $error');
+    return failureExit;
+  }
 }
 
 Future<int> _runRepl(
