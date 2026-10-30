@@ -12,8 +12,8 @@ void main() {
     expect([loaded, kind, issue], everyElement(isNull));
   });
 
-  test('io.dart exposes the shared config check command', () {
-    final result = ConfigCommands().check(
+  test('io.dart exposes the shared config check command', () async {
+    final result = await ConfigCommands().check(
       const CheckOptions(cwd: '/definitely/not/here', environment: {}),
     );
 

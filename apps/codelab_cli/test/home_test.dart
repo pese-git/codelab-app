@@ -25,6 +25,66 @@ void main() {
     );
   });
 
+  test('CODELAB_HOME with ~ or ~/x expands to the home folder', () {
+    const env = {'HOME': '/Users/me'};
+    expect(
+      CodelabHome.resolve({...env, 'CODELAB_HOME': '~'}).path,
+      '/Users/me',
+    );
+    expect(
+      CodelabHome.resolve({...env, 'CODELAB_HOME': '~/x'}).path,
+      '/Users/me/x',
+    );
+    expect(
+      CodelabHome.resolve({'USERPROFILE': '/u', 'CODELAB_HOME': '~/x'}).path,
+      '/u/x',
+    );
+  });
+
+  test(
+    'CODELAB_HOME with ~user/x is a usage error (same text as the agent)',
+    () {
+      expect(
+        () =>
+            CodelabHome.resolve({'HOME': '/Users/me', 'CODELAB_HOME': '~u/x'}),
+        throwsA(
+          isA<UsageError>().having(
+            (e) => e.message,
+            'message',
+            'CODELAB_HOME: ~user is not supported, use an absolute path',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(r'CODELAB_HOME with ~\x is a usage error', () {
+    expect(
+      () => CodelabHome.resolve({'HOME': '/Users/me', 'CODELAB_HOME': r'~\x'}),
+      throwsA(
+        isA<UsageError>().having(
+          (e) => e.message,
+          'message',
+          contains('~user is not supported'),
+        ),
+      ),
+    );
+  });
+
+  test('CODELAB_HOME with ~ and an empty HOME is a usage error', () {
+    expect(
+      () => CodelabHome.resolve({'CODELAB_HOME': '~/x', 'HOME': ''}),
+      throwsA(
+        isA<UsageError>().having(
+          (e) => e.message,
+          'message',
+          'CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an '
+              'absolute path',
+        ),
+      ),
+    );
+  });
+
   test('USERPROFILE is the home folder on Windows', () {
     expect(
       CodelabHome.resolve({'USERPROFILE': r'C:\Users\me'}).path,

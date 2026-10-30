@@ -81,6 +81,127 @@ agent:
     expect(out.last, startsWith('Config: invalid (issues: '));
   }, timeout: const Timeout(Duration(seconds: 90)));
 
+  // Диагностика файлов проекта (change `add-agent-project-files`, D13):
+  // битый шаблон пользователя виден в `config check` бинаря, конфиг остаётся
+  // валидным, код выхода прежний.
+  test('config check: a broken template is a warning line, code 0', () async {
+    Directory('${temp.path}/home/prompts').createSync(recursive: true);
+    File('${temp.path}/home/config.yaml').writeAsStringSync('''
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    models:
+      m: {}
+agent:
+  default_model: p/m
+''');
+    File('${temp.path}/home/prompts/Review.md').writeAsStringSync('body\n');
+
+    final (code, agent) = await run(['config', 'check']);
+
+    expect(code, 0, reason: agent.stderrText);
+    final out = <String>[];
+    String? line;
+    while ((line = await agent.nextStdoutLine()) != null) {
+      out.add(line!);
+    }
+    expect(
+      out,
+      contains(
+        allOf(
+          startsWith('warning: '),
+          contains('home/prompts/Review.md'),
+          contains('not a valid command name'),
+        ),
+      ),
+    );
+    expect(out.last, 'Config: valid');
+  }, timeout: const Timeout(Duration(seconds: 90)));
+
+  // «Сбой загрузчика» (change `add-agent-project-files`, D13, D14):
+  // D17: `CODELAB_HOME=~user/x` — ошибка использования, код 64; тот же текст
+  // и тот же код, что у `codelab config check` (сбой загрузчика файлов
+  // проекта в процессе не воспроизвести, он покрыт фейковым источником).
+  test(
+    'config check: CODELAB_HOME=~user/x is a usage error, code 64',
+    () async {
+      final agent = await AgentProcess.start(
+        ['config', 'check', '--cwd', project],
+        environment: {'CODELAB_HOME': '~bob/x', 'HOME': '${temp.path}/h'},
+        workingDirectory: project,
+      );
+      addTearDown(() async {
+        agent.kill(ProcessSignal.sigkill);
+        await agent.exitCode;
+      });
+      final code = await agent.exitCode.timeout(const Duration(seconds: 30));
+
+      expect(code, 64, reason: agent.stderrText);
+      expect(
+        agent.stderrText,
+        contains(
+          'config check: CODELAB_HOME: ~user is not supported, use an '
+          'absolute path',
+        ),
+      );
+      expect(await agent.nextStdoutLine(), isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
+
+  // D17, 10.5 (защита от регрессий): `serve --stdio` с `~bob/cl` завершается
+  // кодом 64 с текстом ошибки до чтения stdin.
+  test(
+    'serve --stdio: CODELAB_HOME=~user/cl is code 64, stdin not read',
+    () async {
+      final agent = await AgentProcess.start(
+        ['serve', '--stdio'],
+        environment: {'CODELAB_HOME': '~bob/cl', 'HOME': '${temp.path}/h'},
+        workingDirectory: project,
+      );
+      addTearDown(() async {
+        agent.kill(ProcessSignal.sigkill);
+        await agent.exitCode;
+      });
+      final code = await agent.exitCode.timeout(const Duration(seconds: 30));
+
+      expect(code, 64, reason: agent.stderrText);
+      expect(
+        agent.stderrText,
+        contains('CODELAB_HOME: ~user is not supported, use an absolute path'),
+      );
+      expect(await agent.nextStdoutLine(), isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
+
+  test('config check: CODELAB_HOME=~/x reads <HOME>/x/config.yaml', () async {
+    Directory('${temp.path}/h/x').createSync(recursive: true);
+    File('${temp.path}/h/x/config.yaml').writeAsStringSync('budgett: {}\n');
+
+    final agent = await AgentProcess.start(
+      ['config', 'check', '--cwd', project],
+      environment: {'CODELAB_HOME': '~/x', 'HOME': '${temp.path}/h'},
+      workingDirectory: project,
+    );
+    addTearDown(() async {
+      agent.kill(ProcessSignal.sigkill);
+      await agent.exitCode;
+    });
+    final code = await agent.exitCode.timeout(const Duration(seconds: 30));
+
+    // Неизвестный ключ `budgett` в файле под тильдой даёт ошибку конфигурации:
+    // значит, файл прочитан.
+    expect(code, 1, reason: agent.stderrText);
+    final out = <String>[];
+    String? line;
+    while ((line = await agent.nextStdoutLine()) != null) {
+      out.add(line!);
+    }
+    expect('${out.join('\n')}\n${agent.stderrText}', contains('budgett'));
+  }, timeout: const Timeout(Duration(seconds: 90)));
+
   test('config check --cwd <dir> reads that directory', () async {
     final other = '${temp.path}/other';
     Directory('$other/.codelab').createSync(recursive: true);
