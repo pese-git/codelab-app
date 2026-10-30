@@ -424,6 +424,49 @@ void main() {
       },
     );
   });
+
+  group('agent definitions in the log', () {
+    test(
+      'a broken definition logs a diagnostic without its body (D14)',
+      () async {
+        port.files = ProjectFiles(
+          agents: [
+            MarkdownFile(
+              path: '/work/a/.codelab/agents/bad.md',
+              scope: ExtensionScope.project,
+              body: 'Never log sk-test-secret anywhere.',
+              bodyLine: 6,
+              frontmatter: const ConfigTree(
+                kind: ConfigLayerKind.project,
+                source: '/work/a/.codelab/agents/bad.md',
+                values: {
+                  'name': 'bad',
+                  'description': 'Broken',
+                  'mode': 'no-such-mode',
+                },
+              ),
+            ),
+          ],
+        );
+        final core = build(
+          config: CoreConfig(
+            defaultModel: testModel,
+            trustedProjects: const ['/work/a'],
+          ),
+        );
+
+        await core.runtime.createSession(SessionSpec(cwd: '/work/a'));
+
+        final logs = logger.eventsOf('project_files.diagnostic');
+        expect(logs, isNotEmpty);
+        expect(logs.first.fields['path'], '/work/a/.codelab/agents/bad.md');
+        expect(
+          [for (final r in logger.records) r.toString()].join('\n'),
+          isNot(contains('sk-test-secret')),
+        );
+      },
+    );
+  });
 }
 
 /// Порт-фейк: записывает запросы, отдаёт [files], умеет падать и ждать.
