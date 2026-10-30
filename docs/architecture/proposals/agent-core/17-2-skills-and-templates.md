@@ -71,16 +71,24 @@
 не больше 50 путей в байтовом порядке, без каталогов на `.` и без самого `SKILL.md`. Читает их
 модель инструментом `read` по абсолютному пути (§17.2.3).
 
-**Шаблоны промптов** — `*.md` без рекурсии:
+**Шаблоны промптов** — `*.md` без рекурсии. Корни 1 и 2 — этап 8, задача 8.7 (change
+`add-agent-project-files`, D7): их читает общий загрузчик файлов проекта `ProjectFilesLoader`
+вместе с `AGENTS.md` и определениями агентов, а не загрузчик skills; корень 3 — после MVP.
 
 | # | Каталог | Область | Когда читается |
 |---|---|---|---|
-| 1 | `<cwd>/.codelab/prompts/*.md` | `project` | только для доверенного проекта (`prompts.*`, §15.3) |
+| 1 | `<cwd>/.codelab/prompts/*.md` | `project` | только если канонический `cwd` сессии в `trusted_projects` (`CoreConfig.trustedProjects`, §15.3); иначе — одна диагностика `info` `untrusted_project` |
 | 2 | `$CODELAB_HOME/prompts/*.md` | `user` | всегда |
-| 3 | каждый путь из `prompts.templates_dirs` | `extra` | как `extra_roots` у skills |
+| 3 | каждый путь из `prompts.templates_dirs` | `extra` | после MVP; как `extra_roots` у skills |
+
+Чтение — с локальной файловой системы агента через `BoundedEnv` корня каталога (`<cwd>/.codelab/prompts`
+или `$CODELAB_HOME`): файл-symlink наружу пропускается с `outside_root`. Не больше 100 файлов на
+каталог (`limit_exceeded`), файл больше 64 КиБ не читается (`too_large`).
 
 Имя команды — имя файла без `.md`, по тому же правилу, что `name` skill. Файл с другим именем
-(`Review.md`, `my_cmd.md`) — диагностика `warning`, файл пропущен. Файл, на который ссылается
+(`Review.md`, `my_cmd.md`) — диагностика `warning`, файл пропущен. Имена всех встроенных команд
+§13.4 и `skill` зарезервированы с этапа 8, ещё до появления самих команд: шаблон `status.md` не
+должен работать сегодня и молча пропасть, когда появится `/status` (`reserved_name`, SKL-7). Файл, на который ссылается
 переопределение из §11.6 (`prompts.system`, `modes.*`, `compaction.*`), шаблоном не считается
 (диагностика `info`).
 
@@ -377,7 +385,8 @@ expandCommand(text, catalog, plan):
 2. cmd — встроенная команда плана → BuiltinCommand(cmd, raw)          // §13.6, R-08
 3. после MVP: cmd — команда плагина из plan.pluginCommands → PluginInvocation(command, raw)   // §17.14.3
 4. t := catalog.template(cmd):
-   args := splitArguments(raw)      // FormatException → CommandFailed("Unterminated quote in arguments.")
+   args := splitArguments(raw)      // FormatException → CommandFailed("Unterminated quote in arguments.");
+                                    // до change встроенных команд — незакрытая кавычка закрывается концом ввода (ниже)
    body := substituteArguments(t.body, raw, args)
    вернуть Expanded(body, CommandRef(template, t.name, raw))
 5. cmd начинается с "skill:" и skills в плане:
@@ -406,6 +415,12 @@ The user invoked the skill "{{name}}". Follow its instructions for this request.
 набрал его сам. Остальные блоки промпта (картинки, ресурсы) идут после развёрнутого текста в
 исходном порядке. `CommandFailed` — ответ `agent_message_chunk` с текстом и `end_turn`, модель
 не вызывается, в журнал ничего не пишется (R-08).
+
+**Этап 8.7 (только шаблоны).** Механизма «ответ агента без модели» до change встроенных команд нет
+(решение пользователя 2026-10-30, OQ1 design.md change `add-agent-project-files`), поэтому до него действуют два отступления (D8):
+незакрытая кавычка закрывается концом ввода (`/review "error handling` → `$1 = error handling`), а
+шаги 5–7 не выполняются — `/x` без шаблона `x` уходит модели как обычный текст (поведение этапа 4).
+Change встроенных команд вводит `CommandFailed` и ответ «Unknown command» как изменение поведения.
 
 **Аргументы.** `splitArguments(raw)`: разделитель — пробельные символы; `"…"` и `'…'`
 группируют слово (кавычки снимаются); внутри `"…"` экранируются `\"` и `\\`, внутри `'…'`

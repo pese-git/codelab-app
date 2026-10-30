@@ -99,6 +99,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | `prompts.*` (включая `append_system`, `append_system_text`, §11.6.1) | нет | да | проект в `trusted_projects` |
 | `loop.*` (C-07, C-08), кроме ключей `loop.final_response.*` из строк §17.12 | да | да | — |
 | `tools.disabled` (T-26) | да — только добавляет (объединение слоёв, §6.3.8) | да | — |
+| `tools.project_context.max_bytes` | да — только уменьшение (как `budget.*`; design.md change `add-agent-project-files`, D5) | да | увеличение — проект в `trusted_projects` |
 | `agent.effort` | да | да | — |
 | `redact.enabled = true`, добавление слоёв `redact.layers`, удаление записей `redact.allowlist.*` | да | да | — |
 | `redact.enabled = false`, удаление слоёв, новые `redact.allowlist.*`, `redact.exempt_tools` | нет | да | проект в `trusted_projects` |
@@ -339,7 +340,7 @@ providers:
 | `output.max_lines` | int | `2000` | усечение вывода (§6.3) |
 | `output.max_bytes` | int | `51200` | 50 КиБ |
 | `untrusted_paths` | string[] | `["node_modules", ".dart_tool", "vendor"]` | каталоги, вывод `read`/`search` из которых считается недоверенным (§6.3.6, §10.6) |
-| `project_context.max_bytes` | int | `32768` | лимит `AGENTS.md` (§11.5) |
+| `project_context.max_bytes` | int | `32768` | общий бюджет файлов контекста проекта (§11.5), `0..262144`; `0` — контекст не читается (design.md change `add-agent-project-files`, D5) |
 | `disabled` | string[] | `[]` | выключенные инструменты: имена встроенных, `mcp__<server>__<tool>`, `mcp__<server>__*`, `mcp__*`; слои 2–4 объединяются (§6.3.8, T-26) |
 | `load` | `"all"` \| `"essential"` | `"all"` | после MVP: режим загрузки инструментов (T-27, §17.11.9) |
 | `mounted` | string[] | `[]` | после MVP: селекторы §6.3.8, подключённые в режиме `essential`; слои 2–4 объединяются |
@@ -869,7 +870,7 @@ warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Mo
 | Каталог | Источник | Когда действует |
 |---|---|---|
 | `$CODELAB_HOME/agents/*.md` | пользователь | всегда |
-| `<cwd>/.codelab/agents/*.md` | репозиторий | только если проект в `trusted_projects` (§15.3): тело файла — промпт, а промпты из недоверенного проекта не загружаются (CFG-3) |
+| `<cwd>/.codelab/agents/*.md` | репозиторий | только если канонический `cwd` сессии в `trusted_projects` (§15.3; `CoreConfig.trustedProjects`, design.md change `add-agent-project-files`, D4): тело файла — промпт, а промпты из недоверенного проекта не загружаются (CFG-3) |
 
 Определение проекта с тем же `name` заменяет глобальное. Файлы читаются при создании и загрузке
 сессии; изменения действуют в новых сессиях.
@@ -943,27 +944,37 @@ loadAgentDefinitions(home, cwd, trusted):
 
 selectAgent(session, name):            // session/set_config_option agent=<name>
 1. name == "default" → снять профиль агента: базовый промпт, модель и режим сессии
-2. системный промпт = базовый промпт (§11) + секция "## Agent profile: <name>" с телом файла;
-   правила безопасности и ограды базового промпта остаются (тело их не заменяет)
+2. системный промпт = базовый промпт (§11) + последняя секция agent_profile
+   "# Agent profile: <name>" с телом файла (шаг 10b §11.5); правила безопасности и ограды
+   базового промпта остаются (тело их не заменяет)
 3. model задан → сменить модель, опция `model` получает новое значение
-4. mode задан → сменить режим так же, как session/set_mode (§13.6)
+4. mode задан и не мягче режима конфигурации сессии (permissions.mode ?? режим профиля;
+   порядок bypass → accept-edits → standard → ask, plan строже всех) → сменить режим так же,
+   как session/set_mode (§13.6); мягче → режим не меняется, лог agent.mode.not_applied
+   (design.md change add-agent-project-files, D11; решение пользователя 2026-10-30, OQ3); extraDeniedTiers, permissions.deny и
+   критические шаблоны выбор агента не трогает
 5. tools задан → набор схем следующего шага = инструменты профиля ∩ список (шаблоны по префиксу),
    только из включённых инструментов (§6.3.8): выключенный инструмент списком не возвращается;
    инструмент вне списка при вызове → отказ "tool not available for agent <name>"
-6. разослать config_option_update с полным снимком (agent, model, mode)
+6. ответ на session/set_config_option — полный снимок опций (agent, model, mode); если режим
+   изменился — current_mode_update до ответа; config_option_update в ответ на запрос клиента не
+   дублируется (§13.6, п. 4, ACP-11)
 7. изменения действуют со следующего шага; идущий вызов инструмента не прерывается
 ```
 
 **ACP.** Опция конфигурации:
 
 ```json
-{"id":"agent","name":"Agent","category":"other","type":"select","currentValue":"default",
+{"id":"agent","name":"Agent","type":"select","currentValue":"default",
  "options":[{"value":"default","name":"Default"},
             {"value":"reviewer","name":"reviewer","description":"Reviews the current changes and reports defects"}]}
 ```
 
-Опция присутствует, только если загружено хотя бы одно определение (со встроенными профилями —
-всегда). Выбранный агент пишется в
+Поля `category` у опции нет: имена категорий без `_` зарезервированы ACP, а определены только
+`mode`, `model`, `thought_level` (`13-Session Config Options.md`, «Option Categories»); своя
+категория `_codelab_*` была бы расширением протокола (design.md change `add-agent-project-files`,
+D12). Опция идёт после `mode`, `model`, `effort`. Опция присутствует, только если загружено хотя бы
+одно определение со `scope` `session` или `both` (со встроенными профилями — всегда). Выбранный агент пишется в
 журнал записью `config_change` (§8) и восстанавливается при `session/load`.
 
 **Инварианты.**

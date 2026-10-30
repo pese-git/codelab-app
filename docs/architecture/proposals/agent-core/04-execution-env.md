@@ -127,7 +127,7 @@ abstract interface class ByteProcess {
 | `MemoryExecutionEnv` | ядро | файлы в памяти с POSIX-путями; `exec` → `Err(shellUnavailable)`; дефолт тестов и основа `PersistentWebEnv` профиля `web` (§4.8) |
 | `PersistentWebEnv` | этап 10, место — в OpenSpec этапа | `MemoryExecutionEnv` с зеркалированием в IndexedDB |
 | `AcpClientExecutionEnv` | `codelab_agent_acp` | файлы и команды исполняет ACP-клиент (§4.7) |
-| `BoundedEnv` | ядро | декоратор: граница рабочей папки (§4.4) |
+| `BoundedEnv` | ядро | декоратор: граница рабочей папки (§4.4). Экспортируется из публичного бареля (`show BoundedEnv`, только фабрика `wrap`): им же `ProjectFilesLoader` (`codelab_agent_io`) ограничивает чтение файлов проекта корнем области (design.md change `add-agent-project-files`, D1, D2) |
 | `EnvVarsEnv` | ядро | декоратор: добавляет в `exec` переменные сессии и секреты по allowlist (§4.5) |
 | `LocalProcessLauncher` (после MVP) | `codelab_agent_io` | порт `ByteProcessLauncher`: `Process.start(executable, args, runInShell: false, includeParentEnvironment: false)`, завершение дерева процессов как в §4.6; нет файла в `PATH` → `Err(ExecError(spawnFailed, message: 'command "<executable>" was not found'))` (§17.8.2) |
 
