@@ -10,9 +10,13 @@ The Agent Client Protocol provides built-in extension mechanisms that allow impl
 
 ## The `_meta` Field
 
-All types in the protocol include a `_meta` field with type `{ [key: string]: unknown }` that implementations can use to attach custom information. This includes requests, responses, notifications, and even nested types like content blocks, tool calls, plan entries, and capability objects.
+Object types that define a `_meta` field can use it to attach custom information
+with type `{ [key: string]: unknown }`. This includes many requests, responses,
+notifications, and nested types such as content blocks, tool calls, plan
+entries, and capability objects. Not every protocol type defines `_meta`; for
+example, the `Error` object does not.
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -27,7 +31,7 @@ All types in the protocol include a `_meta` field with type `{ [key: string]: un
     ],
     "_meta": {
       "traceparent": "00-80e1afed08e019fc1110464cfa66635c-7a085853722dc6d2-01",
-      "zed.dev/debugMode": true
+      "com.example/debugMode": true
     }
   }
 }
@@ -54,11 +58,11 @@ Extension methods follow standard [JSON-RPC 2.0](https://www.jsonrpc.org/specifi
 
 In addition to the requests specified by the protocol, implementations **MAY** expose and call custom JSON-RPC requests as long as their name starts with an underscore (`_`).
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "_zed.dev/workspace/buffers",
+  "method": "_com.example/workspace/buffers",
   "params": {
     "language": "rust"
   }
@@ -67,7 +71,7 @@ In addition to the requests specified by the protocol, implementations **MAY** e
 
 Upon receiving a custom request, implementations **MUST** respond accordingly with the provided `id`:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -82,7 +86,7 @@ Upon receiving a custom request, implementations **MUST** respond accordingly wi
 
 If the receiving end doesn't recognize the custom method name, it should respond with the standard "Method not found" error:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -99,10 +103,10 @@ To avoid such cases, extensions **SHOULD** advertise their [custom capabilities]
 
 Custom notifications are regular JSON-RPC notifications that start with an underscore (`_`). Like all notifications, they omit the `id` field:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
-  "method": "_zed.dev/file_opened",
+  "method": "_com.example/file_opened",
   "params": {
     "path": "/home/user/project/src/editor.rs"
   }
@@ -113,9 +117,9 @@ Unlike with custom requests, implementations **SHOULD** ignore unrecognized noti
 
 ## Advertising Custom Capabilities
 
-Implementations **SHOULD** use the `_meta` field in capability objects to advertise support for extensions and their methods:
+Implementations **SHOULD** use the `_meta` field in capability objects to advertise support for extensions and their methods. To avoid collisions with other extensions, follow [MCP's naming convention](https://modelcontextprotocol.io/specification/2026-07-28/basic/index): prefix extension names with dot-separated labels in reverse-DNS order of a domain you control, followed by `/`. For example, use `com.example/<name>` for `_meta` keys, including capability entries, and `_com.example/<name>` for custom methods. For example:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 0,
@@ -124,10 +128,8 @@ Implementations **SHOULD** use the `_meta` field in capability objects to advert
     "agentCapabilities": {
       "loadSession": true,
       "_meta": {
-        "zed.dev": {
-          "workspace": true,
-          "fileNotifications": true
-        }
+        "com.example/workspace": true,
+        "com.example/fileNotifications": true
       }
     }
   }
@@ -137,4 +139,4 @@ Implementations **SHOULD** use the `_meta` field in capability objects to advert
 This allows implementations to negotiate custom features during initialization without breaking compatibility with standard Clients and Agents.
 
 
-Built with [Mintlify](https://mintlify.com).
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.

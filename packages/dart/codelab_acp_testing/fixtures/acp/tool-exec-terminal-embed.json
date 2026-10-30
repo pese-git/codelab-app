@@ -8,7 +8,7 @@
     "10-Terminal.md#getting-output",
     "10-Terminal.md#releasing-terminals",
     "08-Tool Calls.md#terminals",
-    "17-Schema.md#terminal-release"
+    "17-Schema.md#terminalrelease"
   ],
   "description": "В режиме bypass модель вызывает exec \"echo hi\"; агент создаёт терминал клиента через /bin/sh -c, встраивает его в tool_call, ждёт выхода, забирает вывод, освобождает терминал и завершает вызов completed; модель отвечает текстом, ход завершается end_turn.",
   "goals": [

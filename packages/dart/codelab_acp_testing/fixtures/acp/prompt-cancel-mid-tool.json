@@ -6,8 +6,8 @@
     "10-Terminal.md#executing-commands",
     "10-Terminal.md#killing-commands",
     "10-Terminal.md#releasing-terminals",
-    "17-Schema.md#terminal-kill",
-    "17-Schema.md#terminal-release"
+    "17-Schema.md#terminalkill",
+    "17-Schema.md#terminalrelease"
   ],
   "description": "В режиме bypass модель запускает exec \"dart test\"; агент создаёт терминал клиента и ждёт выхода; пользователь отменяет ход; агент убивает команду, забирает вывод, освобождает терминал, сообщает вызов как failed и отвечает stopReason cancelled. Ожидаемые кадры не пишут _meta.codelab: _meta сравнивается как $partial.",
   "setup": {
