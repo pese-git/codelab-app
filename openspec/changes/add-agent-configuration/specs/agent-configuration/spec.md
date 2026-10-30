@@ -10,7 +10,7 @@
 6. переменные `CODELAB_*`;
 7. флаги командной строки.
 
-Отсутствующий файл SHALL пропускаться. Отображения SHALL сливаться по ключам рекурсивно, скаляры и списки — заменяться целиком. Список `mcp.servers` SHALL сливаться по `name`: тот же `name` заменяет сервер, новый добавляется в конец, `enabled: false` в более приоритетном слое выключает сервер. `tools.disabled` слоёв 2–4 SHALL объединяться. `--config` с расширением `.toml` SHALL быть ошибкой использования: `codelab.toml` не поддерживается. Файл `config.yml` рядом с `config.yaml` или вместо него SHALL не читаться и давать предупреждение `config.file.ignored`. При запуске со сценарием `--llm-script` слои 2–4 SHALL не читаться.
+Отсутствующий файл слоёв 2–4 SHALL пропускаться. Файл слоя 5, явно названный через `--config` или `CODELAB_CONFIG`, но отсутствующий или нечитаемый, SHALL давать проблему `ConfigIssue` вида `syntax` с ключом `""`, текстом, начинающимся с `cannot read the file`, и источником `--config` или `CODELAB_CONFIG` (решение пользователя 2026-10-30): опечатка в явно названном пути не должна молча запускать агента без этого файла. `CODELAB_CONFIG` SHALL быть абсолютным путём; относительный путь хост SHALL отклонять ошибкой использования до загрузки (требование agent-binary): относительный путь считался бы от корня проекта, а слой 5 правилам доверия не подчиняется, и склонированный репозиторий обошёл бы CFG-3. `--config` МОЖЕТ быть относительным и разрешается от текущего каталога процесса. Отображения SHALL сливаться по ключам рекурсивно, скаляры и списки — заменяться целиком. Список `mcp.servers` SHALL сливаться по `name`: тот же `name` заменяет сервер, новый добавляется в конец, `enabled: false` в более приоритетном слое выключает сервер. `tools.disabled` слоёв 2–4 SHALL объединяться. `--config` с расширением `.toml` SHALL быть ошибкой использования: `codelab.toml` не поддерживается. Файл `config.yml` рядом с `config.yaml` или вместо него SHALL не читаться и давать предупреждение `config.file.ignored`. При запуске со сценарием `--llm-script` слои 2–4 SHALL не читаться.
 
 #### Scenario: Проектный слой перекрывает глобальный
 - **WHEN** `$CODELAB_HOME/config.yaml` задаёт `budget.max_steps: 50`, а `<cwd>/.codelab/config.yaml` — `budget.max_steps: 20`
@@ -24,6 +24,10 @@
 - **WHEN** глобальный слой объявляет серверы `github` и `files`, а локальный проектный — `github` с другим `url` и `files` с `enabled: false`
 - **THEN** итог содержит один `github` с адресом локального слоя и не содержит `files`
 
+#### Scenario: Явно названный файл отсутствует
+- **WHEN** загрузчик вызывается с `--config <tmp>/missing.yaml`, а файла нет; во втором варианте — с `CODELAB_CONFIG=<tmp>/missing.yaml`
+- **THEN** результат содержит проблему вида `syntax` с текстом `cannot read the file…` и источником `--config` (во втором варианте — `CODELAB_CONFIG`), `CoreConfig` не построен; отсутствие `$CODELAB_HOME/config.yaml` и `<cwd>/.codelab/*` проблем не даёт
+
 #### Scenario: Сценарий не читает файлы пользователя
 - **WHEN** загрузчик вызывается со сценарием `--llm-script` и `CODELAB_HOME=<tmp>`, где есть `config.yaml` с ошибкой
 - **THEN** загрузка успешна, файл не прочитан, каталог `<tmp>` не изменён
@@ -33,13 +37,23 @@
 - второй документ — `multiple YAML documents are not supported`;
 - якорь, алиас, ключ слияния `<<`, явный тег — `anchors, aliases, merge keys and tags are not supported`;
 - ключ не строка (`1:`, `null`, `true`, составной) — ошибка;
-- повторяющийся ключ — ошибка с позициями обоих ключей.
+- повторяющийся ключ — ошибка с позициями обоих ключей;
+- нестандартный тег (`!foo`, `!e!x` с необъявленным префиксом) — та же проблема профиля, а не синтаксическая ошибка разборщика; текст НЕ SHALL содержать имя тега;
+- якорь или тег на корневом узле документа — та же проблема профиля, а не пропуск проверки.
+
+Пределы разбора (ревью безопасности итерации 2, 2026-10-30) SHALL проверяться до построения дерева и не приводить к исключению или переполнению стека:
+- файл больше 1 MiB (1 048 576 байт) SHALL давать `ConfigIssue` вида `syntax` с ключом `""`, текст называет предел; файл не разбирается;
+- вложенность отображений и списков глубже 64 уровней SHALL давать `ConfigIssue` вида `profile` с позицией узла, на котором предел превышен; `StackOverflowError` НЕ SHALL возникать.
 
 Пустой файл и файл только из комментариев SHALL давать пустой слой. Блочный и flow-стиль, переводы строк LF и CRLF и BOM SHALL читаться одинаково. Ядро НЕ SHALL импортировать `package:yaml`, `package:yaml_edit` и `package:toml` (CFG-5).
 
 #### Scenario: Таблица нарушений профиля
 - **WHEN** `config_yaml_profile_test.dart` разбирает файлы с якорем и ссылкой, `<<: *base`, тегом `!!str`, вторым документом, ключом `1:`, составным ключом и повторяющимся ключом
 - **THEN** каждый даёт `ConfigIssue` вида `profile` со строкой и столбцом, а повторяющийся ключ называет позиции обоих
+
+#### Scenario: Пределы и нестандартные теги
+- **WHEN** разбираются файл размером 1 MiB + 1 байт, файл с вложенностью 65 уровней (и с 10 000 уровней flow-списков `[[[…]]]`), файл со значением `!secret-tag x` и файл, корень которого — `&root` или `!!map`
+- **THEN** первый — проблема `syntax` без разбора, второй — проблема `profile` без исключения и без `StackOverflowError`, третий — проблема `profile`, текст которой не содержит `secret-tag`, четвёртый — проблема `profile` с позицией корня
 
 #### Scenario: Пустые файлы и стили
 - **WHEN** разбираются пустой файл, файл из комментариев, файл во flow-стиле и тот же файл с CRLF и BOM
@@ -101,7 +115,7 @@
 - **THEN** загрузка даёт проблему `permissions.mode`, а флаг `--permission-mode autopilot` того же запуска допустим
 
 ### Requirement: Доверие к проектному конфигу
-Оба проектных слоя — `<cwd>/.codelab/config.yaml` и `<cwd>/.codelab/config.local.yaml` — SHALL подчиняться правилам доверия §15.3, пока проект не в `trusted_projects` (решение пользователя 2026-10-30). Проект доверенный, если его канонический корень есть в `trusted_projects` глобального слоя (`user` или `appStorage`). В `trusted_projects` SHALL допускаться только абсолютные пути (относительный — проблема). Относительный путь SHALL давать проблему `expected an absolute path` с ключом `trusted_projects[i]`; `~` SHALL раскрываться. `trusted_projects` в проектных слоях SHALL отбрасываться с предупреждением `config.project.untrusted_key` (`ignored: trusted_projects is read only from the global config`), а в слое `--config` — быть проблемой. Без доверия:
+Оба проектных слоя — `<cwd>/.codelab/config.yaml` и `<cwd>/.codelab/config.local.yaml` — SHALL подчиняться правилам доверия §15.3, пока проект не в `trusted_projects` (решение пользователя 2026-10-30). Проект доверенный, если его канонический корень есть в `trusted_projects` глобального слоя (`user` или `appStorage`). Загрузчик (`codelab_agent_io`) SHALL канонизировать корень проекта и каждый элемент `trusted_projects` (раскрыть `~`, `.`/`..` и symlink; несуществующий путь — нормализация без раскрытия symlink) до сравнения: иначе `trusted_projects: [/work/link]` для проекта `/work/real` (или наоборот) давал бы разный ответ в зависимости от записи пути. В `trusted_projects` SHALL допускаться только абсолютные пути (относительный — проблема). Относительный путь SHALL давать проблему `expected an absolute path` с ключом `trusted_projects[i]`; `~` SHALL раскрываться. `trusted_projects` в проектных слоях SHALL отбрасываться с предупреждением `config.project.untrusted_key` (`ignored: trusted_projects is read only from the global config`), а в слое `--config` — быть проблемой. Без доверия:
 - `mcp.servers`, `providers.*`, `model_catalog.*`, `prompts.*` и разделы после MVP `hooks`, `plugins`, `a2a`, `lsp` SHALL отбрасываться с предупреждением `config.project.untrusted_key {key, source}`;
 - раздел `secrets` SHALL отбрасываться из обоих проектных слоёв всегда, и с доверием тоже, с предупреждением `config.project.untrusted_key` (`ignored: secrets is read only from the global config`);
 - `sessions.*`, `logging.*`, `exec.*` SHALL отбрасываться так же, а слоя `config.yaml` — и с доверием;
@@ -140,6 +154,10 @@
 #### Scenario: trusted_projects не из глобального слоя
 - **WHEN** проектный слой задаёт `trusted_projects: [<cwd>]`, а глобальный — `trusted_projects: [relative/path]`
 - **THEN** проектный ключ отброшен с `config.project.untrusted_key` (`ignored: trusted_projects is read only from the global config`), проект не доверенный, а относительный путь глобального слоя — проблема `trusted_projects[0]: expected an absolute path`; `~/work/demo` раскрывается и проблемы не даёт
+
+#### Scenario: Доверие через symlink
+- **WHEN** `/tmp/link` — symlink на каталог проекта `/tmp/real`, глобальный слой задаёт `trusted_projects: [/tmp/link]`, а загрузка идёт для `cwd: /tmp/real` (во втором варианте — `trusted_projects: [/tmp/real]` и `cwd: /tmp/link`)
+- **THEN** в обоих вариантах проект доверенный, `project_root` результата — `/tmp/real`
 
 #### Scenario: secrets только из глобального конфига
 - **WHEN** доверенный проект задаёт `secrets.backend: file` в `config.local.yaml`
@@ -262,8 +280,8 @@
 - **THEN** их stdout и коды выхода совпадают
 
 ### Requirement: Наблюдаемость загрузки конфигурации
-Успешная загрузка SHALL писать `host.config.loaded {sources, warnings, project_root}`. Каждое предупреждение загрузки SHALL писаться отдельным событием своего имени (`config.env.unknown`, `config.project.untrusted_key`, `config.key.not_applied`, `config.provider.key_missing`, `config.secret.unavailable`, `config.file.ignored`, `config.legacy_found`). Значения ключей конфигурации, переменных и секретов НЕ SHALL попадать в эти события и в текст проблем: только пути ключей, имена переменных и секретов, источники.
+Успешная загрузка SHALL писать `host.config.loaded {sources, warnings, project_root, transport, models}` (`transport` — `stdio` или `ws`, `models` — id моделей каталога). Каждое предупреждение загрузки SHALL писаться отдельным событием своего имени (`config.env.unknown`, `config.project.untrusted_key`, `config.key.not_applied`, `config.provider.key_missing`, `config.secret.unavailable`, `config.file.ignored`, `config.legacy_found`, `mcp.server.skipped`) и SHALL нести поле `message` — английский текст `ConfigIssue.message` без значений. Значения ключей конфигурации, переменных и секретов НЕ SHALL попадать в эти события и в текст проблем: только пути ключей, имена переменных и секретов, источники.
 
 #### Scenario: Ни одного значения в логе
 - **WHEN** конфиг содержит `headers.Authorization: "Bearer ${TOKEN}"` с `TOKEN=tok-test-secret` и ключ без потребителя, а агент стартует с `--log-level trace`
-- **THEN** лог содержит `host.config.loaded` и `config.key.not_applied`, но не содержит `tok-test-secret`
+- **THEN** лог содержит `host.config.loaded` с полями `transport` и `models` и `config.key.not_applied` с полями `key`, `source`, `message`, но не содержит `tok-test-secret`

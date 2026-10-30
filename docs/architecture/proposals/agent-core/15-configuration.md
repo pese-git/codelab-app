@@ -70,7 +70,13 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 одного YAML-файла слоёв 2–4 и не задан `--config`, загрузчик пишет одно предупреждение
 `config.legacy_found` (§15.7).
 Дополнительный слой 4а — `--config <path>` / `CODELAB_CONFIG` — читается всегда, когда задан,
-и не подчиняется правилам доверия §15.3: файл назвал тот, кто запускает агента.
+и не подчиняется правилам доверия §15.3: файл назвал тот, кто запускает агента. Поэтому
+`CODELAB_CONFIG` — только абсолютный путь (относительный — ошибка использования: переменная
+переживает смену каталога, и путь от корня склонированного репозитория обошёл бы доверие), а
+`--config` может быть относительным и разрешается от текущего каталога процесса. Явно названный, но
+отсутствующий файл — проблема конфига `cannot read the file` (источник `--config` или
+`CODELAB_CONFIG`), а не пропуск; отсутствующие слои 2–4 пропускаются (change
+`add-agent-configuration`, D4).
 
 ## 15.3. Доверие к проектному конфигу
 
@@ -144,7 +150,11 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 §17.5.3) правилам доверия не подчиняются: их задаёт тот, кто запускает агента.
 
 `trusted_projects` — массив только абсолютных путей (`~` раскрывается; относительный — ошибка
-`expected an absolute path` на `trusted_projects[i]`) в **глобальном** слое (`user` или `appStorage`);
+`expected an absolute path` на `trusted_projects[i]`) в **глобальном** слое (`user` или `appStorage`).
+Загрузчик канонизирует корень проекта и каждый элемент `trusted_projects` (symlink раскрыт;
+несуществующий путь — нормализованная запись), а runtime так же канонизирует `cwd` сессии перед
+выбором снимка (§10.3): иначе один каталог, записанный через symlink и напрямую, получал бы разное
+доверие и разные запреты;
 в проектных слоях ключ отбрасывается с предупреждением `config.project.untrusted_key`
 (`ignored: trusted_projects is read only from the global config`), а в слое `--config` — ошибка. Ключ из слоя 3 (и из слоя 4 недоверенного проекта), который
 требует доверия, без него не ошибка, а предупреждение `config.project.untrusted_key` с именем
@@ -201,6 +211,10 @@ providers:
 Ключ API **нельзя** писать в конфиг значением: ключ `api_key` — ошибка
 `ConfigException("providers.openai.api_key: ключи не хранятся в конфиге, используйте api_key_env или api_key_secret")`.
 Без `api_key_env` и `api_key_secret` запросы идут без ключа (локальные Ollama, LM Studio).
+Провайдер `cli` из флагов (`--provider`, §15.6) получает `api_key_env: CODELAB_API_KEY`, только
+если переменная задана и непуста, а слой флагов заменяет `providers.cli` целиком: `headers` и
+ссылки на ключ одноимённого провайдера из файлов не уходят на адрес `--base-url`
+(change `add-agent-configuration`, D4).
 `api_key_env` и `api_key_secret` взаимоисключающие: оба сразу — `ConfigException`. После MVP
 правило о встроенном секрете расширено (CFG-9, §17.5.4): кроме `api_key` отклоняются ключи
 `apiKey`, `token`, `secret`, `password` в `providers.*`, `tools.web.search.backends.*` и
@@ -550,9 +564,16 @@ change `add-agent-configuration`).
 loadConfig(cwd, env, flags):
 1. layers := [defaults]
 2. для пути в [global, project, projectLocal, flags.config?]:
-     если файла нет → пропустить; иначе разобрать YAML (codelab_agent_io, package:yaml)
+     если файла нет: слои global, project, projectLocal → пропустить;
+       явно названный flags.config (--config / CODELAB_CONFIG) → ConfigIssue(syntax,
+       "cannot read the file", источник --config | CODELAB_CONFIG); CODELAB_CONFIG только
+       абсолютный (относительный — ошибка использования хоста до загрузки)
+     файл больше 1 MiB → ConfigIssue(syntax) без разбора
+     иначе разобрать YAML (codelab_agent_io, package:yaml)
      и проверить профиль YAML (ниже) → ConfigTree(values, positions)
-     синтаксическая ошибка или нарушение профиля → ConfigException(путь, строка, столбец, сообщение)
+     синтаксическая ошибка или нарушение профиля → ConfigIssue(syntax | profile, путь, строка,
+       столбец, сообщение) в результате загрузки (ConfigLoadResult.issues), а не исключение;
+       исключение ConfigException бросает только ConfigLoadResult.orThrow() у хоста
      config.yml рядом с config.yaml не читается: предупреждение config.file.ignored
        {path, hint} с подсказкой переименовать файл (читать оба — значит выбирать между ними)
    ни одного YAML-файла не найдено и --config не задан → проверка наличия codelab.toml,
@@ -643,8 +664,8 @@ loadConfig(cwd, env, flags):
 отбрасываются (§15.3).
 
 **Профиль YAML.** Конфиг — YAML 1.2 с семантикой core schema; ограничения проверяет
-`codelab_agent_io` при разборе, до валидатора ядра, и каждое нарушение — `ConfigException` с
-файлом, строкой и столбцом узла:
+`codelab_agent_io` при разборе, до валидатора ядра, и каждое нарушение — `ConfigIssue` вида
+`profile` (синтаксис — `syntax`) с файлом, строкой и столбцом узла в результате загрузки:
 
 1. Ровно один документ. Пустой файл (или только комментарии) — пустой слой; второй документ
    после `---` — ошибка `multiple YAML documents are not supported`.
@@ -666,6 +687,10 @@ loadConfig(cwd, env, flags):
    неизвестный ключ, и подсказка предлагает вложенную форму `output:` → `max_lines:`.
 8. Блочный и flow-стиль (`{…}`, `[…]`) читаются одинаково; перевод строк LF или CRLF; кодировка
    UTF-8 (BOM допускается и отбрасывается).
+9. Пределы: файл не больше 1 MiB (иначе проблема `syntax` без разбора); вложенность отображений и
+   списков не глубже 64 уровней (иначе проблема профиля в позиции узла; разбор не падает
+   переполнением стека). Тег или якорь на корне документа — нарушение п. 2, нестандартный тег —
+   тоже, и текст проблемы не содержит имени тега.
 
 Тот же разборщик и пункты 1–6 действуют для YAML-frontmatter определений агентов (§15.8) и
 skills (§17.2.2); набор и типы полей frontmatter задают их собственные таблицы. Машинные файлы
@@ -696,13 +721,13 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | Переменная | Флаг | Ключ |
 |---|---|---|
 | `CODELAB_HOME` | — | корень состояния |
-| `CODELAB_CONFIG` | `--config <path>` | дополнительный файл (слой 4а) с приоритетом выше слоя 4; расширение `.yaml` или `.yml`, иначе ошибка использования; для `.toml` — `--config needs a .yaml file; codelab.toml is not supported, see agent-core-architecture §15.7` (без подсказки `migrate`: команды нет) |
-| `CODELAB_MODEL` | `--model <provider/model>` | `agent.default_model`; без `--provider` выбирает модель из конфига, а `--model gpt` без косой черты — ошибка использования `--model needs <provider>/<model> without --provider` |
-| — | `--provider <openai-compatible\|anthropic>` (с этапа 4) | провайдер из флагов с id `cli`: `providers.cli.kind`; с ним `--model <model>` — id модели этого провайдера (`agent.default_model = "cli/<model>"`), флаг можно повторять: первое значение — модель по умолчанию, все — модели `providers.cli.models` |
+| `CODELAB_CONFIG` | `--config <path>` | дополнительный файл (слой 4а) с приоритетом выше слоя 4, флаг сильнее переменной; расширение `.yaml` или `.yml`, иначе ошибка использования; для `.toml` — `--config needs a .yaml file; codelab.toml is not supported, see agent-core-architecture §15.7` (без подсказки `migrate`: команды нет). `CODELAB_CONFIG` — только абсолютный путь (относительный — ошибка использования, текст называет переменную); `--config` может быть относительным — от текущего каталога процесса. Отсутствующий файл — проблема конфига `cannot read the file`, код `64` (§15.2) |
+| `CODELAB_MODEL` | `--model <provider/model>` | `agent.default_model`; без `--provider` выбирает модель из конфига, а `--model gpt` без косой черты — ошибка использования `--model needs <provider>/<model> without --provider`; повтор `--model` без `--provider` — ошибка использования `--model can be repeated only together with --provider`. Нет модели ни во флагах, ни в конфиге, ни в `--llm-script` — проблема `agent.default_model: required`, код `64` |
+| — | `--provider <openai-compatible\|anthropic>` (с этапа 4) | провайдер из флагов с id `cli`: `providers.cli.kind`; с ним `--model <model>` — id модели этого провайдера (`agent.default_model = "cli/<model>"`), флаг можно повторять: первое значение — модель по умолчанию, все — модели `providers.cli.models`. Слой флагов заменяет `providers.cli` из файлов целиком, а не сливается с ним по полям (§15.4) |
 | — | `--base-url <url>` (с этапа 4) | `providers.cli.base_url` |
-| `CODELAB_API_KEY` | — (с этапа 4) | ключ провайдера `cli`: `providers.cli.api_key_env = "CODELAB_API_KEY"`; значение в флаги и логи не попадает |
+| `CODELAB_API_KEY` | — (с этапа 4) | ключ провайдера `cli`: `providers.cli.api_key_env = "CODELAB_API_KEY"`, только если переменная задана и непуста (иначе провайдер без ключа, как Ollama и LM Studio на этапе 4); значение в флаги и логи не попадает |
 | — | `--llm-script <file.json>` (с этапа 4, только тесты) | вместо провайдера — `ScriptedStreamFunction` из файла `{"llm": {...}}` формата §14.7; провайдер `scripted`, `--model` — его модели; слои 2–4 (`$CODELAB_HOME` и проектные файлы) не читаются — конфиг подаётся явно `--config`, окружением и флагами; в справке бинаря скрыт |
-| — | `--sessions-dir <path>` (только тесты, только с `--llm-script`) | корень `JsonlSessionStore` сессий сценария вместо памяти: `loadSession` и `session/list` объявлены, `$CODELAB_HOME` не трогается; в справке бинаря скрыт (change `add-llm-script-session-store`) |
+| — | `--sessions-dir <path>` (только тесты, только с `--llm-script`) | корень `JsonlSessionStore` сессий сценария вместо памяти: `loadSession` и `session/list` объявлены, `$CODELAB_HOME` не трогается; в справке бинаря скрыт (change `add-llm-script-session-store`). Со сценарием это единственный источник журнала: `sessions.dir` и `sessions.fsync` из `--config` не применяются и дают `config.key.not_applied {key, source}` (change `add-agent-configuration`, D4) |
 | `CODELAB_PERMISSION_MODE` | `--permission-mode <mode>` | `permissions.mode` (`plan`, `ask`, `standard`, `accept-edits`, `bypass`); флаг допускает `autopilot` |
 | `CODELAB_PROFILE` | `--profile <name>` | профиль хоста (`agent-serve` у бинаря) |
 | `CODELAB_LOG_LEVEL` | `--log-level <level>` | `logging.level` |
@@ -711,7 +736,7 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | — | `--system-prompt <text>` | `prompts.system_text` (перекрывает и `prompts.system`); вместе с `--system-prompt-file` — ошибка (§11.6.1, E-08) |
 | — | `--system-prompt-file <path>` | `prompts.system` (перекрывает и `prompts.system_text`) |
 | — | `--append-system-prompt <text>` | `prompts.append_system_text` (перекрывает и `prompts.append_system`) |
-| `CODELAB_MAX_STEPS` | `--max-steps <n>` (`codelab-agent serve`, этап 8.5) | `budget.max_steps` |
+| `CODELAB_MAX_STEPS` | `--max-steps <n>` (`codelab-agent serve`, этап 8.5) | `budget.max_steps`; флаг — целое `≥ 1`, иначе ошибка использования; нечисловая переменная — проблема `budget.max_steps` |
 | — | `--local-exec` | `exec.local_fallback = true` |
 | — | `--cwd <path>` | `cwd` для `codelab -p` |
 | — | `--role <role>=<provider/model>` (после MVP, L-10; можно повторять; в том числе `--role vision=<provider/model>`, §17.11.5) | `llm.roles.<role>.models = ["<provider/model>"]` на прогон |

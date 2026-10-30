@@ -107,11 +107,13 @@ final class LogRecord {           // то, что получает sink хост
 
 События `config.*` и загрузки конфига (change `add-agent-configuration`, D16; новые отмечены).
 Значения ключей, переменных и секретов в поля не попадают: только пути ключей, имена переменных и
-секретов, источники и пути файлов:
+секретов, источники и пути файлов. Каждое событие предупреждения загрузки (`config.*` ниже, кроме
+`config.session.outside_root`, и `mcp.server.skipped`) несёт также поле `message` — английский текст
+`ConfigIssue.message` без значений, та же строка, что печатает `config check`:
 
 | Событие | Уровень | Поля |
 |---|---|---|
-| `host.config.loaded` | info | `sources`, `warnings` (число), `project_root` |
+| `host.config.loaded` | info | `sources`, `warnings` (число), `project_root`, `transport` (`stdio` \| `ws`), `models` (id моделей каталога) |
 | `serve.config.invalid` | error | `issues` — список `{source, line, column, key, kind}`; те же строки в stderr, код выхода `64` |
 | `config.env.unknown` | warning | `message` |
 | `config.project.untrusted_key` (новое) | warning | `key`, `source`; в том числе смягчение `permissions.mode` и `trusted_projects` в проектном слое (§15.3) |
@@ -121,7 +123,7 @@ final class LogRecord {           // то, что получает sink хост
 | `config.file.ignored` (новое) | warning | `path`, `hint` (`config.yml` рядом с `config.yaml`) |
 | `config.legacy_found` (новое) | warning | `files` (только пути; содержимое файла не читается, §15.7) |
 | `config.session.outside_root` (новое) | info | `session_id`, `cwd`, `config_root`; пишется логгером сессии, один раз на нормализованный `cwd` (§10.3) |
-| `mcp.server.skipped` | info | `server`, `reason: "disabled in config"` (новая причина для `enabled: false`) |
+| `mcp.server.skipped` | info | `server`, `reason: "disabled in config"` (новая причина для `enabled: false`), `message` |
 
 Прежние `config.legacy_ignored`, `config.legacy_key_dropped` и `config.legacy_active` удалены:
 `codelab.toml` не читается (§15.7).

@@ -10,6 +10,10 @@ import 'config_tree.dart';
 /// Правила:
 /// * отображения сливаются рекурсивно;
 /// * скаляры и списки заменяются целиком;
+/// * слой `flags` заменяет `providers.cli` целиком: хост не может удалить
+///   значения нижних слоёв, а `--provider` описывает провайдера полностью —
+///   `headers` из файла не должны уходить на адрес из `--base-url`
+///   (приоритет 1, D4);
 /// * `mcp.servers` сливается по `name`: тот же `name` заменяет сервер, новый
 ///   добавляется в конец;
 /// * `tools.disabled` слоёв 2–4 объединяется (ключ ещё не применяется, но
@@ -42,7 +46,9 @@ Map<String, Object?> _mergeMaps(
     }
     final here = [...path, key];
     final old = out[key];
-    if (old is Map<String, Object?> && value is Map<String, Object?>) {
+    if (kind == ConfigLayerKind.flags && here.join('.') == 'providers.cli') {
+      out[key] = _clone(value);
+    } else if (old is Map<String, Object?> && value is Map<String, Object?>) {
       out[key] = _mergeMaps(old, value, kind, here);
     } else if (here.join('.') == 'mcp.servers' && value is List) {
       out[key] = _mergeServers(old is List ? old : const [], value);

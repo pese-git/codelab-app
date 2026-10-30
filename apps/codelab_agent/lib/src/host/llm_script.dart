@@ -28,23 +28,7 @@ final class LlmScript {
     required Clock clock,
     required String? Function(String sessionId) cwdOf,
   }) {
-    final Object? json;
-    try {
-      json = jsonDecode(File(path).readAsStringSync());
-    } on FileSystemException catch (error) {
-      throw UsageError(
-        '--llm-script $path: ${error.osError?.message ?? error.message}',
-      );
-    } on FormatException catch (error) {
-      throw UsageError('--llm-script $path: invalid JSON: ${error.message}');
-    }
-    final llm = switch (json) {
-      {'llm': final Map<String, Object?> llm} => llm,
-      _ => throw UsageError(
-        '--llm-script $path: the file must be {"llm": {"model": {...}, '
-        '"steps": [...]}}',
-      ),
-    };
+    final llm = _readLlm(path);
     final ScriptedStreamFunction function;
     try {
       function = ScriptedStreamFunction.fromJson(
@@ -55,6 +39,41 @@ final class LlmScript {
     } on FormatException catch (error) {
       throw UsageError('--llm-script $path: ${error.message}');
     }
+    return LlmScript._(function, _modelRefs(llm, models));
+  }
+
+  /// Модели сценария без построения функции: хост просит их до загрузки
+  /// конфига, чтобы описать провайдера сценария слоем флагов (design.md
+  /// change `add-agent-configuration`, D4). Те же правила, что у [load].
+  static List<ModelRef> modelsOf(
+    String path, {
+    required List<ModelId> models,
+  }) => _modelRefs(_readLlm(path), models);
+
+  static Map<String, Object?> _readLlm(String path) {
+    final Object? json;
+    try {
+      json = jsonDecode(File(path).readAsStringSync());
+    } on FileSystemException catch (error) {
+      throw UsageError(
+        '--llm-script $path: ${error.osError?.message ?? error.message}',
+      );
+    } on FormatException catch (error) {
+      throw UsageError('--llm-script $path: invalid JSON: ${error.message}');
+    }
+    return switch (json) {
+      {'llm': final Map<String, Object?> llm} => llm,
+      _ => throw UsageError(
+        '--llm-script $path: the file must be {"llm": {"model": {...}, '
+        '"steps": [...]}}',
+      ),
+    };
+  }
+
+  static List<ModelRef> _modelRefs(
+    Map<String, Object?> llm,
+    List<ModelId> models,
+  ) {
     final model = switch (llm['model']) {
       final Map<String, Object?> model => model,
       _ => const <String, Object?>{},
@@ -68,7 +87,7 @@ final class LlmScript {
               '${model['modelId'] as String? ?? 'scripted-1'}',
             ),
           ];
-    return LlmScript._(function, [
+    return [
       for (final id in ids)
         ModelRef(
           provider: id.provider,
@@ -78,7 +97,7 @@ final class LlmScript {
           contextWindow: window,
           maxOutputTokens: 4096,
         ),
-    ]);
+    ];
   }
 }
 

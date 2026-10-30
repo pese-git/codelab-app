@@ -4,6 +4,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'cli/serve_args.dart';
 import 'host/agent_host.dart';
+import 'host/serve_config.dart';
 import 'log/file_sink.dart';
 import 'log/host_logger.dart';
 import 'log/stderr_sink.dart';
@@ -36,8 +37,20 @@ Future<int> runCodelabAgent(
     return usageExit;
   }
 
+  // Конфиг грузится до логов и транспорта: по нему выбираются уровень и файл
+  // лога, а невалидный конфиг завершает процесс кодом `64` до первого хода
+  // (agent-binary «Конфиг бинаря из файлов, окружения и флагов»).
+  final ConfigLoadResult loaded;
+  try {
+    loaded = loadServeConfig(options, cwd: Directory.current.path);
+  } on UsageError catch (error) {
+    stderr.writeln('codelab-agent: ${error.message}');
+    return usageExit;
+  }
+
+  final settings = logSettings(options, loaded);
   final sinks = <LogSink>[StderrLogSink(stderr)];
-  if (options.logFile case final path?) {
+  if (settings.file case final path?) {
     try {
       sinks.add(FileLogSink.open(path));
     } on UsageError catch (error) {
@@ -45,11 +58,14 @@ Future<int> runCodelabAgent(
       return usageExit;
     }
   }
-  final logger = HostLogger(level: options.logLevel, sinks: sinks);
+  final logger = HostLogger(level: settings.level, sinks: sinks);
   try {
+    if (loaded.config == null) {
+      return _reportInvalidConfig(loaded, options, logger);
+    }
     final AgentHost host;
     try {
-      host = await AgentHost.build(options, logger: logger);
+      host = await AgentHost.build(options, logger: logger, loaded: loaded);
     } on UsageError catch (error) {
       logger.log(
         LogLevel.error,
@@ -68,4 +84,37 @@ Future<int> runCodelabAgent(
   } finally {
     await logger.close();
   }
+}
+
+/// Проблемы конфига — в stderr по строке на проблему и в лог одним событием
+/// `serve.config.invalid` (agent-binary «Логи бинаря»; design.md change
+/// `add-agent-configuration`, D16). Код `64`: ошибка конфигурации — ошибка
+/// использования (§13.10). Значений ключей в тексте нет: `ConfigIssue.message`
+/// строится из пути и типа (CFG-2).
+int _reportInvalidConfig(
+  ConfigLoadResult loaded,
+  ServeOptions options,
+  Logger logger,
+) {
+  logStartupWarnings(logger, options, loaded);
+  for (final issue in loaded.issues) {
+    stderr.writeln('codelab-agent: $issue');
+  }
+  logger.log(
+    LogLevel.error,
+    'serve.config.invalid',
+    fields: {
+      'issues': [
+        for (final issue in loaded.issues)
+          {
+            'source': issue.source,
+            'line': issue.line,
+            'column': issue.column,
+            'key': issue.key,
+            'kind': issue.kind.name,
+          },
+      ],
+    },
+  );
+  return usageExit;
 }

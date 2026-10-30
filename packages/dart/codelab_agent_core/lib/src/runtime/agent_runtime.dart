@@ -33,6 +33,7 @@ import '../tools/agent_tool.dart';
 import '../tools/executor.dart';
 import '../tools/registry.dart';
 import '../util/logger.dart';
+import '../util/result.dart';
 import '../host/host_profile.dart';
 import '../host/services.dart';
 import 'agent_session.dart';
@@ -135,7 +136,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       metadata: {'profile': profile.name},
     );
     await _store.create(header);
-    final settings = _sessionConfig(
+    final settings = await _sessionConfig(
       header.id,
       spec.cwd,
       spec.ports.logger ?? services.logger,
@@ -203,7 +204,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
   }) async {
     final snapshot = await _store.open(id);
     final restored = buildLlmContext(snapshot);
-    final settings = _sessionConfig(
+    final settings = await _sessionConfig(
       id,
       cwd ?? snapshot.header.cwd,
       ports.logger ?? services.logger,
@@ -288,8 +289,26 @@ final class AgentRuntimeImpl implements AgentRuntime {
   /// проекта (приоритет 1 — безопасность), поэтому берёт снимок без
   /// проектных слоёв. Ключи сборки (каталог, capability, профиль) остаются
   /// общими: они уже вошли в [services] и [profile].
-  CoreConfig _sessionConfig(SessionId id, String cwd, Logger logger) {
-    final settings = config.forSessionCwd(cwd);
+  ///
+  /// `cwd` перед сравнением канонизируется через необязательный
+  /// `PathResolver` базового окружения: корень проекта в конфигурации уже
+  /// канонический, и сессия, открытая по symlink на проект, иначе получила бы
+  /// снимок без проекта и потеряла бы его `permissions.deny` (приоритет 1).
+  /// IO остаётся в порте: ядро путь сам не раскрывает. Путь не раскрылся
+  /// (нет файла, нет `PathResolver`) — сравнивается как есть.
+  Future<CoreConfig> _sessionConfig(
+    SessionId id,
+    String cwd,
+    Logger logger,
+  ) async {
+    var canonical = cwd;
+    if (services.baseEnv case final PathResolver resolver
+        when config.projectRoot != null) {
+      if (await resolver.realpath(cwd) case Ok(:final value)) {
+        canonical = value;
+      }
+    }
+    final settings = config.forSessionCwd(canonical);
     if (!identical(settings, config) &&
         _outsideRootLogged.add(pathComponents(cwd).join('/'))) {
       logger.log(
