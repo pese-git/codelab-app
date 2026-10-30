@@ -65,12 +65,12 @@
 
 ## 1. Сторож ядра (D1)
 
-- [ ] 1.1 `[agent]` Тест `import_guard_test.dart` (workspace-architecture «Автоматический сторож границ пакетов», сценарий «Ядро импортирует разборщик конфигурации»): временный пакет с правилом ядра и `import 'package:yaml/yaml.dart'` даёт одно нарушение. Красный: правило ядра `package:yaml/` не запрещает.
-- [ ] 1.2 `[agent]` `rules.dart` — к запретам ядра добавить `package:yaml/`, `package:yaml_edit/`, `package:toml/` с комментарием CFG-5. 1.1 зелёный, `melos run guard` зелёный.
+- [x] 1.1 `[agent]` Тест `import_guard_test.dart` (workspace-architecture «Автоматический сторож границ пакетов», сценарий «Ядро импортирует разборщик конфигурации»): временный пакет с правилом ядра и `import 'package:yaml/yaml.dart'` даёт одно нарушение. Красный: правило ядра `package:yaml/` не запрещает.
+- [x] 1.2 `[agent]` `rules.dart` — к запретам ядра добавить `package:yaml/`, `package:yaml_edit/`, `package:toml/` с комментарием CFG-5. 1.1 зелёный, `melos run guard` зелёный.
 
 ## 2. Типы и схема ядра (D3, D6)
 
-- [ ] 2.1 `[agent]` Тесты `codelab_agent_core/test/config/config_schema_test.dart` (agent-configuration «Схема и строгая проверка»; CFG-1, CFG-4) — табличные, на `ConfigTree` в коде:
+- [x] 2.1 `[agent]` Тесты `codelab_agent_core/test/config/config_schema_test.dart` (agent-configuration «Схема и строгая проверка»; CFG-1, CFG-4) — табличные, на `ConfigTree` в коде:
   - неизвестный ключ с подсказкой (`reserve_token` → `reserve_tokens`);
   - ключ с точкой → вложенная форма;
   - неверный тип с ожидаемым типом;
@@ -85,9 +85,9 @@
   - `agents.definitions.reviewer` → проблема с подсказкой `.codelab/agents/reviewer.md` (`core/config-rejects-yaml-agent-definitions`, DF-12).
 
   Красный.
-- [ ] 2.2 `[agent]` Тест `config_validator_positions_test.dart` (сценарий «Слой без позиций»): слой с позициями → `ConfigIssue` со строкой и столбцом; `app-storage` без позиций → источник и путь без строки. Красный.
-- [ ] 2.3 `[agent]` Тест `config_not_applied_test.dart` (сценарий «Ключ без потребителя»; D6, OQ4 (а)): `loop.empty_response_retries`, `skills.max_skills`, `redact.enabled` → по одному `config.key.not_applied`; ключ по умолчанию — без предупреждения; `foo.bar` → `unknownKey`. Красный.
-- [ ] 2.4 `[agent]` Реализация `lib/src/config/`:
+- [x] 2.2 `[agent]` Тест `config_validator_positions_test.dart` (сценарий «Слой без позиций»): слой с позициями → `ConfigIssue` со строкой и столбцом; `app-storage` без позиций → источник и путь без строки. Красный.
+- [x] 2.3 `[agent]` Тест `config_not_applied_test.dart` (сценарий «Ключ без потребителя»; D6, OQ4 (а)): `loop.empty_response_retries`, `skills.max_skills`, `redact.enabled` → по одному `config.key.not_applied`; ключ по умолчанию — без предупреждения; `foo.bar` → `unknownKey`. Красный.
+- [x] 2.4 `[agent]` Реализация `lib/src/config/`:
   - `config_tree.dart`, `config_issue.dart` (`ConfigIssueKind`, `ConfigLoadResult`, `ConfigException`, `ConfigInlineSecretException`), `schema.dart` (таблица MVP-ключей §15.4 и разделы после MVP), `resolve.dart` (шаги 1 и 6–7 D3), Левенштейн ≤ 2;
   - переезд `CoreConfig`, `PermissionsConfig`, `CompactionOverrides` в `config/core_config.dart` без изменения экспорта;
   - doc-комментарии по §15 `AGENTS.md`.
@@ -96,8 +96,8 @@
 
 ## 3. Слияние, доверие, подстановка, секреты, redact (D4, D7, D8)
 
-- [ ] 3.1 `[agent]` Тест `config_merge_test.dart` (сценарии «Проектный слой перекрывает глобальный», «Флаг сильнее переменной и файлов», «Серверы сливаются по имени»): списки заменяются, `mcp.servers` по `name`, `enabled: false` выключает, `tools.disabled` объединяется, `sources` по порядку. Красный.
-- [ ] 3.2 `[agent]` Тест `config_trust_test.dart` (agent-configuration «Доверие к проектному конфигу», все сценарии; CFG-3):
+- [x] 3.1 `[agent]` Тест `config_merge_test.dart` (сценарии «Проектный слой перекрывает глобальный», «Флаг сильнее переменной и файлов», «Серверы сливаются по имени»): списки заменяются, `mcp.servers` по `name`, `enabled: false` выключает, `tools.disabled` объединяется, `sources` по порядку. Красный.
+- [x] 3.2 `[agent]` Тест `config_trust_test.dart` (agent-configuration «Доверие к проектному конфигу», все сценарии; CFG-3):
   - `mcp.servers`, `providers`, `permissions.tools: allow` без доверия → `config.project.untrusted_key`, с доверием — есть;
   - `narrow` режима;
   - `budget` только уменьшение;
@@ -106,20 +106,20 @@
   - `config.local.yaml` и `extra` без ограничений.
 
   Красный.
-- [ ] 3.3 `[agent]` Тест `config_interpolation_test.dart` (agent-configuration «Подстановка переменных окружения»): `${VAR}`, `$${`, `$VAR`, вне разрешённых ключей — литерал, незаданная — проблема с ключом и переменной, без повторного раскрытия. Значения не встречаются в `message`. Красный.
-- [ ] 3.4 `[agent]` Тест `config_secrets_test.dart` (agent-configuration «Секреты только ссылками»; CFG-2, `core/config-rejects-inline-api-key`):
+- [x] 3.3 `[agent]` Тест `config_interpolation_test.dart` (agent-configuration «Подстановка переменных окружения»): `${VAR}`, `$${`, `$VAR`, вне разрешённых ключей — литерал, незаданная — проблема с ключом и переменной, без повторного раскрытия. Значения не встречаются в `message`. Красный.
+- [x] 3.4 `[agent]` Тест `config_secrets_test.dart` (agent-configuration «Секреты только ссылками»; CFG-2, `core/config-rejects-inline-api-key`):
   - `api_key`, `token`, `password` в `providers.*` и `mcp.servers[*]` → `inlineSecret`, текст без значения;
   - `api_key_env` + `api_key_secret` → проблема;
   - незаданная `api_key_env` → `config.provider.key_missing` и `providerProblems`;
   - `api_key_secret` и `${secret:…}` → `config.secret.unavailable`, сервер пропущен (D8).
 
   Красный.
-- [ ] 3.5 `[agent]` Тест `config_redact_test.dart` (agent-configuration «Ключи редакции секретов»): неизвестный слой, неизвестная запись `builtin`, некомпилируемое выражение с путём `redact.allowlist.patterns[0]`, правила доверия §12.4.3 (удаление слоёв и новые `patterns` из недоверенного проекта отброшены). Красный.
-- [ ] 3.6 `[agent]` Реализация шагов 2–5 `fromLayers`, `RedactSettings`, `HostSettings` (`sessions.dir`, `fsync`, `logging.level`, `logging.file`, `profile.*`), провайдеры → `List<CatalogProvider>` с `LlmTimeouts`/`RetryPolicy`. 3.1–3.5 зелёные.
+- [x] 3.5 `[agent]` Тест `config_redact_test.dart` (agent-configuration «Ключи редакции секретов»): неизвестный слой, неизвестная запись `builtin`, некомпилируемое выражение с путём `redact.allowlist.patterns[0]`, правила доверия §12.4.3 (удаление слоёв и новые `patterns` из недоверенного проекта отброшены). Красный.
+- [x] 3.6 `[agent]` Реализация шагов 2–5 `fromLayers`, `RedactSettings`, `HostSettings` (`sessions.dir`, `fsync`, `logging.level`, `logging.file`, `profile.*`), провайдеры → `List<CatalogProvider>` с `LlmTimeouts`/`RetryPolicy`. 3.1–3.5 зелёные.
 
 ## 4. MCP-серверы конфигурации и таймаут вызова (D10)
 
-- [ ] 4.1 `[agent]` Тест `config_mcp_servers_test.dart` ядра (agent-configuration «MCP-серверы конфигурации», сценарий «Неподдерживаемый тип в конфиге»):
+- [x] 4.1 `[agent]` Тест `config_mcp_servers_test.dart` ядра (agent-configuration «MCP-серверы конфигурации», сценарий «Неподдерживаемый тип в конфиге»):
   - `stdio` и `http` → `McpServerConfig(origin: config)` с `connectTimeout` и `callTimeout`;
   - порядок заголовков;
   - `type: sse` и `url` без схемы — проблемы;
@@ -128,18 +128,31 @@
   - `toString` не раскрывает `env`/`headers`.
 
   Красный.
-- [ ] 4.2 `[agent]` Тест `codelab_agent_mcp/test/connector_test.dart`, группа «call timeout per server» (agent-mcp-client «Вызов инструмента, отмена и таймаут», сценарий «Таймаут сервера сильнее общего»): на `FakeClock` сервер с `callTimeout: 2 s` получает сигнал отмены и текст `within 2 s.`, сервер с `null` ждёт `options.callTimeout`. Красный.
-- [ ] 4.3 `[agent]` Реализация: поле `Duration? callTimeout` в `McpServerConfig` и ветвях (не входит в `sameConnection`), передача в клиента в `McpClientConnector`, отображение элементов `mcp.servers` в `resolve.dart`. Обновить doc-комментарий `McpClientOptions` (ключ теперь есть). 4.1–4.2 зелёные; тесты `codelab_agent_mcp` и `codelab_agent_acp` зелёные.
+- [x] 4.2 `[agent]` Тест `codelab_agent_mcp/test/connector_test.dart`, группа «call timeout per server» (agent-mcp-client «Вызов инструмента, отмена и таймаут», сценарий «Таймаут сервера сильнее общего»): на `FakeClock` сервер с `callTimeout: 2 s` получает сигнал отмены и текст `within 2 s.`, сервер с `null` ждёт `options.callTimeout`. Красный.
+- [x] 4.3 `[agent]` Реализация: поле `Duration? callTimeout` в `McpServerConfig` и ветвях (не входит в `sameConnection`), передача в клиента в `McpClientConnector`, отображение элементов `mcp.servers` в `resolve.dart`. Обновить doc-комментарий `McpClientOptions` (ключ теперь есть). 4.1–4.2 зелёные; тесты `codelab_agent_mcp` и `codelab_agent_acp` зелёные.
 
 ## 5. Несколько провайдеров (D11)
 
-- [ ] 5.1 `[agent]` Тест `codelab_agent_core/test/llm/routed_stream_function_test.dart` (agent-llm «Фабрика и закрытые адаптеры», сценарии «Маршрут по провайдеру», «Провайдер без ключа»): два провайдера на `MockClient` — запрос только к нужному, цепочка второго не создана; провайдер из `unavailable` — ошибка `auth` с текстом, ноль HTTP-запросов; неизвестный провайдер — `badRequest`. Красный.
-- [ ] 5.2 `[agent]` `createRoutedStreamFunction` в `llm/provider_factory.dart`, экспорт из бареля (PKG-5 соблюдён). 5.1 зелёный.
+- [x] 5.1 `[agent]` Тест `codelab_agent_core/test/llm/routed_stream_function_test.dart` (agent-llm «Фабрика и закрытые адаптеры», сценарии «Маршрут по провайдеру», «Провайдер без ключа»): два провайдера на `MockClient` — запрос только к нужному, цепочка второго не создана; провайдер из `unavailable` — ошибка `auth` с текстом, ноль HTTP-запросов; неизвестный провайдер — `badRequest`. Красный.
+- [x] 5.2 `[agent]` `createRoutedStreamFunction` в `llm/provider_factory.dart`, экспорт из бареля (PKG-5 соблюдён). 5.1 зелёный.
 
 ## 6. Сессия вне корня запуска (D9)
 
-- [ ] 6.1 `[agent]` Тест `codelab_agent_core/test/runtime/config_outside_root_test.dart` (agent-runtime «Конфигурация сессии вне корня запуска», все сценарии): `projectRoot: /A`, сессии `/A`, `/B`, `/A/sub` — серверы, режим, правила и модель из нужного снимка, один `config.session.outside_root` на `cwd`; `loadSession` — то же правило. Красный.
-- [ ] 6.2 `[agent]` `CoreConfig.projectRoot`/`withoutProject`, выбор снимка в `AgentRuntimeImpl` для `createSession` и `loadSession`. 6.1 зелёный, `melos run web-compile` зелёный. **Конец итерации 1.**
+- [x] 6.1 `[agent]` Тест `codelab_agent_core/test/runtime/config_outside_root_test.dart` (agent-runtime «Конфигурация сессии вне корня запуска», все сценарии): `projectRoot: /A`, сессии `/A`, `/B`, `/A/sub` — серверы, режим, правила и модель из нужного снимка, один `config.session.outside_root` на `cwd`; `loadSession` — то же правило. Красный.
+- [x] 6.2 `[agent]` `CoreConfig.projectRoot`/`withoutProject`, выбор снимка в `AgentRuntimeImpl` для `createSession` и `loadSession`. 6.1 зелёный, `melos run web-compile` зелёный.
+- [x] 6.3 `[agent]` Исправления по ревью итерации 1 (решения пользователя 2026-10-30; design.md D3, D6–D9, D16; agent-configuration «Доверие к проектному конфигу», «Секреты только ссылками», «Схема и строгая проверка»; agent-permissions «Дополнительно запрещённые уровни из конфигурации»). Каждый пункт — сначала красный тест:
+  - `ask` + `plan` в любом порядке → режим `ask` и поле дополнительно запрещённых уровней `PermissionsConfig` (`extraDeniedTiers = {write, exec}`); политика запрещает `mode.deniedTiers ∪ extra`; `session/set_mode` запрет не снимает;
+  - `config.local.yaml` подчиняется правилам доверия, пока проект не в `trusted_projects`;
+  - `permissions.deny` недоверенного проекта объединяется с нижними слоями; `permissions.tools.<t>` — только если не мягче (`deny` > `ask` > `allow`, равное применяется), иначе `config.project.untrusted_key`;
+  - `secrets` отбрасывается из обоих проектных слоёв всегда (`ignored: secrets is read only from the global config`);
+  - `prompts.*` и разделы `hooks`, `plugins`, `a2a`, `lsp` из недоверенного проекта отбрасываются с `config.project.untrusted_key`;
+  - формат имён `api_key_env`/`api_key_secret`, значение не попадает в сообщение;
+  - проектные слои без `projectRoot` — `ArgumentError`;
+  - `trusted_projects`: только абсолютные пути; глобальный слой — `user` или `appStorage`; в проектном слое — `config.project.untrusted_key`;
+  - ошибки LLM-транспорта без HTTP-статуса не содержат URL провайдера (`stream_state.dart`): адрес может нести учётные данные в userinfo или query и имя внутреннего хоста; тест — сетевой сбой на `MockClient` для URL с `user:pass@` и `?key=`, текст ошибки хода и лог без URL; Текст сетевого сбоя — `connection failed: <runtimeType>`, в прочих текстах любой `http(s)://…` заменяется на `<url>`; тест `test/llm/error_text_no_url_test.dart`.
+  - сверка с принятыми отклонениями (D3, D6, D7, D8, D9, D16): `ConfigIssue.event/fields/level` у предупреждений и `ConfigLoadResult.orThrow()`; `HostSettings.fsync` строкой; `untrusted_key` для смягчения `permissions.mode`; ключи проблем `profile.<name>.<capability>`, `redact.layers[i]`, `providers.<id>.api_key_secret`; текст inlineSecret MCP `use ${NAME} in env or headers`; `not_applied` по листьям; `profile.<name>` — только встроенные профили, неизвестная capability — `unknownKey`, capability после MVP — `not_applied`; `default_model` в `providers.<p>.models`; `withoutProject` — второй проход `fromLayers` с `fallbackModel` и отказом при его проблемах; `config.session.outside_root` — логгером сессии, один раз на нормализованный `cwd`.
+
+  Тесты групп 2–6 зелёные, `melos run guard` и `melos run web-compile` зелёные. **Конец итерации 1.**
 
 ## 7. Разведка и строгий профиль YAML (D2, D5)
 

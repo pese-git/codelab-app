@@ -27,11 +27,20 @@ sealed class McpServerConfig {
     required this.name,
     this.origin = McpServerOrigin.session,
     this.connectTimeout = defaultMcpConnectTimeout,
+    this.callTimeout,
   });
 
   final String name;
   final McpServerOrigin origin;
   final Duration connectTimeout;
+
+  /// Предел одного `tools/call` этого сервера (ключ конфигурации
+  /// `mcp.servers[*].call_timeout`, design.md change
+  /// `add-agent-configuration`, D10). `null` — умолчание коннектора
+  /// (`McpClientOptions.callTimeout`): так у серверов `session/new`, в ACP
+  /// такого параметра нет, и новые поля не придумываются. Не входит в
+  /// [sameConnection]: срок вызова не влияет на соединение.
+  final Duration? callTimeout;
 
   /// Ключ транспорта для capability `mcp`: `stdio` или `http`.
   String get transport;
@@ -54,6 +63,7 @@ final class McpStdioServerConfig extends McpServerConfig {
     this.env = const {},
     super.origin,
     super.connectTimeout,
+    super.callTimeout,
   });
 
   final String command;
@@ -85,6 +95,7 @@ final class McpHttpServerConfig extends McpServerConfig {
     this.headers = const [],
     super.origin,
     super.connectTimeout,
+    super.callTimeout,
   });
 
   final Uri url;

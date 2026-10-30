@@ -100,11 +100,15 @@ final class ConfigIssue {          // одна проблема валидаци
   final String source;             // путь файла, "env", "flags", "app-storage" или "env:CODELAB_PROVIDER_CONFIG"
   final int? line, column;         // из ConfigTree.positions (§15.1); null — у слоя без позиций
   final String message;            // для человека; никогда не содержит значения секрета
+  final String? event;             // только у предупреждений: имя события лога (§12.2)
+  final Map<String, Object?> fields; // поля события без значений ключей
+  final LogLevel? level;           // уровень записи предупреждения
 }
 final class ConfigLoadResult {
   final CoreConfig? config;        // null ⇔ issues не пусто
   final List<ConfigIssue> issues, warnings;
   final List<String> sources;      // слои по порядку: "defaults", пути файлов, "env:…", "flags"
+  CoreConfig orThrow();            // config или ConfigException / ConfigInlineSecretException
 }
 // codelab.toml не читается (§15.7, решение пользователя 2026-10-29): поля legacy нет, найденный
 // файл — предупреждение config.legacy_found в warnings.

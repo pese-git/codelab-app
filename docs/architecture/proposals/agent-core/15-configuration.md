@@ -51,7 +51,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | 1 | встроенные значения по умолчанию | `ConfigLoader` в `codelab_agent_io` | разработчики |
 | 2 | глобальный конфиг | `$CODELAB_HOME/config.yaml` (по умолчанию `~/.codelab/config.yaml`) | пользователь |
 | 3 | проектный конфиг | `<cwd>/.codelab/config.yaml` | репозиторий (коммитится) |
-| 4 | локальный проектный конфиг | `<cwd>/.codelab/config.local.yaml` | пользователь (в `.gitignore`) |
+| 4 | локальный проектный конфиг | `<cwd>/.codelab/config.local.yaml` | пользователь (обычно в `.gitignore`); пока проект не в `trusted_projects`, подчиняется тем же правилам доверия, что слой 3 (§15.3) |
 | 5 | переменные окружения `CODELAB_*`; после MVP — первой в слое предконфигурация провайдера `CODELAB_PROVIDER_*` (§17.5.3) | §15.6 | окружение запуска |
 | 6 | флаги командной строки | §15.6 | запуск |
 
@@ -62,7 +62,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 заменяются целиком (список `fallback` из проектного конфига не дописывается к глобальному, а
 заменяет его); список `mcp.servers` сливается по `name`: сервер с тем же `name` заменяется, новый
 добавляется, `enabled: false` в более приоритетном файле выключает сервер. Исключение: `tools.disabled`
-слоёв 2–4 объединяется, а не заменяется (§6.3.8); после MVP так же объединяется `tools.mounted`
+слоёв 2–4 объединяется, а не заменяется (§6.3.8). В проектных слоях недоверенного проекта (§15.3) `permissions.deny` объединяется со списком нижних слоёв, а `permissions.tools.<t>` применяется, только если не мягче значения нижних слоёв (`deny` > `ask` > `allow`; равное применяется): недоверенный проект не снимает глобальные запреты; после MVP так же объединяется `tools.mounted`
 (§17.11.10). После MVP списки `hooks.before_tool` и `hooks.after_tool` сливаются по `name`, как
 `mcp.servers` (§17.14.2.4).
 
@@ -75,14 +75,19 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 ## 15.3. Доверие к проектному конфигу
 
 Проектный конфиг приходит из репозитория, который пользователь мог только что склонировать.
-Поэтому слои 3 и 4 ограничены:
+Поэтому слои 3 и 4 ограничены. Оба слоя лежат в дереве проекта, и репозиторий может принести и
+`config.local.yaml`; поэтому, пока проект не в `trusted_projects`, слой 4 подчиняется тем же
+правилам, что слой 3 (столбец «Слой 3»), а столбец «Слой 4» действует только для доверенного
+проекта (решение пользователя 2026-10-30, change `add-agent-configuration`, D7). Сравнение «только уменьшение», «не мягче», «ужесточение» — с результатом
+слияния нижних слоёв; смягчение отбрасывается с предупреждением `config.project.untrusted_key`.
 
 | Ключи | Слой 3 (проект) | Слой 4 (локальный) | Условие снятия ограничения |
 |---|---|---|---|
 | `agent.default_model`, `compaction.*`, `budget.*` (только уменьшение), `tools.output.*` | да | да | — |
-| `permissions.mode` | только ужесточение: итоговый режим — `narrow(режим нижних слоёв, режим проекта)` (§7.3.1, как у субагента §17.3.3, шаг 4): `bypass → accept-edits → standard → ask`; `plan` добавляет запреты `write`/`exec` к режиму нижних слоёв (`ask` + `plan` → `ask` с запретом) | да | — |
-| `permissions.deny`, `permissions.tools` со значениями `ask` и `deny` | да | да | — |
-| `permissions.tools` со значением `allow` | нет | да | проект в `trusted_projects` |
+| `permissions.mode` | только ужесточение: итоговый режим — `narrow(режим нижних слоёв, режим проекта)` (§7.3.1, как у субагента §17.3.3, шаг 4): `bypass → accept-edits → standard → ask`; `plan` добавляет запреты `write`/`exec` к режиму нижних слоёв: `ask` + `plan` и `plan` + `ask` → `ask` с дополнительно запрещёнными уровнями `write`/`exec` (`PermissionsConfig.extraDeniedTiers`, §7.3.1) | да | — |
+| `permissions.deny` | да — объединяется с нижними слоями | да | — |
+| `permissions.tools.<t>` со значением не мягче нижних слоёв (`deny` > `ask` > `allow`; равное применяется) | да | да | — |
+| `permissions.tools.<t>` мягче нижних слоёв | нет | да | проект в `trusted_projects` |
 | `mcp.servers` | нет (игнорируется с предупреждением) | да | проект в `trusted_projects` |
 | `providers.*` (адреса, заголовки) | нет | да | проект в `trusted_projects` |
 | `prompts.*` (включая `append_system`, `append_system_text`, §11.6.1) | нет | да | проект в `trusted_projects` |
@@ -104,7 +109,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | `subagents.*` (после MVP, §17.3.10) | только ужесточение (меньшие лимиты, `enabled = false`; `follow_ups = false`, уменьшение `max_follow_ups`, `max_resumes`, но не включение и не увеличение, §17.3.8.1) | да | — |
 | `tools.spill.enabled = false`; уменьшение любых ключей `tools.spill.*` (этап 3, §17.4.8) | да | да | — |
 | увеличение ключей `tools.spill.*` (этап 3) | нет | да | глобальный конфиг или проект в `trusted_projects` |
-| `secrets.*` (после MVP, §17.5.9) | нет | нет | только глобальный конфиг |
+| `secrets.*` (после MVP, §17.5.9) | нет | нет | только глобальный конфиг; из обоих проектных слоёв отбрасывается всегда с `config.project.untrusted_key` (`ignored: secrets is read only from the global config`) |
 | `config.*` (после MVP) | нет | да | — |
 | `${secret:<name>}` в `headers`, `env` (после MVP, §17.5.4) | нет (подстановка — литерал с предупреждением) | да | проект в `trusted_projects` |
 | `steering.enabled = false`; уменьшение `steering.max_steps`, `steering.max_pending`, `steering.max_bytes` (после MVP, §17.7.7) | да (только ужесточение) | да | — |
@@ -138,7 +143,10 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 Слои 5 и 6 (окружение, флаги и после MVP предконфигурация провайдера `CODELAB_PROVIDER_*`,
 §17.5.3) правилам доверия не подчиняются: их задаёт тот, кто запускает агента.
 
-`trusted_projects` — массив абсолютных путей в **глобальном** конфиге. Ключ из слоя 3, который
+`trusted_projects` — массив только абсолютных путей (`~` раскрывается; относительный — ошибка
+`expected an absolute path` на `trusted_projects[i]`) в **глобальном** слое (`user` или `appStorage`);
+в проектных слоях ключ отбрасывается с предупреждением `config.project.untrusted_key`
+(`ignored: trusted_projects is read only from the global config`), а в слое `--config` — ошибка. Ключ из слоя 3 (и из слоя 4 недоверенного проекта), который
 требует доверия, без него не ошибка, а предупреждение `config.project.untrusted_key` с именем
 ключа: репозиторий не может сломать запуск, но и не может расширить права агента.
 
@@ -167,7 +175,7 @@ providers:
 |---|---|---|---|
 | `kind` | `"openai-compatible"` \| `"anthropic"` \| `"gemini"` | обязателен, если нет `preset` | адаптер (§2.5, §17.10.3) |
 | `base_url` | string | для `anthropic` — `https://api.anthropic.com`; для `gemini` — `https://generativelanguage.googleapis.com`; для `openai-compatible` обязателен | эндпоинт |
-| `api_key_env` | string | нет | имя переменной окружения с ключом |
+| `api_key_env` | string | нет | имя переменной окружения с ключом (`[A-Za-z_][A-Za-z0-9_]*`, иначе `expected an environment variable name`) |
 | `api_key_secret` | string | нет | имя секрета в `SecretStore` (keychain) |
 | `auth_header` | string | `Authorization` (Bearer) / `x-api-key` | имя заголовка ключа |
 | `headers` | map string→string | `{}` | дополнительные заголовки; допускают `${ENV}`, после MVP — `${secret:<name>}` (§17.5.4) |
@@ -531,7 +539,10 @@ snake_case, значения — `"off"` или список транспорт�
 читатель YAML 1.1 не принял его за логическое значение). После MVP — также `network = "off"`
 (§17.1.5), `skills = "off"` (§17.2), `language_servers = "off"` (§17.8.10), `background_jobs = "off"`
 (§17.9.12), `memory = "off"`, `user_questions = "off"` (§17.11) и `user_hooks = "off"` (§17.14.2).
-Расширение — `HostWiringException`.
+`<name>` — только встроенные профили (§10.4), другое имя — `unknownKey`; неизвестная capability —
+`unknownKey`, capability после MVP — `config.key.not_applied`. Расширение — `HostWiringException`,
+который загрузчик переводит в ошибку с ключом `profile.<name>.<capability>` (ревью итерации 1
+change `add-agent-configuration`).
 
 ## 15.5. Алгоритм загрузки и валидации
 
@@ -620,13 +631,16 @@ loadConfig(cwd, env, flags):
 пока никто не читает (на этапе 8.5: `tools.*`, `loop.*`, `exec.*`, `prompts.*`, `agent.fallback`,
 `agent.summary_model`, `permissions.timeout`, `model_catalog.*`, `providers.*.list_models*`,
 `logging.trace*`, `redact.*` и др.), проверяется по схеме, а явно заданный даёт одно предупреждение
-`config.key.not_applied {key, source}` на ключ за загрузку; значение по умолчанию предупреждения не
+`config.key.not_applied {key, source}` на каждый явно заданный лист за загрузку; значение по умолчанию предупреждения не
 даёт. Раздел верхнего уровня «после MVP» (`llm`, `images`, `skills`, `subagents`, `jobs`, `hooks`,
 `plugins`, `a2a`, `memory`, `steering`, `lsp`, `secrets`, `config` и др.) распознаётся по имени и
 даёт то же предупреждение без проверки типов: его схему введёт change, который добавит потребителя.
 Ключ, которого нет ни в схеме, ни в списке разделов после MVP, — `unknownKey` (CFG-1). Ошибка на
 документированном ключе сломала бы старт пользователю, который следует документу, а тихий приём
-противоречил бы CFG-1; предупреждение называет ключ и источник и запуск не ломает.
+противоречил бы CFG-1; предупреждение называет ключ и источник и запуск не ломает. Разделы
+`prompts.*`, `hooks`, `plugins`, `a2a`, `lsp` из проектных слоёв недоверенного проекта и `secrets` из
+проектных слоёв любого проекта дают не `config.key.not_applied`, а `config.project.untrusted_key` и
+отбрасываются (§15.3).
 
 **Профиль YAML.** Конфиг — YAML 1.2 с семантикой core schema; ограничения проверяет
 `codelab_agent_io` при разборе, до валидатора ядра, и каждое нарушение — `ConfigException` с

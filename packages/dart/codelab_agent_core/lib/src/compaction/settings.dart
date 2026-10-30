@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import '../host/services.dart';
+import '../config/core_config.dart';
 
 /// Пороги сжатия для окна модели (`agent-core-architecture` §9.4).
 ///

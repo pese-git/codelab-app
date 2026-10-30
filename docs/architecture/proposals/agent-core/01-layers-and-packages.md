@@ -125,8 +125,9 @@ packages/dart/codelab_agent_core/
     host/      host_profile.dart build_agent_core.dart services.dart
     mcp/       mcp_server_config.dart mcp_transport.dart mcp_connector.dart mcp_tool_name.dart
                (этап 8: порты и правило имён без протокола MCP; клиент — в codelab_agent_mcp)
-    config/    config_tree.dart config_issue.dart schema.dart core_config.dart
-               resolve.dart (CoreConfig.fromLayers) redact_settings.dart (§15; без разборщиков и файлов, CFG-5)
+    config/    config_tree.dart config_issue.dart key_path.dart schema.dart validate.dart merge.dart
+               trust.dart interpolate.dart resolve.dart (CoreConfig.fromLayers) core_config.dart
+               host_settings.dart redact_settings.dart (§15; без разборщиков и файлов, CFG-5)
     prompts/   prompts.g.dart compose.dart template.dart
     runtime/   agent_runtime.dart agent_session.dart
     testing/   scripted_stream_function.dart fake_clock.dart sequential_id_generator.dart

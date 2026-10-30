@@ -73,6 +73,7 @@ final class PermissionPolicy {
     this.modeOverride,
     this.gate,
     this.rules = const PolicyRules(),
+    this.extraDeniedTiers = const {},
     PermissionDecisionStore? decisions,
     required this.logger,
     this.findCritical = defaultCriticalFinder,
@@ -85,6 +86,11 @@ final class PermissionPolicy {
   final PermissionMode? modeOverride;
   final PermissionGate? gate;
   final PolicyRules rules;
+
+  /// Уровни, запрещённые без вопроса сверх `mode.deniedTiers`: сочетание
+  /// `ask` и `plan` слоёв конфигурации даёт `ask` с запретом write/exec
+  /// (`PermissionsConfig.extraDeniedTiers`, §15.3).
+  final Set<ToolTier> extraDeniedTiers;
   final PermissionDecisionStore decisions;
   final Logger logger;
 
@@ -175,7 +181,8 @@ final class PermissionPolicy {
     if (_turnDeny.contains(tool.name)) {
       return const Denied('not allowed in this turn');
     }
-    if (modeOverride == null && mode.deniedTiers.contains(tier)) {
+    if (modeOverride == null &&
+        (mode.deniedTiers.contains(tier) || extraDeniedTiers.contains(tier))) {
       return const Denied('plan mode: changes are not allowed');
     }
     final effective = effectiveMode;

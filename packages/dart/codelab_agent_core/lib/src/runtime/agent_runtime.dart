@@ -5,6 +5,8 @@ import '../compaction/compactor.dart';
 import '../compaction/estimate.dart';
 import '../compaction/settings.dart';
 import '../compaction/summarizer.dart';
+import '../config/core_config.dart';
+import '../config/key_path.dart' show pathComponents;
 import '../env/bounded_env.dart';
 import '../env/execution_env.dart';
 import '../llm/messages.dart';
@@ -113,6 +115,10 @@ final class AgentRuntimeImpl implements AgentRuntime {
   final ModelCatalog models;
   final _sessions = <_Session>[];
 
+  /// Корни, для которых `config.session.outside_root` уже записан: одна
+  /// запись на `cwd` за жизнь рантайма (D9).
+  final _outsideRootLogged = <String>{};
+
   /// Отменяется в [dispose]: подключение MCP-серверов не должно пережить
   /// рантайм (`McpConnectRequest.cancel`).
   final _shutdown = CancelTokenSource();
@@ -129,13 +135,22 @@ final class AgentRuntimeImpl implements AgentRuntime {
       metadata: {'profile': profile.name},
     );
     await _store.create(header);
-    final model = _resolve(spec.model ?? config.defaultModel, config.effort);
+    final settings = _sessionConfig(
+      header.id,
+      spec.cwd,
+      spec.ports.logger ?? services.logger,
+    );
+    final model = _resolve(
+      spec.model ?? settings.defaultModel,
+      settings.effort,
+    );
     final session = await _open(
       snapshot: SessionSnapshot.empty(header),
       cwd: spec.cwd,
-      mode: spec.mode ?? config.permissions.mode ?? profile.defaultMode,
+      settings: settings,
+      mode: spec.mode ?? settings.permissions.mode ?? profile.defaultMode,
       model: model,
-      effort: config.effort,
+      effort: settings.effort,
       ports: spec.ports,
       extraBeforeToolCall: [
         ...spec.extraBeforeToolCall,
@@ -188,11 +203,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
   }) async {
     final snapshot = await _store.open(id);
     final restored = buildLlmContext(snapshot);
+    final settings = _sessionConfig(
+      id,
+      cwd ?? snapshot.header.cwd,
+      ports.logger ?? services.logger,
+    );
     final effort =
         ReasoningEffort.values
             .where((e) => e.name == restored.config['effort'])
             .firstOrNull ??
-        config.effort;
+        settings.effort;
     // Модель журнала выигрывает, если её знает каталог (D3); иначе —
     // поведение этапа 3: модель конфигурации и новая model_change.
     final journalModel = switch (restored.model) {
@@ -204,14 +224,15 @@ final class AgentRuntimeImpl implements AgentRuntime {
     };
     final chosen = model != null
         ? _resolve(model, effort)
-        : journalModel ?? _resolve(config.defaultModel, effort);
+        : journalModel ?? _resolve(settings.defaultModel, effort);
     final header = snapshot.header.cwd;
     final session = await _open(
       snapshot: snapshot,
       cwd: cwd ?? header,
+      settings: settings,
       mode:
           ModeId.values.where((m) => m.value == restored.modeId).firstOrNull ??
-          config.permissions.mode ??
+          settings.permissions.mode ??
           profile.defaultMode,
       model: chosen,
       effort: effort,
@@ -255,6 +276,33 @@ final class AgentRuntimeImpl implements AgentRuntime {
       rethrow;
     }
     return session;
+  }
+
+  /// Ключи сессии из нужного снимка конфигурации (design.md change
+  /// `add-agent-configuration`, D9; agent-runtime «Конфигурация сессии вне
+  /// корня запуска»).
+  ///
+  /// Почему: проектные слои 3–4 прочитаны для корня запуска хоста. Сессия в
+  /// другом каталоге (`session/new` с иным `cwd`, подкаталог со своим
+  /// `.codelab/`) не должна получать MCP-серверы и правила `allow` чужого
+  /// проекта (приоритет 1 — безопасность), поэтому берёт снимок без
+  /// проектных слоёв. Ключи сборки (каталог, capability, профиль) остаются
+  /// общими: они уже вошли в [services] и [profile].
+  CoreConfig _sessionConfig(SessionId id, String cwd, Logger logger) {
+    final settings = config.forSessionCwd(cwd);
+    if (!identical(settings, config) &&
+        _outsideRootLogged.add(pathComponents(cwd).join('/'))) {
+      logger.log(
+        LogLevel.info,
+        'config.session.outside_root',
+        fields: {
+          'session_id': id.value,
+          'cwd': cwd,
+          'config_root': config.projectRoot,
+        },
+      );
+    }
+    return settings;
   }
 
   /// Ссылка каталога с уровнем рассуждения сессии; модели нет в каталоге —
@@ -301,6 +349,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
   Future<_Session> _open({
     required SessionSnapshot snapshot,
     required String cwd,
+    required CoreConfig settings,
     required ModeId mode,
     required ModelRef model,
     required ReasoningEffort effort,
@@ -327,6 +376,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     await _connectMcp(
       id: id,
       cwd: cwd,
+      settings: settings,
       servers: mcpServers,
       logger: logger,
       registry: sessionRegistry,
@@ -338,9 +388,10 @@ final class AgentRuntimeImpl implements AgentRuntime {
         : null;
     final policy = PermissionPolicy(
       mode: mode,
-      modeOverride: config.permissions.modeOverride,
+      modeOverride: settings.permissions.modeOverride,
       gate: gate,
-      rules: config.permissions.rules,
+      rules: settings.permissions.rules,
+      extraDeniedTiers: settings.permissions.extraDeniedTiers,
       logger: logger,
     );
     final compaction = profile.isOn(HostCapability.compaction);
@@ -358,7 +409,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         ),
         clock: services.clock,
         ids: services.ids,
-        budget: config.budget,
+        budget: settings.budget,
         beforeToolCall: [
           policy.asHook(sessionRegistry.lookup),
           ...extraBeforeToolCall,
@@ -375,7 +426,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         emergencyCompact: compaction
             ? (cause, cancel) => session._emergency(cause, cancel)
             : null,
-        contextWindowCap: config.compaction.contextWindowCap,
+        contextWindowCap: settings.compaction.contextWindowCap,
       ),
       systemPrompt: _systemPrompt(cwd, mode, sessionRegistry, mcp),
       tools: sessionRegistry.tools,
@@ -401,6 +452,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       replaceMcp: (servers) => _replaceMcp(
         id: id,
         cwd: cwd,
+        settings: settings,
         servers: servers,
         logger: logger,
         registry: sessionRegistry,
@@ -411,7 +463,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       compose: (cwd, mode) => _systemPrompt(cwd, mode, sessionRegistry, mcp),
       snapshot: snapshot,
       stream: stream,
-      compaction: compaction ? config.compaction : null,
+      compaction: compaction ? settings.compaction : null,
     );
     _sessions.add(session);
     return session;
@@ -459,12 +511,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
   Future<void> _connectMcp({
     required SessionId id,
     required String cwd,
+    required CoreConfig settings,
     required List<McpServerConfig> servers,
     required Logger logger,
     required ToolRegistry registry,
     required _McpState state,
   }) async {
-    final accepted = _planMcp(id, logger, servers);
+    final accepted = _planMcp(id, logger, settings, servers);
     if (accepted.isEmpty) {
       return;
     }
@@ -485,16 +538,17 @@ final class AgentRuntimeImpl implements AgentRuntime {
   List<McpServerConfig> _planMcp(
     SessionId id,
     Logger logger,
+    CoreConfig settings,
     List<McpServerConfig> servers, {
     bool logConfigSkips = true,
   }) {
-    if (config.mcpServers.isEmpty && servers.isEmpty) {
+    if (settings.mcpServers.isEmpty && servers.isEmpty) {
       return const [];
     }
     // Повторная смена набора не переписывает в лог пропуски серверов
     // конфига: они уже записаны при создании сессии.
     final configServers = Set<McpServerConfig>.identity()
-      ..addAll(config.mcpServers);
+      ..addAll(settings.mcpServers);
     void skipped(McpServerConfig server, String reason) {
       if (!logConfigSkips && configServers.contains(server)) {
         return;
@@ -516,7 +570,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     final clientNames = {for (final s in servers) s.name};
     final merged = <McpServerConfig>[];
     for (final (source, list) in [
-      (McpServerOrigin.config, config.mcpServers),
+      (McpServerOrigin.config, settings.mcpServers),
       (McpServerOrigin.session, servers),
     ]) {
       final seen = <String>{};
@@ -600,12 +654,19 @@ final class AgentRuntimeImpl implements AgentRuntime {
   Future<void> _replaceMcp({
     required SessionId id,
     required String cwd,
+    required CoreConfig settings,
     required List<McpServerConfig> servers,
     required Logger logger,
     required ToolRegistry registry,
     required _McpState state,
   }) async {
-    final accepted = _planMcp(id, logger, servers, logConfigSkips: false);
+    final accepted = _planMcp(
+      id,
+      logger,
+      settings,
+      servers,
+      logConfigSkips: false,
+    );
     final current = state.tools;
     if (current == null) {
       // Сессия начиналась без серверов: подключаем как при создании.
