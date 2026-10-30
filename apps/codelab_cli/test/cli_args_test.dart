@@ -149,7 +149,6 @@ void main() {
 
   test('subcommands of later stages are unknown commands', () {
     for (final command in [
-      'config',
       'provider',
       'mcp',
       'secret',

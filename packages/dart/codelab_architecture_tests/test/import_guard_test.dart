@@ -331,4 +331,142 @@ void main() {
       ]),
     );
   });
+
+  // Мост `codelab_setup`: основной барель чистый и не знает IO-пакет агента,
+  // `lib/io.dart` его импортирует (design.md change `add-agent-configuration`,
+  // D14; workspace-architecture «Основной барель моста импортирует IO-пакет
+  // агента»).
+  List<String> scanSetupBridge(Directory tmp) {
+    final setupRules = rules.where(
+      (r) => r.dir == 'packages/dart/codelab_setup',
+    );
+    expect(setupRules, isNotEmpty, reason: 'нет правила codelab_setup');
+    return [
+      for (final rule in setupRules)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            '.',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+  }
+
+  test('reports the IO package of the agent in the main barrel of the setup '
+      'bridge only', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_setup_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_agent_io/codelab_agent_io.dart';\n";
+    for (final file in ['codelab_setup.dart', 'io.dart']) {
+      File(p.join(tmp.path, 'lib', file))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(import);
+    }
+
+    final violations = scanSetupBridge(tmp);
+
+    expect(violations, hasLength(1));
+    expect(
+      violations.single,
+      endsWith(
+        'lib/codelab_setup.dart:1 -> '
+        'package:codelab_agent_io/codelab_agent_io.dart',
+      ),
+    );
+  });
+
+  test('reports dart:io and a reference to io.dart in the main barrel of '
+      'the setup bridge', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_setup_io_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'codelab_setup.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("import 'dart:io';\nexport 'io.dart';\n");
+    File(
+      p.join(tmp.path, 'lib', 'io.dart'),
+    ).writeAsStringSync("import 'dart:io';\nexport 'src/io/x.dart';\n");
+    File(p.join(tmp.path, 'lib', 'src', 'io', 'x.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('');
+
+    final violations = scanSetupBridge(tmp);
+
+    // dart:io разрешён только io.dart и src/io/; основной барель не должен
+    // ссылаться на них даже относительным путём (sealExclude).
+    expect(violations, hasLength(2));
+    expect(violations.first, endsWith('lib/codelab_setup.dart:1 -> dart:io'));
+    expect(
+      violations.last,
+      endsWith('lib/codelab_setup.dart:2 -> io.dart (excluded file)'),
+    );
+  });
+
+  test('reports Flutter, ACP and client packages in io.dart of the setup '
+      'bridge', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_setup_acp_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'io.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'dart:io';\n"
+        "import 'package:codelab_agent_io/codelab_agent_io.dart';\n"
+        "import 'package:flutter/foundation.dart';\n"
+        "import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';\n"
+        "import 'package:codelab_client_core/codelab_client_core.dart';\n",
+      );
+
+    final violations = scanSetupBridge(tmp);
+
+    expect(violations, hasLength(3));
+    expect(
+      violations,
+      containsAll([
+        endsWith('lib/io.dart:3 -> package:flutter/foundation.dart'),
+        endsWith(
+          'lib/io.dart:4 -> package:codelab_acp_protocol/codelab_acp_protocol.dart',
+        ),
+        endsWith(
+          'lib/io.dart:5 -> package:codelab_client_core/codelab_client_core.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('allows the IO barrel of the setup bridge only in run.dart of the '
+      'terminal client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_setup_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_setup/io.dart';\n";
+    File(p.join(tmp.path, 'lib', 'src', 'run.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(import);
+    File(p.join(tmp.path, 'lib', 'src', 'repl', 'repl.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(import);
+
+    final violations = [
+      for (final rule in rules.where(
+        (r) => r.dir == 'apps/codelab_cli/lib/src',
+      ))
+        ...scan(
+          tmp.path,
+          PackageRule(
+            'lib/src',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+
+    // `config check` — единственный потребитель моста в CLI; он живёт в
+    // `run.dart` (design.md change `add-agent-configuration`, D14).
+    expect(
+      violations.single,
+      endsWith('lib/src/repl/repl.dart:1 -> package:codelab_setup/io.dart'),
+    );
+  });
 }
