@@ -126,17 +126,17 @@ codelab --version | --help
 `config export-providers|import-providers` — после MVP (E-14). До своего этапа подкоманда не
 регистрируется (`codelab <команда>` → код 64 `Unknown command`). Это общая реализация ядра
 (agent-core-architecture §17.5.4, §17.5.5: флаги `--project`/`--local`, тексты, коды выхода
-0/1/2); CLI вызывает её через `codelab_setup/io.dart` и добавляет только мастер и проверку
+0/1/64); CLI вызывает её через `codelab_setup/io.dart` и добавляет только мастер и проверку
 адреса к `provider add` (§12.4.4, §12.4.8). Они работают без запуска агента. `codelab.toml` не читается и не
 переводится: команды `config migrate` нет (решение 2026-10-29, change `add-agent-configuration`,
-D14). В 8.5 создаётся минимальный пакет `codelab_setup` (§12.4.2): `codelab config check`
+D12). В 8.5 создаётся минимальный пакет `codelab_setup` (§12.4.2): `codelab config check`
 регистрируется в `apps/codelab_cli` и вызывает `ConfigCommands` через `package:codelab_setup/io.dart`;
 корень состояния — `CODELAB_HOME`, как у `codelab-agent` (`config check` его не изменяет: нет
 `sessions/`, `profiles.json`, `cli_history`), `cwd` — `--cwd` подкоманды, иначе общий `-C/--cwd`,
 иначе текущий каталог. Путь передаётся загрузчику как есть, канонизирует его загрузчик, поэтому
 вывод и код двух бинарей совпадают и для относительного пути с `..`. Проверяется окружение процесса
-`codelab`, профиль подключения не учитывается: `--agent`, `-p`/`--prompt`, `--prompt-file` вместе с
-`config` — ошибка использования, код 64. `codelab config` без подкоманды — код 64 и
+`codelab`, профиль подключения не учитывается: флаги подключения и запроса (`-a`/`--agent`, `-m`/`--model`, `--mode`, `-r`/`--resume`, `-c`/`--continue`, `-p`/`--print`, `-f`/`--prompt-file`, `--approve`, `--timeout`, `--ui`)
+вместе с `config` — ошибка использования `--<flag> does not apply to config check`, код 64. `codelab config` без подкоманды — код 64 и
 `config needs a subcommand: codelab config check [--cwd <dir>]`; остальные подкоманды `config` до своих
 задач дают код 64 `Unknown command config <sub>`. `package:codelab_setup/io.dart` импортируется в
 `apps/codelab_cli/lib/src` только из `run.dart` (сторож).

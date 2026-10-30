@@ -102,10 +102,11 @@ final class ConfigIssue {          // одна проблема валидаци
   final String message;            // для человека; никогда не содержит значения секрета
   final String? event;             // только у предупреждений: имя события лога (§12.2)
   final Map<String, Object?> fields; // поля события без значений ключей
-  final LogLevel? level;           // уровень записи предупреждения
+  final LogLevel level;            // уровень записи предупреждения; по умолчанию warning
 }
 final class ConfigLoadResult {
   final CoreConfig? config;        // null ⇔ issues не пусто
+  final HostSettings? host;        // ключи хоста: sessions.*, logging.*, profile.* (§15.1)
   final List<ConfigIssue> issues, warnings;
   final List<String> sources;      // слои по порядку: "defaults", пути файлов, "env:…", "flags"
   CoreConfig orThrow();            // config или ConfigException / ConfigInlineSecretException

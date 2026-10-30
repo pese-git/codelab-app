@@ -15,12 +15,13 @@
 | Пакет | Ответственность | Зависит от | Запрещено |
 |---|---|---|---|
 | `packages/dart/codelab_agent_core` | типы сообщений, LLM-контракт и адаптеры провайдеров (HTTP через внедрённый клиент), цикл, инструменты, разрешения, сессии (формат и проекции), сжатие, промпты, `MemoryExecutionEnv`, `AgentRuntime`, порты MCP (`McpConnector`, `McpTransport`, `McpTransportFactory`, `McpServerConfig`, правило имён `mcpToolName`; без протокола MCP, §6.4) | чистый Dart, `package:http` (только интерфейс `Client`) | `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web`, `package:flutter`, `codelab_acp_protocol`, `codelab_acp_transports` |
-| `packages/dart/codelab_agent_io` | `LocalExecutionEnv` (файлы, процессы), файловый `JsonlSessionStore`, секреты из env и keychain, `StdioMcpTransportFactory` — реализация порта `McpTransportFactory` ядра для MCP stdio (процесс, окружение по allowlist, завершение дерева); после MVP — `LocalProcessLauncher` (§17.8.2), `FileSessionLeaseStore` и `ProcessProbe` (§17.6.8) | ядро, `dart:io` | Flutter, ACP |
+| `packages/dart/codelab_agent_io` | `LocalExecutionEnv` (файлы, процессы), файловый `JsonlSessionStore`, загрузка конфигурации `ConfigLoader` (YAML в строгом профиле, §15) и общие подкоманды `config` (`ConfigCommands`, §17.5.5), секреты из env и keychain, `StdioMcpTransportFactory` — реализация порта `McpTransportFactory` ядра для MCP stdio (процесс, окружение по allowlist, завершение дерева); после MVP — `LocalProcessLauncher` (§17.8.2), `FileSessionLeaseStore` и `ProcessProbe` (§17.6.8) | ядро, `dart:io` | Flutter, ACP |
 | `packages/dart/codelab_agent_mcp` | MCP-клиент dual-era (modern `2026-07-28` и legacy `initialize`): кодек JSON-RPC, `McpClient`, streamable HTTP на внедрённом `http.Client`, проекция MCP-инструментов в `AgentTool` (`McpTool`), `McpClientConnector` — реализация порта `McpConnector` ядра, `FakeMcpServer` (`lib/testing.dart`) | ядро | `dart:io` (stdio-процесс приходит портом `McpTransportFactory` ядра, реализация — в `_io`), Flutter, ACP, клиентские пакеты |
 | `packages/dart/codelab_agent_lsp` | после MVP (§17.8): кадрирование `Content-Length`, JSON-RPC, `LspClient`, `LspPool`, кодеки позиций, планировщик `WorkspaceEdit`, инструмент `lsp`, `LspToolFactory` | ядро | `dart:io` (процесс приходит портом `ByteProcessLauncher`), Flutter, ACP |
 | `packages/dart/codelab_agent_a2a` | после MVP (§17.15): модели A2A в ProtoJSON, `A2aClient`, `A2aRemoteAgentConnector` (порт `RemoteAgentConnector` ядра), транспортно-независимый A2A-сервер `A2aRequestHandler`, `A2aPermissionGate` | ядро, `package:http` (интерфейс `Client`) | `dart:io` (HTTP-сервер — в `apps/codelab_agent`), Flutter, ACP |
 | `packages/dart/codelab_agent_acp` | ACP-сервер поверх `AgentRuntime`: `initialize`, `session/*`, проекция событий, `AcpClientExecutionEnv`, `AcpPermissionGate`, реплей `session/load` | ядро, `codelab_acp_protocol`, `codelab_acp_transports` | `dart:io`, Flutter |
 | `packages/dart/codelab_embedded` | одна функция сборки встроенного агента для клиентов: runtime + ACP-сервер + `InProcessAcpLink`; после MVP — клиентская часть A2A (§17.15.2) | агентские пакеты, `codelab_acp_transports` | Flutter |
+| `packages/dart/codelab_setup` | мост настроек агента для клиентов (dart-agent-and-clients §12.4.2): основной барель реэкспортирует чистые типы ядра `ConfigIssue`, `ConfigIssueKind`, `ConfigLoadResult`, `lib/io.dart` — общие подкоманды `ConfigCommands` из `codelab_agent_io` для `codelab config check`; создан в минимальном составе change `add-agent-configuration` (D14), остальной состав §12.4.2 приходит со своими потребителями | ядро, `codelab_agent_io` (только из `lib/io.dart` и `lib/src/io/`) | Flutter, ACP, клиентские пакеты; `dart:io` и `package:codelab_agent_io/` вне `lib/io.dart` и `lib/src/io/` (правило сторожа) |
 | `packages/dart/codelab_agent_images` | после MVP (T-29, §17.11.2.1): `PureDartImagePreparer` — реализация порта `ImagePreparer` на `package:image`; отдельная точка входа `lib/io.dart` — `IsolateImagePreparer` (та же реализация в `Isolate.run`) | ядро, `image` | Flutter, ACP; `dart:io`/`dart:isolate` — только в `lib/io.dart` и `lib/src/io/` (исключение §1.4) |
 | `packages/dart/codelab_agent_web` | `PersistentWebEnv` (файлы в IndexedDB), хранилище сессий для web; этап 10 | ядро, `package:web` | `dart:io`, Flutter, ACP |
 | `apps/codelab_agent` | бинарь `codelab-agent serve --stdio` / `--ws` (после MVP — `--a2a`, HTTP-сервер A2A на `dart:io`, §17.15.4), загрузка конфига, выбор профиля | все агентские пакеты | Flutter, клиентские пакеты |
@@ -39,6 +40,8 @@ flowchart TB
     ACPA --> CORE["codelab_agent_core"]
     ACPA --> PROTO["codelab_acp_protocol"]
     ACPA --> TR
+    SETUP["codelab_setup"] --> IO
+    SETUP --> CORE
     IO --> CORE
     MCP --> CORE
     LSP --> CORE
@@ -59,6 +62,7 @@ flowchart TB
 | `codelab_agent_a2a` (после MVP, §17.15.2) | `codelab_agent_core`, `http`, `meta`, `async` |
 | `codelab_agent_acp` | `codelab_agent_core`, `codelab_acp_protocol`, `codelab_acp_transports`, `meta`, `async` |
 | `codelab_embedded` | агентские пакеты `codelab_agent_core`, `codelab_agent_io`, `codelab_agent_acp`, с этапа 8 — `codelab_agent_mcp` (после MVP — и `codelab_agent_lsp`, `codelab_agent_images`, `codelab_agent_a2a`), `codelab_acp_protocol`, `codelab_acp_transports` |
+| `codelab_setup` | `codelab_agent_core`, `codelab_agent_io`, `meta` (`setupAllowlist`; `http` добавится с проверкой провайдера мастера, §12.4.2) |
 | `codelab_agent_images` (после MVP) | `codelab_agent_core`, `image`, `meta` |
 | `codelab_agent_web` | `codelab_agent_core`, `web`, `meta`, `async` |
 
