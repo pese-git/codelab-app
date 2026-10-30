@@ -38,7 +38,6 @@ void main() {
       'src/loop/agent.dart',
       'src/tools/executor.dart',
       'src/tools/registry.dart',
-      'src/env/bounded_env.dart',
       'src/tools/path_lock.dart',
       'src/tools/validator.dart',
       'src/tools/builtin/',
@@ -49,6 +48,18 @@ void main() {
     ]) {
       expect(barrel, isNot(contains("export '$internal")), reason: internal);
     }
+  });
+
+  // Граница рабочей папки нужна не только инструментам ядра: загрузчик
+  // файлов проекта хоста читает через `BoundedEnv` корень своей области
+  // (change `add-agent-project-files`, D2). Экспортируется один тип, без
+  // внутренностей декоратора; инструменты по-прежнему получают только
+  // окружение за границей (ENV-2).
+  test('the barrel exports only BoundedEnv of the boundary decorator', () {
+    expect(
+      barrel,
+      contains("export 'src/env/bounded_env.dart' show BoundedEnv;"),
+    );
   });
 
   // Конфигурация: хост видит типы входа и результата, а схема, обход слоя,
