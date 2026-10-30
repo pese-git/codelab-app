@@ -184,6 +184,8 @@ AI-agent обязан интерпретировать эти формулиро
     │   ├── codelab_agent_core/
     │   ├── codelab_agent_io/
     │   ├── codelab_agent_acp/
+    │   ├── codelab_agent_mcp/
+    │   ├── codelab_setup/
     │   └── codelab_architecture_tests/
     └── flutter/
         └── codelab_ui/
@@ -198,11 +200,13 @@ AI-agent обязан интерпретировать эти формулиро
 * `codelab_client_core` — общий клиентский слой без UI для app и CLI, web-безопасный: рабочее пространство, соединение, сессии, транскрипт, очередь промптов, одобрения, опции и команды агента, инспектор, диагностика, порты хранилищ; владелец клиентского состояния — Cubit-ы app только отображают его; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_client_io` — `dart:io`-адаптеры клиентского слоя: файлы, процессы, рабочая папка, настоящие транспорты (`ioTransportResolver`), JSON-хранилища профилей и недавних проектов; без Flutter; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_agent_core` — встраиваемое ядро Dart-агента на чистом Dart (LLM, цикл, инструменты, разрешения, сессии); правила — во вложенном `AGENTS.md` пакета.
-* `codelab_agent_io` — `dart:io`-реализации портов ядра агента: файлы, процессы, журналы сессий; правила — во вложенном `AGENTS.md` пакета.
+* `codelab_agent_io` — `dart:io`-реализации портов ядра агента: файлы, процессы, журналы сессий, загрузка конфигурации (`ConfigLoader`) и общие подкоманды `config` (`ConfigCommands`); правила — во вложенном `AGENTS.md` пакета.
 * `codelab_agent_acp` — ACP-сервер агента: проекция `AgentRuntime` в протокол; правила — во вложенном `AGENTS.md` пакета.
+* `codelab_agent_mcp` — MCP-клиент агента без `dart:io`: протокол MCP, streamable HTTP на внедрённом `http.Client`, проекция MCP-инструментов в инструменты ядра; stdio-процесс сервера приходит портом ядра из `codelab_agent_io`; правила — во вложенном `AGENTS.md` пакета.
+* `codelab_setup` — мост настроек Dart-агента для клиентов: основной барель реэкспортирует чистые типы конфигурации ядра, `lib/io.dart` — общие подкоманды `config` из `codelab_agent_io` (`codelab config check`); клиенты получают их отсюда, а не из `package:codelab_agent_*`; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_architecture_tests` — только тесты: сторож импортов и allowlist зависимостей ядра (`melos run guard`).
 * `codelab_ui` — Fluent UI widgets рабочего места CodeLab.
-* `apps/codelab_desktop` — десктопный клиент; `apps/codelab_agent` — бинарь Dart-агента `codelab-agent serve --stdio | --ws`; `apps/codelab_cli` — терминальный клиент `codelab` на чистом Dart (REPL, headless `-p`, драйвер фикстур `test-scenario`) поверх `codelab_client_core`; правила — во вложенном `AGENTS.md` приложения.
+* `apps/codelab_desktop` — десктопный клиент; `apps/codelab_agent` — бинарь Dart-агента `codelab-agent serve --stdio | --ws`; `apps/codelab_cli` — терминальный клиент `codelab` на чистом Dart (REPL, headless `-p`, драйвер фикстур `test-scenario`, `config check`) поверх `codelab_client_core`; правила — во вложенном `AGENTS.md` приложения.
 
 Правила:
 

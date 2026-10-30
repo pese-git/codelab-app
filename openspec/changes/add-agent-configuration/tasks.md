@@ -256,13 +256,14 @@
 
 ## 12. Матрица, документы и Definition of Done
 
-- [ ] 12.1 `[agent]` `agent-parity-goals.md`:
+- [x] 12.1 `[agent]` `agent-parity-goals.md`:
   - E-02 и E-03 — серверы конфигурации подключаются (тесты 9.4 и 9.2), убрать «после change `add-agent-configuration`»;
   - R-16 (в редакции задачи 0.4) — критерий `core/config-legacy-found-warning` закрыт (8.3);
   - DF-12 (`core/config-rejects-yaml-agent-definitions`) и DF-15 (`core/config-unknown-provider-error`) закрыты (2.1).
-- [ ] 12.2 `[agent]` Сверка документов с кодом:
+- [x] 12.2 `[agent]` Сверка документов с кодом:
   - `agent-core/15-configuration.md`, §1.2–§1.3, §10.3, §12.2, §17.5.2 — то, что сделано, совпадает с D1–D17;
   - вложенные `AGENTS.md`: `codelab_agent_io` (`config/`, `cli/`, allowlist без `toml`), `apps/codelab_agent` (`config check`, файлы конфига, `--config`, `--max-steps`), `codelab_agent_core` (`config/`);
   - спецификации, которые изменились по ходу реализации, правятся в этом change, а не молча (`AGENTS.md` §17).
-- [ ] 12.3 `[client]` Сверка `09-11-stage-6-cli-mvp.md` и `apps/codelab_cli/AGENTS.md` с реализованной подкомандой.
-- [ ] 12.4 `[agent]` DoD этапа 8 для 8.5 в `09-13-stage-8-mcp-config.md`: отметка «Выполнено» у `config_loader_test.dart: invalid config reports key path and line`, строки R-16 (новая редакция), E-02 и E-03 (серверы конфигурации). Полный `melos run check` зелёный в CI pull request. **Конец итерации 5.**
+- [x] 12.3 `[client]` Сверка `09-11-stage-6-cli-mvp.md` и `apps/codelab_cli/AGENTS.md` с реализованной подкомандой.
+- [x] 12.4 `[agent]` DoD этапа 8 для 8.5 в `09-13-stage-8-mcp-config.md`: отметка «Выполнено» у `config_loader_test.dart: invalid config reports key path and line`, строки R-16 (новая редакция), E-02 и E-03 (серверы конфигурации).
+- [ ] 12.5 Полный melos run check зелёный в CI pull request. **Конец итерации 5.**

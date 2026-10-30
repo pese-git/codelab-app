@@ -5,7 +5,8 @@
 Источник архитектуры — `docs/architecture/proposals/agent-core-architecture.md`:
 - §1 — пакеты и allowlist зависимостей;
 - §4 — `ExecutionEnv`, `LocalExecutionEnv`;
-- §8 — журналы сессий, `JsonlSessionStore`.
+- §8 — журналы сессий, `JsonlSessionStore`;
+- §15 — конфигурация: слои, строгий профиль YAML, предупреждение о `codelab.toml` (§15.7).
 
 Код пишется по этим документам и `design.md` OpenSpec change этапа. Если документов не хватает, сначала дополняется документация, потом пишется код.
 
@@ -14,7 +15,8 @@
 `codelab_agent_io` — реализации портов ядра на `dart:io` для настольных хостов: сейчас — `apps/codelab_agent`, с этапа 7 — `codelab_embedded` (ещё не создан), через который агента встраивают клиенты:
 - `LocalExecutionEnv` — файлы и процессы (с этапа 2);
 - `JsonlSessionStore` — журналы сессий в JSONL (этап 3);
-- конфигурация и хранилища секретов (этапы 4 и 8).
+- `lib/src/config/` — загрузка конфигурации (этап 8.5, design.md change `add-agent-configuration`, D4, D5, D12): `ConfigLoader` читает слои `$CODELAB_HOME/config.yaml`, `<cwd>/.codelab/config.yaml`, `<cwd>/.codelab/config.local.yaml`, `--config`/`CODELAB_CONFIG`, переменные `CODELAB_*` (`environment_layer.dart`) и передаёт `ConfigTree` слоёв в `CoreConfig.fromLayers` ядра; `yaml_reader.dart` разбирает YAML в строгом профиле §15.5 с позициями; `legacy_notice.dart` только проверяет существование файлов Python-агента (`$CODELAB_HOME/codelab.toml`, `$CODELAB_HOME/auth.toml`, `<cwd>/codelab.toml`, `<cwd>/codelab.local.toml`; `codelab.toml.example` не ищется) и даёт предупреждение `config.legacy_found` — файл не открывается и не разбирается. Схема, доверие, слияние и проверка значений — в ядре, здесь их нет;
+- хранилища секретов — этап 8.9 (ещё не созданы);
 - `lib/src/cli/` — общая реализация подкоманд `config` (`ConfigCommands.check` для `config check`): тексты, правила и коды выхода для `codelab-agent` и `codelab` в одном месте; аргументы разбирает каждое приложение своим `package:args` (design.md change `add-agent-configuration`, D13).
 
 Ядро от пакета не зависит. Хост передаёт реализации в `AgentCoreServices`.
@@ -32,4 +34,5 @@
 * `LocalExecutionEnv` проверяется на реальных файлах во временном каталоге и на реальных процессах `/bin/sh`. Это интеграционные тесты на Dart VM, они входят в `melos run check` и в локальную проверку затронутого, если изменён пакет (корневой `AGENTS.md` §21). В ветках `feature/*` и `hotfix/*` другие прогоны не нужны (корневой `AGENTS.md` §21).
 * Общий контракт env — `packages/dart/codelab_agent_core/test/env/execution_env_contract.dart`; тесты пакета прогоняют его на `LocalExecutionEnv`.
 * Общий контракт хранилища сессий — `packages/dart/codelab_agent_core/test/session/session_store_contract.dart`; его проходит `JsonlSessionStore` во временном каталоге. Тест сбоя (`jsonl_crash_recovery_test.dart`) запускает дочерний процесс `test/session/crash_child.dart` и завершает его `SIGKILL`.
+* Конфигурация проверяется на реальных файлах во временных `CODELAB_HOME` и `cwd` (`test/config/`, `test/cli/`); тест не читает настоящий `~/.codelab` и не зависит от окружения разработчика: окружение передаётся загрузчику явно.
 * Тесты времени (таймаут, завершение дерева процессов) задают пределы с запасом («не позже N с»), а не точное время. CI работает на Linux; ветка Windows (`taskkill`) проверяется вручную.

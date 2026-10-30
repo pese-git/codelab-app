@@ -2,11 +2,11 @@
 
 Правила этого приложения дополняют корневой `AGENTS.md` и `packages/dart/codelab_client_core/AGENTS.md`.
 
-Источники: `docs/architecture/proposals/dart-agent-and-clients/09-11-stage-6-cli-mvp.md` (задачи 6.1–6.10), §12.2 (отображение и ввод CLI), §9.10 (API kit), документ ядра §13 (коды выхода из событий) и §14 (фикстуры); `design.md` OpenSpec change `add-codelab-cli`; для полноэкранного режима — §12.2.7 и `design.md` change `add-cli-tui`. Если документов не хватает, сначала дополняется документация, потом пишется код.
+Источники: `docs/architecture/proposals/dart-agent-and-clients/09-11-stage-6-cli-mvp.md` (задачи 6.1–6.10; подкоманда `config` — абзац «Подкоманды `config`, `provider`, `mcp` и `secret` по этапам»), §12.2 (отображение и ввод CLI), §9.10 (API kit), документ ядра §13 (коды выхода из событий) и §14 (фикстуры); `design.md` OpenSpec change `add-codelab-cli`; для полноэкранного режима — §12.2.7 и `design.md` change `add-cli-tui`. Если документов не хватает, сначала дополняется документация, потом пишется код.
 
 ## 1. Назначение
 
-`apps/codelab_cli` — терминальный клиент `codelab`: REPL, полноэкранный режим `--ui tui` и headless-режим `codelab -p` поверх `ClientWorkspace` из `codelab_client_core`, драйвер фикстур `codelab test-scenario`. Состояния сессий, очереди промптов и одобрений у CLI нет: их владелец — kit; CLI только отображает `SessionView` и вызывает `SessionHandle`.
+`apps/codelab_cli` — терминальный клиент `codelab`: REPL, полноэкранный режим `--ui tui` и headless-режим `codelab -p` поверх `ClientWorkspace` из `codelab_client_core`, драйвер фикстур `codelab test-scenario` и проверка конфигурации встроенного агента `codelab config check [--cwd <dir>]` — без запуска агента, через общий `ConfigCommands` моста `codelab_setup`, поэтому вывод и коды совпадают с `codelab-agent config check` (design.md change `add-agent-configuration`, D13, D14). Состояния сессий, очереди промптов и одобрений у CLI нет: их владелец — kit; CLI только отображает `SessionView` и вызывает `SessionHandle`.
 
 ## 2. Границы
 

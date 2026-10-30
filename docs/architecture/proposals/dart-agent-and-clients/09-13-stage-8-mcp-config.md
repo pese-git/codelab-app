@@ -36,7 +36,7 @@
    в `codelab_agent_mcp` (D1, D2), stdio-транспорт в `codelab_agent_io` (D9), streamable HTTP
    обеих эпох (D10), проекция в `AgentTool` (D7), подключение `mcpServers` в ACP-адаптере (D11).
    Отступление: в `codelab-agent serve --ws` MCP выключен (D3, §13.15 документа ядра). Серверы
-   из конфигурации ядро принимает, но читает их только change `add-agent-configuration` (8.5).
+   из конфигурации читает и подключает change `add-agent-configuration` (8.5).
    Отметки DoD — ниже.
 5. **8.5. Конфигурация** (change [`add-agent-configuration`](../../../../openspec/changes/add-agent-configuration/)):
    модель и валидация — `packages/dart/codelab_agent_core/lib/src/config/` (agent-core-architecture §1.3):
@@ -67,7 +67,7 @@
    `$CODELAB_HOME/prompts/*.md` (agent-core-architecture §17.2.2; frontmatter: `description`, `argument-hint`; тело — шаблон
    промпта с `$ARGUMENTS`) → `available_commands_update` после `session/new`; вызов `/имя
    аргументы` разворачивается в промпт.
-8. **8.8. Определения агентов в Markdown** (R-15, Must): загрузчик `$CODELAB_HOME/agents/*.md` и `<cwd>/.codelab/agents/*.md` (только для доверенного проекта), разбор YAML-frontmatter пакетом `yaml`, опция конфигурации `agent`, применение промпта, модели, режима и списка инструментов; `config migrate` переносит `[agents.definitions.*]` в Markdown-файлы. Спецификация — agent-core-architecture §15.8; тесты `agent_definition_parse_test.dart`, `agent_definition_trust_test.dart`, `agent_select_test.dart`, фикстура `acp/set-config-option-agent`.
+8. **8.8. Определения агентов в Markdown** (R-15, Must): загрузчик `$CODELAB_HOME/agents/*.md` и `<cwd>/.codelab/agents/*.md` (только для доверенного проекта), разбор YAML-frontmatter пакетом `yaml`, опция конфигурации `agent`, применение промпта, модели, режима и списка инструментов; определения `[agents.definitions.*]` из `codelab.toml` пользователь переписывает в Markdown вручную (agent-core-architecture §15.7: файл не читается, `config migrate` нет — решение 2026-10-29, change `add-agent-configuration`). Спецификация — agent-core-architecture §15.8; тесты `agent_definition_parse_test.dart`, `agent_definition_trust_test.dart`, `agent_select_test.dart`, фикстура `acp/set-config-option-agent`.
 9. **8.9. Хранилище секретов** (P-12, P-17; agent-core-architecture §17.5.4) — нужна MVP:
    встроенный агент этапа 7 берёт ключ провайдера отсюда. `SecretResolver` (порядок разрешения
    §17.5.4: кэш → переменная `CODELAB_SECRET_<…>` → хранилище ОС), бэкенды `keychain-macos`
@@ -154,28 +154,29 @@ stdio MUST) записано в §13.15, включение явным флаг�
 
 * `packages/dart/codelab_agent_mcp/test/mcp_tool_goes_through_policy_test.dart: MCP tool is not executed without a permission decision` (закрывает F5.1). **Выполнено** (8.3, change `add-agent-mcp-client`).
 * `packages/dart/codelab_agent_mcp/test/streamable_http_test.dart` на `MockClient`. **Выполнено** (8.1, обе эпохи MCP; change `add-agent-mcp-client`).
-* `packages/dart/codelab_agent_io/test/config/config_loader_test.dart: invalid config reports key path and line` — битый конфиг даёт ошибку с путём ключа, а не исключение при первом ходе (8.5, change `add-agent-configuration`).
+* `packages/dart/codelab_agent_io/test/config/config_loader_test.dart: invalid config reports key path and line` — битый конфиг даёт ошибку с путём ключа, а не исключение при первом ходе (8.5, change `add-agent-configuration`). **Выполнено** (8.5, change `add-agent-configuration`): `ConfigIssue` с файлом, строкой `3`, столбцом `3` и ключом `budget.max_stepz`; в бинаре — код `64` до чтения stdin (`apps/codelab_agent/test/config_invalid_process_test.dart`).
 * Фикстуры `acp/session-new-with-mcp`, `acp/available-commands-no-tools` зелёные. `acp/session-new-with-mcp` — **выполнено** (8.4, change `add-agent-mcp-client`); `acp/available-commands-no-tools` — задачи 8.6–8.8.
 * `melos run guard`: `codelab_agent_mcp` без `dart:io`. **Выполнено**: правило пакета в `packages/dart/codelab_architecture_tests/test/support/rules.dart`, allowlist — `pubspec_allowlist_test.dart` (D14 change `add-agent-mcp-client`).
 * Чек-лист библиотеки MCP заполнен в `design.md`, решение записано. **Выполнено**: D1 change `add-agent-mcp-client` — у каждого кандидата есть «нет», свой минимальный клиент; `THIRD_PARTY_NOTICES.md` не меняется.
 * Все Must-строки матрицы этапа 8 зелёные; критерий — сценарий строки в матрице. Строки P-01,
   P-16, E-02, E-03, E-05, R-24 закрыты change `add-agent-mcp-client` (файлы тестов и фикстур —
-  в колонке «Критерий приёмки» матрицы; серверы конфигурации в E-02 и E-03 — после 8.5):
+  в колонке «Критерий приёмки» матрицы); серверы конфигурации в E-02 и E-03 и строка R-16 —
+  change `add-agent-configuration` (8.5):
 
   | Строка | Проверка | Критерий (кратко) |
   |---|---|---|
   | P-01 | `core/no-tool-bypasses-gate`, `acp/mcp-tool-permission` | `session/request_permission` приходит до обращения к MCP-серверу; после отказа сервер вызова не получил |
   | P-16 | `acp/mcp-result-fenced`, `core/mcp-tool-cannot-declare-trusted` | весь результат MCP-инструмента внутри одной ограды, поддельный маркер экранирован; «доверенный» MCP-инструмент регистрируется как недоверенный |
   | E-01 | `core/project-context-agents-md-leaf-first` | системный промпт содержит правила `AGENTS.md` от корня репозитория к `cwd` |
-  | E-02 | `acp/mcp-stdio-tool-call` | вызов `mcp__fake__echo` после одобрения — `completed` с «hi»; после закрытия сессии процесс сервера завершён |
-  | E-03 | `acp/mcp-http-tool-call` | HTTP-инструмент вызывается; сервер неподдерживаемого типа пропущен с `mcp.server.skipped`, сессия создана |
+  | E-02 | `acp/mcp-stdio-tool-call` | вызов `mcp__fake__echo` после одобрения — `completed` с «hi»; после закрытия сессии процесс сервера завершён. Серверы конфигурации — **выполнено** (8.5): `apps/codelab_agent/test/config_mcp_servers_test.dart` (сервер из `mcp.servers` без `mcpServers` в `session/new`), `config_mcp_ws_test.dart` (в `serve --ws` не запускается) |
+  | E-03 | `acp/mcp-http-tool-call` | HTTP-инструмент вызывается; сервер неподдерживаемого типа пропущен с `mcp.server.skipped`, сессия создана. Серверы конфигурации — **выполнено** (8.5): `apps/codelab_agent/test/agent_host_config_test.dart`, группа «MCP servers of the config»; `type: sse` в конфиге — проблема (`codelab_agent_core/test/config/config_mcp_servers_test.dart`) |
   | E-05 | `core/mcp-tool-name-sanitized` | `mcp__my_srv__get_issue`; длинное имя — ровно 64 символа и уникально; коллизия имён отключает сервер с причиной, называющей оба источника, сессия создаётся (HOST-5; `mcp.server.failed`) |
   | K-02 | `acp/slash-compact` | `/compact` даёт отчёт «сжато: X → Y токенов» и запись сжатия в журнале (сценарий палитры app — R-20, этап 5) |
   | R-07 | `acp/available-commands-no-tools` | в `available_commands_update` только команды, без инструментов модели |
   | R-08 | `acp/slash-help`, `acp/slash-mode-plan`, `acp/mcp-prompt-command` | встроенные команды агента и команды из MCP-промптов выполняются |
   | R-14 | `core/litellm-proxy-base-url` | LiteLLM Proxy как OpenAI-совместимый `baseUrl` из конфигурации |
   | R-15 | `core/agent-definition-markdown-frontmatter`, `acp/set-config-option-agent` | опция `agent` содержит определение из `.codelab/agents/*.md`, многострочный `tools` разобран, битый YAML — диагностика с именем файла |
-  | R-16 | `core/config-legacy-found-warning` | `codelab.toml` не читается: без `config.yaml` — одно предупреждение `config.legacy_found` с путём и ссылкой на таблицу ручного переноса §15.7; при `config.yaml` предупреждения нет. Изменено решением пользователя 2026-10-29 (change `add-agent-configuration`); строки DF-12 и DF-15 — `core/config-rejects-yaml-agent-definitions`, `core/config-unknown-provider-error` |
+  | R-16 | `core/config-legacy-found-warning` | `codelab.toml` не читается: без `config.yaml` — одно предупреждение `config.legacy_found` с путём и ссылкой на таблицу ручного переноса §15.7; при `config.yaml` предупреждения нет. Изменено решением пользователя 2026-10-29 (change `add-agent-configuration`); строки DF-12 и DF-15 — `core/config-rejects-yaml-agent-definitions`, `core/config-unknown-provider-error`. **Выполнено** (8.5): `codelab_agent_io/test/config/config_legacy_found_test.dart`; DF-12 и DF-15 — `codelab_agent_core/test/config/config_schema_test.dart` |
   | R-24 | `acp/session-new-with-mcp` | сервер из `session/new.mcpServers` подключается, его инструмент доступен модели в этой сессии; на этапе 4 такие серверы только пропускались с `mcp.server.skipped` (R-02) |
 * 8.9 (MVP): `secret_resolver_test.dart`, `secret_store_backends_test.dart`,
   `debug_secrets_test.dart` зелёные; `codelab secret set codelab/openai` с ключом из stdin, затем

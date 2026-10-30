@@ -46,7 +46,7 @@
 | `exec` с кодом 1 | окружение | результат-ошибка с выводом и кодом; ход продолжается |
 | в профиле `mobile` включён `shellExec` | конфигурация | `HostWiringException` при `buildAgentCore`, агент не стартует |
 | 429 без свободного ключа и резервной модели (после MVP, §17.10.4.1) | работа | `AgentError(cls: provider, errorClass: rateLimited, rateLimit: …)`, текст `Rate limit reached for openai/gpt-4.1: too many requests. Resets in 3 h.`; тело ответа — только лог debug |
-| в конфиге неизвестный ключ `compaction.reserve_token` | конфигурация | `ConfigException("config.yaml:3:3: неизвестный ключ compaction.reserve_token (может быть, reserve_tokens?)")` |
+| в конфиге неизвестный ключ `compaction.reserve_token` | конфигурация | `ConfigLoadResult.issues` с `ConfigIssue(kind: unknownKey)`, текст `config.yaml:3:3: compaction.reserve_token: unknown key (did you mean reserve_tokens?)`; бинарь — stderr и код `64` до старта транспорта, `orThrow()` — `ConfigException` |
 
 ## 12.3. Контракт: Logger
 
