@@ -264,4 +264,4 @@
   Остальные сценарии покрыты тестами задач 1–10 (ссылки — в самих задачах). Без `PathResolver` `unreadable` получают и каталоги `prompts`/`agents`: сценарий требует «есть диагностика `unreadable`» и это допускает.
   - D1: `git log 59ff202^..HEAD` по `packages/dart/codelab_architecture_tests` и по `pubspec.yaml` пакетов и приложений пуст, незакоммиченных правок там нет — сторож и allowlist не менялись.
   - Targeted-прогон оркестратора 2026-10-30, все команды — exit 0: тесты `codelab_agent_core` (1405), `codelab_agent_io` (307), `codelab_agent_mcp` (248), `codelab_agent_acp` (198), setup (2), `codelab_architecture_tests` (68), `apps/codelab_agent` (156), `apps/codelab_cli` (462); `melos run guard`, `prompts:check` (`gen_prompts.dart --check`), `web-compile`, `conformance:agent` (55), `test:e2e:cli` (57), `test:e2e:cli:dart-agent` (44), `openspec validate add-agent-project-files --strict`.
-  - Полный `melos run check` — подтверждается CI pull request.
+  - Полный `melos run check` — зелёный в CI PR #196 (все проверки `ci` успешны).

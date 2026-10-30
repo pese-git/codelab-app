@@ -59,7 +59,7 @@
    `config_legacy_found_test.dart`. Здесь же читаются ключи `redact.*` редакции секретов
    (задача 8.11; agent-core-architecture §12.4.3, правило доверия проекту §15.3).
 6. **8.6. Инструкции проекта** (agent-core-architecture §11.5; change
-   [`add-agent-project-files`](../../../../openspec/changes/add-agent-project-files/), D2, D5):
+   [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/), D2, D5):
    `ProjectFilesLoader` (`codelab_agent_io`, порт ядра `ProjectFilesSource`) читает файлы с локальной
    файловой системы процесса агента через `BoundedEnv` корня области — не через env сессии ACP: до
    ответа `session/new` клиент не знает `sessionId` (ACP-8), а в ACP нет `stat` и листинга. Обход
@@ -93,7 +93,7 @@
    `agent_definition_trust_test.dart`, `agent_select_test.dart`, фикстура
    `acp/set-config-option-agent`.
 
-   **Итог 8.6–8.8.** Сделано change [`add-agent-project-files`](../../../../openspec/changes/add-agent-project-files/)
+   **Итог 8.6–8.8.** Сделано change [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/)
    (итерации 0–5): порт ядра `ProjectFilesSource` и загрузчик `ProjectFilesLoader` в
    `codelab_agent_io` с границей `BoundedEnv` по корню области (D1, D2); инструкции проекта
    `AGENTS.md`/`CLAUDE.md` в секции `project_context` с бюджетом от ближнего файла (D5); шаблоны
@@ -147,7 +147,7 @@
 `add-agent-configuration` (8.5; scope: файлы, порядок слоёв, формат YAML и его профиль,
 предупреждение `config.legacy_found` вместо чтения `codelab.toml`, подкоманда `config check`,
 минимальный `codelab_setup`; новая зависимость `yaml` как решение о технологии по
-`AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), [`add-agent-project-files`](../../../../openspec/changes/add-agent-project-files/) (8.6–8.8; scope: инструкции проекта, шаблоны промптов как команды, определения агентов в Markdown, порт `ProjectFilesSource`, `config check` с диагностикой файлов проекта; ACP не расширяется),
+`AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/) (8.6–8.8; scope: инструкции проекта, шаблоны промптов как команды, определения агентов в Markdown, порт `ProjectFilesSource`, `config check` с диагностикой файлов проекта; ACP не расширяется),
 `add-agent-secret-store` (8.9; scope: имена секретов, порядок разрешения, бэкенды ОС, команды
 `secret`, диагностика без значений) и `add-config-writer-and-reload` (8.10, Should; scope:
 запись конфига, наблюдатель и перезагрузка, реестр настроек, `McpSupervisor`, команды
