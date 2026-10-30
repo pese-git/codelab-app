@@ -41,9 +41,11 @@ String user(
   String text = 'hello',
   String? origin,
   Map<String, Object?> originFields = const {},
+  Object? command,
 }) => jsonEncode({
   ..._common('message', id, parent),
   'origin': ?origin,
+  'command': ?command,
   ...originFields,
   'message': {
     'role': 'user',

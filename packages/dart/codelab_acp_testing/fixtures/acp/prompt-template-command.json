@@ -1,0 +1,360 @@
+{
+  "id": "acp/prompt-template-command",
+  "spec": [
+    "14-Slash Commands.md#advertising-commands",
+    "14-Slash Commands.md#running-commands",
+    "03-Session Setup.md#loading-a-session"
+  ],
+  "description": "Шаблон .codelab/prompts/review.md доверенного проекта: после session/new available_commands_update содержит review с input.hint; промпт «/review lib/parser \"error handling\"» доходит до модели развёрнутым текстом; после session/load реплей содержит user_message_chunk с исходной командой (E-07).",
+  "goals": [
+    "E-07"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "files": {
+      ".codelab/prompts/review.md": "---\ndescription: Review a path with a focus\nargument-hint: \"<path> [focus]\"\n---\nReview $1 focusing on $2. All: $ARGUMENTS\n"
+    },
+    "config": {
+      "trusted_projects": [
+        "${cwd}"
+      ]
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "Review lib/parser focusing on error handling. All: lib/parser \"error handling\""
+          }
+        },
+        "reply": [
+          {
+            "text": "Готово."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ initialize; поля проверяет acp/initialize-capabilities",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент создаёт сессию в доверенном проекте с шаблоном .codelab/prompts/review.md",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/new; команды идут отдельным кадром после него (ACP-8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D9: команда шаблона с input.hint; встроенных инструментов в списке нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "review",
+                "description": "Review a path with a focus",
+                "input": {
+                  "hint": "<path> [focus]"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "пользователь отправляет команду шаблона",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/review lib/parser \"error handling\""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Готово."
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент загружает сессию заново",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "loadId"
+        },
+        "method": "session/load",
+        "params": {
+          "sessionId": "${sessionId}",
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "реплей: исходный текст команды, а не развёрнутый шаблон",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "/review lib/parser \"error handling\""
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Готово."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "standard"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "в реплее тот же список на прежнем месте",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "review",
+                "description": "Review a path with a focus",
+                "input": {
+                  "hint": "<path> [focus]"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/load — после реплея (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${loadId}",
+        "result": {
+          "modes": {
+            "$any": {
+              "availableModes": [
+                {
+                  "id": "standard",
+                  "name": "Standard"
+                }
+              ],
+              "currentModeId": "standard"
+            }
+          },
+          "configOptions": {
+            "$any": []
+          }
+        }
+      }
+    }
+  ]
+}

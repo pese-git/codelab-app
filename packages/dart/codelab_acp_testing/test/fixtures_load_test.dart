@@ -77,22 +77,34 @@ const _stage8McpFixtures = {
   'acp/mcp-http-tool-call',
 };
 
+/// Фикстуры файлов проекта этапа 8 (design.md change
+/// `add-agent-project-files`, D15; acp-golden-fixtures «Фикстуры файлов
+/// проекта этапа 8»): роль только `agent`, команды публикует агент.
+const _stage8ProjectFilesFixtures = {
+  'acp/prompt-template-command',
+  'acp/available-commands-no-tools',
+};
+
 void main() {
   final corpus = loadFixtureCorpus();
   final protocolDirectory = protocolSpecDirectory();
 
-  test('the corpus holds exactly the stage 0, stage 4 and MCP fixtures', () {
+  test('the corpus holds exactly the stage 0, stage 4, MCP and project files '
+      'fixtures', () {
     expect(_stage4Fixtures, hasLength(35));
     expect(corpus.map((f) => f.id).toSet(), {
       ..._stage0Fixtures,
       ..._stage4Fixtures,
       ..._stage8McpFixtures,
+      ..._stage8ProjectFilesFixtures,
     });
   });
 
-  test('MCP fixtures are played by the agent role only', () {
+  test('MCP and project files fixtures are played by the agent role only', () {
     for (final fixture in corpus.where(
-      (f) => _stage8McpFixtures.contains(f.id),
+      (f) =>
+          _stage8McpFixtures.contains(f.id) ||
+          _stage8ProjectFilesFixtures.contains(f.id),
     )) {
       expect(fixture.roles, {FixtureRole.agent}, reason: fixture.id);
     }

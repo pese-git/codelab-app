@@ -1,0 +1,155 @@
+{
+  "id": "acp/available-commands-no-tools",
+  "spec": [
+    "14-Slash Commands.md#advertising-commands",
+    "14-Slash Commands.md#availablecommand",
+    "03-Session Setup.md#mcp-servers"
+  ],
+  "description": "Встроенные инструменты, fake MCP-сервер с echo и один шаблон проекта: available_commands_update после session/new содержит только шаблон review, имён инструментов модели в списке нет (R-07, часть шаблонов).",
+  "goals": [
+    "R-07"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "files": {
+      ".codelab/prompts/review.md": "---\ndescription: Review a path\nargument-hint: \"<path> [focus]\"\n---\nReview $1.\n"
+    },
+    "config": {
+      "trusted_projects": [
+        "${cwd}"
+      ]
+    },
+    "mcp": {
+      "fake": {
+        "tools": [
+          {
+            "name": "echo",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          }
+        ],
+        "results": {
+          "echo": {
+            "content": [
+              {
+                "type": "text",
+                "text": "hi"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ initialize; поля проверяет acp/initialize-capabilities",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент создаёт сессию с MCP-сервером, у которого есть инструмент echo",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": [
+            {
+              "name": "fake",
+              "command": "fake-mcp-server",
+              "args": [],
+              "env": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ ждёт подключения серверов (ACP-8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "R-07: только шаблон; read, exec и mcp__fake__echo в список не попадают",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "review",
+                "description": "Review a path",
+                "input": {
+                  "hint": "<path> [focus]"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

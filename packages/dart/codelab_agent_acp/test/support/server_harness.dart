@@ -46,6 +46,9 @@ final class ServerHarness {
   /// `add-agent-mcp-client`, D11); без него capability `mcp` выключена и
   /// `mcpCapabilities.http` — `false`.
   ///
+  /// [projectFiles] — порт файлов проекта для `AgentCoreServices` (design.md
+  /// change `add-agent-project-files`, D1); без него сессии без файлов.
+  ///
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
   static Future<ServerHarness> start({
@@ -59,6 +62,7 @@ final class ServerHarness {
     ModelCatalog? models,
     Duration detachGrace = const Duration(seconds: 30),
     McpConnector Function(Clock clock)? mcp,
+    ProjectFilesSource? projectFiles,
   }) async {
     final clock = FakeClock();
     final logger = RecordingLogger();
@@ -86,6 +90,7 @@ final class ServerHarness {
         sessions: store,
         models: models,
         mcp: mcp?.call(clock),
+        projectFiles: projectFiles,
       ),
       config: CoreConfig(defaultModel: scriptedModel, budget: budget),
       streamFunction: (model_, context, {cancel}) {
