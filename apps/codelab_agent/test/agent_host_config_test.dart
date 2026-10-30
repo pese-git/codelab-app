@@ -512,12 +512,45 @@ providers:
       final logger = RecordingLogger();
 
       expect(loaded.config, isNull);
-      logStartupWarnings(logger, opts, loaded);
+      logStartupWarnings(logger, loaded);
 
       expect(
         logger.eventsOf('config.env.unknown').single.fields['message'],
         contains('CODELAB_MODLE'),
       );
+    });
+  });
+
+  group('valid config', () {
+    test('config.env.unknown is logged exactly once, by the loader warning, '
+        'and the token variable named by --token-env is not a typo', () async {
+      final path = writeConfig(providers);
+      final logger = RecordingLogger();
+
+      await start(
+        parseServeArgs(
+          [
+            'serve',
+            '--ws',
+            '--token-env',
+            'CODELAB_MY_TOKEN',
+            '--config',
+            path,
+          ],
+          environment: {
+            'CODELAB_HOME': '${temp.path}/home',
+            'OPENAI_KEY': 'sk-openai-test',
+            'ANTHROPIC_KEY': 'sk-anthropic-test',
+            'CODELAB_MODLE': 'x',
+            'CODELAB_MY_TOKEN': 't',
+          },
+        ),
+        logger: logger,
+      );
+
+      final unknown = logger.eventsOf('config.env.unknown');
+      expect(unknown, hasLength(1));
+      expect(unknown.single.fields['message'], contains('CODELAB_MODLE'));
     });
   });
 

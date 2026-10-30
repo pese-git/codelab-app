@@ -25,6 +25,10 @@ void main() {
   Matcher usageError(Object message) =>
       throwsA(isA<UsageError>().having((e) => e.message, 'message', message));
 
+  test('the general usage names `config check`', () {
+    expect(serveUsage(), contains('codelab-agent config check [--cwd <dir>]'));
+  });
+
   group('transport', () {
     test('--stdio and --ws with defaults', () {
       expect(parse(scripted).transport, ServeTransport.stdio);
@@ -411,13 +415,14 @@ void main() {
       );
     });
 
-    test('an unknown CODELAB_* variable is a warning', () {
+    test('CODELAB_HOME is taken from the environment', () {
+      // Неизвестные `CODELAB_*` распознаёт `ConfigLoader` (D13): разбор
+      // флагов их не проверяет, чтобы правило было одно для `serve` и
+      // `config check`.
       final options = parse(scripted, {
         'CODELAB_MODLE': 'x',
-        'CODELAB_AGENT_TOKEN': 't',
         'CODELAB_HOME': '/tmp/home',
       });
-      expect(options.warnings, [contains('CODELAB_MODLE')]);
       expect(options.codelabHome, '/tmp/home');
     });
 

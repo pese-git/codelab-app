@@ -555,6 +555,63 @@ mcp:
       expect(result.sources, ['defaults', '$home/config.yaml']);
     });
 
+    group('config.env.unknown', () {
+      List<ConfigIssue> unknown(ConfigLoadResult result) => [
+        for (final w in result.warnings)
+          if (w.event == 'config.env.unknown') w,
+      ];
+
+      test('a typo is a warning with the name, not an issue; known names, '
+          'families and non-CODELAB variables are silent', () {
+        write('$home/config.yaml', provider);
+
+        final result = load(
+          environment: {
+            'CODELAB_MAX_STEP': '3',
+            'CODELAB_SECRET_X': 'a',
+            'CODELAB_PROVIDER_Y': 'b',
+            'CODELAB_REDACTED_Z': 'c',
+            'CODELAB_AGENT_TOKEN': 't',
+            'OTHER': 'd',
+          },
+        );
+
+        expect(result.issues, isEmpty);
+        final warning = unknown(result).single;
+        expect(warning.level, LogLevel.warning);
+        expect(
+          warning.message,
+          'unknown environment variable CODELAB_MAX_STEP',
+        );
+        expect(warning.toString(), isNot(contains('3')));
+      });
+
+      test('the warning survives invalid config and several typos are '
+          'sorted by name', () {
+        write('$home/config.yaml', 'budgett: {}\n');
+
+        final result = load(environment: {'CODELAB_B': '1', 'CODELAB_A': '1'});
+
+        expect(result.issues, isNotEmpty);
+        expect(
+          [for (final w in unknown(result)) w.fields['name']],
+          ['CODELAB_A', 'CODELAB_B'],
+        );
+      });
+
+      test('the token variable named by the host is not a typo', () {
+        write('$home/config.yaml', provider);
+
+        final result = loader.load(
+          cwd: cwd,
+          environment: {'CODELAB_HOME': home, 'CODELAB_WS_TOKEN': 't'},
+          knownVariables: const {'CODELAB_WS_TOKEN'},
+        );
+
+        expect(unknown(result), isEmpty);
+      });
+    });
+
     test('a non-numeric CODELAB_MAX_STEPS is an issue without the value', () {
       write('$home/config.yaml', provider);
 
