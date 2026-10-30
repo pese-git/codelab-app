@@ -1,5 +1,4 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
-import 'package:codelab_agent_core/src/env/bounded_env.dart';
 import 'package:test/test.dart';
 
 import 'resolving_env.dart';

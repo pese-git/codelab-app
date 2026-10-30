@@ -1,8 +1,6 @@
 import 'dart:io';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
-// ignore: implementation_imports, the boundary decorator is internal to the core; the test checks it over real links
-import 'package:codelab_agent_core/src/env/bounded_env.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:test/test.dart';
 
