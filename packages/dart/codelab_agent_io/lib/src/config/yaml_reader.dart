@@ -48,14 +48,22 @@ const _depthMessage = 'nesting is deeper than $maxYamlDepth levels';
 /// check` показывает все проблемы сразу. Сообщения строятся из фиксированных
 /// текстов разборщика и не содержат исходного текста файла — в нём может быть
 /// секрет (CFG-2). Пустой файл и файл из комментариев — пустой слой.
+///
+/// [lineOffset] — сколько строк файла лежит выше [text] (frontmatter Markdown:
+/// блок YAML начинается после строки `---`). Позиции проблем и дерева, в том
+/// числе «first defined at» в тексте сообщения, строятся сразу в координатах
+/// файла: перед разбором текст дополняется [lineOffset] пустыми строками, что
+/// не меняет смысла YAML, и сдвиг не нужно применять к готовым сообщениям.
 YamlReadResult readYamlTree(
   String text, {
   required String source,
   required ConfigLayerKind kind,
+  int lineOffset = 0,
 }) {
   // BOM сдвинул бы столбец первой строки на 1 (разведка D5), поэтому он
   // снимается до разбора.
-  final body = text.startsWith('﻿') ? text.substring(1) : text;
+  final unmarked = text.startsWith('﻿') ? text.substring(1) : text;
+  final body = '\n' * lineOffset + unmarked;
 
   // До разбора: рекурсивный разборщик не должен видеть глубокое вложение.
   if (_flowDepthIssue(body, source) case final issue?) {
@@ -116,7 +124,7 @@ YamlReadResult readYamlTree(
   final walker = _Walker(source);
   // Тег или якорь на корневом отображении проверяет `_checkNode`, как и у
   // вложенных узлов: `mapping` его не вызывает.
-  walker._checkNode(root, KeyPath.root, ConfigPosition(1, 1));
+  walker._checkNode(root, KeyPath.root, ConfigPosition(lineOffset + 1, 1));
   final values = walker.mapping(root, const [KeyPath.root], null, 1);
   if (walker.issues.isNotEmpty) {
     return YamlReadResult.issues(walker.issues);

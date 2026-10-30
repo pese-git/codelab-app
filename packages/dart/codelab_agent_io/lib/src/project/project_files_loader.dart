@@ -6,6 +6,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import '../env/host_path.dart';
 import '../env/local_execution_env.dart';
+import 'frontmatter.dart';
 
 /// Читает файлы проекта и пользователя с локальной файловой системы процесса
 /// агента (design.md change `add-agent-project-files`, D1, D2, D4–D6;
@@ -16,8 +17,10 @@ import '../env/local_execution_env.dart';
 /// `stat` и листинга каталога, а `$CODELAB_HOME` лежит на машине агента.
 ///
 /// Для чего: реализация порта [ProjectFilesSource] для настольных хостов.
-/// Сейчас читает файлы инструкций `AGENTS.md`/`CLAUDE.md` (E-01); шаблоны
-/// команд и определения агентов добавят следующие итерации в тот же метод.
+/// Читает файлы инструкций `AGENTS.md`/`CLAUDE.md` (E-01) и шаблоны команд
+/// `*.md` из `$CODELAB_HOME/prompts` и `<cwd>/.codelab/prompts` (последний —
+/// только для доверенного проекта, D4); определения агентов добавит
+/// следующая итерация в тот же метод.
 ///
 /// Как использовать: хост создаёт один загрузчик —
 /// `ProjectFilesLoader(home: codelabHomeOf(env), local: LocalExecutionEnv(...))` —
@@ -47,6 +50,12 @@ final class ProjectFilesLoader implements ProjectFilesSource {
   /// Предел обхода вверх к корню репозитория (D5, пункт 1; D6).
   static const maxLevels = 64;
 
+  /// Предел числа `*.md` в каталоге шаблонов (D6).
+  static const maxTemplateFiles = 100;
+
+  /// Предел размера файла шаблона, байты (D6): больший файл не читается.
+  static const maxTemplateFileBytes = 64 * 1024;
+
   @override
   Future<ProjectFiles> load(ProjectFilesQuery query) async {
     final diagnostics = <ExtensionDiagnostic>[];
@@ -55,11 +64,191 @@ final class ProjectFilesLoader implements ProjectFilesSource {
     if (query.contextMaxBytes > 0) {
       root = await _loadContext(query, context, diagnostics);
     }
+    final templates = <MarkdownFile>[];
+    await _loadTemplates(query, templates, diagnostics);
     return ProjectFiles(
       context: context,
       contextRoot: root,
+      templates: templates,
       diagnostics: diagnostics,
     );
+  }
+
+  /// Шаблоны команд: проект (только доверенный) и пользователь (D4, D7).
+  ///
+  /// Область проекта ограничена `cwd`, пользовательская — `$CODELAB_HOME`:
+  /// сначала каталог шаблонов проверяется относительно корня области, и только
+  /// потом файлы — относительно самого каталога (см. [_readTemplateDir]).
+  Future<void> _loadTemplates(
+    ProjectFilesQuery query,
+    List<MarkdownFile> out,
+    List<ExtensionDiagnostic> diagnostics,
+  ) async {
+    final projectDir = '${query.cwd == '/' ? '' : query.cwd}/.codelab/prompts';
+    final projectArea = await BoundedEnv.wrap(_local, query.cwd);
+    if (query.projectTrusted) {
+      await _readTemplateDir(
+        projectArea,
+        projectDir,
+        ExtensionScope.project,
+        query.cancel,
+        out,
+        diagnostics,
+      );
+    } else if (await _exists(projectArea, projectDir)) {
+      // Файлы недоверенного репозитория не читаются: он не вправе добавить
+      // команды, которые выполнит модель (D4). Пользователь видит причину.
+      diagnostics.add(
+        ExtensionDiagnostic(
+          path: projectDir,
+          level: DiagnosticLevel.info,
+          code: 'untrusted_project',
+          message:
+              'the project is not in trusted_projects; its prompt templates '
+              'are not read',
+        ),
+      );
+    }
+
+    final homeDir = home;
+    if (homeDir != null && !query.cancel.isCancelled) {
+      await _readTemplateDir(
+        await BoundedEnv.wrap(_local, homeDir),
+        '$homeDir/prompts',
+        ExtensionScope.user,
+        query.cancel,
+        out,
+        diagnostics,
+      );
+    }
+  }
+
+  /// Читает `*.md` первого уровня каталога [dir] (D3, D6, §17.2.2).
+  ///
+  /// Граница двухступенчатая. [area] — корень области (`cwd` или
+  /// `$CODELAB_HOME`): каталог, чей `realpath` вне области, не читается
+  /// (`BoundedEnv.wrap` канонизирует корень, поэтому симлинк `prompts` наружу
+  /// иначе сам стал бы корнем и проверка потеряла бы смысл). Файлы читаются
+  /// через env с корнем в реальном каталоге шаблонов: symlink на файл вне
+  /// каталога — `outside_root`.
+  Future<void> _readTemplateDir(
+    ExecutionEnv area,
+    String dir,
+    ExtensionScope scope,
+    CancelToken cancel,
+    List<MarkdownFile> out,
+    List<ExtensionDiagnostic> diagnostics,
+  ) async {
+    void report(DiagnosticLevel level, String path, String code, String text) =>
+        diagnostics.add(
+          ExtensionDiagnostic(
+            path: path,
+            level: level,
+            code: code,
+            message: text,
+          ),
+        );
+
+    if (area is! PathResolver) {
+      report(
+        DiagnosticLevel.warning,
+        dir,
+        'unreadable',
+        'the environment cannot resolve real paths; the directory is not read',
+      );
+      return;
+    }
+    final String realDir;
+    switch (await (area as PathResolver).realpath(dir)) {
+      case Ok(:final value):
+        realDir = value;
+      case Err(:final error):
+        switch (error.code) {
+          case FileErrorCode.notFound:
+            break;
+          case FileErrorCode.outsideWorkspace:
+            report(
+              DiagnosticLevel.warning,
+              dir,
+              'outside_root',
+              'the directory resolves outside its root and is not read',
+            );
+          default:
+            report(
+              DiagnosticLevel.warning,
+              dir,
+              'unreadable',
+              'the directory cannot be read: ${error.code.name}',
+            );
+        }
+        return;
+    }
+
+    final env = await BoundedEnv.wrap(_local, realDir);
+    if (env is! DirectoryListing) {
+      report(
+        DiagnosticLevel.warning,
+        dir,
+        'unreadable',
+        'the environment cannot list directories',
+      );
+      return;
+    }
+    final listing = await (env as DirectoryListing).listDir(realDir);
+    if (listing is! Ok<List<FileStat>, FileError>) {
+      report(
+        DiagnosticLevel.warning,
+        dir,
+        'unreadable',
+        'the directory cannot be listed',
+      );
+      return;
+    }
+    // Подкаталоги не обходятся, точечные и не-`.md` файлы пропускаются молча
+    // (D6, §17.2.2). Порядок — по имени, чтобы предел 100 был детерминирован.
+    final names = [
+      for (final entry in listing.value)
+        if (entry.type != FileType.directory)
+          if (entry.path.split('/').last case final name
+              when !name.startsWith('.') && name.endsWith('.md'))
+            name,
+    ]..sort();
+    final kept = names.take(maxTemplateFiles);
+    if (names.length > maxTemplateFiles) {
+      report(
+        DiagnosticLevel.warning,
+        dir,
+        'limit_exceeded',
+        'more than $maxTemplateFiles templates; the extra files are skipped',
+      );
+    }
+
+    for (final name in kept) {
+      if (cancel.isCancelled) {
+        return;
+      }
+      final shown = '$dir/$name';
+      final read = await _readText(
+        env,
+        '$realDir/$name',
+        maxTemplateFileBytes,
+        diagnostics,
+        reportPath: shown,
+        wholeFile: true,
+      );
+      if (read == null) {
+        continue;
+      }
+      final markdown = readMarkdownFile(
+        read.text.startsWith('\u{FEFF}') ? read.text.substring(1) : read.text,
+        path: shown,
+        scope: scope,
+      );
+      diagnostics.addAll(markdown.diagnostics);
+      if (markdown.file case final file?) {
+        out.add(file);
+      }
+    }
   }
 
   /// Файлы контекста в порядке «пользовательский, затем от корня к `cwd`»
@@ -191,10 +380,42 @@ final class ProjectFilesLoader implements ProjectFilesSource {
     required String displayPath,
     required ExtensionScope scope,
   }) async {
+    final read = await _readText(env, path, max + 1, diagnostics);
+    if (read == null) {
+      return null;
+    }
+    return ContextFile(
+      path: displayPath,
+      content: read.text.startsWith('\u{FEFF}')
+          ? read.text.substring(1)
+          : read.text,
+      totalBytes: read.size > read.bytes ? read.size : null,
+      scope: scope,
+    );
+  }
+
+  /// Читает текст файла по [path] внутри границы [env] и возвращает его с
+  /// размером; `null` — файл не прочитан, причина уже в [diagnostics].
+  ///
+  /// Общая часть чтения контекста и шаблонов: `realpath` через [env]
+  /// (нет резолвера, путь вне корня → диагностика), `stat` реального пути,
+  /// чтение не больше [limit] байт `dart:io` и повторная проверка после
+  /// открытия (D2). С [wholeFile] файл больше [limit] байт не читается
+  /// вовсе: `too_large` (шаблоны, D6); иначе читается префикс [limit] байт, а
+  /// усечение — дело вызывающего (контекст, D5). [reportPath] — путь в
+  /// диагностиках, если он должен отличаться от [path].
+  Future<({String text, int size, int bytes})?> _readText(
+    ExecutionEnv env,
+    String path,
+    int limit,
+    List<ExtensionDiagnostic> diagnostics, {
+    String? reportPath,
+    bool wholeFile = false,
+  }) async {
     void report(DiagnosticLevel level, String code, String message) =>
         diagnostics.add(
           ExtensionDiagnostic(
-            path: path,
+            path: reportPath ?? path,
             level: level,
             code: code,
             message: message,
@@ -239,8 +460,16 @@ final class ProjectFilesLoader implements ProjectFilesSource {
     final stat = await env.stat(realPath);
     if (stat case Ok(:final value) when value.type == FileType.file) {
       final size = value.size ?? 0;
+      if (wholeFile && size > limit) {
+        report(
+          DiagnosticLevel.error,
+          'too_large',
+          'the file is larger than $limit bytes and is not read',
+        );
+        return null;
+      }
       try {
-        final bytes = await _readPrefix(realPath, max + 1);
+        final bytes = await _readPrefix(realPath, limit + (wholeFile ? 1 : 0));
         if (bytes == null) {
           report(
             DiagnosticLevel.warning,
@@ -249,7 +478,16 @@ final class ProjectFilesLoader implements ProjectFilesSource {
           );
           return null;
         }
-        final partial = size > bytes.length;
+        if (wholeFile && bytes.length > limit) {
+          // Файл вырос между `stat` и чтением.
+          report(
+            DiagnosticLevel.error,
+            'too_large',
+            'the file is larger than $limit bytes and is not read',
+          );
+          return null;
+        }
+        final partial = !wholeFile && size > bytes.length;
         final text = _decode(bytes, partial: partial);
         if (text == null) {
           report(
@@ -259,12 +497,7 @@ final class ProjectFilesLoader implements ProjectFilesSource {
           );
           return null;
         }
-        return ContextFile(
-          path: displayPath,
-          content: text.startsWith('\u{FEFF}') ? text.substring(1) : text,
-          totalBytes: size > bytes.length ? size : null,
-          scope: scope,
-        );
+        return (text: text, size: size, bytes: bytes.length);
       } on io.FileSystemException {
         report(
           DiagnosticLevel.warning,

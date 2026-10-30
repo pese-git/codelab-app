@@ -1,4 +1,5 @@
 import '../cancel/cancel_token.dart';
+import '../commands/slash_command.dart';
 import '../env/execution_env.dart';
 import '../llm/messages.dart';
 import '../llm/model_catalog.dart';
@@ -46,6 +47,14 @@ abstract interface class AgentSession {
   /// Пишет `config_change {optionId: "effort"}`; действует со следующего
   /// шага.
   Future<void> setEffort(ReasoningEffort effort);
+
+  /// Команды шаблонов проекта и пользователя в байтовом порядке имён
+  /// (design.md change `add-agent-project-files`, D7, D9).
+  ///
+  /// Список строится при открытии сессии и не меняется до её закрытия. ACP-
+  /// адаптер публикует его как `available_commands_update`; инструменты
+  /// модели в него не входят (R-07). Без порта файлов проекта список пуст.
+  List<SlashCommand> get commands;
 
   /// Запускает ход; второй вызов во время хода — [StateError] (LOOP-10).
   /// Возвращается после `TurnEnded` и записи журнала.

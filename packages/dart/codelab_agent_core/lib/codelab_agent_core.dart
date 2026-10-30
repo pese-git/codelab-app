@@ -5,6 +5,16 @@
 library;
 
 export 'src/cancel/cancel_token.dart';
+export 'src/commands/arguments.dart' show splitArguments, substituteArguments;
+export 'src/commands/command_template.dart'
+    show
+        CommandTemplate,
+        TemplateParseResult,
+        availableCommands,
+        parseCommandTemplates,
+        reservedCommandNames;
+export 'src/commands/expand_command.dart';
+export 'src/commands/slash_command.dart';
 export 'src/config/config_issue.dart';
 export 'src/config/config_tree.dart';
 export 'src/config/core_config.dart';

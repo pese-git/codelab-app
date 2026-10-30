@@ -6,6 +6,7 @@
 /// проекции остаются внутренними.
 library;
 
+import '../commands/slash_command.dart';
 import '../llm/messages.dart';
 import '../util/logger.dart';
 import 'records.dart';
@@ -68,9 +69,19 @@ String? sessionTitleFrom(String text) {
   return '${(space > 0 ? cut.substring(0, space) : cut).trimRight()}…';
 }
 
-String _firstText(SessionRecord record) =>
-    (record as MessageRecord).message.content
-        .whereType<TextContent>()
-        .map((b) => b.text)
-        .firstOrNull ??
-    '';
+/// Текст для заголовка. Развёрнутая команда шаблона даёт то, что набрал
+/// пользователь (`/<name> <args>`), как реплей, а не тело шаблона: иначе
+/// заголовок списка сессий показал бы служебный текст (agent-sessions «Поле
+/// записи command»; D8). Неизвестный источник — текст сообщения.
+String _firstText(SessionRecord record) {
+  final message = record as MessageRecord;
+  if (message.command case final command?
+      when command.source == SlashCommandSource.template.wire) {
+    return command.displayText;
+  }
+  return message.message.content
+          .whereType<TextContent>()
+          .map((b) => b.text)
+          .firstOrNull ??
+      '';
+}

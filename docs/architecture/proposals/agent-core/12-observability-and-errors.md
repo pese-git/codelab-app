@@ -147,7 +147,7 @@ final class LogRecord {           // то, что получает sink хост
 | Событие | Уровень | Поля |
 |---|---|---|
 | `project_context.loaded` | info | `session_id`, `files`, `bytes`, `truncated`, `omitted`, `root` (`git` \| `cwd`) |
-| `commands.loaded` | info | `session_id`, `count`, `project` |
+| `commands.loaded` | info | `session_id`, `count`, `project` (bool: проект доверенный, каталог проекта читается) |
 | `agents.loaded` | info | `session_id`, `names` |
 | `project_files.diagnostic` | warning (`error`/`warning`), debug (`info`) | `session_id`, `path`, `line`, `column`, `code`, `message` |
 | `project_files.skipped` | info | `transport` (`ws`), `reason`; логгер хоста, один раз при запуске `serve --ws` (D16) |
@@ -159,8 +159,10 @@ final class LogRecord {           // то, что получает sink хост
 Уровни диагностик файлов проекта (D3, D6): `outside_root`, `not_utf8`, `unreadable`, `timeout` —
 `warning`; `limit_exceeded` — `warning` для предела 100 файлов каталога шаблонов или агентов
 (отброшенные файлы видны в `config check`) и `info` для предела 64 уровней обхода; `shadowed` — `info`; `unexpected` — `error` (непредвиденное исключение
-порта; в поле `message` — только тип исключения). Коды проверки содержимого шаблонов и определений
-— по D7 и D10 того же change. Путь в `project_files.diagnostic` и `project_context.loaded` не
+порта; в поле `message` — только тип исключения). Коды содержимого шаблонов (D3): `unknown_key`,
+`invalid_value`, `empty_body`, `too_large` — `error`; `invalid_name`, `reserved_name` — `warning`;
+`shadowed`, `untrusted_project` — `info`; запись `*.md`, которая не обычный файл (FIFO, сокет,
+устройство), — `unreadable` (`warning`). Коды определений агентов — по D10 того же change. Путь в `project_files.diagnostic` и `project_context.loaded` не
 экранируется, в отличие от атрибута `path` блока в промпте (§11.5).
 
 После MVP (§17) добавляются области:

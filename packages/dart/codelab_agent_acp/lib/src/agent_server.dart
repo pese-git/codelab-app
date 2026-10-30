@@ -308,11 +308,9 @@ final class _Connection {
     );
     return Reply(
       acp.acpSessionNew.encodeResult(response),
-      // Встроенных slash-команд на этапе 4 нет (§13.4, шаг 6).
-      after: () => _update(
-        sessionId,
-        const acp.SessionUpdate.availableCommandsUpdate(availableCommands: []),
-      ),
+      // Команды шаблонов сессии (D9 change `add-agent-project-files`);
+      // без шаблонов список пуст, встроенных команд на этом этапе нет.
+      after: () => _update(sessionId, wiring.bridge.availableCommandsUpdate),
     );
   }
 

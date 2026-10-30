@@ -150,6 +150,29 @@ final class SessionBridge {
   List<acp.SessionConfigOption> get configOptions =>
       sessionConfigOptions(session, _catalog);
 
+  /// Команды сессии для `available_commands_update` (`14-Slash Commands.md`;
+  /// design.md change `add-agent-project-files`, D9).
+  ///
+  /// Почему здесь: и `session/new`, и реплей `session/load` публикуют один
+  /// и тот же список `AgentSession.commands`, а он не меняется за жизнь
+  /// сессии (D7). `input` есть только при подсказке ввода, `_meta` не
+  /// добавляется. Инструменты модели в список не входят (R-07): их в
+  /// `AgentSession.commands` нет.
+  acp.SessionUpdate get availableCommandsUpdate =>
+      acp.SessionUpdate.availableCommandsUpdate(
+        availableCommands: [
+          for (final command in session.commands)
+            acp.AvailableCommand(
+              name: command.name,
+              description: command.description,
+              input: switch (command.inputHint) {
+                final hint? => acp.AvailableCommandInput(hint: hint),
+                null => null,
+              },
+            ),
+        ],
+      );
+
   /// Хук `beforeToolCall` последним в цепочке (§10.7): вызов прошёл
   /// разрешения и хуки — клиент получает `in_progress` (§13.7).
   ///
@@ -280,8 +303,8 @@ final class SessionBridge {
         currentModeId: acp.SessionModeId(session.mode.value),
       ),
       acp.SessionUpdate.configOptionUpdate(configOptions: configOptions),
-      // Встроенных slash-команд на этапе 4 нет (§13.4, шаг 6).
-      const acp.SessionUpdate.availableCommandsUpdate(availableCommands: []),
+      // Список команд шаблонов на прежнем месте последовательности (D9).
+      availableCommandsUpdate,
       if (title != null)
         acp.SessionUpdate.sessionInfoUpdate(
           title: title.title,
