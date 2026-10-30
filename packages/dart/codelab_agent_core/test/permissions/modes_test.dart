@@ -12,6 +12,37 @@ void main() {
     ]);
   });
 
+  group('ModeId softness (floor of an agent mode, OQ3)', () {
+    // Неизвестный идентификатор в расширении-типе создаётся только через
+    // приведение: так выглядит значение, пришедшее извне.
+    final unknown = ('wild' as dynamic) as ModeId;
+
+    test('the known ids are ordered plan < ask < standard < accept-edits < '
+        'bypass, standard explicitly', () {
+      expect([for (final m in ModeId.values) m.softness], [0, 1, 2, 3, 4]);
+      expect(ModeId.standard.softness, 2);
+    });
+
+    test('an unknown id has no rank', () {
+      expect(unknown.softness, isNull);
+    });
+
+    test('fitsFloor: not softer than the floor', () {
+      expect(ModeId.plan.fitsFloor(ModeId.standard), isTrue);
+      expect(ModeId.standard.fitsFloor(ModeId.standard), isTrue);
+      expect(ModeId.acceptEdits.fitsFloor(ModeId.standard), isFalse);
+      expect(ModeId.bypass.fitsFloor(ModeId.ask), isFalse);
+    });
+
+    test('an unknown candidate never fits, an unknown floor admits nothing '
+        '(fail-closed)', () {
+      expect(unknown.fitsFloor(ModeId.bypass), isFalse);
+      expect(unknown.fitsFloor(unknown), isFalse);
+      expect(ModeId.plan.fitsFloor(unknown), isFalse);
+      expect(ModeId.ask.fitsFloor(unknown), isFalse);
+    });
+  });
+
   test('the mode × tier table of §7.3', () {
     const a = TierDecision.allow, q = TierDecision.ask, d = TierDecision.deny;
     final table = {

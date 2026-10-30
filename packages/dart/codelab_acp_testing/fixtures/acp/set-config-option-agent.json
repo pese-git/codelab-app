@@ -1,0 +1,472 @@
+{
+  "id": "acp/set-config-option-agent",
+  "spec": [
+    "13-Session Config Options.md#from-the-client",
+    "13-Session Config Options.md#initial-state",
+    "13-Session Config Options.md#option-categories",
+    "03-Session Setup.md#creating-a-session",
+    "05-Prompt Turn.md#1-user-message",
+    "01-Overview.md#error-handling"
+  ],
+  "description": "Доверенный проект с .codelab/agents/reviewer.md (model scripted/m2, mode plan, многострочный tools): после session/new configOptions содержит agent (без category) после mode и model; set_config_option agent=reviewer даёт current_mode_update plan и ответ с согласованными agent, model и mode без config_option_update; следующий запрос к модели содержит только схемы read, ls и search; неизвестное значение agent — -32602 (R-15).",
+  "goals": [
+    "R-15"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "config": {
+      "agent": {
+        "default_model": "scripted/m1"
+      },
+      "providers": {
+        "scripted": {
+          "models": {
+            "m1": {},
+            "m2": {}
+          }
+        }
+      },
+      "trusted_projects": [
+        "${cwd}"
+      ]
+    },
+    "files": {
+      ".codelab/agents/reviewer.md": "---\nname: reviewer\ndescription: Reviews the current changes and reports defects\nmodel: scripted/m2\nmode: plan\ntools:\n  - read\n  - search\n  - ls\n---\nReview the changes carefully and report defects.\n"
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "m2",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "tools": [
+            "read",
+            "ls",
+            "search"
+          ]
+        },
+        "reply": [
+          {
+            "text": "Готово."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "initializeId"
+        },
+        "method": "initialize",
+        "params": {
+          "$partial": {
+            "protocolVersion": 1,
+            "clientCapabilities": {
+              "fs": {
+                "readTextFile": true,
+                "writeTextFile": true
+              },
+              "terminal": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ агента — ровно эти поля (agent-core §13.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${initializeId}",
+        "result": {
+          "protocolVersion": 1,
+          "agentCapabilities": {
+            "loadSession": true,
+            "promptCapabilities": {
+              "image": true,
+              "audio": false,
+              "embeddedContext": true
+            },
+            "mcpCapabilities": {
+              "http": true,
+              "sse": false
+            },
+            "sessionCapabilities": {
+              "list": {}
+            }
+          },
+          "agentInfo": {
+            "name": "codelab-agent",
+            "title": "CodeLab Agent",
+            "version": {
+              "$any": "0.1.0"
+            }
+          },
+          "authMethods": []
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент создаёт сессию без MCP-серверов",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "sessionNewId"
+        },
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "режимы для совместимости и configOptions; agent — после mode и model, без category (D12)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${sessionNewId}",
+        "result": {
+          "sessionId": {
+            "$capture": "sessionId"
+          },
+          "modes": {
+            "currentModeId": "standard",
+            "availableModes": [
+              {
+                "id": "plan",
+                "name": "Plan",
+                "description": "Read and plan only, no changes"
+              },
+              {
+                "id": "ask",
+                "name": "Ask",
+                "description": "Approve every call, including reads"
+              },
+              {
+                "id": "standard",
+                "name": "Standard",
+                "description": "Reads without asking, edits and commands with approval"
+              },
+              {
+                "id": "accept-edits",
+                "name": "Accept edits",
+                "description": "Reads and edits without asking, commands and network with approval"
+              },
+              {
+                "id": "bypass",
+                "name": "Bypass",
+                "description": "No approval except for critical commands, agent config edits and network access"
+              }
+            ]
+          },
+          "configOptions": [
+            {
+              "id": "mode",
+              "name": "Mode",
+              "category": "mode",
+              "type": "select",
+              "currentValue": "standard",
+              "options": [
+                {
+                  "value": "plan",
+                  "name": "Plan"
+                },
+                {
+                  "value": "ask",
+                  "name": "Ask"
+                },
+                {
+                  "value": "standard",
+                  "name": "Standard"
+                },
+                {
+                  "value": "accept-edits",
+                  "name": "Accept edits"
+                },
+                {
+                  "value": "bypass",
+                  "name": "Bypass"
+                }
+              ]
+            },
+            {
+              "id": "model",
+              "name": "Model",
+              "category": "model",
+              "type": "select",
+              "currentValue": "scripted/m1",
+              "options": [
+                {
+                  "value": "scripted/m1",
+                  "name": "m1"
+                },
+                {
+                  "value": "scripted/m2",
+                  "name": "m2"
+                }
+              ]
+            },
+            {
+              "id": "agent",
+              "name": "Agent",
+              "type": "select",
+              "currentValue": "default",
+              "options": [
+                {
+                  "value": "default",
+                  "name": "Default"
+                },
+                {
+                  "value": "reviewer",
+                  "name": "reviewer",
+                  "description": "Reviews the current changes and reports defects"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": {
+              "$any": []
+            }
+          }
+        }
+      },
+      "note": "после ответа session/new (ACP-8); состав списка — фикстуры этапа 8"
+    },
+    {
+      "dir": "c2a",
+      "note": "пользователь выбирает агента reviewer",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "setAgentId"
+        },
+        "method": "session/set_config_option",
+        "params": {
+          "sessionId": "${sessionId}",
+          "configId": "agent",
+          "value": "reviewer"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "режим агента мягче не стал — plan применён; уведомление до ответа (D12)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "plan"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ — полный снимок с согласованными agent, model, mode; config_option_update не дублируется (ACP-11)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${setAgentId}",
+        "result": {
+          "configOptions": [
+            {
+              "id": "mode",
+              "name": "Mode",
+              "category": "mode",
+              "type": "select",
+              "currentValue": "plan",
+              "options": [
+                {
+                  "value": "plan",
+                  "name": "Plan"
+                },
+                {
+                  "value": "ask",
+                  "name": "Ask"
+                },
+                {
+                  "value": "standard",
+                  "name": "Standard"
+                },
+                {
+                  "value": "accept-edits",
+                  "name": "Accept edits"
+                },
+                {
+                  "value": "bypass",
+                  "name": "Bypass"
+                }
+              ]
+            },
+            {
+              "id": "model",
+              "name": "Model",
+              "category": "model",
+              "type": "select",
+              "currentValue": "scripted/m2",
+              "options": [
+                {
+                  "value": "scripted/m1",
+                  "name": "m1"
+                },
+                {
+                  "value": "scripted/m2",
+                  "name": "m2"
+                }
+              ]
+            },
+            {
+              "id": "agent",
+              "name": "Agent",
+              "type": "select",
+              "currentValue": "reviewer",
+              "options": [
+                {
+                  "value": "default",
+                  "name": "Default"
+                },
+                {
+                  "value": "reviewer",
+                  "name": "reviewer",
+                  "description": "Reviews the current changes and reports defects"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "значения нет в options",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "setUnknownId"
+        },
+        "method": "session/set_config_option",
+        "params": {
+          "sessionId": "${sessionId}",
+          "configId": "agent",
+          "value": "ghost"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "неизвестное значение — -32602, агент не меняется",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${setUnknownId}",
+        "error": {
+          "code": -32602,
+          "message": {
+            "$any": "Invalid params"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "промпт: модель получает только схемы из tools агента",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Проверь изменения"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Готово."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": "Проверь изменения",
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "note": "название сессии из первого промпта приходит после чанков и до ответа"
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

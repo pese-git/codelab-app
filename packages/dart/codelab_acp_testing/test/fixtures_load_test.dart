@@ -83,6 +83,7 @@ const _stage8McpFixtures = {
 const _stage8ProjectFilesFixtures = {
   'acp/prompt-template-command',
   'acp/available-commands-no-tools',
+  'acp/set-config-option-agent',
 };
 
 void main() {

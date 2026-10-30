@@ -12,6 +12,7 @@ final class CoreHarness {
     this.logger,
     this.sessions,
     this.requestedModels,
+    this.requestedContexts,
   );
 
   static CoreHarness build({
@@ -29,12 +30,15 @@ final class CoreHarness {
     ReasoningEffort effort = ReasoningEffort.medium,
     McpConnector? mcp,
     List<McpServerConfig> mcpServers = const [],
+    PermissionsConfig? permissions,
+    ProjectFilesSource? projectFiles,
   }) {
     final c = clock ?? FakeClock();
     final logger = RecordingLogger();
     final model = ScriptedStreamFunction.fromJson({'steps': steps}, clock: c);
     final store = sessions ?? MemorySessionStore();
     final requested = <ModelRef>[];
+    final contexts = <LlmContext>[];
     final core = buildAgentCore(
       profile: HostProfile.of(profile).narrowed({
         // Журнал теста — в памяти: постоянного носителя нет (design.md, D12).
@@ -50,20 +54,23 @@ final class CoreHarness {
         sessions: store,
         models: models,
         mcp: mcp,
+        projectFiles: projectFiles,
       ),
       config: CoreConfig(
         defaultModel: defaultModel ?? testModel,
-        permissions: PermissionsConfig(modeOverride: modeOverride),
+        permissions:
+            permissions ?? PermissionsConfig(modeOverride: modeOverride),
         compaction: compaction,
         effort: effort,
         mcpServers: mcpServers,
       ),
       streamFunction: (ref, context, {cancel}) {
         requested.add(ref);
+        contexts.add(context);
         return model.call(ref, context, cancel: cancel);
       },
     );
-    return CoreHarness._(core, model, c, logger, store, requested);
+    return CoreHarness._(core, model, c, logger, store, requested, contexts);
   }
 
   final BuiltAgentCore core;
@@ -74,6 +81,9 @@ final class CoreHarness {
 
   /// Модель каждого запроса хода в порядке запросов.
   final List<ModelRef> requestedModels;
+
+  /// Контекст (промпт, схемы, сообщения) каждого запроса хода.
+  final List<LlmContext> requestedContexts;
 }
 
 const inMemoryJournal = {
