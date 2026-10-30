@@ -172,6 +172,8 @@ ConfigLoadResult _resolve(
             providers: full.providers,
             providerProblems: full.providerProblems,
             redact: full.redact,
+            projectContextMaxBytes: full.projectContextMaxBytes,
+            trustedProjects: full.trustedProjects,
             projectRoot: projectRoot,
             withoutProject: bare,
           ),
@@ -335,6 +337,7 @@ final class _Builder {
     final mcpServers = _mcpServers();
     final redact = _redact();
     final profiles = _profiles();
+    final projectContextMaxBytes = _projectContextMaxBytes();
 
     if (issues.isNotEmpty || model == null) {
       return;
@@ -349,6 +352,8 @@ final class _Builder {
       providers: providers,
       providerProblems: problems,
       redact: redact,
+      projectContextMaxBytes: projectContextMaxBytes,
+      trustedProjects: _trustedRoots(layers, environment),
     );
     host = HostSettings(
       sessionsDir: _path(['sessions', 'dir']),
@@ -1154,6 +1159,21 @@ final class _Builder {
       maxCost: cost,
       maxDuration: duration,
     );
+  }
+
+  /// `tools.project_context.max_bytes`: `0..262144`, `0` выключает чтение
+  /// инструкций проекта (D5).
+  int _projectContextMaxBytes() {
+    const path = ['tools', 'project_context', 'max_bytes'];
+    final value = _int(path);
+    if (value == null) {
+      return defaultProjectContextMaxBytes;
+    }
+    if (value < 0 || value > maxProjectContextMaxBytes) {
+      _bad(path, 'must be between 0 and $maxProjectContextMaxBytes');
+      return defaultProjectContextMaxBytes;
+    }
+    return value;
   }
 
   CompactionOverrides _compaction() {

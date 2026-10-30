@@ -6,7 +6,7 @@ import '../compaction/estimate.dart';
 import '../compaction/settings.dart';
 import '../compaction/summarizer.dart';
 import '../config/core_config.dart';
-import '../config/key_path.dart' show pathComponents;
+import '../config/key_path.dart' show pathComponents, samePath;
 import '../env/bounded_env.dart';
 import '../env/execution_env.dart';
 import '../llm/messages.dart';
@@ -21,6 +21,8 @@ import '../mcp/mcp_server_config.dart';
 import '../mcp/mcp_tool_name.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
+import '../project/project_context.dart';
+import '../project/project_files.dart';
 import '../prompts/compose.dart';
 import '../session/ids.dart';
 import '../session/projections.dart';
@@ -39,6 +41,9 @@ import '../host/services.dart';
 import 'agent_session.dart';
 
 /// Кто пишет журналы этого ядра (поле `agent` заголовка, §8.2.1).
+/// Предел фазы чтения файлов проекта в `session/new` (D6).
+const _projectFilesTimeout = Duration(seconds: 5);
+
 const coreAgentVersion = '0.1.0';
 const coreAgentInfo = AgentInfo(
   name: 'codelab-agent',
@@ -136,9 +141,12 @@ final class AgentRuntimeImpl implements AgentRuntime {
       metadata: {'profile': profile.name},
     );
     await _store.create(header);
+    final resolved = await _canonicalCwd(spec.cwd);
+    final canonicalCwd = resolved.path;
     final settings = await _sessionConfig(
       header.id,
       spec.cwd,
+      canonicalCwd,
       spec.ports.logger ?? services.logger,
     );
     final model = _resolve(
@@ -148,6 +156,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
     final session = await _open(
       snapshot: SessionSnapshot.empty(header),
       cwd: spec.cwd,
+      canonicalCwd: canonicalCwd,
+      cwdResolved: resolved.resolved,
       settings: settings,
       mode: spec.mode ?? settings.permissions.mode ?? profile.defaultMode,
       model: model,
@@ -204,9 +214,12 @@ final class AgentRuntimeImpl implements AgentRuntime {
   }) async {
     final snapshot = await _store.open(id);
     final restored = buildLlmContext(snapshot);
+    final resolved = await _canonicalCwd(cwd ?? snapshot.header.cwd);
+    final canonicalCwd = resolved.path;
     final settings = await _sessionConfig(
       id,
       cwd ?? snapshot.header.cwd,
+      canonicalCwd,
       ports.logger ?? services.logger,
     );
     final effort =
@@ -230,6 +243,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
     final session = await _open(
       snapshot: snapshot,
       cwd: cwd ?? header,
+      canonicalCwd: canonicalCwd,
+      cwdResolved: resolved.resolved,
       settings: settings,
       mode:
           ModeId.values.where((m) => m.value == restored.modeId).firstOrNull ??
@@ -290,24 +305,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
   /// проектных слоёв. Ключи сборки (каталог, capability, профиль) остаются
   /// общими: они уже вошли в [services] и [profile].
   ///
-  /// `cwd` перед сравнением канонизируется через необязательный
-  /// `PathResolver` базового окружения: корень проекта в конфигурации уже
-  /// канонический, и сессия, открытая по symlink на проект, иначе получила бы
-  /// снимок без проекта и потеряла бы его `permissions.deny` (приоритет 1).
-  /// IO остаётся в порте: ядро путь сам не раскрывает. Путь не раскрылся
-  /// (нет файла, нет `PathResolver`) — сравнивается как есть.
+  /// `cwd` перед сравнением канонизируется ([_canonicalCwd]): корень проекта в
+  /// конфигурации уже канонический, и сессия, открытая по symlink на проект,
+  /// иначе получила бы снимок без проекта и потеряла бы его `permissions.deny`
+  /// (приоритет 1).
   Future<CoreConfig> _sessionConfig(
     SessionId id,
     String cwd,
+    String canonical,
     Logger logger,
   ) async {
-    var canonical = cwd;
-    if (services.baseEnv case final PathResolver resolver
-        when config.projectRoot != null) {
-      if (await resolver.realpath(cwd) case Ok(:final value)) {
-        canonical = value;
-      }
-    }
     final settings = config.forSessionCwd(canonical);
     if (!identical(settings, config) &&
         _outsideRootLogged.add(pathComponents(cwd).join('/'))) {
@@ -322,6 +329,27 @@ final class AgentRuntimeImpl implements AgentRuntime {
       );
     }
     return settings;
+  }
+
+  /// Канонический `cwd` сессии: `realpath` необязательного `PathResolver`
+  /// базового окружения (design.md change `add-agent-configuration`, D9;
+  /// `add-agent-project-files`, D4).
+  ///
+  /// Один результат служит и выбору снимка конфигурации, и сравнению с
+  /// `trustedProjects`, и запросу порту файлов проекта: сессия по symlink на
+  /// доверенный корень не должна терять доверие, а symlink на чужой каталог —
+  /// получать его (приоритет 1). IO остаётся в порте: ядро путь сам не
+  /// раскрывает. Путь не раскрылся (нет файла, нет `PathResolver`) —
+  /// `resolved: false`: для снимка конфигурации путь берётся как есть, но
+  /// доверия проекту он не даёт (fail closed): лексическое `..` или symlink,
+  /// не раскрытые резолвером, не должны совпасть с доверенным корнем.
+  Future<({String path, bool resolved})> _canonicalCwd(String cwd) async {
+    if (services.baseEnv case final PathResolver resolver) {
+      if (await resolver.realpath(cwd) case Ok(:final value)) {
+        return (path: value, resolved: true);
+      }
+    }
+    return (path: cwd, resolved: false);
   }
 
   /// Ссылка каталога с уровнем рассуждения сессии; модели нет в каталоге —
@@ -368,6 +396,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
   Future<_Session> _open({
     required SessionSnapshot snapshot,
     required String cwd,
+    required String canonicalCwd,
+    required bool cwdResolved,
     required CoreConfig settings,
     required ModeId mode,
     required ModelRef model,
@@ -391,6 +421,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
       // Токен сессии: `close()` отменяет подключение серверов, не дожидаясь
       // `connectTimeout`; отмена рантайма доходит через родителя.
       cancel: CancelTokenSource(parent: _shutdown.token),
+    );
+    // Файлы проекта читаются до подключения MCP: отменённая загрузка не
+    // оставляет за собой процессов серверов (D6).
+    final projectContext = await _loadProjectFiles(
+      id: id,
+      canonicalCwd: canonicalCwd,
+      cwdResolved: cwdResolved,
+      settings: settings,
+      logger: logger,
+      cancel: mcp.cancel.token,
     );
     await _connectMcp(
       id: id,
@@ -447,7 +487,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
             : null,
         contextWindowCap: settings.compaction.contextWindowCap,
       ),
-      systemPrompt: _systemPrompt(cwd, mode, sessionRegistry, mcp),
+      systemPrompt: _systemPrompt(
+        cwd,
+        mode,
+        sessionRegistry,
+        mcp,
+        projectContext,
+      ),
       tools: sessionRegistry.tools,
     );
     // План эмитится через очередь агента: PlanUpdated приходит подписчикам
@@ -479,7 +525,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
       ),
       services: services,
       logger: logger,
-      compose: (cwd, mode) => _systemPrompt(cwd, mode, sessionRegistry, mcp),
+      compose: (cwd, mode) =>
+          _systemPrompt(cwd, mode, sessionRegistry, mcp, projectContext),
       snapshot: snapshot,
       stream: stream,
       compaction: compaction ? settings.compaction : null,
@@ -512,6 +559,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     ModeId mode,
     ToolRegistry sessionRegistry,
     _McpState mcp,
+    ProjectContext? projectContext,
   ) => composeSystemPrompt(
     PromptInputs(
       cwd: cwd,
@@ -521,8 +569,156 @@ final class AgentRuntimeImpl implements AgentRuntime {
       profile: profile,
       toolNames: {for (final tool in sessionRegistry.tools) tool.name},
       mcpServers: mcp.summaries,
+      projectContext: projectContext,
     ),
   );
+
+  /// Читает файлы проекта сессии портом и собирает контекст инструкций
+  /// (design.md change `add-agent-project-files`, D1, D4, D5, D6, D14).
+  ///
+  /// Загрузка — одна фаза внутри `_open`, до ответа `session/new`. Ошибки
+  /// файлов порт возвращает диагностикой; непредвиденное исключение порта не
+  /// роняет сессию (она создаётся без файлов), в лог идёт только тип
+  /// исключения. Фаза ограничена [_projectFilesTimeout]: порт, не ответивший
+  /// вовремя, даёт сессию без файлов и диагностику `timeout`. Отмена ([cancel]: `close()` сессии или `dispose()` рантайма)
+  /// выбрасывает результат: сессия не создаётся. В лог не попадает ни
+  /// содержимое файлов, ни фрагменты сообщений исключений (D14).
+  Future<ProjectContext?> _loadProjectFiles({
+    required SessionId id,
+    required String canonicalCwd,
+    required bool cwdResolved,
+    required CoreConfig settings,
+    required Logger logger,
+    required CancelToken cancel,
+  }) async {
+    final source = services.projectFiles;
+    if (source == null) {
+      return null;
+    }
+    void diagnostic(
+      DiagnosticLevel level,
+      String path,
+      String code,
+      String message, {
+      int? line,
+      int? column,
+    }) => logger.log(
+      level == DiagnosticLevel.info ? LogLevel.debug : LogLevel.warning,
+      'project_files.diagnostic',
+      fields: {
+        'session_id': id.value,
+        'path': path,
+        'line': line,
+        'column': column,
+        'code': code,
+        'message': message,
+      },
+    );
+
+    // Фаза ограничена: порт, который не отвечает, не должен держать
+    // `session/new` вечно. Первым из трёх: ответ порта, отмена сессии, таймаут
+    // фазы. Порту отдаётся дочерний токен: по таймауту он отменяется, и
+    // загрузчик перестаёт читать.
+    final loadCancel = CancelTokenSource(parent: cancel);
+    final outcome = Completer<ProjectFiles?>();
+    void giveUp() {
+      if (!outcome.isCompleted) {
+        outcome.complete(null);
+      }
+    }
+
+    final timer = services.clock.timer(_projectFilesTimeout, giveUp);
+    unawaited(cancel.onCancel.then((_) => giveUp()));
+    unawaited(
+      Future.sync(
+        () => source.load(
+          ProjectFilesQuery(
+            cwd: canonicalCwd,
+            // Без раскрытого `realpath` доверия нет (D4, приоритет 1).
+            projectTrusted:
+                cwdResolved &&
+                settings.trustedProjects.any(
+                  (root) => samePath(root, canonicalCwd),
+                ),
+            contextMaxBytes: settings.projectContextMaxBytes,
+            cancel: loadCancel.token,
+          ),
+        ),
+      ).then(
+        (value) {
+          if (!outcome.isCompleted) {
+            outcome.complete(value);
+          }
+        },
+        onError: (Object error, StackTrace stack) {
+          if (!outcome.isCompleted) {
+            outcome.completeError(error, stack);
+          }
+        },
+      ),
+    );
+    final ProjectFiles files;
+    try {
+      final result = await outcome.future;
+      cancel.throwIfCancelled();
+      if (result == null) {
+        loadCancel.cancel();
+        diagnostic(
+          DiagnosticLevel.warning,
+          canonicalCwd,
+          'timeout',
+          'project files were not read within '
+              '${_projectFilesTimeout.inSeconds} s; the session has none',
+        );
+        return null;
+      }
+      files = result;
+    } on CancelledException {
+      rethrow;
+    } on Object catch (error) {
+      cancel.throwIfCancelled();
+      diagnostic(
+        DiagnosticLevel.error,
+        canonicalCwd,
+        'unexpected',
+        'project files could not be read: ${error.runtimeType}',
+      );
+      return null;
+    } finally {
+      timer.cancel();
+      loadCancel.dispose();
+    }
+    cancel.throwIfCancelled();
+    for (final item in files.diagnostics) {
+      diagnostic(
+        item.level,
+        item.path,
+        item.code,
+        item.message,
+        line: item.line,
+        column: item.column,
+      );
+    }
+    final context = assembleProjectContext(
+      files.context,
+      settings.projectContextMaxBytes,
+    );
+    if (context != null) {
+      logger.log(
+        LogLevel.info,
+        'project_context.loaded',
+        fields: {
+          'session_id': id.value,
+          'files': [for (final file in context.files) file.path],
+          'bytes': context.bytes,
+          'truncated': context.truncated,
+          'omitted': context.omitted,
+          'root': files.contextRoot.name,
+        },
+      );
+    }
+    return context;
+  }
 
   /// Подключает MCP-серверы сессии до возврата сессии (D6): слияние
   /// конфигурации и клиента, фильтр по capability `mcp`, подключение

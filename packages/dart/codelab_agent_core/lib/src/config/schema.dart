@@ -10,6 +10,13 @@
 /// ключи, неверные типы и ключи, которые ещё никто не читает.
 library;
 
+/// Бюджет инструкций проекта по умолчанию, байты (`tools.project_context.
+/// max_bytes`, §15.4; design.md change `add-agent-project-files`, D5).
+const defaultProjectContextMaxBytes = 32768;
+
+/// Верхняя граница `tools.project_context.max_bytes`, байты (§15.4).
+const maxProjectContextMaxBytes = 262144;
+
 /// Скалярные типы §15.4.
 enum ScalarType { string, integer, float, boolean, duration, path }
 
@@ -224,7 +231,7 @@ final SectionNode rootSchema = SectionNode({
   'tools': SectionNode({
     'output': SectionNode({'max_lines': _intU, 'max_bytes': _intU}),
     'untrusted_paths': _strListU,
-    'project_context': SectionNode({'max_bytes': _intU}),
+    'project_context': SectionNode({'max_bytes': _int}),
     'disabled': _strListU,
     'load': _opaque,
     'mounted': _opaque,

@@ -12,4 +12,5 @@ export 'src/env/host_path.dart';
 export 'src/env/local_execution_env.dart';
 export 'src/mcp/stdio_process_transport.dart'
     show StdioMcpTransportFactory, StdioProcessTransport;
+export 'src/project/project_files_loader.dart';
 export 'src/session/jsonl_session_store.dart';

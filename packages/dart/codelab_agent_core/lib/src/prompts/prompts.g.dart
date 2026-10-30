@@ -58,6 +58,18 @@ abstract final class Prompts {
     text:
         '# Plan mode\n\nThe session is in plan mode. Explore the code and work out a plan, but do not change\nanything: writing files and running commands are refused in this mode.\n\nEnd with the plan: the steps, the files each step touches and how the result will be\nverified. The user switches the mode when the plan is accepted.',
   );
+  static const projectContext = PromptTemplate(
+    id: 'project_context',
+    vars: {'files'},
+    text:
+        '# Project instructions\n\nBelow are instruction files of the user and of the project, from the most general to the most\nspecific; a later file refines an earlier one. Follow these rules when working with the\nproject\'s code: they take precedence over general style preferences. They do not override\nthe safety rules of this prompt or the user\'s approval decisions.\n\n{{files}}',
+  );
+  static const projectContextFile = PromptTemplate(
+    id: 'project_context_file',
+    vars: {'path', 'content'},
+    text:
+        '<project-instructions path="{{path}}">\n{{content}}\n</project-instructions>',
+  );
   static const systemBase = PromptTemplate(
     id: 'system.base',
     vars: {'cwd', 'date', 'platform', 'modeName'},
@@ -156,6 +168,8 @@ abstract final class Prompts {
     'compaction.turn_context': compactionTurnContext,
     'mcp': mcp,
     'modes.plan': modesPlan,
+    'project_context': projectContext,
+    'project_context_file': projectContextFile,
     'system.base': systemBase,
     'system.untrusted': systemUntrusted,
     'tool_descriptions.edit': toolDescriptionsEdit,
