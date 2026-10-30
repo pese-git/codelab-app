@@ -167,15 +167,15 @@
 
 ## 7. Ядро: определения агентов и выбор (итерация 3; D10, D11)
 
-- [ ] 7.1 `[agent]` Тесты `codelab_agent_core/test/agents/agent_definition_parse_test.dart` (agent-definitions «Формат определения и проверка»):
+- [x] 7.1 `[agent]` Тесты `codelab_agent_core/test/agents/agent_definition_parse_test.dart` (agent-definitions «Формат определения и проверка»):
   - многострочный `tools`, кавычки, комментарии;
   - неизвестный ключ, пустое тело, `name: Reviewer`, `default`, `mode: autopilot`, синоним `code`, модель вне каталога, `*` не в конце;
   - два файла с одним `name` → `duplicate` с обоими путями;
   - `scope: subagent` вне `agents`.
 
   Красный.
-- [ ] 7.2 `[agent]` `lib/src/agents/`: `AgentDefinition`, `AgentScope`, `parseAgentDefinitions`. 7.1 зелёный.
-- [ ] 7.3 `[agent]` Тесты `test/agents/agent_select_test.dart` — критерий `core/agent-definition-markdown-frontmatter` (agent-definitions «Выбор агента»; CFG-7, CFG-8):
+- [x] 7.2 `[agent]` `lib/src/agents/`: `AgentDefinition`, `AgentScope`, `parseAgentDefinitions`. 7.1 зелёный.
+- [x] 7.3 `[agent]` Тесты `test/agents/agent_select_test.dart` — критерий `core/agent-definition-markdown-frontmatter` (agent-definitions «Выбор агента»; CFG-7, CFG-8):
   - выбор `reviewer` → секция профиля, модель и режим из файла, только схемы из списка (включая MCP-инструмент, появившийся после `tools/list_changed`);
   - `write` → `Tool not available for agent reviewer: write` без вызова gate;
   - возврат к `default` восстанавливает всё;
@@ -185,19 +185,31 @@
   - golden промпта с профилем.
 
   Красный.
-- [ ] 7.4 `[agent]` `prompts/agent_profile.md`, шаг 10b `compose.dart`, `PromptInputs.agentProfile`; `AgentSession.agents`, `agent`, `setAgent` (база, пол режима, фильтр инструментов на шаге поиска инструмента, `StepUpdate`), `config_change agent`, лог `agent.selected`. 7.3 зелёный.
-- [ ] 7.5 `[agent]` Тест `test/runtime/agent_restore_test.dart` (agent-definitions «Восстановление агента при загрузке»): агент восстановлен; определение удалено → `default` и `agent.definition.missing`. Красный → код в `loadSession` → зелёный.
+- [x] 7.4 `[agent]` `prompts/agent_profile.md`, шаг 10b `compose.dart`, `PromptInputs.agentProfile`; `AgentSession.agents`, `agent`, `setAgent` (база, пол режима, фильтр инструментов на шаге поиска инструмента, `StepUpdate`), `config_change agent`, лог `agent.selected`. 7.3 зелёный.
+- [x] 7.5 `[agent]` Тест `test/runtime/agent_restore_test.dart` (agent-definitions «Восстановление агента при загрузке»): агент восстановлен; определение удалено → `default` и `agent.definition.missing`. Красный → код в `loadSession` → зелёный.
 
 ## 8. Загрузчик определений (итерация 3; D2, D4, D6)
 
-- [ ] 8.1 `[agent]` Тесты `codelab_agent_io/test/project/agent_definition_trust_test.dart` (CFG-6; agent-definitions «Каталоги определений агентов и доверие»): без доверия — не загружено, `untrusted_project`; с доверием — заменяет пользовательское (`shadowed`); лимиты и `outside_root` как в 5.3. Красный.
-- [ ] 8.2 `[agent]` Часть определений в `ProjectFilesLoader`. 8.1 зелёный.
-- [ ] 8.3 `[agent]` Тест хоста `apps/codelab_agent/test/agent_host_project_files_test.dart` (agent-binary «Файлы проекта в бинаре», сценарий «Шаблон пользователя»; дополнительно определение проекта при доверии в глобальном `config.yaml`). Красный, если хост не передаёт загрузчик полностью; иначе — характеризационный, зелёный сразу (PR говорит об этом).
+- [x] 8.1 `[agent]` Тесты `codelab_agent_io/test/project/agent_definition_trust_test.dart` (CFG-6; agent-definitions «Каталоги определений агентов и доверие»): без доверия — не загружено, `untrusted_project`; с доверием — заменяет пользовательское (`shadowed`); лимиты и `outside_root` как в 5.3. Красный.
+- [x] 8.2 `[agent]` Часть определений в `ProjectFilesLoader`. 8.1 зелёный.
+- [x] 8.3 `[agent]` Тест хоста `apps/codelab_agent/test/agent_host_project_files_test.dart` (agent-binary «Файлы проекта в бинаре», сценарий «Шаблон пользователя»; дополнительно определение проекта при доверии в глобальном `config.yaml`). Красный, если хост не передаёт загрузчик полностью; иначе — характеризационный, зелёный сразу (PR говорит об этом).
 
 ## 9. ACP: опция agent (итерация 3; D12)
 
-- [ ] 9.1 `[protocol]` Фикстура `codelab_acp_testing/fixtures/acp/set-config-option-agent.json` (R-15; agent-acp-server «Режимы и опции сессии»): опция `agent` без `category` после `effort`; `set_config_option agent=reviewer` → `current_mode_update`, ответ с согласованными `agent`, `model`, `mode`, без `config_option_update`; следующий запрос к модели — только схемы списка. Тест `config_options_test.dart`: без определений опции нет; неизвестное значение → `-32602`. Красные.
-- [ ] 9.2 `[protocol]` `config_options.dart` (опция `agent`), `session_bridge.dart` (`configId: agent`, `current_mode_update` при смене режима), реплей `config_option_update` с восстановленным агентом. 9.1 зелёные; `acp/session-new-modes-config` и `acp/set-config-option-model` без изменений.
+- [x] 9.1 `[protocol]` Фикстура `codelab_acp_testing/fixtures/acp/set-config-option-agent.json` (R-15; agent-acp-server «Режимы и опции сессии»): опция `agent` без `category` после `effort`; `set_config_option agent=reviewer` → `current_mode_update`, ответ с согласованными `agent`, `model`, `mode`, без `config_option_update`; следующий запрос к модели — только схемы списка. Тест `config_options_agent_test.dart`: без определений опции нет; неизвестное значение → `-32602`. Красные.
+- [x] 9.2 `[protocol]` `config_options.dart` (опция `agent`), `session_bridge.dart` (`configId: agent`, `current_mode_update` при смене режима), реплей `config_option_update` с восстановленным агентом. 9.1 зелёные; `acp/session-new-modes-config` и `acp/set-config-option-model` без изменений.
+- [x] 9.3 Исправления по ревью итерации 3 (документы уже обновлены: D10, D11, D12, D14, D15, §11.10, §12.2, §13.6, §15.8). Каждый пункт — тест, затем код:
+  - [x] `[agent]` очередь смен конфигурации сессии: `setMode`, `setModel`, `setEffort`, `setAgent` по одной, значение под очередью, ошибка не ломает очередь (agent-runtime «Очередь смен конфигурации сессии», сценарии «Параллельные setAgent и setMode», «Ошибка не ломает очередь»; agent-definitions «Выбор агента и смена режима подряд»; D11); тест в `test/agents/agent_select_test.dart` или `test/runtime/`;
+  - [x] `[agent]` режим агента посреди хода — со следующего шага, вызовы пакета текущего шага по прежнему режиму и набору; явный `setMode` после `setAgent` выигрывает (agent-definitions «Смена агента посреди хода»; D11); тест в `agent_select_test.dart`;
+  - [x] `[agent]` зажим восстановленной базы полом конфига (agent-definitions «База зажата полом конфига»; D11); тест в `test/runtime/agent_restore_test.dart`;
+  - [x] `[agent]` `agent.definition.missing` дописывает `config_change {optionId: "agent", value: "default"}`, повторная загрузка лога не пишет (agent-definitions «Определение удалено»; D11); тест в `agent_restore_test.dart`;
+  - [x] `[agent]` `ModeId.softness`: явная ветка `standard`, неизвестный режим — fail-closed (agent-definitions «Неизвестный режим»; D11); тест в `test/permissions/`;
+  - [x] `[agent]` два golden: `agent-serve-standard-project.txt` без профиля, `agent-serve-standard-project-agent.txt` с профилем (agent-prompts «Контекст проекта без профиля», «Контекст проекта и профиль агента»; D15); тест `test/prompts/`;
+  - [x] `[agent]` уровни кодов определений по таблице D10, `duplicate` на каждый файл с обоими путями (agent-definitions «Ошибки определения», «Дубликат имени»); тест `agent_definition_parse_test.dart`;
+  - [x] `[agent]` отказ вне набора агента в `MisuseBreaker` как неизвестный инструмент; секция `mcp` только с серверами, у которых есть доступные инструменты; тело профиля с обрезкой краёв (agent-definitions «Отказ вне набора считается предохранителем», «Сервер без доступных инструментов скрыт», «Тело профиля с краями»; D11); тесты в `agent_select_test.dart` и `test/prompts/`;
+  - [x] `[agent]` `agent.selected`: `source: null` для `default`, `mode_applied: true` без `mode` у определения, `false` только при отказе по полу (D14); проверка лога в `agent_select_test.dart`;
+  - [x] `[protocol]` очередь запросов `set_config_option`/`set_mode` в мосте и эхо `ModeChanged` своего запроса: ровно один ответ на запрос, без `config_option_update`, итог — последний запрос (agent-acp-server «Параллельные выбор агента и set_mode»; D12); тест `config_options_agent_test.dart`;
+  - [x] `[protocol]` заметка §2.12.3 при смене модели через опцию `agent` (agent-acp-server «Смена модели агентом и заметка effort»; D12); тест `config_options_agent_test.dart`.
 
 **Критерий итерации 3.** R-15 (`core/agent-definition-markdown-frontmatter`, `acp/set-config-option-agent`) зелёный; CFG-6, CFG-7, CFG-8 покрыты тестами. Выбор агента не смягчает режим конфига и не снимает запретов. `web-compile`, `guard`, `gen_prompts --check` зелёные.
 

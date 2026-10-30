@@ -202,9 +202,15 @@ final class PlanUpdated extends AgentEvent {
 /// The mode of the session changed (level of `AgentSession`); it applies
 /// from the next tool call.
 final class ModeChanged extends AgentEvent {
-  const ModeChanged(super.sessionId, {required this.mode});
+  const ModeChanged(super.sessionId, {required this.mode, this.changeId});
 
   final ModeId mode;
+
+  /// Номер смены конфигурации сессии, вызвавшей событие: тот же номер лежит в
+  /// `ConfigChangeResult.changeId` вызова `setMode`/`setAgent`. По нему
+  /// адаптер сопоставляет эхо с запросом клиента, не держа общего поля на
+  /// сессию. `null` — событие без вызова (воспроизведение журнала).
+  final int? changeId;
 }
 
 enum AgentErrorClass { provider, fallback, compaction, hook, storage }

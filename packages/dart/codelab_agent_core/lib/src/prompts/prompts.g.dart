@@ -4,6 +4,11 @@ import 'template.dart';
 
 /// Тексты промптов ядра: константы из `prompts/**/*.md` (§11.2).
 abstract final class Prompts {
+  static const agentProfile = PromptTemplate(
+    id: 'agent_profile',
+    vars: {'name', 'body'},
+    text: '# Agent profile: {{name}}\n\n{{body}}',
+  );
   static const compactionFocus = PromptTemplate(
     id: 'compaction.focus',
     vars: {'text'},
@@ -160,6 +165,7 @@ abstract final class Prompts {
         '# Reading files\n\n- Read a file before you change it or make claims about it.\n- read returns at most {{maxLines}} lines or {{maxKb}} KB. When the output says how to\n  continue, call read again with that offset instead of guessing the rest.\n- Line numbers in the output ("12| text") are not part of the file: do not copy them into\n  edits.',
   );
   static const all = <String, PromptTemplate>{
+    'agent_profile': agentProfile,
     'compaction.focus': compactionFocus,
     'compaction.summary': compactionSummary,
     'compaction.summary_update': compactionSummaryUpdate,

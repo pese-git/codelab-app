@@ -82,11 +82,6 @@ final class SessionBridge {
   /// `session_info_update` (§13.5, шаг 9).
   var _turnMoved = false;
 
-  /// Смена режима по запросу клиента: `config_option_update` не
-  /// дублирует ответ (ACP-11); завершается, когда `current_mode_update`
-  /// поставлен в очередь.
-  Completer<void>? _clientModeChange;
-
   /// Заметка о смене на модель без рассуждения: первым
   /// `agent_message_chunk` следующего хода (§2.12.3).
   String? _effortNote;
@@ -265,20 +260,91 @@ final class SessionBridge {
     return true;
   }
 
+  /// Ставит запрос смены конфигурации в очередь моста (design.md change
+  /// `add-agent-project-files`, D12).
+  ///
+  /// Почему: запросы `session/set_config_option` и `session/set_mode`
+  /// обрабатываются параллельно, а эхо `ModeChanged` своего запроса надо
+  /// отличать от чужого. Очередь даёт не больше одного клиентского запроса
+  /// смены за раз: эхо однозначно принадлежит ему, на каждый запрос —
+  /// ровно один ответ, итог сессии — результат последнего запроса.
+  /// Ошибка запроса (`-32602`, сбой ядра) очередь не останавливает.
+  Future<T> _queued<T>(Future<T> Function() operation) {
+    final done = _configQueue.then<T>((_) => operation());
+    _configQueue = done.then<void>((_) {}, onError: (Object _) {});
+    return done;
+  }
+
+  /// Хвост очереди запросов смены конфигурации (D12).
+  var _configQueue = Future<void>.value();
+
+  /// Идёт клиентский запрос смены: `ModeChanged` с `changeId` — его эхо.
+  var _clientChangeActive = false;
+
+  /// `changeId` эхо, уже пришедших в проекцию во время запроса (эхо может
+  /// опередить завершение `await` вызова ядра).
+  final _echoedChanges = <int>{};
+
+  /// Ожидание эха режима с данным `changeId`.
+  final _echoWaiters = <int, Completer<void>>{};
+
+  /// Выполняет смену ядра под очередью; если вызов изменил режим, ждёт его
+  /// эха (`current_mode_update` уже в очереди кадров), чтобы ответ встал
+  /// после него. `config_option_update` на эхо запроса не шлётся (ACP-11).
+  Future<void> _clientChange(Future<ConfigChangeResult> Function() change) =>
+      _queued(() async {
+        _clientChangeActive = true;
+        _echoedChanges.clear();
+        try {
+          final result = await change();
+          if (result.mode != null &&
+              !_echoedChanges.contains(result.changeId)) {
+            await (_echoWaiters[result.changeId] = Completer<void>()).future;
+          }
+        } finally {
+          _clientChangeActive = false;
+          _echoedChanges.clear();
+          _echoWaiters.clear();
+        }
+      });
+
   /// Режим по запросу клиента: `current_mode_update` без дублирующего
   /// `config_option_update` (§13.6, шаг 4); возвращается, когда уведомление
   /// уже в очереди — ответ встанет после него.
-  Future<void> setMode(ModeId mode) async {
-    final echoed = _clientModeChange = Completer<void>();
-    await session.setMode(mode);
-    await echoed.future;
-  }
+  Future<void> setMode(ModeId mode) =>
+      _clientChange(() => session.setMode(mode));
+
+  /// Агент по запросу клиента (D12): `current_mode_update` уходит, только
+  /// если вызов изменил режим (режим определения мягче режима конфигурации
+  /// не применяется), и до ответа; `config_option_update` не дублирует
+  /// ответ (ACP-11). Смена модели агентом ставит ту же заметку §2.12.3, что
+  /// [setModel]. Неизвестное имя отсекает вызывающий по `session.agents` до
+  /// любых изменений.
+  Future<void> setAgent(String name) => _clientChange(() async {
+    final before = session.model;
+    final result = await session.setAgent(name);
+    _noteEffort(before);
+    return result;
+  });
 
   /// Модель по запросу клиента; смена на модель без рассуждения оставляет
   /// заметку для следующего хода (§2.12.3).
-  Future<void> setModel(ModelId id) async {
+  Future<void> setModel(ModelId id) => _clientChange(() async {
     final before = session.model;
-    await session.setModel(id);
+    final result = await session.setModel(id);
+    _noteEffort(before);
+    return result;
+  });
+
+  /// Уровень рассуждения по запросу клиента — под той же очередью, чтобы
+  /// ответ видел снимок после своей смены (D12).
+  Future<void> setEffort(ReasoningEffort effort) =>
+      _queued(() => session.setEffort(effort));
+
+  /// Заметка §2.12.3: переход с модели с рассуждением на модель без него —
+  /// заметка первым `agent_message_chunk` следующего хода; переход на модель
+  /// с рассуждением её снимает.
+  void _noteEffort(ModelRef before) {
     final after = session.model;
     if (before.supportsReasoning && !after.supportsReasoning) {
       _effortNote =
@@ -422,22 +488,21 @@ final class SessionBridge {
         _announced.add(toolCallId);
       case _:
     }
-    final echo = _clientModeChange;
+    final clientEcho =
+        event is ModeChanged && event.changeId != null && _clientChangeActive;
     for (final update in projectEvent(
       event,
       configOptions: () => configOptions,
     )) {
-      if (event is ModeChanged &&
-          echo != null &&
-          update is acp.ConfigOptionUpdate) {
+      if (clientEcho && update is acp.ConfigOptionUpdate) {
         continue;
       }
       _send(update);
     }
     switch (event) {
-      case ModeChanged() when echo != null:
-        _clientModeChange = null;
-        echo.complete();
+      case ModeChanged(:final changeId?) when clientEcho:
+        _echoedChanges.add(changeId);
+        _echoWaiters.remove(changeId)?.complete();
       case ToolCallStarted(:final toolCallId):
         _awaitingAnnounce.remove(toolCallId)?.complete();
         if (_earlyInProgress.remove(toolCallId)) {

@@ -84,11 +84,18 @@ const _effortNames = {
   ReasoningEffort.high: 'High',
 };
 
-/// `configOptions` в порядке важности: `mode`, `model`, `effort` (§13.6).
+/// `configOptions` в порядке важности: `mode`, `model`, `effort`, `agent`
+/// (§13.6; design.md change `add-agent-project-files`, D12).
 ///
 /// `model` — модели каталога [catalog]; модель сессии вне каталога (её
 /// задал хост) идёт первой, чтобы текущее значение было среди вариантов.
 /// `effort` — только у модели с `supportsReasoning` (ACP-10).
+/// `agent` — только если у сессии есть определения агентов
+/// (`AgentSession.agents`): вариант `default`, затем агенты по имени с
+/// `description`. Поля `category` у опции нет: имена категорий без `_`
+/// зарезервированы ACP (`mode`, `model`, `thought_level`; «Option
+/// Categories»), а собственную категорию вводит только отдельный OpenSpec
+/// change.
 List<acp.SessionConfigOption> sessionConfigOptions(
   AgentSession session,
   ModelCatalog catalog,
@@ -142,5 +149,26 @@ List<acp.SessionConfigOption> sessionConfigOptions(
             ),
         ],
       ),
+    if (session.agents.isNotEmpty)
+      acp.SessionConfigOption.select(
+        id: const acp.SessionConfigId(agentConfigId),
+        name: 'Agent',
+        currentValue: acp.SessionConfigValueId(session.agent),
+        options: [
+          const acp.SessionConfigSelectOption(
+            value: acp.SessionConfigValueId(defaultAgentName),
+            name: 'Default',
+          ),
+          for (final agent in session.agents)
+            acp.SessionConfigSelectOption(
+              value: acp.SessionConfigValueId(agent.name),
+              name: agent.name,
+              description: agent.description,
+            ),
+        ],
+      ),
   ];
 }
+
+/// `configId` опции выбора агента (D12).
+const agentConfigId = 'agent';

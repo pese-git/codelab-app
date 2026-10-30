@@ -118,8 +118,7 @@ final class ContextFile {
 }
 
 /// Файл шаблона команды или определения агента с отделённым frontmatter
-/// (D3). В итерации 1 загрузчик такие файлы не отдаёт: тип нужен порту, чтобы
-/// итерации 2–3 расширяли его без смены сигнатур.
+/// (D3). Проверяют его `parseCommandTemplates` и `parseAgentDefinitions`.
 final class MarkdownFile {
   const MarkdownFile({
     required this.path,
@@ -189,10 +188,10 @@ final class ProjectFiles {
   final List<ContextFile> context;
   final ContextRoot contextRoot;
 
-  /// Шаблоны команд (итерация 2).
+  /// Файлы шаблонов команд (`prompts/*.md`).
   final List<MarkdownFile> templates;
 
-  /// Определения агентов (итерация 3).
+  /// Файлы определений агентов (`agents/*.md`).
   final List<MarkdownFile> agents;
   final List<ExtensionDiagnostic> diagnostics;
 }

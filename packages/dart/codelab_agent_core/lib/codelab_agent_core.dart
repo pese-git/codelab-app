@@ -4,6 +4,7 @@
 /// Flutter imports (invariant PKG-1, checked by `melos run guard`).
 library;
 
+export 'src/agents/agent_definition.dart';
 export 'src/cancel/cancel_token.dart';
 export 'src/commands/arguments.dart' show splitArguments, substituteArguments;
 export 'src/commands/command_template.dart'

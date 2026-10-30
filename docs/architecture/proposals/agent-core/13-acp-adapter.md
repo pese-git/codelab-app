@@ -337,6 +337,9 @@ final class AcpServerConfig {
    `/mode`) — тогда уходит `config_option_update`.
 5. `effort` → запись `config_change {optionId: "effort", value}`; действует со следующего шага
    (идущий запрос к модели не прерывается).
+6. Запросы `session/set_config_option` и `session/set_mode` одной сессии мост обрабатывает по
+   очереди в порядке прихода: эхо `ModeChanged` принадлежит текущему запросу, на каждый запрос —
+   один ответ, итог — последний запрос (design.md change `add-agent-project-files`, D12).
 
 Смена модели или усилия посреди хода доходит до цикла хуком `prepareNextStep` сессии на границе
 шага. Заметку §2.12.3 о смене на модель без рассуждения ставит мост сессии ACP-адаптера: смена

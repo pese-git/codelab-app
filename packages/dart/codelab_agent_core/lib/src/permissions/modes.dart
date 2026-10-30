@@ -49,6 +49,47 @@ extension type const ModeId._(String value) {
     _ => PermissionMode.write,
   };
 
+  /// Мягкость режима: чем больше, тем мягче (§7.3.1). `plan` строже всех:
+  /// он запрещает запись и команды. Нужна для «пола» режима при выборе агента
+  /// (design.md change `add-agent-project-files`, D11): определение агента не
+  /// может сделать режим мягче режима конфигурации.
+  ///
+  /// Все пять идентификаторов перечислены явно, без ветки «по умолчанию»:
+  /// неизвестный идентификатор не получает ранга (`null`) и не может
+  /// оказаться «средним» по ошибке. Сравнивать нужно через [fitsFloor], где
+  /// отсутствие ранга трактуется в сторону запрета (fail-closed).
+  int? get softness {
+    if (value == 'plan') {
+      return 0;
+    }
+    if (value == 'ask') {
+      return 1;
+    }
+    if (value == 'standard') {
+      return 2;
+    }
+    if (value == 'accept-edits') {
+      return 3;
+    }
+    if (value == 'bypass') {
+      return 4;
+    }
+    return null;
+  }
+
+  /// Режим не мягче [floor] (D11, OQ3).
+  ///
+  /// Fail-closed: неизвестный кандидат не подходит никогда (он мог бы быть
+  /// мягче чего угодно), а при неизвестном поле не подходит ни один режим.
+  bool fitsFloor(ModeId floor) {
+    final mine = softness;
+    final limit = floor.softness;
+    if (mine == null || limit == null) {
+      return false;
+    }
+    return mine <= limit;
+  }
+
   /// Tiers the mode forbids without asking: `plan` forbids changes.
   Set<ToolTier> get deniedTiers =>
       value == 'plan' ? const {ToolTier.write, ToolTier.exec} : const {};
