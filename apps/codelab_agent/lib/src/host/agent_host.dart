@@ -11,24 +11,33 @@ import 'package:http/http.dart' as http;
 
 import '../cli/serve_args.dart';
 import 'llm_script.dart';
+import 'serve_config.dart';
 
 /// Версия бинаря в `agentInfo` ответа `initialize`.
 const agentVersion = '0.1.0';
 
 /// Хост ядра в бинаре `codelab-agent`: собранное ядро и конфиг ACP-сервера.
 ///
-/// Почему: хост решает, откуда модель (провайдер из флагов или сценарий),
+/// Почему: хост решает, откуда модель (провайдеры конфигурации или сценарий),
 /// где журнал (`JsonlSessionStore` или память; у сценария — память или
 /// каталог `--sessions-dir`) и что умеет транспорт
 /// (листинг только по stdio), а ядро собирается только через
 /// `buildAgentCore` (HOST-6; design.md change `add-codelab-agent-binary`, D3).
 ///
 /// Для чего: одно ядро на процесс; `serve --stdio` и `serve --ws` создают на
-/// нём сервер [createServer] и обслуживают им соединения.
+/// нём сервер [createServer] и обслуживают им соединения. Настройки ядра
+/// приходят из результата `ConfigLoader` (файлы, переменные, флаги): каталог
+/// моделей, маршрут провайдеров, журнал сессий, сужение профиля и MCP-серверы
+/// конфигурации (design.md change `add-agent-configuration`, D4, D10, D11).
 ///
-/// Как использовать: `await AgentHost.build(options, logger: …)` —
-/// невалидный сценарий даёт [UsageError]; затем [createServer] и
-/// `server.serve(transport)`; в конце — [shutdown].
+/// Как использовать: `await AgentHost.build(options, logger: …, loaded: …)` —
+/// [loaded] обязателен: это результат `loadServeConfig(options, cwd: …)`, и
+/// хост не выбирает каталог проекта сам (тесты не должны читать `.codelab/`
+/// рабочего каталога).
+/// Невалидный сценарий даёт [UsageError], невалидный конфиг —
+/// `ConfigException`; затем [createServer] и `server.serve(transport)`; в
+/// конце — [shutdown]. [httpClient] — шов тестов (`MockClient`); без него
+/// создаётся один `http.Client` на процесс (PKG-6).
 final class AgentHost {
   AgentHost._({
     required this.core,
@@ -50,15 +59,17 @@ final class AgentHost {
   static Future<AgentHost> build(
     ServeOptions options, {
     required Logger logger,
+    required ConfigLoadResult loaded,
     Clock clock = const SystemClock(),
+    http.Client? httpClient,
   }) async {
-    for (final warning in options.warnings) {
-      logger.log(
-        LogLevel.warning,
-        'config.env.unknown',
-        fields: {'message': warning},
-      );
-    }
+    // Невалидный конфиг — `ConfigException` со всеми проблемами; значения
+    // секретов в них нет (CFG-2).
+    final loadedConfig = loaded;
+    final config = loadedConfig.orThrow();
+    final settings = loadedConfig.host!;
+    logStartupWarnings(logger, options, loadedConfig);
+
     final stdio = options.transport == ServeTransport.stdio;
     final narrowing = <HostCapability, CapabilityState>{
       // По WebSocket клиент может быть на другой машине: локальный листинг
@@ -73,7 +84,9 @@ final class AgentHost {
       // целиком, поэтому `initialize` не обещает и `http`. По stdio клиент —
       // локальный хозяин процесса: профиль `agent-serve` оставляет `stdio` и
       // `http`, и `initialize` объявляет `mcpCapabilities.http: true`
-      // (задача 9.6, change `add-agent-mcp-client`, D3).
+      // (задача 9.6, change `add-agent-mcp-client`, D3). Серверы конфигурации
+      // пропускаются так же, как серверы клиента (D10): держатель токена
+      // WebSocket не должен запускать процессы и со стороны конфига.
       if (!stdio)
         HostCapability.mcp: const CapabilityOff(
           'stdio MCP servers are disabled over WebSocket',
@@ -83,10 +96,30 @@ final class AgentHost {
     final ModelCatalog catalog;
     final StreamFunction streamFunction;
     final SessionStore sessions;
-    http.Client? httpClient;
+    // HTTP-клиент хоста: один на процесс, им пользуются провайдеры LLM и
+    // streamable HTTP MCP-серверов; закрывается в `shutdown` (PKG-6).
+    final client = httpClient ?? http.Client();
     if (options.llmScript case final path?) {
       // Сценарий не трогает `$CODELAB_HOME`: журнал на диске — только в
-      // каталоге `--sessions-dir` (D1 change `add-llm-script-session-store`).
+      // каталоге `--sessions-dir` (D1 change `add-llm-script-session-store`),
+      // а `sessions.dir` и `sessions.fsync` конфигурации к сценарию не
+      // применяются (о заданном ключе хост сообщает ниже).
+      for (final key in [
+        if (settings.sessionsDir != null) 'sessions.dir',
+        if (settings.fsync != null) 'sessions.fsync',
+      ]) {
+        // Со сценарием читается только файл `--config` / `CODELAB_CONFIG`,
+        // поэтому он и есть источник ключа.
+        logger.log(
+          LogLevel.warning,
+          'config.key.not_applied',
+          fields: {
+            'key': key,
+            'source':
+                options.configPath ?? options.environment['CODELAB_CONFIG'],
+          },
+        );
+      }
       final store = CwdTrackingStore(switch (options.sessionsDir) {
         final root? => JsonlSessionStore(
           root: root,
@@ -112,60 +145,49 @@ final class AgentHost {
         );
       }
     } else {
-      final provider = ProviderConfig(
-        name: 'cli',
-        api: options.provider == ProviderKind.anthropic
-            ? ProviderApi.anthropicMessages
-            : ProviderApi.openaiChat,
-        baseUrl: options.baseUrl!,
-        apiKey: options.apiKey,
-      );
-      catalog = StaticModelCatalog([
-        CatalogProvider(
-          provider,
-          models: {
-            for (final id in options.models) id.model: const ModelInfo(),
-          },
-        ),
-      ], logger: logger);
-      httpClient = http.Client();
-      streamFunction = createStreamFunction(
-        provider,
+      // Каталог — модели всех провайдеров конфигурации, запрос уходит
+      // провайдеру выбранной модели (D11).
+      catalog = StaticModelCatalog(config.providers, logger: logger);
+      streamFunction = createRoutedStreamFunction(
+        [for (final provider in config.providers) provider.config],
         CoreLlmServices(
-          httpClient: httpClient,
+          httpClient: client,
           clock: clock,
           random: Random.secure(),
           logger: logger,
         ),
+        unavailable: config.providerProblems,
       );
       sessions = JsonlSessionStore(
-        root: '${options.codelabHome}/sessions',
+        root: settings.sessionsDir ?? '${options.codelabHome}/sessions',
+        fsync: switch (settings.fsync) {
+          final String name => FsyncPolicy.values.byName(name),
+          null => FsyncPolicy.checkpoints,
+        },
         clock: clock,
         logger: logger,
       );
     }
-    // HTTP-клиент хоста: один на процесс, им пользуются провайдер LLM и
-    // streamable HTTP MCP-серверов; закрывается в `shutdown` (PKG-6).
-    httpClient ??= http.Client();
-    final defaultModel = catalog.resolve(catalog.models.first.id)!;
     logger.log(
       LogLevel.info,
-      'host.config',
+      'host.config.loaded',
       fields: {
+        'sources': loadedConfig.sources,
+        'warnings': loadedConfig.warnings.length,
+        'project_root': config.projectRoot,
         'transport': options.transport.name,
-        'provider': options.provider?.flag ?? 'scripted',
-        'sessions': options.llmScript != null && options.sessionsDir == null
-            ? 'memory'
-            : 'jsonl',
         'models': [for (final m in catalog.models) m.id.value],
-        // Ключ — только признак: значение в лог не попадает.
-        'api_key_env': 'CODELAB_API_KEY',
-        'api_key_set': options.apiKey != null,
       },
     );
 
+    // Сужение из `profile.agent-serve.*` применяется первым, сужение
+    // транспорта — вторым: повторное сужение допустимо, расширить профиль
+    // нельзя (HOST-2).
+    final profile = HostProfile.of('agent-serve')
+        .narrowed(settings.profileNarrowing['agent-serve'] ?? const {})
+        .narrowed(narrowing);
     final core = buildAgentCore(
-      profile: HostProfile.of('agent-serve').narrowed(narrowing),
+      profile: profile,
       services: AgentCoreServices(
         baseEnv: LocalExecutionEnv(cwd: Directory.current.path),
         gate: const _ConnectionGate(),
@@ -182,21 +204,12 @@ final class AgentHost {
         mcp: McpClientConnector(
           transports: McpTransports(
             stdio: StdioMcpTransportFactory(),
-            http: StreamableHttpTransportFactory(
-              client: httpClient,
-              clock: clock,
-            ),
+            http: StreamableHttpTransportFactory(client: client, clock: clock),
           ),
           clock: clock,
         ),
       ),
-      config: CoreConfig(
-        defaultModel: defaultModel,
-        permissions: PermissionsConfig(
-          mode: options.mode,
-          modeOverride: options.autopilot ? PermissionMode.autopilot : null,
-        ),
-      ),
+      config: config,
       streamFunction: streamFunction,
     );
     return AgentHost._(
@@ -216,7 +229,7 @@ final class AgentHost {
       ),
       logger: logger,
       clock: clock,
-      httpClient: httpClient,
+      httpClient: client,
     );
   }
 

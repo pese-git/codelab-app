@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Конфигурация сессии вне корня запуска
-Если `CoreConfig.projectRoot` задан и канонический `cwd` новой или загружаемой сессии ему не равен, `AgentRuntime` SHALL брать ключи сессии из `CoreConfig.withoutProject` — снимка без проектных слоёв 3–4 (design.md change `add-agent-configuration`, D9). Ключи сессии: модель по умолчанию, `effort`, режим и правила разрешений, бюджет хода, пороги сжатия, MCP-серверы конфигурации и `redact`. Сравнивается равенство путей по компонентам, а не вложенность. Ключи сборки — каталог провайдеров, capability, сужение профиля — общие для процесса. На каждый такой `cwd` SHALL писаться один лог `config.session.outside_root {session_id, cwd, config_root}`. Без `projectRoot` или без `withoutProject` поведение прежнее: все сессии получают `CoreConfig`.
+Если `CoreConfig.projectRoot` задан и канонический `cwd` новой или загружаемой сессии ему не равен, `AgentRuntime` SHALL брать ключи сессии из `CoreConfig.withoutProject` — снимка без проектных слоёв 3–4 (design.md change `add-agent-configuration`, D9). Ключи сессии: модель по умолчанию, `effort`, режим и правила разрешений, бюджет хода, пороги сжатия, MCP-серверы конфигурации и `redact`. Перед сравнением (`CoreConfig.forSessionCwd`) `cwd` сессии SHALL канонизироваться — symlink раскрыт портом `PathResolver.realpath` базового окружения (`AgentCoreServices.baseEnv`); ядро само путь не раскрывает. `projectRoot` уже канонический: его канонизирует загрузчик. Иначе сессия с `cwd` через symlink на корень запуска получила бы снимок без проекта и потеряла бы запреты проекта (`permissions.deny`, ужесточённый режим). Если путь не раскрылся (нет каталога, окружение без `PathResolver`), сравнивается нормализованная запись пути. Сравнивается равенство канонических путей по компонентам, а не вложенность. Ключи сборки — каталог провайдеров, capability, сужение профиля — общие для процесса. На каждый такой `cwd` SHALL писаться один лог `config.session.outside_root {session_id, cwd, config_root}`. Без `projectRoot` или без `withoutProject` поведение прежнее: все сессии получают `CoreConfig`.
 
 #### Scenario: Проектные серверы не попадают в чужой проект
 - **WHEN** ядро собрано с `projectRoot: /A`, `CoreConfig.mcpServers` содержит сервер проекта `/A`, а `withoutProject.mcpServers` пуст, и клиент создаёт сессию с `cwd: /B`
@@ -14,3 +14,7 @@
 #### Scenario: Сессия в корне запуска
 - **WHEN** сессия создана с `cwd`, равным `projectRoot`
 - **THEN** она получает модель, режим, правила и серверы полного снимка, лога `config.session.outside_root` нет
+
+#### Scenario: cwd через symlink на корень запуска
+- **WHEN** ядро собрано с `projectRoot: /A` (канонический путь), проект `/A` добавляет `permissions.deny: ["write:.env"]`, а клиент создаёт сессию с `cwd: /L`, где `/L` — symlink на `/A`
+- **THEN** сессия получает полный снимок: запрет `write:.env` действует, лога `config.session.outside_root` нет

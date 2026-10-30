@@ -156,7 +156,7 @@
 
 ## 7. Разведка и строгий профиль YAML (D2, D5)
 
-- [ ] 7.1 `[agent]` Разведка `package:yaml` 3.1.x (исключение (д) правила TDD, не дольше одного дня, без кода в `lib/`):
+- [x] 7.1 `[agent]` Разведка `package:yaml` 3.1.x (исключение (д) правила TDD, не дольше одного дня, без кода в `lib/`):
   - `span` узла с якорем и тегом;
   - идентичность узла алиаса;
   - `yes`/`on`/`0o17`/`~`;
@@ -164,13 +164,13 @@
   - BOM, CRLF.
 
   Итог — абзац в design.md D5 (подтверждение лексической проверки или переход на запасной путь).
-- [ ] 7.2 `[agent]` Сначала тест: `pubspec_allowlist_test.dart` — `ioAllowlist` без `toml`, проверка на временном `pubspec.yaml` с `toml` называет его (workspace-architecture, сценарий «Зависимость вне allowlist»); затем `ioAllowlist` правится, `pubspec.yaml` `codelab_agent_io` получает `yaml: ^3.1.3` с комментарием-ссылкой на D2; `melos bootstrap`; `melos run guard` зелёный.
-- [ ] 7.3 `[agent]` Тест `codelab_agent_io/test/config/config_yaml_profile_test.dart` (agent-configuration «Строгий профиль YAML», оба сценария; CFG-21) — все пункты §15.12 для профиля: якорь, ссылка, `<<: *base`, `!!str`, второй документ, ключ `1:`, составной ключ, повтор с обеими позициями, пустой файл, комментарии, flow-стиль, CRLF, BOM. Красный.
-- [ ] 7.4 `[agent]` `lib/src/config/yaml_reader.dart` — `readYamlTree(text, source:)` → `ConfigTree` с позициями или проблемы `profile`/`syntax`. 7.3 зелёный.
+- [x] 7.2 `[agent]` Сначала тест: `pubspec_allowlist_test.dart` — `ioAllowlist` без `toml`, проверка на временном `pubspec.yaml` с `toml` называет его (workspace-architecture, сценарий «Зависимость вне allowlist»); затем `ioAllowlist` правится, `pubspec.yaml` `codelab_agent_io` получает `yaml: ^3.1.3` с комментарием-ссылкой на D2; `melos bootstrap`; `melos run guard` зелёный.
+- [x] 7.3 `[agent]` Тест `codelab_agent_io/test/config/config_yaml_profile_test.dart` (agent-configuration «Строгий профиль YAML», оба сценария; CFG-21) — все пункты §15.12 для профиля: якорь, ссылка, `<<: *base`, `!!str`, второй документ, ключ `1:`, составной ключ, повтор с обеими позициями, пустой файл, комментарии, flow-стиль, CRLF, BOM. Красный.
+- [x] 7.4 `[agent]` `lib/src/config/yaml_reader.dart` — `readYamlTree(text, source:)` → `ConfigTree` с позициями или проблемы `profile`/`syntax`. 7.3 зелёный.
 
 ## 8. `ConfigLoader` (D4)
 
-- [ ] 8.1 `[agent]` Тест `codelab_agent_io/test/config/config_loader_test.dart` на временных каталогах (agent-configuration «Слои конфигурации и их порядок», все сценарии; DoD этапа):
+- [x] 8.1 `[agent]` Тест `codelab_agent_io/test/config/config_loader_test.dart` на временных каталогах (agent-configuration «Слои конфигурации и их порядок», все сценарии; DoD этапа):
   - **`invalid config reports key path and line`** — битый `.codelab/config.yaml` даёт `ConfigIssue` с файлом, строкой, столбцом и путём ключа, а не исключение;
   - порядок шести слоёв и `--config`;
   - `CODELAB_CONFIG=x.toml` → ошибка использования (`codelab.toml` не поддерживается);
@@ -180,8 +180,8 @@
   - `projectRoot` канонический (symlink на каталог).
 
   Красный.
-- [ ] 8.2 `[agent]` `config_loader.dart`, `environment_layer.dart`, экспорт `ConfigLoader` из бареля `codelab_agent_io`. 8.1 зелёный.
-- [ ] 8.3 `[agent]` Тест `codelab_agent_io/test/config/config_legacy_found_test.dart` — критерий `core/config-legacy-found-warning` (R-16 в редакции 2026-10-29; agent-configuration «Найденный codelab.toml не читается», сценарии «Только codelab.toml», «codelab.toml рядом с config.yaml»):
+- [x] 8.2 `[agent]` `config_loader.dart`, `environment_layer.dart`, экспорт `ConfigLoader` из бареля `codelab_agent_io`. 8.1 зелёный.
+- [x] 8.3 `[agent]` Тест `codelab_agent_io/test/config/config_legacy_found_test.dart` — критерий `core/config-legacy-found-warning` (R-16 в редакции 2026-10-29; agent-configuration «Найденный codelab.toml не читается», сценарии «Только codelab.toml», «codelab.toml рядом с config.yaml»):
   - только `<cwd>/codelab.toml` с синтаксической ошибкой TOML и `$CODELAB_HOME/auth.toml` → загрузка без проблем из них, ровно одно `config.legacy_found` на два вызова `load` того же `cwd`, оба пути, ссылка на раздел 15.7, текст на английском, содержимого файлов в логе нет;
   - `$CODELAB_HOME/config.yaml` рядом с `<cwd>/codelab.toml` → предупреждения нет;
   - `--config x.yaml` при одном `codelab.toml` → предупреждения нет;
@@ -189,18 +189,18 @@
   - `codelab.toml.example` → не ищется.
 
   Красный.
-- [ ] 8.4 `[agent]` `lib/src/config/legacy_notice.dart` (только проверка существования файлов, doc-комментарий со ссылкой на D12 и решение пользователя), подключение к `ConfigLoader`. 8.3 зелёный.
+- [x] 8.4 `[agent]` `lib/src/config/legacy_notice.dart` (только проверка существования файлов, doc-комментарий со ссылкой на D12 и решение пользователя), подключение к `ConfigLoader`. 8.3 зелёный.
 
 ## 9. Бинарь `serve` на конфиге (D4, D10, D11, D16)
 
-- [ ] 9.1 `[agent]` Характеризационные тесты до правки `serve_args.dart` (исключение (а) правила TDD): существующие сценарии `serve_flags_test.dart` и `agent_host_test.dart` с `--provider`/`--model`/`--llm-script` без файлов конфига фиксируются и остаются зелёными после 9.3.
-- [ ] 9.2 `[agent]` Тесты (agent-binary «Конфиг бинаря из файлов, окружения и флагов», «Логи бинаря»):
+- [x] 9.1 `[agent]` Характеризационные тесты до правки `serve_args.dart` (исключение (а) правила TDD): существующие сценарии `serve_flags_test.dart` и `agent_host_test.dart` с `--provider`/`--model`/`--llm-script` без файлов конфига фиксируются и остаются зелёными после 9.3.
+- [x] 9.2 `[agent]` Тесты (agent-binary «Конфиг бинаря из файлов, окружения и флагов», «Логи бинаря»):
   - `serve_flags_test.dart` — `--model anthropic/x` без `--provider` допустим, `--model gpt` без `--provider` — `64`, `--config a.toml` — `64`, `--max-steps`;
   - `agent_host_config_test.dart` — хост из `config.yaml` с провайдерами `openai` и `anthropic`: опция `model` содержит обе модели, запрос уходит на `base_url` нужного провайдера (`MockClient`); `profile.agent-serve.mcp: [http]` сужает профиль, `[stdio, http, sse]` — проблема конфига; `logging.file` из конфига и приоритет флага; HTTP MCP-сервер из конфига на `MockClient` над `FakeMcpServer` доступен модели (E-03, часть конфигурации);
   - процессный `config_invalid_process_test.dart` — битый конфиг → код `64` до чтения stdin, `config.yaml:<line>:` в stderr, `sk-test-secret` из `api_key` не встречается ни в stderr, ни в файле лога.
 
   Красные.
-- [ ] 9.3 `[agent]` Реализация в `apps/codelab_agent`:
+- [x] 9.3 `[agent]` Реализация в `apps/codelab_agent`:
   - `serve_args.dart` строит `ConfigTree` флагов, а не модели;
   - `AgentHost.build(ConfigLoadResult, …)` с `StaticModelCatalog` из `CoreConfig.providers`, `createRoutedStreamFunction`, `sessions.dir`/`fsync`, сужением профиля, тестовым шовом `http.Client`;
   - `run.dart` — проблемы конфига в stderr и `serve.config.invalid`, код `64`;
@@ -208,8 +208,19 @@
   - doc-комментарий `ServeOptions` обновлён (флаги больше не «весь конфиг»).
 
   9.1–9.2 зелёные.
-- [ ] 9.4 `[agent]` Процессный тест `apps/codelab_agent/test/config_mcp_servers_test.dart` (agent-binary «MCP-серверы в бинаре», сценарий «Сервер из конфигурации»; agent-configuration, сценарий «Сервер конфига в сессии»; E-02, часть конфигурации): `serve --stdio --llm-script … --config <tmp>/c.yaml` с fake stdio-сервером в `mcp.servers`, `session/new` без `mcpServers` → `mcp__fake__echo` `completed` с `hi`; после EOF процесс сервера с записанным pid не жив не позже 10 с. Красный → зелёный без нового кода или с минимальной правкой. Если тест сразу зелёный, PR ссылается на критерий (`AGENTS.md` ядра §2).
-- [ ] 9.5 `[agent]` Тест сценария «WS-профиль не запускает MCP-серверы» (agent-binary): `serve --ws` с сервером в конфиге и сервером клиента — ни одного процесса, два `mcp.server.skipped` с причиной профиля. Красный → зелёный. **Конец итерации 2.**
+- [x] 9.4 `[agent]` Процессный тест `apps/codelab_agent/test/config_mcp_servers_test.dart` (agent-binary «MCP-серверы в бинаре», сценарий «Сервер из конфигурации»; agent-configuration, сценарий «Сервер конфига в сессии»; E-02, часть конфигурации): `serve --stdio --llm-script … --config <tmp>/c.yaml` с fake stdio-сервером в `mcp.servers`, `session/new` без `mcpServers` → `mcp__fake__echo` `completed` с `hi`; после EOF процесс сервера с записанным pid не жив не позже 10 с. Красный → зелёный без нового кода или с минимальной правкой. Если тест сразу зелёный, PR ссылается на критерий (`AGENTS.md` ядра §2).
+- [x] 9.5 `[agent]` Тест сценария «WS-профиль не запускает MCP-серверы» (agent-binary): `serve --ws` с сервером в конфиге и сервером клиента — ни одного процесса, два `mcp.server.skipped` с причиной профиля. Красный → зелёный.
+- [x] 9.6 Исправления по ревью итерации 2 (решения пользователя 2026-10-30; design.md D4, D5, D7, D9, D16). Каждая пара — красный тест, затем код:
+  - `[agent]` явно названный, но отсутствующий файл `--config`/`CODELAB_CONFIG` — `ConfigIssue` `syntax` `cannot read the file` с источником `--config`/`CODELAB_CONFIG`, код `64`; отсутствие слоёв 2–4 — пропуск (agent-configuration «Слои конфигурации и их порядок», сценарий «Явно названный файл отсутствует»; agent-binary, тот же сценарий): `config_loader_test.dart`, `serve_flags_test.dart` или процессный тест → `config_loader.dart`;
+  - `[agent]` относительный `CODELAB_CONFIG` — ошибка использования `64` с именем переменной; относительный `--config` — от текущего каталога процесса (agent-binary, сценарий «Относительный CODELAB_CONFIG»; D4) → `serve_args.dart`/`serve_config.dart`;
+  - `[agent]` со сценарием `--llm-script` ключи `sessions.dir` и `sessions.fsync` из `--config` не применяются, по ключу — `config.key.not_applied` (agent-binary, сценарий «Журналы сценария не берутся из конфига»; D4) → `agent_host.dart`/`serve_config.dart`;
+  - `[agent]` `--provider`: `api_key_env: CODELAB_API_KEY` только при заданной и непустой переменной; слой флагов заменяет `providers.cli` целиком (agent-binary, сценарии «Провайдер флагов без ключа», «Флаги заменяют providers.cli целиком»; D4) → `serve_args.dart`, слияние ядра `merge.dart` (тест ядра `codelab_agent_core/test/config/` на замену `providers.cli` слоем `flags`);
+  - `[agent]` правила `--model` и `--max-steps`, `agent.default_model: required` — тесты на уже реализованное поведение (agent-binary, сценарии «Ошибки --model без --provider», «Нет модели по умолчанию»); если тест сразу зелёный, PR ссылается на критерий;
+  - `[agent]` пределы разбора: файл больше 1 MiB — `syntax`; вложенность глубже 64 (в том числе глубокий flow-список) — `profile` без `StackOverflowError`; нестандартный тег — `profile` без имени тега в тексте; тег и якорь на корне (agent-configuration «Строгий профиль YAML», сценарий «Пределы и нестандартные теги»; D5) → `yaml_reader.dart`, `config_loader.dart`;
+  - `[agent]` канонизация: элементы `trusted_projects` и корень проекта — в `ConfigLoader`; `cwd` сессии — через `PathResolver.realpath` перед `forSessionCwd` (agent-configuration «Доверие к проектному конфигу», сценарий «Доверие через symlink»; agent-runtime, сценарий «cwd через symlink на корень запуска»; D7, D9) → `config_loader.dart`, `agent_runtime.dart`;
+  - `[agent]` наблюдаемость: `host.config.loaded` с `transport` и `models`, поле `message` у каждого события предупреждения загрузки и у `mcp.server.skipped` (agent-configuration «Наблюдаемость загрузки конфигурации»; D16) → `agent_host.dart`, `run.dart`.
+
+  **Конец итерации 2.**
 
 ## 10. Подкоманда `codelab-agent config check` (D13)
 

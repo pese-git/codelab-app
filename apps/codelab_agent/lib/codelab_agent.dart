@@ -5,6 +5,7 @@ library;
 
 export 'src/cli/serve_args.dart';
 export 'src/host/agent_host.dart';
+export 'src/host/serve_config.dart';
 export 'src/log/file_sink.dart';
 export 'src/log/host_logger.dart';
 export 'src/log/stderr_sink.dart';
