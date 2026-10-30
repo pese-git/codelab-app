@@ -10,6 +10,7 @@
 /// `SessionHeader.fromJson` (их зовёт `parseSessionLines`).
 library;
 
+import '../commands/expand_command.dart' show CommandRef;
 import '../llm/messages.dart';
 import '../llm/model_ref.dart';
 import '../loop/agent_events.dart';
@@ -146,6 +147,8 @@ sealed class SessionRecord {
     final timestamp = DateTime.parse(_string(json, 'timestamp'));
     Map<String, Object?> extra(Set<String> known) =>
         _rest(json, {'type', 'id', 'parentId', 'timestamp', ...known});
+    // Поле, которое не разобралось, остаётся в `extra` и пишется обратно.
+    final command = CommandRef.tryParse(json['command']);
     return switch (json['type']) {
       'message' => MessageRecord(
         id: id,
@@ -165,7 +168,12 @@ sealed class SessionRecord {
         origin: json['origin'] as String?,
         nudge: json['nudge'] as String?,
         attempt: json['attempt'] as int?,
-        extra: extra(MessageRecord._fieldNames),
+        command: command,
+        extra: extra(
+          command == null
+              ? MessageRecord._fieldNames.difference(const {'command'})
+              : MessageRecord._fieldNames,
+        ),
       ),
       'model_change' => ModelChangeRecord(
         id: id,
@@ -332,6 +340,7 @@ final class MessageRecord extends SessionRecord {
     this.origin,
     this.nudge,
     this.attempt,
+    this.command,
     super.extra,
   });
 
@@ -342,6 +351,7 @@ final class MessageRecord extends SessionRecord {
     'origin',
     'nudge',
     'attempt',
+    'command',
     'message',
   };
 
@@ -366,6 +376,12 @@ final class MessageRecord extends SessionRecord {
   /// Номер повтора подсказки цикла, с 1.
   final int? attempt;
 
+  /// Исходная команда, если сообщение пользователя получено разворачиванием
+  /// шаблона (§8.2.3; design.md change `add-agent-project-files`, D8).
+  /// Модель поле не видит: оно не входит в [message]. Реплей показывает по
+  /// нему `/<name> <args>` вместо развёрнутого текста.
+  final CommandRef? command;
+
   @override
   String get type => 'message';
 
@@ -378,6 +394,7 @@ final class MessageRecord extends SessionRecord {
     'origin': ?origin,
     'nudge': ?nudge,
     'attempt': ?attempt,
+    'command': ?command?.toJson(),
     'message': message.toJson(),
   };
 }

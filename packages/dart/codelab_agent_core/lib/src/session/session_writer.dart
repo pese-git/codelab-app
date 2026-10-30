@@ -1,3 +1,4 @@
+import '../commands/expand_command.dart' show CommandRef;
 import '../llm/messages.dart';
 import '../loop/agent_events.dart';
 import '../tools/agent_tool.dart';
@@ -55,6 +56,11 @@ final class SessionWriter {
   /// Служебные сообщения: `origin` приходит в `MessageStarted`, а запись
   /// пишется на `MessageEnded` того же сообщения.
   final _origins = Expando<MessageOrigin>();
+
+  /// Исходные команды развёрнутых сообщений: сессия помечает сообщение до
+  /// хода, запись пишется на `MessageEnded` того же объекта (design.md change
+  /// `add-agent-project-files`, D8).
+  final _commands = Expando<CommandRef>();
   final _meta = <String, ToolMeta>{};
   final _finished = <String, ToolCallFinished>{};
 
@@ -63,6 +69,11 @@ final class SessionWriter {
   var _failed = false;
 
   SessionId get _id => _snapshot.header.id;
+
+  /// Запоминает, что [message] получено разворачиванием [command]: его запись
+  /// получит поле `command`. Вызывается до `Agent.prompt`.
+  void noteCommand(Message message, CommandRef command) =>
+      _commands[message] = command;
 
   /// Журнал в памяти после последней успешной записи.
   SessionSnapshot get snapshot => _snapshot;
@@ -104,6 +115,7 @@ final class SessionWriter {
             origin: fields?.origin,
             nudge: fields?.nudge,
             attempt: fields?.attempt,
+            command: _commands[message],
           ),
         );
       case ToolCallStarted(

@@ -108,7 +108,7 @@
 
 ## 4. Ядро: шаблоны, аргументы, разворачивание (итерация 2; D7, D8)
 
-- [ ] 4.1 `[agent]` Тесты `codelab_agent_core/test/commands/template_parse_test.dart` (agent-slash-commands «Формат шаблона и проверка», «Резервные имена команд», «Список команд сессии»):
+- [x] 4.1 `[agent]` Тесты `codelab_agent_core/test/commands/template_parse_test.dart` (agent-slash-commands «Формат шаблона и проверка», «Резервные имена команд», «Список команд сессии»):
   - имя файла;
   - frontmatter только `description`/`argument-hint`, неизвестный ключ → `error`;
   - описание из первой строки тела;
@@ -119,9 +119,9 @@
   - порядок по имени.
 
   Красный.
-- [ ] 4.2 `[agent]` Тесты `test/commands/arguments_test.dart` (SKL-8; «Разворачивание команды»): кавычки, `\"`, `$10`, `$$`, отсутствующий `$3`, значение `$ARGUMENTS` в `$1` не разворачивается, без плейсхолдеров — `ARGUMENTS:`, незакрытая кавычка закрывается концом ввода. Красный.
-- [ ] 4.3 `[agent]` `lib/src/commands/`: `CommandTemplate`, `SlashCommand`, `SlashCommandSource`, `parseCommandTemplates`, `splitArguments`, `substituteArguments`, `expandCommand`, `availableCommands`, список резервных имён §13.4. 4.1, 4.2 зелёные.
-- [ ] 4.4 `[agent]` Тесты `test/runtime/command_expansion_test.dart` и `test/session/record_command_test.dart` (agent-slash-commands «Разворачивание команды», «Исходный текст команды в журнале»; agent-sessions «Поле записи command»):
+- [x] 4.2 `[agent]` Тесты `test/commands/arguments_test.dart` (SKL-8; «Разворачивание команды»): кавычки, `\"`, `$10`, `$$`, отсутствующий `$3`, значение `$ARGUMENTS` в `$1` не разворачивается, без плейсхолдеров — `ARGUMENTS:`, незакрытая кавычка закрывается концом ввода. Красный.
+- [x] 4.3 `[agent]` `lib/src/commands/`: `CommandTemplate`, `SlashCommand`, `SlashCommandSource`, `parseCommandTemplates`, `splitArguments`, `substituteArguments`, `expandCommand`, `availableCommands`, список резервных имён §13.4. 4.1, 4.2 зелёные.
+- [x] 4.4 `[agent]` Тесты `test/runtime/command_expansion_test.dart` и `test/session/record_command_test.dart` (agent-slash-commands «Разворачивание команды», «Исходный текст команды в журнале»; agent-sessions «Поле записи command»):
   - `prompt([/review lib, image])` → модель получает тело и картинку после него;
   - `/nope x` и `/usr/bin/foo` уходят без изменений;
   - запись журнала с `command`, модель поля не видит;
@@ -130,13 +130,13 @@
   - лог `command.expanded` без аргументов.
 
   Красный.
-- [ ] 4.5 `[agent]` Разворачивание в `AgentSession.prompt`, поле `MessageRecord.command` (`records.dart`, `parse.dart`), реплей. 4.4 зелёный.
+- [x] 4.5 `[agent]` Разворачивание в `AgentSession.prompt`, поле `MessageRecord.command` (`records.dart`), реплей (`projections.dart`). 4.4 зелёный.
 
 ## 5. Загрузчик шаблонов и frontmatter (итерация 2; D2, D3, D6)
 
-- [ ] 5.1 `[agent]` Тесты `codelab_agent_io/test/project/frontmatter_test.dart` (CFG-21): `---` после BOM; CRLF; незакрытый `---` → `syntax`; якорь, тег, повторяющийся ключ → `profile` с позициями в координатах файла; без frontmatter — тело целиком. Красный.
-- [ ] 5.2 `[agent]` `lib/src/project/frontmatter.dart` поверх `readYamlTree`. 5.1 зелёный.
-- [ ] 5.3 `[agent]` Тесты `test/project/prompt_templates_load_test.dart` (agent-slash-commands «Каталоги шаблонов команд и доверие»):
+- [x] 5.1 `[agent]` Тесты `codelab_agent_io/test/project/frontmatter_test.dart` (CFG-21): `---` после BOM; CRLF; незакрытый `---` → `syntax`; якорь, тег, повторяющийся ключ → `profile` с позициями в координатах файла; без frontmatter — тело целиком. Красный.
+- [x] 5.2 `[agent]` `lib/src/project/frontmatter.dart` поверх `readYamlTree`. 5.1 зелёный.
+- [x] 5.3 `[agent]` Тесты `test/project/prompt_templates_load_test.dart` (agent-slash-commands «Каталоги шаблонов команд и доверие»):
   - недоверенный проект → файлы не читаются, одна диагностика `untrusted_project`;
   - доверенный → читаются;
   - 101 файл → `warning` `limit_exceeded`, видна в `config check`;
@@ -145,15 +145,23 @@
   - symlink в `prompts/` наружу → `outside_root`.
 
   Красный.
-- [ ] 5.4 `[agent]` Шаблонная часть `ProjectFilesLoader`. 5.3 зелёный.
+- [x] 5.4 `[agent]` Шаблонная часть `ProjectFilesLoader`. 5.3 зелёный.
 
 ## 6. ACP: публикация, реплей, фикстуры (итерация 2; D9, D15)
 
-- [ ] 6.1 `[protocol]` Фабрика conformance `codelab_agent_acp/test/conformance_test.dart`: `ProjectFilesLoader` с временным `CODELAB_HOME`, ключ `trusted_projects` с `${cwd}` в `setup.config` (acp-golden-fixtures «Фикстуры файлов проекта этапа 8»). Тест фабрики: неизвестный ключ по-прежнему провал. Сначала тест, затем код.
-- [ ] 6.2 `[protocol]` Фикстуры `codelab_acp_testing/fixtures/acp/prompt-template-command.json` и `available-commands-no-tools.json` (E-07, R-07; agent-acp-server «session/new», «session/load и реплей»). Красные: адаптер шлёт пустой список.
-- [ ] 6.3 `[protocol]` `agent_server.dart` и `session_bridge.dart`: `available_commands_update` из `session.commands` после `session/new` и в реплее; `replay.dart` — исходный текст команды. 6.2 зелёные; сценарий «Режимы и опции новой сессии» прежний.
+- [x] 6.1 `[protocol]` Фабрика conformance `codelab_agent_acp/test/conformance_test.dart`: `ProjectFilesLoader` с временным `CODELAB_HOME`, ключ `trusted_projects` с `${cwd}` в `setup.config` (acp-golden-fixtures «Фикстуры файлов проекта этапа 8»). Тест фабрики: неизвестный ключ по-прежнему провал. Сначала тест, затем код.
+- [x] 6.2 `[protocol]` Фикстуры `codelab_acp_testing/fixtures/acp/prompt-template-command.json` и `available-commands-no-tools.json` (E-07, R-07; agent-acp-server «session/new», «session/load и реплей»). Красные: адаптер шлёт пустой список.
+- [x] 6.3 `[protocol]` `agent_server.dart` и `session_bridge.dart`: `available_commands_update` из `session.commands` после `session/new` и в реплее; исходный текст команды — в `records.dart` и `projections.dart` ядра. 6.2 зелёные; сценарий «Режимы и опции новой сессии» прежний.
 
-- [ ] 6.4 `[protocol]` Тест `codelab_agent_acp/test/` (agent-acp-server «session/load и реплей», сценарий «Повторная загрузка открытой сессии не читает файлы проекта»; D6; перенесён из 2.3): открытая сессия загружается повторно после изменения `AGENTS.md` → фейковый `ProjectFilesSource` вызван один раз, промпт следующего хода прежний. Характеризационный: `reattach` уже не вызывает `loadSession`, поэтому тест зелёный сразу (PR говорит об этом); красный — правка `agent_server.dart`.
+- [x] 6.4 `[protocol]` Тест `codelab_agent_acp/test/` (agent-acp-server «session/load и реплей», сценарий «Повторная загрузка открытой сессии не читает файлы проекта»; D6; перенесён из 2.3): открытая сессия загружается повторно после изменения `AGENTS.md` → фейковый `ProjectFilesSource` вызван один раз, промпт следующего хода прежний. Характеризационный: `reattach` уже не вызывает `loadSession`, поэтому тест зелёный сразу (PR говорит об этом); красный — правка `agent_server.dart`.
+
+- [x] 6.5 Исправления по ревью итерации 2 (документы уже обновлены: D2, D3, D8, D14, §12.2, §17.2.2, §17.2.6). Каждый пункт — тест, затем код:
+  - `[agent]` граница каталогов двухступенчатая (D2): каталог шаблонов — `realpath` по корню области, файлы — `BoundedEnv` с корнем в реальном пути каталога; тест `prompt_templates_load_test.dart`: файл-symlink из `$CODELAB_HOME/prompts/` на `$CODELAB_HOME/config.yaml` → `outside_root`; запись `x.md`, которая FIFO, → `unreadable` (warning) без открытия;
+  - `[agent]` уровни кодов содержимого шаблонов по таблице D3 (`unknown_key`, `invalid_value`, `empty_body`, `too_large` — error; `invalid_name`, `reserved_name` — warning; `shadowed`, `untrusted_project` — info); тест в `test/commands/`;
+  - `[agent]` завершающий `\r?\n` снимается с `raw` (agent-slash-commands «Завершающий CRLF»); тест в `test/commands/`;
+  - `[agent]` заголовок сессии по исходному `/<name> <args>` для записи с `command` (agent-sessions «Автозаголовок по команде»; D8): `summarize`, `session/list`, автоматический `session_info`; тесты в `test/session/` и `test/runtime/`;
+  - `[agent]` поле `commands.loaded.project` — проект доверенный (D14); проверка лога в тесте рантайма;
+  - `[protocol]` сценарий «Команды шаблонов после session/new» — шаблон доверенного проекта в `available-commands-no-tools.json`; пользовательская область — тест хоста `apps/codelab_agent/test/agent_host_project_files_test.dart`.
 
 **Критерий итерации 2.** E-07 (`acp/prompt-template-command`) и R-07 в части шаблонов (`acp/available-commands-no-tools`) зелёные. Фикстуры этапов 0 и 4 не менялись. `web-compile`, `guard`, `gen_prompts --check` зелёные. PR называет точку итерации 3: `ProjectFiles.agents` и `AgentSession.setAgent`.
 

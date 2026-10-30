@@ -12,6 +12,7 @@
 /// [summarize] для списка.
 library;
 
+import '../commands/slash_command.dart';
 import '../llm/messages.dart';
 import '../llm/usage.dart';
 import '../loop/agent_events.dart';
@@ -181,9 +182,23 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
             calls[call.id] = call;
           }
         }
+        // Развёрнутая команда показывается тем, что набрал пользователь:
+        // `/<name> <args>` вместо тела шаблона. Неизвестный источник не
+        // трогаем, его развёртку знает только его автор (agent-sessions «Поле
+        // записи command»).
+        final shown = switch (record.command) {
+          final command?
+              when command.source == SlashCommandSource.template.wire &&
+                  message is UserMessage =>
+            UserMessage([
+              TextContent(command.displayText),
+              ...message.content.skip(1),
+            ], timestamp: message.timestamp),
+          _ => message,
+        };
         events
-          ..add(MessageStarted(session, message: message))
-          ..add(MessageEnded(session, message: message));
+          ..add(MessageStarted(session, message: shown))
+          ..add(MessageEnded(session, message: shown));
       case PlanRecord(:final entries):
         events.add(PlanUpdated(session, entries: entries));
       case ModeChangeRecord(:final modeId):

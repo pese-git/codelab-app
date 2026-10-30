@@ -81,8 +81,13 @@
 | 2 | `$CODELAB_HOME/prompts/*.md` | `user` | всегда |
 | 3 | каждый путь из `prompts.templates_dirs` | `extra` | после MVP; как `extra_roots` у skills |
 
-Чтение — с локальной файловой системы агента через `BoundedEnv` корня каталога (`<cwd>/.codelab/prompts`
-или `$CODELAB_HOME`): файл-symlink наружу пропускается с `outside_root`. Не больше 100 файлов на
+Чтение — с локальной файловой системы агента, граница двухступенчатая (change
+`add-agent-project-files`, D2): каталог (`<cwd>/.codelab/prompts`, `$CODELAB_HOME/prompts`; так же
+`agents/` для определений агентов) раскрывается `realpath` и проверяется по корню своей области
+(`cwd` или `$CODELAB_HOME`), а файлы читаются через `BoundedEnv` с корнем в реальном пути каталога.
+Поэтому файл-symlink за пределы каталога пропускается с `outside_root`, даже если цель лежит внутри
+`$CODELAB_HOME` или `cwd`: шаблоном считается только `*.md` самого каталога. Остаточный TOCTOU тот
+же, что у `AGENTS.md` (D2): подмену файла на FIFO после `stat` прерывает таймаут фазы 5 с (`timeout`). Не больше 100 файлов на
 каталог (`limit_exceeded`), файл больше 64 КиБ не читается (`too_large`).
 
 Имя команды — имя файла без `.md`, по тому же правилу, что `name` skill. Файл с другим именем
@@ -243,7 +248,7 @@ final class CommandRef { final SlashCommandSource source; final String name, arg
 sealed class CommandExpansion {}
 final class NotACommand extends CommandExpansion {}
 final class BuiltinCommand extends CommandExpansion { final String name, args; }
-final class Expanded extends CommandExpansion { final String text; final CommandRef ref; }
+final class Expanded extends CommandExpansion { final String text; final CommandRef command; }
 final class CommandFailed extends CommandExpansion { final String message; }   // текст человеку
 final class PluginInvocation extends CommandExpansion { final PluginCommand command; final String args; }   // после MVP, §17.14.3
 CommandExpansion expandCommand(String promptText, SkillCatalog catalog, CorePlan plan);
@@ -380,7 +385,8 @@ renderEntries(skills):
 expandCommand(text, catalog, plan):
 1. разбирается только первый текстовый блок промпта; он начинается с "/" → иначе NotACommand
    cmd := до первого пробельного символа без "/", raw := остаток после него без ведущих пробелов
-   (хвостовые пробелы и переводы строк raw сохраняются как есть, кроме завершающего "\n")
+   (хвостовые пробелы и переводы строк raw сохраняются как есть, кроме завершающего "\r?\n":
+   CRLF присылают клиенты на Windows; change `add-agent-project-files`, D8)
    cmd не соответствует ^[A-Za-z0-9][A-Za-z0-9:_-]*$ → NotACommand (§13.6, шаг 1)
 2. cmd — встроенная команда плана → BuiltinCommand(cmd, raw)          // §13.6, R-08
 3. после MVP: cmd — команда плагина из plan.pluginCommands → PluginInvocation(command, raw)   // §17.14.3

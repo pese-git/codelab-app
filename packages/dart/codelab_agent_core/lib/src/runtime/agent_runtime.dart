@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import '../cancel/cancel_token.dart';
+import '../commands/command_template.dart';
+import '../commands/expand_command.dart';
+import '../commands/slash_command.dart';
 import '../compaction/compactor.dart';
 import '../compaction/estimate.dart';
 import '../compaction/settings.dart';
@@ -424,7 +428,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     );
     // Файлы проекта читаются до подключения MCP: отменённая загрузка не
     // оставляет за собой процессов серверов (D6).
-    final projectContext = await _loadProjectFiles(
+    final project = await _loadProjectFiles(
       id: id,
       canonicalCwd: canonicalCwd,
       cwdResolved: cwdResolved,
@@ -432,6 +436,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       logger: logger,
       cancel: mcp.cancel.token,
     );
+    final projectContext = project.context;
     await _connectMcp(
       id: id,
       cwd: cwd,
@@ -530,6 +535,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       snapshot: snapshot,
       stream: stream,
       compaction: compaction ? settings.compaction : null,
+      templates: project.templates,
     );
     _sessions.add(session);
     return session;
@@ -583,7 +589,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
   /// вовремя, даёт сессию без файлов и диагностику `timeout`. Отмена ([cancel]: `close()` сессии или `dispose()` рантайма)
   /// выбрасывает результат: сессия не создаётся. В лог не попадает ни
   /// содержимое файлов, ни фрагменты сообщений исключений (D14).
-  Future<ProjectContext?> _loadProjectFiles({
+  Future<_ProjectLoad> _loadProjectFiles({
     required SessionId id,
     required String canonicalCwd,
     required bool cwdResolved,
@@ -593,7 +599,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
   }) async {
     final source = services.projectFiles;
     if (source == null) {
-      return null;
+      return _ProjectLoad.none;
     }
     void diagnostic(
       DiagnosticLevel level,
@@ -627,6 +633,10 @@ final class AgentRuntimeImpl implements AgentRuntime {
       }
     }
 
+    // Без раскрытого `realpath` доверия нет (D4, приоритет 1).
+    final projectTrusted =
+        cwdResolved &&
+        settings.trustedProjects.any((root) => samePath(root, canonicalCwd));
     final timer = services.clock.timer(_projectFilesTimeout, giveUp);
     unawaited(cancel.onCancel.then((_) => giveUp()));
     unawaited(
@@ -634,12 +644,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         () => source.load(
           ProjectFilesQuery(
             cwd: canonicalCwd,
-            // Без раскрытого `realpath` доверия нет (D4, приоритет 1).
-            projectTrusted:
-                cwdResolved &&
-                settings.trustedProjects.any(
-                  (root) => samePath(root, canonicalCwd),
-                ),
+            projectTrusted: projectTrusted,
             contextMaxBytes: settings.projectContextMaxBytes,
             cancel: loadCancel.token,
           ),
@@ -670,7 +675,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
           'project files were not read within '
               '${_projectFilesTimeout.inSeconds} s; the session has none',
         );
-        return null;
+        return _ProjectLoad.none;
       }
       files = result;
     } on CancelledException {
@@ -683,7 +688,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         'unexpected',
         'project files could not be read: ${error.runtimeType}',
       );
-      return null;
+      return _ProjectLoad.none;
     } finally {
       timer.cancel();
       loadCancel.dispose();
@@ -717,7 +722,31 @@ final class AgentRuntimeImpl implements AgentRuntime {
         },
       );
     }
-    return context;
+    // Шаблоны команд: проверка ядром, диагностика без содержимого файлов
+    // (D3, D14). Ошибка шаблона не прерывает создание сессии.
+    final parsed = parseCommandTemplates(files.templates);
+    for (final item in parsed.diagnostics) {
+      diagnostic(
+        item.level,
+        item.path,
+        item.code,
+        item.message,
+        line: item.line,
+        column: item.column,
+      );
+    }
+    logger.log(
+      LogLevel.info,
+      'commands.loaded',
+      fields: {
+        'session_id': id.value,
+        'count': parsed.templates.length,
+        // «Читался ли каталог проекта»: каталог шаблонов проекта читается
+        // только для доверенного проекта (D4).
+        'project': projectTrusted,
+      },
+    );
+    return _ProjectLoad(context, parsed.templates);
   }
 
   /// Подключает MCP-серверы сессии до возврата сессии (D6): слияние
@@ -928,6 +957,17 @@ final class AgentRuntimeImpl implements AgentRuntime {
   }
 }
 
+/// Итог фазы файлов проекта: контекст инструкций и шаблоны команд.
+final class _ProjectLoad {
+  const _ProjectLoad(this.context, this.templates);
+
+  /// Порта нет, он упал или не уложился в таймаут: сессия без файлов проекта.
+  static const none = _ProjectLoad(null, []);
+
+  final ProjectContext? context;
+  final List<CommandTemplate> templates;
+}
+
 /// MCP-часть состояния сессии: подключённые серверы и имена их
 /// инструментов в реестре сессии (design.md change `add-agent-mcp-client`,
 /// D6).
@@ -1032,6 +1072,7 @@ final class _Session implements AgentSession {
     required SessionSnapshot snapshot,
     required StreamFunction stream,
     required CompactionOverrides? compaction,
+    required List<CommandTemplate> templates,
   }) : _mode = mode,
        _effort = effort,
        _catalog = catalog,
@@ -1048,6 +1089,8 @@ final class _Session implements AgentSession {
        _services = services,
        _logger = logger,
        _compose = compose,
+       _templates = List.unmodifiable(templates),
+       commands = availableCommands(templates),
        _titled = _hasTitle(snapshot) {
     _writer = SessionWriter(
       store: services.sessions,
@@ -1065,6 +1108,12 @@ final class _Session implements AgentSession {
   @override
   final SessionId id;
   final String cwd;
+
+  /// Шаблоны сессии: строятся при открытии и не меняются до закрытия (D7).
+  final List<CommandTemplate> _templates;
+
+  @override
+  final List<SlashCommand> commands;
   ModeId _mode;
   ModelRef _model;
   ReasoningEffort _effort;
@@ -1229,10 +1278,9 @@ final class _Session implements AgentSession {
     // Между ходами изменение набора применяется перед началом хода (D6).
     _applyMcpUpdate();
     cancel?.onCancel.then((_) => _agent.abort(cancel.reason));
+    final message = _expandCommand(content);
     try {
-      await _agent.prompt([
-        UserMessage(content, timestamp: _services.clock.now()),
-      ]);
+      await _agent.prompt([message]);
     } finally {
       // `TurnEnded` уже опубликован: набор, присланный во время хода,
       // применяется теперь, а не в ответе на запрос (D11).
@@ -1249,6 +1297,43 @@ final class _Session implements AgentSession {
       budgetExceeded: ended.budgetExceeded,
       held: ended.held,
     );
+  }
+
+  /// Сообщение пользователя; команда шаблона разворачивается здесь, до записи
+  /// в журнал, поэтому ACP, встроенный режим и CLI ведут себя одинаково
+  /// (design.md change `add-agent-project-files`, D8).
+  ///
+  /// Разбирается только первый текстовый блок. Развёрнутый текст идёт первым,
+  /// остальные блоки — после него в исходном порядке. В лог не пишутся
+  /// аргументы: пользователь мог вставить туда секрет (D14, §16).
+  UserMessage _expandCommand(List<ContentBlock> content) {
+    final index = content.indexWhere((block) => block is TextContent);
+    if (index >= 0 && _templates.isNotEmpty) {
+      final typed = (content[index] as TextContent).text;
+      if (expandCommand(typed, _templates) case Expanded(
+        text: final body,
+        :final command,
+      )) {
+        final message = UserMessage([
+          TextContent(body),
+          for (final (i, block) in content.indexed)
+            if (i != index) block,
+        ], timestamp: _services.clock.now());
+        _writer.noteCommand(message, command);
+        _logger.log(
+          LogLevel.info,
+          'command.expanded',
+          fields: {
+            'session_id': id.value,
+            'name': command.name,
+            'source': command.source,
+            'args_bytes': utf8.encode(command.args).length,
+          },
+        );
+        return message;
+      }
+    }
+    return UserMessage(content, timestamp: _services.clock.now());
   }
 
   @override
