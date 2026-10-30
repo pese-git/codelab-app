@@ -448,4 +448,39 @@ void main() {
       expect(tree.positions['budget.max_steps'], const ConfigPosition(1, 11));
     });
   });
+
+  group('lineOffset', () {
+    YamlReadResult readAt(String text, int offset) => readYamlTree(
+      text,
+      source: 'x.md',
+      kind: ConfigLayerKind.user,
+      lineOffset: offset,
+    );
+
+    test('positions of values are in file coordinates', () {
+      final tree = readAt('a: 1\nb:\n  c: 2\n', 3).tree!;
+
+      expect(tree.positions['a'], const ConfigPosition(4, 1));
+      expect(tree.positions['b.c'], const ConfigPosition(6, 3));
+    });
+
+    test('a syntax error and a repeated key are shifted, both positions', () {
+      final dup = readAt('a: 1\nb: 2\na: 3\n', 2).issues.single;
+      expect((dup.line, dup.column), (5, 1));
+      expect(dup.message, contains('first defined at 3:1'));
+
+      final syntax = readAt('a: [1\n', 4).issues.single;
+      expect(syntax.line, greaterThan(4));
+    });
+
+    test('a profile violation at the root is shifted', () {
+      final issue = readAt('a: &x 1\nb: *x\n', 1).issues.first;
+
+      expect(issue.line, greaterThanOrEqualTo(2));
+    });
+
+    test('an empty block with an offset is an empty layer', () {
+      expect(readAt('', 1).tree!.values, isEmpty);
+    });
+  });
 }

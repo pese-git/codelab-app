@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_agent/codelab_agent.dart';
@@ -97,5 +98,49 @@ agent:
     final skipped = logger.eventsOf('project_files.skipped').single;
     expect(skipped.fields['transport'], 'ws');
     expect(logger.eventsOf('project_context.loaded'), isEmpty);
+  });
+
+  test(r'prompt templates: the user one always, the project one only when '
+      'the global config trusts the project', () async {
+    Future<List<String>> commandsOf({required bool trusted}) async {
+      final temp = await Directory.systemTemp.createTemp('codelab_host_tpl_');
+      addTearDown(() => temp.delete(recursive: true));
+      final project = '${temp.path}/project';
+      final home = '${temp.path}/home';
+      Directory('$project/.codelab/prompts').createSync(recursive: true);
+      Directory('$home/prompts').createSync(recursive: true);
+      File('$home/prompts/review.md').writeAsStringSync('Review \$1');
+      File('$project/.codelab/prompts/deploy.md').writeAsStringSync('Deploy');
+      final trust = trusted
+          ? 'trusted_projects: [${jsonEncode(project)}]\n'
+          : '';
+      File('$home/config.yaml').writeAsStringSync('''
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    api_key_env: LLM_KEY
+    models:
+      m: {}
+agent:
+  default_model: p/m
+$trust''');
+      final host = await buildHost(
+        parseServeArgs(
+          ['serve', '--stdio'],
+          environment: {'CODELAB_HOME': home, 'LLM_KEY': 'sk-test'},
+        ),
+        cwd: project,
+        logger: RecordingLogger(),
+      );
+      addTearDown(() => host.shutdown(grace: Duration.zero));
+      final session = await host.core.runtime.createSession(
+        SessionSpec(cwd: project),
+      );
+      return [for (final c in session.commands) c.name];
+    }
+
+    expect(await commandsOf(trusted: false), ['review']);
+    expect(await commandsOf(trusted: true), ['deploy', 'review']);
   });
 }

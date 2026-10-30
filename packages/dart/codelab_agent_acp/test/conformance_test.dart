@@ -35,6 +35,45 @@ void main() {
     });
   }
 
+  // acp-golden-fixtures «Фикстуры файлов проекта этапа 8»: ключ
+  // `trusted_projects` фабрика принимает, любой другой неизвестный ключ
+  // остаётся громким провалом (design.md change `add-agent-project-files`,
+  // D15): молча проигнорированная настройка сделала бы фикстуру ложно
+  // зелёной.
+  test('the factory still rejects an unknown config key', () async {
+    for (final config in <Map<String, Object?>>[
+      {
+        'trusted_projects': [r'${cwd}'],
+        'bogus': 1,
+      },
+      {'bogus': 1},
+    ]) {
+      final source = loadFixtureCorpus().firstWhere(
+        (f) => f.id == 'acp/prompt-text-end-turn',
+      );
+      final json =
+          jsonDecode(File(source.sourcePath!).readAsStringSync())
+              as Map<String, Object?>;
+      json['id'] = 'acp/unknown-config-key';
+      (json['setup']! as Map<String, Object?>)['config'] = config;
+      final fixture = AcpFixture.fromJson(
+        json,
+        fileName: 'unknown-config-key.json',
+      );
+
+      await expectLater(
+        runAgentFixture(fixture, startAgent),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('config.bogus'),
+          ),
+        ),
+      );
+    }
+  });
+
   // acp-golden-fixtures «Формат golden-фикстуры ACP», сценарий «Лишний
   // вызов MCP-сервера»: `after.mcpCalls` проверяет `verify()` фабрики.
   test(
@@ -92,6 +131,10 @@ Future<AgentUnderTest> startAgent(
     cwd: setup.cwd,
   );
   final mcp = _FixtureMcp(setup);
+  // Пустой `$CODELAB_HOME` на прогон: шаблоны пользователя фикстуры не
+  // читают, а настоящий `~/.codelab` разработчика не должен влиять на кадры
+  // (design.md change `add-agent-project-files`, D15, D16).
+  final home = Directory.systemTemp.createTempSync('agent_fixture_home_');
   final core = buildAgentCore(
     profile: HostProfile.of(setup.profile),
     services: AgentCoreServices(
@@ -102,6 +145,10 @@ Future<AgentUnderTest> startAgent(
       clock: clock,
       ids: SequentialIdGenerator(),
       sessions: store,
+      projectFiles: ProjectFilesLoader(
+        home: home.path,
+        local: LocalExecutionEnv(cwd: setup.cwd),
+      ),
       models: FixedModelCatalog(config.models),
       // Коннектор есть всегда: `mcpCapabilities.http` в `initialize` зависит
       // от него (design.md change `add-agent-mcp-client`, D11), а серверы
@@ -124,6 +171,7 @@ Future<AgentUnderTest> startAgent(
       effort: config.effort,
       budget: config.budget,
       compaction: config.compaction,
+      trustedProjects: config.trustedProjects,
       permissions: PermissionsConfig(
         mode: setup.mode == null ? null : ModeId.parse(setup.mode!),
       ),
@@ -144,15 +192,16 @@ Future<AgentUnderTest> startAgent(
     clock: clock,
   );
   unawaited(server.serve(transport));
-  return _ServedAgent(server, model, mcp);
+  return _ServedAgent(server, model, mcp, home);
 }
 
 final class _ServedAgent implements AgentUnderTest {
-  _ServedAgent(this._server, this._model, this._mcp);
+  _ServedAgent(this._server, this._model, this._mcp, this._home);
 
   final AcpAgentServer _server;
   final ScriptedStreamFunction _model;
   final _FixtureMcp _mcp;
+  final Directory _home;
 
   @override
   void verify() {
@@ -161,7 +210,10 @@ final class _ServedAgent implements AgentUnderTest {
   }
 
   @override
-  Future<void> stop() => _server.shutdown(grace: Duration.zero);
+  Future<void> stop() async {
+    await _server.shutdown(grace: Duration.zero);
+    _home.deleteSync(recursive: true);
+  }
 }
 
 /// Gate хоста для сборки: включает `interactiveApproval`, а вопросы идут
@@ -179,9 +231,12 @@ final class _HostGate implements PermissionGate {
 /// Фрагмент конфига фикстуры (§15) в объёме, который читают фикстуры
 /// этапов 0 и 4: `agent.default_model`, `agent.effort`, `budget.max_steps`,
 /// `budget.max_tokens`, `compaction.keep_recent_tokens`,
-/// `providers.<id>.models.<model>` (`context_window`, `reasoning`). Другой
-/// ключ — громкий провал: молча проигнорированная настройка сделала бы
-/// фикстуру ложно зелёной.
+/// `providers.<id>.models.<model>` (`context_window`, `reasoning`),
+/// `trusted_projects` (список путей, `${cwd}` — временный `cwd` прогона:
+/// доверие проекту, файлы которого лежат в `setup.files`; фикстуры этапа 8,
+/// design.md change `add-agent-project-files`, D15).
+/// Другой ключ — громкий провал: молча проигнорированная настройка сделала
+/// бы фикстуру ложно зелёной.
 final class _FixtureConfig {
   _FixtureConfig({
     required this.defaultModel,
@@ -189,6 +244,7 @@ final class _FixtureConfig {
     required this.effort,
     required this.budget,
     required this.compaction,
+    required this.trustedProjects,
   });
 
   factory _FixtureConfig.parse(AgentFixtureSetup setup) {
@@ -198,6 +254,7 @@ final class _FixtureConfig {
       'budget',
       'compaction',
       'providers',
+      'trusted_projects',
     }, 'config');
     final agent = _object(config['agent'], 'config.agent');
     _keys(agent, const {'default_model', 'effort'}, 'config.agent');
@@ -255,7 +312,19 @@ final class _FixtureConfig {
     models
       ..remove(defaultModel)
       ..insert(0, defaultModel);
+    final trusted = switch (config['trusted_projects']) {
+      null => const <String>[],
+      final List<Object?> paths => [
+        for (final path in paths)
+          if (path is String)
+            path.replaceAll(r'${cwd}', setup.cwd)
+          else
+            throw FormatException('config.trusted_projects: $path'),
+      ],
+      final value => throw FormatException('config.trusted_projects: $value'),
+    };
     return _FixtureConfig(
+      trustedProjects: trusted,
       defaultModel: defaultModel,
       models: models,
       effort: switch (agent['effort']) {
@@ -278,6 +347,7 @@ final class _FixtureConfig {
   final ReasoningEffort effort;
   final TurnBudget budget;
   final CompactionOverrides compaction;
+  final List<String> trustedProjects;
 
   static ModelRef _model(
     String provider,
