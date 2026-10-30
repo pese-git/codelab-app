@@ -52,7 +52,11 @@ void main() {
     FakeGate gate,
     ScriptedStreamFunction model,
   })
-  build(CoreConfig config, {List<Map<String, Object?>> steps = const []}) {
+  build(
+    CoreConfig config, {
+    List<Map<String, Object?>> steps = const [],
+    ExecutionEnv? env,
+  }) {
     final clock = FakeClock();
     final logger = RecordingLogger();
     final mcp = FakeMcpConnector();
@@ -65,7 +69,7 @@ void main() {
         'agent-serve',
       ).narrowed({...inMemoryJournal, ...noExec}),
       services: AgentCoreServices(
-        baseEnv: MemoryExecutionEnv(cwd: '/A'),
+        baseEnv: env ?? MemoryExecutionEnv(cwd: '/A'),
         gate: gate,
         logger: logger,
         clock: clock,
@@ -227,4 +231,113 @@ void main() {
       expect(h.logger.eventsOf('config.session.outside_root'), isEmpty);
     });
   });
+
+  group('a symlink cwd is canonicalized before the comparison', () {
+    // Канонизация cwd сессии — безопасность: `/link -> /A` иначе получил бы
+    // снимок без проекта и потерял бы `permissions.deny` проекта.
+    final links = {'/link': '/A', '/elsewhere': '/B'};
+
+    test(
+      'createSession through a link gets the full snapshot, no log',
+      () async {
+        final h = build(snapshots(), env: _LinkingEnv(links));
+
+        final session = await h.core.runtime.createSession(
+          SessionSpec(cwd: '/link'),
+        );
+
+        expect(session.mode, ModeId.bypass);
+        expect(session.model.id, 'full');
+        expect(h.logger.eventsOf('config.session.outside_root'), isEmpty);
+      },
+    );
+
+    test('a link to another directory still gets the bare snapshot', () async {
+      final h = build(snapshots(), env: _LinkingEnv(links));
+
+      final session = await h.core.runtime.createSession(
+        SessionSpec(cwd: '/elsewhere'),
+      );
+
+      expect(session.mode, ModeId.ask);
+      expect(h.logger.eventsOf('config.session.outside_root'), hasLength(1));
+    });
+
+    test('loadSession through a link gets the full snapshot', () async {
+      final h = build(snapshots(), env: _LinkingEnv(links));
+      final created = await h.core.runtime.createSession(
+        SessionSpec(cwd: '/A'),
+      );
+
+      final loaded = await h.core.runtime.loadSession(
+        created.id,
+        const SessionHostPorts(),
+        cwd: '/link',
+      );
+
+      expect(loaded.mode, ModeId.bypass);
+    });
+
+    test('a path that cannot be resolved falls back to the lexical '
+        'comparison', () async {
+      final h = build(snapshots(), env: _LinkingEnv(links));
+
+      final session = await h.core.runtime.createSession(
+        SessionSpec(cwd: '/missing'),
+      );
+
+      expect(session.mode, ModeId.ask);
+    });
+  });
+}
+
+/// Env с «символическими ссылками» поверх памяти: `realpath` раскрывает
+/// [links], остальное делегируется.
+final class _LinkingEnv
+    implements ExecutionEnv, DirectoryListing, PathResolver {
+  _LinkingEnv(this.links);
+
+  final Map<String, String> links;
+  final _inner = MemoryExecutionEnv(cwd: '/A');
+
+  @override
+  String get cwd => _inner.cwd;
+
+  @override
+  Future<Result<String, FileError>> realpath(String path) async {
+    final target =
+        links[path.endsWith('/') && path.length > 1
+            ? path.substring(0, path.length - 1)
+            : path];
+    if (target != null) {
+      return Ok(target);
+    }
+    return path == '/A' || path == '/B'
+        ? Ok(path)
+        : Err(FileError(FileErrorCode.notFound, path));
+  }
+
+  @override
+  Future<Result<String, FileError>> readText(
+    String path, {
+    int? line,
+    int? limit,
+  }) => _inner.readText(path, line: line, limit: limit);
+
+  @override
+  Future<Result<void, FileError>> writeText(String path, String content) =>
+      _inner.writeText(path, content);
+
+  @override
+  Future<Result<FileStat, FileError>> stat(String path) => _inner.stat(path);
+
+  @override
+  Future<Result<List<FileStat>, FileError>> listDir(String path) =>
+      _inner.listDir(path);
+
+  @override
+  Future<Result<ExecResult, ExecError>> exec(
+    String command,
+    ExecOptions options,
+  ) => _inner.exec(command, options);
 }

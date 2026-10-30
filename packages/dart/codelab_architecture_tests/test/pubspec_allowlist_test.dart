@@ -19,7 +19,6 @@ const ioAllowlist = {
   'async',
   'yaml',
   'yaml_edit',
-  'toml',
 };
 
 /// Dependencies of the ACP server of the agent (agent-core-architecture
@@ -135,6 +134,21 @@ void main() {
     final extra = dependencyKeys(pubspec).difference(ioAllowlist);
 
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('reports toml in the dependencies of the IO package of the agent', () {
+    // `codelab.toml` не читается (design.md change `add-agent-configuration`,
+    // D12): зависимость `toml` в allowlist пакета не входит.
+    const pubspec = '''
+name: codelab_agent_io
+dependencies: # allowlist
+  codelab_agent_core:
+    path: ../codelab_agent_core
+  yaml: ^3.1.3
+  toml: ^0.16.0
+''';
+
+    expect(dependencyKeys(pubspec).difference(ioAllowlist), {'toml'});
   });
 
   test('codelab_agent_acp depends only on its allowlist', () {

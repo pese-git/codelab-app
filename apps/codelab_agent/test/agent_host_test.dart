@@ -9,6 +9,7 @@ import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/acp_peer.dart';
+import 'support/build_host.dart';
 
 /// Сборка ядра бинаря (задача 4.6; agent-binary «Сценарий --llm-script»,
 /// «Минимальный конфиг из флагов», «Команда serve»; design.md change
@@ -45,7 +46,11 @@ void main() {
 
   /// Хост, сервер и клиент на одной паре транспортов.
   Future<(AgentHost, AcpPeer)> start(ServeOptions options) async {
-    final host = await AgentHost.build(options, logger: RecordingLogger());
+    final host = await buildHost(
+      cwd: temp.path,
+      options,
+      logger: RecordingLogger(),
+    );
     final link = InProcessAcpLink();
     unawaited(host.createServer().serve(link.agent));
     await link.client.start();
@@ -113,8 +118,11 @@ void main() {
     test('an invalid script is a usage error with the field path', () async {
       final script = writeScript({'steps': 'not a list'});
       expect(
-        () =>
-            AgentHost.build(scriptedOptions(script), logger: RecordingLogger()),
+        () => buildHost(
+          cwd: temp.path,
+          scriptedOptions(script),
+          logger: RecordingLogger(),
+        ),
         throwsA(
           isA<UsageError>().having(
             (e) => e.message,
@@ -127,7 +135,8 @@ void main() {
 
     test('a missing script file is a usage error', () async {
       expect(
-        () => AgentHost.build(
+        () => buildHost(
+          cwd: temp.path,
           scriptedOptions('${temp.path}/missing.json'),
           logger: RecordingLogger(),
         ),
@@ -204,7 +213,8 @@ void main() {
       final work = Directory('${temp.path}/work')..createSync();
 
       // Первый процесс: сессия с одним ходом, затем завершение.
-      final first = await AgentHost.build(
+      final first = await buildHost(
+        cwd: temp.path,
         persistentOptions(script),
         logger: RecordingLogger(),
       );
@@ -275,6 +285,27 @@ void main() {
 
       await peer.newSession(temp.path);
       expect(Directory('${temp.path}/home/sessions').existsSync(), isTrue);
+    });
+
+    // Характеризационный тест задачи 9.1 (change `add-agent-configuration`,
+    // исключение (а) правила TDD): ключ провайдера из `CODELAB_API_KEY` не
+    // попадает в записи лога сборки хоста ни до, ни после перехода на конфиг.
+    test('the key of CODELAB_API_KEY is not in the log of the build', () async {
+      final logger = RecordingLogger();
+      final host = await buildHost(
+        cwd: temp.path,
+        providerOptions(),
+        logger: logger,
+      );
+      addTearDown(() => host.shutdown(grace: Duration.zero));
+
+      expect(logger.records, isNotEmpty);
+      for (final record in logger.records) {
+        expect(
+          '${record.event} ${record.fields} ${record.error}',
+          isNot(contains('sk-test-secret')),
+        );
+      }
     });
 
     test('the model option lists cli models, cli/gpt-5 first', () async {

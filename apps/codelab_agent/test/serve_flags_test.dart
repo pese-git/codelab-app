@@ -78,8 +78,6 @@ void main() {
   group('models and providers', () {
     test('--model repeats: the first is the default', () {
       final options = parse([...provider, '--model', 'gpt-4']);
-      expect(options.provider, ProviderKind.openaiCompatible);
-      expect(options.baseUrl, Uri.parse('http://localhost:4000/v1'));
       expect(options.models, [
         const ModelId('cli/gpt-5'),
         const ModelId('cli/gpt-4'),
@@ -112,15 +110,85 @@ void main() {
       ]);
     });
 
-    test('a foreign provider in --model is a usage error', () {
+    test('a foreign provider in --model with --provider is a usage error', () {
       expect(
         () => parse([...provider.take(6), '--model', 'openai/gpt-5']),
         usageError(contains('openai/gpt-5')),
       );
+    });
+
+    // agent-binary «Конфиг бинаря из файлов, окружения и флагов»: `--model
+    // <provider>/<model>` без `--provider` выбирает модель конфига (задача
+    // 9.2; design.md change `add-agent-configuration`, D4). Прежняя ошибка
+    // «named providers come with the config of stage 8» ушла.
+    test('--model <provider>/<model> without --provider selects a config '
+        'model', () {
+      final options = parse(['serve', '--stdio', '--model', 'anthropic/x']);
+
+      expect(options.flags.values['providers'], isNull);
+      expect(options.models, [const ModelId('anthropic/x')]);
+      expect(options.flags.kind, ConfigLayerKind.flags);
+      expect(options.flags.values, {
+        'agent': {'default_model': 'anthropic/x'},
+      });
+    });
+
+    test('--model without a slash and without --provider is a usage error', () {
       expect(
-        () => parse(['serve', '--stdio', '--model', 'openai/gpt-5']),
+        () => parse(['serve', '--stdio', '--model', 'gpt']),
+        usageError('--model needs <provider>/<model> without --provider'),
+      );
+    });
+
+    test('--model repeated without --provider is a usage error', () {
+      expect(
+        () => parse(['serve', '--stdio', '--model', 'a/x', '--model', 'b/y']),
         usageError(contains('--provider')),
       );
+    });
+
+    test('without CODELAB_API_KEY the layer has no api_key_env', () {
+      final options = parse([...provider, '--model', 'gpt-4']);
+
+      final cli = (options.flags.values['providers']! as Map)['cli']! as Map;
+      expect(cli, isNot(contains('api_key_env')));
+      final empty = parse(
+        [...provider, '--model', 'gpt-4'],
+        {'CODELAB_API_KEY': ''},
+      );
+      expect(
+        ((empty.flags.values['providers']! as Map)['cli']! as Map).keys,
+        isNot(contains('api_key_env')),
+      );
+    });
+
+    test('the provider flags become the layer of flags', () {
+      final options = parse(
+        [...provider, '--model', 'gpt-4'],
+        {'CODELAB_API_KEY': 'sk-test-secret'},
+      );
+
+      expect(options.flags.source, 'flags');
+      expect(options.flags.values, {
+        'providers': {
+          'cli': {
+            'kind': 'openai-compatible',
+            'base_url': 'http://localhost:4000/v1',
+            'api_key_env': 'CODELAB_API_KEY',
+            'models': {
+              'gpt-5': <String, Object?>{},
+              'gpt-4': <String, Object?>{},
+            },
+          },
+        },
+        'agent': {'default_model': 'cli/gpt-5'},
+      });
+    });
+
+    test('the layer of flags never holds the key itself', () {
+      final options = parse(provider, {'CODELAB_API_KEY': 'sk-test-secret'});
+
+      expect('${options.flags.values}', isNot(contains('sk-test-secret')));
     });
 
     test('--provider together with --llm-script is a usage error', () {
@@ -145,15 +213,17 @@ void main() {
       );
     });
 
-    test('neither a model nor a script is a usage error', () {
+    // Правка характеризационного теста в фазе реализации 9.3: запуск без
+    // модели больше не ошибка разбора флагов, а проблема конфига
+    // `agent.default_model: required` (agent-binary «Конфиг бинаря…»,
+    // требование «Минимальный конфиг из флагов» удалено).
+    test('--provider without a model is a usage error; no model source is '
+        'left to the config', () {
       expect(
         () => parse(provider.take(6).toList()),
         usageError(contains('--model')),
       );
-      expect(
-        () => parse(['serve', '--stdio']),
-        usageError(contains('--provider')),
-      );
+      expect(parse(['serve', '--stdio']).models, isEmpty);
     });
 
     // §15.4: `base_url` обязателен для openai-compatible, у anthropic есть
@@ -180,13 +250,18 @@ void main() {
           '--model',
           'claude-sonnet-5-5',
         ]);
-        expect(anthropic.baseUrl, Uri.parse('https://api.anthropic.com'));
+        expect(
+          ((anthropic.flags.values['providers']! as Map)['cli']!
+              as Map)['base_url'],
+          'https://api.anthropic.com',
+        );
       },
     );
 
     test('the key comes only from CODELAB_API_KEY and is not shown', () {
       final options = parse(provider, {'CODELAB_API_KEY': 'sk-test-secret'});
-      expect(options.apiKey, 'sk-test-secret');
+      final cli = (options.flags.values['providers']! as Map)['cli']! as Map;
+      expect(cli['api_key_env'], 'CODELAB_API_KEY');
       expect(options.toString(), isNot(contains('sk-test-secret')));
       expect(
         () => parse([...provider, '--api-key', 'sk-test-secret']),
@@ -195,26 +270,103 @@ void main() {
     });
   });
 
-  group('mode and logging', () {
-    test('--permission-mode beats CODELAB_PERMISSION_MODE', () {
+  group('config file and limits', () {
+    test('--config keeps the path; no flag means none', () {
+      expect(parse(scripted).configPath, isNull);
       expect(
-        parse(scripted, {'CODELAB_PERMISSION_MODE': 'bypass'}).mode,
-        ModeId.bypass,
+        parse([...scripted, '--config', '/tmp/c.yaml']).configPath,
+        '/tmp/c.yaml',
       );
+      expect(parse([...scripted, '--config', 'c.yml']).configPath, 'c.yml');
+    });
+
+    test('--config with .toml is a usage error', () {
       expect(
-        parse(
+        () => parse([...scripted, '--config', 'a.toml']),
+        usageError(allOf(contains('codelab.toml'), contains('--config'))),
+      );
+    });
+
+    test('--config with another extension is a usage error', () {
+      expect(
+        () => parse([...scripted, '--config', 'a.json']),
+        usageError(contains('.yaml')),
+      );
+    });
+
+    test('--max-steps goes to budget.max_steps of the flags', () {
+      final options = parse([...scripted, '--max-steps', '7']);
+
+      expect(options.flags.values['budget'], {'max_steps': 7});
+      expect(parse(scripted).flags.values['budget'], isNull);
+    });
+
+    test('--max-steps must be a positive integer', () {
+      for (final bad in ['0', '-1', 'abc', '2.5']) {
+        expect(
+          () => parse([...scripted, '--max-steps', bad]),
+          usageError(contains('--max-steps')),
+          reason: bad,
+        );
+      }
+    });
+
+    test('flag values reach the layer; variables stay out of it', () {
+      final options = parse(
+        [
+          ...scripted,
+          '--permission-mode',
+          'plan',
+          '--log-level',
+          'debug',
+          '--log-file',
+          '/tmp/f.log',
+        ],
+        {'CODELAB_LOG_LEVEL': 'error', 'CODELAB_MAX_STEPS': '3'},
+      );
+
+      expect(options.flags.values, {
+        'permissions': {'mode': 'plan'},
+        'logging': {'level': 'debug', 'file': '/tmp/f.log'},
+      });
+    });
+
+    test('autopilot reaches the layer only as a flag', () {
+      final options = parse([...scripted, '--permission-mode', 'autopilot']);
+
+      expect(options.flags.values['permissions'], {'mode': 'autopilot'});
+    });
+  });
+
+  group('mode and logging', () {
+    // Приоритет «флаг сильнее переменной» обеспечивает порядок слоёв
+    // загрузчика; здесь флаг попадает в слой, а переменная — нет.
+    test(
+      '--permission-mode goes to the flags layer, the variable does not',
+      () {
+        final byFlag = parse(
           [...scripted, '--permission-mode', 'accept-edits'],
           {'CODELAB_PERMISSION_MODE': 'bypass'},
-        ).mode,
-        ModeId.acceptEdits,
-      );
-      expect(parse(scripted).mode, isNull);
-    });
+        );
+
+        expect(byFlag.flags.values['permissions'], {'mode': 'accept-edits'});
+        expect(
+          parse(scripted, {
+            'CODELAB_PERMISSION_MODE': 'bypass',
+          }).flags.values['permissions'],
+          isNull,
+        );
+      },
+    );
 
     test('autopilot is a flag-only override', () {
       final options = parse([...scripted, '--permission-mode', 'autopilot']);
-      expect(options.mode, isNull);
-      expect(options.autopilot, isTrue);
+
+      expect(options.flags.values['permissions'], {'mode': 'autopilot'});
+      expect(
+        () => parse(scripted, {'CODELAB_PERMISSION_MODE': 'autopilot'}),
+        usageError(contains('autopilot')),
+      );
     });
 
     test('an unknown mode is a usage error', () {
