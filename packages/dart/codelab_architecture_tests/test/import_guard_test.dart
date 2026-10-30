@@ -34,6 +34,29 @@ void main() {
     expect(violations.single, endsWith('lib/src/x.dart:1 -> dart:io'));
   });
 
+  // CFG-5: разборщики конфигурации живут только в codelab_agent_io; ядро
+  // получает уже разобранные деревья (change `add-agent-configuration`, D1).
+  test('reports a configuration parser imported by the agent core', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cfg_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'src', 'config', 'reader.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("import 'package:yaml/yaml.dart';\n");
+    final rule = rules.firstWhere(
+      (r) => r.dir == 'packages/dart/codelab_agent_core',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    expect(
+      violations.single,
+      endsWith('lib/src/config/reader.dart:1 -> package:yaml/yaml.dart'),
+    );
+  });
+
   test('reports ACP imported by the IO package of the agent', () {
     final tmp = Directory.systemTemp.createTempSync('guard_io_');
     addTearDown(() => tmp.deleteSync(recursive: true));

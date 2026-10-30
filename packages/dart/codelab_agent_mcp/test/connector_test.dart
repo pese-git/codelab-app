@@ -1,5 +1,7 @@
 // Барель пакета сужен до API хоста; тесты проверяют внутренние типы.
 // ignore_for_file: implementation_imports
+import 'dart:async';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
 import 'package:codelab_agent_mcp/src/protocol.dart';
@@ -437,5 +439,75 @@ void main() {
 
     expect(session.takeUpdate()!.tools, isEmpty);
     await h.clock.elapse(Duration.zero);
+  });
+
+  // Таймаут вызова сервера из `mcp.servers[*].call_timeout` (design.md change
+  // `add-agent-configuration`, D10): сервер с собственным сроком сильнее
+  // общего `McpClientOptions.callTimeout`.
+  group('call timeout per server', () {
+    ToolContext toolContext() => ToolContext(
+      env: MemoryExecutionEnv(cwd: '/'),
+      cancel: CancelToken.none,
+      onUpdate: (_) {},
+      toolCallId: 'tc-1',
+      services: ToolServices(clock: h.clock, logger: h.logger),
+      supportsImages: false,
+    );
+
+    test('a server with callTimeout gets the cancel signal and its own '
+        'seconds; a server without waits for the connector option', () async {
+      final gateA = Completer<Map<String, Object?>>();
+      final gateB = Completer<Map<String, Object?>>();
+      final a = FakeMcpServer(
+        tools: [const FakeMcpTool('echo')],
+        responses: {'echo': FakeToolResponse.gated(gateA)},
+      );
+      final b = FakeMcpServer(
+        tools: [const FakeMcpTool('echo')],
+        responses: {'echo': FakeToolResponse.gated(gateB)},
+      );
+      final c = McpClientConnector(
+        transports: McpTransports(
+          stdio: FakeMcpTransportFactory({'a': a, 'b': b}),
+        ),
+        clock: h.clock,
+        options: const McpClientOptions(callTimeout: Duration(minutes: 10)),
+      );
+      final session = await c.connect(
+        request([
+          McpStdioServerConfig(
+            name: 'a',
+            command: '/usr/bin/a',
+            callTimeout: const Duration(seconds: 2),
+          ),
+          _stdio('b'),
+        ]),
+      );
+      final toolA = session.tools.firstWhere((t) => t.name == 'mcp__a__echo');
+      final toolB = session.tools.firstWhere((t) => t.name == 'mcp__b__echo');
+
+      final callA = toolA.execute(const {}, toolContext());
+      final callB = toolB.execute(const {}, toolContext());
+      await h.clock.elapse(const Duration(seconds: 2));
+      final resultA = await callA;
+
+      expect(
+        resultA.content.whereType<TextContent>().single.text,
+        contains('MCP server a did not answer tools/call within 2 s.'),
+      );
+      expect(a.cancelledRequestIds, hasLength(1));
+      expect(b.cancelledRequestIds, isEmpty);
+
+      await h.clock.elapse(const Duration(seconds: 597));
+      expect(b.cancelledRequestIds, isEmpty, reason: '599 s < 600 s');
+      await h.clock.elapse(const Duration(seconds: 1));
+      final resultB = await callB;
+
+      expect(
+        resultB.content.whereType<TextContent>().single.text,
+        contains('within 600 s.'),
+      );
+      expect(b.cancelledRequestIds, hasLength(1));
+    });
   });
 }
