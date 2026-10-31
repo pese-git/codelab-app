@@ -118,7 +118,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | увеличение ключей `tools.spill.*` (этап 3) | нет | да | глобальный конфиг или проект в `trusted_projects` |
 | `secrets.*` (после MVP, §17.5.9) | нет | нет | только глобальный конфиг; из обоих проектных слоёв отбрасывается всегда с `config.project.untrusted_key` (`ignored: secrets is read only from the global config`) |
 | `config.*` (после MVP) | нет | да | — |
-| `${secret:<name>}` в `headers`, `env` (после MVP, §17.5.4) | нет (подстановка — литерал с предупреждением) | да | проект в `trusted_projects` |
+| `${secret:<name>}` в `headers`, `env` (с этапа 8.9, §17.5.4) | нет: `providers` и `mcp.servers` недоверенного проекта отбрасываются целиком, ссылка до резолвера не доходит (change `add-agent-secret-store`, D4) | да | проект в `trusted_projects` |
 | `steering.enabled = false`; уменьшение `steering.max_steps`, `steering.max_pending`, `steering.max_bytes` (после MVP, §17.7.7) | да (только ужесточение) | да | — |
 | увеличение лимитов `steering.*` (после MVP) | нет | да | проект в `trusted_projects` |
 | `lsp.enabled = false`, `lsp.servers.<id>.enabled = false`; уменьшение `lsp.max_servers`, таймаутов, `max_open_documents`, `rename_max_files`; `diagnostics_after_edit` (после MVP, §17.8.10) | да | да | — |
@@ -187,7 +187,7 @@ providers:
 | `kind` | `"openai-compatible"` \| `"anthropic"` \| `"gemini"` | обязателен, если нет `preset` | адаптер (§2.5, §17.10.3) |
 | `base_url` | string | для `anthropic` — `https://api.anthropic.com`; для `gemini` — `https://generativelanguage.googleapis.com`; для `openai-compatible` обязателен | эндпоинт |
 | `api_key_env` | string | нет | имя переменной окружения с ключом (`[A-Za-z_][A-Za-z0-9_]*`, иначе `expected an environment variable name`) |
-| `api_key_secret` | string | нет | имя секрета в `SecretStore` (keychain) |
+| `api_key_secret` | string | нет | имя секрета (правило `SecretNames`, §17.5.2); значение читает `SecretResolver` при первом запросе к провайдеру, а не загрузка (этап 8.9; change `add-agent-secret-store`, D2, D4) |
 | `auth_header` | string | `Authorization` (Bearer) / `x-api-key` | имя заголовка ключа |
 | `headers` | map string→string | `{}` | дополнительные заголовки; допускают `${ENV}`, после MVP — `${secret:<name>}` (§17.5.4) |
 | `connect_timeout` | duration | `llm.timeouts.connect` (`"30s"`) | заголовки ответа не пришли (§2.4) |
@@ -535,11 +535,13 @@ capability `memory` off), `max_notes` (`500`, `10..10000`, на scope), `note_ma
 | `trace_payload` | bool | `false` | payload кадров; только debug-сборка |
 | `llm_snapshot` | `"off"` \| `"headers"` \| `"body"` | `"off"` | после MVP: снимок запроса при зависании (§17.10.10) |
 
-**`secrets`** (после MVP, §17.5.4) — только глобальный конфиг.
+**`secrets`** (с этапа 8.9, §17.5.4; change `add-agent-secret-store`, D7) — только пользовательский
+конфиг и `--config`/`CODELAB_CONFIG`; из проектных слоёв отбрасывается (§15.3), поэтому репозиторий
+не может переключить агента на открытый файл. Потребитель — хост (`HostSettings.secretsBackend`).
 
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `backend` | `"auto"` \| `"keychain"` \| `"env"` \| `"file"` | `"auto"` | хранилище секретов: ОС-хранилище, если доступно, иначе `env`; `file` — открытый `$CODELAB_HOME/secrets.yaml` с правами `0600` |
+| `backend` | `"auto"` \| `"keychain"` \| `"env"` \| `"file"` | `"auto"` | хранилище секретов. В 1.0: `auto` — `env` на всех ОС, без проб и процессов, `file` не выбирает никогда (CFG-11); `env` — только переменные `CODELAB_SECRET_<…>`; `file` — открытый `$CODELAB_HOME/secrets.yaml` с правами `0600`, на Windows — проблема конфигурации (D14); `keychain` — проблема конфигурации `secrets.backend: keychain is not supported yet (supported: auto, env, file)`, значение остаётся в схеме для хранилищ ОС после 1.0 (черновик `add-agent-os-secret-backends`, D13). Другое значение — проблема `value` `expected one of: auto, keychain, env, file` |
 
 **`config`** (после MVP, §17.5.6) — слои 2 и 4.
 
@@ -584,7 +586,7 @@ loadConfig(cwd, env, flags):
      после MVP: проверка встроенных секретов (CFG-9, §17.5.4) → ConfigInlineSecretException
 4. для слоёв 3–4: применить правила доверия §15.3
 5. merged := merge(layers) по правилам §15.2
-6. interpolate(merged)                                    // ${ENV}, после MVP — ${secret:<name>}; ниже
+6. interpolate(merged)                                    // ${ENV}; ${secret:<name>} — шаблон без чтения (с 8.9, D4); ниже
 7. после MVP: слой предконфигурации envPreconfigLayer(env, flags) (§17.5.3) — первым в слое 5,
      с той же строгой проверкой шагов 3 и 6, без правил доверия
    applyEnv(merged, env); applyFlags(merged, flags)       // §15.6
@@ -710,12 +712,21 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 5. Результат подстановки повторно не раскрывается.
 6. Значения, полученные подстановкой в `headers` и `env`, добавляются в набор точных секретов
    редактора (§12.4).
-7. После MVP (§17.5.4): в значениях `providers.*.headers.*`, `mcp.servers.*.headers.*` и
-   `mcp.servers.*.env.*` допустима форма `${secret:<name>}`, где `<name>` соответствует
-   `SecretNames.pattern`; неверное имя — `ConfigException` на загрузке. Значение берётся из
-   `SecretResolver` при подключении сервера или запросе к провайдеру, а не при загрузке;
-   отсутствующий секрет — ошибка подключения с текстом `secret <name> is not set`. В
-   недоверенном проектном слое 3 форма остаётся литералом с предупреждением (§15.3).
+7. С этапа 8.9 (§17.5.4; change `add-agent-secret-store`, D2, D4): в значениях
+   `providers.*.headers.*`, `mcp.servers.*.headers.*` и `mcp.servers.*.env.*` допустима форма
+   `${secret:<name>}`, где `<name>` проходит правило `SecretNames` (§17.5.2); неверное имя —
+   проблема `value` с путём ключа на загрузке, текст называет правило, а не значение. Загрузка
+   секрет не читает: значение с `${secret:…}` хранится **шаблоном** `SecretTemplate` — списком
+   частей «литерал» и «ссылка», уже после раскрытия `${ENV}` и `$${`. Строкой его хранить нельзя:
+   литерал `$${secret:x}` после раскрытия неотличим от ссылки и раскрылся бы повторно (п. 5). У
+   провайдера шаблоны лежат в `CatalogProvider.headerTemplates`, у MCP-сервера конфига — в
+   `McpServerConfig.secretValues`. Значение берёт `SecretResolver`: у провайдера — при первом
+   запросе, у MCP-сервера конфига — перед подключением к сессии. Ненайденный секрет: провайдер —
+   ошибка хода класса `auth` без HTTP-запроса (`… is not set. Run: codelab secret set <name>`),
+   MCP-сервер — `mcp.server.failed` с причиной `secret <name> is not set`, сессия создаётся без
+   него. `${secret:…}` в серверах `session/new.mcpServers` от клиента ACP — литерал: иначе клиент
+   мог бы вытянуть любой секрет хранилища на свой адрес. Недоверенный проект до резолвера ссылку
+   не доводит: его `providers` и `mcp.servers` отбрасываются целиком (§15.3).
 
 ## 15.6. Переменные окружения и флаги
 
@@ -746,8 +757,8 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | `CODELAB_PROVIDER_TYPE` | `--provider-type <kind>` (после MVP, L-25) | тип провайдера предконфигурации (§17.5.3) |
 | `CODELAB_PROVIDER_CONFIG` | `--provider-config <json \| @путь>` (после MVP) | JSON провайдера предконфигурации; флаги затеняют обе переменные |
 | `CODELAB_PROVIDER_CONFIG_BASE64` | — (после MVP) | тот же JSON в base64; вместе с `CODELAB_PROVIDER_CONFIG` — ошибка |
-| `CODELAB_SECRET_<ИМЯ>` | — (после MVP, P-12) | переопределение секрета по имени, `SecretNames.envOverride` (§17.5.4) |
-| `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` (после MVP, P-17) | лог каждого обращения к секретам без значений |
+| `CODELAB_SECRET_<ИМЯ>` | — (с этапа 8.9, P-12; change `add-agent-secret-store`, D3) | переопределение секрета по имени, `SecretNames.envOverride` (§17.5.4): побеждает хранилище при любом `secrets.backend`; при `auto`/`env` в 1.0 — единственный источник секретов |
+| `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` (с этапа 8.9, P-17, флаг `serve`; change `add-agent-secret-store`, D10, D11) | событие `secrets.lookup {name, purpose, source, found}` на каждое обращение, без значения, длины, префикса и хеша (CFG-10); уровень лога не меняет; другие значения переменной — как незаданная |
 | — | `--debug-llm-snapshot[=headers\|body]` (после MVP, L-27) | `logging.llm_snapshot` |
 | `CODELAB_DEBUG_LLM_SNAPSHOT` | — | `logging.llm_snapshot` |
 

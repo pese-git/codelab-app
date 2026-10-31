@@ -110,7 +110,7 @@ codelab config get|set|unset|path|check ...   конфиг встроенног�
 codelab config export-providers|import-providers ...   обмен провайдерами без секретов (agent-core §17.14.4)
 codelab provider add|list|remove ...          провайдеры; add без флагов на TTY — мастер (§12.4.4)
 codelab mcp add|list|remove ...               MCP-серверы в конфиге
-codelab secret set|delete|list ...            хранилище секретов
+codelab secret set|delete|list ...            секреты агента (8.9: бэкенды env и file)
 codelab update [--check] [--channel stable|beta|pinned] [--version <x.y.z>] [--allow-downgrade] [--yes]   самообновление (после MVP, §12.6.4)
 codelab login <provider> [--device] [--no-browser] [--timeout <duration>]   вход по подписке (после MVP, agent-core §17.10.6)
 codelab logout <provider>                     удалить токен входа (после MVP, agent-core §17.10.6)
@@ -140,6 +140,26 @@ D12). В 8.5 создаётся минимальный пакет `codelab_setup
 `config needs a subcommand: codelab config check [--cwd <dir>]`; остальные подкоманды `config` до своих
 задач дают код 64 `Unknown command config <sub>`. `package:codelab_setup/io.dart` импортируется в
 `apps/codelab_cli/lib/src` только из `run.dart` (сторож).
+
+`codelab secret set|delete|list` (этап 8, задача 8.9; change `add-agent-secret-store`, D1, D7, D8)
+регистрируется так же, как `config check`: `CliCommand.secret` в `cli_args.dart`, вызов в `run.dart`
+через `package:codelab_setup/io.dart`, который реэкспортирует `SecretCommands` из
+`codelab_agent_io`. CLI только разбирает аргументы своим `package:args`; тексты, правила и коды
+выхода — в `SecretCommands`, поэтому stdout, stderr и код совпадают с `codelab-agent secret`
+(agent-core-architecture §17.5.4, абзац «CLI»). Бэкенд подкоманды берут из `secrets.backend` в
+`$CODELAB_HOME/config.yaml` и файле `CODELAB_CONFIG` — и только этот ключ, без полной загрузки
+конфига: невалидный конфиг с ключом, вписанным значением, не блокирует `secret set`, который его
+чинит. **В 1.0 запись возможна только с `secrets.backend: file`** (открытый `$CODELAB_HOME/secrets.yaml`,
+`0600`, только macOS и Linux): `auto` в 1.0 — бэкенд `env` (только чтение `CODELAB_SECRET_*`), и
+`secret set` отвечает кодом 1 с подсказкой `secrets.backend: file` или переменной; на Windows
+доступен только `env`; хранилища ОС — после 1.0 (черновик `add-agent-os-secret-backends`). `set`
+читает значение только из stdin (с TTY — без эха), значение аргументом — код 64. Флаги подключения
+и запроса вместе с `secret` — код 64, как у `config`; `codelab secret` без подкоманды — код 64 и
+`secret needs a subcommand: codelab secret set|delete|list`, неизвестная — код 64 и `Unknown command
+secret <sub>`. Подкоманды не запускают агента, не создают `sessions/`, `profiles.json` и
+`cli_history`; файл `secrets.yaml` пишут только `set` и `delete` при бэкенде `file`, создаёт —
+только `set`. Сторож и `cliAllowlist` не меняются: `codelab_setup/io.dart` по-прежнему
+импортируется только из `run.dart`.
 
 Скрипт прогона Terminal-Bench (`tool/bench/`, H-06) вызывает обычный `codelab -f …
 --output-format stream-json --approve allow-all` только внутри контейнера задачи
