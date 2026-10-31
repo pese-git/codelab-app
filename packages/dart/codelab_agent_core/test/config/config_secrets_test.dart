@@ -81,14 +81,15 @@ void main() {
       },
     });
 
-    test('is read from the environment at load time', () {
+    test('is not read at load time: the provider keeps a reference', () {
       final result = load(
         [layer(withKeyEnv())],
         environment: {'OPENAI_API_KEY': _secret},
       );
 
       final config = result.config!;
-      expect(config.providers.single.config.apiKey, _secret);
+      expect(config.providers.single.config.apiKey, isNull);
+      expect(config.providers.single.key, isA<EnvKeyRef>());
       expect(config.providerProblems, isEmpty);
       expect(result.warnings, isEmpty);
       expect(result.warnings.join(), isNot(contains(_secret)));
@@ -131,79 +132,6 @@ void main() {
       final issue = issuesAt(result, 'providers.p.api_key_secret').single;
       expect(issue.kind, ConfigIssueKind.value);
       expect(issue.message, contains('mutually exclusive'));
-    });
-  });
-
-  group('before the secret store (D8)', () {
-    test('api_key_secret is accepted; choosing the provider gets a '
-        'reason', () {
-      final result = load([
-        layer(
-          withValues(baseValues(), {
-            'providers': {
-              'p': {'api_key_secret': 'codelab/anthropic'},
-            },
-          }),
-        ),
-      ]);
-
-      expect(result.issues, isEmpty);
-      expect(warningsOf(result, 'config.secret.unavailable').single.fields, {
-        'key': 'providers.p.api_key_secret',
-      });
-      expect(
-        result.config!.providerProblems['p'],
-        'API key secret codelab/anthropic cannot be read: the secret store '
-        'is not available yet',
-      );
-    });
-
-    test(r'a ${secret:...} in a provider header gives the same reason', () {
-      final result = load([
-        layer(
-          withValues(baseValues(), {
-            'providers': {
-              'p': {
-                'headers': {'X-Key': r'${secret:codelab/p/key}'},
-              },
-            },
-          }),
-        ),
-      ]);
-
-      expect(warningsOf(result, 'config.secret.unavailable').single.fields, {
-        'key': 'providers.p.headers.X-Key',
-      });
-      expect(result.config!.providerProblems['p'], contains('codelab/p/key'));
-    });
-
-    test(r'an MCP server with ${secret:...} is skipped, the rest of the '
-        'config works', () {
-      final result = load([
-        layer(
-          withValues(baseValues(), {
-            'mcp': {
-              'servers': [
-                {
-                  'name': 'gh',
-                  'type': 'http',
-                  'url': 'https://gh.test/mcp',
-                  'headers': {
-                    'Authorization': r'${secret:codelab/mcp/gh/authorization}',
-                  },
-                },
-                {'name': 'ok', 'type': 'stdio', 'command': 'ok-mcp'},
-              ],
-            },
-          }),
-        ),
-      ]);
-
-      expect(result.issues, isEmpty);
-      expect([for (final s in result.config!.mcpServers) s.name], ['ok']);
-      expect(warningsOf(result, 'config.secret.unavailable').single.fields, {
-        'key': 'mcp.servers[gh].headers.Authorization',
-      });
     });
   });
 
