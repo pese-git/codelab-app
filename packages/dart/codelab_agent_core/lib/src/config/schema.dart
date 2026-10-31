@@ -145,7 +145,6 @@ const afterMvpSections = [
   'memory',
   'steering',
   'lsp',
-  'secrets',
   'config',
 ];
 
@@ -312,6 +311,11 @@ final SectionNode rootSchema = SectionNode({
     'block': _opaque,
     'command_rewrite': _opaque,
   }),
+  // Хранилище секретов (этап 8.9, design.md change `add-agent-secret-store`,
+  // D7). Допустимость значения проверяет `resolve.dart`: текст проблемы
+  // `expected one of: auto, keychain, env, file` задан спецификацией и
+  // отличается от общего текста `allowed`.
+  'secrets': SectionNode({'backend': _str}),
   'profile': SectionNode(
     {},
     named: SectionNode({}, named: ProfileValueNode(), nameLabel: 'capability'),

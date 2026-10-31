@@ -86,10 +86,11 @@ final class CoreConfig {
   /// уже разобранным деревом (CFG-5); мобильный и web-хосты передают слои
   /// без позиций и получают ту же проверку.
   ///
-  /// Как использовать: [environment] — переменные для `${ENV}` и
-  /// `api_key_env`; [projectRoot] — канонический корень проектных слоёв
-  /// (доверие §15.3 и [withoutProject], D9). Исключений не бросает: либо
-  /// `config` без проблем, либо непустой `issues`.
+  /// Как использовать: [environment] — переменные для `${ENV}` и проверки
+  /// `api_key_env` (само значение ключа загрузка не читает, D4);
+  /// [projectRoot] — канонический корень проектных слоёв (доверие §15.3 и
+  /// [withoutProject], D9). Исключений не бросает: либо `config` без проблем,
+  /// либо непустой `issues`.
   static ConfigLoadResult fromLayers(
     List<ConfigTree> layers, {
     required Map<String, String> environment,
@@ -117,9 +118,11 @@ final class CoreConfig {
   /// (`createRoutedStreamFunction`, D11).
   final List<CatalogProvider> providers;
 
-  /// Провайдер → причина, по которой его ключ недоступен (`api_key_env` не
-  /// задана, секрет не читается, D8). Выбор такой модели даёт ошибку хода без
-  /// HTTP-запроса.
+  /// Провайдер → причина, по которой его ключ недоступен заранее:
+  /// переменная `api_key_env` не задана (быстрый отказ, D4). Выбор такой
+  /// модели даёт ошибку хода без HTTP-запроса. Записей о секретах здесь нет:
+  /// `api_key_secret` и `${secret:…}` разрешаются при первом запросе
+  /// (design.md change `add-agent-secret-store`, D4).
   final Map<String, String> providerProblems;
 
   /// Проверенные ключи `redact.*`.

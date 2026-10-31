@@ -29,6 +29,8 @@ import '../permissions/policy.dart';
 import '../project/project_context.dart';
 import '../project/project_files.dart';
 import '../prompts/compose.dart';
+import '../secrets/secret_lookup.dart';
+import '../secrets/secret_resolver.dart';
 import '../session/ids.dart';
 import '../session/projections.dart';
 import '../session/records.dart';
@@ -852,7 +854,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
     required ToolRegistry registry,
     required _McpState state,
   }) async {
-    final accepted = _planMcp(id, logger, settings, servers);
+    final planned = _planMcp(id, logger, settings, servers);
+    final accepted = await _expandMcpSecrets(
+      id,
+      logger,
+      planned,
+      state.cancel.token,
+    );
     if (accepted.isEmpty) {
       return;
     }
@@ -949,6 +957,94 @@ final class AgentRuntimeImpl implements AgentRuntime {
     return accepted;
   }
 
+  /// Раскрывает шаблоны `${secret:…}` серверов конфигурации через
+  /// `services.secrets` перед `connect` (design.md change
+  /// `add-agent-secret-store`, D4; agent-secrets «Секреты MCP-серверов
+  /// конфигурации»).
+  ///
+  /// Почему здесь: значения нужны только на момент подключения, и держать их
+  /// в `CoreConfig` строками нельзя (CFG-10: в лог и журнал они не
+  /// попадают). Серверы без шаблонов — клиента ACP и конфига без ссылок —
+  /// проходят как есть: `${secret:…}` от клиента остаётся литералом.
+  ///
+  /// Серверы раскрываются параллельно. Секрет не найден или хранилище
+  /// недоступно — сервер выпадает из списка с `mcp.server.failed {server,
+  /// transport, reason}`, остальные подключаются. Ожидание ограничено
+  /// [cancel] (`close()` сессии или `dispose()` рантайма): отмена бросает
+  /// [CancelledException], результат отбрасывается и `connect` не вызывается;
+  /// запоздавшие значения только наполнят кэш резолвера. Лог получает
+  /// причину с именем секрета, без значения.
+  Future<List<McpServerConfig>> _expandMcpSecrets(
+    SessionId id,
+    Logger logger,
+    List<McpServerConfig> servers,
+    CancelToken cancel,
+  ) async {
+    if (servers.every((server) => server.secretValues.isEmpty)) {
+      return servers;
+    }
+    final resolver = services.secrets;
+    final work = Future.wait([
+      for (final server in servers) _expandServerSecrets(server, resolver),
+    ]);
+    await Future.any<void>([work, cancel.onCancel]);
+    cancel.throwIfCancelled();
+    final results = await work;
+    cancel.throwIfCancelled();
+    final expanded = <McpServerConfig>[];
+    for (final (index, (server, reason)) in results.indexed) {
+      if (server != null) {
+        expanded.add(server);
+        continue;
+      }
+      logger.log(
+        LogLevel.warning,
+        'mcp.server.failed',
+        fields: {
+          'session_id': id.value,
+          'server': servers[index].name,
+          'transport': servers[index].transport,
+          'reason': reason,
+        },
+      );
+    }
+    return expanded;
+  }
+
+  /// Один сервер: раскрытый конфиг или причина отказа; не бросает.
+  Future<(McpServerConfig?, String?)> _expandServerSecrets(
+    McpServerConfig server,
+    SecretResolver? resolver,
+  ) async {
+    if (server.secretValues.isEmpty) {
+      return (server, null);
+    }
+    if (resolver == null) {
+      return (null, 'no secret store');
+    }
+    final values = <String, String>{};
+    for (final MapEntry(key: field, value: template)
+        in server.secretValues.entries) {
+      final purpose = 'mcp.servers[${server.name}].$field';
+      final found = <String, String>{};
+      for (final name in template.names) {
+        switch (await resolver.secret(name, purpose: purpose)) {
+          case SecretFound(:final value):
+            found[name] = value;
+          case SecretMissing():
+            return (null, 'secret $name is not set');
+          case SecretUnavailable(:final backend):
+            return (
+              null,
+              'secret $name cannot be read: $backend is unavailable',
+            );
+        }
+      }
+      values[field] = template.render(found);
+    }
+    return (server.withSecrets(values), null);
+  }
+
   /// Подключает принятые серверы; сбой коннектора целиком не роняет сессию.
   Future<void> _connectAccepted({
     required SessionId id,
@@ -995,12 +1091,18 @@ final class AgentRuntimeImpl implements AgentRuntime {
     required ToolRegistry registry,
     required _McpState state,
   }) async {
-    final accepted = _planMcp(
+    final planned = _planMcp(
       id,
       logger,
       settings,
       servers,
       logConfigSkips: false,
+    );
+    final accepted = await _expandMcpSecrets(
+      id,
+      logger,
+      planned,
+      state.cancel.token,
     );
     final current = state.tools;
     if (current == null) {
@@ -1556,6 +1658,11 @@ final class _Session implements AgentSession {
       _agent
         ..tools = _visibleTools()
         ..systemPrompt = _compose(cwd, _mode, _activeAgent);
+    } on CancelledException {
+      // `close()` или `dispose()` во время раскрытия секретов: результат
+      // отбрасывается без записи `mcp.server.failed` (agent-secrets
+      // «Секреты MCP-серверов конфигурации», D4).
+      return;
     } on Object catch (error, stack) {
       _logger.log(
         LogLevel.warning,

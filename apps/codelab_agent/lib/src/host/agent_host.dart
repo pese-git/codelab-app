@@ -99,6 +99,16 @@ final class AgentHost {
     // HTTP-клиент хоста: один на процесс, им пользуются провайдеры LLM и
     // streamable HTTP MCP-серверов; закрывается в `shutdown` (PKG-6).
     final client = httpClient ?? http.Client();
+    // Один резолвер на процесс: им пользуются функция модели (ключ и заголовки
+    // провайдеров, при первом запросе) и ядро (MCP-серверы конфигурации, перед
+    // подключением; D4). В итерации 1 бэкенд — только `env`; выбор по
+    // `secrets.backend` и `--debug-secrets` приходят с `openHostSecrets`
+    // (задачи 6.4, 7.2).
+    final secrets = SecretResolver(
+      store: const _EnvSecretStore(),
+      environment: options.environment,
+      logger: logger,
+    );
     if (options.llmScript case final path?) {
       // Сценарий не трогает `$CODELAB_HOME`: журнал на диске — только в
       // каталоге `--sessions-dir` (D1 change `add-llm-script-session-store`),
@@ -157,6 +167,16 @@ final class AgentHost {
           logger: logger,
         ),
         unavailable: config.providerProblems,
+        keys: {
+          for (final provider in config.providers)
+            provider.config.name: ?provider.key,
+        },
+        headerTemplates: {
+          for (final provider in config.providers)
+            if (provider.headerTemplates.isNotEmpty)
+              provider.config.name: provider.headerTemplates,
+        },
+        secrets: secrets,
       );
       sessions = JsonlSessionStore(
         root: settings.sessionsDir ?? '${options.codelabHome}/sessions',
@@ -215,6 +235,7 @@ final class AgentHost {
         sessions: sessions,
         platform: Platform.operatingSystem,
         models: catalog,
+        secrets: secrets,
         // Файлы проекта сессии: `AGENTS.md`/`CLAUDE.md` в системный промпт.
         // Читаются с локальной ФС процесса только по stdio: по WebSocket
         // загрузчик не передаётся (D2). Сценарий `--llm-script` не трогает `$CODELAB_HOME`
@@ -285,6 +306,44 @@ final class AgentHost {
     await core.runtime.dispose();
     _httpClient.close();
   }
+}
+
+/// Временный бэкенд `env` для резолвера хоста (design.md change
+/// `add-agent-secret-store`, D3, Migration Plan, итерация 1).
+///
+/// Почему отдельный маленький класс: `EnvSecretStore` и `openHostSecrets`
+/// появляются в `codelab_agent_io` в итерациях 2–3 (задачи 5.3, 6.4), а ключи
+/// `api_key_env` и переменные `CODELAB_SECRET_*` должны работать уже сейчас.
+/// Переменные `CODELAB_SECRET_<…>` читает сам `SecretResolver` до обращения к
+/// хранилищу, поэтому бэкенду нечего читать: он только сообщает `id: env` и
+/// отказывает в записи, как настоящий `EnvSecretStore` (D5).
+///
+/// Как использовать: никак снаружи; задача 7.2 заменяет его результатом
+/// `openHostSecrets`.
+final class _EnvSecretStore implements DescribedSecretStore {
+  const _EnvSecretStore();
+
+  @override
+  SecretBackendInfo get backend =>
+      const SecretBackendInfo(id: 'env', writable: false);
+
+  @override
+  Future<String?> read(String name) async => null;
+
+  @override
+  Future<void> write(String name, String value) async =>
+      // `async`: отказ приходит завершённым с ошибкой Future, а не
+      // синхронным исключением из вызова порта.
+      throw const SecretStoreUnavailableException(
+        backend: 'env',
+        reason: 'env backend is read-only',
+      );
+
+  @override
+  Future<void> delete(String name) => write(name, '');
+
+  @override
+  Future<List<String>> names() async => const [];
 }
 
 /// Gate сборки: включает `interactiveApproval`, а вопросы задаёт

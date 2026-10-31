@@ -8,6 +8,8 @@ import '../loop/turn_budget.dart';
 import '../permissions/modes.dart';
 import '../permissions/pattern.dart';
 import '../permissions/policy.dart';
+import '../secrets/secret_names.dart';
+import '../secrets/secret_template.dart';
 import '../tools/agent_tool.dart' show ToolTier;
 import '../util/logger.dart';
 import 'config_issue.dart';
@@ -273,16 +275,6 @@ List<ConfigIssue> _trustedProjectsPaths(
 
 final _envName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
 
-/// Имя секрета: непустое, без пробелов и управляющих символов (решение
-/// архитектора: точный `SecretNames.pattern` введёт change
-/// `add-agent-secret-store`). Главное — значение ключа, вписанное вместо
-/// имени, не должно пройти молча в сообщения: такие значения обычно
-/// содержат пробелы или не помещаются в длину.
-bool _validSecretName(String name) =>
-    name.isNotEmpty &&
-    name.length <= 128 &&
-    !RegExp(r'[\s\x00-\x1f\x7f]').hasMatch(name);
-
 final class _SilentLogger implements Logger {
   const _SilentLogger();
 
@@ -338,6 +330,7 @@ final class _Builder {
     final redact = _redact();
     final profiles = _profiles();
     final projectContextMaxBytes = _projectContextMaxBytes();
+    final secretsBackend = _secretsBackend();
 
     if (issues.isNotEmpty || model == null) {
       return;
@@ -363,6 +356,7 @@ final class _Builder {
         null => null,
       },
       logFile: _path(['logging', 'file']),
+      secretsBackend: secretsBackend,
       profileNarrowing: profiles,
     );
   }
@@ -506,6 +500,34 @@ final class _Builder {
     );
   }
 
+  /// `secrets.backend` (D7): `auto` | `env` | `file`. `keychain` в схеме
+  /// остаётся, чтобы будущий change хранилищ ОС не менял её, но пока даёт
+  /// проблему конфигурации; текст `expected one of: …` задан спецификацией
+  /// agent-secrets «Выбор бэкенда secrets.backend».
+  String? _secretsBackend() {
+    final value = _str(['secrets', 'backend']);
+    if (value == null) {
+      return null;
+    }
+    switch (value) {
+      case 'auto' || 'env' || 'file':
+        return value;
+      case 'keychain':
+        _bad(
+          ['secrets', 'backend'],
+          'keychain is not supported yet (supported: auto, env, file)',
+          kind: ConfigIssueKind.value,
+        );
+      default:
+        _bad(
+          ['secrets', 'backend'],
+          'expected one of: auto, keychain, env, file',
+          kind: ConfigIssueKind.value,
+        );
+    }
+    return null;
+  }
+
   // ---- провайдеры ---------------------------------------------------------
 
   List<CatalogProvider> _providers(Map<String, String> problems) {
@@ -546,6 +568,7 @@ final class _Builder {
         rawBase,
         _kp([...at, 'base_url']),
         _origin([...at, 'base_url']),
+        allowSecrets: false,
       )?.text;
       if (base == null) {
         return null;
@@ -598,10 +621,10 @@ final class _Builder {
     }
     const defaultRetry = RetryPolicy();
 
-    // Заголовки: `${ENV}` раскрывается, `${secret:…}` до change
-    // `add-agent-secret-store` читать нечем (D8).
+    // Заголовки: `${ENV}` раскрывается сразу, значение со ссылкой
+    // `${secret:…}` остаётся шаблоном до первого запроса к провайдеру (D4).
     final headers = <String, String>{};
-    String? secretProblem;
+    final headerTemplates = <String, SecretTemplate>{};
     final rawHeaders = _map([...at, 'headers']) ?? const {};
     for (final MapEntry(key: name, value: value) in rawHeaders.entries) {
       final path = _kp([...at, 'headers', name]);
@@ -614,19 +637,10 @@ final class _Builder {
         continue;
       }
       if (expanded.secrets.isNotEmpty) {
-        secretProblem ??=
-            'API key secret ${expanded.secrets.first} cannot be read: the '
-            'secret store is not available yet';
-        _warn(
-          'config.secret.unavailable',
-          path.value,
-          _origin([...at, 'headers', name]),
-          'secrets cannot be read until the secret store is available',
-          fields: {'key': path.value},
-        );
-        continue;
+        headerTemplates[name] = expanded.template;
+      } else {
+        headers[name] = expanded.text;
       }
-      headers[name] = expanded.text;
     }
 
     final keyEnv = _str([...at, 'api_key_env']);
@@ -642,15 +656,20 @@ final class _Builder {
       );
       return null;
     }
-    if (keySecret != null && !_validSecretName(keySecret)) {
+    if (keySecret != null && SecretNames.problem(keySecret) != null) {
       _bad(
         [...at, 'api_key_secret'],
-        'expected a secret name (no spaces or control characters)',
+        SecretNames.problem(keySecret)!,
         kind: ConfigIssueKind.value,
       );
       return null;
     }
-    String? apiKey;
+    // Значение ключа загрузка не читает (D4): провайдер хранит ссылку, а
+    // `createRoutedStreamFunction` разрешает её при первом запросе через
+    // `SecretResolver`. Незаданная переменная остаётся быстрым отказом
+    // (сценарий «Переменная ключа не задана»): окружение процесса не
+    // меняется, поэтому ответ при запросе был бы тем же.
+    ProviderKeyRef? key;
     if (keyEnv != null && keySecret != null) {
       _bad(
         [...at, 'api_key_secret'],
@@ -659,6 +678,7 @@ final class _Builder {
       );
       return null;
     } else if (keyEnv != null) {
+      key = EnvKeyRef(keyEnv);
       final value = environment[keyEnv];
       if (value == null || value.isEmpty) {
         problems[id] = 'API key variable $keyEnv is not set';
@@ -669,31 +689,15 @@ final class _Builder {
           'the environment variable with the API key is not set',
           fields: {'provider': id, 'variable': keyEnv},
         );
-      } else {
-        apiKey = value;
       }
     } else if (keySecret != null) {
-      final path = _kp([...at, 'api_key_secret']);
-      problems[id] =
-          'API key secret $keySecret cannot be read: the secret store is '
-          'not available yet';
-      _warn(
-        'config.secret.unavailable',
-        path.value,
-        _origin([...at, 'api_key_secret']),
-        'secrets cannot be read until the secret store is available',
-        fields: {'key': path.value},
-      );
-    }
-    if (secretProblem != null) {
-      problems.putIfAbsent(id, () => secretProblem!);
+      key = SecretKeyRef(keySecret);
     }
 
     final provider = ProviderConfig(
       name: id,
       api: api,
       baseUrl: baseUrl,
-      apiKey: apiKey,
       headers: headers,
       authHeader: _str([...at, 'auth_header']),
       reasoningFormat: switch (_str([...at, 'reasoning_format'])) {
@@ -725,7 +729,12 @@ final class _Builder {
         models[model] = info;
       }
     }
-    return CatalogProvider(provider, models: models);
+    return CatalogProvider(
+      provider,
+      models: models,
+      key: key,
+      headerTemplates: headerTemplates,
+    );
   }
 
   ModelInfo? _modelInfo(List<String> at) {
@@ -778,11 +787,17 @@ final class _Builder {
   /// Раскрывает `${NAME}` в значении разрешённого ключа (§15.5). Незаданная
   /// переменная — проблема с путём ключа и именем переменной (значение не
   /// попадает в текст), результат — `null`.
-  ({String text, List<String> secrets})? _interpolate(
+  ///
+  /// Ссылки `${secret:<name>}` не читаются: имя проверяет `SecretNames`
+  /// (текст проблемы называет правило, а не имя), а значение остаётся
+  /// шаблоном `template` (D4). [allowSecrets] `false` — ключ, где ссылка на
+  /// секрет недопустима (argv, URL): это проблема, а не молчаливый литерал.
+  ({String text, List<String> secrets, SecretTemplate template})? _interpolate(
     String raw,
     KeyPath path,
-    ConfigTree origin,
-  ) {
+    ConfigTree origin, {
+    bool allowSecrets = true,
+  }) {
     final expansion = expandEnvironment(raw, environment);
     if (expansion.missing.isNotEmpty) {
       for (final name in expansion.missing.toSet()) {
@@ -795,18 +810,27 @@ final class _Builder {
       }
       return null;
     }
+    if (expansion.secretRefs.isNotEmpty && !allowSecrets) {
+      _issue(
+        ConfigIssueKind.value,
+        path,
+        r'secret references ${secret:…} are allowed only in env and headers '
+        'values',
+        origin: origin,
+      );
+      return null;
+    }
     for (final name in expansion.secretRefs) {
-      if (!_validSecretName(name)) {
-        _issue(
-          ConfigIssueKind.value,
-          path,
-          'expected a secret name in \${secret:…} (no spaces or control characters)',
-          origin: origin,
-        );
+      if (SecretNames.problem(name) case final problem?) {
+        _issue(ConfigIssueKind.value, path, problem, origin: origin);
         return null;
       }
     }
-    return (text: expansion.text, secrets: expansion.secretRefs);
+    return (
+      text: expansion.text,
+      secrets: expansion.secretRefs,
+      template: expansion.template,
+    );
   }
 
   // ---- MCP-серверы конфигурации (D10) -------------------------------------
@@ -884,20 +908,34 @@ final class _Builder {
       return null;
     }
 
-    // Значение после подстановки — возможный секрет; ссылки на секреты до
-    // хранилища пропускают сервер (D8).
+    // Значение после подстановки — возможный секрет. Ссылки `${secret:…}`
+    // допустимы только в `env` и `headers`: они остаются шаблонами в
+    // `secretValues` и раскрываются рантаймом перед `connect` (D4). В `args`
+    // и `url` ссылка недопустима: argv и URL видны в списке процессов и
+    // логах.
     var failed = false;
-    var secretKey = '';
     String? expand(String value, KeyPath path) {
+      final result = _interpolate(value, path, origin, allowSecrets: false);
+      if (result == null) {
+        failed = true;
+        return null;
+      }
+      return result.text;
+    }
+
+    final secretValues = <String, SecretTemplate>{};
+    // Значение `env`/`headers`: строка или шаблон (тогда в [secretValues]).
+    String? expandValue(String value, KeyPath path, String templateKey) {
       final result = _interpolate(value, path, origin);
       if (result == null) {
         failed = true;
         return null;
       }
-      if (result.secrets.isNotEmpty && secretKey.isEmpty) {
-        secretKey = path.value;
+      if (result.secrets.isEmpty) {
+        return result.text;
       }
-      return result.text;
+      secretValues[templateKey] = result.template;
+      return null;
     }
 
     McpServerConfig? server;
@@ -915,7 +953,14 @@ final class _Builder {
       final env = <String, String>{};
       for (final MapEntry(:key, :value)
           in (raw['env'] as Map<String, Object?>? ?? const {}).entries) {
-        env[key] = expand(value! as String, at.child('env').child(key)) ?? '';
+        final text = expandValue(
+          value! as String,
+          at.child('env').child(key),
+          'env.$key',
+        );
+        if (text != null) {
+          env[key] = text;
+        }
       }
       server = McpStdioServerConfig(
         name: name,
@@ -925,6 +970,7 @@ final class _Builder {
         origin: McpServerOrigin.config,
         connectTimeout: connect ?? defaultMcpConnectTimeout,
         callTimeout: call,
+        secretValues: secretValues,
       );
     } else {
       final rawUrl = raw['url'];
@@ -934,12 +980,23 @@ final class _Builder {
       }
       final text = expand(rawUrl, at.child('url'));
       final headers = <(String, String)>[];
+      // Индекс заголовка-шаблона среди всех заголовков файла: раскрытие
+      // вернёт его на место, а не в конец (D4).
+      final positions = <String, int>{};
+      var index = 0;
       for (final MapEntry(:key, :value)
           in (raw['headers'] as Map<String, Object?>? ?? const {}).entries) {
-        headers.add((
-          key,
-          expand(value! as String, at.child('headers').child(key)) ?? '',
-        ));
+        final expanded = expandValue(
+          value! as String,
+          at.child('headers').child(key),
+          'headers.$key',
+        );
+        if (expanded != null) {
+          headers.add((key, expanded));
+        } else if (secretValues.containsKey('headers.$key')) {
+          positions[key] = index;
+        }
+        index++;
       }
       final url = text == null ? null : Uri.tryParse(text);
       if (!failed &&
@@ -958,22 +1015,11 @@ final class _Builder {
               origin: McpServerOrigin.config,
               connectTimeout: connect ?? defaultMcpConnectTimeout,
               callTimeout: call,
+              secretValues: secretValues,
+              secretHeaderPositions: positions,
             );
     }
-    if (failed) {
-      return null;
-    }
-    if (secretKey.isNotEmpty) {
-      _warn(
-        'config.secret.unavailable',
-        secretKey,
-        origin,
-        'secrets cannot be read until the secret store is available',
-        fields: {'key': secretKey},
-      );
-      return null;
-    }
-    return server;
+    return failed ? null : server;
   }
 
   // ---- редакция секретов (§12.4.3) ----------------------------------------

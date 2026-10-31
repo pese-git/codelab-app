@@ -3,6 +3,7 @@ import '../llm/model_catalog.dart';
 import '../mcp/mcp_connector.dart';
 import '../permissions/gate.dart';
 import '../project/project_files.dart';
+import '../secrets/secret_resolver.dart';
 import '../session/session_store.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
@@ -27,6 +28,7 @@ final class AgentCoreServices {
     this.models,
     this.mcp,
     this.projectFiles,
+    this.secrets,
   });
 
   /// Local | ACP client | memory (tests).
@@ -67,4 +69,14 @@ final class AgentCoreServices {
   /// промпт, позже — шаблоны команд и определения агентов. `null` — файлов
   /// проекта нет (web, мобильные хосты, тесты): поведение прежнее.
   final ProjectFilesSource? projectFiles;
+
+  /// Резолвер секретов хоста (design.md change `add-agent-secret-store`, D3,
+  /// D4): ядро берёт через него значения `${secret:…}` в `env` и `headers`
+  /// MCP-серверов конфигурации перед подключением. Хост передаёт тот же
+  /// резолвер, что и в `createRoutedStreamFunction(…, secrets:)`: функцию
+  /// модели он строит раньше ядра, а для переменных `CODELAB_SECRET_*` нужно
+  /// окружение процесса, которого у ядра нет. `null` — секретов нет (web без
+  /// хранилища, тесты): сервер со ссылкой не подключается, причина
+  /// `no secret store`.
+  final SecretResolver? secrets;
 }
