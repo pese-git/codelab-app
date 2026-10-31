@@ -77,6 +77,13 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// Переменные `CODELAB_*`, которые знают ядро и его хосты (`agent-core-
 /// architecture` §15.6). Другие дают предупреждение: опечатка не должна
 /// молча игнорироваться.
+///
+/// `CODELAB_TEST_SECRET_STORE` (каталог тестового хранилища секретов) известен
+/// только в сборке с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true`: в
+/// обычной сборке переменная не читается, каталог не создаётся, а
+/// `config.env.unknown` называет её имя (§15.6; design.md change
+/// `add-agent-secret-store`, D14). Условие вычисляется при компиляции:
+/// окружением процесса его не включить (§12.4.13).
 const _knownVariables = {
   'CODELAB_HOME',
   'CODELAB_CONFIG',
@@ -92,7 +99,8 @@ const _knownVariables = {
   'CODELAB_DEBUG_LLM_SNAPSHOT',
   'CODELAB_AGENT_TOKEN',
   'CODELAB_POWER_HELPER',
-  'CODELAB_TEST_SECRET_STORE',
+  if (bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS'))
+    'CODELAB_TEST_SECRET_STORE',
 };
 
 /// Семейства переменных, известные целиком (§15.6).
