@@ -46,6 +46,8 @@
 | `exec` с кодом 1 | окружение | результат-ошибка с выводом и кодом; ход продолжается |
 | в профиле `mobile` включён `shellExec` | конфигурация | `HostWiringException` при `buildAgentCore`, агент не стартует |
 | 429 без свободного ключа и резервной модели (после MVP, §17.10.4.1) | работа | `AgentError(cls: provider, errorClass: rateLimited, rateLimit: …)`, текст `Rate limit reached for openai/gpt-4.1: too many requests. Resets in 3 h.`; тело ответа — только лог debug |
+| `api_key_secret: codelab/openai`, секрет не задан ни в хранилище, ни в `CODELAB_SECRET_CODELAB_OPENAI` (с этапа 8.9; change `add-agent-secret-store`, D4) | работа | при первом запросе к провайдеру, без HTTP-запроса: `AgentError(cls: provider, errorClass: auth)`, текст `API key secret codelab/openai is not set. Run: codelab secret set codelab/openai`; хранилище недоступно — `… cannot be read: <backend> is unavailable (<reason>). Set CODELAB_SECRET_CODELAB_OPENAI or fix the secret store`. Цепочка провайдера не кэшируется: следующий ход разрешает ключ заново. ACP — тот же путь, что у 401 (§13.8) |
+| в конфиге `secrets.backend: keychain` (в 1.0; change `add-agent-secret-store`, D7) | конфигурация | проблема `secrets.backend: keychain is not supported yet (supported: auto, env, file)`; бинарь — stderr и код `64` до старта транспорта |
 | в конфиге неизвестный ключ `compaction.reserve_token` | конфигурация | `ConfigLoadResult.issues` с `ConfigIssue(kind: unknownKey)`, текст `config.yaml:3:3: compaction.reserve_token: unknown key (did you mean reserve_tokens?)`; бинарь — stderr и код `64` до старта транспорта, `orThrow()` — `ConfigException` |
 
 ## 12.3. Контракт: Logger
@@ -84,7 +86,7 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`trace`), `mcp.servers.replace_failed`, `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
 | `acp` | `acp.frame.in`, `acp.frame.out`, `acp.frame.bad`, `acp.cancel.no_turn`, `acp.prompt.rejected`, `acp.detached`, `acp.client_capabilities.absent` (§13.2), `acp.terminal.release_failed` (§13.9) |
 | `host` | `host.plan`, `host.config.loaded`, `serve.config.invalid` (бинарь `serve`, ошибка загрузки конфига) |
-| `config` | `config.env.unknown`, `config.project.untrusted_key` (§15.3), `config.key.not_applied` (§15.5), `config.provider.key_missing`, `config.secret.unavailable`, `config.file.ignored`, `config.legacy_found` (§15.7), `config.session.outside_root` (§10.3); таблица ниже |
+| `config` | `config.env.unknown`, `config.project.untrusted_key` (§15.3), `config.key.not_applied` (§15.5), `config.provider.key_missing`, `config.file.ignored`, `config.legacy_found` (§15.7), `config.session.outside_root` (§10.3); таблица ниже |
 
 События `mcp.*` (этап 8; `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md`, D13). `session_id` есть
 всегда, `server` — `name` сервера:
@@ -119,14 +121,26 @@ final class LogRecord {           // то, что получает sink хост
 | `config.project.untrusted_key` (новое) | warning | `key`, `source`; в том числе смягчение `permissions.mode` и `trusted_projects` в проектном слое (§15.3) |
 | `config.key.not_applied` (новое) | warning | `key`, `source`; ключ без потребителя или раздел «после MVP», один раз на лист за загрузку (§15.5) |
 | `config.provider.key_missing` (новое) | warning | `provider`, `variable` |
-| `config.secret.unavailable` (новое) | warning | `key` |
 | `config.file.ignored` (новое) | warning | `path`, `hint` (`config.yml` рядом с `config.yaml`) |
 | `config.legacy_found` (новое) | warning | `files` (только пути; содержимое файла не читается, §15.7) |
 | `config.session.outside_root` (новое) | info | `session_id`, `cwd`, `config_root`; пишется логгером сессии, один раз на нормализованный `cwd` (§10.3) |
 | `mcp.server.skipped` | info | `server`, `reason: "disabled in config"` (новая причина для `enabled: false`), `message` |
 
 Прежние `config.legacy_ignored`, `config.legacy_key_dropped` и `config.legacy_active` удалены:
-`codelab.toml` не читается (§15.7).
+`codelab.toml` не читается (§15.7). `config.secret.unavailable` (заглушка 8.5 для ссылок на
+секреты) снято на этапе 8.9: ссылки разрешаются при запросе и подключении, а не при загрузке
+(change `add-agent-secret-store`, D4, D10).
+
+События `secrets.*` (этап 8.9, §17.5.4; change `add-agent-secret-store`, D10). Значение секрета, его
+длина, префикс и хеш в поля не попадают никогда, в том числе при `--debug-secrets` (CFG-10):
+
+| Событие | Уровень | Поля | Когда |
+|---|---|---|---|
+| `secrets.lookup` | info | `name`, `purpose` (путь ключа конфига), `source` (`cache`, `env` или id бэкенда), `found` | только `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1`, на каждое обращение к `SecretResolver`; уровень лога режим не меняет |
+| `secrets.backend.selected` | info | `backend`, `path` (`secrets.yaml` или `null`), `reason` (у `auto` → `env`) | выбор бэкенда, один раз на процесс |
+| `secrets.backend.unavailable` | warning | `backend`, `reason` | отказ хранилища при чтении (например, `file` по правам), один раз на пару `(backend, reason)` |
+| `secrets.backend.plaintext` | warning | `path` | бэкенд `file`, при каждом старте хоста |
+| `secrets.file.refused` | warning | `path`, `mode` (восьмеричная строка) или `reason: symlink` | `secrets.yaml` с правами шире `0600` или символическая ссылка, один раз на процесс |
 
 В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов
 и ответов; причины ошибок транспорта формирует наш код, без текста заголовков (OBS-инварианты,
@@ -176,7 +190,6 @@ final class LogRecord {           // то, что получает sink хост
 | `subagent` | `subagent.start`, `subagent.end`, `subagent.type_overridden`, `subagent.cancel_grace_exceeded`, `subagent.approval_unavailable` (§17.3), `subagent.follow_up` {`subagentId`, `run`, `kind`: `send` \| `resume`}, `subagent.follow_up_rejected` {`subagentId`, `reason`}, `subagent.observe` {`subagentId`, `last`} (§17.3.8.1) |
 | `spill` | `spill.write`, `spill.failed`, `spill.missing`, `spill.orphan_deleted` (§17.4) |
 | `config` | `config.reload.applied`, `config.reload.failed`, `config.reload.noop`, `config.reload.restart_required`, `config.preconfig.shadowed`, `config.write` (§17.5) |
-| `secrets` | `secrets.lookup` (только `--debug-secrets`), `secrets.backend.unavailable`, `secrets.backend.plaintext` (§17.5.4) |
 | `mcp` (дополнение) | `mcp.server.state`, `mcp.server.retry` (§17.5.7); `mcp.tools.changed` уже в MVP |
 | `session` (дополнение) | `session.lease.takeover`, `session.lease.lost`, `session.branch_summary.failed`, `session.fork.start`, `session.fork.end`, `session.fork.failed` (§17.6); `session.sealed` (info), `session.sealed.dropped` (warning, один раз на вид записи), `session.title_probe` (debug) (§8.5.1, §8.10.1); `session.search` (debug: `scope`, `terms` — число, `scanned`, `hits`, `truncated`, `skipped`, `durationMs`; без текста запроса и сниппетов) (§17.6.17) |
 | `steer` | `steer.accepted`, `steer.refused` (§17.7.3.1) |
@@ -290,13 +303,22 @@ $ CODELAB_LOG_FILE=/tmp/agent.log codelab-agent serve --stdio --log-file ./debug
 
 Источники «точных» секретов:
 
-1. значения из `SecretStore` (ключи провайдеров, токены MCP-серверов);
+1. значения из `SecretStore` (ключи провайдеров, токены MCP-серверов) — только через `SecretResolver` (п. 4);
 2. значения переменных окружения, чьи имена совпадают с `(?i)(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH)` и длина значения ≥ 8;
 3. значения заголовков `Authorization`, `X-Api-Key`, `Api-Key` из конфигурации MCP и провайдеров;
 4. после MVP (§17.5.3, §17.5.4): каждое значение, полученное через `SecretResolver`
    (`api_key_secret`, `api_key_env`, подстановка `${secret:<name>}` в `headers`/`env`,
    переопределение `CODELAB_SECRET_<…>`), и все значения `headers` предконфигурации из окружения
    (`CODELAB_PROVIDER_CONFIG`).
+
+**До 8.11** (change `add-agent-secret-store`, D10, п. 3). Хранилище секретов (8.9) появляется
+раньше `Redactor` (8.11), поэтому пункт 4 в 8.9 ещё не выполняется. Единственная дорога к
+значениям — `SecretResolver`; change 8.11 добавляет в его конструктор `Redactor` и вызов
+`addExactSecret` до возврата найденного значения — точка одна, сигнатуры вызывающих не меняются.
+До этого значения ключа и заголовков провайдера защищены существующей вычисткой
+`ProviderConfig.secrets` из текстов ошибок провайдера, а значения MCP-заголовков и `env` до
+коннектора не логируются. Остаточный риск — модель сама выведет секрет, прочитанный
+инструментом; он тот же, что для `api_key_env` сегодня, и закрывается 8.11.
 
 Шаблоны известных форматов (пишутся для CodeLab, расширяются через OpenSpec):
 

@@ -73,10 +73,32 @@
 и остальное ниже приходят со своими потребителями (задачи 8.10, 9.6), без абстракций «на вырост».
 Таблица ниже — полный состав.
 
+**Секреты с этапа 8.9 (change `add-agent-secret-store`, D1, D8, D15).** `io.dart` реэкспортирует
+из `codelab_agent_io` `SecretCommands` с `SecretCommandResult` и опциями подкоманд, `SecretInput`,
+`StdinSecretInput` (вход для `codelab secret set|delete|list`), `SecretAdmin` с типизированными
+результатами (`Stored | Updated | InvalidName | InvalidValue | Collision | ReadOnly | Failed`) и
+`openSecretStore` — программную запись для страницы настроек: значение передаётся аргументом
+метода в памяти процесса, не через argv, stdin или файл (кроме самого бэкенда `file`). Основной
+барель `codelab_setup.dart` в 8.9 не меняется: реэкспорт `SecretNames`, `SecretStore`,
+`DescribedSecretStore`, `SecretBackendInfo` и обёртка `SecretValue` приходят вместе со страницей
+настроек (этап 7/§12.4), реэкспорт без потребителя был бы «на вырост» (D1). `setupAllowlist` и
+правило сторожа не меняются. Desktop пользуется теми же бэкендами `codelab_agent_io`, что CLI, —
+ключ, сохранённый `codelab secret set`, виден встроенному агенту приложения и наоборот;
+`flutter_secure_storage` на desktop не используется (D15, D16).
+
+**Хранилище в 1.0** (D7, D13, D14). `secrets.backend: auto` в 1.0 — бэкенд `env` (только чтение
+`CODELAB_SECRET_*`, `writable == false`); записывать можно только при явном `secrets.backend: file`
+(открытый `$CODELAB_HOME/secrets.yaml`, `0600`, не на Windows). Поэтому статус ключа
+(`KeyStatusView`, `ProviderKeyMissing`) и мастер провайдера в 1.0 предлагают сохранить ключ в
+`file` (с предупреждением об открытом тексте) или задать переменную — `UseEnvVar` либо
+`CODELAB_SECRET_<…>`, — а не хранилище ОС; `StoreSecret` доступен только при `backend.writable`.
+Хранилища ОС — после 1.0 (черновик `add-agent-os-secret-backends`), без изменения этих типов: меняется
+только `openSecretStore`.
+
 | Барель | Содержимое | Можно | Нельзя |
 |---|---|---|---|
-| `codelab_setup.dart` (чистый Dart) | `ProviderSetupFlow`, пресеты, `ProviderCheck` и `HttpProviderCheck` поверх `http.Client`, `ProviderReadiness`, `McpServerDraft`, `SettingsAccess`, модели представления, порт `AgentConfigStore` и `ConfigSaveOutcome`; реэкспорт чистых типов ядра (§17.5.2): `ConfigLayer`, `ConfigTarget`, `ConfigSnapshot`, `ConfigEdit` и его подклассы, `ConfigIssue`, `ConfigLoadResult`, `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType`, `SecretNames`, `SecretStore`, `DescribedSecretStore`, `SecretBackendInfo` | `codelab_agent_core`, `http`, `meta` | `dart:io`, `codelab_agent_io`, Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
-| `io.dart` (десктоп и CLI) | `FileAgentConfigStore` поверх `ConfigWriter` и `ConfigLoader`, `systemSecretStore()` (бэкенд по `secrets.backend`, §17.5.4), пути `$CODELAB_HOME`, вход в общие подкоманды CLI ядра `config`/`provider`/`mcp`/`secret` (§17.5.5) | `codelab_agent_io`, `dart:io` | Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
+| `codelab_setup.dart` (чистый Dart) | `ProviderSetupFlow`, пресеты, `ProviderCheck` и `HttpProviderCheck` поверх `http.Client`, `ProviderReadiness`, `McpServerDraft`, `SettingsAccess`, модели представления, порт `AgentConfigStore` и `ConfigSaveOutcome`; реэкспорт чистых типов ядра (§17.5.2): `ConfigLayer`, `ConfigTarget`, `ConfigSnapshot`, `ConfigEdit` и его подклассы, `ConfigIssue`, `ConfigLoadResult`, `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType`, `SecretNames`, `SecretStore`, `DescribedSecretStore`, `SecretBackendInfo` (типы секретов — вместе со страницей настроек, не в 8.9; D1) | `codelab_agent_core`, `http`, `meta` | `dart:io`, `codelab_agent_io`, Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
+| `io.dart` (десктоп и CLI) | `FileAgentConfigStore` поверх `ConfigWriter` и `ConfigLoader`, `openSecretStore` (бэкенд по `secrets.backend`, §17.5.4) и `SecretAdmin` (8.9, D15), пути `$CODELAB_HOME`, вход в общие подкоманды CLI ядра `config`/`provider`/`mcp` (§17.5.5) и `secret` (`SecretCommands`, 8.9, D8) | `codelab_agent_io`, `dart:io` | Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
 
 Сторож (§9.5) получает новое правило: основной барель `codelab_setup` не импортирует то, что
 запрещено `webUnsafe`, а также `package:codelab_agent_io`, `package:codelab_acp_`, `package:codelab_client_` и `package:flutter/`;
@@ -304,9 +326,9 @@ final class SettingFieldView {             // строка общего реда
 
 **Состояния Cubit-ов app.** Feature `apps/codelab_desktop/lib/features/settings/`:
 `application/` содержит Cubit-ы, `infrastructure/settings_module.dart` связывает
-`FileAgentConfigStore`, `systemSecretStore()` и `HttpProviderCheck(IOClient())` из
-`codelab_setup/io.dart`, `presentation/` содержит страницы. Presentation не видит ни файлов, ни
-связки ключей.
+`FileAgentConfigStore`, `openSecretStore(…)` с `SecretAdmin` (change `add-agent-secret-store`, D15) и
+`HttpProviderCheck(IOClient())` из `codelab_setup/io.dart`, `presentation/` содержит страницы.
+Presentation не видит ни файлов, ни хранилища секретов.
 
 ```dart
 // apps/codelab_desktop/lib/features/settings/application/provider_settings_cubit.dart
@@ -1079,9 +1101,9 @@ mcp:
 
 **Новые зависимости.** Пакет `codelab_setup` (внутренний). `http` в `codelab_setup` (уже есть в
 allowlist ядра). В app — `http` для `IOClient` в infrastructure, если её ещё нет транзитивно.
-Сторонних пакетов раздел не добавляет. Хранилище ключей — решение ядра §17.5.4 (связка ключей
-ОС, иначе переменные `CODELAB_SECRET_<…>`, открытый файл — только явным выбором), реализация — в
-`codelab_agent_io`; вопрос §11 «Где хранить ключ API встроенного агента в app» этим закрыт.
+Сторонних пакетов раздел не добавляет. Хранилище ключей — решение ядра §17.5.4 (в 1.0 —
+переменные `CODELAB_SECRET_<…>` и открытый файл только явным выбором, связка ключей ОС — после 1.0;
+change `add-agent-secret-store`, D7, D13), реализация — в `codelab_agent_io`; вопрос §11 «Где хранить ключ API встроенного агента в app» этим закрыт.
 
 * **«Add profile» — в kit, проверка — `initialize` без сессии.** Профили общие с CLI, поэтому
   разбор аргументов, правила id и порядок записи секрета живут в `codelab_client_core`, а не в

@@ -24,7 +24,9 @@ E-13 со стороны агента (команды `/mcp list`, `/mcp reload`
 1. **Контейнер и CI.** Файла конфига нет, есть только окружение. Агент должен получить провайдера
    и модель из двух переменных (L-25).
 2. **Ключ без файла.** Пользователь вводит ключ один раз — в CLI или в настройках app; ключ
-   уходит в хранилище секретов ОС, а конфиг хранит только его имя (P-12). Ключ, вписанный в
+   уходит в хранилище секретов ОС, а конфиг хранит только его имя (P-12). В 1.0 — в явно
+   выбранный `secrets.yaml` или в переменную `CODELAB_SECRET_<…>`; хранилище ОС — после 1.0
+   (change `add-agent-secret-store`, D13). Ключ, вписанный в
    конфиг значением, — ошибка с подсказкой, как сделать правильно.
 3. **Одни настройки в двух клиентах.** CLI и app редактируют один и тот же конфиг через один
    писатель и показывают одни и те же ключи из одного реестра (E-15). Тест полноты не даёт
@@ -39,9 +41,9 @@ E-13 со стороны агента (команды `/mcp list`, `/mcp reload`
 
 ## 17.5.2. Контракт
 
-**Секреты.** `SecretStore` из §10.3 не меняется. Расширение — необязательный интерфейс описания
-бэкенда и резолвер ядра, через который проходит каждое чтение секрета
-(`codelab_agent_core/lib/src/secrets/`):
+**Секреты** (этап 8.9; уточнено design.md change `add-agent-secret-store`, D2, D3). `SecretStore` из
+§10.3 не меняется. Расширение — необязательный интерфейс описания бэкенда и резолвер ядра, через
+который проходит каждое чтение секрета (`codelab_agent_core/lib/src/secrets/`, чистый Dart):
 
 ```dart
 /// Расширение §10.3: реализация сообщает, куда пишет и читает. Хранилища codelab_agent_io
@@ -50,18 +52,25 @@ abstract interface class DescribedSecretStore implements SecretStore {
   SecretBackendInfo get backend;
 }
 final class SecretBackendInfo {
-  final String id;                 // keychain-macos | secret-service | wincred | env | file | memory
+  final String id;                 // env | file | memory; после 1.0 — keychain-macos | secret-service | wincred
   final bool writable;             // env — только чтение
-  final String? unavailableReason; // почему ОС-хранилище не выбрано (для `auto`), иначе null
+  final String? unavailableReason; // почему auto не выбрал хранилище ОС, иначе null
 }
-/// Хранилище недоступно или не ответило за 10 с. Сообщение не содержит значения секрета.
+/// Хранилище недоступно (права secrets.yaml, после 1.0 — утилита ОС не ответила за 10 с).
+/// reason — наш текст, без значения секрета и без stderr утилит.
 final class SecretStoreUnavailableException implements Exception {
   final String backend; final String reason;
 }
 
-/// Правило имени секрета (SecretNames.validate бросает ArgumentError с причиной).
+/// Правило имени секрета. problem — значение, а не ArgumentError: ошибка имени в конфиге —
+/// проблема загрузки (ConfigIssue), а не исключение (D2).
 abstract final class SecretNames {
   static final RegExp pattern = RegExp(r'^[a-z0-9][a-z0-9._/-]{0,127}$');  // без "..", без "/" в конце
+  /// null — имя годится; иначе английская причина без самого имени:
+  /// "expected a secret name: lowercase letters, digits and . _ / -, up to 128 characters".
+  static String? problem(String name);
+  /// Префикс CODELAB_SECRET_, имя в верхнем регистре, символы вне [A-Z0-9] → "_". Отображение
+  /// необратимо, поэтому secret set отклоняет имя, чья переменная совпала с чужой (D8).
   static String envOverride(String name);   // "codelab/anthropic" → "CODELAB_SECRET_CODELAB_ANTHROPIC"
   static String suggestFor(String configPath); // "providers.openai.api_key" → "codelab/openai"
   /// "github", "Authorization" → "codelab/mcp/github/authorization": обе части в нижнем регистре,
@@ -69,24 +78,48 @@ abstract final class SecretNames {
   static String forMcp(String server, String key);
 }
 
-/// Единственная дорога к значению секрета в ядре (§17.5.4). Значения кэшируются до invalidate().
+/// Результат обращения: «не задан» и «хранилище недоступно» требуют от человека разных действий.
+sealed class SecretLookup { const SecretLookup(); }
+final class SecretFound extends SecretLookup { final String value; final String source; }  // cache | env | <backend.id>; toString без значения
+final class SecretMissing extends SecretLookup { final String backend; }
+final class SecretUnavailable extends SecretLookup { final String backend; final String reason; }
+
+/// Единственная дорога к значению секрета в ядре (§17.5.4). Создаёт хост, один на процесс;
+/// найденные значения кэшируются до конца процесса, ненайденные — нет.
 final class SecretResolver {
-  SecretResolver({required SecretStore store, required Map<String, String> environment,
-      required Redactor redactor, required Logger logger, bool debug = false});
-  /// api_key_secret, ${secret:<name>}, exec.secrets. purpose — путь ключа конфига.
-  Future<String?> secret(String name, {required String purpose});
-  /// api_key_env и ${ENV} в ключах провайдеров.
-  String? env(String variable, {required String purpose});
-  void invalidate();               // при перезагрузке конфига (§17.5.6)
+  SecretResolver({required DescribedSecretStore store, required Map<String, String> environment,
+      required Logger logger, bool debug = false});
+  /// api_key_secret, ${secret:<name>}. purpose — путь ключа конфига.
+  Future<SecretLookup> secret(String name, {required String purpose});
+  /// api_key_env: синхронное чтение окружения процесса хоста, под debug — secrets.lookup.
+  SecretLookup env(String variable, {required String purpose});
 }
 ```
+
+**Отступления 8.9 от прежнего контракта** (design.md change `add-agent-secret-store`, D3):
+- `SecretLookup` вместо `String?`: со `String?` ошибка хода «хранилище недоступно» и «секрет не
+  задан» была бы одинаковой и в первом случае вводила бы в заблуждение (приоритет наблюдаемости
+  выше простоты);
+- параметра `redactor` нет: `Redactor` появится в 8.11 вместе со своим параметром конструктора
+  (D10; §12.4, абзац «До 8.11»);
+- `invalidate()` нет: перезагрузки конфига в 8.9 нет, сброс кэша добавит 8.10 вместе с ней
+  (§17.5.6);
+- таймаута в резолвере нет: ядро не создаёт таймеры (PKG-6), предел ожидания соблюдают бэкенды
+  `codelab_agent_io` (в 1.0 — `env` и `file`, ожидания нет), мобильные и web-хосты — свои
+  реализации;
+- `exec.secrets` в 8.9 потребителя не имеет (`config.key.not_applied`).
 
 `AgentCoreServices` (§10.3) получает два необязательных поля:
 
 ```dart
-  final ConfigSource? config;      // null → живая перезагрузка и команда /config недоступны
-  final bool debugSecrets;         // --debug-secrets или CODELAB_DEBUG_SECRETS=1 (P-17)
+  final SecretResolver? secrets;   // 8.9 (D3): null → ссылки дают SecretUnavailable("none", "no secret store")
+  final ConfigSource? config;      // 8.10: null → живая перезагрузка и команда /config недоступны
 ```
+
+Поля `debugSecrets` нет: режим отладки (`--debug-secrets`, `CODELAB_DEBUG_SECRETS=1`, P-17) — параметр
+`debug` резолвера. В сервисах лежит резолвер, а не `SecretStore`: функцию модели хост строит раньше
+ядра (`createRoutedStreamFunction(…, secrets:)` вызывается до `buildAgentCore`), а переменные
+переопределения требуют окружения процесса, которого у ядра нет (D3, D11, D15).
 
 **Источник конфига и перезагрузка** (`codelab_agent_core/lib/src/config/`). `ConfigSource` — порт
 хоста: `apps/codelab_agent` и `codelab_embedded` реализуют его поверх `ConfigLoader` и
@@ -303,8 +336,28 @@ envPreconfigLayer(environment, flags):
 **Ссылки на секреты в конфиге.** У провайдера (и у бэкенда поиска, §17.1.6) — ровно одно из
 `api_key_secret = "<name>"` и `api_key_env = "<VAR>"`; оба сразу — `ConfigException`. В значениях
 `headers` и `env` MCP-серверов и `headers` провайдеров допустима подстановка `${secret:<name>}`
-рядом с `${ENV}` (§15.5): значение берётся из `SecretResolver` при подключении или запросе,
-отсутствующий секрет — ошибка подключения сервера с текстом `secret <name> is not set`.
+рядом с `${ENV}` (§15.5, п. 7).
+
+**Где разрешаются ссылки** (этап 8.9; design.md change `add-agent-secret-store`, D4). Загрузка
+секреты не читает: `CatalogProvider.key` хранит ссылку (`EnvKeyRef` для `api_key_env`,
+`SecretKeyRef` для `api_key_secret`), значения с `${secret:…}` — шаблоны `SecretTemplate`
+(`CatalogProvider.headerTemplates`, `McpServerConfig.secretValues`).
+- **Провайдер — при первом запросе.** `createRoutedStreamFunction(…, secrets:)` разрешает ключ и
+  шаблоны заголовков через резолвер внутри `runProvider` и кэширует цепочку на процесс только при
+  успехе. `SecretMissing` — отказ `auth` без HTTP-запроса `API key secret <name> is not set. Run:
+  codelab secret set <name>`; `SecretUnavailable` — `API key secret <name> cannot be read: <backend>
+  is unavailable (<reason>). Set <envOverride(name)> or fix the secret store`. Отмена хода во время
+  ожидания завершает поток `cancelled` сразу; позднее значение только наполняет кэш.
+- **MCP-сервер конфига — перед `connect`.** `AgentRuntimeImpl` раскрывает шаблоны серверов
+  параллельно, в токене отмены создания сессии. Ненайденный секрет или недоступное хранилище —
+  `mcp.server.failed {server, reason}` с причиной `secret <name> is not set` или `secret <name>
+  cannot be read: <backend> is unavailable`; сессия создаётся без инструментов этого сервера.
+- **Ссылка от клиента ACP — литерал.** Серверы `session/new.mcpServers` шаблонов не имеют:
+  `${secret:…}` в их `env`/`headers` передаётся серверу как есть. Иначе клиент мог бы вытянуть
+  любой секрет хранилища на свой адрес.
+- **Доверие.** `providers` и `mcp.servers` недоверенного проекта отбрасываются целиком (§15.3),
+  поэтому `${secret:…}` из чужого репозитория до резолвера не доходит; у доверенного проекта ссылка
+  работает (§17.5.9).
 
 **Встроенный ключ — ошибка (CFG-9).** Валидатор §15.5 (шаг 3) отклоняет:
 
@@ -324,47 +377,87 @@ codelab secret set codelab/openai и укажите api_key_secret: codelab/open
 После MVP пул ключей: имена `<name>_2` … `<name>_16` и переменные `NAME_2` … (§17.10.4); токены
 входа — `codelab/oauth/<id>` (§17.10.6).
 
-**Порядок разрешения** `SecretResolver.secret(name)`:
+**Порядок разрешения** `SecretResolver.secret(name, purpose)` (design.md change
+`add-agent-secret-store`, D3):
 
 ```text
-1. SecretNames.validate(name); ошибка → ConfigException на загрузке (а не здесь)
-2. кэш процесса содержит name → вернуть (без лога, кроме --debug-secrets: source "cache")
-3. v := environment[SecretNames.envOverride(name)]; v не пуст → source "env", перейти к 6
-     CODELAB_SECRET_* — переопределение для CI и контейнеров без связки ключей
-4. v := await store.read(name) с таймаутом 10 с; source := store.backend.id
-     SecretStoreUnavailableException → лог warning secrets.backend.unavailable {backend, reason},
-     вернуть null
-5. v == null → вернуть null; вызывающий превращает это в ошибку там, где ключ нужен:
-     провайдер — AgentError(cls: provider, errorClass: auth) с текстом "API key secret codelab/openai is not set.
-     Run: codelab secret set codelab/openai"; MCP — сервер failed с тем же текстом
-6. redactor.addExact(v); кэш[name] := v; вернуть v
-debug: на шагах 2–5 лог info secrets.lookup {name, purpose, source, found}; значения, длины,
-  префиксы, хеши — никогда (CFG-10)
+1. SecretNames.problem(name) != null → SecretMissing (имя уже проверено загрузкой; защита в глубину)
+2. кэш процесса содержит name → SecretFound(source: "cache")
+3. v := environment[SecretNames.envOverride(name)]; v не пуст → кэш[name] := v; SecretFound(source: "env")
+     CODELAB_SECRET_* — переопределение для CI и контейнеров; побеждает хранилище при любом backend
+4. идёт обращение к store по name → дождаться его (single-flight)
+5. v := await store.read(name)
+     SecretStoreUnavailableException(b, r) → warning secrets.backend.unavailable {backend: b, reason: r}
+       (один раз на пару (b, r) за процесс) → SecretUnavailable(b, r)
+     v == null или пусто → SecretMissing(store.backend.id)
+     иначе → кэш[name] := v; SecretFound(source: store.backend.id)
+debug: на каждом вызове — info secrets.lookup {name, purpose, source, found}; source у SecretMissing
+  и SecretUnavailable — id бэкенда; значение, длина, префикс, хеш — никогда (CFG-10)
 ```
 
-`SecretResolver.env(VAR)` читает только окружение процесса хоста; найденное значение тоже
-регистрируется в `Redactor`. Без `--debug-secrets` чтения не логируются, кроме отказов бэкенда.
+Таймаута в резолвере нет (PKG-6): предел ожидания держат бэкенды. Кэшируются только найденные
+значения, поэтому секрет, заданный `secret set` после старта, подхватывается следующим запросом
+без перезапуска, а замена уже прочитанного требует перезапуска до 8.10. Регистрация значения в
+`Redactor` (CFG-10) добавляется change 8.11 в шаги 3 и 5 до возврата `SecretFound` (D10;
+§12.4, абзац «До 8.11»).
+
+`SecretResolver.env(VAR, purpose)` синхронно читает только окружение процесса хоста — дорога
+`api_key_env` (D4); под `debug` пишет `secrets.lookup {name: <VAR>, purpose, source: "env", found}`.
+Без `--debug-secrets` чтения не логируются, кроме отказов бэкенда.
 
 **Бэкенды** (`codelab_agent_io/lib/src/secrets/`). Служба — `codelab`, учётная запись — имя
 секрета. Значение секрета НЕ ДОЛЖНО попадать в argv дочернего процесса: argv виден другим
 пользователям через `ps`.
 
+**В 1.0 (change `add-agent-secret-store`, сужение 8.9 решением пользователя 2026-10-31) реализуются только `env` и `file`** (D5, D13, D14). Строки `keychain-macos`, `secret-service` и `wincred` — проект для черновика `add-agent-os-secret-backends` (после 1.0); порт `SecretStore` уже рассчитан на них, вызывающие не меняются.
+
 | Бэкенд (`id`) | Платформа | Запись | Чтение | Список имён |
 |---|---|---|---|---|
-| `keychain-macos` | macOS | `security -i`, команда `add-generic-password -U -s codelab -a <name> -w "<value>"` подаётся в stdin (экранирование `"` и `\`; значение с переводом строки отклоняется) | `security find-generic-password -s codelab -a <name> -w` (stdout) | индекс `$CODELAB_HOME/secret-names.json` (только имена), сверяется чтением |
-| `secret-service` | Linux | `secret-tool store --label "CodeLab: <name>" service codelab account <name>`, значение — в stdin без перевода строки | `secret-tool lookup service codelab account <name>` | `secret-tool search --all service codelab`, поле `attribute.account` |
-| `wincred` | Windows | `dart:ffi` → `advapi32` `CredWriteW`, цель `codelab:<name>`, `CRED_TYPE_GENERIC`, `CRED_PERSIST_LOCAL_MACHINE` | `CredReadW` | `CredEnumerateW("codelab:*")` |
-| `env` | все | нет: `SecretStoreUnavailableException("env backend is read-only")` | `CODELAB_SECRET_<…>` | имена из окружения |
-| `file` | все, только по явному выбору | `$CODELAB_HOME/secrets.yaml`, права `0600`, атомарно (tmp + rename) | тот же файл; права шире `0600` → отказ чтения с ошибкой | ключи файла |
+| `keychain-macos` (после 1.0) | macOS | `/usr/bin/security -i` (абсолютный путь), команда `add-generic-password -U -s codelab -a <name> -w "<value>"` подаётся в stdin (экранирование `"` и `\` — по итогу разведки утилит черновика `add-agent-os-secret-backends`) | `/usr/bin/security find-generic-password -s codelab -a <name> -w` (stdout) | индекс `$CODELAB_HOME/secret-names.json` (только имена), сверяется проверкой существования без `-w` |
+| `secret-service` (после 1.0) | Linux | `secret-tool store --label "CodeLab: <name>" service codelab account <name>`, значение — в stdin без перевода строки | `secret-tool lookup service codelab account <name>` | тот же индекс `secret-names.json`: `secret-tool search` печатает значения найденных записей, поэтому для списка не используется |
+| `wincred` (после 1.0) | Windows | свои привязки `advapi32` через `dart:ffi` и `package:ffi` (только `codelab_agent_io/lib/src/secrets/wincred/`, за портом `WinCredApi`): `CredWriteW`, цель `codelab:<name>`, `CRED_TYPE_GENERIC`, `CRED_PERSIST_LOCAL_MACHINE`, значение UTF-16LE до 1280 символов | `CredReadW`; `ERROR_NOT_FOUND` → нет секрета | `CredEnumerateW("codelab:*")`, только `TargetName`; индекс не нужен |
+| `env` | все | нет: `SecretStoreUnavailableException("env backend is read-only")`, удаление — то же | `CODELAB_SECRET_<…>` | имён секретов нет: `envOverride` необратимо, поэтому `secret list` печатает имена переменных строкой `Environment overrides` (D6, D8) |
+| `file` | macOS, Linux; только по явному выбору | `$CODELAB_HOME/secrets.yaml`: файл создаёт только запись (`secret set`); tmp в том же каталоге получает права `0600` до записи значения, затем rename | тот же файл; символическая ссылка или права шире `0600` → отказ с текстом `run: chmod 600 <path>` (как у ssh; владельца `dart:io` не сообщает) | ключи файла |
 
-Выбор — ключ `secrets.backend` (только глобальный конфиг, §15.3): `"auto"` (по умолчанию) —
-ОС-хранилище, если доступно (Linux: `secret-tool` в `PATH`, задан `DBUS_SESSION_BUS_ADDRESS`, проба
-`secret-tool search --all service codelab` завершилась с кодом 0 за 3 с), иначе `env` с одним
-предупреждением `secrets.backend.unavailable` при старте; `"keychain"` — ОС-хранилище обязательно,
-недоступно → ошибка старта; `"env"` — только окружение; `"file"` — открытый текст, при каждом
-старте предупреждение `secrets.backend.plaintext`. Мобильный и web-хосты передают свою
-реализацию `DescribedSecretStore` поверх хранилища платформы; встроенный агент desktop-app
-использует ту же реализацию `codelab_agent_io`, что и CLI.
+Значение с переводом строки отклоняется всеми бэкендами; текст исключений бэкендов значения не
+содержит (D5). Права `0600` бэкенд `file` выставляет процессом `/bin/chmod 600 <tmp>` через узкий
+порт `SecretProcessRunner` (`codelab_agent_io`; в argv только путь), потому что в `dart:io` нет API
+смены прав (D5, D14). После 1.0 (черновик `add-agent-os-secret-backends`): каждое обращение к
+хранилищу ОС ограничено 10 с — процесс утилиты убивается, вызов `advapi32` (в отдельном изоляте)
+отбрасывается; stderr утилит в тексты ошибок не попадает.
+
+Выбор — ключ `secrets.backend` (только глобальный конфиг и `--config`, §15.3), значения
+`auto | keychain | env | file`. **В 1.0:** `"auto"` (по умолчанию) — `env` на всех ОС, без проб
+и процессов; `"keychain"` — ошибка конфигурации `not supported yet`; `"env"` — только окружение;
+`"file"` — открытый текст, при каждом старте предупреждение `secrets.backend.plaintext`, строка
+`warning:` в `config check` и в подкомандах `secret`; на Windows `"file"` — ошибка конфигурации
+(ACL NTFS `dart:io` не проверяет), поэтому на Windows в 1.0 доступен только `env`. `auto`
+**никогда не выбирает `file`** — ни сразу, ни как запасной вариант (CFG-11). `secret set` при `env`
+отвечает кодом 1 и подсказывает `secrets.backend: file` или переменную `CODELAB_SECRET_<…>`;
+`config check` даёт ту же подсказку для незаданного ссылочного секрета. **После 1.0**
+(`add-agent-os-secret-backends`): `auto` лениво, при первом обращении, выбирает ОС-хранилище, если
+оно доступно (macOS — `/usr/bin/security`; Linux — `secret-tool` в `PATH`,
+`DBUS_SESSION_BUS_ADDRESS`, проба за 3 с; Windows — `advapi32.dll`), иначе `env`; `"keychain"`
+требует ОС-хранилище (проба при старте). Тестовое хранилище `CODELAB_TEST_SECRET_STORE` этапа 7
+(§12.4.13) — бэкенд `file` с явным путём `<каталог>/secrets.yaml`. Мобильный и web-хосты передают
+свою реализацию `DescribedSecretStore`; встроенный агент desktop-app использует ту же реализацию
+`codelab_agent_io`, что и CLI. Решения — design.md change `add-agent-secret-store` (D5–D7, D13,
+D14).
+
+**Настольные хосты, встроенные профили и другие платформы** (change `add-agent-secret-store`,
+D15, D16). Резолвер у `codelab-agent` и у встроенного агента этапа 7 строит одна фабрика
+`openHostSecrets` (`codelab_agent_io`), у ядра в отдельном isolate — внутри него. Desktop
+использует те же бэкенды, что CLI (в 1.0 — те же переменные и `secrets.yaml`, после 1.0 — та же
+служба `codelab` в хранилищах ОС), поэтому `flutter_secure_storage` на
+desktop не применяется; программная запись для страницы настроек — `SecretAdmin` через
+`codelab_setup/io.dart`. Кэш найденных значений живёт до конца процесса: работающий агент видит
+замену уже прочитанного секрета только после перезапуска (до 8.10). Условие App Sandbox для
+будущего `keychain-macos` записано в черновике `add-agent-os-secret-backends`. Готовые пакеты (`flutter_secure_storage`, `keyring`, `keybay`) не берутся (пересмотр — при старте
+`add-agent-os-secret-backends`, если появится зрелый пакет без Flutter от подтверждённого издателя):
+Flutter-плагины не работают в бинарях `dart compile exe`, а малоизвестные пакеты на пути к
+секретам — риск цепочки поставок. Мобильный профиль — адаптер порта поверх
+`flutter_secure_storage` в мобильном приложении; web — ключи на клиенте не сохраняются (серверный
+прокси или ключ только в памяти сессии), решение — при старте web-профиля.
 
 **Почему нет зашифрованного файла по умолчанию.** Ключ шифрования пришлось бы хранить рядом —
 на том же диске, с теми же правами; такой файл не защищает ни от кого, кто может прочитать
@@ -372,12 +465,29 @@ debug: на шагах 2–5 лог info secrets.lookup {name, purpose, source, 
 TTY (`agent-serve`, CI) не может. Поэтому выбор честный: хранилище ОС, переменные окружения или
 явно выбранный открытый файл с правами `0600`.
 
-**CLI.** `codelab secret set <name>` читает значение из stdin (с TTY — без эха, ввод до Enter; без
-TTY — весь stdin, один завершающий `\n` отбрасывается); значение аргументом командной строки —
-ошибка использования `pass the secret value on stdin, not as an argument`. Имя, у которого
-`envOverride` совпадает с `envOverride` уже существующего другого имени, отклоняется.
-`codelab secret delete <name>`; `codelab secret list` печатает бэкенд и имена, без значений и длин.
-Те же подкоманды есть у `codelab-agent`.
+**CLI** (design.md change `add-agent-secret-store`, D8). Одна реализация — `SecretCommands`
+(`codelab_agent_io`); `codelab-agent secret …` и `codelab secret …` (через `codelab_setup/io.dart`)
+только разбирают аргументы, поэтому stdout, stderr и код выхода двух бинарей совпадают. Бэкенд
+подкоманды берут из `secrets.backend` в `$CODELAB_HOME/config.yaml` и файле `CODELAB_CONFIG` — и
+только этот ключ: невалидный остальной конфиг (например, ключ вписан значением) не блокирует
+команду, которая его чинит; флаг `serve --config` подкоманды не видят.
+- `codelab secret set <name>` читает значение из stdin (с TTY — без эха, ввод до Enter, эхо
+  восстанавливается в `finally` и по `SIGINT`; без TTY — весь stdin, один завершающий `\n` или
+  `\r\n` отбрасывается). Значение аргументом — код `64`, `pass the secret value on stdin, not as an
+  argument`, аргумент не печатается. Неверное имя, пустое значение, перевод строки внутри значения,
+  коллизия `envOverride` с другим сохранённым именем — код `64`. Бэкенд `env` (в том числе `auto`
+  в 1.0) — код `1` без чтения stdin, с подсказкой `secrets.backend: file` или переменной
+  `CODELAB_SECRET_<…>` (на Windows — только переменной). Успех — `Stored secret <name> in
+  <backend>`, перезапись без `--force` — `Updated secret <name> in <backend>`.
+- `codelab secret delete <name>` — код `0` и для отсутствующего имени (`Secret <name> was not set in
+  <backend>`): команда идемпотентна для скриптов.
+- `codelab secret list` — строка `Backend: <id>` (у `auto` — с причиной), имена по алфавиту и строка
+  `Environment overrides: <VAR>, …`, без значений и длин; хранилище недоступно — код `1`.
+- С бэкендом `file` каждая подкоманда пишет в stderr предупреждение об открытом тексте; файл
+  `secrets.yaml` создаёт только `set`.
+
+Кэш работающего агента подкоманды не сбрасывают: новый секрет он подхватит сразу, замену
+прочитанного — после перезапуска (до 8.10, D15).
 
 ## 17.5.5. Алгоритм: запись конфига
 
@@ -815,7 +925,7 @@ local-db  config   stdio      disabled   0      disabled by /mcp disable
 ```yaml
 # ~/.codelab/config.yaml
 secrets:
-  backend: auto               # auto | keychain | env | file
+  backend: auto               # auto | keychain | env | file; в 1.0 auto = env, keychain — «not supported yet» (D7)
 
 config:
   watch: true
@@ -839,9 +949,10 @@ mcp:
 
 | Ключи | Слой 3 (проект) | Слой 4 (локальный) | Условие снятия ограничения |
 |---|---|---|---|
-| `secrets.*` | нет | нет | только глобальный конфиг |
+| `secrets.*` | нет | нет | только пользовательский конфиг и `--config`/`CODELAB_CONFIG` (D7) |
 | `config.*` | нет | да | — |
-| `${secret:<name>}` в `headers`, `env` | нет (подстановка — литерал с предупреждением) | да | проект в `trusted_projects` |
+| `${secret:<name>}` в `headers`, `env` | нет: `providers` и `mcp.servers` недоверенного проекта отбрасываются целиком, ссылка до резолвера не доходит (D4) | да | проект в `trusted_projects` |
+| `${secret:<name>}` в `session/new.mcpServers` клиента ACP | — | — | никогда: литерал, не раскрывается (D4) |
 
 Окружение и флаги (дополнение §15.6):
 
@@ -850,17 +961,22 @@ mcp:
 | `CODELAB_PROVIDER_TYPE` | `--provider-type <kind>` | тип провайдера предконфигурации (§17.5.3) |
 | `CODELAB_PROVIDER_CONFIG` | `--provider-config <json \| @путь>` | JSON провайдера |
 | `CODELAB_PROVIDER_CONFIG_BASE64` | — | то же в base64 |
-| `CODELAB_SECRET_<ИМЯ>` | — | переопределение секрета по имени (§17.5.4) |
-| `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` | лог каждого обращения к секретам без значений (P-17) |
+| `CODELAB_SECRET_<ИМЯ>` | — | переопределение секрета по имени (§17.5.4); побеждает хранилище при любом бэкенде (D3) |
+| `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` (флаг `serve`, без значения; 8.9) | событие `secrets.lookup` на каждое обращение, без значений (P-17). Режим не меняет уровень лога; другие значения переменной — как незаданная. Встроенные профили этапа 7 включают его переменной или опцией хоста `debugSecrets`, `embedded-cli` — своим `--debug-secrets`; ключа конфига нет (D10, D11, D15) |
 
 События лога (дополнение §12.3): `config.reload.applied`, `config.reload.failed`,
 `config.reload.noop`, `config.reload.restart_required`, `config.preconfig.shadowed`,
-`config.write`; `secrets.lookup` (только `--debug-secrets`), `secrets.backend.unavailable`,
-`secrets.backend.plaintext`; `mcp.server.state`, `mcp.server.retry`, `mcp.tools.changed`.
+`config.write`; `secrets.lookup` (только `--debug-secrets`), `secrets.backend.selected`,
+`secrets.backend.unavailable`, `secrets.backend.plaintext`, `secrets.file.refused` (поля и условия —
+§12.3, таблица `secrets.*`; design.md change `add-agent-secret-store`, D10); `config.secret.unavailable`
+этапа 8.5 снято (D4); `mcp.server.state`, `mcp.server.retry`, `mcp.tools.changed`.
 
 Подкоманды CLI — таблица §17.5.5 и §17.5.4: `codelab config get|set|unset|path|check|export-providers|import-providers`,
 `codelab provider add|list|remove`, `codelab mcp add|list|remove`,
-`codelab secret set|delete|list`; агентские команды — `/config reload|check`,
+`codelab secret set|delete|list` (8.9, D8: те же подкоманды у `codelab-agent`, бэкенд — из
+`secrets.backend`; `config check` с 8.9 печатает бэкенд и строку `warning:` на каждый незаданный
+ссылочный секрет, при `file` — строку об открытом тексте всегда, код выхода не меняется, D9);
+агентские команды — `/config reload|check`,
 `/mcp list|reload [<id>]|enable <id>|disable <id>`.
 
 ## 17.5.10. Примеры
@@ -912,10 +1028,10 @@ agent:
   fallback: [anthropic/claude-sonnet-4]
 ```
 
-**`--debug-secrets`.** Строки лога одного запроса:
+**`--debug-secrets`.** Строки лога одного запроса при `secrets.backend: file` (D10):
 
 ```json
-{"level":"info","event":"secrets.lookup","fields":{"name":"codelab/anthropic","purpose":"providers.anthropic.api_key_secret","source":"keychain-macos","found":true}}
+{"level":"info","event":"secrets.lookup","fields":{"name":"codelab/anthropic","purpose":"providers.anthropic.api_key_secret","source":"file","found":true}}
 {"level":"info","event":"secrets.lookup","fields":{"name":"codelab/anthropic","purpose":"providers.anthropic.api_key_secret","source":"cache","found":true}}
 ```
 
@@ -994,7 +1110,7 @@ Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.ya
 `packages/dart/codelab_agent_mcp/test/supervisor/`.
 
 * `provider_preconfig_env_test.dart` — критерий матрицы **`core/provider-preconfig-from-env`**: `TYPE` + `CONFIG` без файлов → каталог с `env/<model>`, `default_model` из JSON; `_BASE64` даёт тот же `CoreConfig`; флаги затеняют переменные; файл с `default_model` проигрывает окружению, `CODELAB_MODEL` выигрывает у предконфигурации; битый JSON, обе переменные сразу, неизвестное поле → `ConfigException` с именем переменной; ни в одном сообщении и записи лога нет подстроки значения (CFG-12).
-* `config_inline_secret_test.dart` — **`core/config-rejects-inline-api-key`**: `api_key` в провайдере, `Authorization = "Bearer ghp_…"` литералом в MCP, `api_key_env = "sk-…"`, `api_key` в JSON предконфигурации → `ConfigInlineSecretException` с `codelab secret set codelab/<id>`; текст исключения не содержит значения; `${secret:…}` и `${ENV}` принимаются (CFG-9).
+* `config_inline_secret_test.dart` — **`core/config-rejects-inline-api-key`**: `api_key` в провайдере, `Authorization = "Bearer ghp_…"` литералом в MCP, `api_key_env = "sk-…"`, `api_key` в JSON предконфигурации → `ConfigInlineSecretException` с `codelab secret set codelab/<id>`; текст исключения не содержит значения; `${secret:…}` и `${ENV}` принимаются (CFG-9). В 8.9 тест покрывает пункт 1 CFG-9 (ключ `api_key` и родственные, `suggestedSecretName`); литералы по шаблонам §12.4 (пункты 2–3) — 8.11 (design.md change `add-agent-secret-store`, D10, D12).
 * `debug_secrets_test.dart` — **`core/debug-secrets-never-logs-value`**: `MemorySecretStore` со значением `sk-test-0123456789abcdef`, флаг `debug`; запрос к scripted-провайдеру → записи `secrets.lookup` с `found: true` и `source`; в сырых `LogRecord` **до** редакции нет значения, его префикса из 4+ символов, длины и хеша; без флага `secrets.lookup` нет (CFG-10).
 * `settings_registry_complete_test.dart` — **`core/settings-registry-complete`**: алгоритм §17.5.8; отдельный случай — фиктивный ключ, добавленный в схему теста, роняет проверку с текстом про `SettingDescriptor` (CFG-19).
 * `mcp_reconnect_test.dart` — **`core/mcp-reconnect-after-crash`**: fake-транспорт закрывается после подключения; fake `Clock` и `Random(0)` → задержки 1, 2, 4, 8, 16, 30, 30 с (с джиттером в пределах +20 %, не больше 30 с); после успеха и 10 с жизни счётчик сброшен; вызов во время простоя → текст `not connected`; вызов в полёте при падении → `disconnected during the call`; после переподключения с новым `tools/list` реестр меняется только на границе шага (CFG-17).
@@ -1005,9 +1121,17 @@ Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.ya
 * `config_watcher_test.dart` (`codelab_agent_io`): три записи за 200 мс → одна перезагрузка через 300 мс после последней; замена через rename замечена; файл появился после старта — замечен; та же sha256 — без перезагрузки; режим опроса на временном каталоге.
 * `config_writer_test.dart`: комментарии (в том числе хвостовые), пустые строки, порядок ключей и CRLF сохранены побайтово вне изменённого узла; новый ключ — в конец своего отображения, недостающие предки — в блочном стиле с отступом файла; правка внутри flow-списка `[…]` сохраняет flow-стиль; строки `off`, `yes`, `${VAR}` записаны в кавычках и читаются обратно строками; элемент `mcp.servers` находится и заменяется по `name`, новый — в конец списка; `RemoveTable("providers.local")` удаляет `providers.local` вместе с `models."qwen2.5-coder-32b"` и комментариями внутри, комментарий над следующим ключом сохранён; `RemoveTable` несуществующего ключа и ключа вне схемы → `ConfigException`; сегмент в кавычках (`models."qwen2.5-coder-32b"`) находится и создаётся одним ключом; отказ `YamlEditor` → `ConfigException` с `edit the file manually`, файл не изменён; невалидный итог → файл не изменён; правка файла между `read` и `apply` → `ConfigConflictException`; `mcp.servers` в недоверенный проектный слой → отказ с подсказкой `--local`; `trusted_projects` в проектный слой → отказ(CFG-13).
 * `config_writer_atomic_test.dart`: сбой после записи tmp и до rename → исходный файл цел, tmp удалён при следующей записи; символическая ссылка сохраняется, правится цель.
-* `secret_store_backends_test.dart`: fake `ProcessRunner` — значение секрета ни разу не встречается в argv `security` и `secret-tool`, только в stdin; таймаут 10 с → `SecretStoreUnavailableException`; `auto` без D-Bus → `env` с предупреждением; `file` с правами `0644` → отказ чтения (CFG-10, CFG-11). Реальные хранилища ОС — интеграционные тесты с тегом `os-keychain`, вне обязательного CI.
-* `secret_resolver_test.dart`: `CODELAB_SECRET_CODELAB_OPENAI` побеждает хранилище; отсутствие → `AgentError` с текстом `codelab secret set`; `invalidate` после перезагрузки перечитывает; коллизия `envOverride` при `secret set` отклонена; `SecretNames.forMcp("GitHub", "Authorization") == "codelab/mcp/github/authorization"` и `suggestFor` для пути MCP-заголовка дают одно имя, проходящее `pattern`.
-* `cli_config_commands_test.dart`: `codelab config set|get|unset|path|check`, `provider add --api-key-stdin` (секрет записан, в конфиге только имя), `mcp add|list|remove`, `secret set` со значением аргументом → код 64.
+**Секреты 8.9** (design.md change `add-agent-secret-store`, D12; хранилищ ОС в 1.0 нет):
+* ядро, `codelab_agent_core/test/secrets/`: `secret_names_test.dart` — правило, `envOverride`, `suggestFor` и `forMcp` (`forMcp("GitHub", "Authorization") == "codelab/mcp/github/authorization"`, результат всегда проходит `pattern`); `secret_resolver_test.dart` — `CODELAB_SECRET_CODELAB_OPENAI` побеждает хранилище, кэш найденного, ненайденное не кэшируется, single-flight, недоступность — одно предупреждение на причину, `env()`, `SecretFound.toString()` без значения;
+* ядро, `test/config/`, `test/llm/`, `test/runtime/`: ссылки и шаблоны в конфиге, `secrets.backend`; `routed_stream_function_secrets_test.dart` — ключ при первом запросе, `auth` без HTTP, отмена во время ожидания; `mcp_secret_values_test.dart` — раскрытие перед `connect`, литерал клиента ACP, `dispose()` во время раскрытия; недоверенный проект не вызывает резолвер;
+* `codelab_agent_io/test/secrets/`: `env_secret_store_test.dart` (только чтение); `file_secret_store_test.dart` во временном `CODELAB_HOME` на macOS и Linux — `0644` и символическая ссылка → отказ с `chmod 600`, отсутствующий файл не создаётся, права `0600` до записи значения (фейковый `SecretProcessRunner`, в argv только путь), атомарность, подменённая платформа `windows` → отказ (CFG-10, CFG-11); `open_secret_store_test.dart` — `auto` = `env` без процессов, `auto` не выбирает `file`; `secret_admin_test.dart`, `host_secrets_test.dart` (резолвер в `Isolate.run`);
+* `codelab_agent_io/test/cli/`: `secret_commands_test.dart` — все ветки D8 на фейковом `SecretInput`, в том числе значение аргументом → код `64`; `config_commands_test.dart` — строки `note:`/`warning:` секретов в `config check` (D9);
+* процессные тесты `apps/codelab_agent/test/` и `apps/codelab_cli/test/` с `env` или `file` во временном `CODELAB_HOME`: ключ из `CODELAB_SECRET_*`, `--debug-secrets`, `--llm-script` не открывает `secrets.yaml`, совпадение вывода `codelab-agent secret` и `codelab secret`.
+
+Тесты хранилищ ОС (тег `os-keychain`, argv `security`/`secret-tool`, таймаут 10 с) — черновик
+`add-agent-os-secret-backends` (D13). `invalidate` после перезагрузки и `provider add --api-key-stdin`
+— 8.10.
+* `cli_config_commands_test.dart` (8.10): `codelab config set|get|unset|path|check`, `provider add --api-key-stdin` (секрет записан, в конфиге только имя), `mcp add|list|remove`.
 
 ---
 

@@ -23,7 +23,10 @@
    `EmbeddedTransportResolver` в composition root (`apps/codelab_desktop/lib/app/app_scope.dart`),
    выбор провайдера и модели из конфигурации; конфигурация — загрузчик задачи 8.5
    (`config_loader.dart`), ключ API — `SecretResolver` задачи 8.9 (переменная
-   `CODELAB_SECRET_<…>` или связка ключей ОС; §15 и §17.5.4 документа ядра). Это часть MVP.
+   `CODELAB_SECRET_<…>` или, при явном `secrets.backend: file`, `$CODELAB_HOME/secrets.yaml`;
+   хранилище ОС — после 1.0, change `add-agent-os-secret-backends`; §15 и §17.5.4 документа ядра). Это
+   часть MVP. В 1.0 страница настроек и мастер (если сделаны) предлагают `file` или переменную, а не
+   хранилище ОС; на Windows — только переменную.
    **Should — не блокирует MVP:** пакет `codelab_setup` (§12.4.2), страница провайдеров app
    (D-05, §12.4.5), мастер и статус ключа (§12.4.4) — запись конфига идёт через `ConfigWriter`
    задачи 8.10, тоже Should. Без них встроенный профиль настраивается файлом `config.yaml` и
@@ -37,7 +40,8 @@
    `--dart-define=CODELAB_ALLOW_SCRIPTED_LLM=true`; в релизной сборке его нет. Так же устроено
    тестовое хранилище секретов: переменная `CODELAB_TEST_SECRET_STORE=<каталог>` действует только
    в сборке с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true` (только для тестов; §12.4.13,
-   agent-core-architecture §15.6).
+   agent-core-architecture §15.6). Хранилище — бэкенд `file` задачи 8.9 с явным путём
+   `<каталог>/secrets.yaml` (change `add-agent-secret-store`, D14).
 8. **7.8. Замер нагрузки на UI:** `packages/dart/codelab_embedded/benchmark/stream_latency_benchmark.dart`
    — 10 000 чанков ответа через встроенного агента, измеряется задержка цикла событий. Это
    разведка (исключение (д) правила TDD §9.0 п.3): замер без тестов, ограничен двумя днями.
@@ -201,7 +205,8 @@ Future<EmbeddedAgent> createEmbeddedAgent({required EmbeddedAgentConfig config, 
 AgentCoreServices memoryHostServices({required http.Client http, Logger? logger});
 
 // packages/dart/codelab_embedded/lib/io.dart — десктоп и CLI; мобильные — с этапа 10
-/// LocalExecutionEnv, JsonlSessionStore в $CODELAB_HOME/sessions, секреты — SecretResolver (8.9), MCP stdio (8.1–8.4).
+/// LocalExecutionEnv, JsonlSessionStore в $CODELAB_HOME/sessions, секреты — SecretResolver из openHostSecrets
+/// codelab_agent_io (8.9: те же бэкенды, что у CLI — в 1.0 env и file; change add-agent-secret-store, D15), MCP stdio (8.1–8.4).
 Future<AgentCoreServices> desktopHostServices({String? codelabHome, http.Client? http, Logger? logger});
 /// Этап 10 (§9.15): LocalExecutionEnv с корнем в папке документов приложения, без процессов (exec off),
 /// JsonlSessionStore там же, MCP только по HTTP (agent-core-architecture §4, §10).
@@ -262,7 +267,9 @@ p99 задержки цикла событий UI-isolate больше 8 мс и
 // packages/dart/codelab_embedded/lib/src/isolate_acp_link.dart (только io.dart)
 final class IsolateAcpLink {
   /// В isolate передаются только сериализуемые данные: конфиг как JSON и описание сервисов
-  /// (codelabHome, hostProfile). http.Client, Logger и SecretResolver создаются внутри isolate.
+  /// (codelabHome, hostProfile, secretsBackend, debugSecrets). http.Client, Logger и SecretResolver
+  /// (openHostSecrets, change add-agent-secret-store, D15) создаются внутри isolate; значения секретов
+  /// через SendPort не передаются. Замена прочитанного секрета видна только после перезапуска (до 8.10).
   static Future<IsolateAcpLink> spawn({required Map<String, Object?> configJson,
       required DesktopServicesSpec services});
   AcpTransport get client;                    // тот же контракт, что у InProcessAcpTransport

@@ -105,16 +105,26 @@
    `codelab-agent` и `codelab` (D17). Отступления: в `serve --ws` файлы проекта и `$CODELAB_HOME`
    не читаются (D2, D16); встроенные команды, MCP prompts и ответ «Unknown command» — отдельный
    change встроенных команд (OQ1). Сторож импортов и allowlist зависимостей не менялись (D1).
-9. **8.9. Хранилище секретов** (P-12, P-17; agent-core-architecture §17.5.4) — нужна MVP:
-   встроенный агент этапа 7 берёт ключ провайдера отсюда. `SecretResolver` (порядок разрешения
-   §17.5.4: кэш → переменная `CODELAB_SECRET_<…>` → хранилище ОС), бэкенды `keychain-macos`
-   (`security`), `secret-service` (`secret-tool`), `wincred`; значение секрета передаётся утилите
-   только через stdin, никогда в argv; подкоманды `codelab secret set|delete|list`;
-   `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` пишет обращения без
-   значений. Тесты (agent-core-architecture §17.5.13): `secret_resolver_test.dart`,
-   `secret_store_backends_test.dart` (fake `ProcessRunner`), `debug_secrets_test.dart`
-   (`core/debug-secrets-never-logs-value`); настоящие связки ключей — отдельный интеграционный
-   тест на macOS и Linux (исключение (г) правила TDD).
+9. **8.9. Хранилище секретов** (P-12 — частично, P-17; agent-core-architecture §17.5.4) — нужна MVP:
+   встроенный агент этапа 7 берёт ключ провайдера отсюда. Change
+   [`add-agent-secret-store`](../../../../openspec/changes/add-agent-secret-store/) (design.md, D3–D8, D13–D15). `SecretResolver`
+   (порядок разрешения §17.5.4: кэш → переменная `CODELAB_SECRET_<…>` → хранилище; ссылки
+   `api_key_secret` и `${secret:…}` разрешаются при запросе к провайдеру и подключении MCP-сервера,
+   а не при загрузке). Бэкенды 1.0 — `env` (только чтение `CODELAB_SECRET_*`) и `file` (открытый
+   `$CODELAB_HOME/secrets.yaml`, только по явному `secrets.backend: file`, права `0600`
+   проверяются при каждом доступе, на Windows не поддерживается). `auto` в 1.0 — `env` на всех ОС и
+   никогда не `file`; `keychain` — ошибка конфигурации «not supported yet». `secret set` при `env`
+   отвечает кодом 1 и подсказывает `secrets.backend: file` или переменную; так же подсказывает
+   `config check` для незаданного ссылочного секрета. Подкоманды `codelab secret set|delete|list` и
+   `codelab-agent secret …` (одна реализация `SecretCommands`), программная запись `SecretAdmin`
+   для страницы настроек, фабрика `openHostSecrets` для встроенных профилей;
+   `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` пишет обращения без значений. Сторож и allowlist
+   не меняются. Тесты (agent-core-architecture §17.5.13): `secret_resolver_test.dart`,
+   `file_secret_store_test.dart`, `open_secret_store_test.dart`, `debug_secrets_test.dart`
+   (`core/debug-secrets-never-logs-value`). **Хранилища ОС** (`keychain-macos`, `secret-service`,
+   `wincred` с `ffi`), индекс имён и ручной тест `os-keychain` — после 1.0, черновик
+   [`add-agent-os-secret-backends`](../../../../openspec/changes/add-agent-os-secret-backends/)
+   (решение пользователя 2026-10-31: сужение 8.9).
 10. **8.10. Запись конфига, живая перезагрузка, реестр настроек, переподключение MCP**
     (L-25, E-04, E-15; agent-core-architecture §17.5.3, §17.5.5–§17.5.8) — **Should — не блокирует
     MVP**: `ConfigWriter` (`yaml_edit`, атомарная запись) и подкоманды `codelab config set|unset`,

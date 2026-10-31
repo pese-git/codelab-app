@@ -81,13 +81,12 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final http.Client http;
   final SessionStore sessions;
   final PermissionGate? gate;                      // null → interactiveApproval off
-  final SecretStore? secrets;
+  final SecretResolver? secrets;                   // этап 8.9 (§17.5.2; change add-agent-secret-store, D3): null → ссылки на секреты дают SecretUnavailable("none", "no secret store")
   final McpConnector? mcp;                         // null → mcp off; McpClientConnector из codelab_agent_mcp (этап 8, ниже)
   final ProjectContextLoader? projectContext;      // читает AGENTS.md через env хоста
   final NetworkAddressResolver? resolver;          // после MVP (§17.1.2): null → проверка SSRF только по литералам
   final SpillStore? spills;                        // этап 3 (§17.4.2): null → outputSpill off
   final ConfigSource? config;                      // после MVP (§17.5.2): null → живая перезагрузка и /config недоступны
-  final bool debugSecrets;                         // после MVP (§17.5.4): --debug-secrets или CODELAB_DEBUG_SECRETS=1
   final SessionLeaseStore? leases;                 // после MVP (§17.6.8): null → lease только внутри процесса
   final ProcessProbe? processProbe;                // после MVP (§17.6.8): host, bootId, pid, isAlive для lease
   final LanguageServerToolFactory? languageServers;  // после MVP (§17.8.2): null → languageServers off
@@ -167,15 +166,24 @@ followed`, `connection failed: <runtimeType>`, `HTTP session expired`; в лог
 
 Решения — `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md` (D3, D6).
 
-Реализации: связка ключей ОС в `codelab_agent_io` (Keychain, Secret Service, Credential Manager) и
-хранилище в памяти для тестов. Значения секретов никогда не попадают в логи: каждое прочитанное
-значение регистрируется в `Redactor` (§12.4).
+**Секреты (этап 8.9, change `add-agent-secret-store`, D3, D5, D13).** В `AgentCoreServices`
+лежит не `SecretStore`, а `SecretResolver` (§17.5.2): функцию модели хост строит раньше ядра
+(`createRoutedStreamFunction` вызывается до `buildAgentCore`), и резолвер нужен ей уже тогда, а
+переменные переопределения `CODELAB_SECRET_<…>` требуют окружения процесса, которого у ядра нет.
+Поэтому резолвер создаёт хост (`openHostSecrets` из `codelab_agent_io`, D15) и передаёт один и тот
+же объект в функцию модели и в `AgentCoreServices.secrets`; поля `debugSecrets` нет — режим отладки
+задаётся параметром `debug` резолвера (D3, D11). `SecretStore` остаётся портом хранилища под
+резолвером; все хранилища реализуют расширение `DescribedSecretStore` (`backend` —
+`SecretBackendInfo`: id бэкенда, запись, причина, по которой `auto` не выбрал хранилище ОС).
 
-После MVP (§17.5.2, §17.5.4): все хранилища реализуют расширение `DescribedSecretStore`
-(`backend` — `SecretBackendInfo`: id бэкенда, запись, причина недоступности ОС-хранилища); к
-связке ключей добавляются бэкенды `env` (только чтение, `CODELAB_SECRET_<…>`) и `file` (открытый
-`$CODELAB_HOME/secrets.yaml`, только по явному `secrets.backend = "file"`). Ядро читает секреты
-только через `SecretResolver` (кэш, переопределение из окружения, регистрация в `Redactor`).
+Реализации в 1.0 (D5, D14): `env` (только чтение, `CODELAB_SECRET_<…>`) и `file` (открытый
+`$CODELAB_HOME/secrets.yaml`, `0600`, только по явному `secrets.backend: file`, не на Windows) в
+`codelab_agent_io` и `MemorySecretStore` ядра для тестов. Связка ключей ОС (Keychain, Secret
+Service, Credential Manager) — после 1.0, черновик `add-agent-os-secret-backends` (D13). Ядро
+читает секреты только через `SecretResolver` (кэш процесса, переопределение из окружения,
+single-flight). Регистрация каждого прочитанного значения в `Redactor` (§12.4) добавляется
+change 8.11 в ту же точку резолвера; до него значения ключа и заголовков провайдера вычищаются из
+текстов ошибок через `ProviderConfig.secrets` (D10).
 
 Хост, который обслуживает сессии с разными `cwd`, держит один снимок `CoreConfig` на корень сессии
 (глобальный слой общий): проектные слои у каждого `cwd` свои, и правка проектного файла касается
