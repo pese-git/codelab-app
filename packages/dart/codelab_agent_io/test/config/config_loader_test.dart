@@ -614,6 +614,36 @@ mcp:
         );
       });
 
+      // §15.6, D14 change add-agent-secret-store: тестовое хранилище известно
+      // только в сборке с `-DCODELAB_ALLOW_TEST_SECRETS=true`; вариант с
+      // define проверяет задача 7.7, поэтому здесь он пропускается.
+      test(
+        'CODELAB_TEST_SECRET_STORE in a normal build is a warning with the '
+        'name only; the directory is not created',
+        () {
+          write('$home/config.yaml', provider);
+          final store = '${root.path}/test-secrets';
+
+          final result = load(
+            environment: {'CODELAB_TEST_SECRET_STORE': store},
+          );
+
+          expect(result.issues, isEmpty);
+          final warning = unknown(result).single;
+          expect(warning.level, LogLevel.warning);
+          expect(warning.fields['name'], 'CODELAB_TEST_SECRET_STORE');
+          expect(
+            warning.message,
+            'unknown environment variable CODELAB_TEST_SECRET_STORE',
+          );
+          expect(warning.toString(), isNot(contains(store)));
+          expect(Directory(store).existsSync(), isFalse);
+        },
+        skip: const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')
+            ? 'сборка с CODELAB_ALLOW_TEST_SECRETS: задача 7.7'
+            : false,
+      );
+
       test('the token variable named by the host is not a typo', () {
         write('$home/config.yaml', provider);
 
