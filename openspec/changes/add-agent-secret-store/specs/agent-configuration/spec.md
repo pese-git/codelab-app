@@ -35,6 +35,58 @@
 - **WHEN** провайдер задаёт `api_key_secret: codelab/anthropic`, а сервер `gh` — заголовок `${secret:codelab/mcp/gh/authorization}`; загрузка идёт с хранилищем, которое считает вызовы
 - **THEN** загрузка успешна без предупреждений о секретах, хранилище не вызывалось, `CoreConfig.mcpServers` содержит `gh`, `providerProblems` не содержит `anthropic`
 
+### Requirement: Подкоманда config check
+`codelab-agent config check [--cwd <dir>]` и `codelab config check [--cwd <dir>]` SHALL выполнять полную загрузку для `cwd` (по умолчанию — текущий каталог процесса) без запуска агента. Загрузка SHALL учитывать окружение процесса целиком, включая `CODELAB_CONFIG` и прочие `CODELAB_*`; флагов `serve` (`--config`, `--provider`, `--model` и других) у подкоманды нет: проверяется то, что увидит `serve` без флагов. Вывод в stdout по строкам:
+- первая строка — `Sources: <источники через ", ">`, где источники — `ConfigLoadResult.sources` как есть, по порядку слоёв: `defaults`, затем канонические абсолютные пути прочитанных файлов, затем `env`, если есть переменные-ключи (например `Sources: defaults, /home/u/.codelab/config.yaml, /work/demo/.codelab/config.yaml`);
+- каждая проблема — строка `ConfigIssue.toString()`: `<location>: <key>: <message>`, без `<key>: `, если ключ пустой; `<location>` — `<source>:<line>:<column>` или `<source>`, если позиции нет; подсказка (`did you mean max_steps?`) — часть `<message>`;
+- каждое предупреждение — строка `warning: <location>: [<key>: ]<message>` в той же форме, включая `config.legacy_found` и `config.env.unknown`. Текст `config.legacy_found` НЕ SHALL повторять путь, уже стоящий в `<location>`. Неизвестные `CODELAB_*` SHALL распознаваться в `ConfigLoader` (`codelab_agent_io`), а не в каждом бинаре: правило одно для `serve` и обеих подкоманд. `CODELAB_TEST_SECRET_STORE` SHALL считаться известной только в сборке с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true`; в обычной сборке она SHALL давать `config.env.unknown`, как любая неизвестная `CODELAB_*`, и НЕ SHALL читаться (agent-core §15.6);
+- последняя строка — `Config: valid` или `Config: invalid (issues: <n>)`, где `<n>` — число проблем; предупреждения проблемами не считаются.
+
+Код выхода SHALL быть `0` при валидном конфиге (с предупреждениями тоже), `1` при проблемах, `64` при ошибке использования. Ошибка использования — несуществующий каталог `--cwd` и `ConfigUsageException` загрузчика (`CODELAB_CONFIG` с расширением `.toml` или относительный): текст ошибки идёт в stderr, stdout SHALL быть пустым. Подкоманда НЕ SHALL писать файлы и печатать значения секретов. Обе подкоманды SHALL использовать одну реализацию `ConfigCommands` из `codelab_agent_io`.
+
+#### Scenario: Битый конфиг
+- **WHEN** `config.yaml` задаёт провайдера и `agent.default_model`, содержит одну опечатку ключа, а `config check` запускается в этом `cwd`
+- **THEN** первая строка stdout начинается с `Sources: defaults, ` и называет канонический абсолютный путь `config.yaml`, строка проблемы содержит файл, строку, столбец, путь ключа и подсказку `did you mean …?`, последняя строка `Config: invalid (issues: 1)`, код `1`
+
+#### Scenario: Предупреждения не делают конфиг невалидным
+- **WHEN** `config.yaml` валиден, окружение содержит неизвестную переменную `CODELAB_UNKNOWN_X=1`, а `config check` запускается в этом `cwd`
+- **THEN** stdout содержит строку `warning: …` предупреждения `config.env.unknown`, называющую `CODELAB_UNKNOWN_X`, но не её значение; последняя строка `Config: valid`, код `0`
+
+#### Scenario: Подсказка о codelab.toml
+- **WHEN** `CODELAB_HOME` пуст, в `cwd` есть только `codelab.toml`, а `config check` запускается в этом `cwd`
+- **THEN** stdout содержит строку `warning: <cwd>/codelab.toml: codelab.toml is not used by the Dart agent…`, в тексте после локации путь `<cwd>/codelab.toml` не повторяется; единственная проблема — `agent.default_model: required`, последняя строка `Config: invalid (issues: 1)`, код `1`
+
+#### Scenario: CODELAB_CONFIG учитывается
+- **WHEN** `CODELAB_CONFIG=<tmp>/extra.yaml` (абсолютный путь), файл содержит неизвестный ключ, а `config check` запускается без флагов
+- **THEN** строка `Sources:` содержит `<tmp>/extra.yaml`, stdout содержит проблему этого файла, код `1`
+
+#### Scenario: Несуществующий каталог
+- **WHEN** запускается `config check --cwd <tmp>/missing`, а каталога нет
+- **THEN** код `64`, stderr называет каталог, stdout пуст
+
+#### Scenario: Ошибка использования из окружения
+- **WHEN** `CODELAB_CONFIG` равна `<tmp>/c.toml` или относительному пути `.codelab/extra.yaml`
+- **THEN** код `64`, stderr содержит текст `ConfigUsageException` с именем `CODELAB_CONFIG`, stdout пуст, файл не читается
+
+#### Scenario: Одинаковый вывод у двух бинарей
+- **WHEN** `codelab-agent config check` и `codelab config check` запускаются с одним окружением и `cwd`
+- **THEN** их stdout и коды выхода совпадают
+
+#### Scenario: Тестовое хранилище в обычной сборке
+- **WHEN** агент собран без `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true`, `config.yaml` валиден, окружение содержит `CODELAB_TEST_SECRET_STORE=<tmp>/test-secrets`, а `config check` запускается в этом `cwd`
+- **THEN** stdout содержит строку `warning: …` предупреждения `config.env.unknown`, называющую `CODELAB_TEST_SECRET_STORE`, но не её значение; каталог `<tmp>/test-secrets` не читается и не создаётся; последняя строка `Config: valid`, код `0`
+
+### Requirement: Наблюдаемость загрузки конфигурации
+Успешная загрузка SHALL писать `host.config.loaded {sources, warnings, project_root, transport, models}` (`transport` — `stdio` или `ws`, `models` — id моделей каталога). Каждое предупреждение загрузки SHALL писаться отдельным событием своего имени (`config.env.unknown`, `config.project.untrusted_key`, `config.key.not_applied`, `config.provider.key_missing`, `config.file.ignored`, `config.legacy_found`, `mcp.server.skipped`) и SHALL нести поле `message` — английский текст `ConfigIssue.message` без значений. Событие `config.secret.unavailable` НЕ SHALL писаться: ссылки на секреты разрешаются при запросе и подключении (requirement «Секреты только ссылками»). Значения ключей конфигурации, переменных и секретов НЕ SHALL попадать в эти события и в текст проблем: только пути ключей, имена переменных и секретов, источники.
+
+#### Scenario: Ни одного значения в логе
+- **WHEN** конфиг содержит `headers.Authorization: "Bearer ${TOKEN}"` с `TOKEN=tok-test-secret` и ключ без потребителя, а агент стартует с `--log-level trace`
+- **THEN** лог содержит `host.config.loaded` с полями `transport` и `models` и `config.key.not_applied` с полями `key`, `source`, `message`, но не содержит `tok-test-secret`
+
+#### Scenario: Нет предупреждения о недоступном хранилище
+- **WHEN** конфиг содержит `api_key_secret` и `${secret:…}` в MCP-сервере
+- **THEN** лог загрузки не содержит `config.secret.unavailable`
+
 ## ADDED Requirements
 
 ### Requirement: config check показывает состояние секретов
@@ -66,14 +118,3 @@
 #### Scenario: Без ссылок вывод прежний
 - **WHEN** конфиг использует только `api_key_env`
 - **THEN** строк `note: secrets` и `warning: secrets` нет, хранилище не вызывалось
-
-### Requirement: Наблюдаемость загрузки конфигурации
-Успешная загрузка SHALL писать `host.config.loaded {sources, warnings, project_root, transport, models}` (`transport` — `stdio` или `ws`, `models` — id моделей каталога). Каждое предупреждение загрузки SHALL писаться отдельным событием своего имени (`config.env.unknown`, `config.project.untrusted_key`, `config.key.not_applied`, `config.provider.key_missing`, `config.file.ignored`, `config.legacy_found`, `mcp.server.skipped`) и SHALL нести поле `message` — английский текст `ConfigIssue.message` без значений. Событие `config.secret.unavailable` НЕ SHALL писаться: ссылки на секреты разрешаются при запросе и подключении (requirement «Секреты только ссылками»). Значения ключей конфигурации, переменных и секретов НЕ SHALL попадать в эти события и в текст проблем: только пути ключей, имена переменных и секретов, источники.
-
-#### Scenario: Ни одного значения в логе
-- **WHEN** конфиг содержит `headers.Authorization: "Bearer ${TOKEN}"` с `TOKEN=tok-test-secret` и ключ без потребителя, а агент стартует с `--log-level trace`
-- **THEN** лог содержит `host.config.loaded` с полями `transport` и `models` и `config.key.not_applied` с полями `key`, `source`, `message`, но не содержит `tok-test-secret`
-
-#### Scenario: Нет предупреждения о недоступном хранилище
-- **WHEN** конфиг содержит `api_key_secret` и `${secret:…}` в MCP-сервере
-- **THEN** лог загрузки не содержит `config.secret.unavailable`

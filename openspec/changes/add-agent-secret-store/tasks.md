@@ -45,6 +45,10 @@
   - `09-13-stage-8-mcp-config.md`, пункт 9; `agent-parity-goals.md` P-12 — «частично»: **сделано при подготовке change (2026-10-31)**.
 - [x] 0.2 `[client]` `09-11-stage-6-cli-mvp.md` (абзац о подкомандах): `secret set|delete|list` — через `codelab_setup/io.dart` в составе 8.9, бэкенд из `secrets.backend` пользовательского конфига и `CODELAB_CONFIG`; в 1.0 запись — только с `secrets.backend: file` (D7, D8). `12-4-first-run-and-settings.md` §12.4.2: в `io.dart` моста с 8.9 — `SecretCommands`, `SecretAdmin`; реэкспорт типов секретов в основном бареле — вместе со страницей настроек (D1, D15); статус ключа и мастер в 1.0 предлагают `file` или переменную, а не хранилище ОС.
 
+- [x] 0.3 `[agent]` Тестовое хранилище в обычной сборке (D14; agent-configuration «Подкоманда config check», сценарий «Тестовое хранилище в обычной сборке»; agent-core §15.6; решение пользователя 2026-10-31). Не зависит от итерации 1, делается отдельной веткой и отдельным PR:
+  - тест в `codelab_agent_io/test/config/config_loader_test.dart` (рядом с проверками `config.env.unknown`): обычный прогон `fvm dart test` (без `-D`) с `CODELAB_TEST_SECRET_STORE=<tmp>/test-secrets` даёт предупреждение `config.env.unknown`, текст называет переменную и не содержит значения, каталог не создан; тот же сценарий — на уровне `ConfigCommands` в `codelab_agent_io/test/cli/config_commands_test.dart` (строка `warning:` в stdout, `Config: valid`, код `0`). Красный;
+  - `codelab_agent_io/lib/src/config/environment_layer.dart`: `CODELAB_TEST_SECRET_STORE` в `_knownVariables` только при `const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')` (collection-if в константном множестве); doc-комментарий со ссылкой на §15.6 и D14. Тест зелёный. Вариант сборки с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true` проверяет задача 7.7 этапа 7 вместе с чтением переменной.
+
 **Критерий итерации 0.** Документы не расходятся с design.md; в каждом изменённом абзаце есть ссылка на D-решение.
 
 ## 1. Имена секретов (итерация 1; D2)

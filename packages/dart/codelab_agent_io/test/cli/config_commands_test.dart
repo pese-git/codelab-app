@@ -154,6 +154,30 @@ agent:
   });
 
   test(
+    'CODELAB_TEST_SECRET_STORE in a regular build: a warning naming the '
+    'variable, not the path; the directory is not created; the config stays '
+    'valid (config.env.unknown, §12.4.13)',
+    () async {
+      write('$home/config.yaml', providers);
+      final store = '${root.path}/secret-store';
+
+      final result = await check(env: {'CODELAB_TEST_SECRET_STORE': store});
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      final warning = result.stdout.singleWhere(
+        (l) => l.startsWith('warning: '),
+      );
+      expect(warning, contains('CODELAB_TEST_SECRET_STORE'));
+      expect(result.stdout.join('\n'), isNot(contains(store)));
+      expect(result.stdout.last, 'Config: valid');
+      expect(Directory(store).existsSync(), isFalse);
+    },
+    skip: const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')
+        ? 'сборка с CODELAB_ALLOW_TEST_SECRETS: задача 7.7'
+        : false,
+  );
+
+  test(
     'config.yml next to nothing: warning line, config stays valid',
     () async {
       write('$home/config.yaml', providers);
