@@ -1,3 +1,4 @@
+import '../secrets/secret_names.dart';
 import '../util/logger.dart';
 import 'core_config.dart';
 import 'host_settings.dart';
@@ -136,4 +137,9 @@ final class ConfigInlineSecretException extends ConfigException {
 
   /// Путь первого ключа с секретом.
   final String key;
+
+  /// Имя для подсказки `codelab secret set <name>`: `SecretNames.suggestFor`
+  /// от [key] (design.md change `add-agent-secret-store`, D2). Допустимое имя
+  /// по правилу `SecretNames`; значения секрета в нём нет.
+  String get suggestedSecretName => SecretNames.suggestFor(key);
 }

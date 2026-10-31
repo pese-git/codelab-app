@@ -112,7 +112,7 @@ final class SecretResolver {
 `AgentCoreServices` (§10.3) получает два необязательных поля:
 
 ```dart
-  final SecretResolver? secrets;   // 8.9 (D3): null → ссылки дают SecretUnavailable("none", "no secret store")
+  final SecretResolver? secrets;   // 8.9 (D3, D4): null → ключ провайдера не читается («the host has no secret resolver»), MCP — «no secret store»
   final ConfigSource? config;      // 8.10: null → живая перезагрузка и команда /config недоступны
 ```
 
@@ -346,12 +346,23 @@ envPreconfigLayer(environment, flags):
   шаблоны заголовков через резолвер внутри `runProvider` и кэширует цепочку на процесс только при
   успехе. `SecretMissing` — отказ `auth` без HTTP-запроса `API key secret <name> is not set. Run:
   codelab secret set <name>`; `SecretUnavailable` — `API key secret <name> cannot be read: <backend>
-  is unavailable (<reason>). Set <envOverride(name)> or fix the secret store`. Отмена хода во время
-  ожидания завершает поток `cancelled` сразу; позднее значение только наполняет кэш.
+  is unavailable (<reason>). Set <envOverride(name)> or fix the secret store`. Без резолвера
+  (`secrets == null`) ключ не читается ни из хранилища, ни из окружения: `API key variable <VAR>
+  cannot be read: the host has no secret resolver` (для `api_key_secret` — `API key secret <name>
+  cannot be read: …`); каждый хост с ключом передаёт резолвер (`openHostSecrets`, D15). В
+  `ProviderConfig.secrets` попадают и собранные строки (`Bearer <v>`), и сырые значения ссылок —
+  тело `401` часто цитирует сам токен. Отмена хода во время ожидания завершает поток сразу ошибкой
+  класса `aborted` (`StopReason.aborted`, LLM-7); позднее значение только наполняет кэш.
 - **MCP-сервер конфига — перед `connect`.** `AgentRuntimeImpl` раскрывает шаблоны серверов
-  параллельно, в токене отмены создания сессии. Ненайденный секрет или недоступное хранилище —
-  `mcp.server.failed {server, reason}` с причиной `secret <name> is not set` или `secret <name>
-  cannot be read: <backend> is unavailable`; сессия создаётся без инструментов этого сервера.
+  параллельно при `createSession`, `loadSession` и `setMcpServers`, в токене отмены создания
+  сессии (у замены — уровня сессии). Ненайденный секрет или недоступное хранилище —
+  `mcp.server.failed {server, transport, reason}` с причиной `secret <name> is not set` или
+  `secret <name> cannot be read: <backend> is unavailable` (значение — никогда); сессия создаётся
+  без инструментов этого сервера. `dispose()`/`close()` во время раскрытия отбрасывают результат
+  без `connect` и без `mcp.server.failed`. Заголовки после раскрытия — в порядке файла конфига.
+- **Только `env` и `headers`.** `${secret:…}` в `args`, `url` MCP-сервера и `base_url` провайдера —
+  проблема конфига `secret references ${secret:…} are allowed only in env and headers values`
+  (§15.5, п. 7): argv и URL видны в `ps` и логах.
 - **Ссылка от клиента ACP — литерал.** Серверы `session/new.mcpServers` шаблонов не имеют:
   `${secret:…}` в их `env`/`headers` передаётся серверу как есть. Иначе клиент мог бы вытянуть
   любой секрет хранилища на свой адрес.
@@ -372,8 +383,8 @@ envPreconfigLayer(environment, flags):
 `config.yaml:7:5: providers.openai.api_key: ключ не хранится в конфиге. Сохраните его командой
 codelab secret set codelab/openai и укажите api_key_secret: codelab/openai`. Имя в подсказке —
 `SecretNames.suggestFor(путь)`: `codelab/<id провайдера>`, `codelab/mcp/<сервер>/<ключ>`
-(`SecretNames.forMcp`: имя переменной `env` или заголовка, в нижнем регистре),
-`codelab/search-<имя бэкенда>`. Эти же имена пишут мастер и страницы настроек клиентов.
+(`SecretNames.forMcp`: имя переменной `env`, заголовка или ключа элемента вроде `token`, в нижнем
+регистре), `codelab/search-<имя бэкенда>`, для прочих путей — `codelab/<нормализованный путь>`. Эти же имена пишут мастер и страницы настроек клиентов.
 После MVP пул ключей: имена `<name>_2` … `<name>_16` и переменные `NAME_2` … (§17.10.4); токены
 входа — `codelab/oauth/<id>` (§17.10.6).
 

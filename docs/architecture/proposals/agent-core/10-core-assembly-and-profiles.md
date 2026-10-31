@@ -81,7 +81,7 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final http.Client http;
   final SessionStore sessions;
   final PermissionGate? gate;                      // null → interactiveApproval off
-  final SecretResolver? secrets;                   // этап 8.9 (§17.5.2; change add-agent-secret-store, D3): null → ссылки на секреты дают SecretUnavailable("none", "no secret store")
+  final SecretResolver? secrets;                   // этап 8.9 (§17.5.2; change add-agent-secret-store, D3, D4): null → ключ провайдера не читается («the host has no secret resolver»), MCP-сервер со ссылкой — mcp.server.failed «no secret store»
   final McpConnector? mcp;                         // null → mcp off; McpClientConnector из codelab_agent_mcp (этап 8, ниже)
   final ProjectContextLoader? projectContext;      // читает AGENTS.md через env хоста
   final NetworkAddressResolver? resolver;          // после MVP (§17.1.2): null → проверка SSRF только по литералам
@@ -172,7 +172,12 @@ followed`, `connection failed: <runtimeType>`, `HTTP session expired`; в лог
 переменные переопределения `CODELAB_SECRET_<…>` требуют окружения процесса, которого у ядра нет.
 Поэтому резолвер создаёт хост (`openHostSecrets` из `codelab_agent_io`, D15) и передаёт один и тот
 же объект в функцию модели и в `AgentCoreServices.secrets`; поля `debugSecrets` нет — режим отладки
-задаётся параметром `debug` резолвера (D3, D11). `SecretStore` остаётся портом хранилища под
+задаётся параметром `debug` резолвера (D3, D11). Хост без резолвера ключ провайдера не получает
+вовсе — ни из хранилища, ни прямым чтением окружения: `api_key_env` и `api_key_secret` дают ошибку
+хода `API key variable <VAR> cannot be read: the host has no secret resolver` (для секрета —
+`API key secret <name> cannot be read: …`), иначе чтение выпало бы из `secrets.lookup` и будущей
+регистрации в `Redactor` (D4). Поэтому каждый хост, которому нужен ключ, передаёт резолвер:
+настольные — через `openHostSecrets` (D15). `SecretStore` остаётся портом хранилища под
 резолвером; все хранилища реализуют расширение `DescribedSecretStore` (`backend` —
 `SecretBackendInfo`: id бэкенда, запись, причина, по которой `auto` не выбрал хранилище ОС).
 

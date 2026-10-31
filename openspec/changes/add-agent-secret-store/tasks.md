@@ -53,12 +53,12 @@
 
 ## 1. Имена секретов (итерация 1; D2)
 
-- [ ] 1.1 `[agent]` Тесты `codelab_agent_core/test/secrets/secret_names_test.dart` (agent-secrets «Имена секретов», все сценарии): правило, `envOverride`, `suggestFor` для провайдера, MCP `env`/`headers` и бэкенда поиска, `forMcp`; результат всегда проходит правило; текст ошибки не содержит проверяемой строки. Красный.
-- [ ] 1.2 `[agent]` `lib/src/secrets/secret_names.dart`, экспорт из бареля; doc-комментарии по `AGENTS.md` §15. 1.1 зелёный.
+- [x] 1.1 `[agent]` Тесты `codelab_agent_core/test/secrets/secret_names_test.dart` (agent-secrets «Имена секретов», все сценарии): правило, `envOverride`, `suggestFor` для провайдера, MCP `env`/`headers` и бэкенда поиска, `forMcp`; результат всегда проходит правило; текст ошибки не содержит проверяемой строки. Красный.
+- [x] 1.2 `[agent]` `lib/src/secrets/secret_names.dart`, экспорт из бареля; doc-комментарии по `AGENTS.md` §15. 1.1 зелёный.
 
 ## 2. Порт и резолвер (итерация 1; D3, D10)
 
-- [ ] 2.1 `[agent]` Тесты `codelab_agent_core/test/secrets/secret_resolver_test.dart` на `MemorySecretStore` и фейковом `DescribedSecretStore` (agent-secrets «Резолвер секретов», все сценарии):
+- [x] 2.1 `[agent]` Тесты `codelab_agent_core/test/secrets/secret_resolver_test.dart` на `MemorySecretStore` и фейковом `DescribedSecretStore` (agent-secrets «Резолвер секретов», все сценарии):
   - переменная побеждает хранилище;
   - кэш найденного, ненайденное не кэшируется;
   - single-flight;
@@ -67,13 +67,14 @@
   - `SecretFound.toString()` без значения.
 
   Красный.
-- [ ] 2.2 `[agent]` Тесты `codelab_agent_core/test/secrets/debug_secrets_test.dart` (agent-secrets «Диагностика обращений к секретам», `core/debug-secrets-never-logs-value`, CFG-10): записи `secrets.lookup` с `source` `memory` и `cache`; в сырых `LogRecord` нет значения, его подстрок длиной 4+, длины в полях записи и SHA-256 значения; без режима записей нет. Красный.
-- [ ] 2.3 `[agent]` `lib/src/secrets/`: `SecretStore`, `DescribedSecretStore`, `SecretBackendInfo`, `SecretStoreUnavailableException`, `SecretLookup` и ветки, `SecretResolver`, `MemorySecretStore` (в `lib/src/testing/` или рядом — по образцу существующих тестовых реализаций ядра); экспорт из бареля. 2.1, 2.2 зелёные, `web-compile` зелёный.
+- [x] 2.2 `[agent]` Тесты `codelab_agent_core/test/secrets/debug_secrets_test.dart` (agent-secrets «Диагностика обращений к секретам», `core/debug-secrets-never-logs-value`, CFG-10): две функции `createRoutedStreamFunction` над одним резолвером (провайдеры `openai` и `org`) дают записи `secrets.lookup` `memory`, `memory`, `cache`, `cache`; повторный ход первой функции записей не добавляет; в сырых `LogRecord` нет значения, его подстрок длиной 4+, длины в полях записи и SHA-256 значения; без режима записей нет. Красный.
+- [x] 2.3 `[agent]` `lib/src/secrets/`: `SecretStore`, `DescribedSecretStore`, `SecretBackendInfo`, `SecretStoreUnavailableException`, `SecretLookup` и ветки, `SecretResolver`, `MemorySecretStore` (в `lib/src/testing/` или рядом — по образцу существующих тестовых реализаций ядра); экспорт из бареля. 2.1, 2.2 зелёные, `web-compile` зелёный.
 
 ## 3. Ссылки в конфиге (итерация 1; D2, D4, D7)
 
-- [ ] 3.1 `[agent]` Тесты `codelab_agent_core/test/config/` (agent-configuration «Секреты только ссылками», все сценарии; `config_inline_secret_test.dart` — `core/config-rejects-inline-api-key` в части пункта 1 CFG-9):
+- [x] 3.1 `[agent]` Тесты `codelab_agent_core/test/config/` (agent-configuration «Секреты только ссылками», все сценарии; `config_inline_secret_test.dart` — `core/config-rejects-inline-api-key` в части пункта 1 CFG-9):
   - строгое имя у `api_key_secret` и `${secret:…}`;
+  - `${secret:…}` в `mcp.servers.*.args`, `mcp.servers.*.url` и `providers.*.base_url` — проблема `value` `secret references ${secret:…} are allowed only in env and headers values`;
   - `suggestedSecretName` и текст подсказки у провайдера и MCP;
   - `CatalogProvider.key` (`EnvKeyRef`, `SecretKeyRef`);
   - шаблоны заголовков и `secretValues` MCP, включая литерал `$${secret:x}`;
@@ -83,33 +84,37 @@
   - недоверенный проект с `${secret:…}` не даёт ссылок (agent-secrets, сценарий «Недоверенный проект не читает секреты»).
 
   Красный.
-- [ ] 3.2 `[agent]` `config/resolve.dart`, `schema.dart`, `config_issue.dart` (`suggestedSecretName`), `host_settings.dart` (`secretsBackend`), `interpolate.dart` (шаблон), `model_catalog.dart` (`CatalogProvider.key`, `headerTemplates`), `mcp/mcp_server_config.dart` (`secretValues`); `_validSecretName` заменяется `SecretNames`. 3.1 зелёный; существующие тесты конфига обновлены только там, где сценарий спецификации изменён этим change.
+- [x] 3.2 `[agent]` `config/resolve.dart`, `schema.dart`, `config_issue.dart` (`suggestedSecretName`), `host_settings.dart` (`secretsBackend`), `interpolate.dart` (шаблон), `model_catalog.dart` (`CatalogProvider.key`, `headerTemplates`), `mcp/mcp_server_config.dart` (`secretValues`); `_validSecretName` заменяется `SecretNames`. 3.1 зелёный; существующие тесты конфига обновлены только там, где сценарий спецификации изменён этим change.
 
 ## 4. Ленивое разрешение у провайдеров и MCP (итерация 1; D4)
 
-- [ ] 4.1 `[agent]` Тесты `codelab_agent_core/test/llm/routed_stream_function_secrets_test.dart` на фейковом `http.Client` и `MemorySecretStore` (agent-secrets «Ключ провайдера при запросе», все сценарии):
+- [x] 4.1 `[agent]` Тесты `codelab_agent_core/test/llm/routed_stream_function_secrets_test.dart` на фейковом `http.Client` и `MemorySecretStore` (agent-secrets «Ключ провайдера при запросе», все сценарии):
   - ключ из хранилища, одно чтение на два хода;
   - не задан → `auth` без HTTP и успех после записи без перезапуска;
   - недоступно → текст с бэкендом и переменной;
   - заголовок с `${secret:…}`;
   - `api_key_env` через `env()`;
-  - отмена во время ожидания — `cancelled` не позже 1 с;
+  - отмена во время ожидания — `aborted` (`LlmErrorClass.aborted`, `StopReason.aborted`) не позже 1 с;
+  - без резолвера `api_key_env` и `api_key_secret` → `… cannot be read: the host has no secret resolver`, HTTP-запроса нет;
+  - тело `401`, содержащее только сырое значение секрета заголовка, — значения нет в тексте ошибки;
   - два одновременных первых запроса — одно чтение;
   - значения нет в тексте ошибки.
 
   Красный.
-- [ ] 4.2 `[agent]` `createRoutedStreamFunction(…, secrets:)` в `llm/provider_factory.dart`; doc-комментарий обновлён (больше не «ключ уже разрешён при загрузке»). 4.1 зелёный.
-- [ ] 4.3 `[agent]` Тесты `codelab_agent_core/test/runtime/mcp_secret_values_test.dart` на фейковом `McpConnector` (agent-secrets «Секреты MCP-серверов конфигурации», все сценарии):
+- [x] 4.2 `[agent]` `createRoutedStreamFunction(…, secrets:)` в `llm/provider_factory.dart`; doc-комментарий обновлён (больше не «ключ уже разрешён при загрузке»). 4.1 зелёный.
+- [x] 4.3 `[agent]` Тесты `codelab_agent_core/test/runtime/mcp_secret_values_test.dart` на фейковом `McpConnector` (agent-secrets «Секреты MCP-серверов конфигурации», все сценарии):
   - заголовок из хранилища;
   - ненайденный секрет → `mcp.server.failed`, остальные серверы подключены;
   - ссылка клиента ACP — литерал;
   - без `services.secrets` → причина `no secret store`;
-  - `dispose()` во время раскрытия → результат отброшен, `connect` не вызван;
+  - `dispose()` и `close()` во время раскрытия → результат отброшен, `connect` не вызван, `mcp.server.failed` нет;
+  - раскрытие при `loadSession` и `setMcpServers`;
+  - заголовки после раскрытия в порядке файла конфига;
   - лог и журнал без значения.
 
   Красный.
-- [ ] 4.4 `[agent]` `AgentCoreServices.secrets` (`host/services.dart`), раскрытие в `AgentRuntimeImpl` перед `connect` (`runtime/agent_runtime.dart`). 4.3 зелёный.
-- [ ] 4.5 `[agent]` `apps/codelab_agent`: `AgentHost` временно передаёт резолвер над бэкендом `env` (D3, Migration Plan, итерация 1); характеризационный тест `serve` с `api_key_env` проходит без изменений. **Конец итерации 1.**
+- [x] 4.4 `[agent]` `AgentCoreServices.secrets` (`host/services.dart`), раскрытие в `AgentRuntimeImpl` перед `connect` (`runtime/agent_runtime.dart`). 4.3 зелёный.
+- [x] 4.5 `[agent]` `apps/codelab_agent`: `AgentHost` временно передаёт резолвер над бэкендом `env` (D3, Migration Plan, итерация 1); характеризационный тест `serve` с `api_key_env` проходит без изменений. **Конец итерации 1.**
 
 ## 5. Бэкенды `env` и `file`, выбор бэкенда (итерация 2; D5–D7, D14)
 

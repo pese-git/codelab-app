@@ -6,7 +6,9 @@
 `SecretNames.envOverride(name)` SHALL возвращать `CODELAB_SECRET_` и имя в верхнем регистре, где каждый символ вне `[A-Z0-9]` заменён на `_`. `SecretNames.suggestFor(path)` SHALL возвращать:
 - `codelab/<id>` для ключей `providers.<id>.*`;
 - `codelab/mcp/<server>/<key>` для `mcp.servers[<server>].env.<KEY>` и `….headers.<Key>` — обе части в нижнем регистре, символы вне `[a-z0-9._-]` заменены на `-`; так же `SecretNames.forMcp(server, key)`;
-- `codelab/search-<b>` для `tools.web.search.backends.<b>.*`.
+- `codelab/mcp/<server>/<key>` для ключа `mcp.servers[<server>].<key>` вне `env` и `headers` (например, `token`) — по тому же правилу;
+- `codelab/search-<b>` для `tools.web.search.backends.<b>.*`;
+- `codelab/<путь>` для любого другого пути: путь нормализуется тем же правилом частей (нижний регистр, символы вне `[a-z0-9._-]` заменены на `-`).
 
 Результат `suggestFor` и `forMcp` SHALL проходить правило имени.
 
@@ -17,6 +19,10 @@
 #### Scenario: Предлагаемое имя MCP
 - **WHEN** вызываются `SecretNames.forMcp("GitHub", "Authorization")` и `SecretNames.suggestFor("mcp.servers[GitHub].headers.Authorization")`
 - **THEN** оба дают `codelab/mcp/github/authorization`, и имя проходит правило
+
+#### Scenario: Предлагаемое имя ключа элемента MCP и запасной вариант
+- **WHEN** вызываются `SecretNames.suggestFor("mcp.servers[GitHub].token")` и `SecretNames.suggestFor("tools.exec.Api Token")`
+- **THEN** первое даёт `codelab/mcp/github/token`, второе — имя с префиксом `codelab/`; оба проходят правило
 
 #### Scenario: Неверные имена
 - **WHEN** проверяются `Codelab/OpenAI`, `a/../b`, `codelab/`, `my key` и строка из 129 символов
@@ -57,12 +63,14 @@
 - `api_key_env` — через `SecretResolver.env`;
 - `${secret:<name>}` в `providers.<id>.headers.*` — через `SecretResolver.secret`.
 
+Хост без `SecretResolver` ключ провайдера НЕ SHALL получать: ни из хранилища, ни прямым чтением окружения. Ссылка тогда SHALL давать ошибку хода класса `auth` без HTTP-запроса: `API key variable <VAR> cannot be read: the host has no secret resolver` для `api_key_env`, `API key secret <name> cannot be read: the host has no secret resolver` для `api_key_secret`, `secret <name> cannot be read (providers.<id>.headers.<H>): the host has no secret resolver` для заголовка. Каждый хост, которому нужен ключ провайдера, SHALL передавать резолвер (настольные хосты — `openHostSecrets`, design.md D4, D15).
+
 Ответы:
 - `SecretMissing` для ключа SHALL давать ошибку хода класса `auth` без HTTP-запроса с текстом `API key secret <name> is not set. Run: codelab secret set <name>`;
 - `SecretMissing` для заголовка SHALL давать ошибку `auth` с текстом `secret <name> is not set (providers.<id>.headers.<H>). Run: codelab secret set <name>`;
 - `SecretUnavailable` SHALL давать ошибку `auth` с текстом, который называет бэкенд, причину и переменную `SecretNames.envOverride(name)`.
 
-После неудачи следующий запрос SHALL разрешать ссылку заново. Цепочка провайдера с найденными значениями SHALL кэшироваться на процесс; найденные значения SHALL входить в `ProviderConfig.secrets`. Отмена хода во время ожидания хранилища SHALL завершать поток с `cancelled`, не дожидаясь хранилища. Текст ошибки, журнал и лог НЕ SHALL содержать значение секрета.
+После неудачи следующий запрос SHALL разрешать ссылку заново. Цепочка провайдера с найденными значениями SHALL кэшироваться на процесс. В `ProviderConfig.secrets` SHALL входить и собранные строки (ключ, значение заголовка вроде `Bearer <v>`), и сырые найденные значения каждой ссылки — для вычистки текстов ошибок провайдера. Отмена хода во время ожидания хранилища SHALL завершать поток ошибкой класса `aborted` (`LlmErrorClass.aborted`, `StopReason.aborted`, LLM-7), не дожидаясь хранилища. Текст ошибки, журнал и лог НЕ SHALL содержать значение секрета.
 
 #### Scenario: Ключ из хранилища
 - **WHEN** провайдер `openai` задаёт `api_key_secret: codelab/openai`, хранилище содержит `sk-test-0123456789abcdef`, а сессия выбирает `openai/gpt-4o`
@@ -74,14 +82,30 @@
 
 #### Scenario: Отмена во время ожидания хранилища
 - **WHEN** `read` хранилища не завершается, а ход отменяется через 100 мс
-- **THEN** поток провайдера завершается `cancelled` не позже чем через 1 с после отмены, HTTP-запроса нет
+- **THEN** поток провайдера завершается ошибкой класса `aborted` (`StopReason.aborted`) не позже чем через 1 с после отмены, HTTP-запроса нет
+
+#### Scenario: Хост без резолвера
+- **WHEN** `createRoutedStreamFunction` вызван без `secrets`, провайдер задаёт `api_key_env: OPENAI_API_KEY`, а переменная задана в окружении процесса
+- **THEN** ход завершается ошибкой `auth` `API key variable OPENAI_API_KEY cannot be read: the host has no secret resolver`, HTTP-запроса нет; то же для `api_key_secret: codelab/openai` с текстом `API key secret codelab/openai cannot be read: the host has no secret resolver`
+
+#### Scenario: Сырое значение в теле ошибки
+- **WHEN** провайдер задаёт `headers.Authorization: "Bearer ${secret:codelab/gw}"`, хранилище содержит `tok-test-raw-value`, а сервер отвечает `401` с телом, где есть только `tok-test-raw-value` без `Bearer `
+- **THEN** текст ошибки хода класса `auth` не содержит `tok-test-raw-value`
 
 ### Requirement: Секреты MCP-серверов конфигурации
-Значения `env.*` и `headers.*` MCP-сервера конфигурации с `${secret:<name>}` SHALL храниться в `CoreConfig` шаблоном из литералов и ссылок, а не строкой, и раскрываться рантаймом перед `services.mcp.connect` при создании и загрузке сессии (design.md, D4). Сервер с ненайденным секретом НЕ SHALL подключаться: лог `mcp.server.failed {server, reason}` с причиной `secret <name> is not set` или `secret <name> cannot be read: <backend> is unavailable`, сессия создаётся без его инструментов. `${secret:…}` в серверах `session/new.mcpServers` SHALL оставаться литералом. Литерал `$${secret:x}` SHALL давать строку `${secret:x}` без обращения к резолверу. Без `AgentCoreServices.secrets` ссылка SHALL давать сбой сервера с причиной `no secret store`.
+Значения `env.*` и `headers.*` MCP-сервера конфигурации с `${secret:<name>}` SHALL храниться в `CoreConfig` шаблоном из литералов и ссылок, а не строкой, и раскрываться рантаймом перед `services.mcp.connect` при создании и загрузке сессии (design.md, D4). Раскрытие SHALL выполняться также для серверов конфига в `AgentSession.setMcpServers`. Сервер с ненайденным секретом НЕ SHALL подключаться: лог `mcp.server.failed {server, transport, reason}` с причиной `secret <name> is not set` или `secret <name> cannot be read: <backend> is unavailable` (имя секрета и бэкенд, никогда значение), сессия создаётся без его инструментов (agent-runtime «MCP-серверы сессии», шаг 3). `AgentSession.close()` или `AgentRuntime.dispose()` во время раскрытия SHALL отбрасывать результат без `connect` и без `mcp.server.failed`. Заголовки HTTP-сервера после раскрытия SHALL идти в порядке файла конфига. `${secret:…}` в серверах `session/new.mcpServers` SHALL оставаться литералом. Литерал `$${secret:x}` SHALL давать строку `${secret:x}` без обращения к резолверу. Без `AgentCoreServices.secrets` ссылка SHALL давать сбой сервера с причиной `no secret store`.
 
 #### Scenario: Заголовок из хранилища
 - **WHEN** конфиг объявляет http-сервер `gh` с `headers.Authorization: "Bearer ${secret:codelab/mcp/gh/authorization}"`, а хранилище содержит `tok-test-secret`
 - **THEN** коннектор получает заголовок `Bearer tok-test-secret`, а лог и журнал не содержат `tok-test-secret`
+
+#### Scenario: Порядок заголовков сохраняется
+- **WHEN** сервер `gh` задаёт заголовки `X-A: a`, `Authorization: "Bearer ${secret:codelab/mcp/gh/authorization}"`, `X-B: b` в этом порядке, секрет найден
+- **THEN** коннектор получает заголовки в порядке `X-A`, `Authorization`, `X-B`
+
+#### Scenario: Закрытие во время раскрытия
+- **WHEN** `read` хранилища для сервера `gh` не завершается, а рантайм получает `dispose()`
+- **THEN** `connect` для `gh` не вызван, записи `mcp.server.failed` для `gh` нет
 
 #### Scenario: Ненайденный секрет MCP
 - **WHEN** у сервера `gh` секрет не задан, а у сервера `docs` ссылок нет
@@ -212,8 +236,8 @@
 Флаг `serve --debug-secrets` и переменная `CODELAB_DEBUG_SECRETS=1` SHALL включать событие `secrets.lookup {name, purpose, source, found}` уровня `info` на каждое обращение к `SecretResolver`. `name` — имя секрета или переменной, `purpose` — путь ключа конфига, `source` — `cache`, `env` или id бэкенда. Без режима `secrets.lookup` НЕ SHALL писаться. Ни в одном режиме лог НЕ SHALL содержать значение секрета, его длину, префикс из 4 и более символов или хеш (CFG-10).
 
 #### Scenario: Значение не попадает в лог
-- **WHEN** `MemorySecretStore` содержит `sk-test-0123456789abcdef`, резолвер в режиме отладки, а scripted-провайдер выполняет два хода (`core/debug-secrets-never-logs-value`)
-- **THEN** есть записи `secrets.lookup` с `found: true` и `source` — `memory`, затем `cache`; сырые `LogRecord` (до любой редакции) не содержат значения, ни одной его подстроки длиной 4+, числа `24` в поле, связанном с секретом, и SHA-256 значения в шестнадцатеричном или base64 виде
+- **WHEN** `MemorySecretStore` содержит `sk-test-0123456789abcdef` под `api_key_secret` провайдеров `openai` и `org`, резолвер в режиме отладки; первая функция `createRoutedStreamFunction` на фейковом `http.Client` выполняет ход к `openai` и к `org`, затем вторая функция над тем же резолвером (как второй хост или сессия) — тоже к `openai` и к `org`, после чего первая функция выполняет ещё один ход к `openai` (`core/debug-secrets-never-logs-value`)
+- **THEN** записи `secrets.lookup` с `found: true` идут по порядку: `openai` — `memory`, `org` — `memory`, `openai` — `cache`, `org` — `cache`; повторный ход первой функции новых записей не добавляет (цепочка провайдера кэшируется на процесс, design.md D4); сырые `LogRecord` (до любой редакции) не содержат значения, ни одной его подстроки длиной 4+, числа `24` в поле, связанном с секретом, и SHA-256 значения в шестнадцатеричном или base64 виде
 
 #### Scenario: Без режима
 - **WHEN** тот же прогон без `debug`

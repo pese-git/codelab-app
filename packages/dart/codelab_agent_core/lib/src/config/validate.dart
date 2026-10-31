@@ -1,3 +1,4 @@
+import '../secrets/secret_names.dart';
 import 'config_issue.dart';
 import 'config_tree.dart';
 import 'key_path.dart';
@@ -63,7 +64,11 @@ final class LayerWalk {
     for (final MapEntry(key: name, value: value) in map.entries) {
       final child = path.child(name);
       if (node.rejectsInlineSecrets && inlineSecretKeys.contains(name)) {
-        _issue(ConfigIssueKind.inlineSecret, child, _inlineSecretMessage(path));
+        _issue(
+          ConfigIssueKind.inlineSecret,
+          child,
+          _inlineSecretMessage(child),
+        );
         continue;
       }
       final field = node.fields[name];
@@ -108,13 +113,21 @@ final class LayerWalk {
     );
   }
 
-  /// Текст не содержит значения: оно может быть секретом (CFG-2).
-  String _inlineSecretMessage(KeyPath owner) =>
-      owner.value.startsWith('mcp.servers')
-      ? 'secrets are not stored in the config; reference an environment '
-            'variable with \${NAME} in env or headers'
-      : 'secrets are not stored in the config; use api_key_env '
-            '(or api_key_secret with the secret store)';
+  /// Текст не содержит значения: оно может быть секретом (CFG-2). Подсказка
+  /// называет команду `codelab secret set <name>` с именем
+  /// `SecretNames.suggestFor(путь ключа)` и ссылку, которой заменить ключ
+  /// (agent-configuration «Секреты только ссылками»; design.md change
+  /// `add-agent-secret-store`, D2).
+  String _inlineSecretMessage(KeyPath key) {
+    final name = SecretNames.suggestFor(key.value);
+    return key.value.startsWith('mcp.servers')
+        ? 'secrets are not stored in the config; run: codelab secret set '
+              '$name, then use \${secret:$name} in env or headers '
+              '(or reference an environment variable with \${NAME})'
+        : 'secrets are not stored in the config; run: codelab secret set '
+              '$name, then use api_key_secret: $name '
+              '(or api_key_env with an environment variable)';
+  }
 
   void _node(Object? value, SchemaNode node, KeyPath path) {
     switch (node) {

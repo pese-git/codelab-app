@@ -40,6 +40,7 @@
 
 ### Modified Capabilities
 - `agent-configuration`: строгое правило имени секрета; разрешение `api_key_secret`, `api_key_env` и `${secret:…}` при запросе и подключении вместо заглушки D8; ключ `secrets.backend`; подсказка `inlineSecret` с именем секрета; `config check` показывает состояние секретов; событие `config.secret.unavailable` снимается.
+- `agent-runtime`: шаг 3 требования «MCP-серверы сессии» — раскрытие `${secret:…}` серверов конфига перед `connect` (в том числе при `loadSession` и `setMcpServers`) и новый вид сбоя `mcp.server.failed` для ненайденного или недоступного секрета.
 - `agent-binary`: хранилище секретов в `serve`; флаг `--debug-secrets`; сценарий `--llm-script` использует только бэкенд `env`; подкоманда `codelab-agent secret`.
 - `codelab-cli`: подкоманда `codelab secret set|delete|list` через `codelab_setup/io.dart`.
 
