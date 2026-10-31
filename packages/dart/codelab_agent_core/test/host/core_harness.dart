@@ -32,6 +32,7 @@ final class CoreHarness {
     List<McpServerConfig> mcpServers = const [],
     PermissionsConfig? permissions,
     ProjectFilesSource? projectFiles,
+    SecretResolver? secrets,
   }) {
     final c = clock ?? FakeClock();
     final logger = RecordingLogger();
@@ -55,6 +56,7 @@ final class CoreHarness {
         models: models,
         mcp: mcp,
         projectFiles: projectFiles,
+        secrets: secrets,
       ),
       config: CoreConfig(
         defaultModel: defaultModel ?? testModel,
