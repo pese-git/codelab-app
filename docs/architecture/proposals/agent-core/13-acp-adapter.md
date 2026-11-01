@@ -26,8 +26,19 @@ final class AcpServerConfig {
   final Implementation agentInfo; final Duration detachGrace;   // по умолчанию 30 с; бинарь MVP — 0 (§13.10)
   final AcpTimeouts timeouts;
   final ExecutionEnv Function(String cwd)? localListing;        // §10.4: бинарь по stdio
+  final ExecutionEnv Function(String cwd)? localEnv;            // §10.4: встроенные профили embedded-*
 }
 ```
+
+`localEnv` задаёт хост встроенного агента (профили `embedded-*`, этап 7). Если поле задано, env
+сессии — `localEnv(cwd)`: файлы, команды и листинг исполняет хост, а `fs/*` и `terminal/*`
+клиенту не отправляются, даже если клиент объявил `fs` и `terminal`. Возможности клиента в ACP
+разрешают агенту вызывать его методы, но не обязывают к этому (`09-File System.md`,
+`10-Terminal.md`), поэтому ответ `initialize` не меняется. Gate остаётся `AcpPermissionGate`:
+одобрение спрашивается у клиента `session/request_permission`, containment даёт `BoundedEnv`
+ядра по `cwd` сессии (ENV-2). Без `localEnv` файлы и команды идут через клиента
+(`AcpClientExecutionEnv`, §13.9), а листинг — через `localListing`. Решение и альтернативы —
+design.md change `add-embedded-agent-mode`, D4.
 
 Сырые кадры разбирает транспорт: порт `AcpTransport` отдаёт `JsonRpcMessage`, поэтому ответы
 `-32700` и `-32600` на неразбираемый JSON или кадр не JSON-RPC 2.0 даёт серверный транспорт
