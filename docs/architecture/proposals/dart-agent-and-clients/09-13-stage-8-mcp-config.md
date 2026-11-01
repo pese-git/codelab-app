@@ -107,7 +107,7 @@
    change встроенных команд (OQ1). Сторож импортов и allowlist зависимостей не менялись (D1).
 9. **8.9. Хранилище секретов** (P-12 — частично, P-17; agent-core-architecture §17.5.4) — нужна MVP:
    встроенный агент этапа 7 берёт ключ провайдера отсюда. Change
-   [`add-agent-secret-store`](../../../../openspec/changes/add-agent-secret-store/) (design.md, D3–D8, D13–D15). `SecretResolver`
+   [`add-agent-secret-store`](../../../../openspec/changes/archive/2026-11-01-add-agent-secret-store/) (design.md, D3–D8, D13–D15). `SecretResolver`
    (порядок разрешения §17.5.4: кэш → переменная `CODELAB_SECRET_<…>` → хранилище; ссылки
    `api_key_secret` и `${secret:…}` разрешаются при запросе к провайдеру и подключении MCP-сервера,
    а не при загрузке). Бэкенды 1.0 — `env` (только чтение `CODELAB_SECRET_*`) и `file` (открытый
@@ -126,7 +126,7 @@
    [`add-agent-os-secret-backends`](../../../../openspec/changes/add-agent-os-secret-backends/)
    (решение пользователя 2026-10-31: сужение 8.9).
 
-   **Итог 8.9.** Сделано change [`add-agent-secret-store`](../../../../openspec/changes/add-agent-secret-store/)
+   **Итог 8.9.** Сделано change [`add-agent-secret-store`](../../../../openspec/changes/archive/2026-11-01-add-agent-secret-store/)
    (итерации 0–5): правило имён `SecretNames` и `SecretResolver` в ядре с порядком «кэш →
    `CODELAB_SECRET_*` → хранилище», single-flight и типизированным `SecretLookup` (D2, D3); ссылки
    `api_key_secret`, `api_key_env` и `${secret:…}` разрешаются при первом запросе к провайдеру и
@@ -176,7 +176,7 @@
 предупреждение `config.legacy_found` вместо чтения `codelab.toml`, подкоманда `config check`,
 минимальный `codelab_setup`; новая зависимость `yaml` как решение о технологии по
 `AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/) (8.6–8.8; scope: инструкции проекта, шаблоны промптов как команды, определения агентов в Markdown, порт `ProjectFilesSource`, `config check` с диагностикой файлов проекта; ACP не расширяется),
-[`add-agent-secret-store`](../../../../openspec/changes/add-agent-secret-store/) (8.9; scope: имена секретов, порядок разрешения, бэкенды `env` и `file`, команды
+[`add-agent-secret-store`](../../../../openspec/changes/archive/2026-11-01-add-agent-secret-store/) (8.9; scope: имена секретов, порядок разрешения, бэкенды `env` и `file`, команды
 `secret`, диагностика без значений; бэкенды ОС — черновик `add-agent-os-secret-backends` после 1.0) и `add-config-writer-and-reload` (8.10, Should; scope:
 запись конфига, наблюдатель и перезагрузка, реестр настроек, `McpSupervisor`, команды
 `config`/`provider`/`mcp` на запись) и `add-agent-core-secret-redaction` (8.11, Should; scope:
