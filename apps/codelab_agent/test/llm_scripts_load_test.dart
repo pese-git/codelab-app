@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
-import 'package:codelab_agent_io/codelab_agent_io.dart';
+import 'package:codelab_agent_io/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/agent_process.dart';
