@@ -41,7 +41,7 @@ CodeLab SHALL использовать Dart/Flutter/FVM/Melos monorepo с раз
 
 #### Scenario: Основной барель встроенного агента собирается для web
 - **WHEN** выполняется `fvm dart run melos run web-compile`
-- **THEN** точка входа `packages/dart/codelab_embedded/test/web_smoke/main.dart` компилируется в JavaScript без ошибок
+- **THEN** точка входа `packages/dart/codelab_embedded/test/web_smoke/main.dart` компилируется в JavaScript и в WebAssembly без ошибок (профиль `embedded-cli`, суженный до памяти; design.md change `add-embedded-agent-mode`, D3)
 
 ### Requirement: Автоматический сторож границ пакетов
 CodeLab SHALL проверять границы пакетов тестом `packages/dart/codelab_architecture_tests`, а не только ревью.

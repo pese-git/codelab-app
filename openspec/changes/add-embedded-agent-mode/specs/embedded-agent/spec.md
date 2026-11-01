@@ -10,7 +10,7 @@
 
 #### Scenario: Основной барель собирается для web
 - **WHEN** выполняется `fvm dart run melos run web-compile`
-- **THEN** точка входа `packages/dart/codelab_embedded/test/web_smoke/main.dart`, импортирующая только основной барель и `package:codelab_agent_core/testing.dart`, компилируется в JavaScript без ошибок
+- **THEN** точка входа `packages/dart/codelab_embedded/test/web_smoke/main.dart` компилируется в JavaScript и в WebAssembly без ошибок. Она импортирует только основной барель `codelab_embedded`, `package:codelab_agent_core/codelab_agent_core.dart`, `package:codelab_agent_core/testing.dart` и `package:http/http.dart` и вызывает `createEmbeddedAgent` с профилем `embedded-cli`, суженным до памяти (`shellExec` и `sessionPersistence` выключены), на `MemoryExecutionEnv` (design.md, D3). Компиляция доказывает, что основной барель `codelab_embedded` не тянет `dart:io`
 
 #### Scenario: dart:io в основном бареле
 - **WHEN** файл `packages/dart/codelab_embedded/lib/src/agent.dart` импортирует `dart:io` или `package:codelab_agent_io/`
@@ -22,11 +22,17 @@
 - `detachGrace` — ноль;
 - для профилей `embedded-*` — `localEnv` (требование «Локальное исполнение и containment»).
 
+`createEmbeddedAgent` SHALL принимать только профили `embedded-*`: иной профиль (в том числе `agent-serve`) SHALL завершать возвращённый `Future` ошибкой `HostWiringException` до создания ресурсов, без синхронного исключения (D2, D8).
+
 В `lib/` пакета НЕ SHALL встречаться `ToolRegistry(`, `Agent(` и `AgentRuntime(`. Методов, полей и состояний ACP встроенный режим НЕ SHALL добавлять.
 
 #### Scenario: Ход через встроенного агента
 - **WHEN** тест открывает агента `scriptedEmbeddedAgentOpener` со сценарием «ответить текстом `hello`» и профилем `embedded-cli`, а затем через `clientTransport` выполняет `initialize`, `session/new` с временным `cwd` и `session/prompt`
 - **THEN** клиент получает `agent_message_chunk` с `hello` и ответ `session/prompt` с `stopReason: end_turn`, а `initialize` возвращает `agentInfo.name == "codelab-agent"`
+
+#### Scenario: Профиль agent-serve через основной барель
+- **WHEN** хост вызывает `createEmbeddedAgent` с `hostProfile: agent-serve`
+- **THEN** вызов возвращает `Future`, который завершается `HostWiringException`; ядро, пара транспортов и сервер не создаются
 
 #### Scenario: Ручная сборка ядра запрещена
 - **WHEN** файл в `packages/dart/codelab_embedded/lib/` содержит `AgentRuntime(`
@@ -82,7 +88,7 @@
 - **THEN** файл записан в `cwd` сессии, следующий вызов `write` с другим `toolCallId` снова спрашивает
 
 ### Requirement: Жизненный цикл встроенного агента
-`EmbeddedAgent.dispose()` SHALL быть идемпотентным (design.md, D6). Он SHALL выполнить `AcpAgentServer.shutdown` и только после этого:
+`EmbeddedAgent.dispose()` SHALL быть идемпотентным и устойчивым к ошибкам своих шагов: ошибка одного шага НЕ SHALL отменять следующие, а `closed` SHALL завершаться в любом случае (design.md, D6). Он SHALL выполнить `AcpAgentServer.shutdown` и только после этого:
 - освободить runtime, MCP-серверы сессий и созданный хостом HTTP-клиент;
 - закрыть агентский конец.
 

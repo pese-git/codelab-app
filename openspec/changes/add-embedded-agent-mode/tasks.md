@@ -35,40 +35,56 @@
 
 ## 1. Встроенный агент отвечает на ход в памяти (итерация 1)
 
-- [ ] 1.1 `[agent]` Тест `codelab_agent_core/test/host/host_profile_test.dart` и golden `test/host/profiles/embedded-app-desktop.golden.json` (agent-runtime «Профили хостов и сужение», сценарий «Профиль встроенного агента приложения»; D4). Красный: `HostProfile.of('embedded-app-desktop')` бросает `ArgumentError`.
-- [ ] 1.2 `[agent]` Профиль `embedded-app-desktop` в `host_profile.dart` с причинами по §10.4.
-- [ ] 1.3 `[protocol]` Тесты `codelab_agent_acp/test/` (agent-acp-server «Локальное окружение сессии от хоста», все три сценария; D4):
+- [x] 1.1 `[agent]` Тест `codelab_agent_core/test/host/host_profile_test.dart` и golden `test/host/profiles/embedded-app-desktop.golden.json` (agent-runtime «Профили хостов и сужение», сценарий «Профиль встроенного агента приложения»; D4). Красный: `HostProfile.of('embedded-app-desktop')` бросает `ArgumentError`.
+- [x] 1.2 `[agent]` Профиль `embedded-app-desktop` в `host_profile.dart` с причинами по §10.4.
+- [x] 1.3 `[protocol]` Тесты `codelab_agent_acp/test/` (agent-acp-server «Локальное окружение сессии от хоста», все три сценария; D4):
   - клиент объявил `fs`/`terminal`, сервер с `localEnv` не шлёт `fs/*`/`terminal/*`;
   - `write` в `standard` по-прежнему спрашивает клиента;
   - без `localEnv` — прежние кадры;
   - `fileListing` при `localEnv` без листинга — `HostWiringException`.
 
   Красный: поля `localEnv` нет.
-- [ ] 1.4 `[protocol]` `AcpServerConfig.localEnv` и ветка в `_wire` (`agent_server.dart`). Doc-комментарии по-русски со ссылкой на D4 и §13.1.
-- [ ] 1.5 `[agent]` Тест `codelab_agent_io/test/scripted/llm_script_test.dart` — случаи `apps/codelab_agent/test` про разбор `--llm-script` и слой провайдеров сценария переносятся на новый API (embedded-agent «Сценарий модели для тестов», сценарий «Сценарий бинаря и встроенного агента разбирается одинаково»; D8). Красный: API нет в `codelab_agent_io`.
-- [ ] 1.6 `[agent]` Перенести `LlmScript` и `_withScriptedProviders` в `codelab_agent_io/lib/src/scripted/` (`LlmScriptException` вместо `UsageError`); `apps/codelab_agent` переводит исключение в код `64`. Тесты бинаря (`llm_scripts_load_test.dart`, `agent_host_*_test.dart`, процессные) остаются зелёными без правок ожиданий.
-- [ ] 1.7 `[agent]` Сторож до кода пакета (workspace-architecture «Автоматический сторож границ пакетов», сценарии «Основной барель встроенного агента импортирует IO-пакет», «Встроенный агент собирает ядро вручную», «Зависимость моста встроенного агента вне allowlist»; D3):
+- [x] 1.4 `[protocol]` `AcpServerConfig.localEnv` и ветка в `_wire` (`agent_server.dart`). Doc-комментарии по-русски со ссылкой на D4 и §13.1.
+- [x] 1.5 `[agent]` Тест `codelab_agent_io/test/scripted/llm_script_test.dart` — случаи `apps/codelab_agent/test` про разбор `--llm-script` и слой провайдеров сценария переносятся на новый API (embedded-agent «Сценарий модели для тестов», сценарий «Сценарий бинаря и встроенного агента разбирается одинаково»; D8). Красный: API нет в `codelab_agent_io`.
+- [x] 1.6 `[agent]` Перенести `LlmScript` и `_withScriptedProviders` в `codelab_agent_io/lib/src/scripted/` (`LlmScriptException` вместо `UsageError`); `apps/codelab_agent` переводит исключение в код `64`. Тесты бинаря (`llm_scripts_load_test.dart`, `agent_host_*_test.dart`, процессные) остаются зелёными без правок ожиданий.
+- [x] 1.7 `[agent]` Сторож до кода пакета (workspace-architecture «Автоматический сторож границ пакетов», сценарии «Основной барель встроенного агента импортирует IO-пакет», «Встроенный агент собирает ядро вручную», «Зависимость моста встроенного агента вне allowlist»; D3):
   - два правила `packages/dart/codelab_embedded` в `rules.dart` вместо комментария `stage 7`;
   - `embeddedAllowlist` и тест в `pubspec_allowlist_test.dart`;
   - сканирование `packages/dart/codelab_embedded/lib` в `host_assembly_guard_test.dart`;
   - негативные тесты на временном пакете.
 
   Красный: пакета нет, тест allowlist не находит `pubspec.yaml`.
-- [ ] 1.8 `[agent]` Тесты `packages/dart/codelab_embedded/test/embedded_agent_test.dart` на `scriptedEmbeddedAgentOpener` и `MemorySessionStore`/временном каталоге (embedded-agent:
+- [x] 1.8 `[agent]` Тесты `packages/dart/codelab_embedded/test/embedded_agent_test.dart` на `scriptedEmbeddedAgentOpener` и `MemorySessionStore`/временном каталоге (embedded-agent:
   - «Сборка встроенного агента», сценарий «Ход через встроенного агента»;
   - «Локальное исполнение и containment», оба сценария;
   - «Разрешения во встроенном режиме», оба сценария;
   - D2, D4).
 
   Красный: пакета нет.
-- [ ] 1.9 `[agent]` Пакет `packages/dart/codelab_embedded`:
+- [x] 1.9 `[agent]` Пакет `packages/dart/codelab_embedded`:
   - `pubspec.yaml` по `embeddedAllowlist`, запись в `workspace:` корневого `pubspec.yaml`;
   - основной барель (`createEmbeddedAgent`, `EmbeddedAgent`, `EmbeddedAgentConfig`, `EmbeddedHostServices`, `EmbeddedAgentOpener`, `EmbeddedAgentConfigException`, реэкспорт `Logger`/`LogLevel`);
   - `lib/testing.dart` (`scriptedEmbeddedAgentOpener`);
   - вложенный `AGENTS.md` (назначение, границы, TDD, готовность итерации — §9.0, правило 7).
 
   Сборка — только `buildAgentCore`, сервер на `InProcessAcpLink` с `agentInfo` бинаря и `detachGrace: zero` (D2, D4).
-- [ ] 1.10 `[agent]` Web-smoke `packages/dart/codelab_embedded/test/web_smoke/main.dart` и строка в скрипте `web-compile` корневого `pubspec.yaml` (workspace-architecture «Границы пакетов monorepo», сценарий «Основной барель встроенного агента собирается для web»; embedded-agent «Пакет codelab_embedded и его точки входа», сценарий «Основной барель собирается для web»; D3). Красный: файла нет, `web-compile` падает на отсутствующей точке входа после правки скрипта.
+- [x] 1.10 `[agent]` Web-smoke `packages/dart/codelab_embedded/test/web_smoke/main.dart` и строка в скрипте `web-compile` корневого `pubspec.yaml` (workspace-architecture «Границы пакетов monorepo», сценарий «Основной барель встроенного агента собирается для web»; embedded-agent «Пакет codelab_embedded и его точки входа», сценарий «Основной барель собирается для web»; D3). Красный: файла нет, `web-compile` падает на отсутствующей точке входа после правки скрипта.
+
+- [x] 1.11 `[protocol]` По ревью итерации 1 (agent-acp-server «Локальное окружение сессии от хоста», сценарии «Несуществующий cwd при localEnv», «Команда в standard спрашивает клиента»; D4):
+  - тест: при `localEnv` `session/new` и `session/load` с несуществующим `cwd` → `-32602`, сессия не создана; красный — сейчас `_checkCwd` смотрит только `localListing`;
+  - `_checkCwd` проверяет `cwd` листингом `localEnv(cwd)`, если `localEnv` задан;
+  - тест: `exec` в `standard` при `localEnv` спрашивает клиента `session/request_permission`, `terminal/create` не уходит;
+  - doc-комментарий `localEnv`: фабрика вызывается с `/` при создании сервера и должна быть без побочных эффектов.
+- [x] 1.12 `[agent]` По ревью итерации 1, пары «тест → правка» (embedded-agent «Сборка встроенного агента», сценарий «Профиль agent-serve через основной барель»; «Локальное исполнение и containment»; «Разрешения во встроенном режиме»; «Жизненный цикл встроенного агента»; D2, D6, D8):
+  - тесты ветки `agent-serve` в `scriptedEmbeddedAgentOpener` (файлы через клиента) и отказа `createEmbeddedAgent` на `agent-serve` через `Future`, без синхронного исключения; `createEmbeddedAgent` — `async`;
+  - `EmbeddedHostServices.localEnv` — non-null тип;
+  - устойчивый `dispose`: каждый шаг в своём `try`, `closed` в `finally`, ошибка `serve` логируется без текста (D6); тест с падающим шагом;
+  - утечка при `start()`: если `link.agent.start()` бросает, ядро и пара транспортов освобождаются (D6, сборка п. 4); тест;
+  - тесты `write` и `exec` вне корня (`../`, symlink) → `outsideWorkspace` без записи и запуска;
+  - тест `dispose` при ожидающем разрешении: вызов отклонён, ход `cancelled`, повторный `dispose` без ошибок (полный сценарий с журналом JSONL — 2.5);
+  - тексты ошибок и логов — по-английски (`AGENTS.md` §15);
+  - doc-комментарий `lib/src/testing/scripted_opener.dart` (почему/для чего/как, D8).
+- [x] 1.13 `[docs]` Правки артефактов change по двойному ревью итерации 1: web-smoke в спеках embedded-agent и workspace-architecture и D3 (импорты, профиль `embedded-cli`, JS и Wasm); поля `EmbeddedHostServices` и уточнения API в D2; устойчивый `dispose` и граница итераций 1/2 в D6; `-32602` для `cwd` и чистая фабрика `localEnv` в agent-acp-server и D4; место `LlmScript` в D8 и Risks; задачи 1.11, 1.12, 2.9.
 
 ## 2. Настоящий хост: конфиг, секреты, журнал, жизненный цикл (итерация 2)
 
@@ -94,12 +110,20 @@
   - `dispose` при ожидающем разрешении — отказ, `cancelled`, итог хода в журнале;
   - повторный `dispose`;
   - закрытие клиентом — `closed`, MCP-процесс fake-сервера остановлен;
-  - асинхронная ошибка в зоне — клиентский `failed`/`disconnected`, `embedded.agent.failed` без текста, внешняя зона ничего не получает.
+  - асинхронная ошибка в зоне — клиентский `failed`/`disconnected`, `embedded.agent.failed` уровня `error` только с `error_class`, без текста ошибки; внешняя зона и обработчик ошибок приложения ничего не получают;
+  - ошибка `serve` — тот же путь: `embedded.agent.failed`, закрытие агентского конца, `dispose`.
 
-  Красный: `dispose` не ждёт `shutdown`, зоны нет.
-- [ ] 2.6 `[agent]` Охраняемая зона `serve`, подписка на закрытие агентского конца, порядок `dispose` по D6, `closed`.
+  Красный: зоны `runZonedGuarded` и события `embedded.agent.failed` нет (устойчивый `dispose` уже есть с итерации 1, задача 1.12).
+- [ ] 2.6 `[agent]` Охраняемая зона `runZonedGuarded` вокруг `serve` и асинхронной работы агента; при отказе — `embedded.agent.failed {error_class}` без текста, закрытие агентского конца, `dispose` (D6, «Отказ агента»). Подписка на закрытие агентского конца, порядок `dispose` по D6, `closed`.
 - [ ] 2.7 `[agent]` Тест паритета профилей `codelab_embedded/test/profile_parity_test.dart` (agent-runtime, сценарий «Паритет профилей»; §10.12). Красный до 2.2, если ядро и сервер расходятся; иначе тест закрывает критерий и фиксируется ссылкой в PR.
 - [ ] 2.8 `[agent]` Рефакторинг по итогам итерации: общая часть сборки `apps/codelab_agent` и `codelab_embedded` сверена. Различия — только профиль, транспорт и сценарий (D1, в); дублирование логики устранено переносом в существующие пакеты, если оно появилось.
+
+- [ ] 2.9 `[agent]` Вынести сценарий модели из основного бареля `codelab_agent_io` в `package:codelab_agent_io/testing.dart` (D8, «Где лежит `LlmScript`»; Risks «Сценарий модели в графе рабочей сборки»):
+  - красный тест сторожа: основной барель `codelab_agent_io` не экспортирует и не импортирует `lib/src/scripted/`; импорт `codelab_agent_io/testing.dart` разрешён только `apps/codelab_agent`, `codelab_embedded/lib/src/testing/` и тестам;
+  - перенос экспортов `LlmScript`, слоя провайдеров сценария и `CwdTrackingStore`; импорты бинаря и `codelab_embedded/testing.dart`;
+  - тесты бинаря и `codelab_embedded` остаются зелёными без правок ожиданий.
+
+  Выполняется до или вместе с 2.2: `io.dart` не появляется, пока сценарий в основном бареле.
 
 ## 3. CLI (итерация 3)
 

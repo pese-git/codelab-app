@@ -1,7 +1,8 @@
 /// Реализации портов ядра CodeLab на `dart:io`: локальные файлы и процессы
 /// (`agent-core-architecture` §4.3, §4.6), журналы сессий в JSONL (§8.5) и
 /// stdio-транспорт MCP-серверов (design.md change `add-agent-mcp-client`, D9) и
-/// хранилища секретов `env`/`file` (change `add-agent-secret-store`).
+/// хранилища секретов `env`/`file` (change `add-agent-secret-store`) и сценарий
+/// модели для тестов `LlmScript` (change `add-embedded-agent-mode`, D8).
 library;
 
 export 'src/cli/exit_codes.dart';
@@ -23,6 +24,9 @@ export 'src/env/local_execution_env.dart';
 export 'src/mcp/stdio_process_transport.dart'
     show StdioMcpTransportFactory, StdioProcessTransport;
 export 'src/project/project_files_loader.dart';
+export 'src/scripted/cwd_tracking_store.dart';
+export 'src/scripted/llm_script.dart';
+export 'src/scripted/scripted_providers.dart';
 export 'src/secrets/env_secret_store.dart';
 export 'src/secrets/file_secret_store.dart';
 export 'src/secrets/host_secrets.dart';
