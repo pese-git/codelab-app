@@ -104,6 +104,19 @@ void main() {
       );
     });
 
+    test('a path without a rule falls back to the codelab/ prefix', () {
+      // agent-secrets «Предлагаемое имя ключа элемента MCP и запасной
+      // вариант»: ключ элемента и запасной путь.
+      expect(
+        SecretNames.suggestFor('mcp.servers[GitHub].token'),
+        'codelab/mcp/github/token',
+      );
+      final fallback = SecretNames.suggestFor('tools.exec.Api Token');
+      expect(fallback, startsWith('codelab/'));
+      expect(fallback, 'codelab/tools.exec.api-token');
+      expect(SecretNames.problem(fallback), isNull);
+    });
+
     test('a search backend suggests codelab/search-<b>', () {
       expect(
         SecretNames.suggestFor('tools.web.search.backends.brave.api_key'),

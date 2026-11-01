@@ -152,6 +152,9 @@ void main() {
         expect(result.exitCode, 64);
         expect(result.stderr, contains('empty secret value'));
         expect(result.stdout, isEmpty);
+        // agent-secrets «Ошибка значения без справки»: ошибка значения, а не
+        // использования — приложение справку `secret` не печатает.
+        expect(result.showUsage, isFalse);
         expect(await store.names(), isEmpty);
       });
     }
@@ -208,6 +211,7 @@ void main() {
 
       expect(result.exitCode, 64);
       expect(result.stderr, ['secret value must be a single line']);
+      expect(result.showUsage, isFalse);
       expect(result.stdout, isEmpty);
       expect(await store.read(name), isNull);
     });
@@ -223,6 +227,8 @@ void main() {
 
       expect(result.exitCode, 64);
       expect(result.stderr, ['secret value must be valid UTF-8']);
+      // agent-secrets «Недопустимый UTF-8»: без справки.
+      expect(result.showUsage, isFalse);
       expect(await store.read(name), isNull);
     });
   });
@@ -582,6 +588,34 @@ providers:
       expect(result.stdout, isEmpty);
     });
 
+    test('set с secrets.backend: file в CODELAB_CONFIG: код 64, stdin не '
+        'читался, ничего не создано', () async {
+      // agent-secrets «Нет домашнего каталога»: файл `CODELAB_CONFIG` выбирает
+      // `file`, но без домашнего каталога путь `secrets.yaml` неоткуда взять.
+      final extra = File('${root.path}/extra.yaml')
+        ..writeAsStringSync('secrets:\n  backend: file\n');
+      final input = FakeSecretInput('$value\n');
+      final cwd = Directory.current.path;
+
+      final result = await real().set(
+        SecretSetOptions(
+          name: name,
+          environment: {...noHome, 'CODELAB_CONFIG': extra.path},
+        ),
+        input,
+      );
+
+      expect(result.exitCode, 64);
+      expect(result.stderr, [text]);
+      expect(result.showUsage, isFalse);
+      expect(input.events, isEmpty);
+      expect(input.reads, 0);
+      expect(Directory('$cwd/.codelab').existsSync(), isFalse);
+      expect(File('$cwd/secrets.yaml').existsSync(), isFalse);
+      expect(Directory('${root.path}/.codelab').existsSync(), isFalse);
+      expect(File('${root.path}/secrets.yaml').existsSync(), isFalse);
+    });
+
     test('delete и list: код 64 и тот же текст', () async {
       final deleted = await real().delete(
         SecretDeleteOptions(name: name, environment: noHome),
@@ -594,6 +628,11 @@ providers:
       expect(listed.stderr, [text]);
       expect(deleted.showUsage, isFalse);
       expect(listed.showUsage, isFalse);
+      final cwd = Directory.current.path;
+      expect(Directory('$cwd/.codelab').existsSync(), isFalse);
+      expect(File('$cwd/secrets.yaml').existsSync(), isFalse);
+      expect(Directory('${root.path}/.codelab').existsSync(), isFalse);
+      expect(File('${root.path}/secrets.yaml').existsSync(), isFalse);
     });
 
     test('USERPROFILE без HOME домашним каталогом считается', () async {

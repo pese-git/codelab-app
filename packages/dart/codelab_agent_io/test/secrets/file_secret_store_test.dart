@@ -836,6 +836,28 @@ void main() {
     expect(second.eventsOf('secrets.file.refused'), isEmpty);
   });
 
+  test('a file over 1 MiB on read is refused with secrets.file.refused '
+      '{reason: too_large}, once per process and path', () async {
+    // agent-secrets «Бэкенд file»: размер входит в список отказов с
+    // предупреждением (D10), как права и символическая ссылка.
+    File(path)
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync('x' * (1024 * 1024 + 1));
+    chmod('700', home);
+    chmod('600', path);
+
+    await expectRefused(
+      () => open().read('codelab/a'),
+      equals('$path is larger than 1 MiB'),
+    );
+    await expectRefused(() => open().names(), contains('larger than 1 MiB'));
+
+    final refused = logger.eventsOf('secrets.file.refused');
+    expect(refused, hasLength(1));
+    expect(refused.single.level, LogLevel.warning);
+    expect(refused.single.fields, {'path': path, 'reason': 'too_large'});
+  });
+
   group('Windows', () {
     test('the substituted platform refuses every operation', () async {
       seed({'codelab/a': 'v'});

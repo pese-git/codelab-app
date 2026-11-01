@@ -240,6 +240,36 @@ void main() {
       ]);
       expect(gh.secretValues, isEmpty);
     });
+
+    test('an unavailable store skips only its server and logs the reason, '
+        'no value', () async {
+      final first = build(config: const []);
+      final created = await first.core.runtime.createSession(
+        SessionSpec(cwd: '/proj'),
+      );
+      await created.close();
+      final h = build(
+        backend: FakeSecretStore(
+          id: 'file',
+          failWith: const SecretStoreUnavailableException(
+            backend: 'file',
+            reason: 'denied',
+          ),
+        ),
+      );
+
+      await h.core.runtime.loadSession(created.id, const SessionHostPorts());
+
+      expect([for (final s in mcp.requests.last.servers) s.name], ['docs']);
+      expect(
+        h.logger.eventsOf('mcp.server.failed').single.fields['reason'],
+        'secret $_name cannot be read: file is unavailable',
+      );
+      expect(
+        [for (final r in h.logger.records) '${r.fields} ${r.error}'].join(),
+        isNot(contains(_token)),
+      );
+    });
   });
 
   group('setMcpServers', () {
@@ -341,6 +371,9 @@ void main() {
         await cancelled;
         await disposing;
         expect(mcp.requests, isEmpty);
+        // agent-runtime «Закрытие во время раскрытия секретов»: тихий конец,
+        // а не сбой сервера.
+        expect(h.logger.eventsOf('mcp.server.failed'), isEmpty);
       },
     );
   });
