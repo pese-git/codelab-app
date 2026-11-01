@@ -44,10 +44,16 @@ final class SecretSetOptions {
     this.hasValueArgument = false,
   });
 
+  /// Имя секрета из первого позиционного аргумента. Проверяется
+  /// `SecretNames.problem` внутри `SecretCommands.set`, поэтому приложению
+  /// достаточно передать строку как есть: неверное имя даёт код `64` и
+  /// справку, а не исключение разбора.
   final String name;
 
   /// Переменные процесса: из них берутся `CODELAB_HOME`, `CODELAB_CONFIG`,
-  /// `CODELAB_SECRET_*`. В `toString` не попадают.
+  /// `CODELAB_SECRET_*`. В `toString` не попадают. Приложение передаёт
+  /// `Platform.environment`, тест — явную карту (настоящий `~/.codelab`
+  /// тесты не читают).
   final Map<String, String> environment;
 
   /// Передан лишний позиционный аргумент (вероятно, значение секрета).
@@ -70,7 +76,12 @@ final class SecretSetOptions {
 final class SecretDeleteOptions {
   const SecretDeleteOptions({required this.name, required this.environment});
 
+  /// Имя удаляемого секрета; неверное имя — код `64` со справкой, а не
+  /// исключение. Отсутствующее в хранилище имя — не ошибка (идемпотентность).
   final String name;
+
+  /// Переменные процесса: `CODELAB_HOME`, `CODELAB_CONFIG` и настройки
+  /// бэкенда. Приложение передаёт `Platform.environment`, тест — явную карту.
   final Map<String, String> environment;
 }
 
@@ -87,6 +98,9 @@ final class SecretDeleteOptions {
 final class SecretListOptions {
   const SecretListOptions({required this.environment});
 
+  /// Переменные процесса: из них берутся `CODELAB_HOME`, `CODELAB_CONFIG` и
+  /// имена (не значения) заданных `CODELAB_SECRET_*`, которые `list` печатает
+  /// отдельной строкой. Приложение передаёт `Platform.environment`.
   final Map<String, String> environment;
 }
 

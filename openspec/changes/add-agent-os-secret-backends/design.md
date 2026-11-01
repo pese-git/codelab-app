@@ -9,6 +9,17 @@
 
 Этот change добавляет три бэкенда ОС за тем же портом: вызывающие (резолвер, подкоманды, `config check`, встроенные профили) не меняются.
 
+**Сверка с итогом 8.9 (2026-11-01, итерация 5 change `add-agent-secret-store`).** Код 8.9, на который опирается черновик:
+- `codelab_agent_io/lib/src/secrets/secret_process_runner.dart`: `SecretProcessRunner.run(executable, arguments, {String? stdin, Duration? timeout})`, `SecretProcessResult` — только `exitCode` и `timedOut`; `IoSecretProcessRunner` запускает процесс без оболочки и **без окружения родителя** (`includeParentEnvironment: false`), stdout и stderr вычитывает и отбрасывает. Расширение порта — D2 ниже;
+- `secretsBackendProblem(choice, platform)` (`secrets_backend_problem.dart`) — одна проверка `secrets.backend` у `ConfigLoader`, `openSecretStore` и `FileSecretStore`; сейчас `keychain` даёт `keychain is not supported yet (supported: auto, env, file)`. Этот change снимает проблему для `keychain` в этой функции, а не в каждом вызывающем (D5);
+- `openSecretStore({choice, environment, home, logger, runner, platform, selectionReason})` — синхронная фабрика: выбирает бэкенд и сразу пишет `secrets.backend.selected {backend, path, reason}`; причина `auto` — `OS keychain backends are not available in this version; …` (на Windows без `secrets.backend: file`). Ленивый выбор D5 должен уложиться в эту сигнатуру или явно её изменить (OQ3);
+- `openHostSecrets({codelabHome, environment, backend, debug, logger, platform, runner, selectionReason})` — синхронная, вызывается внутри isolate ядра; `AgentHost` под `--llm-script` передаёт `backend: 'env'` и `selectionReason: 'forced by --llm-script'` — сценарий не должен запускать пробы хранилищ ОС и после этого change;
+- `AgentHost.build` превращает `SecretStoreUnavailableException` из `openHostSecrets` в ошибку использования (код `64`, `secrets.backend: <reason>`); D5 ниже называет для недоступного `keychain` код `1` — расхождение решается при старте (OQ4);
+- `FileSecretStore` пишет через приватный `$CODELAB_HOME/.secrets-tmp` (`0700`), проверяет владельца `$CODELAB_HOME` no-op `chmod`, держит одну очередь записей на нормализованный путь и удаляет брошенные tmp старше 10 минут; индекс имён D3 пишется тем же механизмом, а не своим tmp рядом с файлом;
+- `SecretAdmin` (`store`/`delete`/`list`/`checkStore`, результаты `SecretStored` … `SecretReadOnly {backend, variable, fileBackendOffered}`) и `SecretCommands` не меняются: при бэкенде ОС ветка `SecretReadOnly` просто не возникает; меняются только тексты причины `auto` в `openSecretStore` и подсказки, которые на неё ссылаются (`config check`, `secret set` при `env`);
+- общие пределы значения — `secretValueProblem` (`secret_value_checks.dart`: одна строка, 64 КиБ UTF-8, без непарных суррогатов); бэкенды ОС применяют её до своих пределов (`wincred` — 1280 UTF-16 единиц);
+- поле `path` события `secrets.backend.selected` по §12.3 — путь `secrets.yaml` или `null`; путь утилиты (`secret-tool`) пишется в него только с правкой §12.3.
+
 ## Goals / Non-Goals
 
 **Goals:** P-12 целиком — ключи в хранилище ОС на macOS, Linux и Windows; `auto` выбирает хранилище ОС; значение никогда не в argv.
@@ -30,21 +41,26 @@
 ### D2. Бэкенды на утилитах ОС (`keychain-macos`, `secret-service`)
 
 ```dart
-/// codelab_agent_io/lib/src/secrets/process_runner.dart
+/// codelab_agent_io/lib/src/secrets/secret_process_runner.dart — порт есть с 8.9 (D5 change 8.9);
+/// этот change добавляет два необязательных элемента, не меняя вызывающих 8.9.
 abstract interface class SecretProcessRunner {
   /// stdin пишется целиком и закрывается; по истечении timeout процесс убивается.
+  /// environment — явный список переменных для дочернего процесса (новое); окружение
+  /// родителя целиком по-прежнему не передаётся.
   Future<SecretProcessResult> run(String executable, List<String> arguments,
-      {String? stdin, required Duration timeout});
+      {String? stdin, Duration? timeout, Map<String, String>? environment});
 }
-final class SecretProcessResult { final int exitCode; final String stdout; final String stderr; final bool timedOut; }
+/// stdout — новое необязательное поле: нужно чтению секрета; stderr по-прежнему
+/// вычитывается и отбрасывается.
+final class SecretProcessResult { final int exitCode; final bool timedOut; final String? stdout; }
 ```
 
 Порт узкий и свой, а не общий `ExecutionEnv.exec`:
 - `exec` работает в границе `BoundedEnv`, с allowlist окружения и выводом для модели;
-- утилитам секретов нужен stdin и полное окружение хоста (`DBUS_SESSION_BUS_ADDRESS`);
+- утилитам секретов нужен stdin и несколько переменных хоста (`DBUS_SESSION_BUS_ADDRESS`, по итогам разведки 0.1 — возможно `XDG_RUNTIME_DIR`): они передаются явным списком через `environment`, а не окружением родителя целиком — в нём `CODELAB_SECRET_*` и ключи провайдеров (D5 change 8.9);
 - их stdout нельзя ни логировать, ни буферизовать в общем выводе.
 
-Реализация — `IoSecretProcessRunner` (`Process.start`, `runInShell: false`). Тестовая — фейк, записывающий `executable`, `arguments` и `stdin`.
+Реализация — `IoSecretProcessRunner` (`Process.start`, `runInShell: false`, `includeParentEnvironment: false`). Тестовая — фейк `test/support/fake_secret_process_runner.dart`, записывающий `executable`, `arguments` и `stdin`. Бэкенды ОС передают `timeout` всегда (10 с).
 
 | Бэкенд | Запись | Чтение | Удаление | Ошибки |
 |---|---|---|---|---|
@@ -57,7 +73,7 @@ final class SecretProcessResult { final int exitCode; final String stdout; final
 Правила для всех бэкендов (у `wincred` и `file` процессов нет — к ним относятся пункты про значение, таймаут и перевод строки):
 - **Значение никогда не в argv** — ни у утилиты, ни у оболочки (оболочка не используется). Тест проверяет каждую запись фейка: значение не входит ни в один элемент `arguments`.
 - **Абсолютный путь** `/usr/bin/security` на macOS: подмена через `PATH` исключена. `secret-tool` ищется в `PATH` один раз при выборе бэкенда (D5); найденный абсолютный путь пишется в `secrets.backend.selected`.
-- **stderr утилиты не попадает в текст ошибки записи**, только код выхода: в некоторых режимах утилита может повторить ввод. У чтения, удаления и пробы stderr тоже не включается. Причина — фиксированный текст и код; stderr пишется в лог на уровне `debug` под `--debug-secrets`, усечённый до 200 символов. Перед логом из stderr вырезается значение, если оно известно (запись).
+- **stderr утилиты не попадает ни в текст ошибки, ни в лог**, только код выхода: в некоторых режимах утилита может повторить ввод. Порт 8.9 stderr вычитывает и отбрасывает, и этот change это сохраняет (прежний вариант «stderr в лог под `--debug-secrets`, усечённый до 200 символов» снят при сверке с 8.9: он требовал бы протаскивать stderr через порт и вычищать из него значение). Причина — фиксированный текст и код.
 - **stdout чтения** возвращается вызывающему и больше нигде не хранится и не логируется.
 - **Таймаут 10 с** на вызов. По истечении процесс убивается, результат — `SecretStoreUnavailableException(reason: "<tool> did not answer within 10 s")`. Почему 10 с: первое обращение к Secret Service может поднимать демон связки ключей, а ход не должен висеть дольше таймаута соединения провайдера.
 - **Перевод строки в значении** (`\n`, `\r`) отклоняется при записи, у всех бэкендов: `security -i` читает по строкам, `secret-tool` хранил бы перевод буквально, а одинаковое правило у всех бэкендов не даёт секрету «не переехать» между ними. Ключи API однострочны.
@@ -80,7 +96,7 @@ final class SecretProcessResult { final int exitCode; final String stdout; final
 | `file` | ключи файла `secrets.yaml` (D14 change 8.9) |
 | `env` | имена переменных `CODELAB_SECRET_*` (необратимы, поэтому `list` показывает их строкой `Environment overrides`) |
 
-**Индекс macOS и Linux.** `names()` у `keychain-macos` и `secret-service` читает индекс `$CODELAB_HOME/secret-names.json`: `{"version": 1, "names": [...]}`, только имена. Запись — атомарно (tmp + rename), права `0600`. `write` добавляет имя, `delete` убирает. `names()` сверяет индекс с хранилищем проверкой существования и отбрасывает исчезнувшие имена: пользователь мог удалить запись в «Связке ключей».
+**Индекс macOS и Linux.** `names()` у `keychain-macos` и `secret-service` читает индекс `$CODELAB_HOME/secret-names.json`: `{"version": 1, "names": [...]}`, только имена. Запись — атомарно, права `0600`, тем же механизмом, что у `FileSecretStore` 8.9 (приватный `.secrets-tmp`, проверка владельца `$CODELAB_HOME`, очередь записей на путь); механизм выносится в общую функцию, а не копируется. `write` добавляет имя, `delete` убирает. `names()` сверяет индекс с хранилищем проверкой существования и отбрасывает исчезнувшие имена: пользователь мог удалить запись в «Связке ключей».
 - **Проверка существования.** macOS — `security find-generic-password -s codelab -a <name>` без `-w`: значение не выводится. Linux — `lookup`: значение читается в память процесса и сразу отбрасывается.
 
 **Отступление от §17.5.4 для Linux.** Документ предлагал `secret-tool search --all service codelab`, но эта команда печатает значения (`secret = …`) всех найденных записей. Индекс одинаков на обеих платформах, и значения при `list` не читаются массово. Поправка документа — задача 0.1.
@@ -122,9 +138,10 @@ final class FfiWinCredApi implements WinCredApi { … }
 ### D5. `auto` и `keychain` с хранилищем ОС
 
 Меняется только `openSecretStore` (change 8.9, D7):
-- `auto` выбирает лениво, при первом обращении: macOS с `/usr/bin/security` → `keychain-macos`; Linux с `secret-tool` в `PATH`, `DBUS_SESSION_BUS_ADDRESS` и успешной пробой за 3 с → `secret-service`; Windows с загруженной `advapi32.dll` → `wincred`; иначе `env` с причиной и одним `secrets.backend.unavailable`.
+- `auto` выбирает лениво, при первом обращении (как это совместить с синхронными `openSecretStore`/`openHostSecrets` и геттером `backend` — OQ3): macOS с `/usr/bin/security` → `keychain-macos`; Linux с `secret-tool` в `PATH`, `DBUS_SESSION_BUS_ADDRESS` и успешной пробой за 3 с → `secret-service`; Windows с загруженной `advapi32.dll` → `wincred`; иначе `env` с причиной и одним `secrets.backend.unavailable`.
 - `auto` по-прежнему **никогда не выбирает `file`** (OQ2 change 8.9).
-- `keychain` перестаёт быть проблемой «not supported yet»: проба при старте хоста, недоступно → `serve` код `1` с текстом `secrets.backend is keychain, but the OS keychain is unavailable: <reason>`.
+- `keychain` перестаёт быть проблемой «not supported yet» — правка одной `secretsBackendProblem` (8.9): проба при старте хоста, недоступно → `serve` код `1` с текстом `secrets.backend is keychain, but the OS keychain is unavailable: <reason>` (в 8.9 `AgentHost` переводит отказ `openHostSecrets` в код `64` — OQ4).
+- `--llm-script` по-прежнему выбирает `env` без проб (`selectionReason: forced by --llm-script`, D11 change 8.9).
 - Пользователь, который в 1.0 выбрал `file`, переносит секреты сам: `codelab secret set` при `auto` и удаление файла. Автоматического переноса нет: открытый файл не должен «тихо» переезжать (решение — при старте change, OQ2 ниже).
 
 ### D6. Тесты
@@ -167,3 +184,5 @@ final class FfiWinCredApi implements WinCredApi { … }
 Открыты (решаются при старте change):
 - **OQ1. Перенос секретов из `secrets.yaml` в хранилище ОС.** (а) Рекомендуется: без автоматики, подсказка в `config check` при `secrets.backend: file` и доступном хранилище ОС. (б) Команда `codelab secret migrate`.
 - **OQ2. Перепроверка условия D16 change 8.9** — если к старту появилась зрелая библиотека без Flutter от подтверждённого издателя, бэкенды берутся из неё.
+- **OQ3. Ленивый выбор и синхронная фабрика.** `openSecretStore` и `openHostSecrets` 8.9 синхронны, `DescribedSecretStore.backend` — синхронный геттер, а его id нужен строке `Backend:` в `secret list`, `note: secrets backend` в `config check` и `SecretMissing.backend`. Варианты: (а) обёртка-хранилище, которая пробует при первом `read`/`write`/`names`, а до пробы отдаёт `backend.id` `auto`; (б) асинхронная фабрика (`Future<DescribedSecretStore>`) с пробой при старте — меняет сигнатуры 8.9 и вызов внутри isolate ядра. Решается при старте; критерий — не ломать вызывающих 8.9 без нужды.
+- **OQ4. Код выхода при недоступном `keychain`.** D5 называет `1`, а `AgentHost` 8.9 отдаёт отказ `openHostSecrets` как ошибку использования `64`. Либо `keychain` без хранилища — проблема конфигурации (`64`, как в 8.9), либо отдельная ветка с кодом `1`; спецификация agent-secrets меняется вместе с решением.

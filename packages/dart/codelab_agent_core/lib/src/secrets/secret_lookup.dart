@@ -33,6 +33,8 @@ final class SecretFound extends SecretLookup {
 final class SecretMissing extends SecretLookup {
   const SecretMissing(this.backend);
 
+  /// Идентификатор бэкенда, в котором искали: по нему текст ошибки подсказывает,
+  /// куда записать секрет (`codelab secret set`) или какую переменную задать.
   final String backend;
 
   @override
@@ -44,7 +46,12 @@ final class SecretMissing extends SecretLookup {
 final class SecretUnavailable extends SecretLookup {
   const SecretUnavailable(this.backend, this.reason);
 
+  /// Идентификатор недоступного бэкенда (чинится хранилище, а не «задаётся»
+  /// секрет).
   final String backend;
+
+  /// Причина из `SecretStoreUnavailableException.reason`: наш английский текст,
+  /// без значения секрета; безопасна для лога и ошибки хода.
   final String reason;
 
   @override

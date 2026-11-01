@@ -125,6 +125,24 @@
    `wincred` с `ffi`), индекс имён и ручной тест `os-keychain` — после 1.0, черновик
    [`add-agent-os-secret-backends`](../../../../openspec/changes/add-agent-os-secret-backends/)
    (решение пользователя 2026-10-31: сужение 8.9).
+
+   **Итог 8.9.** Сделано change [`add-agent-secret-store`](../../../../openspec/changes/add-agent-secret-store/)
+   (итерации 0–5): правило имён `SecretNames` и `SecretResolver` в ядре с порядком «кэш →
+   `CODELAB_SECRET_*` → хранилище», single-flight и типизированным `SecretLookup` (D2, D3); ссылки
+   `api_key_secret`, `api_key_env` и `${secret:…}` разрешаются при первом запросе к провайдеру и
+   перед подключением MCP-сервера конфига, `${secret:…}` вне `env`/`headers` — проблема конфига,
+   в `session/new.mcpServers` — литерал (D4); бэкенды `env` и `file` за общим `openSecretStore`
+   с единой проверкой `secretsBackendProblem`, `file` — открытый `secrets.yaml` с проверкой прав,
+   владельца `$CODELAB_HOME` и атомарной записью через приватный `.secrets-tmp` (D5–D7, D14);
+   `SecretAdmin` и фабрика `openHostSecrets` для настольных хостов и встроенных профилей (D15);
+   подкоманды `codelab-agent secret` и `codelab secret` — одна реализация `SecretCommands` со
+   скрытым вводом с TTY (D8); `config check` печатает состояние ссылочных секретов (D9);
+   `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` — `secrets.lookup` без значений (D10, D11). P-12 —
+   **частично**: `env` и `file`, пункт 1 CFG-9; хранилище ОС — после 1.0
+   (`add-agent-os-secret-backends`), пункты 2–3 CFG-9 — 8.11. P-17 — **выполнено**. Отступления:
+   хранилищ ОС, индекса имён и `ffi` в 1.0 нет, `auto` = `env`, `keychain` — проблема конфига «not
+   supported yet» (D13); замена уже прочитанного секрета видна работающему агенту только после
+   перезапуска (до 8.10). Сторож импортов и allowlist зависимостей не менялись (D1).
 10. **8.10. Запись конфига, живая перезагрузка, реестр настроек, переподключение MCP**
     (L-25, E-04, E-15; agent-core-architecture §17.5.3, §17.5.5–§17.5.8) — **Should — не блокирует
     MVP**: `ConfigWriter` (`yaml_edit`, атомарная запись) и подкоманды `codelab config set|unset`,
@@ -158,8 +176,8 @@
 предупреждение `config.legacy_found` вместо чтения `codelab.toml`, подкоманда `config check`,
 минимальный `codelab_setup`; новая зависимость `yaml` как решение о технологии по
 `AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/) (8.6–8.8; scope: инструкции проекта, шаблоны промптов как команды, определения агентов в Markdown, порт `ProjectFilesSource`, `config check` с диагностикой файлов проекта; ACP не расширяется),
-`add-agent-secret-store` (8.9; scope: имена секретов, порядок разрешения, бэкенды ОС, команды
-`secret`, диагностика без значений) и `add-config-writer-and-reload` (8.10, Should; scope:
+[`add-agent-secret-store`](../../../../openspec/changes/add-agent-secret-store/) (8.9; scope: имена секретов, порядок разрешения, бэкенды `env` и `file`, команды
+`secret`, диагностика без значений; бэкенды ОС — черновик `add-agent-os-secret-backends` после 1.0) и `add-config-writer-and-reload` (8.10, Should; scope:
 запись конфига, наблюдатель и перезагрузка, реестр настроек, `McpSupervisor`, команды
 `config`/`provider`/`mcp` на запись) и `add-agent-core-secret-redaction` (8.11, Should; scope:
 слои и точки применения редакции, `AgentTool.redactResult`, источники точных секретов, ключи
@@ -230,7 +248,21 @@ stdio MUST) записано в §13.15, включение явным флаг�
 * 8.9 (MVP): `secret_resolver_test.dart`, `secret_store_backends_test.dart`,
   `debug_secrets_test.dart` зелёные; `codelab secret set codelab/openai` с ключом из stdin, затем
   `codelab -p` во встроенном режиме (этап 7) использует ключ; значение секрета не встречается в
-  логах, trace и argv дочерних процессов.
+  логах, trace и argv дочерних процессов. **Выполнено в части 8.9** (change
+  `add-agent-secret-store`; `secret_store_backends_test.dart` — тест бэкендов хранилищ ОС, он
+  перенесён в черновик `add-agent-os-secret-backends`, в 1.0 его место занимают тесты `env` и
+  `file`):
+
+  | Строка | Проверка | Тесты 8.9 |
+  |---|---|---|
+  | P-12 (частично) | `core/config-rejects-inline-api-key`; ссылки по имени; бэкенды `env` и `file` | `packages/dart/codelab_agent_core/test/config/config_inline_secret_test.dart`, `config_secret_refs_test.dart`; `test/secrets/secret_names_test.dart`, `secret_resolver_test.dart`; `test/llm/routed_stream_function_secrets_test.dart`; `test/runtime/mcp_secret_values_test.dart`; `packages/dart/codelab_agent_io/test/secrets/env_secret_store_test.dart`, `file_secret_store_test.dart`, `open_secret_store_test.dart`, `secret_admin_test.dart`, `host_secrets_test.dart`; `test/cli/secret_commands_test.dart`, `config_commands_test.dart` (группа `secrets`); `apps/codelab_agent/test/secret_store_process_test.dart`, `secret_command_process_test.dart`, `config_invalid_process_test.dart`; `apps/codelab_cli/test/secret_command_test.dart`, `e2e/secret_command_test.dart`. Хранилище ОС — после 1.0, пункты 2–3 CFG-9 — 8.11 |
+  | P-17 | `core/debug-secrets-never-logs-value` | `packages/dart/codelab_agent_core/test/secrets/debug_secrets_test.dart`; `apps/codelab_agent/test/serve_flags_test.dart`, `agent_host_secrets_test.dart` (группа `--debug-secrets`), `secret_store_process_test.dart` |
+
+  Значение не попадает в argv дочерних процессов — `codelab_agent_io/test/secrets/secret_admin_test.dart`
+  («no child process receives the value in argv or stdin») и `file_secret_store_test.dart`
+  («permissions are set before the value is written; argv has only the path»). Сквозная проверка
+  «`codelab secret set`, затем `codelab -p` во встроенном режиме» — этап 7 (встроенного режима
+  в 8.9 нет).
 * Если сделано (8.10, Should — не блокирует MVP): `config_writer_test.dart`,
   `config_writer_atomic_test.dart`, `config_watcher_test.dart`, `config_reload_test.dart`,
   `mcp_reconnect_test.dart` (`core/mcp-reconnect-after-crash`, E-04), `mcp_apply_config_test.dart`,

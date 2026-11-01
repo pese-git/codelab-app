@@ -243,7 +243,9 @@ ServeOptions parseServeResults(
     throw const UsageError('missing command: codelab-agent serve');
   }
   if (serve.rest.isNotEmpty) {
-    throw UsageError('unexpected arguments: ${serve.rest.join(' ')}');
+    // Токены не цитируются: после `secret` среди них может быть значение
+    // секрета (agent-secrets: ошибка разбора не печатает argv; D8).
+    throw UsageError('unexpected arguments (${serve.rest.length})');
   }
 
   final stdio = serve.flag('stdio');

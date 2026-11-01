@@ -24,6 +24,8 @@ sealed class SecretTemplatePart {
 final class SecretLiteral extends SecretTemplatePart {
   const SecretLiteral(this.text);
 
+  /// Готовый текст части: сам по себе не ссылка, но может быть частью
+  /// секретного значения (`Bearer `), поэтому в `toString` и логи не идёт.
   final String text;
 
   @override
@@ -46,6 +48,8 @@ final class SecretLiteral extends SecretTemplatePart {
 final class SecretReference extends SecretTemplatePart {
   const SecretReference(this.name);
 
+  /// Имя секрета, прошедшее `SecretNames.problem`; по нему резолвер ищет
+  /// значение. Само имя не секрет и может попадать в логи и сообщения.
   final String name;
 
   @override
@@ -74,6 +78,9 @@ final class SecretTemplate {
   SecretTemplate(List<SecretTemplatePart> parts)
     : parts = List.unmodifiable(parts);
 
+  /// Неизменяемый список частей в порядке записи в конфиге. Порядок важен:
+  /// [render] склеивает значение слева направо, и `Bearer ${secret:x}` не
+  /// должно превращаться в `${secret:x}Bearer `.
   final List<SecretTemplatePart> parts;
 
   /// Имена секретов без повторов, в порядке появления.

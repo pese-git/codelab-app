@@ -134,7 +134,7 @@
 - каталог `$CODELAB_HOME` доступен на запись группе или остальным (`mode & 0o022 != 0`): причина `<home> is writable by group or others (mode <mode>); run: chmod go-w <home>`; существующий каталог бэкенд НЕ SHALL изменять;
 - путь — символическая ссылка: причина `<path> is a symbolic link; refusing to read secrets`;
 - права шире `0600` (`mode & 0o077 != 0`): причина `<path> has permissions <mode>; run: chmod 600 <path>`;
-- файл больше 1 МиБ: причина `<path> is larger than 1 MiB`.
+- файл больше 1 МиБ: причина `<path> is larger than 1 MiB` (поле события `reason: too_large`).
 
 Каталог `$CODELAB_HOME`, которого нет, SHALL создаваться только записью и сразу получать права `0700` независимо от umask. Перед каждой заменой файла (`write`, `delete` существующего имени) владелец существующего `$CODELAB_HOME` SHALL проверяться no-op `chmod <текущий режим>` через `SecretProcessRunner`; отказ — `<home> is not owned by the current user; refusing to write secrets` (`secrets.file.refused {reason: home_owner}`). Утилита — `/bin/chmod`, при его отсутствии — `/usr/bin/chmod`.
 
@@ -242,7 +242,7 @@
   - код `0`.
 
 Ошибки с кодом `64` делятся на два класса:
-- **ошибка использования** — код `64`, сообщение и справка `secret` в stderr: неверное имя; значение аргументом (`pass the secret value on stdin, not as an argument`, аргумент не печатается); нет подкоманды или она неизвестна; ошибка разбора argv. Ошибка разбора argv SHALL печатать только `<бинарь>: invalid arguments for secret` и справку, без присланных слов: среди них может быть значение секрета. Это относится к любой ошибке разбора, если `secret` есть в argv, — в том числе к ошибке флага верхнего уровня, стоящего до `secret`; текст исключения `package:args` НЕ SHALL печататься;
+- **ошибка использования** — код `64`, сообщение и справка `secret` в stderr: неверное имя; значение аргументом (`pass the secret value on stdin, not as an argument`, аргумент не печатается); нет подкоманды или она неизвестна; ошибка разбора argv. Ошибка разбора argv SHALL печатать только `<бинарь>: invalid arguments for secret` и справку, без присланных слов: среди них может быть значение секрета. Это относится к любой ошибке разбора, если `secret` есть в argv, — в том числе к ошибке флага верхнего уровня, стоящего до `secret`; текст исключения `package:args` НЕ SHALL печататься. Лишние слова в argv других команд `codelab-agent` (`serve`, `config`) тоже НЕ SHALL цитироваться: сообщение называет только их число (`unexpected arguments (N)`, `codelab-agent: unknown config arguments (N)`);
 - **ошибка значения** — код `64` и только сообщение, без справки, ничего не записывается: пустое значение или EOF — `empty secret value`; перевод строки внутри значения — `secret value must be a single line`; недопустимый UTF-8 — `secret value must be valid UTF-8`; длиннее 64 КиБ или с непарным суррогатом — причина `SecretAdmin`; коллизия `envOverride` с переменной другого сохранённого имени — `secret name <name> collides with <other> (both map to <VAR>)`.
 
 Скрытый ввод с TTY SHALL выключать эхо и канонический режим терминала и обрабатывать Backspace и Ctrl+D сам; Enter завершает ввод, Ctrl+D на пустом вводе — конец потока. Длина значения НЕ SHALL ограничиваться длиной канонической строки терминала. Байты после первого перевода строки (вставка нескольких строк) SHALL давать ошибку значения `secret value must be a single line`; уже поступивший остаток ввода SHALL вычитываться до восстановления режимов терминала. Режимы терминала SHALL восстанавливаться при любом завершении чтения и по `SIGINT`; `SIGINT` во время ввода завершает процесс кодом `130`.
@@ -296,6 +296,10 @@
 #### Scenario: Вставка нескольких строк в TTY
 - **WHEN** `secret set codelab/openai` читает с TTY (фейковый `SecretInput`), и ввод содержит `line1\nline2`
 - **THEN** код `64`, stderr — `secret value must be a single line`, хранилище не записывалось
+
+#### Scenario: Слова secret после другой команды
+- **WHEN** запускается `codelab-agent serve --stdio secret set codelab/x sk-test-0123456789abcdef`
+- **THEN** код `64`, stdout и stderr не содержат `sk-test-0123456789abcdef` и ни одной его подстроки из 4 и более символов
 
 #### Scenario: Недопустимый CODELAB_CONFIG
 - **WHEN** `secret list` запускается с `CODELAB_CONFIG=relative.yaml`, а `$CODELAB_HOME/config.yaml` задаёт `secrets.backend: env`
