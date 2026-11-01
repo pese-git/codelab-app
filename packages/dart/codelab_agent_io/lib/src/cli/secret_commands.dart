@@ -332,11 +332,27 @@ final class SecretCommands {
     showUsage: true,
   );
 
+  bool _isEmpty(String? value) => value == null || value.isEmpty;
+
   /// Читает `secrets.backend`, открывает хранилище и собирает контекст
   /// подкоманды; ошибка конфигурации или хранилища — готовый результат.
   ({_Session? session, SecretCommandResult? failure}) _open(
     Map<String, String> environment,
   ) {
+    // Без CODELAB_HOME, HOME и USERPROFILE `codelabHomeOf` вернул бы
+    // `./.codelab`: `secrets.yaml` лёг бы в текущий каталог (возможно, в
+    // git-репозиторий). Отказ только у `secret`; `serve` не меняется
+    // (ревью итерации 4).
+    if (_isEmpty(environment['CODELAB_HOME']) &&
+        userHomeOf(environment) == null) {
+      return (
+        session: null,
+        failure: const SecretCommandResult(
+          exitCode: configUsageExit,
+          stderr: ['cannot find the home folder: set CODELAB_HOME or HOME'],
+        ),
+      );
+    }
     final String home;
     try {
       home = codelabHomeOf(environment);

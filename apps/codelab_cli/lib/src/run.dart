@@ -41,6 +41,11 @@ Future<int> runCodelab(
     return await _run(args, environment, io);
   } on UsageError catch (error) {
     io.stderr.writeln('codelab: ${error.message}');
+    if (error.showSecretUsage) {
+      io.stderr
+        ..writeln()
+        ..writeln(secretUsage());
+    }
     return usageExit;
   } finally {
     await io.flush();
@@ -82,6 +87,8 @@ Future<int> _run(
       );
     case CliCommand.config:
       return _runConfigCheck(options, environment, io);
+    case CliCommand.secret:
+      return _runSecret(options, environment, io);
     case CliCommand.headless:
       return _runHeadless(options, environment, io);
     case CliCommand.repl when options.ui == UiMode.tui:
@@ -128,6 +135,66 @@ Future<int> _runConfigCheck(
     // Как у `codelab-agent config`: неожиданное исключение — одна строка и
     // код `1`, а не трасса Dart и код `255`.
     io.stderr.writeln('codelab: config failed: $error');
+    return failureExit;
+  }
+}
+
+/// `codelab secret set|delete|list`: хранилище секретов без агента.
+///
+/// Почему через мост: клиент не импортирует `package:codelab_agent_*`, а вывод
+/// и коды обязаны совпасть с `codelab-agent secret` — реализация одна,
+/// `SecretCommands` (design.md change `add-agent-secret-store`, D8, D15).
+/// Ни `ClientWorkspace`, ни транспорт не создаются; `ensureExists`,
+/// профили и история здесь не вызываются, поэтому `sessions/`,
+/// `profiles.json` и `cli_history` не появляются. В `CODELAB_HOME` пишет
+/// `set` и `delete` с бэкендом `file` — в `secrets.yaml`; `list` и ошибки
+/// использования его не меняют.
+Future<int> _runSecret(
+  CliOptions options,
+  Map<String, String> environment,
+  CliIo io,
+) async {
+  // Тильда и `~user` проверяются тем же правилом, что у остальных команд CLI
+  // (`CodelabHome.resolve`, D17); ошибка — `64` до обращения к хранилищу.
+  // Окружение дальше уходит как есть: раскрытие повторяет `codelabHomeOf`.
+  CodelabHome.resolve(environment);
+  final [name, ...rest] = options.positional;
+  final commands = SecretCommands();
+  try {
+    final SecretCommandResult result;
+    switch (name) {
+      case 'set':
+        result = await commands.set(
+          SecretSetOptions(
+            name: rest.first,
+            environment: environment,
+            // Лишний аргумент — вероятно, значение: дальше идёт только
+            // признак, сам аргумент не передаётся и не печатается (D8).
+            hasValueArgument: rest.length > 1,
+          ),
+          StdinSecretInput(),
+        );
+      case 'delete':
+        result = await commands.delete(
+          SecretDeleteOptions(name: rest.single, environment: environment),
+        );
+      default:
+        result = await commands.list(
+          SecretListOptions(environment: environment),
+        );
+    }
+    result.stdout.forEach(io.stdout.writeln);
+    result.stderr.forEach(io.stderr.writeln);
+    if (result.showUsage) {
+      io.stderr
+        ..writeln()
+        ..writeln(secretUsage());
+    }
+    return result.exitCode;
+  } on Object catch (error) {
+    // Только тип исключения: текст чужой реализации мог бы цитировать
+    // значение секрета (CFG-10); код `1`, а не трасса Dart и код `255`.
+    io.stderr.writeln('codelab: secret failed: ${error.runtimeType}');
     return failureExit;
   }
 }

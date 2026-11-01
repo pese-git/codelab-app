@@ -15,7 +15,8 @@
 
 Сейчас состав минимальный:
 - `lib/codelab_setup.dart` — реэкспорт чистых типов ядра `ConfigIssue`, `ConfigIssueKind`, `ConfigLoadResult`;
-- `lib/io.dart` — реэкспорт `ConfigCommands`, `CheckOptions`, `ConfigCommandResult` и кодов выхода `configValidExit`, `configInvalidExit`, `configUsageExit` из `codelab_agent_io`. Логика `config check` не дублируется (D13).
+- `lib/io.dart` — реэкспорт `ConfigCommands`, `CheckOptions`, `ConfigCommandResult` и кодов выхода `configValidExit`, `configInvalidExit`, `configUsageExit` из `codelab_agent_io`. Логика `config check` не дублируется (D13);
+- `lib/io.dart` также реэкспортирует подкоманду `secret`: `SecretCommands`, `SecretCommandResult`, `SecretSetOptions`, `SecretDeleteOptions`, `SecretListOptions`, `SecretInput`, `StdinSecretInput`, `MultilineSecretException`, а для страницы настроек — `SecretAdmin` с результатами (`SecretWriteOutcome`, `SecretDeleteOutcome`, `SecretListOutcome` и их ветки) и фабрика `openSecretStore`; для её вызова и типизации из ядра реэкспортируются `DescribedSecretStore`, `SecretStoreUnavailableException`, `Logger`, `LogLevel`. Классы `EnvSecretStore`/`FileSecretStore` и `openHostSecrets` НЕ экспортируются (`add-agent-secret-store`, D8, D15). Логика секретов живёт в `codelab_agent_io`.
 
 ## 2. Границы
 
@@ -28,7 +29,7 @@
 
 Приходит со своими потребителями, без абстракций «на вырост»:
 - основной барель: `ProviderSetupFlow`, пресеты, `ProviderCheck`, `ProviderReadiness`, `McpServerDraft`, `SettingsAccess`, модели представления, порт `AgentConfigStore`, остальные реэкспорты ядра (`ConfigLayer`, `ConfigSnapshot`, `ConfigEdit`, `SettingsRegistry`, `SecretStore` и др.); тогда в allowlist добавится `http` — через OpenSpec;
-- `io.dart`: `FileAgentConfigStore`, `systemSecretStore()`, пути `$CODELAB_HOME`, подкоманды `provider`/`mcp`/`secret`;
+- `io.dart`: `FileAgentConfigStore`, пути `$CODELAB_HOME`, подкоманды `provider`/`mcp` (подкоманда `secret`, `SecretAdmin` и фабрика `openSecretStore` уже реэкспортируются, см. §1; сами бэкенды — нет);
 - правило сторожа для `apps/codelab_desktop/lib/features/settings/presentation` (запрет `package:codelab_setup/io.dart`, `dart:io`; SETUP-9).
 
 ## 4. Тесты

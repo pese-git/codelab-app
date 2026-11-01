@@ -151,7 +151,6 @@ void main() {
     for (final command in [
       'provider',
       'mcp',
-      'secret',
       'sessions',
       'update',
       'login',
