@@ -94,13 +94,13 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 
 ### Requirement: Агентский драйвер фикстур
 `codelab_acp_testing` SHALL предоставлять драйвер `runAgentFixture(fixture, startAgent)`, который проигрывает фикстуру с ролью `agent` против агента по алгоритму §14.9 документа ядра:
-- агент поднимается фабрикой теста на агентском конце пары транспортов в памяти (`InProcessAcpLink`, тестовая копия в `codelab_acp_testing`, design.md change `add-dart-agent-acp-server`, D9) с `ScriptedStreamFunction` из блока `llm`, `FakeClock` и `SequentialIdGenerator`;
+- агент поднимается фабрикой теста на агентском конце пары транспортов в памяти (`InProcessAcpLink` из основного бареля `codelab_acp_transports`; design.md change `add-in-process-acp-transport`, D5) с `ScriptedStreamFunction` из блока `llm`, `FakeClock` и `SequentialIdGenerator`;
 - файлы и команды агент получает через ACP: кадры `fs/*` и `terminal/*` — часть фикстуры, ответы клиента берутся из её кадров `c2a`; `setup.files` пишутся во временный `cwd` только для локального листинга;
 - кадры `c2a` отправляются агенту, кадры `a2c` ожидаются (таймаут 5 с) и сравниваются после нормализации с матчерами `repeat`, `optional`, `unordered`;
 - после последнего кадра 200 мс тишины: лишний кадр или лишний запрос агента — провал;
 - все шаги scripted-модели использованы, лишних запросов нет; `after.files` сверяются с последним `fs/write_text_file`.
 
-Драйвер НЕ SHALL зависеть от пакетов агента. Фикстура без роли `agent` и фикстура с `setup.transport` SHALL пропускаться с указанием причины: транспортные фикстуры играет транспортный драйвер. Скрипт `melos run conformance:agent` SHALL входить в `melos run check`.
+Драйвер НЕ SHALL зависеть от пакетов агента и НЕ SHALL содержать собственную реализацию пары транспортов в памяти. Фикстура без роли `agent` и фикстура с `setup.transport` SHALL пропускаться с указанием причины: транспортные фикстуры играет транспортный драйвер. Скрипт `melos run conformance:agent` SHALL входить в `melos run check`.
 
 #### Scenario: Ход с разрешением
 - **WHEN** драйвер проигрывает `acp/prompt-tool-permission-allow` против `AcpAgentServer`
@@ -117,6 +117,10 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 #### Scenario: Транспортная фикстура в памяти
 - **WHEN** агентский драйвер получает `acp/stdio-framing-large-line`
 - **THEN** он её пропускает и сообщает, что её играет транспортный драйвер
+
+#### Scenario: Пара транспортов из codelab_acp_transports
+- **WHEN** агентский драйвер поднимает агента для фикстуры
+- **THEN** агентский конец — `InProcessAcpLink().agent` из `package:codelab_acp_transports/codelab_acp_transports.dart`, а в `packages/dart/codelab_acp_testing/lib/` нет определения классов `InProcessAcpLink` и `InProcessAcpTransport`
 
 ### Requirement: Транспортный драйвер фикстур
 Фикстуры с `setup.transport` SHALL проигрываться транспортным драйвером `apps/codelab_agent/test/transport_conformance_test.dart` против процесса бинаря: `dart run bin/codelab_agent.dart serve --stdio` или `serve --ws --port 0` со сценарием из блока `llm` фикстуры. Кадры SHALL идти через настоящий stdio или WebSocket и сравниваться тем же алгоритмом, что у агентского драйвера (нормализация, матчеры, 200 мс тишины). Для `ws` попытки `attempts` SHALL проверять HTTP-статус отказа до основного подключения. Корпус этапа 4 SHALL содержать транспортные фикстуры `acp/stdio-framing-large-line` и `acp/ws-auth-bearer-required` с ролью `agent`.
