@@ -1,0 +1,30 @@
+name: codelab_embedded
+description: Embedded CodeLab agent — the bridge that assembles the Dart agent core in the client process over an in-memory ACP link.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+# allowlist — workspace-architecture «Автоматический сторож границ пакетов»
+# (embeddedAllowlist; design.md change `add-embedded-agent-mode`, D3). Клиентских
+# пакетов и Flutter здесь нет: клиенты зависят от моста, а не он от них.
+# `codelab_agent_mcp` и `async` придут с `lib/io.dart` и жизненным циклом
+# (итерация 2).
+dependencies:
+  codelab_acp_protocol:
+    path: ../codelab_acp_protocol
+  codelab_acp_transports:
+    path: ../codelab_acp_transports
+  codelab_agent_acp:
+    path: ../codelab_agent_acp
+  codelab_agent_core:
+    path: ../codelab_agent_core
+  codelab_agent_io:
+    path: ../codelab_agent_io
+  http: ^1.5.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.3

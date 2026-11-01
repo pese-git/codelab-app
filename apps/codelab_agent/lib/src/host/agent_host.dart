@@ -10,7 +10,6 @@ import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
 import 'package:http/http.dart' as http;
 
 import '../cli/serve_args.dart';
-import 'llm_script.dart';
 import 'serve_config.dart';
 
 /// Версия бинаря в `agentInfo` ответа `initialize`.
@@ -155,12 +154,19 @@ final class AgentHost {
         ),
         null => MemorySessionStore(),
       });
-      final script = LlmScript.load(
-        path,
-        models: options.models,
-        clock: clock,
-        cwdOf: store.cwdOf,
-      );
+      final LlmScript script;
+      try {
+        script = LlmScript.load(
+          path,
+          models: options.models,
+          clock: clock,
+          cwdOf: store.cwdOf,
+        );
+      } on LlmScriptException catch (error) {
+        // Разбор сценария — в `codelab_agent_io` (D8 change
+        // `add-embedded-agent-mode`); бинарь отвечает кодом `64`.
+        throw UsageError(error.message);
+      }
       catalog = FixedModelCatalog(script.models);
       streamFunction = script.function.call;
       sessions = store;

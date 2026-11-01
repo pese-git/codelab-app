@@ -76,15 +76,18 @@ final class EmbeddedAgentConfig {
 /// Ресурсы хоста; создаёт io.dart (настольные хосты) или тест.
 final class EmbeddedHostServices {
   final ExecutionEnv baseEnv;                          // локальный env; containment даёт BoundedEnv ядра
-  final ExecutionEnv Function(String cwd)? localEnv;   // env сессии для AcpServerConfig.localEnv (D4)
+  final ExecutionEnv Function(String cwd) localEnv;    // env сессии для AcpServerConfig.localEnv (D4); обязателен
   final SessionStore sessions;
-  final SecretResolver secrets;
-  final http.Client http;                              // закрывается в dispose, если создан хостом
+  final SecretResolver secrets;                        // один на агента: и функции модели, и AgentCoreServices (D5)
+  final http.Client http;
+  final bool closeHttpOnDispose;                       // по умолчанию false; true, если клиент создан хостом (D6, п. 4)
   final Logger logger;
   final Clock clock;
+  final IdGenerator ids;                               // PKG-6: AgentCoreServices
+  final Random random;                                 // PKG-6: CoreLlmServices (джиттер повторов)
+  final String platform;
   final McpConnector? mcp;
   final ProjectFilesSource? projectFiles;
-  final String platform;
 }
 
 abstract interface class EmbeddedAgent {
@@ -105,7 +108,9 @@ typedef EmbeddedAgentOpener =
 
 /// Невалидная конфигурация: проблемы загрузчика без значений секретов (CFG-2).
 final class EmbeddedAgentConfigException implements Exception {
+  EmbeddedAgentConfigException(List<ConfigIssue> issues, {required String home});
   final List<ConfigIssue> issues;
+  final String message;  // строки ConfigIssue + подсказка с <home> (D5)
 }
 
 export … show Logger, LogLevel;      // адаптер логгера хоста (app, CLI)
@@ -124,6 +129,13 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
 ```
 
 **`lib/testing.dart`** — сценарий модели (D8). Импорт разрешён тестам и только `apps/codelab_cli/lib/src/scenario/` (D3).
+
+**Уточнения API (ревью итерации 1):**
+- `createEmbeddedAgent` — `async`: любые ошибки, включая неверный профиль, приходят через возвращённый `Future`, а не синхронным исключением. Принимаются только профили `embedded-*`; иной профиль, в том числе `agent-serve`, даёт `HostWiringException` до создания ресурсов. `agent-serve` доступен только открывателю `testing.dart` (D8);
+- `localEnv` обязателен и не может быть `null`: основной барель собирает только `embedded-*`, а им всегда нужен env хоста (D4). Сервер один раз вызывает фабрику с `cwd` `/` при создании, чтобы проверить листинг (agent-acp-server «Локальное окружение сессии от хоста»), поэтому фабрика ДОЛЖНА быть без побочных эффектов и без обращения к ФС;
+- `ids` и `random` — порты PKG-6: пакет не создаёт `IdGenerator` и `Random` сам, они нужны `AgentCoreServices` и `CoreLlmServices`;
+- `closeHttpOnDispose` явно говорит `dispose`, владеет ли агент HTTP-клиентом (D6, п. 4): клиент, переданный тестом или общий для хоста, не закрывается;
+- текст `EmbeddedAgentConfigException.message` строится в конструкторе из `ConfigIssue` (форма `config check`) и подсказки с `home`; значений ключей в нём нет, потому что `ConfigIssue` их не хранит (CFG-2).
 
 **Отличия от эскиза плана:**
 - `memoryHostServices` и `mobileHostServices` не создаются: потребителя до этапа 10 нет (§13). Основной барель от `dart:io` свободен, и web-хост этапа 10 передаст свои `EmbeddedHostServices`;
@@ -163,13 +175,19 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
 - ребро к `codelab_acp_transports` транзитивно через `codelab_agent_acp` и не рисуется;
 - абзац под графом уточняется: клиенты видят агентскую сторону только через мосты `codelab_setup` и `codelab_embedded`.
 
-**Web.** `web-compile` компилирует `packages/dart/codelab_embedded/test/web_smoke/main.dart`: основной барель и `createEmbeddedAgent` на `MemoryExecutionEnv` с профилем `agent-serve`, суженным до памяти. Это исполняет обещание D6 change `add-in-process-acp-transport`: сборку бареля транспортов для web даёт `codelab_embedded`.
+**Web.** `web-compile` компилирует `packages/dart/codelab_embedded/test/web_smoke/main.dart` в JavaScript и в WebAssembly. Цель smoke — доказать, что основной барель `codelab_embedded` не тянет `dart:io`. Поэтому:
+- разрешённые импорты точки входа — основной барель `codelab_embedded`, `package:codelab_agent_core/codelab_agent_core.dart` (+ `testing.dart`) и `package:http/http.dart`. Основной барель по D2 не реэкспортирует типы ядра (`ExecutionEnv`, `CoreConfig`, `SessionStore`, …), а `EmbeddedHostServices` без них не собрать; ядро и `http` web-безопасны сами (их web-smoke и сторож);
+- профиль — `embedded-cli`, суженный до памяти: `shellExec` и `sessionPersistence` выключены, env — `MemoryExecutionEnv`, журнал — `MemorySessionStore`. `agent-serve` здесь невозможен: основной барель его отвергает (D8).
+
+Это исполняет обещание D6 change `add-in-process-acp-transport`: сборку бареля транспортов для web даёт `codelab_embedded`.
 
 ### D4. Локальное исполнение во встроенных профилях; `agentInfo`
 
 **Решение.** У `AcpServerConfig` появляется поле `ExecutionEnv Function(String cwd)? localEnv`. Если оно задано, `_wire` ставит сессии env `localEnv(cwd)` вместо `AcpClientExecutionEnv` и `ListingOverlayEnv`. Агент тогда не отправляет `fs/*` и `terminal/*`, даже если клиент объявил `fs`/`terminal`. Gate остаётся `AcpPermissionGate`: вопрос идёт клиенту `session/request_permission`. Ядро ставит `BoundedEnv(env, root: cwd)` на сессию (ENV-2): containment обеспечивает ядро, тот же рубеж, что у инструментов бинаря.
 
 `createEmbeddedAgent` задаёт `localEnv` для `embedded-*`. Для `agent-serve` (только `testing.dart`, D8) он не задаётся, как у бинаря по stdio, — файлы через клиента.
+
+При `localEnv` проверка `cwd` в `session/new` и `session/load` идёт через листинг этого env: несуществующий каталог даёт `-32602`, как при `localListing`. Иначе ошибка проявилась бы только на первом вызове инструмента.
 
 Почему это не меняет ACP:
 - `fs` и `terminal` в `clientCapabilities` разрешают агенту вызывать методы клиента, но не обязывают его (`docs/acp/protocol/09-File System.md`, `10-Terminal.md`);
@@ -211,13 +229,16 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
   1. `buildAgentCore(profile: HostProfile.of(hostProfile).narrowed(host.profileNarrowing[hostProfile] ?? {}), services: …, config: core, streamFunction: …)`;
   2. `InProcessAcpLink()`;
   3. `AcpAgentServer(…, config: AcpServerConfig(agentInfo, detachGrace: zero, localEnv / localListing по D4))`;
-  4. `await link.agent.start()`, `serve(link.agent)` в охраняемой зоне (ниже).
+  4. `await link.agent.start()`, `serve(link.agent)` в охраняемой зоне (ниже). Если после `buildAgentCore` бросает конструктор сервера (например, `HostWiringException`) или `start()`, ядро освобождается (`runtime.dispose`, закрытие HTTP-клиента, если им владеет агент) до проброса ошибки; сбой шага освобождения пишется `embedded.agent.dispose_failed {step, errorType}` без текста. Пара транспортов к этому моменту не открыта, закрывать её не нужно. Незавершённая сборка не оставляет runtime и MCP-процессов.
 - **`dispose()`** — идемпотентен, повторный вызов возвращает тот же `Future`:
   1. `server.shutdown(grace: 5 s)`: новые запросы → `-32603`, ожидающие разрешения → `cancelled` → отказ, ходы отменяются и дожидаются `TurnEnded`, журнал дописывается (§13.10);
   2. `runtime.dispose()` — закрываются MCP-серверы сессий;
   3. закрытие агентского конца, если он ещё открыт. Клиентский конец получает `failed`/`disconnected`, а если клиент уже закрыл его сам — ничего;
   4. `http.close()`, если клиент создан хостом;
   5. `closed` завершается.
+
+  Каждый шаг выполняется в своём `try`: ошибка одного не отменяет следующие, а `closed` завершается в `finally`. Ошибка шага логируется классом, без текста.
+- **Что есть в итерации 1, а что — в итерации 2.** В итерации 1 `dispose` уже устойчив к ошибкам шагов (выше), а ошибка `serve` логируется без текста и запускает `dispose`. События итерации 1: `embedded.agent.serve_failed {errorType}` и `embedded.agent.dispose_failed {step, errorType}` уровня `error`, где `errorType` — тип исключения без текста; в итерации 2 `serve_failed` заменяется событием `embedded.agent.failed`. Охраняемая зона `runZonedGuarded`, событие `embedded.agent.failed` и закрытие агентского конца при отказе — итерация 2 (задачи 2.5, 2.6).
 - **Закрытие клиентом.** Агент подписан на события агентского конца. Переход в `failed` с `disconnected` (клиент закрыл свой конец: `disconnect`, переподключение, выход) запускает тот же `dispose`. Агент не живёт дольше соединения, утечки процессов MCP и HTTP-клиента нет.
 - **Отказ агента.** `serve` и вся асинхронная работа агента запускаются в `runZonedGuarded`. Необработанная ошибка в зоне или завершение `serve` с ошибкой:
   1. пишет `embedded.agent.failed {error_class}` уровня `error`. Текста ошибки в событии нет: в нём мог бы оказаться ответ провайдера или путь;
@@ -244,6 +265,9 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
 ### D8. Сценарий модели для тестов: `testing.dart`, без dart-define
 
 - **Перенос.** `LlmScript` (разбор блока `{"llm": …}`, модели сценария) и `_withScriptedProviders` (слой провайдеров сценария) переезжают из `apps/codelab_agent` в `codelab_agent_io` (`lib/src/scripted/`, экспорт из основного бареля). Бинарь и встроенный режим разбирают сценарий одним кодом. `UsageError` бинаря заменяется типизированным `LlmScriptException`, бинарь переводит его в код `64`. Тексты ошибок прежние, поведение бинаря не меняется: его тесты остаются зелёными.
+- **Где лежит `LlmScript` в `codelab_agent_io`.** Итерация 1 экспортирует сценарий из основного бареля `codelab_agent_io`. Ревью безопасности указало: после итерации 2 `codelab_embedded/io.dart` импортирует этот барель, и сценарий окажется в графе импортов рабочей сборки клиентов. Наружу он не реэкспортируется и вычищается tree-shaking, но это гарантия компилятора, а не структуры. Решение — вынести `LlmScript`, слой провайдеров сценария и `CwdTrackingStore` в отдельную точку входа `package:codelab_agent_io/testing.dart` (задача 2.9) по той же логике, что `codelab_embedded/testing.dart`: сценарий в рабочей сборке структурно невозможен, а не просто не используется.
+  - Импорт `codelab_agent_io/testing.dart` разрешается сторожем только `apps/codelab_agent` (флаг `--llm-script` рабочего бинаря, паритет с `test-scenario` CLI), `codelab_embedded/lib/src/testing/` и тестам; основной барель `codelab_agent_io` на него не ссылается.
+  - Альтернатива — оставить экспорт в основном бареле как осознанное решение и опереться на tree-shaking. Отклонена: она ослабляет D8 («не попадает структурно») ровно для того пути, который D8 закрывает, а перенос — смена одной строки экспорта и импортов у трёх потребителей.
 - **`package:codelab_embedded/testing.dart`** даёт открыватель со сценарием:
 
   ```dart
@@ -339,7 +363,7 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
    - перенос сценария модели;
    - пакет `codelab_embedded` с `createEmbeddedAgent` и `testing.dart`;
    - сторож, allowlist, HOST-6, web-smoke.
-2. **Настоящий хост** — `[agent]`: `io.dart` (конфиг 8.5, секреты 8.9 и тестовое хранилище, JSONL, MCP, файлы проекта), `dispose` и закрытие клиентом, отказ в зоне, паритет профилей.
+2. **Настоящий хост** — `[agent]`: вынос сценария модели в `codelab_agent_io/testing.dart` (D8), `io.dart` (конфиг 8.5, секреты 8.9 и тестовое хранилище, JSONL, MCP, файлы проекта), `dispose` и закрытие клиентом, отказ в зоне, паритет профилей.
 3. **CLI** — `[client]`: `EmbeddedProfile`, резолвер, выбор по умолчанию, `--debug-secrets`, ошибки конфига, `test-scenario --agent embedded`, e2e `cli/*`, скрипты `check`.
 4. **App** — `[desktop]`: тип подключения, резолвер и scope, адаптер логгера, интеграционные тесты (анализ в feature, прогон — `release/*`), скрипт `test:e2e:app:embedded`.
 5. **Замер 7.8** — `[agent]`: бенчмарк и решение. Затем, по TDD, `Isolate.run` для журнала; `IsolateAcpLink` — только по результату.
@@ -360,6 +384,7 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
   - кэш резолвера до перезапуска — известное ограничение до 8.10.
 - **Permission flow.** API для внешнего `PermissionGate` или режима (`autopilot`) у пакета нет. Режим задаёт профиль или `permissions.mode` конфига (HOST-7), `autopilot` в конфиге запрещён (CFG-4). Тестовый `permissionMode` есть только в `testing.dart` (D8).
 - **Containment.** В embedded-профилях единственный рубеж — `BoundedEnv` ядра (ENV-2): клиентская проверка `fs/*` здесь не участвует. Тесты D10 проверяют выход `../` и symlink наружу.
+- **Сценарий модели в графе рабочей сборки.** До задачи 2.9 `LlmScript` экспортируется из основного бареля `codelab_agent_io` и после `io.dart` итерации 2 оказался бы в графе импортов клиентов (вычищается tree-shaking, наружу не реэкспортируется). Задача 2.9 выносит его в `codelab_agent_io/testing.dart` со сторожем (D8): итерация 2 не закрывается, пока `io.dart` и `testing.dart` не разведены.
 - **Обход сторожа реэкспортом.** `codelab_embedded` реэкспортирует только `Logger` и `LogLevel`. Новые реэкспорты — через правку D2 и спецификации.
 - **Дублирование сборки** в бинаре и `codelab_embedded` (D1, в) → тест паритета профилей и общий перенесённый сценарий (D8).
 

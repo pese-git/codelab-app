@@ -38,12 +38,17 @@ final class AcpTimeouts {
 /// агент на одной машине, `ls` и `search` идут по локальной ФС; по
 /// WebSocket его нет, и хост выключает `fileListing` при сборке ядра
 /// (design.md change `add-dart-agent-acp-server`, D5).
+///
+/// Встроенный агент (профили `embedded-*`) передаёт [localEnv]: файлы,
+/// команды и листинг исполняет сам хост (design.md change
+/// `add-embedded-agent-mode`, D4; `agent-core-architecture` §13.1).
 final class AcpServerConfig {
   const AcpServerConfig({
     required this.agentInfo,
     this.detachGrace = const Duration(seconds: 30),
     this.timeouts = const AcpTimeouts(),
     this.localListing,
+    this.localEnv,
   });
 
   /// `agentInfo` ответа `initialize`.
@@ -55,6 +60,29 @@ final class AcpServerConfig {
 
   /// Локальный env для `listDir` сессии с рабочей папкой `cwd`.
   final ExecutionEnv Function(String cwd)? localListing;
+
+  /// Фабрика env сессии по её `cwd`, которую задаёт хост встроенного агента.
+  ///
+  /// Почему: клиент и агент в одном процессе, и гонять файлы и команды через
+  /// `fs/*` и `terminal/*` того же процесса незачем (§10.4 `shellExec:
+  /// transport local`). Объявленные клиентом `fs` и `terminal` разрешают
+  /// агенту вызывать эти методы, но не обязывают (`09-File System.md`,
+  /// `10-Terminal.md`), поэтому `initialize` не меняется (D4).
+  ///
+  /// Для чего: если задана, `session/new` и `session/load` ставят сессии env
+  /// `localEnv(cwd)` вместо `AcpClientExecutionEnv` и [localListing]; запросы
+  /// `fs/*` и `terminal/*` клиенту не уходят. Gate остаётся
+  /// `AcpPermissionGate` (вопрос идёт `session/request_permission`),
+  /// containment по `cwd` даёт `BoundedEnv` ядра (ENV-2).
+  ///
+  /// Как использовать: фабрика обязана быть без побочных эффектов (без
+  /// обращения к ФС, без валидации cwd): сервер один раз вызывает её с cwd
+  /// `/` при создании (если в профиле `fileListing`), чтобы проверить
+  /// `env is DirectoryListing`, затем на каждый `session/new` и
+  /// `session/load` — для проверки существования каталога и env сессии.
+  /// Такой env заменяет [localListing]: листинг обязан дать сам `localEnv`,
+  /// иначе `HostWiringException`. Без поля поведение прежнее (§13.9).
+  final ExecutionEnv Function(String cwd)? localEnv;
 }
 
 /// ACP-сервер Dart-агента: проекция `AgentRuntime` в ACP
@@ -77,13 +105,25 @@ final class AcpAgentServer {
   }) : _core = core,
        _logger = logger {
     // Реестр инструментов общий на ядро, а локальный листинг — свойство
-    // хоста: они должны совпадать (design.md, D5).
-    if (core.plan.profile.isOn(HostCapability.fileListing) &&
-        config.localListing == null) {
-      throw const HostWiringException(
-        'capability fileListing требует AcpServerConfig.localListing: '
-        'без него ls и search некуда направить',
-      );
+    // хоста: они должны совпадать (design.md, D5). Env от хоста (`localEnv`)
+    // листинг не получает из оверлея, поэтому реализовать его обязан сам
+    // (change `add-embedded-agent-mode`, D4).
+    if (core.plan.profile.isOn(HostCapability.fileListing)) {
+      final localEnv = config.localEnv;
+      if (localEnv != null) {
+        if (localEnv('/') is! DirectoryListing) {
+          throw const HostWiringException(
+            'capability fileListing requires the env from '
+            'AcpServerConfig.localEnv to implement DirectoryListing: '
+            'ls and search have nowhere to go without it',
+          );
+        }
+      } else if (config.localListing == null) {
+        throw const HostWiringException(
+          'capability fileListing requires AcpServerConfig.localListing: '
+          'ls and search have nowhere to go without it',
+        );
+      }
     }
   }
 
@@ -386,10 +426,38 @@ final class _Connection {
 
   /// Env, gate и мост сессии этого соединения (D5, D6): файлы и команды —
   /// через клиента, листинг — локально, если хост его дал.
+  ///
+  /// Если хост задал `localEnv`, env сессии — `localEnv(cwd)` целиком
+  /// (change `add-embedded-agent-mode`, D4; §13.1): `fs/*` и `terminal/*`
+  /// не отправляются, даже если клиент их объявил. `ClientLink` остаётся
+  /// для `AcpPermissionGate`, а `clientEnv` не создаётся: отменять
+  /// незавершённые запросы к клиенту нечему.
   ({ClientLink link, SessionBridge bridge, SessionHostPorts ports}) _wire(
     String cwd,
   ) {
     final link = ClientLink(requests: _requests, capabilities: _client!);
+    final localEnv = _server.config.localEnv;
+    if (localEnv != null) {
+      final bridge = SessionBridge(
+        owner: this,
+        sink: _notify,
+        link: link,
+        catalog: _server._runtime.models,
+        clock: _server.clock,
+        logger: _logger,
+      );
+      final ports = SessionHostPorts(
+        env: localEnv(cwd),
+        gate: AcpPermissionGate(
+          link,
+          logger: _logger,
+          waitForReconnect: bridge.waitForReconnect,
+          announced: bridge.announced,
+        ),
+        extraBeforeToolCall: [bridge.markInProgress],
+      );
+      return (link: link, bridge: bridge, ports: ports);
+    }
     final clientEnv = AcpClientExecutionEnv(
       link: link,
       cwd: cwd,
@@ -628,14 +696,17 @@ final class _Connection {
       _server._sessions[id.value] ??
       (throw AcpRequestError.notFound('Session not found: ${id.value}'));
 
-  /// Абсолютный путь; при локальном листинге — существующий каталог.
+  /// Абсолютный путь; при локальном листинге или `localEnv` — существующий
+  /// каталог.
   /// Без листинга проверить каталог нечем: в ACP нет stat каталога
   /// (design.md, D5).
   Future<void> _checkCwd(String cwd) async {
     if (!_isAbsolute(cwd)) {
       throw const AcpRequestError.invalidParams('cwd must be an absolute path');
     }
-    final listing = _server.config.localListing;
+    // Env от хоста (`localEnv`) приоритетнее `localListing`: в базовой
+    // спецификации несуществующий каталог при локальном листинге — -32602.
+    final listing = _server.config.localEnv ?? _server.config.localListing;
     if (listing == null) {
       return;
     }

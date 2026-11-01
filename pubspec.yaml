@@ -23,6 +23,7 @@ workspace:
   - packages/dart/codelab_agent_io
   - packages/dart/codelab_agent_mcp
   - packages/dart/codelab_architecture_tests
+  - packages/dart/codelab_embedded
   - packages/dart/codelab_setup
   - packages/flutter/codelab_ui
 
@@ -73,10 +74,12 @@ melos:
       run: cd packages/dart/codelab_agent_core && fvm dart run tool/gen_prompts.dart --check
 
     web-compile:
-      description: Compile the agent core web-smoke entry point to JavaScript and WebAssembly.
+      description: Compile the web-smoke entry points of the agent core and the embedded agent to JavaScript and WebAssembly.
       run: >-
         fvm dart compile js -O1 -o build/web_smoke/core.js packages/dart/codelab_agent_core/test/web_smoke/main.dart &&
-        fvm dart compile wasm -o build/web_smoke/core.wasm packages/dart/codelab_agent_core/test/web_smoke/main.dart
+        fvm dart compile wasm -o build/web_smoke/core.wasm packages/dart/codelab_agent_core/test/web_smoke/main.dart &&
+        fvm dart compile js -O1 -o build/web_smoke/embedded.js packages/dart/codelab_embedded/test/web_smoke/main.dart &&
+        fvm dart compile wasm -o build/web_smoke/embedded.wasm packages/dart/codelab_embedded/test/web_smoke/main.dart
 
     test:e2e:app:stdio:
       description: Run codelab_desktop macOS stdio connection integration tests.

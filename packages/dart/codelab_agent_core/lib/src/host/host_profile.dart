@@ -63,7 +63,8 @@ final class HostProfile {
     this.defaultMode,
   ) : states = Map.unmodifiable(states);
 
-  /// The built-in profiles of §10.4; [ArgumentError] for an unknown name.
+  /// Встроенные профили §10.4: `agent-serve`, `embedded-cli`,
+  /// `embedded-app-desktop`; [ArgumentError] для неизвестного имени.
   factory HostProfile.of(String name) => switch (name) {
     'agent-serve' => HostProfile._(name, const {
       HostCapability.shellExec: CapabilityTransport({
@@ -85,24 +86,35 @@ final class HostProfile {
         'http',
       }, 'серверы MCP: процесс клиента и streamable HTTP'),
     }, ModeId.standard),
-    'embedded-cli' => HostProfile._(name, const {
-      HostCapability.shellExec: CapabilityTransport({
-        'local',
-      }, 'процессы хоста'),
-      HostCapability.fileListing: CapabilityTransport({'local'}, 'файлы хоста'),
-      HostCapability.interactiveApproval: CapabilityTransport({
-        'acp',
-      }, 'вопрос через встроенный ACP-клиент'),
-      HostCapability.compaction: CapabilityOn(),
-      HostCapability.sessionPersistence: CapabilityTransport({
-        'jsonl-file',
-      }, 'журнал JSONL в \$CODELAB_HOME/sessions'),
-      HostCapability.mcp: CapabilityTransport({
-        'stdio',
-        'http',
-      }, 'серверы MCP: процессы хоста и streamable HTTP'),
-    }, ModeId.standard),
+    // Профили встроенного агента различаются только хостом, а не
+    // возможностями: те же состояния и режим, что у `embedded-cli` (§10.4;
+    // design.md change `add-embedded-agent-mode`, D4). Отдельное имя нужно
+    // сужению `profile.<name>.*` конфига и записи `host.plan` в журнале.
+    'embedded-cli' || 'embedded-app-desktop' => HostProfile._(
+      name,
+      _embeddedStates,
+      ModeId.standard,
+    ),
     _ => throw ArgumentError.value(name, 'name', 'unknown host profile'),
+  };
+
+  /// Состояния профилей встроенного агента (§10.4): `embedded-cli` и
+  /// `embedded-app-desktop` совпадают, паритет закреплён golden-тестом
+  /// `host_profile_test.dart`.
+  static const _embeddedStates = <HostCapability, CapabilityState>{
+    HostCapability.shellExec: CapabilityTransport({'local'}, 'процессы хоста'),
+    HostCapability.fileListing: CapabilityTransport({'local'}, 'файлы хоста'),
+    HostCapability.interactiveApproval: CapabilityTransport({
+      'acp',
+    }, 'вопрос через встроенный ACP-клиент'),
+    HostCapability.compaction: CapabilityOn(),
+    HostCapability.sessionPersistence: CapabilityTransport({
+      'jsonl-file',
+    }, 'журнал JSONL в \$CODELAB_HOME/sessions'),
+    HostCapability.mcp: CapabilityTransport({
+      'stdio',
+      'http',
+    }, 'серверы MCP: процессы хоста и streamable HTTP'),
   };
 
   final String name;

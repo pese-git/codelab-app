@@ -2,7 +2,6 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 
 import '../cli/serve_args.dart';
-import 'llm_script.dart';
 
 /// Загружает конфигурацию `serve`: файлы, переменные и флаги (`agent-core-
 /// architecture` §15.2, §15.6; design.md change `add-agent-configuration`,
@@ -29,10 +28,16 @@ ConfigLoadResult loadServeConfig(
 }) {
   var flags = options.flags;
   if (options.llmScript case final path?) {
-    flags = _withScriptedProviders(
-      flags,
-      LlmScript.modelsOf(path, models: options.models),
-    );
+    try {
+      flags = withScriptedProviders(
+        flags,
+        LlmScript.modelsOf(path, models: options.models),
+      );
+    } on LlmScriptException catch (error) {
+      // Сценарий разбирает `codelab_agent_io` (D8 change
+      // `add-embedded-agent-mode`); для бинаря это ошибка использования.
+      throw UsageError(error.message);
+    }
   }
   try {
     return (loader ?? ConfigLoader()).load(
@@ -65,39 +70,6 @@ ConfigLoadResult loadServeConfig(
     return (level: options.logLevel, file: options.logFile);
   }
   return (level: host.logLevel ?? LogLevel.info, file: host.logFile);
-}
-
-/// Дополняет слой флагов провайдерами и моделью сценария.
-///
-/// Схема требует `agent.default_model` из каталога провайдеров; у сценария
-/// каталог — его собственные модели, поэтому каждая становится моделью
-/// провайдера с её окном контекста и лимитом ответа.
-ConfigTree _withScriptedProviders(ConfigTree flags, List<ModelRef> models) {
-  final providers = <String, Map<String, Object?>>{};
-  for (final model in models) {
-    final entry = providers.putIfAbsent(
-      model.provider,
-      () => {
-        'kind': 'openai-compatible',
-        'base_url': model.baseUrl.toString(),
-        'models': <String, Object?>{},
-      },
-    );
-    (entry['models']! as Map<String, Object?>)[model.id] = {
-      'context_window': model.contextWindow,
-      'max_output_tokens': model.maxOutputTokens,
-    };
-  }
-  return ConfigTree(
-    kind: flags.kind,
-    source: flags.source,
-    values: {
-      ...flags.values,
-      'providers': providers,
-      'agent': {'default_model': '${models.first.provider}/${models.first.id}'},
-    },
-    positions: flags.positions,
-  );
 }
 
 /// Пишет предупреждения загрузки конфига в лог.
