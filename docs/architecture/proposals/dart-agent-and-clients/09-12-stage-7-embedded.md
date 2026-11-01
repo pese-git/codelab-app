@@ -17,6 +17,11 @@
    на `InProcessAcpLink` у всех потребителей — contract test этапа 4, агентский драйвер фикстур, тесты
    `codelab_agent_acp` и `apps/codelab_agent` — и удалить копию в том же PR (change
    `add-in-process-acp-transport`, D5).
+
+   **Итог 7.1–7.2.** Сделано change `add-in-process-acp-transport` (итерация 1, PR #209):
+   продуктовая пара `InProcessAcpLink` в `codelab_acp_transports` с копированием сообщений всегда
+   (D9), экспорт из web-безопасного основного бареля; тестовая копия из `codelab_acp_testing`
+   удалена, все потребители переведены (D5). Отметки DoD — ниже.
 3. **7.3. Пакет `packages/dart/codelab_embedded`** (API ниже): `lib/codelab_embedded.dart`
    (нейтральная часть, `createEmbeddedAgent`), `lib/io.dart` (сервисы для десктопа).
 4. **7.4. Профили хостов** `embedded-app-desktop` и `embedded-cli` в `buildAgentCore`
@@ -219,6 +224,7 @@ final class IsolateAcpLink {
 **Definition of Done.**
 
 * `fvm dart test packages/dart/codelab_acp_transports/test/in_process_acp_transport_test.dart` зелёный.
+  **Выполнено** (7.1, change `add-in-process-acp-transport`, PR #209).
 * Интеграционные тесты app для встроенного режима (таблица этапа 4) собираются; прогон на
   устройстве `melos run test:e2e:app:embedded` — все применимые тесты зелёные — выполняется в
   ветке `release/<version>` (`AGENTS.md` §21).
