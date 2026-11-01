@@ -48,6 +48,12 @@
 6. **7.6. codelab_cli:** `--agent embedded` по умолчанию; тот же резолвер в
    `apps/codelab_cli/lib/src/composition_root.dart`; `codelab config check` показывает план
    сборки (что включено и почему выключено).
+   **Решение пользователя 2026-11-02** (design.md change `add-embedded-agent-mode`, D13):
+   без `--agent` используется профиль `default` из `profiles.json`, если он есть, иначе встроенный
+   агент. Вне scope change `add-embedded-agent-mode`, отдельными change: план сборки в
+   `codelab config check` (вывод обязан совпадать у CLI и `codelab-agent`, а план зависит от
+   профиля хоста) и флаги CLI `--permission-mode`, `--config`, `--log-file` (таблица §9.11).
+   До них работают `CODELAB_CONFIG`, `permissions.mode` конфига и `--approve`.
 7. **7.7. Интеграционные тесты app в режиме `CODELAB_E2E_AGENT=embedded`:** поддержка
    `integration_test/support/e2e_agent.dart` создаёт `EmbeddedProfile` с провайдером
    `ProviderConfig.scripted(<скрипт>)`. Scripted-провайдер доступен только при
@@ -168,12 +174,35 @@ final class EmbeddedTransportResolver implements TransportResolver {
 }
 ```
 
+**Уточнения change `add-embedded-agent-mode`.** Эскиз выше написан до конфигурации 8.5. Действующий
+API и решения — в [design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md):
+
+* `EmbeddedAgentConfig` несёт `CoreConfig` и `HostSettings` загрузчика 8.5 (несколько провайдеров
+  с маршрутизацией) вместо одного `ProviderConfig`, `fallbackModels` и `mcpServers` (D2).
+* `loadEmbeddedAgentConfig` и `desktopHostServices` соединены в открыватель
+  `localEmbeddedAgentOpener` из `io.dart`: оба клиента вызывают их подряд, а службам нужны
+  `secretsBackend` и `sessions.dir` загруженного конфига (D2, D5). Резолвер клиента получает
+  открыватель, а не фабрику сервисов. `EmbeddedAgent.plan` не публикуется до потребителя.
+* `memoryHostServices` и `mobileHostServices` не создаются до этапа 10; основной барель остаётся
+  web-безопасным (D2).
+* Встроенные профили исполняют файлы и команды через `AcpServerConfig.localEnv`
+  (agent-core-architecture §13.1): при `services.baseEnv = LocalExecutionEnv` сервер иначе отдал бы
+  их клиенту через `fs/*` и `terminal/*` (D4).
+* `dispose` запускается и при закрытии клиентского конца; ошибка агента перехватывается зоной
+  и переводит клиентский транспорт в `failed` с `disconnected` (D6).
+* Сценарий модели для тестов — `package:codelab_embedded/testing.dart`, который `lib/` клиентов
+  не импортирует (сторож), вместо `--dart-define=CODELAB_ALLOW_SCRIPTED_LLM` и
+  `ProviderConfig.scripted` (задача 7.7); разбор сценария переезжает из `apps/codelab_agent` в
+  `codelab_agent_io` (D8).
+
 **OpenSpec change.** `add-in-process-acp-transport` (задачи 7.1–7.2; scope: публичный API
 `codelab_acp_transports`, правила копирования и закрытия; выполнен и архивирован —
 [`archive/2026-11-01-add-in-process-acp-transport`](../../../../openspec/changes/archive/2026-11-01-add-in-process-acp-transport/)) и `add-embedded-agent-mode` (задачи 7.3–7.9;
 scope: `codelab_embedded`, профили `embedded-*`, профиль подключения в app и CLI, scripted-провайдер
 только для тестов; часть 7.5 про `codelab_setup` и D-05 — отдельный change
-`add-provider-setup-ui`, Should). `tasks.md` — пары "тест → реализация" со ссылкой на критерий
+`add-provider-setup-ui`, Should; план сборки в `codelab config check` из 7.6 и флаги CLI
+`--permission-mode`, `--config`, `--log-file` — вне scope, отдельные change, решение пользователя
+2026-11-02). `tasks.md` — пары "тест → реализация" со ссылкой на критерий
 (§9.0, правило 3); замер 7.8 — разведка без пары (исключение (д)).
 
 **Решение 7.8: ядро в isolate.** Критерии (замер на эталонной машине, записанной в `design.md`):
