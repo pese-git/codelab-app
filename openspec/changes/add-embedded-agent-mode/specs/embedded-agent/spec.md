@@ -41,9 +41,11 @@
 ### Requirement: Конфигурация и секреты встроенного агента
 `localEmbeddedAgentOpener` SHALL загружать конфигурацию загрузчиком `ConfigLoader` из `codelab_agent_io` (задача 8.5): `cwd` — папка проекта из `open`, окружение — окружение процесса хоста. Своего загрузчика у пакета НЕ SHALL быть (design.md, D5). При невалидном конфиге открыватель SHALL бросать `EmbeddedAgentConfigException` со всеми проблемами загрузчика. Текст исключения SHALL содержать строки `<location>: [<key>: ]<message>` в форме `config check` и последней строкой подсказку `Configure the embedded agent in <home>/config.yaml; check it with: codelab config check`, где `<home>` — `codelabHomeOf(environment)` (design.md, D5; D13, п. 2). Значения секретов и подставленных переменных НЕ SHALL в него попадать. Сетевые клиенты и процессы до этой точки НЕ SHALL создаваться.
 
-Резолвер секретов SHALL быть один на агента и строиться только через `openHostSecrets` из `codelabHomeOf(environment)`, окружения, `HostSettings.secretsBackend` и признака отладки. Его SHALL получать и функция модели (`createRoutedStreamFunction`), и `AgentCoreServices.secrets` (design.md change `add-agent-secret-store`, D15).
+Предупреждения загрузчика открыватель SHALL писать в лог и тогда, когда конфиг невалиден, — до броска исключения, как бинарь (design.md change `add-agent-configuration`, D16). Профиль хоста открыватель SHALL проверять первым шагом, до загрузки конфига и создания ресурсов (design.md, D2). Окружение процесса открыватель SHALL брать только из своего параметра `environment`: из него же — окружение процессов `exec` и MCP-серверов stdio.
 
-Переменная `CODELAB_TEST_SECRET_STORE=<каталог>` SHALL выбирать бэкенд `file` с путём `<каталог>/secrets.yaml` (`backend.id == "file"`) только в сборке с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true`. В обычной сборке она НЕ SHALL читаться.
+Резолвер секретов SHALL быть один на агента и строиться только через `openHostSecrets` из `codelabHomeOf(environment)`, окружения, `HostSettings.secretsBackend` и признака отладки. Его SHALL получать и функция модели, и `AgentCoreServices.secrets` (design.md change `add-agent-secret-store`, D15). Функцию модели из `CoreConfig` (ключи провайдеров, шаблоны заголовков, маршруты) SHALL строить та же публичная функция `codelab_agent_core`, что у `codelab-agent serve`; своей проекции конфига у пакета НЕ SHALL быть (design.md, D1, в).
+
+Переменная `CODELAB_TEST_SECRET_STORE=<каталог>` SHALL выбирать бэкенд `file` с путём `<каталог>/secrets.yaml` (`backend.id == "file"`, причина выбора `test store`) только в сборке с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true`. В обычной сборке она НЕ SHALL читаться. Разбор переменной и проверка define SHALL жить в `codelab_agent_io` рядом с загрузчиком (design.md, D5).
 
 #### Scenario: Ключ провайдера из secrets.yaml
 - **WHEN** временный `CODELAB_HOME` содержит `config.yaml` с провайдером `openai-compatible` на адресе `MockClient` теста, `api_key_secret: codelab/p` и `secrets.backend: file`, а `secrets.yaml` (права `0600`) — значение `codelab/p`; открыватель получает этот `CODELAB_HOME` и проводит ход
@@ -96,12 +98,14 @@
 
 Закрытие клиентского конца клиентом SHALL запускать тот же `dispose`. `EmbeddedAgent.closed` SHALL завершаться после него.
 
-Необработанная ошибка асинхронной работы агента SHALL перехватываться зоной агента. Агент SHALL:
-- записать `embedded.agent.failed` уровня `error` с классом ошибки, без её текста;
+Необработанная ошибка асинхронной работы агента или завершение `serve` с ошибкой SHALL перехватываться зоной агента. На первую такую ошибку агент SHALL:
+- записать `embedded.agent.failed {error_class}` уровня `error`, без текста ошибки;
 - закрыть агентский конец, чтобы клиентский перешёл в `failed` с кодом `disconnected`;
 - выполнить `dispose`.
 
-Ошибка агента НЕ SHALL доходить до обработчика ошибок приложения. После `dispose` клиент НЕ SHALL получать кадров этого агента.
+Вторая и последующие ошибки зоны, а также ошибки, пришедшие во время уже начатой остановки (`dispose`, закрытие клиентом или отказ), НЕ SHALL запускать повторный отказ: агент SHALL записать `embedded.agent.late_error {error_class}` уровня `warning`, без текста ошибки. Сбой шага `dispose` SHALL записываться `embedded.agent.dispose_failed {step, error_class}` уровня `error`, без текста. Поля событий — snake_case; `error_class` — класс ошибки (design.md, D6).
+
+Ошибка агента, в том числе поздняя, НЕ SHALL доходить до обработчика ошибок приложения. После `dispose` клиент НЕ SHALL получать кадров этого агента.
 
 #### Scenario: dispose при ожидающем разрешении
 - **WHEN** ход ждёт ответа на `session/request_permission` для `write`, и хост вызывает `dispose()`
@@ -113,7 +117,11 @@
 
 #### Scenario: Ошибка внутри агента
 - **WHEN** тестовая функция модели бросает ошибку асинхронно вне `Future` хода
-- **THEN** клиентский транспорт переходит в `failed` с `disconnected`, лог содержит `embedded.agent.failed` без текста ошибки, тестовый обработчик ошибок зоны приложения ничего не получает
+- **THEN** клиентский транспорт переходит в `failed` с `disconnected`, лог содержит `embedded.agent.failed` уровня `error` с единственным полем `error_class`, без текста ошибки, тестовый обработчик ошибок зоны приложения ничего не получает
+
+#### Scenario: Поздняя ошибка не запускает повторный отказ
+- **WHEN** после первой ошибки в зоне агента, пока идёт остановка, тестовая функция модели асинхронно бросает вторую ошибку
+- **THEN** лог содержит ровно одно `embedded.agent.failed` и одно `embedded.agent.late_error` уровня `warning` с единственным полем `error_class`, без текста ошибки; `dispose` выполнен один раз, `closed` завершён, тестовый обработчик ошибок зоны приложения ничего не получает
 
 ### Requirement: Сценарий модели для тестов
 `scriptedEmbeddedAgentOpener` (`package:codelab_embedded/testing.dart`) SHALL открывать агента со сценарием модели — блоком `llm` формата фикстур (`agent-core-architecture` §14). Разбор сценария и слой провайдеров сценария SHALL быть тем же кодом `codelab_agent_io`, что у `codelab-agent serve --llm-script` (design.md, D8). Только этот открыватель SHALL принимать профиль `agent-serve` (файлы и команды через клиента, как у бинаря по stdio) и тестовый режим разрешений. Основной барель и `io.dart` НЕ SHALL принимать функцию модели или сценарий.

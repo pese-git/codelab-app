@@ -16,8 +16,10 @@
 
 Точки входа (D2):
 - `lib/codelab_embedded.dart` — основной барель, web-безопасный: `createEmbeddedAgent`, `EmbeddedAgent`, `EmbeddedAgentOpener`, `EmbeddedAgentConfig`, `EmbeddedHostServices`, `EmbeddedAgentConfigException`, а из ядра только `Logger` и `LogLevel`;
-- `lib/io.dart` — настольный открыватель `localEmbeddedAgentOpener` (конфиг, секреты, журнал, MCP): появится в итерации 2;
-- `lib/testing.dart` — `scriptedEmbeddedAgentOpener` со сценарием модели; код сценария и слой провайдеров сценария — `LlmScript` и `withScriptedProviders` из `codelab_agent_io` (D8).
+- `lib/io.dart` — настольный открыватель `localEmbeddedAgentOpener({environment, logger, debugSecrets, httpClient})` (`ConfigLoader` → `openHostSecrets` → `JsonlSessionStore`, `LocalExecutionEnv`, `ProjectFilesLoader`, `McpClientConnector` → `createEmbeddedAgent`). Невалидный конфиг — `EmbeddedAgentConfigException` до создания HTTP-клиента; `CODELAB_TEST_SECRET_STORE` читается только в сборке с `-DCODELAB_ALLOW_TEST_SECRETS=true`;
+- `lib/testing.dart` — `scriptedEmbeddedAgentOpener` со сценарием модели; код сценария и слой провайдеров сценария — `LlmScript` и `withScriptedProviders` из `package:codelab_agent_io/testing.dart` (D8); основной барель `codelab_agent_io` их не экспортирует.
+
+Жизненный цикл (D6, `lib/src/assemble.dart`): `serve` и вся асинхронная работа агента идут в охраняемой зоне `runZonedGuarded`; отказ (необработанная ошибка зоны или `serve`) пишет `embedded.agent.failed {error_class}` уровня `error` без текста ошибки, закрывает агентский конец и запускает `dispose`; повторные ошибки после начала остановки — `embedded.agent.late_error {error_class}` (`warning`). `dispose` идемпотентен, шаги в своих `try` (`embedded.agent.dispose_failed {step, error_class}` уровня `error`).
 
 Профили: `createEmbeddedAgent` принимает только `embedded-app-desktop` и `embedded-cli`. Профиль `agent-serve` и режим разрешений принимает только `testing.dart`. Профили `embedded-*` исполняют файлы и команды сами (`AcpServerConfig.localEnv`, D4); `fs/*` и `terminal/*` клиенту не уходят.
 
@@ -27,7 +29,7 @@
 * `io.dart`, `testing.dart` и их `src/`-каталоги не импортируют Flutter, `fluent_ui`, `codelab_ui` и `codelab_client_*`.
 * `dependencies` — только подмножество `embeddedAllowlist`: `codelab_agent_core`, `codelab_agent_io`, `codelab_agent_acp`, `codelab_agent_mcp`, `codelab_acp_protocol`, `codelab_acp_transports`, `http`, `meta`, `async`. Расширение — только через OpenSpec change. Проверка — `pubspec_allowlist_test.dart`.
 * Ядро собирается только через `buildAgentCore` (HOST-6): в `lib/` нет `ToolRegistry(`, `Agent(`, `AgentRuntime(` (`host_assembly_guard_test.dart`).
-* `http.Client`, `Clock`, `Random` и `IdGenerator` приходят от хоста через `EmbeddedHostServices` (PKG-6); пакет сам их не создаёт, кроме `testing.dart`.
+* `http.Client`, `Clock`, `Random` и `IdGenerator` приходят от хоста через `EmbeddedHostServices` (PKG-6); пакет сам их не создаёт, кроме `io.dart` (настольный хост, `localEmbeddedAgentOpener`) и `testing.dart`.
 * Методов, полей и состояний ACP пакет не добавляет; `agentInfo` — как у бинаря `codelab-agent` (D4).
 * Основной барель и `io.dart` не принимают функцию модели, сценарий и `PermissionGate`: разрешения идут клиенту через `AcpPermissionGate`.
 
@@ -41,5 +43,5 @@
 ## 4. Готовность итерации (dart-agent-and-clients §9.0, правило 7)
 
 Итерация завершена, когда выполнены условия (а)–(е) из `packages/dart/codelab_agent_core/AGENTS.md` §3. Для этого пакета отдельно:
-* (в) PR называет следующую итерацию и точку, куда встаёт её функция: итерация 2 добавляет `lib/io.dart` и `lib/src/io/` (открыватель настольных хостов), охраняемую зону и порядок `dispose` в `lib/src/assemble.dart`; контракты `EmbeddedAgent` и `EmbeddedHostServices` расширяются без изменения сигнатур;
+* (в) PR называет следующую итерацию и точку, куда встаёт её функция: итерации 3 (CLI) и 4 (desktop) вызывают `localEmbeddedAgentOpener` из `io.dart` в composition root клиента и `scriptedEmbeddedAgentOpener` из `testing.dart` в тестах; контракты `EmbeddedAgent` и `EmbeddedHostServices` расширяются без изменения сигнатур;
 * (г) новая функция встаёт в точку расширения (`EmbeddedHostServices`, профиль, открыватель), а не условием в `assembleEmbeddedAgent`.

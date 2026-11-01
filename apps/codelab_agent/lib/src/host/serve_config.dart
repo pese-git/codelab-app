@@ -1,5 +1,6 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
+import 'package:codelab_agent_io/testing.dart';
 
 import '../cli/serve_args.dart';
 
@@ -70,22 +71,4 @@ ConfigLoadResult loadServeConfig(
     return (level: options.logLevel, file: options.logFile);
   }
   return (level: host.logLevel ?? LogLevel.info, file: host.logFile);
-}
-
-/// Пишет предупреждения загрузки конфига в лог.
-///
-/// Почему одна функция: валидный конфиг пишет их при сборке хоста, а
-/// невалидный — при отчёте об ошибках, и оба пути обязаны давать одни и те же
-/// события (D16). Неизвестные `CODELAB_*` распознаёт `ConfigLoader` и кладёт
-/// их в те же `warnings` событием `config.env.unknown` (D13), поэтому каждое
-/// предупреждение пишется ровно один раз. Предупреждение — событие со своим
-/// именем; в `message` нет значений ключей.
-void logStartupWarnings(Logger logger, ConfigLoadResult loaded) {
-  for (final warning in loaded.warnings) {
-    logger.log(
-      warning.level,
-      warning.event ?? 'config.warning',
-      fields: {...warning.fields, 'message': warning.message},
-    );
-  }
 }

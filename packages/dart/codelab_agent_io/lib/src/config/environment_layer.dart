@@ -103,6 +103,29 @@ const _knownVariables = {
     'CODELAB_TEST_SECRET_STORE',
 };
 
+/// Путь `secrets.yaml` тестового хранилища секретов из окружения (`null` —
+/// обычный выбор по `secrets.backend`).
+///
+/// Почему здесь: правило «переменная действует только в сборке с
+/// `-DCODELAB_ALLOW_TEST_SECRETS=true`» одно и то же для загрузчика
+/// ([_knownVariables]) и для хоста, который выбирает хранилище. Define
+/// вычисляется при компиляции, поэтому в рабочей сборке ветка вычищена, а
+/// переменная даёт `config.env.unknown` (change `add-embedded-agent-mode`,
+/// D5; §12.4.13).
+///
+/// Как использовать: открыватель хоста передаёт результат в
+/// `openHostSecrets(testStorePath:)`; каталог из переменной получает имя
+/// `secrets.yaml`.
+String? testSecretStorePath(Map<String, String> environment) {
+  if (!const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')) {
+    return null;
+  }
+  final directory = environment['CODELAB_TEST_SECRET_STORE'];
+  return directory == null || directory.isEmpty
+      ? null
+      : '$directory/secrets.yaml';
+}
+
 /// Семейства переменных, известные целиком (§15.6).
 const _knownFamilies = [
   'CODELAB_SECRET_',

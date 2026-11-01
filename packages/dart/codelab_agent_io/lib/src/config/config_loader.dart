@@ -16,9 +16,15 @@ import 'yaml_reader.dart';
 /// `64` и справкой (`agent-core-architecture` §13.10), а проблемы файлов —
 /// это [ConfigIssue] в результате загрузки. Сообщение значений не содержит.
 final class ConfigUsageException implements Exception {
-  const ConfigUsageException(this.message);
+  const ConfigUsageException(this.message, {this.source});
 
   final String message;
+
+  /// Что именно задано неверно: `CODELAB_HOME`, `CODELAB_CONFIG` или
+  /// `--config`. Хост без разбора текста называет источник в проблеме
+  /// (встроенный агент, `EmbeddedAgentConfigException`); `null` — источник не
+  /// определён.
+  final String? source;
 
   @override
   String toString() => 'ConfigUsageException: $message';
@@ -42,7 +48,10 @@ bool isAbsoluteConfigPath(String path) =>
 void checkConfigEnvPath(String path) {
   checkConfigFileName(path, origin: 'CODELAB_CONFIG');
   if (!isAbsoluteConfigPath(path)) {
-    throw const ConfigUsageException('CODELAB_CONFIG must be an absolute path');
+    throw const ConfigUsageException(
+      'CODELAB_CONFIG must be an absolute path',
+      source: 'CODELAB_CONFIG',
+    );
   }
 }
 
@@ -59,10 +68,14 @@ void checkConfigFileName(String path, {required String origin}) {
     throw ConfigUsageException(
       '$origin needs a .yaml file; codelab.toml is not supported, see '
       'agent-core-architecture §15.7',
+      source: origin,
     );
   }
   if (!lower.endsWith('.yaml') && !lower.endsWith('.yml')) {
-    throw ConfigUsageException('$origin needs a .yaml or .yml file');
+    throw ConfigUsageException(
+      '$origin needs a .yaml or .yml file',
+      source: origin,
+    );
   }
 }
 
@@ -122,12 +135,14 @@ String codelabHomeOf(Map<String, String> environment) {
     if (explicit.startsWith('~') && explicit.length > 1 && explicit[1] != '/') {
       throw const ConfigUsageException(
         'CODELAB_HOME: ~user is not supported, use an absolute path',
+        source: 'CODELAB_HOME',
       );
     }
     if (home == null && (explicit == '~' || explicit.startsWith('~/'))) {
       throw const ConfigUsageException(
         'CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an '
         'absolute path',
+        source: 'CODELAB_HOME',
       );
     }
     return _expandHomeTilde(explicit, home);
