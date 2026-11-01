@@ -10,7 +10,7 @@
 /// Для чего: основной барель web-безопасен — он не тянет `dart:io`,
 /// `dart:isolate`, `package:codelab_agent_io/` и `codelab_acp_transports/io.dart`
 /// (D3, сторож `codelab_architecture_tests`). Настольный открыватель
-/// (`io.dart`, итерация 2) и сценарий модели для тестов (`testing.dart`, D8)
+/// (`io.dart`) и сценарий модели для тестов (`testing.dart`, D8)
 /// лежат в отдельных точках входа, на которые барель не ссылается.
 ///
 /// Как использовать: хост собирает [EmbeddedHostServices], вызывает

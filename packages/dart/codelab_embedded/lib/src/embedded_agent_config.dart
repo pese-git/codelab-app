@@ -91,7 +91,7 @@ final class EmbeddedHostServices {
 /// значений секретов (CFG-2; design.md change `add-embedded-agent-mode`, D5).
 ///
 /// Как использовать: открыватель хоста бросает её до создания ресурсов
-/// (`io.dart`, итерация 2) и передаёт [issues] загрузчика и каталог состояния
+/// (`io.dart`) и передаёт [issues] загрузчика и каталог состояния
 /// [home] (`codelabHomeOf`). CLI печатает [message] в stderr с кодом `64`, app
 /// показывает его в баннере соединения. Текст — строки
 /// `<location>: [<key>: ]<message>` формы `config check` и последней строкой

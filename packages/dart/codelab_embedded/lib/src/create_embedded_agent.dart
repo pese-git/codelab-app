@@ -8,6 +8,20 @@ import 'embedded_agent_config.dart';
 /// CLI. `agent-serve` доступен только `testing.dart` (D8).
 const _embeddedProfiles = {'embedded-app-desktop', 'embedded-cli'};
 
+/// Проверяет профиль до создания любых ресурсов: принимаются только
+/// `embedded-*`, иначе [HostWiringException] (D2).
+///
+/// Как использовать: зовут `createEmbeddedAgent` и открыватель `io.dart` в
+/// самом начале, чтобы чужой профиль не оставил HTTP-клиент и не читал секреты.
+void checkEmbeddedProfile(String hostProfile) {
+  if (!_embeddedProfiles.contains(hostProfile)) {
+    throw HostWiringException(
+      'createEmbeddedAgent accepts profiles '
+      '${(_embeddedProfiles.toList()..sort()).join(', ')}, not $hostProfile',
+    );
+  }
+}
+
 /// Единственная точка сборки встроенного агента (HOST-6).
 ///
 /// Почему: ядро, ACP-сервер и пара транспортов должны собираться одинаково в
@@ -15,7 +29,7 @@ const _embeddedProfiles = {'embedded-app-desktop', 'embedded-cli'};
 /// транспорте и env (design.md change `add-embedded-agent-mode`, D1, D2).
 ///
 /// Для чего: функция модели строится из провайдеров [config] через
-/// `createRoutedStreamFunction`, каталог моделей — `StaticModelCatalog`;
+/// `createConfiguredStreamFunction`, каталог моделей — `StaticModelCatalog`;
 /// сценарий или свою функцию модели основной барель не принимает (D8).
 ///
 /// Как использовать: [config] — результат загрузчика, [services] — ресурсы
@@ -25,35 +39,19 @@ Future<EmbeddedAgent> createEmbeddedAgent({
   required EmbeddedAgentConfig config,
   required EmbeddedHostServices services,
 }) async {
-  if (!_embeddedProfiles.contains(config.hostProfile)) {
-    throw HostWiringException(
-      'createEmbeddedAgent accepts profiles '
-      '${(_embeddedProfiles.toList()..sort()).join(', ')}, not '
-      '${config.hostProfile}',
-    );
-  }
-  final providers = config.core.providers;
+  checkEmbeddedProfile(config.hostProfile);
   return assembleEmbeddedAgent(
     config: config,
     services: services,
-    models: StaticModelCatalog(providers, logger: services.logger),
-    streamFunction: createRoutedStreamFunction(
-      [for (final provider in providers) provider.config],
+    models: StaticModelCatalog(config.core.providers, logger: services.logger),
+    streamFunction: createConfiguredStreamFunction(
+      config.core,
       CoreLlmServices(
         httpClient: services.http,
         clock: services.clock,
         random: services.random,
         logger: services.logger,
       ),
-      unavailable: config.core.providerProblems,
-      keys: {
-        for (final provider in providers) provider.config.name: ?provider.key,
-      },
-      headerTemplates: {
-        for (final provider in providers)
-          if (provider.headerTemplates.isNotEmpty)
-            provider.config.name: provider.headerTemplates,
-      },
       secrets: services.secrets,
     ),
   );

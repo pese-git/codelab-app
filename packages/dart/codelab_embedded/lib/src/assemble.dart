@@ -34,12 +34,18 @@ const embeddedAgentVersion = '0.1.0';
 /// `AcpServerConfig.localEnv` — файлы и команды исполняет хост, `fs/*` и
 /// `terminal/*` клиенту не уходят. Другие профили (`agent-serve` в тестах)
 /// отдают `localEnv` как локальный листинг, как бинарь по stdio.
+///
+/// [serve] — тестовый шов (D6, D10): запускает обслуживание соединения вместо
+/// `AcpAgentServer.serve`, чтобы тест отказа `serve` (D6, «Отказ агента»)
+/// мог воспроизвести ошибку, которую настоящий сервер извне не вызвать. Хосты
+/// его не задают.
 Future<EmbeddedAgent> assembleEmbeddedAgent({
   required EmbeddedAgentConfig config,
   required EmbeddedHostServices services,
   required StreamFunction streamFunction,
   required ModelCatalog models,
   Map<HostCapability, CapabilityState> extraNarrowing = const {},
+  Future<void> Function(AcpAgentServer server, AcpTransport transport)? serve,
 }) async {
   final embedded = config.hostProfile.startsWith('embedded-');
   // HOST-6: ядро только через `buildAgentCore`. Сужение из конфига — первым,
@@ -70,7 +76,7 @@ Future<EmbeddedAgent> assembleEmbeddedAgent({
   // например HostWiringException, или start пары) без освобождения утекла бы
   // ресурсами ядра и HTTP-клиентом, хотя вызывающий агента не получит.
   try {
-    return await _assemble(core, config, services, embedded);
+    return await _assemble(core, config, services, embedded, serve);
   } catch (_) {
     await _releaseCore(core, services);
     rethrow;
@@ -82,6 +88,7 @@ Future<EmbeddedAgent> _assemble(
   EmbeddedAgentConfig config,
   EmbeddedHostServices services,
   bool embedded,
+  Future<void> Function(AcpAgentServer server, AcpTransport transport)? serve,
 ) async {
   final link = InProcessAcpLink();
   final server = AcpAgentServer(
@@ -109,7 +116,7 @@ Future<EmbeddedAgent> _assemble(
     services: services,
   );
   await link.agent.start();
-  agent._serve();
+  agent._serve(serve ?? (server, transport) => server.serve(transport));
   return agent;
 }
 
@@ -137,30 +144,74 @@ final class _Agent implements EmbeddedAgent {
   @override
   Future<void> get closed => _closed.future;
 
-  /// `serve` завершается, когда клиент закрыл свой конец: агент не живёт
-  /// дольше соединения (D6). Ошибка `serve` не глотается молча: в журнал идёт
-  /// только тип (текст исключения может содержать данные). Полноценное
-  /// `embedded.agent.failed` и охраняемая зона — задачи 2.5, 2.6.
-  void _serve() {
-    unawaited(
-      _server
-          .serve(_link.agent)
-          .then(
-            (_) => dispose(),
-            onError: (Object error) {
-              _services.logger.log(
-                LogLevel.warning,
-                'embedded.agent.serve_failed',
-                fields: {'errorType': '${error.runtimeType}'},
-              );
-              return dispose();
-            },
-          ),
+  /// Зона агента: в ней живут `serve`, обработчики сервера, ходы и `dispose`
+  /// (D6). Запоминается при запуске, чтобы вызов [dispose] из зоны приложения
+  /// тоже исполнялся здесь: ошибки остановки агента не должны попадать в
+  /// обработчик ошибок приложения.
+  late final Zone _zone;
+
+  /// Агент остановлен отказом (fail-stop), а не по закрытию клиентом.
+  var _failed = false;
+
+  /// Запускает `serve` в охраняемой зоне `runZonedGuarded` (D6, «Отказ
+  /// агента»).
+  ///
+  /// Почему зона: ядро в процессе клиента, и необработанная асинхронная
+  /// ошибка в нём дошла бы до `PlatformDispatcher.onError` приложения, где
+  /// сломанный агент остался бы жить. Зона превращает её в fail-stop, как
+  /// смерть процесса stdio-агента: клиент видит `disconnected` и показывает
+  /// `ConnectionLost`. Остаточный риск — синхронный бесконечный цикл зона не
+  /// прервёт (Risks, замер 7.8).
+  ///
+  /// `serve` завершается, когда клиент закрыл свой конец (агент не живёт дольше
+  /// соединения) — тогда идёт обычный [dispose]. Завершение `serve` ошибкой —
+  /// тот же отказ, что и ошибка зоны.
+  void _serve(
+    Future<void> Function(AcpAgentServer server, AcpTransport transport) serve,
+  ) {
+    runZonedGuarded(() {
+      _zone = Zone.current;
+      unawaited(
+        serve(_server, _link.agent).then((_) => dispose(), onError: _fail),
+      );
+    }, (error, stack) => _fail(error));
+  }
+
+  /// Отказ агента: событие, закрытие агентского конца, `dispose` (D6).
+  ///
+  /// В событие идёт только класс ошибки: текст мог бы содержать ответ
+  /// провайдера, путь или фрагмент файла (§16, CFG-2). Повторная ошибка зоны
+  /// после начала остановки — не новый отказ, а запись `late_error`: агент уже
+  /// останавливается, но ошибка не должна пропасть бесследно.
+  void _fail(Object error) {
+    final errorClass = '${error.runtimeType}';
+    if (_failed || _disposing != null) {
+      _services.logger.log(
+        LogLevel.warning,
+        'embedded.agent.late_error',
+        fields: {'error_class': errorClass},
+      );
+      return;
+    }
+    _failed = true;
+    _services.logger.log(
+      LogLevel.error,
+      'embedded.agent.failed',
+      fields: {'error_class': errorClass},
     );
+    unawaited(_failStop());
+  }
+
+  /// Сначала закрывается агентский конец: клиент немедленно получает
+  /// `failed`/`disconnected` и не ждёт остановки ядра; затем обычный
+  /// [dispose] (его шаг закрытия конца повторно безвреден).
+  Future<void> _failStop() async {
+    await _step('link', () => _link.agent.close());
+    await dispose();
   }
 
   @override
-  Future<void> dispose() => _disposing ??= _dispose();
+  Future<void> dispose() => _disposing ??= _zone.run<Future<void>>(_dispose);
 
   /// Каждый шаг в своём `try`: сбой одного не должен оставить остальные
   /// ресурсы открытыми, а [closed] — незавершённым (D6). Исключение наружу не
@@ -186,24 +237,24 @@ final class _Agent implements EmbeddedAgent {
       await action();
     } catch (error) {
       _services.logger.log(
-        LogLevel.warning,
+        LogLevel.error,
         'embedded.agent.dispose_failed',
-        fields: {'step': name, 'errorType': '${error.runtimeType}'},
+        fields: {'step': name, 'error_class': '${error.runtimeType}'},
       );
     }
   }
 }
 
 /// Освобождает ядро и HTTP-клиент владельца при сбое сборки; ошибки шагов
-/// не заменяют исходную, в журнал идут шаг и тип (как в `_Agent._step`).
+/// не заменяют исходную, в журнал идут шаг и класс ошибки (как в `_Agent._step`).
 Future<void> _releaseCore(
   BuiltAgentCore core,
   EmbeddedHostServices services,
 ) async {
   void failed(String step, Object error) => services.logger.log(
-    LogLevel.warning,
+    LogLevel.error,
     'embedded.agent.dispose_failed',
-    fields: {'step': step, 'errorType': '${error.runtimeType}'},
+    fields: {'step': step, 'error_class': '${error.runtimeType}'},
   );
   try {
     await core.runtime.dispose();

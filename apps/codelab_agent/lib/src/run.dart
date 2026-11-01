@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_io/codelab_agent_io.dart' show logConfigWarnings;
 
 import 'cli/config_cli.dart';
 import 'cli/secret_cli.dart';
@@ -163,7 +164,7 @@ int _reportInvalidConfig(
   ServeOptions options,
   Logger logger,
 ) {
-  logStartupWarnings(logger, loaded);
+  logConfigWarnings(logger, loaded);
   for (final issue in loaded.issues) {
     stderr.writeln('codelab-agent: $issue');
   }

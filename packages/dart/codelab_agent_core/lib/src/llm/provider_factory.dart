@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../cancel/cancel_token.dart';
+import '../config/core_config.dart' show CoreConfig;
 import '../secrets/secret_lookup.dart';
 import '../secrets/secret_names.dart';
 import '../secrets/secret_resolver.dart';
@@ -66,6 +67,41 @@ StreamFunction _unsupported(ProviderConfig config, CoreLlmServices services) =>
         '${config.name}: provider api ${config.api.name} is not supported yet',
       ),
     );
+
+/// Функция модели по провайдерам загруженной конфигурации.
+///
+/// Почему в ядре: `codelab-agent` и встроенный агент (`codelab_embedded`)
+/// обязаны проецировать `CoreConfig` в [createRoutedStreamFunction] одинаково
+/// (ключи, шаблоны заголовков, проблемы провайдеров). Две копии проводки
+/// расходились бы молча (design.md change `add-embedded-agent-mode`, D1).
+///
+/// Для чего: берёт из [config] провайдеров (`CatalogProvider.config`),
+/// `providerProblems` как `unavailable`, ключи (`CatalogProvider.key`) и
+/// шаблоны заголовков, остальное делает [createRoutedStreamFunction].
+///
+/// Как использовать: хост передаёт [config] — результат загрузчика, [services]
+/// — порты LLM (HTTP-клиент, часы, `Random`, логгер от хоста, PKG-6) и тот же
+/// [secrets], что кладёт в `AgentCoreServices.secrets`. Результат отдаёт в
+/// `buildAgentCore(streamFunction: …)`. Значения секретов хост не читает.
+StreamFunction createConfiguredStreamFunction(
+  CoreConfig config,
+  CoreLlmServices services, {
+  SecretResolver? secrets,
+}) => createRoutedStreamFunction(
+  [for (final provider in config.providers) provider.config],
+  services,
+  unavailable: config.providerProblems,
+  keys: {
+    for (final provider in config.providers)
+      provider.config.name: ?provider.key,
+  },
+  headerTemplates: {
+    for (final provider in config.providers)
+      if (provider.headerTemplates.isNotEmpty)
+        provider.config.name: provider.headerTemplates,
+  },
+  secrets: secrets,
+);
 
 /// Функция модели для нескольких провайдеров конфигурации (design.md change
 /// `add-agent-configuration`, D11; `agent-core-architecture` §2.10).
