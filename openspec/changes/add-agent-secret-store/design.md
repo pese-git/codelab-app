@@ -219,9 +219,9 @@ debug: на каждом вызове — info secrets.lookup {name, purpose, so
 | `env` | `SecretStoreUnavailableException("env backend is read-only")` | `CODELAB_SECRET_<…>` | то же исключение, что у записи | `false` |
 | `file` | `$CODELAB_HOME/secrets.yaml`, атомарно, `0600` (D14) | тот же файл; права шире `0600` → отказ | ключ удаляется из файла | `true` |
 
-Правила обоих бэкендов: значение с `\n` или `\r` отклоняется при записи; текст исключений не содержит значения.
+Правила обоих бэкендов: значение с `\n` или `\r`, длиннее 64 КиБ в UTF-8 или с непарным суррогатом отклоняется при записи (общая `secretValueProblem`, `secret_value_checks.dart`; суррогат не «чинится» — молчаливая подмена испортила бы секрет); текст исключений не содержит ни значения, ни имени из недопустимого ввода. `FileSecretStore.write` проверяет имя и значение сам и отвечает `SecretStoreUnavailableException` (`invalid secret name` или причина `secretValueProblem`): хранилище не доверяет вызывающему, даже если `SecretAdmin` уже проверил то же.
 
-**`SecretProcessRunner`** — узкий порт запуска процесса в `codelab_agent_io` (`run(executable, arguments, {stdin, timeout})`, реализация `IoSecretProcessRunner` на `Process.start` без оболочки). В 8.9 через него идёт только `/bin/chmod 600 <tmp>` бэкенда `file` (D14): в `dart:io` нет API смены прав, а фейк порта проверяет порядок «права до записи значения». Он же станет швом бэкендов утилит ОС в `openspec/changes/add-agent-os-secret-backends/` (черновик, после 1.0); это не абстракция «на вырост»: у порта есть потребитель и тест уже в 8.9.
+**`SecretProcessRunner`** — узкий порт запуска процесса в `codelab_agent_io` (`run(executable, arguments, {stdin, timeout})`, реализация `IoSecretProcessRunner` на `Process.start` без оболочки и без окружения родителя). Результат — `SecretProcessResult {exitCode, timedOut}`: stdout и stderr вычитываются и отбрасываются, потому что вывод служебных утилит может цитировать аргументы (CFG-10); бэкенды утилит ОС после 1.0 добавят необязательное поле stdout, не меняя вызывающих. `executable` — только абсолютный путь: `PATH` дочернему процессу не передаётся, поиск по имени не гарантирован. По таймауту процесс убивается (`SIGKILL`), результат `timedOut: true, exitCode: -1`; ошибка запуска — исключение. В 8.9 через порт идут только вызовы `chmod` бэкенда `file` (D14): `600 <tmp>`, `700 <каталог>`, no-op проверка владельца `$CODELAB_HOME`; утилита — `/bin/chmod` или, если его нет, `/usr/bin/chmod`; таймаут 10 с: в `dart:io` нет API смены прав, а фейк порта проверяет порядок «права до записи значения». Он же станет швом бэкендов утилит ОС в `openspec/changes/add-agent-os-secret-backends/` (черновик, после 1.0); это не абстракция «на вырост»: у порта есть потребитель и тест уже в 8.9.
 
 **Перенесено** в `openspec/changes/add-agent-os-secret-backends/` (черновик, после 1.0): бэкенды `keychain-macos` (`security -i`, значение только в stdin), `secret-service` (`secret-tool`), их таймауты, разбор кодов и разведка утилит (прежние D5 и задача 0.2).
 
@@ -239,11 +239,22 @@ debug: на каждом вызове — info secrets.lookup {name, purpose, so
 Схема: `secrets: {backend: auto | keychain | env | file}`, по умолчанию `auto`; потребитель — хост (`HostSettings.secretsBackend`). Ключ читается из пользовательского слоя и из `--config`/`CODELAB_CONFIG`; проектные слои его уже не дают (`trust.dart`): репозиторий не может переключить агента на открытый файл. Другое значение — проблема `value` `expected one of: auto, keychain, env, file`.
 
 `openSecretStore({choice, environment, home, runner, platform, logger})` (`codelab_agent_io`) возвращает `DescribedSecretStore` (решение пользователя 2026-10-31, вариант (а)):
-- **`auto`** в 8.9 — `env` на всех ОС, без проб и процессов; `unavailableReason` — `OS keychain backends are not available in this version; set secrets.backend: file or CODELAB_SECRET_* variables`. Предупреждения при старте нет: подсказку получают те, кому секрет действительно нужен (D8, D9, ошибка хода D4). **`auto` никогда не выбирает `file`** — ни сразу, ни как запасной вариант (CFG-11, OQ2). После 1.0 `auto` выбирает хранилище ОС (`openspec/changes/add-agent-os-secret-backends/` (черновик, после 1.0)).
+- **`auto`** в 8.9 — `env` на всех ОС, без проб и процессов; `unavailableReason` на macOS и Linux — `OS keychain backends are not available in this version; set secrets.backend: file or CODELAB_SECRET_* variables`, на Windows — `OS keychain backends are not available in this version; set CODELAB_SECRET_* variables` (`file` там недоступен, подсказывать его нельзя). Предупреждения при старте нет: подсказку получают те, кому секрет действительно нужен (D8, D9, ошибка хода D4). **`auto` никогда не выбирает `file`** — ни сразу, ни как запасной вариант (CFG-11, OQ2). После 1.0 `auto` выбирает хранилище ОС (`openspec/changes/add-agent-os-secret-backends/` (черновик, после 1.0)).
 - **`keychain`** — проблема конфигурации `secrets.backend: keychain is not supported yet (supported: auto, env, file)`, код `64` у `serve` и `config check` (строка проблемы). Значение остаётся в схеме, чтобы будущий change не менял её.
 - **`env`** — `EnvSecretStore`.
 - **`file`** — `FileSecretStore` над `$CODELAB_HOME/secrets.yaml` (D14), предупреждение `secrets.backend.plaintext {path}` при каждом старте хоста.
-- **Windows.** `file` на Windows — проблема конфигурации (D14), её добавляет `ConfigLoader` (ядро платформу не знает). **Поэтому на Windows в 1.0 доступен только `env`** (переменные `CODELAB_SECRET_*`); `wincred` — в `openspec/changes/add-agent-os-secret-backends/` (черновик, после 1.0).
+- **Windows.** `file` на Windows — проблема конфигурации (D14), её добавляет `ConfigLoader` (ядро платформу не знает) с источником и позицией слоя, где задан ключ; при `scripted` (`--llm-script`) проверки нет — сценарий всегда использует `env` (D11). **Поэтому на Windows в 1.0 доступен только `env`** (переменные `CODELAB_SECRET_*`); `wincred` — в `openspec/changes/add-agent-os-secret-backends/` (черновик, после 1.0).
+
+**Одна проверка значения.** `secretsBackendProblem(choice, platform)` (`codelab_agent_io/lib/src/secrets/secrets_backend_problem.dart`) — единственная проверка `secrets.backend` для платформы; её вызывают `ConfigLoader`, `openSecretStore` и `FileSecretStore` (защита в глубину), поэтому тексты не расходятся. Тексты (без ключа и без эха значения — в нём мог оказаться секрет):
+
+| Значение | Текст | Где ещё |
+|---|---|---|
+| `null`, `auto`, `env`; `file` вне Windows | нет проблемы | — |
+| `file` на Windows | `file backend is not supported on Windows; use env with CODELAB_SECRET_* variables` | `ConfigLoader` печатает с ключом: `secrets.backend: file backend is not supported on Windows; …` |
+| `keychain` | `keychain is not supported yet (supported: auto, env, file)` | тот же текст у ядра (`resolve.dart`) |
+| другое | `expected one of: auto, keychain, env, file` | тот же текст у ядра |
+
+`openSecretStore` с недопустимым значением бросает `SecretStoreUnavailableException(backend: 'file' для file, иначе 'config', reason: <текст>)`, а не `UnsupportedError`: значение приходит и из подкоманд `secret` (D8), которые конфиг целиком не загружают, и им нужна типизированная ошибка с кодом `1`. `secrets.backend.selected` тогда не пишется.
 
 Порядок резолвера (D3) от выбора не зависит: переменная `CODELAB_SECRET_<…>` побеждает хранилище при любом бэкенде.
 
@@ -273,13 +284,13 @@ abstract interface class SecretInput {          // stdin процесса; фе�
 **`set <name>`:**
 1. Имя не проходит `SecretNames` → код `64`, `expected a secret name: …`.
 2. Лишний позиционный аргумент → код `64`, `pass the secret value on stdin, not as an argument`. Сам аргумент не печатается.
-3. Бэкенд не допускает записи (`env`) → код `1`, stdin не читается: `secret store env is read-only. Add 'secrets.backend: file' to <CODELAB_HOME>/config.yaml to store secrets in <CODELAB_HOME>/secrets.yaml (plaintext, 0600), or set <envOverride> in the environment`. На Windows вариант с `file` не предлагается (D7).
+3. Бэкенд не допускает записи (`env`) → код `1`, stdin не читается: `secret store env is read-only. Add 'secrets.backend: file' to <CODELAB_HOME>/config.yaml to store secrets in <CODELAB_HOME>/secrets.yaml (plaintext, 0600), or set <envOverride> in the environment`. На Windows вариант с `file` не предлагается (D7). Данные подсказки даёт `SecretReadOnly {backend, variable, fileBackendOffered}` (D15), текст с настоящим путём `$CODELAB_HOME` строит `SecretCommands` (итерация 3). Шаги 1, 3 и 4 выполняет `SecretAdmin.checkStore(name)` до чтения значения.
 4. Переменная `envOverride(name)` совпадает с переменной другого имени из `names()` → код `64`: `secret name <name> collides with <other> (both map to <VAR>)`.
 5. Значение:
    - TTY — `readHidden("Secret value for <name>: ")`; эхо восстанавливается в `finally` и по `SIGINT`;
    - без TTY — `readAll()`, отбрасывается один завершающий `\n` или `\r\n`.
    
-   Пустое значение или EOF → код `64`, `empty secret value`. Перевод строки внутри значения → код `64`, `secret value must be a single line`.
+   Пустое значение или EOF → код `64`, `empty secret value`. Перевод строки внутри значения → код `64`, `secret value must be a single line`; длиннее 64 КиБ или с непарным суррогатом → код `64` с причиной `SecretInvalidValue` (D5).
 6. `write`. Успех — код `0`, stdout `Stored secret <name> in <backend>`; имя уже было в `names()` — перезапись без вопроса и без `--force`, stdout `Updated secret <name> in <backend>` (OQ5, решение 2026-10-31). Ошибка хранилища — код `1`, `cannot store secret <name>: <reason>`. У бэкенда `file` `set` — единственный путь, который создаёт файл `secrets.yaml` (D14); stderr получает строку `warning: secrets are stored unencrypted in <path>`.
 
 **`delete <name>`:** код `0` и `Deleted secret <name> from <backend>`. Отсутствующее имя — код `0` и `Secret <name> was not set in <backend>`: команда идемпотентна для скриптов. Бэкенд `env` — код `1`, как у `set`.
@@ -322,10 +333,10 @@ abstract interface class SecretInput {          // stdin процесса; фе�
 | Событие | Уровень | Поля | Когда |
 |---|---|---|---|
 | `secrets.lookup` | info | `name`, `purpose`, `source`, `found` | только `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` |
-| `secrets.backend.selected` (новое) | info | `backend`, `path` (`secrets.yaml` или `null`), `reason` (у `auto` → `env`) | выбор бэкенда, один раз на процесс |
+| `secrets.backend.selected` (новое) | info | `backend`, `path` (`secrets.yaml` или `null`), `reason`: у `auto` — `unavailableReason` (D7), у явного выбора — `configured: secrets.backend: env` или `configured: secrets.backend: file` | выбор бэкенда в `openSecretStore`, один раз на процесс; недопустимое значение — исключение без события |
 | `secrets.backend.unavailable` | warning | `backend`, `reason` | отказ хранилища при чтении (например, `file` по правам) — один раз на пару `(backend, reason)` |
 | `secrets.backend.plaintext` | warning | `path` | бэкенд `file`, при каждом старте хоста |
-| `secrets.file.refused` (новое) | warning | `path`, `mode` (восьмеричная строка) или `reason: symlink` | `secrets.yaml` с правами шире `0600` или символическая ссылка; один раз на процесс |
+| `secrets.file.refused` (новое) | warning | `path` (путь `secrets.yaml`) и `mode` (восьмеричная строка) — права файла; или `reason`: `symlink`, `home_symlink`, `home_writable` (с `mode`), `home_owner`, `tmp_dir_symlink`, `tmp_dir_mode`, `wide_after_write` (с `removed`) | отказ бэкенда `file` (D14); не больше одного на процесс и путь — последующие отказы по тому же пути, в том числе других экземпляров и по другой причине, событие не повторяют |
 | `config.secret.unavailable` | — | — | снимается (D4) |
 
 `CODELAB_DEBUG_SECRETS=1` включает режим так же, как флаг; другие значения — как не заданная переменная (без предупреждения: имя уже известно `environment_layer.dart`).
@@ -376,13 +387,30 @@ abstract interface class SecretInput {          // stdin процесса; фе�
 
 - **Файл.** `$CODELAB_HOME/secrets.yaml` (§17.5.4). Открытый текст: только по явному `secrets.backend: file` в пользовательском конфиге или `--config`; `auto` его не выбирает никогда и не использует как запасной вариант (D7, CFG-11). В 1.0 это единственный способ сохранить секрет командой `secret set` на macOS и Linux.
 - **Формат.** YAML строгого профиля §15.5: отображение `"<name>": "<value>"`, по строке на секрет, ключи по алфавиту; значения пишутся в двойных кавычках с экранированием JSON (подмножество двойных кавычек YAML). Первая строка — комментарий `# CodeLab secrets in plaintext. Managed by: codelab secret set|delete`. Читается `readYamlTree`; структура не «имя → строка» или имя вне `SecretNames` → `SecretStoreUnavailableException(reason: "<path> is not a map of secret names to strings")` без строк файла. `yaml_edit` не нужен: файл целиком генерируется агентом.
-- **Права (как у ssh).** Перед каждым чтением, записью и `names()`:
+- **Права (как у ssh).** Перед каждым чтением, записью и `names()` (решение оркестратора 2026-11-01 в рамках D14):
+  - платформа — `secretsBackendProblem('file', platform)` (D7): на Windows отказ;
+  - `$CODELAB_HOME` — символическая ссылка → отказ `<home> is a symbolic link; refusing to keep secrets there`; каталог с правом записи для группы или остальных (`mode & 0o022 != 0`) → отказ `<home> is writable by group or others (mode <mode>); run: chmod go-w <home>`. Существующий каталог пользователя бэкенд не изменяет (как ssh): чужой пользователь с правом записи в каталог заменил бы `secrets.yaml` или каталог tmp;
   - путь — символическая ссылка → отказ `<path> is a symbolic link; refusing to read secrets`;
-  - `FileStat.mode & 0o077 != 0` → отказ `<path> has permissions <mode>; run: chmod 600 <path>` и предупреждение `secrets.file.refused` один раз на процесс.
+  - `FileStat.mode & 0o077 != 0` → отказ `<path> has permissions <mode>; run: chmod 600 <path>`;
+  - файл больше 1 МиБ → отказ `<path> is larger than 1 MiB` (файл читается целиком, по образцу CFG-21).
+
+  Каждый отказ из этого списка (кроме платформы) пишет `secrets.file.refused` не больше одного раза на процесс и путь (D10): повторные чтения и новые экземпляры лог не засоряют.
   
   Владельца файла `dart:io` не сообщает, поэтому проверка владельца, которую делает ssh, не выполняется (Risks).
 - **Создание.** Файл создаёт только `secret set` (`write`); чтение, `delete` и `names()` отсутствующего файла его не создают (`null`, «не было», пустой список).
-- **Атомарная запись.** В том же каталоге: создать пустой `secrets.yaml.tmp-<pid>`, выставить права `0600` процессом `/bin/chmod 600 <tmp>` через `SecretProcessRunner` (в argv только путь), проверить `FileStat.mode`, затем записать содержимое, `flush`, `rename` поверх `secrets.yaml`. Значение попадает на диск только в файл, уже имеющий `0600`. Сбой до `rename` оставляет прежний файл; оставшийся tmp удаляется при следующей записи. Записи внутри процесса идут по очереди; две одновременные команды `secret set` разных процессов могут потерять одно обновление (Risks). Каталог `$CODELAB_HOME` создаётся, если его нет.
+- **Атомарная запись** (уточнение оркестратора 2026-11-01 в рамках D14):
+  1. Содержимое больше 1 МиБ → отказ `<path> would be larger than 1 MiB` до любых изменений на диске.
+  2. `$CODELAB_HOME`, если его нет, создаётся и сразу получает `chmod 700` независимо от umask (umask `0002` Debian/Ubuntu дал бы группе запись и отказ следующей же проверки). Существующий проверяется (см. «Права») и, кроме того, на владельца: no-op `chmod <текущий 4-значный режим> $CODELAB_HOME` через порт. `dart:io` владельца не сообщает, а не-владельцу ОС отвечает `EPERM`; отказ → `<home> is not owned by the current user; refusing to write secrets`, `secrets.file.refused {reason: home_owner}`. Почему: владелец чужого `$CODELAB_HOME` (например, `/tmp/codelab` другого uid) подменил бы `.secrets-tmp` своим каталогом `0777` между `chmod 700` и созданием tmp. Проверка выполняется перед каждой заменой файла (`write`, `delete` существующего имени); чтение ею не покрыто, root её обходит (Risks).
+  3. Приватный каталог `$CODELAB_HOME/.secrets-tmp/` (та же файловая система, `rename` атомарен): символическая ссылка → отказ без `chmod` (он пошёл бы по ссылке на чужой каталог); иначе создаётся при отсутствии, получает `/bin/chmod 700`, проверяются тип и `mode & 0o077 == 0`, иначе отказ `<dir> must be private (mode 0700)`. Почему отдельный каталог: пока у нового tmp ещё права `0666 & ~umask`, открыть его по пути может только владелец — дескриптор, открытый посторонним до `chmod 600`, невозможен.
+  4. Уборка: удаляются только обычные файлы `secrets.tmp-*` старше 10 минут (брошены убитым процессом); свежие (параллельный процесс), чужие имена и ссылки не трогаются и не разыменовываются.
+  5. Уникальный tmp `secrets.tmp-<pid>-<counter>-<random>` (счётчик процесса, 32 бита `Random.secure`), создаётся `exclusive`; сразу после создания повторно проверяются тип и режим `.secrets-tmp` (каталог могли подменить между проверкой и созданием); `chmod 600 <tmp>` через `SecretProcessRunner` (в argv только режим и путь); проверка `.secrets-tmp` и tmp (обычный файл, не ссылка, `mode & 0o077 == 0`).
+  6. Запись содержимого с `flush`; повторная проверка `.secrets-tmp` и tmp перед `rename` (права могли измениться за время записи); `rename` поверх `secrets.yaml`.
+  7. Проверка `secrets.yaml` после `rename` (например, файловая система без POSIX-прав): права шире `0600` → сначала `chmod 600` и повторная проверка, чтобы не стирать все секреты пользователя. Только если исправить не удалось, файл удаляется: отказ `<path> has wider permissions than 0600 after write; the file was removed` (или `…; could not remove the file`), `secrets.file.refused {reason: wide_after_write, removed}`. Безопасность важнее сохранности (`AGENTS.md` §2), но удаление — последний шаг, а не первый (Risks).
+
+  Утилита — `/bin/chmod`, а если его нет (NixOS) — `/usr/bin/chmod`; оба пути абсолютные (D5).
+  8. Свой tmp удаляется в `finally` при любом сбое; значение попадает на диск только в файл, уже имеющий `0600`. Сбой до `rename` оставляет прежний файл. Исключение чужого порта превращается в причину только с типом ошибки.
+
+  Очередь записей: `write` и `delete` сводятся в одну очередь в пределах процесса; ключ — нормализованный абсолютный путь с разрешёнными символическими ссылками родительского каталога (`a/../secrets.yaml` и путь через ссылку на тот же каталог дают одну очередь), общую для всех экземпляров `FileSecretStore` (`openSecretStore` строит новый на каждую команду); ошибка одной записи следующую не отменяет. Две одновременные команды `secret set` разных процессов могут потерять одно обновление (Risks).
 - **Windows.** `dart:io` не даёт ни прочитать, ни выставить ACL NTFS, поэтому проверить «только владелец» нельзя. `secrets.backend: file` на Windows — проблема конфигурации (D7), `FileSecretStore` на Windows отказывает (защита в глубину). Поэтому на Windows в 1.0 доступен только `env` (D7); `wincred` — после 1.0 (D13).
 - **Предупреждения.** `secrets.backend.plaintext {path}` при каждом старте хоста; строка `warning:` в `config check` (D9) и в stderr подкоманд `secret` (D8).
 - **Тестовое хранилище этапа 7.** `CODELAB_TEST_SECRET_STORE=<каталог>` (§12.4.13, задача 7.7) переиспользует этот бэкенд: `FileSecretStore(path: '<каталог>/secrets.yaml')` с теми же правилами прав, `backend.id == "file"`. Конструктор принимает явный путь; чтение переменной — этап 7 (задача 7.7), в 8.9 переменная не читается; список известных имён уже ограничен сборкой с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true` в задаче 0.3.
@@ -417,13 +445,21 @@ SecretResolver openHostSecrets({
 
 ```dart
 final class SecretAdmin {
-  SecretAdmin({required DescribedSecretStore store, required Map<String, String> environment});
+  SecretAdmin({required DescribedSecretStore store, required Map<String, String> environment, String? platform});
+  Future<SecretWriteOutcome?> checkStore(String name);           // имя, только чтение, коллизия; null — можно сохранять
   Future<SecretWriteOutcome> store(String name, String value);   // значение — только в памяти
   Future<SecretDeleteOutcome> delete(String name);
-  Future<SecretListing> list();                                 // backend, имена, имена переменных переопределения
+  Future<SecretListOutcome> list();
 }
-sealed class SecretWriteOutcome { … }   // Stored | Updated | InvalidName | InvalidValue | Collision | ReadOnly | Failed(reason)
+sealed class SecretWriteOutcome { … }   // SecretStored | SecretUpdated | SecretInvalidName | SecretInvalidValue | SecretCollision | SecretReadOnly | SecretFailed
+sealed class SecretDeleteOutcome { … }  // SecretDeleted | SecretNotSet | SecretInvalidName | SecretReadOnly | SecretFailed
+sealed class SecretListOutcome { … }    // SecretListing {backend, names, overrides} | SecretListFailed
 ```
+
+- Имена результатов с префиксом `Secret`: голые `Stored`, `Failed`, `ReadOnly` в общем бареле `codelab_agent_io` и в реэкспорте `codelab_setup/io.dart` конфликтовали бы с чужими именами. `SecretInvalidName`, `SecretReadOnly` и `SecretFailed` общие для записи и удаления.
+- `SecretReadOnly {backend, variable, fileBackendOffered}` — данные, а не готовая фраза: текст подсказки D8 п. 3 с настоящим путём `$CODELAB_HOME` и на своём языке строит потребитель (`SecretCommands` в итерации 3, страница настроек). `fileBackendOffered == false` на Windows (D7, D14).
+- Порядок `store`: имя, бэкенд только для чтения, значение (пустое — `empty secret value`, затем `secretValueProblem`, D5), коллизия (`names()`), запись. `checkStore` выполняет те же проверки без значения и только читает хранилище: так CLI соблюдает порядок D8 и не просит ввести ключ, который будет отвергнут.
+- Исключения хранилища превращаются в `SecretFailed`/`SecretListFailed`: `SecretStoreUnavailableException` — с её причиной, любое другое — только с типом (`secret store failed: <runtimeType>`), текст чужой реализации порта мог бы цитировать значение.
 
 - Те же проверки, что у CLI: `SecretNames`, однострочное непустое значение, коллизия `envOverride`, бэкенд только для чтения. Тот же список имён: в 1.0 у `file` это ключи `secrets.yaml`, у `env` имён секретов нет, только имена переменных переопределения (D6), поэтому CLI и страница настроек видят одни имена. Индекс имён для хранилищ ОС — в `openspec/changes/add-agent-os-secret-backends/` (черновик, после 1.0).
 - Значение передаётся аргументом метода в памяти процесса: не через argv, stdin или файл (кроме самого бэкенда `file`), не в лог и не в журнал. Ни один тип результата значения не содержит, `toString` значения не печатает.
@@ -467,7 +503,11 @@ sealed class SecretWriteOutcome { … }   // Stored | Updated | InvalidName | In
 - **[Web-безопасность]** → ядро без `dart:io`, `web-compile` в проверках итерации 1; основной барель `codelab_setup` не меняется.
 - **[Allowlist]** → PKG-2, `ioAllowlist`, `setupAllowlist`, `cliAllowlist` и правила сторожа не меняются (D1).
 - **[P-12 частично]** → в 1.0 секреты хранятся в переменных или в открытом файле `0600`; хранилище ОС — после 1.0 (D13). На Windows — только переменные (D7). Подсказки `secret set` и `config check` называют оба пути (D8, D9).
-- **[Открытый файл секретов]** → только явный выбор, предупреждения при старте, в `config check` и в подкомандах; права `0600` проверяются перед каждым доступом; владелец не проверяется (нет API в `dart:io`) — файл чужого владельца с `0600` будет прочитан. Потерянное обновление при двух одновременных `secret set` разных процессов — команда ручная, риск принят.
+- **[Открытый файл секретов]** → только явный выбор, предупреждения при старте, в `config check` и в подкомандах; права `0600` файла и отсутствие записи группы и остальных у `$CODELAB_HOME` проверяются перед каждым доступом; tmp — в приватном `.secrets-tmp` (D14). Владельца `dart:io` не сообщает: у `$CODELAB_HOME` он проверяется косвенно no-op `chmod` перед каждой заменой файла (D14, шаг 2), но root эту проверку обходит (`EPERM` ему не грозит), а чтение и `names()` ею не покрыты — файл чужого владельца с `0600` в своём каталоге будет прочитан. Между проверкой и операцией остаётся окно TOCTOU того же класса, что у `BoundedEnv`. Потерянное обновление при двух одновременных `secret set` разных процессов — очередь только внутри процесса; команда ручная, риск принят.
+- **[Коллизия и запись не атомарны]** → `SecretAdmin` проверяет коллизию `envOverride` через `names()`, а затем пишет; порт `SecretStore` очереди не даёт, поэтому другой процесс или другой `SecretAdmin` может между ними сохранить конфликтующее имя. Последствие — два имени одной переменной в файле; резолвер не путает значения (имя хранилища читается по ключу), а переменная окружения переопределит оба. Остаточный риск принят.
+- **[`$CODELAB_HOME` — символическая ссылка]** → строгий отказ ломает раскладку менеджеров dotfiles (stow, chezmoi), где `~/.codelab` — ссылка. Принято ради отсутствия обхода через подмену ссылки; ослабление (разрешить ссылку на каталог того же владельца с проверкой цели) — возможный будущий change, когда `dart:io` или FFI дадут владельца.
+- **[Права шире `0600` после `rename`]** → сначала `chmod 600` и повторная проверка (D14, шаг 7); файл удаляется, только если исправить не удалось (файловая система без POSIX-прав). Тогда пользователь теряет сохранённые секреты, но они не остаются доступными другим (`AGENTS.md` §2: безопасность выше целостности данных); причина отказа говорит, удалён ли файл.
+- **[Нет fsync каталога после `rename`]** → содержимое tmp сбрасывается `flush` до `rename`, а каталог не синхронизируется. При отключении питания может потеряться только последнее обновление (останется прежний `secrets.yaml`); повреждённого файла не будет.
 
 ## Migration Plan
 

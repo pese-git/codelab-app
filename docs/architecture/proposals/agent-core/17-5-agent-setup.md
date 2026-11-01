@@ -428,12 +428,15 @@ debug: на каждом вызове — info secrets.lookup {name, purpose, so
 | `secret-service` (после 1.0) | Linux | `secret-tool store --label "CodeLab: <name>" service codelab account <name>`, значение — в stdin без перевода строки | `secret-tool lookup service codelab account <name>` | тот же индекс `secret-names.json`: `secret-tool search` печатает значения найденных записей, поэтому для списка не используется |
 | `wincred` (после 1.0) | Windows | свои привязки `advapi32` через `dart:ffi` и `package:ffi` (только `codelab_agent_io/lib/src/secrets/wincred/`, за портом `WinCredApi`): `CredWriteW`, цель `codelab:<name>`, `CRED_TYPE_GENERIC`, `CRED_PERSIST_LOCAL_MACHINE`, значение UTF-16LE до 1280 символов | `CredReadW`; `ERROR_NOT_FOUND` → нет секрета | `CredEnumerateW("codelab:*")`, только `TargetName`; индекс не нужен |
 | `env` | все | нет: `SecretStoreUnavailableException("env backend is read-only")`, удаление — то же | `CODELAB_SECRET_<…>` | имён секретов нет: `envOverride` необратимо, поэтому `secret list` печатает имена переменных строкой `Environment overrides` (D6, D8) |
-| `file` | macOS, Linux; только по явному выбору | `$CODELAB_HOME/secrets.yaml`: файл создаёт только запись (`secret set`); tmp в том же каталоге получает права `0600` до записи значения, затем rename | тот же файл; символическая ссылка или права шире `0600` → отказ с текстом `run: chmod 600 <path>` (как у ssh; владельца `dart:io` не сообщает) | ключи файла |
+| `file` | macOS, Linux; только по явному выбору | `$CODELAB_HOME/secrets.yaml`: файл создаёт только запись (`secret set`); уникальный tmp `secrets.tmp-<pid>-<counter>-<random>` в приватном `$CODELAB_HOME/.secrets-tmp/` (`0700`) получает права `0600` с проверкой (и `.secrets-tmp`) до записи значения и перед rename; после rename широкие права `secrets.yaml` исправляются `chmod 600`, файл удаляется, только если не удалось; перед заменой — no-op `chmod` проверяет владельца `$CODELAB_HOME` (root обходит, чтение не покрыто); очередь записей на нормализованный путь в пределах процесса; брошенные tmp старше 10 мин удаляются следующей записью; каталог после rename не fsync-ится — при отключении питания теряется только последнее обновление | тот же файл; символическая ссылка или права шире `0600` → отказ с текстом `run: chmod 600 <path>`; `$CODELAB_HOME` — ссылка или с записью для группы/остальных → отказ с `chmod go-w` (как у ssh; владельца `dart:io` не сообщает); файл ≤ 1 МиБ | ключи файла |
 
-Значение с переводом строки отклоняется всеми бэкендами; текст исключений бэкендов значения не
-содержит (D5). Права `0600` бэкенд `file` выставляет процессом `/bin/chmod 600 <tmp>` через узкий
-порт `SecretProcessRunner` (`codelab_agent_io`; в argv только путь), потому что в `dart:io` нет API
-смены прав (D5, D14). После 1.0 (черновик `add-agent-os-secret-backends`): каждое обращение к
+Значение с переводом строки, длиннее 64 КиБ в UTF-8 или с непарным суррогатом отклоняется при
+записи; текст исключений бэкендов значения не содержит (D5). Права `0600` (tmp) и `0700`
+(`.secrets-tmp`, а также `$CODELAB_HOME`, если его создал сам бэкенд) бэкенд `file` выставляет
+процессом `/bin/chmod` (нет его — `/usr/bin/chmod`) через узкий порт `SecretProcessRunner` (`codelab_agent_io`; абсолютный путь
+утилиты, без оболочки и окружения родителя, в argv только режим и путь; результат — код выхода и
+признак таймаута, вывод отбрасывается), потому что в `dart:io` нет API смены прав (D5, D14).
+Существующий `$CODELAB_HOME` бэкенд не изменяет. После 1.0 (черновик `add-agent-os-secret-backends`): каждое обращение к
 хранилищу ОС ограничено 10 с — процесс утилиты убивается, вызов `advapi32` (в отдельном изоляте)
 отбрасывается; stderr утилит в тексты ошибок не попадает.
 
@@ -442,7 +445,13 @@ debug: на каждом вызове — info secrets.lookup {name, purpose, so
 и процессов; `"keychain"` — ошибка конфигурации `not supported yet`; `"env"` — только окружение;
 `"file"` — открытый текст, при каждом старте предупреждение `secrets.backend.plaintext`, строка
 `warning:` в `config check` и в подкомандах `secret`; на Windows `"file"` — ошибка конфигурации
-(ACL NTFS `dart:io` не проверяет), поэтому на Windows в 1.0 доступен только `env`. `auto`
+`secrets.backend: file backend is not supported on Windows; use env with CODELAB_SECRET_* variables`
+(ACL NTFS `dart:io` не проверяет), поэтому на Windows в 1.0 доступен только `env`. Значение
+проверяет одна функция `secretsBackendProblem` у `ConfigLoader`, `openSecretStore` и
+`FileSecretStore`; `openSecretStore` с недопустимым значением бросает
+`SecretStoreUnavailableException` с тем же текстом (D7). Причина `auto` — `OS keychain backends are
+not available in this version; set secrets.backend: file or CODELAB_SECRET_* variables`, на Windows —
+без упоминания `file`. `auto`
 **никогда не выбирает `file`** — ни сразу, ни как запасной вариант (CFG-11). `secret set` при `env`
 отвечает кодом 1 и подсказывает `secrets.backend: file` или переменную `CODELAB_SECRET_<…>`;
 `config check` даёт ту же подсказку для незаданного ссылочного секрета. **После 1.0**
@@ -461,7 +470,8 @@ D15, D16). Резолвер у `codelab-agent` и у встроенного аг
 использует те же бэкенды, что CLI (в 1.0 — те же переменные и `secrets.yaml`, после 1.0 — та же
 служба `codelab` в хранилищах ОС), поэтому `flutter_secure_storage` на
 desktop не применяется; программная запись для страницы настроек — `SecretAdmin` через
-`codelab_setup/io.dart`. Кэш найденных значений живёт до конца процесса: работающий агент видит
+`codelab_setup/io.dart` (результаты `SecretStored`, `SecretUpdated`, `SecretReadOnly`, `SecretFailed` и
+др.; `checkStore(name)` — проверки без значения, D15). Кэш найденных значений живёт до конца процесса: работающий агент видит
 замену уже прочитанного секрета только после перезапуска (до 8.10). Условие App Sandbox для
 будущего `keychain-macos` записано в черновике `add-agent-os-secret-backends`. Готовые пакеты (`flutter_secure_storage`, `keyring`, `keybay`) не берутся (пересмотр — при старте
 `add-agent-os-secret-backends`, если появится зрелый пакет без Flutter от подтверждённого издателя):

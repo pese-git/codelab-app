@@ -1,0 +1,45 @@
+import 'package:codelab_agent_core/codelab_agent_core.dart';
+
+import 'open_secret_store.dart';
+import 'secret_process_runner.dart';
+
+/// Строит резолвер секретов настольного хоста (design.md change
+/// `add-agent-secret-store`, D15; agent-secrets «Секреты настольных хостов и
+/// встроенных профилей»).
+///
+/// Почему одна фабрика: `codelab-agent`, встроенный агент desktop-приложения и
+/// CLI обязаны использовать одни и те же бэкенды, иначе ключ, сохранённый
+/// `codelab secret set`, был бы невиден встроенному агенту. Своего хранилища у
+/// `codelab_embedded` нет.
+///
+/// Для чего: собрать [SecretResolver] из сериализуемых данных — [codelabHome]
+/// (`codelabHomeOf(environment)`), [environment] процесса, [backend]
+/// (`HostSettings.secretsBackend`, `null` — `auto`) и признака [debug]
+/// (`--debug-secrets`, `CODELAB_DEBUG_SECRETS=1` или опция хоста).
+///
+/// Как использовать: функция синхронна и не держит глобального состояния,
+/// поэтому хост с ядром в отдельном isolate (`IsolateAcpLink`) вызывает её
+/// внутри isolate из полей `codelabHome`, `secretsBackend`, `debugSecrets`.
+/// Резолвер, его кэш, [runner] и значения секретов через границу isolate не
+/// передаются. [platform] и [runner] — швы для тестов.
+SecretResolver openHostSecrets({
+  required String codelabHome,
+  required Map<String, String> environment,
+  required String? backend,
+  required bool debug,
+  required Logger logger,
+  String? platform,
+  SecretProcessRunner? runner,
+}) => SecretResolver(
+  store: openSecretStore(
+    choice: backend,
+    environment: environment,
+    home: codelabHome,
+    logger: logger,
+    runner: runner,
+    platform: platform,
+  ),
+  environment: environment,
+  logger: logger,
+  debug: debug,
+);

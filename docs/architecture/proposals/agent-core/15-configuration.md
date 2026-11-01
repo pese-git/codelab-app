@@ -541,7 +541,7 @@ capability `memory` off), `max_notes` (`500`, `10..10000`, на scope), `note_ma
 
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `backend` | `"auto"` \| `"keychain"` \| `"env"` \| `"file"` | `"auto"` | хранилище секретов. В 1.0: `auto` — `env` на всех ОС, без проб и процессов, `file` не выбирает никогда (CFG-11); `env` — только переменные `CODELAB_SECRET_<…>`; `file` — открытый `$CODELAB_HOME/secrets.yaml` с правами `0600`, на Windows — проблема конфигурации (D14); `keychain` — проблема конфигурации `secrets.backend: keychain is not supported yet (supported: auto, env, file)`, значение остаётся в схеме для хранилищ ОС после 1.0 (черновик `add-agent-os-secret-backends`, D13). Другое значение — проблема `value` `expected one of: auto, keychain, env, file` |
+| `backend` | `"auto"` \| `"keychain"` \| `"env"` \| `"file"` | `"auto"` | хранилище секретов. В 1.0: `auto` — `env` на всех ОС, без проб и процессов, `file` не выбирает никогда (CFG-11); `env` — только переменные `CODELAB_SECRET_<…>`; `file` — открытый `$CODELAB_HOME/secrets.yaml` с правами `0600`, на Windows — проблема конфигурации `file backend is not supported on Windows; use env with CODELAB_SECRET_* variables` (добавляет `ConfigLoader`, D7, D14); `keychain` — проблема конфигурации `secrets.backend: keychain is not supported yet (supported: auto, env, file)`, значение остаётся в схеме для хранилищ ОС после 1.0 (черновик `add-agent-os-secret-backends`, D13). Другое значение — проблема `value` `expected one of: auto, keychain, env, file` |
 
 **`config`** (после MVP, §17.5.6) — слои 2 и 4.
 
