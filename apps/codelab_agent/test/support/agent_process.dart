@@ -17,7 +17,10 @@ final class AgentProcess {
     _process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen(_stdout.add, onDone: _stdout.close);
+        .listen((line) {
+          _stdoutLog.writeln(line);
+          _stdout.add(line);
+        }, onDone: _stdout.close);
     _process.stderr.transform(utf8.decoder).listen(_stderr.write);
   }
 
@@ -25,6 +28,7 @@ final class AgentProcess {
   final _stdout = StreamController<String>();
   late final StreamIterator<String> _lines = StreamIterator(_stdout.stream);
   final _stderr = StringBuffer();
+  final _stdoutLog = StringBuffer();
 
   static Future<String>? _kernel;
 
@@ -59,6 +63,10 @@ final class AgentProcess {
   Future<int> get exitCode => _process.exitCode;
 
   String get stderrText => _stderr.toString();
+
+  /// Все строки stdout (кадры ACP), пришедшие к этому моменту, в том числе
+  /// уже прочитанные [nextStdoutLine]: тест проверяет, что в них нет секретов.
+  String get stdoutText => _stdoutLog.toString();
 
   void sendLine(String line) => _process.stdin.writeln(line);
 

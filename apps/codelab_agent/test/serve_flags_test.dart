@@ -29,6 +29,42 @@ void main() {
     expect(serveUsage(), contains('codelab-agent config check [--cwd <dir>]'));
   });
 
+  group('--debug-secrets (change add-agent-secret-store, D11)', () {
+    test('the flag turns the mode on, the default is off', () {
+      expect(parse(scripted).debugSecrets, isFalse);
+      expect(parse([...scripted, '--debug-secrets']).debugSecrets, isTrue);
+    });
+
+    test('CODELAB_DEBUG_SECRETS=1 turns it on; other values do not', () {
+      expect(
+        parse(scripted, {'CODELAB_DEBUG_SECRETS': '1'}).debugSecrets,
+        isTrue,
+      );
+      for (final other in ['0', 'true', '', 'yes']) {
+        expect(
+          parse(scripted, {'CODELAB_DEBUG_SECRETS': other}).debugSecrets,
+          isFalse,
+          reason: other,
+        );
+      }
+    });
+
+    test('the flag takes no value', () {
+      expect(
+        () => parse([...scripted, '--debug-secrets=1']),
+        throwsA(isA<UsageError>()),
+      );
+    });
+
+    test(
+      'the general usage names --debug-secrets and secret set|delete|list',
+      () {
+        expect(serveUsage(), contains('--debug-secrets'));
+        expect(serveUsage(), contains('codelab-agent secret set|delete|list'));
+      },
+    );
+  });
+
   group('transport', () {
     test('--stdio and --ws with defaults', () {
       expect(parse(scripted).transport, ServeTransport.stdio);
