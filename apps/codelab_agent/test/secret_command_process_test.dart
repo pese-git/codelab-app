@@ -53,6 +53,27 @@ void main() {
   }
 
   test(
+    'no home folder at all: secret list exits 64 and creates nothing in cwd',
+    () async {
+      final (code, out, err) = await run(
+        ['secret', 'list'],
+        environment: {'CODELAB_HOME': '', 'HOME': ''},
+      );
+
+      expect(code, 64, reason: err);
+      expect(out, isEmpty);
+      expect(
+        err,
+        contains('cannot find the home folder: set CODELAB_HOME or HOME'),
+      );
+      expect(err, isNot(contains('Usage:')));
+      expect(Directory('${temp.path}/.codelab').existsSync(), isFalse);
+      expect(File('${temp.path}/secrets.yaml').existsSync(), isFalse);
+    },
+    timeout: const Timeout(Duration(seconds: 120)),
+  );
+
+  test(
     'an unknown subcommand: code 64, the secret usage, stdout is empty',
     () async {
       final (code, out, err) = await run(['secret', 'show', 'codelab/openai']);

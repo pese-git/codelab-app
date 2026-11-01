@@ -562,6 +562,51 @@ providers:
     });
   });
 
+  group('без домашнего каталога', () {
+    // Ревью итерации 4: без CODELAB_HOME, HOME и USERPROFILE `codelabHomeOf`
+    // даёт `./.codelab`, и `secrets.yaml` лёг бы в текущий каталог (возможно,
+    // git-репозиторий). Подкоманды `secret` отказывают, `serve` не меняется.
+    const text = 'cannot find the home folder: set CODELAB_HOME or HOME';
+    final noHome = <String, String>{'HOME': '', 'CODELAB_HOME': ''};
+
+    test('set: код 64 и текст, значение не читается', () async {
+      final input = FakeSecretInput('$value\n');
+      final result = await real().set(
+        SecretSetOptions(name: name, environment: noHome),
+        input,
+      );
+
+      expect(result.exitCode, 64);
+      expect(result.stderr, [text]);
+      expect(result.showUsage, isFalse);
+      expect(result.stdout, isEmpty);
+    });
+
+    test('delete и list: код 64 и тот же текст', () async {
+      final deleted = await real().delete(
+        SecretDeleteOptions(name: name, environment: noHome),
+      );
+      final listed = await real().list(SecretListOptions(environment: noHome));
+
+      expect(deleted.exitCode, 64);
+      expect(deleted.stderr, [text]);
+      expect(listed.exitCode, 64);
+      expect(listed.stderr, [text]);
+      expect(deleted.showUsage, isFalse);
+      expect(listed.showUsage, isFalse);
+    });
+
+    test('USERPROFILE без HOME домашним каталогом считается', () async {
+      final result = await real().list(
+        SecretListOptions(
+          environment: {'USERPROFILE': root.path, 'CODELAB_HOME': ''},
+        ),
+      );
+
+      expect(result.exitCode, 0);
+    });
+  });
+
   group('list', () {
     test('auto: Backend: env (причина), имён нет, переопределения только '
         'именами', () async {
