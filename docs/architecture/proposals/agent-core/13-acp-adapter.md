@@ -684,9 +684,10 @@ dart-agent-and-clients §12.5), поэтому отдельные коды дл�
 /// Пара соединённых транспортов: отправленное в один приходит в inbound другого.
 /// `client` отдаётся AcpClientApplication, `agent` — AcpAgentServer.serve.
 final class InProcessAcpLink {
-  factory InProcessAcpLink({bool copyMessages = true}) {
-    final client = InProcessAcpTransport._('client', copyMessages);
-    final agent = InProcessAcpTransport._('agent', copyMessages);
+  // Копия всегда, без параметра copyMessages (change add-in-process-acp-transport, D9).
+  factory InProcessAcpLink() {
+    final client = InProcessAcpTransport._('client');
+    final agent = InProcessAcpTransport._('agent');
     client._peer = agent;
     agent._peer = client;
     return InProcessAcpLink._(client, agent);
@@ -697,22 +698,25 @@ final class InProcessAcpLink {
 }
 
 final class InProcessAcpTransport implements AcpTransport {
-  InProcessAcpTransport._(this._side, this._copy);
+  InProcessAcpTransport._(this._side) {
+    _inbound = StreamController<JsonRpcMessage>.broadcast(onListen: _flush);
+  }
   final String _side;
-  final bool _copy;
   late final InProcessAcpTransport _peer;
 
-  // Асинхронные контроллеры: доставка в следующей микрозадаче, порядок сохраняется,
-  // отправитель не вызывает обработчики получателя реентерабельно.
-  final _inbound = StreamController<JsonRpcMessage>.broadcast();
+  // Широковещательные асинхронные контроллеры, как у клиентских stdio и WebSocket.
+  late final StreamController<JsonRpcMessage> _inbound;
   final _events = StreamController<AcpTransportEvent>.broadcast();
-  final _beforeStart = <JsonRpcMessage>[];  // агент может ответить раньше, чем клиент вызвал start()
+  // Пока конец не запущен или у inbound нет первого подписчика: агент может ответить раньше,
+  // чем клиент вызвал start(), а serve() подписывается после await start() (D4, п. 2).
+  final _pending = <JsonRpcMessage>[];
   var _state = AcpTransportState.idle;
 
   @override Stream<JsonRpcMessage> get inbound => _inbound.stream;
   @override Stream<AcpTransportEvent> get events => _events.stream;
   @override AcpTransportState get state => _state;
   bool get _isDown => const {AcpTransportState.closing, AcpTransportState.closed, AcpTransportState.failed}.contains(_state);
+  bool get _canDeliver => _state == AcpTransportState.connected && _inbound.hasListener;
 
   @override
   Future<void> start() async {
@@ -720,7 +724,7 @@ final class InProcessAcpTransport implements AcpTransport {
     if (_isDown) throw _error(AcpTransportErrorCode.closed, 'is closed');
     _setState(AcpTransportState.connecting);
     _setState(AcpTransportState.connected);
-    _beforeStart..forEach(_inbound.add)..clear();
+    _flush();
   }
 
   @override
@@ -728,22 +732,35 @@ final class InProcessAcpTransport implements AcpTransport {
     if (_state != AcpTransportState.connected) throw _error(AcpTransportErrorCode.sendFailed, 'is not connected');
     final JsonRpcMessage copy;
     try {
-      copy = _copy ? _copyMessage(message) : message;
+      copy = _copyMessage(message);
     } on ArgumentError catch (e) {             // как проводной транспорт с не-JSON значением
+      // Только причина: значение из params не попадает ни в текст, ни в cause.
       throw _error(AcpTransportErrorCode.sendFailed, 'got a non-JSON value: ${e.message}');
     }
-    _peer._deliver(copy);
+    // Доставка в следующей микрозадаче: обработчики получателя не вызываются изнутри send,
+    // порядок сохраняется — очередь микрозадач FIFO.
+    scheduleMicrotask(() => _peer._deliver(copy));
   }
 
   void _deliver(JsonRpcMessage message) {
-    if (_state == AcpTransportState.connected) {
+    if (_isDown) {
+      if (!_events.isClosed) {
+        _events.add(const AcpTransportEvent.diagnostic(message: 'Dropped in-process message after close.',
+            severity: AcpTransportDiagnosticSeverity.warning, source: 'in_process'));
+      }
+    } else if (_canDeliver && _pending.isEmpty) {
       _inbound.add(message);
-    } else if (!_isDown) {
-      _beforeStart.add(message);
     } else {
-      _events.add(const AcpTransportEvent.diagnostic(message: 'Dropped in-process message after close.',
-          severity: AcpTransportDiagnosticSeverity.warning, source: 'in_process'));
+      _pending.add(message);
+      _flush();
     }
+  }
+
+  void _flush() {
+    if (!_canDeliver) return;
+    final buffered = [..._pending];
+    _pending.clear();
+    buffered.forEach(_inbound.add);
   }
 
   @override
@@ -751,6 +768,7 @@ final class InProcessAcpTransport implements AcpTransport {
     if (_state == AcpTransportState.closed || _state == AcpTransportState.closing) return;
     _setState(AcpTransportState.closing);
     _setState(AcpTransportState.closed);
+    _pending.clear();
     await _events.close();
     await _inbound.close();
     _peer._onPeerClosed();
@@ -760,6 +778,9 @@ final class InProcessAcpTransport implements AcpTransport {
     if (_isDown) return;
     _events.add(AcpTransportEvent.failure(_error(AcpTransportErrorCode.disconnected, 'peer closed the connection')));
     _setState(AcpTransportState.failed);
+    // Как EOF у stdio: inbound завершается после уже доставленных сообщений, сервер видит
+    // конец соединения (§13.10).
+    unawaited(_inbound.close());
   }
 
   void _setState(AcpTransportState next) {
@@ -772,18 +793,21 @@ final class InProcessAcpTransport implements AcpTransport {
 }
 
 /// Глубокая копия JSON-дерева без строкового кодирования: стороны не делят изменяемые
-/// Map/List, а не-JSON значения (DateTime, объекты домена) ловятся сразу, как на проводе.
+/// Map/List, а не-JSON значения (DateTime, объекты домена, NaN) ловятся сразу, как на проводе.
 JsonRpcMessage _copyMessage(JsonRpcMessage m) => switch (m) {
   JsonRpcRequest(:final id, :final method, :final params) =>
     JsonRpcMessage.request(id: id, method: method, params: _copyJson(params)),
   JsonRpcNotification(:final method, :final params) =>
     JsonRpcMessage.notification(method: method, params: _copyJson(params)),
   JsonRpcResponse(:final id, :final result, :final error) =>
-    JsonRpcMessage.response(id: id, result: _copyJson(result), error: error),
+    JsonRpcMessage.response(id: id, result: _copyJson(result),
+        error: error == null ? null : JsonRpcError(code: error.code, message: error.message, data: _copyJson(error.data))),
 };
 
 Object? _copyJson(Object? v) => switch (v) {
-  null || bool() || num() || String() => v,
+  null || bool() || String() => v,
+  // Через num, а не int/double: на web double.infinity is int может быть истинным.
+  num() when v.isFinite => v,
   List() => List<Object?>.unmodifiable(v.map(_copyJson)),
   Map() => Map<String, Object?>.unmodifiable({
     for (final MapEntry(:key, :value) in v.entries)
@@ -793,20 +817,26 @@ Object? _copyJson(Object? v) => switch (v) {
 };
 ```
 
-Правила:
+Правила (решения D2–D4 change `add-in-process-acp-transport`):
 
 * Доставка асинхронная, по одному сообщению, в порядке `send`: семантика та же, что у
   stdio-кадров, а обработчики не вызываются изнутри `send` другой стороны.
-* `copyMessages: true` (по умолчанию, во всех сборках) делает глубокую копию JSON-дерева каждого
-  сообщения: стороны не делят изменяемые `Map`/`List`, а не-JSON значение (`DateTime`, объект
-  домена) даёт `AcpTransportException` с кодом `sendFailed`, как на проводе — встроенный режим не
-  может разойтись с проводным форматом. `copyMessages: false` — только для замеров.
-* `send` на конце не в состоянии `connected` (до `start()` или после `close()`) — `sendFailed`.
-  Сообщение, пришедшее до `start()` получателя, буферизуется и доставляется при `start()`: агент
-  может ответить раньше, чем клиент запустил свой конец.
+* Каждое сообщение во всех сборках копируется глубоко, как JSON-дерево — `params`, `result` и `error.data`: стороны не делят изменяемые `Map`/`List`, получатель
+  видит неизменяемые копии. Не-JSON значение (`DateTime`, объект домена, ключ `Map` не строкой,
+  `NaN`, `±Infinity`) даёт `AcpTransportException` с кодом `sendFailed` на отправляющей стороне, как
+  на проводе — встроенный режим не может разойтись с проводным форматом. Сообщение не доставляется,
+  соединение живёт; значение в текст ошибки не попадает. Выключателя копии нет (D9): сравнение без
+  копии для замера 7.8, если понадобится, вводит change `add-embedded-agent-mode`.
+* `send` на конце не в состоянии `connected` (до `start()`, после `close()`, после закрытия другого
+  конца) — `sendFailed`; `start()` закрытого или упавшего конца — `closed`. Сообщение, пришедшее до
+  `start()` получателя или до первого подписчика его `inbound`, буферизуется и доставляется по
+  порядку, когда выполнены оба условия: агент может ответить раньше, чем клиент запустил свой конец,
+  а `AcpAgentServer.serve` подписывается после `await start()`.
 * Закрытие одного конца переводит другой в `failed` с `disconnected` и закрывает его `inbound` —
-  как EOF у stdio; сервер отрабатывает отсоединение по §13.10. Сообщение, пришедшее после закрытия, отбрасывается с
-  диагностикой `warning`.
+  как EOF у stdio, после сообщений, отправленных до `close()`; сервер отрабатывает отсоединение по
+  §13.10. Повторный `close()` ничего не делает; `close()` упавшего конца переводит его в `closed`.
+  Сообщение, доставка которого пришлась на закрытый конец, отбрасывается без исключения у
+  отправителя (диагностика `warning`, если `events` ещё открыт).
 * `codelab_embedded` создаёт `InProcessAcpLink()`, отдаёт `link.client` `AcpClientApplication`,
   а `link.agent` — `AcpAgentServer.serve`.
 
@@ -993,7 +1023,7 @@ sequenceDiagram
 * Golden-фикстуры (§14) на каждый метод и каждый вид `session/update`: `acp/initialize-capabilities`, `acp/session-new-modes-config`, `acp/session-load-replay`, `acp/session-list-cwd-filter`, `acp/prompt-text-end-turn`, `acp/prompt-tool-permission-allow`, `acp/prompt-tool-permission-reject-continues`, `acp/prompt-cancel-mid-tool`, `acp/prompt-max-turn-requests`, `acp/prompt-failed-provider-auth`, `acp/set-config-option-model`, `acp/errors-bad-frame-survives` (ACP-1, ACP-3, ACP-5, ACP-7).
 * После MVP: фикстуры управления сессиями `acp/session-rename`, `acp/session-fork`, `acp/session-rewind`, `acp/session-leaf-branch-changed`, `acp/session-commands-no-extension`, `acp/session-load-locked` (§17.6.16); steering — `acp/prompt-steer-during-tool`, `acp/steer-no-active-turn`, `acp/steer-returned-on-cancel`, `acp/initialize-steering-capability` (§17.7.11); LSP — `acp/tool-lsp-rename-permission`, `acp/tool-lsp-rename-permission-reject` (§17.8.14); провайдеры — `acp/authenticate-oauth`, `acp/slash-model-role` (§17.10.6, §17.10.5).
 * Тест исчерпывающей проекции: список подтипов `AgentEvent` ↔ таблица §13.7 (ACP-6).
-* Contract test: `AcpClientApplication` codelab-app через `InProcessAcpLink()` (копирование сообщений по умолчанию) против адаптера на scripted LLM.
+* Contract test: `AcpClientApplication` codelab-app через `InProcessAcpLink()` (копирование сообщений всегда) против адаптера на scripted LLM.
 * Fuzz-тест кадров: мусор, неполный JSON, массив вместо объекта, неизвестный метод, ответ на неизвестный id — соединение живо, ход продолжается (ACP-4).
 * Тест порядка: медленный транспорт и 1 000 дельт — ответ `session/prompt` последний кадр хода (ACP-3).
 * Тест `session/new`: уведомлений до ответа нет (ACP-8); stdio-MCP в профиле `mobile` пропущен с логом; `sse` и неизвестный `type` пропущены с `mcp.server.skipped`, сессия создана; повторный `session/load` открытой сессии применяет новый набор серверов (D11).
