@@ -22,7 +22,7 @@ When the user tries to connect to an agent, the editor boots the agent sub-proce
 
 Each connection can support several concurrent sessions, so you can have multiple trains of thought going on at once.
 
-<img src="https://mintcdn.com/zed-685ed6d6/ZwvtxaoaZwBJrK5s/images/server-client.svg?fit=max&auto=format&n=ZwvtxaoaZwBJrK5s&q=85&s=336b604262b9b61ece9fc402774185bf" alt="Server Client setup" width="579" height="455" data-path="images/server-client.svg" />
+![Server Client setup](https://mintcdn.com/zed-685ed6d6/ZwvtxaoaZwBJrK5s/images/server-client.svg?fit=max\&auto=format\&n=ZwvtxaoaZwBJrK5s\&q=85\&s=336b604262b9b61ece9fc402774185bf)
 
 ACP makes heavy use of JSON-RPC notifications to allow the agent to stream updates to the UI in real-time. It also uses JSON-RPC's bidirectional requests to allow the agent to make requests of the code editor: for example to request permissions for a tool call.
 
@@ -30,11 +30,11 @@ ACP makes heavy use of JSON-RPC notifications to allow the agent to stream updat
 
 Commonly the code editor will have user-configured MCP servers. When forwarding the prompt from the user, it passes configuration for these to the agent. This allows the agent to connect directly to the MCP server.
 
-<img src="https://mintcdn.com/zed-685ed6d6/ZwvtxaoaZwBJrK5s/images/mcp.svg?fit=max&auto=format&n=ZwvtxaoaZwBJrK5s&q=85&s=87650126080bf3bb4d983f447889ab86" alt="MCP Server connection" width="689" height="440" data-path="images/mcp.svg" />
+![MCP Server connection](https://mintcdn.com/zed-685ed6d6/ZwvtxaoaZwBJrK5s/images/mcp.svg?fit=max\&auto=format\&n=ZwvtxaoaZwBJrK5s\&q=85\&s=87650126080bf3bb4d983f447889ab86)
 
 The code editor may itself also wish to export MCP based tools. Instead of trying to run MCP and ACP on the same socket, the code editor can provide its own MCP server as configuration. As agents may only support MCP over stdio, the code editor can provide a small proxy that tunnels requests back to itself:
 
-<img src="https://mintcdn.com/zed-685ed6d6/ZwvtxaoaZwBJrK5s/images/mcp-proxy.svg?fit=max&auto=format&n=ZwvtxaoaZwBJrK5s&q=85&s=dd128411c4be5945e131596190b41cb8" alt="MCP connection to self" width="632" height="440" data-path="images/mcp-proxy.svg" />
+![MCP connection to self](https://mintcdn.com/zed-685ed6d6/ZwvtxaoaZwBJrK5s/images/mcp-proxy.svg?fit=max\&auto=format\&n=ZwvtxaoaZwBJrK5s\&q=85\&s=dd128411c4be5945e131596190b41cb8)
 
 
-Built with [Mintlify](https://mintlify.com).
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.
