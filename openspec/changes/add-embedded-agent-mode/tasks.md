@@ -88,7 +88,7 @@
 
 ## 2. Настоящий хост: конфиг, секреты, журнал, жизненный цикл (итерация 2)
 
-- [ ] 2.1 `[agent]` Тесты `codelab_embedded/test/io/local_opener_test.dart` с временным `CODELAB_HOME`, `MockClient` и окружением теста (embedded-agent «Конфигурация и секреты встроенного агента», сценарии «Ключ провайдера из secrets.yaml», «Невалидный конфиг», «Нет конфигурации»; D5):
+- [x] 2.1 `[agent]` Тесты `codelab_embedded/test/io/local_opener_test.dart` с временным `CODELAB_HOME`, `MockClient` и окружением теста (embedded-agent «Конфигурация и секреты встроенного агента», сценарии «Ключ провайдера из secrets.yaml», «Невалидный конфиг», «Нет конфигурации»; D5):
   - ключ через `openHostSecrets` и `secrets.backend: file`;
   - ключ из `CODELAB_SECRET_*`;
   - `EmbeddedAgentConfigException` без значений, HTTP-клиент не создан;
@@ -96,7 +96,7 @@
   - сужение `profile.embedded-cli.*`.
 
   Красный: `io.dart` нет.
-- [ ] 2.2 `[agent]` `lib/io.dart` и `lib/src/io/`: `localEmbeddedAgentOpener`:
+- [x] 2.2 `[agent]` `lib/io.dart` и `lib/src/io/`: `localEmbeddedAgentOpener`:
   - `ConfigLoader` и `codelabHomeOf`, затем `openHostSecrets`;
   - `createRoutedStreamFunction` и `StaticModelCatalog`;
   - `JsonlSessionStore`, `LocalExecutionEnv`, `ProjectFilesLoader`;
@@ -104,9 +104,9 @@
   - `createEmbeddedAgent`.
 
   Ресурсы создаются после успешной загрузки конфига.
-- [ ] 2.3 `[agent]` Тест `codelab_agent_io/test/secrets/host_secrets_test.dart`: `openHostSecrets(testStorePath:)` даёт `FileSecretStore` по пути с `backend.id == "file"`. Процессный тест `codelab_embedded/test/io/test_secret_store_process_test.dart` запускает `fvm dart run -DCODELAB_ALLOW_TEST_SECRETS=true` и проверяет обратный случай без define (embedded-agent, сценарий «Тестовое хранилище только в тестовой сборке»; D5). Красный: параметра нет.
-- [ ] 2.4 `[agent]` Параметр `testStorePath` у `openHostSecrets`; чтение `CODELAB_TEST_SECRET_STORE` в открывателе только при `const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')`. Снять `skip` в `config_loader_test.dart`, где он ссылается на задачу 7.7, если тест теперь покрыт процессным.
-- [ ] 2.5 `[agent]` Тесты `codelab_embedded/test/lifecycle_test.dart` (embedded-agent «Жизненный цикл встроенного агента», все три сценария; D6):
+- [x] 2.3 `[agent]` Тест `codelab_agent_io/test/secrets/host_secrets_test.dart`: `openHostSecrets(testStorePath:)` даёт `FileSecretStore` по пути с `backend.id == "file"`. Процессный тест `codelab_embedded/test/io/test_secret_store_process_test.dart` запускает `fvm dart run -DCODELAB_ALLOW_TEST_SECRETS=true` и проверяет обратный случай без define (embedded-agent, сценарий «Тестовое хранилище только в тестовой сборке»; D5). Красный: параметра нет.
+- [x] 2.4 `[agent]` Параметр `testStorePath` (путь к `secrets.yaml`, причина выбора `test store`) у `openHostSecrets` и `openSecretStore`; `CODELAB_TEST_SECRET_STORE` читается только при `const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')` — разбор и проверка define в `codelab_agent_io` рядом с загрузчиком (перенос из открывателя — задача 2.10; D5). `skip` у обычных тестов `codelab_agent_io` про `CODELAB_TEST_SECRET_STORE` оставлен осознанно: в обычной сборке define выключен, ветку с define покрывает процессный тест `codelab_embedded/test/io/test_secret_store_process_test.dart`. Парный тест «под define» в `config_loader_test.dart` удалён — в обычном `fvm dart test` он не исполнялся бы.
+- [x] 2.5 `[agent]` Тесты `codelab_embedded/test/lifecycle_test.dart` (embedded-agent «Жизненный цикл встроенного агента», все три сценария; D6):
   - `dispose` при ожидающем разрешении — отказ, `cancelled`, итог хода в журнале;
   - повторный `dispose`;
   - закрытие клиентом — `closed`, MCP-процесс fake-сервера остановлен;
@@ -114,16 +114,35 @@
   - ошибка `serve` — тот же путь: `embedded.agent.failed`, закрытие агентского конца, `dispose`.
 
   Красный: зоны `runZonedGuarded` и события `embedded.agent.failed` нет (устойчивый `dispose` уже есть с итерации 1, задача 1.12).
-- [ ] 2.6 `[agent]` Охраняемая зона `runZonedGuarded` вокруг `serve` и асинхронной работы агента; при отказе — `embedded.agent.failed {error_class}` без текста, закрытие агентского конца, `dispose` (D6, «Отказ агента»). Подписка на закрытие агентского конца, порядок `dispose` по D6, `closed`.
-- [ ] 2.7 `[agent]` Тест паритета профилей `codelab_embedded/test/profile_parity_test.dart` (agent-runtime, сценарий «Паритет профилей»; §10.12). Красный до 2.2, если ядро и сервер расходятся; иначе тест закрывает критерий и фиксируется ссылкой в PR.
-- [ ] 2.8 `[agent]` Рефакторинг по итогам итерации: общая часть сборки `apps/codelab_agent` и `codelab_embedded` сверена. Различия — только профиль, транспорт и сценарий (D1, в); дублирование логики устранено переносом в существующие пакеты, если оно появилось.
+- [x] 2.6 `[agent]` Охраняемая зона `runZonedGuarded` вокруг `serve` и асинхронной работы агента; при отказе — `embedded.agent.failed {error_class}` без текста, закрытие агентского конца, `dispose` (D6, «Отказ агента»). Подписка на закрытие агентского конца, порядок `dispose` по D6, `closed`.
+- [x] 2.7 `[agent]` Тест паритета профилей (agent-runtime, сценарий «Паритет профилей»; §10.12). Красный до 2.2, если ядро и сервер расходятся; иначе тест закрывает критерий и фиксируется ссылкой в PR. Написан как `codelab_embedded/test/profile_parity_test.dart`; по ревью итерации 2 паритет — свойство ядра, тест переносится в `codelab_agent_core/test/host/` (задача 2.10; D1, в).
+- [x] 2.8 `[agent]` Рефакторинг по итогам итерации: общая часть сборки `apps/codelab_agent` и `codelab_embedded` сверена (D1, в). Сверено:
+  - проекция `CoreConfig` → функция модели (ключи, `headerTemplates`, маршруты) совпадала строка в строку — выносится в одну публичную функцию `codelab_agent_core`, её зовут оба хоста (задача 2.10);
+  - сценарий модели — уже общий, `codelab_agent_io/testing.dart` (2.9);
+  - `openHostSecrets`, `ConfigLoader`, `codelabHomeOf`, `JsonlSessionStore`, `LocalExecutionEnv`, `ProjectFilesLoader`, `buildAgentCore` — вызовы готовых API, своей логики у хостов нет;
+  - различия — только профиль, транспорт (`InProcessAcpLink` и `localEnv` против stdio/ws) и сценарий.
 
-- [ ] 2.9 `[agent]` Вынести сценарий модели из основного бареля `codelab_agent_io` в `package:codelab_agent_io/testing.dart` (D8, «Где лежит `LlmScript`»; Risks «Сценарий модели в графе рабочей сборки»):
+  Оставлено сознательно: проводка `McpClientConnector` (stdio из `codelab_agent_io`, HTTP из `codelab_agent_mcp`, около 12 строк) — общего пакета без нового ребра `codelab_agent_io` ↔ `codelab_agent_mcp` нет. Расхождение хостов на уровне ACP ловит `test-scenario --agent embedded` на корпусе фикстур (3.5–3.6).
+
+- [x] 2.9 `[agent]` Вынести сценарий модели из основного бареля `codelab_agent_io` в `package:codelab_agent_io/testing.dart` (D8, «Где лежит `LlmScript`»; Risks «Сценарий модели в графе рабочей сборки»):
   - красный тест сторожа: основной барель `codelab_agent_io` не экспортирует и не импортирует `lib/src/scripted/`; импорт `codelab_agent_io/testing.dart` разрешён только `apps/codelab_agent`, `codelab_embedded/lib/src/testing/` и тестам;
   - перенос экспортов `LlmScript`, слоя провайдеров сценария и `CwdTrackingStore`; импорты бинаря и `codelab_embedded/testing.dart`;
   - тесты бинаря и `codelab_embedded` остаются зелёными без правок ожиданий.
 
   Выполняется до или вместе с 2.2: `io.dart` не появляется, пока сценарий в основном бареле.
+
+- [x] 2.10 `[agent]` Исправления по двойному ревью итерации 2 и решениям пользователя 2026-11-02, пары «тест → правка» (embedded-agent «Конфигурация и секреты встроенного агента», «Жизненный цикл встроенного агента», сценарий «Поздняя ошибка не запускает повторный отказ»; agent-runtime, сценарий «Паритет профилей»; D1, в; D2; D5; D6):
+  - общая функция модели в `codelab_agent_core` (имя по стилю ядра, ориентир `createConfiguredStreamFunction`): модульный тест ядра (ключи через `SecretResolver`, `headerTemplates`, маршруты), затем перевод `AgentHost.build` и открывателя `codelab_embedded` на неё; тесты бинаря и `codelab_embedded` зелёные без правок ожиданий;
+  - перенос теста паритета профилей из `codelab_embedded/test/profile_parity_test.dart` в `codelab_agent_core/test/host/profile_event_parity_test.dart`; общий журнал хоста `openHostSessions` в `codelab_agent_io`; поле `source` у `ConfigUsageException`; `testSecretStorePath` в `environment_layer.dart`;
+  - открыватель: `logConfigWarnings` до броска `EmbeddedAgentConfigException` (тест: невалидный конфиг с предупреждением — предупреждение в логе);
+  - открыватель: проверка профиля первым шагом, до загрузки конфига и создания ресурсов (тест: неверный профиль — HTTP-клиент не создан, конфиг не читался);
+  - окружение MCP-серверов stdio — `hostEnvironment` из `environment` открывателя, как у `exec` (тест на allowlist переменных);
+  - разбор `CODELAB_TEST_SECRET_STORE` и проверка define — в `codelab_agent_io` рядом с загрузчиком; открыватель только передаёт `testStorePath`; `testStorePath` — путь к `secrets.yaml`, причина `test store`;
+  - события: `embedded.agent.dispose_failed {step, error_class}` `error`, `failed {error_class}` `error`, `late_error {error_class}` `warning` — snake_case, без текста; `serve_failed` и `errorType` удалены из кода и тестов;
+  - тест `late_error`: вторая ошибка зоны после первой — одно `failed`, одно `late_error`, один `dispose`;
+  - сторож: закрыть дыру `io.dart` → `testing.dart` — `codelab_embedded/lib/io.dart` и `lib/src/io/` не ссылаются ни на `package:codelab_agent_io/testing.dart`, ни на собственные `lib/testing.dart` и `lib/src/testing/` (в том числе относительным импортом), иначе сценарий модели транзитивно попадает в рабочую сборку клиентов (D8); негативный тест на временном пакете;
+  - NIT ревью (комментарии, имена, тексты по-английски) — без изменения поведения.
+- [x] 2.11 `[docs]` Правки артефактов change по двойному ревью итерации 2: D1 (в) — общая функция модели ядра, паритет как тест ядра, осознанный дубль MCP; D2 — `HostWiringException` у клиента, профиль первым шагом, предупреждения при невалидном конфиге, единый `environment`; D5 — `testStorePath` и место разбора переменной; D6 — шов `serve`, таблица событий в snake_case, `late_error`, устаревший результат `open` у резолвера; D10 и Risks; спека embedded-agent (секреты, общая функция модели, `late_error`, сценарий); задачи 2.4, 2.7, 2.8, 2.10, 3.3–3.4, 4.3–4.4.
 
 ## 3. CLI (итерация 3)
 
@@ -135,11 +154,12 @@
 - [ ] 3.3 `[client]` Тесты `apps/codelab_cli/test/profiles/profile_arg_test.dart`, `profiles_command_test.dart`, `test/embedded_resolver_test.dart` (codelab-cli «Профили подключения CLI», сценарии «Профиль default сильнее встроенного агента», «Встроенный агент явно», «embedded нельзя сохранить профилем», «Без профиля и без конфига»; «Встроенный агент в CLI», сценарий «Невалидный конфиг встроенного агента»; D6):
   - `embedded` и без `--agent` → `EmbeddedProfile(embedded-cli)` при отсутствии `default`;
   - битый `profiles.json` → `64`;
-  - резолвер сериализует `open` и ждёт `dispose` прежнего агента;
+  - резолвер сериализует `open`: `await prev.dispose()` перед новым открывателем;
+  - устаревший результат: если подключение отменено (новый `open`, `disconnect`, `close()`), пока открыватель работает, агент, вернувшийся позже, получает `dispose()` и не становится текущим (`AGENTS.md` §12; D6, «Резолвер клиента»);
   - `close()` ждёт `dispose`.
 
   Существующие тесты «embedded is 64» меняются на новые ожидания. Красный: `UsageError` на `embedded`.
-- [ ] 3.4 `[client]` `resolveAgentProfile`: без `--agent` — профиль `default`, если он есть в `profiles.json`, иначе `EmbeddedProfile(embedded-cli)`; битый файл — код `64` (D13, п. 1). `EmbeddedTransportResolver` и `localEmbeddedAgentOpener` в `composition_root.dart`. Флаг `--debug-secrets`. `EmbeddedAgentConfigException` → код `64` в `run.dart`. Ожидание `close()` резолвера в `CliRuntime.dispose` и в обработке сигналов. Правила сторожа CLI для `codelab_embedded/io.dart` и `testing.dart`, `cliAllowlist` += `codelab_embedded` (workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3). Шов `run(…, {EmbeddedAgentOpener? embeddedOpener})` для тестовой точки входа (D8).
+- [ ] 3.4 `[client]` `resolveAgentProfile`: без `--agent` — профиль `default`, если он есть в `profiles.json`, иначе `EmbeddedProfile(embedded-cli)`; битый файл — код `64` (D13, п. 1). `EmbeddedTransportResolver` и `localEmbeddedAgentOpener` в `composition_root.dart`: сериализация `open` через `await prev.dispose()`, `dispose()` у агента, вернувшегося после отмены подключения (D6). Флаг `--debug-secrets`. `EmbeddedAgentConfigException` → код `64` в `run.dart`. Ожидание `close()` резолвера в `CliRuntime.dispose` и в обработке сигналов. Правила сторожа CLI для `codelab_embedded/io.dart` и `testing.dart`, `cliAllowlist` += `codelab_embedded` (workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3). Шов `run(…, {EmbeddedAgentOpener? embeddedOpener})` для тестовой точки входа (D8).
 - [ ] 3.5 `[client]` Тест `apps/codelab_cli/test/scenario/test_scenario_command_test.dart` (cli-scenario-driver «Команда test-scenario», сценарии «Корпус против встроенного агента», «Фикстура с fake MCP-серверами»; D8):
   - корпус `--agent embedded` без `FAIL`;
   - пропуски с причинами;
@@ -175,10 +195,11 @@
   - подключение и ход;
   - отказ в карточке одобрения;
   - закрытие scope ждёт `dispose`;
+  - сериализация `open` (`await prev.dispose()` перед новым) и `dispose()` у агента, вернувшегося после отмены подключения (`AGENTS.md` §12; D6, «Резолвер клиента»);
   - лог агента в логгере приложения без значений секретов.
 
   Красный: резолвера нет.
-- [ ] 4.4 `[desktop]` `EmbeddedTransportResolver` и адаптер `Logger` в `lib/app/`; регистрация вторым резолвером `ClientWorkspace`; закрытие при закрытии root scope; зависимость `codelab_embedded` в `pubspec.yaml`. Правила сторожа desktop для `io.dart` (только `lib/app/`) и `testing.dart` (запрещён в `lib/`) — testing-quality, сценарий «Тестовый сценарий не попадает в app»; workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3.
+- [ ] 4.4 `[desktop]` `EmbeddedTransportResolver` (сериализация `open`, `dispose()` устаревшего агента — D6) и адаптер `Logger` в `lib/app/`; регистрация вторым резолвером `ClientWorkspace`; закрытие при закрытии root scope; зависимость `codelab_embedded` в `pubspec.yaml`. Правила сторожа desktop для `io.dart` (только `lib/app/`) и `testing.dart` (запрещён в `lib/`) — testing-quality, сценарий «Тестовый сценарий не попадает в app»; workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3.
 - [ ] 4.5 `[desktop]` Интеграционные тесты для `CODELAB_E2E_AGENT=embedded` (testing-quality «Встроенный режим в e2e и conformance»; D10; критерии таблицы этапа 4 для app):
   - вариант `embedded` в `integration_test/support/e2e_agent.dart`: выбор типа «Embedded agent», scope со `scriptedEmbeddedAgentOpener` и сценариями `integration_test/llm_scripts/`;
   - пропуск `fs_flow_test` и `terminal_flow_test` с причиной;
@@ -203,7 +224,7 @@
 - [ ] 6.2 `[docs]` Тексты плана:
   - `09-12-stage-7-embedded.md` — итог 7.3–7.9, отметки DoD, решение 7.8;
   - `09-05-stage-0-foundation.md` — скрипт `test:e2e:app:embedded` без `CODELAB_ALLOW_SCRIPTED_LLM` (D8);
-  - `agent-core/10-core-assembly-and-profiles.md` §10.12 — ссылка на тест паритета;
+  - `agent-core/10-core-assembly-and-profiles.md` §10.12 — ссылка на тест паритета в `codelab_agent_core/test/host/` (D1, в);
   - `docs/architecture/concurrency.md` — ссылка на решение 7.8.
 - [ ] 6.3 `[docs]` Definition of Done этапа 7 по `09-12`:
   - `codelab test-scenario … --agent embedded` — все `PASS` или `SKIP` с причиной;

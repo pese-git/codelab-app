@@ -35,7 +35,11 @@ String _autoBackendReason(String platform) => platform == 'windows'
 /// выбирает `file` никогда, ни сразу, ни запасным вариантом, CFG-11),
 /// [environment] — окружение процесса, [home] — `$CODELAB_HOME`, [platform]
 /// подменяет `Platform.operatingSystem` в тестах, [selectionReason] заменяет
-/// `reason` в событии, когда бэкенд задан не настройкой (`--llm-script`). Выбор логируется один раз:
+/// `reason` в событии, когда бэкенд задан не настройкой (`--llm-script`).
+/// [testStorePath] — путь к `secrets.yaml` тестового хранилища (change
+/// `add-embedded-agent-mode`, D5): если задан, бэкенд — `file` по этому пути,
+/// а [choice] игнорируется, чтобы E2E не касались `$CODELAB_HOME`; вызывает его
+/// только хост, и только в тестовой сборке. Выбор логируется один раз:
 /// `secrets.backend.selected {backend, path, reason}`; для `file` ещё
 /// предупреждение `secrets.backend.plaintext {path}`. Недопустимый [choice]
 /// (`keychain`, незнакомое значение, `file` на Windows — [secretsBackendProblem])
@@ -51,7 +55,11 @@ DescribedSecretStore openSecretStore({
   SecretProcessRunner? runner,
   String? platform,
   String? selectionReason,
+  String? testStorePath,
 }) {
+  if (testStorePath != null) {
+    choice = 'file';
+  }
   if (secretsBackendProblem(choice, platform ?? Platform.operatingSystem)
       case final problem?) {
     throw SecretStoreUnavailableException(
@@ -76,14 +84,16 @@ DescribedSecretStore openSecretStore({
       path = null;
       reason = 'configured: secrets.backend: env';
     case 'file':
-      path = '$home/secrets.yaml';
+      path = testStorePath ?? '$home/secrets.yaml';
       store = FileSecretStore(
         path: path,
         runner: runner,
         logger: logger,
         platform: platform ?? Platform.operatingSystem,
       );
-      reason = 'configured: secrets.backend: file';
+      reason = testStorePath != null
+          ? 'test store'
+          : 'configured: secrets.backend: file';
     default:
       // Недостижимо: [secretsBackendProblem] выше отсёк всё остальное.
       throw StateError('unreachable secrets.backend');

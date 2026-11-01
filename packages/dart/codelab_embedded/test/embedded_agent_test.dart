@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';
@@ -10,6 +9,7 @@ import 'package:http/http.dart' as web;
 import 'package:test/test.dart';
 
 import 'support/acp_client.dart';
+import 'support/memory_host.dart';
 
 /// Встроенный агент отвечает на ход в памяти процесса (embedded-agent
 /// «Сборка встроенного агента», «Локальное исполнение и containment»,
@@ -310,8 +310,8 @@ void main() {
   test('a failing dispose step does not leave closed pending', () async {
     final failing = _ThrowingCloseClient();
     final embedded = await createEmbeddedAgent(
-      config: _config(),
-      services: _services(logger, failing),
+      config: memoryConfig(),
+      services: memoryServices(logger, failing),
     );
 
     await embedded.dispose();
@@ -319,7 +319,9 @@ void main() {
 
     await embedded.closed.timeout(const Duration(seconds: 10));
     expect(failing.closeCalls, 1);
-    expect(logger.eventsOf('embedded.agent.dispose_failed'), hasLength(1));
+    final failed = logger.eventsOf('embedded.agent.dispose_failed').single;
+    expect(failed.level, LogLevel.error);
+    expect(failed.fields, {'step': 'http', 'error_class': 'StateError'});
     // Текст исключения (может содержать данные) в запись не попадает.
     expect(
       logger.eventsOf('embedded.agent.dispose_failed').single.error,
@@ -330,8 +332,8 @@ void main() {
   test('createEmbeddedAgent reports a non-embedded profile through the '
       'Future', () async {
     final future = createEmbeddedAgent(
-      config: _config(profile: 'agent-serve'),
-      services: _services(logger, _ThrowingCloseClient()),
+      config: memoryConfig(profile: 'agent-serve'),
+      services: memoryServices(logger, _ThrowingCloseClient()),
     );
 
     await expectLater(future, throwsA(isA<HostWiringException>()));
@@ -341,7 +343,7 @@ void main() {
     'a failing server constructor releases the built core and http',
     () async {
       final http = _CountingCloseClient();
-      final base = _services(logger, http);
+      final base = memoryServices(logger, http);
       final services = EmbeddedHostServices(
         baseEnv: base.baseEnv,
         // Без DirectoryListing при включённой fileListing конструктор
@@ -358,7 +360,10 @@ void main() {
         platform: 'test',
       );
 
-      final future = createEmbeddedAgent(config: _config(), services: services);
+      final future = createEmbeddedAgent(
+        config: memoryConfig(),
+        services: services,
+      );
 
       await expectLater(future, throwsA(isA<HostWiringException>()));
       expect(http.closeCalls, 1);
@@ -415,48 +420,4 @@ final class _ThrowingCloseClient extends web.BaseClient {
     closeCalls++;
     throw StateError('close failed: secret-text');
   }
-}
-
-EmbeddedAgentConfig _config({String profile = 'embedded-cli'}) =>
-    EmbeddedAgentConfig(
-      hostProfile: profile,
-      core: CoreConfig(
-        defaultModel: ModelRef(
-          provider: 'p',
-          id: 'm',
-          api: ProviderApi.openaiChat,
-          baseUrl: Uri.parse('http://p.invalid/v1'),
-          contextWindow: 32000,
-          maxOutputTokens: 4096,
-        ),
-      ),
-      host: const HostSettings(
-        profileNarrowing: {
-          'embedded-cli': {
-            HostCapability.shellExec: CapabilityOff('test'),
-            HostCapability.sessionPersistence: CapabilityOff('test'),
-          },
-        },
-      ),
-    );
-
-EmbeddedHostServices _services(Logger logger, web.Client http) {
-  final clock = FakeClock();
-  return EmbeddedHostServices(
-    baseEnv: MemoryExecutionEnv(cwd: '/t', clock: clock),
-    localEnv: (cwd) => MemoryExecutionEnv(cwd: cwd, clock: clock),
-    sessions: MemorySessionStore(),
-    secrets: SecretResolver(
-      store: MemorySecretStore(),
-      environment: const {},
-      logger: logger,
-    ),
-    http: http,
-    closeHttpOnDispose: true,
-    logger: logger,
-    clock: clock,
-    ids: SequentialIdGenerator(),
-    random: Random(0),
-    platform: 'test',
-  );
 }

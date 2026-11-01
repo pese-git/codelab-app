@@ -601,4 +601,164 @@ void main() {
 
     expect(scanEmbedded(tmp), isEmpty);
   });
+
+  // Сценарий модели `LlmScript` (design.md change `add-embedded-agent-mode`,
+  // D8, задача 2.9): основной барель `codelab_agent_io` на него не ссылается,
+  // а `testing.dart` импортируют только бинарь, `codelab_embedded/lib/src/testing/`
+  // и тесты. Так сценарий структурно не попадает в рабочую сборку клиентов.
+  test('reports a reference to the scripted layer in the main barrel of the '
+      'IO package of the agent only', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_scripted_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(
+      p.join(tmp.path, 'pubspec.yaml'),
+    ).writeAsStringSync('name: codelab_agent_io\n');
+    writeLib(
+      tmp,
+      'codelab_agent_io.dart',
+      "export 'src/scripted/llm_script.dart';\n",
+    );
+    writeLib(tmp, 'src/config/loader.dart', "import '../scripted/x.dart';\n");
+    writeLib(tmp, 'testing.dart', "export 'src/scripted/llm_script.dart';\n");
+    writeLib(tmp, 'src/scripted/x.dart', "import '../env/y.dart';\n");
+    final ioRules = rules.where(
+      (r) => r.dir == 'packages/dart/codelab_agent_io' && r.exclude.isNotEmpty,
+    );
+    expect(ioRules, hasLength(1), reason: 'нет правила на сценарий модели');
+
+    final violations = [
+      for (final rule in ioRules)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            '.',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+
+    expect(violations, hasLength(2));
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/codelab_agent_io.dart:1 -> src/scripted/llm_script.dart '
+          '(excluded file)',
+        ),
+        endsWith(
+          'lib/src/config/loader.dart:1 -> ../scripted/x.dart (excluded file)',
+        ),
+      ]),
+    );
+  });
+
+  test('allows agent_io/testing.dart only in the binary, the testing layer '
+      'of the embedded agent and tests', () {
+    const import = "import 'package:codelab_agent_io/testing.dart';\n";
+    final tmp = Directory.systemTemp.createTempSync('guard_scripted_use_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeLib(tmp, 'src/testing/scripted_opener.dart', import);
+    writeLib(tmp, 'src/io/opener.dart', import);
+    writeLib(tmp, 'src/assemble.dart', import);
+    writeLib(tmp, 'io.dart', import);
+
+    final embedded = [
+      for (final rule in rules.where(
+        (r) => r.dir == 'packages/dart/codelab_embedded/lib',
+      ))
+        ...scan(
+          tmp.path,
+          PackageRule(
+            'lib',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+
+    expect(embedded, hasLength(3));
+    expect(
+      embedded,
+      containsAll([
+        endsWith(
+          'lib/src/io/opener.dart:1 -> package:codelab_agent_io/testing.dart',
+        ),
+        endsWith(
+          'lib/src/assemble.dart:1 -> package:codelab_agent_io/testing.dart',
+        ),
+        endsWith('lib/io.dart:1 -> package:codelab_agent_io/testing.dart'),
+      ]),
+    );
+
+    // Мост настроек агента сценарий тоже не импортирует.
+    final setup = tmp.createTempSync('setup_');
+    writeLib(setup, 'io.dart', import);
+    final setupViolations = [
+      for (final rule in rules.where(
+        (r) => r.dir == 'packages/dart/codelab_setup',
+      ))
+        ...scan(
+          setup.path,
+          PackageRule(
+            '.',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+    expect(
+      setupViolations.single,
+      endsWith('lib/io.dart:1 -> package:codelab_agent_io/testing.dart'),
+    );
+  });
+
+  // Дыра, найденная ревью итерации 2: правило первого уровня снимает запреты
+  // с `io.dart`, `src/io/` и `testing.dart` целиком, поэтому ссылки между ними
+  // оно не видит. Открыватель настольных хостов не должен тянуть сценарий
+  // модели (D8, D3) ни пакетным, ни относительным путём.
+  test('reports references from io.dart and src/io/ to the testing layer of '
+      'the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_seal_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(
+      p.join(tmp.path, 'pubspec.yaml'),
+    ).writeAsStringSync('name: codelab_embedded\n');
+    writeLib(
+      tmp,
+      'io.dart',
+      "export 'package:codelab_embedded/testing.dart';\n",
+    );
+    writeLib(
+      tmp,
+      'src/io/opener.dart',
+      "import '../testing/scripted_opener.dart';\n"
+          "import '../../testing.dart';\n",
+    );
+    writeLib(
+      tmp,
+      'testing.dart',
+      "export 'src/testing/scripted_opener.dart';\n",
+    );
+    writeLib(tmp, 'src/testing/scripted_opener.dart', '');
+    final rule = rules.singleWhere(
+      (r) => r.dir == 'packages/dart/codelab_embedded/lib',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule(
+        'lib',
+        forbidden: rule.forbidden,
+        exclude: rule.exclude,
+        sealExclude: rule.sealExclude,
+      ),
+    );
+
+    expect(violations, hasLength(3), reason: violations.join('\n'));
+    expect(violations, everyElement(endsWith('(excluded file)')));
+  });
 }

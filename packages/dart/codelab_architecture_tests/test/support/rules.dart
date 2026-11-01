@@ -78,6 +78,27 @@ const rules = [
       'package:codelab_client_',
     ],
   ),
+  // Сценарий модели (`LlmScript`, слой провайдеров сценария, `CwdTrackingStore`)
+  // живёт в `lib/testing.dart` и `lib/src/scripted/`; основной барель и остальной
+  // код пакета на них не ссылаются, поэтому сценарий структурно не попадает в
+  // рабочую сборку клиентов через `codelab_embedded/io.dart` (design.md change
+  // `add-embedded-agent-mode`, D8, задача 2.9).
+  PackageRule(
+    'packages/dart/codelab_agent_io',
+    forbidden: [],
+    exclude: ['lib/testing.dart', 'lib/src/scripted/'],
+  ),
+  // `package:codelab_agent_io/testing.dart` — только `lib/src/testing/` моста
+  // встроенного агента (`io.dart` и остальной `lib/` — нет); бинарь
+  // `apps/codelab_agent` (флаг `--llm-script`) и тесты правилом не охвачены
+  // (сторож сканирует только `lib/` пакетов).
+  PackageRule(
+    'packages/dart/codelab_embedded/lib',
+    forbidden: ['package:codelab_agent_io/testing.dart'],
+    // Seal: `io.dart` и `src/io/` не ссылаются на `testing.dart` и
+    // `src/testing/` ни пакетным, ни относительным путём (D3, D8).
+    exclude: ['testing.dart', 'src/testing/'],
+  ),
   // ACP-сервер агента обслуживает любой транспорт: транспорты и локальный
   // листинг передаёт хост (PKG-3).
   PackageRule('packages/dart/codelab_agent_acp', forbidden: webUnsafe),
@@ -206,6 +227,7 @@ const rules = [
       'package:flutter/',
       'package:codelab_acp_',
       'package:codelab_client_',
+      'package:codelab_agent_io/testing.dart',
     ],
   ),
   // stage 7: apps/codelab_desktop/lib/features/settings/presentation —

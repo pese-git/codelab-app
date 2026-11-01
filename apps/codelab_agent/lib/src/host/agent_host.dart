@@ -6,11 +6,11 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
 import 'package:codelab_agent_acp/codelab_agent_acp.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
+import 'package:codelab_agent_io/testing.dart';
 import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
 import 'package:http/http.dart' as http;
 
 import '../cli/serve_args.dart';
-import 'serve_config.dart';
 
 /// Версия бинаря в `agentInfo` ответа `initialize`.
 const agentVersion = '0.1.0';
@@ -67,7 +67,7 @@ final class AgentHost {
     final loadedConfig = loaded;
     final config = loadedConfig.orThrow();
     final settings = loadedConfig.host!;
-    logStartupWarnings(logger, loadedConfig);
+    logConfigWarnings(logger, loadedConfig);
 
     final stdio = options.transport == ServeTransport.stdio;
     final narrowing = <HostCapability, CapabilityState>{
@@ -181,32 +181,19 @@ final class AgentHost {
       // Каталог — модели всех провайдеров конфигурации, запрос уходит
       // провайдеру выбранной модели (D11).
       catalog = StaticModelCatalog(config.providers, logger: logger);
-      streamFunction = createRoutedStreamFunction(
-        [for (final provider in config.providers) provider.config],
+      streamFunction = createConfiguredStreamFunction(
+        config,
         CoreLlmServices(
           httpClient: client,
           clock: clock,
           random: Random.secure(),
           logger: logger,
         ),
-        unavailable: config.providerProblems,
-        keys: {
-          for (final provider in config.providers)
-            provider.config.name: ?provider.key,
-        },
-        headerTemplates: {
-          for (final provider in config.providers)
-            if (provider.headerTemplates.isNotEmpty)
-              provider.config.name: provider.headerTemplates,
-        },
         secrets: secrets,
       );
-      sessions = JsonlSessionStore(
-        root: settings.sessionsDir ?? '${options.codelabHome}/sessions',
-        fsync: switch (settings.fsync) {
-          final String name => FsyncPolicy.values.byName(name),
-          null => FsyncPolicy.checkpoints,
-        },
+      sessions = openHostSessions(
+        codelabHome: options.codelabHome,
+        settings: settings,
         clock: clock,
         logger: logger,
       );

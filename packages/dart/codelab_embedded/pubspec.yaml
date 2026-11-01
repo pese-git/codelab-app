@@ -10,8 +10,7 @@ environment:
 # allowlist — workspace-architecture «Автоматический сторож границ пакетов»
 # (embeddedAllowlist; design.md change `add-embedded-agent-mode`, D3). Клиентских
 # пакетов и Flutter здесь нет: клиенты зависят от моста, а не он от них.
-# `codelab_agent_mcp` и `async` придут с `lib/io.dart` и жизненным циклом
-# (итерация 2).
+# `codelab_agent_mcp` пришёл с `lib/io.dart` (итерация 2, MCP-коннектор хоста).
 dependencies:
   codelab_acp_protocol:
     path: ../codelab_acp_protocol
@@ -23,6 +22,8 @@ dependencies:
     path: ../codelab_agent_core
   codelab_agent_io:
     path: ../codelab_agent_io
+  codelab_agent_mcp:
+    path: ../codelab_agent_mcp
   http: ^1.5.0
 
 dev_dependencies:

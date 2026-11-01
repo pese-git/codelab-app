@@ -23,7 +23,11 @@ import 'secret_process_runner.dart';
 /// Резолвер, его кэш, [runner] и значения секретов через границу isolate не
 /// передаются. [platform] и [runner] — швы для тестов. [selectionReason] — текст
 /// `reason` события `secrets.backend.selected`, когда бэкенд выбран не
-/// настройкой (`forced by --llm-script`, D11).
+/// настройкой (`forced by --llm-script`, D11). [testStorePath] — путь к
+/// `secrets.yaml` тестового хранилища: бэкенд становится `file` по этому пути
+/// независимо от [backend] (change `add-embedded-agent-mode`, D5). Параметр
+/// передаёт только открыватель встроенного агента в сборке с
+/// `-DCODELAB_ALLOW_TEST_SECRETS=true`; обычный хост его не задаёт.
 SecretResolver openHostSecrets({
   required String codelabHome,
   required Map<String, String> environment,
@@ -33,6 +37,7 @@ SecretResolver openHostSecrets({
   String? platform,
   SecretProcessRunner? runner,
   String? selectionReason,
+  String? testStorePath,
 }) => SecretResolver(
   store: openSecretStore(
     choice: backend,
@@ -42,6 +47,7 @@ SecretResolver openHostSecrets({
     runner: runner,
     platform: platform,
     selectionReason: selectionReason,
+    testStorePath: testStorePath,
   ),
   environment: environment,
   logger: logger,

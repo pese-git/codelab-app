@@ -616,7 +616,8 @@ mcp:
 
       // §15.6, D14 change add-agent-secret-store: тестовое хранилище известно
       // только в сборке с `-DCODELAB_ALLOW_TEST_SECRETS=true`; вариант с
-      // define проверяет задача 7.7, поэтому здесь он пропускается.
+      // define проверяет процессный тест `codelab_embedded` (задача 2.3 change
+      // `add-embedded-agent-mode`).
       test(
         'CODELAB_TEST_SECRET_STORE in a normal build is a warning with the '
         'name only; the directory is not created',
@@ -640,7 +641,8 @@ mcp:
           expect(Directory(store).existsSync(), isFalse);
         },
         skip: const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')
-            ? 'сборка с CODELAB_ALLOW_TEST_SECRETS: задача 7.7'
+            ? 'сборка с CODELAB_ALLOW_TEST_SECRETS: покрыто процессным тестом '
+                  'codelab_embedded/test/io/test_secret_store_process_test.dart'
             : false,
       );
 
