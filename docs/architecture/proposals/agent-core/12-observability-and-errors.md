@@ -137,10 +137,10 @@ final class LogRecord {           // то, что получает sink хост
 | Событие | Уровень | Поля | Когда |
 |---|---|---|---|
 | `secrets.lookup` | info | `name`, `purpose` (путь ключа конфига), `source` (`cache`, `env` или id бэкенда), `found` | только `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1`, на каждое обращение к `SecretResolver`; уровень лога режим не меняет |
-| `secrets.backend.selected` | info | `backend`, `path` (`secrets.yaml` или `null`), `reason` (у `auto` → `env`) | выбор бэкенда, один раз на процесс |
+| `secrets.backend.selected` | info | `backend`, `path` (`secrets.yaml` или `null`), `reason` (у `auto` — причина выбора `env`; у явного выбора — `configured: secrets.backend: env` или `configured: secrets.backend: file`) | выбор бэкенда, один раз на процесс |
 | `secrets.backend.unavailable` | warning | `backend`, `reason` | отказ хранилища при чтении (например, `file` по правам), один раз на пару `(backend, reason)` |
 | `secrets.backend.plaintext` | warning | `path` | бэкенд `file`, при каждом старте хоста |
-| `secrets.file.refused` | warning | `path`, `mode` (восьмеричная строка) или `reason: symlink` | `secrets.yaml` с правами шире `0600` или символическая ссылка, один раз на процесс |
+| `secrets.file.refused` | warning | `path`, `mode` (восьмеричная строка) или `reason`: `symlink`, `home_symlink`, `home_writable` (с `mode`), `home_owner`, `tmp_dir_symlink`, `tmp_dir_mode`, `wide_after_write` (с `removed`) | отказ бэкенда `file`: права `secrets.yaml` шире `0600`, ссылка, `$CODELAB_HOME` — ссылка, с записью для группы/остальных или чужого владельца, небезопасный `.secrets-tmp`, широкие права после записи, которые `chmod 600` не исправил; один раз на процесс и путь независимо от причины |
 
 В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов
 и ответов; причины ошибок транспорта формирует наш код, без текста заголовков (OBS-инварианты,

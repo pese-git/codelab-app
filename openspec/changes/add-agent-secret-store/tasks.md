@@ -118,28 +118,30 @@
 
 ## 5. Бэкенды `env` и `file`, выбор бэкенда (итерация 2; D5–D7, D14)
 
-- [ ] 5.1 `[agent]` Тесты `codelab_agent_io/test/secrets/env_secret_store_test.dart` (agent-secrets «Бэкенды env и file», сценарий «env только для чтения»). Красный.
-- [ ] 5.2 `[agent]` Тесты `codelab_agent_io/test/secrets/file_secret_store_test.dart` во временном `CODELAB_HOME` на macOS и Linux (agent-secrets «Бэкенд file», все сценарии):
+- [x] 5.1 `[agent]` Тесты `codelab_agent_io/test/secrets/env_secret_store_test.dart` (agent-secrets «Бэкенды env и file», сценарий «env только для чтения»). Красный.
+- [x] 5.2 `[agent]` Тесты `codelab_agent_io/test/secrets/file_secret_store_test.dart` во временном `CODELAB_HOME` на macOS и Linux (agent-secrets «Бэкенд file», все сценарии):
   - права `0644` → отказ чтения, записи и `names()` с текстом `chmod 600`, одно `secrets.file.refused`;
   - символическая ссылка → отказ;
   - отсутствующий файл: `read`/`delete`/`names()` файл не создают;
   - запись создаёт файл с правами `0600`; права выставлены до записи значения (фейковый `SecretProcessRunner` для `/bin/chmod` проверяет, что в момент вызова файл пуст; в argv только путь);
-  - сбой между временным файлом и переименованием оставляет прежний файл, следующий `write` удаляет tmp;
+  - сбой между временным файлом и переименованием оставляет прежний файл, следующий `write` удаляет брошенный tmp старше 10 минут; свежие, чужие tmp и ссылки не удаляются; tmp — в приватном `.secrets-tmp` (`0700`), очередь записей на путь общая для экземпляров;
+  - `$CODELAB_HOME` — ссылка или с записью для группы/остальных → отказ без изменения каталога; созданный бэкендом каталог — `0700`;
+  - размер файла ≤ 1 МиБ (и при записи), значение ≤ 64 КиБ, непарный суррогат отклонён; `secrets.file.refused` один раз на процесс и путь;
   - значения с `"`, `\` и не-ASCII читаются обратно; значение с переводом строки отклонено;
   - битая структура → исключение без строк файла;
   - подменённая платформа `windows` → отказ.
 
   Красный.
-- [ ] 5.3 `[agent]` `SecretProcessRunner`, `IoSecretProcessRunner`, `EnvSecretStore`, `FileSecretStore` с явным путём (D14: переиспользование тестовым хранилищем этапа 7); экспорт из бареля `codelab_agent_io`. 5.1, 5.2 зелёные; `pubspec.yaml` не меняется.
-- [ ] 5.4 `[agent]` Тесты `codelab_agent_io/test/secrets/open_secret_store_test.dart` (agent-secrets «Выбор бэкенда secrets.backend», сценарии «auto — env на всех ОС», «auto не выбирает file»): `auto` = `env` на macOS/Linux/Windows без процессов и с причиной, называющей `secrets.backend: file`; `env`; `file`; `secrets.backend.selected` один раз. Тест `config_loader_test.dart`: `file` на подменённой платформе Windows — проблема конфигурации (agent-secrets «Бэкенд file», сценарий «file на Windows»). Красные.
-- [ ] 5.5 `[agent]` `openSecretStore`; проблема `file` на Windows в `ConfigLoader`. 5.4 зелёные.
+- [x] 5.3 `[agent]` `SecretProcessRunner`, `IoSecretProcessRunner`, `EnvSecretStore`, `FileSecretStore` с явным путём (D14: переиспользование тестовым хранилищем этапа 7); экспорт из бареля `codelab_agent_io`. 5.1, 5.2 зелёные; `pubspec.yaml` не меняется.
+- [x] 5.4 `[agent]` Тесты `codelab_agent_io/test/secrets/open_secret_store_test.dart` (agent-secrets «Выбор бэкенда secrets.backend», сценарии «auto — env на всех ОС», «auto не выбирает file»): `auto` = `env` на macOS/Linux/Windows без процессов и с причиной, называющей `secrets.backend: file` (на Windows — только `CODELAB_SECRET_*`); недопустимое значение — `SecretStoreUnavailableException` с текстом `secretsBackendProblem`; `env`; `file`; `secrets.backend.selected` один раз. Тест `config_loader_test.dart`: `file` на подменённой платформе Windows — проблема конфигурации (agent-secrets «Бэкенд file», сценарий «file на Windows»). Красные.
+- [x] 5.5 `[agent]` `openSecretStore`; проблема `file` на Windows в `ConfigLoader`. 5.4 зелёные.
 
 ## 6. `SecretAdmin` и `openHostSecrets` (итерация 2; D15)
 
-- [ ] 6.1 `[agent]` Тесты `codelab_agent_io/test/secrets/secret_admin_test.dart` (agent-secrets «Программная запись секретов», все сценарии): типизированные результаты `Stored`/`Updated`/`InvalidName`/`InvalidValue`/`Collision`/`ReadOnly`/`Failed`; `ReadOnly` у `env` с подсказкой `secrets.backend: file`; значение ни в argv, ни в stdin дочерних процессов; `toString` результатов без значения. Красный.
-- [ ] 6.2 `[agent]` `SecretAdmin` и результаты; экспорт из бареля. 6.1 зелёный; задача 8.2 строит `SecretCommands` поверх него.
-- [ ] 6.3 `[agent]` Тесты `codelab_agent_io/test/secrets/host_secrets_test.dart` (agent-secrets «Секреты настольных хостов и встроенных профилей», все сценарии): `openHostSecrets` внутри `Isolate.run` из сериализуемых данных — наружу только `found`/`source`, лог без значения; общий секрет через `SecretAdmin` и резолвер на бэкенде `file`; замена прочитанного секрета видна только новому резолверу. Красный.
-- [ ] 6.4 `[agent]` `openHostSecrets` в `lib/src/secrets/host_secrets.dart`; экспорт из бареля. 6.3 зелёный. **Конец итерации 2.**
+- [x] 6.1 `[agent]` Тесты `codelab_agent_io/test/secrets/secret_admin_test.dart` (agent-secrets «Программная запись секретов», все сценарии): типизированные результаты `SecretStored`/`SecretUpdated`/`SecretInvalidName`/`SecretInvalidValue`/`SecretCollision`/`SecretReadOnly`/`SecretFailed`, `SecretDeleted`/`SecretNotSet`, `SecretListing`/`SecretListFailed`; `SecretReadOnly` у `env` с данными подсказки (`variable`, `fileBackendOffered`); `checkStore` без значения; значение ни в argv, ни в stdin дочерних процессов; `toString` результатов без значения. Красный.
+- [x] 6.2 `[agent]` `SecretAdmin` и результаты; экспорт из бареля. 6.1 зелёный; задача 8.2 строит `SecretCommands` поверх него.
+- [x] 6.3 `[agent]` Тесты `codelab_agent_io/test/secrets/host_secrets_test.dart` (agent-secrets «Секреты настольных хостов и встроенных профилей», все сценарии): `openHostSecrets` внутри `Isolate.run` из сериализуемых данных — наружу только `found`/`source`, лог без значения; общий секрет через `SecretAdmin` и резолвер на бэкенде `file`; замена прочитанного секрета видна только новому резолверу. Красный.
+- [x] 6.4 `[agent]` `openHostSecrets` в `lib/src/secrets/host_secrets.dart`; экспорт из бареля. 6.3 зелёный. **Конец итерации 2.**
 
 ## 7. Бинарь: хранилище и отладка (итерация 3; D11)
 
@@ -161,7 +163,7 @@
   - `set` с TTY и без, `\n`/`\r\n`, пустое значение, перевод строки внутри;
   - значение аргументом → `64` без печати аргумента;
   - коллизия `envOverride`; бэкенд `env` (и `auto`) → `1` с подсказкой `secrets.backend: file` и переменной, на Windows — только переменной;
-  - `Stored`/`Updated`;
+  - `Stored secret …`/`Updated secret …` (по `SecretStored`/`SecretUpdated`); подсказка `SecretReadOnly` с настоящим путём `$CODELAB_HOME`; порядок D8 через `SecretAdmin.checkStore`;
   - `delete` существующего и отсутствующего;
   - `list` с бэкендом, причиной и строкой `Environment overrides`;
   - невалидный конфиг с `api_key` не блокирует;

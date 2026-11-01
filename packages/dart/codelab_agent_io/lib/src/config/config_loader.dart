@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
+import '../secrets/secrets_backend_problem.dart';
 import 'environment_layer.dart';
 import 'legacy_notice.dart';
 import 'yaml_reader.dart';
@@ -155,6 +156,9 @@ final class ConfigLoader {
   /// которые назвал хост (переменная токена `--token-env`): они не опечатка.
   /// Неизвестные `CODELAB_*` попадают в `warnings` событием
   /// `config.env.unknown` (D13): правило одно для `serve` и `config check`.
+  /// [platform] подменяет `Platform.operatingSystem` в тестах: на `windows`
+  /// `secrets.backend: file` — проблема конфигурации (change
+  /// `add-agent-secret-store`, D14).
   ConfigLoadResult load({
     required String cwd,
     required Map<String, String> environment,
@@ -162,6 +166,7 @@ final class ConfigLoader {
     String? extraConfig,
     bool scripted = false,
     Set<String> knownVariables = const {},
+    String? platform,
   }) {
     final extraPath =
         _nonEmpty(extraConfig) ?? _nonEmpty(environment['CODELAB_CONFIG']);
@@ -277,12 +282,63 @@ final class ConfigLoader {
       environment: environment,
       projectRoot: root,
     );
+    final windowsFile = scripted
+        ? null
+        : _fileBackendOnWindows(result, layers, platform);
+    if (windowsFile != null) {
+      return ConfigLoadResult(
+        issues: [...result.issues, windowsFile],
+        warnings: [...warnings, ...result.warnings],
+        sources: result.sources,
+      );
+    }
     return ConfigLoadResult(
       config: result.config,
       host: result.host,
       issues: result.issues,
       warnings: [...warnings, ...result.warnings],
       sources: result.sources,
+    );
+  }
+
+  /// Проблема `secrets.backend: file` на Windows (agent-secrets «Бэкенд file»,
+  /// design.md change `add-agent-secret-store`, D7, D14).
+  ///
+  /// Почему здесь, а не в ядре: ядро платформу не знает (PKG-1). Права NTFS
+  /// `dart:io` не проверяет, поэтому открытый файл на Windows недопустим;
+  /// `FileSecretStore` отказывает и сам (защита в глубину). Со [scripted]
+  /// проверки нет: сценарий всегда использует `env` (D11). Позиция берётся из
+  /// слоя, где задан ключ, чтобы сообщение указало файл и строку.
+  ConfigIssue? _fileBackendOnWindows(
+    ConfigLoadResult result,
+    List<ConfigTree> layers,
+    String? platform,
+  ) {
+    // Тот же `secretsBackendProblem`, что у `openSecretStore`: тексты не
+    // расходятся. Ядро уже отсекло `keychain` и незнакомые значения, поэтому
+    // здесь срабатывает только `file` на Windows.
+    final problem = secretsBackendProblem(
+      result.host?.secretsBackend,
+      platform ?? Platform.operatingSystem,
+    );
+    if (problem == null) {
+      return null;
+    }
+    ConfigTree? origin;
+    for (final layer in layers.reversed) {
+      if (layer.positions.containsKey('secrets.backend')) {
+        origin = layer;
+        break;
+      }
+    }
+    final position = origin?.positions['secrets.backend'];
+    return ConfigIssue(
+      kind: ConfigIssueKind.value,
+      key: 'secrets.backend',
+      source: origin?.source ?? 'config',
+      line: position?.line,
+      column: position?.column,
+      message: problem.message,
     );
   }
 
