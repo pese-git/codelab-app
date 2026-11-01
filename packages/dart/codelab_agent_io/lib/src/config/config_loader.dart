@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:meta/meta.dart';
 
 import '../secrets/secrets_backend_problem.dart';
 import 'environment_layer.dart';
@@ -21,6 +22,28 @@ final class ConfigUsageException implements Exception {
 
   @override
   String toString() => 'ConfigUsageException: $message';
+}
+
+/// Абсолютный ли путь: POSIX `/…` или Windows `C:\\…` / `C:/…`.
+///
+/// Почему отдельно: одну проверку используют загрузчик и подкоманды `secret`
+/// (design.md change `add-agent-secret-store`, D8), и она не должна
+/// расходиться.
+bool isAbsoluteConfigPath(String path) =>
+    path.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+
+/// Проверяет значение `CODELAB_CONFIG`: имя файла и абсолютный путь.
+///
+/// Почему: относительный путь переменной зависел бы от каталога, из которого
+/// клиент запустил процесс, — один и тот же `CODELAB_CONFIG` читал бы разные
+/// файлы. Флаг `--config` вводит пользователь в этом каталоге, поэтому для
+/// него требование не действует. Нарушение — [ConfigUsageException]; одну
+/// функцию вызывают `ConfigLoader` и `SecretCommands`.
+void checkConfigEnvPath(String path) {
+  checkConfigFileName(path, origin: 'CODELAB_CONFIG');
+  if (!isAbsoluteConfigPath(path)) {
+    throw const ConfigUsageException('CODELAB_CONFIG must be an absolute path');
+  }
 }
 
 /// Проверяет имя файла `--config` / `CODELAB_CONFIG`: `.yaml` или `.yml`.
@@ -167,6 +190,36 @@ final class ConfigLoader {
     bool scripted = false,
     Set<String> knownVariables = const {},
     String? platform,
+  }) => loadWithLayers(
+    cwd: cwd,
+    environment: environment,
+    flags: flags,
+    extraConfig: extraConfig,
+    scripted: scripted,
+    knownVariables: knownVariables,
+    platform: platform,
+  ).result;
+
+  /// То же, что [load], плюс разобранные слои по порядку приоритета.
+  ///
+  /// Почему: `config check` называет файл и строку ключа, на который ссылается
+  /// предупреждение о секрете (`providers.p.api_key_secret`), а результат
+  /// ядра позиций ссылок не хранит (design.md change `add-agent-secret-store`,
+  /// D9). Слои — те же деревья, что ушли в `CoreConfig.fromLayers`; в них могут
+  /// быть и значения, вписанные в конфиг (`api_key`), поэтому вызывающий
+  /// использует только позиции ключей, а значения не печатает.
+  ///
+  /// Как использовать: только внутри пакета (`ConfigCommands`); для
+  /// приложений — [load].
+  @internal
+  ({ConfigLoadResult result, List<ConfigTree> layers}) loadWithLayers({
+    required String cwd,
+    required Map<String, String> environment,
+    ConfigTree? flags,
+    String? extraConfig,
+    bool scripted = false,
+    Set<String> knownVariables = const {},
+    String? platform,
   }) {
     final extraPath =
         _nonEmpty(extraConfig) ?? _nonEmpty(environment['CODELAB_CONFIG']);
@@ -174,14 +227,10 @@ final class ConfigLoader {
         ? '--config'
         : 'CODELAB_CONFIG';
     if (extraPath != null) {
-      checkConfigFileName(extraPath, origin: extraOrigin);
-      // Относительный путь переменной зависел бы от каталога, из которого
-      // клиент запустил процесс: один и тот же `CODELAB_CONFIG` читал бы
-      // разные файлы. Флаг `--config` вводит пользователь в этом каталоге.
-      if (extraOrigin == 'CODELAB_CONFIG' && !_isAbsolute(extraPath)) {
-        throw const ConfigUsageException(
-          'CODELAB_CONFIG must be an absolute path',
-        );
+      if (extraOrigin == 'CODELAB_CONFIG') {
+        checkConfigEnvPath(extraPath);
+      } else {
+        checkConfigFileName(extraPath, origin: extraOrigin);
       }
     }
 
@@ -271,10 +320,13 @@ final class ConfigLoader {
     }
 
     if (issues.isNotEmpty) {
-      return ConfigLoadResult(
-        issues: issues,
-        warnings: warnings,
-        sources: [for (final layer in layers) layer.source],
+      return (
+        result: ConfigLoadResult(
+          issues: issues,
+          warnings: warnings,
+          sources: [for (final layer in layers) layer.source],
+        ),
+        layers: layers,
       );
     }
     final result = CoreConfig.fromLayers(
@@ -286,18 +338,24 @@ final class ConfigLoader {
         ? null
         : _fileBackendOnWindows(result, layers, platform);
     if (windowsFile != null) {
-      return ConfigLoadResult(
-        issues: [...result.issues, windowsFile],
-        warnings: [...warnings, ...result.warnings],
-        sources: result.sources,
+      return (
+        result: ConfigLoadResult(
+          issues: [...result.issues, windowsFile],
+          warnings: [...warnings, ...result.warnings],
+          sources: result.sources,
+        ),
+        layers: layers,
       );
     }
-    return ConfigLoadResult(
-      config: result.config,
-      host: result.host,
-      issues: result.issues,
-      warnings: [...warnings, ...result.warnings],
-      sources: result.sources,
+    return (
+      result: ConfigLoadResult(
+        config: result.config,
+        host: result.host,
+        issues: result.issues,
+        warnings: [...warnings, ...result.warnings],
+        sources: result.sources,
+      ),
+      layers: layers,
     );
   }
 
@@ -442,8 +500,7 @@ final class ConfigLoader {
     }
   }
 
-  bool _isAbsolute(String path) =>
-      path.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+  bool _isAbsolute(String path) => isAbsoluteConfigPath(path);
 
   String? _nonEmpty(String? value) =>
       value == null || value.isEmpty ? null : value;

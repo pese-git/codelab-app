@@ -34,7 +34,8 @@ String _autoBackendReason(String platform) => platform == 'windows'
 /// (`null` и `auto` — `env` на всех ОС, без проб и процессов; `auto` НЕ
 /// выбирает `file` никогда, ни сразу, ни запасным вариантом, CFG-11),
 /// [environment] — окружение процесса, [home] — `$CODELAB_HOME`, [platform]
-/// подменяет `Platform.operatingSystem` в тестах. Выбор логируется один раз:
+/// подменяет `Platform.operatingSystem` в тестах, [selectionReason] заменяет
+/// `reason` в событии, когда бэкенд задан не настройкой (`--llm-script`). Выбор логируется один раз:
 /// `secrets.backend.selected {backend, path, reason}`; для `file` ещё
 /// предупреждение `secrets.backend.plaintext {path}`. Недопустимый [choice]
 /// (`keychain`, незнакомое значение, `file` на Windows — [secretsBackendProblem])
@@ -49,6 +50,7 @@ DescribedSecretStore openSecretStore({
   required Logger logger,
   SecretProcessRunner? runner,
   String? platform,
+  String? selectionReason,
 }) {
   if (secretsBackendProblem(choice, platform ?? Platform.operatingSystem)
       case final problem?) {
@@ -89,7 +91,11 @@ DescribedSecretStore openSecretStore({
   logger.log(
     LogLevel.info,
     'secrets.backend.selected',
-    fields: {'backend': store.backend.id, 'path': path, 'reason': reason},
+    fields: {
+      'backend': store.backend.id,
+      'path': path,
+      'reason': selectionReason ?? reason,
+    },
   );
   if (path != null) {
     logger.log(

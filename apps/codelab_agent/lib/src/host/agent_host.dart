@@ -96,19 +96,36 @@ final class AgentHost {
     final ModelCatalog catalog;
     final StreamFunction streamFunction;
     final SessionStore sessions;
+    // Один резолвер на процесс: им пользуются функция модели (ключ и заголовки
+    // провайдеров, при первом запросе) и ядро (MCP-серверы конфигурации, перед
+    // подключением; D4). Хранилище выбирает `openHostSecrets` по
+    // `secrets.backend` загруженного конфига (D11, D15). Сценарий `--llm-script`
+    // всегда использует `env` независимо от конфига: он не читает
+    // `$CODELAB_HOME`, а тесты не должны открывать `secrets.yaml`
+    // разработчика; секреты сценария задаются `CODELAB_SECRET_<…>` (D11).
+    final SecretResolver secrets;
+    try {
+      secrets = openHostSecrets(
+        codelabHome: options.codelabHome,
+        environment: options.environment,
+        backend: options.llmScript != null ? 'env' : settings.secretsBackend,
+        debug: options.debugSecrets,
+        logger: logger,
+        selectionReason: options.llmScript != null
+            ? 'forced by --llm-script'
+            : null,
+      );
+    } on SecretStoreUnavailableException catch (error) {
+      // Недопустимый `secrets.backend` загрузка конфига уже отвергла; сюда
+      // попадает только расхождение платформы (защита в глубину, D7): код `64`
+      // до старта транспорта.
+      throw UsageError('secrets.backend: ${error.reason}');
+    }
+    // Клиент создаётся после хранилища секретов: ошибка выше (код `64`) не должна
+    // оставлять открытый сокетный клиент.
     // HTTP-клиент хоста: один на процесс, им пользуются провайдеры LLM и
     // streamable HTTP MCP-серверов; закрывается в `shutdown` (PKG-6).
     final client = httpClient ?? http.Client();
-    // Один резолвер на процесс: им пользуются функция модели (ключ и заголовки
-    // провайдеров, при первом запросе) и ядро (MCP-серверы конфигурации, перед
-    // подключением; D4). В итерации 1 бэкенд — только `env`; выбор по
-    // `secrets.backend` и `--debug-secrets` приходят с `openHostSecrets`
-    // (задачи 6.4, 7.2).
-    final secrets = SecretResolver(
-      store: const _EnvSecretStore(),
-      environment: options.environment,
-      logger: logger,
-    );
     if (options.llmScript case final path?) {
       // Сценарий не трогает `$CODELAB_HOME`: журнал на диске — только в
       // каталоге `--sessions-dir` (D1 change `add-llm-script-session-store`),
@@ -306,44 +323,6 @@ final class AgentHost {
     await core.runtime.dispose();
     _httpClient.close();
   }
-}
-
-/// Временный бэкенд `env` для резолвера хоста (design.md change
-/// `add-agent-secret-store`, D3, Migration Plan, итерация 1).
-///
-/// Почему отдельный маленький класс: `EnvSecretStore` и `openHostSecrets`
-/// появляются в `codelab_agent_io` в итерациях 2–3 (задачи 5.3, 6.4), а ключи
-/// `api_key_env` и переменные `CODELAB_SECRET_*` должны работать уже сейчас.
-/// Переменные `CODELAB_SECRET_<…>` читает сам `SecretResolver` до обращения к
-/// хранилищу, поэтому бэкенду нечего читать: он только сообщает `id: env` и
-/// отказывает в записи, как настоящий `EnvSecretStore` (D5).
-///
-/// Как использовать: никак снаружи; задача 7.2 заменяет его результатом
-/// `openHostSecrets`.
-final class _EnvSecretStore implements DescribedSecretStore {
-  const _EnvSecretStore();
-
-  @override
-  SecretBackendInfo get backend =>
-      const SecretBackendInfo(id: 'env', writable: false);
-
-  @override
-  Future<String?> read(String name) async => null;
-
-  @override
-  Future<void> write(String name, String value) async =>
-      // `async`: отказ приходит завершённым с ошибкой Future, а не
-      // синхронным исключением из вызова порта.
-      throw const SecretStoreUnavailableException(
-        backend: 'env',
-        reason: 'env backend is read-only',
-      );
-
-  @override
-  Future<void> delete(String name) => write(name, '');
-
-  @override
-  Future<List<String>> names() async => const [];
 }
 
 /// Gate сборки: включает `interactiveApproval`, а вопросы задаёт

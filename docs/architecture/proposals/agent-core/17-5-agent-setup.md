@@ -488,18 +488,29 @@ TTY (`agent-serve`, CI) не может. Поэтому выбор честны�
 
 **CLI** (design.md change `add-agent-secret-store`, D8). Одна реализация — `SecretCommands`
 (`codelab_agent_io`); `codelab-agent secret …` и `codelab secret …` (через `codelab_setup/io.dart`)
-только разбирают аргументы, поэтому stdout, stderr и код выхода двух бинарей совпадают. Бэкенд
+только разбирают аргументы, поэтому вывод и коды `SecretCommands` у двух бинарей совпадают; своё у
+каждого — только справка `secret` и сообщения разбора argv (они называют бинарь). Бэкенд
 подкоманды берут из `secrets.backend` в `$CODELAB_HOME/config.yaml` и файле `CODELAB_CONFIG` — и
 только этот ключ: невалидный остальной конфиг (например, ключ вписан значением) не блокирует
-команду, которая его чинит; флаг `serve --config` подкоманды не видят.
-- `codelab secret set <name>` читает значение из stdin (с TTY — без эха, ввод до Enter, эхо
-  восстанавливается в `finally` и по `SIGINT`; без TTY — весь stdin, один завершающий `\n` или
-  `\r\n` отбрасывается). Значение аргументом — код `64`, `pass the secret value on stdin, not as an
-  argument`, аргумент не печатается. Неверное имя, пустое значение, перевод строки внутри значения,
-  коллизия `envOverride` с другим сохранённым именем — код `64`. Бэкенд `env` (в том числе `auto`
-  в 1.0) — код `1` без чтения stdin, с подсказкой `secrets.backend: file` или переменной
-  `CODELAB_SECRET_<…>` (на Windows — только переменной). Успех — `Stored secret <name> in
-  <backend>`, перезапись без `--force` — `Updated secret <name> in <backend>`.
+команду, которая его чинит; флаг `serve --config` подкоманды не видят. Недопустимый
+`CODELAB_CONFIG` (относительный путь или расширение не `.yaml`/`.yml` без учёта регистра) —
+`warning: CODELAB_CONFIG ignored: <reason>`, бэкенд только из `$CODELAB_HOME/config.yaml`, код
+выхода не меняется.
+- Код `64` — два класса. Ошибка использования (неверное имя, значение аргументом, нет или неизвестна
+  подкоманда, ошибка argv) — сообщение и справка `secret`; ошибка разбора argv печатает только
+  `<бинарь>: invalid arguments for secret`, без присланных слов (среди них может быть значение).
+  Ошибка значения (пустое, перевод строки, `secret value must be valid UTF-8`, длиннее 64 КиБ,
+  непарный суррогат, коллизия `envOverride`) — только сообщение, без справки.
+- `codelab secret set <name>` читает значение из stdin. С TTY — неканонический режим (эхо и
+  построчный режим выключены, Backspace и Ctrl+D обрабатываются вручную, Enter завершает ввод):
+  каноническая строка терминала обрезалась бы на `MAX_CANON`. Байты после перевода строки (вставка
+  нескольких строк) — код `64` `secret value must be a single line`, остаток ввода вычитывается до
+  восстановления режимов; режимы восстанавливаются в `finally` и по `SIGINT` (код `130`). Без TTY —
+  весь stdin, один завершающий `\n` или `\r\n` отбрасывается. Значение аргументом — код `64`,
+  `pass the secret value on stdin, not as an argument`, аргумент не печатается. Бэкенд `env` (в том
+  числе `auto` в 1.0) — код `1` без чтения stdin, с подсказкой `secrets.backend: file` или
+  переменной `CODELAB_SECRET_<…>` (на Windows — только переменной). Успех — `Stored secret <name>
+  in <backend>`, перезапись без `--force` — `Updated secret <name> in <backend>`.
 - `codelab secret delete <name>` — код `0` и для отсутствующего имени (`Secret <name> was not set in
   <backend>`): команда идемпотентна для скриптов.
 - `codelab secret list` — строка `Backend: <id>` (у `auto` — с причиной), имена по алфавиту и строка
@@ -996,7 +1007,9 @@ mcp:
 `codelab provider add|list|remove`, `codelab mcp add|list|remove`,
 `codelab secret set|delete|list` (8.9, D8: те же подкоманды у `codelab-agent`, бэкенд — из
 `secrets.backend`; `config check` с 8.9 печатает бэкенд и строку `warning:` на каждый незаданный
-ссылочный секрет, при `file` — строку об открытом тексте всегда, код выхода не меняется, D9);
+ссылочный секрет, при `file` — строку об открытом тексте всегда, а отказ `file` — одной строкой
+(права — `<path> has permissions <mode>; run: chmod 600 <path>`, иначе `file is unavailable
+(<reason>)`) без строк по именам; код выхода не меняется, D9);
 агентские команды — `/config reload|check`,
 `/mcp list|reload [<id>]|enable <id>|disable <id>`.
 

@@ -6,7 +6,10 @@ import 'package:meta/meta.dart';
 import '../config/config_loader.dart';
 import '../env/local_execution_env.dart';
 import '../project/project_files_loader.dart';
+import '../secrets/open_secret_store.dart';
 import 'exit_codes.dart';
+import 'secret_commands.dart' show SecretStoreOpener;
+import 'silent_logger.dart';
 
 /// Параметры `config check`, уже разобранные приложением (D13).
 ///
@@ -71,11 +74,28 @@ final class ConfigCommands {
   /// [projectFiles] и [projectFilesTimeout] — только для тестов: подмена
   /// источника файлов проекта (зависший порт) и короткий предел фазы. В
   /// приложениях — `ConfigCommands()`: загрузчик по умолчанию, предел 5 с.
+  ///
+  /// [platform] подменяет `Platform.operatingSystem` (подсказка секретов на
+  /// Windows, D7); [openStore] — только для тестов: фейковое хранилище секретов
+  /// вместо `openSecretStore` (D9).
   ConfigCommands({
     @visibleForTesting ProjectFilesSource? projectFiles,
     @visibleForTesting Duration projectFilesTimeout = _defaultTimeout,
+    @visibleForTesting String? platform,
+    @visibleForTesting SecretStoreOpener? openStore,
   }) : _projectFiles = projectFiles,
-       _projectFilesTimeout = projectFilesTimeout;
+       _projectFilesTimeout = projectFilesTimeout,
+       _platform = platform ?? Platform.operatingSystem,
+       _openStore =
+           openStore ??
+           (({required choice, required environment, required home}) =>
+               openSecretStore(
+                 choice: choice,
+                 environment: environment,
+                 home: home,
+                 logger: const SilentLogger(),
+                 platform: platform,
+               ));
 
   /// Как `_projectFilesTimeout` рантайма (D14 change `add-agent-project-files`): `check` показывает то, что
   /// увидит сессия.
@@ -83,6 +103,8 @@ final class ConfigCommands {
 
   final ProjectFilesSource? _projectFiles;
   final Duration _projectFilesTimeout;
+  final String _platform;
+  final SecretStoreOpener _openStore;
 
   /// Печатает слои, проблемы и предупреждения, итог — последней строкой.
   ///
@@ -98,12 +120,16 @@ final class ConfigCommands {
       );
     }
     final ConfigLoadResult loaded;
+    final List<ConfigTree> layers;
     try {
       // Флагов у `check` нет: проверяется то, что увидит `serve` без флагов.
-      loaded = ConfigLoader().load(
+      final loadedWithLayers = ConfigLoader().loadWithLayers(
         cwd: options.cwd,
         environment: options.environment,
+        platform: _platform,
       );
+      loaded = loadedWithLayers.result;
+      layers = loadedWithLayers.layers;
     } on ConfigUsageException catch (error) {
       return ConfigCommandResult(
         exitCode: configUsageExit,
@@ -117,6 +143,11 @@ final class ConfigCommands {
     final fileLines = issues.isEmpty && config != null
         ? await _projectFileLines(options, config)
         : const <String>[];
+    // Состояние секретов — только у валидного конфига (D9): у невалидного
+    // ссылки не проверены, и хранилище не нужно.
+    final secretLines = issues.isEmpty && config != null
+        ? await _secretLines(options, loaded, config, layers)
+        : const <String>[];
     return ConfigCommandResult(
       exitCode: issues.isEmpty ? configValidExit : configInvalidExit,
       stdout: [
@@ -124,6 +155,7 @@ final class ConfigCommands {
         for (final issue in issues) '$issue',
         for (final warning in loaded.warnings) 'warning: $warning',
         ...fileLines,
+        ...secretLines,
         issues.isEmpty
             ? 'Config: valid'
             : 'Config: invalid (issues: ${issues.length})',
@@ -199,7 +231,7 @@ final class ConfigCommands {
       }
       final models = StaticModelCatalog(
         config.providers,
-        logger: const _SilentLogger(),
+        logger: const SilentLogger(),
       );
       final diagnostics = [
         ...files.diagnostics,
@@ -226,6 +258,196 @@ final class ConfigCommands {
     }
   }
 
+  /// Строки состояния секретов (agent-configuration «config check показывает
+  /// состояние секретов»; design.md change `add-agent-secret-store`, D9).
+  ///
+  /// Почему здесь, а не в ядре: ядро не знает хранилища, а подсказки
+  /// (`codelab secret set`, `secrets.backend: file`) — тексты CLI. Ссылки
+  /// собираются в порядке конфига: ключ провайдера, затем шаблоны его
+  /// заголовков, затем `env`/`headers` MCP-серверов.
+  ///
+  /// Для чего: пользователь видит ненайденный секрет до первого хода, но код
+  /// выхода не меняется — секрет нужен только при выборе этой модели (та же
+  /// логика, что `config.provider.key_missing`). Без ссылок хранилище не
+  /// вызывается и вывод прежний; исключение — бэкенд `file`: строка об
+  /// открытом тексте печатается всегда (CFG-11), а права файла проверяются
+  /// через `names()` (значения не читаются, файл не создаётся). Найденный
+  /// секрет строки не даёт, значение читается в память и отбрасывается;
+  /// резолвер без режима отладки, логгер тихий.
+  Future<List<String>> _secretLines(
+    CheckOptions options,
+    ConfigLoadResult loaded,
+    CoreConfig config,
+    List<ConfigTree> layers,
+  ) async {
+    final references = _secretReferences(config, layers, loaded);
+    final choice = loaded.host?.secretsBackend;
+    if (references.isEmpty && choice != 'file') {
+      return const [];
+    }
+    final String home;
+    try {
+      home = codelabHomeOf(options.environment);
+    } on ConfigUsageException {
+      return const [];
+    }
+    final DescribedSecretStore store;
+    try {
+      store = _openStore(
+        choice: choice,
+        environment: options.environment,
+        home: home,
+      );
+    } on SecretStoreUnavailableException catch (error) {
+      return [
+        'warning: secrets: ${error.backend} is unavailable '
+            '(${error.reason})',
+      ];
+    }
+    final backend = store.backend;
+    final lines = <String>[];
+    if (references.isNotEmpty) {
+      lines.add(
+        backend.unavailableReason == null
+            ? 'note: secrets backend: ${backend.id}'
+            : 'note: secrets backend: ${backend.id} '
+                  '(${backend.unavailableReason})',
+      );
+    }
+    var reasonShown = false;
+    if (backend.id == 'file') {
+      lines.add(
+        'warning: secrets: file backend stores secrets unencrypted in '
+        '$home/secrets.yaml',
+      );
+      try {
+        // Только проверка прав и формата файла: отсутствующий файл не
+        // создаётся, значения не читаются.
+        await store.names();
+      } on SecretStoreUnavailableException catch (error) {
+        // Права (`<path> has permissions 0644; run: chmod 600 <path>`) — своя
+        // строка с готовой командой исправления (D9). Остальные отказы
+        // (ссылка, каталог, размер) — `file is unavailable (<причина>)`,
+        // как у недоступного бэкенда; вторая строка по тому же отказу не
+        // печатается.
+        lines.add(
+          error.reason.contains(' has permissions ')
+              ? 'warning: secrets: ${error.reason}'
+              : 'warning: secrets: file is unavailable (${error.reason})',
+        );
+        reasonShown = true;
+      } on Object catch (error) {
+        lines.add(
+          'warning: secrets: ${backend.id} is unavailable '
+          '(secret store failed: ${error.runtimeType})',
+        );
+        reasonShown = true;
+      }
+    }
+    final resolver = SecretResolver(
+      store: store,
+      environment: options.environment,
+      logger: const SilentLogger(),
+    );
+    for (final reference in references) {
+      switch (await resolver.secret(reference.name, purpose: reference.key)) {
+        case SecretFound():
+          break;
+        case SecretMissing():
+          lines.add(
+            'warning: ${reference.location}: ${reference.key}: '
+            '${_missingText(reference.name, backend.id)}',
+          );
+        case SecretUnavailable(:final backend, :final reason):
+          if (!reasonShown) {
+            reasonShown = true;
+            lines.add('warning: secrets: $backend is unavailable ($reason)');
+          }
+      }
+    }
+    return lines;
+  }
+
+  /// Текст «секрет не задан» с подсказкой по бэкенду (D9): у `env` — переменная
+  /// или `secrets.backend: file` (на Windows только переменная, D7), у
+  /// остальных — `codelab secret set`.
+  String _missingText(String name, String backendId) {
+    if (backendId != 'env') {
+      return 'secret $name is not set; run: codelab secret set $name';
+    }
+    final variable = SecretNames.envOverride(name);
+    return _platform == 'windows'
+        ? 'secret $name is not set; set $variable'
+        : "secret $name is not set; set $variable or add "
+              "'secrets.backend: file' and run: codelab secret set $name";
+  }
+
+  /// Ссылки на секреты конфига без повторов имён: первое упоминание даёт
+  /// ключ и место для строки `warning:`.
+  List<_SecretReference> _secretReferences(
+    CoreConfig config,
+    List<ConfigTree> layers,
+    ConfigLoadResult loaded,
+  ) {
+    final out = <_SecretReference>[];
+    final seen = <String>{};
+    void add(String name, KeyPath key) {
+      if (seen.add(name)) {
+        out.add(
+          _SecretReference(
+            name: name,
+            key: key.value,
+            location: _locationOf(key, layers, loaded),
+          ),
+        );
+      }
+    }
+
+    for (final provider in config.providers) {
+      final at = KeyPath('providers').child(provider.config.name);
+      if (provider.key case SecretKeyRef(:final name)) {
+        add(name, at.child('api_key_secret'));
+      }
+      for (final MapEntry(key: header, value: template)
+          in provider.headerTemplates.entries) {
+        for (final name in template.names) {
+          add(name, at.child('headers').child(header));
+        }
+      }
+    }
+    for (final server in config.mcpServers) {
+      final at = KeyPath('mcp.servers').at(server.name);
+      for (final MapEntry(key: field, value: template)
+          in server.secretValues.entries) {
+        // Ключ шаблона — `env.<KEY>` или `headers.<Name>`.
+        final dot = field.indexOf('.');
+        final path = at
+            .child(field.substring(0, dot))
+            .child(field.substring(dot + 1));
+        for (final name in template.names) {
+          add(name, path);
+        }
+      }
+    }
+    return out;
+  }
+
+  /// `файл:строка:столбец` слоя, который последним задал ключ; слой без
+  /// позиций (окружение, флаги) и неизвестное место дают имя источника.
+  String _locationOf(
+    KeyPath key,
+    List<ConfigTree> layers,
+    ConfigLoadResult loaded,
+  ) {
+    for (final layer in layers.reversed) {
+      final position = layer.positions[key.value];
+      if (position != null) {
+        return '${layer.source}:${position.line}:${position.column}';
+      }
+    }
+    return loaded.sources.isEmpty ? 'config' : loaded.sources.last;
+  }
+
   /// `путь[:строка[:столбец]]` диагностики.
   String _where(ExtensionDiagnostic item) {
     final line = item.line;
@@ -235,26 +457,15 @@ final class ConfigCommands {
   }
 }
 
-/// Тихий логгер для каталога моделей внутри [ConfigCommands].
-///
-/// Почему: `StaticModelCatalog` требует `Logger` и пишет в него события о
-/// моделях, а `check` печатает результат только строками своего вывода
-/// (stdout/stderr — контракт D13), поэтому события лога были бы шумом.
-///
-/// Как использовать: передавать `const _SilentLogger()` только в каталог
-/// `check`; в хостах (`serve`) живёт настоящий логгер.
-final class _SilentLogger implements Logger {
-  const _SilentLogger();
+/// Ссылка на секрет конфига: имя, путь ключа и место ключа в файле.
+final class _SecretReference {
+  const _SecretReference({
+    required this.name,
+    required this.key,
+    required this.location,
+  });
 
-  @override
-  bool isEnabled(LogLevel level) => false;
-
-  @override
-  void log(
-    LogLevel level,
-    String event, {
-    Map<String, Object?> fields = const {},
-    Object? error,
-    StackTrace? stack,
-  }) {}
+  final String name;
+  final String key;
+  final String location;
 }

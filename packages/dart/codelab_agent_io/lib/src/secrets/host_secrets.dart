@@ -21,7 +21,9 @@ import 'secret_process_runner.dart';
 /// поэтому хост с ядром в отдельном isolate (`IsolateAcpLink`) вызывает её
 /// внутри isolate из полей `codelabHome`, `secretsBackend`, `debugSecrets`.
 /// Резолвер, его кэш, [runner] и значения секретов через границу isolate не
-/// передаются. [platform] и [runner] — швы для тестов.
+/// передаются. [platform] и [runner] — швы для тестов. [selectionReason] — текст
+/// `reason` события `secrets.backend.selected`, когда бэкенд выбран не
+/// настройкой (`forced by --llm-script`, D11).
 SecretResolver openHostSecrets({
   required String codelabHome,
   required Map<String, String> environment,
@@ -30,6 +32,7 @@ SecretResolver openHostSecrets({
   required Logger logger,
   String? platform,
   SecretProcessRunner? runner,
+  String? selectionReason,
 }) => SecretResolver(
   store: openSecretStore(
     choice: backend,
@@ -38,6 +41,7 @@ SecretResolver openHostSecrets({
     logger: logger,
     runner: runner,
     platform: platform,
+    selectionReason: selectionReason,
   ),
   environment: environment,
   logger: logger,
