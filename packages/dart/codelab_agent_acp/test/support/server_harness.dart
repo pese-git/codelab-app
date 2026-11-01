@@ -49,6 +49,10 @@ final class ServerHarness {
   /// [projectFiles] — порт файлов проекта для `AgentCoreServices` (design.md
   /// change `add-agent-project-files`, D1); без него сессии без файлов.
   ///
+  /// [localEnv] — `AcpServerConfig.localEnv`: env сессии от хоста вместо
+  /// `fs/*` и `terminal/*` клиента (design.md change
+  /// `add-embedded-agent-mode`, D4).
+  ///
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
   static Future<ServerHarness> start({
@@ -56,6 +60,7 @@ final class ServerHarness {
     Map<HostCapability, CapabilityState> narrow = const {},
     List<Map<String, Object?>> steps = const [],
     ExecutionEnv Function(String cwd)? localListing,
+    ExecutionEnv Function(String cwd)? localEnv,
     JournalStore? sessions,
     TurnBudget budget = const TurnBudget(),
     bool slow = false,
@@ -75,7 +80,7 @@ final class ServerHarness {
     final toolsSeen = <List<String>>[];
     final core = buildAgentCore(
       profile: HostProfile.of(profile).narrowed({
-        if (localListing == null)
+        if (localListing == null && localEnv == null)
           HostCapability.fileListing: const CapabilityOff(
             'клиент не на этой машине',
           ),
@@ -103,6 +108,7 @@ final class ServerHarness {
       config: AcpServerConfig(
         agentInfo: testAgentInfo,
         localListing: localListing,
+        localEnv: localEnv,
         detachGrace: detachGrace,
       ),
       logger: logger,

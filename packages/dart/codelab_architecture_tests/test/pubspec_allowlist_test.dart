@@ -105,6 +105,24 @@ const cliAllowlist = {
 /// `package:codelab_agent_*` сами.
 const setupAllowlist = {'codelab_agent_core', 'codelab_agent_io', 'meta'};
 
+/// Допустимые зависимости моста встроенного агента `codelab_embedded`
+/// (workspace-architecture «Автоматический сторож границ пакетов»; design.md
+/// change `add-embedded-agent-mode`, D3): сторона агента целиком (ядро, IO,
+/// ACP-сервер, MCP) и ACP-пакеты для пары `InProcessAcpLink`; `codelab_acp_protocol`
+/// нужен для `Implementation` в `agentInfo`. Клиентских пакетов и Flutter нет:
+/// клиенты зависят от моста, а не он от них.
+const embeddedAllowlist = {
+  'codelab_agent_core',
+  'codelab_agent_io',
+  'codelab_agent_acp',
+  'codelab_agent_mcp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'http',
+  'meta',
+  'async',
+};
+
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
 
@@ -278,4 +296,36 @@ dev_dependencies:
 
     expect(dependencyKeys(pubspec).difference(coreAllowlist), {'path'});
   });
+
+  test('codelab_embedded depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_embedded/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(embeddedAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test(
+    'reports a client package in the dependencies of the embedded agent',
+    () {
+      // Клиенты зависят от моста, обратная зависимость создала бы цикл
+      // (design.md change `add-embedded-agent-mode`, D3).
+      const pubspec = '''
+name: codelab_embedded
+dependencies: # allowlist
+  codelab_agent_core:
+    path: ../codelab_agent_core
+  codelab_agent_acp:
+    path: ../codelab_agent_acp
+  codelab_client_core:
+    path: ../codelab_client_core
+''';
+
+      expect(dependencyKeys(pubspec).difference(embeddedAllowlist), {
+        'codelab_client_core',
+      });
+    },
+  );
 }

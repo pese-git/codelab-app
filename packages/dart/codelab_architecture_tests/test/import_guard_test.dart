@@ -469,4 +469,136 @@ void main() {
       endsWith('lib/src/repl/repl.dart:1 -> package:codelab_setup/io.dart'),
     );
   });
+
+  // Встроенный агент `codelab_embedded` (design.md change
+  // `add-embedded-agent-mode`, D3): основной барель чист и не знает IO-пакет
+  // агента, `io.dart` и `testing.dart` вне запретов `webUnsafe`, но без ссылок
+  // снаружи (sealExclude). Пакета на момент итерации 1.7 ещё нет: правила
+  // проверяются на временном каталоге, а общий цикл выше краснеет по причине
+  // «пакет не существует» до задачи 1.9.
+  List<String> scanEmbedded(Directory tmp) {
+    final embeddedRules = rules.where(
+      (r) => r.dir == 'packages/dart/codelab_embedded',
+    );
+    expect(
+      embeddedRules,
+      hasLength(2),
+      reason: 'нужны два правила packages/dart/codelab_embedded',
+    );
+    return [
+      for (final rule in embeddedRules)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            '.',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+  }
+
+  void writeLib(Directory tmp, String file, String content) {
+    File(p.join(tmp.path, 'lib', file))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(content);
+  }
+
+  test('reports the IO package of the agent in the main barrel of the '
+      'embedded agent only', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_agent_io/codelab_agent_io.dart';\n";
+    for (final file in [
+      'codelab_embedded.dart',
+      'src/agent.dart',
+      'io.dart',
+      'src/io/opener.dart',
+    ]) {
+      writeLib(tmp, file, import);
+    }
+
+    final violations = scanEmbedded(tmp);
+
+    expect(violations, hasLength(2));
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/codelab_embedded.dart:1 -> '
+          'package:codelab_agent_io/codelab_agent_io.dart',
+        ),
+        endsWith(
+          'lib/src/agent.dart:1 -> '
+          'package:codelab_agent_io/codelab_agent_io.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('reports dart:io and references to io.dart and testing.dart in the '
+      'main barrel of the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_io_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeLib(
+      tmp,
+      'codelab_embedded.dart',
+      "import 'dart:io';\nexport 'io.dart';\nexport 'testing.dart';\n",
+    );
+    writeLib(tmp, 'io.dart', "import 'dart:io';\n");
+    writeLib(tmp, 'testing.dart', "import 'dart:io';\n");
+
+    final violations = scanEmbedded(tmp);
+
+    expect(violations, hasLength(3));
+    expect(
+      violations.first,
+      endsWith('lib/codelab_embedded.dart:1 -> dart:io'),
+    );
+    expect(
+      violations,
+      containsAll([
+        endsWith('lib/codelab_embedded.dart:2 -> io.dart (excluded file)'),
+        endsWith('lib/codelab_embedded.dart:3 -> testing.dart (excluded file)'),
+      ]),
+    );
+  });
+
+  test('reports Flutter, UI and client packages in io.dart and testing.dart '
+      'of the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_ui_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const imports =
+        "import 'package:flutter/foundation.dart';\n"
+        "import 'package:fluent_ui/fluent_ui.dart';\n"
+        "import 'package:codelab_ui/codelab_ui.dart';\n"
+        "import 'package:codelab_client_core/codelab_client_core.dart';\n"
+        "import 'package:codelab_agent_io/codelab_agent_io.dart';\n";
+    writeLib(tmp, 'io.dart', imports);
+    writeLib(tmp, 'testing.dart', imports);
+
+    final violations = scanEmbedded(tmp);
+
+    // Четыре запрета на каждый из двух файлов; IO-пакет агента им разрешён.
+    expect(violations, hasLength(8));
+    expect(violations, isNot(contains(contains('package:codelab_agent_io/'))));
+  });
+
+  test('allows the ACP packages and the web-safe transports in the main '
+      'barrel of the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_acp_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeLib(
+      tmp,
+      'codelab_embedded.dart',
+      "import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';\n"
+          "import 'package:codelab_acp_transports/codelab_acp_transports.dart';\n"
+          "import 'package:codelab_agent_acp/codelab_agent_acp.dart';\n"
+          "import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';\n"
+          "import 'package:codelab_agent_core/codelab_agent_core.dart';\n",
+    );
+
+    expect(scanEmbedded(tmp), isEmpty);
+  });
 }

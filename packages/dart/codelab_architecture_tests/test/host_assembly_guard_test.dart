@@ -22,6 +22,37 @@ void main() {
     expect(violations, isEmpty, reason: violations.join('\n'));
   });
 
+  test('codelab_embedded builds the core only through buildAgentCore', () {
+    // Сканер молча пропускает отсутствующий каталог, поэтому наличие пакета
+    // проверяется явно: до задачи 1.9 change `add-embedded-agent-mode` тест
+    // красный по причине «пакета нет», а не зелёный впустую.
+    final lib = p.join(root, 'packages', 'dart', 'codelab_embedded', 'lib');
+    expect(Directory(lib).existsSync(), isTrue, reason: '$lib не существует');
+
+    final violations = scanHostAssembly(lib);
+
+    expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test('reports a manual core assembly in the embedded agent with file and '
+      'line', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_host_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'src', 'agent.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        'final registry = ToolRegistry();\n'
+        'final core = buildAgentCore(profile: profile);\n',
+      );
+
+    final violations = scanHostAssembly(p.join(tmp.path, 'lib'));
+
+    expect(
+      violations.single,
+      endsWith('lib/src/agent.dart:1 -> ToolRegistry('),
+    );
+  });
+
   test('reports a manual core assembly with file and line', () {
     final tmp = Directory.systemTemp.createTempSync('guard_host_');
     addTearDown(() => tmp.deleteSync(recursive: true));
