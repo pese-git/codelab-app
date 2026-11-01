@@ -10,9 +10,13 @@
 **Задачи.**
 
 1. **7.1. `InProcessAcpLink`** (пара `InProcessAcpTransport`) в `packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart`
-   (код ниже), экспорт из основного (платформенно-нейтрального) бареля. Тест
-   `packages/dart/codelab_acp_transports/test/in_process_acp_transport_test.dart`.
-2. **7.2.** Заменить тестовую копию транспорта в contract test этапа 4 на `InProcessAcpLink`.
+   (эскиз и правила — agent-core-architecture §13.11), экспорт из основного (платформенно-нейтрального)
+   бареля. Тест `packages/dart/codelab_acp_transports/test/in_process_acp_transport_test.dart`.
+   OpenSpec change `add-in-process-acp-transport`.
+2. **7.2.** Заменить тестовую копию транспорта (`codelab_acp_testing/lib/src/in_process_acp_link.dart`)
+   на `InProcessAcpLink` у всех потребителей — contract test этапа 4, агентский драйвер фикстур, тесты
+   `codelab_agent_acp` и `apps/codelab_agent` — и удалить копию в том же PR (change
+   `add-in-process-acp-transport`, D5).
 3. **7.3. Пакет `packages/dart/codelab_embedded`** (API ниже): `lib/codelab_embedded.dart`
    (нейтральная часть, `createEmbeddedAgent`), `lib/io.dart` (сервисы для десктопа).
 4. **7.4. Профили хостов** `embedded-app-desktop` и `embedded-cli` в `buildAgentCore`
@@ -56,134 +60,27 @@
    разведка (исключение (д) правила TDD §9.0 п.3): замер без тестов, ограничен двумя днями.
    Решение об isolate принимается в этой задаче по критериям ниже («Решение 7.8: ядро в
    isolate») и фиксируется в `design.md` change с числами замера.
+   Замер идёт с копированием сообщений: выключателя копии у `InProcessAcpLink` нет (change
+   `add-in-process-acp-transport`, D9). Если нужно сравнение без копии, параметр вводит change
+   `add-embedded-agent-mode` с числами замера.
 9. **7.9. E2E CLI во встроенном режиме:** те же `cli/*` с `--agent embedded` и scripted-провайдером;
    `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded` — в CI-джобе
    `conformance`.
 
-**Артефакт: `InProcessAcpLink`** — пара `InProcessAcpTransport`, реализаций существующего интерфейса `AcpTransport`.
+**Артефакт: `InProcessAcpLink`** — пара `InProcessAcpTransport`, реализаций существующего интерфейса
+`AcpTransport`. Эскиз кода и правила доставки, копирования и закрытия — одно место:
+agent-core-architecture §13.11 ([`13-acp-adapter.md`](../agent-core/13-acp-adapter.md)); решения и
+альтернативы — design.md change `add-in-process-acp-transport` (D2–D4). Отдельной копии кода здесь нет,
+чтобы эскизы не расходились.
 
-```dart
-// packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart
-import 'dart:async';
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
-import 'acp_transport.dart';
-
-/// Пара соединённых транспортов: отправленное в один приходит в inbound другого.
-/// `client` отдаётся AcpClientApplication, `agent` — AcpAgentServer.serve.
-final class InProcessAcpLink {
-  factory InProcessAcpLink({bool copyMessages = true}) {
-    final client = InProcessAcpTransport._('client', copyMessages);
-    final agent = InProcessAcpTransport._('agent', copyMessages);
-    client._peer = agent;
-    agent._peer = client;
-    return InProcessAcpLink._(client, agent);
-  }
-  InProcessAcpLink._(this.client, this.agent);
-  final InProcessAcpTransport client;
-  final InProcessAcpTransport agent;
-}
-
-final class InProcessAcpTransport implements AcpTransport {
-  InProcessAcpTransport._(this._side, this._copy);
-  final String _side;
-  final bool _copy;
-  late final InProcessAcpTransport _peer;
-
-  // Асинхронные контроллеры: доставка в следующей микрозадаче, порядок сохраняется,
-  // отправитель не вызывает обработчики получателя реентерабельно.
-  final _inbound = StreamController<JsonRpcMessage>.broadcast();
-  final _events = StreamController<AcpTransportEvent>.broadcast();
-  final _beforeStart = <JsonRpcMessage>[];  // агент может ответить раньше, чем клиент вызвал start()
-  var _state = AcpTransportState.idle;
-
-  @override Stream<JsonRpcMessage> get inbound => _inbound.stream;
-  @override Stream<AcpTransportEvent> get events => _events.stream;
-  @override AcpTransportState get state => _state;
-  bool get _isDown => const {AcpTransportState.closing, AcpTransportState.closed, AcpTransportState.failed}.contains(_state);
-
-  @override
-  Future<void> start() async {
-    if (_state == AcpTransportState.connected) return;
-    if (_isDown) throw _error(AcpTransportErrorCode.closed, 'is closed');
-    _setState(AcpTransportState.connecting);
-    _setState(AcpTransportState.connected);
-    _beforeStart..forEach(_inbound.add)..clear();
-  }
-
-  @override
-  Future<void> send(JsonRpcMessage message) async {
-    if (_state != AcpTransportState.connected) throw _error(AcpTransportErrorCode.sendFailed, 'is not connected');
-    final JsonRpcMessage copy;
-    try {
-      copy = _copy ? _copyMessage(message) : message;
-    } on ArgumentError catch (e) {             // как проводной транспорт с не-JSON значением
-      throw _error(AcpTransportErrorCode.sendFailed, 'got a non-JSON value: ${e.message}');
-    }
-    _peer._deliver(copy);
-  }
-
-  void _deliver(JsonRpcMessage message) {
-    if (_state == AcpTransportState.connected) {
-      _inbound.add(message);
-    } else if (!_isDown) {
-      _beforeStart.add(message);
-    } else {
-      _events.add(const AcpTransportEvent.diagnostic(message: 'Dropped in-process message after close.',
-          severity: AcpTransportDiagnosticSeverity.warning, source: 'in_process'));
-    }
-  }
-
-  @override
-  Future<void> close({Duration? timeout}) async {
-    if (_state == AcpTransportState.closed || _state == AcpTransportState.closing) return;
-    _setState(AcpTransportState.closing);
-    _setState(AcpTransportState.closed);
-    await _events.close();
-    await _inbound.close();
-    _peer._onPeerClosed();
-  }
-
-  void _onPeerClosed() {
-    if (_isDown) return;
-    _events.add(AcpTransportEvent.failure(_error(AcpTransportErrorCode.disconnected, 'peer closed the connection')));
-    _setState(AcpTransportState.failed);
-  }
-
-  void _setState(AcpTransportState next) {
-    _state = next;
-    if (!_events.isClosed) _events.add(AcpTransportEvent.stateChanged(next));
-  }
-
-  AcpTransportException _error(AcpTransportErrorCode code, String text) =>
-      AcpTransportException(code: code, message: 'In-process $_side transport $text.');
-}
-
-/// Глубокая копия JSON-дерева без строкового кодирования: стороны не делят изменяемые
-/// Map/List, а не-JSON значения (DateTime, объекты домена) ловятся сразу, как на проводе.
-JsonRpcMessage _copyMessage(JsonRpcMessage m) => switch (m) {
-  JsonRpcRequest(:final id, :final method, :final params) =>
-    JsonRpcMessage.request(id: id, method: method, params: _copyJson(params)),
-  JsonRpcNotification(:final method, :final params) =>
-    JsonRpcMessage.notification(method: method, params: _copyJson(params)),
-  JsonRpcResponse(:final id, :final result, :final error) =>
-    JsonRpcMessage.response(id: id, result: _copyJson(result), error: error),
-};
-
-Object? _copyJson(Object? v) => switch (v) {
-  null || bool() || num() || String() => v,
-  List() => List<Object?>.unmodifiable(v.map(_copyJson)),
-  Map() => Map<String, Object?>.unmodifiable({
-    for (final MapEntry(:key, :value) in v.entries)
-      (key is String ? key : throw ArgumentError.value(key, 'key', 'must be a String')): _copyJson(value),
-  }),
-  _ => throw ArgumentError.value(v, 'value', 'not JSON-compatible'),
-};
-```
-
-Тесты транспорта (`in_process_acp_transport_test.dart`): порядок 1000 сообщений сохраняется;
-сообщение до `start()` получателя буферизуется; `close()` одной стороны переводит другую в
-`failed` с `disconnected`; изменение `Map` после `send` не видно получателю; `DateTime` в
-`params` даёт `sendFailed`; `send` после `close` — `sendFailed`.
+Тесты транспорта (`in_process_acp_transport_test.dart`):
+* порядок 1000 сообщений сохраняется, доставка не реентерабельна;
+* сообщение до `start()` получателя или до первого подписчика его `inbound` буферизуется;
+* `close()` одной стороны переводит другую в `failed` с `disconnected`; сообщения, отправленные до
+  `close()`, доставляются раньше конца `inbound`; повторный `close()` идемпотентен;
+* изменение `Map` после `send` не видно получателю, в том числе в `error.data`;
+* `DateTime`, ключ не строкой, `NaN` и `±Infinity` в `params` дают `sendFailed` без значения в тексте;
+* `send` до `start()` и после `close` — `sendFailed`.
 
 **Артефакт: API `codelab_embedded`.**
 
