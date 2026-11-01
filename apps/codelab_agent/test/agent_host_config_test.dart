@@ -6,6 +6,7 @@ import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_agent/codelab_agent.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';
+import 'package:codelab_agent_io/codelab_agent_io.dart' show logConfigWarnings;
 import 'package:codelab_agent_mcp/testing.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -512,7 +513,7 @@ providers:
       final logger = RecordingLogger();
 
       expect(loaded.config, isNull);
-      logStartupWarnings(logger, loaded);
+      logConfigWarnings(logger, loaded);
 
       expect(
         logger.eventsOf('config.env.unknown').single.fields['message'],

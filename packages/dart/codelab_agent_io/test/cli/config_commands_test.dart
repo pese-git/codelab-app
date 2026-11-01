@@ -173,7 +173,8 @@ agent:
       expect(Directory(store).existsSync(), isFalse);
     },
     skip: const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')
-        ? 'сборка с CODELAB_ALLOW_TEST_SECRETS: задача 7.7'
+        ? 'сборка с CODELAB_ALLOW_TEST_SECRETS: покрыто процессным тестом '
+              'codelab_embedded/test/io/test_secret_store_process_test.dart'
         : false,
   );
 

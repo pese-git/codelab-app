@@ -79,6 +79,36 @@ void main() {
     expect(logger.eventsOf('secrets.backend.plaintext'), hasLength(1));
   });
 
+  // Тестовое хранилище этапа 7 (`CODELAB_TEST_SECRET_STORE`, задача 2.3 change
+  // `add-embedded-agent-mode`, D5): путь задаёт открыватель хоста, а выбор
+  // по `secrets.backend` перекрывается — E2E не должны трогать `$CODELAB_HOME`.
+  test('testStorePath selects the file backend at that path whatever the '
+      'configured backend is', () async {
+    final logger = RecordingLogger();
+    final path = '${root.path}/store/secrets.yaml';
+    await SecretAdmin(
+      store: FileSecretStore(path: path),
+      environment: const {},
+    ).store('codelab/p', value);
+
+    final resolver = openHostSecrets(
+      codelabHome: home,
+      environment: const {},
+      backend: 'env',
+      debug: false,
+      logger: logger,
+      testStorePath: path,
+    );
+    final lookup = await resolver.secret('codelab/p', purpose: 'test');
+
+    expect(lookup, isA<SecretFound>());
+    expect((lookup as SecretFound).source, 'file');
+    final selected = logger.eventsOf('secrets.backend.selected').single;
+    expect(selected.fields['backend'], 'file');
+    expect(selected.fields['path'], path);
+    expect(File('$home/secrets.yaml').existsSync(), isFalse);
+  });
+
   test('a null backend is auto: env, never the file', () async {
     final logger = RecordingLogger();
     await SecretAdmin(
