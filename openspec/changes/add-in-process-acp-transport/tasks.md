@@ -92,10 +92,10 @@
 
 ## 3. Документы и Definition of Done (итерация 2)
 
-- [ ] 3.1 `[docs]` `agent-core/14-golden-fixtures.md` §14.9, шаг 4 алгоритма: убрать «на этапе 4 — тестовая копия из contract test…», указать `InProcessAcpLink` из `codelab_acp_transports`. Исторические абзацы этапа 4 (`09-09-stage-4-acp-adapter.md`, 4.7–4.8) не меняются.
-- [ ] 3.2 `[docs]` `dart-agent-and-clients/09-12-stage-7-embedded.md`: пометить 7.1–7.2 выполненными change `add-in-process-acp-transport`; DoD этапа — первый пункт (`in_process_acp_transport_test.dart`) выполнен.
-- [ ] 3.3 `[docs]` Проверить относительные ссылки изменённых документов (`docs/architecture/**`) — все цели существуют.
-- [ ] 3.4 Definition of Done:
+- [x] 3.1 `[docs]` `agent-core/14-golden-fixtures.md` §14.9, шаг 4 алгоритма: убрать «на этапе 4 — тестовая копия из contract test…», указать `InProcessAcpLink` из `codelab_acp_transports`. Исторические абзацы этапа 4 (`09-09-stage-4-acp-adapter.md`, 4.7–4.8) не меняются.
+- [x] 3.2 `[docs]` `dart-agent-and-clients/09-12-stage-7-embedded.md`: пометить 7.1–7.2 выполненными change `add-in-process-acp-transport`; DoD этапа — первый пункт (`in_process_acp_transport_test.dart`) выполнен.
+- [x] 3.3 `[docs]` Проверить относительные ссылки изменённых документов (`docs/architecture/**`) — все цели существуют.
+- [x] 3.4 Definition of Done (проверено 2026-11-01 на `develop` @ `eb713bc` после PR #209: тесты пары 31, `codelab_acp_testing` 268, `codelab_agent_acp` 198 (~3), `apps/codelab_agent` 193, `conformance:agent` 55, guard 68 — зелёные; в итерации 2 Dart-файлы не менялись; полный CI PR #209 зелёный):
   - `fvm dart test packages/dart/codelab_acp_transports/test/in_process_acp_transport_test.dart` и `web_safe_barrel_test.dart` зелёные;
   - `fvm dart test` для `codelab_acp_testing`, `codelab_agent_acp` (с `conformance:agent`) и `apps/codelab_agent` зелёный;
   - `fvm dart run melos run guard` зелёный;

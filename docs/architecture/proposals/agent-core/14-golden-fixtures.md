@@ -376,8 +376,8 @@ runAgentFixture(fx, startAgent):
 2. cwd := временный каталог; записать в него fx.setup.files — только для локального листинга
    ls/search (fileListing transport local, §10.4); содержимое файлов агент получает кадрами fs/*
 3. stream := ScriptedStreamFunction(fx.llm); clock := FakeClock; ids := SequentialIdGenerator
-4. link := InProcessAcpLink() (копирование сообщений, §13.11; на этапе 4 — тестовая копия из
-   contract test, dart-agent-and-clients §9.9, задача 4.7); client := link.client
+4. link := InProcessAcpLink() (продуктовая пара codelab_acp_transports, копирование сообщений
+   всегда, §13.11; ссылка на код — под блоком); client := link.client
 5. startAgent(link.agent, AgentFixtureSetup(profile: fx.setup.profile ?? "agent-serve", cwd,
           config: defaults + fx.setup.config, streamFunction: stream, clock, ids)):
      core := buildAgentCore(profile: HostProfile.of(profile),
@@ -408,6 +408,11 @@ runAgentFixture(fx, startAgent):
 11. в конце (и при провале) сначала закрыть client: ожидания агента завершаются разрывом,
     а не таймаутами FakeClock; затем остановить агента
 ```
+
+Пара на шаге 4 — продуктовая `InProcessAcpLink` из `codelab_acp_transports`
+([`in_process_acp_transport.dart`](../../../../packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart)),
+та же, что во встроенном режиме (dart-agent-and-clients §9.12, задачи 7.1–7.2; OpenSpec change
+`add-in-process-acp-transport`, D5).
 
 Транспортный драйвер (`runAgentFixtureOver`) выполняет те же шаги 1–2 и 6–11, а шаги 3–5
 заменяет подключением теста: процесс бинаря `codelab-agent serve --stdio | --ws` со
