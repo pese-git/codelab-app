@@ -680,6 +680,75 @@ mcp:
     });
   });
 
+  // agent-secrets «Бэкенд file», сценарий «file на Windows» (design.md change
+  // `add-agent-secret-store`, D7, D14): ядро платформу не знает, проблему
+  // добавляет загрузчик; платформа подменяется параметром `platform`.
+  group('secrets.backend: file on Windows', () {
+    ConfigLoadResult loadWith(String backend, {String? platform}) {
+      write('$home/config.yaml', '$provider\nsecrets:\n  backend: $backend\n');
+      return loader.load(
+        cwd: cwd,
+        environment: {'CODELAB_HOME': home},
+        platform: platform,
+      );
+    }
+
+    test('is a configuration problem naming the key and the file', () {
+      final result = loadWith('file', platform: 'windows');
+
+      expect(result.config, isNull);
+      expect(result.host, isNull);
+      final issue = result.issues.single;
+      expect(issue.kind, ConfigIssueKind.value);
+      expect(issue.key, 'secrets.backend');
+      expect(issue.source, '$home/config.yaml');
+      expect(issue.line, 12);
+      expect(
+        issue.message,
+        'file backend is not supported on Windows; use env with '
+        'CODELAB_SECRET_* variables',
+      );
+      expect(
+        issue.toString(),
+        contains(
+          'secrets.backend: file backend is not supported on Windows; use env '
+          'with CODELAB_SECRET_* variables',
+        ),
+      );
+    });
+
+    test('is accepted on macOS and Linux', () {
+      for (final platform in ['macos', 'linux', null]) {
+        final result = loadWith('file', platform: platform);
+
+        expect(result.issues, isEmpty, reason: '$platform');
+        expect(result.host!.secretsBackend, 'file');
+      }
+    });
+
+    test('auto and env are accepted on Windows', () {
+      for (final backend in ['auto', 'env']) {
+        final result = loadWith(backend, platform: 'windows');
+
+        expect(result.issues, isEmpty, reason: backend);
+        expect(result.host!.secretsBackend, backend);
+      }
+    });
+
+    test('a scripted run is not affected: the script never uses the file', () {
+      write('$home/config.yaml', '$provider\nsecrets:\n  backend: file\n');
+      final result = loader.load(
+        cwd: cwd,
+        environment: {'CODELAB_HOME': home},
+        platform: 'windows',
+        scripted: true,
+        flags: flagsOf(_values()),
+      );
+
+      expect(result.issues, isEmpty);
+    });
+  });
+
   group('project root', () {
     test('is canonical when cwd is a symlink', () {
       write('$home/config.yaml', provider);
