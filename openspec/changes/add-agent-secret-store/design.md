@@ -264,34 +264,58 @@ debug: на каждом вызове — info secrets.lookup {name, purpose, so
 
 ```dart
 final class SecretCommands {
-  SecretCommands({SecretProcessRunner? runner});                          // null → IoSecretProcessRunner
-  Future<SecretCommandResult> set(SecretSetOptions o, SecretInput input); // name, environment
+  SecretCommands({SecretProcessRunner? runner, String? platform});        // null → IoSecretProcessRunner, Platform.operatingSystem
+  Future<SecretCommandResult> set(SecretSetOptions o, SecretInput input);
   Future<SecretCommandResult> delete(SecretDeleteOptions o);
   Future<SecretCommandResult> list(SecretListOptions o);
 }
-final class SecretCommandResult { final int exitCode; final List<String> stdout, stderr; }
+final class SecretSetOptions { final String name; final Map<String, String> environment; final bool hasValueArgument; }
+final class SecretCommandResult { final int exitCode; final List<String> stdout, stderr; final bool showUsage; }
 abstract interface class SecretInput {          // stdin процесса; фейк — в тестах
   bool get hasTerminal;
-  Future<String?> readHidden(String prompt);   // TTY: prompt в stderr, эхо выключено, до Enter; null — EOF/Ctrl+D
+  Future<String?> readHidden(String prompt);   // TTY: prompt в stderr, без эха, до Enter; null — EOF/Ctrl+D на пустом вводе
   Future<String> readAll();                     // без TTY: весь stdin
 }
 ```
 
-Аргументы разбирает каждое приложение своим `package:args`: `codelab-agent secret …` — `apps/codelab_agent/lib/src/cli/secret_cli.dart`, `codelab secret …` — `cli_args.dart` и `run.dart`. Тексты, правила и коды — только в `SecretCommands`. Поэтому stdout, stderr и код двух бинарей совпадают; это проверяет тест.
+- **`hasValueArgument`.** Лишний позиционный аргумент `set` (вероятно, значение) приложение сообщает только флагом: сам аргумент в общий код не попадает, поэтому `SecretCommands` не может его напечатать.
+- **`showUsage`.** Справку `secret` печатает приложение: она называет его бинарь. `SecretCommands` только помечает результат, к которому справка нужна.
+- **`platform`** — шов тестов (подсказки Windows, D7); по умолчанию `Platform.operatingSystem`. Тестам также доступен `@visibleForTesting openStore` — фейковое хранилище без файлов.
+
+Аргументы разбирает каждое приложение своим `package:args`: `codelab-agent secret …` — `apps/codelab_agent/lib/src/cli/secret_cli.dart`, `codelab secret …` — `cli_args.dart` и `run.dart`. Тексты, правила и коды результатов — только в `SecretCommands`, поэтому вывод `SecretCommands` у двух бинарей совпадает; это проверяет тест. Своё у каждого приложения — только справка `secret` и сообщения разбора argv: они называют бинарь (`codelab-agent: …`, `codelab: …`).
+
+**Два класса ошибок с кодом `64`** (решение оркестратора 2026-11-01):
+
+| Класс | Случаи | Вывод |
+|---|---|---|
+| ошибка использования | неверное имя; значение аргументом (`hasValueArgument`); нет подкоманды, неизвестная подкоманда, лишние или недостающие аргументы, неизвестный флаг | сообщение и справка `secret` в stderr (`showUsage` или разбор приложения) |
+| ошибка значения | пустое значение или EOF; перевод строки; недопустимый UTF-8; длиннее 64 КиБ; непарный суррогат; коллизия `envOverride` | только сообщение, без справки: аргументы верны, справка не поможет |
+
+Ошибка разбора argv (`ArgParserException`, `UsageError` верхнего парсера) печатает только `<бинарь>: invalid arguments for secret` и справку — без текста исключения: он цитирует присланное слово, а это может быть значение секрета, переданное аргументом по ошибке. Нет подкоманды или она неизвестна — `<бинарь>: secret needs a subcommand: set, delete or list` и справка; неизвестное слово не печатается по той же причине.
 
 **Бэкенд у подкоманд.** `SecretCommands` читает `secrets.backend` из `$CODELAB_HOME/config.yaml` и из файла `CODELAB_CONFIG` (`codelabHomeOf`, `readYamlTree`) — и только этот ключ. Остальные проблемы конфига игнорируются. Почему не полная загрузка: подсказка ошибки `inlineSecret` велит выполнить `codelab secret set …` при невалидном конфиге (ключ вписан значением). Полная загрузка заблокировала бы ровно ту команду, которая чинит конфиг. Синтаксическая ошибка YAML в этих файлах — код `1` с проблемой в форме `ConfigIssue.toString()`. Флаг `serve --config` подкоманды не видят — это записано в справке.
 
+**Недопустимый `CODELAB_CONFIG`** (относительный путь или расширение не `.yaml`/`.yml` без учёта регистра — те же проверки, что у `ConfigLoader`): stderr `warning: CODELAB_CONFIG ignored: <reason>` (`<reason>` — текст той же проверки загрузчика), файл не читается, бэкенд — только из `$CODELAB_HOME/config.yaml`, код выхода подкоманды от этого не меняется. Почему не код `64`, как у `config check`: подкоманды не загружают конфиг целиком (см. выше), и чужой `CODELAB_CONFIG` в окружении не должен блокировать `list` или `delete`; молча пропускать файл тоже нельзя — пользователь иначе не поймёт, почему бэкенд не тот.
+
 **`set <name>`:**
-1. Имя не проходит `SecretNames` → код `64`, `expected a secret name: …`.
-2. Лишний позиционный аргумент → код `64`, `pass the secret value on stdin, not as an argument`. Сам аргумент не печатается.
-3. Бэкенд не допускает записи (`env`) → код `1`, stdin не читается: `secret store env is read-only. Add 'secrets.backend: file' to <CODELAB_HOME>/config.yaml to store secrets in <CODELAB_HOME>/secrets.yaml (plaintext, 0600), or set <envOverride> in the environment`. На Windows вариант с `file` не предлагается (D7). Данные подсказки даёт `SecretReadOnly {backend, variable, fileBackendOffered}` (D15), текст с настоящим путём `$CODELAB_HOME` строит `SecretCommands` (итерация 3). Шаги 1, 3 и 4 выполняет `SecretAdmin.checkStore(name)` до чтения значения.
-4. Переменная `envOverride(name)` совпадает с переменной другого имени из `names()` → код `64`: `secret name <name> collides with <other> (both map to <VAR>)`.
+1. Имя не проходит `SecretNames` → код `64`, `expected a secret name: …`, справка.
+2. `hasValueArgument` → код `64`, `pass the secret value on stdin, not as an argument`, справка. Сам аргумент не печатается.
+3. Бэкенд не допускает записи (`env`) → код `1`, stdin не читается: `secret store env is read-only. Add 'secrets.backend: file' to <CODELAB_HOME>/config.yaml to store secrets in <CODELAB_HOME>/secrets.yaml (plaintext, 0600), or set <envOverride> in the environment`. На Windows вариант с `file` не предлагается (D7). Данные подсказки даёт `SecretReadOnly {backend, variable, fileBackendOffered}` (D15), текст с настоящим путём `$CODELAB_HOME` строит `SecretCommands`. Шаги 1, 3 и 4 выполняет `SecretAdmin.checkStore(name)` до чтения значения.
+4. Переменная `envOverride(name)` совпадает с переменной другого имени из `names()` → код `64` без справки: `secret name <name> collides with <other> (both map to <VAR>)`.
 5. Значение:
-   - TTY — `readHidden("Secret value for <name>: ")`; эхо восстанавливается в `finally` и по `SIGINT`;
+   - TTY — `readHidden("Secret value for <name>: ")` (скрытый ввод, ниже);
    - без TTY — `readAll()`, отбрасывается один завершающий `\n` или `\r\n`.
-   
-   Пустое значение или EOF → код `64`, `empty secret value`. Перевод строки внутри значения → код `64`, `secret value must be a single line`; длиннее 64 КиБ или с непарным суррогатом → код `64` с причиной `SecretInvalidValue` (D5).
+
+   Все ошибки значения — код `64` без справки: пустое значение или EOF — `empty secret value`; перевод строки внутри — `secret value must be a single line`; недопустимый UTF-8 — `secret value must be valid UTF-8`; длиннее 64 КиБ или с непарным суррогатом — причина `SecretInvalidValue` (D5). Ничего не записывается.
 6. `write`. Успех — код `0`, stdout `Stored secret <name> in <backend>`; имя уже было в `names()` — перезапись без вопроса и без `--force`, stdout `Updated secret <name> in <backend>` (OQ5, решение 2026-10-31). Ошибка хранилища — код `1`, `cannot store secret <name>: <reason>`. У бэкенда `file` `set` — единственный путь, который создаёт файл `secrets.yaml` (D14); stderr получает строку `warning: secrets are stored unencrypted in <path>`.
+
+**Скрытый ввод с TTY** (`StdinSecretInput.readHidden`, решение оркестратора 2026-11-01):
+- терминал переводится в неканонический режим: `echoMode = false`, `lineMode = false`. Почему не канонический режим с выключенным эхом: драйвер терминала обрезает каноническую строку (`MAX_CANON`, на macOS 1024 байта), и длинный токен молча сохранился бы усечённым;
+- редактирование — вручную: Backspace удаляет последний символ, Ctrl+D на пустом вводе — конец потока (`null` → `empty secret value`); Enter завершает ввод;
+- байты после первого перевода строки (вставка нескольких строк) → код `64` `secret value must be a single line`, ничего не записывается. Остаток ввода, уже поступивший в stdin, вычитывается до восстановления режимов: иначе после выхода оболочка выполнила бы вставленные строки как команды;
+- режимы `echoMode` и `lineMode` восстанавливаются в `finally` и по `SIGINT`; `SIGINT` завершает процесс кодом `130` после восстановления. Чтение асинхронное, поэтому обработчик сигнала срабатывает во время ожидания ввода.
+
+Восстановление терминала по `SIGINT` и поведение настоящего pty автотестом не проверяются (тест не владеет терминалом): это ручная проверка задачи 8.7.
 
 **`delete <name>`:** код `0` и `Deleted secret <name> from <backend>`. Отсутствующее имя — код `0` и `Secret <name> was not set in <backend>`: команда идемпотентна для скриптов. Бэкенд `env` — код `1`, как у `set`.
 
@@ -303,7 +327,7 @@ abstract interface class SecretInput {          // stdin процесса; фе�
 Значения и длины не печатаются. Код `0`; хранилище недоступно — код `1` (в том числе файл `secrets.yaml` с правами шире `0600`: текст причины с командой `chmod 600 <path>`, D14). У бэкенда `file` `list` и `delete` тоже пишут в stderr предупреждение об открытом тексте.
 
 **Общее.**
-- Справка `secret` — в stderr с кодом `64`, если подкоманды нет, она неизвестна или в аргументах ошибка.
+- Справка `secret` — в stderr с кодом `64` при ошибке использования (таблица выше).
 - Подкоманды не запускают агента и не читают stdin, кроме `set`.
 - `codelab secret …` с флагами подключения — код `64`, как `config` (D14 change `add-agent-configuration`).
 - Справки обоих бинарей называют `secret set|delete|list`.
@@ -326,14 +350,20 @@ abstract interface class SecretInput {          // stdin процесса; фе�
 
 Найденный секрет строки не даёт. Значение читается в память и сразу отбрасывается. Код выхода не меняется: секрет может понадобиться только при выборе этой модели (та же логика, что `config.provider.key_missing`, §15.5, шаг 8). В 8.9 проверка читает только переменные и файл и не ждёт внешних процессов. Проверка наличия — решение пользователя 2026-10-31 (OQ3 (а)).
 
-**Бэкенд `file`.** При `secrets.backend: file` `config check` печатает строку `warning: secrets: file backend stores secrets unencrypted in <path>` всегда, даже без ссылок на секреты (CFG-11: открытый текст должен быть виден при каждой проверке). Права файла шире `0600` дают ещё строку `warning: secrets: <path> has permissions <mode>; run: chmod 600 <path>`, а ссылки на секреты тогда считаются недоступными. Код выхода не меняется.
+**Бэкенд `file`.** При `secrets.backend: file` `config check` печатает строку `warning: secrets: file backend stores secrets unencrypted in <path>` всегда, даже без ссылок на секреты (CFG-11: открытый текст должен быть виден при каждой проверке). Состояние файла проверяется `names()` (значения не читаются, файл не создаётся). Отказ бэкенда даёт ровно одну строку (решение оркестратора 2026-11-01):
+- права шире `0600` — `warning: secrets: <path> has permissions <mode>; run: chmod 600 <path>` (например, `0644`);
+- любая другая причина (ссылка, небезопасный `$CODELAB_HOME`, битая структура, сбой) — `warning: secrets: file is unavailable (<reason>)`.
+
+Строк по отдельным именам при отказе бэкенда нет: каждое имя дало бы тот же отказ, и вывод повторил бы одну причину N раз. Строка `unavailable` из списка выше тогда тоже не печатается. Код выхода не меняется.
+
+**Места ключей.** `<location>` — `файл:строка:столбец` слоя, который последним задал ключ ссылки; слой без позиций (окружение) — имя источника. Позиции даёт `ConfigLoader.loadWithLayers` — метод для внутреннего использования `codelab_agent_io` (`ConfigCommands.check`), не часть контракта для хостов: он возвращает результат `load` и разобранные слои, а `load` вызывает его и отбрасывает слои. Поведение `load` не меняется.
 
 ### D10. Наблюдаемость и что 8.9 передаёт 8.11
 
 | Событие | Уровень | Поля | Когда |
 |---|---|---|---|
 | `secrets.lookup` | info | `name`, `purpose`, `source`, `found` | только `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` |
-| `secrets.backend.selected` (новое) | info | `backend`, `path` (`secrets.yaml` или `null`), `reason`: у `auto` — `unavailableReason` (D7), у явного выбора — `configured: secrets.backend: env` или `configured: secrets.backend: file` | выбор бэкенда в `openSecretStore`, один раз на процесс; недопустимое значение — исключение без события |
+| `secrets.backend.selected` (новое) | info | `backend`, `path` (`secrets.yaml` или `null`), `reason`: у `auto` — `unavailableReason` (D7), у явного выбора — `configured: secrets.backend: env` или `configured: secrets.backend: file`; у `--llm-script` — `backend: env`, `reason: forced by --llm-script` (D11) | выбор бэкенда в `openSecretStore`, один раз на процесс; недопустимое значение — исключение без события |
 | `secrets.backend.unavailable` | warning | `backend`, `reason` | отказ хранилища при чтении (например, `file` по правам) — один раз на пару `(backend, reason)` |
 | `secrets.backend.plaintext` | warning | `path` | бэкенд `file`, при каждом старте хоста |
 | `secrets.file.refused` (новое) | warning | `path` (путь `secrets.yaml`) и `mode` (восьмеричная строка) — права файла; или `reason`: `symlink`, `home_symlink`, `home_writable` (с `mode`), `home_owner`, `tmp_dir_symlink`, `tmp_dir_mode`, `wide_after_write` (с `removed`) | отказ бэкенда `file` (D14); не больше одного на процесс и путь — последующие отказы по тому же пути, в том числе других экземпляров и по другой причине, событие не повторяют |
@@ -351,7 +381,7 @@ abstract interface class SecretInput {          // stdin процесса; фе�
 
 - **`AgentHost.build`** создаёт резолвер через `openHostSecrets` (D15) по `HostSettings.secretsBackend` и окружению процесса. Резолвер передаётся в `createRoutedStreamFunction(…, secrets:)` и в `AgentCoreServices.secrets`.
 - **`--debug-secrets`** — флаг `serve`, без значения; включает и `CODELAB_DEBUG_SECRETS=1`. Режим не меняет уровень лога: события `info` видны при уровне по умолчанию.
-- **`--llm-script`** использует `EnvSecretStore` независимо от `secrets.backend`. Сценарий не читает `$CODELAB_HOME` (D16 change `add-agent-project-files`), а тесты не должны читать `secrets.yaml` разработчика. Секреты сценария задаются `CODELAB_SECRET_<…>`.
+- **`--llm-script`** использует `EnvSecretStore` независимо от `secrets.backend`. Сценарий не читает `$CODELAB_HOME` (D16 change `add-agent-project-files`), а тесты не должны читать `secrets.yaml` разработчика. Секреты сценария задаются `CODELAB_SECRET_<…>`. Событие выбора — `secrets.backend.selected {backend: env, path: null, reason: forced by --llm-script}` (решение оркестратора 2026-11-01): причина `configured: …` или причина `auto` вводили бы в заблуждение, когда конфиг задаёт `file`, а читается `env`.
 - **`serve --ws`** читает секреты так же, как `--stdio`: ключ провайдера нужен в обоих режимах. Capability `mcp` в `--ws` выключена, поэтому `${secret:…}` MCP там не раскрывается.
 - **`secret set|delete|list`** — команда верхнего парсера рядом с `serve` и `config` (D8).
 
@@ -430,8 +460,11 @@ SecretResolver openHostSecrets({
   required Logger logger,
   String platform,                             // по умолчанию Platform.operatingSystem
   SecretProcessRunner? runner,
+  String? selectionReason,                     // null → причина по выбору (D10); 'forced by --llm-script' у AgentHost (D11)
 });
 ```
+
+`selectionReason` передаётся в `openSecretStore` и заменяет только поле `reason` события `secrets.backend.selected`; выбор бэкенда от него не зависит. Нужен один хост — `AgentHost` со сценарием, который передаёт `backend: 'env'` и `selectionReason: 'forced by --llm-script'` (D11).
 
 - `apps/codelab_agent` (`AgentHost`, D11) и `desktopHostServices` пакета `codelab_embedded` (этап 7, `09-12-stage-7-embedded.md`) вызывают её одинаково. Своего хранилища у `codelab_embedded` нет.
 - **Внутри isolate ядра** (`IsolateAcpLink`, решение 7.8). В isolate передаются только сериализуемые данные, поэтому `DesktopServicesSpec` получает поля `codelabHome`, `secretsBackend` и `debugSecrets`. `_agentMain` вызывает `openHostSecrets` уже в isolate; окружение isolate берёт из `Platform.environment` — это то же окружение процесса. `SecretResolver`, кэш и `SecretProcessRunner` живут в isolate ядра и через границу не передаются; значения секретов в сообщения `SendPort` не попадают.

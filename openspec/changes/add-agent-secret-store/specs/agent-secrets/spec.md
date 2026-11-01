@@ -202,7 +202,7 @@
 
 Проверка значения для платформы SHALL быть одной (`secretsBackendProblem`) у `ConfigLoader`, `openSecretStore` и `FileSecretStore`, чтобы тексты не расходились. `openSecretStore` с недопустимым значением (`keychain`, незнакомое, `file` на Windows) SHALL бросать `SecretStoreUnavailableException` с тем же текстом, а не `UnsupportedError`: значение приходит и из подкоманд `secret`, которые не загружают конфиг целиком (design.md, D7, D8).
 
-Выбранный бэкенд SHALL логироваться один раз: `secrets.backend.selected {backend, path, reason}`; `reason` у `auto` — `unavailableReason`, у явного выбора — `configured: secrets.backend: env` или `configured: secrets.backend: file` (design.md, D10).
+Выбранный бэкенд SHALL логироваться один раз: `secrets.backend.selected {backend, path, reason}`; `reason` у `auto` — `unavailableReason`, у явного выбора — `configured: secrets.backend: env` или `configured: secrets.backend: file`; хост, который принудительно выбирает `env` (`codelab-agent serve --llm-script`), SHALL передавать свою причину — `forced by --llm-script` (design.md, D10, D11).
 
 #### Scenario: auto — env на всех ОС
 - **WHEN** `auto` (или ключ не задан) на macOS, Linux и Windows (подменённая платформа)
@@ -225,15 +225,11 @@
 - **THEN** загрузка даёт проблему `secrets.backend: expected one of: auto, keychain, env, file`
 
 ### Requirement: Подкоманды secret
-`codelab secret set|delete|list` и `codelab-agent secret set|delete|list` SHALL использовать одну реализацию `SecretCommands` (`codelab_agent_io`); их stdout, stderr и коды выхода SHALL совпадать (design.md, D8). Подкоманды SHALL работать без запуска агента и без ACP. Бэкенд SHALL браться из `secrets.backend` пользовательского конфига и файла `CODELAB_CONFIG`; другие проблемы конфига НЕ SHALL мешать подкомандам.
+`codelab secret set|delete|list` и `codelab-agent secret set|delete|list` SHALL использовать одну реализацию `SecretCommands` (`codelab_agent_io`); stdout, stderr и коды выхода, которые даёт `SecretCommands`, SHALL совпадать у двух бинарей (design.md, D8). Справка `secret` и сообщения разбора argv МОГУТ различаться: они называют свой бинарь. Подкоманды SHALL работать без запуска агента и без ACP. Бэкенд SHALL браться из `secrets.backend` пользовательского конфига и файла `CODELAB_CONFIG`; другие проблемы конфига НЕ SHALL мешать подкомандам. Если `CODELAB_CONFIG` недопустим (относительный путь или расширение не `.yaml`/`.yml` без учёта регистра — те же проверки, что у загрузчика), подкоманда SHALL писать в stderr `warning: CODELAB_CONFIG ignored: <reason>`, брать бэкенд только из `$CODELAB_HOME/config.yaml` и НЕ SHALL менять из-за этого код выхода.
 
 - `set <name>`:
-  - значение читается только из stdin: с TTY — без эха, с подсказкой в stderr; без TTY — весь поток без одного завершающего `\n` или `\r\n`;
-  - значение аргументом — код `64` и `pass the secret value on stdin, not as an argument`, аргумент не печатается;
-  - пустое значение — код `64` и `empty secret value`; значение с переводом строки — код `64` и `secret value must be a single line`; длиннее 64 КиБ или с непарным суррогатом — код `64` с причиной `SecretAdmin`;
+  - значение читается только из stdin: с TTY — скрытым вводом с подсказкой в stderr; без TTY — весь поток без одного завершающего `\n` или `\r\n`;
   - проверки, не требующие значения (имя, бэкенд только для чтения, коллизия), выполняются `SecretAdmin.checkStore` до чтения stdin;
-  - неверное имя — код `64`;
-  - имя, чья переменная `envOverride` совпадает с переменной другого сохранённого имени, — код `64`;
   - бэкенд `env` (в том числе при `auto`) — код `1`, stdin не читается, stderr подсказывает добавить `secrets.backend: file` в `<CODELAB_HOME>/config.yaml` (секреты будут в открытом `secrets.yaml` с правами `0600`) или задать переменную `envOverride(name)`; на Windows — только переменную;
   - успех — код `0` и `Stored secret <name> in <backend>`; существующее имя перезаписывается без вопроса и без флага `--force`, stdout — `Updated secret <name> in <backend>`.
 - `delete <name>`: код `0` и `Deleted secret <name> from <backend>`; отсутствующее имя — код `0` и `Secret <name> was not set in <backend>`.
@@ -243,7 +239,13 @@
   - затем строка `Environment overrides: <VAR>, …`, если в окружении есть переменные `CODELAB_SECRET_*`;
   - код `0`.
 
-Ни одна подкоманда НЕ SHALL печатать значение или длину секрета. Ошибка хранилища (в том числе отказ бэкенда `file` по правам) SHALL давать код `1`, ошибка использования — код `64` и справку `secret` в stderr. С бэкендом `file` каждая подкоманда SHALL писать в stderr `warning: secrets are stored unencrypted in <path>`.
+Ошибки с кодом `64` делятся на два класса:
+- **ошибка использования** — код `64`, сообщение и справка `secret` в stderr: неверное имя; значение аргументом (`pass the secret value on stdin, not as an argument`, аргумент не печатается); нет подкоманды или она неизвестна; ошибка разбора argv. Ошибка разбора argv SHALL печатать только `<бинарь>: invalid arguments for secret` и справку, без присланных слов: среди них может быть значение секрета;
+- **ошибка значения** — код `64` и только сообщение, без справки, ничего не записывается: пустое значение или EOF — `empty secret value`; перевод строки внутри значения — `secret value must be a single line`; недопустимый UTF-8 — `secret value must be valid UTF-8`; длиннее 64 КиБ или с непарным суррогатом — причина `SecretAdmin`; коллизия `envOverride` с переменной другого сохранённого имени — `secret name <name> collides with <other> (both map to <VAR>)`.
+
+Скрытый ввод с TTY SHALL выключать эхо и канонический режим терминала и обрабатывать Backspace и Ctrl+D сам; Enter завершает ввод, Ctrl+D на пустом вводе — конец потока. Длина значения НЕ SHALL ограничиваться длиной канонической строки терминала. Байты после первого перевода строки (вставка нескольких строк) SHALL давать ошибку значения `secret value must be a single line`; уже поступивший остаток ввода SHALL вычитываться до восстановления режимов терминала. Режимы терминала SHALL восстанавливаться при любом завершении чтения и по `SIGINT`; `SIGINT` во время ввода завершает процесс кодом `130`.
+
+Ни одна подкоманда НЕ SHALL печатать значение или длину секрета. Ошибка хранилища (в том числе отказ бэкенда `file` по правам) SHALL давать код `1`. С бэкендом `file` каждая подкоманда SHALL писать в stderr `warning: secrets are stored unencrypted in <path>`.
 
 #### Scenario: Значение аргументом
 - **WHEN** запускается `codelab secret set codelab/openai sk-test-0123456789abcdef`
@@ -276,6 +278,26 @@
 #### Scenario: Одинаковый вывод двух бинарей
 - **WHEN** `codelab secret list` и `codelab-agent secret list` запускаются с одним окружением, `secrets.backend: env` и `CODELAB_SECRET_X=1`
 - **THEN** stdout, stderr и коды совпадают; stdout содержит `Environment overrides: CODELAB_SECRET_X` и не содержит `1` как значение
+
+#### Scenario: Ошибка значения без справки
+- **WHEN** в stdin `secret set codelab/openai` без TTY подан пустой поток, бэкенд — фейк с записью
+- **THEN** код `64`, stderr — `empty secret value` без справки `secret`, хранилище не записывалось
+
+#### Scenario: Недопустимый UTF-8
+- **WHEN** в stdin `secret set codelab/openai` без TTY поданы байты `0xff 0xfe`, бэкенд — фейк с записью
+- **THEN** код `64`, stderr — `secret value must be valid UTF-8` без справки, хранилище не записывалось
+
+#### Scenario: Ошибка разбора argv не цитирует слово
+- **WHEN** запускается `codelab-agent secret set codelab/openai --sk-test-0123456789abcdef`
+- **THEN** код `64`, stderr содержит `invalid arguments for secret` и справку `secret` и не содержит `sk-test-0123456789abcdef`
+
+#### Scenario: Вставка нескольких строк в TTY
+- **WHEN** `secret set codelab/openai` читает с TTY (фейковый `SecretInput`), и ввод содержит `line1\nline2`
+- **THEN** код `64`, stderr — `secret value must be a single line`, хранилище не записывалось
+
+#### Scenario: Недопустимый CODELAB_CONFIG
+- **WHEN** `secret list` запускается с `CODELAB_CONFIG=relative.yaml`, а `$CODELAB_HOME/config.yaml` задаёт `secrets.backend: env`
+- **THEN** stderr содержит `warning: CODELAB_CONFIG ignored:`, первая строка stdout — `Backend: env`, код `0`
 
 ### Requirement: Диагностика обращений к секретам
 Флаг `serve --debug-secrets` и переменная `CODELAB_DEBUG_SECRETS=1` SHALL включать событие `secrets.lookup {name, purpose, source, found}` уровня `info` на каждое обращение к `SecretResolver`. `name` — имя секрета или переменной, `purpose` — путь ключа конфига, `source` — `cache`, `env` или id бэкенда. Без режима `secrets.lookup` НЕ SHALL писаться. Ни в одном режиме лог НЕ SHALL содержать значение секрета, его длину, префикс из 4 и более символов или хеш (CFG-10).

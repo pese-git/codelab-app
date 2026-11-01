@@ -7,6 +7,15 @@ library;
 export 'src/cli/exit_codes.dart';
 export 'src/cli/config_commands.dart'
     show CheckOptions, ConfigCommandResult, ConfigCommands;
+export 'src/cli/secret_commands.dart'
+    show
+        SecretCommandResult,
+        SecretCommands,
+        SecretDeleteOptions,
+        SecretListOptions,
+        SecretSetOptions;
+export 'src/cli/secret_input.dart'
+    show MultilineSecretException, SecretInput, StdinSecretInput;
 export 'src/config/config_loader.dart'
     show ConfigLoader, ConfigUsageException, checkConfigFileName, codelabHomeOf;
 export 'src/env/host_path.dart';

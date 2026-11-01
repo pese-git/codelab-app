@@ -4,6 +4,7 @@ import 'package:args/args.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'cli/config_cli.dart';
+import 'cli/secret_cli.dart';
 import 'cli/serve_args.dart';
 import 'host/agent_host.dart';
 import 'host/serve_config.dart';
@@ -28,19 +29,31 @@ Future<int> runCodelabAgent(
   List<String> args, {
   required Map<String, String> environment,
 }) async {
-  // Командная строка разбирается один раз. `config` — отдельная команда рядом
-  // с `serve` (D13): сервер, транспорт и логи ей не нужны, поэтому она
-  // выходит до загрузки конфига `serve`.
+  // Командная строка разбирается один раз. `config` и `secret` — отдельные
+  // команды рядом с `serve` (D13 change `add-agent-configuration`, D8 change
+  // `add-agent-secret-store`): сервер, транспорт и логи им не нужны, поэтому
+  // они выходят до загрузки конфига `serve`.
   final ArgResults top;
   try {
     top = parseCommandLine(args);
   } on UsageError catch (error) {
     // Справка той команды, которую пользователь начал писать: после
-    // `config check --bogus` флаги `serve` только запутали бы.
+    // `config check --bogus` флаги `serve` только запутали бы. Текст ошибки
+    // разбора `secret …` не печатается: он цитирует присланное слово, а это
+    // могло быть значение секрета, переданное аргументом по ошибке (D8).
+    final command = args.firstOrNull;
     stderr
-      ..writeln('codelab-agent: ${error.message}')
+      ..writeln(
+        command == 'secret'
+            ? 'codelab-agent: invalid arguments for secret'
+            : 'codelab-agent: ${error.message}',
+      )
       ..writeln()
-      ..writeln(args.firstOrNull == 'config' ? configUsage() : serveUsage());
+      ..writeln(switch (command) {
+        'config' => configUsage(),
+        'secret' => secretUsage(),
+        _ => serveUsage(),
+      });
     return usageExit;
   }
   if (top.command case final config? when config.name == 'config') {
@@ -57,6 +70,22 @@ Future<int> runCodelabAgent(
       // одна строка в stderr, а не код `255` и трасса Dart. Трасса не
       // печатается и в stdout ничего не попадает.
       stderr.writeln('codelab-agent: config failed: $error');
+      return failureExit;
+    }
+  }
+
+  if (top.command case final secret? when secret.name == 'secret') {
+    try {
+      return await runSecretCommand(
+        secret,
+        environment: environment,
+        out: stdout,
+        err: stderr,
+      );
+    } on Object catch (error) {
+      // Только тип исключения: текст чужой реализации мог бы цитировать
+      // значение секрета (CFG-10).
+      stderr.writeln('codelab-agent: secret failed: ${error.runtimeType}');
       return failureExit;
     }
   }

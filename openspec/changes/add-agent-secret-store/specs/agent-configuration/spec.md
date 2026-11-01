@@ -108,7 +108,9 @@
 - на каждый ненайденный секрет — `warning: <location>: <key>: secret <name> is not set; run: codelab secret set <name>`; при бэкенде `env` (в том числе `auto`) текст SHALL вместо этого подсказывать `set <envOverride(name)> or add 'secrets.backend: file' and run: codelab secret set <name>` (на Windows — только переменную);
 - при недоступном хранилище — одна строка `warning: secrets: <backend> is unavailable (<reason>)`.
 
-При `secrets.backend: file` SHALL всегда, даже без ссылок на секреты, печататься `warning: secrets: file backend stores secrets unencrypted in <path>`, а при правах шире `0600` — ещё `warning: secrets: <path> has permissions <mode>; run: chmod 600 <path>`.
+`<location>` — `файл:строка:столбец` слоя, который последним задал ключ ссылки (слой без позиций — имя источника).
+
+При `secrets.backend: file` SHALL всегда, даже без ссылок на секреты, печататься `warning: secrets: file backend stores secrets unencrypted in <path>`. Отказ бэкенда `file` SHALL давать ровно одну строку: при правах шире `0600` — `warning: secrets: <path> has permissions <mode>; run: chmod 600 <path>`, при любой другой причине — `warning: secrets: file is unavailable (<reason>)`. При отказе бэкенда строки по отдельным именам НЕ SHALL печататься.
 
 Найденный секрет строки НЕ SHALL давать. Значения секретов НЕ SHALL печататься и логироваться. Без ссылок на секреты хранилище НЕ SHALL вызываться, и вывод НЕ SHALL меняться, кроме строк бэкенда `file`. Строки секретов НЕ SHALL влиять на код выхода. Обе подкоманды `config check` SHALL печатать одно и то же.
 
@@ -127,6 +129,14 @@
 #### Scenario: Предупреждение об открытом тексте
 - **WHEN** валидный глобальный конфиг задаёт `secrets.backend: file` и не ссылается на секреты, `secrets.yaml` имеет права `0644`
 - **THEN** stdout содержит `warning: secrets: file backend stores secrets unencrypted in <path>` и строку о правах с `chmod 600`, последняя строка `Config: valid`, код `0`
+
+#### Scenario: Отказ file без строк по именам
+- **WHEN** валидный конфиг с `secrets.backend: file` ссылается на `codelab/openai` и `codelab/mcp/github/authorization`, `secrets.yaml` имеет права `0644`
+- **THEN** stdout содержит `warning: secrets: <path> has permissions 0644; run: chmod 600 <path>` ровно один раз и не содержит строк `is not set` и `is unavailable`, последняя строка `Config: valid`, код `0`
+
+#### Scenario: Отказ file по другой причине
+- **WHEN** валидный конфиг с `secrets.backend: file` ссылается на `codelab/openai`, а `secrets.yaml` — символическая ссылка
+- **THEN** stdout содержит одну строку `warning: secrets: file is unavailable (…)` и не содержит строки `is not set`, код `0`
 
 #### Scenario: Без ссылок вывод прежний
 - **WHEN** конфиг использует только `api_key_env`

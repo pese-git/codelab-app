@@ -4,6 +4,7 @@ import 'package:codelab_agent_io/codelab_agent_io.dart'
     show ConfigUsageException, checkConfigFileName, codelabHomeOf;
 
 import 'config_cli.dart';
+import 'secret_cli.dart';
 
 /// Транспорт команды `serve`.
 enum ServeTransport { stdio, ws }
@@ -64,6 +65,7 @@ final class ServeOptions {
     required this.logFile,
     required this.codelabHome,
     required this.configPath,
+    required this.debugSecrets,
     required this.flags,
     required this.environment,
   });
@@ -102,6 +104,12 @@ final class ServeOptions {
   /// `--config <path>`: дополнительный файл конфигурации (слой 4а); `null` —
   /// флага нет (тогда действует `CODELAB_CONFIG`).
   final String? configPath;
+
+  /// Режим отладки секретов: `--debug-secrets` или `CODELAB_DEBUG_SECRETS=1`
+  /// (design.md change `add-agent-secret-store`, D11). Включает событие
+  /// `secrets.lookup` у `SecretResolver`; уровень лога не меняет. Другие
+  /// значения переменной — как не заданная.
+  final bool debugSecrets;
 
   /// Слой флагов для `ConfigLoader`: провайдер `cli`, модель, режим, лимит
   /// шагов и логи из флагов (§15.6). Секретов в нём нет: ключ провайдера
@@ -170,6 +178,13 @@ final ArgParser _serveParser = ArgParser()
     'config',
     help: 'Extra config.yaml, above config.local.yaml (CODELAB_CONFIG).',
   )
+  ..addFlag(
+    'debug-secrets',
+    negatable: false,
+    help:
+        'Log secrets.lookup (name, source, found) for every secret lookup; '
+        'never the value (CODELAB_DEBUG_SECRETS=1).',
+  )
   ..addOption(
     'max-steps',
     help: 'Model steps per turn, a positive integer (CODELAB_MAX_STEPS).',
@@ -182,9 +197,11 @@ final ArgParser _serveParser = ArgParser()
 
 final ArgParser _parser = ArgParser()
   ..addCommand('serve', _serveParser)
-  ..addCommand('config', configParser);
+  ..addCommand('config', configParser)
+  ..addCommand('secret', secretParser);
 
-/// Разбирает верхний уровень командной строки: `serve` или `config`.
+/// Разбирает верхний уровень командной строки: `serve`, `config` или
+/// `secret`.
 ///
 /// Почему отдельная функция: `run.dart` выбирает команду по результату, а
 /// каждая команда сама проверяет свои аргументы. Ошибка разбора — [UsageError].
@@ -200,7 +217,8 @@ ArgResults parseCommandLine(List<String> args) {
 /// нет.
 String serveUsage() =>
     'Usage: codelab-agent serve (--stdio | --ws) [options]\n'
-    '       codelab-agent config check [--cwd <dir>]\n\n'
+    '       codelab-agent config check [--cwd <dir>]\n'
+    '       codelab-agent secret set|delete|list\n\n'
     '${_serveParser.usage}';
 
 /// Разбирает [args] и [environment] по правилам §15.6: флаг сильнее
@@ -370,6 +388,9 @@ ServeOptions parseServeResults(
         serve.option('log-file') ?? _nonEmpty(environment['CODELAB_LOG_FILE']),
     codelabHome: home,
     configPath: configPath,
+    debugSecrets:
+        serve.flag('debug-secrets') ||
+        environment['CODELAB_DEBUG_SECRETS'] == '1',
     flags: flags,
     environment: Map.unmodifiable(environment),
   );

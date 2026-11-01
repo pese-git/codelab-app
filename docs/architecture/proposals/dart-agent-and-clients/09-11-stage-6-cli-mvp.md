@@ -154,9 +154,13 @@ D12). В 8.5 создаётся минимальный пакет `codelab_setup
 `secret set` отвечает кодом 1 с подсказкой `secrets.backend: file` или переменной; на Windows
 доступен только `env`; хранилища ОС — после 1.0 (черновик `add-agent-os-secret-backends`). `set`
 читает значение только из stdin (с TTY — без эха), значение аргументом — код 64. Флаги подключения
-и запроса вместе с `secret` — код 64, как у `config`; `codelab secret` без подкоманды — код 64 и
-`secret needs a subcommand: codelab secret set|delete|list`, неизвестная — код 64 и `Unknown command
-secret <sub>`. Подкоманды не запускают агента, не создают `sessions/`, `profiles.json` и
+и запроса вместе с `secret` — код 64, как у `config`; `codelab secret` без подкоманды или с неизвестной
+подкомандой — код 64 и `secret needs a subcommand: codelab secret set|delete|list`, ошибка разбора
+argv — код 64 и `codelab: invalid arguments for secret`; присланные слова не цитируются (среди них
+может быть значение секрета). Ошибки использования (неверное имя, значение аргументом, argv) идут со
+справкой `secret`, ошибки значения (пустое, многострочное, не UTF-8, длинное, коллизия) — без неё;
+недопустимый `CODELAB_CONFIG` подкоманды пропускают с `warning: CODELAB_CONFIG ignored: <reason>`
+(D8). Подкоманды не запускают агента, не создают `sessions/`, `profiles.json` и
 `cli_history`; файл `secrets.yaml` пишут только `set` и `delete` при бэкенде `file`, создаёт —
 только `set`. Сторож и `cliAllowlist` не меняются: `codelab_setup/io.dart` по-прежнему
 импортируется только из `run.dart`.

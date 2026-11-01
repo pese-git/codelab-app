@@ -145,23 +145,24 @@
 
 ## 7. Бинарь: хранилище и отладка (итерация 3; D11)
 
-- [ ] 7.1 `[agent]` Процессные тесты `apps/codelab_agent/test/` (agent-binary «Хранилище секретов в бинаре», все сценарии):
+- [x] 7.1 `[agent]` Процессные тесты `apps/codelab_agent/test/` (agent-binary «Хранилище секретов в бинаре», все сценарии):
   - ключ из `CODELAB_SECRET_*` к локальному HTTP-серверу теста;
   - ошибка хода `API key secret … is not set` при `secrets.backend: env`;
   - `--debug-secrets` и `CODELAB_DEBUG_SECRETS=1` → `secrets.lookup` без значения;
-  - `--llm-script` с `secrets.backend: file` в `--config` — бэкенд `env`, `secrets.yaml` не открывается;
+  - `--llm-script` с `secrets.backend: file` в `--config` — бэкенд `env`, `secrets.yaml` не открывается, `secrets.backend.selected {backend: env, reason: forced by --llm-script}`;
   - `secrets.backend: file` → `secrets.backend.plaintext` при старте, файл не создан;
   - `secrets.backend: keychain` → код `64` до старта транспорта, текст `not supported yet`;
   - stdout, stderr и лог не содержат значения.
 
   Красный.
-- [ ] 7.2 `[agent]` `AgentHost.build` через `openHostSecrets` (задача 6.4); флаг `--debug-secrets` в `serve_args.dart`; справка `serve`. 7.1 зелёный.
+- [x] 7.2 `[agent]` `AgentHost.build` через `openHostSecrets` (задача 6.4) с `selectionReason` для `--llm-script` (D11, D15); флаг `--debug-secrets` в `serve_args.dart`; справка `serve`. 7.1 зелёный.
 
 ## 8. `codelab-agent secret` и `config check` (итерация 3; D8, D9)
 
-- [ ] 8.1 `[agent]` Тесты `codelab_agent_io/test/cli/secret_commands_test.dart` на фейковом `SecretInput` и фейковом хранилище (agent-secrets «Подкоманды secret», все сценарии):
-  - `set` с TTY и без, `\n`/`\r\n`, пустое значение, перевод строки внутри;
-  - значение аргументом → `64` без печати аргумента;
+- [x] 8.1 `[agent]` Тесты `codelab_agent_io/test/cli/secret_commands_test.dart` на фейковом `SecretInput` и фейковом хранилище (agent-secrets «Подкоманды secret», все сценарии):
+  - `set` с TTY и без, `\n`/`\r\n`, пустое значение, перевод строки внутри, недопустимый UTF-8 (`secret value must be valid UTF-8`);
+  - значение аргументом и неверное имя → `64` с `showUsage`, без печати аргумента (`hasValueArgument`); ошибки значения и коллизия → `64` без `showUsage`;
+  - недопустимый `CODELAB_CONFIG` (относительный, расширение не `.yaml`/`.yml` без учёта регистра) → `warning: CODELAB_CONFIG ignored: <reason>`, бэкенд из `$CODELAB_HOME/config.yaml`, код не меняется;
   - коллизия `envOverride`; бэкенд `env` (и `auto`) → `1` с подсказкой `secrets.backend: file` и переменной, на Windows — только переменной;
   - `Stored secret …`/`Updated secret …` (по `SecretStored`/`SecretUpdated`); подсказка `SecretReadOnly` с настоящим путём `$CODELAB_HOME`; порядок D8 через `SecretAdmin.checkStore`;
   - `delete` существующего и отсутствующего;
@@ -172,11 +173,12 @@
   - ни в одной строке нет значения и длины.
 
   Красный.
-- [ ] 8.2 `[agent]` `lib/src/cli/secret_commands.dart`, `secret_input.dart` (`SecretInput`, `StdinSecretInput` с восстановлением эха в `finally` и по `SIGINT`); экспорт из бареля. 8.1 зелёный.
-- [ ] 8.3 `[agent]` Тесты `codelab_agent_io/test/cli/config_commands_test.dart` (agent-configuration «config check показывает состояние секретов», все сценарии): строки `note:`/`warning:` перед `Config: …`; при `env` подсказка `secrets.backend: file`; код не меняется; без ссылок хранилище не вызывается и вывод прежний; `secrets.backend: file` — строка об открытом тексте всегда и строка о правах при `0644`. Красный.
-- [ ] 8.4 `[agent]` `ConfigCommands.check` — проверка ссылок резолвером. 8.3 зелёный.
-- [ ] 8.5 `[agent]` Процессные тесты `apps/codelab_agent/test/secret_command_process_test.dart` (agent-binary «Подкоманда secret бинаря», все сценарии; agent-secrets, сценарии «Значение аргументом», «Только чтение при auto», «Сохранение в file»): неизвестная подкоманда, `list` с `env`, справка бинаря называет `secret`. Красный.
-- [ ] 8.6 `[agent]` `apps/codelab_agent/lib/src/cli/secret_cli.dart`, регистрация в `run.dart`, общая справка; вложенный `AGENTS.md` приложения (§1, §2: команды `secret`, `--debug-secrets`). 8.5 зелёный. **Конец итерации 3.**
+- [x] 8.2 `[agent]` `lib/src/cli/secret_commands.dart` (`SecretSetOptions.hasValueArgument`, `SecretCommandResult.showUsage`, параметр `platform`), `secret_input.dart` (`SecretInput`, `StdinSecretInput`: неканонический режим без эха, ручные Backspace и Ctrl+D, отказ многострочной вставки с вычиткой остатка, восстановление режимов в `finally` и по `SIGINT` с кодом `130`; D8); экспорт из бареля. 8.1 зелёный.
+- [x] 8.3 `[agent]` Тесты `codelab_agent_io/test/cli/config_commands_test.dart` (agent-configuration «config check показывает состояние секретов», все сценарии): строки `note:`/`warning:` перед `Config: …`; при `env` подсказка `secrets.backend: file`; код не меняется; без ссылок хранилище не вызывается и вывод прежний; `secrets.backend: file` — строка об открытом тексте всегда; отказ — одна строка (права `0644` → `has permissions 0644; run: chmod 600`, иначе `file is unavailable (<reason>)`) без строк по именам; `<location>` из `ConfigLoader.loadWithLayers`. Красный.
+- [x] 8.4 `[agent]` `ConfigCommands.check` — проверка ссылок резолвером. 8.3 зелёный.
+- [x] 8.5 `[agent]` Процессные тесты `apps/codelab_agent/test/secret_command_process_test.dart` (agent-binary «Подкоманда secret бинаря», все сценарии; agent-secrets, сценарии «Значение аргументом», «Ошибка разбора argv не цитирует слово», «Недопустимый CODELAB_CONFIG», «Только чтение при auto», «Сохранение в file»): неизвестная подкоманда, ошибка argv → `codelab-agent: invalid arguments for secret` без присланного слова, справка только при ошибках использования, `list` с `env`, справка бинаря называет `secret`. Красный.
+- [x] 8.6 `[agent]` `apps/codelab_agent/lib/src/cli/secret_cli.dart`, регистрация в `run.dart`, общая справка; вложенный `AGENTS.md` приложения (§1, §2: команды `secret`, `--debug-secrets`). 8.5 зелёный.
+- [x] 8.7 `[agent]` Ручная проверка скрытого ввода в настоящем pty (macOS и Linux; автотест не владеет терминалом, D8): обычный ввод сохраняет значение без эха; вставка нескольких строк → код `64` `secret value must be a single line`, ничего не записано, вставленные строки не выполнились оболочкой; Ctrl+C во время ввода → код `130`, эхо и построчный режим терминала восстановлены. Результат — запись в описании pull request. **Конец итерации 3.** Проверено 2026-11-01 на macOS (`script`): обычный ввод — 0, две строки одним куском и через 20 мс — 64, Ctrl+C — 130, 2000 символов — 0, Backspace — 0; во всех случаях эхо восстановлено. На Linux не проверялось.
 
 ## 9. Мост и `codelab secret` (итерация 4; D1, D8)
 
