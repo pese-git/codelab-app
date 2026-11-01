@@ -54,7 +54,7 @@
     - `host/services.dart` — поле `AgentCoreServices.secrets`.
   - `codelab_agent_io`: новый `lib/src/secrets/` — `SecretProcessRunner`, `EnvSecretStore`, `FileSecretStore`, `openSecretStore`, `openHostSecrets`, `SecretAdmin`. Также `lib/src/cli/secret_commands.dart`, `secret_input.dart` и правка `config_commands.dart` (секреты в `config check`); `config_loader.dart` — проблема `file` на Windows. `pubspec.yaml` не меняется.
   - `apps/codelab_agent`: `AgentHost` создаёт резолвер; флаг `--debug-secrets`; `lib/src/cli/secret_cli.dart`.
-  - `codelab_setup`: `lib/io.dart` реэкспортирует `SecretCommands`, `SecretInput`, `StdinSecretInput`, `SecretAdmin`, `openSecretStore`.
+  - `codelab_setup`: `lib/io.dart` реэкспортирует `SecretCommands`, `SecretInput`, `StdinSecretInput`, `SecretAdmin`, `openSecretStore`, `DescribedSecretStore`, `SecretStoreUnavailableException`, `Logger` и `LogLevel`.
   - `apps/codelab_cli`: подкоманда `secret` в `cli_args.dart` и `run.dart`.
 - **Зависимости и сторож не меняются** (design.md, D1): новых зависимостей нет; PKG-2, `ioAllowlist`, `setupAllowlist`, `cliAllowlist` и `rules.dart` прежние. Ядро остаётся web-безопасным: `lib/src/secrets/` без `dart:io`, проверка — `web-compile`.
 - **Public API ядра** — только добавления. `createRoutedStreamFunction` получает необязательный параметр `secrets`; используемые сигнатуры не меняются.

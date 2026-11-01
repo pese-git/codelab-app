@@ -27,6 +27,11 @@
    хранилище ОС — после 1.0, change `add-agent-os-secret-backends`; §15 и §17.5.4 документа ядра). Это
    часть MVP. В 1.0 страница настроек и мастер (если сделаны) предлагают `file` или переменную, а не
    хранилище ОС; на Windows — только переменную.
+   **Известное ограничение до 8.10** (change `add-agent-secret-store`, D3, D15): кэш найденных
+   значений резолвера живёт до конца процесса. Ключ, заменённый `codelab secret set` или страницей
+   настроек, работающий встроенный агент app или CLI увидит только после перезапуска, в том числе
+   при записи через `SecretAdmin` в том же процессе; новый, ещё не прочитанный секрет подхватывается
+   сразу. Сброс кэша (`SecretResolver.invalidate`) — вместе с перезагрузкой конфига в 8.10.
    **Should — не блокирует MVP:** пакет `codelab_setup` (§12.4.2), страница провайдеров app
    (D-05, §12.4.5), мастер и статус ключа (§12.4.4) — запись конфига идёт через `ConfigWriter`
    задачи 8.10, тоже Should. Без них встроенный профиль настраивается файлом `config.yaml` и
@@ -41,7 +46,11 @@
    тестовое хранилище секретов: переменная `CODELAB_TEST_SECRET_STORE=<каталог>` действует только
    в сборке с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true` (только для тестов; §12.4.13,
    agent-core-architecture §15.6). Хранилище — бэкенд `file` задачи 8.9 с явным путём
-   `<каталог>/secrets.yaml` (change `add-agent-secret-store`, D14).
+   `<каталог>/secrets.yaml` (`FileSecretStore(path: …)`, `backend.id == "file"`; change
+   `add-agent-secret-store`, D14). Переменную читает эта задача 7.7, в 8.9 она не читается. Имя
+   `CODELAB_TEST_SECRET_STORE` известно загрузчику конфигурации только в сборке с
+   `CODELAB_ALLOW_TEST_SECRETS` (задача 0.3 того же change, D14); в обычной сборке оно, как любая
+   неизвестная `CODELAB_*`, даёт `config.env.unknown`. Сборку с флагом проверяет тоже 7.7.
 8. **7.8. Замер нагрузки на UI:** `packages/dart/codelab_embedded/benchmark/stream_latency_benchmark.dart`
    — 10 000 чанков ответа через встроенного агента, измеряется задержка цикла событий. Это
    разведка (исключение (д) правила TDD §9.0 п.3): замер без тестов, ограничен двумя днями.
@@ -207,6 +216,10 @@ AgentCoreServices memoryHostServices({required http.Client http, Logger? logger}
 // packages/dart/codelab_embedded/lib/io.dart — десктоп и CLI; мобильные — с этапа 10
 /// LocalExecutionEnv, JsonlSessionStore в $CODELAB_HOME/sessions, секреты — SecretResolver из openHostSecrets
 /// codelab_agent_io (8.9: те же бэкенды, что у CLI — в 1.0 env и file; change add-agent-secret-store, D15), MCP stdio (8.1–8.4).
+/// Вызов: openHostSecrets(codelabHome: codelabHomeOf(Platform.environment), environment: Platform.environment,
+/// backend: HostSettings.secretsBackend из loadEmbeddedAgentConfig (null → auto), debug: CODELAB_DEBUG_SECRETS=1
+/// или опция хоста debugSecrets, logger); selectionReason не передаётся — он нужен только AgentHost со
+/// сценарием (D11, D15). Ключа конфига для режима отладки нет.
 Future<AgentCoreServices> desktopHostServices({String? codelabHome, http.Client? http, Logger? logger});
 /// Этап 10 (§9.15): LocalExecutionEnv с корнем в папке документов приложения, без процессов (exec off),
 /// JsonlSessionStore там же, MCP только по HTTP (agent-core-architecture §4, §10).
@@ -278,8 +291,11 @@ final class IsolateAcpLink {
 ```
 
 1. `spawn` вызывает `Isolate.spawn(_agentMain, boot)` с `SendPort` клиента и портами `onError`,
-   `onExit`. Внутри isolate `_agentMain` собирает агента как `createEmbeddedAgent` поверх
-   `InProcessAcpLink` и соединяет его клиентскую сторону с портом.
+   `onExit`. Внутри isolate `_agentMain` вызывает `openHostSecrets` из полей `codelabHome`,
+   `secretsBackend`, `debugSecrets` спецификации `DesktopServicesSpec` и `Platform.environment`
+   (то же окружение процесса), собирает агента как `createEmbeddedAgent` поверх
+   `InProcessAcpLink` и соединяет его клиентскую сторону с портом. Резолвер, его кэш и
+   `SecretProcessRunner` живут только в isolate ядра (change `add-agent-secret-store`, D15).
 2. Сообщения — конверты-Map: `{"k":"msg","m":<JSON-RPC>}`, `{"k":"log",…}`, `{"k":"close"}`,
    `{"k":"closed"}`, `{"k":"fatal","error":…}`. JSON-RPC кадр проходит те же правила
    `_copyJson`: не-JSON значение — `sendFailed` на отправляющей стороне. Порядок сохраняется

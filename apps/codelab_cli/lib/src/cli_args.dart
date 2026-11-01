@@ -9,9 +9,16 @@ const cliVersion = '0.1.0';
 /// `64` с текстом в stderr и пустым stdout (`09-11-stage-6-cli-mvp.md`,
 /// коды выхода), а не трассой исключения.
 final class UsageError implements Exception {
-  const UsageError(this.message);
+  const UsageError(this.message, {this.showSecretUsage = false});
 
   final String message;
+
+  /// Нужна ли после сообщения справка `codelab secret` (spec codelab-cli
+  /// «Подкоманда codelab secret»). Признак, а не текст справки: ошибки
+  /// разбора `secret` не должны цитировать присланные слова (среди них может
+  /// быть значение секрета), а справку печатает `runCodelab` (design.md change
+  /// `add-agent-secret-store`, D8).
+  final bool showSecretUsage;
 
   @override
   String toString() => 'UsageError: $message';
@@ -24,6 +31,7 @@ enum CliCommand {
   profiles,
   testScenario,
   config,
+  secret,
   version,
   help,
 }
@@ -134,7 +142,6 @@ final class CliOptions {
 const _laterCommands = {
   'provider',
   'mcp',
-  'secret',
   'sessions',
   'update',
   'login',
@@ -226,6 +233,16 @@ ArgParser _parser() {
         ),
       ),
     )
+    // Три подкоманды без флагов: значение секрета читается только из stdin,
+    // флага `--value` нет (argv виден через `ps`; design.md change
+    // `add-agent-secret-store`, D8).
+    ..addCommand(
+      'secret',
+      ArgParser()
+        ..addCommand('set', ArgParser())
+        ..addCommand('delete', ArgParser())
+        ..addCommand('list', ArgParser()),
+    )
     ..addCommand(
       'test-scenario',
       ArgParser()
@@ -247,6 +264,7 @@ Usage:
   codelab -p "<prompt>" [options]     headless: one turn, answer in stdout
   codelab profiles list|show <id>|add <id> <agent>|remove <id>
   codelab config check [--cwd <dir>]
+  codelab secret set|delete|list      manage secrets (value on stdin)
   codelab test-scenario <file-or-dir>... --agent <profile> [--filter <glob>] [--timeout <d>]
 
 Options:
@@ -261,6 +279,16 @@ CliOptions parseCliArgs(List<String> args) {
   try {
     results = _parser().parse(args);
   } on ArgParserException catch (error) {
+    // `secret` где угодно в argv (и внутри подкоманды, и в верхнем уровне:
+    // `--approve=<v> secret set x`): текст `package:args` цитирует присланное
+    // слово, а это могло быть значение секрета (D8) — печатается только
+    // фиксированная фраза.
+    if (args.contains('secret')) {
+      throw const UsageError(
+        'invalid arguments for secret',
+        showSecretUsage: true,
+      );
+    }
     throw UsageError(_usageMessage(error));
   }
 
@@ -286,6 +314,9 @@ CliOptions parseCliArgs(List<String> args) {
   }
   if (results.command case final command? when command.name == 'config') {
     return _configOptions(results, command);
+  }
+  if (results.command case final command? when command.name == 'secret') {
+    return _secretOptions(results, command);
   }
   if (results.command case final command?) {
     return _options(CliCommand.profiles, results, positional: command.rest);
@@ -369,6 +400,57 @@ CliOptions _configOptions(ArgResults results, ArgResults config) {
     );
   }
   return _options(CliCommand.config, results, cwd: check.option('cwd'));
+}
+
+/// Справка `codelab secret` (в stderr при коде `64`).
+///
+/// Своя у каждого бинаря, потому что называет его (`codelab-agent` печатает
+/// свою); общие тексты результатов даёт `SecretCommands` (D8).
+String secretUsage() =>
+    'Usage: codelab secret set|delete|list\n\n'
+    '  codelab secret set <name>     '
+    'read the value from stdin (hidden on a terminal)\n'
+    '  codelab secret delete <name>\n'
+    '  codelab secret list\n\n'
+    'Works on the backend chosen by secrets.backend in '
+    r'$CODELAB_HOME/config.yaml or in the file named by CODELAB_CONFIG. '
+    'The value is never passed as an argument and never printed.';
+
+/// `codelab secret set|delete|list`: [CliOptions.positional] — имя
+/// подкоманды и её аргументы.
+///
+/// Почему проверки здесь: ошибка использования — код `64` до любого
+/// ввода-вывода (spec codelab-cli «Подкоманда codelab secret»). Флаги
+/// подключения вместе с `secret` — тоже `64`: хранилищу профиль не нужен, и
+/// молчаливое игнорирование скрыло бы опечатку. Сообщения не цитируют
+/// присланные слова: лишний аргумент `set` — вероятно, значение секрета, он
+/// уходит дальше только признаком `hasValueArgument` (D8).
+CliOptions _secretOptions(ArgResults results, ArgResults secret) {
+  UsageError usage(String message) =>
+      UsageError(message, showSecretUsage: true);
+  // `-C/--cwd` тоже лишний: рабочая папка сессии хранилищу не нужна.
+  for (final flag in [..._connectionFlags, 'cwd']) {
+    if (results.wasParsed(flag)) {
+      throw usage('--$flag does not apply to secret');
+    }
+  }
+  final sub = secret.command;
+  if (sub == null) {
+    throw usage('secret needs a subcommand: set, delete or list');
+  }
+  switch (sub.name) {
+    case 'set' when sub.rest.isEmpty:
+      throw usage('secret set needs the secret name');
+    case 'delete' when sub.rest.length != 1:
+      throw usage('secret delete needs exactly one name');
+    case 'list' when sub.rest.isNotEmpty:
+      throw usage('secret list takes no arguments');
+  }
+  return _options(
+    CliCommand.secret,
+    results,
+    positional: [sub.name!, ...sub.rest],
+  );
 }
 
 CliOptions _options(

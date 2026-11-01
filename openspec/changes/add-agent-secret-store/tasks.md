@@ -182,8 +182,8 @@
 
 ## 9. Мост и `codelab secret` (итерация 4; D1, D8)
 
-- [ ] 9.1 `[agent]` `codelab_setup/lib/io.dart` — реэкспорт `SecretCommands`, `SecretCommandResult`, `SecretSetOptions`, `SecretDeleteOptions`, `SecretListOptions`, `SecretInput`, `StdinSecretInput`, `SecretAdmin` с результатами и `openSecretStore` (D15); основной барель не меняется; тест компиляции реэкспортов; вложенный `AGENTS.md` моста (§1, §3). `melos run guard` зелёный, `setupAllowlist` не меняется.
-- [ ] 9.2 `[client]` Тесты `apps/codelab_cli/test/secret_command_test.dart` и e2e процесса (codelab-cli «Подкоманда codelab secret», все сценарии; agent-secrets, сценарий «Одинаковый вывод двух бинарей»):
+- [x] 9.1 `[agent]` `codelab_setup/lib/io.dart` — реэкспорт `SecretCommands`, `SecretCommandResult`, `SecretSetOptions`, `SecretDeleteOptions`, `SecretListOptions`, `SecretInput`, `StdinSecretInput`, `SecretAdmin` с результатами и `openSecretStore` (D15); основной барель не меняется; тест компиляции реэкспортов; вложенный `AGENTS.md` моста (§1, §3). `melos run guard` зелёный, `setupAllowlist` не меняется.
+- [x] 9.2 `[client]` Тесты `apps/codelab_cli/test/secret_command_test.dart` и e2e процесса (codelab-cli «Подкоманда codelab secret», все сценарии; agent-secrets, сценарий «Одинаковый вывод двух бинарей»):
   - совпадение вывода с `codelab-agent secret` на ошибках использования и `list`;
   - флаги подключения → `64`;
   - без подкоманды и с неизвестной;
@@ -191,9 +191,14 @@
   - справка `--help`.
 
   Красный.
-- [ ] 9.2a `[desktop]` Создать новый вложенный `apps/codelab_desktop/AGENTS.md` (сейчас его нет) — минимальный, только правило секретов: секреты — только через общие бэкенды `codelab_agent_io` (через `codelab_setup/io.dart` и `codelab_embedded`), `flutter_secure_storage` на desktop не используется (D15, D16). Кода нет. Корневые `AGENTS.md` и `CLAUDE.md` говорят о вложенных `AGENTS.md` в общем виде, их правка не нужна.
-- [ ] 9.2b `[client]` `09-12-stage-7-embedded.md`: `desktopHostServices` и `_agentMain` вызывают `openHostSecrets`; `DesktopServicesSpec` с `codelabHome`, `secretsBackend`, `debugSecrets`; в 1.0 встроенный профиль использует `env` и `file`; известное ограничение кэша; `CODELAB_TEST_SECRET_STORE` — бэкенд `file` с явным путём (D14, D15). **Сделано при подготовке change (2026-10-31)**, сверить в 10.2.
-- [ ] 9.3 `[client]` `CliCommand.secret` в `cli_args.dart`, вызов в `run.dart` через `package:codelab_setup/io.dart`; строка в `--help`; вложенный `AGENTS.md` CLI (§1). 9.2 зелёный, `melos run guard` зелёный. **Конец итерации 4.**
+- [x] 9.2a `[desktop]` Создать новый вложенный `apps/codelab_desktop/AGENTS.md` (сейчас его нет) — минимальный, только правило секретов: секреты — только через общие бэкенды `codelab_agent_io` (через `codelab_setup/io.dart` и `codelab_embedded`), `flutter_secure_storage` на desktop не используется (D15, D16). Кода нет. Корневые `AGENTS.md` и `CLAUDE.md` говорят о вложенных `AGENTS.md` в общем виде, их правка не нужна.
+- [x] 9.2b `[client]` `09-12-stage-7-embedded.md`: `desktopHostServices` и `_agentMain` вызывают `openHostSecrets`; `DesktopServicesSpec` с `codelabHome`, `secretsBackend`, `debugSecrets`; в 1.0 встроенный профиль использует `env` и `file`; известное ограничение кэша; `CODELAB_TEST_SECRET_STORE` — бэкенд `file` с явным путём (D14, D15). **Сделано при подготовке change (2026-10-31)**, сверить в 10.2.
+- [x] 9.3 `[client]` `CliCommand.secret` в `cli_args.dart`, вызов в `run.dart` через `package:codelab_setup/io.dart`; строка в `--help`; вложенный `AGENTS.md` CLI (§1). 9.2 зелёный, `melos run guard` зелёный. **Конец итерации 4.**
+
+- [x] 9.4 `[agent]` Тесты `codelab_agent_io/test/cli/secret_commands_test.dart` и `codelab_setup/test/secret_exports_test.dart` (agent-secrets «Подкоманды secret», сценарий «Нет домашнего каталога»; «SecretAdmin», реэкспорт `DescribedSecretStore`, `SecretStoreUnavailableException`, `Logger`): пустые `CODELAB_HOME`, `HOME`, `USERPROFILE` → `64`, stdin не читается, `./.codelab` не создан; `serve` не затронут. Красный.
+- [x] 9.5 `[agent]` Проверка домашнего каталога в `SecretCommands` (D8, «Нет домашнего каталога»); реэкспорт трёх типов в `codelab_setup/lib/io.dart` (D15). 9.4 зелёный.
+- [x] 9.6 `[client]` Тесты `apps/codelab_cli/test/secret_command_test.dart` и `cli_args_test.dart` (codelab-cli «Подкоманда codelab secret»; agent-secrets, сценарий «Ошибка флага верхнего уровня перед secret»): `-C`/`--cwd` с `secret` → `codelab: --cwd does not apply to secret`; любая ошибка разбора при `secret` в argv — только `codelab: invalid arguments for secret` и справка, без текста `package:args`. Красный.
+- [x] 9.7 `[client]` Правка `cli_args.dart`/`run.dart` по 9.6 (D8). 9.6 зелёный, `melos run guard` зелёный.
 
 ## 10. Матрица, документы и Definition of Done (итерация 5)
 
