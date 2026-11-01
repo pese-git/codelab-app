@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:test/test.dart';
 
 /// Агентский драйвер фикстур (задача 9.1; acp-golden-fixtures «Агентский

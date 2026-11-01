@@ -6,7 +6,6 @@ import 'dart:io';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 
-import '../in_process_acp_link.dart';
 import 'fixture.dart';
 import 'matcher.dart';
 
@@ -21,7 +20,8 @@ import 'matcher.dart';
 ///
 /// Для чего: одна и та же фикстура проверяет обе стороны протокола.
 /// Драйвер не зависит от пакетов агента: агента поднимает фабрика теста
-/// ([AgentFixtureStarter]) на агентском конце `InProcessAcpLink`.
+/// ([AgentFixtureStarter]) на агентском конце `InProcessAcpLink`
+/// (`codelab_acp_transports`).
 ///
 /// Как использовать: `await runAgentFixture(fixture, startAgent)`; провал —
 /// [AgentFixtureFailure] с индексом кадра и diff, фикстура без роли `agent`

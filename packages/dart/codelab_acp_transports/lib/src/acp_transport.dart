@@ -11,7 +11,7 @@ part 'acp_transport.freezed.dart';
 /// Для чего: один порт для обеих сторон соединения — клиентские транспорты
 /// (`StdioAcpTransport`, `WebSocketAcpTransport`), серверные транспорты
 /// агента (`StdioServerAcpTransport`, `WebSocketServerAcpTransport`) и пара
-/// в памяти тестов.
+/// в памяти `InProcessAcpLink`.
 ///
 /// Как использовать: [start], затем подписка на [inbound] и [send];
 /// [close] — штатное завершение. Сбой соединения приходит в [events].
