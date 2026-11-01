@@ -23,6 +23,6 @@
 ## 3. Тесты
 
 * TDD — по `packages/dart/codelab_agent_core/AGENTS.md` §2.
-* Сервер проверяется через пару транспортов в памяти `InProcessAcpLink` из `codelab_acp_testing`: кадры идут тем же кодеком, что на проводе, но без процессов и сокетов.
+* Сервер проверяется через пару транспортов в памяти `InProcessAcpLink` из `codelab_acp_transports`: кадры идут тем же кодеком, что на проводе, но без процессов и сокетов.
 * Модель — `ScriptedStreamFunction`, время — `FakeClock`, id — `SequentialIdGenerator`: тесты детерминированы.
 * Фабрика агентского прогона фикстур (`test/conformance_test.dart`) подключает `ProjectFilesLoader` (`codelab_agent_io`, только `dev_dependency`) с временным `CODELAB_HOME` и принимает в `setup.config` ключ `trusted_projects` с `${cwd}`; другой неизвестный ключ — провал (design.md change `add-agent-project-files`, D15).

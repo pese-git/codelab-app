@@ -9,14 +9,14 @@
 ## What Changes
 
 - **`InProcessAcpLink` и `InProcessAcpTransport` в `codelab_acp_transports`** (`lib/src/in_process_acp_transport.dart`), экспорт из основного web-безопасного бареля `package:codelab_acp_transports/codelab_acp_transports.dart`. Основа — проверенная этапами 4–6 тестовая копия, а не эскиз §13.11 (design.md, D2).
-- **Правила доставки и закрытия** закрепляются требованием спецификации. Доставка асинхронная, в порядке `send`, без реентерабельности. Сообщение до `start()` получателя буферизуется. Закрытие одного конца переводит другой в `failed` с кодом `disconnected` и закрывает его `inbound` после уже отправленных сообщений. Повторный `close()` идемпотентен; `send` вне `connected` даёт `sendFailed`, `start()` после закрытия — `closed` (D4).
+- **Правила доставки и закрытия** закрепляются требованием спецификации. Доставка асинхронная, в порядке `send`, без реентерабельности. Сообщение до `start()` получателя или до первого подписчика его `inbound` буферизуется; после первой подписки сообщения без подписчика выбрасываются. Закрытие одного конца переводит другой в `failed` с кодом `disconnected` и закрывает его `inbound` после уже отправленных сообщений; невыданный буфер выбрасывается с диагностикой `warning`, в которой только число сообщений. Повторный `close()` идемпотентен; `send` вне `connected` даёт `sendFailed`, `start()` после закрытия — `closed` (D4).
 - **Правила копирования.** Каждое сообщение копируется как дерево JSON, результат неизменяемый. Этот change дополняет копию тестовой версии двумя правилами, нужными для паритета с проводом:
   - копируется и `error.data` ответа;
   - нечисловые `double` (`NaN`, `±Infinity`) дают `sendFailed`, как `jsonEncode` проводного транспорта.
 
-  Не-JSON значение (`DateTime`, объект домена, ключ `Map` не строкой) даёт `sendFailed` на отправляющей стороне. Получатель ничего не получает, соединение живёт (D3).
+  Не-JSON значение (`DateTime`, объект домена, ключ `Map` не строкой) и любая другая ошибка копирования дают `sendFailed` на отправляющей стороне с общим текстом без значения. Получатель ничего не получает, соединение живёт (D3).
 - **Миграция потребителей (7.2).** Тестовая копия и её тест удаляются из `codelab_acp_testing`. Барель `codelab_acp_testing` её не реэкспортирует. Драйвер `agent_conformance.dart`, тесты `codelab_agent_acp` (contract test, `client_channel`, `server_harness`), тесты `codelab_acp_testing` и `apps/codelab_agent` импортируют пару из `codelab_acp_transports`. Все потребители уже зависят от этого пакета напрямую (D5).
-- **Документы.** Эскиз §13.11 документа ядра приводится к решениям этого change, план этапа 7 ссылается на §13.11 вместо третьей копии кода. Это сделано при подготовке change, задачи 0.1–0.2. Правится строка §14.9 о тестовой копии и правило тестов во вложенном `AGENTS.md` `codelab_agent_acp`.
+- **Документы.** §13.11 документа ядра ссылается на файл реализации и держит только правила (задача 0.4, D2), план этапа 7 ссылается на §13.11 вместо третьей копии кода. Это сделано при подготовке change, задачи 0.1–0.2. Правится строка §14.9 о тестовой копии и правило тестов во вложенном `AGENTS.md` `codelab_agent_acp`.
 
 ## Не входит
 
@@ -40,7 +40,7 @@
 ## Impact
 
 - **Пакеты:**
-  - `codelab_acp_transports` — новый `lib/src/in_process_acp_transport.dart`, строка `export` в `lib/codelab_acp_transports.dart`, тест `test/in_process_acp_transport_test.dart`, новая точка входа в `test/web_safe_barrel_test.dart`. `pubspec.yaml` не меняется: нужны только `dart:async` и `codelab_acp_protocol`;
+  - `codelab_acp_transports` — новый `lib/src/in_process_acp_transport.dart`, строка `export` в `lib/codelab_acp_transports.dart`, тест `test/in_process_acp_transport_test.dart`, новая точка входа в `test/web_safe_barrel_test.dart`. `pubspec.yaml` не меняется: нужны только `dart:async`, `dart:collection` и `codelab_acp_protocol`;
   - `codelab_acp_testing` — удаляются `lib/src/in_process_acp_link.dart`, его `export` и `test/in_process_acp_link_test.dart`; `lib/src/fixtures/agent_conformance.dart` импортирует пару из `codelab_acp_transports`;
   - `codelab_agent_acp` — только тесты (`test/support/client_channel.dart`, `test/support/server_harness.dart`, `test/contract/client_application_contract_test.dart`) и `AGENTS.md` §3; `lib/` не меняется;
   - `apps/codelab_agent` — только тесты (`agent_host_test.dart`, `agent_host_config_test.dart`, `agent_host_secrets_test.dart`).

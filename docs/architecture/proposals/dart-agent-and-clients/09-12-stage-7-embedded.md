@@ -10,7 +10,7 @@
 **Задачи.**
 
 1. **7.1. `InProcessAcpLink`** (пара `InProcessAcpTransport`) в `packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart`
-   (эскиз и правила — agent-core-architecture §13.11), экспорт из основного (платформенно-нейтрального)
+   (правила — agent-core-architecture §13.11), экспорт из основного (платформенно-нейтрального)
    бареля. Тест `packages/dart/codelab_acp_transports/test/in_process_acp_transport_test.dart`.
    OpenSpec change `add-in-process-acp-transport`.
 2. **7.2.** Заменить тестовую копию транспорта (`codelab_acp_testing/lib/src/in_process_acp_link.dart`)
@@ -68,18 +68,21 @@
    `conformance`.
 
 **Артефакт: `InProcessAcpLink`** — пара `InProcessAcpTransport`, реализаций существующего интерфейса
-`AcpTransport`. Эскиз кода и правила доставки, копирования и закрытия — одно место:
-agent-core-architecture §13.11 ([`13-acp-adapter.md`](../agent-core/13-acp-adapter.md)); решения и
-альтернативы — design.md change `add-in-process-acp-transport` (D2–D4). Отдельной копии кода здесь нет,
-чтобы эскизы не расходились.
+`AcpTransport`. Код — `packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart`,
+правила доставки, копирования и закрытия — одно место: agent-core-architecture §13.11
+([`13-acp-adapter.md`](../agent-core/13-acp-adapter.md)); решения и альтернативы — design.md change
+`add-in-process-acp-transport` (D2–D4). Отдельной копии кода здесь нет, чтобы копии не расходились.
 
 Тесты транспорта (`in_process_acp_transport_test.dart`):
 * порядок 1000 сообщений сохраняется, доставка не реентерабельна;
 * сообщение до `start()` получателя или до первого подписчика его `inbound` буферизуется;
+  после отписки всех подписчиков сообщения выбрасываются; невыданный буфер при закрытии второго
+  конца выбрасывается с диагностикой `warning` и числом сообщений;
 * `close()` одной стороны переводит другую в `failed` с `disconnected`; сообщения, отправленные до
   `close()`, доставляются раньше конца `inbound`; повторный `close()` идемпотентен;
 * изменение `Map` после `send` не видно получателю, в том числе в `error.data`;
-* `DateTime`, ключ не строкой, `NaN` и `±Infinity` в `params` дают `sendFailed` без значения в тексте;
+* `DateTime`, ключ не строкой, `NaN`, `±Infinity` и любая другая ошибка копирования в `params` дают
+  `sendFailed` без значения в тексте;
 * `send` до `start()` и после `close` — `sendFailed`.
 
 **Артефакт: API `codelab_embedded`.**
