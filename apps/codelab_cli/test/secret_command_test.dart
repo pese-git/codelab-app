@@ -8,6 +8,7 @@
 import 'dart:io';
 
 import 'package:codelab_cli/codelab_cli.dart';
+import 'package:codelab_setup/io.dart';
 import 'package:test/test.dart';
 
 import 'support/fake_cli_io.dart';
@@ -15,6 +16,21 @@ import 'support/fake_cli_io.dart';
 /// Слово, имитирующее значение секрета, переданное аргументом по ошибке: ни
 /// одно сообщение не вправе его процитировать.
 const _leak = 'sk-LEAK-0123456789';
+
+/// Логгер-заглушка для `openSecretStore`: тесту нужны только результаты.
+final class _SilentLogger implements Logger {
+  @override
+  bool isEnabled(LogLevel level) => false;
+
+  @override
+  void log(
+    LogLevel level,
+    String event, {
+    Map<String, Object?> fields = const {},
+    Object? error,
+    StackTrace? stack,
+  }) {}
+}
 
 void main() {
   late Directory temp;
@@ -244,6 +260,29 @@ void main() {
     );
 
     test(
+      'list with env backend from CODELAB_CONFIG: empty home unchanged',
+      () async {
+        // Scenario «Подкоманда не меняет CODELAB_HOME»: пустой CODELAB_HOME,
+        // бэкенд env задан файлом CODELAB_CONFIG вне домашней папки.
+        File('$home/config.yaml').deleteSync();
+        final cfg = File('${temp.path}/cfg.yaml')
+          ..writeAsStringSync('secrets:\n  backend: env\n');
+        final (code, io) = await run(
+          ['secret', 'list'],
+          environment: {
+            'CODELAB_HOME': home,
+            'CODELAB_CONFIG': cfg.path,
+            'HOME': '${temp.path}/x',
+          },
+        );
+        expect(code, 0, reason: io.stderrText);
+        expect(io.stdoutText, startsWith('Backend: env'));
+        expect(snapshot(home), isEmpty);
+        expect(Directory(home).listSync(), isEmpty);
+      },
+    );
+
+    test(
       'list with the env backend: 0, Backend line, home unchanged',
       () async {
         final before = snapshot(home);
@@ -256,6 +295,84 @@ void main() {
         expect(before.keys, ['/config.yaml']);
       },
     );
+
+    test('--cwd <dir> / -C <dir> secret list: 64, exact message, secret usage, '
+        'store untouched', () async {
+      // spec codelab-cli «--cwd с secret»: длинная и короткая формы.
+      File(
+        '$home/config.yaml',
+      ).writeAsStringSync('secrets:\n  backend: file\n');
+      final before = snapshot(home);
+      for (final flag in ['--cwd', '-C']) {
+        final (code, io) = await run([flag, temp.path, 'secret', 'list']);
+        expect(code, 64, reason: flag);
+        expect(io.stdoutText, isEmpty, reason: flag);
+        expect(
+          io.stderrText,
+          startsWith('codelab: --cwd does not apply to secret\n'),
+          reason: flag,
+        );
+        expect(
+          io.stderrText,
+          contains('Usage: codelab secret set|delete|list'),
+          reason: flag,
+        );
+        expect(snapshot(home), before, reason: flag);
+        expect(File('$home/secrets.yaml').existsSync(), isFalse);
+      }
+    });
+
+    test(
+      'a bad top-level flag before secret: 64, fixed phrase, flag not echoed',
+      () async {
+        // spec codelab-cli «Ошибка верхнего парсера с secret»; agent-secrets
+        // «Ошибка флага верхнего уровня перед secret».
+        const secretLike = 'sk-test-0123456789abcdef';
+        for (final flag in ['--no-such-flag', '--$secretLike']) {
+          final before = snapshot(home);
+          final (code, io) = await run([flag, 'secret', 'list']);
+          expect(code, 64, reason: flag);
+          expect(io.stdoutText, isEmpty, reason: flag);
+          expect(
+            io.stderrText,
+            startsWith('codelab: invalid arguments for secret\n\nUsage: '),
+            reason: flag,
+          );
+          expect(io.stderrText, contains('codelab secret set|delete|list'));
+          expect(io.stderrText, isNot(contains('no-such-flag')));
+          expect(io.stderrText, isNot(contains(secretLike)));
+          expect(io.stderrText, isNot(contains('Could not find an option')));
+          expect(io.stderrText, isNot(contains('package:args')));
+          expect(snapshot(home), before);
+        }
+      },
+    );
+
+    test('SecretAdmin.store from the app, then codelab secret list shows the '
+        'name and never the value', () async {
+      // spec agent-secrets «Запись из приложения и список в CLI».
+      const name = 'codelab/openai';
+      const value = 'sk-test-0123456789abcdef';
+      File(
+        '$home/config.yaml',
+      ).writeAsStringSync('secrets:\n  backend: file\n');
+      final admin = SecretAdmin(
+        store: openSecretStore(
+          choice: 'file',
+          environment: const {},
+          home: home,
+          logger: _SilentLogger(),
+        ),
+        environment: const {},
+      );
+
+      expect(await admin.store(name, value), isA<SecretStored>());
+
+      final (code, io) = await run(['secret', 'list']);
+      expect(code, 0, reason: io.stderrText);
+      expect(io.stdoutText, contains(name));
+      expect('${io.stdoutText}${io.stderrText}', isNot(contains(value)));
+    });
 
     test('CODELAB_HOME=~user/x: 64 with the home message', () async {
       final (code, io) = await run(
@@ -281,5 +398,53 @@ void main() {
       expect(code, 0, reason: io.stderrText);
       expect(Directory('$cwd/~').existsSync(), isFalse);
     });
+  });
+
+  // Утечка класса «разбор удался, поздняя ошибка цитирует хвост argv»
+  // (spec agent-secrets: при `secret` в argv ни одна ошибка не цитирует токены).
+  group('no argv quoting in late errors when secret is in argv', () {
+    final cases = <String, List<String>>{
+      'headless with positional': [
+        '-p',
+        'hi',
+        'x',
+        'secret',
+        'set',
+        'n',
+        _leak,
+      ],
+      'config check rest': ['config', 'check', 'secret', 'set', 'n', _leak],
+      'config unknown sub': ['config', _leak, 'secret'],
+      'profiles add rest': ['profiles', 'add', 'id', 'secret', _leak],
+      'profiles show unknown': ['profiles', 'show', _leak, 'secret'],
+      'later command': ['serve', _leak, 'secret'],
+      'bad agent value': ['--agent', _leak, 'secret'],
+      'bad folder': ['-C', '/no/such/$_leak', 'secret', 'x'],
+      'scenario path': ['test-scenario', '/no/such/$_leak', 'secret'],
+    };
+    for (final entry in cases.entries) {
+      test(entry.key, () async {
+        final (code, io) = await run(entry.value);
+        expect(code, isNot(0));
+        final all = '${io.stdoutText}${io.stderrText}';
+        expect(all, isNot(contains('sk-LEAK')));
+        expect(all, isNot(contains('0123456789')));
+      });
+    }
+    test('config frobnicate without secret keeps the spec text', () async {
+      final (code, io) = await run(['config', 'frobnicate']);
+      expect(code, 64);
+      expect(io.stderrText, contains('Unknown command config frobnicate'));
+    });
+
+    test(
+      'config frobnicate with secret in argv: fixed text, no token',
+      () async {
+        final (code, io) = await run(['config', 'frobnicate', 'secret', _leak]);
+        expect(code, 64);
+        expect(io.stderrText, isNot(contains('frobnicate')));
+        expect(io.stderrText, isNot(contains('sk-LEAK')));
+      },
+    );
   });
 }

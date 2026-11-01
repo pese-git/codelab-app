@@ -66,6 +66,32 @@ agent:
     timeout: const Timeout(Duration(seconds: 90)),
   );
 
+  test('config check: secrets.backend: keychain gives code 1 and the problem, '
+      'no transport', () async {
+    // agent-secrets «keychain ещё не поддерживается»: `config check` — код 1.
+    Directory('${temp.path}/home').createSync();
+    File(
+      '${temp.path}/home/config.yaml',
+    ).writeAsStringSync('secrets:\n  backend: keychain\n');
+
+    final (code, agent) = await run(['config', 'check']);
+
+    expect(code, 1, reason: agent.stderrText);
+    final out = <String>[];
+    String? line;
+    while ((line = await agent.nextStdoutLine()) != null) {
+      out.add(line!);
+    }
+    expect(
+      out.join('\n'),
+      contains(
+        'secrets.backend: keychain is not supported yet '
+        '(supported: auto, env, file)',
+      ),
+    );
+    expect(out.last, isNot('Config: valid'));
+  }, timeout: const Timeout(Duration(seconds: 90)));
+
   test('config check: a typo gives code 1 and the position', () async {
     File('$project/.codelab/config.yaml').writeAsStringSync('budgett: {}\n');
 

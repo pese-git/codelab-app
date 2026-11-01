@@ -73,6 +73,68 @@ void main() {
     timeout: const Timeout(Duration(seconds: 120)),
   );
 
+  test('no home folder at all: set with secrets.backend: file in '
+      'CODELAB_CONFIG exits 64 and creates nothing in cwd', () async {
+    // agent-secrets «Нет домашнего каталога»: `set` и `delete` так же, как
+    // `list`, отказывают до записи и до создания файлов в текущем каталоге.
+    final extra = File('${temp.path}/extra.yaml')
+      ..writeAsStringSync('secrets:\n  backend: file\n');
+    final env = {'CODELAB_HOME': '', 'HOME': '', 'CODELAB_CONFIG': extra.path};
+
+    final (setCode, setOut, setErr) = await run(
+      ['secret', 'set', 'codelab/openai'],
+      stdin: value,
+      environment: env,
+    );
+    final (delCode, delOut, delErr) = await run([
+      'secret',
+      'delete',
+      'codelab/openai',
+    ], environment: env);
+
+    for (final (code, out, err) in [
+      (setCode, setOut, setErr),
+      (delCode, delOut, delErr),
+    ]) {
+      expect(code, 64, reason: err);
+      expect(out, isEmpty);
+      expect(
+        err,
+        contains('cannot find the home folder: set CODELAB_HOME or HOME'),
+      );
+      expect(err, isNot(contains('Usage:')));
+      expect(err, isNot(contains(value)));
+    }
+    expect(Directory('${temp.path}/.codelab').existsSync(), isFalse);
+    expect(File('${temp.path}/secrets.yaml').existsSync(), isFalse);
+  }, timeout: const Timeout(Duration(seconds: 180)));
+
+  test('CODELAB_CONFIG gives secrets.backend to the subcommand: set stores '
+      'in file, list names the explicit backend', () async {
+    // agent-secrets «Подкоманды secret»: бэкенд берётся из файла
+    // `CODELAB_CONFIG` (он сильнее `config.yaml`, который его не задаёт).
+    final extra = File('${temp.path}/extra.yaml')
+      ..writeAsStringSync('secrets:\n  backend: file\n');
+    final env = {'CODELAB_CONFIG': extra.path};
+
+    final (setCode, setOut, setErr) = await run(
+      ['secret', 'set', 'codelab/openai'],
+      stdin: value,
+      environment: env,
+    );
+    final (listCode, listOut, listErr) = await run([
+      'secret',
+      'list',
+    ], environment: env);
+
+    expect(setCode, 0, reason: setErr);
+    expect(setOut, 'Stored secret codelab/openai in file\n');
+    expect(File('$home/secrets.yaml').existsSync(), isTrue);
+    expect(listCode, 0, reason: listErr);
+    expect(listOut, 'Backend: file\ncodelab/openai\n');
+    expect(setOut + setErr + listOut + listErr, isNot(contains(value)));
+  }, timeout: const Timeout(Duration(seconds: 180)));
+
   test(
     'an unknown subcommand: code 64, the secret usage, stdout is empty',
     () async {
@@ -81,6 +143,11 @@ void main() {
       expect(code, 64, reason: err);
       expect(out, isEmpty);
       expect(err, contains('Usage: codelab-agent secret'));
+      // agent-binary «Неизвестная подкоманда»: текст и отсутствие слова
+      // пользователя в выводе (в аргументах может быть секрет).
+      expect(err, contains('secret needs a subcommand'));
+      expect(err, isNot(contains('codelab/openai')));
+      expect(out, isNot(contains('codelab/openai')));
       expect(File('$home/secrets.yaml').existsSync(), isFalse);
     },
     timeout: const Timeout(Duration(seconds: 120)),
@@ -196,6 +263,59 @@ void main() {
     expect(delCode, 0);
     expect(delOut, 'Deleted secret codelab/openai from file\n');
   }, timeout: const Timeout(Duration(seconds: 180)));
+
+  // agent-secrets «Ошибка флага верхнего уровня перед secret» (для
+  // `codelab-agent`): текст `package:args` цитирует слово, а это могло быть
+  // значение секрета — печатается только фиксированная фраза и справка.
+  for (final args in [
+    ['--$value', 'secret', 'list'],
+    ['--no-such-flag=$value', 'secret', 'set', 'codelab/x'],
+  ]) {
+    test(
+      'a top-level flag error before secret (${args.first.substring(0, 6)}…): '
+      '64, fixed text, the secret usage, no echo',
+      () async {
+        final (code, out, err) = await run(args);
+
+        expect(code, 64, reason: err);
+        expect(out, isEmpty);
+        expect(err, contains('codelab-agent: invalid arguments for secret'));
+        expect(err, contains('Usage: codelab-agent secret'));
+        expect(err, isNot(contains('Could not find an option')));
+        for (final text in [out, err]) {
+          for (var i = 0; i + 4 <= value.length; i++) {
+            expect(
+              text,
+              isNot(contains(value.substring(i, i + 4))),
+              reason: 'substring at $i leaked',
+            );
+          }
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 120)),
+    );
+  }
+
+  for (final args in [
+    ['serve', '--stdio', 'secret', 'set', 'codelab/x', value],
+    ['config', 'check', 'secret', 'set', 'n', value],
+  ]) {
+    test('${args.take(2).join(' ')} with trailing secret tokens: 64, '
+        'rest tokens are never quoted', () async {
+      final (code, out, err) = await run(args);
+
+      expect(code, 64, reason: err);
+      for (final text in [out, err]) {
+        for (var i = 0; i + 4 <= value.length; i++) {
+          expect(
+            text,
+            isNot(contains(value.substring(i, i + 4))),
+            reason: 'substring at $i leaked',
+          );
+        }
+      }
+    }, timeout: const Timeout(Duration(seconds: 120)));
+  }
 
   test('the general usage names secret set|delete|list', () async {
     final (code, _, err) = await run(['bogus']);

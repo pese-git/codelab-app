@@ -242,6 +242,25 @@ agent:
     },
   );
 
+  test('CODELAB_CONFIG is honoured: absolute extra.yaml with an unknown key '
+      'appears in Sources: and its problem gives code 1 (agent-configuration, '
+      'CODELAB_CONFIG учитывается)', () async {
+    write('$home/config.yaml', providers);
+    final extra = '${root.path}/extra.yaml';
+    write(extra, 'bogus_key: 1\n');
+
+    final result = await check(env: {'CODELAB_CONFIG': extra});
+
+    final out = result.stdout.join('\n');
+    expect(result.exitCode, 1, reason: out);
+    expect(
+      result.stdout.firstWhere((l) => l.startsWith('Sources:')),
+      contains(extra),
+    );
+    expect(out, contains('bogus_key'));
+    expect(result.stdout.last, startsWith('Config: invalid'));
+  });
+
   test('a missing cwd is a usage error: code 64', () async {
     final result = await ConfigCommands().check(
       CheckOptions(
@@ -1070,18 +1089,63 @@ agent:
       expect(result.stdout.last, 'Config: valid');
     });
 
+    test('secrets.backend: keychain: проблема конфигурации, код 1', () async {
+      // agent-secrets «keychain ещё не поддерживается»: `config check` — код 1.
+      write('$home/config.yaml', 'secrets:\n  backend: keychain\n$providers');
+
+      final result = await check();
+
+      expect(result.exitCode, 1);
+      expect(
+        result.stdout.join('\n'),
+        contains(
+          'secrets.backend: keychain is not supported yet '
+          '(supported: auto, env, file)',
+        ),
+      );
+      expect(result.stdout.last, isNot('Config: valid'));
+    });
+
     test('file с правами 0644 и ссылками: секреты недоступны, отдельных '
         'warning на каждое имя нет', () async {
-      write('$home/config.yaml', 'secrets:\n  backend: file\n$withSecretKey');
+      // agent-configuration «Отказ file без строк по именам»: две ссылки
+      // (провайдер и заголовок MCP) дают одну строку о правах.
+      write('$home/config.yaml', r'''
+secrets:
+  backend: file
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    api_key_secret: codelab/openai
+    models:
+      m: {}
+agent:
+  default_model: p/m
+mcp:
+  servers:
+    - name: github
+      type: http
+      url: https://gh.test/mcp
+      headers:
+        Authorization: "Bearer ${secret:codelab/mcp/github/authorization}"
+''');
       seedFile('644');
 
       final result = await check(commands: ConfigCommands(platform: 'linux'));
 
       expect(result.stdout.where((l) => l.contains('is not set')), isEmpty);
+      expect(result.stdout.where((l) => l.contains('is unavailable')), isEmpty);
       expect(
-        result.stdout.where((l) => l.contains('has permissions 0644')),
+        result.stdout.where(
+          (l) =>
+              l ==
+              'warning: secrets: $home/secrets.yaml has permissions 0644; '
+                  'run: chmod 600 $home/secrets.yaml',
+        ),
         hasLength(1),
       );
+      expect(result.stdout.last, 'Config: valid');
       expect(result.exitCode, 0);
     });
 
