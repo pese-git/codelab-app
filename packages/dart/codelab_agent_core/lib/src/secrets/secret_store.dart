@@ -17,8 +17,26 @@ abstract interface class SecretStore {
   /// `null` — секрета нет. Недоступность хранилища — [SecretStoreUnavailableException].
   Future<String?> read(String name);
 
+  /// Сохраняет или заменяет значение секрета [name].
+  ///
+  /// Почему исключения: хранилище только для чтения (`env`) и отказ
+  /// файлового бэкенда (права, ссылка) не одно и то же, но для вызывающего
+  /// это «записать нельзя» — не молчаливый успех.
+  ///
+  /// Как использовать: вызывает только администрирование (`SecretAdmin` в
+  /// `codelab_agent_io`) после проверки имени и значения. Бросает
+  /// [SecretStoreUnavailableException] с причиной без значения: если запись
+  /// невозможна (бэкенд только для чтения) или хранилище отказало.
   Future<void> write(String name, String value);
 
+  /// Удаляет секрет [name]; отсутствующее имя — не ошибка (идемпотентно).
+  ///
+  /// Почему идемпотентно: `secret delete` повторяют после сбоев, и повтор не
+  /// должен падать (D8).
+  ///
+  /// Как использовать: как [write] — через `SecretAdmin`. Бросает
+  /// [SecretStoreUnavailableException], если бэкенд только для чтения или
+  /// недоступен.
   Future<void> delete(String name);
 
   /// Имена сохранённых секретов; у `env` их нет (D6).
@@ -30,7 +48,16 @@ abstract interface class SecretStore {
 /// Почему отдельный интерфейс: порт `SecretStore` остаётся прежним, а
 /// резолверу и подсказкам нужны id бэкенда, признак записи и причина, по
 /// которой `auto` выбрал не то хранилище (D3).
+///
+/// Для чего: `SecretResolver` берёт из [backend] идентификатор для поля
+/// `source` результата и для диагностики; `config check` и подкоманды
+/// `secret` — признак записи и причину выбора.
+///
+/// Как использовать: каждая реализация хранилища (`env`, `file`, `memory`)
+/// реализует этот интерфейс, а не голый [SecretStore]; хост передаёт его в
+/// `SecretResolver(store: …)`.
 abstract interface class DescribedSecretStore implements SecretStore {
+  /// Описание бэкенда; одно и то же значение на всю жизнь хранилища.
   SecretBackendInfo get backend;
 }
 
@@ -74,7 +101,12 @@ final class SecretStoreUnavailableException implements Exception {
     required this.reason,
   });
 
+  /// Идентификатор бэкенда (`SecretBackendInfo.id`): по нему человек понимает,
+  /// какое хранилище чинить; попадает в лог и текст ошибки хода.
   final String backend;
+
+  /// Причина на английском без значения секрета, содержимого файла и stderr
+  /// внешних утилит: текст идёт в лог и сообщение об ошибке как есть (CFG-10).
   final String reason;
 
   @override

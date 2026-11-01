@@ -202,18 +202,134 @@
 
 ## 10. Матрица, документы и Definition of Done (итерация 5)
 
-- [ ] 10.1 `[agent]` Матрица этапа 8 в `09-13-stage-8-mcp-config.md` и `agent-parity-goals.md`:
+- [x] 10.1 `[agent]` Матрица этапа 8 в `09-13-stage-8-mcp-config.md` и `agent-parity-goals.md`:
   - P-12 — «частично: `env` и `file`, пункт 1 CFG-9; хранилище ОС — после 1.0 (`add-agent-os-secret-backends`), пункты 2–3 CFG-9 — 8.11» с файлами тестов;
   - P-17 — `debug_secrets_test.dart`;
   - итог 8.9 абзацем, как у 8.6–8.8.
-- [ ] 10.2 `[agent]` Сверка документов с кодом (`codelab_agent_core/AGENTS.md` §3, критерий (е)):
+- [x] 10.2 `[agent]` Сверка документов с кодом (`codelab_agent_core/AGENTS.md` §3, критерий (е)):
   - §17.5.2, §17.5.4, §17.5.9, §17.5.13, §10.3, §15.4–§15.6, §12.2–§12.4;
   - вложенные `AGENTS.md` `codelab_agent_io` (§1: хранилища секретов `env` и `file` вместо «ещё не созданы»), `codelab_setup`, `apps/codelab_agent`, `apps/codelab_cli`;
   - doc-комментарии новых сущностей на русском (`AGENTS.md` §15).
-- [ ] 10.3 `[agent]` Definition of Done change:
+- [x] 10.3 `[agent]` Definition of Done change:
   - все сценарии спецификаций этого change покрыты тестами задач 1–9;
   - `melos run guard`, `web-compile` зелёные;
   - сторож и allowlist не менялись (D1);
   - `openspec validate add-agent-os-secret-backends --strict` зелёный (черновик после 1.0 не устарел относительно D-решений 8.9);
   - `openspec validate add-agent-secret-store --strict` зелёный;
-  - полный `melos run check` — в CI pull request последней итерации.
+  - полный `melos run check` — **перенесено в pull request**: подтверждается CI PR последней итерации, здесь не прогонялся.
+
+  Сверка 10.1–10.2 (2026-11-01). 10.1: P-12 — «частично: `env` и `file`, пункт 1 CFG-9; хранилище ОС — после 1.0, пункты 2–3 CFG-9 — 8.11» с файлами тестов, P-17 — «выполнено» (`debug_secrets_test.dart`) в `agent-parity-goals.md`; итог 8.9, таблица DoD 8.9 и scope change в `09-13-stage-8-mcp-config.md` (тест `secret_store_backends_test.dart` относится к черновику `add-agent-os-secret-backends`). 10.2: документы сверены с кодом — §17.5.2 (`SecretNames.maxLength`, правило `suggestFor`, `SecretTemplate`/`MemorySecretStore`, `suggestedSecretName` с 8.9), §17.5.4 (объём CFG-9 в 8.9, английский текст `inlineSecret`, `SecretResolver.env` читает окружение резолвера, правило «нет домашнего каталога» у `secret`), §17.5.10 (пример ошибки и исправления в 1.0), §17.5.13 (фактические файлы и состав тестов), §15.3–§15.5 (`secrets.*` с 8.9 из пользовательского конфига и `--config`, `${secret:…}` в `headers`/`env` с 8.9, текст `inlineSecret`, шаг 3 загрузки); §10.3, §15.6, §12.2–§12.4 расхождений не имеют. Вложенные `AGENTS.md`: `codelab_agent_io` (§1 `lib/src/secrets/`, §3 тесты секретов), `codelab_setup` (§4), `apps/codelab_agent` (§2: `selectionReason`, `plaintext`, классы ошибок `secret`), `apps/codelab_cli` (§2: флаги и ошибки разбора с `secret`). Найдено расхождение кода со спецификацией: `FileSecretStore` при файле больше 1 МиБ отказывал без `secrets.file.refused`; исправлено в итерации 5 (дефект 1 ниже), причина `too_large` добавлена в §12.3, design.md (D10, D14) и agent-secrets «Бэкенд file».
+
+  Сверка DoD 2026-11-01 (итерация 5). Сторож и allowlist (D1): `git log 647a0d5^..HEAD` и `git diff 647a0d5^..HEAD` по `packages/dart/codelab_architecture_tests` и по `pubspec.yaml` всех пакетов и приложений пусты, незакоммиченных правок там нет. Прогоны 2026-11-01: `fvm exec melos run guard` (68 тестов) и `fvm exec melos run web-compile` — exit 0; `openspec validate add-agent-secret-store --strict` и `openspec validate add-agent-os-secret-backends --strict` — valid. Черновик `add-agent-os-secret-backends` сверен с D-решениями 8.9 (порт `SecretProcessRunner`/`SecretProcessResult`, `secretsBackendProblem`, синхронные `openSecretStore`/`openHostSecrets` с `selectionReason`, механизм записи `FileSecretStore`, `SecretAdmin`): `design.md` («Сверка с итогом 8.9», D2, D3, D5, OQ3, OQ4) и `proposal.md` («Impact») обновлены. Полный `melos run check` подтверждается CI pull request.
+
+  Дефекты, найденные при сверке DoD и исправленные в итерации 5 (тест, затем код):
+  1. `FileSecretStore` при `secrets.yaml` больше 1 МиБ отказывал при чтении без `secrets.file.refused`; теперь — `secrets.file.refused {path, reason: too_large}` один раз на процесс и путь (`io/secrets/file_secret_store_test.dart`, «a file over 1 MiB on read is refused with secrets.file.refused {reason: too_large}, once per process and path»).
+  2. `codelab-agent --<слово> secret list` печатал текст `package:args` с присланным словом (возможно, значением секрета) и справку `serve`; теперь `apps/codelab_agent/lib/src/run.dart` при `secret` в argv печатает только `codelab-agent: invalid arguments for secret` и справку `secret` (`agent/secret_command_process_test.dart`, «a top-level flag error before secret (…): 64, fixed text, the secret usage, no echo»).
+
+  Сценарий спецификации → тест (пути от корня; `core` = `packages/dart/codelab_agent_core/test`, `io` = `packages/dart/codelab_agent_io/test`, `agent` = `apps/codelab_agent/test`, `cli` = `apps/codelab_cli/test`):
+
+  | Спецификация, сценарий | Тест | Покрытие |
+  |---|---|---|
+  | agent-secrets «Переменная переопределения» | `core/secrets/secret_names_test.dart` («uppercases and maps every character outside [A-Z0-9] to _») | да |
+  | agent-secrets «Предлагаемое имя MCP» | там же («an MCP env or header suggests codelab/mcp/<server>/<key>», «the result always passes the rule») | да |
+  | agent-secrets «Предлагаемое имя ключа элемента MCP и запасной вариант» | `core/secrets/secret_names_test.dart` («a path without a rule falls back to the codelab/ prefix»: `mcp.servers[GitHub].token` → `codelab/mcp/github/token`, `tools.exec.Api Token` → `codelab/tools.exec.api-token`) | да |
+  | agent-secrets «Неверные имена» | там же («rejects other names with the rule text, never with the name») | да |
+  | agent-secrets «Переменная побеждает хранилище» | `core/secrets/secret_resolver_test.dart` («a variable wins over the store and the store is not read») | да |
+  | agent-secrets «Кэш и отсутствие» | там же («a found value is cached, a missing one is not») | да |
+  | agent-secrets «Одно обращение на имя» | там же («concurrent requests of one name make one read») | да |
+  | agent-secrets «Хранилище недоступно» | там же («two names give two SecretUnavailable and one warning») | да |
+  | agent-secrets «Ключ из хранилища» | `core/llm/routed_stream_function_secrets_test.dart` («the key comes from the store; two turns make one read») | да |
+  | agent-secrets «Секрет не задан» | там же («not set: auth without HTTP, then success after a write without a restart») | да |
+  | agent-secrets «Отмена во время ожидания хранилища» | там же («cancellation ends the stream as aborted within 1 s, no HTTP») | да |
+  | agent-secrets «Хост без резолвера» | там же (группы `api_key_env` и `api_key_secret`: «without a resolver …») | да (переменная процесса в тесте не задаётся: без резолвера ядро окружение не читает вовсе) |
+  | agent-secrets «Сырое значение в теле ошибки» | там же («the bare value in a 401 body reaches neither the error nor the log») | да |
+  | agent-secrets «Заголовок из хранилища» | `core/runtime/mcp_secret_values_test.dart` («a header value comes from the store; log and journal stay clean») | да |
+  | agent-secrets «Порядок заголовков сохраняется» | `core/config/config_secret_refs_test.dart` («withSecrets keeps the header order of the config file …»); там же в рантайме — `X-Plain`, `Authorization` | да |
+  | agent-secrets «Закрытие во время раскрытия» | `core/runtime/mcp_secret_values_test.dart` (группа `dispose`: «during expansion the result is discarded and connect is not called» — `connect` не вызван, `mcp.server.failed` нет; `setMcpServers`: «close() during expansion ends quietly …») | да |
+  | agent-secrets «Ненайденный секрет MCP» | там же («a missing secret fails only its server») | да |
+  | agent-secrets «Ссылка от клиента ACP — литерал» | там же («a client server keeps a literal ${secret:…}; the store is not read») | да |
+  | agent-secrets «Недоверенный проект не читает секреты» | `core/config/config_secret_refs_test.dart` (группа `untrusted project`) | да |
+  | agent-secrets «env только для чтения» | `io/secrets/env_secret_store_test.dart` («reads CODELAB_SECRET_* and refuses write and delete») | да |
+  | agent-secrets «Права шире 0600» | `io/secrets/file_secret_store_test.dart` («0644 refuses read, write, delete and names with chmod hint»); `SecretUnavailable` — `secret_resolver_test.dart` | да |
+  | agent-secrets «Символическая ссылка» | там же («a symbolic link is refused even if its target is 0600») | да |
+  | agent-secrets «Файл создаёт только запись» | там же («read, delete and names of a missing file do not create it», «write creates the file with 0600 and read returns the value») | да |
+  | agent-secrets «Атомарная запись» | там же («a tmp file with wider permissions never receives the value», «tmp directory widened after createSync: refused, no value on disk» — сбой после создания tmp; «a failure before the rename keeps the old file and the next write removes the leftover tmp» — брошенный tmp старше 10 минут) | да (сочетанием) |
+  | agent-secrets «Свежие и чужие временные файлы не удаляются» | там же («removes only abandoned files; fresh foreign tmp and links survive») | да |
+  | agent-secrets «Каталог секретов доступен на запись другим» | там же (группа `directory safety`) | да |
+  | agent-secrets «Чужой каталог секретов» | там же («a failing no-op chmod of home (foreign owner) refuses the write before any tmp file exists») | да |
+  | agent-secrets «Широкие права после переименования» | там же (группа `wide permissions after rename`) | да |
+  | agent-secrets «Каталог секретов создаёт запись» | там же («a newly created CODELAB_HOME is made private independent of umask»; `0600` — «write creates the file with 0600 …») | да |
+  | agent-secrets «Записи разных экземпляров не теряются» | там же («two instances over one path lose no update; file stays 0600») | да |
+  | agent-secrets «file на Windows» | `io/config/config_loader_test.dart` (группа `secrets.backend: file on Windows`); `file_secret_store_test.dart` («the substituted platform refuses every operation») | да |
+  | agent-secrets «auto — env на всех ОС» | `io/secrets/open_secret_store_test.dart` (группа `auto is env on every OS`, «no backend of this version starts a process») | да |
+  | agent-secrets «Недопустимое значение у openSecretStore» | там же («file on Windows is a typed failure …», «keychain and unknown choices are typed failures with spec texts») | да |
+  | agent-secrets «auto не выбирает file» | там же («auto never selects file even if secrets.yaml exists») | да |
+  | agent-secrets «keychain ещё не поддерживается» | `core/config/config_secret_refs_test.dart` («keychain is a problem: not supported yet»); `agent/secret_store_process_test.dart` («secrets.backend: keychain exits 64 before the transport starts»); `io/cli/config_commands_test.dart` («secrets.backend: keychain: проблема конфигурации, код 1»); `agent/config_command_process_test.dart` («config check: secrets.backend: keychain gives code 1 and the problem, no transport») | да |
+  | agent-secrets «Неизвестный бэкенд» | `core/config/config_secret_refs_test.dart` («another value is a problem with the list of values») | да |
+  | agent-secrets «Значение аргументом» | `io/cli/secret_commands_test.dart` («значение аргументом: код 64, хранилище не открывается …»); `agent/secret_command_process_test.dart` («a value argument …»); `cli/secret_command_test.dart` («a value passed as an argument: 64, never printed») | да |
+  | agent-secrets «Значение из stdin без TTY» | `io/cli/secret_commands_test.dart` («без TTY: весь поток без одного завершающего \n») | да |
+  | agent-secrets «Перезапись существующего секрета» | там же («перезапись: Updated secret, без вопроса и флага») | да |
+  | agent-secrets «Конфиг с ключом значением не мешает set» | там же («невалидный конфиг с api_key значением не блокирует») | да |
+  | agent-secrets «Коллизия переменной» | там же («коллизия envOverride: код 64, называет оба имени и переменную …») | да |
+  | agent-secrets «Только чтение при auto» | там же («бэкенд env (auto): код 1, stdin не читается …»); `agent/secret_command_process_test.dart` («auto: set is read-only, code 1, stdin is not read») | да |
+  | agent-secrets «Сохранение в file» | `io/cli/secret_commands_test.dart` («file: secrets.yaml создан с правами 0600 …»); `agent/secret_command_process_test.dart` («file: set stores from stdin, then list and delete work») | да |
+  | agent-secrets «Одинаковый вывод двух бинарей» | `cli/e2e/secret_command_test.dart` («env backend: list is identical in both binaries …») | да |
+  | agent-secrets «Ошибка значения без справки» | `io/cli/secret_commands_test.dart` («пустое значение …: код 64», `showUsage == false`) | да |
+  | agent-secrets «Недопустимый UTF-8» | там же («недопустимый UTF-8 без TTY: код 64, ничего не сохранено», `showUsage == false`); `io/cli/secret_input_test.dart` | да |
+  | agent-secrets «Ошибка разбора argv не цитирует слово» | `agent/secret_command_process_test.dart` («the value as …: code 64, the secret usage, no part of the value in the output») | да |
+  | agent-secrets «Вставка нескольких строк в TTY» | `io/cli/secret_commands_test.dart` («многострочная вставка с TTY …»); `io/cli/secret_input_test.dart` (байты после перевода строки) | да |
+  | agent-secrets «Слова secret после другой команды» | `agent/secret_command_process_test.dart` («serve --stdio with trailing secret tokens: 64, rest tokens are never quoted»; тот же тест для `config check`) | да |
+  | agent-secrets «Недопустимый CODELAB_CONFIG» | `io/cli/secret_commands_test.dart` («CODELAB_CONFIG с относительным путём игнорируется с предупреждением, код выхода прежний» — `set`; «CODELAB_CONFIG с чужим расширением …» — `list`, `Backend: env`, код `0`) | да (сочетанием) |
+  | agent-secrets «Нет домашнего каталога» | `io/cli/secret_commands_test.dart` (группа `без домашнего каталога`: «set с secrets.backend: file в CODELAB_CONFIG: код 64, stdin не читался, ничего не создано», «delete и list: код 64 и тот же текст»); `agent/secret_command_process_test.dart` («no home folder at all: secret list exits 64 and creates nothing in cwd», «no home folder at all: set with secrets.backend: file in CODELAB_CONFIG exits 64 and creates nothing in cwd») | да |
+  | agent-secrets «Ошибка флага верхнего уровня перед secret» | `cli/secret_command_test.dart` («a bad top-level flag before secret: 64, fixed phrase, flag not echoed»); `agent/secret_command_process_test.dart` («a top-level flag error before secret (…): 64, fixed text, the secret usage, no echo») | да |
+  | agent-secrets «Значение не попадает в лог» | `core/secrets/debug_secrets_test.dart` (группа `provider path`: «two turns: lookups are memory, then cache …») | да |
+  | agent-secrets «Без режима» | там же («without the mode there are no secrets.lookup records») | да |
+  | agent-secrets «Резолвер внутри isolate» | `io/secrets/host_secrets_test.dart` («openHostSecrets works inside an isolate from serializable data …») | да |
+  | agent-secrets «Общий секрет CLI и встроенного агента» | там же («a secret saved by SecretAdmin is found by the resolver on the file backend») | да |
+  | agent-secrets «Замена прочитанного секрета требует перезапуска» | там же («a replaced secret is seen only by a new resolver») | да |
+  | agent-secrets «Запись из приложения и список в CLI» | `cli/secret_command_test.dart` («SecretAdmin.store from the app, then codelab secret list shows the name and never the value»); значение не в argv и stdin дочерних процессов — `io/secrets/secret_admin_test.dart` («no child process receives the value in argv or stdin») | да |
+  | agent-secrets «Отказ без исключения» | `io/secrets/secret_admin_test.dart` («invalid name and invalid value are results, the store is not called») | да |
+  | agent-secrets «Предварительная проверка без значения» | там же (группа `checkStore`) | да |
+  | agent-secrets «Бэкенд только для чтения на Windows» | там же («env is read-only: structured data, file backend offered», «on Windows the file backend is not offered, only the variable») | да |
+  | agent-configuration «file на Windows при загрузке» | `io/config/config_loader_test.dart` (группа `secrets.backend: file on Windows`) | да |
+  | agent-configuration «Ключ значением» | `core/config/config_inline_secret_test.dart` (группа `providers.*`); `agent/config_invalid_process_test.dart` («a key written as a value: the secret is in neither stderr nor the log file»); `io/cli/config_commands_test.dart` («an inline secret never reaches the output») | да |
+  | agent-configuration «Токен значением у MCP-сервера» | `core/config/config_inline_secret_test.dart` («a token value names the command and the ${secret:…} form») | да |
+  | agent-configuration «Ключ вместо имени переменной» | `core/config/config_secrets_test.dart` («api_key_env that is not a variable name is a problem without the value anywhere») | да |
+  | agent-configuration «Ключ вместо имени секрета» | `core/config/config_secret_refs_test.dart` («api_key_secret follows the strict rule, the name is not echoed») | да |
+  | agent-configuration «Ссылка на секрет в args MCP-сервера» | там же («a reference outside env and headers is a problem») | да |
+  | agent-configuration «Ссылка на секрет в base_url провайдера» | там же («providers.*.base_url with a reference is a value problem») | да |
+  | agent-configuration «Переменная ключа не задана» | `core/config/config_secrets_test.dart` («an unset variable is a warning and a provider problem …»); `core/llm/routed_stream_function_secrets_test.dart` («an unset variable is an auth failure without HTTP») | да |
+  | agent-configuration «Ссылки на секреты не читаются при загрузке» | `core/config/config_secret_refs_test.dart` («references are not read at load …») | да (загрузка ядра хранилища не получает вовсе) |
+  | agent-configuration «Битый конфиг», «Предупреждения не делают конфиг невалидным», «Подсказка о codelab.toml», «Несуществующий каталог», «Ошибка использования из окружения» (прежние) | `io/cli/config_commands_test.dart` («a typo …», «an unknown CODELAB_* variable is a warning line …», «codelab.toml alone …», «a missing cwd is a usage error: code 64», «a bad CODELAB_CONFIG file name is a usage error …»); `agent/config_command_process_test.dart` | да (DoD change `add-agent-configuration`) |
+  | agent-configuration «CODELAB_CONFIG учитывается» (прежний) | `io/cli/config_commands_test.dart` («CODELAB_CONFIG is honoured: absolute extra.yaml with an unknown key appears in Sources: and its problem gives code 1 (agent-configuration, CODELAB_CONFIG учитывается)»); слои — `io/config/config_loader_test.dart` | да |
+  | agent-configuration «Одинаковый вывод у двух бинарей» (прежний) | `cli/config_command_test.dart` | да (DoD change `add-agent-configuration`) |
+  | agent-configuration «Тестовое хранилище в обычной сборке» | `io/cli/config_commands_test.dart` («CODELAB_TEST_SECRET_STORE in a regular build …»); `io/config/config_loader_test.dart` (группа `config.env.unknown`) | да |
+  | agent-configuration «Ни одного значения в логе» (прежний) | `agent/agent_host_config_test.dart` (`TOKEN=tok-test-secret`) | да |
+  | agent-configuration «Нет предупреждения о недоступном хранилище» | `core/config/config_secret_refs_test.dart` (`config.secret.unavailable` нет в `warnings`, которые хост пишет в лог) | да |
+  | agent-configuration «Секрет не задан при auto» | `io/cli/config_commands_test.dart` (группа `secrets`: «auto: note с причиной и warning с подсказкой env/file …», «Windows: подсказка только с переменной») | да |
+  | agent-configuration «Секрет не задан в file» | там же («file без секрета: подсказка set …») | да |
+  | agent-configuration «Секрет задан переменной» | там же («секрет задан переменной: строки warning нет …») | да |
+  | agent-configuration «Предупреждение об открытом тексте» | там же («file без ссылок: строка об открытом тексте всегда …», «file с правами 0644: строка о правах с chmod 600, код 0») | да |
+  | agent-configuration «Отказ file без строк по именам» | `io/cli/config_commands_test.dart` («file с правами 0644 и ссылками: секреты недоступны, отдельных warning на каждое имя нет» — ссылки `codelab/openai` и заголовка MCP, одна строка о правах) | да |
+  | agent-configuration «Отказ file по другой причине» | там же («file: secrets.yaml — символьная ссылка …») | да |
+  | agent-configuration «Без ссылок вывод прежний» | там же («без ссылок на секреты хранилище не вызывается, вывод прежний», «только api_key_env …») | да |
+  | agent-binary «Ключ провайдера из переменной переопределения» | `agent/secret_store_process_test.dart` («the provider key comes from CODELAB_SECRET_*; the value is in no output»); `agent/agent_host_secrets_test.dart` (`--stdio`, `--ws`) | да |
+  | agent-binary «Секрет не задан — ошибка хода» | `agent/secret_store_process_test.dart` («a missing secret with secrets.backend: env is a turn error and the process keeps running») | да |
+  | agent-binary «Режим отладки секретов» | там же (`--debug-secrets` и `CODELAB_DEBUG_SECRETS=1`: «secrets.lookup without the value») | да |
+  | agent-binary «Бэкенд file при старте» | там же («secrets.backend: file logs secrets.backend.plaintext at start and does not create the file») | да |
+  | agent-binary «Сценарий не читает secrets.yaml» | там же («--llm-script ignores secrets.backend: file; secrets.yaml is not opened») | да |
+  | agent-binary «Неизвестная подкоманда» | `agent/secret_command_process_test.dart` («an unknown subcommand: code 64, the secret usage, stdout is empty» — текст `secret needs a subcommand`, без `codelab/openai`) | да |
+  | agent-binary «list с бэкендом env» | там же («list with secrets.backend: env: the first line is Backend: env, code 0») | да |
+  | codelab-cli «Совпадение с бинарём агента» | `cli/e2e/secret_command_test.dart` («set with a value argument: both binaries give 64 and the same output …») | да |
+  | codelab-cli «Флаги подключения с secret» | `cli/e2e/secret_command_test.dart` («-p hi secret list: 64, stdout empty, no agent started»); `cli/secret_command_test.dart` | да |
+  | codelab-cli «--cwd с secret» | `cli/secret_command_test.dart` («--cwd <dir> / -C <dir> secret list: 64, exact message, secret usage, store untouched»; «connection flags with secret are usage errors») | да |
+  | codelab-cli «Ошибка верхнего парсера с secret» | `cli/secret_command_test.dart` («a bad top-level flag before secret: 64, fixed phrase, flag not echoed»: `--no-such-flag`, без `Could not find an option`) | да |
+  | codelab-cli «Подкоманда не меняет CODELAB_HOME» | `cli/secret_command_test.dart` («list with the env backend: 0, Backend line, home unchanged»); `cli/e2e/secret_command_test.dart` («CODELAB_HOME is not modified by list and by usage errors») | да; вариант с `CODELAB_CONFIG` — `list with env backend from CODELAB_CONFIG: empty home unchanged` (`apps/codelab_cli/test/secret_command_test.dart`) |
+  | agent-runtime «Секрет сервера конфига не найден» | `core/runtime/mcp_secret_values_test.dart` («a missing secret fails only its server») | да |
+  | agent-runtime «Хранилище недоступно при загрузке сессии» | `core/runtime/mcp_secret_values_test.dart` (группа `loadSession`: «an unavailable store skips only its server and logs the reason, no value») | да |
+  | agent-runtime «Закрытие во время раскрытия секретов» | там же (группы `dispose` и `setMcpServers`) | да |
+  | agent-runtime «Закрытие во время замены», «Замена во время хода», «Сервер конфига не тронут» (прежние) | `core/runtime/set_mcp_servers_test.dart` («close during a connection of a new server …», группа `a session with a turn`, «servers of the config stay in the list …») | да (DoD change `add-agent-mcp-client`) |
+  | agent-runtime «Сервер клиента побеждает сервер конфига», «Сессии не видят чужих инструментов», «Процессы закрываются вместе с сессией», «Сбой после подключения закрывает серверы», «Коннектор бросил», «Коннектор отдал инструмент без префикса», «Capability выключена» (прежние) | `core/runtime/session_mcp_test.dart` (группы `list of servers`, `registration and isolation`, `close`, `robustness`, `capability filter`) | да (DoD change `add-agent-mcp-client`) |
+  | agent-runtime «Коллизия двух серверов», «Коллизия внутри одного сервера» (прежние) | `packages/dart/codelab_agent_mcp/test/connector_test.dart` (группа `name collisions disable the later server (E-05, HOST-5)`) | да (DoD change `add-agent-mcp-client`) |
+
+  Итог: все сценарии спецификаций этого change покрыты тестами (сценарии, перенесённые без изменений из прежних changes, — их тестами и тестами итерации 5); 10.3 отмечен. Полный `melos run check` подтверждается CI pull request.

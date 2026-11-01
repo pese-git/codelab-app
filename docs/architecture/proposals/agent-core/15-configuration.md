@@ -116,7 +116,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | `subagents.*` (после MVP, §17.3.10) | только ужесточение (меньшие лимиты, `enabled = false`; `follow_ups = false`, уменьшение `max_follow_ups`, `max_resumes`, но не включение и не увеличение, §17.3.8.1) | да | — |
 | `tools.spill.enabled = false`; уменьшение любых ключей `tools.spill.*` (этап 3, §17.4.8) | да | да | — |
 | увеличение ключей `tools.spill.*` (этап 3) | нет | да | глобальный конфиг или проект в `trusted_projects` |
-| `secrets.*` (после MVP, §17.5.9) | нет | нет | только глобальный конфиг; из обоих проектных слоёв отбрасывается всегда с `config.project.untrusted_key` (`ignored: secrets is read only from the global config`) |
+| `secrets.*` (с этапа 8.9, §17.5.9; change `add-agent-secret-store`, D7) | нет | нет | только пользовательский конфиг и `--config`/`CODELAB_CONFIG`; из обоих проектных слоёв отбрасывается всегда с `config.project.untrusted_key` (`ignored: secrets is read only from the global config`) |
 | `config.*` (после MVP) | нет | да | — |
 | `${secret:<name>}` в `headers`, `env` (с этапа 8.9, §17.5.4) | нет: `providers` и `mcp.servers` недоверенного проекта отбрасываются целиком, ссылка до резолвера не доходит (change `add-agent-secret-store`, D4) | да | проект в `trusted_projects` |
 | `steering.enabled = false`; уменьшение `steering.max_steps`, `steering.max_pending`, `steering.max_bytes` (после MVP, §17.7.7) | да (только ужесточение) | да | — |
@@ -189,7 +189,7 @@ providers:
 | `api_key_env` | string | нет | имя переменной окружения с ключом (`[A-Za-z_][A-Za-z0-9_]*`, иначе `expected an environment variable name`) |
 | `api_key_secret` | string | нет | имя секрета (правило `SecretNames`, §17.5.2); значение читает `SecretResolver` при первом запросе к провайдеру, а не загрузка (этап 8.9; change `add-agent-secret-store`, D2, D4) |
 | `auth_header` | string | `Authorization` (Bearer) / `x-api-key` | имя заголовка ключа |
-| `headers` | map string→string | `{}` | дополнительные заголовки; допускают `${ENV}`, после MVP — `${secret:<name>}` (§17.5.4) |
+| `headers` | map string→string | `{}` | дополнительные заголовки; допускают `${ENV}` и с этапа 8.9 — `${secret:<name>}` (шаблон, раскрывается при первом запросе; §15.5, п. 7; §17.5.4) |
 | `connect_timeout` | duration | `llm.timeouts.connect` (`"30s"`) | заголовки ответа не пришли (§2.4) |
 | `idle_timeout` | duration | `llm.timeouts.idle` (`"120s"`) | пауза между событиями SSE |
 | `rate_limit_retries` | int | `llm.retry.rate_limit_retries` (`3`) | бюджет повторов при 429, не считая первой попытки: `RetryPolicy.rateLimitRetries` (§2.10) |
@@ -209,19 +209,23 @@ providers:
 | `stall_retries`, `stall_key_rotations` | int | `llm.retry.stall_retries`, `.stall_key_rotations` | после MVP: переопределение `llm.retry.*` на провайдера (§17.10.10.1) |
 | `stall_base_delay`, `stall_max_delay` | duration | `llm.retry.stall_base_delay`, `.stall_max_delay` | после MVP: переопределение `llm.retry.*` на провайдера (§17.10.10.1) |
 
-Ключ API **нельзя** писать в конфиг значением: ключ `api_key` — ошибка
-`ConfigException("providers.openai.api_key: ключи не хранятся в конфиге, используйте api_key_env или api_key_secret")`.
+Ключ API **нельзя** писать в конфиг значением: ключ `api_key` — проблема `inlineSecret`, у хоста —
+`ConfigInlineSecretException` (`suggestedSecretName`, с этапа 8.9) с текстом
+`providers.openai.api_key: secrets are not stored in the config; run: codelab secret set
+codelab/openai, then use api_key_secret: codelab/openai (or api_key_env with an environment
+variable)`.
 Без `api_key_env` и `api_key_secret` запросы идут без ключа (локальные Ollama, LM Studio).
 Провайдер `cli` из флагов (`--provider`, §15.6) получает `api_key_env: CODELAB_API_KEY`, только
 если переменная задана и непуста, а слой флагов заменяет `providers.cli` целиком: `headers` и
 ссылки на ключ одноимённого провайдера из файлов не уходят на адрес `--base-url`
 (change `add-agent-configuration`, D4).
-`api_key_env` и `api_key_secret` взаимоисключающие: оба сразу — `ConfigException`. После MVP
-правило о встроенном секрете расширено (CFG-9, §17.5.4): кроме `api_key` отклоняются ключи
-`apiKey`, `token`, `secret`, `password` в `providers.*`, `tools.web.search.backends.*` и
-`mcp.servers.*`, литеральные значения `headers.*` и `mcp.servers.*.env.*`, похожие на ключ по
-шаблонам §12.4, и ключ, вписанный в `api_key_env`/`api_key_secret` вместо имени; ошибка —
-`ConfigInlineSecretException` с подсказкой `codelab secret set <name>`.
+`api_key_env` и `api_key_secret` взаимоисключающие: оба сразу — `ConfigException`. Кроме
+`api_key` отклоняются ключи `apiKey`, `token`, `secret`, `password` в `providers.*` и в элементах
+`mcp.servers` (CFG-9, п. 1, §17.5.4; подсказка `codelab secret set <name>` с именем
+`SecretNames.suggestFor` — с этапа 8.9); в `tools.web.search.backends.*` — вместе с инструментом
+поиска (§17.1.6). Литеральные значения `headers.*` и `mcp.servers.*.env.*`, похожие на ключ по
+шаблонам §12.4, и ключ, вписанный в `api_key_env`/`api_key_secret` вместо имени (CFG-9, п. 2–3), —
+8.11; до него ключ вместо имени чаще всего отсекает формат имени (§17.5.4).
 
 **`providers.<id>.models.<model>`** — `<model>` — id модели у провайдера: один ключ YAML, даже
 если в нём есть `.` или `/` (`gpt-4o`, `qwen2.5-coder-32b`, `org/model`); с `:` или пробелом,
@@ -392,8 +396,8 @@ providers:
 |---|---|---|---|
 | `name` | string | обязателен | префикс инструментов `mcp__<name>__` |
 | `type` | `"stdio"` \| `"http"` | обязателен | транспорт |
-| `command`, `args`, `env` | string, string[], map string→string | — | для `stdio`; `${ENV}` допустим в `args` и значениях `env`; после MVP в значениях `env` — и `${secret:<name>}` (§17.5.4) |
-| `url`, `headers` | string, map string→string | — | для `http`; `${ENV}` допустим; после MVP в значениях `headers` — и `${secret:<name>}` |
+| `command`, `args`, `env` | string, string[], map string→string | — | для `stdio`; `${ENV}` допустим в `args` и значениях `env`; с этапа 8.9 в значениях `env` — и `${secret:<name>}` (раскрывается перед подключением; в `args` — проблема конфига, §15.5, п. 7; §17.5.4) |
+| `url`, `headers` | string, map string→string | — | для `http`; `${ENV}` допустим; с этапа 8.9 в значениях `headers` — и `${secret:<name>}` (в `url` — проблема конфига, §15.5, п. 7) |
 | `enabled` | bool | `true` | выключение сервера без удаления |
 | `connect_timeout` | duration | `"10s"` | подключение при создании сессии |
 | `call_timeout` | duration | `"10m"`; допустимо `1s..24h`, иначе ошибка | срок одного вызова `tools/call` этого сервера; `McpClientConnector` берёт `server.callTimeout ?? options.callTimeout` (change `add-agent-configuration`, D10). У серверов из `session/new` ключа нет: в ACP такого параметра нет, у них действует умолчание коннектора |
@@ -583,7 +587,9 @@ loadConfig(cwd, env, flags):
      auth.toml, codelab.local.toml (§15.7) без чтения: найден хотя бы один → одно
      предупреждение config.legacy_found {files} на процесс и cwd; YAML найден → предупреждения нет
 3. для каждого слоя: validateKeys(layer, schema)          // строгость, ниже; позиции — из positions
-     после MVP: проверка встроенных секретов (CFG-9, §17.5.4) → ConfigInlineSecretException
+     встроенные секреты (CFG-9, п. 1, §17.5.4): ключи api_key, apiKey, token, secret, password в
+       providers.* и mcp.servers → проблема inlineSecret (orThrow — ConfigInlineSecretException);
+       литералы по шаблонам §12.4 (п. 2–3) — 8.11
 4. для слоёв 3–4: применить правила доверия §15.3
 5. merged := merge(layers) по правилам §15.2
 6. interpolate(merged)                                    // ${ENV}; ${secret:<name>} — шаблон без чтения (с 8.9, D4); ниже

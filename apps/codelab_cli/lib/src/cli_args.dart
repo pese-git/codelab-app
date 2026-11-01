@@ -313,7 +313,7 @@ CliOptions parseCliArgs(List<String> args) {
     );
   }
   if (results.command case final command? when command.name == 'config') {
-    return _configOptions(results, command);
+    return _configOptions(results, command, hasSecret: args.contains('secret'));
   }
   if (results.command case final command? when command.name == 'secret') {
     return _secretOptions(results, command);
@@ -333,9 +333,9 @@ CliOptions parseCliArgs(List<String> args) {
   }
   final headless = prompt != null || promptFile != null;
   if (headless && positional.isNotEmpty) {
-    throw UsageError(
-      'Unexpected arguments with --print or --prompt-file: '
-      '${positional.join(' ')}',
+    // Слова не цитируются: среди них мог быть секрет (D8).
+    throw const UsageError(
+      'Unexpected arguments with --print or --prompt-file',
     );
   }
   if (results.option('resume') != null && results.flag('continue')) {
@@ -380,7 +380,11 @@ const _connectionFlags = [
 /// Флаги подключения и запроса (`--agent`, `-p`, `--model`, …) вместе с
 /// `config` — ошибка `64`: профиль подключения `config check` не учитывает
 /// (D14), и молчаливое игнорирование скрыло бы опечатку в команде.
-CliOptions _configOptions(ArgResults results, ArgResults config) {
+CliOptions _configOptions(
+  ArgResults results,
+  ArgResults config, {
+  bool hasSecret = false,
+}) {
   for (final flag in _connectionFlags) {
     if (results.wasParsed(flag)) {
       throw UsageError('--$flag does not apply to config check');
@@ -391,13 +395,17 @@ CliOptions _configOptions(ArgResults results, ArgResults config) {
     throw UsageError(
       config.rest.isEmpty
           ? 'config needs a subcommand: codelab config check [--cwd <dir>]'
+          // Spec codelab-cli требует `Unknown command config <слово>`; слово
+          // не цитируется только если `secret` есть в argv (D8): там мог
+          // оказаться секрет.
+          : hasSecret
+          ? 'Unknown command config; only config check exists'
           : 'Unknown command config ${config.rest.first}',
     );
   }
   if (check.rest.isNotEmpty) {
-    throw UsageError(
-      'Unexpected arguments for config check: ${check.rest.join(' ')}',
-    );
+    // Хвост не цитируется по той же причине (D8): в нём мог оказаться секрет.
+    throw const UsageError('Unexpected arguments for config check');
   }
   return _options(CliCommand.config, results, cwd: check.option('cwd'));
 }

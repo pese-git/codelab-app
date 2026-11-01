@@ -10,6 +10,10 @@
 final class SecretsBackendProblem {
   const SecretsBackendProblem(this.message);
 
+  /// Английский текст проблемы: уходит в `ConfigIssue`, в исключение
+  /// `SecretStoreUnavailableException.reason` и в stderr подкоманд как есть.
+  /// Не содержит ни ключа конфига, ни введённого значения (в нём мог быть
+  /// секрет), поэтому префикс `secrets.backend:` добавляет вызывающий.
   final String message;
 
   @override

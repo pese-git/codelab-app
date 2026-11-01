@@ -27,6 +27,7 @@
 
 ## Impact
 
-- `codelab_agent_io`: `lib/src/secrets/` — `KeychainMacosSecretStore`, `SecretServiceSecretStore`, `WincredSecretStore`, `WinCredApi`, `SecretNamesIndex`; `lib/src/secrets/wincred/` — `FfiWinCredApi`; зависимость `ffi`; правка `openSecretStore`.
+- `codelab_agent_io`: `lib/src/secrets/` — `KeychainMacosSecretStore`, `SecretServiceSecretStore`, `WincredSecretStore`, `WinCredApi`, `SecretNamesIndex`; `lib/src/secrets/wincred/` — `FfiWinCredApi`; зависимость `ffi`; правка `openSecretStore` и `secretsBackendProblem` (`keychain`); необязательные `environment` и `SecretProcessResult.stdout` у порта `SecretProcessRunner` 8.9 (design.md, D2); общий механизм атомарной записи `FileSecretStore` для индекса имён (D3).
+- `apps/codelab_agent`: код выхода при недоступном `keychain` (design.md, OQ4).
 - `codelab_architecture_tests`: `ioAllowlist` += `ffi`; правило импорта FFI.
 - Документы: §17.5.4, `01-layers-and-packages.md` §1.2, `technology-stack.md`, `codelab_agent_io/AGENTS.md`, `agent-parity-goals.md` (P-12 — «выполнено»).

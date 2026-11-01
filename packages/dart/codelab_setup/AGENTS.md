@@ -35,4 +35,4 @@
 ## 4. Тесты
 
 * TDD — по `packages/dart/codelab_agent_core/AGENTS.md` §2.
-* Логика `config check` тестируется в `codelab_agent_io`; здесь — компиляция реэкспортов.
+* Логика `config check` и подкоманд `secret` тестируется в `codelab_agent_io`; здесь — компиляция реэкспортов (`test/secret_exports_test.dart`: символы подкоманды `secret`, `SecretAdmin` с результатами, `openSecretStore` и типы ядра из `io.dart`; `SecretAdmin` строится через один `io.dart`).

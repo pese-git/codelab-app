@@ -88,10 +88,14 @@ const _staleTmpAge = Duration(minutes: 10);
 /// `chmod go-w` (как у ssh); каталог пользователя бэкенд не изменяет. Исключение
 /// — каталог, который создал сам бэкенд: он получает `700` независимо от umask.
 ///
-/// Ограничения: владельца файла `dart:io` не сообщает, проверка владельца как
-/// у ssh не выполняется; между проверкой и чтением остаётся окно TOCTOU того же
-/// класса, что у `BoundedEnv`. На Windows бэкенд отказывает: ACL NTFS
-/// `dart:io` не проверяет (D14).
+/// Ограничения: владельца файла `secrets.yaml` `dart:io` не сообщает, поэтому
+/// при чтении он не проверяется (в отличие от ssh); владелец каталога
+/// `$CODELAB_HOME` проверяется только перед записью и удалением — no-op
+/// `chmod` через порт (см. выше), при чтении нет. Между проверкой и чтением
+/// остаётся окно TOCTOU того же класса, что у `BoundedEnv`. Отказы чтения
+/// (ссылка, права, размер больше 1 МиБ, каталог) пишут `secrets.file.refused`
+/// с полем `reason` не чаще раза на процесс и путь. На Windows бэкенд
+/// отказывает: ACL NTFS `dart:io` не проверяет (D14).
 ///
 /// Как использовать: `FileSecretStore(path: '$home/secrets.yaml', logger:
 /// logger)`; путь явный, чтобы тестовое хранилище этапа 7
@@ -269,7 +273,12 @@ final class FileSecretStore implements DescribedSecretStore {
     try {
       final file = File(path);
       if (file.statSync().size > _maxFileBytes) {
-        throw _unavailable('$path is larger than 1 MiB');
+        // Как права и ссылка: отказ с одним предупреждением на процесс и
+        // путь (agent-secrets «Бэкенд file», D10).
+        _refuse('$path is larger than 1 MiB', {
+          'path': path,
+          'reason': 'too_large',
+        });
       }
       text = utf8.decode(file.readAsBytesSync());
     } on FormatException {

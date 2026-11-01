@@ -29,13 +29,21 @@ sealed class SecretListOutcome {
 }
 
 /// Секрет сохранён впервые.
+///
+/// Почему отдельная ветка от [SecretUpdated]: CLI и страница настроек
+/// говорят «Stored» и «Updated» по-разному, а различить их можно только по
+/// списку имён до записи (OQ5).
+///
+/// Как использовать: показать `name` и `backend` пользователю; значения в
+/// результате нет.
 @immutable
 final class SecretStored extends SecretWriteOutcome {
   const SecretStored(this.name, this.backend);
 
+  /// Имя секрета (не секрет): можно показывать и логировать.
   final String name;
 
-  /// `SecretBackendInfo.id` бэкенда.
+  /// `SecretBackendInfo.id` бэкенда, куда записано (`file`, `memory`).
   final String backend;
 
   @override
@@ -44,11 +52,19 @@ final class SecretStored extends SecretWriteOutcome {
 
 /// Секрет уже был в хранилище и перезаписан без вопроса (OQ5, решение
 /// 2026-10-31).
+///
+/// Почему без вопроса и флага `--force`: `secret set` читает значение из
+/// stdin, интерактивного подтверждения в скрипте нет; замену видно по тексту
+/// `Updated`. Уже работающий резолвер процесса старое значение не забывает —
+/// нужен перезапуск (D15).
 @immutable
 final class SecretUpdated extends SecretWriteOutcome {
   const SecretUpdated(this.name, this.backend);
 
+  /// Имя перезаписанного секрета (не секрет).
   final String name;
+
+  /// `SecretBackendInfo.id` бэкенда, где значение заменено.
   final String backend;
 
   @override
@@ -56,6 +72,10 @@ final class SecretUpdated extends SecretWriteOutcome {
 }
 
 /// Имя не прошло `SecretNames`.
+///
+/// Почему без имени в результате: в поле имени часто вписывают сам ключ, и
+/// эхо имени в сообщении выдало бы секрет (D2). Это ошибка использования
+/// (код `64`), а не сбой хранилища.
 @immutable
 final class SecretInvalidName
     implements SecretWriteOutcome, SecretDeleteOutcome {
@@ -70,10 +90,16 @@ final class SecretInvalidName
 
 /// Значение пустое, многострочное, длиннее 64 КиБ или не воспроизводится
 /// при записи (непарный суррогат).
+///
+/// Почему отказ до записи: такое значение невозможно сохранить без потерь
+/// (формат строгий, одна строка), а тихая правка значения испортила бы ключ.
+/// Это ошибка значения (код `64`), справка `secret` не нужна.
 @immutable
 final class SecretInvalidValue extends SecretWriteOutcome {
   const SecretInvalidValue(this.reason);
 
+  /// Английская причина (`empty secret value`, `secret value must be a single
+  /// line`, …) без самого значения.
   final String reason;
 
   @override
@@ -82,6 +108,10 @@ final class SecretInvalidValue extends SecretWriteOutcome {
 
 /// `SecretNames.envOverride(name)` совпадает с переменной другого имени
 /// хранилища (D2, D8).
+///
+/// Почему отказ: отображение имени в переменную необратимо (`codelab/a-b` и
+/// `codelab/a.b` дают одну переменную), и переопределение действовало бы на
+/// оба секрета сразу.
 @immutable
 final class SecretCollision extends SecretWriteOutcome {
   const SecretCollision({
@@ -90,8 +120,13 @@ final class SecretCollision extends SecretWriteOutcome {
     required this.variable,
   });
 
+  /// Имя, которое пытались сохранить.
   final String name;
+
+  /// Уже сохранённое имя с той же переменной переопределения.
   final String other;
+
+  /// Общая переменная `CODELAB_SECRET_*` (только имя, не значение).
   final String variable;
 
   @override
@@ -112,6 +147,7 @@ final class SecretReadOnly implements SecretWriteOutcome, SecretDeleteOutcome {
     required this.fileBackendOffered,
   });
 
+  /// `SecretBackendInfo.id` бэкенда только для чтения (`env`).
   final String backend;
 
   /// Имя переменной, которой можно задать секрет
@@ -129,6 +165,12 @@ final class SecretReadOnly implements SecretWriteOutcome, SecretDeleteOutcome {
 }
 
 /// Хранилище отказало (права `secrets.yaml`, сбой записи).
+///
+/// Почему отдельно от исключения: отказ хранилища — штатный исход для CLI и
+/// страницы настроек (код `1`, текст причины), а не повод ронять процесс.
+/// Исключение `SecretStoreUnavailableException` превращается сюда; чужое
+/// исключение — в `secret store failed: <тип>`, без его текста (он мог
+/// цитировать значение).
 @immutable
 final class SecretFailed implements SecretWriteOutcome, SecretDeleteOutcome {
   const SecretFailed(this.reason);
@@ -141,11 +183,17 @@ final class SecretFailed implements SecretWriteOutcome, SecretDeleteOutcome {
 }
 
 /// Секрет удалён.
+///
+/// Как использовать: показать `name` и `backend`; отличается от [SecretNotSet]
+/// тем, что запись в хранилище действительно изменилась.
 @immutable
 final class SecretDeleted extends SecretDeleteOutcome {
   const SecretDeleted(this.name, this.backend);
 
+  /// Имя удалённого секрета (не секрет).
   final String name;
+
+  /// `SecretBackendInfo.id` бэкенда, откуда удалено.
   final String backend;
 
   @override
@@ -153,11 +201,17 @@ final class SecretDeleted extends SecretDeleteOutcome {
 }
 
 /// Секрета не было: удаление идемпотентно (D8).
+///
+/// Почему не ошибка: повтор `secret delete` после сбоя или в скрипте не
+/// должен падать; хранилище при этом не изменяется (файл не переписывается).
 @immutable
 final class SecretNotSet extends SecretDeleteOutcome {
   const SecretNotSet(this.name, this.backend);
 
+  /// Имя, которого не оказалось (не секрет).
   final String name;
+
+  /// `SecretBackendInfo.id` бэкенда, где искали.
   final String backend;
 
   @override
@@ -165,6 +219,9 @@ final class SecretNotSet extends SecretDeleteOutcome {
 }
 
 /// Содержимое хранилища: бэкенд, имена и имена переменных переопределения.
+///
+/// Почему только имена: `list` нужен, чтобы увидеть, что задано, и не должен
+/// быть путём к значениям (CFG-10); значения не читаются вовсе.
 @immutable
 final class SecretListing extends SecretListOutcome {
   const SecretListing({
@@ -173,6 +230,8 @@ final class SecretListing extends SecretListOutcome {
     required this.overrides,
   });
 
+  /// Описание бэкенда, включая `unavailableReason`: по нему `list` печатает
+  /// причину, по которой `auto` выбрал `env`.
   final SecretBackendInfo backend;
 
   /// Имена по алфавиту (у `file` — ключи `secrets.yaml`, у `env` — пусто, D6).
@@ -188,10 +247,15 @@ final class SecretListing extends SecretListOutcome {
 }
 
 /// Хранилище недоступно для перечисления.
+///
+/// Почему отдельная ветка: `list` над повреждённым или закрытым по правам
+/// `secrets.yaml` — код `1` с причиной, а не пустой список, который
+/// выглядел бы как «секретов нет».
 @immutable
 final class SecretListFailed extends SecretListOutcome {
   const SecretListFailed(this.reason);
 
+  /// Наша английская причина без значений и без строк файла.
   final String reason;
 
   @override

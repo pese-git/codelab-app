@@ -47,7 +47,9 @@ Future<int> runConfigCommand(
     err.writeln(
       rest.isEmpty
           ? 'codelab-agent: config needs the subcommand: check'
-          : 'codelab-agent: unknown config arguments: ${rest.join(' ')}',
+          // Токены не цитируются: среди них может быть значение секрета
+          // (agent-secrets: ошибка разбора не печатает argv; D8).
+          : 'codelab-agent: unknown config arguments (${rest.length})',
     );
     err
       ..writeln()

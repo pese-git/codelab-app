@@ -39,12 +39,15 @@ Future<int> runCodelabAgent(
   } on UsageError catch (error) {
     // Справка той команды, которую пользователь начал писать: после
     // `config check --bogus` флаги `serve` только запутали бы. Текст ошибки
-    // разбора `secret …` не печатается: он цитирует присланное слово, а это
-    // могло быть значение секрета, переданное аргументом по ошибке (D8).
-    final command = args.firstOrNull;
+    // разбора, если `secret` есть в argv, не печатается: он цитирует
+    // присланное слово, а это могло быть значение секрета — аргументом
+    // подкоманды или неверным флагом верхнего уровня до `secret` (agent-secrets
+    // «Ошибка флага верхнего уровня перед secret»; D8).
+    final isSecret = args.contains('secret');
+    final command = isSecret ? 'secret' : args.firstOrNull;
     stderr
       ..writeln(
-        command == 'secret'
+        isSecret
             ? 'codelab-agent: invalid arguments for secret'
             : 'codelab-agent: ${error.message}',
       )
