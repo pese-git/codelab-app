@@ -1,8 +1,7 @@
 import 'dart:io';
 
-import 'package:codelab_agent/src/cli/serve_args.dart';
-import 'package:codelab_agent/src/host/llm_script.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:test/test.dart';
 
 import 'support/agent_process.dart';
@@ -105,19 +104,7 @@ void main() {
     }
   });
 
-  test('a broken scenario is a usage error', () {
-    final temp = Directory.systemTemp.createTempSync('llm_script_');
-    addTearDown(() => temp.deleteSync(recursive: true));
-    final file = File('${temp.path}/broken.json')
-      ..writeAsStringSync('{"llm": {"steps": [{"reply": [{"txt": "x"}]}]}}');
-    expect(
-      () => LlmScript.load(
-        file.path,
-        models: const [],
-        clock: const SystemClock(),
-        cwdOf: (_) => null,
-      ),
-      throwsA(isA<UsageError>()),
-    );
-  });
+  // Случай «битый сценарий» разбора перенесён в
+  // `codelab_agent_io/test/scripted/llm_script_test.dart`; перевод в
+  // `UsageError` (код 64) проверяет `agent_host_test.dart`.
 }

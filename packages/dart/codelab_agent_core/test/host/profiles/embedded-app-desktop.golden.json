@@ -1,0 +1,256 @@
+{
+  "defaultMode": "standard",
+  "capabilities": {
+    "shellExec": {
+      "state": "transport",
+      "transports": [
+        "local"
+      ],
+      "reason": "процессы хоста"
+    },
+    "fileListing": {
+      "state": "transport",
+      "transports": [
+        "local"
+      ],
+      "reason": "файлы хоста"
+    },
+    "interactiveApproval": {
+      "state": "transport",
+      "transports": [
+        "acp"
+      ],
+      "reason": "вопрос через встроенный ACP-клиент"
+    },
+    "compaction": {
+      "state": "on"
+    },
+    "sessionPersistence": {
+      "state": "transport",
+      "transports": [
+        "jsonl-file"
+      ],
+      "reason": "журнал JSONL в $CODELAB_HOME/sessions"
+    },
+    "mcp": {
+      "state": "transport",
+      "transports": [
+        "http",
+        "stdio"
+      ],
+      "reason": "серверы MCP: процессы хоста и streamable HTTP"
+    }
+  },
+  "toolNames": [
+    "read",
+    "write",
+    "edit",
+    "update_plan",
+    "exec",
+    "ls",
+    "search"
+  ],
+  "promptSections": [
+    "system.base",
+    "system.untrusted",
+    "tools.read",
+    "tools.edit",
+    "tools.listing",
+    "tools.exec",
+    "tools.plan"
+  ],
+  "tools": [
+    {
+      "name": "read",
+      "description": "Read a text file of the workspace, or an image when the model accepts images. Lines are numbered \"<n>| <text>\". Output is limited to 2000 lines or 50 KB; use offset and limit to read a part of a long file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "File path, relative to the workspace root or absolute."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "1-based line number to start from. Default 1."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of lines. Default 2000."
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "write",
+      "description": "Create a file or overwrite it with the full new content. Missing parent directories are created. To change part of a file, use edit.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "File path to create or overwrite."
+          },
+          "content": {
+            "type": "string",
+            "description": "Full new file content."
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      }
+    },
+    {
+      "name": "edit",
+      "description": "Replace an exact fragment of a file. oldText must occur exactly once; read the file first and copy the fragment byte for byte.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "oldText": {
+            "type": "string",
+            "description": "Exact text to replace. Must occur exactly once."
+          },
+          "newText": {
+            "type": "string",
+            "description": "Replacement text."
+          }
+        },
+        "required": [
+          "path",
+          "oldText",
+          "newText"
+        ]
+      }
+    },
+    {
+      "name": "update_plan",
+      "description": "Replace the whole work plan shown to the user. Send every entry each time; keep one entry in_progress.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "string"
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed"
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "priority",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "entries"
+        ]
+      }
+    },
+    {
+      "name": "exec",
+      "description": "Run a non-interactive shell command in the workspace. The tail of the output and a non-zero exit code are returned.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Shell command to run."
+          },
+          "timeout": {
+            "type": "integer",
+            "description": "Timeout in seconds. Default 120, maximum 3600."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Working directory, relative to the workspace root. Default: root."
+          }
+        },
+        "required": [
+          "command"
+        ]
+      }
+    },
+    {
+      "name": "ls",
+      "description": "List one directory of the workspace: directories end with \"/\", links with \"@\". Hidden entries are shown.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Directory to list. Default: workspace root."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum entries. Default 500."
+          }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Search file contents of the workspace with a regular expression (Dart syntax) or literal text. Prints \"<path>:<line>: <text>\". Skips VCS, build and hidden directories and binary files.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "Regular expression (Dart syntax) or literal text."
+          },
+          "path": {
+            "type": "string",
+            "description": "Directory or file to search. Default: workspace root."
+          },
+          "glob": {
+            "type": "string",
+            "description": "Filter by relative path, e.g. **/*.dart"
+          },
+          "literal": {
+            "type": "boolean",
+            "description": "Treat pattern as plain text. Default false."
+          },
+          "ignoreCase": {
+            "type": "boolean",
+            "description": "Default false."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum matches. Default 100."
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      }
+    }
+  ],
+  "commands": []
+}

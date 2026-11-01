@@ -150,8 +150,40 @@ const rules = [
     'apps/codelab_cli/lib/src/tui/core',
     forbidden: ['package:dart_tui/', 'dart:io'],
   ),
-  // stage 7: codelab_embedded — webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/'];
-  //   apps/codelab_desktop — ['package:codelab_agent_'] already above
+  // Встроенный агент (мост между сторонами без префикса стороны, ADR-0002;
+  // design.md change `add-embedded-agent-mode`, D3). Основной барель чист:
+  // web-безопасен (`webUnsafe`), не знает IO-пакет агента и клиентские пакеты.
+  // `lib/io.dart` и `lib/src/io/` (настольный открыватель) и `lib/testing.dart`
+  // с `lib/src/testing/` (сценарий модели, D8) вне запретов, но без ссылок
+  // снаружи (sealExclude).
+  PackageRule(
+    'packages/dart/codelab_embedded',
+    forbidden: [
+      ...webUnsafe,
+      'package:codelab_agent_io/',
+      'package:codelab_client_',
+    ],
+    exclude: [
+      'lib/io.dart',
+      'lib/src/io/',
+      'lib/testing.dart',
+      'lib/src/testing/',
+    ],
+  ),
+  // `exclude` выше снимает запреты целиком; Flutter, UI и клиентские пакеты не
+  // нужны и `io.dart` с `testing.dart` (мост не зависит от клиентов).
+  PackageRule(
+    'packages/dart/codelab_embedded',
+    forbidden: [
+      'package:flutter/',
+      'package:fluent_ui/',
+      'package:codelab_ui/',
+      'package:codelab_client_',
+    ],
+  ),
+  // Правила клиентов на `codelab_embedded/io.dart` и `testing.dart` — в
+  // задачах 3.4 (CLI) и 4.4 (desktop) того же change: ограничиваемый код
+  // появляется в их итерациях.
   // Мост настроек агента для клиентов (dart-agent-and-clients §12.4.2; design.md
   // change `add-agent-configuration`, D14): основной барель чист и не знает
   // IO-пакет агента, `lib/io.dart` и `lib/src/io/` — вне запретов
