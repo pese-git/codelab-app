@@ -169,7 +169,8 @@ final class EmbeddedTransportResolver implements TransportResolver {
 ```
 
 **OpenSpec change.** `add-in-process-acp-transport` (задачи 7.1–7.2; scope: публичный API
-`codelab_acp_transports`, правила копирования и закрытия) и `add-embedded-agent-mode` (задачи 7.3–7.9;
+`codelab_acp_transports`, правила копирования и закрытия; выполнен и архивирован —
+[`archive/2026-11-01-add-in-process-acp-transport`](../../../../openspec/changes/archive/2026-11-01-add-in-process-acp-transport/)) и `add-embedded-agent-mode` (задачи 7.3–7.9;
 scope: `codelab_embedded`, профили `embedded-*`, профиль подключения в app и CLI, scripted-провайдер
 только для тестов; часть 7.5 про `codelab_setup` и D-05 — отдельный change
 `add-provider-setup-ui`, Should). `tasks.md` — пары "тест → реализация" со ссылкой на критерий
