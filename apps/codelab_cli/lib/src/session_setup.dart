@@ -93,4 +93,5 @@ String describeProfile(ConnectionProfile profile) => switch (profile) {
   StdioProfile(:final command, :final args) =>
     '"${[command, ...args].join(' ')}"',
   WebSocketProfile(:final uri) => '$uri',
+  EmbeddedProfile(:final hostProfile) => 'embedded agent ($hostProfile)',
 };

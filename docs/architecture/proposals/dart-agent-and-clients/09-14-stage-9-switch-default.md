@@ -26,7 +26,9 @@
 2. **9.2.** Закрыть оставшиеся строки Must (по отчёту 9.1).
 3. **9.3. Профили по умолчанию:** в app — «Встроенный агент» (не нужен отдельный бинарь) и
    встроенный профиль «codelab-agent (stdio)» с командой `codelab-agent serve --stdio` вместо
-   `codelab serve --stdio` в `codelabAgentStdioProfile`; в CLI — `embedded`.
+   `codelab serve --stdio` в `codelabAgentStdioProfile`; в CLI — `embedded` (выбор без `--agent` уже с
+   этапа 7: профиль `default` из `profiles.json`, если есть, иначе `embedded`; design.md change
+   `add-embedded-agent-mode`, D13, п. 1).
 4. **9.4. Поставка** (Should — не блокирует MVP; веха «продукт 1.0») по §12.7: `release.yml`, артефакты `codelab` и `codelab-agent` для пяти
    целей, подписанный `SHA256SUMS`, скрипты `install.sh` / `install.ps1` и каналы (U-29),
    происхождение сборки; инструкция установки. Переключение по умолчанию МОЖЕТ выйти

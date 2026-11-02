@@ -18,7 +18,7 @@
 - итерация 5 — группа 5, замер 7.8 и разбор журнала в isolate;
 - итерация 6 — группа 6, документы и Definition of Done.
 
-Итерации 3 и 4 независимы друг от друга после итерации 2. Открытых вопросов нет: решения пользователя 2026-11-02 — design.md, D13.
+Итерации 3 и 4 независимы друг от друга после итерации 2. Открытых вопросов нет: решения пользователя 2026-11-02 — design.md, D13. Решение L4 (отмена подключения в app без нового API `codelab_client_core`, D6) пользователь подтверждает при старте итерации 4.
 
 Проверки каждой задачи — по `AGENTS.md` §21, только для затронутого:
 - `fvm dart format` изменённых файлов;
@@ -146,40 +146,54 @@
 
 ## 3. CLI (итерация 3)
 
-- [ ] 3.1 `[client]` Тесты `codelab_client_core` и `codelab_client_io` (acp-client-kit «Профили и резолверы транспорта», сценарии «Встроенный профиль без резолвера встроенного агента», «Встроенный профиль не сохраняется в profiles.json»; D7). Красный: фабрики `ConnectionProfile.embedded` нет.
-- [ ] 3.2 `[client]` `ConnectionProfile.embedded` (`EmbeddedProfile`) и `build_runner` для freezed. Ветки исчерпывающих `switch`:
+- [x] 3.1 `[client]` Тесты `codelab_client_core` и `codelab_client_io` (acp-client-kit «Профили и резолверы транспорта», сценарии «Встроенный профиль без резолвера встроенного агента», «Встроенный профиль не сохраняется в profiles.json»; D7). Красный: фабрики `ConnectionProfile.embedded` нет.
+- [x] 3.2 `[client]` `ConnectionProfile.embedded` (`EmbeddedProfile`) и `build_runner` для freezed. Ветки исчерпывающих `switch`:
   - `ConfigTransportResolver` — `false`/`UnsupportedConnectionProfileException`;
   - `JsonFileProfileStore` — `ArgumentError` при `save`, `FormatException` при чтении;
   - `describeProfile`, `/profile`, `profiles` CLI, `ScenarioAgent` — заглушки до 3.6.
-- [ ] 3.3 `[client]` Тесты `apps/codelab_cli/test/profiles/profile_arg_test.dart`, `profiles_command_test.dart`, `test/embedded_resolver_test.dart` (codelab-cli «Профили подключения CLI», сценарии «Профиль default сильнее встроенного агента», «Встроенный агент явно», «embedded нельзя сохранить профилем», «Без профиля и без конфига»; «Встроенный агент в CLI», сценарий «Невалидный конфиг встроенного агента»; D6):
+- [x] 3.3 `[client]` Тесты `apps/codelab_cli/test/profiles/profile_arg_test.dart`, `profiles_command_test.dart`, `test/embedded_resolver_test.dart` (codelab-cli «Профили подключения CLI», сценарии «Профиль default сильнее встроенного агента», «Встроенный агент явно», «embedded нельзя сохранить профилем», «Без профиля и без конфига»; «Встроенный агент в CLI», сценарий «Невалидный конфиг встроенного агента»; D6):
   - `embedded` и без `--agent` → `EmbeddedProfile(embedded-cli)` при отсутствии `default`;
   - битый `profiles.json` → `64`;
   - резолвер сериализует `open`: `await prev.dispose()` перед новым открывателем;
-  - устаревший результат: если подключение отменено (новый `open`, `disconnect`, `close()`), пока открыватель работает, агент, вернувшийся позже, получает `dispose()` и не становится текущим (`AGENTS.md` §12; D6, «Резолвер клиента»);
+  - устаревший результат: если подключение отменено (новый `open` или `close()`), пока открыватель работает, агент, вернувшийся позже, получает `dispose()` и не становится текущим (`AGENTS.md` §12; D6, «Резолвер клиента»);
   - `close()` ждёт `dispose`.
 
   Существующие тесты «embedded is 64» меняются на новые ожидания. Красный: `UsageError` на `embedded`.
-- [ ] 3.4 `[client]` `resolveAgentProfile`: без `--agent` — профиль `default`, если он есть в `profiles.json`, иначе `EmbeddedProfile(embedded-cli)`; битый файл — код `64` (D13, п. 1). `EmbeddedTransportResolver` и `localEmbeddedAgentOpener` в `composition_root.dart`: сериализация `open` через `await prev.dispose()`, `dispose()` у агента, вернувшегося после отмены подключения (D6). Флаг `--debug-secrets`. `EmbeddedAgentConfigException` → код `64` в `run.dart`. Ожидание `close()` резолвера в `CliRuntime.dispose` и в обработке сигналов. Правила сторожа CLI для `codelab_embedded/io.dart` и `testing.dart`, `cliAllowlist` += `codelab_embedded` (workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3). Шов `run(…, {EmbeddedAgentOpener? embeddedOpener})` для тестовой точки входа (D8).
-- [ ] 3.5 `[client]` Тест `apps/codelab_cli/test/scenario/test_scenario_command_test.dart` (cli-scenario-driver «Команда test-scenario», сценарии «Корпус против встроенного агента», «Фикстура с fake MCP-серверами»; D8):
+- [x] 3.4 `[client]` `resolveAgentProfile`: без `--agent` — профиль `default`, если он есть в `profiles.json`, иначе `EmbeddedProfile(embedded-cli)`; битый файл — код `64` (D13, п. 1). `EmbeddedTransportResolver` в `lib/src/embedded_transport_resolver.dart` (только основной барель `codelab_embedded`): сериализация `open` через `await prev.dispose()`, `dispose()` у агента, вернувшегося после отмены подключения — новым `open` или `close()` (D6). `composition_root.dart` только связывает резолвер с `localEmbeddedAgentOpener` из `io.dart`. Флаг `--debug-secrets`. `EmbeddedAgentConfigException` → код `64` в `run.dart`. Ожидание `close()` резолвера в `CliRuntime.dispose` и в обработке сигналов. Правила сторожа CLI для `codelab_embedded/io.dart` и `testing.dart`, `cliAllowlist` += `codelab_embedded` (workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3). Шов `runCodelab(…, {EmbeddedAgentOpener? embeddedOpener})` (`lib/src/run.dart`) для тестовой точки входа (D8).
+- [x] 3.5 `[client]` Тест `apps/codelab_cli/test/scenario/test_scenario_command_test.dart` (cli-scenario-driver «Команда test-scenario», сценарии «Корпус против встроенного агента», «Фикстура с fake MCP-серверами»; D8):
   - корпус `--agent embedded` без `FAIL`;
   - пропуски с причинами;
   - временные каталоги удалены.
 
   Красный: `embedded` даёт `64`.
-- [ ] 3.6 `[client]` `ScenarioAgent` для `EmbeddedProfile`: `scriptedEmbeddedAgentOpener` с `setup.llm`, `setup.profile ?? 'agent-serve'`, `setup.mode`, временными `sessions` и `CODELAB_HOME`; `AgentConnection` с `dispose` агента. Скрипт `conformance:embedded` в корневом `pubspec.yaml` и в шагах `check`.
-- [ ] 3.7 `[client]` E2E `cli/*` для `CODELAB_E2E_AGENT=embedded` (testing-quality «Встроенный режим в e2e и conformance», сценарий «E2E CLI против встроенного агента»; codelab-cli «Встроенный агент в CLI», сценарии «Отказ по умолчанию в headless», «Журнал дописан при SIGTERM», «Отладка секретов»; «Профили подключения CLI», сценарий «Без профиля по умолчанию запускается встроенный агент»; критерий `cli/connect-profiles-stdio-ws-embedded`, вариант `embedded`):
+- [x] 3.6 `[client]` `ScenarioAgent` для `EmbeddedProfile`: `scriptedEmbeddedAgentOpener` с `setup.llm`, `setup.profile ?? 'agent-serve'`, `setup.mode`, временными `sessions` и `CODELAB_HOME`; `AgentConnection` с `dispose` агента. Скрипт `conformance:embedded` в корневом `pubspec.yaml` и в шагах `check`.
+- [x] 3.7 `[client]` E2E `cli/*` для `CODELAB_E2E_AGENT=embedded` (testing-quality «Встроенный режим в e2e и conformance», сценарий «E2E CLI против встроенного агента»; codelab-cli «Встроенный агент в CLI», сценарии «Отказ по умолчанию в headless», «Журнал дописан при SIGTERM», «Отладка секретов»; «Профили подключения CLI», сценарий «Без профиля по умолчанию запускается встроенный агент»; критерий `cli/connect-profiles-stdio-ws-embedded`, вариант `embedded`):
   - тестовая точка входа `test/e2e/support/embedded_cli_main.dart`;
   - вариант `embedded` в `support/e2e_agent.dart`;
   - скрипт `test:e2e:cli:embedded` в `check`.
 
   Это приёмочные ворота (исключение (б) §9.0): пишутся до закрытия итерации, не до каждой задачи.
-- [ ] 3.8 `[docs]` `apps/codelab_cli/AGENTS.md`:
+- [x] 3.8 `[docs]` `apps/codelab_cli/AGENTS.md`:
   - зависимость `codelab_embedded`;
   - импорт `io.dart` только из `composition_root.dart`, `testing.dart` — только из `scenario/`;
   - `--debug-secrets`;
   - выбор без `--agent`.
 
   `09-11-stage-6-cli-mvp.md`: таблица `--agent` и DoD — `default` из `profiles.json`, если есть, иначе `embedded` (D13, п. 1).
+- [x] 3.9 `[client]` Исправления по двойному ревью итерации 3 и решениям пользователя 2026-11-02 (U1–U4), пары «тест → правка» (codelab-cli «Профили подключения CLI», сценарий «profiles.json неверной структуры»; «Встроенный агент в CLI», сценарии «Отладка секретов», «Без --debug-secrets лог агента молчит», «Журнал дописан при SIGTERM», «Второй сигнал при зависшем dispose»; cli-scenario-driver «Команда test-scenario», сценарии «Без --agent и без профиля default», «Без --agent при профиле default»; «Вывод и коды выхода test-scenario», сценарии «Все фикстуры пропущены», «Фильтр не выбрал фикстур»; D6, «Выход CLI»; D13, п. 7–10):
+  - **U1**: `test-scenario` без `--agent` — `resolveAgentProfile` без `embeddedByDefault: false`; `noDefaultProfileMessage` и параметр удаляются, если больше не нужны; синопсис и справка `test-scenario` — `[--agent <profile>]`; тест «без `--agent` и без `default` — встроенный агент, ни одного процесса»;
+  - **U3**: `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` — логгер встроенного агента пишет в stderr `secrets.lookup` без `--verbose`, остальные события — только с `--verbose`; тест логгера (`CliEmbeddedLogger`: фильтр по событию, `SecretRedactor`, очистка управляющих символов, только `error_class` у ошибки) и e2e без `--verbose`;
+  - **U4**: `test-scenario` — код `1` и `codelab: no fixtures were played` в stderr, если не сыграна ни одна фикстура (все `SKIP` или пустой фильтр), для любого агента;
+  - **сигналы и таймаут**: обработчики `SIGINT`/`SIGTERM` снимаются только после `dispose` агента; ожидание `close()` резолвера с таймаутом больше grace агента (5 s) и событием `embedded.close_timeout` уровня `warning`; второй сигнал во время `dispose` → сразу `130`/`143`; тест на подменных потоках сигналов и зависшем `dispose`;
+  - **`try`/`finally`**: `dispose` рантайма CLI (и закрытие резолвера) в `finally` во всех режимах — REPL, `--ui tui`, `-p`; тест: ошибка режима не пропускает `dispose` агента;
+  - **sanitize**: строки встроенного агента, которые CLI печатает в терминал (текст `EmbeddedAgentConfigException` и другие места по замечанию ревью), проходят `sanitizeTerminalText`: управляющие символы из конфига и путей не доходят до терминала;
+  - **`profiles.json` неверной структуры**: `JsonFileProfileStore` переводит ошибки типа и формы (`TypeError`, отсутствующее поле, не объект) в `FormatException`, CLI — код `64` с причиной; тест `codelab_client_io` и тест `profile_arg_test.dart`;
+  - **`/profile` и поздние события**: по замечанию ревью — смена профиля командой `/profile` не даёт событиям прежнего соединения (и прежнего встроенного агента) менять состояние нового (`AGENTS.md` §9); тест;
+  - **сторож**: правила для `bin/` и бареля `lib/codelab_cli.dart` — `package:codelab_embedded/io.dart` и `testing.dart` из них запрещены, как во всём `lib/` вне `composition_root.dart` и `scenario/`; негативные тесты на временном пакете;
+  - **e2e SIGTERM строже**: сигнал посылается после события начала хода (а не по таймеру), проверяются код `143`, `stopReason: aborted` в журнале и отсутствие процесса агента;
+  - **`embedded_agent_test`** CLI запускается один раз, а не в трёх вариантах `CODELAB_E2E_AGENT`: тест сам задаёт встроенный режим (тег или проверка варианта в `support/e2e_agent.dart`);
+  - **NIT** ревью — комментарии по-русски (почему/для чего/как), имена, тексты ошибок по-английски — без изменения поведения.
+- [x] 3.10 `[docs]` Правки артефактов change по двойному ревью итерации 3 и решениям пользователя 2026-11-02 (U1–U4): D13, п. 7–10 и таблица соответствия; Risks «Молчаливый выбор встроенного агента», «Зависший `dispose` при выходе CLI»; D6 — поводы отмены `open` (новый `open`, `close()`), место резолвера CLI, решение L4 для app, «Выход CLI»; D1 (в) и D8 — сигнатура `scriptedEmbeddedAgentOpener` с `models`, `McpClientConnector` в сценарном открывателе, подтверждённое расхождение; шов `runCodelab(…, embeddedOpener:)` в D8 и testing-quality; спеки codelab-cli (выбор без `--agent` для всех режимов, молчаливый выбор, `profiles.json` неверной структуры, `--debug-secrets` без `--verbose`, выход с таймаутом и вторым сигналом, формат строки решения SJ-11, `stopReason: aborted`) и cli-scenario-driver (необязательный `--agent`, код `1` без сыгранных фикстур); proposal; `09-11-stage-6-cli-mvp.md`; `apps/codelab_cli/AGENTS.md`; задачи 3.3, 3.4, 3.9, 4.3, 4.4.
 
 ## 4. codelab-app (итерация 4)
 
@@ -195,11 +209,11 @@
   - подключение и ход;
   - отказ в карточке одобрения;
   - закрытие scope ждёт `dispose`;
-  - сериализация `open` (`await prev.dispose()` перед новым) и `dispose()` у агента, вернувшегося после отмены подключения (`AGENTS.md` §12; D6, «Резолвер клиента»);
+  - сериализация `open` (`await prev.dispose()` перед новым) и `dispose()` у агента, вернувшегося после отмены подключения — повторным Connect (новый `open`) или закрытием root scope (`close()`) (`AGENTS.md` §12; D6, «Резолвер клиента», «Отмена подключения в app»);
   - лог агента в логгере приложения без значений секретов.
 
   Красный: резолвера нет.
-- [ ] 4.4 `[desktop]` `EmbeddedTransportResolver` (сериализация `open`, `dispose()` устаревшего агента — D6) и адаптер `Logger` в `lib/app/`; регистрация вторым резолвером `ClientWorkspace`; закрытие при закрытии root scope; зависимость `codelab_embedded` в `pubspec.yaml`. Правила сторожа desktop для `io.dart` (только `lib/app/`) и `testing.dart` (запрещён в `lib/`) — testing-quality, сценарий «Тестовый сценарий не попадает в app»; workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3.
+- [ ] 4.4 `[desktop]` `EmbeddedTransportResolver` (сериализация `open`, `dispose()` устаревшего агента — D6; поводы отмены — новый `open` и `close()`, без нового API `TransportResolver` и `ClientWorkspace` — решение L4, D6, «Отмена подключения в app»; если пользователь при старте итерации 4 потребует кнопку Disconnect — сначала отдельный change клиентского слоя) и адаптер `Logger` в `lib/app/`; регистрация вторым резолвером `ClientWorkspace`; закрытие при закрытии root scope; зависимость `codelab_embedded` в `pubspec.yaml`. Правила сторожа desktop для `io.dart` (только `lib/app/`) и `testing.dart` (запрещён в `lib/`) — testing-quality, сценарий «Тестовый сценарий не попадает в app»; workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3.
 - [ ] 4.5 `[desktop]` Интеграционные тесты для `CODELAB_E2E_AGENT=embedded` (testing-quality «Встроенный режим в e2e и conformance»; D10; критерии таблицы этапа 4 для app):
   - вариант `embedded` в `integration_test/support/e2e_agent.dart`: выбор типа «Embedded agent», scope со `scriptedEmbeddedAgentOpener` и сценариями `integration_test/llm_scripts/`;
   - пропуск `fs_flow_test` и `terminal_flow_test` с причиной;

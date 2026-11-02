@@ -403,7 +403,8 @@ final class BootWatchdog {
 
 ## 12.4.3. Алгоритм: первый запуск CLI (U-17)
 
-Срабатывает, когда `codelab` запускается с профилем `embedded` (по умолчанию, §9.11) и в
+Срабатывает, когда `codelab` запускается с профилем `embedded` (`-a embedded` или без `--agent`, если
+в `profiles.json` нет профиля `default`, §9.11) и в
 `embedded`-профиле нет готового провайдера.
 
 1. До запуска агента `composition_root.dart` читает `AgentConfigStore.snapshot(cwd)` и вызывает

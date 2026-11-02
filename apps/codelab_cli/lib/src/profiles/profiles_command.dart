@@ -50,7 +50,12 @@ Future<int> runProfilesCommand(
       _show(profile, stdout);
       return okExit;
     case ['add', final id, final value]:
-      if (!_profileId.hasMatch(id) || id == 'embedded') {
+      // `embedded` встроен и в `profiles.json` не пишется (D7): ни как id, ни
+      // как значение.
+      if (id == embeddedAgentWord || value == embeddedAgentWord) {
+        throw const UsageError(embeddedIsBuiltInMessage);
+      }
+      if (!_profileId.hasMatch(id)) {
         throw UsageError(
           'Invalid profile id "$id": use letters, digits, ".", "_" and "-".',
         );
@@ -91,6 +96,8 @@ String _summary(ConnectionProfile profile) => switch (profile) {
   StdioProfile(:final command, :final args) =>
     'stdio: ${[command, ...args].join(' ')}',
   WebSocketProfile(:final uri) => 'ws: $uri',
+  // В `profiles.json` его не бывает (D7); ветка нужна исчерпывающему switch.
+  EmbeddedProfile(:final hostProfile) => 'embedded: $hostProfile',
 };
 
 /// Аргументы печатаются JSON-массивом: так видно границы слов с пробелами.
@@ -115,5 +122,9 @@ void _show(ConnectionProfile profile, StringSink out) {
           'token: ${ref.startsWith('env:') ? '\$${ref.substring(4)}' : ref}',
         );
       }
+    case EmbeddedProfile():
+      out
+        ..writeln('type: embedded')
+        ..writeln('hostProfile: ${profile.hostProfile}');
   }
 }

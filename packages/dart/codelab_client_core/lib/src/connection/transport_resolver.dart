@@ -59,6 +59,9 @@ final class ConfigTransportResolver implements TransportResolver {
   bool supports(ConnectionProfile profile) => switch (profile) {
     StdioProfile() => stdio != null,
     WebSocketProfile() => webSocket != null,
+    // Встроенный агент собирает хост своим резолвером (D7): здесь нет ни
+    // процесса, ни сокета, а ядра агента kit не знает.
+    EmbeddedProfile() => false,
   };
 
   @override
@@ -87,6 +90,8 @@ final class ConfigTransportResolver implements TransportResolver {
         }
         final token = tokenRef == null ? null : await secrets?.read(tokenRef);
         return factory(WebSocketAcpTransportConfig(uri: uri, token: token));
+      case EmbeddedProfile():
+        throw UnsupportedConnectionProfileException(profile);
     }
   }
 }

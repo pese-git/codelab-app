@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:dart_tui/dart_tui.dart' as tea;
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgentConfigException;
 
 import '../exit_codes.dart';
 import '../input/history.dart';
@@ -134,6 +136,9 @@ final class TuiRunner {
       );
       await applyConfigFlag(handle, 'model', _model);
       await applyConfigFlag(handle, 'mode', _mode);
+    } on EmbeddedAgentConfigException {
+      // Ошибка использования (`64`), как в `-p`: текст печатает `runCodelab`.
+      rethrow;
     } on Object catch (error) {
       _errorOutput.writeln(
         sanitizeTerminalText(

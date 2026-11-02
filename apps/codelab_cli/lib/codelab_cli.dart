@@ -6,6 +6,8 @@ library;
 export 'src/cli_args.dart';
 export 'src/cli_io.dart';
 export 'src/cli_logger.dart';
+export 'src/embedded_logger.dart';
+export 'src/embedded_transport_resolver.dart';
 export 'src/exit_codes.dart';
 export 'src/headless/approval_policy.dart';
 export 'src/headless/headless_runner.dart';

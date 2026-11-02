@@ -89,6 +89,8 @@ final class CliOptions {
     required this.timeout,
     required this.noColor,
     required this.verbose,
+    required this.debugSecrets,
+    required this.argvHasSecret,
     required this.ui,
     this.filter,
   });
@@ -97,7 +99,7 @@ final class CliOptions {
   final List<String> positional;
 
   /// Значение `--agent`: id профиля, `stdio:…`, URL или `embedded`; `null` —
-  /// профиль `default`.
+  /// профиль `default`, если он есть, иначе встроенный агент.
   final String? agent;
 
   /// Рабочая папка сессии; `null` — текущая.
@@ -129,6 +131,17 @@ final class CliOptions {
   final bool noColor;
   final bool verbose;
 
+  /// `--debug-secrets`: включает `secrets.lookup` встроенного агента (имя и
+  /// источник секрета, без значения). Внешнего агента не касается (spec
+  /// codelab-cli «Встроенный агент в CLI»; design.md change
+  /// `add-embedded-agent-mode`, D5).
+  final bool debugSecrets;
+
+  /// В argv есть слово `secret`: тексты ошибок не цитируют присланные слова и
+  /// пути, среди них мог быть секрет (design.md change
+  /// `add-agent-secret-store`, D8).
+  final bool argvHasSecret;
+
   /// `--ui`: интерактивный режим; на headless не влияет.
   final UiMode ui;
 
@@ -158,8 +171,9 @@ ArgParser _parser() {
       abbr: 'a',
       valueHelp: 'profile',
       help:
-          'Agent profile id, "stdio:<command> [args]", ws:// or wss:// URL '
-          '(default: profile "default").',
+          'Agent profile id, "embedded", "stdio:<command> [args]", ws:// or '
+          'wss:// URL (default: profile "default" if it exists, else '
+          '"embedded").',
     )
     ..addOption('cwd', abbr: 'C', valueHelp: 'dir', help: 'Session folder.')
     ..addOption('model', abbr: 'm', valueHelp: 'id', help: 'Model option.')
@@ -213,6 +227,11 @@ ArgParser _parser() {
       abbr: 'v',
       negatable: false,
       help: 'Connection diagnostics in stderr.',
+    )
+    ..addFlag(
+      'debug-secrets',
+      negatable: false,
+      help: 'Embedded agent: log secret lookups (names, never values).',
     )
     ..addFlag('version', negatable: false, help: 'Print the version.')
     ..addFlag('help', abbr: 'h', negatable: false, help: 'Print this help.');
@@ -306,6 +325,7 @@ CliOptions parseCliArgs(List<String> args) {
       positional: command.rest,
       agent: command.option('agent'),
       filter: command.option('filter'),
+      argvHasSecret: args.contains('secret'),
       // Ожидание кадра агента; по умолчанию 30 с (spec cli-scenario-driver).
       timeout: _parseDuration(
         command.option('timeout') ?? results.option('timeout') ?? '30s',
@@ -365,6 +385,7 @@ const _connectionFlags = [
   'approve',
   'timeout',
   'ui',
+  'debug-secrets',
 ];
 
 /// `codelab config …`: только `check [--cwd]`.
@@ -469,6 +490,7 @@ CliOptions _options(
   String? agent,
   String? filter,
   Duration? timeout,
+  bool argvHasSecret = false,
 }) => CliOptions._(
   command: command,
   positional: List.unmodifiable(positional),
@@ -492,6 +514,8 @@ CliOptions _options(
       },
   noColor: results.flag('no-color'),
   verbose: results.flag('verbose'),
+  debugSecrets: results.flag('debug-secrets'),
+  argvHasSecret: argvHasSecret,
   ui: UiMode.values.firstWhere((mode) => mode.flag == results.option('ui')),
 );
 

@@ -23,17 +23,28 @@ import 'agent_connector.dart';
 ///
 /// Как использовать: `runCodelab` передаёт разобранные [options] и профиль;
 /// код `0` — без `FAIL`, `1` — есть `FAIL` (в том числе агент не
-/// запустился). Ошибки использования (нет пути, путь не существует, битая
-/// фикстура) — [UsageError], код `64`. [quietPeriod] — тишина в конце
+/// запустился) и `1`, если не сыграна ни одна фикстура. Ошибки использования
+/// (нет пути, путь не существует, битая фикстура) — [UsageError], код `64`. [quietPeriod] — тишина в конце
 /// фикстуры (§14.9).
 Future<int> runTestScenario(
   CliOptions options, {
   required ConnectionProfile profile,
   required Map<String, String> environment,
   required StringSink stdout,
+  required StringSink stderr,
   Duration quietPeriod = const Duration(milliseconds: 200),
 }) async {
-  final fixtures = _load(options.positional);
+  final List<AcpFixture> fixtures;
+  try {
+    fixtures = _load(options.positional);
+  } on UsageError {
+    // Путь фикстуры — слово argv: если среди слов есть `secret`, оно могло
+    // быть значением секрета, и текст ошибки его не цитирует (D8).
+    if (options.argvHasSecret) {
+      throw const UsageError('Cannot load the fixtures');
+    }
+    rethrow;
+  }
   final filter = options.filter;
   final selected = [
     for (final fixture in fixtures)
@@ -72,6 +83,13 @@ Future<int> runTestScenario(
     }
   }
   stdout.writeln('$passed passed, $failed failed, $skipped skipped');
+  if (passed + failed == 0) {
+    // Прогон, где ничего не сыграно (всё пропущено или фильтр пуст), не
+    // доказывает ничего: зелёный код скрыл бы пустой корпус (решение
+    // пользователя 2026-11-02, U4).
+    stderr.writeln('codelab: no fixtures were played');
+    return failureExit;
+  }
   return failed == 0 ? okExit : failureExit;
 }
 

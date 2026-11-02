@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgentConfigException;
 
 import '../cli_args.dart';
 import '../render/sanitize.dart';
@@ -127,6 +129,11 @@ final class HeadlessRunner {
           resume: resume,
           last: continueLast,
         );
+      } on EmbeddedAgentConfigException {
+        // Невалидный конфиг встроенного агента — не сбой подключения (`1`), а
+        // ошибка использования: `runCodelab` печатает текст и даёт `64`
+        // (spec codelab-cli «Невалидный конфиг встроенного агента»).
+        rethrow;
       } on Object catch (error) {
         final message = error is SessionSetupError
             ? error.message
