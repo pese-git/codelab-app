@@ -181,6 +181,30 @@ final class LogRecord {           // то, что получает sink хост
 тег, повторяющийся ключ) — `error`, с путём, строкой и столбцом в координатах файла. Коды определений агентов (D10): `invalid_value`, `unknown_key`, `empty_body`, `too_large`, `duplicate` (на каждый файл, оба пути в сообщении) — `error`; `shadowed`, `untrusted_project` — `info`. Путь в `project_files.diagnostic` и `project_context.loaded` не
 экранируется, в отличие от атрибута `path` блока в промпте (§11.5).
 
+Этап 8.10 (design.md change `add-config-writer-and-reload`, D14; имена — agent-core §17.5.9).
+Значения ключей, подстановок и секретов не пишутся ни в одно поле; `keys` — пути ключей:
+
+| Событие | Уровень | Поля |
+|---|---|---|
+| `config.preconfig.shadowed` | info | `by: "flags"` — флаги `--provider-type`/`--provider-config` затенили `CODELAB_PROVIDER_*` |
+| `config.write` | info | `path`, `keys` |
+| `config.write.stale_lock` | warning | `path`, `age_ms` — lock старше 10 с удалён |
+| `config.watch.fallback` | info | `path`, `reason` (`runtimeType`) — ошибка потока событий, файл переведён на опрос |
+| `config.watch.failed` | warning | `path`, `error_class` — исключение опроса, опрос продолжается |
+| `config.reload.applied` | info | `keys`, `restart_required` |
+| `config.reload.noop` | debug | — |
+| `config.reload.failed` | error | `sources`, `issues` (`source`, `line`, `column`, `key`, `kind`) или `error_class` — сбой перезагрузки, запущенной сигналом |
+| `config.reload.restart_required` | warning | `keys`; в том числе ключи, ослабляющие права (R0-1): `permissions.*`, `trusted_projects`, `mcp.servers[<name>]` новых и изменённых stdio-серверов; правки, способные направить секрет на другой адрес (R0-4): `providers.<id>`, `mcp.servers[<name>]` HTTP-серверов с подстановкой `${…}`, ссылки на модели нового отложенного провайдера |
+| `config.reload.model_orphaned` | info | `session_id`, `model` (`provider/model`) — модель сессии исчезла из каталога, сессия работает на прежней функции; один раз на сессию и модель |
+| `mcp.server.state` | debug | `session_id`, `server`, `from`, `to` |
+| `mcp.server.retry` | info | `session_id`, `server`, `attempt`, `delay_ms` |
+| `command.builtin` | info | `session_id`, `name`, `subcommand` (без аргументов) |
+
+С 8.10 `mcp.server.failed` пишется на 1-м и каждом 10-м подряд сбое сервера, `mcp.server.retry` — на
+остальных, `mcp.server.connect` — при каждом успешном подключении, в том числе повторном; причины —
+тексты кода CodeLab, без текстов сервера (D11). `logging.level` в 1.0 — `restartRequired` (OQ5):
+уровень логгера принадлежит хосту, а канала «хост, примени новые настройки хоста» в ядре нет.
+
 После MVP (§17) добавляются области:
 
 | Область | События |
@@ -189,8 +213,6 @@ final class LogRecord {           // то, что получает sink хост
 | `skills` | `skills.load`, `skills.catalog.truncated`, `skills.operative.dropped`, `skills.operative.truncated` (§17.2) |
 | `subagent` | `subagent.start`, `subagent.end`, `subagent.type_overridden`, `subagent.cancel_grace_exceeded`, `subagent.approval_unavailable` (§17.3), `subagent.follow_up` {`subagentId`, `run`, `kind`: `send` \| `resume`}, `subagent.follow_up_rejected` {`subagentId`, `reason`}, `subagent.observe` {`subagentId`, `last`} (§17.3.8.1) |
 | `spill` | `spill.write`, `spill.failed`, `spill.missing`, `spill.orphan_deleted` (§17.4) |
-| `config` | `config.reload.applied`, `config.reload.failed`, `config.reload.noop`, `config.reload.restart_required`, `config.preconfig.shadowed`, `config.write` (§17.5) |
-| `mcp` (дополнение) | `mcp.server.state`, `mcp.server.retry` (§17.5.7); `mcp.tools.changed` уже в MVP |
 | `session` (дополнение) | `session.lease.takeover`, `session.lease.lost`, `session.branch_summary.failed`, `session.fork.start`, `session.fork.end`, `session.fork.failed` (§17.6); `session.sealed` (info), `session.sealed.dropped` (warning, один раз на вид записи), `session.title_probe` (debug) (§8.5.1, §8.10.1); `session.search` (debug: `scope`, `terms` — число, `scanned`, `hits`, `truncated`, `skipped`, `durationMs`; без текста запроса и сниппетов) (§17.6.17) |
 | `steer` | `steer.accepted`, `steer.refused` (§17.7.3.1) |
 | `lsp` | `lsp.server.start`, `lsp.server.ready`, `lsp.server.stop`, `lsp.server.crash`, `lsp.server.failed`, `lsp.server.stderr` (`debug`), `lsp.request.timeout`, `lsp.frame.bad`, `lsp.sync.failed`, `lsp.edit.rollback` (§17.8.10) |
