@@ -28,6 +28,21 @@ void main() {
     expect(options.agent, 'py');
   });
 
+  test('--debug-secrets is a flag without a value, off by default '
+      '(spec «Встроенный агент в CLI», D5)', () {
+    expect(parseCliArgs(['-p', 'hi']).debugSecrets, isFalse);
+    expect(
+      parseCliArgs([
+        '--debug-secrets',
+        '-a',
+        'embedded',
+        '-p',
+        'hi',
+      ]).debugSecrets,
+      isTrue,
+    );
+  });
+
   test('-f selects the headless mode with a prompt file', () {
     expect(parseCliArgs(['-f', 'task.md']).promptFile, 'task.md');
     expect(parseCliArgs(['-f', '-']).command, CliCommand.headless);

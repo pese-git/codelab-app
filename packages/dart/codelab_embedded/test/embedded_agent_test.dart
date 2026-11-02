@@ -72,6 +72,56 @@ void main() {
     return client!.newSession(project.path);
   }
 
+  // Паритет `initialize` с бинарём: корпус `acp/initialize-capabilities`
+  // ждёт `mcpCapabilities.http: true`, потому что хост бинаря всегда передаёт
+  // MCP-коннектор (D1: проводка MCP — осознанный дубль). Расхождение нашёл
+  // `codelab test-scenario --agent embedded` (задача 3.6).
+  test('initialize declares the same MCP capabilities as the binary: http '
+      'on, sse off', () async {
+    final opener = scriptedEmbeddedAgentOpener(
+      llm: {'steps': <Object?>[]},
+      codelabHome: '${temp.path}/home',
+      logger: logger,
+    );
+    agent = await opener(cwd: project.path, hostProfile: 'agent-serve');
+    client = TestAcpClient(agent!.clientTransport);
+    await client!.start();
+
+    final result = await client!.initialize();
+
+    expect((result['agentCapabilities']! as Map)['mcpCapabilities'], {
+      'http': true,
+      'sse': false,
+    });
+  });
+
+  test('models replace the single model of the script in the catalog (the '
+      'model option of the session)', () async {
+    final opener = scriptedEmbeddedAgentOpener(
+      llm: {'steps': <Object?>[]},
+      codelabHome: '${temp.path}/home',
+      logger: logger,
+      models: const ['scripted/gpt-5', 'scripted/gpt-4'],
+    );
+    agent = await opener(cwd: project.path, hostProfile: 'embedded-cli');
+    client = TestAcpClient(agent!.clientTransport);
+    await client!.start();
+    await client!.initialize();
+
+    final result = await client!.call('session/new', {
+      'cwd': project.path,
+      'mcpServers': <Object?>[],
+    });
+
+    final options = (result['configOptions']! as List).cast<Map>();
+    final model = options.firstWhere((option) => option['id'] == 'model');
+    expect((model['options']! as List).map((o) => (o as Map)['value']), [
+      'scripted/gpt-5',
+      'scripted/gpt-4',
+    ]);
+    expect(model['currentValue'], 'scripted/gpt-5');
+  });
+
   test('a turn through the embedded agent: hello and end_turn', () async {
     final opener = scriptedEmbeddedAgentOpener(
       llm: {

@@ -84,6 +84,50 @@ void main() {
     );
   });
 
+  test('embedded: the script, permission mode and models go to the test '
+      'entry point through the environment, the agent is the word '
+      '"embedded"', () async {
+    final agent = E2eCliAgent.fromEnvironment(const {
+      'CODELAB_E2E_AGENT': 'embedded',
+    });
+
+    final permission = await agent.launch(
+      dir,
+      mode: _Mode.withPermissionRequest,
+    );
+    final models = await agent.launch(dir, mode: _Mode.withConfigOptions);
+
+    expect(agent.kind, E2eAgentKind.embedded);
+    expect(permission.agent, 'embedded');
+    expect(
+      permission.environment['CODELAB_E2E_LLM_SCRIPT'],
+      endsWith('llm_scripts/with_permission_request.json'),
+    );
+    expect(permission.environment['CODELAB_E2E_PERMISSION_MODE'], 'standard');
+    expect(
+      permission.environment['CODELAB_E2E_SESSIONS_DIR'],
+      contains(dir.path),
+    );
+    expect(permission.permissionTitle, 'echo hello');
+    expect(
+      models.environment['CODELAB_E2E_MODELS'],
+      'scripted/gpt-5,scripted/gpt-4',
+    );
+    expect(models.models, ['scripted/gpt-5', 'scripted/gpt-4']);
+    expect(agent.needsStoredProfile, isNotNull);
+  });
+
+  test('embedded: a mode without a script is a state error', () async {
+    final agent = E2eCliAgent.fromEnvironment(const {
+      'CODELAB_E2E_AGENT': 'embedded',
+    });
+
+    expect(
+      agent.launch(dir, mode: _Mode.withAvailableCommands),
+      throwsStateError,
+    );
+  });
+
   group('python', () {
     /// `codelab` в своём каталоге `PATH`: печатает [help] на `serve --help`.
     Future<Map<String, String>> fakeCodelab(String help, {int code = 0}) async {

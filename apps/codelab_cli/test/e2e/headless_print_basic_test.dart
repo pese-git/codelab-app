@@ -27,14 +27,10 @@ Future<void> main() async {
     () async {
       final launch = await E2eCliAgent.current.launch(tmp);
 
-      final result = await CliProcess.run([
-        '-p',
-        'hello',
-        '-a',
-        launch.agent,
-        '-C',
-        tmp.path,
-      ], environment: environment);
+      final result = await CliProcess.run(
+        ['-p', 'hello', '-a', launch.agent, '-C', tmp.path],
+        environment: {...environment, ...launch.environment},
+      );
 
       expect(result.exitCode, 0, reason: '$result');
       expect(result.stdout, '${launch.answer}\n');
@@ -66,23 +62,32 @@ Future<void> main() async {
       expect(result.exitCode, 0, reason: '$result');
       expect(result.stdout, '${launch.answer}\n');
     },
-    skip: agentSkip,
+    skip: agentSkip ?? E2eCliAgent.current.needsStoredProfile,
     tags: pythonAgent,
   );
 
+  // Без `--agent` и без профиля `default` запускается встроенный агент; без
+  // конфига рабочий бинарь отвечает кодом 64 с проблемой конфигурации и
+  // подсказкой, а процесс агента не стартует (spec codelab-cli «Без профиля и
+  // без конфига»; design.md change `add-embedded-agent-mode`, D5, D13 п. 1).
   test('cli/headless-print-basic: an empty CODELAB_HOME without --agent is '
-      '64 with the hint, and no agent starts', () async {
-    final result = await CliProcess.run([
-      '-p',
-      'hi',
-      '-C',
-      tmp.path,
-    ], environment: environment);
+      '64 with the embedded config hint, and no agent starts', () async {
+    final result = await CliProcess.run(
+      ['-p', 'hi', '-C', tmp.path],
+      environment: environment,
+      entry: CliEntry.production,
+    );
 
     expect(result.exitCode, 64, reason: '$result');
     expect(result.stdout, isEmpty);
-    expect(result.stderr, contains('codelab profiles add default'));
-  }, tags: scriptedOnly);
+    expect(
+      result.stderr,
+      contains(
+        'Configure the embedded agent in ${tmp.path}/home/config.yaml; '
+        'check it with: codelab config check',
+      ),
+    );
+  });
 
   test('cli/headless-print-basic: an agent that cannot start is 1', () async {
     final result = await CliProcess.run([

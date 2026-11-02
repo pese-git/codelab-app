@@ -470,6 +470,132 @@ void main() {
     );
   });
 
+  // IO-барель и тестовый сценарий встроенного агента в терминальном клиенте
+  // (design.md change `add-embedded-agent-mode`, D3; задача 3.4;
+  // workspace-architecture «IO-барель встроенного агента вне composition
+  // root»): `io.dart` — только `composition_root.dart`, `testing.dart` — только
+  // драйвер фикстур `lib/src/scenario/`.
+  List<String> scanCliEmbedded(Directory tmp) => [
+    for (final rule in rules.where(
+      (r) =>
+          r.dir == 'apps/codelab_cli/lib' &&
+          r.forbidden.any((f) => f.startsWith('package:codelab_embedded/')),
+    ))
+      ...scan(
+        tmp.path,
+        PackageRule(
+          'lib',
+          forbidden: rule.forbidden,
+          exclude: rule.exclude,
+          sealExclude: rule.sealExclude,
+        ),
+      ),
+  ];
+
+  void writeCli(Directory tmp, Map<String, String> files) {
+    files.forEach((file, content) {
+      File(p.join(tmp.path, 'lib', file))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(content);
+    });
+  }
+
+  test('allows the IO barrel of the embedded agent only in the composition '
+      'root of the terminal client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_embedded_io_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_embedded/io.dart';\n";
+    writeCli(tmp, {
+      'src/composition_root.dart': import,
+      'src/run.dart': import,
+      'src/repl/repl.dart': import,
+      'src/scenario/agent_connector.dart': import,
+      // Барель не должен реэкспортировать мост наружу.
+      'codelab_cli.dart': "export 'package:codelab_embedded/io.dart';\n",
+    });
+
+    expect(
+      scanCliEmbedded(tmp),
+      unorderedEquals([
+        endsWith('lib/src/run.dart:1 -> package:codelab_embedded/io.dart'),
+        endsWith(
+          'lib/src/repl/repl.dart:1 -> package:codelab_embedded/io.dart',
+        ),
+        endsWith(
+          'lib/src/scenario/agent_connector.dart:1 -> '
+          'package:codelab_embedded/io.dart',
+        ),
+        endsWith('lib/codelab_cli.dart:1 -> package:codelab_embedded/io.dart'),
+      ]),
+    );
+  });
+
+  test('allows the scripted opener of the embedded agent only in the '
+      'fixture driver of the terminal client', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_cli_embedded_testing_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_embedded/testing.dart';\n";
+    writeCli(tmp, {
+      'src/scenario/agent_connector.dart': import,
+      'src/composition_root.dart': import,
+      'src/run.dart': import,
+      'codelab_cli.dart': "export 'package:codelab_embedded/testing.dart';\n",
+    });
+
+    expect(
+      scanCliEmbedded(tmp),
+      unorderedEquals([
+        endsWith(
+          'lib/src/composition_root.dart:1 -> '
+          'package:codelab_embedded/testing.dart',
+        ),
+        endsWith('lib/src/run.dart:1 -> package:codelab_embedded/testing.dart'),
+        endsWith(
+          'lib/codelab_cli.dart:1 -> package:codelab_embedded/testing.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('the entry point bin/ of the terminal client imports neither the IO '
+      'barrel nor the scripted opener of the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_embedded_bin_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'bin', 'codelab.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'package:codelab_embedded/io.dart';\n"
+        "import 'package:codelab_embedded/testing.dart';\n"
+        "import 'package:codelab_embedded/codelab_embedded.dart';\n",
+      );
+    final rule = rules.singleWhere((r) => r.dir == 'apps/codelab_cli/bin');
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('bin', forbidden: rule.forbidden),
+    );
+
+    expect(violations, hasLength(2));
+    expect(
+      violations.first,
+      endsWith('bin/codelab.dart:1 -> package:codelab_embedded/io.dart'),
+    );
+  });
+
+  test('the main barrel of the embedded agent is allowed everywhere in the '
+      'terminal client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_embedded_main_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeCli(tmp, {
+      'src/repl/repl.dart':
+          "import 'package:codelab_embedded/codelab_embedded.dart';\n",
+    });
+
+    expect(scanCliEmbedded(tmp), isEmpty);
+  });
+
   // Встроенный агент `codelab_embedded` (design.md change
   // `add-embedded-agent-mode`, D3): основной барель чист и не знает IO-пакет
   // агента, `io.dart` и `testing.dart` вне запретов `webUnsafe`, но без ссылок

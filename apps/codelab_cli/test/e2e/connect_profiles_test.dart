@@ -26,8 +26,8 @@ void main() {
 
   test('cli/connect-profiles-stdio-ws-embedded: stdio profile from '
       'profiles.json', () async {
-    final env = {'CODELAB_HOME': '${dir.path}/codelab'};
     final launch = await E2eCliAgent.current.launch(dir);
+    final env = {'CODELAB_HOME': '${dir.path}/codelab', ...launch.environment};
     final added = await CliProcess.run([
       'profiles',
       'add',
@@ -45,7 +45,7 @@ void main() {
 
     expect(result.exitCode, 0, reason: '$result');
     expect(result.stdout, contains(launch.answer));
-  });
+  }, skip: E2eCliAgent.current.needsStoredProfile);
 
   test('cli/connect-profiles-stdio-ws-embedded: WebSocket with the token '
       'from CODELAB_AGENT_TOKEN', () async {
@@ -108,14 +108,42 @@ void main() {
     // Сервер — всегда Dart-агент теста: в прогоне `dart` тест не повторяется.
   }, tags: scriptedOnly);
 
-  test('cli/connect-profiles-stdio-ws-embedded: embedded is 64', () async {
+  // Критерий `cli/connect-profiles-stdio-ws-embedded`, вариант `embedded`:
+  // `-a embedded` проводит ход встроенного агента в процессе CLI (CLI из
+  // тестовой точки входа со сценарием модели, design.md change
+  // `add-embedded-agent-mode`, D8), дочернего процесса агента нет.
+  test('cli/connect-profiles-stdio-ws-embedded: embedded runs the turn in '
+      'the CLI process', () async {
+    final launch = await E2eCliAgent.fromEnvironment({
+      'CODELAB_E2E_AGENT': 'embedded',
+    }).launch(dir);
+
     final result = await CliProcess.run(
-      ['--agent', 'embedded', '-p', 'hi'],
-      environment: {'CODELAB_HOME': '${dir.path}/codelab'},
+      ['--agent', 'embedded', '--cwd', dir.path, '-p', 'hi'],
+      environment: {
+        'CODELAB_HOME': '${dir.path}/codelab',
+        ...launch.environment,
+      },
+      entry: CliEntry.scriptedEmbedded,
     );
 
-    expect(result.exitCode, 64);
-    expect(result.stderr, contains('Embedded agent is not available'));
+    expect(result.exitCode, 0, reason: '$result');
+    expect(result.stdout, '${launch.answer}\n');
+  });
+
+  test('cli/connect-profiles-stdio-ws-embedded: embedded is not stored in '
+      'profiles.json', () async {
+    final result = await CliProcess.run(
+      ['profiles', 'add', 'x', 'embedded'],
+      environment: {'CODELAB_HOME': '${dir.path}/codelab'},
+      entry: CliEntry.production,
+    );
+
+    expect(result.exitCode, 64, reason: '$result');
     expect(result.stdout, isEmpty);
-  }, tags: scriptedOnly);
+    expect(
+      result.stderr,
+      contains('embedded is built in; use --agent embedded'),
+    );
+  });
 }

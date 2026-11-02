@@ -165,6 +165,36 @@ const rules = [
     exclude: ['run.dart'],
     sealExclude: false,
   ),
+  // IO-барель встроенного агента — только composition root CLI; остальной код
+  // получает агента через `EmbeddedTransportResolver` (design.md change
+  // `add-embedded-agent-mode`, D3; workspace-architecture «IO-барель
+  // встроенного агента вне composition root»). Правило на весь `lib/`, чтобы
+  // барель `lib/codelab_cli.dart` не мог его реэкспортировать; точка входа
+  // `bin/` — следующим правилом.
+  PackageRule(
+    'apps/codelab_cli/lib',
+    forbidden: ['package:codelab_embedded/io.dart'],
+    exclude: ['src/composition_root.dart'],
+    sealExclude: false,
+  ),
+  // Сценарий модели встроенного агента — только драйверу фикстур
+  // `test-scenario` (`lib/src/scenario/`), как `codelab_acp_testing` (D3, D8):
+  // тестовый код не попадает в остальной рабочий код CLI.
+  PackageRule(
+    'apps/codelab_cli/lib',
+    forbidden: ['package:codelab_embedded/testing.dart'],
+    exclude: ['src/scenario/'],
+    sealExclude: false,
+  ),
+  // Точка входа рабочего бинаря не знает ни IO-барель, ни сценарий модели:
+  // сборка агента — в composition root.
+  PackageRule(
+    'apps/codelab_cli/bin',
+    forbidden: [
+      'package:codelab_embedded/io.dart',
+      'package:codelab_embedded/testing.dart',
+    ],
+  ),
   // Ядро экрана — чистые `reduce` и `render`: ни пакета TUI, ни dart:io
   // (TUI-5; design.md change `add-cli-tui`, D3).
   PackageRule(
@@ -202,9 +232,9 @@ const rules = [
       'package:codelab_client_',
     ],
   ),
-  // Правила клиентов на `codelab_embedded/io.dart` и `testing.dart` — в
-  // задачах 3.4 (CLI) и 4.4 (desktop) того же change: ограничиваемый код
-  // появляется в их итерациях.
+  // Правила CLI на `codelab_embedded/io.dart` и `testing.dart` — выше (задача
+  // 3.4); правила desktop — в задаче 4.4 того же change: ограничиваемый код
+  // появляется в её итерации.
   // Мост настроек агента для клиентов (dart-agent-and-clients §12.4.2; design.md
   // change `add-agent-configuration`, D14): основной барель чист и не знает
   // IO-пакет агента, `lib/io.dart` и `lib/src/io/` — вне запретов

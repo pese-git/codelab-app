@@ -80,8 +80,10 @@ const clientIoAllowlist = {
 /// «Автоматический сторож границ пакетов»; design.md change `add-codelab-cli`,
 /// D3): клиентский слой, ACP-пакеты, тестовый пакет для `test-scenario`,
 /// `args`, `dart_tui` для полноэкранного режима и мост `codelab_setup` для
-/// `codelab config check` (change `add-agent-configuration`, D14). Пакетов
-/// агента и Flutter здесь нет: к агенту CLI ходит только по ACP.
+/// `codelab config check` (change `add-agent-configuration`, D14) и мост
+/// встроенного агента `codelab_embedded` (change `add-embedded-agent-mode`,
+/// D3). Пакетов агента и Flutter здесь нет: к агенту CLI ходит по ACP, а
+/// встроенного получает через мост.
 const cliAllowlist = {
   'codelab_client_core',
   'codelab_client_io',
@@ -89,6 +91,7 @@ const cliAllowlist = {
   'codelab_acp_protocol',
   'codelab_acp_transports',
   'codelab_acp_testing',
+  'codelab_embedded',
   'codelab_setup',
   'dart_tui',
   'args',
@@ -275,6 +278,14 @@ dependencies: # allowlist
 ''';
 
     expect(dependencyKeys(pubspec).difference(setupAllowlist), {'http'});
+  });
+
+  test('the terminal client may depend on the embedded agent bridge', () {
+    // Мост встроенного агента (design.md change `add-embedded-agent-mode`,
+    // D3): клиент получает агента через него, а не через `codelab_agent_*`.
+    expect(cliAllowlist, contains('codelab_embedded'));
+    expect(cliAllowlist, isNot(contains('codelab_agent_core')));
+    expect(cliAllowlist, isNot(contains('codelab_agent_acp')));
   });
 
   test('the terminal client may depend on the setup bridge', () {
