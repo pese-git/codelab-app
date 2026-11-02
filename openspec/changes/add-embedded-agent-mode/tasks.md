@@ -245,22 +245,24 @@
 
 ## 6. Документы и Definition of Done (итерация 6)
 
-- [ ] 6.1 `[docs]` `README.md`: строка таблицы и узел `codelab_embedded` в графе, рёбра от `codelab_desktop` и `codelab_cli`, уточнение абзаца о сходимости веток (D3). Корневой `AGENTS.md` §5: пакет в дереве и в «Назначении пакетов», правило импорта `io.dart`/`testing.dart` клиентами. Таблица зон в `CLAUDE.md` и `.claude/agents/agent-core-engineer.md`: `codelab_embedded` — по согласованию с пользователем (D1).
-- [ ] 6.2 `[docs]` Тексты плана:
+- [x] 6.1 `[docs]` `README.md`: строка таблицы и узел `codelab_embedded` в графе, рёбра от `codelab_desktop` и `codelab_cli`, уточнение абзаца о сходимости веток (D3). Корневой `AGENTS.md` §5: пакет в дереве и в «Назначении пакетов», правило импорта `io.dart`/`testing.dart` клиентами. Таблица зон в `CLAUDE.md` и `.claude/agents/agent-core-engineer.md`: `codelab_embedded` — по согласованию с пользователем (D1; решение R6-1).
+  Попутно в графе `README.md` сняты устаревшие пометки: `codelab_cli` больше не «план, этап 6», ребро `codelab_agent` → `codelab_agent_mcp` — сплошное (зависимость есть), список dev-зависимостей под графом сверен с `pubspec.yaml`.
+- [x] 6.2 `[docs]` Тексты плана:
   - `09-12-stage-7-embedded.md` — итог 7.3–7.9, отметки DoD, решение 7.8;
   - `09-05-stage-0-foundation.md` — скрипт `test:e2e:app:embedded` без `CODELAB_ALLOW_SCRIPTED_LLM` (D8);
   - `agent-core/10-core-assembly-and-profiles.md` §10.12 — ссылка на тест паритета в `codelab_agent_core/test/host/` (D1, в);
   - `docs/architecture/concurrency.md` — ссылка на решение 7.8.
-- [ ] 6.3 `[docs]` Definition of Done этапа 7 по `09-12`:
-  - `codelab test-scenario … --agent embedded` — все `PASS` или `SKIP` с причиной;
-  - `melos run guard` — правила D3;
-  - интеграционные тесты app собираются (`fvm flutter analyze`); прогон на устройстве отмечается в `release/<version>`;
-  - замер выполнен, решение записано;
-  - конфиг через загрузчик 8.5 и ключ через `SecretResolver` 8.9 доказаны тестами 2.1 и 2.3;
-  - Should (`codelab_setup`, D-05, мастер) — в change `add-provider-setup-ui`.
+- [x] 6.3 `[docs]` Definition of Done этапа 7 по `09-12` (там же — тот же список с отметками). Результаты прогонов внесены по факту (2026-11-02):
+  - `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded` (`melos run conformance:embedded`) — все `PASS` или `SKIP` с причиной, без `FAIL` (cli-scenario-driver «Вывод и коды выхода test-scenario»; D8) — **выполнено** 2026-11-02 на `develop` @ `8905dee`: код 0, `37 passed, 0 failed, 19 skipped`, у каждого `SKIP` причина;
+  - `fvm dart run melos run guard` — правила D3, включая allowlist пакетов `codelab_*` app (задача 6.4) — **выполнено** 2026-11-02: код 0, 100 тестов;
+  - интеграционные тесты app собираются: `fvm flutter analyze` в `apps/codelab_desktop` с `integration_test/` (testing-quality; D10, D13, п. 4) — **выполнено** 2026-11-02: `fvm flutter analyze integration_test` — код 0; прогон на устройстве `melos run test:e2e:app:embedded` отмечается в `release/<version>` (`AGENTS.md` §21);
+  - замер выполнен, решение записано — **доказано**: D11, «Решение 7.8» (задача 5.1; R5-1);
+  - конфиг через загрузчик 8.5 и ключ через `SecretResolver` 8.9 — **доказано** тестами задач 2.1 и 2.3: `packages/dart/codelab_embedded/test/io/local_opener_test.dart`, `packages/dart/codelab_agent_io/test/secrets/host_secrets_test.dart`, `packages/dart/codelab_embedded/test/io/test_secret_store_process_test.dart`;
+  - Should (`codelab_setup` для мастера, D-05, мастер) — в будущий change `add-provider-setup-ui` (записан в `docs/architecture/proposals/delivery-roadmap.md` и `09-12`; этим change не создаётся).
 
   Change готов к архивированию по просьбе пользователя.
-- [ ] 6.4 `[desktop]` Allowlist зависимостей app в стороже (workspace-architecture «Автоматический сторож границ пакетов», сценарий «Пакет агента в зависимостях app»; D3). Решение пользователя 2026-11-02 по ревью итерации 4: отдельной задачей в итерации 6. Сторож пишет исполнитель зоны ограничиваемого кода (правило выше, как 1.7 `[agent]`, 3.4 `[client]`, 4.4 `[desktop]`):
+- [x] 6.4 `[desktop]` Allowlist зависимостей app в стороже (workspace-architecture «Автоматический сторож границ пакетов», сценарий «Пакет агента в зависимостях app»; D3). Решение пользователя 2026-11-02 по ревью итерации 4: отдельной задачей в итерации 6. Сторож пишет исполнитель зоны ограничиваемого кода (правило выше, как 1.7 `[agent]`, 3.4 `[client]`, 4.4 `[desktop]`):
   - красный тест в `packages/dart/codelab_architecture_tests/test/pubspec_allowlist_test.dart`: `desktopAllowlist` по пакетам `codelab_*` — `{codelab_client_acp, codelab_client_core, codelab_client_io, codelab_acp_protocol, codelab_acp_transports, codelab_embedded, codelab_ui}`; негативный случай — `codelab_agent_core` в `dependencies` временного `pubspec.yaml` даёт падение с именем пакета; `codelab_embedded` нарушением не считается; сторонние зависимости app не проверяются;
   - если текущий `apps/codelab_desktop/pubspec.yaml` проходит без правок, тест закрывает критерий (характеризационный, исключение (а) §9.0) и это фиксируется в PR;
-  - doc-комментарий константы по-русски (почему/для чего/как) со ссылкой на D3.
+  - doc-комментарий константы по-русски (почему/для чего/как) со ссылкой на D3;
+  - `codelab_setup` в `desktopAllowlist` не входит: его добавит change `add-provider-setup-ui` вместе с потребителем (решение R6-2).

@@ -21,6 +21,7 @@ Monorepo CodeLab на Dart и Flutter: desktop-клиент (`apps/codelab_deskt
 | `packages/dart/codelab_agent_acp` | ACP-сервер агента: проекция `AgentRuntime` в протокол |
 | `packages/dart/codelab_agent_mcp` | MCP-клиент агента: dual-era JSON-RPC, streamable HTTP, проекция инструментов MCP в `AgentTool` |
 | `packages/dart/codelab_setup` | мост настроек агента для клиентов: реэкспорт чистых типов конфигурации и общих подкоманд `config` (`io.dart`) |
+| `packages/dart/codelab_embedded` | мост встроенного агента для клиентов: агент в процессе клиента через `InProcessAcpLink`; основной барель web-безопасен, `io.dart` — настольный открыватель, `testing.dart` — сценарий модели для тестов |
 | `packages/dart/codelab_architecture_tests` | сторож границ пакетов и схемы имён (`melos run guard`) |
 | `packages/flutter/codelab_ui` | Fluent UI виджеты рабочего места |
 | `openspec/` | спецификации поведения и активные изменения |
@@ -33,7 +34,7 @@ Monorepo CodeLab на Dart и Flutter: desktop-клиент (`apps/codelab_deskt
 ```mermaid
 flowchart TD
   desktop[codelab_desktop]
-  cli["codelab_cli (план, этап 6)"]
+  cli[codelab_cli]
   agent[codelab_agent]
 
   ui[codelab_ui]
@@ -44,6 +45,7 @@ flowchart TD
   agent_acp[codelab_agent_acp]
   agent_mcp[codelab_agent_mcp]
   setup[codelab_setup]
+  embedded[codelab_embedded]
 
   testing[codelab_acp_testing]
   client_acp[codelab_client_acp]
@@ -57,11 +59,16 @@ flowchart TD
   desktop --> client_io
   cli --> client_io
   cli --> setup
+  desktop --> embedded
+  cli --> embedded
+  embedded --> agent_acp
+  embedded --> agent_io
+  embedded --> agent_mcp
   setup --> agent_io
   setup --> agent_core
   agent --> agent_io
   agent --> agent_acp
-  agent -.-> agent_mcp
+  agent --> agent_mcp
   client_io --> client_core
   agent_io --> agent_core
   client_core --> client_acp
@@ -76,20 +83,23 @@ flowchart TD
   classDef acp fill:#EEEDFE,stroke:#534AB7,color:#3C3489
   classDef client fill:#E1F5EE,stroke:#0F6E56,color:#085041
   classDef agentside fill:#FAECE7,stroke:#993C1D,color:#712B13
-  classDef planned stroke-dasharray:5 3
   classDef testonly stroke-dasharray:1 3
 
-  class desktop,cli,agent,arch,setup app
+  class desktop,cli,agent,arch,setup,embedded app
   class protocol,transports,testing acp
   class ui,client_io,client_core,client_acp client
   class agent_io,agent_acp,agent_mcp,agent_core agentside
-  class cli planned
   class testing,arch testonly
 ```
 
-Цвета: серый — приложения и инфраструктура, сиреневый — `codelab_acp_*`, зелёный — `codelab_client_*` и `codelab_ui`, терракотовый — `codelab_agent_*`. Пунктирная рамка — пакет запланирован, точечная — пакет только для тестов; пунктирное ребро `codelab_agent` → `codelab_agent_mcp` — зависимость появится в итерации 2 change `add-agent-mcp-client`; ребро `codelab_cli` → `codelab_setup` — мост настроек (change `add-agent-configuration`, D14: клиенты получают типы и подкоманды `config` агента через него, а не импортом `codelab_agent_*`). Кроме показанного, `codelab_agent_acp` берёт `codelab_client_acp` и `codelab_agent_io` как dev-зависимости: conformance-тест агента гоняет настоящий клиент против настоящего сервера. Dev-зависимость `codelab_agent_mcp` появится у `codelab_agent_io` и `codelab_agent_acp` с задачами итерации 2 change `add-agent-mcp-client` (stdio-тесты и фикстуры MCP).
+Цвета: серый — приложения, инфраструктура и мосты между сторонами, сиреневый — `codelab_acp_*`, зелёный — `codelab_client_*` и `codelab_ui`, терракотовый — `codelab_agent_*`. Точечная рамка — пакет только для тестов. Мосты между сторонами (ADR-0002, без префикса `codelab_agent_`):
 
-Клиентская и агентская ветки сходятся только на `codelab_acp_transports` и `codelab_acp_protocol`: клиенты не импортируют `package:codelab_agent_*` (`AGENTS.md` §5). `codelab_agent_core` не зависит даже от протокола, а `codelab_ui` — ни от одного внутреннего пакета. Границы проверяет `codelab_architecture_tests`; при добавлении пакета или новой зависимости граф обновляется вместе с правилом сторожа.
+- `codelab_cli` → `codelab_setup` — мост настроек (change `add-agent-configuration`, D14): клиенты получают типы и подкоманды `config` агента через него, а не импортом `codelab_agent_*`;
+- `codelab_desktop` → `codelab_embedded` и `codelab_cli` → `codelab_embedded` — мост встроенного агента (change `add-embedded-agent-mode`, D1–D3). Рёбра `codelab_embedded` к `codelab_agent_core`, `codelab_acp_protocol` и `codelab_acp_transports` транзитивны (через `codelab_agent_acp` и `codelab_agent_io`) и не рисуются.
+
+Кроме показанного, dev-зависимости: `codelab_agent_acp` берёт `codelab_client_acp`, `codelab_agent_io` и `codelab_agent_mcp` — conformance-тест агента гоняет настоящий клиент против настоящего сервера; `codelab_embedded` берёт `codelab_client_acp` и `codelab_client_core` для замера 7.8 (`benchmark/`).
+
+Клиентская и агентская ветки сходятся на `codelab_acp_transports` и `codelab_acp_protocol`, а агентскую сторону клиенты видят только через мосты `codelab_setup` и `codelab_embedded`: `package:codelab_agent_*` клиенты не импортируют, а пакеты `codelab_agent_*` в зависимостях `codelab_desktop` и `codelab_cli` запрещены allowlist сторожа (`AGENTS.md` §5; design.md change `add-embedded-agent-mode`, D3). `codelab_agent_core` не зависит даже от протокола, а `codelab_ui` — ни от одного внутреннего пакета. Границы проверяет `codelab_architecture_tests`; при добавлении пакета или новой зависимости граф обновляется вместе с правилом сторожа.
 
 ## Начало работы
 

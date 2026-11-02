@@ -78,6 +78,36 @@
    `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded` — в CI-джобе
    `conformance`.
 
+   **Итог 7.3–7.9.** Сделано change `add-embedded-agent-mode`, итерации 1–5
+   ([design.md](../../../../openspec/changes/add-embedded-agent-mode/design.md), D12; отметки DoD — ниже):
+   * **7.3** — пакет `packages/dart/codelab_embedded`, мост между сторонами без префикса стороны
+     (ADR-0002): web-безопасный основной барель (`createEmbeddedAgent`), `io.dart` — настольный
+     открыватель `localEmbeddedAgentOpener` (конфиг 8.5, секреты 8.9, журнал JSONL, MCP, файлы
+     проекта), `testing.dart` — сценарный открыватель для тестов. Сторож, allowlist, HOST-6 и
+     web-smoke — вместе с пакетом (D1–D3, D8).
+   * **7.4** — профили `embedded-app-desktop` и `embedded-cli`; файлы и команды встроенный агент
+     исполняет сам через `AcpServerConfig.localEnv` с containment `BoundedEnv` ядра (D4). Паритет
+     профилей — тест ядра `codelab_agent_core/test/host/profile_event_parity_test.dart` (D1, в).
+   * **7.5** — тип подключения «Встроенный агент» в codelab-app, резолвер
+     `apps/codelab_desktop/lib/app/embedded_transport_resolver.dart` в composition root, таймаут
+     закрытия 10 s (`embedded.close_timeout`), номер попытки подключения в `ClientWorkspace` против
+     гонки повторного Connect (D6, D9). Should-часть (`codelab_setup` для мастера, D-05) — в change
+     `add-provider-setup-ui`.
+   * **7.6** — в CLI без `--agent` берётся профиль `default`, иначе встроенный агент (D13, п. 1);
+     резолвер — `apps/codelab_cli/lib/src/embedded_transport_resolver.dart`, открыватель — из
+     `composition_root.dart`; `--debug-secrets` (D13, п. 9). План сборки в `codelab config check` и
+     флаги `--permission-mode`, `--config`, `--log-file` — вне scope (D13, пп. 5–6).
+   * **7.7** — интеграционные тесты app с `CODELAB_E2E_AGENT=embedded` подают сценарий модели
+     через шов `CodeLabBootstrap(scope:)` из `package:codelab_embedded/testing.dart`, без
+     `--dart-define=CODELAB_ALLOW_SCRIPTED_LLM` (D8); скрипт `test:e2e:app:embedded` — в корневом
+     `pubspec.yaml`, прогон на устройстве — в `release/<version>` (D10, D13, п. 4).
+     `CODELAB_TEST_SECRET_STORE` действует только в сборке с `CODELAB_ALLOW_TEST_SECRETS` (D5).
+   * **7.8** — замер выполнен, остаётся `InProcessAcpLink` (ниже, «Решение 7.8: ядро в isolate»);
+     разбор журнала сессии — в `Isolate.run` (`JsonlSessionStore.open`).
+   * **7.9** — `melos run test:e2e:cli:embedded` (CI-джоб `e2e-cli-embedded`) и
+     `melos run conformance:embedded` (`codelab test-scenario … --agent embedded`, CI-джоб
+     `conformance`) входят в `melos run check`.
+
 **Артефакт: `InProcessAcpLink`** — пара `InProcessAcpTransport`, реализаций существующего интерфейса
 `AcpTransport`. Код — `packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart`,
 правила доставки, копирования и закрытия — одно место: agent-core-architecture §13.11
@@ -209,7 +239,21 @@ scope: `codelab_embedded`, профили `embedded-*`, профиль подк�
 p99 задержки цикла событий UI-isolate больше 8 мс или максимум больше 50 мс на 10 000 чанков —
 ядро переносится в `IsolateAcpLink`; иначе остаётся `InProcessAcpLink`, а тяжёлые операции
 (разбор журнала, сжатие) уходят в `Isolate.run` в любом случае. На web isolate нет — там всегда
-`InProcessAcpLink`. Эскиз контракта на случай переноса:
+`InProcessAcpLink`. *Уточнение change `add-embedded-agent-mode`:* выполнено для разбора журнала
+(`JsonlSessionStore.open`); сжатие по D11 остаётся в главном isolate — оно ждёт ответа LLM, его
+CPU-часть мала ([design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md), D11, «Разбор журнала»).
+
+**Результат замера (задача 5.1 change `add-embedded-agent-mode`; решение пользователя 2026-11-02):
+остаётся `InProcessAcpLink`, `IsolateAcpLink` не делается.** Числа, машина, режим сборки и
+разбивка по слоям — [design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md), D11, «Решение 7.8». Кратко: критерии выполняются,
+пока провайдер отдаёт не больше 7 SSE-событий на одно чтение сокета (задержка растёт ≈1 мс на
+событие в пачке); больше половины стоимости чанка — клиентская проекция kit, которую isolate ядра
+из UI-isolate не унёс бы. Разбор журнала при открытии сессии ушёл в `Isolate.run`. Остаточный риск
+пачек от 8 событий и follow-up (PERF-1 — удешевить проекцию kit, PERF-2 — замерить реальный
+размер пачки SSE) — [`docs/backlog/perf-2026-11-02-stream-latency.md`](../../../backlog/perf-2026-11-02-stream-latency.md). Эскиз ниже не
+реализуется и сохранён на случай пересмотра решения по PERF-2.
+
+Эскиз контракта на случай переноса:
 
 ```dart
 // packages/dart/codelab_embedded/lib/src/isolate_acp_link.dart (только io.dart)
@@ -251,29 +295,53 @@ final class IsolateAcpLink {
 **Что прочитать.** Документ ядра §10, §13 (`shutdown`), §4 (выбор env); §4.5 и §6 этого документа;
 `docs/architecture/concurrency.md` (isolate).
 
-**Definition of Done.**
+**Definition of Done.** Пункты 7.3–7.9 закрывает change `add-embedded-agent-mode`, итерация 6
+(задача 6.3 `tasks.md`); результаты прогонов внесены по факту (2026-11-02).
 
 * `fvm dart test packages/dart/codelab_acp_transports/test/in_process_acp_transport_test.dart` зелёный.
   **Выполнено** (7.1, change `add-in-process-acp-transport`, PR #209).
-* Интеграционные тесты app для встроенного режима (таблица этапа 4) собираются; прогон на
-  устройстве `melos run test:e2e:app:embedded` — все применимые тесты зелёные — выполняется в
-  ветке `release/<version>` (`AGENTS.md` §21).
-* `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded` — все `PASS`.
-* `melos run guard`: основной барель `codelab_embedded` не импортирует `dart:io`; app и CLI не
-  импортируют `codelab_agent_*` напрямую.
+* Интеграционные тесты app для встроенного режима (таблица этапа 4) собираются:
+  `fvm flutter analyze integration_test` в `apps/codelab_desktop`. **Выполнено** 2026-11-02
+  на `develop` @ `8905dee`: код 0, «No issues found!».
+  Прогон на устройстве `melos run test:e2e:app:embedded` — все применимые тесты
+  зелёные — выполняется в ветке `release/<version>` (`AGENTS.md` §21; D13, п. 4).
+* `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded`
+  (`melos run conformance:embedded`) — все `PASS` или `SKIP` с причиной (`setup.sessions`,
+  `setup.config`, `setup.web`, `setup.mcp`, `setup.transport`, профиль вне `{agent-serve,
+  embedded-cli}`; D8), без `FAIL`. **Выполнено** 2026-11-02 на `develop` @ `8905dee`: код 0,
+  `37 passed, 0 failed, 19 skipped`; причины `SKIP`: `setup.config` (8), `setup.mcp` (7),
+  `setup.transport` (2), `setup.sessions` (1), фикстура только с ролью `client` (1).
+* `melos run guard` — правила D3: основной барель `codelab_embedded` не импортирует `dart:io`,
+  `codelab_agent_io` и `codelab_client_*`; `io.dart` — только composition root клиентов,
+  `testing.dart` — только `apps/codelab_cli/lib/src/scenario/` и тесты; app и CLI не импортируют
+  `codelab_agent_*` напрямую; allowlist `codelab_embedded`, CLI и пакетов `codelab_*` app; HOST-6.
+  **Выполнено** 2026-11-02: `melos run guard` — код 0, 100 тестов (с `desktopAllowlist`
+  задачи 6.4).
 * Замер 7.8 выполнен, решение об isolate записано в `design.md` с числами и критериями.
+  **Выполнено** — [design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md), D11,
+  «Решение 7.8»; остаётся `InProcessAcpLink`.
 * Встроенный профиль в app и CLI берёт конфиг через загрузчик 8.5 и ключ через `SecretResolver`
-  8.9 (тест резолвера с `CODELAB_TEST_SECRET_STORE`).
-* Если сделано (Should — не блокирует MVP): `codelab_setup`, страница провайдеров app (D-05) и
-  мастер — тесты §12.4.13 зелёные.
+  8.9. **Выполнено** — тесты задач 2.1 и 2.3 change `add-embedded-agent-mode`:
+  `packages/dart/codelab_embedded/test/io/local_opener_test.dart` (ключ из `secrets.yaml` и
+  `CODELAB_SECRET_*`, невалидный конфиг, нет конфигурации),
+  `packages/dart/codelab_agent_io/test/secrets/host_secrets_test.dart` (`openHostSecrets(testStorePath:)`
+  — `FileSecretStore`, `backend.id == "file"`) и
+  `packages/dart/codelab_embedded/test/io/test_secret_store_process_test.dart`
+  (`CODELAB_TEST_SECRET_STORE` только в сборке с `CODELAB_ALLOW_TEST_SECRETS`).
+* Should (не блокирует MVP): `codelab_setup` для мастера, страница провайдеров app (D-05) и
+  мастер — тесты §12.4.13 зелёные. **Перенесено** в будущий change `add-provider-setup-ui`
+  (`delivery-roadmap.md`); этап 7 закрывается без него.
 
 **Зависимости.** Этапы 6 и 8 (порядок D3: `{6, 8} → 7`): CLI-клиент этапа 6, загрузка
 конфигурации 8.5 и хранилище секретов 8.9; через них — этапы 4 (агент) и 5 (kit для app). От
 8.10 (запись конфига) зависит только Should-часть 7.5.
 
-**Риски.** Тяжёлые операции ядра в UI-isolate (разбор журнала, сжатие) — `Isolate.run` для
-разбора и сжатия, при плохом замере — ядро в отдельном isolate. Общие изменяемые `Map` между
-сторонами — глубокая копия по умолчанию.
+**Риски.** Тяжёлые операции ядра в UI-isolate (разбор журнала, сжатие) — разбор журнала в
+`Isolate.run`; сжатие по D11 остаётся в главном isolate: оно ждёт ответа LLM, его CPU-часть мала
+([design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md), D11). Замер 7.8 сжатие не измерял.
+Пачки SSE от 8 событий на чтение дают задержку UI выше критерия — PERF-1 и PERF-2 в
+[`docs/backlog/perf-2026-11-02-stream-latency.md`](../../../backlog/perf-2026-11-02-stream-latency.md). Общие изменяемые `Map` между сторонами —
+глубокая копия по умолчанию.
 
 ---
 
