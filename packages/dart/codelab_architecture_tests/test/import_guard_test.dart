@@ -596,6 +596,108 @@ void main() {
     expect(scanCliEmbedded(tmp), isEmpty);
   });
 
+  // IO-барель и сценарий модели встроенного агента в десктопном клиенте
+  // (design.md change `add-embedded-agent-mode`, D3; задача 4.4;
+  // workspace-architecture «IO-барель встроенного агента вне composition
+  // root»; testing-quality «Тестовый сценарий не попадает в app»): `io.dart` —
+  // только `lib/app/`, `testing.dart` — нигде в `lib/`.
+  List<String> scanDesktopEmbedded(Directory tmp) => [
+    for (final rule in rules.where(
+      (r) =>
+          r.dir == 'apps/codelab_desktop/lib' &&
+          r.forbidden.any((f) => f.startsWith('package:codelab_embedded/')),
+    ))
+      ...scan(
+        tmp.path,
+        PackageRule(
+          'lib',
+          forbidden: rule.forbidden,
+          exclude: rule.exclude,
+          sealExclude: rule.sealExclude,
+        ),
+      ),
+  ];
+
+  void writeDesktop(Directory tmp, Map<String, String> files) {
+    files.forEach((file, content) {
+      File(p.join(tmp.path, 'lib', file))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(content);
+    });
+  }
+
+  test('allows the IO barrel of the embedded agent only in lib/app/ of the '
+      'desktop client', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_desktop_embedded_io_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_embedded/io.dart';\n";
+    writeDesktop(tmp, {
+      'app/app_scope.dart': import,
+      'core/platform/x.dart': import,
+      'features/workbench/application/connection_cubit.dart': import,
+      'features/workbench/presentation/workbench_shell.dart': import,
+    });
+
+    expect(
+      scanDesktopEmbedded(tmp),
+      unorderedEquals([
+        endsWith(
+          'lib/core/platform/x.dart:1 -> package:codelab_embedded/io.dart',
+        ),
+        endsWith(
+          'lib/features/workbench/application/connection_cubit.dart:1 -> '
+          'package:codelab_embedded/io.dart',
+        ),
+        endsWith(
+          'lib/features/workbench/presentation/workbench_shell.dart:1 -> '
+          'package:codelab_embedded/io.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('forbids the scripted opener of the embedded agent everywhere in '
+      'lib/ of the desktop client, lib/app/ included', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_desktop_embedded_testing_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_embedded/testing.dart';\n";
+    writeDesktop(tmp, {
+      'app/app_scope.dart': import,
+      'features/workbench/application/connection_cubit.dart': import,
+    });
+
+    expect(
+      scanDesktopEmbedded(tmp),
+      unorderedEquals([
+        endsWith(
+          'lib/app/app_scope.dart:1 -> package:codelab_embedded/testing.dart',
+        ),
+        endsWith(
+          'lib/features/workbench/application/connection_cubit.dart:1 -> '
+          'package:codelab_embedded/testing.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('the main barrel of the embedded agent is allowed everywhere in the '
+      'desktop client', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_desktop_embedded_main_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeDesktop(tmp, {
+      'features/workbench/application/connection_cubit.dart':
+          "import 'package:codelab_embedded/codelab_embedded.dart';\n",
+    });
+
+    expect(scanDesktopEmbedded(tmp), isEmpty);
+  });
+
   // Встроенный агент `codelab_embedded` (design.md change
   // `add-embedded-agent-mode`, D3): основной барель чист и не знает IO-пакет
   // агента, `io.dart` и `testing.dart` вне запретов `webUnsafe`, но без ссылок
