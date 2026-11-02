@@ -127,15 +127,24 @@ scope: формат и корпус фикстур с полем `roles`, кли
       fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test -d macos
       --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=dart
       --dart-define=CODELAB_E2E_AGENT_BIN=../../build/bin/codelab-agent"
-    test:e2e:app:embedded: >-                                                                          # этап 7
+    test:e2e:app:embedded: >-                                                                          # этап 7, D8 и D10 change add-embedded-agent-mode
       fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test -d macos
-      --dart-define=CODELAB_E2E_AGENT=embedded --dart-define=CODELAB_ALLOW_SCRIPTED_LLM=true"
+      --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=embedded"
     check:
       description: Run format, analyze, guard, tests, conformance and web compile.
       steps: [check-format, analyze, guard, test, protocol-conformance, conformance:client, web-compile]
 ```
 
 `conformance:agent` добавляется в `check` на этапе 4; `test:e2e:*` в `check` не входят.
+
+Эскиз — набросок плана; рабочий вид скриптов — в корневом `pubspec.yaml`. Там `test:e2e:app:*`
+идут циклом по файлам `integration_test/*_test.dart` (на macOS `flutter test integration_test`
+не поднимает приложение после первого файла), а код `79` — пропуск файла только со
+`scripted-only` тестами. `test:e2e:app:embedded` не собирает бинарь агента и не передаёт
+`--dart-define=CODELAB_ALLOW_SCRIPTED_LLM`: сценарий модели интеграционный тест подаёт через шов
+`CodeLabBootstrap(scope:)` из `package:codelab_embedded/testing.dart`, который `lib/` app не
+импортирует (сторож), поэтому в релизную сборку сценарий не попадает структурно, а не по
+константе сборки (`openspec/changes/add-embedded-agent-mode/design.md`, D8).
 
 **Интеграционные тесты в CI — только на Dart VM.** GitHub CI запускает интеграционные тесты
 чистых Dart-пакетов: реальные процессы и сокеты (`codelab_acp_transports`), прогон корпуса фикстур
@@ -238,7 +247,10 @@ const rules = [
   // этап 6: apps/codelab_cli — ['package:flutter/', 'package:codelab_agent_'];
   //   apps/codelab_cli/lib/src — ['package:dart_tui/'], exclude: ['tui/'], sealExclude: false
   //   (dart_tui — только в lib/src/tui/, §12.2.7; остальной CLI вызывает tui/ через TuiRunner)
-  // этап 7: codelab_embedded — webUnsafe, exclude: ['lib/io.dart', 'lib/src/io/']; apps/codelab_desktop — ['package:codelab_agent_']
+  // этап 7: codelab_embedded — [...webUnsafe, 'package:codelab_agent_io/', 'package:codelab_client_'],
+  //   exclude: ['lib/io.dart', 'lib/src/io/', 'lib/testing.dart', 'lib/src/testing/'], sealExclude: true;
+  //   io.dart — только composition root клиентов, testing.dart — только apps/codelab_cli/lib/src/scenario/
+  //   (design.md change add-embedded-agent-mode, D3); apps/codelab_desktop — ['package:codelab_agent_']
   // этап 7: codelab_setup — [...webUnsafe, 'package:codelab_agent_io/', 'package:codelab_acp_', 'package:codelab_client_', 'package:flutter/'],
   //   exclude: ['lib/io.dart', 'lib/src/io/'];
   //   apps/codelab_desktop/lib/features/settings/presentation — ['package:codelab_setup/io.dart', 'dart:io'] (§12.4.2, SETUP-9)

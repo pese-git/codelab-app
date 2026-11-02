@@ -50,7 +50,7 @@
 
 **Решение.** Пакет называется `packages/dart/codelab_embedded`. Это мост между сторонами: клиенты получают через него агента, не импортируя `package:codelab_agent_*`. Поэтому префикса стороны у имени нет (ADR-0002), как у `codelab_setup`. Пакет — хост ядра (`agent-core-architecture` §10.1): он зовёт `buildAgentCore` и `AcpAgentServer` и не содержит клиентской логики. От `codelab_client_*` он не зависит.
 
-**Исполнитель** — `[agent]` (`agent-core-engineer`): весь код пакета — сборка агентской стороны. Таблица зон в `CLAUDE.md` и описание агента в `.claude/agents/` пакета пока не знают. Их дополняет задача документов этого change; правка вне `openspec/` и `docs/` — по согласованию с пользователем.
+**Исполнитель** — `[agent]` (`agent-core-engineer`): весь код пакета — сборка агентской стороны. Таблица зон в `CLAUDE.md` и описание агента в `.claude/agents/agent-core-engineer.md` дополнены задачей 6.1 по решению пользователя 2026-11-02 (R6-1): `codelab_embedded` — в зоне `agent-core-engineer`.
 
 **Резолвер транспорта** (`EmbeddedTransportResolver`) живёт в composition root каждого клиента, как в эскизе §9.12, а не в пакете: иначе `codelab_embedded` зависел бы от `codelab_client_core`. Логика резолвера — около 30 строк: ожидание `dispose` прежнего агента, вызов «открывателя», `dispose` всего при закрытии хоста; с отменой устаревшего `open` и doc-комментариями файл вырос до ~125 строк (D6, «место в app»). Повтор в двух приложениях дешевле нового ребра между сторонами, а одинаковость резолверов проверяют тесты каждого клиента.
 
@@ -176,7 +176,7 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
 **Allowlist** (`pubspec_allowlist_test.dart`):
 - новый `embeddedAllowlist = {codelab_agent_core, codelab_agent_io, codelab_agent_acp, codelab_agent_mcp, codelab_acp_protocol, codelab_acp_transports, http, meta, async}`: `codelab_acp_protocol` нужен для `Implementation` в `agentInfo`;
 - `cliAllowlist` += `codelab_embedded`;
-- `desktopAllowlist` — по пакетам монорепо (`codelab_*`) в `dependencies` app: `{codelab_client_acp, codelab_client_core, codelab_client_io, codelab_acp_protocol, codelab_acp_transports, codelab_embedded, codelab_ui}`. До этого change у desktop был только запрет импорта `package:codelab_agent_`; зависимость `codelab_agent_*` в `pubspec.yaml` без импорта сторож не ловил, а с мостом такая ошибка стала вероятнее. Сторонние пакеты app (Flutter, UI, логирование) не ограничиваются: их набор меняется вместе с UI, и allowlist по ним сделал бы каждую UI-зависимость предметом OpenSpec change. Задача 6.4 (решение пользователя 2026-11-02 по ревью итерации 4: отдельной задачей в итерации 6).
+- `desktopAllowlist` — по пакетам монорепо (`codelab_*`) в `dependencies` app: `{codelab_client_acp, codelab_client_core, codelab_client_io, codelab_acp_protocol, codelab_acp_transports, codelab_embedded, codelab_ui}`. До этого change у desktop был только запрет импорта `package:codelab_agent_`; зависимость `codelab_agent_*` в `pubspec.yaml` без импорта сторож не ловил, а с мостом такая ошибка стала вероятнее. Сторонние пакеты app (Flutter, UI, логирование) не ограничиваются: их набор меняется вместе с UI, и allowlist по ним сделал бы каждую UI-зависимость предметом OpenSpec change. `codelab_setup` в множестве нет: app моста настроек пока не использует, его добавит change `add-provider-setup-ui` вместе с потребителем (R6-2). Задача 6.4 (решение пользователя 2026-11-02 по ревью итерации 4: отдельной задачей в итерации 6).
 
 **Граф** (`README.md`):
 - новый узел `codelab_embedded` (серый, как `codelab_setup`) с рёбрами к `codelab_agent_acp`, `codelab_agent_io` и `codelab_agent_mcp`;
@@ -516,7 +516,7 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
 
 ## Open Questions
 
-Открытых вопросов нет. Решения пользователя 2026-11-02 по двойному ревью итерации 4 — R4-1…R4-3 в таблице, по замеру 7.8 — R5-1…R5-2. Решение L4 (D6, «Отмена подключения в app»: без нового API `codelab_client_core`) пользователь подтвердил 2026-11-02 при старте итерации 4 — «Без Disconnect». Соответствие решений пользователя 2026-11-02:
+Открытых вопросов нет. Решения пользователя 2026-11-02 по двойному ревью итерации 4 — R4-1…R4-3 в таблице, по замеру 7.8 — R5-1…R5-2, по итерации 6 — R6-1…R6-2. Решение L4 (D6, «Отмена подключения в app»: без нового API `codelab_client_core`) пользователь подтвердил 2026-11-02 при старте итерации 4 — «Без Disconnect». Соответствие решений пользователя 2026-11-02:
 
 | Вопрос | Решение | Где учтено |
 |---|---|---|
@@ -535,3 +535,5 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
 | R4-3 | allowlist зависимостей desktop — итерация 6 | D3; workspace-architecture «Автоматический сторож границ пакетов»; задача 6.4 |
 | R5-1 | замер 7.8: остаётся `InProcessAcpLink`, `IsolateAcpLink` не делается | D11, «Решение 7.8»; embedded-agent «Нагрузка встроенного агента на UI-isolate»; задачи 5.1, 5.4 |
 | R5-2 | в backlog — удешевление клиентской проекции kit и замер реального размера пачки SSE на LM Studio | D11, «Решение 7.8», follow-up; `docs/backlog/perf-2026-11-02-stream-latency.md` (PERF-1, PERF-2) |
+| R6-1 | `codelab_embedded` — в зоне `agent-core-engineer`: таблица зон `CLAUDE.md` и `.claude/agents/agent-core-engineer.md` правятся в этом change | D1, «Исполнитель»; задача 6.1 |
+| R6-2 | allowlist зависимостей desktop — только пакеты `codelab_*`, без `codelab_setup`: его добавит change `add-provider-setup-ui` вместе с потребителем | D3, «Allowlist»; workspace-architecture «Автоматический сторож границ пакетов»; задача 6.4 |

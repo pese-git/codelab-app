@@ -10,7 +10,7 @@
 |---|---|---|
 | `codelab-architect` | OpenSpec changes, `docs/architecture/` | только `openspec/`, `docs/` |
 | `acp-protocol-engineer` | `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_acp_testing`, `codelab_agent_acp` | да |
-| `agent-core-engineer` | `codelab_agent_core`, `codelab_agent_io`, `apps/codelab_agent` | да |
+| `agent-core-engineer` | `codelab_agent_core`, `codelab_agent_io`, `codelab_embedded`, `apps/codelab_agent` | да |
 | `client-engineer` | `codelab_client_acp`, `codelab_client_core`, `codelab_client_io`, `apps/codelab_cli` | да |
 | `desktop-engineer` | `apps/codelab_desktop`, `packages/flutter/codelab_ui` | да |
 | `check-runner` | проверки затронутого; полный `melos run check` — по просьбе | нет |

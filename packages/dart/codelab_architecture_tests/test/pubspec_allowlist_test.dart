@@ -126,6 +126,29 @@ const embeddedAllowlist = {
   'async',
 };
 
+/// Допустимые пакеты монорепо в зависимостях desktop-клиента `codelab-app`
+/// (workspace-architecture «Автоматический сторож границ пакетов», сценарий
+/// «Пакет агента в зависимостях app»; design.md change
+/// `add-embedded-agent-mode`, D3).
+///
+/// Почему: клиенты НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*`; агент
+/// приходит в app только через мост `codelab_embedded`. Решения R4-3 и R6-2
+/// (design.md, таблица Open Questions): проверяются лишь пакеты `codelab_*`, сторонние зависимости app
+/// (`flutter_bloc`, `fluent_ui` и т.п.) не ограничиваются, а `codelab_setup`
+/// сюда не входит — его добавит change `add-provider-setup-ui`.
+///
+/// Как использовать: из `dependencies` `apps/codelab_desktop/pubspec.yaml`
+/// берутся ключи с префиксом `codelab_` и сверяются с этим множеством.
+const desktopAllowlist = {
+  'codelab_client_acp',
+  'codelab_client_core',
+  'codelab_client_io',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'codelab_embedded',
+  'codelab_ui',
+};
+
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
 
@@ -144,6 +167,20 @@ Set<String> dependencyKeys(String pubspec) {
   }
   return keys;
 }
+
+/// Зависимости `codelab_*` из `dependencies` app, не входящие в
+/// [desktopAllowlist].
+///
+/// Почему: рабочий и негативный тест обязаны проходить через один и тот же
+/// код, иначе негативный кейс не доказывает работу сторожа. Сторонние
+/// зависимости не проверяются (R6-2, design.md change
+/// `add-embedded-agent-mode`, D3).
+///
+/// Как использовать: передать текст `pubspec.yaml`; пустое множество значит,
+/// что нарушений нет, иначе в нём имена лишних пакетов.
+Set<String> desktopViolations(String pubspec) => dependencyKeys(
+  pubspec,
+).where((k) => k.startsWith('codelab_')).toSet().difference(desktopAllowlist);
 
 void main() {
   final root = repoRoot();
@@ -339,4 +376,32 @@ dependencies: # allowlist
       });
     },
   );
+
+  test('apps/codelab_desktop depends only on allowed codelab_* packages', () {
+    final pubspec = File(
+      p.join(root, 'apps/codelab_desktop/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = desktopViolations(pubspec);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('reports an agent package in the dependencies of the desktop app', () {
+    // Пакет агента в `dependencies` app (workspace-architecture, сценарий
+    // «Пакет агента в зависимостях app»): агент приходит только через мост.
+    const pubspec = '''
+name: codelab_desktop
+dependencies: # allowlist
+  flutter_bloc: ^9.0.0
+  codelab_embedded:
+    path: ../../packages/dart/codelab_embedded
+  codelab_agent_core:
+    path: ../../packages/dart/codelab_agent_core
+''';
+
+    final extra = desktopViolations(pubspec);
+
+    expect(extra, {'codelab_agent_core'});
+  });
 }
