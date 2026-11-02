@@ -69,6 +69,8 @@ void main() {
     for (final public in [
       'src/config/config_tree.dart',
       'src/config/config_issue.dart',
+      'src/config/config_edit.dart',
+      'src/config/settings_registry.dart',
       'src/config/core_config.dart',
       'src/config/host_settings.dart',
       'src/config/redact_settings.dart',
