@@ -13,10 +13,25 @@ const agentTokenRef = 'env:$agentTokenVariable';
 /// Id профиля, который используется без `--agent`.
 const defaultProfileId = 'default';
 
-/// Текст ошибки без `--agent` и без профиля `default` (DoD §9.11).
-const noDefaultProfileMessage =
-    'No default agent profile. Pass --agent or run '
-    '"codelab profiles add default stdio:<command>".';
+/// Слово `--agent`, которое выбирает встроенный агент.
+const embeddedAgentWord = 'embedded';
+
+/// Профиль хоста встроенного агента CLI (design.md change
+/// `add-embedded-agent-mode`, D2).
+const embeddedHostProfile = 'embedded-cli';
+
+/// Встроенный агент CLI: выбирается словом `embedded` или умолчанием без
+/// `--agent` и `default` в `profiles.json`; в файл не записывается (D7).
+const embeddedCliProfile = ConnectionProfile.embedded(
+  id: embeddedAgentWord,
+  label: 'Embedded agent',
+  hostProfile: embeddedHostProfile,
+);
+
+/// Текст отказа сохранить `embedded` профилем (spec codelab-cli «embedded
+/// нельзя сохранить профилем»).
+const embeddedIsBuiltInMessage =
+    'embedded is built in; use --agent $embeddedAgentWord';
 
 /// Превращает значение `--agent` в профиль подключения.
 ///
@@ -25,9 +40,12 @@ const noDefaultProfileMessage =
 /// (design.md change `add-codelab-cli`, D4).
 ///
 /// Как использовать: `await resolveAgentProfile(options.agent, store:
-/// store)`; [value] `null` — профиль `default`. Любая ошибка — [UsageError]
-/// (код `64`): неверная форма, неизвестный id, битый `profiles.json`,
-/// `embedded` до этапа 7.
+/// store)`. [value] `null` — профиль `default` из `profiles.json`, если он
+/// там есть, иначе встроенный агент (D13, п. 1): новая установка получает
+/// встроенного агента, а явный выбор `profiles add default …` сохраняется.
+/// `embedded` хранилище не читает. Любая ошибка — [UsageError] (код `64`):
+/// неверная форма, неизвестный id, битый `profiles.json` (без `--agent` он не
+/// превращается тихо во встроенного агента).
 Future<ConnectionProfile> resolveAgentProfile(
   String? value, {
   required ProfileStore store,
@@ -49,21 +67,22 @@ Future<ConnectionProfile> resolveAgentProfile(
       return profile;
     }
   }
-  throw UsageError(
-    value == null
-        ? noDefaultProfileMessage
-        : 'Unknown agent profile "$id". Run "codelab profiles list".',
-  );
+  if (value == null) {
+    // Так же выбирает агента весь CLI, включая `test-scenario` (решение
+    // пользователя 2026-11-02, U1; D13 п. 1).
+    return embeddedCliProfile;
+  }
+  throw UsageError('Unknown agent profile "$id". Run "codelab profiles list".');
 }
 
-/// Профиль из формы `stdio:…`, URL или `embedded`; `null` — [value] похоже
+/// Профиль из формы `stdio:…`, URL или слова `embedded`; `null` — [value] похоже
 /// на id профиля и ищется в хранилище.
 ///
 /// Как использовать: [id] — id нового профиля (`profiles add`) или
 /// `inline` для разового `--agent`. Ошибка формы — [UsageError].
 ConnectionProfile? inlineAgentProfile(String value, {required String id}) {
-  if (value == 'embedded') {
-    throw const UsageError('Embedded agent is not available in this build.');
+  if (value == embeddedAgentWord) {
+    return embeddedCliProfile;
   }
   if (value.startsWith('stdio:')) {
     final List<String> words;

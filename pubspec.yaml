@@ -61,6 +61,10 @@ melos:
       description: Play the golden ACP fixture corpus against AcpAgentServer (agent role).
       run: fvm dart test packages/dart/codelab_agent_acp/test/conformance_test.dart
 
+    conformance:embedded:
+      description: Play the golden ACP fixture corpus against the embedded agent in the CLI process (codelab test-scenario --agent embedded; no child process, no network).
+      run: cd apps/codelab_cli && fvm dart run bin/codelab.dart test-scenario ../../packages/dart/codelab_acp_testing/fixtures/acp --agent embedded
+
     test:dart:
       description: Run tests of pure Dart packages with the Dart test runner.
       run: fvm dart run melos exec -c 4 --no-flutter --dir-exists=test --fail-fast -- "fvm dart test"
@@ -133,6 +137,10 @@ melos:
       description: Run the codelab_cli end-to-end tests except scripted-only against codelab-agent with --llm-script (kernel compiled by the test, Dart VM; part of check).
       run: CODELAB_E2E_AGENT=dart fvm dart test apps/codelab_cli/test/e2e --exclude-tags scripted-only
 
+    test:e2e:cli:embedded:
+      description: Run the codelab_cli end-to-end tests except scripted-only with the embedded agent (CLI from the test entry point test/e2e/support/embedded_cli_main.dart with a model script, Dart VM; part of check).
+      run: CODELAB_E2E_AGENT=embedded fvm dart test apps/codelab_cli/test/e2e --exclude-tags scripted-only
+
     test:e2e:cli:python-agent:
       description: Run the plain-turn codelab_cli end-to-end tests (tag python-agent) against the Python agent `codelab serve --stdio` with the mock provider; skipped with a reason without it (local only, not part of check).
       run: CODELAB_E2E_AGENT=python fvm dart test apps/codelab_cli/test/e2e --tags python-agent
@@ -160,7 +168,7 @@ melos:
         }
 
     check:
-      description: Run format, analyze, guard, tests, the CLI e2e against the Dart agent, protocol, client and agent fixture conformance, and web compile.
+      description: Run format, analyze, guard, tests, the CLI e2e against the Dart agent and the embedded agent, protocol, client, agent and embedded fixture conformance, and web compile.
       steps:
         - check-format
         - analyze
@@ -168,7 +176,9 @@ melos:
         - prompts:check
         - test
         - test:e2e:cli:dart-agent
+        - test:e2e:cli:embedded
         - protocol-conformance
         - conformance:client
         - conformance:agent
+        - conformance:embedded
         - web-compile

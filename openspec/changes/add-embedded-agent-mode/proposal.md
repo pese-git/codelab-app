@@ -30,9 +30,9 @@
 - **CLI** (7.6):
   - `EmbeddedTransportResolver` в composition root;
   - `-a embedded` работает; без `--agent` используется встроенный агент, а профиль `default` из `profiles.json`, если он задан, остаётся сильнее (решение пользователя 2026-11-02, design.md, D13);
-  - флаг `--debug-secrets` (D15 change `add-agent-secret-store`);
+  - флаг `--debug-secrets` (D15 change `add-agent-secret-store`): события `secrets.lookup` в stderr и без `--verbose` (D13, п. 9);
   - невалидный конфиг — код `64` с проблемами в stderr;
-  - `test-scenario --agent embedded` играет корпус на встроенном агенте с профилем фикстуры (D8).
+  - `test-scenario --agent embedded` играет корпус на встроенном агенте с профилем фикстуры (D8); без `--agent` драйвер выбирает агента как весь CLI, прогон без сыгранных фикстур — код `1` (D13, п. 7, 10).
 - **codelab-app** (7.5): тип подключения «Embedded agent» в диалоге подключения и `EmbeddedTransportResolver` в `app/app_scope.dart`. Логи агента идут в логгер приложения. Тип подключения по умолчанию остаётся stdio (D9).
 - **Тесты** (7.7, 7.9):
   - e2e CLI `cli/*` с `CODELAB_E2E_AGENT=embedded` на Dart VM входят в `melos run check`, как и `test-scenario --agent embedded` на корпусе;
@@ -76,7 +76,7 @@
 - `codelab-cli`:
   - «Профили подключения CLI»: `embedded` и выбор по умолчанию;
   - новое требование «Встроенный агент в CLI».
-- `cli-scenario-driver` — «Команда test-scenario»: профиль `embedded`.
+- `cli-scenario-driver` — «Команда test-scenario»: профиль `embedded`, выбор без `--agent`; «Вывод и коды выхода test-scenario»: код `1`, если не сыграна ни одна фикстура.
 - `agent-workbench-ui` — новое требование «Тип подключения «Встроенный агент»».
 - `workspace-architecture`:
   - «Границы пакетов monorepo»: пакет `codelab_embedded`, web-компиляция бареля;

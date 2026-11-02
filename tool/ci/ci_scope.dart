@@ -122,13 +122,17 @@ const fullJobs = [
   CiJob('test', 'test'),
   CiJob(
     'conformance',
-    'protocol-conformance conformance:client conformance:agent',
+    'protocol-conformance conformance:client conformance:agent '
+        'conformance:embedded',
   ),
   CiJob('guard', 'guard prompts:check'),
   CiJob('web-compile', 'web-compile'),
   // Тесты CLI против scripted-агента идут внутри `test`, здесь — те же
   // тесты против codelab-agent (change add-cli-e2e-agent-matrix).
   CiJob('e2e-cli-dart', 'test:e2e:cli:dart-agent'),
+  // То же против встроенного агента: CLI из тестовой точки входа со
+  // сценарием модели (change add-embedded-agent-mode, D10).
+  CiJob('e2e-cli-embedded', 'test:e2e:cli:embedded'),
 ];
 
 /// Корпус фикстур ACP на каждый ACP-слой: прогоняется, если слой затронут.
@@ -140,6 +144,10 @@ const _conformance = {
 
 /// Пакеты, без которых не собирается бинарь CLI-e2e или сам CLI.
 const _cliE2e = {'codelab_cli', 'codelab_agent'};
+
+/// Пакеты, от которых зависит CLI со встроенным агентом: корпус фикстур и
+/// e2e `embedded` играет CLI (`conformance:embedded`, `test:e2e:cli:embedded`).
+const _embeddedCli = {'codelab_cli', 'codelab_embedded'};
 
 /// Точка входа `web-compile` собирает ядро агента и его зависимости.
 const _webSmoke = 'codelab_agent_core';
@@ -189,6 +197,7 @@ CiScope ciScope({
   final conformance = [
     for (final entry in _conformance.entries)
       if (affected.contains(entry.key)) entry.value,
+    if (affected.any(_embeddedCli.contains)) 'conformance:embedded',
   ];
   final webDependencies = _withDependencies({_webSmoke}, packages);
 
@@ -211,6 +220,8 @@ CiScope ciScope({
         const CiJob('web-compile', 'web-compile'),
       if (affected.any(_cliE2e.contains))
         const CiJob('e2e-cli-dart', 'test:e2e:cli:dart-agent'),
+      if (affected.any(_embeddedCli.contains))
+        const CiJob('e2e-cli-embedded', 'test:e2e:cli:embedded'),
     ],
   );
 }

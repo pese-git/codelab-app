@@ -32,12 +32,25 @@ final class JsonFileProfileStore implements ProfileStore {
       throw FormatException('Expected a "profiles" list in $path.');
     }
     return [
-      for (final profile in profiles) _decode(profile as Map<String, Object?>),
+      for (final profile in profiles)
+        if (profile is Map<String, Object?>)
+          _decodeChecked(profile)
+        else
+          throw FormatException('Expected a profile object in $path.'),
     ];
   }
 
   @override
   Future<void> save(ConnectionProfile profile) async {
+    // Встроенный агент выбирается словом `embedded`, а не записью (D7).
+    // Проверка до чтения файла: файл при отказе не меняется.
+    if (profile is EmbeddedProfile) {
+      throw ArgumentError.value(
+        profile.id,
+        'profile',
+        'an embedded profile is built in and is not saved',
+      );
+    }
     final profiles = [...await load()];
     final index = profiles.indexWhere((stored) => stored.id == profile.id);
     if (index == -1) {
@@ -85,7 +98,24 @@ final class JsonFileProfileStore implements ProfileStore {
       'uri': profile.uri.toString(),
       'tokenRef': ?profile.tokenRef,
     },
+    // `save` отклоняет такой профиль раньше (D7): сюда он не доходит.
+    EmbeddedProfile() => throw ArgumentError.value(
+      profile.id,
+      'profile',
+      'an embedded profile is not stored',
+    ),
   };
+
+  /// Структурно битая запись (нет `id`, `args` не список, …) — тот же
+  /// `FormatException`, что у неизвестного типа, а не `TypeError`: хост
+  /// превращает его в понятную ошибку (CLI — код `64`).
+  ConnectionProfile _decodeChecked(Map<String, Object?> json) {
+    try {
+      return _decode(json);
+    } on TypeError {
+      throw FormatException('Invalid profile record in $path.');
+    }
+  }
 
   ConnectionProfile _decode(Map<String, Object?> json) =>
       switch (json['type']) {

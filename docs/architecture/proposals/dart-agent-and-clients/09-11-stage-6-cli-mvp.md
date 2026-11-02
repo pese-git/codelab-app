@@ -105,7 +105,7 @@ codelab [опции] [первое сообщение]        REPL (первое
 codelab -p "<промпт>" [опции]             headless: один ход, вывод в stdout, код выхода
 codelab sessions [--cwd <dir>] [--json]   список сессий агента для папки
 codelab profiles list|show <id>|add <id> ...|remove <id>
-codelab test-scenario <путь>... --agent <профиль> [опции]
+codelab test-scenario <путь>... [--agent <профиль>] [опции]
 codelab config get|set|unset|path|check ...   конфиг встроенного агента (§12.4.8); в 8.5 — только check [--cwd <dir>]
 codelab config export-providers|import-providers ...   обмен провайдерами без секретов (agent-core §17.14.4)
 codelab provider add|list|remove ...          провайдеры; add без флагов на TTY — мастер (§12.4.4)
@@ -200,7 +200,7 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 
 | Флаг | Сокращение | Значение | По умолчанию |
 |---|---|---|---|
-| `--agent <профиль>` | `-a` | `embedded`; id профиля из `profiles.json`; `stdio:<команда> [аргументы]`; `ws://…` или `wss://…` | `embedded` (с этапа 7); до этапа 7 — профиль `default` из `profiles.json`; если файла или профиля `default` нет — код 64 и `No default agent profile. Pass --agent or run "codelab profiles add default stdio:<command>".` (агент не запускается, `embedded` до этапа 7 → код 64 `Embedded agent is not available in this build.`) |
+| `--agent <профиль>` | `-a` | `embedded`; id профиля из `profiles.json`; `stdio:<команда> [аргументы]`; `ws://…` или `wss://…` | с этапа 7 — профиль `default` из `profiles.json`, если он там есть, иначе `embedded`; битый `profiles.json` → код 64 с причиной, без перехода на `embedded` (design.md change `add-embedded-agent-mode`, D13, п. 1). До этапа 7 — профиль `default`; если файла или профиля нет — код 64 и `No default agent profile. Pass --agent or run "codelab profiles add default stdio:<command>".` (агент не запускается, `embedded` до этапа 7 → код 64 `Embedded agent is not available in this build.`) |
 | `--cwd <dir>` | `-C` | рабочая папка сессии | текущая папка |
 | `--model <id>` | `-m` | значение опции конфигурации `model` после создания сессии; после MVP сильнее модели, запомненной для папки (U-27, §12.6.9), и не запоминается | из агента |
 | `--mode <id>` | | значение опции конфигурации `mode` | из агента |
@@ -217,7 +217,7 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 | `--include-acp` | | change `add-cli-stream-json`; только с `--output-format stream-json`: строки `acp` с исходными кадрами после редакции (§12.5.3); иначе код 64 | выключено |
 | `--input-format text\|stream-json` | | change `add-cli-stream-json`; `text` — промпт из `-p`, `-f` или stdin; `stream-json` зарезервирован → код 64 (§12.5.2) | `text` |
 | `--approve <политика>` | | headless: `reject` (отклонять всё), `read-only` (разрешать once только вызовы вида `read`, остальное отклонять), `allow-all` (разрешать once всё, кроме запросов с `_meta.codelab.critical: true`; печатает предупреждение в stderr) | `reject` |
-| `--permission-mode <режим>` | | этап 7 (нужен встроенный агент; у `codelab-agent serve` тот же флаг — этап 4); `accept-edits` — после MVP (P-06). Режим встроенного агента: `plan`, `ask`, `standard`, `accept-edits`, `bypass`, `autopilot` (только с `-p`) (agent-core-architecture §7.7, §13.6); на внешнего агента не влияет | `standard` |
+| `--permission-mode <режим>` | | отдельный change после `add-embedded-agent-mode` (D13, п. 6; до него — `permissions.mode` конфига); нужен встроенный агент; у `codelab-agent serve` тот же флаг — этап 4; `accept-edits` — после MVP (P-06). Режим встроенного агента: `plan`, `ask`, `standard`, `accept-edits`, `bypass`, `autopilot` (только с `-p`) (agent-core-architecture §7.7, §13.6); на внешнего агента не влияет | `standard` |
 | `--timeout <длительность>` | | headless: предел на ход (`90s`, `10m`); по истечении — `session/cancel` | без предела |
 | `--deadline <длительность\|время>` | | после MVP (C-15): дедлайн сессии; `90s`, `45m`, `1h30m`, ISO-8601 или `HH:MM`; CLI отправляет `/timer until <ISO>` до первого промпта; агент без `/timer` — предупреждение и `session/cancel` в срок (agent-core-architecture §17.12.5) | без срока |
 | `--drain-timeout <длительность>` | | после MVP (H-05, этап 9+); headless: сколько ждать фоновую работу агента (субагенты, фоновые команды — agent-core-architecture §17.9) после ответа на `session/prompt`; `0` — не ждать (agent-core-architecture §17.3.9) | `60s` (`subagents.drain_timeout`) |
@@ -231,10 +231,11 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 | `--ui line\|tui` | | построчный REPL или полноэкранный TUI (U-12, change `add-cli-tui`, §12.2.1, §12.2.7); `tui` требует TTY на stdin и stdout и не сочетается с `-p`/`-f` (код 64) | `line` (`ui.mode` в `cli.yaml` — после MVP) |
 | `--attach <файл>` | | вложение к первому промпту (REPL) или к промпту `-p`; флаг можно повторять (U-14, после MVP, §12.2.8) | — |
 | `--trace-file <файл>` | | change `add-cli-stream-json` (общий отвод кадров с `--include-acp`); protocol trace (JSON-RPC кадры с редакцией секретов) в файл | выключено |
-| `--log-file <файл>` | | этап 7, Should (E-16; встроенного агента в CLI до этапа 7 нет, у `codelab-agent serve` флаг — этап 4); лог встроенного агента (JSON Lines, с редакцией секретов) дописывается в файл; переменная `CODELAB_LOG_FILE`; флаг сильнее переменной, переменная сильнее `logging.file` (agent-core-architecture §12.3.1) | `logging.file` (`~/.codelab/logs/agent.log`) |
-| `--verbose` | `-v` | диагностика соединения в stderr | выключено |
+| `--log-file <файл>` | | отдельный change после `add-embedded-agent-mode` (D13, п. 6), Should (E-16; встроенного агента в CLI до этапа 7 нет, у `codelab-agent serve` флаг — этап 4); лог встроенного агента (JSON Lines, с редакцией секретов) дописывается в файл; переменная `CODELAB_LOG_FILE`; флаг сильнее переменной, переменная сильнее `logging.file` (agent-core-architecture §12.3.1) | `logging.file` (`~/.codelab/logs/agent.log`) |
+| `--verbose` | `-v` | диагностика соединения в stderr; со встроенным агентом — и его лог | выключено |
+| `--debug-secrets` | | этап 7 (P-17; change `add-embedded-agent-mode`): встроенный агент пишет событие `secrets.lookup` на каждое обращение к секретам, без значений, в stderr и без `--verbose` (D13, п. 9 того change); `CODELAB_DEBUG_SECRETS=1` действует так же; на внешнего агента не влияет (change `add-agent-secret-store`, D15) | выключено |
 | `--debug-llm-snapshot[=headers\|body]` | | после MVP (L-27): встроенный агент пишет снимки зависших запросов к LLM (`logging.llm_snapshot`, agent-core-architecture §17.10.10) | выключено |
-| `--config <файл>` | | этап 7 (загрузчик 8.5); конфигурация встроенного агента, `.yaml` или `.yml` | `~/.codelab/config.yaml` + `.codelab/config.yaml` |
+| `--config <файл>` | | отдельный change после `add-embedded-agent-mode` (D13, п. 6; до него — `CODELAB_CONFIG`; загрузчик 8.5); конфигурация встроенного агента, `.yaml` или `.yml` | `~/.codelab/config.yaml` + `.codelab/config.yaml` |
 
 Headless (`-p`, `-f`) передаёт `_meta.codelab.sealOnClose: true` в `session/new`/`session/load` и объявляет `clientCapabilities._meta.codelab.jobBoard: true`; после итоговой строки закрывает соединение — сессия запечатывается (S-15, agent-core-architecture §8.5.1).
 
@@ -380,7 +381,7 @@ Enter без выбора ничего не делает: варианта «п�
 |---|---|
 | `0` | `stopReason: end_turn` и ответ не пустой (заметка о пустом ответе — тоже ответ, agent-core-architecture §5.4.1) |
 | `1` | ошибка хода (ошибка JSON-RPC на `session/prompt`, ошибка провайдера), `end_turn` без единого `agent_message_chunk`, `max_tokens`, `max_turn_requests`, `refusal`, не удалось подключиться к агенту, агент завершился; после MVP — ответ с `_meta.codelab.held` (agent-core-architecture §17.12.4) |
-| `64` | ошибка использования: неизвестный флаг, нет промпта, неверное значение `--agent`; битый конфиг (agent-core-architecture §13.10) |
+| `64` | ошибка использования: неизвестный флаг, нет промпта, неверное значение `--agent`, битый `profiles.json`; битый конфиг (agent-core-architecture §13.10), в том числе невалидный конфиг встроенного агента — текст `EmbeddedAgentConfigException` в stderr (change `add-embedded-agent-mode`, D5) |
 | `130` | отмена: SIGINT или `--timeout` (`stopReason: cancelled`), или срок `--deadline` у агента без `/timer` |
 | `143` | SIGTERM: ход отменён, транспорт закрыт |
 
@@ -400,7 +401,7 @@ Enter без выбора ничего не делает: варианта «п�
 **Драйвер фикстур.**
 
 ```text
-codelab test-scenario <файл-или-папка>... --agent <профиль>
+codelab test-scenario <файл-или-папка>... [--agent <профиль>]
     [--filter <glob по id>] [--timeout 30s] [--junit <out.xml>] [--update-golden]
 ```
 
@@ -416,8 +417,12 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
    диффом ожидаемого и фактического кадра.
 5. С `--update-golden` — записать фактические кадры агента в фикстуру (только для своего агента).
 
-Вывод: строка `PASS|FAIL|SKIP <id> (<время>)` на фикстуру и итог. Код выхода: `0` — все прошли,
-`1` — есть `FAIL`, `64` — ошибка использования.
+Без `--agent` агент выбирается как во всём CLI: профиль `default`, иначе встроенный (design.md change
+`add-embedded-agent-mode`, D13, п. 1 и 7).
+
+Вывод: строка `PASS|FAIL|SKIP <id> (<время>)` на фикстуру и итог. Код выхода: `0` — нет `FAIL` и
+сыграна хотя бы одна фикстура, `1` — есть `FAIL` или не сыграна ни одна фикстура (все пропущены,
+фильтр пуст; D13, п. 10), `64` — ошибка использования.
 
 **OpenSpec change.** Этап делится на change (решение владельца проекта, design.md change
 `add-codelab-cli`, D1):
@@ -453,8 +458,12 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
 * `melos run test:e2e:cli:dart-agent` — те же тесты без `scripted-only` зелёные против Dart-агента
   (входит в `check`, джоб CI `e2e-cli-dart`); `melos run test:e2e:cli:python-agent` — тесты обычного
   хода зелёные против Python-агента локально (в CI Python-агента нет).
-* `codelab -p hi` с пустым `CODELAB_HOME` (нет `profiles.json`) — код 64 и подсказка
-  `codelab profiles add default …`; агент не запускается.
+* `codelab -p hi` без `--agent`: при профиле `default` в `profiles.json` ход проводит он; без
+  профиля `default` — встроенный агент, как с `-a embedded` (с этапа 7; design.md change
+  `add-embedded-agent-mode`, D13, п. 1). С пустым `CODELAB_HOME` (нет `profiles.json` и
+  `config.yaml`) — код 64, проблема конфигурации встроенного агента и подсказка
+  `Configure the embedded agent in <home>/config.yaml; check it with: codelab config check`;
+  агент не запускается. До этапа 7 — код 64 и подсказка `codelab profiles add default …`.
 * `cli/headless-exit-codes`: ошибка провайдера → `1`, `session/cancel` по `--timeout` → `130`,
   неизвестный флаг → `64`, SIGTERM → `143`.
 * change `add-cli-stream-json`: `cli/headless-stream-json-golden` — вывод совпадает с golden-файлом `test/e2e/golden/stream_json_basic.ndjson`.

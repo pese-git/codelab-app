@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_client_io/codelab_client_io.dart';
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgentConfigException, EmbeddedAgentOpener;
 import 'package:codelab_setup/io.dart';
 import 'package:path/path.dart' as p;
 
@@ -17,6 +19,7 @@ import 'input/io_terminal.dart';
 import 'profiles/profile_arg.dart';
 import 'profiles/profiles_command.dart';
 import 'render/output_surface.dart';
+import 'render/sanitize.dart';
 import 'repl/repl.dart';
 import 'scenario/test_scenario_command.dart';
 import 'tui/tui_runner.dart';
@@ -32,13 +35,26 @@ import 'signals.dart';
 /// Как использовать: `exit(await runCodelab(args, environment:
 /// Platform.environment))`; тесты передают [io] с буферами. Ошибка
 /// использования — текст в stderr, пустой stdout и [usageExit].
+///
+/// [embeddedOpener] — шов тестовой точки входа (design.md change
+/// `add-embedded-agent-mode`, D8): по умолчанию встроенного агента открывает
+/// `localEmbeddedAgentOpener`, тест подставляет открыватель со сценарием
+/// модели. Невалидный конфиг встроенного агента — текст исключения в stderr и
+/// [usageExit] (spec codelab-cli «Невалидный конфиг встроенного агента»).
 Future<int> runCodelab(
   List<String> args, {
   required Map<String, String> environment,
   CliIo io = const ProcessCliIo(),
+  EmbeddedAgentOpener? embeddedOpener,
+  SignalSeam signals = const SignalSeam(),
 }) async {
   try {
-    return await _run(args, environment, io);
+    return await _run(args, environment, io, embeddedOpener, signals);
+  } on EmbeddedAgentConfigException catch (error) {
+    // Текст собирает мост из файлов конфигурации: управляющие символы
+    // терминала в stderr не пропускаются.
+    io.stderr.writeln(sanitizeTerminalText('codelab: ${error.message}'));
+    return usageExit;
   } on UsageError catch (error) {
     io.stderr.writeln('codelab: ${error.message}');
     if (error.showSecretUsage) {
@@ -56,6 +72,8 @@ Future<int> _run(
   List<String> args,
   Map<String, String> environment,
   CliIo io,
+  EmbeddedAgentOpener? embeddedOpener,
+  SignalSeam signalSeam,
 ) async {
   final options = parseCliArgs(args);
   switch (options.command) {
@@ -84,13 +102,14 @@ Future<int> _run(
         ),
         environment: environment,
         stdout: io.stdout,
+        stderr: io.stderr,
       );
     case CliCommand.config:
       return _runConfigCheck(options, environment, io);
     case CliCommand.secret:
       return _runSecret(options, environment, io);
     case CliCommand.headless:
-      return _runHeadless(options, environment, io);
+      return _runHeadless(options, environment, io, embeddedOpener, signalSeam);
     case CliCommand.repl when options.ui == UiMode.tui:
       // Полноэкранный режим рисует кадр в терминал и читает клавиши из
       // него: без TTY на обоих потоках работать нечему (design.md change
@@ -98,12 +117,12 @@ Future<int> _run(
       if (!io.stdinIsTerminal || !io.stdoutIsTerminal) {
         throw const UsageError('--ui tui needs a terminal on stdin and stdout');
       }
-      return _runTui(options, environment, io);
+      return _runTui(options, environment, io, embeddedOpener, signalSeam);
     case CliCommand.repl when !io.stdinIsTerminal && options.positional.isEmpty:
       // Ни `-p`, ни `-f`, а stdin — pipe: промпт из stdin, headless (H-01).
-      return _runHeadless(options, environment, io);
+      return _runHeadless(options, environment, io, embeddedOpener, signalSeam);
     case CliCommand.repl:
-      return _runRepl(options, environment, io);
+      return _runRepl(options, environment, io, embeddedOpener, signalSeam);
   }
 }
 
@@ -203,6 +222,8 @@ Future<int> _runRepl(
   CliOptions options,
   Map<String, String> environment,
   CliIo io,
+  EmbeddedAgentOpener? embeddedOpener,
+  SignalSeam signalSeam,
 ) async {
   final cwd = await _sessionFolder(options.cwd);
   final home = CodelabHome.resolve(environment);
@@ -217,6 +238,8 @@ Future<int> _runRepl(
     environment: environment,
     stderr: io.stderr,
     verbose: options.verbose,
+    debugSecrets: options.debugSecrets,
+    embeddedOpener: embeddedOpener,
   );
   final repl = Repl(
     workspace: runtime.workspace,
@@ -243,21 +266,27 @@ Future<int> _runRepl(
         resolveAgentProfile(id, store: JsonFileProfileStore(home.profilesFile)),
   );
   // SIGTERM — безопасное завершение с кодом 143; SIGINT вне raw-режима —
-  // как Ctrl+C, поэтому не через `watchStopSignals`, где второй сигнал
-  // выходит сразу (spec codelab-cli «Сигналы CLI»; design.md, D13).
-  final signals = watchStopSignals(
-    (code) => unawaited(repl.interrupt(code)),
-    sigint: const Stream.empty(),
+  // как Ctrl+C, а не остановка (spec codelab-cli «Сигналы CLI»; design.md,
+  // D13). Обработчики живут до конца `dispose` встроенного агента: когда
+  // режим закончен (`stopped`), любой сигнал выходит сразу (D6, «Выход CLI»).
+  var stopped = false;
+  final signals = watchModeSignals(
+    onStop: (code) => unawaited(repl.interrupt(code)),
+    isStopped: () => stopped,
+    onSigint: repl.onSigint,
+    seam: signalSeam,
   );
-  final sigint = ProcessSignal.sigint.watch().listen((_) => repl.onSigint());
   try {
     return await repl.run();
   } finally {
     // Терминал восстанавливается и при исключении, которое REPL не поймал.
     terminal.restore();
-    await sigint.cancel();
-    await signals.cancel();
-    await runtime.dispose();
+    stopped = true;
+    try {
+      await runtime.dispose();
+    } finally {
+      await signals.cancel();
+    }
   }
 }
 
@@ -265,6 +294,8 @@ Future<int> _runTui(
   CliOptions options,
   Map<String, String> environment,
   CliIo io,
+  EmbeddedAgentOpener? embeddedOpener,
+  SignalSeam signalSeam,
 ) async {
   final cwd = await _sessionFolder(options.cwd);
   final home = CodelabHome.resolve(environment);
@@ -278,6 +309,8 @@ Future<int> _runTui(
     environment: environment,
     stderr: io.stderr,
     verbose: options.verbose,
+    debugSecrets: options.debugSecrets,
+    embeddedOpener: embeddedOpener,
   );
   final tui = TuiRunner(
     workspace: runtime.workspace,
@@ -307,12 +340,21 @@ Future<int> _runTui(
   // Сигналы — наши, а не обработчик dart_tui: SIGTERM даёт код 143, ход
   // отменяется (spec codelab-tui «Восстановление терминала после TUI»;
   // design.md change `add-cli-tui`, D7).
-  final signals = watchStopSignals((code) => unawaited(tui.interrupt(code)));
+  var stopped = false;
+  final signals = watchModeSignals(
+    onStop: (code) => unawaited(tui.interrupt(code)),
+    isStopped: () => stopped,
+    seam: signalSeam,
+  );
   try {
     return await tui.run();
   } finally {
-    await signals.cancel();
-    await runtime.dispose();
+    stopped = true;
+    try {
+      await runtime.dispose();
+    } finally {
+      await signals.cancel();
+    }
   }
 }
 
@@ -320,6 +362,8 @@ Future<int> _runHeadless(
   CliOptions options,
   Map<String, String> environment,
   CliIo io,
+  EmbeddedAgentOpener? embeddedOpener,
+  SignalSeam signalSeam,
 ) async {
   final prompt = await readPrompt(options, io);
   final cwd = await _sessionFolder(options.cwd);
@@ -333,6 +377,8 @@ Future<int> _runHeadless(
     environment: environment,
     stderr: io.stderr,
     verbose: options.verbose,
+    debugSecrets: options.debugSecrets,
+    embeddedOpener: embeddedOpener,
   );
   final runner = HeadlessRunner(
     workspace: runtime.workspace,
@@ -344,7 +390,12 @@ Future<int> _runHeadless(
   );
   // Сигнал отменяет ход; закрытие транспорта и процесса агента — в
   // `finally` ниже (design.md, D13).
-  final signals = watchStopSignals((code) => unawaited(runner.interrupt(code)));
+  var stopped = false;
+  final signals = watchModeSignals(
+    onStop: (code) => unawaited(runner.interrupt(code)),
+    isStopped: () => stopped,
+    seam: signalSeam,
+  );
   try {
     final outcome = await runner.run(
       profile: profile,
@@ -357,8 +408,12 @@ Future<int> _runHeadless(
     );
     return exitCodeOf(outcome);
   } finally {
-    await signals.cancel();
-    await runtime.dispose();
+    stopped = true;
+    try {
+      await runtime.dispose();
+    } finally {
+      await signals.cancel();
+    }
   }
 }
 

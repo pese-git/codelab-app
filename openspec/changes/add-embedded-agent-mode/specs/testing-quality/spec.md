@@ -4,7 +4,7 @@
 Встроенный агент SHALL проверяться на трёх уровнях (design.md change `add-embedded-agent-mode`, D10):
 - **Пакет.** Тесты `packages/dart/codelab_embedded/test/` на Dart VM работают на `InProcessAcpLink`, временном `CODELAB_HOME` и `MockClient` провайдера и входят в `melos run test`.
 - **CLI.**
-  - E2E `apps/codelab_cli/test/e2e/` с `CODELAB_E2E_AGENT=embedded` запускают CLI из kernel тестовой точки входа `test/e2e/support/embedded_cli_main.dart`. Эта точка передаёт `run(…)` открыватель `scriptedEmbeddedAgentOpener` со сценарием `test/e2e/llm_scripts/<сценарий>.json`, путь к которому задаёт переменная теста. Тесты с тегом `scripted-only` исключаются. Скрипт `melos run test:e2e:cli:embedded` входит в `melos run check` (Dart VM, `AGENTS.md` §21).
+  - E2E `apps/codelab_cli/test/e2e/` с `CODELAB_E2E_AGENT=embedded` запускают CLI из kernel тестовой точки входа `test/e2e/support/embedded_cli_main.dart`. Эта точка передаёт `runCodelab(…, embeddedOpener:)` открыватель `scriptedEmbeddedAgentOpener` со сценарием `test/e2e/llm_scripts/<сценарий>.json`, путь к которому задаёт переменная теста. Тесты с тегом `scripted-only` исключаются. Скрипт `melos run test:e2e:cli:embedded` входит в `melos run check` (Dart VM, `AGENTS.md` §21).
   - Скрипт `melos run conformance:embedded` — `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded` — тоже входит в `check`.
 - **App.**
   - Интеграционные тесты `apps/codelab_desktop/integration_test/` с `--dart-define=CODELAB_E2E_AGENT=embedded` подключаются типом `Embedded agent`. Поддержка `integration_test/support/e2e_agent.dart` передаёт `CodeLabBootstrap` scope с открывателем `scriptedEmbeddedAgentOpener`.

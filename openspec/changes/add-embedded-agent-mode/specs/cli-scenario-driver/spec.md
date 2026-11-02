@@ -1,7 +1,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Команда test-scenario
-`codelab test-scenario <файл-или-папка>... --agent <профиль> [--filter <glob по id>] [--timeout <длительность>]` SHALL проигрывать golden-фикстуры ACP (формат `agent-core-architecture` §14, загрузчик `codelab_acp_testing`) против агента, которого задаёт профиль подключения, через `runAgentFixtureOver` (H-04). Для каждой фикстуры SHALL:
+`codelab test-scenario <файл-или-папка>... [--agent <профиль>] [--filter <glob по id>] [--timeout <длительность>]` SHALL проигрывать golden-фикстуры ACP (формат `agent-core-architecture` §14, загрузчик `codelab_acp_testing`) против агента, которого задаёт профиль подключения, через `runAgentFixtureOver` (H-04).
+
+Без `--agent` агент SHALL выбираться так же, как во всём CLI (capability `codelab-cli`, «Профили подключения CLI»; design.md change `add-embedded-agent-mode`, D13, п. 1 и 7): профиль `default` из `profiles.json`, если он там есть, иначе встроенный агент, как с `--agent embedded`. Битый `profiles.json` SHALL давать код `64` с причиной. О неявном выборе встроенного агента драйвер не сообщает отдельной строкой (D13, п. 8).
+
+Для каждой фикстуры SHALL:
 1. пропускать с пометкой `SKIP` и причиной фикстуру без роли `agent` и фикстуру с `setup.transport` (её играет транспортный драйвер `codelab-agent` против процесса бинаря);
 2. запускать агента по профилю заново для каждой фикстуры:
    - **`{fixture}`.** Подстрока `{fixture}` в аргументах профиля `stdio:` SHALL заменяться путём файла фикстуры: такой агент (например, агент-повторитель) получает фикстуру целиком, и её блок `llm` не требует передачи.
@@ -26,6 +30,14 @@
 - **WHEN** выполняется `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded`
 - **THEN** ни одна фикстура не даёт `FAIL`, пропущенные имеют причину, код выхода `0`, ни один дочерний процесс агента не запущен
 
+#### Scenario: Без --agent и без профиля default
+- **WHEN** выполняется `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp` с временным `CODELAB_HOME` без `profiles.json`
+- **THEN** фикстуры играются против встроенного агента, как с `--agent embedded`: ни одна не даёт `FAIL`, код `0`, ни один дочерний процесс агента не запущен
+
+#### Scenario: Без --agent при профиле default
+- **WHEN** `profiles.json` содержит профиль `default` с агентом-повторителем и `{fixture}` в аргументах, и `test-scenario` запускается без `--agent`
+- **THEN** фикстуры играются против процесса из профиля `default`
+
 #### Scenario: Сторонний агент и сценарий модели
 - **WHEN** профиль — сторонний агент без `{fixture}`, а у фикстуры есть блок `llm`
 - **THEN** строка фикстуры — `SKIP` с причиной, агент не запускается
@@ -45,3 +57,21 @@
 #### Scenario: Повторитель играет фикстуру с MCP
 - **WHEN** профиль — агент-повторитель с `{fixture}` в аргументах, а у фикстуры непустой `setup.mcp`
 - **THEN** фикстура проигрывается, а не пропускается
+
+### Requirement: Вывод и коды выхода test-scenario
+Драйвер SHALL печатать в stdout строку `PASS|FAIL|SKIP <id> (<время>)` на фикстуру в порядке id, дифф `FAIL` — под строкой фикстуры, и итог `<passed> passed, <failed> failed, <skipped> skipped`. Код выхода SHALL быть:
+- `0` — нет `FAIL` и сыграна хотя бы одна фикстура (`PASS`);
+- `1` — есть хотя бы один `FAIL`, агент не запустился или не сыграна ни одна фикстура: все пропущены (`SKIP`) или фильтр не выбрал ни одной. Последний случай — для любого агента; в stderr SHALL печататься `codelab: no fixtures were played`, итоговая строка в stdout остаётся. Иначе прогон, который ничего не проверил (забытый `{fixture}`, опечатка в `--filter`), выглядел бы успешным (design.md change `add-embedded-agent-mode`, D13, п. 10);
+- `64` — ошибка использования (нет пути, путь не существует, неверный профиль, битый файл фикстуры, битый `profiles.json`).
+
+#### Scenario: Битая фикстура
+- **WHEN** путь указывает на файл, который не проходит загрузчик фикстур
+- **THEN** в stderr — путь и причина `FixtureFormatException`, код выхода `64`
+
+#### Scenario: Все фикстуры пропущены
+- **WHEN** `test-scenario` проигрывает только `acp/mcp-stdio-tool-call` против `--agent embedded`
+- **THEN** строка фикстуры — `SKIP` с причиной, итог `0 passed, 0 failed, 1 skipped`, в stderr — `codelab: no fixtures were played`, код выхода `1`
+
+#### Scenario: Фильтр не выбрал фикстур
+- **WHEN** передан `--filter 'acp/no-such-*'`, которому не соответствует ни одна фикстура
+- **THEN** итог `0 passed, 0 failed, 0 skipped`, в stderr — `codelab: no fixtures were played`, код выхода `1`

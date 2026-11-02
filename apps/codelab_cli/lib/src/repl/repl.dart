@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgentConfigException;
 
 import '../cli_args.dart';
 import '../exit_codes.dart';
@@ -330,6 +332,11 @@ final class Repl implements ReplContext {
       );
       await applyConfigFlag(handle, 'model', _model);
       await applyConfigFlag(handle, 'mode', _mode);
+    } on EmbeddedAgentConfigException {
+      // Ошибка использования, а не сбой подключения: `runCodelab` печатает
+      // текст и даёт `64`, как в `-p` (spec codelab-cli «Встроенный агент в
+      // CLI»).
+      rethrow;
     } on Object catch (error) {
       _terminal.errorOutput.writeln(
         sanitizeTerminalText(

@@ -25,6 +25,7 @@ final class ProfileCommand implements ReplCommand {
         'Profile ${profile.id} (${profile.label}): ${switch (profile) {
           StdioProfile(:final command, :final args) => 'stdio ${[command, ...args].join(' ')}',
           WebSocketProfile(:final uri) => '$uri',
+          EmbeddedProfile(:final hostProfile) => 'embedded $hostProfile',
         }}',
       );
       return;

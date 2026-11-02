@@ -42,4 +42,21 @@ sealed class ConnectionProfile with _$ConnectionProfile {
     required Uri uri,
     String? tokenRef,
   }) = WebSocketProfile;
+
+  /// Встроенный агент в процессе клиента (design.md change
+  /// `add-embedded-agent-mode`, D7).
+  ///
+  /// Почему: это чистые данные — kit не знает ядра агента. [hostProfile] —
+  /// строка с именем профиля хоста (`embedded-cli`, `embedded-app-desktop`);
+  /// смысл ей придаёт открыватель из composition root клиента.
+  ///
+  /// Как использовать: профиль открывает только `EmbeddedTransportResolver`
+  /// хоста; `ConfigTransportResolver` его не поддерживает, а
+  /// `ProfileStore` не сохраняет (встроенный агент выбирается словом
+  /// `embedded`, а не записью).
+  const factory ConnectionProfile.embedded({
+    required String id,
+    required String label,
+    required String hostProfile,
+  }) = EmbeddedProfile;
 }

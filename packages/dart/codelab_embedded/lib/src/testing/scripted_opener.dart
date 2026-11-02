@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:codelab_agent_io/testing.dart';
+import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
 import 'package:http/testing.dart';
 
 import '../assemble.dart';
@@ -30,8 +31,10 @@ import '../embedded_agent_config.dart';
 /// logger: …)` и `await opener(cwd: …, hostProfile: …)`. [hostProfile], если
 /// задан, заменяет профиль вызова. [sessionsDir] включает журнал JSONL, иначе
 /// сессии в памяти (`sessionPersistence` сужается). Невалидный сценарий —
-/// `LlmScriptException`. [clock] и [ids] — швы детерминизма (PKG-6); по
-/// умолчанию системные.
+/// `LlmScriptException`. [models] (`provider/model`) — каталог моделей сессии
+/// вместо единственной модели блока `llm`: так тесты проверяют выбор модели
+/// (опция `model`), как флаги `--model` у `codelab-agent --llm-script`.
+/// [clock] и [ids] — швы детерминизма (PKG-6); по умолчанию системные.
 EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
   required Map<String, Object?> llm,
   required String codelabHome,
@@ -39,6 +42,7 @@ EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
   String? hostProfile,
   String? permissionMode,
   String? sessionsDir,
+  List<String> models = const [],
   Clock clock = const SystemClock(),
   IdGenerator? ids,
 }) {
@@ -57,7 +61,7 @@ EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
     });
     final script = LlmScript.fromJson(
       llm,
-      models: const [],
+      models: [for (final id in models) ModelId(id)],
       clock: clock,
       cwdOf: store.cwdOf,
     );
@@ -81,6 +85,11 @@ EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
       throw EmbeddedAgentConfigException(loaded.issues, home: codelabHome);
     }
     final env = LocalExecutionEnv(cwd: cwd);
+    // Сети у сценария нет: запрос к провайдеру — ошибка теста. Тот же клиент
+    // стоит под HTTP-транспортом MCP.
+    final http = MockClient(
+      (_) async => throw StateError('the scripted agent has no network'),
+    );
     return assembleEmbeddedAgent(
       config: EmbeddedAgentConfig(
         hostProfile: profile,
@@ -99,9 +108,18 @@ EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
           logger: logger,
           selectionReason: 'forced by scripted opener',
         ),
-        // Сети у сценария нет: запрос к провайдеру — ошибка теста.
-        http: MockClient(
-          (_) async => throw StateError('the scripted agent has no network'),
+        http: http,
+        // Как у бинаря и `localEmbeddedAgentOpener` (D1: проводка MCP —
+        // осознанный дубль): без коннектора план выключает capability `mcp`, и
+        // `initialize` перестаёт объявлять `mcpCapabilities.http`, а корпус
+        // `acp/initialize-capabilities` ждёт `true`. Серверы MCP фикстур
+        // (`setup.mcp`) в процесс не передаются (драйвер пропускает их, D8).
+        mcp: McpClientConnector(
+          transports: McpTransports(
+            stdio: StdioMcpTransportFactory(hostEnvironment: environment),
+            http: StreamableHttpTransportFactory(client: http, clock: clock),
+          ),
+          clock: clock,
         ),
         logger: logger,
         clock: clock,
