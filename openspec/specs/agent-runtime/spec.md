@@ -4,15 +4,15 @@
 Сборка и среда выполнения Dart-агента: `AgentRuntime` и `AgentSession` в памяти, профили хостов и их сужение по capability, минимальная сборка `buildAgentCore`, сквозной сценарий хода и требование детерминизма повторных прогонов. Через эту границу хосты получают готового агента, не собирая цикл, инструменты и политику вручную (`agent-core-architecture` §10).
 ## Requirements
 ### Requirement: Профили хостов и сужение
-`HostProfile.of(name)` SHALL знать профили `agent-serve` и `embedded-cli` с явным состоянием каждой capability ядра по таблице §10.4 документа ядра (HOST-1):
-- `shellExec`, `fileListing`, `interactiveApproval` — как в этапе 2;
-- `sessionPersistence` — transport `jsonl-file` в обоих профилях;
-- `compaction` — `on` в обоих профилях;
-- `mcp` — transport `{stdio, http}` в обоих профилях (design.md change `add-agent-mcp-client`, D3).
+`HostProfile.of(name)` SHALL знать профили `agent-serve`, `embedded-app-desktop` и `embedded-cli` с явным состоянием каждой capability ядра по таблице §10.4 документа ядра (HOST-1):
+- `shellExec`, `fileListing`, `interactiveApproval` — как в этапе 2; в `embedded-app-desktop` — те же состояния, что в `embedded-cli`: `shellExec` и `fileListing` — transport `local`, `interactiveApproval` — transport `acp` (design.md change `add-embedded-agent-mode`, D4);
+- `sessionPersistence` — transport `jsonl-file` во всех трёх профилях;
+- `compaction` — `on` во всех трёх профилях;
+- `mcp` — transport `{stdio, http}` во всех трёх профилях (design.md change `add-agent-mcp-client`, D3).
 
 Для неизвестного имени `of` бросает `ArgumentError`. Состояния `off` и `transport` SHALL нести непустую причину.
 
-Режим новой сессии по умолчанию в обоих профилях — `standard` (§10.5).
+Режим новой сессии по умолчанию во всех трёх профилях — `standard` (§10.5).
 
 `narrowed(overrides)` SHALL принимать только сужение: `on` → `transport` → `off` и `transport(A)` → `transport(B)` при `B ⊆ A`. Расширение SHALL давать `HostWiringException` с именем capability (HOST-2).
 
@@ -27,6 +27,14 @@
 #### Scenario: Сужение транспортов MCP
 - **WHEN** у `agent-serve` вызывается `narrowed({mcp: CapabilityTransport({'http'}, …)})`, а затем `narrowed({mcp: CapabilityTransport({'http', 'stdio'}, …)})`
 - **THEN** первое сужение принято, второе бросает `HostWiringException`, называющий `mcp`
+
+#### Scenario: Профиль встроенного агента приложения
+- **WHEN** вызывается `HostProfile.of('embedded-app-desktop')`
+- **THEN** состояния всех capability и режим по умолчанию совпадают с `embedded-cli`, а golden-матрица `test/host/profiles/embedded-app-desktop.golden.json` (схемы инструментов, секции промпта, slash-команды) совпадает с матрицей `embedded-cli`
+
+#### Scenario: Паритет профилей
+- **WHEN** один сценарий модели («прочитай файл, измени, покажи план») проходит через ядро в профилях `agent-serve`, `embedded-app-desktop` и `embedded-cli` с одинаковыми ответами на запросы разрешений
+- **THEN** последовательности `AgentEvent` трёх прогонов совпадают; различаются только env и gate хоста (§10.12)
 
 ### Requirement: Минимальная сборка buildAgentCore
 Хост SHALL собирать ядро только через `buildAgentCore(profile, services, config, streamFunction)` (HOST-6). Функция выполняет шаги §10.7 документа ядра в объёме этапов 2–4 и 8 (design.md change `add-agent-core-loop-and-tools`, D12; design.md change `add-agent-core-sessions-and-compaction`, D12; design.md change `add-dart-agent-acp-server`, D3; design.md change `add-agent-mcp-client`, D3, D6):

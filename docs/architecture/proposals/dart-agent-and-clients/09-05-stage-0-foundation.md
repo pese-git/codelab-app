@@ -144,7 +144,7 @@ scope: формат и корпус фикстур с полем `roles`, кли
 `--dart-define=CODELAB_ALLOW_SCRIPTED_LLM`: сценарий модели интеграционный тест подаёт через шов
 `CodeLabBootstrap(scope:)` из `package:codelab_embedded/testing.dart`, который `lib/` app не
 импортирует (сторож), поэтому в релизную сборку сценарий не попадает структурно, а не по
-константе сборки (`openspec/changes/add-embedded-agent-mode/design.md`, D8).
+константе сборки (`openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md`, D8).
 
 **Интеграционные тесты в CI — только на Dart VM.** GitHub CI запускает интеграционные тесты
 чистых Dart-пакетов: реальные процессы и сокеты (`codelab_acp_transports`), прогон корпуса фикстур
