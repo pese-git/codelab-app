@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:test/test.dart';
+import '../support/package_dir.dart';
 
 /// Тестовое хранилище секретов встроенного агента (embedded-agent, сценарий
 /// «Тестовое хранилище только в тестовой сборке»; design.md change
@@ -44,16 +44,13 @@ agent:
     final secrets = File('$store/secrets.yaml')
       ..writeAsStringSync('"codelab/p": "$value"\n');
     Process.runSync('/bin/chmod', ['600', secrets.path]);
-    final lib = await Isolate.resolvePackageUri(
-      Uri.parse('package:codelab_embedded/io.dart'),
-    );
-    packageRoot = File.fromUri(lib!).parent.parent.path;
+    packageRoot = embeddedRoot;
   });
 
   tearDown(() => temp.deleteSync(recursive: true));
 
   Future<Map<String, Object?>> probe({required bool allowTestSecrets}) async {
-    final result = await Process.run(Platform.resolvedExecutable, [
+    final result = await Process.run(dartExecutable(), [
       'run',
       if (allowTestSecrets) '-DCODELAB_ALLOW_TEST_SECRETS=true',
       'test/io/support/secret_store_probe.dart',
