@@ -128,7 +128,9 @@ void main() {
       await replayAgentProfile(),
     ]);
 
-    expect(run.code, 0);
+    // Ни одной сыгранной фикстуры — код 1 (U4).
+    expect(run.code, 1);
+    expect(run.stderr, contains('no fixtures were played'));
     expect(run.status.values, ['SKIP']);
     expect(run.stdout, contains('without "agent"'));
   });
@@ -142,9 +144,35 @@ void main() {
       agent,
     ]);
 
-    expect(run.code, 0, reason: run.stdout);
+    expect(run.code, 1, reason: run.stdout);
+    expect(run.stderr, contains('no fixtures were played'));
     expect(run.status.values, ['SKIP']);
     expect(run.stdout, contains('third-party agent'));
+  });
+
+  test('a filter that matches nothing plays nothing: exit 1 with the reason '
+      'in stderr (U4)', () async {
+    final run = await _testScenario([
+      corpusDirectory,
+      '--agent',
+      await replayAgentProfile(),
+      '--filter',
+      'acp/no-such-fixture-*',
+    ]);
+
+    expect(run.code, 1, reason: run.stdout);
+    expect(run.stderr, contains('no fixtures were played'));
+    expect(run.stdout, contains('0 passed, 0 failed, 0 skipped'));
+  });
+
+  test('without --agent and without a "default" profile the embedded agent '
+      'plays the fixtures, like the rest of the CLI (U1)', () async {
+    final run = await _testScenario([
+      _fixture('acp/prompt-text-end-turn').sourcePath!,
+    ]);
+
+    expect(run.code, 0, reason: run.stdout + run.stderr);
+    expect(run.status.values, ['PASS']);
   });
 
   test('a broken fixture file is 64 with the path and the reason', () async {
@@ -179,11 +207,59 @@ void main() {
     expect(run.code, 64);
   });
 
-  test('embedded is 64', () async {
-    final run = await _testScenario([corpusDirectory, '--agent', 'embedded']);
+  group('--agent embedded (spec «Корпус против встроенного агента»; D8)', () {
+    /// Временные папки встроенного драйвера: свой префикс, поэтому чужие
+    /// тесты в системном каталоге не мешают сравнению.
+    Set<String> leftovers() => {
+      for (final entity in Directory.systemTemp.listSync())
+        if (entity.uri.pathSegments
+            .lastWhere((segment) => segment.isNotEmpty)
+            .startsWith('codelab_scenario_embedded_'))
+          entity.path,
+    };
 
-    expect(run.code, 64);
-    expect(run.stderr, contains('Embedded agent is not available'));
+    test('the corpus plays without FAIL, skips carry reasons and the '
+        'temporary folders are removed', () async {
+      final before = leftovers();
+
+      final run = await _testScenario([corpusDirectory, '--agent', 'embedded']);
+
+      expect(run.code, 0, reason: run.stdout + run.stderr);
+      expect(run.stdout, isNot(contains('FAIL ')), reason: run.stdout);
+      expect(
+        run.status.values.where((status) => status == 'PASS'),
+        hasLength(greaterThan(10)),
+        reason: run.stdout,
+      );
+      // Каждая строка SKIP — с причиной на следующей строке.
+      final lines = const LineSplitter().convert(run.stdout);
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('SKIP ')) {
+          expect(
+            lines[i + 1],
+            startsWith('    '),
+            reason: 'no reason under ${lines[i]}',
+          );
+        }
+      }
+      expect(leftovers(), before, reason: 'temporary folders are removed');
+    });
+
+    test('a fixture with fake MCP servers is SKIP with the reason', () async {
+      final run = await _testScenario([
+        _fixture('acp/mcp-stdio-tool-call').sourcePath!,
+        '--agent',
+        'embedded',
+      ]);
+
+      expect(run.code, 1, reason: run.stdout);
+      expect(run.stderr, contains('no fixtures were played'));
+      expect(run.status.values, ['SKIP']);
+      expect(
+        run.stdout,
+        contains('setup.mcp cannot be passed to the agent process'),
+      );
+    });
   });
 
   test('an agent that does not start is FAIL and exit 1', () async {

@@ -45,4 +45,63 @@ void main() {
     expect(plain.setup.mcp, isEmpty);
     expect(_agent('codelab-agent').skipReason(plain), isNull);
   });
+
+  group('embedded agent', () {
+    const embedded = EmbeddedProfile(
+      id: 'embedded',
+      label: 'Embedded agent',
+      hostProfile: 'embedded-cli',
+    );
+    final agent = ScenarioAgent(embedded, environment: const {});
+
+    test('plays a plain fixture with an llm block', () {
+      expect(agent.skipReason(_fixture('acp/prompt-text-end-turn')), isNull);
+    });
+
+    test('skips setup.mcp', () {
+      expect(
+        agent.skipReason(withMcp),
+        contains('setup.mcp cannot be passed to the agent process'),
+      );
+    });
+
+    test('skips setup.sessions, setup.config, setup.web and a foreign host '
+        'profile with the reason', () {
+      final corpus = loadFixtureCorpus();
+      var checked = 0;
+      for (final (label, test) in <(String, bool Function(AcpFixture))>[
+        ('setup.sessions', (f) => f.setup.sessions.isNotEmpty),
+        ('setup.config', (f) => f.setup.config != null),
+        ('setup.web', (f) => f.setup.web != null),
+        (
+          'setup.profile',
+          (f) =>
+              f.setup.profile != null &&
+              !const {'agent-serve', 'embedded-cli'}.contains(f.setup.profile),
+        ),
+      ]) {
+        final fixture = corpus
+            .where((f) => test(f) && f.setup.mcp.isEmpty)
+            .firstOrNull;
+        // Не каждый вид входа есть в корпусе сегодня (`setup.web` — нет):
+        // проверяется то, что есть, но не меньше двух видов.
+        if (fixture == null) {
+          continue;
+        }
+        checked++;
+
+        expect(
+          agent.skipReason(fixture),
+          allOf(isNotNull, contains('embedded'), contains(label)),
+          reason: fixture.id,
+        );
+      }
+      expect(checked, greaterThanOrEqualTo(2));
+    });
+
+    test('is not the codelab-agent binary and takes no {fixture}', () {
+      expect(agent.isCodelabAgent, isFalse);
+      expect(agent.takesFixture, isFalse);
+    });
+  });
 }

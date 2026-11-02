@@ -57,6 +57,7 @@ Future<void> main() async {
         'HOME': '${dir.path}/home',
         'CODELAB_HOME': '${dir.path}/codelab',
         'LANG': 'en_US.UTF-8',
+        ...launch.environment,
         ...environment,
       },
     );
@@ -105,7 +106,10 @@ Future<void> main() async {
 
       final result = await CliProcess.run(
         ['--agent', launch.agent, '--cwd', dir.path, 'hello'],
-        environment: {'CODELAB_HOME': '${dir.path}/codelab'},
+        environment: {
+          'CODELAB_HOME': '${dir.path}/codelab',
+          ...launch.environment,
+        },
         stdin: '',
       );
 

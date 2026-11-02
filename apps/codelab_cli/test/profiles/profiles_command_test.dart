@@ -99,10 +99,28 @@ void main() {
     expect(io.stderrText, contains('Unknown agent profile "nope"'));
   });
 
-  test('add rejects embedded, reserved and malformed ids', () async {
+  test('add rejects embedded as an id and as a value with the built-in '
+      'hint and leaves the store unchanged', () async {
     for (final args in <List<String>>[
       ['add', 'x', 'embedded'],
       ['add', 'embedded', 'stdio:x'],
+      ['add', 'embedded', 'embedded'],
+    ]) {
+      final (code, io) = await run(args);
+
+      expect(code, 64, reason: args.join(' '));
+      expect(io.stdoutText, isEmpty, reason: args.join(' '));
+      expect(
+        io.stderrText,
+        contains('embedded is built in; use --agent embedded'),
+        reason: args.join(' '),
+      );
+    }
+    expect(File('${tmp.path}/home/profiles.json').existsSync(), isFalse);
+  });
+
+  test('add rejects malformed ids and values', () async {
+    for (final args in <List<String>>[
       ['add', 'bad id', 'stdio:x'],
       ['add', 'x', 'stdio:'],
       ['add', 'x', 'just-a-word'],

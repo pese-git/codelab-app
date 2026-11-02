@@ -34,21 +34,45 @@ final class CliProcess {
   late final Future<void> _stderrDone;
 
   static Future<String>? _kernel;
+  static Future<String>? _embeddedKernel;
 
-  /// Путь к `.dill` CLI.
-  static Future<String> kernel() => _kernel ??= _compile();
+  /// Прогон e2e идёт против встроенного агента (`CODELAB_E2E_AGENT=embedded`,
+  /// testing-quality «Встроенный режим в e2e и conformance»).
+  static bool get embeddedVariant =>
+      Platform.environment['CODELAB_E2E_AGENT'] == 'embedded';
+
+  /// Путь к `.dill` CLI, который запускают тесты варианта прогона.
+  static Future<String> kernel() => kernelOf(CliEntry.variant);
+
+  /// Путь к `.dill` выбранной точки входа; каждая собирается один раз.
+  static Future<String> kernelOf(CliEntry entry) {
+    final scripted = switch (entry) {
+      CliEntry.variant => embeddedVariant,
+      CliEntry.production => false,
+      CliEntry.scriptedEmbedded => true,
+    };
+    return scripted
+        ? _embeddedKernel ??= _compile(
+            'test/e2e/support/embedded_cli_main.dart',
+          )
+        : _kernel ??= _compile('bin/codelab.dart');
+  }
 
   /// Запускает CLI; [environment] заменяет окружение целиком, кроме `PATH`.
   /// `HOME` по умолчанию — несуществующая папка, чтобы тест не видел
   /// настоящий `~/.codelab`.
+  ///
+  /// [entry] — какая точка входа: по умолчанию та, что задаёт вариант прогона
+  /// ([CliEntry.variant]).
   static Future<CliProcess> start(
     List<String> args, {
     Map<String, String> environment = const {},
     String? workingDirectory,
+    CliEntry entry = CliEntry.variant,
   }) async {
     final process = await Process.start(
       dartExecutable(),
-      [await kernel(), ...args],
+      [await kernelOf(entry), ...args],
       workingDirectory: workingDirectory,
       environment: {
         'PATH': Platform.environment['PATH'] ?? '',
@@ -67,11 +91,13 @@ final class CliProcess {
     String? workingDirectory,
     String? stdin,
     Duration timeout = const Duration(seconds: 60),
+    CliEntry entry = CliEntry.variant,
   }) async {
     final process = await start(
       args,
       environment: environment,
       workingDirectory: workingDirectory,
+      entry: entry,
     );
     if (stdin != null) {
       process._process.stdin.write(stdin);
@@ -121,13 +147,13 @@ final class CliProcess {
     return CliResult(code, stdoutText, stderrText);
   }
 
-  static Future<String> _compile() async {
+  static Future<String> _compile(String entry) async {
     final dir = await Directory.systemTemp.createTemp('codelab_cli_kernel_');
     final output = '${dir.path}/codelab.dill';
     final result = await Process.run(dartExecutable(), [
       'compile',
       'kernel',
-      'bin/codelab.dart',
+      entry,
       '-o',
       output,
     ], workingDirectory: appDirectory);
@@ -138,6 +164,28 @@ final class CliProcess {
     }
     return output;
   }
+}
+
+/// Точка входа процесса `codelab` в тестах.
+///
+/// Почему три: рабочий `bin/codelab.dart` открывает встроенного агента
+/// настоящим `localEmbeddedAgentOpener` — с конфигом, ключом и сетью, а e2e
+/// нужен детерминированный сценарий модели. Его подставляет тестовая точка
+/// входа `test/e2e/support/embedded_cli_main.dart` (design.md change
+/// `add-embedded-agent-mode`, D8, D10); `package:codelab_embedded/testing.dart`
+/// в рабочий код не попадает.
+enum CliEntry {
+  /// Как требует вариант прогона: в `embedded` — тестовая точка входа, иначе
+  /// рабочая.
+  variant,
+
+  /// Всегда рабочий `bin/codelab.dart` (настоящий открыватель: конфиг, ключи,
+  /// отладка секретов).
+  production,
+
+  /// Всегда тестовая точка входа со сценарием модели; сценарий задаёт
+  /// `E2eCliLaunch.environment` варианта `embedded`.
+  scriptedEmbedded,
 }
 
 /// Итог процесса `codelab`.

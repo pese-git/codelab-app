@@ -9,7 +9,7 @@ import '../../support/cli_process.dart';
 typedef _Mode = CodelabCompatibleStdioAgentMode;
 
 /// Какой агент стоит за e2e терминального клиента.
-enum E2eAgentKind { scripted, dart, python }
+enum E2eAgentKind { scripted, dart, python, embedded }
 
 /// Тег тестов поведения, которое есть только у scripted-агента, и тестов, не
 /// зависящих от агента; прогон против Dart-агента их исключает.
@@ -47,6 +47,7 @@ final class E2eCliAgent {
         'scripted' => E2eAgentKind.scripted,
         'dart' => E2eAgentKind.dart,
         'python' => E2eAgentKind.python,
+        'embedded' => E2eAgentKind.embedded,
         final other => throw ArgumentError.value(other, 'CODELAB_E2E_AGENT'),
       }, environment['PATH'] ?? '');
 
@@ -91,7 +92,16 @@ final class E2eCliAgent {
     E2eAgentKind.scripted => _scripted(dir, mode),
     E2eAgentKind.dart => _dart(dir, mode),
     E2eAgentKind.python => _python(dir, mode),
+    E2eAgentKind.embedded => _embedded(dir, mode),
   };
+
+  /// Причина пропустить тест, которому нужен внешний агент в `profiles.json`
+  /// (`profiles add default <агент>`); `null` — тест идёт. Встроенный агент
+  /// выбирается словом `embedded` и профилем не сохраняется (design.md change
+  /// `add-embedded-agent-mode`, D7).
+  String? get needsStoredProfile => kind == E2eAgentKind.embedded
+      ? 'the embedded agent is built in and cannot be stored in profiles.json'
+      : null;
 
   /// Python-агент со своим `CODELAB_HOME`: провайдер `mock` отвечает без
   /// сети, а `codelab-stdio.lock` агента не пересекается с CLI и другими
@@ -179,7 +189,8 @@ final class E2eCliAgent {
     }
     final sessions = '${dir.path}/agent-sessions';
     final script = '$appDirectory/test/e2e/llm_scripts/${mode.wireName}.json';
-    return E2eCliLaunch._(
+    return _llmLaunch(
+      dir,
       agent: [
         "stdio:'${dartExecutable()}' '${await agentKernel()}'",
         'serve --stdio',
@@ -187,37 +198,90 @@ final class E2eCliAgent {
         "--sessions-dir '$sessions'",
         ...flags,
       ].join(' '),
-      answer: 'hello from compatible stdio agent',
-      // Заголовок `exec` — сама команда (ToolPresentation инструмента).
-      permissionTitle: 'echo hello',
-      // `rm -rf build` для Dart-агента не критичен (P-07: критичны корень,
-      // домашний и системный каталоги, предок рабочей папки). `rm -rf .` —
-      // критичен, а при поломке защиты удалит только временную папку теста.
-      criticalTitle: 'rm -rf .',
-      permissionCommand: 'echo hello',
-      // Сценарий не знает решения пользователя: итог виден по строке
-      // вызова, а ответ модели после результата один.
-      allowedMarker: '✓ echo hello',
-      rejectedMarker: '⊘ echo hello',
-      allowedAnswer: 'approved',
-      rejectedAnswer: 'approved',
-      models: const ['scripted/gpt-5', 'scripted/gpt-4'],
-      completedToolRow: '✓ Write',
-      sessionAnswer: (_) => 'session answer',
-      // Заголовок сессии Dart-агент берёт из первого промпта.
-      listedSession: (firstPrompt) => firstPrompt,
-      savedSessions: () {
-        final directory = Directory(sessions);
-        return directory.existsSync()
-            ? directory
-                  .listSync(recursive: true)
-                  .whereType<File>()
-                  .where((f) => f.path.endsWith('.jsonl'))
-                  .length
-            : 0;
+      sessions: sessions,
+    );
+  }
+
+  /// Встроенный агент в процессе CLI: тот же сценарий `llm_scripts/<режим>`,
+  /// те же режимы разрешений и модели, что у Dart-агента. CLI запускает
+  /// тестовая точка входа `embedded_cli_main.dart`, сценарий и настройки ей
+  /// передаёт [E2eCliLaunch.environment] (design.md change
+  /// `add-embedded-agent-mode`, D8, D10).
+  static Future<E2eCliLaunch> _embedded(Directory dir, _Mode mode) async {
+    final permissionMode = switch (mode) {
+      _Mode.withPermissionRequest || _Mode.withCriticalPermission => 'standard',
+      _Mode.withToolCalls => 'accept-edits',
+      _Mode.normal ||
+      _Mode.withSessionList ||
+      _Mode.hangsUntilCancel ||
+      _Mode.promptError ||
+      _Mode.emptyResponse ||
+      _Mode.withConfigOptions => null,
+      _ => throw StateError(
+        'no embedded script for ${mode.wireName}: tag the test '
+        '"$scriptedOnly"',
+      ),
+    };
+    if (mode == _Mode.withToolCalls) {
+      File('${dir.path}/README.md').writeAsStringSync('# e2e\n');
+    }
+    final sessions = '${dir.path}/agent-sessions';
+    return _llmLaunch(
+      dir,
+      agent: 'embedded',
+      sessions: sessions,
+      environment: {
+        'CODELAB_E2E_LLM_SCRIPT':
+            '$appDirectory/test/e2e/llm_scripts/${mode.wireName}.json',
+        'CODELAB_E2E_PERMISSION_MODE': ?permissionMode,
+        if (mode == _Mode.withConfigOptions)
+          'CODELAB_E2E_MODELS': 'scripted/gpt-5,scripted/gpt-4',
+        'CODELAB_E2E_SESSIONS_DIR': sessions,
       },
     );
   }
+
+  /// Ожидания тестов для агентов со сценарием `llm_scripts/*.json`
+  /// (`codelab-agent --llm-script` и встроенный агент): тексты у них общие,
+  /// потому что сценарий и ядро одни.
+  static E2eCliLaunch _llmLaunch(
+    Directory dir, {
+    required String agent,
+    required String sessions,
+    Map<String, String> environment = const {},
+  }) => E2eCliLaunch._(
+    agent: agent,
+    environment: environment,
+    answer: 'hello from compatible stdio agent',
+    // Заголовок `exec` — сама команда (ToolPresentation инструмента).
+    permissionTitle: 'echo hello',
+    // `rm -rf build` для Dart-агента не критичен (P-07: критичны корень,
+    // домашний и системный каталоги, предок рабочей папки). `rm -rf .` —
+    // критичен, а при поломке защиты удалит только временную папку теста.
+    criticalTitle: 'rm -rf .',
+    permissionCommand: 'echo hello',
+    // Сценарий не знает решения пользователя: итог виден по строке
+    // вызова, а ответ модели после результата один.
+    allowedMarker: '✓ echo hello',
+    rejectedMarker: '⊘ echo hello',
+    allowedAnswer: 'approved',
+    rejectedAnswer: 'approved',
+    models: const ['scripted/gpt-5', 'scripted/gpt-4'],
+    completedToolRow: '✓ Write',
+    sessionAnswer: (_) => 'session answer',
+    // Заголовок сессии Dart-агент берёт из первого промпта.
+    listedSession: (firstPrompt) => firstPrompt,
+    savedSessions: () {
+      final directory = Directory(sessions);
+      return directory.existsSync()
+          ? directory
+                .listSync(recursive: true)
+                .whereType<File>()
+                .where((f) => f.path.endsWith('.jsonl'))
+                .length
+          : 0;
+    },
+  );
 
   static Future<String>? _kernel;
 
@@ -248,6 +312,7 @@ final class E2eCliAgent {
 final class E2eCliLaunch {
   E2eCliLaunch._({
     required this.agent,
+    this.environment = const {},
     required this.answer,
     required this.permissionTitle,
     required this.criticalTitle,
@@ -265,8 +330,15 @@ final class E2eCliLaunch {
        _listedSession = listedSession,
        _savedSessions = savedSessions;
 
-  /// Значение `--agent` (`stdio:…`).
+  /// Значение `--agent` (`stdio:…` или `embedded`).
   final String agent;
+
+  /// Окружение, которое тест добавляет к окружению процесса CLI. Пусто, кроме
+  /// варианта `embedded`: там оно несёт сценарий модели для тестовой точки
+  /// входа `embedded_cli_main.dart` (design.md change
+  /// `add-embedded-agent-mode`, D10). Тест объединяет его со своим:
+  /// `{...environment, ...launch.environment}`.
+  final Map<String, String> environment;
 
   /// Ответ на обычный промпт (режим `normal`).
   final String answer;

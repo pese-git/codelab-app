@@ -57,16 +57,27 @@ void main() {
     }
   });
 
-  test('embedded is not available before stage 7', () async {
-    await expectLater(
-      resolveAgentProfile('embedded', store: store),
-      throwsA(
-        isA<UsageError>().having(
-          (e) => e.message,
-          'message',
-          'Embedded agent is not available in this build.',
+  test(
+    'embedded is the built-in profile for the CLI host (D13, п. 1)',
+    () async {
+      final profile = await resolveAgentProfile('embedded', store: store);
+
+      expect(
+        profile,
+        const ConnectionProfile.embedded(
+          id: 'embedded',
+          label: 'Embedded agent',
+          hostProfile: 'embedded-cli',
         ),
-      ),
+      );
+    },
+  );
+
+  test('explicit embedded beats the "default" profile and never reads the '
+      'store', () async {
+    expect(
+      await resolveAgentProfile('embedded', store: MemoryProfileStore.broken()),
+      isA<EmbeddedProfile>(),
     );
   });
 
@@ -97,16 +108,37 @@ void main() {
     );
   });
 
-  test('without --agent and without "default" the hint names the '
-      'command', () async {
+  test('without --agent and without "default" the embedded agent is '
+      'used (D13, п. 1)', () async {
+    expect(
+      await resolveAgentProfile(null, store: MemoryProfileStore()),
+      const ConnectionProfile.embedded(
+        id: 'embedded',
+        label: 'Embedded agent',
+        hostProfile: 'embedded-cli',
+      ),
+    );
+    // Другие профили без "default" его не заменяют.
+    expect(
+      await resolveAgentProfile(
+        null,
+        store: MemoryProfileStore([
+          const StdioProfile(id: 'py', label: 'Python', command: 'codelab'),
+        ]),
+      ),
+      isA<EmbeddedProfile>(),
+    );
+  });
+
+  test('a broken profiles file without --agent is a usage error, not a '
+      'silent switch to the embedded agent', () async {
     await expectLater(
-      resolveAgentProfile(null, store: MemoryProfileStore()),
+      resolveAgentProfile(null, store: MemoryProfileStore.broken()),
       throwsA(
         isA<UsageError>().having(
           (e) => e.message,
           'message',
-          'No default agent profile. Pass --agent or run '
-              '"codelab profiles add default stdio:<command>".',
+          startsWith('Cannot read agent profiles:'),
         ),
       ),
     );

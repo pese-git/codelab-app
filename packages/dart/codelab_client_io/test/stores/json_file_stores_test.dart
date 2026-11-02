@@ -89,6 +89,63 @@ void main() {
       expect(text, isNot(contains('"token"')));
     });
 
+    test('an embedded profile is not saved: ArgumentError, file unchanged '
+        '(D7)', () async {
+      final path = '${tmp.path}/profiles.json';
+      final store = JsonFileProfileStore(path);
+      await store.save(remote);
+      final before = File(path).readAsStringSync();
+
+      await expectLater(
+        store.save(
+          const ConnectionProfile.embedded(
+            id: 'embedded',
+            label: 'Embedded agent',
+            hostProfile: 'embedded-cli',
+          ),
+        ),
+        throwsArgumentError,
+      );
+
+      expect(File(path).readAsStringSync(), before);
+    });
+
+    test('a "type": "embedded" record is an unknown type on load '
+        '(FormatException, D7)', () async {
+      final path = '${tmp.path}/profiles.json';
+      File(path).writeAsStringSync(
+        '{"version": 1, "profiles": [{"type": "embedded", "id": "embedded", '
+        '"label": "Embedded agent", "hostProfile": "embedded-cli"}]}',
+      );
+
+      await expectLater(
+        JsonFileProfileStore(path).load(),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('a structurally broken record is a FormatException, not a '
+        'TypeError', () async {
+      final path = '${tmp.path}/profiles.json';
+      for (final profiles in [
+        '["not an object"]',
+        '[{"type": "stdio", "label": "x", "command": "c", "args": [], '
+            '"env": {}}]',
+        '[{"type": "stdio", "id": "x", "label": "x", "args": [], "env": {}}]',
+        '[{"type": "webSocket", "id": "w", "label": "w"}]',
+        '[{"type": "stdio", "id": "x", "label": "x", "command": "c", '
+            '"args": "oops", "env": {}}]',
+      ]) {
+        File(path).writeAsStringSync('{"version": 1, "profiles": $profiles}');
+
+        await expectLater(
+          JsonFileProfileStore(path).load(),
+          throwsA(isA<FormatException>()),
+          reason: profiles,
+        );
+      }
+    });
+
     test('a broken file is a FormatException, not silently empty', () async {
       final path = '${tmp.path}/profiles.json';
       File(path).writeAsStringSync('{not json');
