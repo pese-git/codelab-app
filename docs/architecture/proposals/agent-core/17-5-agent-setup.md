@@ -273,7 +273,7 @@ final class ConfigTarget {
 }
 final class ConfigSnapshot {
   final ConfigTarget target; final String path;   // путь после разрешения символической ссылки
-  final String? fingerprint;                      // sha256 байтов файла; null — файла нет
+  final String? fingerprint;                      // configFingerprint(bytes); null — файла нет
   final Map<String, Object?> values;              // разобранный слой (без слияния)
   Object? get(String key);                        // "providers.openai.base_url", "mcp.servers[github].url"
 }
@@ -284,6 +284,17 @@ final class UpsertMcpServer extends ConfigEdit { final Map<String, Object?> serv
 final class RemoveMcpServer extends ConfigEdit { final String name; const RemoveMcpServer(this.name); }
 /// Ключ-отображение целиком со всем поддеревом: "providers.local-1234" удаляет и providers.local-1234.models.*.
 final class RemoveTable extends ConfigEdit { final String key; const RemoveTable(this.key); }
+
+/// Отпечаток байтов файла: sha256, 64 hex-символа в нижнем регистре. В ядре, потому что crypto
+/// есть в allowlist ядра и нет в allowlist codelab_agent_io; один на всех писателей (8.10, D1, D5).
+String configFingerprint(List<int> bytes);
+/// Разбор пути "a.b.\"c.d\"[name]" — общий у ConfigWriter, SettingsRegistry.lookup и маскирования
+/// вывода (key_path.dart; 8.10, D1, D5); null — путь синтаксически неверен.
+typedef KeyPathSegment = ({String value, bool isElement});
+List<KeyPathSegment>? splitKeyPath(String path);
+/// Имена ключей-секретов значением (CFG-9, п. 1); экспортируются из config_issue.dart, потому что
+/// schema.dart не экспортируется (CFG-5), а список нужен писателю и маскированию (8.10, D5, D6).
+const inlineSecretKeys = {'api_key', 'apiKey', 'token', 'secret', 'password'};
 
 /// Встроенный секрет (CFG-9): бросают валидатор §15.5 (шаг 3) и ConfigWriter.apply.
 final class ConfigInlineSecretException extends ConfigException {
@@ -303,15 +314,22 @@ final class ConfigWriteResult {
   final List<String> restartRequiredKeys;         // по SettingsRegistry
 }
 
+/// Итог ConfigLoader.validateCandidate: issues запрещают запись (если новые, R3-1), warnings —
+/// в ConfigWriteResult.warnings (незаданная ${VAR} и др.).
+typedef ConfigCandidateResult = ({List<ConfigIssue> issues, List<ConfigIssue> warnings});
+
 final class ConfigWriter {
   ConfigWriter({required String codelabHome, required Map<String, String> environment,
       required ConfigLoader loader, required Logger logger,
-      required SecretProcessRunner processRunner, required Clock clock, required Random random});   // 8.10, D5
+      required SecretProcessRunner processRunner, required Clock clock, required Random random,
+      String? cwd, String? platform,
+      @visibleForTesting Future<void> Function(ConfigWriteSeam point)? seam});   // 8.10, D5
   Future<ConfigSnapshot> read(ConfigTarget target);
   /// Применяет правки к YAML-документу base через YamlEditor, проверяет итог и атомарно
   /// заменяет файл (§17.5.5). ConfigConflictException — файл изменился после read;
-  /// ConfigInlineSecretException; ConfigException(issues) — итог невалиден или правку нельзя
-  /// выполнить без потери структуры документа. Файл при ошибке не меняется.
+  /// ConfigInlineSecretException; ConfigException(issues) — правка вносит новую ошибку загрузки
+  /// (R3-1; прежние — warnings) или её нельзя выполнить без потери структуры документа.
+  /// Файл при ошибке не меняется; правка без изменений файл не трогает.
   Future<ConfigWriteResult> apply(ConfigSnapshot base, List<ConfigEdit> edits);
 }
 // ConfigConflictException — тип ядра (выше, D5).
@@ -470,7 +488,7 @@ agent-configuration «Слои конфигурации и их порядок»
    ключ вписан вместо имени).
 
 В 8.9 действует пункт 1 для `providers.*` и элементов `mcp.servers` (проблема `inlineSecret`
-валидатора, `schema.dart`: `inlineSecretKeys`); `tools.web.search.backends.*` в схеме 8.9 ещё
+валидатора; `inlineSecretKeys` — в `config_issue.dart` с 8.10); `tools.web.search.backends.*` в схеме 8.9 ещё
 непрозрачен и получит правило вместе с инструментом поиска (§17.1.6). Пункты 2–3 (проверка по
 шаблонам §12.4) — 8.11 (change `add-agent-core-secret-redaction`; design.md change
 `add-agent-secret-store`, D10, D12). До них большинство ключей, вписанных вместо имени, отсекает
@@ -647,29 +665,41 @@ apply(base, edits):
    base.target.layer ∉ d.layers → ConfigException("<key> записывается только в <слои>")
    SetValue со значением-секретом (правила CFG-9) → ConfigInlineSecretException (ничего не пишется)
    UpsertMcpServer: литеральный секрет (правило ниже) → ConfigInlineSecretException
-2. слой project: правило доверия §15.3 для ключа и значения при trusted_projects текущих слоёв
+2. только слои project/projectLocal (у user доверие не проверяется): правило доверия §15.3 для ключа и значения при trusted_projects текущих слоёв
    user и --config/CODELAB_CONFIG (тех же, что у загрузки; проверку выполняет trust.dart ядра);
    ключ был бы проигнорирован → ConfigException("<key>: в недоверенном проекте ключ не действует;
    используйте --local или добавьте проект в trusted_projects")
 3. путь цели раскрывается resolveSymbolicLinks (ссылка остаётся ссылкой, правится цель);
-   брошенные <path>.tmp-* старше 10 с удаляются;
+   > 32 переходов по ссылкам → ConfigException("too many symbolic links: <path>");
+   слои project/projectLocal: раскрытая цель (и .codelab, если он ссылка) вне канонического
+   <cwd>/.codelab → ConfigException до lock и до создания каталогов; у user ссылка — куда угодно;
+   созданный писателем $CODELAB_HOME получает права 0700 (кроме Windows);
    lock := эксклюзивное создание <path>.lock с содержимым "<pid> <nonce>"; существующий старше
-   10 с снимается через rename в <path>.lock.stale-<nonce> с повторной проверкой возраста и
-   содержимого (свежий — вернуть на место и ConfigConflictException), лог warning
-   config.write.stale_lock {path, age_ms}; занят → ConfigConflictException
+   порога устаревания (10 с) снимается через rename в <path>.lock.stale-<nonce> с повторной
+   проверкой возраста и содержимого (свежий — вернуть на место и ConfigConflictException), лог
+   warning config.write.stale_lock {path, age_ms}; занят → ConfigConflictException;
+   под lock: брошенные <path>.tmp-* старше 10 с удаляются
 4. bytes := прочитать <path> (нет файла → пусто); sha256(bytes) != base.fingerprint →
    снять lock, ConfigConflictException(path): вызывающий перечитывает (read) и повторяет правки
 5. text := применить правки к bytes через YamlEditor (ниже); перевод строк (LF/CRLF) и
      завершающий \n — как в файле; файла нет → документ строится с пустого
 6. проверка: loader.validateCandidate(target, text, {cwd, environment}) — тот же порядок слоёв
    и fromLayers, что у загрузки, с заменой этого слоя на text;
-   незаданная ${VAR} — предупреждение ConfigWriteResult.warnings, а не ошибка (окружение агента
-   может отличаться); ошибки → снять lock, ConfigException(issues); файл не тронут
+   незаданная ${VAR} (структурный признак ConfigIssue ядра, не текст) — предупреждение
+   ConfigWriteResult.warnings, а не ошибка (окружение агента может отличаться; проверка
+   повторяется с подставленным значением);
+   base := loader.validateCandidate(target, исходный текст слоя, …); сравнение проблем по
+   сигнатуре kind|key|source, без значений и позиции (R3-1), с учётом числа проблем каждой
+   сигнатуры — проблемы с пустым ключом не схлопываются: новые — снять lock, ConfigException(новые); файл не тронут;
+   бывшие и до правки — в ConfigWriteResult.warnings, запись продолжается
 7. эксклюзивно создать пустой <path>.tmp-<pid>-<rand> в каталоге цели; права существующего файла
    (FileStat.mode) выставить на пустой tmp через порт SecretProcessRunner (абсолютный /bin/chmod,
-   в argv только режим и путь) ДО записи содержимого; сбой chmod → удалить tmp, снять lock,
+   в argv только режим и путь; таймаут chmod 5 с строго меньше порога устаревания lock 10 с) ДО записи
+   содержимого; сбой chmod → удалить tmp, снять lock,
    ConfigException("cannot set permissions on <path>"), rename не выполняется; новый файл — права
    по umask процесса; на Windows права не переносятся; затем записать text, flush(flushAll);
+   перед rename перечитать свой lock (nonce) и отпечаток цели: lock чужой или снят, отпечаток
+   не тот → удалить tmp, ConfigConflictException (чужой lock не трогать);
    rename поверх цели (Windows — MoveFileEx с заменой); каталог не fsync-ится
    ошибка IO при записи tmp или rename → удалить tmp, снять lock,
    ConfigException("cannot write <path>: <runtimeType>"); исходный файл цел
@@ -698,9 +728,43 @@ apply(base, edits):
   значения в тексте. Правило получают `codelab mcp add`, `config set`, будущая страница MCP-серверов
   и предконфигурация (§17.5.3). Ручная правка файла с таким литералом до 8.11 загружается: пункты 2–3
   CFG-9 по шаблонам §12.4 остаются за 8.11. Fail closed на пути записи дешевле, чем объяснять, почему
-  CLI записал токен в файл (ревью итерации 0, D5).
+  CLI записал токен в файл (ревью итерации 0, D5). Ревью итерации 3: в поддеревьях непрозрачных
+  узлов (`providers.*.auth`, `key_rotation`, `tools.web`, `llm`, `hooks`, …) правило имён действует
+  на любой лист; `inlineSecretKeys` сравниваются после той же нормализации имени; нестроковый
+  скаляр под секретным именем — литерал; изменённость элемента `mcp.servers` определяется по номеру
+  элемента, поэтому дубль `name` не прячет литерал.
 - **Lock без гонки.** Устаревший lock снимается переименованием в уникальное имя с повторной
-  проверкой; свой lock писатель удаляет, только если в нём его nonce (D5).
+  проверкой; свой lock писатель удаляет, только если в нём его nonce (D5). Ревью итерации 3:
+  брошенные tmp удаляются только под lock; таймаут `chmod` (5 с) строго меньше порога (10 с) устаревания lock,
+  чтобы lock живого писателя не выглядел устаревшим; перед `rename` писатель перечитывает свой lock
+  и отпечаток цели — иначе `ConfigConflictException`. Окно между перепроверкой и `rename` — один
+  системный вызов.
+- **Containment ссылок проектных слоёв** (ревью итерации 3, D5, п. 5). Проектный каталог приходит
+  из чужого репозитория: ссылка `.codelab/config.local.yaml` → `~/.codelab/config.yaml` не должна
+  превращать `config set --local` в запись глобального конфига. Цель `project`/`projectLocal` —
+  только внутри канонического `<cwd>/.codelab`; у слоя `user` ссылки разрешены (dotfiles). Больше
+  32 переходов — `too many symbolic links`. Созданный писателем `$CODELAB_HOME` — `0700`.
+- **Служебные имена писателя** (`<имя>.lock`, `<имя>.lock.stale-*`, `<имя>.tmp-*`) — константы
+  `config_write_lock.dart`; их же берёт наблюдатель §17.5.6, чтобы не перезагружаться от
+  собственных служебных файлов писателя (D5 «Где», D7).
+- **Блокируют только новые ошибки** (R3-1, решение пользователя 2026-11-02). Писатель проверяет
+  и исходный текст слоя и сравнивает проблемы до и после правки по сигнатуре
+  `kind|key|source`, без значений; позиции в сигнатуре нет — вставка выше сдвигает строки, и
+  прежняя ошибка выглядела бы новой; сравнение по числу проблем каждой сигнатуры, поэтому проблемы
+  с пустым ключом не схлопываются.
+  Новая проблема — отказ записи; бывшая и до правки — предупреждение `ConfigWriteResult.warnings`,
+  CLI печатает её строкой `warning:`. Поэтому `config set budget.max_steps 40` и `provider add` без
+  `--default` в пустом `$CODELAB_HOME` проходят с предупреждением `agent.default_model: required`,
+  а удаление последнего провайдера, на которого ссылается `agent.default_model`, отклоняется.
+  Литеральный секрет, вносимый правкой, ключ вне реестра, запрещённый слой и ключ, отброшенный
+  правилом доверия (шаги 1–2), блокируют всегда. Известное ограничение: загрузка проверяет
+  ступенями (схема и неизвестные ключи раньше семантики), и семантическая ошибка, скрытая в
+  исходном тексте ошибкой ранней ступени, после её исправления выглядит новой — запись
+  отклоняется (консервативно, D5).
+- **Отпечаток и разбор пути — в ядре.** `configFingerprint` (sha256; `crypto` есть в allowlist
+  ядра и нет в allowlist `codelab_agent_io`), `splitKeyPath` — общий разбор пути писателя,
+  `SettingsRegistry.lookup` и маскирования вывода; `inlineSecretKeys` экспортируется из
+  `config_issue.dart` (D1, D5).
 
 **Правка с сохранением формата.** Писатель не пересериализует документ: он применяет правки
 через `YamlEditor` из `package:yaml_edit` (`codelab_agent_io`), и всё вне изменённых узлов
@@ -712,12 +776,17 @@ apply(base, edits):
    с этим `name`.
 2. `SetValue` существующего ключа — `YamlEditor.update(path, value)`: меняется только узел
    значения, хвостовой комментарий `# …` остаётся. Нового ключа — `update` в ближайшее
-   существующее отображение-предок; новый ключ добавляется в конец этого отображения;
-   недостающие предки создаются как вложенные отображения в блочном стиле.
+   существующее отображение-предок; новый ключ вставляется по правилу `YamlEditor` (R3-2): в
+   отображение, ключи которого отсортированы по алфавиту, — на своё место по алфавиту, иначе —
+   в конец; недостающие предки создаются как вложенные отображения в блочном стиле. Известная
+   граница (ревью итерации 3): `YamlEditor` относит комментарий над ключом к промежутку перед ним,
+   поэтому при вставке по алфавиту комментарий над следующим ключом оказывается над новым ключом;
+   байты комментария сохраняются (D5, «Порядок вставки»).
 3. `UnsetValue` — `YamlEditor.remove(path)`; опустевшее отображение-предок удаляется тем же
    способом, если в нём нет комментариев.
 4. `UpsertMcpServer` — `update` элемента `mcp.servers[<name>]` по ключам (лишние ключи —
-   `remove`, новые — в конец элемента) или `appendToList(["mcp", "servers"], server)`;
+   `remove`, новые — по правилу п. 2) или `appendToList(["mcp", "servers"], server)` — новый
+   элемент всегда в конец списка;
    `RemoveMcpServer` — `remove` элемента списка. `RemoveTable(key)` — `remove(key)`: ключ
    удаляется вместе со всем поддеревом и комментариями внутри него; комментарий над следующим
    ключом сохраняется.
@@ -822,6 +891,10 @@ rename — событие каталога); если каталога нет, `
 опрос раз в `config.poll_interval` (`"2s"`, `1s..60s`) по `(exists, mtime, size)` и sha256 при их
 смене. Событие запускает таймер 300 мс на часах `Clock` ядра (`FakeClock` в тестах); новые события
 перезапускают его (debounce). Совпадение sha256 всех файлов с последней загрузкой — не изменение.
+События по служебным файлам `ConfigWriter` (`config.yaml.lock`, `*.lock.stale-*`, `*.tmp-*`) в
+`$CODELAB_HOME` и `.codelab/` перезагрузку не запускают — шаблоны имён берутся из
+`config_write_lock.dart`; запись писателя даёт один сигнал по итоговому `rename` (D7 change
+`add-config-writer-and-reload`).
 Окружение и флаги не перечитываются: они не меняются у живого процесса. `config.watch = false` —
 источник без наблюдателя: `changes` не срабатывает, `/config reload` работает. Ошибка потока
 `watch` переводит файл на опрос с `config.watch.fallback {path, reason}`, исключение опроса —
@@ -1551,9 +1624,9 @@ Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.ya
 * `config_reload_test.dart` (ядро, `test/runtime/`, фейковый `ConfigSource` и `FakeClock`): правка `permissions.*` и `trusted_projects`, stdio-сервер без прежнего `sameConnection` (в том числе `http` → `stdio`) → не применяются, в `pendingRestartKeys` (R0-1); проект, добавленный в `trusted_projects`, — без своих провайдеров и серверов до перезапуска, снятое доверие — тоже до перезапуска; R0-4 — смена адреса провайдера с ключом и HTTP-сервер со ссылкой на секрет отложены, новые модели применены; HTTP-сервер и удаление применяются; `agent.default_model` → только новые сессии; `config.reload.model_orphaned`; `modelsFor` не вызывается при сборке; `logging.file` → `restartRequiredKeys` и `pendingRestartKeys`; невалидная правка → прежний снимок, ни одного события сессиям, `configStatus().lastIssues`; правка списка моделей → `ModelOptionsChanged`; коалесценция; `dispose` во время загрузки; сессия в окне создания (CFG-15, CFG-16; D8).
 * `secret_resolver_test.dart` (ядро): `invalidate` сбрасывает кэш; поиск, начатый до `invalidate`, в кэш не попадает (поколения, D8).
 * `mcp_apply_config_test.dart` (ядро, `test/runtime/`, fake-коннектор): изменён `url` одного сервера → переподключён только он; удалённый во время хода сервер закрыт после `TurnEnded`; две перезагрузки во время хода → применён последний набор; одноимённый `session`-сервер не тронут; неизменённый сервер в `failed` будится сразу (CFG-17; D10, OQ8).
-* `config_watcher_test.dart` (`codelab_agent_io`): три записи за 200 мс → один сигнал через 300 мс после последней; замена через rename замечена; файл появился после старта — замечен; та же sha256 — без сигнала; режим опроса на временном каталоге (`FakeClock`); события — через шов-фабрику потока, плюс один интеграционный тест настоящего `watch` с пределом 5 с; `config.*` в `config.local.yaml` недоверенного проекта отброшен. `file_config_source_test.dart` — сигнал `changes`, `config.watch: false` без наблюдателя, `close()` без сигналов после него (D7).
-* `config_writer_test.dart`: комментарии (в том числе хвостовые), пустые строки, порядок ключей и CRLF сохранены побайтово вне изменённого узла; новый ключ — в конец своего отображения, недостающие предки — в блочном стиле с отступом файла; правка внутри flow-списка `[…]` сохраняет flow-стиль; строки `off`, `yes`, `${VAR}` записаны в кавычках и читаются обратно строками; элемент `mcp.servers` находится и заменяется по `name`, новый — в конец списка; `RemoveTable("providers.local")` удаляет `providers.local` вместе с `models."qwen2.5-coder-32b"` и комментариями внутри, комментарий над следующим ключом сохранён; `RemoveTable` несуществующего ключа и ключа вне схемы → `ConfigException`; сегмент в кавычках (`models."qwen2.5-coder-32b"`) находится и создаётся одним ключом; отказ `YamlEditor` → `ConfigException` с `edit the file manually`, файл не изменён; невалидный итог → файл не изменён; правка файла между `read` и `apply` → `ConfigConflictException`; `mcp.servers` в недоверенный проектный слой → отказ с подсказкой `--local`; `trusted_projects` в проектный слой → отказ; занятый lock → `ConfigConflictException`, lock старше 10 с — `config.write.stale_lock`; литеральный `Authorization` в `UpsertMcpServer` → `ConfigInlineSecretException` с `codelab/mcp/<server>/authorization`; тот же отказ для `config set mcp.servers '…'` и `providers.*.headers` по нормализованному имени; сбой `chmod` → файл цел, tmp удалён; права выставлены до содержимого; гонка снятия устаревшего lock (CFG-13; D5).
-* `config_writer_atomic_test.dart`: сбой после записи tmp и до rename → исходный файл цел, tmp удалён при следующей записи; символическая ссылка сохраняется, правится цель; права цели переносятся через фейковый `SecretProcessRunner` (D5).
+* `config_watcher_test.dart` (`codelab_agent_io`): три записи за 200 мс → один сигнал через 300 мс после последней; замена через rename замечена; файл появился после старта — замечен; та же sha256 — без сигнала; режим опроса на временном каталоге (`FakeClock`); события — через шов-фабрику потока, плюс один интеграционный тест настоящего `watch` с пределом 5 с; `config.*` в `config.local.yaml` недоверенного проекта отброшен; события служебных файлов писателя (`*.lock`, `*.lock.stale-*`, `*.tmp-*`) сигнала не дают, запись `ConfigWriter` — один сигнал. `file_config_source_test.dart` — сигнал `changes`, `config.watch: false` без наблюдателя, `close()` без сигналов после него (D7).
+* `config_writer_test.dart`: комментарии (в том числе хвостовые), пустые строки, порядок ключей и CRLF сохранены побайтово вне изменённого узла; новый ключ — по правилу `YamlEditor` (в отсортированном отображении по алфавиту, иначе в конец; R3-2), недостающие предки — в блочном стиле с отступом файла; правка внутри flow-списка `[…]` сохраняет flow-стиль; строки `off`, `yes`, `${VAR}` записаны в кавычках и читаются обратно строками; элемент `mcp.servers` находится и заменяется по `name`, новый — в конец списка; `RemoveTable("providers.local")` удаляет `providers.local` вместе с `models."qwen2.5-coder-32b"` и комментариями внутри, комментарий над следующим ключом сохранён; `RemoveTable` несуществующего ключа и ключа вне схемы → `ConfigException`; сегмент в кавычках (`models."qwen2.5-coder-32b"`) находится и создаётся одним ключом; отказ `YamlEditor` → `ConfigException` с `edit the file manually`, файл не изменён; новая ошибка загрузки итога → файл не изменён, прежняя — предупреждение (R3-1; первая запись в пустой конфиг проходит с `agent.default_model: required`, удаление провайдера из `agent.default_model` отклоняется); правка файла между `read` и `apply` → `ConfigConflictException`; `mcp.servers` в недоверенный проектный слой → отказ с подсказкой `--local`; `trusted_projects` в проектный слой → отказ; занятый lock → `ConfigConflictException`, lock старше 10 с — `config.write.stale_lock`; литеральный `Authorization` в `UpsertMcpServer` → `ConfigInlineSecretException` с `codelab/mcp/<server>/authorization`; тот же отказ для `config set mcp.servers '…'` и `providers.*.headers` по нормализованному имени; сбой `chmod` → файл цел, tmp удалён; права выставлены до содержимого; гонка снятия устаревшего lock; литералы в непрозрачных поддеревьях, `API_KEY` по нормализованному `inlineSecretKeys`, числовой `token`, дубль `name` в `mcp.servers`; проблемы без ключа не схлопываются, прежняя ошибка ниже вставки — предупреждение; комментарий над следующим ключом оказывается над новым ключом (граница R3-2) (CFG-13; D5).
+* `config_writer_atomic_test.dart`: сбой после записи tmp и до rename → исходный файл цел, tmp удалён при следующей записи; символическая ссылка сохраняется, правится цель; права цели переносятся через фейковый `SecretProcessRunner`; lock снят или отпечаток изменён перед rename → `ConfigConflictException`; брошенный tmp не удаляется без lock; ссылка проектного слоя вне `<cwd>/.codelab` → отказ до lock; > 32 ссылок → `too many symbolic links`; новый `$CODELAB_HOME` — `0700` (D5).
 **Секреты 8.9** (design.md change `add-agent-secret-store`, D12; хранилищ ОС в 1.0 нет):
 * ядро, `codelab_agent_core/test/secrets/`: `secret_names_test.dart` — правило, `envOverride`, `suggestFor` и `forMcp` (`forMcp("GitHub", "Authorization") == "codelab/mcp/github/authorization"`, результат всегда проходит `pattern`); `secret_resolver_test.dart` — `CODELAB_SECRET_CODELAB_OPENAI` побеждает хранилище, кэш найденного, ненайденное не кэшируется, single-flight, недоступность — одно предупреждение на причину, `env()`, `SecretFound.toString()` без значения;
 * ядро, `test/config/`, `test/llm/`, `test/runtime/`: `config_secret_refs_test.dart` (строгие имена, запрещённые позиции `${secret:…}`, `CatalogProvider.key`, шаблоны заголовков и `secretValues` в порядке файла, литерал `$${secret:x}`, недоверенный проект, `secrets.backend`), `config_inline_secret_test.dart` и `config_secrets_test.dart` (CFG-9, п. 1; формат `api_key_env`); `routed_stream_function_secrets_test.dart` — ключ при первом запросе, `auth` без HTTP, хост без резолвера, недоступное хранилище, отмена во время ожидания, сырое значение в теле `401`; `mcp_secret_values_test.dart` — раскрытие перед `connect` при `createSession`, `loadSession` и `setMcpServers`, литерал клиента ACP, `no secret store`, `dispose()` и `close()` во время раскрытия;

@@ -22,11 +22,13 @@ export 'src/cli/secret_input.dart'
     show MultilineSecretException, SecretInput, StdinSecretInput;
 export 'src/config/config_loader.dart'
     show
+        ConfigCandidateResult,
         ConfigLoader,
         ConfigUsageException,
         checkConfigFileName,
         codelabHomeOf,
         maxConfigBytes;
+export 'src/config/config_writer.dart' show ConfigWriteResult, ConfigWriter;
 export 'src/config/config_warnings.dart' show logConfigWarnings;
 export 'src/config/environment_layer.dart' show testSecretStorePath;
 export 'src/config/provider_preconfig.dart' show ProviderPreconfigFlags;
@@ -40,7 +42,7 @@ export 'src/secrets/file_secret_store.dart';
 export 'src/secrets/host_secrets.dart';
 export 'src/secrets/open_secret_store.dart' show openSecretStore;
 export 'src/secrets/secret_admin.dart';
-export 'src/secrets/secret_process_runner.dart';
+export 'src/secrets/secret_process_runner.dart' hide chmodExecutablePath;
 export 'src/secrets/secrets_backend_problem.dart';
 export 'src/session/host_sessions.dart' show openHostSessions;
 export 'src/session/jsonl_session_store.dart';

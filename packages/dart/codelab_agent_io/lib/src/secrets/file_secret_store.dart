@@ -342,10 +342,8 @@ final class FileSecretStore implements DescribedSecretStore {
     }
   }
 
-  /// Путь утилиты `chmod`: абсолютный (PATH дочернему процессу не передаётся);
-  /// на NixOS `/bin/chmod` нет, тогда `/usr/bin/chmod`.
-  static String get _chmodExecutable =>
-      File('/bin/chmod').existsSync() ? '/bin/chmod' : '/usr/bin/chmod';
+  /// Путь утилиты `chmod` — общий с `ConfigWriter` ([chmodExecutablePath]).
+  static String get _chmodExecutable => chmodExecutablePath();
 
   /// `chmod <mode> <target>`; в argv только режим и путь.
   Future<void> _chmod(String mode, String target) async {

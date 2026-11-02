@@ -102,14 +102,18 @@
 ### Requirement: Запись конфига ConfigWriter
 Программная запись конфигурации SHALL выполняться только `ConfigWriter` (`codelab_agent_io/lib/src/config/config_writer.dart`) над правками ядра `ConfigEdit` (`SetValue`, `UnsetValue`, `UpsertMcpServer`, `RemoveMcpServer`, `RemoveTable`) и целью `ConfigTarget` (`user`, `project`, `projectLocal`). Алгоритм — `agent-core-architecture` §17.5.5 с уточнениями design.md, D5. `ConfigWriter.apply(base, edits)` SHALL:
 - **Реестр.** Отклонять `SetValue` и `UpsertMcpServer` с ключом вне `SettingsRegistry` и ключ, чей дескриптор не разрешает слой цели. `UnsetValue` SHALL принимать и ключ вне реестра, если он есть в файле.
-- **Доверие.** Отклонять правку проектного слоя, которую правило доверия §15.3 проигнорировало бы. Текст SHALL подсказывать `--local` или `trusted_projects`.
+- **Доверие.** Отклонять правку проектного слоя, которую правило доверия §15.3 проигнорировало бы. Текст SHALL подсказывать `--local` или `trusted_projects`. Доверие SHALL проверяться только при записи в проектный слой (`project`, `projectLocal`).
 - **Секреты.** Отклонять `ConfigInlineSecretException` (с `suggestedSecretName`):
   - значение-секрет по правилу CFG-9, п. 1;
-  - по итоговому поддереву документа после всех правок на любой глубине, независимо от типа правки (`SetValue`, `UpsertMcpServer`) и от того, записан лист или значение-отображение целиком: каждое изменённое значение в `providers.*.headers`, `mcp.servers[*].headers`, `mcp.servers[*].env`, `exec.env`, чьё имя после нормализации (нижний регистр, без `-` и `_`) содержит `token`, `secret`, `password`, `apikey`, `auth`, `cookie`, `key` или `privatetoken`, — если в значении нет ни `${secret:…}`, ни `${VAR}`.
-- **Блокировка и отпечаток.** Брать эксклюзивный `<path>.lock` с содержимым `<pid> <nonce>`. Lock старше 10 с снимается через `rename` в уникальное имя с повторной проверкой возраста и содержимого и `config.write.stale_lock`; свежий lock другого писателя возвращается на место, а запись получает `ConfigConflictException`. Занятый lock или отпечаток sha256 файла, отличный от `base.fingerprint`, дают `ConfigConflictException`.
-- **Правка.** Применять правки к байтам файла через `YamlEditor` (`package:yaml_edit`). Комментарии, пустые строки, порядок ключей, flow-стиль и перевод строк (LF/CRLF) вне изменённых узлов SHALL сохраняться побайтово. Новый ключ SHALL добавляться в конец своего отображения, недостающие предки — в блочном стиле с отступом файла. Строку, которая по профилю §15.5 прочиталась бы не строкой (`off`, `yes`, `${VAR}`), SHALL писать в двойных кавычках. Отказ `YamlEditor` SHALL давать `ConfigException` с `cannot edit <key> automatically; edit the file manually`.
-- **Проверка.** Проверять итог `ConfigLoader.validateCandidate` по всем слоям с заменой целевого. Незаданная `${VAR}` — предупреждение результата, а не ошибка. Невалидный итог — `ConfigException(issues)`.
-- **Замена.** Эксклюзивно создавать пустой `<path>.tmp-<pid>-<rand>` в каталоге цели, выставлять на него права исходного файла (кроме Windows) через `SecretProcessRunner` **до** записи содержимого, затем писать, сбрасывать на диск и атомарно переименовывать поверх цели. Сбой смены прав SHALL давать `ConfigException`, удалять tmp и не выполнять `rename`. Символическую ссылку SHALL раскрывать: правится цель, ссылка остаётся.
+  - по итоговому поддереву документа после всех правок на любой глубине, независимо от типа правки (`SetValue`, `UpsertMcpServer`) и от того, записан лист или значение-отображение целиком: каждое изменённое значение в `providers.*.headers`, `mcp.servers[*].headers`, `mcp.servers[*].env`, `exec.env`, чьё имя после нормализации (нижний регистр, без `-` и `_`) содержит `token`, `secret`, `password`, `apikey`, `auth`, `cookie`, `key` или `privatetoken`, — если в значении нет ни `${secret:…}`, ни `${VAR}`;
+  - в поддеревьях непрозрачных узлов схемы (`providers.*.auth`, `providers.*.key_rotation`, `tools.web`, `llm`, `hooks` и прочие разделы после MVP) — по тому же нормализованному правилу имён для любого листа;
+  - лист с именем из `inlineSecretKeys` на любой глубине; имя SHALL сравниваться после той же нормализации (`API_KEY`, `Api-Key` — как `api_key`);
+  - нестроковый скаляр (число, `bool`) под секретным именем SHALL считаться литералом;
+  - изменённость элемента `mcp.servers` SHALL определяться по его номеру в списке, а не по `name`: при дублях `name` каждый элемент проверяется сам.
+- **Блокировка и отпечаток.** Брать эксклюзивный `<path>.lock` с содержимым `<pid> <nonce>`. Lock старше порога устаревания (10 с) снимается через `rename` в уникальное имя с повторной проверкой возраста и содержимого и `config.write.stale_lock`; свежий lock другого писателя возвращается на место, а запись получает `ConfigConflictException`. Занятый lock или отпечаток sha256 файла, отличный от `base.fingerprint`, дают `ConfigConflictException`. Брошенные `<path>.tmp-*` SHALL удаляться только после взятия lock. Таймаут смены прав (`chmod`, 5 s) SHALL быть строго меньше порога устаревания lock (10 s). Непосредственно перед `rename` писатель SHALL перечитывать свой lock (в нём его nonce) и отпечаток цели (совпадает с прочитанным под lock); иначе — `ConfigConflictException`, tmp удаляется, цель и чужой lock не трогаются.
+- **Правка.** Применять правки к байтам файла через `YamlEditor` (`package:yaml_edit`). Комментарии, пустые строки, порядок ключей, flow-стиль и перевод строк (LF/CRLF) вне изменённых узлов SHALL сохраняться побайтово. Новый ключ SHALL вставляться по правилу `YamlEditor` (R3-2): в отображение, ключи которого отсортированы по алфавиту, — на своё место по алфавиту, иначе — в конец отображения; новый элемент списка (`mcp.servers`) — в конец списка; недостающие предки — в блочном стиле с отступом файла. Известная граница: при вставке по алфавиту комментарий над следующим ключом оказывается над новым ключом; байты комментария сохраняются. Строку, которая по профилю §15.5 прочиталась бы не строкой (`off`, `yes`, `${VAR}`), SHALL писать в двойных кавычках. Отказ `YamlEditor` SHALL давать `ConfigException` с `cannot edit <key> automatically; edit the file manually`.
+- **Проверка.** Проверять итог `ConfigLoader.validateCandidate` по всем слоям с заменой целевого. Незаданная `${VAR}` — предупреждение результата, а не ошибка. Незаданную `${VAR}` писатель SHALL узнавать по структурному признаку проблемы ядра, а не по тексту сообщения. Тем же методом проверять исходный текст слоя и сравнивать проблемы до и после правки по сигнатуре `kind|key|source`, без значений и без позиции `line:column` (R3-1); сравнение SHALL учитывать число проблем каждой сигнатуры, поэтому проблемы с пустым ключом НЕ SHALL схлопываться в одну: проблема, которой не было до правки, SHALL давать `ConfigException` с новыми проблемами без записи; проблема, которая была и до правки, SHALL возвращаться в `ConfigWriteResult.warnings`, а запись — выполняться. Литеральный секрет, вносимый правкой, ключ вне реестра, слой, не разрешённый дескриптором, и ключ, отброшенный правилом доверия, SHALL отклоняться всегда, независимо от сравнения. Ограничение: загрузка проверяет ступенями, и семантическая ошибка, скрытая в исходном тексте ошибкой ранней ступени (схема, неизвестный ключ), после правки считается новой — запись отклоняется.
+- **Замена.** Эксклюзивно создавать пустой `<path>.tmp-<pid>-<rand>` в каталоге цели, выставлять на него права исходного файла (кроме Windows) через `SecretProcessRunner` **до** записи содержимого, затем писать, сбрасывать на диск и атомарно переименовывать поверх цели. Сбой смены прав SHALL давать `ConfigException`, удалять tmp и не выполнять `rename`. Символическую ссылку SHALL раскрывать: правится цель, ссылка остаётся. Для слоя `user` ссылка MAY вести куда угодно (dotfiles). Для слоёв `project` и `projectLocal` раскрытая цель (и каталог `.codelab`, если он ссылка) SHALL лежать внутри канонического `<cwd>/.codelab`; иначе — `ConfigException` до взятия lock и до создания каталогов. Больше 32 переходов по ссылкам — `ConfigException` `too many symbolic links`. Каталог `$CODELAB_HOME`, созданный писателем, SHALL получать права `0700` (кроме Windows).
 - **Итог.** Писать лог `config.write {path, keys}` и возвращать `ConfigWriteResult {path, fingerprint, warnings, restartRequiredKeys}`.
 
 При любой ошибке файл НЕ SHALL меняться, tmp и lock SHALL удаляться (CFG-13). Значения ключей НЕ SHALL попадать в лог и тексты ошибок. TOML писатель НЕ SHALL писать никогда.
@@ -135,8 +139,33 @@
 - **THEN** `apply` бросает `ConfigConflictException`, содержимое файла — правка другого процесса
 
 #### Scenario: Невалидный итог не пишется
-- **WHEN** `SetValue("budget.max_steps", 0)`
-- **THEN** `ConfigException` с проблемой `budget.max_steps`, байты файла не изменены, tmp и lock отсутствуют
+- **WHEN** конфиг без проблем загрузки, и применяется `SetValue("budget.max_steps", 0)`
+- **THEN** `ConfigException` с новой проблемой `budget.max_steps`, байты файла не изменены, tmp и lock отсутствуют
+
+#### Scenario: Первая запись в пустой конфиг
+- **WHEN** `$CODELAB_HOME` пуст, и применяется `SetValue("budget.max_steps", 40)` или правки `provider add` без `--default`
+- **THEN** файл записан, `ConfigWriteResult.warnings` содержит проблему `agent.default_model` (`required`), исключения нет
+
+#### Scenario: Правка не вносит новую ошибку
+- **WHEN** `agent.default_model: gw/m`, провайдер `gw` — единственный, и применяется `RemoveTable("providers.gw")`
+- **THEN** `ConfigException` с проблемой `agent.default_model`, файл не изменён; при этом прежняя проблема другого ключа, бывшая в файле до правки, отказа не вызывает и возвращается предупреждением
+
+#### Scenario: Проблемы без ключа не схлопываются
+- **WHEN** исходный текст слоя даёт одну проблему без ключа некоторого вида, а правка вносит ещё одну проблему того же вида без ключа в том же источнике
+- **THEN** проблем с сигнатурой `kind||source` стало две вместо одной: лишняя считается новой, `ConfigException`, файл не изменён
+
+#### Scenario: Прежняя ошибка ниже вставки — предупреждение
+- **WHEN** в файле есть проблема ключа ниже места вставки (например, `budget.max_steps: 0`), и `SetValue` добавляет новый ключ выше неё, сдвигая её строку
+- **THEN** сигнатура `kind|key|source` не изменилась: проблема возвращается в `ConfigWriteResult.warnings`, запись выполнена
+
+#### Scenario: Ошибка ранней ступени
+- **WHEN** файл содержит неизвестный ключ `bogus_key` и `budget.max_steps: 0`, и применяется `UnsetValue("bogus_key")`
+- **THEN** `ConfigException` с проблемой `budget.max_steps`, файл не изменён: загрузка проверяет ступенями (схема и неизвестные ключи раньше семантики), поэтому семантическая ошибка в исходной проверке не видна и считается новой — известное консервативное ограничение (design.md, D5)
+
+#### Scenario: Порядок нового ключа
+- **WHEN** `SetValue` добавляет новый ключ в отображение с ключами `a`, `c` (по алфавиту) и в отображение с ключами `c`, `a`
+- **THEN** в первом новый ключ `b` встаёт между `a` и `c`, во втором — в конец; комментарии и остальные строки не изменены
+- **AND** если над `c` в первом отображении стоит комментарий `# про c`, он оказывается над новым ключом `b` (граница `YamlEditor`, design.md D5), а его байты не меняются
 
 #### Scenario: Недоверенный проект
 - **WHEN** проект не в `trusted_projects`, и применяется `UpsertMcpServer` к слою `project`
@@ -154,6 +183,14 @@
 - **WHEN** применяется `SetValue("exec", {"env":{"GITHUB_TOKEN":"ghp_x"}})` или `SetValue` значения-отображения с вложенным листом `token: "t-1"`
 - **THEN** `ConfigInlineSecretException`, текст не содержит `ghp_x` и `t-1`, файл не изменён
 
+#### Scenario: Литеральный секрет в непрозрачном поддереве
+- **WHEN** правка записывает в `providers.p.auth` лист `client_secret: "cs-1"`, или лист `API_KEY: "k-2"` на любой глубине, или `token: 123456` (число)
+- **THEN** каждая правка даёт `ConfigInlineSecretException`, текст не содержит значений, файл не изменён
+
+#### Scenario: Дубли имени сервера MCP
+- **WHEN** в `mcp.servers` уже есть элемент `name: gh` без заголовков, и правка добавляет второй элемент `name: gh` с заголовком `Authorization: "Bearer ghp_y"`
+- **THEN** `ConfigInlineSecretException`: второй элемент сравнивается со своим прежним по номеру, а не с первым по `name`; файл не изменён
+
 #### Scenario: Сбой смены прав
 - **WHEN** фейковый `SecretProcessRunner` возвращает ненулевой код на `chmod` tmp
 - **THEN** `ConfigException` с `cannot set permissions`, исходный файл не изменён, tmp удалён, содержимое в tmp не записывалось
@@ -165,6 +202,22 @@
 #### Scenario: Символическая ссылка и права
 - **WHEN** `$CODELAB_HOME/config.yaml` — символическая ссылка на файл с правами `0600`
 - **THEN** после записи ссылка осталась ссылкой, изменена цель, права цели — `0600`
+
+#### Scenario: Ссылка проектного слоя наружу
+- **WHEN** `<cwd>/.codelab/config.local.yaml` — ссылка на `$CODELAB_HOME/config.yaml` (или `<cwd>/.codelab` — ссылка на каталог вне `<cwd>`), и применяется правка слоя `projectLocal`
+- **THEN** `ConfigException` с путём, цель ссылки не изменена, lock, tmp и новые каталоги не созданы
+
+#### Scenario: Цепочка ссылок и новый CODELAB_HOME
+- **WHEN** путь цели проходит больше 32 символических ссылок (в том числе цикл), а в другом случае `$CODELAB_HOME` не существует
+- **THEN** в первом случае `ConfigException` `too many symbolic links`, ничего не создано; во втором писатель создаёт `$CODELAB_HOME` с правами `0700` (кроме Windows) и записывает файл
+
+#### Scenario: Lock снят во время записи
+- **WHEN** после записи tmp и до `rename` (тестовый шов) lock писателя удалён или заменён lock другого писателя, либо файл цели изменён в обход lock
+- **THEN** `ConfigConflictException`, правки писателя в цели нет (байты — исходные или чужой правки), tmp удалён, чужой lock на месте
+
+#### Scenario: Брошенный tmp и занятый lock
+- **WHEN** рядом с целью лежит `<path>.tmp-*` старше 10 с, а lock занят другим живым писателем
+- **THEN** запись получает `ConfigConflictException`, и брошенный tmp этой записью не удаляется: чистка идёт только под lock
 
 ### Requirement: Подкоманды записи и чтения конфига
 Общая реализация `codelab_agent_io/lib/src/cli/` SHALL предоставлять подкоманды (design.md, D6):
@@ -197,15 +250,15 @@
 - **Конфликт.** При `ConfigConflictException` подкоманда SHALL один раз перечитать файл и повторить правки; второй конфликт — код `1` с текстом `config file changed during the edit; run the command again`.
 - **Коды выхода:**
   - `0` — успех;
-  - `1` — невалидный итог, отказ доверия, `inlineSecret`, конфликт, хранилище секретов только для чтения или недоступно;
+  - `1` — новая ошибка загрузки итога (R3-1), отказ доверия, `inlineSecret`, конфликт, хранилище секретов только для чтения или недоступно;
   - `64` — ошибка использования: неизвестный ключ `set`, неверное значение, недостающий обязательный флаг `provider add` (`--kind`, `--model`, `--context-window`), несовместимые флаги, лишние аргументы.
 - **Вывод успешной записи** SHALL содержать путь файла, строки `warning:` предупреждений писателя и `note: restart the agent to apply: <keys>` для ключей `restartRequired`.
 
 Значения секретов и раскрытые подстановки НЕ SHALL попадать в stdout, stderr и лог.
 
 #### Scenario: config set и get
-- **WHEN** `config set budget.max_steps 40`, затем `config get budget.max_steps`
-- **THEN** первый — код `0` и `Updated budget.max_steps in <home>/config.yaml`, второй — `40` и слой `user`
+- **WHEN** в пустом `$CODELAB_HOME` вызывается `config set budget.max_steps 40`, затем `config get budget.max_steps`
+- **THEN** первый — код `0`, `Updated budget.max_steps in <home>/config.yaml` и строка `warning: agent.default_model: required` (прежняя проблема конфига, R3-1), второй — `40` и слой `user`
 
 #### Scenario: get не раскрывает переменную
 - **WHEN** `providers.gw.headers.X-Token` в файле равен `"${GW_TOKEN}"`, окружение содержит `GW_TOKEN=t-123`, и вызывается `config get providers.gw.headers --layer merged`
@@ -263,7 +316,7 @@
 - после события — debounce 300 мс на часах `Clock`, новые события перезапускают таймер;
 - если sha256 всех файлов совпадает с последней загрузкой, сигнала нет.
 
-Поток событий каталога SHALL приходить через шов-фабрику (по умолчанию `Directory.watch`), чтобы unit-тесты подавали события без настоящей файловой системы; настоящий `watch` проверяет один интеграционный тест с пределом времени. `FileConfigSource implements ConfigSource` SHALL выдавать сигнал `changes` после debounce. Хост SHALL создавать его с результатом стартовой загрузки (`initial`), и каждая `load()` SHALL вызывать `ConfigLoader.load` с `pinnedTrustedProjects` из `initial.config.trustedProjects`. Загрузчик SHALL лишь передавать список в `CoreConfig.fromLayers(..., pinnedTrustedProjects:)`: доверие вычисляет ядро, и по закреплённому списку строятся проектные слои и `CoreConfig.trustedProjects`; новое значение `trusted_projects` попадает только в `values` (design.md, D8). `close()` SHALL останавливать наблюдение и таймеры; после `close()` сигналов нет. При `config.watch: false` наблюдатель НЕ SHALL создаваться. Ошибка потока событий SHALL переводить файл на опрос с `config.watch.fallback`, ошибка опроса — давать `config.watch.failed` без остановки опроса.
+Поток событий каталога SHALL приходить через шов-фабрику (по умолчанию `Directory.watch`), чтобы unit-тесты подавали события без настоящей файловой системы; настоящий `watch` проверяет один интеграционный тест с пределом времени. `FileConfigSource implements ConfigSource` SHALL выдавать сигнал `changes` после debounce. Хост SHALL создавать его с результатом стартовой загрузки (`initial`), и каждая `load()` SHALL вызывать `ConfigLoader.load` с `pinnedTrustedProjects` из `initial.config.trustedProjects`. Загрузчик SHALL лишь передавать список в `CoreConfig.fromLayers(..., pinnedTrustedProjects:)`: доверие вычисляет ядро, и по закреплённому списку строятся проектные слои и `CoreConfig.trustedProjects`; новое значение `trusted_projects` попадает только в `values` (design.md, D8). `close()` SHALL останавливать наблюдение и таймеры; после `close()` сигналов нет. При `config.watch: false` наблюдатель НЕ SHALL создаваться. События по служебным файлам `ConfigWriter` (`config.yaml.lock`, `*.lock.stale-*`, `*.tmp-*`) в `$CODELAB_HOME` и `.codelab/` НЕ SHALL запускать перезагрузку; шаблоны их имён SHALL браться у писателя (`config_write_lock.dart`), а не дублироваться. Ошибка потока событий SHALL переводить файл на опрос с `config.watch.fallback`, ошибка опроса — давать `config.watch.failed` без остановки опроса.
 
 #### Scenario: Debounce
 - **WHEN** файл записывается три раза за 200 мс
@@ -272,6 +325,10 @@
 #### Scenario: Замена через rename и новый файл
 - **WHEN** редактор заменяет `config.yaml` через `rename`, а позже создаётся отсутствовавший при старте `<root>/.codelab/config.local.yaml`
 - **THEN** оба изменения дают по сигналу
+
+#### Scenario: Запись ConfigWriter даёт один сигнал
+- **WHEN** `ConfigWriter` записывает `$CODELAB_HOME/config.yaml` (создание и удаление `config.yaml.lock`, `config.yaml.tmp-*`) и отдельно в `.codelab/` появляется и исчезает `config.local.yaml.lock.stale-*`
+- **THEN** запись даёт ровно один сигнал — по итоговому `rename`; события служебных файлов сами по себе сигнала не дают (`config_watcher_test.dart`, `FakeClock`)
 
 #### Scenario: Те же байты
 - **WHEN** файл перезаписывается теми же байтами

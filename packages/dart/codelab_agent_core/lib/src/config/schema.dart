@@ -115,9 +115,6 @@ final class AgentsNode extends SchemaNode {
 /// Виды провайдеров §15.4 (DF-15: без подмены mock-провайдером).
 const providerKinds = ['openai-compatible', 'anthropic', 'gemini'];
 
-/// Секреты значением (CFG-2, §17.5.4, пункт 1).
-const inlineSecretKeys = {'api_key', 'apiKey', 'token', 'secret', 'password'};
-
 const _opaque = OpaqueNode();
 const _str = ScalarNode(ScalarType.string);
 const _int = ScalarNode(ScalarType.integer);

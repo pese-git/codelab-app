@@ -19,6 +19,7 @@
 library;
 
 import 'package:collection/collection.dart';
+import 'package:crypto/crypto.dart';
 
 import 'key_path.dart';
 
@@ -68,6 +69,19 @@ final class ConfigTarget {
   String toString() =>
       'ConfigTarget(${layer.name}${cwd == null ? '' : ', $cwd'})';
 }
+
+/// Отпечаток байтов файла конфигурации: sha256 в нижнем регистре, 64
+/// шестнадцатеричных символа.
+///
+/// Почему в ядре: писатель `codelab_agent_io` не имеет `crypto` в allowlist
+/// (PKG-2 ядра его допускает), а отпечаток должен совпадать у всех писателей
+/// и хостов (мобильный и web-хосты считают его над своим хранилищем).
+///
+/// Как использовать: `ConfigSnapshot.fingerprint` — отпечаток прочитанных
+/// байтов; `apply` пересчитывает его под блокировкой и при расхождении
+/// бросает [ConfigConflictException]. Пустой список — отпечаток пустого файла,
+/// отличный от `null` («файла нет»).
+String configFingerprint(List<int> bytes) => sha256.convert(bytes).toString();
 
 /// Прочитанный слой: основа оптимистичной записи (§17.5.5, шаг 4).
 ///
