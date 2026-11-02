@@ -65,10 +65,18 @@
 
 ## 2. Реестр настроек и типы правок (итерация 2; D4, D5; E-15)
 
-- [ ] 2.1 `[agent]` Тесты `codelab_agent_core/test/config/settings_registry_complete_test.dart` (agent-configuration «Реестр настроек», сценарии «Ключ схемы без дескриптора», «Расхождение умолчаний», «Более конкретный дескриптор», «Разбор значения CLI»; `core/settings-registry-complete`, CFG-19): алгоритм §17.5.8, п. 1–7; список ключей перезапуска — константа теста со ссылкой на D8: `sessions.*`, `logging.*`, `profile.*`, `secrets.backend`, `permissions.*`, `trusted_projects` (R0-1), **без** `config.*` — раздел `config` в этой итерации непрозрачен и покрыт одним дескриптором `map`/`fileOnly` (D4, «Порядок итераций»). Красный.
-- [ ] 2.2 `[agent]` `config/settings_registry.dart`: дескрипторы ключей схемы этой сборки и разделов после MVP (D4), `lookup`, `parseCliValue` с исключением ядра `ConfigValueException`; экспорт из бареля. 2.1 зелёный, `web-compile` зелёный.
-- [ ] 2.3 `[agent]` Тесты `codelab_agent_core/test/config/config_edit_test.dart`: `ConfigTarget`, `ConfigSnapshot.get` с `mcp.servers[<name>]` и сегментом в кавычках, равенство правок. Красный.
-- [ ] 2.4 `[agent]` `config/config_edit.dart` (`ConfigLayer`, `ConfigTarget`, `ConfigSnapshot`, `ConfigEdit` и подклассы, `ConfigConflictException`); экспорт. 2.3 зелёный.
+- [x] 2.1 `[agent]` Тесты `codelab_agent_core/test/config/settings_registry_complete_test.dart` (agent-configuration «Реестр настроек», сценарии «Ключ схемы без дескриптора», «Расхождение умолчаний», «Более конкретный дескриптор», «Разбор значения CLI»; `core/settings-registry-complete`, CFG-19): алгоритм §17.5.8, п. 1–7; список ключей перезапуска — константа теста со ссылкой на D8: `sessions.*`, `logging.*`, `profile.*`, `secrets.backend`, `permissions.*`, `trusted_projects` (R0-1), **без** `config.*` — раздел `config` в этой итерации непрозрачен и покрыт одним дескриптором `map`/`fileOnly` (D4, «Порядок итераций»). Красный.
+- [x] 2.2 `[agent]` `config/settings_registry.dart`: дескрипторы ключей схемы этой сборки и разделов после MVP (D4), `lookup`, `parseCliValue` с исключением ядра `ConfigValueException`; экспорт из бареля. 2.1 зелёный, `web-compile` зелёный.
+- [x] 2.3 `[agent]` Тесты `codelab_agent_core/test/config/config_edit_test.dart`: `ConfigTarget`, `ConfigSnapshot.get` с `mcp.servers[<name>]` и сегментом в кавычках, равенство правок. Красный.
+- [x] 2.4 `[agent]` `config/config_edit.dart` (`ConfigLayer`, `ConfigTarget`, `ConfigSnapshot`, `ConfigEdit` и подклассы, `ConfigConflictException`); экспорт. 2.3 зелёный.
+- [x] 2.5 `[agent]` Правки по ревью итерации 2 — тесты `settings_registry_complete_test.dart` (agent-configuration «Реестр настроек», сценарии «Ключ без потребителя не показывается в UI», «Расхождение умолчаний»; D4, «Объём в 1.0», «Ограничение теста полноты»):
+  - п. 7 спецификации: дескриптор `shared` покрывает только узлы `applied: true`;
+  - `min`/`max` каждого `int` — зондом валидатора; умолчания применяемых ключей — по разрешённому `CoreConfig` пустой конфигурации, остальные — явная константа теста «только по §15.4»;
+  - типы по схеме: `tools.untrusted_paths` — `stringList`, `tools.project_context.max_bytes` и `loop.empty_response_retries` — `int`;
+  - ключи без потребителя — `fileOnly` с причиной `not applied in this version`; `logging.llm_snapshot` — `restartRequired: true`, слои `logging`; `profile` — все слои.
+
+  Красный.
+- [x] 2.6 `[agent]` `settings_registry.dart` по 2.5; функция покрытия не в публичном API (`lookup` — единственный вход клиентов). 2.5 и 2.1 зелёные, `web-compile` зелёный.
 
 **Критерий итерации 2.** E-15 зелёный; новый ключ схемы без дескриптора роняет тест.
 
@@ -79,7 +87,8 @@
   - отказ `YamlEditor` → `edit the file manually`;
   - незаданная `${VAR}` — предупреждение;
   - занятый lock → конфликт, lock старше 10 с — `config.write.stale_lock`; гонка снятия устаревшего lock двумя писателями — свежий lock возвращается на место, второй писатель получает конфликт (D5);
-  - литеральный секрет по итоговому поддереву: `config set mcp.servers '…'` с `X-Api-Key`, `SetValue("providers.p.headers", {"Cookie": …})`, `env` с `GITHUB_TOKEN` — `ConfigInlineSecretException` без значения в тексте; имя с `-`/`_` и в другом регистре нормализуется; значение со ссылкой `${…}` проходит (сценарий «Литеральный токен через config set»).
+  - литеральный секрет по итоговому поддереву: `config set mcp.servers '…'` с `X-Api-Key`, `SetValue("providers.p.headers", {"Cookie": …})`, `env` с `GITHUB_TOKEN` — `ConfigInlineSecretException` без значения в тексте; имя с `-`/`_` и в другом регистре нормализуется; значение со ссылкой `${…}` проходит (сценарий «Литеральный токен через config set»);
+  - литеральный секрет на любой глубине (D5, «глубина»; ревью безопасности итерации 2): `config set exec '{"env":{"GITHUB_TOKEN":"…"}}'` и значение-отображение с вложенным листом `token` — `ConfigInlineSecretException`, файл не тронут, значение не процитировано (сценарий «Литеральный секрет во вложенном значении»); элемент `exec.secrets` с допустимым именем в `secret` проходит, с недопустимым (`SecretNames.problem`) — отклоняется как литерал.
 
   Красный.
 - [ ] 3.2 `[agent]` Тесты `config_writer_atomic_test.dart` (сценарии «Сбой между tmp и переименованием», «Символическая ссылка и права»): тестовый шов между записью tmp и `rename`; права `0600` выставляются фейковым `SecretProcessRunner` на пустой tmp **до** записи содержимого (порядок вызовов фиксирует фейк); сбой `chmod` → `ConfigException`, tmp удалён, `rename` не было, содержимое не писалось (сценарий «Сбой смены прав»); ветка Windows — подменённой платформой. Красный.
@@ -135,6 +144,8 @@
   - `config.reload.model_orphaned {session_id, model}` один раз на сессию и модель;
   - `ConfigLoadResult.values` и прежние `HostSettings` после перезагрузки с изменённым `logging.file`;
   - `services.config` без `modelsFor` — `HostWiringException`;
+  - ключи diff (D8, шаг 4; ревью безопасности итерации 2): изменение элемента `permissions.deny` даёт ключ `permissions.deny`, а не индекс; `mcp.servers` — по `mcp.servers[<name>]`; ключ `values`, не найденный `SettingsRegistry.lookup`, — в `restartRequiredKeys` и `pendingRestartKeys` (fail closed; сценарий «Ключ вне реестра ждёт перезапуска»);
+  - `tools.disabled`, `exec.*`, `redact.*` перезагрузкой не применяются: их правка не меняет набор инструментов и окружение сессий, итог не содержит их в `restartRequiredKeys` (D8, «Ключи без потребителя»);
   - без `services.config` `modelsFor` не требуется и не вызывается; при сборке `modelsFor` не вызывается, начальный ход идёт на `streamFunction`, а после каждой применённой перезагрузки (в том числе `unchanged`) — на функции из `modelsFor` (D8, «`modelsFor` и `streamFunction` при сборке»).
 
   В итерации 5 тест проверяет снимок, `restartRequiredKeys` и `pendingRestartKeys`; применение серверов к живым сессиям — в 6.3.

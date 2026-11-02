@@ -66,13 +66,14 @@
 
 **Тест полноты** `settings_registry_complete_test.dart` SHALL проверять:
 1. каждый листовой путь схемы валидатора (имена — `*`) покрыт ровно одним дескриптором;
-2. путь каждого дескриптора есть в схеме, а его `type`, `defaultValue`, `enumValues`, `min`/`max` совпадают со схемой;
+2. путь каждого дескриптора есть в схеме, его `type` и `enumValues` совпадают со схемой; `min`/`max` каждого `int` совпадают с поведением валидатора (граница принимается, значение за ней отклоняется); `defaultValue` ключа, который ядро применяет, совпадает с разрешённым `CoreConfig` пустой конфигурации, а умолчания остальных ключей перечислены явной константой теста «только по §15.4» (в узлах схемы умолчаний и диапазонов нет, design.md, D4);
 3. `scope == fileOnly` тогда и только тогда, когда `fileOnlyReason` не пуст; `label` и `description` не пусты;
 4. каждый ключ верхнего уровня схемы покрыт;
 5. `restartRequired` истинен ровно для ключей «только после перезапуска» (capability `agent-runtime`, «Живая перезагрузка конфигурации»);
-6. `layers` — подмножество слоёв, которые правила доверия §15.3 разрешают ключу.
+6. `layers` — подмножество слоёв, которые правила доверия §15.3 разрешают ключу;
+7. дескриптор со `scope: shared` покрывает только узлы схемы с `applied: true`.
 
-Разделы схемы после MVP (непрозрачные узлы) SHALL иметь по одному дескриптору `map` со `scope: fileOnly`. Ключ схемы без дескриптора SHALL ронять тест с сообщением `config key <path> has no SettingDescriptor: declare it shared or fileOnly with a reason` (CFG-19, E-15).
+Разделы схемы после MVP (непрозрачные узлы) SHALL иметь по одному дескриптору `map` со `scope: fileOnly`; непрозрачный узел внутри раздела хоста (`logging.llm_snapshot`) SHALL наследовать `restartRequired` и слои своего раздела. Ключ, чей узел схемы не применяется (`applied: false`: `agent.fallback`, `agent.summary_model`, `permissions.timeout`, `tools.disabled` и др.), SHALL иметь `scope: fileOnly` с причиной `not applied in this version`. Типы дескрипторов SHALL совпадать с узлами схемы этой сборки (`tools.untrusted_paths` — `stringList`; `tools.project_context.max_bytes`, `loop.empty_response_retries` — `int`). Ключ схемы без дескриптора SHALL ронять тест с сообщением `config key <path> has no SettingDescriptor: declare it shared or fileOnly with a reason` (CFG-19, E-15).
 
 `SettingsRegistry.parseCliValue(descriptor, raw)` SHALL разбирать строку значения по типу дескриптора (списки и отображения — JSON). Ошибка разбора — исключение ядра `ConfigValueException {key, expected}` с ожидаемым форматом (design.md, D4); подкоманда переводит его в код `64`. Значение в текст ошибки НЕ SHALL попадать.
 
@@ -83,8 +84,12 @@
 - **THEN** проверка полноты падает с сообщением `config key budget.max_widgets has no SettingDescriptor: declare it shared or fileOnly with a reason` (`core/settings-registry-complete`)
 
 #### Scenario: Расхождение умолчаний
-- **WHEN** дескриптор `budget.max_steps` объявляет умолчание, отличное от схемы валидатора
+- **WHEN** дескриптор `budget.max_steps` объявляет умолчание, отличное от разрешённого `CoreConfig` пустой конфигурации
 - **THEN** проверка полноты падает и называет ключ
+
+#### Scenario: Ключ без потребителя не показывается в UI
+- **WHEN** тест подставляет в копию таблицы дескриптор `tools.disabled` со `scope: shared`, а узел схемы `tools.disabled` — `applied: false`
+- **THEN** проверка полноты падает и называет ключ; в настоящей таблице `tools.disabled` — `fileOnly` с причиной `not applied in this version`
 
 #### Scenario: Более конкретный дескриптор
 - **WHEN** вызывается `lookup("providers.openai.api_key_secret")`
@@ -100,7 +105,7 @@
 - **Доверие.** Отклонять правку проектного слоя, которую правило доверия §15.3 проигнорировало бы. Текст SHALL подсказывать `--local` или `trusted_projects`.
 - **Секреты.** Отклонять `ConfigInlineSecretException` (с `suggestedSecretName`):
   - значение-секрет по правилу CFG-9, п. 1;
-  - по итоговому поддереву документа после всех правок, независимо от типа правки (`SetValue`, `UpsertMcpServer`): каждое изменённое значение в `providers.*.headers`, `mcp.servers[*].headers`, `mcp.servers[*].env`, чьё имя после нормализации (нижний регистр, без `-` и `_`) содержит `token`, `secret`, `password`, `apikey`, `auth`, `cookie`, `key` или `privatetoken`, — если в значении нет ни `${secret:…}`, ни `${VAR}`.
+  - по итоговому поддереву документа после всех правок на любой глубине, независимо от типа правки (`SetValue`, `UpsertMcpServer`) и от того, записан лист или значение-отображение целиком: каждое изменённое значение в `providers.*.headers`, `mcp.servers[*].headers`, `mcp.servers[*].env`, `exec.env`, чьё имя после нормализации (нижний регистр, без `-` и `_`) содержит `token`, `secret`, `password`, `apikey`, `auth`, `cookie`, `key` или `privatetoken`, — если в значении нет ни `${secret:…}`, ни `${VAR}`.
 - **Блокировка и отпечаток.** Брать эксклюзивный `<path>.lock` с содержимым `<pid> <nonce>`. Lock старше 10 с снимается через `rename` в уникальное имя с повторной проверкой возраста и содержимого и `config.write.stale_lock`; свежий lock другого писателя возвращается на место, а запись получает `ConfigConflictException`. Занятый lock или отпечаток sha256 файла, отличный от `base.fingerprint`, дают `ConfigConflictException`.
 - **Правка.** Применять правки к байтам файла через `YamlEditor` (`package:yaml_edit`). Комментарии, пустые строки, порядок ключей, flow-стиль и перевод строк (LF/CRLF) вне изменённых узлов SHALL сохраняться побайтово. Новый ключ SHALL добавляться в конец своего отображения, недостающие предки — в блочном стиле с отступом файла. Строку, которая по профилю §15.5 прочиталась бы не строкой (`off`, `yes`, `${VAR}`), SHALL писать в двойных кавычках. Отказ `YamlEditor` SHALL давать `ConfigException` с `cannot edit <key> automatically; edit the file manually`.
 - **Проверка.** Проверять итог `ConfigLoader.validateCandidate` по всем слоям с заменой целевого. Незаданная `${VAR}` — предупреждение результата, а не ошибка. Невалидный итог — `ConfigException(issues)`.
@@ -144,6 +149,10 @@
 #### Scenario: Литеральный токен через config set
 - **WHEN** применяется `SetValue("mcp.servers", [{"name":"gh","type":"http","url":"https://h","headers":{"X-Api-Key":"k-1"}}])` или `SetValue("providers.p.headers", {"Cookie":"s=1"})`
 - **THEN** `ConfigInlineSecretException`, текст не содержит `k-1` и `s=1`, файл не изменён
+
+#### Scenario: Литеральный секрет во вложенном значении
+- **WHEN** применяется `SetValue("exec", {"env":{"GITHUB_TOKEN":"ghp_x"}})` или `SetValue` значения-отображения с вложенным листом `token: "t-1"`
+- **THEN** `ConfigInlineSecretException`, текст не содержит `ghp_x` и `t-1`, файл не изменён
 
 #### Scenario: Сбой смены прав
 - **WHEN** фейковый `SecretProcessRunner` возвращает ненулевой код на `chmod` tmp

@@ -18,8 +18,9 @@
 1. **Коалесценция.** Если перезагрузка уже идёт, вызов SHALL ставить не больше одного повтора и получать его итог.
 2. **Загрузка.** Вызывается `ConfigSource.load()`. После `dispose()` результат SHALL отбрасываться: снимок не меняется, уведомлений и замен MCP нет.
 3. **Невалидный конфиг.** Прежний снимок SHALL оставаться целиком (CFG-15). Клиентам НЕ SHALL уходить ни одно уведомление. `configStatus` получает `lastFailureAt` и `lastIssues`, лог — `config.reload.failed` с источниками, строками и путями ключей, без значений. Итог — `failed`.
-4. **Ключи перезапуска.** Отложенными SHALL быть:
+4. **Ключи перезапуска.** Ключи diff — листья итогового дерева; список сравнивается целиком и даёт один ключ, по элементам развёрнут только `mcp.servers[<name>]`. Отложенными SHALL быть:
    - ключи с `restartRequired` в реестре настроек: `sessions.*`, `logging.*`, `profile.*`, `secrets.backend`, `config.*`;
+   - ключ diff, для которого реестр настроек не нашёл дескриптора (fail closed);
    - ключи, ослабляющие права (R0-1): `permissions.*`, `trusted_projects`; включённый элемент `mcp.servers[<name>]` с `type: stdio`, для которого в применённом снимке нет элемента `old` с `old.enabled && old.sameConnection(new)` (новый, включённый из `enabled: false`, сменивший тип `http` → `stdio`, с другими `command`, `args` или `env`, в том числе шаблонами `${secret:…}`);
    - правки, способные направить секрет на другой адрес (R0-4). «Ссылка на секрет» определяется по значению: любая подстановка `${…}` — `${secret:…}` или `${VAR}`. Отложены: включённый элемент `mcp.servers[<name>]` с `type: http` без прежнего `old.enabled && old.sameConnection(new)`, если в `url`, `headers` или `env` есть подстановка; провайдер `providers.<id>` с ключом (в прежнем или новом снимке есть `api_key_secret`, `api_key_env`, подстановка в `base_url`, `headers` или `auth_header` или литеральный секретный заголовок), если он новый или изменилось поле группы `kind`, `base_url`, `headers`, `auth_header`, `api_key_secret`, `api_key_env` — группа атомарна: её поля прежние, модели новые; каждая ссылка на модели нового отложенного провайдера (`agent.default_model`; с потребителем — `agent.fallback`, `agent.summary_model`, `llm.roles.*`, модели субагентов).
 
@@ -31,7 +32,8 @@
 **Когда действует новое значение** (CFG-16):
 - `providers.*` и модели — со следующего шага любой сессии. Сессия, чья текущая модель исчезла из каталога, SHALL продолжать работать на функции модели прежнего снимка до смены модели; рантайм пишет `config.reload.model_orphaned {session_id, model}` один раз на сессию и модель;
 - `budget.*`, `compaction.*` — со следующего хода;
-- `agent.default_model`, `agent.effort`, `tools.disabled`, `tools.project_context.*` и файлы проекта — для новых сессий;
+- `agent.default_model`, `agent.effort`, `tools.project_context.*` и файлы проекта — для новых сессий;
+- ключи без потребителя (`tools.disabled`, `exec.*`, `redact.*` и другие узлы `applied: false`) перезагрузкой не применяются (`config.key.not_applied`);
 - `mcp.servers` — требование «Серверы конфигурации при перезагрузке»;
 - `permissions.*`, `trusted_projects`, новые или изменённые stdio-серверы и правки R0-4 — только после перезапуска (шаг 4).
 
@@ -96,6 +98,10 @@
 #### Scenario: Невалидная правка
 - **WHEN** после ручной правки файл содержит `budget.max_steps: 0`, и срабатывает `changes`
 - **THEN** итог `failed`, снимок прежний, ни одно событие сессий не опубликовано, `configStatus().lastIssues` содержит `budget.max_steps`, лог `config.reload.failed` не содержит значений
+
+#### Scenario: Ключ вне реестра ждёт перезапуска
+- **WHEN** фейковый `ConfigSource` отдаёт `values` с ключом, для которого `SettingsRegistry.lookup` не находит дескриптора, и перезагрузка меняет его значение
+- **THEN** ключ попадает в `restartRequiredKeys` и `pendingRestartKeys`, а в `values` применённого снимка остаётся его прежнее значение
 
 #### Scenario: Ключ перезапуска
 - **WHEN** перезагрузка меняет `logging.file` и `budget.max_steps`
