@@ -50,7 +50,7 @@
 
 ## 1. Предконфигурация провайдера из окружения (итерация 1; D3; L-25)
 
-- [ ] 1.1 `[agent]` Тесты `codelab_agent_io/test/config/provider_preconfig_env_test.dart` (agent-configuration «Предконфигурация провайдера из окружения», все сценарии; `core/provider-preconfig-from-env`):
+- [x] 1.1 `[agent]` Тесты `codelab_agent_io/test/config/provider_preconfig_env_test.dart` (agent-configuration «Предконфигурация провайдера из окружения», все сценарии; `core/provider-preconfig-from-env`):
   - `TYPE` + `CONFIG` без файлов;
   - `_BASE64` — тот же `CoreConfig`;
   - файл проигрывает окружению, `CODELAB_MODEL` выигрывает у предконфигурации;
@@ -59,9 +59,9 @@
   - ни одна проблема и запись `RecordingLogger` не содержит подстроки значения (CFG-12).
 
   Красный.
-- [ ] 1.2 `[agent]` `environment_layer.dart`: `envPreconfigLayer` по §17.5.3; источник `env:CODELAB_PROVIDER_CONFIG`; doc-комментарии по `AGENTS.md` §15. 1.1 зелёный.
-- [ ] 1.3 `[agent]` Тесты `apps/codelab_agent/test/serve_flags_test.dart` и `provider_preconfig_process_test.dart` (agent-binary «Флаги предконфигурации провайдера»; agent-configuration, сценарий «Флаги и модель»): флаги затеняют переменные, `config.preconfig.shadowed`; `--model` побеждает предконфигурацию флагов, `CODELAB_MODEL` ей проигрывает; справка рекомендует `@путь`; один флаг — `64`; сочетание с `--provider` — `64`; `@путь` не читается — `64`; значение не попадает в stderr и лог; `codelab-agent config check` видит предконфигурацию. Красный.
-- [ ] 1.4 `[agent]` `apps/codelab_agent`: флаги в `serve_args.dart`, слой флагов в `ConfigLoader`. 1.3 зелёный.
+- [x] 1.2 `[agent]` Слой предконфигурации в `codelab_agent_io/lib/src/config/provider_preconfig.dart` по алгоритму `envPreconfigLayer` §17.5.3, правило литеральных секретов заголовков — `config/literal_secret_rule.dart` (D3, D5); источник `env:CODELAB_PROVIDER_CONFIG`; doc-комментарии по `AGENTS.md` §15. 1.1 зелёный.
+- [x] 1.3 `[agent]` Тесты `apps/codelab_agent/test/serve_flags_test.dart` и `provider_preconfig_process_test.dart` (agent-binary «Флаги предконфигурации провайдера»; agent-configuration, сценарий «Флаги и модель»): флаги затеняют переменные, `config.preconfig.shadowed`; `--model` побеждает предконфигурацию флагов, `CODELAB_MODEL` ей проигрывает; справка рекомендует `@путь`; один флаг — `64`; сочетание с `--provider` — `64`; `@путь` не читается — `64`; значение не попадает в stderr и лог; `codelab-agent config check` видит предконфигурацию. Красный.
+- [x] 1.4 `[agent]` `apps/codelab_agent`: флаги в `serve_args.dart`, слой флагов в `ConfigLoader`. 1.3 зелёный.
 
 ## 2. Реестр настроек и типы правок (итерация 2; D4, D5; E-15)
 

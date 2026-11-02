@@ -1,7 +1,15 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:args/args.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart'
-    show ConfigUsageException, checkConfigFileName, codelabHomeOf;
+    show
+        ConfigUsageException,
+        ProviderPreconfigFlags,
+        checkConfigFileName,
+        codelabHomeOf,
+        maxConfigBytes;
 
 import 'config_cli.dart';
 import 'secret_cli.dart';
@@ -67,6 +75,7 @@ final class ServeOptions {
     required this.configPath,
     required this.debugSecrets,
     required this.flags,
+    required this.preconfig,
     required this.environment,
   });
 
@@ -116,6 +125,14 @@ final class ServeOptions {
   /// назван переменной `api_key_env`.
   final ConfigTree flags;
 
+  /// Предконфигурация провайдера из `--provider-type` и `--provider-config`
+  /// (`null` — флагов нет). Хранит текст JSON, который может содержать
+  /// заголовки с токеном, поэтому в [toString] его нет (CFG-12). Загрузчик
+  /// строит из неё слой флагов перед слоем [flags] и не читает переменные
+  /// `CODELAB_PROVIDER_*` (design.md change `add-config-writer-and-reload`,
+  /// D3).
+  final ProviderPreconfigFlags? preconfig;
+
   /// Переменные процесса: из них загрузчик берёт `CODELAB_HOME`,
   /// `CODELAB_CONFIG`, слой окружения и значения `${ENV}`. Содержат секреты,
   /// поэтому в [toString] не попадают.
@@ -162,6 +179,19 @@ final ArgParser _serveParser = ArgParser()
         'Model id; repeat for more models, the first is the default '
         '(CODELAB_MODEL). Without --provider: <provider>/<model> from the '
         'config.',
+  )
+  ..addOption(
+    'provider-type',
+    help:
+        'Provider kind of the preconfiguration; use together with '
+        '--provider-config (CODELAB_PROVIDER_TYPE). Not with --provider.',
+  )
+  ..addOption(
+    'provider-config',
+    help:
+        'Provider JSON (id, base_url, model, context_window, …) or @path to '
+        'a file with it (CODELAB_PROVIDER_CONFIG). Prefer @path: JSON in '
+        'argv is visible to other users via ps.',
   )
   ..addOption(
     'permission-mode',
@@ -365,6 +395,11 @@ ServeOptions parseServeResults(
     }
   }
 
+  final preconfig = _preconfigFlags(
+    serve,
+    withProvider: provider != null || serve.option('base-url') != null,
+  );
+
   final flags = _flagsLayer(
     provider: provider,
     scripted: llmScript != null,
@@ -394,8 +429,82 @@ ServeOptions parseServeResults(
         serve.flag('debug-secrets') ||
         environment['CODELAB_DEBUG_SECRETS'] == '1',
     flags: flags,
+    preconfig: preconfig,
     environment: Map.unmodifiable(environment),
   );
+}
+
+/// Предконфигурация провайдера из флагов (`agent-binary` «Флаги
+/// предконфигурации провайдера»; design.md change
+/// `add-config-writer-and-reload`, D3, OQ6).
+///
+/// Почему здесь: все три отказа — ошибки использования с кодом `64` до
+/// загрузки конфига и старта транспорта. Проверка самого JSON и литеральных
+/// секретных заголовков — не здесь, а в слое предконфигурации загрузчика
+/// (`preconfigLayer`): так `config check` и встроенный агент проверяют то
+/// же самое.
+///
+/// Как использовать: один флаг из пары, сочетание с `--provider`/`--base-url`
+/// и нечитаемый файл `@путь` — [UsageError]. Путь `@путь` относителен
+/// текущему каталогу процесса. Тексты не содержат значения `--provider-config`
+/// (в JSON могут быть заголовки с токеном, CFG-12); путь файла называется.
+ProviderPreconfigFlags? _preconfigFlags(
+  ArgResults serve, {
+  required bool withProvider,
+}) {
+  final type = serve.option('provider-type');
+  final config = serve.option('provider-config');
+  if (type == null && config == null) {
+    return null;
+  }
+  if (type == null || config == null) {
+    throw const UsageError(
+      '--provider-type and --provider-config must be used together',
+    );
+  }
+  if (withProvider) {
+    throw const UsageError(
+      '--provider-type cannot be combined with --provider (or --base-url): '
+      'two ways to set the provider by flags are ambiguous',
+    );
+  }
+  return ProviderPreconfigFlags(
+    providerType: type,
+    providerConfig: config.startsWith('@')
+        ? _readConfigFile(config.substring(1))
+        : config,
+  );
+}
+
+/// Читает файл `--provider-config @путь` не больше [maxConfigBytes] в строгом
+/// UTF-8; причина сбоя без текста файла и без цитат системной ошибки.
+///
+/// Только обычный файл: FIFO и устройства (`/dev/zero`) заблокировали бы или
+/// переполнили чтение. Размер проверяется по факту чтения (`maxConfigBytes + 1`
+/// байт), а не по `stat`: файл мог вырасти между проверкой и чтением.
+String _readConfigFile(String path) {
+  UsageError failure(String reason) =>
+      UsageError('--provider-config: cannot read the file $path: $reason');
+  try {
+    if (File(path).statSync().type != FileSystemEntityType.file) {
+      throw failure('not a regular file');
+    }
+    final file = File(path).openSync();
+    final List<int> bytes;
+    try {
+      bytes = file.readSync(maxConfigBytes + 1);
+    } finally {
+      file.closeSync();
+    }
+    if (bytes.length > maxConfigBytes) {
+      throw failure('the file is larger than 1 MiB');
+    }
+    return utf8.decode(bytes);
+  } on FileSystemException {
+    throw failure('no such file or no access');
+  } on FormatException {
+    throw failure('the file is not valid UTF-8');
+  }
 }
 
 /// `<id>` или `<провайдер>/<id>` с провайдером этого запуска: у `--provider`
