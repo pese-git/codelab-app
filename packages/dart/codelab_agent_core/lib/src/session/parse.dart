@@ -185,7 +185,7 @@ ParsedJournal parseSessionLines(
     logger?.log(
       LogLevel.warning,
       'session.leaf.healed',
-      fields: {'from': healedFrom, 'to': leaf},
+      fields: {'session_id': id.value, 'from': healedFrom, 'to': leaf},
     );
   }
   final brokenLinks = records

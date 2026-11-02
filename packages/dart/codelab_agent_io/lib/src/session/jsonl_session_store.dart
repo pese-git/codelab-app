@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:meta/meta.dart';
@@ -232,19 +233,61 @@ final class JsonlSessionStore implements SessionStore {
     }
   }
 
+  /// Чтение и разбор журнала при `session/load` идут в `Isolate.run`.
+  ///
+  /// Почему: файл в тысячи записей читается, декодируется из UTF-8 и
+  /// разбирается построчно, а встроенный агент живёт в одном isolate с UI
+  /// клиента (design.md change `add-embedded-agent-mode`, D11;
+  /// `docs/architecture/concurrency.md`): без переноса `session/load` отнимал
+  /// бы кадры. Поведение и результат те же, что при разборе на месте
+  /// (`jsonl_replay_isolate_test.dart`).
+  ///
+  /// Как устроено: в isolate уходят только пересылаемые значения (путь,
+  /// `SessionId`, `cwd` из кеша, время создания), а обратно — `ParsedJournal`
+  /// (записи, карантин, строки) и исключения разбора вроде
+  /// `SessionOpenException`; они остаются теми же типами у вызывающего. Логгер
+  /// хоста в isolate не передаётся (это закрытие над приёмником, его нельзя
+  /// переслать), поэтому единственное событие разбора `session.leaf.healed`
+  /// пишется здесь по отчёту о ремонте. Сжатие контекста в isolate не
+  /// переносится (D11).
   Future<ParsedJournal> _parse(File file, SessionId id) async {
-    final text = utf8.decode(await file.readAsBytes(), allowMalformed: true);
     final cached = (await _readIndex())[_keyOf(file.path)];
-    // Синтез отсутствующего заголовка (§8.6, шаг 3b): cwd — из кеша
-    // сводок по имени файла, created — mtime.
-    return parseSessionLines(
-      text,
-      id: id,
-      cwd: cached?.summary.cwd ?? '',
-      created: (await file.lastModified()).toUtc(),
-      logger: _logger,
+    final parsed = await _readAndParse(
+      file.path,
+      id,
+      // Синтез отсутствующего заголовка (§8.6, шаг 3b): cwd — из кеша
+      // сводок по имени файла, created — mtime.
+      cached?.summary.cwd ?? '',
+      (await file.lastModified()).toUtc(),
     );
+    if (parsed.snapshot.repair.healedLeafFrom case final from?) {
+      _logger?.log(
+        LogLevel.warning,
+        'session.leaf.healed',
+        fields: {
+          'session_id': id.value,
+          'from': from,
+          'to': parsed.snapshot.leafId,
+        },
+      );
+    }
+    return parsed;
   }
+
+  /// Статический, чтобы замыкание `Isolate.run` не захватило `this`: у
+  /// хранилища есть открытые дескрипторы и логгер, которые не пересылаются.
+  static Future<ParsedJournal> _readAndParse(
+    String path,
+    SessionId id,
+    String cwd,
+    DateTime created,
+  ) => Isolate.run(() async {
+    final text = utf8.decode(
+      await File(path).readAsBytes(),
+      allowMalformed: true,
+    );
+    return parseSessionLines(text, id: id, cwd: cwd, created: created);
+  });
 
   /// Шаги 5a–5b §8.6: карантин и единственное переписывание файла (SES-1).
   Future<void> _repair(File file, SessionId id, ParsedJournal parsed) async {
