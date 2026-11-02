@@ -238,10 +238,10 @@
 
 ## 5. Замер 7.8 и разбор журнала в isolate (итерация 5)
 
-- [ ] 5.1 `[agent]` Разведка (исключение (д) §9.0, без пары, не дольше двух дней): `packages/dart/codelab_embedded/benchmark/stream_latency_benchmark.dart` (embedded-agent «Нагрузка встроенного агента на UI-isolate», сценарий «Замер печатает метрики»; D11). Dev-зависимости `codelab_client_core`, `codelab_client_acp`. Прогон AOT на Mac Apple Silicon разработчика, три прогона, критерий — медиана p99 и максимум; Linux-раннер CI — справочно (D13, п. 3). Числа, машина, режим и вывод записываются в design.md, «Решение 7.8».
-- [ ] 5.2 `[agent]` Тест `codelab_agent_io/test/session/jsonl_replay_isolate_test.dart`: реплей журнала в 1000 записей совпадает до и после переноса (embedded-agent, сценарий «Реплей после переноса разбора»; D11). Тест зелёный до переноса и остаётся зелёным после: это характеризационный тест (исключение (а) §9.0).
-- [ ] 5.3 `[agent]` Разбор JSONL при `session/load` в `Isolate.run` в `JsonlSessionStore`.
-- [ ] 5.4 `[agent]` Только если 5.1 провалил критерии: новые задачи `IsolateAcpLink` по эскизу §9.12 добавляются сюда отдельной итерацией с парами тестов (порядок 1000 сообщений, `close` → `failed`, `DateTime` → `sendFailed`, `kill` после `grace`, падение isolate → `failed`). Решение пользователя по объёму — до начала.
+- [x] 5.1 `[agent]` Разведка (исключение (д) §9.0, без пары, не дольше двух дней): `packages/dart/codelab_embedded/benchmark/stream_latency_benchmark.dart` (embedded-agent «Нагрузка встроенного агента на UI-isolate», сценарий «Замер печатает метрики»; D11). Dev-зависимости `codelab_client_core`, `codelab_client_acp`. Прогон AOT на Mac Apple Silicon разработчика, три прогона, критерий — медиана p99 и максимум; Linux-раннер CI — справочно (D13, п. 3). Числа, машина, режим и вывод записываются в design.md, «Решение 7.8».
+- [x] 5.2 `[agent]` Тест `codelab_agent_io/test/session/jsonl_replay_isolate_test.dart`: реплей журнала в 1000 записей совпадает до и после переноса (embedded-agent, сценарий «Реплей после переноса разбора»; D11). Тест зелёный до переноса и остаётся зелёным после: это характеризационный тест (исключение (а) §9.0).
+- [x] 5.3 `[agent]` Разбор JSONL при `session/load` в `Isolate.run` в `JsonlSessionStore`.
+- [x] 5.4 `[agent]` **Не требуется** (design.md, «Решение 7.8»: критерии D11 выполнены при реалистичном N ≈ 1; решение пользователя 2026-11-02 — остаётся `InProcessAcpLink`; follow-up — PERF-1, PERF-2 в `docs/backlog/perf-2026-11-02-stream-latency.md`). Исходная формулировка: только если 5.1 провалил критерии: новые задачи `IsolateAcpLink` по эскизу §9.12 добавляются сюда отдельной итерацией с парами тестов (порядок 1000 сообщений, `close` → `failed`, `DateTime` → `sendFailed`, `kill` после `grace`, падение isolate → `failed`). Решение пользователя по объёму — до начала.
 
 ## 6. Документы и Definition of Done (итерация 6)
 

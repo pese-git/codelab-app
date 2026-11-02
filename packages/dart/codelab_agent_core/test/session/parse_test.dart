@@ -152,6 +152,11 @@ void main() {
     expect(parsed.snapshot.leafId, 'b');
     expect(parsed.snapshot.repair.healedLeafFrom, 'gone');
     expect(logger.eventsOf('session.leaf.healed'), hasLength(1));
+    expect(logger.eventsOf('session.leaf.healed').single.fields, {
+      'session_id': id.value,
+      'from': 'gone',
+      'to': 'b',
+    });
   });
 
   test('broken links are counted', () {
