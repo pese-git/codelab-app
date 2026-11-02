@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show JsonRpcMessageWire;
@@ -14,6 +13,7 @@ import 'package:http/testing.dart';
 import 'package:test/test.dart';
 
 import '../support/acp_client.dart';
+import '../support/package_dir.dart';
 
 /// Настольный открыватель встроенного агента (embedded-agent «Конфигурация и
 /// секреты встроенного агента», сценарии «Ключ провайдера из secrets.yaml»,
@@ -417,10 +417,7 @@ agent:
           );
         }
       });
-      final lib = await Isolate.resolvePackageUri(
-        Uri.parse('package:codelab_embedded/io.dart'),
-      );
-      final root = File.fromUri(lib!).parent.parent.path;
+      final root = embeddedRoot;
 
       await connect(
         await opener(
@@ -433,7 +430,7 @@ agent:
         mcpServers: [
           {
             'name': 'fake',
-            'command': Platform.resolvedExecutable,
+            'command': dartExecutable(),
             'args': [
               '$root/test/support/fake_mcp_stdio_server.dart',
               pidFile.path,

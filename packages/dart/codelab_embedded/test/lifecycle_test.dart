@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_agent_acp/codelab_agent_acp.dart' show AcpAgentServer;
@@ -17,6 +16,7 @@ import 'package:test/test.dart';
 
 import 'support/acp_client.dart';
 import 'support/memory_host.dart';
+import 'support/package_dir.dart';
 
 /// Жизненный цикл встроенного агента (embedded-agent «Жизненный цикл
 /// встроенного агента», сценарии «dispose при ожидающем разрешении», «Клиент
@@ -192,7 +192,7 @@ agent:
       'mcpServers': [
         {
           'name': 'fake',
-          'command': Platform.resolvedExecutable,
+          'command': dartExecutable(),
           'args': [
             '${await _packageRoot()}/test/support/fake_mcp_stdio_server.dart',
             pidFile.path,
@@ -351,11 +351,6 @@ agent:
 }
 
 /// Корень пакета `codelab_embedded` (файлы тестовых процессов лежат в нём).
-Future<String> _packageRoot() async {
-  final lib = await Isolate.resolvePackageUri(
-    Uri.parse('package:codelab_embedded/io.dart'),
-  );
-  return File.fromUri(lib!).parent.parent.path;
-}
+Future<String> _packageRoot() async => embeddedRoot;
 
 bool _alive(int pid) => Process.runSync('ps', ['-p', '$pid']).exitCode == 0;
