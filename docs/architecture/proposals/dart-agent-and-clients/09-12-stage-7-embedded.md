@@ -79,7 +79,7 @@
    `conformance`.
 
    **Итог 7.3–7.9.** Сделано change `add-embedded-agent-mode`, итерации 1–5
-   ([design.md](../../../../openspec/changes/add-embedded-agent-mode/design.md), D12; отметки DoD — ниже):
+   ([design.md](../../../../openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md), D12; отметки DoD — ниже):
    * **7.3** — пакет `packages/dart/codelab_embedded`, мост между сторонами без префикса стороны
      (ADR-0002): web-безопасный основной барель (`createEmbeddedAgent`), `io.dart` — настольный
      открыватель `localEmbeddedAgentOpener` (конфиг 8.5, секреты 8.9, журнал JSONL, MCP, файлы
@@ -205,7 +205,7 @@ final class EmbeddedTransportResolver implements TransportResolver {
 ```
 
 **Уточнения change `add-embedded-agent-mode`.** Эскиз выше написан до конфигурации 8.5. Действующий
-API и решения — в [design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md):
+API и решения — в [design.md change](../../../../openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md):
 
 * `EmbeddedAgentConfig` несёт `CoreConfig` и `HostSettings` загрузчика 8.5 (несколько провайдеров
   с маршрутизацией) вместо одного `ProviderConfig`, `fallbackModels` и `mcpServers` (D2).
@@ -241,11 +241,11 @@ p99 задержки цикла событий UI-isolate больше 8 мс и
 (разбор журнала, сжатие) уходят в `Isolate.run` в любом случае. На web isolate нет — там всегда
 `InProcessAcpLink`. *Уточнение change `add-embedded-agent-mode`:* выполнено для разбора журнала
 (`JsonlSessionStore.open`); сжатие по D11 остаётся в главном isolate — оно ждёт ответа LLM, его
-CPU-часть мала ([design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md), D11, «Разбор журнала»).
+CPU-часть мала ([design.md change](../../../../openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md), D11, «Разбор журнала»).
 
 **Результат замера (задача 5.1 change `add-embedded-agent-mode`; решение пользователя 2026-11-02):
 остаётся `InProcessAcpLink`, `IsolateAcpLink` не делается.** Числа, машина, режим сборки и
-разбивка по слоям — [design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md), D11, «Решение 7.8». Кратко: критерии выполняются,
+разбивка по слоям — [design.md change](../../../../openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md), D11, «Решение 7.8». Кратко: критерии выполняются,
 пока провайдер отдаёт не больше 7 SSE-событий на одно чтение сокета (задержка растёт ≈1 мс на
 событие в пачке); больше половины стоимости чанка — клиентская проекция kit, которую isolate ядра
 из UI-isolate не унёс бы. Разбор журнала при открытии сессии ушёл в `Isolate.run`. Остаточный риск
@@ -318,7 +318,7 @@ final class IsolateAcpLink {
   **Выполнено** 2026-11-02: `melos run guard` — код 0, 100 тестов (с `desktopAllowlist`
   задачи 6.4).
 * Замер 7.8 выполнен, решение об isolate записано в `design.md` с числами и критериями.
-  **Выполнено** — [design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md), D11,
+  **Выполнено** — [design.md change](../../../../openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md), D11,
   «Решение 7.8»; остаётся `InProcessAcpLink`.
 * Встроенный профиль в app и CLI берёт конфиг через загрузчик 8.5 и ключ через `SecretResolver`
   8.9. **Выполнено** — тесты задач 2.1 и 2.3 change `add-embedded-agent-mode`:
@@ -338,7 +338,7 @@ final class IsolateAcpLink {
 
 **Риски.** Тяжёлые операции ядра в UI-isolate (разбор журнала, сжатие) — разбор журнала в
 `Isolate.run`; сжатие по D11 остаётся в главном isolate: оно ждёт ответа LLM, его CPU-часть мала
-([design.md change](../../../../openspec/changes/add-embedded-agent-mode/design.md), D11). Замер 7.8 сжатие не измерял.
+([design.md change](../../../../openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md), D11). Замер 7.8 сжатие не измерял.
 Пачки SSE от 8 событий на чтение дают задержку UI выше критерия — PERF-1 и PERF-2 в
 [`docs/backlog/perf-2026-11-02-stream-latency.md`](../../../backlog/perf-2026-11-02-stream-latency.md). Общие изменяемые `Map` между сторонами —
 глубокая копия по умолчанию.

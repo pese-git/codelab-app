@@ -3,8 +3,8 @@
 Правила этого пакета дополняют корневой `AGENTS.md` и `packages/dart/codelab_agent_core/AGENTS.md`.
 
 Источники:
-- `openspec/changes/add-embedded-agent-mode/design.md` — D1–D8 (пакет, точки входа, сторож, локальное исполнение, конфиг, жизненный цикл, сценарий модели);
-- `openspec/changes/add-embedded-agent-mode/specs/embedded-agent/spec.md` — требования пакета;
+- `openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md` — D1–D8 (пакет, точки входа, сторож, локальное исполнение, конфиг, жизненный цикл, сценарий модели);
+- `openspec/specs/embedded-agent/spec.md` — требования пакета;
 - `docs/architecture/proposals/agent-core-architecture.md` §10 (сборка ядра, профили, HOST-1…HOST-7), §13.1 (`AcpServerConfig.localEnv`);
 - `docs/architecture/proposals/dart-agent-and-clients/09-12-stage-7-embedded.md`.
 
