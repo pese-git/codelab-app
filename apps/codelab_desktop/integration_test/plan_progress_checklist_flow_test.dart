@@ -48,7 +48,7 @@ void main() {
     "a real agent's plan updates dock the activity bar, support expand and "
     'dismiss, and hide it entirely once every entry is completed',
     (tester) async {
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
 
       final agentDirectory = await Directory.systemTemp.createTemp(
@@ -69,14 +69,7 @@ void main() {
       ).shellCubit;
 
       await _openConnectionSetupDialog(tester);
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Command')),
-        launch.command,
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Args')),
-        launch.args,
-      );
+      await launch.enterConnection(tester);
       await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 

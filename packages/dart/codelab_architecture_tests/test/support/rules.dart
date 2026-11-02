@@ -233,8 +233,23 @@ const rules = [
     ],
   ),
   // Правила CLI на `codelab_embedded/io.dart` и `testing.dart` — выше (задача
-  // 3.4); правила desktop — в задаче 4.4 того же change: ограничиваемый код
-  // появляется в её итерации.
+  // 3.4). Десктопный клиент: IO-барель встроенного агента — только composition
+  // root `lib/app/` (workspace-architecture «IO-барель встроенного агента вне
+  // composition root»; design.md change `add-embedded-agent-mode`, D3, задача
+  // 4.4); виджеты и Cubit-ы получают агента через `EmbeddedTransportResolver`.
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['package:codelab_embedded/io.dart'],
+    exclude: ['app/'],
+    sealExclude: false,
+  ),
+  // Сценарий модели не попадает в приложение вообще, `lib/app/` тоже: тестам
+  // его даёт шов `createCodeLabRootScope(embeddedOpener:)` (testing-quality
+  // «Тестовый сценарий не попадает в app»; D3, D8).
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['package:codelab_embedded/testing.dart'],
+  ),
   // Мост настроек агента для клиентов (dart-agent-and-clients §12.4.2; design.md
   // change `add-agent-configuration`, D14): основной барель чист и не знает
   // IO-пакет агента, `lib/io.dart` и `lib/src/io/` — вне запретов

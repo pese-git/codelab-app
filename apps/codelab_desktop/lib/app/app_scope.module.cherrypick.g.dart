@@ -48,6 +48,8 @@ final class $CodeLabRootLifecycleModuleContract
             currentScope.resolve<AcpClientApplication>(),
             currentScope.resolve<AcpTransport>(),
             currentScope.resolve<ClientWorkspace>(),
+            currentScope.resolve<EmbeddedTransportResolver>(),
+            currentScope.resolve<EmbeddedCloseSettings>(),
             currentScope.resolve<CodeLabShellCubit>(),
           ),
         )

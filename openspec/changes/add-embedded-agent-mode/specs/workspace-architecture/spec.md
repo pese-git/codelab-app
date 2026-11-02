@@ -63,7 +63,7 @@ CodeLab SHALL проверять границы пакетов тестом `pac
 - **Мост `codelab_setup`** (настройки агента для клиентов, `dart-agent-and-clients` §12.4.2): файлы `lib/` вне `lib/io.dart` и `lib/src/io/` НЕ SHALL импортировать `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web/`, `package:flutter/`, `package:codelab_acp_transports/io.dart`, `package:codelab_agent_io/`, `package:codelab_acp_` и `package:codelab_client_`, а также ссылаться на файлы `lib/io.dart` и `lib/src/io/`. `lib/io.dart` и `lib/src/io/` НЕ SHALL импортировать `package:flutter/`, `package:codelab_acp_` и `package:codelab_client_`. Его `dependencies` SHALL быть подмножеством `{codelab_agent_core, codelab_agent_io, meta}`.
 - **Мост встроенного агента `codelab_embedded`** (design.md change `add-embedded-agent-mode`, D1–D3): файлы `lib/` вне `lib/io.dart`, `lib/src/io/`, `lib/testing.dart` и `lib/src/testing/` НЕ SHALL импортировать `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web/`, `package:flutter/`, `package:codelab_acp_transports/io.dart`, `package:codelab_agent_io/` и `package:codelab_client_`, а также ссылаться на эти четыре места. Весь `lib/` НЕ SHALL импортировать `package:flutter/`, `package:fluent_ui/`, `package:codelab_ui/` и `package:codelab_client_`. Его `dependencies` SHALL быть подмножеством `{codelab_agent_core, codelab_agent_io, codelab_agent_acp, codelab_agent_mcp, codelab_acp_protocol, codelab_acp_transports, http, meta, async}`. В его `lib/` НЕ SHALL встречаться `ToolRegistry(`, `Agent(` и `AgentRuntime(` (HOST-6).
 - **Расширение allowlist** любого из этих множеств SHALL проходить через OpenSpec change.
-- **Клиент `apps/codelab_desktop`** НЕ SHALL импортировать `package:codelab_agent_*` напрямую; `package:codelab_embedded/io.dart` SHALL импортироваться только из `lib/app/` (composition root), а `package:codelab_embedded/testing.dart` — ни одним файлом `lib/`.
+- **Клиент `apps/codelab_desktop`** НЕ SHALL импортировать `package:codelab_agent_*` напрямую; `package:codelab_embedded/io.dart` SHALL импортироваться только из `lib/app/` (composition root), а `package:codelab_embedded/testing.dart` — ни одним файлом `lib/`. Пакеты монорепо в его `dependencies` (имена `codelab_*`) SHALL быть подмножеством `{codelab_client_acp, codelab_client_core, codelab_client_io, codelab_acp_protocol, codelab_acp_transports, codelab_embedded, codelab_ui}`: пакеты `codelab_agent_*` в зависимостях app запрещены, агентскую сторону app получает только через мост `codelab_embedded` (design.md change `add-embedded-agent-mode`, D3). Сторонние зависимости app этим правилом не ограничиваются.
 
 #### Scenario: Нарушение в ядре обнаружено
 - **WHEN** файл в `packages/dart/codelab_agent_core/lib/` импортирует `dart:io`, в том числе как альтернативу условного импорта
@@ -140,6 +140,10 @@ CodeLab SHALL проверять границы пакетов тестом `pac
 #### Scenario: IO-барель встроенного агента вне composition root
 - **WHEN** файл `apps/codelab_cli/lib/src/repl/repl.dart` или `apps/codelab_desktop/lib/features/workbench/application/connection_cubit.dart` импортирует `package:codelab_embedded/io.dart`
 - **THEN** сторож сообщает нарушение
+
+#### Scenario: Пакет агента в зависимостях app
+- **WHEN** в `dependencies` файла `apps/codelab_desktop/pubspec.yaml` появляется `codelab_agent_core`
+- **THEN** `pubspec_allowlist_test.dart` падает и называет `codelab_agent_core`, а зависимость `codelab_embedded` нарушением не считается
 
 #### Scenario: Зависимость моста встроенного агента вне allowlist
 - **WHEN** в `dependencies` файла `packages/dart/codelab_embedded/pubspec.yaml` появляется `codelab_client_core`

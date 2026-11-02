@@ -197,15 +197,15 @@
 
 ## 4. codelab-app (итерация 4)
 
-- [ ] 4.1 `[desktop]` Тесты `ConnectionCubit` (`test/features/workbench/application/connection_cubit_test.dart`) и widget-тест диалога подключения (agent-workbench-ui «Тип подключения «Встроенный агент»», сценарии «Выбор встроенного агента», «Нет конфигурации встроенного агента»; D9):
+- [x] 4.1 `[desktop]` Тесты `ConnectionCubit` (`test/features/workbench/application/connection_cubit_test.dart`) и widget-тест диалога подключения (agent-workbench-ui «Тип подключения «Встроенный агент»», сценарии «Выбор встроенного агента», «Нет конфигурации встроенного агента»; D9):
   - тип `embedded` строит `EmbeddedProfile(embedded-app-desktop)`;
   - метка и деталь;
   - `ConnectionFailed` с текстом проблем;
   - тип по умолчанию — `stdio`.
 
   Красный: значения `CodeLabTransportType.embedded` нет.
-- [ ] 4.2 `[desktop]` `CodeLabTransportType.embedded` и выбор типа в диалоге (`codelab_ui` — только отображение варианта, без логики).
-- [ ] 4.3 `[desktop]` Тест composition root (`test/app/app_scope_embedded_test.dart`) на `scriptedEmbeddedAgentOpener` через шов `createCodeLabRootScope(embeddedOpener:)` (agent-workbench-ui, сценарий «Одобрение во встроенном режиме»; embedded-agent «Жизненный цикл встроенного агента»; D6, D9):
+- [x] 4.2 `[desktop]` `CodeLabTransportType.embedded` и выбор типа в диалоге (`codelab_ui` — только отображение варианта, без логики).
+- [x] 4.3 `[desktop]` Тест composition root (`test/app/app_scope_embedded_test.dart`) на `scriptedEmbeddedAgentOpener` через шов `createCodeLabRootScope(embeddedOpener:)` (agent-workbench-ui, сценарий «Одобрение во встроенном режиме»; embedded-agent «Жизненный цикл встроенного агента»; D6, D9):
   - подключение и ход;
   - отказ в карточке одобрения;
   - закрытие scope ждёт `dispose`;
@@ -213,17 +213,28 @@
   - лог агента в логгере приложения без значений секретов.
 
   Красный: резолвера нет.
-- [ ] 4.4 `[desktop]` `EmbeddedTransportResolver` (сериализация `open`, `dispose()` устаревшего агента — D6; поводы отмены — новый `open` и `close()`, без нового API `TransportResolver` и `ClientWorkspace` — решение L4, D6, «Отмена подключения в app»; если пользователь при старте итерации 4 потребует кнопку Disconnect — сначала отдельный change клиентского слоя) и адаптер `Logger` в `lib/app/`; регистрация вторым резолвером `ClientWorkspace`; закрытие при закрытии root scope; зависимость `codelab_embedded` в `pubspec.yaml`. Правила сторожа desktop для `io.dart` (только `lib/app/`) и `testing.dart` (запрещён в `lib/`) — testing-quality, сценарий «Тестовый сценарий не попадает в app»; workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3.
-- [ ] 4.5 `[desktop]` Интеграционные тесты для `CODELAB_E2E_AGENT=embedded` (testing-quality «Встроенный режим в e2e и conformance»; D10; критерии таблицы этапа 4 для app):
+
+  **Ограничение (ревью итерации 4):** шов `embeddedOpener` подменяет открыватель целиком, поэтому тест scope не исполняет проводку `localEmbeddedAgentOpener(logger: CodeLabEmbeddedLogger(…))`. Лог агента без значений секретов проверен модульным тестом адаптера `CodeLabEmbeddedLogger`, а проводка логгера в `app_scope.dart` — ревью (D9).
+- [x] 4.4 `[desktop]` `EmbeddedTransportResolver` (сериализация `open`, `dispose()` устаревшего агента — D6; поводы отмены — новый `open` и `close()`, без нового API `TransportResolver` и `ClientWorkspace` — решение L4, D6, «Отмена подключения в app»; пользователь выбрал вариант без Disconnect 2026-11-02) и адаптер `Logger` в `lib/app/`; регистрация вторым резолвером `ClientWorkspace`; закрытие при закрытии root scope; зависимость `codelab_embedded` в `pubspec.yaml`. Правила сторожа desktop для `io.dart` (только `lib/app/`) и `testing.dart` (запрещён в `lib/`) — testing-quality, сценарий «Тестовый сценарий не попадает в app»; workspace-architecture, сценарий «IO-барель встроенного агента вне composition root»; D3.
+- [x] 4.5 `[desktop]` Интеграционные тесты для `CODELAB_E2E_AGENT=embedded` (testing-quality «Встроенный режим в e2e и conformance»; D10; критерии таблицы этапа 4 для app):
   - вариант `embedded` в `integration_test/support/e2e_agent.dart`: выбор типа «Embedded agent», scope со `scriptedEmbeddedAgentOpener` и сценариями `integration_test/llm_scripts/`;
   - пропуск `fs_flow_test` и `terminal_flow_test` с причиной;
   - скрипт `test:e2e:app:embedded` в корневом `pubspec.yaml` вне `check`.
 
-  В feature-ветке — только `fvm flutter analyze`; прогон на устройстве — в `release/<version>` (`AGENTS.md` §21; D13, п. 4).
-- [ ] 4.6 `[docs]` `apps/codelab_desktop/AGENTS.md`:
+  В feature-ветке — только `fvm flutter analyze`; прогон на устройстве — в `release/<version>` (`AGENTS.md` §21; D13, п. 4). Причина пропуска `fs_flow_test` и `terminal_flow_test` видна в имени или описании теста: `skip` у `testWidgets` — `bool` (D10).
+
+  **Ограничение:** ожидания варианта `embedded`, зависящие от агента, — `sessionLabel` и список моделей сценария — в feature-ветке проверены только анализом и подтверждаются прогоном в `release/<version>` (D10).
+- [x] 4.6 `[docs]` `apps/codelab_desktop/AGENTS.md`:
   - встроенный профиль через `codelab_embedded` (вместо «ещё не существует»);
   - `io.dart` только в `lib/app/`;
   - путь `secrets.backend: file` для приложения, запущенного из Finder (D5).
+- [x] 4.7 `[client]` Номер попытки в `DefaultClientWorkspace` (acp-client-kit «Явный автомат соединения», сценарии «Повторный Connect во время подключения», «Повторный Reconnect во время переподключения», «Поздний успех устаревшей попытки»; agent-workbench-ui, сценарий «Повторный Connect во время подключения встроенного агента»; D6, «Устаревшая попытка в `ClientWorkspace`»; `AGENTS.md` §9, §12). Решение пользователя 2026-11-02 по ревью итерации 4. Пара «тест → правка», красный тест коммитится до кода:
+  - тест `packages/dart/codelab_client_core/test/workspace/client_workspace_test.dart` на резолвере с управляемым `open` (`Completer`): открыта сессия, первый `connect` ждёт `open`, второй `connect` стартует, затем `open` первой попытки бросает — в потоке `state` нет промежуточного `ConnectionFailed`, сессия первой попыткой не возобновлена и не загружена; то же для `reconnect` (`Reconnecting` без промежуточного `failed`); поздний успех первой попытки после старта второй не публикует `Connected` и возможности, не шлёт `session/list` и `session/load`. Красный: сейчас прерванная попытка публикует `ConnectionFailed` и вызывает `resume`;
+  - реализация: внутренний номер попытки в `connect`/`reconnect`; после каждого `await` устаревшая попытка не публикует состояние, не трогает сессии (`resume`, `_reattachSessions`) и не выполняет шаги после подключения (`_listFirstPage`, `restoreAfterConnect`). Публичный API `ClientWorkspace` не меняется (L4); doc-комментарий по-русски со ссылкой на D6;
+  - тесты существующих сценариев «Явный автомат соединения» и клиентов (CLI, desktop) остаются зелёными без правок ожиданий.
+- [x] 4.8 `[desktop]` Таймаут закрытия встроенного агента в `CodeLabRootLifecycle.dispose` (agent-workbench-ui «Тип подключения «Встроенный агент»», сценарий «Зависшая остановка встроенного агента»; D6, таблица событий; D9, «Таймаут закрытия»). Решение пользователя 2026-11-02 по ревью итерации 4. Пара «тест → правка»:
+  - тест в `apps/codelab_desktop/test/app/` с резолвером, чей `close()` не завершается (подменный открыватель с зависшим `dispose`), и подменным временем (`fake_async` или параметр таймаута): закрытие root scope завершается после 10 s, в логгере приложения — `embedded.close_timeout` уровня `warning` без текста ошибки, транспорт и `AcpClientApplication` освобождены. Красный: сейчас `dispose` ждёт `close()` без ограничения;
+  - реализация: ожидание `close()` резолвера не дольше 10 s (как CLI), по истечении — `embedded.close_timeout` и продолжение освобождения; значение таймаута — параметр с умолчанием 10 s только ради теста, не настройка пользователя.
 
 ## 5. Замер 7.8 и разбор журнала в isolate (итерация 5)
 
@@ -249,3 +260,7 @@
   - Should (`codelab_setup`, D-05, мастер) — в change `add-provider-setup-ui`.
 
   Change готов к архивированию по просьбе пользователя.
+- [ ] 6.4 `[desktop]` Allowlist зависимостей app в стороже (workspace-architecture «Автоматический сторож границ пакетов», сценарий «Пакет агента в зависимостях app»; D3). Решение пользователя 2026-11-02 по ревью итерации 4: отдельной задачей в итерации 6. Сторож пишет исполнитель зоны ограничиваемого кода (правило выше, как 1.7 `[agent]`, 3.4 `[client]`, 4.4 `[desktop]`):
+  - красный тест в `packages/dart/codelab_architecture_tests/test/pubspec_allowlist_test.dart`: `desktopAllowlist` по пакетам `codelab_*` — `{codelab_client_acp, codelab_client_core, codelab_client_io, codelab_acp_protocol, codelab_acp_transports, codelab_embedded, codelab_ui}`; негативный случай — `codelab_agent_core` в `dependencies` временного `pubspec.yaml` даёт падение с именем пакета; `codelab_embedded` нарушением не считается; сторонние зависимости app не проверяются;
+  - если текущий `apps/codelab_desktop/pubspec.yaml` проходит без правок, тест закрывает критерий (характеризационный, исключение (а) §9.0) и это фиксируется в PR;
+  - doc-комментарий константы по-русски (почему/для чего/как) со ссылкой на D3.

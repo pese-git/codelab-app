@@ -26,14 +26,26 @@ typedef CodeLabStdioTransportFactory =
 typedef CodeLabWebSocketTransportFactory =
     AcpTransport Function(WebSocketAcpTransportConfig config);
 
+/// Тип подключения формы.
+///
+/// [embedded] — агент в процессе приложения (`codelab_embedded`): полей у типа
+/// нет, проект выбирается «Open Project», а конфигурация читается из файлов
+/// агента (design.md change `add-embedded-agent-mode`, D9; agent-workbench-ui
+/// «Тип подключения «Встроенный агент»»).
 enum CodeLabTransportType {
   stdio(label: 'stdio'),
-  webSocket(label: 'WebSocket');
+  webSocket(label: 'WebSocket'),
+  embedded(label: 'Embedded agent');
 
   const CodeLabTransportType({required this.label});
 
   final String label;
 }
+
+/// Профиль хоста встроенного агента в приложении (design.md change
+/// `add-embedded-agent-mode`, D9): локальное исполнение, режим разрешений
+/// из конфигурации агента.
+const embeddedHostProfile = 'embedded-app-desktop';
 
 /// Черновик профиля подключения из формы и статус соединения.
 final class ConnectionFormState {
@@ -81,6 +93,7 @@ final class ConnectionFormState {
   String get selectedProfileLabel => switch (transportType) {
     CodeLabTransportType.stdio => stdioProfileName,
     CodeLabTransportType.webSocket => 'Remote ACP Agent',
+    CodeLabTransportType.embedded => 'Embedded agent',
   };
 
   String get selectedConnectionDetail => switch (transportType) {
@@ -89,7 +102,12 @@ final class ConnectionFormState {
       stdioArgs,
     ].where((part) => part.trim().isNotEmpty).join(' '),
     CodeLabTransportType.webSocket => webSocketEndpoint,
+    CodeLabTransportType.embedded => embeddedConnectionDetail,
   };
+
+  /// Деталь встроенного подключения: пакет и профиль хоста (D9).
+  static const embeddedConnectionDetail =
+      'codelab_embedded ($embeddedHostProfile)';
 
   ConnectionFormState _copyWith({
     CodeLabConnectionStatus? connectionStatus,
@@ -160,6 +178,13 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
   final ActiveSessionCubit _activeSession;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
 
+  /// Номер последней начатой попытки [connect]/[reconnect]. Попытка, которую
+  /// вытеснила более новая (повторный Connect, пока встроенный агент
+  /// открывается), не вправе менять статус: иначе её отмена мелькнула бы
+  /// `failed` посреди успешного подключения (`AGENTS.md` §9; design.md change
+  /// `add-embedded-agent-mode`, D6, «Отмена подключения в app»).
+  var _attempt = 0;
+
   /// Ссылка на токен WebSocket в [_secrets].
   static const _webSocketTokenRef = 'codelab_desktop.websocket.token';
 
@@ -183,7 +208,11 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
       emit(state._copyWith(webSocketToken: value));
 
   Future<void> connect() async {
-    final isWebSocket = state.transportType == CodeLabTransportType.webSocket;
+    // Тип фиксируется на старте: форму можно менять, пока подключение идёт, а
+    // тексты диагностики должны описывать начатое подключение.
+    final type = state.transportType;
+    final detail = state.selectedConnectionDetail;
+    final attempt = ++_attempt;
     final profile = _profileFromForm(action: 'connecting');
     if (profile == null) {
       emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
@@ -195,9 +224,12 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
       return;
     }
     _diagnostics.record(
-      isWebSocket
-          ? 'Connecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
-          : 'Starting stdio ACP agent: ${state.selectedConnectionDetail}.',
+      _byType(
+        type,
+        stdio: 'Starting stdio ACP agent: $detail.',
+        webSocket: 'Connecting WebSocket ACP agent: $detail.',
+        embedded: 'Starting embedded ACP agent: $detail.',
+      ),
       source: 'transport',
     );
 
@@ -206,18 +238,31 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
         profile,
         projectDirectory: _settings.projectDirectory,
       );
+      // Вытесненная попытка завершается нормально и ничего не публикует
+      // (контракт `ClientWorkspace`): итог — у новой попытки, а «started» от
+      // старой был бы ложной диагностикой.
+      if (attempt != _attempt) {
+        return;
+      }
       emit(
         state._copyWith(
           connectionStatus: connectionStatusOf(_workspace.current.connection),
         ),
       );
       _diagnostics.record(
-        isWebSocket
-            ? 'WebSocket ACP agent connected: ${state.selectedConnectionDetail}.'
-            : 'Stdio ACP agent started: ${state.selectedConnectionDetail}.',
+        _byType(
+          type,
+          stdio: 'Stdio ACP agent started: $detail.',
+          webSocket: 'WebSocket ACP agent connected: $detail.',
+          embedded: 'Embedded ACP agent started: $detail.',
+        ),
         source: 'transport',
       );
     } on UnsupportedProtocolVersionException catch (error) {
+      if (attempt != _attempt) {
+        _recordStaleAttempt(error);
+        return;
+      }
       emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       _diagnostics.record(
         'Incompatible ACP agent: ${error.message}',
@@ -225,11 +270,18 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
         source: 'transport',
       );
     } on Object catch (error) {
+      if (attempt != _attempt) {
+        _recordStaleAttempt(error);
+        return;
+      }
       emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       _diagnostics.record(
-        isWebSocket
-            ? 'Failed to connect WebSocket ACP agent: $error'
-            : 'Failed to start stdio ACP agent: $error',
+        _byType(
+          type,
+          stdio: 'Failed to start stdio ACP agent: $error',
+          webSocket: 'Failed to connect WebSocket ACP agent: $error',
+          embedded: 'Failed to start embedded ACP agent: $error',
+        ),
         severity: DiagnosticSeverity.error,
         source: 'transport',
       );
@@ -240,7 +292,9 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
   /// пользователь мог изменить команду, адрес или проект после [connect]
   /// (design D4).
   Future<void> reconnect() async {
-    final isWebSocket = state.transportType == CodeLabTransportType.webSocket;
+    final type = state.transportType;
+    final detail = state.selectedConnectionDetail;
+    final attempt = ++_attempt;
     final profile = _profileFromForm(action: 'reconnecting');
     if (profile == null) {
       emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
@@ -254,9 +308,12 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
       return;
     }
     _diagnostics.record(
-      isWebSocket
-          ? 'Reconnecting WebSocket ACP agent: ${state.selectedConnectionDetail}.'
-          : 'Reconnecting stdio ACP agent: ${state.selectedConnectionDetail}.',
+      _byType(
+        type,
+        stdio: 'Reconnecting stdio ACP agent: $detail.',
+        webSocket: 'Reconnecting WebSocket ACP agent: $detail.',
+        embedded: 'Reconnecting embedded ACP agent: $detail.',
+      ),
       source: 'transport',
     );
 
@@ -265,25 +322,38 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
         profile: profile,
         projectDirectory: _settings.projectDirectory,
       );
-      if (isClosed) return;
+      if (isClosed || attempt != _attempt) return;
       emit(
         state._copyWith(
           connectionStatus: connectionStatusOf(_workspace.current.connection),
         ),
       );
       _diagnostics.record(
-        isWebSocket
-            ? 'WebSocket ACP agent reconnected: ${state.selectedConnectionDetail}.'
-            : 'Stdio ACP agent reconnected: ${state.selectedConnectionDetail}.',
+        _byType(
+          type,
+          stdio: 'Stdio ACP agent reconnected: $detail.',
+          webSocket: 'WebSocket ACP agent reconnected: $detail.',
+          embedded: 'Embedded ACP agent reconnected: $detail.',
+        ),
         source: 'transport',
       );
     } on Object catch (error) {
       if (isClosed) return;
+      if (attempt != _attempt) {
+        _recordStaleAttempt(error);
+        return;
+      }
       emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
       _diagnostics.record(
-        isWebSocket
-            ? 'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}'
-            : 'Failed to reconnect stdio ACP agent: ${describeFailure(error)}',
+        _byType(
+          type,
+          stdio:
+              'Failed to reconnect stdio ACP agent: ${describeFailure(error)}',
+          webSocket:
+              'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}',
+          embedded:
+              'Failed to reconnect embedded ACP agent: ${describeFailure(error)}',
+        ),
         severity: DiagnosticSeverity.error,
         source: 'transport',
       );
@@ -327,16 +397,24 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
     });
   }
 
+  /// Сбой вытесненной попытки: статус не меняется, в журнал — уровнем info.
+  void _recordStaleAttempt(Object error) => _diagnostics.record(
+    'A superseded connection attempt ended: ${describeFailure(error)}',
+    source: 'transport',
+  );
+
   /// Вызывается сразу после перехода в `connecting`/`reconnecting`, а не
   /// до него: статус меняется синхронно, и повторное нажатие во время
   /// проверки не запускает второе подключение.
   ///
   /// Останавливает подключение локального агента, если папки проекта нет:
   /// статус `failed` и понятная причина в `connectionMessage` вместо ошибки
-  /// запуска процесса или отказа `session/new`. Для WebSocket папка — путь
-  /// на стороне удалённого агента, локально её не проверить.
+  /// запуска процесса или отказа `session/new`. Встроенный агент тоже
+  /// локальный: ему папка нужна для слоёв конфигурации и журнала. Для
+  /// WebSocket папка — путь на стороне удалённого агента, локально её не
+  /// проверить.
   Future<bool> _failIfProjectDirectoryMissing() async {
-    if (state.transportType != CodeLabTransportType.stdio) {
+    if (state.transportType == CodeLabTransportType.webSocket) {
       return false;
     }
     final missing = await _settings.missingProjectDirectory();
@@ -411,8 +489,29 @@ final class ConnectionCubit extends ShellPartCubit<ConnectionFormState> {
           uri: uri,
           tokenRef: token.isEmpty ? null : _webSocketTokenRef,
         );
+      case CodeLabTransportType.embedded:
+        // Полей у типа нет: конфигурацию агент читает сам из
+        // `$CODELAB_HOME/config.yaml` и `.codelab/config.yaml` проекта (D5).
+        return ConnectionProfile.embedded(
+          id: 'embedded',
+          label: state.selectedProfileLabel,
+          hostProfile: embeddedHostProfile,
+        );
     }
   }
+
+  /// Текст диагностики по типу подключения: формулировки stdio, WebSocket и
+  /// встроенного агента различаются (прежние тексты первых двух сохранены).
+  String _byType(
+    CodeLabTransportType type, {
+    required String stdio,
+    required String webSocket,
+    required String embedded,
+  }) => switch (type) {
+    CodeLabTransportType.stdio => stdio,
+    CodeLabTransportType.webSocket => webSocket,
+    CodeLabTransportType.embedded => embedded,
+  };
 
   void _recordFormError(String message) => _diagnostics.record(
     message,

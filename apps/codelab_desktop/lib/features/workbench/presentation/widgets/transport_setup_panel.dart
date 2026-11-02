@@ -28,10 +28,14 @@ class TransportSetupPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
+            // Wrap, а не Row: три кнопки типов не помещаются в узком диалоге
+            // (640 px) в одну строку.
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text('Transport', style: theme.typography.bodyStrong),
-                const SizedBox(width: 12),
                 CodeLabButton(
                   label: 'stdio',
                   icon: FluentIcons.command_prompt,
@@ -41,7 +45,6 @@ class TransportSetupPanel extends StatelessWidget {
                   onPressed: () =>
                       cubit.selectTransport(CodeLabTransportType.stdio),
                 ),
-                const SizedBox(width: 8),
                 CodeLabButton(
                   label: 'WebSocket',
                   icon: FluentIcons.plug,
@@ -52,13 +55,29 @@ class TransportSetupPanel extends StatelessWidget {
                   onPressed: () =>
                       cubit.selectTransport(CodeLabTransportType.webSocket),
                 ),
+                CodeLabButton(
+                  label: CodeLabTransportType.embedded.label,
+                  icon: FluentIcons.robot,
+                  emphasis: state.transportType == CodeLabTransportType.embedded
+                      ? CodeLabButtonEmphasis.primary
+                      : CodeLabButtonEmphasis.secondary,
+                  onPressed: () =>
+                      cubit.selectTransport(CodeLabTransportType.embedded),
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            if (state.transportType == CodeLabTransportType.stdio)
-              _StdioTransportFields(state: state, cubit: cubit)
-            else
-              _WebSocketTransportFields(state: state, cubit: cubit),
+            switch (state.transportType) {
+              CodeLabTransportType.stdio => _StdioTransportFields(
+                state: state,
+                cubit: cubit,
+              ),
+              CodeLabTransportType.webSocket => _WebSocketTransportFields(
+                state: state,
+                cubit: cubit,
+              ),
+              CodeLabTransportType.embedded => const _EmbeddedTransportNote(),
+            },
           ],
         ),
       ),
@@ -127,6 +146,24 @@ class _StdioTransportFields extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// У встроенного агента нет полей: проект выбирается «Open Project», а
+/// конфигурацию агент читает сам (design.md change `add-embedded-agent-mode`,
+/// D9). Подсказка говорит, где её искать, чтобы отказ подключения из-за
+/// конфигурации не был неожиданным.
+class _EmbeddedTransportNote extends StatelessWidget {
+  const _EmbeddedTransportNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'The agent runs inside CodeLab, without a child process. '
+      'Its configuration is read from \$CODELAB_HOME/config.yaml and '
+      'the project\'s .codelab/config.yaml.',
+      style: FluentTheme.of(context).typography.caption,
     );
   }
 }

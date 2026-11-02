@@ -3,11 +3,23 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_desktop/app/app_scope.dart';
+import 'package:codelab_desktop/app/codelab_app_widget.dart';
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgent, LogLevel, Logger;
+// Сценарий модели — только для тестов: рабочий код app его не импортирует
+// (сторож, design.md change `add-embedded-agent-mode`, D3, D8).
+import 'package:codelab_embedded/testing.dart';
+import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Какой агент стоит за e2e-тестами app.
-enum E2eAgentKind { scripted, dart }
+///
+/// [embedded] — встроенный агент в процессе app: тип подключения «Embedded
+/// agent», сценарий модели `scriptedEmbeddedAgentOpener` (design.md change
+/// `add-embedded-agent-mode`, D8, D10).
+enum E2eAgentKind { scripted, dart, embedded }
 
 /// Тег тестов, которые проверяют поведение именно scripted-агента; в режиме
 /// `dart` прогон идёт с `--exclude-tags scripted-only` (`dart_test.yaml`).
@@ -38,6 +50,7 @@ final class E2eAgent {
     )) {
       'scripted' => E2eAgentKind.scripted,
       'dart' => E2eAgentKind.dart,
+      'embedded' => E2eAgentKind.embedded,
       final other => throw ArgumentError.value(other, 'CODELAB_E2E_AGENT'),
     },
   );
@@ -45,6 +58,77 @@ final class E2eAgent {
   final E2eAgentKind kind;
 
   bool get isScripted => kind == E2eAgentKind.scripted;
+
+  /// Пропустить тесты `fs/*` и `terminal/*` во встроенном режиме.
+  ///
+  /// Причина: встроенные профили исполняют файлы и команды локально, а не
+  /// через ACP-методы клиента `fs/*` и `terminal/*`, поэтому эти тесты там
+  /// нечего проверять (design.md change `add-embedded-agent-mode`, D4, D10).
+  /// `skip` у `testWidgets` — `bool`, причина записана здесь.
+  bool get skipFsAndTerminal => kind == E2eAgentKind.embedded;
+
+  /// Суффикс описания теста `fs/*` и `terminal/*`: при пропуске причина видна
+  /// в выводе раннера (у `skip: true` её нет).
+  String get skipNote => skipFsAndTerminal
+      ? ' [skipped: the embedded agent runs files and commands locally, not '
+            'through ACP fs/* and terminal/*]'
+      : '';
+
+  /// Пропустить тесты, которым нужен процесс `codelab-agent serve --ws`:
+  /// есть только в режиме `dart`; у scripted-агента сервера WebSocket нет, у
+  /// встроенного — тоже.
+  bool get skipWebSocketAgent => kind != E2eAgentKind.dart;
+
+  /// Данные следующего подключения встроенного агента: их задаёт [launch], а
+  /// открыватель scope читает в момент подключения. Поэтому `bootstrap()`
+  /// можно звать до `launch()`, как делают тесты.
+  _EmbeddedSetup? _embeddedSetup;
+
+  /// Корень приложения теста.
+  ///
+  /// Почему не `const CodeLabBootstrap(child: CodeLabApp())` в каждом тесте:
+  /// во встроенном режиме root scope должен получить открыватель со сценарием
+  /// (шов `createCodeLabRootScope(embeddedOpener:)`, D9); в остальных режимах
+  /// остаётся прежний корень.
+  ///
+  /// Как использовать: `await tester.pumpWidget(E2eAgent.current.bootstrap())`.
+  /// Каждый вызов создаёт новый root scope, поэтому перезапуск app в тесте
+  /// закрывает прежний `closeCodeLabRootScope()`.
+  Widget bootstrap() {
+    // Данные прошлого теста не должны попасть в подключение нового.
+    _embeddedSetup = null;
+    return _bootstrap();
+  }
+
+  Widget _bootstrap() => switch (kind) {
+    E2eAgentKind.embedded => CodeLabBootstrap(
+      scope: createCodeLabRootScope(embeddedOpener: _embeddedOpener),
+      child: const CodeLabApp(),
+    ),
+    _ => const CodeLabBootstrap(child: CodeLabApp()),
+  };
+
+  /// Открыватель, который строит агента по данным последнего [launch]:
+  /// сценарий `integration_test/llm_scripts/<режим>.json` с тем же набором
+  /// режимов разрешений, моделей и журнала, что флаги бинаря
+  /// ([_dartFlags]).
+  Future<EmbeddedAgent> _embeddedOpener({
+    required String cwd,
+    required String hostProfile,
+  }) {
+    final setup = _embeddedSetup;
+    if (setup == null) {
+      throw StateError('E2eAgent.launch must run before the first connect');
+    }
+    return scriptedEmbeddedAgentOpener(
+      llm: setup.llm,
+      codelabHome: setup.home,
+      permissionMode: setup.permissionMode,
+      sessionsDir: setup.sessionsDir,
+      models: setup.models,
+      logger: _SilentLogger(),
+    )(cwd: cwd, hostProfile: hostProfile);
+  }
 
   /// scripted: пишет агента из `codelab_acp_testing` в [tempDir]; dart: ничего не
   /// пишет, сценарий — `integration_test/llm_scripts/<mode.wireName>.json`.
@@ -96,6 +180,21 @@ final class E2eAgent {
             ..._dartFlags(mode, tempDir),
           ].join(' '),
           sessionLabel: equals('New session'),
+          models: const [
+            (value: 'scripted/gpt-5', name: 'gpt-5'),
+            (value: 'scripted/gpt-4', name: 'gpt-4'),
+          ],
+          rawInputMarker: 'timeout',
+        );
+      case E2eAgentKind.embedded:
+        _embeddedSetup = _EmbeddedSetup.of(mode, tempDir);
+        return E2eLaunch._(
+          command: '',
+          args: '',
+          embedded: true,
+          sessionLabel: equals('New session'),
+          // Ожидания те же, что у бинаря `--llm-script`: один и тот же
+          // сценарий модели (D8).
           models: const [
             (value: 'scripted/gpt-5', name: 'gpt-5'),
             (value: 'scripted/gpt-4', name: 'gpt-4'),
@@ -177,39 +276,48 @@ final class E2eAgent {
   static List<String> _dartFlags(
     CodelabCompatibleStdioAgentMode mode,
     Directory tempDir,
-  ) => switch (mode) {
-    CodelabCompatibleStdioAgentMode.normal ||
-    CodelabCompatibleStdioAgentMode.withPlan ||
-    CodelabCompatibleStdioAgentMode.echoesCwd => const [],
-    CodelabCompatibleStdioAgentMode.withConfigOptions => const [
-      '--model',
-      'gpt-5',
-      '--model',
-      'gpt-4',
-    ],
-    CodelabCompatibleStdioAgentMode.withPermissionRequest ||
-    CodelabCompatibleStdioAgentMode.withQueuedPromptDrain ||
-    CodelabCompatibleStdioAgentMode.withConcurrentSessions => const [
-      '--permission-mode',
-      'standard',
-    ],
-    CodelabCompatibleStdioAgentMode.withFsAccess => const [
-      '--permission-mode',
-      'accept-edits',
-    ],
-    CodelabCompatibleStdioAgentMode.withTerminalExecution => const [
-      '--permission-mode',
-      'bypass',
-    ],
-    CodelabCompatibleStdioAgentMode.withSessionList => [
-      '--sessions-dir',
-      _noSpaces('${tempDir.absolute.path}/agent-sessions'),
-    ],
-    final other => throw StateError(
-      '${other.name} has no Dart agent scenario: tag the test '
-      '$scriptedOnly',
-    ),
-  };
+  ) {
+    final settings = _modeSettings(mode);
+    return [
+      if (settings.permissionMode != null) ...[
+        '--permission-mode',
+        settings.permissionMode!,
+      ],
+      for (final model in settings.models) ...['--model', model],
+      if (settings.sessions) ...[
+        '--sessions-dir',
+        _noSpaces('${tempDir.absolute.path}/agent-sessions'),
+      ],
+    ];
+  }
+
+  /// Единая таблица режимов сценария для бинаря Dart-агента (флаги) и
+  /// встроенного агента (параметры `scriptedEmbeddedAgentOpener`): режим без
+  /// сценария падает одинаково — [StateError], а не молча без настроек.
+  static _ModeSettings _modeSettings(CodelabCompatibleStdioAgentMode mode) =>
+      switch (mode) {
+        CodelabCompatibleStdioAgentMode.normal ||
+        CodelabCompatibleStdioAgentMode.withPlan ||
+        CodelabCompatibleStdioAgentMode.echoesCwd => const _ModeSettings(),
+        CodelabCompatibleStdioAgentMode.withConfigOptions =>
+          const _ModeSettings(models: ['gpt-5', 'gpt-4']),
+        CodelabCompatibleStdioAgentMode.withPermissionRequest ||
+        CodelabCompatibleStdioAgentMode.withQueuedPromptDrain ||
+        CodelabCompatibleStdioAgentMode.withConcurrentSessions =>
+          const _ModeSettings(permissionMode: 'standard'),
+        CodelabCompatibleStdioAgentMode.withFsAccess => const _ModeSettings(
+          permissionMode: 'accept-edits',
+        ),
+        CodelabCompatibleStdioAgentMode.withTerminalExecution =>
+          const _ModeSettings(permissionMode: 'bypass'),
+        CodelabCompatibleStdioAgentMode.withSessionList => const _ModeSettings(
+          sessions: true,
+        ),
+        final other => throw StateError(
+          '${other.name} has no Dart agent scenario: tag the test '
+          '$scriptedOnly',
+        ),
+      };
 
   /// Относительная команда разрешается от `apps/codelab_desktop`: спавн агента
   /// идёт из папки проекта, где относительный путь уже не найдётся. Голое
@@ -234,7 +342,12 @@ final class E2eLaunch {
     required this.sessionLabel,
     required this.models,
     required this.rawInputMarker,
+    this.embedded = false,
   });
+
+  /// Встроенный агент: вместо команды и аргументов выбирается тип «Embedded
+  /// agent» ([enterConnection]).
+  final bool embedded;
 
   /// Поле `transport-field-Command`.
   final String command;
@@ -250,6 +363,26 @@ final class E2eLaunch {
 
   /// Текст, который есть только в сырых аргументах вызова (`rawInput`).
   final String rawInputMarker;
+
+  /// Заполняет форму подключения; диалог подключения должен быть открыт.
+  ///
+  /// Почему общий шаг: запуск внешнего агента вводится в поля `Command` и
+  /// `Args`, а встроенному полей не нужно — достаточно выбрать тип (D9).
+  Future<void> enterConnection(WidgetTester tester) async {
+    if (embedded) {
+      await tester.tap(find.widgetWithText(CodeLabButton, 'Embedded agent'));
+      await tester.pumpAndSettle();
+      return;
+    }
+    await tester.enterText(
+      find.byKey(const ValueKey('transport-field-Command')),
+      command,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('transport-field-Args')),
+      args,
+    );
+  }
 
   /// Текстовые виджеты, совпавшие с [sessionLabel].
   Finder get sessionLabelFinder => find.byWidgetPredicate(
@@ -287,4 +420,85 @@ final class E2eWebSocketAgent {
       },
     );
   }
+}
+
+/// Лог встроенного агента в e2e-тестах не нужен: журнал app и транскрипт
+/// проверяются сами.
+final class _SilentLogger implements Logger {
+  @override
+  bool isEnabled(LogLevel level) => false;
+
+  @override
+  void log(
+    LogLevel level,
+    String event, {
+    Map<String, Object?> fields = const {},
+    Object? error,
+    StackTrace? stack,
+  }) {}
+}
+
+/// Настройки сценария одного режима: режим разрешений, каталог моделей и
+/// журнал сессий (`--sessions-dir` бинаря, change
+/// `add-llm-script-session-store`, D4: без него сессии `--llm-script` живут в
+/// памяти и агент не объявляет `loadSession`).
+final class _ModeSettings {
+  const _ModeSettings({
+    this.permissionMode,
+    this.models = const [],
+    this.sessions = false,
+  });
+
+  final String? permissionMode;
+  final List<String> models;
+  final bool sessions;
+}
+
+/// Сценарий и настройки встроенного агента для одного режима теста.
+///
+/// Почему: у встроенного агента нет флагов командной строки, а те же режимы
+/// разрешений, моделей и журнала, что у `codelab-agent serve --stdio`
+/// (`E2eAgent._dartFlags`), задаются параметрами `scriptedEmbeddedAgentOpener`.
+/// Режим без сценария Dart-агента — [StateError]: такой тест помечается
+/// `scripted-only` и в этом режиме исключается.
+final class _EmbeddedSetup {
+  _EmbeddedSetup._({
+    required this.llm,
+    required this.home,
+    required this.permissionMode,
+    required this.sessionsDir,
+    required this.models,
+  });
+
+  factory _EmbeddedSetup.of(
+    CodelabCompatibleStdioAgentMode mode,
+    Directory tempDir,
+  ) {
+    // Таблица режимов — общая с бинарём; неизвестный режим падает здесь же.
+    final settings = E2eAgent._modeSettings(mode);
+    final script = File('integration_test/llm_scripts/${mode.wireName}.json');
+    if (!script.existsSync()) {
+      throw StateError(
+        '${mode.name} has no model script ${script.path}: tag the test '
+        '$scriptedOnly',
+      );
+    }
+    final json = jsonDecode(script.readAsStringSync()) as Map<String, Object?>;
+    return _EmbeddedSetup._(
+      llm: json['llm']! as Map<String, Object?>,
+      // Путь вводится не в форму, а передаётся открывателю: пробелы не мешают.
+      home: '${tempDir.absolute.path}/codelab-home',
+      permissionMode: settings.permissionMode,
+      sessionsDir: settings.sessions
+          ? '${tempDir.absolute.path}/agent-sessions'
+          : null,
+      models: [for (final model in settings.models) 'scripted/$model'],
+    );
+  }
+
+  final Map<String, Object?> llm;
+  final String home;
+  final String? permissionMode;
+  final String? sessionsDir;
+  final List<String> models;
 }

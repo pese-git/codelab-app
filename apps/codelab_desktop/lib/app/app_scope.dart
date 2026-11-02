@@ -22,6 +22,13 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         WorkspaceSnapshotStore;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_acp_transports/io.dart';
+import 'package:codelab_embedded/codelab_embedded.dart'
+    as agent
+    show EmbeddedAgentOpener, LogLevel, Logger;
+// IO-барель встроенного агента разрешён сторожем только в `lib/app/`
+// (design.md change `add-embedded-agent-mode`, D3): композиция — единственное
+// место, которое знает настольный открыватель.
+import 'package:codelab_embedded/io.dart' show localEmbeddedAgentOpener;
 import 'package:cherrypick/cherrypick.dart';
 import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -39,6 +46,8 @@ import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
 import '../features/workbench/application/shell_cubit.dart';
+import 'embedded_logger.dart';
+import 'embedded_transport_resolver.dart';
 
 part 'app_scope.module.cherrypick.g.dart';
 
@@ -50,6 +59,8 @@ Scope createCodeLabRootScope({
   CodeLabWebSocketTransportFactory? webSocketTransportFactory,
   String? logDirectoryPath,
   DirectoryExists? directoryExists,
+  agent.EmbeddedAgentOpener? embeddedOpener,
+  Duration? embeddedCloseTimeout,
 }) {
   final scope = CherryPick.openRootScope()
     ..installModules([
@@ -64,6 +75,10 @@ Scope createCodeLabRootScope({
         stdioTransportFactory: stdioTransportFactory ?? _createStdioTransport,
         webSocketTransportFactory:
             webSocketTransportFactory ?? _createWebSocketTransport,
+      ),
+      CodeLabEmbeddedAgentModule(
+        embeddedOpener: embeddedOpener,
+        closeTimeout: embeddedCloseTimeout,
       ),
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
@@ -107,6 +122,71 @@ final class CodeLabTransportRuntimeModule extends Module {
     bind<CodeLabWebSocketTransportFactory>().toInstance(
       _webSocketTransportFactory,
     );
+  }
+}
+
+/// Сколько `CodeLabRootLifecycle` ждёт закрытие встроенного агента: больше
+/// grace 5 с у `server.shutdown` агента, как в CLI (design.md change
+/// `add-embedded-agent-mode`, D6, «Выход CLI»; решение пользователя
+/// итерации 4).
+const defaultEmbeddedCloseTimeout = Duration(seconds: 10);
+
+/// Предел ожидания закрытия встроенного агента и логгер события таймаута.
+///
+/// Почему отдельный тип: `CodeLabRootLifecycle` получает зависимости через
+/// сгенерированный контракт cherrypick, а `Duration` и `Logger` без обёртки
+/// не различить по типу. Как использовать: создаёт
+/// [CodeLabEmbeddedAgentModule]; `timeout` — шов тестов
+/// (`createCodeLabRootScope(embeddedCloseTimeout:)`).
+final class EmbeddedCloseSettings {
+  const EmbeddedCloseSettings({required this.timeout, required this.logger});
+
+  final Duration timeout;
+  final agent.Logger logger;
+}
+
+/// Открыватель встроенного агента и его резолвер (design.md change
+/// `add-embedded-agent-mode`, D6, D9).
+///
+/// Почему отдельный модуль: открыватель — шов тестов (`embeddedOpener`:
+/// сценарий модели вместо настоящего конфига и сети, D8), а резолвер должен
+/// быть один на scope — им владеют и `ClientWorkspace`, и закрытие scope.
+///
+/// Как использовать: без [embeddedOpener] берётся `localEmbeddedAgentOpener` с
+/// окружением процесса и логом агента в журнал приложения. Модуль ставится
+/// после `CodeLabLoggingModule`: адаптер логгера читает уже настроенный журнал.
+final class CodeLabEmbeddedAgentModule extends Module {
+  CodeLabEmbeddedAgentModule({
+    agent.EmbeddedAgentOpener? embeddedOpener,
+    Duration? closeTimeout,
+  }) : _embeddedOpener = embeddedOpener,
+       _closeTimeout = closeTimeout;
+
+  final agent.EmbeddedAgentOpener? _embeddedOpener;
+  final Duration? _closeTimeout;
+
+  @override
+  void builder(Scope currentScope) {
+    bind<agent.EmbeddedAgentOpener>().toInstance(
+      _embeddedOpener ??
+          localEmbeddedAgentOpener(
+            environment: Platform.environment,
+            logger: CodeLabEmbeddedLogger(),
+          ),
+    );
+    bind<EmbeddedCloseSettings>().toInstance(
+      EmbeddedCloseSettings(
+        timeout: _closeTimeout ?? defaultEmbeddedCloseTimeout,
+        logger: CodeLabEmbeddedLogger(),
+      ),
+    );
+    bind<EmbeddedTransportResolver>()
+        .toProvide(
+          () => EmbeddedTransportResolver(
+            currentScope.resolve<agent.EmbeddedAgentOpener>(),
+          ),
+        )
+        .singleton();
   }
 }
 
@@ -259,6 +339,10 @@ final class CodeLabPresentationModule extends Module {
                     .resolve<CodeLabWebSocketTransportFactory>(),
                 secrets: currentScope.resolve<InMemorySecretSource>(),
               ),
+              // Встроенный агент открывает только свой резолвер; у
+              // `ConfigTransportResolver` профиль `embedded` не поддержан
+              // (D7).
+              currentScope.resolve<EmbeddedTransportResolver>(),
             ],
             snapshots: currentScope.resolve<WorkspaceSnapshotStore>(),
           ),
@@ -340,11 +424,15 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     AcpClientApplication application,
     AcpTransport transport,
     ClientWorkspace workspace,
+    EmbeddedTransportResolver embedded,
+    EmbeddedCloseSettings embeddedCloseSettings,
     CodeLabShellCubit shellCubit,
   ) => CodeLabRootLifecycle(
     application: application,
     transport: transport,
     workspace: workspace,
+    embedded: embedded,
+    embeddedCloseSettings: embeddedCloseSettings,
     shellCubit: shellCubit,
   );
 }
@@ -354,10 +442,14 @@ final class CodeLabRootLifecycle implements Disposable {
     required AcpClientApplication application,
     required AcpTransport transport,
     required ClientWorkspace workspace,
+    required EmbeddedTransportResolver embedded,
+    required EmbeddedCloseSettings embeddedCloseSettings,
     required CodeLabShellCubit shellCubit,
   }) : _application = application,
        _transport = transport,
        _workspace = workspace,
+       _embedded = embedded,
+       _embeddedCloseSettings = embeddedCloseSettings,
        _shellCubit = shellCubit;
 
   final AcpClientApplication _application;
@@ -366,6 +458,13 @@ final class CodeLabRootLifecycle implements Disposable {
   /// Закрывается после Cubit (его подписчика) и до ядра клиента: kit не
   /// закрывает `AcpClientApplication` сам.
   final ClientWorkspace _workspace;
+
+  /// Закрывается после рабочего пространства и до ядра клиента: агент
+  /// отменяет ход и дописывает журнал, пока клиентский конец жив; закрытие
+  /// ждёт `dispose` агента и открытие в полёте (design.md change
+  /// `add-embedded-agent-mode`, D6, D9).
+  final EmbeddedTransportResolver _embedded;
+  final EmbeddedCloseSettings _embeddedCloseSettings;
   final CodeLabShellCubit _shellCubit;
   var _isDisposed = false;
 
@@ -378,6 +477,16 @@ final class CodeLabRootLifecycle implements Disposable {
     _isDisposed = true;
     await _shellCubit.close();
     await _workspace.dispose();
+    // Зависший `dispose` агента не держит закрытие scope вечно: по таймауту
+    // пишется событие без текста ошибки, а транспорт и ядро клиента всё равно
+    // освобождаются (design.md change `add-embedded-agent-mode`, D6).
+    await _embedded.close().timeout(
+      _embeddedCloseSettings.timeout,
+      onTimeout: () => _embeddedCloseSettings.logger.log(
+        agent.LogLevel.warning,
+        'embedded.close_timeout',
+      ),
+    );
     await _transport.close();
     await _application.dispose();
   }
