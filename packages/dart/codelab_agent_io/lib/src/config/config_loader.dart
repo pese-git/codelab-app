@@ -7,6 +7,7 @@ import 'package:meta/meta.dart';
 import '../secrets/secrets_backend_problem.dart';
 import 'environment_layer.dart';
 import 'legacy_notice.dart';
+import 'provider_preconfig.dart';
 import 'yaml_reader.dart';
 
 /// Ошибка использования загрузчика: запрос, который нельзя выполнить и нельзя
@@ -166,8 +167,13 @@ String codelabHomeOf(Map<String, String> environment) {
 /// 3. `<cwd>/.codelab/config.yaml`;
 /// 4. `<cwd>/.codelab/config.local.yaml`;
 /// 5. файл `--config` / `CODELAB_CONFIG` (`.yaml` или `.yml`);
-/// 6. переменные `CODELAB_*` ([buildEnvironmentLayer]);
-/// 7. флаги (дерево строит хост).
+/// 6. переменные `CODELAB_*`: сначала предконфигурация провайдера
+///    `CODELAB_PROVIDER_*` ([preconfigLayer]), затем остальные
+///    ([buildEnvironmentLayer]);
+/// 7. флаги: сначала предконфигурация `--provider-type`/`--provider-config`
+///    ([ProviderPreconfigFlags]), затем дерево флагов, которое строит хост
+///    (поэтому `--model` побеждает модель предконфигурации, а `CODELAB_MODEL`
+///    ей проигрывает; design.md change `add-config-writer-and-reload`, D3).
 ///
 /// Как использовать: один [ConfigLoader] на процесс —
 /// `loader.load(cwd: …, environment: Platform.environment, flags: …)`.
@@ -194,6 +200,9 @@ final class ConfigLoader {
   /// которые назвал хост (переменная токена `--token-env`): они не опечатка.
   /// Неизвестные `CODELAB_*` попадают в `warnings` событием
   /// `config.env.unknown` (D13): правило одно для `serve` и `config check`.
+  /// [preconfigFlags] — предконфигурация провайдера из флагов `serve`: если
+  /// задана, переменные `CODELAB_PROVIDER_*` не читаются (D3). Её значение
+  /// не попадает ни в проблемы, ни в лог.
   /// [platform] подменяет `Platform.operatingSystem` в тестах: на `windows`
   /// `secrets.backend: file` — проблема конфигурации (change
   /// `add-agent-secret-store`, D14).
@@ -201,6 +210,7 @@ final class ConfigLoader {
     required String cwd,
     required Map<String, String> environment,
     ConfigTree? flags,
+    ProviderPreconfigFlags? preconfigFlags,
     String? extraConfig,
     bool scripted = false,
     Set<String> knownVariables = const {},
@@ -209,6 +219,7 @@ final class ConfigLoader {
     cwd: cwd,
     environment: environment,
     flags: flags,
+    preconfigFlags: preconfigFlags,
     extraConfig: extraConfig,
     scripted: scripted,
     knownVariables: knownVariables,
@@ -231,6 +242,7 @@ final class ConfigLoader {
     required String cwd,
     required Map<String, String> environment,
     ConfigTree? flags,
+    ProviderPreconfigFlags? preconfigFlags,
     String? extraConfig,
     bool scripted = false,
     Set<String> knownVariables = const {},
@@ -325,9 +337,21 @@ final class ConfigLoader {
     warnings.addAll(
       unknownEnvironmentWarnings(environment, extraKnown: knownVariables),
     );
+    // Слои 6 и 7 (D3): предконфигурация идёт первой в своём слое, чтобы более
+    // частное значение (`CODELAB_MODEL`, `--model`) её переопределяло.
+    final preconfig = preconfigLayer(environment, flags: preconfigFlags);
+    issues.addAll(preconfig.issues);
+    warnings.addAll(preconfig.notices);
+    final preconfigFromFlags = preconfig.layer?.kind == ConfigLayerKind.flags;
+    if (preconfig.layer case final layer? when !preconfigFromFlags) {
+      layers.add(layer);
+    }
     final env = buildEnvironmentLayer(environment);
     issues.addAll(env.issues);
     if (env.layer case final layer?) {
+      layers.add(layer);
+    }
+    if (preconfig.layer case final layer? when preconfigFromFlags) {
       layers.add(layer);
     }
     if (flags != null && flags.values.isNotEmpty) {

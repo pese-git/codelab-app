@@ -20,7 +20,7 @@ export 'src/config/config_issue.dart';
 export 'src/config/config_tree.dart';
 export 'src/config/core_config.dart';
 export 'src/config/host_settings.dart';
-export 'src/config/key_path.dart' show KeyPath;
+export 'src/config/key_path.dart' show KeyPath, nearestKey;
 export 'src/config/redact_settings.dart';
 export 'src/env/bounded_env.dart' show BoundedEnv;
 export 'src/env/execution_env.dart';

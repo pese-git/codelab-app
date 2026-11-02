@@ -54,7 +54,20 @@ int editDistance(String a, String b) {
   return previous[b.length];
 }
 
-/// Ближайший ключ с расстоянием ≤ 2 или `null`.
+/// Ближайший к [key] из [candidates] ключ для подсказки «did you mean».
+///
+/// Почему отдельная публичная функция: опечатку в ключе объясняют одним
+/// способом и валидатор ядра (неизвестный ключ файла), и хост, который сам
+/// разбирает вход вне схемы (предконфигурация провайдера
+/// `CODELAB_PROVIDER_CONFIG`, design.md change
+/// `add-config-writer-and-reload`, D3). Две копии расходились бы.
+///
+/// Для чего: порог расстояния Левенштейна ([editDistance]) не больше 2; дальше
+/// догадка вводила бы в заблуждение. При равенстве выигрывает первый
+/// кандидат.
+///
+/// Как использовать: `nearestKey('contex_window', fields)` — имя для текста
+/// `unknown key (did you mean <имя>?)`; `null` — подсказки нет, текст без неё.
 String? nearestKey(String key, Iterable<String> candidates) {
   String? best;
   var bestDistance = 3;

@@ -45,6 +45,7 @@ ConfigLoadResult loadServeConfig(
       cwd: cwd,
       environment: options.environment,
       flags: flags,
+      preconfigFlags: options.preconfig,
       extraConfig: options.configPath,
       scripted: options.llmScript != null,
       // Переменная токена WebSocket названа флагом — не опечатка (D13).

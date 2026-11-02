@@ -64,7 +64,7 @@
 
 - **Пакеты** (раскладка — design.md, D1):
   - `codelab_agent_core`: `config/` — `settings_registry.dart`, `config_edit.dart`, `config_source.dart`, строки схемы `config.*`; `runtime/` — `reloadConfig`, `configStatus`, снимок под замену; `secrets/secret_resolver.dart` — `invalidate`; `mcp/mcp_connector.dart` — состояние сервера в сводке, `reconnect`/`setEnabled`; `commands/` — встроенные `config` и `mcp`; `host/` — `AgentCoreServices.config`, параметр `buildAgentCore(modelsFor:)`.
-  - `codelab_agent_io`: `config/config_writer.dart`, `config_watcher.dart`, `file_config_source.dart`, `environment_layer.dart` (L-25); `cli/` — `ConfigCommands` (`path`, `get`, `set`, `unset`), `ProviderCommands`, `McpServerCommands`; `pubspec.yaml` — прямая зависимость `yaml_edit` (уже в allowlist `ioAllowlist`).
+  - `codelab_agent_io`: `config/config_writer.dart`, `config_watcher.dart`, `file_config_source.dart`, `provider_preconfig.dart` и `literal_secret_rule.dart` (L-25); `cli/` — `ConfigCommands` (`path`, `get`, `set`, `unset`), `ProviderCommands`, `McpServerCommands`; `pubspec.yaml` — прямая зависимость `yaml_edit` (уже в allowlist `ioAllowlist`).
   - `codelab_agent_mcp`: супервизия серверов в сессии коннектора, задержки повторов.
   - `codelab_agent_acp`: уведомления сессий после перезагрузки, кадры встроенных команд.
   - `codelab_embedded`: `FileConfigSource` встроенного агента, закрытие в `dispose`.

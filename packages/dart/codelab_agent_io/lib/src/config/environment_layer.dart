@@ -21,6 +21,11 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// `type` без значения переменной (оно не должно попадать в текст ошибок);
 /// `autopilot` из `CODELAB_PERMISSION_MODE` отклоняет валидатор ядра: режим
 /// включается только флагом (CFG-4). Пустой слой возвращается как `null`.
+///
+/// Предконфигурация провайдера `CODELAB_PROVIDER_*` (L-25) — отдельный слой в
+/// `provider_preconfig.dart` (`preconfigLayer`): он стоит перед этим слоем,
+/// чтобы `CODELAB_MODEL` переопределял модель предконфигурации (design.md
+/// change `add-config-writer-and-reload`, D3).
 ({ConfigTree? layer, List<ConfigIssue> issues}) buildEnvironmentLayer(
   Map<String, String> environment,
 ) {

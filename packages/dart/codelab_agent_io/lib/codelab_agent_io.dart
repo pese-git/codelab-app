@@ -21,9 +21,15 @@ export 'src/cli/secret_commands.dart'
 export 'src/cli/secret_input.dart'
     show MultilineSecretException, SecretInput, StdinSecretInput;
 export 'src/config/config_loader.dart'
-    show ConfigLoader, ConfigUsageException, checkConfigFileName, codelabHomeOf;
+    show
+        ConfigLoader,
+        ConfigUsageException,
+        checkConfigFileName,
+        codelabHomeOf,
+        maxConfigBytes;
 export 'src/config/config_warnings.dart' show logConfigWarnings;
 export 'src/config/environment_layer.dart' show testSecretStorePath;
+export 'src/config/provider_preconfig.dart' show ProviderPreconfigFlags;
 export 'src/env/host_path.dart';
 export 'src/env/local_execution_env.dart';
 export 'src/mcp/stdio_process_transport.dart'
