@@ -150,6 +150,11 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 Слои 5 и 6 (окружение, флаги и после MVP предконфигурация провайдера `CODELAB_PROVIDER_*`,
 §17.5.3) правилам доверия не подчиняются: их задаёт тот, кто запускает агента.
 
+С живой перезагрузкой (этап 8.10) доверие закреплено на стартовом снимке до перезапуска:
+`CoreConfig.fromLayers(pinnedTrustedProjects:)` оценивает проектные слои и строит
+`CoreConfig.trustedProjects` по списку начальной загрузки, а новое значение `trusted_projects`
+ждёт перезапуска (§17.5.6; design.md change `add-config-writer-and-reload`, D8).
+
 `trusted_projects` — массив только абсолютных путей (`~` раскрывается; относительный — ошибка
 `expected an absolute path` на `trusted_projects[i]`) в **глобальном** слое (`user` или `appStorage`).
 Загрузчик канонизирует корень проекта и каждый элемент `trusted_projects` (symlink раскрыт;
@@ -547,11 +552,14 @@ capability `memory` off), `max_notes` (`500`, `10..10000`, на scope), `note_ma
 |---|---|---|---|
 | `backend` | `"auto"` \| `"keychain"` \| `"env"` \| `"file"` | `"auto"` | хранилище секретов. В 1.0: `auto` — `env` на всех ОС, без проб и процессов, `file` не выбирает никогда (CFG-11); `env` — только переменные `CODELAB_SECRET_<…>`; `file` — открытый `$CODELAB_HOME/secrets.yaml` с правами `0600`, на Windows — проблема конфигурации `file backend is not supported on Windows; use env with CODELAB_SECRET_* variables` (добавляет `ConfigLoader`, D7, D14); `keychain` — проблема конфигурации `secrets.backend: keychain is not supported yet (supported: auto, env, file)`, значение остаётся в схеме для хранилищ ОС после 1.0 (черновик `add-agent-os-secret-backends`, D13). Другое значение — проблема `value` `expected one of: auto, keychain, env, file` |
 
-**`config`** (после MVP, §17.5.6) — слои 2 и 4.
+**`config`** (с этапа 8.10, §17.5.6; design.md change `add-config-writer-and-reload`, D7) — слои 2, 4
+и `--config`/`CODELAB_CONFIG`; в проектном слое 3 раздел отбрасывается с
+`config.project.untrusted_key`. Ключи применяются (потребитель — `FileConfigSource` хоста) и оба
+`restartRequired`: наблюдатель создаётся один раз при старте.
 
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `watch` | bool | `true` | наблюдение за файлами конфига и живая перезагрузка |
+| `watch` | bool | `true` | наблюдение за файлами конфига и живая перезагрузка; `false` — источник без наблюдателя, `/config reload` работает |
 | `poll_interval` | duration | `"2s"` | период опроса, где события ФС недоступны; `1s..60s` |
 
 **`profile.<name>`** — сужение встроенного профиля (§10.2): ключи — имена capability в
@@ -663,7 +671,7 @@ loadConfig(cwd, env, flags):
 `logging.trace*`, `redact.*` и др.), проверяется по схеме, а явно заданный даёт одно предупреждение
 `config.key.not_applied {key, source}` на каждый явно заданный лист за загрузку; значение по умолчанию предупреждения не
 даёт. Раздел верхнего уровня «после MVP» (`llm`, `images`, `skills`, `subagents`, `jobs`, `hooks`,
-`plugins`, `a2a`, `memory`, `steering`, `lsp`, `secrets`, `config` и др.) распознаётся по имени и
+`plugins`, `a2a`, `memory`, `steering`, `lsp` и др.; `secrets` получил схему в 8.9, `config` — в 8.10, D7 change `add-config-writer-and-reload`) распознаётся по имени и
 даёт то же предупреждение без проверки типов: его схему введёт change, который добавит потребителя.
 Ключ, которого нет ни в схеме, ни в списке разделов после MVP, — `unknownKey` (CFG-1). Ошибка на
 документированном ключе сломала бы старт пользователю, который следует документу, а тихий приём
@@ -764,9 +772,9 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | — | `--role <role>=<provider/model>` (после MVP, L-10; можно повторять; в том числе `--role vision=<provider/model>`, §17.11.5) | `llm.roles.<role>.models = ["<provider/model>"]` на прогон |
 | — | `--drain-timeout <duration>` (после MVP, только `codelab -p`, H-05) | `subagents.drain_timeout` (§17.3.9); `0` — не ждать |
 | — | `--max-wakes <n>` (после MVP, только `codelab -p`, H-05) | `subagents.max_wakes` (§17.3.9); `0` — не будить |
-| `CODELAB_PROVIDER_TYPE` | `--provider-type <kind>` (после MVP, L-25) | тип провайдера предконфигурации (§17.5.3) |
-| `CODELAB_PROVIDER_CONFIG` | `--provider-config <json \| @путь>` (после MVP) | JSON провайдера предконфигурации; флаги затеняют обе переменные |
-| `CODELAB_PROVIDER_CONFIG_BASE64` | — (после MVP) | тот же JSON в base64; вместе с `CODELAB_PROVIDER_CONFIG` — ошибка |
+| `CODELAB_PROVIDER_TYPE` | `--provider-type <kind>` (этап 8.10, L-25; флаг только у `serve`) | тип провайдера предконфигурации (§17.5.3): `openai-compatible` или `anthropic` |
+| `CODELAB_PROVIDER_CONFIG` | `--provider-config <json \| @путь>` (этап 8.10; путь — от текущего каталога процесса) | JSON провайдера предконфигурации; флаги затеняют обе переменные (`config.preconfig.shadowed {by: "flags"}`); один флаг без другого, нечитаемый `@путь` и сочетание с `--provider`/`--base-url` — ошибка использования `64` (design.md change `add-config-writer-and-reload`, D3) |
+| `CODELAB_PROVIDER_CONFIG_BASE64` | — (этап 8.10) | тот же JSON в base64 (стандартный или URL-safe алфавит, `=` необязательны); вместе с `CODELAB_PROVIDER_CONFIG` — проблема конфига |
 | `CODELAB_SECRET_<ИМЯ>` | — (с этапа 8.9, P-12; change `add-agent-secret-store`, D3) | переопределение секрета по имени, `SecretNames.envOverride` (§17.5.4): побеждает хранилище при любом `secrets.backend`; при `auto`/`env` в 1.0 — единственный источник секретов |
 | `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` (с этапа 8.9, P-17, флаг `serve`; change `add-agent-secret-store`, D10, D11) | событие `secrets.lookup {name, purpose, source, found}` на каждое обращение, без значения, длины, префикса и хеша (CFG-10); уровень лога не меняет; другие значения переменной — как незаданная |
 | — | `--debug-llm-snapshot[=headers\|body]` (после MVP, L-27) | `logging.llm_snapshot` |
@@ -776,9 +784,14 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 конфига; это абзац о прежнем минимуме). Бинарь `codelab-agent` этапа 4 файлы конфига (§15.2) не читает: провайдер, модель и ключ задаются `--provider`, `--base-url`,
 `--model` и `CODELAB_API_KEY`, режим — `--permission-mode`, остальные ключи — значения по
 умолчанию §15.4 (dart-agent-and-clients §9.9, задача 4.6). На этапе 8 YAML-конфиг (§15.2–§15.5)
-заменяет этот минимум, а флаги остаются переопределениями слоя 6. Флаги `--provider` и
-`--provider-type`/`--provider-config` (после MVP, §17.5.3) взаимоисключающие: оба сразу — ошибка
-использования.
+заменяет этот минимум, а флаги остаются переопределениями слоя 6. Флаги `--provider`/`--base-url` и
+`--provider-type`/`--provider-config` (этап 8.10, §17.5.3) взаимоисключающие: вместе — ошибка
+использования `64` `--provider-type cannot be combined with --provider` (D3, OQ6 change
+`add-config-writer-and-reload`). Внутри слоя флагов предконфигурация применяется первой, `--model` —
+после неё; `CODELAB_MODEL` (слой окружения) предконфигурации флагов проигрывает. Справка рекомендует
+`--provider-config @путь`: JSON в argv виден в `ps`; литеральный секретный заголовок в JSON —
+проблема `inlineSecret` (§17.5.3, §17.5.5). Предконфигурацию из переменных одинаково видят `serve`, встроенный
+агент и `config check`: она часть слоя переменных `ConfigLoader`; у встроенного агента флагов нет.
 
 Других переменных `CODELAB_*` ядро не читает; неизвестная переменная с префиксом `CODELAB_`
 даёт предупреждение (опечатка не должна молча игнорироваться). Переменные семейства

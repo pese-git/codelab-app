@@ -149,16 +149,23 @@ design.md change `add-embedded-agent-mode`, D4.
    env: из clientCapabilities, gate: AcpPermissionGate(connection)))`. Сессия пишет заголовок и
    `model_change`.
 4. MCP-серверы подключаются параллельно, не дольше `mcpConnectTimeout` (10 с) каждый; ответ
-   `session/new` ждёт подключения (уведомлений до ответа нет, ACP-8); сбой сервера — лог `mcp.server.failed`, сессия создаётся без его инструментов. После MVP сбой не
+   `session/new` ждёт подключения (уведомлений до ответа нет, ACP-8); сбой сервера — лог `mcp.server.failed`, сессия создаётся без его инструментов. С этапа 8.10 сбой не
    окончателен: сервер переходит в `failed` и переподключается с задержкой 1…30 с, пока жива
-   сессия; инструменты появляются на границе шага после первого успешного подключения (§17.5.7).
+   сессия; ответ ждёт только первую попытку, инструменты появляются на границе шага после первого
+   успешного подключения (§17.5.7; design.md change `add-config-writer-and-reload`, D11).
 5. Ответ `NewSessionResponse(sessionId, modes, configOptions)`.
 6. **После** ответа — уведомление `available_commands_update` (до ответа клиент не знает
    `sessionId`, ранние уведомления он отбросил бы). На этапе 4 встроенных команд ещё нет и
    список пуст (`availableCommands: []`). С этапа 8.7 список — команды шаблонов промптов
    `AgentSession.commands` (§17.2.2; design.md change `add-agent-project-files`, D9); встроенные команды и порядок ниже добавляет
-   отдельный change встроенных команд (решение пользователя 2026-10-30, OQ1). Фикстуры этапов 0 и 4
-   сверяют список через `$any` (§14.2).
+   отдельный change встроенных команд (решение пользователя 2026-10-30, OQ1). С этапа 8.10 список
+   начинается со встроенных `config` (только при `services.config != null` и
+   `configCommand: true`; у `serve --ws` её нет — R0-3) и `mcp` (при включённой capability `mcp`;
+   у `serve --ws` она выключена) — первыми, в порядке правила ниже, затем шаблоны (design.md change
+   `add-config-writer-and-reload`, D12; OQ1 (а) того change). Других встроенных команд в 8.10 нет;
+   список не меняется до закрытия сессии, в том числе при перезагрузке конфига (D9). Фикстуры этапов 0 и 4
+   сверяют список через `$any` (§14.2); `acp/available-commands-no-tools` ожидает `mcp` перед
+   шаблоном.
 
 ```json
 {"jsonrpc":"2.0","id":1,"result":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","modes":{"currentModeId":"standard","availableModes":[{"id":"plan","name":"Plan","description":"Read and plan only, no changes"},{"id":"ask","name":"Ask","description":"Approve every call, including reads"},{"id":"standard","name":"Standard","description":"Reads without asking, edits and commands with approval"},{"id":"accept-edits","name":"Accept edits","description":"Reads and edits without asking, commands and network with approval"},{"id":"bypass","name":"Bypass","description":"No approval except for critical commands, agent config edits and network access"}]},"configOptions":[{"id":"mode","name":"Mode","category":"mode","type":"select","currentValue":"standard","options":[{"value":"plan","name":"Plan"},{"value":"ask","name":"Ask"},{"value":"standard","name":"Standard"},{"value":"accept-edits","name":"Accept edits"},{"value":"bypass","name":"Bypass"}]},{"id":"model","name":"Model","category":"model","type":"select","currentValue":"openai/gpt-4o","options":[{"value":"openai/gpt-4o","name":"GPT-4o"},{"value":"anthropic/claude-sonnet-4","name":"Claude Sonnet 4"}]}]}}
@@ -389,9 +396,14 @@ design.md change `add-embedded-agent-mode`, D4.
 2. `session/set_config_option` с `configId: "effort"`, когда опции нет в списке (модель без
    рассуждения), → `-32602` «unknown config option» — так же, как для любого неизвестного `configId`.
 3. Каталог моделей изменился (фоновое обновление, §2.12.2, или живая перезагрузка конфига,
-   §17.5.6, шаг 7c): для каждой открытой сессии пересчитываются опции `model` и `effort`; снимок
+   §17.5.6, шаг 7b): для каждой открытой сессии пересчитываются опции `model` и `effort`; снимок
    отличается от последнего отправленного → `config_option_update` с полным списком опций. Во
-   время хода уведомление уходит в той же очереди (§13.10), ход не прерывается.
+   время хода уведомление уходит в той же очереди (§13.10), ход не прерывается. Перезагрузка
+   доходит до адаптера событием сессии `ModelOptionsChanged` (новая ветка `AgentEvent`, этап 8.10;
+   design.md change `add-config-writer-and-reload`, D8); `switch` проекции остаётся исчерпывающим.
+   Уведомление не уходит до ответа на `session/new`/`session/load` этой сессии (ACP-8); неудачная
+   перезагрузка не даёт ни одного кадра (CFG-15); текущая модель сессии, исчезнувшая из каталога,
+   остаётся `currentValue` и в `options`.
 
 `session/set_mode` есть в спецификации ACP (`12-Session Model.md`, схема
 `SetSessionModeRequest {sessionId, modeId}`), но ещё не реализован в `codelab_acp_protocol`. Решение:
@@ -415,7 +427,7 @@ Slash-команды приходят обычным `session/prompt` с тек�
 `agent_message_chunk` с фиксированным английским текстом и `stopReason: end_turn`, в журнал не
 пишутся и модели не отправляются; `/status` получает строку `Config: ok` или
 `Config: reload failed at <ISO-время> (<n> issues). Run /config check.` и, если есть отложенные
-ключи, `Restart required: <ключи>` (§17.5.6). В MVP `/status` также показывает строку
+ключи, `Restart required: <ключи>` (§17.5.6) — вместе с change встроенных команд, не в 8.10. В MVP `/status` также показывает строку
 `System prompt: custom (<source>)` или `System prompt: appended (<source>)`, если базовый промпт
 заменён или дополнен (§11.6.1), и `Tools disabled: <names>`, если инструменты выключены (§6.3.8).
 
@@ -438,6 +450,20 @@ Slash-команды приходят обычным `session/prompt` с тек�
 `Deadline: …` (§17.12.5), `Hooks: <n> before, <m> after` или `Hooks: unavailable (<reason>)`
 (§17.14.2.4), `Plugins: <name> <version>, …` и `Plugins skipped: <name> (<reason>)` (§17.14.3.4).
 Порядок команд в `available_commands_update` — §13.4.
+
+**Этап 8.10** (design.md change `add-config-writer-and-reload`, D12; OQ1 (а) того change).
+Из встроенных команд реализуются только `/config reload|check` и
+`/mcp list|reload [<id>]|enable <id>|disable <id>` — минимальным механизмом, который расширит change
+встроенных команд: `AgentSession.prompt` до разворачивания шаблонов узнаёт `/config` или `/mcp`
+(слово до пробела или конца блока) и отвечает без модели кадрами `agent_message_chunk` и
+`stopReason: end_turn` (`cancelled` — при `session/cancel`), без `tool_call`, `plan` и
+`usage_update`; ни промпт, ни ответ в журнал не пишутся (CFG-18). Команда занимает слот хода
+сессии: второй `session/prompt` во время неё отклоняется тем же путём, что во время хода модели;
+ходом модели она не является, поэтому замена серверов, вызванная `/mcp reload`, применяется до
+ответа. По WebSocket `/config` не объявляется и не исполняется (R0-3): ответ раскрывал бы пути и
+тексты проблем конфига машины агента. Пока нет change встроенных команд,
+`/x` для любого другого `x` без шаблона уходит модели как обычный текст — правило 3 ниже
+(`Unknown command`) вступает в силу вместе с ним. Новых методов, полей и `_meta` нет.
 
 Разбор:
 

@@ -145,12 +145,48 @@
    перезапуска (до 8.10). Сторож импортов и allowlist зависимостей не менялись (D1).
 10. **8.10. Запись конфига, живая перезагрузка, реестр настроек, переподключение MCP**
     (L-25, E-04, E-15; agent-core-architecture §17.5.3, §17.5.5–§17.5.8) — **Should — не блокирует
-    MVP**: `ConfigWriter` (`yaml_edit`, атомарная запись) и подкоманды `codelab config set|unset`,
-    `provider add|list|remove`, `mcp add|list|remove`; `ConfigWatcher` и живая перезагрузка;
-    `McpSupervisor` с переподключением; `SettingsRegistry` с тестом полноты; предконфигурация
-    провайдера из окружения (L-25); агентские команды `/config` и `/mcp`. Клиентская часть
-    (мастер, страницы настроек) — §12.4. Без 8.10 конфиг правится вручную, а `config check`
-    (8.5) его проверяет.
+    MVP**: `ConfigWriter` (`yaml_edit`, атомарная запись) и подкоманды `config path|get|set|unset`,
+    `provider add|list|remove`, `mcp add|list|remove` у `codelab-agent` и `codelab`; `ConfigWatcher`,
+    `FileConfigSource` и живая перезагрузка; переподключение MCP-серверов в сессии
+    `McpClientConnector`; `SettingsRegistry` с тестом полноты; предконфигурация провайдера из
+    окружения (L-25); агентские команды `/config` и `/mcp`. Клиентская часть (мастер, страницы
+    настроек, `AgentConfigStore`) — §12.4, change `add-provider-setup-ui`. Без 8.10 конфиг
+    правится вручную, а `config check` (8.5) его проверяет.
+
+    **Change** [`add-config-writer-and-reload`](../../../../openspec/changes/add-config-writer-and-reload/)
+    — девять итераций, каждая — отдельный PR (или 2–3) в `develop` (design.md, D16): 0 — документы;
+    1 — L-25; 2 — реестр и типы правок (E-15); 3 — `ConfigWriter`; 4 — подкоманды записи у обоих
+    бинарей и мост `codelab_setup`; 5 — живая перезагрузка (ядро, `FileConfigSource`, хосты,
+    `config_option_update`); 6 — переподключение MCP и серверы конфига при перезагрузке (E-04); 7 —
+    команды `/config`, `/mcp` и фикстуры; 8 — матрица, сверка документов, DoD. Зависимости: 3 ← 2,
+    4 ← 3, 6 ← 5, 7 ← 5 и 6; итерация 1 независима.
+
+    Решения пользователя 2026-11-02 (OQ1–OQ8 того change, все — по рекомендации):
+    * OQ1 — команды `/config` и `/mcp` входят в change; минимальный механизм «ответ без модели» —
+      точка расширения change встроенных команд (D11, D12);
+    * OQ2 — список путей PERM-11 (agent-core §7.6.1) расширяется `$CODELAB_HOME/config.yaml`,
+      `$CODELAB_HOME/secrets.yaml` и файлом `CODELAB_CONFIG`: правка глобального конфига моделью
+      иначе вступала бы в силу сразу после перезагрузки;
+    * OQ3 — один change, девять итераций (D16);
+    * OQ4 — машиночитаемого статуса MCP по ACP нет; поток состояний для встроенного агента — change
+      `add-provider-setup-ui` (D12);
+    * OQ5 — `logging.level` только с перезапуском (D8, D14);
+    * OQ6 — флаги `--provider-type`/`--provider-config` у `serve`, сочетание с `--provider` —
+      ошибка `64` (D3);
+    * OQ7 — файлы проекта читаются только новыми сессиями (D9);
+    * OQ8 — неизменённый сервер в `failed` при перезагрузке будится сразу (D10).
+
+    Решения пользователя 2026-11-02 по двойному ревью итерации 0:
+    * R0-1 — ключи, ослабляющие права (`permissions.*`, `trusted_projects`, новые и изменённые
+      stdio-серверы), живой перезагрузкой не применяются, только после перезапуска (D8);
+    * R0-2 — `config get` и `provider list` маскируют секреты, значения окружения и userinfo URL (D6);
+    * R0-3 — по WebSocket `/config` не объявляется и не исполняется (D12, D13).
+
+    Отступления от agent-core §17.5 (внесены в документ итерацией 0): один снимок на корень запуска
+    хоста и `ConfigSource` без `cwd` (D7, D8); `modelsFor` хоста вместо пересборки функции модели в
+    ядре (D8); супервизия MCP в `McpSessionTools` без отдельного `McpSupervisor`, серверы конфига —
+    существующим `replaceServers` после хода (D10, D11); без fsync каталога при записи (D5).
+    Сторож импортов и allowlist зависимостей не меняются; `yaml_edit` уже в `ioAllowlist` (D1, D2).
 11. **8.11. Редакция секретов** (P-10, *Should — не блокирует MVP*; перенесена с этапа 3):
     вывод инструментов (`exec env`, `read .env`), промпт пользователя и лог не попадают в журнал
     сессии и к провайдеру с сырыми секретами. Состав:
@@ -178,8 +214,8 @@
 `AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/) (8.6–8.8; scope: инструкции проекта, шаблоны промптов как команды, определения агентов в Markdown, порт `ProjectFilesSource`, `config check` с диагностикой файлов проекта; ACP не расширяется),
 [`add-agent-secret-store`](../../../../openspec/changes/archive/2026-11-01-add-agent-secret-store/) (8.9; scope: имена секретов, порядок разрешения, бэкенды `env` и `file`, команды
 `secret`, диагностика без значений; бэкенды ОС — черновик `add-agent-os-secret-backends` после 1.0) и `add-config-writer-and-reload` (8.10, Should; scope:
-запись конфига, наблюдатель и перезагрузка, реестр настроек, `McpSupervisor`, команды
-`config`/`provider`/`mcp` на запись) и `add-agent-core-secret-redaction` (8.11, Should; scope:
+запись конфига, наблюдатель и перезагрузка, реестр настроек, переподключение MCP в сессии
+коннектора, команды `config`/`provider`/`mcp` на запись, агентские `/config` и `/mcp`) и `add-agent-core-secret-redaction` (8.11, Should; scope:
 слои и точки применения редакции, `AgentTool.redactResult`, источники точных секретов, ключи
 `redact.*`). `tasks.md` — пары "тест → реализация" со ссылкой на
 критерий (§9.0, правило 3).

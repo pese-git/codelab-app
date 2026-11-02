@@ -70,8 +70,17 @@
 создаётся сразу, но с минимумом: основной барель реэкспортирует только чистые типы ядра
 `ConfigIssue` и `ConfigLoadResult`; `io.dart` реэкспортирует `ConfigCommands` из `codelab_agent_io`
 (вход для `codelab config check`). Мастер, `AgentConfigStore`, `SettingsAccess`, `FileAgentConfigStore`
-и остальное ниже приходят со своими потребителями (задачи 8.10, 9.6), без абстракций «на вырост».
+и остальное ниже приходят со своими потребителями (change `add-provider-setup-ui`, задача 9.6), без абстракций «на вырост».
 Таблица ниже — полный состав.
+
+**Подкоманды записи с этапа 8.10** (design.md change `add-config-writer-and-reload`, D1, D6). `io.dart`
+дополнительно реэкспортирует из `codelab_agent_io` `ProviderCommands` и `McpServerCommands` с их
+опциями; `ConfigCommands` получает `path`, `get`, `set`, `unset` — вход для `codelab
+config|provider|mcp`. Основной барель `codelab_setup.dart` в 8.10 не меняется: реэкспорт
+`ConfigEdit`, `ConfigConflictException`, `SettingsRegistry` и остальных типов правок приходит с
+потребителем — мастером, `AgentConfigStore`/`FileAgentConfigStore` и страницами настроек
+(change `add-provider-setup-ui`; §13 корневого `AGENTS.md`). `setupAllowlist` и правило сторожа не
+меняются.
 
 **Секреты с этапа 8.9 (change `add-agent-secret-store`, D1, D8, D15).** `io.dart` реэкспортирует
 из `codelab_agent_io` `SecretCommands` с `SecretCommandResult` и опциями подкоманд, `SecretInput`,
@@ -97,16 +106,17 @@
 
 | Барель | Содержимое | Можно | Нельзя |
 |---|---|---|---|
-| `codelab_setup.dart` (чистый Dart) | `ProviderSetupFlow`, пресеты, `ProviderCheck` и `HttpProviderCheck` поверх `http.Client`, `ProviderReadiness`, `McpServerDraft`, `SettingsAccess`, модели представления, порт `AgentConfigStore` и `ConfigSaveOutcome`; реэкспорт чистых типов ядра (§17.5.2): `ConfigLayer`, `ConfigTarget`, `ConfigSnapshot`, `ConfigEdit` и его подклассы, `ConfigIssue`, `ConfigLoadResult`, `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType`, `SecretNames`, `SecretStore`, `DescribedSecretStore`, `SecretBackendInfo` (типы секретов — вместе со страницей настроек, не в 8.9; D1) | `codelab_agent_core`, `http`, `meta` | `dart:io`, `codelab_agent_io`, Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
-| `io.dart` (десктоп и CLI) | `FileAgentConfigStore` поверх `ConfigWriter` и `ConfigLoader`, `openSecretStore` (бэкенд по `secrets.backend`, §17.5.4) и `SecretAdmin` (8.9, D15), пути `$CODELAB_HOME`, вход в общие подкоманды CLI ядра `config`/`provider`/`mcp` (§17.5.5) и `secret` (`SecretCommands`, 8.9, D8) | `codelab_agent_io`, `dart:io` | Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
+| `codelab_setup.dart` (чистый Dart) | `ProviderSetupFlow`, пресеты, `ProviderCheck` и `HttpProviderCheck` поверх `http.Client`, `ProviderReadiness`, `McpServerDraft`, `SettingsAccess`, модели представления, порт `AgentConfigStore` и `ConfigSaveOutcome`; реэкспорт чистых типов ядра (§17.5.2): `ConfigLayer`, `ConfigTarget`, `ConfigSnapshot`, `ConfigEdit` и его подклассы, `ConfigConflictException` (D5 change `add-config-writer-and-reload`), `ConfigIssue`, `ConfigLoadResult`, `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType`, `SecretNames`, `SecretStore`, `DescribedSecretStore`, `SecretBackendInfo` (типы секретов — вместе со страницей настроек, не в 8.9; D1) | `codelab_agent_core`, `http`, `meta` | `dart:io`, `codelab_agent_io`, Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
+| `io.dart` (десктоп и CLI) | `FileAgentConfigStore` поверх `ConfigWriter` и `ConfigLoader`, `openSecretStore` (бэкенд по `secrets.backend`, §17.5.4) и `SecretAdmin` (8.9, D15), пути `$CODELAB_HOME`, вход в общие подкоманды CLI ядра `config`/`provider`/`mcp` (`ConfigCommands`, `ProviderCommands`, `McpServerCommands`, 8.10, D6; §17.5.5) и `secret` (`SecretCommands`, 8.9, D8) | `codelab_agent_io`, `dart:io` | Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
 
 Сторож (§9.5) получает новое правило: основной барель `codelab_setup` не импортирует то, что
 запрещено `webUnsafe`, а также `package:codelab_agent_io`, `package:codelab_acp_`, `package:codelab_client_` и `package:flutter/`;
 presentation app не импортирует `package:codelab_setup/io.dart`. Клиенты по-прежнему не
 импортируют `codelab_agent_*` напрямую: нужные типы ядра приходят реэкспортом из
-`codelab_setup`, как `ProviderConfig` через `codelab_embedded`. `ConfigWriter`, бэкенды секретов и
-исключения писателя (`ConfigConflictException`) видит только
-`io.dart`.
+`codelab_setup`, как `ProviderConfig` через `codelab_embedded`. `ConfigWriter` и бэкенды секретов
+видит только `io.dart`. `ConfigConflictException` — тип ядра (agent-core-architecture §17.5.2; D5
+change `add-config-writer-and-reload`): клиенты ловят его через реэкспорт основного бареля, не видя
+`codelab_agent_io`.
 
 Почему не другие места:
 

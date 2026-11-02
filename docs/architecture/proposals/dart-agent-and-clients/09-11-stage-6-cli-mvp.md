@@ -121,8 +121,8 @@ codelab --version | --help
 Подкоманды `config`, `provider`, `mcp` и `secret` по этапам: `config check [--cwd <dir>]` — этап 8,
 задача 8.5 (проверка; `get|path` — позже; план сборки встроенного агента в `config check` — этап 7,
 задача 7.6); `secret set|delete|list` — этап 8, задача 8.9 (нужна MVP);
-`config set|unset`, `provider add|list|remove`, `mcp add|list|remove` — этап 8, задача 8.10
-(Should — не блокирует MVP); мастер `provider add` — этап 9 (задача 9.6, Should);
+`config path|get|set|unset`, `provider add|list|remove`, `mcp add|list|remove` — этап 8, задача 8.10
+(Should — не блокирует MVP; change `add-config-writer-and-reload`, D6); мастер `provider add` — этап 9 (задача 9.6, Should);
 `config export-providers|import-providers` — после MVP (E-14). До своего этапа подкоманда не
 регистрируется (`codelab <команда>` → код 64 `Unknown command`). Это общая реализация ядра
 (agent-core-architecture §17.5.4, §17.5.5: флаги `--project`/`--local`, тексты, коды выхода
@@ -137,7 +137,7 @@ D12). В 8.5 создаётся минимальный пакет `codelab_setup
 вывод и код двух бинарей совпадают и для относительного пути с `..`. Проверяется окружение процесса
 `codelab`, профиль подключения не учитывается: флаги подключения и запроса (`-a`/`--agent`, `-m`/`--model`, `--mode`, `-r`/`--resume`, `-c`/`--continue`, `-p`/`--print`, `-f`/`--prompt-file`, `--approve`, `--timeout`, `--ui`)
 вместе с `config` — ошибка использования `--<flag> does not apply to config check`, код 64. `codelab config` без подкоманды — код 64 и
-`config needs a subcommand: codelab config check [--cwd <dir>]`; остальные подкоманды `config` до своих
+`config needs a subcommand: codelab config check [--cwd <dir>]` (с 8.10 — `codelab config path|get|set|unset|check`, D6 change `add-config-writer-and-reload`); остальные подкоманды `config` до своих
 задач дают код 64 `Unknown command config <sub>`. `package:codelab_setup/io.dart` импортируется в
 `apps/codelab_cli/lib/src` только из `run.dart` (сторож).
 
@@ -164,6 +164,29 @@ argv — код 64 и `codelab: invalid arguments for secret`; присланн�
 `cli_history`; файл `secrets.yaml` пишут только `set` и `delete` при бэкенде `file`, создаёт —
 только `set`. Сторож и `cliAllowlist` не меняются: `codelab_setup/io.dart` по-прежнему
 импортируется только из `run.dart`.
+
+`codelab config path|get|set|unset`, `codelab provider add|list|remove` и `codelab mcp add|list|remove`
+(этап 8, задача 8.10; design.md change `add-config-writer-and-reload`, D6) регистрируются так же,
+как `config check` и `secret`: подкоманды в `cli_args.dart`, вызов в `run.dart` через
+`package:codelab_setup/io.dart`, который реэкспортирует `ConfigCommands`, `ProviderCommands` и
+`McpServerCommands` из `codelab_agent_io` вместе с их опциями. CLI только разбирает аргументы;
+тексты, правила и коды выхода (`0`/`1`/`64`) — в общей реализации, поэтому stdout, stderr, коды и
+записанные байты совпадают с `codelab-agent config|provider|mcp`, кроме имени бинаря в справке
+использования (agent-core-architecture §17.5.5). Слой по умолчанию — `user`, `--project` и `--local` —
+для `cwd` (`--cwd` подкоманды, иначе общий `-C`/`--cwd`, иначе текущий каталог). `config get` не
+раскрывает подстановки `${VAR}` и `${secret:…}` ни при каком `--layer`; `config get` и `provider list`
+маскируют литеральные секреты (`<redacted>`), значения из окружения (`<from env:…>`) и userinfo URL
+(R0-2 change `add-config-writer-and-reload`). При
+`ConfigConflictException` подкоманда один раз перечитывает файл и повторяет правки; второй
+конфликт — код `1`. `provider add --api-key-stdin` читает ключ скрытым вводом `StdinSecretInput`, как
+`secret set`, сохраняет его через `SecretAdmin` и пишет в конфиг только имя `codelab/<id>`; значение
+не попадает в stdout, `profiles.json`, `cli_history` и лог. `provider add` без обязательных флагов
+(`--kind`, `--model`, `--context-window`) в 8.10 — код 64 и на TTY: мастер добавит change
+`add-provider-setup-ui`, не меняя флаговую форму. Флаги подключения и запроса вместе с этими
+подкомандами — код 64, как у `config check`; `codelab config` без подкоманды — `config needs a
+subcommand: codelab config path|get|set|unset|check`. `codelab --help` перечисляет `provider` и
+`mcp`. Агентская команда `/mcp` в REPL доступна по своему имени, агентская `/config` — как
+`/agent:config` (клиентская `/config` имеет приоритет). Сторож и `cliAllowlist` не меняются.
 
 Скрипт прогона Terminal-Bench (`tool/bench/`, H-06) вызывает обычный `codelab -f …
 --output-format stream-json --approve allow-all` только внутри контейнера задачи

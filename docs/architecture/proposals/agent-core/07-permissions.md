@@ -312,6 +312,40 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
 * `exec` с перенаправлением, `tee`, `cp`/`mv`/`ln` или `sed -i` с целью из того же списка —
   критический шаблон с меткой `write to agent configuration` (строка таблицы выше).
 
+**Пути конфигурации агента от хоста** (этап 8.10; design.md change
+`add-config-writer-and-reload`, D8, OQ2). С живой перезагрузкой (§17.5.6) правка глобального
+конфига действовала бы на следующем шаге, поэтому те же правила применяются к путям, которые хост
+передаёт полем `AgentCoreServices.agentConfigPaths: AgentConfigPaths {paths, expansions,
+caseInsensitive}`:
+
+* `paths` — файлы, которые наблюдает `ConfigWatcher` (`$CODELAB_HOME/config.yaml`, файл
+  `--config`/`CODELAB_CONFIG`, `<корень запуска>/.codelab/config.yaml` и `config.local.yaml`,
+  `$CODELAB_HOME/secrets.yaml`), и каталоги `$CODELAB_HOME/agents`, `$CODELAB_HOME/prompts` с
+  поддеревом. Строит их одна функция `agentConfigPathsFor` (`codelab_agent_io`), та же, что даёт
+  файлы наблюдателю, поэтому наблюдаемые и защищаемые файлы совпадают. Пути канонические: `~`
+  раскрыт, ссылки раскрыты по самому глубокому существующему предку;
+* `expansions` — значения `HOME` и `CODELAB_HOME` окружения хоста: ими раскрываются `~`, `$HOME`,
+  `${HOME}`, `$CODELAB_HOME`, `${CODELAB_HOME}` в командах `exec` (у ядра своего окружения нет);
+* `caseInsensitive` — признак ФС без учёта регистра; его определяет хост.
+
+Сравнение:
+
+* цель `write`/`edit` — после канонизации `BoundedEnv` (тот же результат, что для containment
+  §4.4); каноническая форма защищаемых путей пересчитывается на каждой проверке — асинхронно в
+  `beforeToolCall` политики тем же вызовом `ExecutionEnv`, что у containment, поэтому подмена каталога-предка ссылкой после старта (`ln -s sub .codelab`, затем
+  `write sub/config.yaml`) путь из-под защиты не выводит; защита действует для сессии с любым `cwd`;
+* `exec` — критический шаблон `write to agent configuration` срабатывает на запись (`>`, `>>`,
+  `tee`, `cp`, `mv`, `rename`, `ln`, `install`, `dd of=`, `sed -i`) в защищаемый путь после
+  раскрытия переменных и разрешения относительно `cwd` команды (включая `../`), на команду, которая
+  переходит в защищаемый каталог и пишет (`cd ~/.codelab && …`), и на создание, переименование,
+  удаление и подмену ссылкой каталогов-предков (`<корень запуска>/.codelab`, `$CODELAB_HOME`);
+* жёсткая ссылка — `ln` без `-s` и `cp -l`/`cp --link` с защищаемым путём в любой позиции
+  (источник или цель) — тоже критическая: через неё защищаемый файл правится по другому пути.
+
+Разбор `exec` не полон (интерпретаторы, составные команды); остаточный риск смягчает то, что ключи,
+ослабляющие права, и правки, способные направить секрет на другой адрес, живой перезагрузкой не
+применяются (§17.5.6; R0-1, R0-4 того change).
+
 Чтение этих файлов не ограничено. Правило не мешает клиентам: `ConfigWriter` работает вне
 инструментов модели.
 
@@ -382,7 +416,7 @@ sequenceDiagram
 8. **PERM-8.** Grants на ход очищаются в начале каждого `prompt()`.
 9. **PERM-9.** В `autopilot` критический шаблон отклоняется без вопроса; для критического шаблона вариант `allow_always` не предлагается.
 10. **PERM-10.** В `acceptEdits` вызовы уровней `read` и `write` разрешаются режимом без вопроса, а `network`, `exec` и критические шаблоны спрашиваются; `narrow` и ужесточение конфигом используют один порядок `alwaysAsk < write < acceptEdits < yolo < autopilot`.
-11. **PERM-11.** Правка конфигурационных файлов агента в проекте (§7.6.1) спрашивается в любом режиме, не принимает `allow_always` и отклоняется без человека.
+11. **PERM-11.** Правка конфигурационных файлов агента в проекте и путей конфигурации агента, переданных хостом (§7.6.1), спрашивается в любом режиме, не принимает `allow_always` и отклоняется без человека.
 
 ## 7.10. Обоснование решения
 
@@ -416,6 +450,7 @@ sequenceDiagram
 * `turn_grants_test.dart`: grant на ход не действует в следующем `prompt()` (PERM-8).
 * `accept_edits_mode_test.dart`: табличный тест строки `acceptEdits` §7.3 по всем уровням и критическому шаблону; `permissions.tools.exec = "allow"` снимает вопрос; `narrow` для всех пар пяти режимов совпадает с минимумом по порядку §7.3.1; проектный `permissions.mode: bypass` поверх глобального `accept-edits` отклонён как ослабление, `standard` — принят (PERM-10).
 * `acp/set-mode-accept-edits` (критерий матрицы P-06, фикстура §14): `session/new` перечисляет пять режимов в порядке `plan`, `ask`, `standard`, `accept-edits`, `bypass`; `session/set_mode` с `modeId: "accept-edits"` → `{}` и `current_mode_update`; ход, где scripted модель зовёт `edit`, затем `exec` → для `edit` нет `session/request_permission`, `tool_call_update` `completed` с diff; для `exec` — `session/request_permission` без `_meta.codelab.critical`; синоним `acceptEdits` на входе нормализуется в `accept-edits` (PERM-10).
+* `agent_config_paths_test.dart` (8.10): пути от хоста в `bypass` и `autopilot`, symlink dotfiles, проектный конфиг корня запуска из сессии с другим `cwd`, файл `--config`, `exec` с `mv`/`rename`/`ln -sf`/`install`/`dd of=`/`cd ~/.codelab && …`, пути `~/…`, `$HOME/…`, `${CODELAB_HOME}/…`, `../../.codelab/…`, регистр, подмена каталога ссылкой (PERM-11; design.md change `add-config-writer-and-reload`, D8).
 * `acp_permission_gate_test.dart` на fake-клиенте: состав запроса совпадает с примером §7.8 (`rawInput`, `locations`, diff) (PERM-6); `cancelled` → отказ, ход продолжается (PERM-7); неизвестный `optionId` → отказ; поздний ответ после отмены игнорируется (PERM-4).
 
 ---

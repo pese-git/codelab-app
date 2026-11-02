@@ -86,7 +86,9 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final ProjectContextLoader? projectContext;      // читает AGENTS.md через env хоста
   final NetworkAddressResolver? resolver;          // после MVP (§17.1.2): null → проверка SSRF только по литералам
   final SpillStore? spills;                        // этап 3 (§17.4.2): null → outputSpill off
-  final ConfigSource? config;                      // после MVP (§17.5.2): null → живая перезагрузка и /config недоступны
+  final ConfigSource? config;                      // этап 8.10 (§17.5.2; change add-config-writer-and-reload, D7, D8): null → живая перезагрузка и /config недоступны; задан → нужен modelsFor
+  final ModelCatalog? models;                      // каталог моделей начального снимка (§2.12.2); хост с ConfigSource берёт его из modelsFor(config).catalog (D8)
+  final AgentConfigPaths? agentConfigPaths;        // этап 8.10 (D8; OQ2): {paths, expansions, caseInsensitive} — пути PERM-11 (§7.6.1), HOME/CODELAB_HOME для exec, регистр ФС
   final SessionLeaseStore? leases;                 // после MVP (§17.6.8): null → lease только внутри процесса
   final ProcessProbe? processProbe;                // после MVP (§17.6.8): host, bootId, pid, isAlive для lease
   final LanguageServerToolFactory? languageServers;  // после MVP (§17.8.2): null → languageServers off
@@ -126,9 +128,11 @@ abstract interface class McpConnector {            // AgentCoreServices.mcp
 }
 abstract interface class McpSessionTools {         // объект MCP-части одной сессии
   List<AgentTool> get tools;                       // в порядке регистрации (§6.4)
-  List<McpServerSummary> get servers;              // для секции mcp (§11.5)
+  List<McpServerSummary> get servers;              // для секции mcp (§11.5); с 8.10 — все серверы сессии с состоянием (§17.5.2, D11)
   McpToolsUpdate? takeUpdate();                    // ожидающее tools/list_changed; ядро забирает на границе шага
-  Future<void> replaceServers(List<McpServerConfig> servers);   // повторный session/load (§13.5): полный список после слияния и фильтра ядра
+  Future<void> replaceServers(List<McpServerConfig> servers);   // повторный session/load (§13.5) и перезагрузка конфига (8.10, D10): полный список после слияния и фильтра ядра
+  Future<void> reconnect(String name);             // 8.10 (D11): /mcp reload <id>
+  Future<void> setEnabled(String name, bool enabled);   // 8.10 (D11): /mcp enable|disable, только эта сессия, в памяти
   Future<void> close();
 }
 abstract interface class McpTransport {            // транспорт уровня сообщений: одно сообщение — один JSON-текст
@@ -190,12 +194,10 @@ single-flight). Регистрация каждого прочитанного �
 change 8.11 в ту же точку резолвера; до него значения ключа и заголовков провайдера вычищаются из
 текстов ошибок через `ProviderConfig.secrets` (D10).
 
-Хост, который обслуживает сессии с разными `cwd`, держит один снимок `CoreConfig` на корень сессии
-(глобальный слой общий): проектные слои у каждого `cwd` свои, и правка проектного файла касается
-только сессий этого корня (§15.2, §17.5.6).
-
-**До снимков по корням (change `add-agent-configuration`, D9; снимки на каждый корень приходят с
-`ConfigSource` change 8.10).** `buildAgentCore` принимает один `CoreConfig` на процесс. Загрузчик
+**Один снимок на корень запуска (change `add-agent-configuration`, D9; с 8.10 так и остаётся —
+design.md change `add-config-writer-and-reload`, D8).** Снимка на каждый `cwd` сессии нет: чтение
+проектного конфига чужого `cwd` — новое поведение с вопросами доверия, его место — отдельный
+change. `buildAgentCore` принимает один `CoreConfig` на процесс. Загрузчик
 читает проектные слои 3–4 для корня запуска хоста и возвращает два снимка: полный в
 `CoreConfig` и снимок без проектных слоёв в `CoreConfig.withoutProject`; `CoreConfig.projectRoot` —
 канонический корень запуска. `AgentRuntimeImpl` для `createSession` и `loadSession` берёт ключи
@@ -207,7 +209,7 @@ change 8.11 в ту же точку резолвера; до него значе
 
 ```dart
 final class CoreConfig {                           // результат загрузки конфига (§15), уже провалидирован
-  final ModelCatalog models;                       // — ModelCatalog, §2.12.2
+  final ModelCatalog models;                       // — ModelCatalog, §2.12.2; в коде каталог приходит полем AgentCoreServices.models, у CoreConfig этого поля нет (сверено в 8.10, D8)
   final ModelId defaultModel; final PermissionsConfig permissions;
   final TurnBudget budget; final CompactionOverrides compaction;
   final ToolsConfig tools;                         // в том числе switches: List<ToolSwitch> (§6.3.8)
@@ -233,9 +235,38 @@ BuiltAgentCore buildAgentCore({
   required HostProfile profile,
   required AgentCoreServices services,
   required CoreConfig config,
-  @visibleForTesting StreamFunction? streamFunction, // только тесты и conformance (§14.9): ScriptedStreamFunction вместо шага 8 §10.7; хосты не передают
+  required StreamFunction streamFunction,          // функция модели начального снимка: хост строит её до сборки (createConfiguredStreamFunction), тесты и conformance — ScriptedStreamFunction (§14.9); так в коде с этапа 1 (сверено в 8.10, D8)
+  ConfiguredModels Function(CoreConfig config)? modelsFor,   // 8.10 (§17.5.2, D8): функция модели и каталог по снимку
+  bool configCommand = true,                        // 8.10 (D12, R0-3): false → /config не объявляется и не исполняется (serve --ws)
 });                                                // HostWiringException | ConfigException при ошибке
+typedef ConfiguredModels = ({StreamFunction stream, ModelCatalog catalog});
 ```
+
+**Перезагрузка конфига (этап 8.10; design.md change `add-config-writer-and-reload`, D8).** Если
+хост передал `services.config`, он обязан передать и `modelsFor`; иначе `buildAgentCore` бросает
+`HostWiringException`. `streamFunction` остаётся функцией модели начального снимка, начальный
+каталог — `AgentCoreServices.models`; `modelsFor` при сборке не вызывается, только на снимках,
+применённых перезагрузкой. Хост с источником берёт начальные функцию и каталог из одного вызова того
+же замыкания (`final models = modelsFor(config)`, затем `streamFunction: models.stream`,
+`services.models: models.catalog`) — одна дорога для старта и перезагрузки (D8, «`modelsFor` и
+`streamFunction` при сборке»). Без источника `modelsFor` не нужен. `modelsFor` — замыкание хоста над `createConfiguredStreamFunction(config,
+llm, secrets:)` и `StaticModelCatalog(config.providers)`: `http.Client` и сервисы LLM принадлежат
+хосту (PKG-6), а `--llm-script` подставляет сценарий, поэтому ядро функцию модели не пересобирает
+само, а вызывает `modelsFor` на каждом применённом снимке. Подписку на `ConfigSource.changes`
+создаёт `buildAgentCore`, владеет ею рантайм, отменяет `dispose()`. `AgentRuntime` получает
+`reloadConfig()`, `checkConfig()` и `configStatus()` (§17.5.2, §17.5.6). Хост без источника
+(`--llm-script`, `scriptedEmbeddedAgentOpener`, мобильный и web) перезагрузки и команды `/config`
+не имеет (D13); `serve --ws` перезагрузку имеет, а `/config` — нет (`configCommand: false`, R0-3).
+
+**Пути конфигурации агента (этап 8.10, OQ2; D8).** Хост передаёт политике разрешений полем
+`agentConfigPaths` значение `AgentConfigPaths`: значения `HOME` и `CODELAB_HOME` для раскрытия в
+`exec`, признак ФС без учёта регистра и канонические абсолютные пути (ссылки раскрыты по самому
+глубокому существующему предку): файлы, которые наблюдает `ConfigWatcher`
+(`$CODELAB_HOME/config.yaml`, файл `--config`/`CODELAB_CONFIG`, `<корень запуска>/.codelab/config*.yaml`,
+`$CODELAB_HOME/secrets.yaml`), и каталоги `$CODELAB_HOME/agents`, `prompts`. Строит их одна функция
+`agentConfigPathsFor` (`codelab_agent_io`), поэтому наблюдаемые и защищаемые файлы совпадают. Поле
+лежит в сервисах, а не в `HostProfile`: это данные запуска процесса, а не возможность платформы.
+Правки этих путей критические по PERM-11 (§7.6.1).
 
 ## 10.4. Профили
 
@@ -392,9 +423,12 @@ buildAgentCore(profile, services, config, streamFunction):
        у загруженной сессии — из SessionHostPorts.extraBeforeToolCall по тому же правилу
      afterToolCall: хуки хоста из SessionSpec.extraAfterToolCall — первыми, затем (после MVP) SessionHooks.after (§17.14.2.3), затем хук сессии языковых серверов (§17.8.5)
 7. промпт: секции в фиксированном порядке (§11.5), только для включённых capability (HOST-4)
-8. LLM: stream := streamFunction (если передан, только тесты) иначе createStreamFunction(ProviderConfig из config.models,
+8. LLM: stream := streamFunction — обязательный параметр: функцию начального снимка хост строит до
+       сборки (createConfiguredStreamFunction(ProviderConfig из config.models,
        CoreLlmServices(services.http, services.clock, services.random, services.logger,
-         diagnostics: services.llmDiagnostics; §2.10));
+         diagnostics: services.llmDiagnostics; §2.10))), тесты — ScriptedStreamFunction;
+     services.config != null и modelsFor == null → HostWiringException; modelsFor при сборке не
+       вызывается — только на снимках, применённых перезагрузкой (D8 change add-config-writer-and-reload);
      ModelCatalog стартует из кэша и конфига без сети, refresh() запускается в фоне (§2.12.2)
 9. runtime := AgentRuntime(env factory, tools, permissions, prompts, stream, sessions,
                            compaction: включено ли, budget, logger, clock, ids)
