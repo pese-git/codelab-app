@@ -84,6 +84,26 @@ void checkConfigFileName(String path, {required String origin}) {
 /// architecture` §15.5). Настоящий конфиг на порядки меньше.
 const maxConfigBytes = 1024 * 1024;
 
+/// Итог [ConfigLoader.validateCandidate]: проблемы запрещают запись, а
+/// предупреждения (в том числе `config.project.untrusted_key` и незаданная
+/// `${VAR}`) сообщаются вызывающему (design.md change
+/// `add-config-writer-and-reload`, D5).
+typedef ConfigCandidateResult = ({
+  List<ConfigIssue> issues,
+  List<ConfigIssue> warnings,
+});
+
+/// Вид слоя загрузчика по слою записи (`ConfigLayer` ядра): одно отображение
+/// для загрузчика и писателя.
+@internal
+ConfigLayerKind configLayerKindOf(ConfigLayer layer) => switch (layer) {
+  ConfigLayer.user => ConfigLayerKind.user,
+  ConfigLayer.project => ConfigLayerKind.project,
+  ConfigLayer.projectLocal => ConfigLayerKind.projectLocal,
+};
+
+bool _isUnsetVariable(ConfigIssue issue) => issue.event == unsetVariableEvent;
+
 /// Домашний каталог пользователя: `HOME`, на Windows `USERPROFILE`.
 ///
 /// Пустое значение считается отсутствующим: тильда с пустым `HOME` не должна
@@ -226,6 +246,65 @@ final class ConfigLoader {
     platform: platform,
   ).result;
 
+  /// Проверяет итоговый [text] слоя [target] теми же слоями и `fromLayers`,
+  /// что обычная загрузка, не читая файл этого слоя с диска (design.md change
+  /// `add-config-writer-and-reload`, D5, шаг 6 `agent-core-architecture`
+  /// §17.5.5).
+  ///
+  /// Почему здесь: порядок слоёв, канонизация `trusted_projects`, слой
+  /// окружения и правила доверия принадлежат загрузчику; писатель не
+  /// повторяет их, иначе проверка записи разошлась бы с загрузкой.
+  ///
+  /// Как использовать: [cwd] — корень запуска (для слоёв `project` — каталог
+  /// проекта), [environment] — переменные процесса писателя. Остальные слои
+  /// читаются с диска. Незаданная `${VAR}` попадает в `warnings`, а не в
+  /// `issues` (окружение агента может отличаться от окружения писателя);
+  /// значения кандидата в проблемы не попадают (CFG-2).
+  ConfigCandidateResult validateCandidate(
+    ConfigTarget target,
+    String text, {
+    required String cwd,
+    required Map<String, String> environment,
+    String? platform,
+  }) {
+    final kind = configLayerKindOf(target.layer);
+    ConfigLoadResult run(Map<String, String> env) => loadWithLayers(
+      cwd: cwd,
+      environment: env,
+      platform: platform,
+      candidate: (kind: kind, text: text),
+    ).result;
+
+    var loaded = run(environment);
+    // Незаданная `${VAR}` — предупреждение: окружение агента может
+    // отличаться от окружения писателя (§17.5.5, шаг 6). Но без значения
+    // переменной ядро не строит провайдера, и следом идут проблемы-
+    // последствия (`default_model` не в каталоге). Поэтому проверка
+    // повторяется с подставленным значением, а исходные проблемы
+    // подстановки остаются предупреждениями.
+    final unset = [
+      for (final issue in loaded.issues)
+        if (_isUnsetVariable(issue)) issue,
+    ];
+    if (unset.isNotEmpty) {
+      loaded = run({
+        for (final issue in unset)
+          '${issue.fields['variable']}': 'https://unset.invalid',
+        ...environment,
+      });
+    }
+    final issues = <ConfigIssue>[];
+    final warnings = [...unset, ...loaded.warnings];
+    for (final issue in loaded.issues) {
+      if (_isUnsetVariable(issue)) {
+        warnings.add(issue);
+      } else {
+        issues.add(issue);
+      }
+    }
+    return (issues: issues, warnings: warnings);
+  }
+
   /// То же, что [load], плюс разобранные слои по порядку приоритета.
   ///
   /// Почему: `config check` называет файл и строку ключа, на который ссылается
@@ -247,6 +326,7 @@ final class ConfigLoader {
     bool scripted = false,
     Set<String> knownVariables = const {},
     String? platform,
+    ({ConfigLayerKind kind, String text})? candidate,
   }) {
     final extraPath =
         _nonEmpty(extraConfig) ?? _nonEmpty(environment['CODELAB_CONFIG']);
@@ -276,23 +356,44 @@ final class ConfigLoader {
     // У явного файла источник проблемы чтения — имя флага или переменной
     // ([origin]), а путь идёт в текст: так stderr называет, откуда пришёл путь.
     void readFile(String path, ConfigLayerKind kind, {String? origin}) {
-      if (!FileSystemEntity.isFileSync(path)) {
-        if (origin != null) {
+      final String? text;
+      if (candidate != null && candidate.kind == kind) {
+        // Кандидат записи заменяет слой целиком (D5, шаг 6): файла на диске
+        // может не быть или он может отличаться от того, что будет записано.
+        // Имя источника остаётся путём слоя, чтобы проблемы называли файл
+        // конфига, а не tmp.
+        yamlFound = true;
+        if (utf8.encode(candidate.text).length > maxConfigBytes) {
           issues.add(
             ConfigIssue(
               kind: ConfigIssueKind.syntax,
               key: '',
-              source: origin,
-              message: 'cannot read the file: $path: no such file',
+              source: path,
+              message: 'the file is larger than 1 MiB',
             ),
           );
+          return;
         }
-        return;
-      }
-      yamlFound = true;
-      final text = _readText(path, issues, origin: origin);
-      if (text == null) {
-        return;
+        text = candidate.text;
+      } else {
+        if (!FileSystemEntity.isFileSync(path)) {
+          if (origin != null) {
+            issues.add(
+              ConfigIssue(
+                kind: ConfigIssueKind.syntax,
+                key: '',
+                source: origin,
+                message: 'cannot read the file: $path: no such file',
+              ),
+            );
+          }
+          return;
+        }
+        yamlFound = true;
+        text = _readText(path, issues, origin: origin);
+        if (text == null) {
+          return;
+        }
       }
       final result = readYamlTree(text, source: path, kind: kind);
       if (result.tree case final tree?) {

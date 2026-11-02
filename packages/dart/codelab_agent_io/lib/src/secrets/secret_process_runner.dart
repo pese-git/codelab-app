@@ -4,6 +4,17 @@ import 'dart:io';
 
 import 'package:meta/meta.dart';
 
+/// Абсолютный путь утилиты `chmod`: `/bin/chmod`, а на NixOS, где его нет,
+/// `/usr/bin/chmod`.
+///
+/// Почему абсолютный: [IoSecretProcessRunner] не передаёт дочернему процессу
+/// `PATH` (и вообще окружение родителя), поиск по имени не гарантирован.
+/// Для чего: один путь для [FileSecretStore] и `ConfigWriter`. Вызывающий
+/// кладёт его в `run(...)` первым аргументом; в argv идут только режим и путь.
+@internal
+String chmodExecutablePath() =>
+    File('/bin/chmod').existsSync() ? '/bin/chmod' : '/usr/bin/chmod';
+
 /// Результат запуска процесса через [SecretProcessRunner].
 ///
 /// Почему только код выхода: stdout и stderr служебных утилит могут цитировать
@@ -37,9 +48,15 @@ final class SecretProcessResult {
 /// (argv виден через `ps`, CFG-10); если процессу нужно значение, оно
 /// передаётся в [stdin].
 ///
-/// Как использовать: хост не создаёт порт сам — [FileSecretStore] и
-/// `openSecretStore` берут [IoSecretProcessRunner] по умолчанию; тесты
-/// передают фейк.
+/// Второй потребитель — `ConfigWriter` (design.md change
+/// `add-config-writer-and-reload`, D5): он переносит права существующего
+/// `config.yaml` на пустой tmp тем же `chmod`, до записи содержимого. Порт не
+/// переименован (§19 корневого `AGENTS.md`): имя остаётся узким по смыслу
+/// «запуск служебной утилиты без значений секретов в argv».
+///
+/// Как использовать: хост не создаёт порт сам — [FileSecretStore],
+/// `ConfigWriter` и `openSecretStore` берут [IoSecretProcessRunner] по
+/// умолчанию; тесты передают фейк.
 abstract interface class SecretProcessRunner {
   /// Запускает [executable] с [arguments] без оболочки и ждёт завершения.
   ///

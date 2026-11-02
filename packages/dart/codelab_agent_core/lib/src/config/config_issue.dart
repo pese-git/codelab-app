@@ -3,6 +3,25 @@ import '../util/logger.dart';
 import 'core_config.dart';
 import 'host_settings.dart';
 
+/// Имена ключей, значение которых — секрет, записанный в конфиг (CFG-2,
+/// `agent-core-architecture` §17.5.4, пункт 1).
+///
+/// Почему здесь, а не в `schema.dart`: схема — внутренность проверки и не
+/// экспортируется (CFG-5), а список нужен и за её пределами — писателю
+/// `ConfigWriter` и маскированию вывода `config get` в `codelab_agent_io`
+/// (design.md change `add-config-writer-and-reload`, D5, D6). Один список на
+/// валидатор, писатель и вывод: иначе запись и загрузка расходились бы.
+///
+/// Как использовать: `inlineSecretKeys.contains(name)` для имени листа
+/// (регистр важен: `apiKey` и `api_key` — разные имена).
+const inlineSecretKeys = {'api_key', 'apiKey', 'token', 'secret', 'password'};
+
+/// Событие проблемы «переменная `${NAME}` не задана» (`ConfigIssue.event`,
+/// поле `variable`): структурный признак для писателя конфига, чтобы он не
+/// разбирал текст сообщения (design.md change `add-config-writer-and-reload`,
+/// D5, шаг 6).
+const unsetVariableEvent = 'config.variable.unset';
+
 /// Класс проблемы конфигурации (`agent-core-architecture` §15.1, §17.5.2).
 ///
 /// Почему отдельный enum: тестам и `ConfigInlineSecretException` нужен класс

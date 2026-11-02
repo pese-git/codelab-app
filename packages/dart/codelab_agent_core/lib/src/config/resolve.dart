@@ -436,6 +436,8 @@ final class _Builder {
     String message, {
     ConfigTree? origin,
     List<String>? segments,
+    String? event,
+    Map<String, Object?> fields = const {},
   }) {
     final layer = origin ?? _origin(segments ?? const []);
     final position = layer.positions[path.value];
@@ -447,6 +449,8 @@ final class _Builder {
         line: position?.line,
         column: position?.column,
         message: message,
+        event: event,
+        fields: fields,
       ),
     );
   }
@@ -806,6 +810,10 @@ final class _Builder {
           path,
           'variable $name is not set',
           origin: origin,
+          // Писатель конфига превращает такую проблему в предупреждение
+          // (§17.5.5, шаг 6) по признаку, а не по тексту (R3, D5).
+          event: unsetVariableEvent,
+          fields: {'variable': name},
         );
       }
       return null;
