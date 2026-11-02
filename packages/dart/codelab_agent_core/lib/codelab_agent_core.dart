@@ -16,12 +16,14 @@ export 'src/commands/command_template.dart'
         reservedCommandNames;
 export 'src/commands/expand_command.dart';
 export 'src/commands/slash_command.dart';
+export 'src/config/config_edit.dart';
 export 'src/config/config_issue.dart';
 export 'src/config/config_tree.dart';
 export 'src/config/core_config.dart';
 export 'src/config/host_settings.dart';
 export 'src/config/key_path.dart' show KeyPath, nearestKey;
 export 'src/config/redact_settings.dart';
+export 'src/config/settings_registry.dart' hide coveringDescriptors;
 export 'src/env/bounded_env.dart' show BoundedEnv;
 export 'src/env/execution_env.dart';
 export 'src/env/listing_overlay_env.dart';

@@ -909,8 +909,9 @@ ACP-8. Расхождение списка моделей в этом окне �
 | `agent.default_model`, `agent.effort` | новые сессии; модель идущей сессии меняют `/model`, `session/set_config_option` |
 | `budget.*`, `compaction.*` | следующий ход |
 | `mcp.servers`: HTTP-серверы без подстановок `${…}`, удаление и выключение любых серверов | после текущего хода, без хода — сразу (D10) |
-| `tools.disabled`, `tools.project_context.*` | новые сессии (набор инструментов и файлы проекта фиксируются при создании, D9) |
+| `tools.project_context.*` | новые сессии (файлы проекта фиксируются при создании, D9) |
 | `redact.*` | не применяется до 8.11 (`config.key.not_applied`) |
+| `tools.disabled`, `exec.*`, `tools.untrusted_paths` и другие ключи без потребителя (`applied: false`) | не применяются (`config.key.not_applied`); `restartRequired` решает change потребителя (D8, «Обязанность будущих change»): снятие `tools.disabled` на лету снова включает инструмент |
 | `permissions.*`, `trusted_projects`, новый или изменённый (`command`, `args`, `env`) stdio-сервер `mcp.servers[<name>]`, в том числе включённый из `enabled: false` | только после перезапуска: ослабление прав на лету не применяется (R0-1, решение пользователя 2026-11-02; защита в глубину поверх PERM-11) |
 | новый или изменённый HTTP-сервер с подстановкой `${…}` (`${secret:…}` или `${VAR}` — по значению) в `url`/`headers`/`env`; новый провайдер с ключом и смена группы `kind`, `base_url`, `headers`, `auth_header`, `api_key_secret`, `api_key_env` у провайдера с ключом (группа атомарна); ссылки на модели нового отложенного провайдера, в том числе `agent.default_model` | только после перезапуска: секрет не уходит на новый адрес без перезапуска (R0-4, решение пользователя 2026-11-02); новые модели провайдера применяются |
 | `sessions.*`, `logging.*` (включая `logging.level`, OQ5), `profile.*`, `secrets.backend`, `config.*` | только после перезапуска (`restartRequired`) |
@@ -1159,7 +1160,9 @@ stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` о
 ## 17.5.8. Алгоритм: реестр настроек (E-15)
 
 Схема §15.4 становится данными: валидатор строится из `ConfigSchema` (листовые ключи, типы,
-значения по умолчанию, перечисления, диапазоны), реестр — из `SettingsRegistry.all`. Клиенты
+перечисления, признак «применяется»), реестр — из `SettingsRegistry.all`. Умолчаний и диапазонов
+в узлах схемы сборки 1.0 нет: умолчания применяет разрешение `CoreConfig`, диапазоны проверяет
+валидатор кодом (ограничение теста полноты ниже). Клиенты
 (`/settings` в CLI, страница настроек app) рисуют редакторы по `type` и пишут через
 `ConfigWriter`: `secretName` — поле «задать ключ» (`SecretStore.write`, затем `SetValue` имени),
 `modelRef` — выбор из каталога моделей, `mapList` (`mcp.servers`) — список с формой сервера.
@@ -1170,7 +1173,7 @@ stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` о
 | Ключ | Тип | Scope | Restart | Причина `fileOnly` / заметка |
 |---|---|---|---|---|
 | `trusted_projects` | pathList | shared | да | слой только `user`; перезапуск — R0-1 |
-| `agent.default_model`, `agent.fallback`, `agent.summary_model` | modelRef, modelRefList, modelRef | shared | нет | — |
+| `agent.default_model`, `agent.fallback`, `agent.summary_model` | modelRef, modelRefList, modelRef | shared | нет | в 1.0 `agent.fallback` и `agent.summary_model` без потребителя — `fileOnly`, `not applied in this version` |
 | `agent.effort` | enumeration `low, medium, high` | shared | нет | — |
 | `providers.*.kind`, `.base_url` | enumeration (после MVP в `enumValues` — также `gemini`, §17.10.3), string | shared | нет | — |
 | `providers.*.preset` | enumeration id пресетов | shared | нет | после MVP (§17.10.2) |
@@ -1194,14 +1197,14 @@ stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` о
 | `images` (прочие) | map | fileOnly | нет | после MVP (§17.11.10): лимиты подготовки картинок |
 | `model_catalog` | map | fileOnly | нет | внешний источник метаданных и сетевые параметры каталога |
 | `permissions.mode` | enumeration `plan, ask, standard, accept-edits, bypass` | shared | да | R0-1: ослабление прав не применяется на лету |
-| `permissions.timeout`, `permissions.deny`, `permissions.tools` | duration, stringList, map | shared | да (R0-1) | значения `permissions.tools` — `allow, ask, deny` |
+| `permissions.timeout`, `permissions.deny`, `permissions.tools` | duration, stringList, map | shared | да (R0-1) | значения `permissions.tools` — `allow, ask, deny`; в 1.0 `permissions.timeout` без потребителя — `fileOnly`, `not applied in this version` |
 | `budget.*` | int, int, float, duration | shared | нет | — |
 | `compaction.enabled` | bool | shared | нет | — |
 | `compaction.engine` | enumeration `classic, structured` | shared | нет | после MVP (§17.13.4) |
 | `compaction.structured` | map | fileOnly | нет | после MVP: бюджеты маркеров, пинов и раскрытия; доли окна §17.13.4 |
 | `compaction.context_window_cap`, `.reserve_tokens`, `.keep_recent_tokens`, `.keep_recent_user_turns` | int | fileOnly | нет | арифметика токенов §9.4; неверное значение ломает сжатие |
-| `tools.output`, `tools.untrusted_paths`, `tools.project_context` | map, pathList, map | fileOnly | нет | граница доверия и лимиты усечения; меняются осознанно |
-| `tools.disabled` | stringList | shared | нет | — |
+| `tools.output`, `tools.untrusted_paths`, `tools.project_context.max_bytes` | map, stringList, int | fileOnly | нет | граница доверия и лимиты усечения; меняются осознанно; в 1.0 `tools.output` и `tools.untrusted_paths` без потребителя — `not applied in this version` |
+| `tools.disabled` | stringList | shared | нет | в 1.0 без потребителя — `fileOnly`, `not applied in this version`; `restartRequired` решит change потребителя (D8) |
 | `tools.load` | enumeration `all, essential` | shared | нет | после MVP (§17.11.9) |
 | `tools.mounted` | stringList | shared | нет | после MVP (§17.11.9) |
 | `tools.edit.anchors` | bool | shared | нет | после MVP (§17.11.3) |
@@ -1209,7 +1212,7 @@ stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` о
 | `tools.ask.enabled` | bool | shared | да | после MVP: capability `userQuestions` на соединение (§17.11.7) |
 | `tools.ask.timeout` | duration | shared | нет | после MVP |
 | `tools.heartbeat` | map | shared | нет | после MVP (§17.12.3) |
-| `loop.empty_response_retries`, `loop.misuse`, `loop.final_response` | int, map, map | fileOnly | нет | поведение цикла при сбоях модели, после MVP — ревизии и одобрение ответа (§17.12.4); значения по умолчанию подходят почти всем |
+| `loop.empty_response_retries`, `loop.misuse`, `loop.final_response` | int, map, map | fileOnly | нет | в 1.0 `empty_response_retries` и `misuse` без потребителя — `not applied in this version`; поведение цикла при сбоях модели, после MVP — ревизии и одобрение ответа (§17.12.4); значения по умолчанию подходят почти всем |
 | `redact` | map | fileOnly | нет | граница безопасности: ослабление редакции — сознательная правка файла; после MVP покрывает `redact.block` и `redact.command_rewrite` (§17.12.6–§17.12.7) |
 | `tools.web.enabled` | bool | shared | да | — |
 | `tools.web.search.backend` | enumeration | shared | нет | — |
@@ -1245,10 +1248,11 @@ stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` о
 | `a2a.server` (прочие) | map | fileOnly | да | после MVP (§17.15.4): сетевой сервер агента с shell; адрес, режим и лимиты — сознательной правкой файла |
 | `logging.level` | enumeration | shared | да | уровень логгера принадлежит хосту; в 1.0 — только после перезапуска (OQ5, D14 change `add-config-writer-and-reload`) |
 | `logging.file`, `logging.trace`, `logging.trace_payload` | path, bool, bool | fileOnly | да | sink открывается один раз; trace — диагностика |
-| `logging.llm_snapshot` | enumeration `off, headers, body` | fileOnly | нет | после MVP (§17.10.10): диагностика; тело запроса — только сознательной правкой |
-| `profile` | map | fileOnly | да | сужение capability зависит от хоста; после MVP — также `memory`, `user_questions`, `user_hooks` |
+| `logging.llm_snapshot` | enumeration `off, headers, body` | fileOnly | да | после MVP (§17.10.10): диагностика; тело запроса — только сознательной правкой; в 1.0 непрозрачный узел раздела хоста `logging` — перезапуск по D8 `logging.*` |
+| `profile` | map | fileOnly | да | сужение capability зависит от хоста; слои — все, как у загрузчика; после MVP — также `memory`, `user_questions`, `user_hooks` |
 | `secrets.backend` | enumeration `auto, keychain, env, file` | fileOnly | да | открытый файл секретов выбирается только сознательной правкой; слой только `user` |
 | `config.watch`, `config.poll_interval` | bool, duration | fileOnly | да | поведение наблюдателя; из UI менять бессмысленно |
+| `agents` | map | fileOnly | нет | ключ верхнего уровня схемы; определения агентов — markdown-файлы, а не YAML |
 
 Новые ключи этого раздела (дополнение §15.4): `secrets.backend` (`"auto"`) — только глобальный
 конфиг; `config.watch` (`true`) и `poll_interval` (`"2s"`, `1s..60s`) — слои 2, 4 и
@@ -1257,17 +1261,27 @@ stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` о
 
 **Объём в 1.0** (D4). Таблица выше — целевой состав. Дескрипторы сборки 1.0 — на ключи схемы этой
 сборки:
+- **Типы — как у узлов схемы**: `tools.untrusted_paths` — `stringList` (`ListNode(string)`);
+  `tools.project_context.max_bytes` и `loop.empty_response_retries` — листья `int`; `agents` —
+  `map`/`fileOnly`.
 - **Разделы после MVP** (`afterMvpSections`: `llm`, `images`, `skills`, `subagents`, `jobs`,
-  `hooks`, `plugins`, `a2a`, `memory`, `steering`, `lsp`, а также `tools.web`, `tools.spill` и
-  подобные) — непрозрачные узлы схемы. Каждый получает один дескриптор `map`/`fileOnly` с причиной
-  `not supported in this version; edit the file manually`, `restartRequired: false`. Их строки
-  таблицы вводят change этих разделов вместе со схемой.
+  `hooks`, `plugins`, `a2a`, `memory`, `steering`, `lsp`, а также непрозрачные узлы `tools.web`,
+  `tools.spill` и подобные внутри разделов ядра) — непрозрачные узлы схемы. Каждый получает один
+  дескриптор `map`/`fileOnly` с причиной `not supported in this version; edit the file manually`,
+  `restartRequired: false`. Их строки таблицы вводят change этих разделов вместе со схемой.
+- **Непрозрачные узлы внутри разделов хоста** наследуют правило D8 своего раздела:
+  `logging.llm_snapshot` — `restartRequired: true`, слои раздела `logging`.
+- **Ключи без потребителя** (узел схемы `applied: false`) — `fileOnly` с причиной
+  `not applied in this version`, в том числе объявленные в таблице `shared`: `agent.fallback`,
+  `agent.summary_model`, `permissions.timeout`, `tools.disabled`. Change, который даёт ключу
+  потребителя, переводит дескриптор в целевой `scope` и решает его `restartRequired`.
 - **`config.watch`, `config.poll_interval`** — листья, `fileOnly`, `restartRequired: true`, слои
   `user` и `projectLocal`.
 - **`secrets.backend`** — `fileOnly`, `restartRequired: true`, слой только `user`.
+- **`profile`** — `map`/`fileOnly`, `restartRequired: true`, слои — все, как у загрузчика.
 
 Реестр — отдельная таблица данных в `config/settings_registry.dart`, а не метаданные узлов
-`schema.dart`: схема описывает проверку (тип, умолчание, правило, область `core`/`host`), реестр —
+`schema.dart`: схема описывает проверку (тип, перечисление, правило, область `core`/`host`), реестр —
 показ и запись (раздел UI, метка, `shared`/`fileOnly`, `restartRequired`, `layers`). Схема — дерево
 узлов валидатора, реестр — плоский список в порядке показа; слить их — значит тащить UI-поля в
 валидатор и перестроить проверенный в 8.5 код. Согласованность держит тест полноты (D4).
@@ -1290,14 +1304,25 @@ stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` о
 ```text
 1. leaves := все листовые пути ConfigSchema (имена — "*")
 2. для каждого leaf: ровно один дескриптор покрывает его (сам ключ или предок с типом map/mapList)
-3. для каждого дескриптора: путь есть в ConfigSchema; type, defaultValue, enumValues, min/max
-   совпадают со схемой валидатора
+3. для каждого дескриптора: путь есть в ConfigSchema; type и enumValues совпадают со схемой;
+   min/max каждого int — зонд валидатора (граница принимается, значение за ней отклоняется);
+   defaultValue применяемого ключа == значение разрешённого CoreConfig пустой конфигурации,
+   умолчания остальных — константа теста «только по §15.4»
 4. scope == fileOnly ⇔ fileOnlyReason не пуст; label и description не пусты
 5. каждый ключ верхнего уровня схемы покрыт хотя бы одним дескриптором (формулировка E-15)
 6. restartRequired == true ровно для ключей «только после перезапуска» таблицы сборки 1.0 §17.5.6;
    список — константа теста со ссылкой на D8 design.md change add-config-writer-and-reload
 7. layers ⊆ слоёв, которые §15.3 разрешает для ключа
+8. scope == shared ⇒ все покрытые узлы схемы applied: true
 ```
+
+**Ограничение п. 3.** В узлах схемы сборки 1.0 нет умолчаний и диапазонов, поэтому умолчания
+ключей без потребителя, ключей хоста и непрозрачных узлов сверить не с чем: они перечислены явной
+константой теста и держатся ревью. Перенос умолчаний и диапазонов в узлы схемы — отдельный
+рефакторинг вне 8.10 (design.md change `add-config-writer-and-reload`, D4, Risks).
+
+Функция покрытия, на которой стоят `lookup` и тест полноты, — не публичный API: клиенты пользуются
+только `SettingsRegistry.lookup`.
 
 `SettingsRegistry.lookup`: более конкретный дескриптор побеждает `*` и «прочие» (`plugins.enabled`
 против `plugins.*`, `memory.enabled` против `memory`); в шаге 2 теста «ровно один» — после этого
