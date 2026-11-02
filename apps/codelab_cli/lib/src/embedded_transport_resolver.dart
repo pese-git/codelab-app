@@ -27,8 +27,12 @@ final class EmbeddedOpenCancelledException implements Exception {
 ///
 /// Почему в CLI, а не в пакете: резолвер реализует `TransportResolver`
 /// клиентского слоя, а мост `codelab_embedded` не зависит от `codelab_client_*`
-/// (D1). Около тридцати строк повторяются в composition root desktop;
-/// одинаковость проверяют тесты каждого клиента.
+/// (D1). Общий пакет невозможен: `codelab_client_core` не может зависеть от
+/// `codelab_embedded` (allowlist зависимостей ядра, `melos run guard`).
+/// Поэтому у desktop своя копия (около 125 строк,
+/// `apps/codelab_desktop/lib/app/embedded_transport_resolver.dart`);
+/// одинаковость поведения держат тесты обоих клиентов — правка здесь требует
+/// парной правки там.
 ///
 /// Для чего и как:
 /// * `open` **сериализован**: следующий вызов ждёт окончания предыдущего,

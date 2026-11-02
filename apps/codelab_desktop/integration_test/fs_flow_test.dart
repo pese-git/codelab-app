@@ -47,7 +47,7 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   required String workingDirectory,
   required Directory agentDirectory,
 }) async {
-  await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+  await tester.pumpWidget(E2eAgent.current.bootstrap());
   await tester.pumpAndSettle();
 
   // Unlike the other e2e tests, this one points the session's working
@@ -72,14 +72,7 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   await shellCubit.selectProject(workingDirectory);
 
   await _openConnectionSetupDialog(tester);
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Command')),
-    launch.command,
-  );
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Args')),
-    launch.args,
-  );
+  await launch.enterConnection(tester);
   await _closeConnectionSetupDialog(tester);
   await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
@@ -121,7 +114,9 @@ void main() {
   testWidgets(
     'reads and writes real files in the session working directory via a '
     'real fs/read_text_file + fs/write_text_file round trip, with no '
-    'approval step',
+    'approval step'
+    '${E2eAgent.current.skipNote}',
+    skip: E2eAgent.current.skipFsAndTerminal,
     (tester) async {
       final workDirectory = await Directory.systemTemp.createTemp(
         'codelab_app_fs_e2e_work_',
@@ -171,7 +166,9 @@ void main() {
 
   testWidgets(
     'rejects an agent fs/read_text_file whose path escapes the session '
-    'working directory, without ever touching the real filesystem there',
+    'working directory, without ever touching the real filesystem there'
+    '${E2eAgent.current.skipNote}',
+    skip: E2eAgent.current.skipFsAndTerminal,
     (tester) async {
       final workDirectory = await Directory.systemTemp.createTemp(
         'codelab_app_fs_e2e_work_',

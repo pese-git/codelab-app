@@ -32,14 +32,7 @@ CodeLabShellCubit _cubit(WidgetTester tester) =>
 Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
   await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
   await tester.pumpAndSettle();
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Command')),
-    launch.command,
-  );
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Args')),
-    launch.args,
-  );
+  await launch.enterConnection(tester);
   await tester.tap(find.widgetWithText(Button, 'Close'));
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
@@ -127,7 +120,7 @@ void main() {
         mode: CodelabCompatibleStdioAgentMode.withAvailableCommands,
       );
 
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
       await _cubit(tester).selectProject(project.path);
       await tester.pumpAndSettle();

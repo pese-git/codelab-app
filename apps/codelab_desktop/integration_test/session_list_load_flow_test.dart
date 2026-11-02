@@ -28,14 +28,7 @@ CodeLabShellCubit _cubit(WidgetTester tester) =>
 Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
   await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
   await tester.pumpAndSettle();
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Command')),
-    launch.command,
-  );
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Args')),
-    launch.args,
-  );
+  await launch.enterConnection(tester);
   await tester.tap(find.widgetWithText(Button, 'Close'));
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
@@ -135,7 +128,7 @@ void main() {
         mode: CodelabCompatibleStdioAgentMode.withSessionList,
       );
 
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
       await _cubit(tester).selectProject(project.path);
       await tester.pumpAndSettle();
@@ -167,7 +160,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
       await closeCodeLabRootScope();
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
 
       expect(_cubit(tester).state.selectedProjectPath, project.path);
@@ -211,7 +204,7 @@ void main() {
   testWidgets(
     'Reconnect over WebSocket cancels the running turn, and the session '
     'accepts the next prompt',
-    skip: E2eAgent.current.isScripted,
+    skip: E2eAgent.current.skipWebSocketAgent,
     (tester) async {
       final project = await Directory.systemTemp.createTemp(
         'codelab_reconnect_mid_turn_e2e_',
@@ -227,7 +220,7 @@ void main() {
       );
       addTearDown(agent.stop);
 
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
       await _cubit(tester).selectProject(project.path);
       await tester.pumpAndSettle();

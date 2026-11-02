@@ -49,7 +49,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('reports missing stdio command without crashing', (tester) async {
-    await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+    await tester.pumpWidget(E2eAgent.current.bootstrap());
     await tester.pumpAndSettle();
 
     await _openConnectionSetupDialog(tester);
@@ -79,7 +79,7 @@ void main() {
   });
 
   testWidgets('connects to a codelab-compatible stdio agent', (tester) async {
-    await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+    await tester.pumpWidget(E2eAgent.current.bootstrap());
     await tester.pumpAndSettle();
 
     final agentDirectory = await Directory.systemTemp.createTemp(
@@ -97,14 +97,7 @@ void main() {
     ).shellCubit;
 
     await _openConnectionSetupDialog(tester);
-    await tester.enterText(
-      find.byKey(const ValueKey('transport-field-Command')),
-      launch.command,
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('transport-field-Args')),
-      launch.args,
-    );
+    await launch.enterConnection(tester);
     await _closeConnectionSetupDialog(tester);
     await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
@@ -124,7 +117,7 @@ void main() {
     'creates a session and completes a prompt turn against a real stdio '
     'process',
     (tester) async {
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
 
       final agentDirectory = await Directory.systemTemp.createTemp(
@@ -142,14 +135,7 @@ void main() {
       ).shellCubit;
 
       await _openConnectionSetupDialog(tester);
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Command')),
-        launch.command,
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Args')),
-        launch.args,
-      );
+      await launch.enterConnection(tester);
       await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
@@ -192,7 +178,7 @@ void main() {
   testWidgets(
     'selects a session config option value against a real stdio process',
     (tester) async {
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
 
       final agentDirectory = await Directory.systemTemp.createTemp(
@@ -213,14 +199,7 @@ void main() {
       ).shellCubit;
 
       await _openConnectionSetupDialog(tester);
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Command')),
-        launch.command,
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Args')),
-        launch.args,
-      );
+      await launch.enterConnection(tester);
       await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
@@ -277,7 +256,7 @@ void main() {
     'a real stdio agent process dying mid-turn is reflected as a lost '
     'connection, not a stuck Connected/running UI',
     (tester) async {
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
 
       final agentDirectory = await Directory.systemTemp.createTemp(
@@ -298,14 +277,7 @@ void main() {
       ).shellCubit;
 
       await _openConnectionSetupDialog(tester);
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Command')),
-        launch.command,
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Args')),
-        launch.args,
-      );
+      await launch.enterConnection(tester);
       await _closeConnectionSetupDialog(tester);
       await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 

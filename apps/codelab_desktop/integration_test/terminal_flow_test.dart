@@ -45,7 +45,7 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   required CodelabCompatibleStdioAgentMode mode,
   required Directory agentDirectory,
 }) async {
-  await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+  await tester.pumpWidget(E2eAgent.current.bootstrap());
   await tester.pumpAndSettle();
 
   final launch = await E2eAgent.current.launch(agentDirectory, mode: mode);
@@ -55,14 +55,7 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   ).shellCubit;
 
   await _openConnectionSetupDialog(tester);
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Command')),
-    launch.command,
-  );
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Args')),
-    launch.args,
-  );
+  await launch.enterConnection(tester);
   await _closeConnectionSetupDialog(tester);
   await _tapConnectAndWaitUntilSettled(tester, shellCubit);
 
@@ -102,7 +95,9 @@ void main() {
 
   testWidgets(
     'terminal/create runs a real command and the agent observes its real '
-    'output and exit code',
+    'output and exit code'
+    '${E2eAgent.current.skipNote}',
+    skip: E2eAgent.current.skipFsAndTerminal,
     (tester) async {
       final agentDirectory = await Directory.systemTemp.createTemp(
         'codelab_app_terminal_e2e_',
@@ -140,7 +135,9 @@ void main() {
 
   testWidgets(
     'terminal/create with a cwd outside the working directory is rejected '
-    'before starting a process',
+    'before starting a process'
+    '${E2eAgent.current.skipNote}',
+    skip: E2eAgent.current.skipFsAndTerminal,
     (tester) async {
       final agentDirectory = await Directory.systemTemp.createTemp(
         'codelab_app_terminal_e2e_',
@@ -171,36 +168,42 @@ void main() {
     tags: scriptedOnly,
   );
 
-  testWidgets('terminal/kill terminates a real long-running process without '
-      'releasing its terminalId', (tester) async {
-    final agentDirectory = await Directory.systemTemp.createTemp(
-      'codelab_app_terminal_e2e_',
-    );
-    addTearDown(() async {
-      if (await agentDirectory.exists()) {
-        await agentDirectory.delete(recursive: true);
-      }
-    });
+  testWidgets(
+    'terminal/kill terminates a real long-running process without '
+    'releasing its terminalId'
+    '${E2eAgent.current.skipNote}',
+    (tester) async {
+      final agentDirectory = await Directory.systemTemp.createTemp(
+        'codelab_app_terminal_e2e_',
+      );
+      addTearDown(() async {
+        if (await agentDirectory.exists()) {
+          await agentDirectory.delete(recursive: true);
+        }
+      });
 
-    final shellCubit = await _connectAndCreateSession(
-      tester,
-      mode: CodelabCompatibleStdioAgentMode.withTerminalKill,
-      agentDirectory: agentDirectory,
-    );
+      final shellCubit = await _connectAndCreateSession(
+        tester,
+        mode: CodelabCompatibleStdioAgentMode.withTerminalKill,
+        agentDirectory: agentDirectory,
+      );
 
-    await _sendPromptAndWaitForTurn(tester, shellCubit);
+      await _sendPromptAndWaitForTurn(tester, shellCubit);
 
-    // The agent started a real `sleep 30`, killed it via terminal/kill,
-    // then successfully called terminal/output with the SAME terminalId
-    // — proving the real IoTerminalProcessRunner did not release it, and
-    // that the real OS process was actually terminated (signal SIGKILL/
-    // SIGTERM shows up in the reported exit status).
-    expect(find.textContaining('terminal output:'), findsWidgets);
-    expect(find.textContaining('SIGTERM'), findsWidgets);
-    expect(shellCubit.state.isPromptSubmitting, isFalse);
+      // The agent started a real `sleep 30`, killed it via terminal/kill,
+      // then successfully called terminal/output with the SAME terminalId
+      // — proving the real IoTerminalProcessRunner did not release it, and
+      // that the real OS process was actually terminated (signal SIGKILL/
+      // SIGTERM shows up in the reported exit status).
+      expect(find.textContaining('terminal output:'), findsWidgets);
+      expect(find.textContaining('SIGTERM'), findsWidgets);
+      expect(shellCubit.state.isPromptSubmitting, isFalse);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpAndSettle();
-    await closeCodeLabRootScope();
-  }, tags: scriptedOnly);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await closeCodeLabRootScope();
+    },
+    tags: scriptedOnly,
+    skip: E2eAgent.current.skipFsAndTerminal,
+  );
 }

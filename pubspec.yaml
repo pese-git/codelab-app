@@ -167,6 +167,28 @@ melos:
         exit $status;
         }
 
+    test:e2e:app:embedded:
+      description: Run every codelab_desktop macOS integration test except scripted-only with the embedded agent (type "Embedded agent", model script instead of a child process; fs_flow and terminal_flow skip themselves), one file per flutter test run (release/* only, not part of check).
+      # Тот же цикл по файлам, что у `test:e2e:app:dart-agent`: на macOS
+      # `flutter test integration_test -d macos` не поднимает приложение после
+      # первого файла. Бинарь агента не собирается: агент встроен в приложение
+      # (design.md change `add-embedded-agent-mode`, D10; `AGENTS.md` §21 —
+      # прогон на устройстве только в `release/<version>`). Код 79 — «No tests
+      # ran» из package:test: в файле только scripted-only тесты, это пропуск
+      # файла, а не падение.
+      run: >-
+        cd apps/codelab_desktop && {
+        status=0;
+        for file in integration_test/*_test.dart; do
+        echo "== $file";
+        fvm flutter test "$file" -d macos --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=embedded;
+        code=$?;
+        if [ $code -eq 79 ]; then echo "SKIPPED (scripted-only): $file";
+        elif [ $code -ne 0 ]; then echo "FAILED: $file"; status=1; fi;
+        done;
+        exit $status;
+        }
+
     check:
       description: Run format, analyze, guard, tests, the CLI e2e against the Dart agent and the embedded agent, protocol, client, agent and embedded fixture conformance, and web compile.
       steps:

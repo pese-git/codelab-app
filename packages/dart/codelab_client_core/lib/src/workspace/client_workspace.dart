@@ -58,6 +58,11 @@ abstract interface class ClientWorkspace {
   /// Если сессии уже открыты (повторный Connect, в том числе к другому
   /// агенту), они, как после [reconnect], загружаются заново через
   /// `session/load` или становятся [SessionStatusView.detached].
+  ///
+  /// Повторный [connect] или [reconnect], пока прежний ещё идёт (например,
+  /// долгий `open` встроенного агента), вытесняет прежнюю попытку: её
+  /// `Future` завершается **без ошибки и без изменения состояния**, а итог
+  /// читается из [state] / [current] (AGENTS.md §9).
   Future<void> connect(
     ConnectionProfile profile, {
     required String projectDirectory,
@@ -256,6 +261,12 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   /// остаются `Reconnecting`, а не мигают `Connecting`.
   _Transition _transition = _Transition.none;
 
+  /// Номер последней начатой попытки подключения (поколение): растёт на
+  /// каждом `connect`/`reconnect` и на `dispose`. Устаревшая попытка не
+  /// публикует состояние, не трогает сессии и не сбрасывает [_transition]
+  /// (AGENTS.md §9; см. [_isStale]).
+  var _attempt = 0;
+
   @override
   WorkspaceState get current => _current;
 
@@ -286,6 +297,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       ),
     );
     _transition = _Transition.connecting;
+    final attempt = ++_attempt;
     // Повторный Connect — новый процесс агента, а то и другой агент из
     // диалога подключения: открытые сессии он не знает. Как при Reconnect,
     // они не шлют промпты, пока не перезагружены, а после подключения
@@ -300,22 +312,40 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         profile,
         projectDirectory: projectDirectory,
       );
+      if (_isStale(attempt)) {
+        // Транспорт ещё не передан бэкенду, владельца у него нет (§9).
+        await _closeSuperseded(transport);
+        return;
+      }
       final connectionState = await _backend.connect(transport);
+      if (_isStale(attempt)) {
+        // Транспорт уже у бэкенда: следующая попытка заменит и закроет его.
+        return;
+      }
       _capabilities = _capabilitiesOf(connectionState);
       _publishConnection(_viewFor(connectionState));
     } on Object catch (error) {
+      if (_isStale(attempt)) {
+        return;
+      }
       for (final handle in _handles.values) {
         handle.resume();
       }
       _publishFailure(error);
-      rethrow;
-    } finally {
       _transition = _Transition.none;
+      rethrow;
     }
+    _transition = _Transition.none;
     if (reattach) {
-      await _reattachSessions();
+      await _reattachSessions(attempt);
+    }
+    if (_isStale(attempt)) {
+      return;
     }
     await _listFirstPage();
+    if (_isStale(attempt)) {
+      return;
+    }
     await _restorer?.restoreAfterConnect();
   }
 
@@ -344,6 +374,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       ),
     );
     _transition = _Transition.reconnecting;
+    final attempt = ++_attempt;
     // Ход, оборванный заменой транспорта, не должен слить очередь в новое
     // соединение раньше, чем сессия загружена в нём.
     for (final handle in _handles.values) {
@@ -352,28 +383,69 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     try {
       final connectionState = await _backend.reconnect(
         ReconnectCommand(
-          transportFactory: () =>
-              resolver.open(target, projectDirectory: directory),
+          transportFactory: () async {
+            final transport = await resolver.open(
+              target,
+              projectDirectory: directory,
+            );
+            if (_isStale(attempt)) {
+              // Бэкенд ещё не принял транспорт: закрываем его сами и
+              // прерываем попытку до замены текущего транспорта.
+              await _closeSuperseded(transport);
+              throw const _SupersededAttempt();
+            }
+            return transport;
+          },
         ),
       );
+      if (_isStale(attempt)) {
+        return;
+      }
       _capabilities = _capabilitiesOf(connectionState);
       _publishConnection(_viewFor(connectionState));
     } on Object catch (error) {
+      if (_isStale(attempt)) {
+        return;
+      }
       for (final handle in _handles.values) {
         handle.resume();
       }
       _publishFailure(error);
-      rethrow;
-    } finally {
       _transition = _Transition.none;
+      rethrow;
     }
-    await _reattachSessions();
+    _transition = _Transition.none;
+    await _reattachSessions(attempt);
+    if (_isStale(attempt)) {
+      return;
+    }
     await _listFirstPage();
+  }
+
+  /// Попытка подключения [attempt] вытеснена более новой или `dispose`.
+  ///
+  /// Почему: повторный `connect`/`reconnect` во время долгого `open`
+  /// (встроенный агент, решение L4 `add-embedded-agent-mode`) — штатный способ
+  /// прервать подключение, а завершение старой попытки не должно менять
+  /// состояние новой (AGENTS.md §9: late events старого request не меняют
+  /// актуальный state).
+  bool _isStale(int attempt) => attempt != _attempt;
+
+  /// Закрывает транспорт вытесненной попытки, который не достался бэкенду.
+  ///
+  /// Ошибка закрытия не важна: транспорт уже не нужен никому, а сбой не
+  /// должен подменить результат актуальной попытки.
+  Future<void> _closeSuperseded(AcpTransport transport) async {
+    try {
+      await transport.close();
+    } on Object {
+      // Намеренно проглочено, см. выше.
+    }
   }
 
   /// Загружает открытые сессии в новом соединении, активную первой: её
   /// транскрипт пользователь видит сразу, а фоновые его не задерживают.
-  Future<void> _reattachSessions() async {
+  Future<void> _reattachSessions(int attempt) async {
     final active = _current.activeSessionId;
     final ids = [
       if (active != null && _handles.containsKey(active)) active,
@@ -381,6 +453,10 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         if (id != active) id,
     ];
     for (final id in ids) {
+      if (_isStale(attempt)) {
+        // Новая попытка сама приостановила сессии и перезагрузит их.
+        return;
+      }
       final handle = _handles[id]!;
       if (!_capabilities.loadSession) {
         handle.detach('The agent cannot restore sessions after reconnecting.');
@@ -388,8 +464,13 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       }
       try {
         await _load(id, handle.cwd);
-        handle.resume();
+        if (!_isStale(attempt)) {
+          handle.resume();
+        }
       } on Object {
+        if (_isStale(attempt)) {
+          return;
+        }
         handle.detach(
           'Session ${id.value} could not be restored after reconnecting.',
         );
@@ -575,6 +656,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       return;
     }
     _disposed = true;
+    _attempt++;
     // Последняя запись снимка не теряется при закрытии хоста (design D6).
     await _restorer?.flush();
     await _connectionSubscription.cancel();
@@ -814,6 +896,13 @@ final class _RestoreHostAdapter implements RestoreHost {
 }
 
 enum _Transition { none, connecting, reconnecting }
+
+/// Внутренний сигнал: попытка вытеснена, пока `open` ещё шёл. Прерывает
+/// `ReconnectCommand.transportFactory` до замены транспорта; наружу не
+/// выходит — `reconnect` распознаёт устаревшую попытку по номеру.
+final class _SupersededAttempt implements Exception {
+  const _SupersededAttempt();
+}
 
 /// Связь открытой сессии с соединением агента.
 enum _Link {
