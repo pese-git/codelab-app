@@ -501,7 +501,7 @@ resolve(role, sessionModel, overrides):
      без дубликатов; source sessionModel; вернуть       // основную модель выбирает пользователь
 2. candidates :=
      overrides[role] задан → [overrides[role]] + llm.roles.<role>.models   (source session)
-     иначе llm.roles.<role>.models (флаг --role уже записал сюда слой 6; source runFlag | config)
+     иначе llm.roles.<role>.models (флаг --role уже записал сюда слой 7; source runFlag | config)
 3. available := candidates, у которых catalog.resolve(id, role) != null
      и есть учётные данные: auth none, или ключ найден (env/secret), или сохранён OAuth-токен
 4. available не пусто → chain := available; вернуть
@@ -533,7 +533,7 @@ resolve(role, sessionModel, overrides):
 сессии, а пробует `subagent` (шаг 7 §17.3.3), и только затем — `default`.
 
 **Переопределение на прогон.** `--role <role>=<provider/model>` (§15.6, можно повторять) —
-слой 6: `llm.roles.<role>.models = ["<provider/model>"]`. Неизвестная роль или модель вне
+слой 7: `llm.roles.<role>.models = ["<provider/model>"]`. Неизвестная роль или модель вне
 каталога — ошибка использования, код 64. `--role default=<m>` равносилен `--model <m>`.
 
 **Переопределение на сессию** — агентская команда `/model --role <role> <provider/model>` и

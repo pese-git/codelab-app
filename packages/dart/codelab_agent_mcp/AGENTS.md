@@ -5,6 +5,7 @@
 Источники:
 - `docs/architecture/proposals/agent-core-architecture.md` — §1.2 (пакеты и allowlist), §6.4 (MCP-инструменты), §10.3 (`AgentCoreServices.mcp`), §11.5 (секция `mcp`), §12.2 (события);
 - `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md` — решения D1–D15;
+- `openspec/changes/add-config-writer-and-reload/design.md` — D10, D11 (супервизия серверов сессии, `replaceServers` при перезагрузке, R6-1, R6-2); `agent-core-architecture` §17.5.7;
 - нормативный текст MCP — `docs/protocols/mcp/specification/` (ревизия `2026-07-28`, modern) и `docs/protocols/mcp/specification/2025-11-25/` (legacy). Методы, поля, коды и `_meta`-ключи, которых там нет, не вводятся (по аналогии с корневым `AGENTS.md` §3.4).
 
 Если документов не хватает, сначала дополняется документация, потом пишется код.
@@ -19,6 +20,7 @@
 * `mcp.server.failed` пишет только супервизор — на 1-м и каждом 10-м сбое подряд, остальные — `mcp.server.retry`; `McpClient` под коннектором создаётся с `logFailures: false`;
 * `McpTool` вызывает не клиента, а `McpToolCaller` сервера: после переподключения старые инструменты работают на новом соединении, а во время простоя получают `is not connected (retry in <n>s)` без обращения к транспорту;
 * набор инструментов после переподключения попадает в реестр только через `takeUpdate()` на границе шага; неизменённый набор обновления не даёт;
+* `replaceServers` при перезагрузке конфига сохраняет ручной выбор `setEnabled`, пока элемент сервера (`sameConnection`, `enabled`, сроки) не изменился, а неизменённый сервер в `failed` будит сразу (R6-2, OQ8);
 * `lastError` и поля логов — тексты кода CodeLab ≤ 200 символов, без значений `env`, `headers` и секретов.
 
 ## 2. Границы

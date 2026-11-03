@@ -187,6 +187,44 @@
     ядре (D8); супервизия MCP в `McpSessionTools` без отдельного `McpSupervisor`, серверы конфига —
     существующим `replaceServers` после хода (D10, D11); без fsync каталога при записи (D5).
     Сторож импортов и allowlist зависимостей не меняются; `yaml_edit` уже в `ioAllowlist` (D1, D2).
+
+    **Итог 8.10.** Сделано change [`add-config-writer-and-reload`](../../../../openspec/changes/add-config-writer-and-reload/)
+    (итерации 0–8): предконфигурация провайдера `CODELAB_PROVIDER_*` и флаги `serve`
+    `--provider-type`/`--provider-config` первыми в слоях 6 и 7, слияние с `providers.<id>` доверенных
+    файлов, литеральный секретный заголовок — `inlineSecret` (D3; L-25); `SettingsRegistry` ядра с
+    тестом полноты по схеме валидатора и единственным источником `restartRequired` (D4; E-15);
+    `ConfigWriter` на `yaml_edit` — правки ядра `ConfigEdit`, lock с отпечатком sha256, tmp с правами
+    до записи, атомарный `rename`, запись блокируют только новые ошибки по полной базе (R3-1, R3-3),
+    литеральные секреты на любой глубине, containment ссылок проектных слоёв (D2, D5); подкоманды
+    `config path|get|set|unset`, `provider add|list|remove`, `mcp add|list|remove` у обоих бинарей
+    одной реализацией через мост `codelab_setup` с маскированием вывода (D6, R0-2, R4-1…R4-5);
+    `ConfigWatcher` и `FileConfigSource` с закреплённым доверием, `AgentRuntime.reloadConfig`/
+    `checkConfig`, `config_option_update` после смены списка моделей, `SecretResolver.invalidate` с
+    поколениями (D7, D8, D13, D14); супервизия серверов в сессии `McpClientConnector` и серверы
+    конфига через `replaceServers` после хода (D10, D11; E-04); пути PERM-11 от хоста
+    (`agentConfigPaths`) с белым списком чтения `exec` (D8, OQ2, R5-1…R5-4); встроенные команды
+    `/config` и `/mcp` без модели, фикстура `acp/slash-mcp-list` (D12; агентская часть E-13).
+    Отступления от плана 8.10 и agent-core §17.5 (кроме перечисленных выше):
+    * D8 — один снимок на корень запуска, `ConfigSource` без `cwd`, `modelsFor` хоста; ключи,
+      ослабляющие права (`permissions.*`, `trusted_projects`, новые и изменённые stdio-серверы), и
+      правки, способные направить секрет на другой адрес (HTTP-серверы с `${…}`, адрес и ключ
+      провайдера с ключом), применяются только после перезапуска (R0-1, R0-4, R6-1) — E-04
+      выполнена в этих границах;
+    * D9 (OQ7) — файлы проекта (контекст, шаблоны, агенты) и список команд перечитывают только новые
+      сессии;
+    * D10 — неизменённый сервер в `failed` будится сразу (OQ8); ручной выбор `/mcp enable|disable`
+      живёт, пока элемент сервера не изменился (R6-2);
+    * D11 — отдельного `McpSupervisor` нет: супервизия — расширение `McpSessionTools`; ручные
+      действия идут через очередь замен сессии;
+    * OQ5 — `logging.level` только с перезапуском;
+    * задача 8.5 — containment ссылок проектных слоёв и при чтении: проектный файл с целью вне
+      `<cwd>/.codelab` — проблема загрузки, наблюдатель цель снаружи не читает (D5, D7);
+    * известные границы до 8.11 — смешанное значение секретного заголовка (R1-1) и литеральные
+      токены в `mcp.servers[*].args` (R4-6); висячая ссылка на месте каталога-предка в PERM-11 (R5-3).
+
+    Клиентская часть (мастер, страницы настроек, `AgentConfigStore`, реэкспорт `ConfigEdit` и
+    `SettingsRegistry` в основном барели моста) — change `add-provider-setup-ui`. Сторож импортов и
+    allowlist зависимостей не менялись; новое ребро графа — нет (D1).
 11. **8.11. Редакция секретов** (P-10, *Should — не блокирует MVP*; перенесена с этапа 3):
     вывод инструментов (`exec env`, `read .env`), промпт пользователя и лог не попадают в журнал
     сессии и к провайдеру с сырыми секретами. Состав:
@@ -299,12 +337,26 @@ stdio MUST) записано в §13.15, включение явным флаг�
   («permissions are set before the value is written; argv has only the path»). Сквозная проверка
   «`codelab secret set`, затем `codelab -p` во встроенном режиме» — этап 7 (встроенного режима
   в 8.9 нет).
-* Если сделано (8.10, Should — не блокирует MVP): `config_writer_test.dart`,
-  `config_writer_atomic_test.dart`, `config_watcher_test.dart`, `config_reload_test.dart`,
-  `mcp_reconnect_test.dart` (`core/mcp-reconnect-after-crash`, E-04), `mcp_apply_config_test.dart`,
+* 8.10 (Should — не блокирует MVP): `config_writer_test.dart`, `config_writer_atomic_test.dart`,
+  `config_watcher_test.dart`, `config_reload_test.dart`, `mcp_reconnect_test.dart`
+  (`core/mcp-reconnect-after-crash`, E-04), `mcp_apply_config_test.dart`,
   `settings_registry_complete_test.dart` (`core/settings-registry-complete`, E-15),
   `provider_preconfig_env_test.dart` (`core/provider-preconfig-from-env`, L-25),
-  `cli_config_commands_test.dart` и фикстура `acp/slash-mcp-list` зелёные.
+  `cli_config_commands_test.dart` и фикстура `acp/slash-mcp-list` зелёные. Тесты — change
+  `add-config-writer-and-reload` (итерации 1–8); отметка **«Выполнено»** ставится по итогу его задачи
+  8.4 (DoD: прогон тестов, `guard`, `web-compile`):
+
+  | Строка | Проверка | Тесты 8.10 |
+  |---|---|---|
+  | L-25 | `core/provider-preconfig-from-env` | `packages/dart/codelab_agent_io/test/config/provider_preconfig_env_test.dart`; флаги `serve` — `apps/codelab_agent/test/serve_flags_test.dart` (группа «--provider-type and --provider-config (L-25)»), `provider_preconfig_process_test.dart` |
+  | E-15 | `core/settings-registry-complete` | `packages/dart/codelab_agent_core/test/config/settings_registry_complete_test.dart`; типы правок — `config_edit_test.dart`, `config_fingerprint_test.dart` |
+  | E-04 | `core/mcp-reconnect-after-crash`, перечитывание конфига | `packages/dart/codelab_agent_mcp/test/supervisor/mcp_reconnect_test.dart`, `mcp_supervisor_state_test.dart`; `apps/codelab_agent/test/mcp_reconnect_process_test.dart`; `packages/dart/codelab_agent_core/test/runtime/config_reload_test.dart`, `mcp_apply_config_test.dart`, `test/secrets/secret_resolver_test.dart`; `packages/dart/codelab_agent_io/test/config/config_watcher_test.dart`, `file_config_source_test.dart`, `config_loader_link_containment_test.dart`; `packages/dart/codelab_agent_acp/test/config_reload_notifications_test.dart`; `apps/codelab_agent/test/config_reload_process_test.dart`, `agent_host_config_test.dart`; `packages/dart/codelab_embedded/test/embedded_config_reload_test.dart` |
+  | E-13 (агентская часть) | `acp/slash-mcp-list` | `packages/dart/codelab_acp_testing/fixtures/acp/slash-mcp-list.json` (агентский прогон — `packages/dart/codelab_agent_acp/test/conformance_test.dart`, `session_new_test.dart`); `packages/dart/codelab_agent_core/test/commands/builtin_commands_test.dart`; `apps/codelab_agent/test/agent_host_ws_commands_test.dart` (R0-3) |
+  | запись конфига | CFG-13, D5, D6 | `packages/dart/codelab_agent_io/test/config/config_writer_test.dart`, `config_writer_atomic_test.dart`, `config_validate_candidate_test.dart`; `test/cli/cli_config_commands_test.dart`, `config_output_test.dart`; `packages/dart/codelab_setup/test/config_write_exports_test.dart`; `apps/codelab_agent/test/config_write_command_process_test.dart`; `apps/codelab_cli/test/config_command_test.dart`, `provider_mcp_command_test.dart`, `e2e/config_write_command_test.dart` (байты файла совпадают с `codelab-agent`) |
+  | PERM-11 | OQ2, R5-1…R5-4 | `packages/dart/codelab_agent_core/test/permissions/agent_config_paths_test.dart`, `packages/dart/codelab_agent_io/test/config/agent_config_paths_test.dart` |
+
+  `melos run guard` и `web-compile` — условие задачи 8.4 change; страница MCP-серверов app
+  (`app:mcp_settings_flow_test.dart`) — change `add-provider-setup-ui`.
 * Если сделано (8.11, Should — не блокирует MVP): `core/redaction-before-journal`,
   `core/redaction-preserves-line-count`, `core/redaction-write-results-exempt` зелёные; журнал
   сессии с выводом `exec env` и `read .env` не содержит значений секретов.

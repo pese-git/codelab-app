@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'agent_config_paths.dart';
+import 'config_link_containment.dart';
 import 'config_loader.dart';
 import 'config_watcher.dart';
 import 'provider_preconfig.dart';
@@ -76,15 +77,34 @@ final class FileConfigSource implements ConfigSource {
         pollInterval: host?.configPollInterval ?? const Duration(seconds: 2),
         directoryEvents: directoryEvents,
         probe: probe,
+        // 8.5: проектный слой читается и наблюдается только по реальному
+        // пути внутри `.codelab` (тот же вердикт, что у загрузчика).
+        readablePath: _readablePathOf,
       );
       _watcher!.start();
     }
+  }
+
+  /// Путь, по которому наблюдатель вправе читать [file]; `null` — загрузчик
+  /// файл не читает (цель вне `.codelab`, цикл, `..` в хвосте, висячая ссылка
+  /// наружу). Файлы проектных слоёв определяются по значениям
+  /// `projectLayerFiles`, а не по разбору строк.
+  String? _readablePathOf(String file) {
+    if (!_projectFiles.contains(file)) {
+      return file;
+    }
+    return switch (checkProjectLayer(file, _cwd)) {
+      ProjectLayerReadable(:final realPath) => realPath,
+      ProjectLayerAbsent(escapes: false) => file,
+      ProjectLayerAbsent() || ProjectLayerRefused() => null,
+    };
   }
 
   @override
   final ConfigLoadResult initial;
 
   final String _cwd;
+  late final Set<String> _projectFiles = projectLayerFiles(_cwd).toSet();
   final Map<String, String> _environment;
   final ConfigTree? _flags;
   final ProviderPreconfigFlags? _preconfigFlags;

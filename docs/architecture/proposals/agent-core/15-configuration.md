@@ -52,8 +52,13 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | 2 | глобальный конфиг | `$CODELAB_HOME/config.yaml` (по умолчанию `~/.codelab/config.yaml`) | пользователь |
 | 3 | проектный конфиг | `<cwd>/.codelab/config.yaml` | репозиторий (коммитится) |
 | 4 | локальный проектный конфиг | `<cwd>/.codelab/config.local.yaml` | пользователь (обычно в `.gitignore`); пока проект не в `trusted_projects`, подчиняется тем же правилам доверия, что слой 3 (§15.3) |
-| 5 | переменные окружения `CODELAB_*`; после MVP — первой в слое предконфигурация провайдера `CODELAB_PROVIDER_*` (§17.5.3) | §15.6 | окружение запуска |
-| 6 | флаги командной строки | §15.6 | запуск |
+| 5 | дополнительный файл `--config <path>` / `CODELAB_CONFIG` (ниже) | путь из флага или переменной | тот, кто запускает агента |
+| 6 | переменные окружения `CODELAB_*`; с этапа 8.10 первой в слое — предконфигурация провайдера `CODELAB_PROVIDER_*` (§17.5.3) | §15.6 | окружение запуска |
+| 7 | флаги командной строки; с этапа 8.10 первой в слое — предконфигурация `--provider-type`/`--provider-config` (§17.5.3) | §15.6 | запуск |
+
+Нумерация совпадает со спецификацией agent-configuration, требование «Слои конфигурации и их
+порядок», и с D3 change `add-config-writer-and-reload` (до этапа 8.10 здесь файл `--config`
+назывался слоем 4а, окружение — слоем 5, флаги — слоем 6).
 
 `CODELAB_HOME` — корень глобального состояния: конфиг, сессии (§8.9), логи. По умолчанию
 `~/.codelab`; на мобильных платформах и web — каталог документов приложения (задаёт хост).
@@ -69,7 +74,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 Файлы `codelab.toml` Python-агента в этой таблице отсутствуют: агент их не читает. Если нет ни
 одного YAML-файла слоёв 2–4 и не задан `--config`, загрузчик пишет одно предупреждение
 `config.legacy_found` (§15.7).
-Дополнительный слой 4а — `--config <path>` / `CODELAB_CONFIG` — читается всегда, когда задан,
+Слой 5 — `--config <path>` / `CODELAB_CONFIG` — читается всегда, когда задан,
 и не подчиняется правилам доверия §15.3: файл назвал тот, кто запускает агента. Поэтому
 `CODELAB_CONFIG` — только абсолютный путь (относительный — ошибка использования: переменная
 переживает смену каталога, и путь от корня склонированного репозитория обошёл бы доверие), а
@@ -147,8 +152,9 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 `compaction.structured.*` (§17.13.4) покрыты строкой `compaction.*`, а `sessions.window.*` и
 `sessions.segments.*` (§17.13.2) — строкой `sessions.*`.
 
-Слои 5 и 6 (окружение, флаги и после MVP предконфигурация провайдера `CODELAB_PROVIDER_*`,
-§17.5.3) правилам доверия не подчиняются: их задаёт тот, кто запускает агента.
+Слои 5–7 (`--config`/`CODELAB_CONFIG`, окружение, флаги и с этапа 8.10 предконфигурация
+провайдера `CODELAB_PROVIDER_*`, §17.5.3) правилам доверия не подчиняются: их задаёт тот, кто
+запускает агента.
 
 С живой перезагрузкой (этап 8.10) доверие закреплено на стартовом снимке до перезапуска:
 `CoreConfig.fromLayers(pinnedTrustedProjects:)` оценивает проектные слои и строит
@@ -165,6 +171,24 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 (`ignored: trusted_projects is read only from the global config`), а в слое `--config` — ошибка. Ключ из слоя 3 (и из слоя 4 недоверенного проекта), который
 требует доверия, без него не ошибка, а предупреждение `config.project.untrusted_key` с именем
 ключа: репозиторий не может сломать запуск, но и не может расширить права агента.
+
+**Ссылки проектных файлов** (с этапа 8.10, задача 8.5; design.md change
+`add-config-writer-and-reload`, D5, п. 5, D7). Перед чтением слоёв 3 и 4 загрузчик берёт реальный
+путь существующего файла от ОС (`realpath`, `resolveSymbolicLinksSync`), проверяет его и открывает
+именно его, а не лексический путь; посегментный разбор с несозданным хвостом — только у
+`ConfigWriter`. Разделитель — `/` на POSIX (`\` — символ имени), `/` и `\` на Windows. Код проверки
+общий у писателя, загрузчика и наблюдателя (`config_link_containment.dart`). Реальный путь вне
+канонического `<cwd>/.codelab` (в том числе `.codelab` — ссылка наружу; сравнение по сегментам)
+не читается: проблема загрузки `syntax` с путём файла слоя и текстом `the config file resolves
+outside <cwd>/.codelab/; symbolic links of a project config must stay inside .codelab` (цель не
+называется). Ошибка раскрытия — всегда проблема: цикл — `too many symbolic links: <path>`, `..` в
+несуществующем хвосте — `invalid path: <path>`. Без проблемы — только висячая ссылка с целью
+снаружи: слой отсутствует. Наблюдатель (§17.5.6) содержимое цели снаружи не читает, цель не
+замеряет (`lstat`/`readlink` звеньев допустимы) и на её каталог — и на `.codelab`-ссылку наружу —
+не подписывается; отпечаток `blocked` отличим от отсутствия и при опросе. Висячая ссылка наружу,
+чья цель появилась позже, сигнала не даёт (граница). Слой 2 (dotfiles) и слой 5 не ограничиваются. Почему: иначе ссылка
+репозитория `.codelab/config.yaml -> ../../other/.codelab/config.yaml` подставляла бы в проект чужой
+файл (spec agent-configuration «Ссылки проектных слоёв при чтении»).
 
 ## 15.4. Схема MVP
 
@@ -579,6 +603,10 @@ change `add-agent-configuration`).
 loadConfig(cwd, env, flags):
 1. layers := [defaults]
 2. для пути в [global, project, projectLocal, flags.config?]:
+     project, projectLocal (§15.3, «Ссылки проектных файлов»): реальный путь существующего файла
+       от ОС; вне канонического <cwd>/.codelab → ConfigIssue(syntax) с путём слоя, файл не
+       читается; ошибка раскрытия (цикл, invalid path) → ConfigIssue(syntax) всегда; висячая
+       ссылка с целью снаружи → как отсутствующий файл; открывается проверенный реальный путь
      если файла нет: слои global, project, projectLocal → пропустить;
        явно названный flags.config (--config / CODELAB_CONFIG) → ConfigIssue(syntax,
        "cannot read the file", источник --config | CODELAB_CONFIG); CODELAB_CONFIG только
@@ -601,7 +629,8 @@ loadConfig(cwd, env, flags):
 4. для слоёв 3–4: применить правила доверия §15.3
 5. merged := merge(layers) по правилам §15.2
 6. interpolate(merged)                                    // ${ENV}; ${secret:<name>} — шаблон без чтения (с 8.9, D4); ниже
-7. после MVP: слой предконфигурации envPreconfigLayer(env, flags) (§17.5.3) — первым в слое 5,
+7. с этапа 8.10: предконфигурация envPreconfigLayer(env, flags) (§17.5.3) — первой в слое 6
+     (переменные) или 7 (флаги),
      с той же строгой проверкой шагов 3 и 6, без правил доверия
    applyEnv(merged, env); applyFlags(merged, flags)       // §15.6
 8. семантическая проверка:
@@ -752,7 +781,7 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | Переменная | Флаг | Ключ |
 |---|---|---|
 | `CODELAB_HOME` | — | корень состояния; по умолчанию `~/.codelab`. Значение `~` или `~/…` (тильду не раскрыла оболочка: unit launchd/systemd, `env` профиля, кавычки) раскрывается в домашний каталог — `HOME`, иначе `USERPROFILE`, — тем же правилом, что `trusted_projects` (§15.3). Прочие формы с `~` в начале (`~user/…`, `~\…`) — ошибка использования `CODELAB_HOME: ~user is not supported, use an absolute path`, код `64`; `~`/`~/…` без домашнего каталога — ошибка использования `CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an absolute path`, код `64`; одинаково у агента и CLI. Пустое значение — как незаданное. Со сценарием `--llm-script` `$CODELAB_HOME` не читается, поэтому значение не раскрывается и не проверяется (кода `64` нет, D16). Одно правило у `codelabHomeOf` (агент) и `CodelabHome` (CLI) (change `add-agent-project-files`, D17) |
-| `CODELAB_CONFIG` | `--config <path>` | дополнительный файл (слой 4а) с приоритетом выше слоя 4, флаг сильнее переменной; расширение `.yaml` или `.yml`, иначе ошибка использования; для `.toml` — `--config needs a .yaml file; codelab.toml is not supported, see agent-core-architecture §15.7` (без подсказки `migrate`: команды нет). `CODELAB_CONFIG` — только абсолютный путь (относительный — ошибка использования, текст называет переменную); `--config` может быть относительным — от текущего каталога процесса. Отсутствующий файл — проблема конфига `cannot read the file`, код `64` (§15.2) |
+| `CODELAB_CONFIG` | `--config <path>` | дополнительный файл (слой 5) с приоритетом выше слоя 4, флаг сильнее переменной; расширение `.yaml` или `.yml`, иначе ошибка использования; для `.toml` — `--config needs a .yaml file; codelab.toml is not supported, see agent-core-architecture §15.7` (без подсказки `migrate`: команды нет). `CODELAB_CONFIG` — только абсолютный путь (относительный — ошибка использования, текст называет переменную); `--config` может быть относительным — от текущего каталога процесса. Отсутствующий файл — проблема конфига `cannot read the file`, код `64` (§15.2) |
 | `CODELAB_MODEL` | `--model <provider/model>` | `agent.default_model`; без `--provider` выбирает модель из конфига, а `--model gpt` без косой черты — ошибка использования `--model needs <provider>/<model> without --provider`; повтор `--model` без `--provider` — ошибка использования `--model can be repeated only together with --provider`. Нет модели ни во флагах, ни в конфиге, ни в `--llm-script` — проблема `agent.default_model: required`, код `64` |
 | — | `--provider <openai-compatible\|anthropic>` (с этапа 4) | провайдер из флагов с id `cli`: `providers.cli.kind`; с ним `--model <model>` — id модели этого провайдера (`agent.default_model = "cli/<model>"`), флаг можно повторять: первое значение — модель по умолчанию, все — модели `providers.cli.models`. Слой флагов заменяет `providers.cli` из файлов целиком, а не сливается с ним по полям (§15.4) |
 | — | `--base-url <url>` (с этапа 4) | `providers.cli.base_url` |
@@ -785,7 +814,7 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 конфига; это абзац о прежнем минимуме). Бинарь `codelab-agent` этапа 4 файлы конфига (§15.2) не читает: провайдер, модель и ключ задаются `--provider`, `--base-url`,
 `--model` и `CODELAB_API_KEY`, режим — `--permission-mode`, остальные ключи — значения по
 умолчанию §15.4 (dart-agent-and-clients §9.9, задача 4.6). На этапе 8 YAML-конфиг (§15.2–§15.5)
-заменяет этот минимум, а флаги остаются переопределениями слоя 6. Флаги `--provider`/`--base-url` и
+заменяет этот минимум, а флаги остаются переопределениями слоя 7. Флаги `--provider`/`--base-url` и
 `--provider-type`/`--provider-config` (этап 8.10, §17.5.3) взаимоисключающие: вместе — ошибка
 использования `64` `--provider-type cannot be combined with --provider` (D3, OQ6 change
 `add-config-writer-and-reload`). Внутри слоя флагов предконфигурация применяется первой, `--model` —
