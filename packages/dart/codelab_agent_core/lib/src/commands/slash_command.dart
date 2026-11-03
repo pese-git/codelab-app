@@ -12,7 +12,11 @@ library;
 /// свои значения в этот enum, не меняя [SlashCommand].
 enum SlashCommandSource {
   /// Шаблон `*.md` из `$CODELAB_HOME/prompts` или `<cwd>/.codelab/prompts`.
-  template('template');
+  template('template'),
+
+  /// Встроенная команда сессии (`config`, `mcp`; design.md change
+  /// `add-config-writer-and-reload`, D12). Исполняется без модели.
+  builtin('builtin');
 
   const SlashCommandSource(this.wire);
 

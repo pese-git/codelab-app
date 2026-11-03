@@ -84,6 +84,9 @@ const _stage8ProjectFilesFixtures = {
   'acp/prompt-template-command',
   'acp/available-commands-no-tools',
   'acp/set-config-option-agent',
+  // Встроенная команда `/mcp` (design.md change
+  // `add-config-writer-and-reload`, D12; задача 7.3).
+  'acp/slash-mcp-list',
 };
 
 void main() {

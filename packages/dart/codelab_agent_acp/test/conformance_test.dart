@@ -74,6 +74,54 @@ void main() {
     }
   });
 
+  // acp-golden-fixtures «Фикстуры файлов проекта этапа 8»: сервер
+  // `mcp.servers` с `command`, которого нет среди `setup.mcp`, или с
+  // `type` не `stdio` — громкий провал, а не запуск настоящего процесса.
+  test('the factory rejects an mcp.servers entry that is not a fake', () async {
+    for (final (server, fragment) in <(Map<String, Object?>, String)>[
+      (
+        {'name': 'x', 'type': 'stdio', 'command': 'npx'},
+        'config.mcp.servers[0].command',
+      ),
+      (
+        {'name': 'x', 'type': 'http', 'command': 'fake'},
+        'config.mcp.servers[0].type',
+      ),
+      (
+        {'name': 'x', 'type': 'stdio', 'command': 'fake', 'url': 'u'},
+        'config.mcp.servers[0].url',
+      ),
+    ]) {
+      final source = loadFixtureCorpus().firstWhere(
+        (f) => f.id == 'acp/session-new-with-mcp',
+      );
+      final json =
+          jsonDecode(File(source.sourcePath!).readAsStringSync())
+              as Map<String, Object?>;
+      json['id'] = 'acp/mcp-config-not-fake';
+      (json['setup']! as Map<String, Object?>)['config'] = {
+        'mcp': {
+          'servers': [server],
+        },
+      };
+      final fixture = AcpFixture.fromJson(
+        json,
+        fileName: 'mcp-config-not-fake.json',
+      );
+
+      await expectLater(
+        runAgentFixture(fixture, startAgent),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains(fragment),
+          ),
+        ),
+      );
+    }
+  });
+
   // acp-golden-fixtures «Формат golden-фикстуры ACP», сценарий «Лишний
   // вызов MCP-сервера»: `after.mcpCalls` проверяет `verify()` фабрики.
   test(
@@ -155,7 +203,10 @@ Future<AgentUnderTest> startAgent(
       // фикстуры берутся из `setup.mcp`.
       mcp: McpClientConnector(
         transports: McpTransports(
-          stdio: mcp.transports,
+          // Серверы конфига идут к fake-серверу по `command`, серверы клиента
+          // — по `name` (acp-golden-fixtures «Фикстуры файлов проекта этапа
+          // 8»).
+          stdio: _ConfigServerRouting(mcp.transports),
           // HTTP-сервер фикстуры — настоящий `StreamableHttpTransport` на
           // `MockClient` над `FakeMcpServer` (D15, задача 9.5).
           http: StreamableHttpTransportFactory(
@@ -172,6 +223,7 @@ Future<AgentUnderTest> startAgent(
       budget: config.budget,
       compaction: config.compaction,
       trustedProjects: config.trustedProjects,
+      mcpServers: config.mcpServers,
       permissions: PermissionsConfig(
         mode: setup.mode == null ? null : ModeId.parse(setup.mode!),
       ),
@@ -245,6 +297,7 @@ final class _FixtureConfig {
     required this.budget,
     required this.compaction,
     required this.trustedProjects,
+    required this.mcpServers,
   });
 
   factory _FixtureConfig.parse(AgentFixtureSetup setup) {
@@ -253,6 +306,7 @@ final class _FixtureConfig {
       'agent',
       'budget',
       'compaction',
+      'mcp',
       'providers',
       'trusted_projects',
     }, 'config');
@@ -325,6 +379,7 @@ final class _FixtureConfig {
     };
     return _FixtureConfig(
       trustedProjects: trusted,
+      mcpServers: _mcpServers(config['mcp'], setup),
       defaultModel: defaultModel,
       models: models,
       effort: switch (agent['effort']) {
@@ -348,6 +403,70 @@ final class _FixtureConfig {
   final TurnBudget budget;
   final CompactionOverrides compaction;
   final List<String> trustedProjects;
+
+  /// Серверы `mcp.servers` (`origin: config`) для `CoreConfig.mcpServers`.
+  final List<McpServerConfig> mcpServers;
+
+  /// Ключ `mcp.servers` (design.md change `add-config-writer-and-reload`,
+  /// D12; acp-golden-fixtures «Фикстуры файлов проекта этапа 8»).
+  ///
+  /// Почему так строго: сервер конфига фикстуры подключается только к
+  /// fake-серверу из `setup.mcp`. Другой `command` или `type` — громкий
+  /// провал, иначе фикстура запускала бы настоящий процесс или молча
+  /// теряла сервер. Поля элемента: `name`, `type` (`stdio`), `command`,
+  /// `args`, `env`, `enabled`.
+  static List<McpServerConfig> _mcpServers(
+    Object? raw,
+    AgentFixtureSetup setup,
+  ) {
+    final mcp = _object(raw, 'config.mcp');
+    _keys(mcp, const {'servers'}, 'config.mcp');
+    final servers = switch (mcp['servers']) {
+      null => const <Object?>[],
+      final List<Object?> list => list,
+      final value => throw FormatException('config.mcp.servers: $value'),
+    };
+    return [
+      for (final (index, item) in servers.indexed)
+        _mcpServer(_object(item, 'config.mcp.servers[$index]'), index, setup),
+    ];
+  }
+
+  static McpServerConfig _mcpServer(
+    Map<String, Object?> item,
+    int index,
+    AgentFixtureSetup setup,
+  ) {
+    final path = 'config.mcp.servers[$index]';
+    _keys(item, const {
+      'name',
+      'type',
+      'command',
+      'args',
+      'env',
+      'enabled',
+    }, path);
+    if (item['type'] != 'stdio') {
+      throw FormatException(
+        '$path.type: the fixture driver supports only "stdio"',
+      );
+    }
+    final command = item['command'];
+    if (command is! String || !setup.mcp.containsKey(command)) {
+      throw FormatException(
+        '$path.command: must be the name of a setup.mcp fake server '
+        '(${setup.mcp.keys.join(', ')}), got $command',
+      );
+    }
+    return McpStdioServerConfig(
+      name: item['name']! as String,
+      command: command,
+      args: [...?(item['args'] as List<Object?>?)?.cast<String>()],
+      env: {...?(item['env'] as Map<String, Object?>?)?.cast<String, String>()},
+      origin: McpServerOrigin.config,
+      enabled: item['enabled'] as bool? ?? true,
+    );
+  }
 
   static ModelRef _model(
     String provider,
@@ -468,5 +587,45 @@ final class _FixtureMcp {
         );
       }
     }
+  }
+}
+
+/// Направляет stdio-сервер конфига к fake-серверу по `command`, а сервер
+/// клиента ACP — по `name`, как раньше.
+///
+/// Почему: `FakeMcpTransportFactory` ищет fake по имени сервера, а фикстура
+/// `mcp.servers` называет fake в `command` (acp-golden-fixtures «Фикстуры
+/// файлов проекта этапа 8»), и имя сервера конфига может отличаться от него.
+final class _ConfigServerRouting implements McpTransportFactory {
+  _ConfigServerRouting(this._inner);
+
+  final McpTransportFactory _inner;
+
+  @override
+  Set<String> get transports => _inner.transports;
+
+  @override
+  Future<McpTransport> open(
+    McpServerConfig server, {
+    required String cwd,
+    required CancelToken cancel,
+    required Logger logger,
+  }) {
+    final routed = switch (server) {
+      McpStdioServerConfig(origin: McpServerOrigin.config) =>
+        McpStdioServerConfig(
+          name: server.command,
+          command: server.command,
+          args: server.args,
+          env: server.env,
+          origin: server.origin,
+          connectTimeout: server.connectTimeout,
+          callTimeout: server.callTimeout,
+          secretValues: server.secretValues,
+          enabled: server.enabled,
+        ),
+      _ => server,
+    };
+    return _inner.open(routed, cwd: cwd, cancel: cancel, logger: logger);
   }
 }
