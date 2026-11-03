@@ -114,7 +114,7 @@
 
 ## 4. Подкоманды записи и чтения (итерация 4; D6)
 
-- [ ] 4.1 `[agent]` Тесты `codelab_agent_io/test/cli/cli_config_commands_test.dart` (agent-configuration «Подкоманды записи и чтения конфига», все сценарии):
+- [x] 4.1 `[agent]` Тесты `codelab_agent_io/test/cli/cli_config_commands_test.dart` (agent-configuration «Подкоманды записи и чтения конфига», все сценарии):
   - `config path|get|set|unset`, в том числе `get` без раскрытия `${VAR}`;
   - `provider add|list|remove`, `--api-key-stdin` на фейковом `SecretInput` и `MemorySecretStore` или `file` во временном `CODELAB_HOME`;
   - `mcp add|list|remove`;
@@ -125,11 +125,11 @@
   Отдельно `cli/config_output_test.dart` (R0-2, сценарий «get маскирует секреты»), по тесту на ветку: ключ из `inlineSecretKeys`; секретный заголовок; секретная переменная `env`; ссылка `${secret:…}` и `${VAR}` печатается как есть; значение слоя `env:*` и предконфигурации → `<from env:…>`; секретное имя листа вне `headers`/`env`; непрозрачные `providers.*.auth` и `key_rotation` → `<opaque: edit the file>` (сценарий «Непрозрачные поддеревья»); userinfo URL в `config get` и `provider list`; `--layer merged`; отображение и список поэлементно.
 
   Красный.
-- [ ] 4.2 `[agent]` `cli/config_commands.dart` (`path`, `get`, `set`, `unset`), `cli/provider_commands.dart`, `cli/mcp_server_commands.dart`, `cli/config_output.dart` (маскирование R0-2, D6); экспорт из бареля `codelab_agent_io`. 4.1 зелёный.
-- [ ] 4.3 `[agent]` Тесты `apps/codelab_agent/test/config_write_command_process_test.dart` (agent-binary «Подкоманда config бинаря», все сценарии) и `codelab_setup/test/config_write_exports_test.dart` (реэкспорт новых подкоманд из `io.dart`). Красный.
-- [ ] 4.4 `[agent]` `apps/codelab_agent`: регистрация `config path|get|set|unset`, `provider`, `mcp`, справка `serveUsage`; `codelab_setup/lib/io.dart` — реэкспорт `ProviderCommands`, `McpServerCommands` и опций; `codelab_setup/AGENTS.md` §1, §3. 4.3 зелёный.
-- [ ] 4.5 `[client]` Тесты `apps/codelab_cli/test/config_command_test.dart`, `provider_mcp_command_test.dart` и e2e `test/e2e/config_write_command_test.dart` (codelab-cli «Подкоманда codelab config», «Подкоманды codelab provider и codelab mcp», все сценарии, включая совпадение байтов с `codelab-agent`). Красный.
-- [ ] 4.6 `[client]` `cli_args.dart` (подкоманды, флаги подключения → `64`), `run.dart` (вызов через `codelab_setup/io.dart`), справка `--help`; `apps/codelab_cli/AGENTS.md`. 4.5 зелёный.
+- [x] 4.2 `[agent]` `cli/config_commands.dart` (`path`, `get`, `set`, `unset`), `cli/provider_commands.dart`, `cli/mcp_server_commands.dart`, `cli/config_output.dart` (маскирование R0-2, D6); экспорт из бареля `codelab_agent_io`. 4.1 зелёный.
+- [x] 4.3 `[agent]` Тесты `apps/codelab_agent/test/config_write_command_process_test.dart` (agent-binary «Подкоманда config бинаря», все сценарии) и `codelab_setup/test/config_write_exports_test.dart` (реэкспорт новых подкоманд из `io.dart`). Красный.
+- [x] 4.4 `[agent]` `apps/codelab_agent`: регистрация `config path|get|set|unset`, `provider`, `mcp`, справка `serveUsage`; `codelab_setup/lib/io.dart` — реэкспорт `ProviderCommands`, `McpServerCommands` и опций; `codelab_setup/AGENTS.md` §1, §3. 4.3 зелёный.
+- [x] 4.5 `[client]` Тесты `apps/codelab_cli/test/config_command_test.dart`, `provider_mcp_command_test.dart` и e2e `test/e2e/config_write_command_test.dart` (codelab-cli «Подкоманда codelab config», «Подкоманды codelab provider и codelab mcp», все сценарии, включая совпадение байтов с `codelab-agent`). Красный.
+- [x] 4.6 `[client]` `cli_args.dart` (подкоманды, флаги подключения → `64`), `run.dart` (вызов через `codelab_setup/io.dart`), справка `--help`; `apps/codelab_cli/AGENTS.md`. 4.5 зелёный.
 
 **Критерий итерации 4.** `codelab config set` и `codelab-agent config set` дают одинаковые байты файла; комментарии сохранены.
 

@@ -136,9 +136,9 @@ D12). В 8.5 создаётся минимальный пакет `codelab_setup
 иначе текущий каталог. Путь передаётся загрузчику как есть, канонизирует его загрузчик, поэтому
 вывод и код двух бинарей совпадают и для относительного пути с `..`. Проверяется окружение процесса
 `codelab`, профиль подключения не учитывается: флаги подключения и запроса (`-a`/`--agent`, `-m`/`--model`, `--mode`, `-r`/`--resume`, `-c`/`--continue`, `-p`/`--print`, `-f`/`--prompt-file`, `--approve`, `--timeout`, `--ui`)
-вместе с `config` — ошибка использования `--<flag> does not apply to config check`, код 64. `codelab config` без подкоманды — код 64 и
-`config needs a subcommand: codelab config check [--cwd <dir>]` (с 8.10 — `codelab config path|get|set|unset|check`, D6 change `add-config-writer-and-reload`); остальные подкоманды `config` до своих
-задач дают код 64 `Unknown command config <sub>`. `package:codelab_setup/io.dart` импортируется в
+вместе с `config` — ошибка использования `--<flag> does not apply to config <sub>` (`config check`, `config set` и т. д.), код 64; то же для `provider` и `mcp` (с 8.10). `codelab config` без подкоманды — код 64 и
+`config needs a subcommand: codelab config check [--cwd <dir>]` (с 8.10 — `codelab config path|get|set|unset|check`, D6 change `add-config-writer-and-reload`); неизвестные подкоманды `config` дают код 64
+`Unknown command config <sub>`. У `provider list` и `mcp list` есть `--cwd` подкоманды (порядок тот же: `--cwd` подкоманды, общий `-C/--cwd`, текущий каталог); у `provider add|remove` и `mcp add|remove` его нет — папка проекта — общий `-C/--cwd`, иначе текущий каталог. Неизвестная подкоманда `provider`/`mcp` — код 64 и `unknown <cmd> arguments (<n>)` без цитирования слова, как у `codelab-agent`. `package:codelab_setup/io.dart` импортируется в
 `apps/codelab_cli/lib/src` только из `run.dart` (сторож).
 
 `codelab secret set|delete|list` (этап 8, задача 8.9; change `add-agent-secret-store`, D1, D7, D8)
@@ -172,16 +172,23 @@ argv — код 64 и `codelab: invalid arguments for secret`; присланн�
 `McpServerCommands` из `codelab_agent_io` вместе с их опциями. CLI только разбирает аргументы;
 тексты, правила и коды выхода (`0`/`1`/`64`) — в общей реализации, поэтому stdout, stderr, коды и
 записанные байты совпадают с `codelab-agent config|provider|mcp`, кроме имени бинаря в справке
-использования (agent-core-architecture §17.5.5). Слой по умолчанию — `user`, `--project` и `--local` —
-для `cwd` (`--cwd` подкоманды, иначе общий `-C`/`--cwd`, иначе текущий каталог). `config get` не
+использования (agent-core-architecture §17.5.5). Слой записи по умолчанию — `user`, `--project` и `--local` —
+для `cwd` (`--cwd` подкоманды там, где он есть — `config path|get|set|unset|check`, `provider list`,
+`mcp list`, — иначе общий `-C`/`--cwd`, иначе текущий каталог); `config get` без `--layer` читает итог
+(`merged`). Ошибка разбора argv у `config set|unset`, `provider` и `mcp` — код 64 и фиксированная
+фраза `invalid arguments for config <sub>` (`… provider`, `… mcp`) без цитирования слов argv, как у
+`secret`: значение `config set` может начинаться с `-`, а ключ могли передать флагом. `config get` не
 раскрывает подстановки `${VAR}` и `${secret:…}` ни при каком `--layer`; `config get` и `provider list`
-маскируют литеральные секреты (`<redacted>`), значения из окружения (`<from env:…>`) и userinfo URL
-(R0-2 change `add-config-writer-and-reload`). При
+маскируют литеральные секреты (`<redacted>`), значения из окружения (`<from env:…>`), userinfo URL и
+значения секретных query-параметров; неразбираемый URL — `<redacted>` (R0-2, R4-5 change
+`add-config-writer-and-reload`). При
 `ConfigConflictException` подкоманда один раз перечитывает файл и повторяет правки; второй
 конфликт — код `1`. `provider add --api-key-stdin` читает ключ скрытым вводом `StdinSecretInput`, как
 `secret set`, сохраняет его через `SecretAdmin` и пишет в конфиг только имя `codelab/<id>`; значение
-не попадает в stdout, `profiles.json`, `cli_history` и лог. `provider add` без обязательных флагов
-(`--kind`, `--model`, `--context-window`) в 8.10 — код 64 и на TTY: мастер добавит change
+не попадает в stdout, `profiles.json`, `cli_history` и лог; любой флаг ключа заменяет источник ключа
+провайдера целиком (R4-4). `provider add` без обязательных флагов
+(`--kind`, `--model`, `--context-window`) в 8.10 — код 64 и на TTY, stderr перечисляет все недостающие
+флаги одной строкой: мастер добавит change
 `add-provider-setup-ui`, не меняя флаговую форму. Флаги подключения и запроса вместе с этими
 подкомандами — код 64, как у `config check`; `codelab config` без подкоманды — `config needs a
 subcommand: codelab config path|get|set|unset|check`. `codelab --help` перечисляет `provider` и

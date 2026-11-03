@@ -17,7 +17,12 @@
 /// `SecretCommands().set/delete/list(…)` с `StdinSecretInput()` печатает тот же
 /// вывод, что `codelab-agent secret`; `SecretAdmin` с результатами и
 /// `openSecretStore` — для страницы настроек (change `add-agent-secret-store`,
-/// D8, D15); типы, без которых их не собрать и не типизировать
+/// D8, D15). Подкоманды записи и чтения конфига (change
+/// `add-config-writer-and-reload`, D6): `ConfigCommands().path/get/set/unset`,
+/// `ProviderCommands().add/list/remove`, `McpServerCommands().add/list/remove`
+/// и их опции (`ConfigSetOptions`, `ProviderAddOptions`, `McpAddOptions` и др.,
+/// слой чтения — `ConfigGetLayer`) дают тот же вывод и коды выхода, что
+/// `codelab-agent`; типы, без которых их не собрать и не типизировать
 /// (`DescribedSecretStore`, `SecretStoreUnavailableException`, `Logger`,
 /// `LogLevel`), реэкспортируются из ядра. Остальное из §12.4.2 (`FileAgentConfigStore`) придёт со своими
 /// потребителями.
@@ -28,7 +33,20 @@ export 'package:codelab_agent_io/codelab_agent_io.dart'
         CheckOptions,
         ConfigCommandResult,
         ConfigCommands,
+        ConfigGetLayer,
+        ConfigGetOptions,
+        ConfigPathOptions,
+        ConfigSetOptions,
+        ConfigUnsetOptions,
+        McpAddOptions,
+        McpListOptions,
+        McpRemoveOptions,
+        McpServerCommands,
         MultilineSecretException,
+        ProviderAddOptions,
+        ProviderCommands,
+        ProviderListOptions,
+        ProviderRemoveOptions,
         SecretAdmin,
         SecretCollision,
         SecretCommandResult,

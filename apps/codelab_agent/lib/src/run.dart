@@ -5,6 +5,8 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart' show logConfigWarnings;
 
 import 'cli/config_cli.dart';
+import 'cli/mcp_cli.dart';
+import 'cli/provider_cli.dart';
 import 'cli/secret_cli.dart';
 import 'cli/serve_args.dart';
 import 'host/agent_host.dart';
@@ -30,34 +32,41 @@ Future<int> runCodelabAgent(
   List<String> args, {
   required Map<String, String> environment,
 }) async {
-  // Командная строка разбирается один раз. `config` и `secret` — отдельные
-  // команды рядом с `serve` (D13 change `add-agent-configuration`, D8 change
-  // `add-agent-secret-store`): сервер, транспорт и логи им не нужны, поэтому
-  // они выходят до загрузки конфига `serve`.
+  // Командная строка разбирается один раз. `config`, `provider`, `mcp` и
+  // `secret` — отдельные команды рядом с `serve` (D13 change
+  // `add-agent-configuration`, D6 change `add-config-writer-and-reload`, D8
+  // change `add-agent-secret-store`): сервер, транспорт и логи им не нужны,
+  // поэтому они выходят до загрузки конфига `serve`.
   final ArgResults top;
   try {
     top = parseCommandLine(args);
   } on UsageError catch (error) {
     // Справка той команды, которую пользователь начал писать: после
-    // `config check --bogus` флаги `serve` только запутали бы. Текст ошибки
-    // разбора, если `secret` есть в argv, не печатается: он цитирует
-    // присланное слово, а это могло быть значение секрета — аргументом
-    // подкоманды или неверным флагом верхнего уровня до `secret` (agent-secrets
-    // «Ошибка флага верхнего уровня перед secret»; D8).
-    final isSecret = args.contains('secret');
-    final command = isSecret ? 'secret' : args.firstOrNull;
+    // `config check --bogus` флаги `serve` только запутали бы. Команда
+    // ищется по всему argv, а не по первому слову: `--X provider add gw`
+    // не должен цитировать `--X`. Текст ошибки разбора для `secret`,
+    // `provider`, `mcp` и `config set|unset` не печатается: он цитирует
+    // присланное слово, а это могло быть значение секрета (аргументом
+    // подкоманды, неверным флагом либо значением `set`, начинающимся с `-`)
+    // — agent-secrets «Ошибка флага верхнего уровня перед secret»; D8; D6
+    // change `add-config-writer-and-reload`.
+    final quietCommand = _quietCommandOf(args);
+    final command = quietCommand ?? args.firstOrNull;
+    final usage = switch (command?.split(' ').first) {
+      'config' => configUsage(),
+      'provider' => providerUsage(),
+      'mcp' => mcpUsage(),
+      'secret' => secretUsage(),
+      _ => serveUsage(),
+    };
     stderr
       ..writeln(
-        isSecret
-            ? 'codelab-agent: invalid arguments for secret'
+        quietCommand != null
+            ? 'codelab-agent: invalid arguments for $quietCommand'
             : 'codelab-agent: ${error.message}',
       )
       ..writeln()
-      ..writeln(switch (command) {
-        'config' => configUsage(),
-        'secret' => secretUsage(),
-        _ => serveUsage(),
-      });
+      ..writeln(usage);
     return usageExit;
   }
   if (top.command case final config? when config.name == 'config') {
@@ -71,9 +80,41 @@ Future<int> runCodelabAgent(
       );
     } on Object catch (error) {
       // Как у `serve` (`serve.failed`): неожиданное исключение — код `1` и
-      // одна строка в stderr, а не код `255` и трасса Dart. Трасса не
-      // печатается и в stdout ничего не попадает.
-      stderr.writeln('codelab-agent: config failed: $error');
+      // одна строка в stderr, а не код `255` и трасса Dart. Только тип
+      // исключения: текст мог бы цитировать значение ключа (CFG-10).
+      stderr.writeln('codelab-agent: config failed: ${error.runtimeType}');
+      return failureExit;
+    }
+  }
+
+  if (top.command case final provider? when provider.name == 'provider') {
+    try {
+      return await runProviderCommand(
+        provider,
+        environment: environment,
+        cwd: Directory.current.path,
+        out: stdout,
+        err: stderr,
+      );
+    } on Object catch (error) {
+      // Только тип исключения: текст чужой реализации мог бы цитировать
+      // значение ключа (CFG-10).
+      stderr.writeln('codelab-agent: provider failed: ${error.runtimeType}');
+      return failureExit;
+    }
+  }
+
+  if (top.command case final mcp? when mcp.name == 'mcp') {
+    try {
+      return await runMcpCommand(
+        mcp,
+        environment: environment,
+        cwd: Directory.current.path,
+        out: stdout,
+        err: stderr,
+      );
+    } on Object catch (error) {
+      stderr.writeln('codelab-agent: mcp failed: ${error.runtimeType}');
       return failureExit;
     }
   }
@@ -185,4 +226,33 @@ int _reportInvalidConfig(
     },
   );
   return usageExit;
+}
+
+/// Команда, для которой текст ошибки разбора argv печатать нельзя, либо
+/// `null` (design.md change `add-config-writer-and-reload`, D6; D8 change
+/// `add-agent-secret-store`).
+///
+/// Почему по всему [args]: верхний парсер падает на первом неверном слове, а
+/// оно может стоять и перед именем команды. `config` скрывается только для
+/// `set` и `unset` (значение `set` может начинаться с `-` и быть секретом);
+/// ошибки `config check|get|path` по-прежнему называют причину.
+String? _quietCommandOf(List<String> args) {
+  if (args.contains('secret')) {
+    return 'secret';
+  }
+  if (args.contains('provider')) {
+    return 'provider';
+  }
+  if (args.contains('mcp')) {
+    return 'mcp';
+  }
+  final config = args.indexOf('config');
+  if (config >= 0) {
+    for (final word in args.skip(config + 1)) {
+      if (word == 'set' || word == 'unset') {
+        return 'config $word';
+      }
+    }
+  }
+  return null;
 }

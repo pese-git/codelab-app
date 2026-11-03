@@ -805,8 +805,8 @@ apply(base, edits):
 **Подкоманды CLI** (общая реализация в `codelab_agent_io/lib/src/cli/` — типизированные методы
 `ConfigCommands` с результатом `{exitCode, stdout, stderr}`; `check` асинхронный (`Future<ConfigCommandResult>`): он ждёт загрузчик файлов проекта (change `add-agent-project-files`, D13); аргументы разбирают сами приложения
 своим `package:args`, которого в allowlist `codelab_agent_io` нет; `codelab` вызывает реализацию
-через `package:codelab_setup/io.dart`; у `codelab` и `codelab-agent` подкоманды одинаковые; слой по умолчанию — `user`, `--project` и `--local` — слои 3 и 4
-для `cwd`; код выхода 0 — успех, 1 — ошибка валидации или конфликт, 64 — ошибка
+через `package:codelab_setup/io.dart`; у `codelab` и `codelab-agent` подкоманды одинаковые; слой записи по умолчанию — `user`, `--project` и `--local` — слои 3 и 4
+для `cwd`; `config get` без `--layer` читает `merged`; код выхода 0 — успех, 1 — ошибка валидации или конфликт, 64 — ошибка
 использования, как у `codelab -p`, dart-agent-and-clients §9.11).
 
 **Правила 8.10** (design.md change `add-config-writer-and-reload`, D6):
@@ -814,27 +814,68 @@ apply(base, edits):
   (`add`, `list`, `remove`) и `McpServerCommands` (`add`, `list`, `remove`). Имя `McpServerCommands`,
   а не `McpCommands`, — чтобы не путать с агентской командой `/mcp` (§17.5.7). Все три класса и их
   опции реэкспортирует `codelab_setup/lib/io.dart`.
-- **`cwd`.** `--cwd` подкоманды, иначе общий `-C`/`--cwd` у `codelab`, иначе текущий каталог; путь
-  канонизирует загрузчик, как у `config check`.
+- **Слой** (решение пользователя 2026-11-03). Слой `user` по умолчанию — только у записи: `set`,
+  `unset`, `provider add|remove`, `mcp add|remove`. `config get` без `--layer` — `merged`.
+- **`cwd`.** `--cwd` подкоманды (есть у `config path|get|set|unset|check`, `provider list`,
+  `mcp list`; у `provider add|remove` и `mcp add|remove` нет), иначе общий `-C`/`--cwd` у `codelab`,
+  иначе текущий каталог; путь канонизирует загрузчик, как у `config check`.
+- **Отсутствующая запись** (решение пользователя 2026-11-03). `config unset`, `provider remove`,
+  `mcp remove` без такой записи в файле слоя — код `0` без записи, stdout `<key> is not set in
+  <path>`. `config get` отсутствующего ключа — код `1`. Наличие ключа определяется по пути, а не по
+  значению (ревью итерации 4): ключ со значением `null` (`max_steps:`) присутствует, и `config unset`
+  его удаляет.
+- **`provider add` — upsert** (решение пользователя 2026-11-03): для существующего `<id>` переданные
+  флаги перезаписывают свои поля, остальные сохраняются; так повторный `--api-key-stdin` меняет ключ.
+  Любой флаг ключа (`--api-key-stdin`, `--api-key-secret`, `--api-key-env`) заменяет источник ключа
+  целиком: поля другого источника удаляются той же записью, пары `api_key_env` + `api_key_secret`
+  после команды нет (R4-4, решение пользователя 2026-11-03). Недостающие обязательные флаги
+  перечисляются все одной строкой stderr.
+- **Прочие проверки.** `provider remove` со ссылкой из `agent.*` — stderr дополнительно содержит
+  `change the model first: config set agent.default_model <provider>/<model>`. Имя MCP-сервера в
+  `mcp add` и `mcp remove` без пробелов, `[`, `]`, `"` (иначе ломается путь `mcp.servers[<name>]`) —
+  иначе `64`. `mcp remove <name>` ищет сервер только по `name`, никогда по номеру элемента
+  (`mcp remove 0` без сервера `0` — код `0`, `is not set`).
+- **argv не цитируется.** Ошибка разбора argv у `config set|unset`, `provider` и `mcp` — фиксированная
+  фраза `invalid arguments for config <sub>` (`… provider`, `… mcp`) и справка без цитирования слов
+  argv (та же политика, что у `secret`): значение могло начинаться с `-`, ключ могли передать флагом.
+  Неизвестная подкоманда `provider`/`mcp` и лишние аргументы — `unknown <cmd> arguments (<n>)`, в обоих
+  бинарях одинаково, кроме имени бинаря.
 - **Маскирование `config get` и `provider list`** (R0-2, решение пользователя 2026-11-02; D6).
   Значение любого листа (на любой глубине), чьё имя — ключ из `inlineSecretKeys` или секретное по
   правилу имён выше, без `${…}` → `<redacted>`; значение со ссылкой — как есть; непрозрачное
   поддерево схемы (`providers.*.auth`, `key_rotation`, разделы после MVP) → `<opaque: edit the
-  file>`; значение из слоя окружения (`env:*`, в том
-  числе предконфигурация) → имя источника `<from env:CODELAB_PROVIDER_CONFIG>`; из URL (`base_url`,
-  `url`) удаляется userinfo; отображения и списки — поэлементно. Маскирует одна функция
-  `cli/config_output.dart`.
+  file>`. Правило имён — для листьев без дескриптора реестра и элементов отображений с
+  произвольными ключами (`headers`, `env`); скалярный лист реестра (`api_key_secret`, `api_key_env`,
+  `auth_header`) печатается как есть; известная консервативная граница — `exec.secrets[].secret`
+  печатается `<redacted>`; значение из слоя окружения (`env:*`, в том
+  числе предконфигурация) → имя источника `<from env:CODELAB_PROVIDER_CONFIG>`; URL (`base_url`,
+  `url`) разбирается как URI и печатается без userinfo, неразбираемый URL и URL с `@` без авторитета → `<redacted>`, значение
+  query-параметра или пары во фрагменте с секретным именем без `${…}` → `<redacted>` (R4-5: `https://u:p@ss@host/v1?api_key=X&v=2`
+  не выводит ни `p@ss`, ни `X`); отображения и списки — поэлементно. Маскирует одна функция
+  `cli/config_output.dart`. Известная граница до 8.11 (R4-6, вместе с R1-1): литеральный токен в
+  `mcp.servers[*].args` (`--token X`, `--api-key=X`) запись не отклоняет, а `config get` печатает как
+  есть — аргументы процесса не имеют имён, и правило имён к ним неприменимо.
 - **`get` никогда не раскрывает подстановки.** Печатается сырое значение слоя-победителя
   (`"${GITHUB_TOKEN}"`, `"Bearer ${secret:…}"`), даже при `--layer merged`: значение `${VAR}` —
   содержимое окружения, а оно может быть секретом. Значения ключей `secret: true` — имена секретов,
   они печатаются.
-- **Коды выхода.** `1` — невалидный итог, отказ доверия, `inlineSecret`, конфликт после повтора,
-  отказ хранилища секретов; `64` — неизвестный ключ в `set`, разбор значения, лишние или
-  недостающие аргументы, несовместимые флаги, `provider add` без `--kind`/`--model`/`--context-window`.
+- **Коды выхода.** `0` — успех, в том числе удаление отсутствующей записи; `1` — невалидный итог,
+  отказ доверия, `inlineSecret`, конфликт после повтора, отказ хранилища секретов, `config get`
+  отсутствующего ключа; `64` — неизвестный ключ в `set`, разбор значения, лишние или
+  недостающие аргументы, несовместимые флаги, `provider add` без `--kind`/`--model`/`--context-window`,
+  недопустимое имя MCP-сервера, неизвестная подкоманда.
 - **Повтор при конфликте.** `ConfigConflictException` — одно автоматическое повторение `read` →
   `apply`: правки CLI декларативны, а устаревшего экрана, который нужно защитить, у CLI нет. Второй
   конфликт — код `1`, `config file changed during the edit; run the command again`.
-- **Вывод успеха.** `Updated <key> in <path>` или `Removed …`, затем строки `warning:` из
+- **Формат вывода** (общий контракт двух бинарей). `config get` — значение (скаляр одной строкой,
+  структура — JSON с отступом) и строка `layer: <name>` (`user`, `project`, `local`, `extra` — файл
+  `CODELAB_CONFIG`/`--config`, `env`, `flags`); победитель — старший слой, где ключ задан, его
+  поддерево целиком. `config path` — `user: <path> (exists|missing)`, `project: …`, `local: …`, при
+  `CODELAB_CONFIG` — `CODELAB_CONFIG: …`; с `--project`/`--local` — только путь. `provider list` —
+  `<id>  kind: …  base_url: …  models: a, b  key: <source>`, без `base_url` — `(default)`.
+  `mcp list` — `<name>  type: …  layer: …  enabled: true|false`.
+- **Вывод успеха.** `Updated <key> in <path>` (`Updated providers.<id> in <path>`,
+  `Updated mcp.servers[<name>] in <path>`) или `Removed <key> from <path>`, затем строки `warning:` из
   `ConfigWriteResult.warnings` и `note: restart the agent to apply: <keys>` при
   `restartRequiredKeys`. Работающий агент подхватывает правку перезагрузкой (§17.5.6).
 - **`provider add --api-key-stdin`:** проверка кандидата конфига без записи →
@@ -851,16 +892,16 @@ apply(base, edits):
 | Подкоманда | Действие |
 |---|---|
 | `config path [--project\|--local] [--cwd D]` | путь файла слоя; без флага — все слои `user`, `project`, `local` и файл `CODELAB_CONFIG` с пометкой `exists`/`missing` |
-| `config get <key> [--layer user\|project\|local\|merged] [--cwd D]` | сырое значение слоя-победителя (по умолчанию итоговое) и слой-источник; подстановки не раскрываются, секреты — только имя |
+| `config get <key> [--layer user\|project\|local\|merged] [--cwd D]` | сырое значение слоя-победителя (без `--layer` — `merged`) и слой-источник; подстановки не раскрываются, секреты — только имя; отсутствующий ключ — `1` |
 | `config set <key> <value> [--project\|--local] [--cwd D]` | `SetValue`; значение разбирает `SettingsRegistry.parseCliValue` (списки и таблицы — JSON) |
 | `config unset <key> [--project\|--local] [--cwd D]` | `UnsetValue`: принимает и ключ вне реестра, если он есть в файле (так удаляются опечатки и `api_key`) |
 | `config check [--cwd <dir>]` | полная загрузка §15.5 для `cwd` с окружением процесса целиком (включая `CODELAB_CONFIG`), без флагов `serve`. Первая строка — `Sources: defaults, <канонический абсолютный путь>, …` (`ConfigLoadResult.sources`); проблемы — `ConfigIssue.toString()` (подсказка `did you mean …?` — часть текста); предупреждения — `warning: <location>: [<key>: ]<message>`, включая `config.legacy_found` (§15.7) и `config.env.unknown` (неизвестные `CODELAB_*` распознаёт `ConfigLoader`); последняя строка `Config: valid` или `Config: invalid (issues: <n>)`, предупреждения проблемами не считаются. Только при валидном конфиге, перед последней строкой — диагностика файлов проекта для канонического `cwd` (тот же `ProjectFilesLoader`, что у runtime, §17.2): `error`/`warning` — строками `warning: <path>[:<line>[:<column>]]: <message>` (фиксированные тексты кодов, без фрагментов файлов), для недоверенного проекта — `note: <каталог>: the project is not trusted; add it to trusted_projects` по строке на `.codelab/prompts`/`.codelab/agents`, прочие `info` не печатаются; сбой загрузчика — `warning: <cwd>: project files could not be read: <runtimeType>`, загрузка дольше 5 с — `warning: <cwd>: project files were not read within 5 s`. На код выхода диагностика файлов проекта не влияет (change `add-agent-project-files`, D13). Код `0` / `1` / `64`; `64` — несуществующий `--cwd`, `ConfigUsageException` (`CODELAB_CONFIG` с `.toml` или относительный; `CODELAB_HOME` вида `~user/…` или `~` без домашнего каталога, §15.6, D17) или ошибка разбора аргументов: текст и справка в stderr, stdout пуст. Ничего не пишет. Появляется первой, в change `add-agent-configuration` (8.5, D13) |
-| `provider add <id> --kind <kind> [--base-url U] --model M --context-window N [--api-key-secret S \| --api-key-env V \| --api-key-stdin] [--default] [--project\|--local]` | одна `apply` со списком `SetValue` ключей `providers.<id>.*` и `providers.<id>.models.<M>.*`; `--api-key-stdin` сначала пишет секрет `codelab/<id>`; `--default` — `SetValue("agent.default_model", "<id>/<M>")` |
+| `provider add <id> --kind <kind> [--base-url U] --model M --context-window N [--api-key-secret S \| --api-key-env V \| --api-key-stdin] [--default] [--project\|--local]` | одна `apply` со списком `SetValue` ключей `providers.<id>.*` и `providers.<id>.models.<M>.*`; `--api-key-stdin` сначала пишет секрет `codelab/<id>`; `--default` — `SetValue("agent.default_model", "<id>/<M>")`; существующий `<id>` — upsert; флаг ключа добавляет `UnsetValue` полей другого источника ключа, которые есть в файле слоя (R4-4) |
 | `provider list [--cwd D]` | по строке на провайдера итогового конфига: id, kind, base_url, модели, источник ключа (`secret codelab/x: found\|not set\|unavailable`, `env VAR: set\|not set`); первая строка — `Secrets: <backend.id>`, при `unavailableReason` — `Secrets: env (<причина>)` |
 | `provider remove <id> [--project\|--local]` | `RemoveTable("providers.<id>")`; ссылка из `agent.*` (после MVP — и `llm.roles.*`) → `ConfigException` с подсказкой сменить модель |
 | `mcp add <name> --type stdio --command C [--arg A]… [--env K=V]… \| --type http --url U [--header K=V]… [--disabled] [--project\|--local]` | `UpsertMcpServer`; литеральный секрет в `--header`/`--env` → `ConfigInlineSecretException` с подсказкой `${secret:<name>}` (D5) |
 | `mcp list [--cwd D]` | серверы файлов по слоям: name, type, слой, enabled (без подключения) |
-| `mcp remove <name> [--project\|--local]` | `RemoveMcpServer` |
+| `mcp remove <name> [--project\|--local]` | `RemoveMcpServer`: только по `name`, никогда по номеру элемента |
 | `secret set\|delete\|list` | §17.5.4 |
 | `config export-providers [--layer user\|project\|local\|merged] [--output F] [--provider ID]…` | после MVP: файл обмена провайдеров без значений секретов (§17.14.4.3) |
 | `config import-providers <file\|-> [--force] [--dry-run] [--skip-agent] [--map-secret OLD=NEW]… [--project\|--local]` | после MVP: слияние провайдеров, моделей и ролей одной `apply`; существующее не меняется без `--force` (§17.14.4.4) |
