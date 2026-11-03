@@ -261,6 +261,23 @@ final class SessionTitleChanged extends AgentEvent {
   final DateTime updatedAt;
 }
 
+/// Список моделей каталога изменился после перезагрузки конфигурации
+/// (событие уровня сессии; design.md change `add-config-writer-and-reload`,
+/// D8, шаг 7б).
+///
+/// Почему событие без полезной нагрузки: сессия показывает клиенту опцию
+/// `model` со всем каталогом, и адаптер ACP строит её из текущего снимка
+/// (`config_option_update`, §13.6), а не из списка в событии. Событие
+/// получает каждая живая сессия — возвращённая вызывающему до замены каталога
+/// и не закрытая; сессия, создаваемая во время замены, получит исправление со
+/// следующей перезагрузкой (D8, «Создание сессии»).
+///
+/// Как использовать: подписчик `AgentSession.events` читает опции сессии заново.
+/// В журнал событие не пишется.
+final class ModelOptionsChanged extends AgentEvent {
+  const ModelOptionsChanged(super.sessionId);
+}
+
 enum TurnEndReason { completed, maxTokens, refused, cancelled, failed }
 
 /// The last event of a turn.

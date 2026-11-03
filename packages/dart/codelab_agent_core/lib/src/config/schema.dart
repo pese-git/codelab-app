@@ -142,7 +142,6 @@ const afterMvpSections = [
   'memory',
   'steering',
   'lsp',
-  'config',
 ];
 
 /// Слои редакции секретов §12.4.3.
@@ -318,6 +317,10 @@ final SectionNode rootSchema = SectionNode({
     named: SectionNode({}, named: ProfileValueNode(), nameLabel: 'capability'),
     nameLabel: 'profile name',
   ),
+  // Наблюдение за файлами конфига (change `add-config-writer-and-reload`, D7):
+  // `config.*` читают слои `user`, `projectLocal` и `--config`; допустимость
+  // `poll_interval` (`1s..60s`) проверяет `resolve.dart`.
+  'config': SectionNode({'watch': _bool, 'poll_interval': _dur}),
   for (final name in afterMvpSections) name: _opaque,
 });
 

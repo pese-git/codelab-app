@@ -442,7 +442,7 @@ final class _Connection {
         owner: this,
         sink: _notify,
         link: link,
-        catalog: _server._runtime.models,
+        catalog: () => _server._runtime.models,
         clock: _server.clock,
         logger: _logger,
       );
@@ -470,7 +470,7 @@ final class _Connection {
       owner: this,
       sink: _notify,
       link: link,
-      catalog: _server._runtime.models,
+      catalog: () => _server._runtime.models,
       clock: _server.clock,
       logger: _logger,
       clientEnv: clientEnv,

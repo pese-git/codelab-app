@@ -135,10 +135,10 @@
 
 ## 5. Живая перезагрузка (итерация 5; D7, D8, D13, D14; E-04, часть конфига)
 
-- [ ] 5.1 `[agent]` Тесты `codelab_agent_core/test/secrets/secret_resolver_test.dart` (agent-secrets «Резолвер секретов», сценарии «Сброс кэша», «Чтение во время сброса»). Красный.
-- [ ] 5.2 `[agent]` `SecretResolver.invalidate()` с поколениями кэша. 5.1 зелёный.
-- [ ] 5.3 `[agent]` Тесты `codelab_agent_core/test/runtime/config_reload_test.dart` на фейковом `ConfigSource`, `FakeClock` и fake-моделях (agent-runtime «Живая перезагрузка конфигурации», все сценарии; CFG-15, CFG-16):
-  - `permissions.deny` — со следующего вызова;
+- [x] 5.1 `[agent]` Тесты `codelab_agent_core/test/secrets/secret_resolver_test.dart` (agent-secrets «Резолвер секретов», сценарии «Сброс кэша», «Чтение во время сброса»). Красный.
+- [x] 5.2 `[agent]` `SecretResolver.invalidate()` с поколениями кэша. 5.1 зелёный.
+- [x] 5.3 `[agent]` Тесты `codelab_agent_core/test/runtime/config_reload_test.dart` на фейковом `ConfigSource`, `FakeClock` и fake-моделях (agent-runtime «Живая перезагрузка конфигурации», все сценарии; CFG-15, CFG-16):
+  - `permissions.deny` и другие `permissions.*` — только после перезапуска (R0-1), правила разрешений прежние;
   - `agent.default_model` — только новым сессиям;
   - ключ перезапуска;
   - невалидная правка;
@@ -168,7 +168,7 @@
   В итерации 5 тест проверяет снимок, `restartRequiredKeys` и `pendingRestartKeys`; применение серверов к живым сессиям — в 6.3.
 
   Красный.
-- [ ] 5.4 `[agent]` Ядро:
+- [x] 5.4 `[agent]` Ядро:
   - `config/config_source.dart`, `AgentCoreServices.config`, `AgentCoreServices.agentConfigPaths`, `buildAgentCore(modelsFor:, configCommand:)`;
   - `ConfigLoadResult.values` в `CoreConfig.fromLayers` (D8); рантайм хранит `values` и `HostSettings` применённого снимка;
   - правила R0-1 и R0-4 в шаге 5 (до задачи 6.2, где появляется `McpServerConfig.enabled`, условие «включение из `enabled: false`» проверяется через отсутствие элемента в применённом снимке и `values`: выключенный сервер в них не попадает), `CoreConfig.withDeferred`, `CoreConfig.validateSnapshot`, `ConfigSource.initial` (D8, «Пересборка снимка с отложенными ключами»);
@@ -179,12 +179,12 @@
   - строки схемы `config.watch`, `config.poll_interval` вместо `afterMvpSections`, доверие проектного слоя для `config` (agent-configuration «Ключи config.watch и config.poll_interval»); дескрипторы реестра обновлены.
 
   5.3 зелёный, 2.1 зелёный, `web-compile` зелёный.
-- [ ] 5.5 `[agent]` Тесты `codelab_agent_io/test/config/config_watcher_test.dart` и `file_config_source_test.dart` (agent-configuration «Наблюдение за файлами конфига», все сценарии; «Ключи config.watch и config.poll_interval»): debounce на `FakeClock`, `rename`, новый файл, те же байты, режим опроса, `secrets.yaml` при `file`, `config.watch: false`, `close()` без поздних сигналов, переход на опрос при ошибке потока. Unit-тесты подают события через шов-фабрику потока (D7), без настоящей ФС; один интеграционный тест настоящего `watch` во временном каталоге — сигнал не позже 5 с, `Timeout(Duration(seconds: 60))`. `config.*` в `config.local.yaml` недоверенного проекта — `config.project.untrusted_key`. Служебные файлы писателя (D7, подготовка по ревью итерации 3; сценарий «Запись ConfigWriter даёт один сигнал»): события по `config.yaml.lock`, `*.lock.stale-*`, `*.tmp-*` в `$CODELAB_HOME` и `.codelab/` перезагрузку не запускают, запись `ConfigWriter` даёт один сигнал по итоговому `rename`; шаблоны имён — константы `config_write_lock.dart`, а не копии в тесте или наблюдателе. Красный.
-- [ ] 5.6 `[agent]` `config/config_watcher.dart`, `config/file_config_source.dart` (с `initial` и закреплённым доверием), `ConfigLoader.load(pinnedTrustedProjects:)` — только передаёт список в `CoreConfig.fromLayers` (D8); `codelab_agent_io/AGENTS.md` §1. 5.5 зелёный; в 5.5 добавлен тест `file_config_source_test.dart` «доверие закреплено на `initial`».
-- [ ] 5.7 `[protocol]` Тесты `codelab_agent_acp/test/config_reload_notifications_test.dart` (agent-acp-server «Уведомления после перезагрузки конфигурации», сценарии «Список моделей изменился», «Неудачная перезагрузка», «Модель сессии удалена»; ACP-8). Красный.
-- [ ] 5.8 `[protocol]` `event_projection.dart`: `ModelOptionsChanged` → `config_option_update`, исчерпывающий `switch`; опция `model` с текущей моделью вне каталога. 5.7 зелёный.
-- [ ] 5.9 `[agent]` (OQ2 (а)) Тесты `codelab_agent_core/test/permissions/agent_config_paths_test.dart` (agent-permissions «Критические пути правок конфигурации агента», все сценарии) и `codelab_agent_io/test/config/agent_config_paths_test.dart`:
-  - `agentConfigPathsFor` даёт те же файлы, что наблюдает `ConfigWatcher`, плюс `$CODELAB_HOME/agents` и `prompts`; пути канонические (`~` раскрыт, symlink раскрыт);
+- [x] 5.5 `[agent]` Тесты `codelab_agent_io/test/config/config_watcher_test.dart` и `file_config_source_test.dart` (agent-configuration «Наблюдение за файлами конфига», все сценарии; «Ключи config.watch и config.poll_interval»): debounce на `FakeClock`, `rename`, новый файл, те же байты, режим опроса, `secrets.yaml` при `file`, `config.watch: false`, `close()` без поздних сигналов, переход на опрос при ошибке потока. Unit-тесты подают события через шов-фабрику потока (D7), без настоящей ФС; один интеграционный тест настоящего `watch` во временном каталоге — сигнал не позже 5 с, `Timeout(Duration(seconds: 60))`. `config.*` в `config.local.yaml` недоверенного проекта — `config.project.untrusted_key`. Служебные файлы писателя (D7, подготовка по ревью итерации 3; сценарий «Запись ConfigWriter даёт один сигнал»): события по `config.yaml.lock`, `*.lock.stale-*`, `*.tmp-*` в `$CODELAB_HOME` и `.codelab/` перезагрузку не запускают, запись `ConfigWriter` даёт один сигнал по итоговому `rename`; шаблоны имён — константы `config_write_lock.dart`, а не копии в тесте или наблюдателе. Красный.
+- [x] 5.6 `[agent]` `config/config_watcher.dart`, `config/file_config_source.dart` (с `initial` и закреплённым доверием), `ConfigLoader.load(pinnedTrustedProjects:)` — только передаёт список в `CoreConfig.fromLayers` (D8); `codelab_agent_io/AGENTS.md` §1. 5.5 зелёный; в 5.5 добавлен тест `file_config_source_test.dart` «доверие закреплено на `initial`».
+- [x] 5.7 `[protocol]` Тесты `codelab_agent_acp/test/config_reload_notifications_test.dart` (agent-acp-server «Уведомления после перезагрузки конфигурации», сценарии «Список моделей изменился», «Неудачная перезагрузка», «Модель сессии удалена»; ACP-8). Красный.
+- [x] 5.8 `[protocol]` `event_projection.dart`: `ModelOptionsChanged` → `config_option_update`, исчерпывающий `switch`; опция `model` с текущей моделью вне каталога. 5.7 зелёный.
+- [x] 5.9 `[agent]` (OQ2 (а)) Тесты `codelab_agent_core/test/permissions/agent_config_paths_test.dart` (agent-permissions «Критические пути правок конфигурации агента», все сценарии) и `codelab_agent_io/test/config/agent_config_paths_test.dart`:
+  - `agentConfigPathsFor` даёт файлы, которые наблюдает `ConfigWatcher`, плюс `secrets.yaml` при любом бэкенде (R5-1), `$CODELAB_HOME/agents` и `prompts`; пути канонические (`~` раскрыт, symlink раскрыт);
   - `write`/`edit` с целью из `agentConfigPaths` — критические в `bypass`, `accept-edits`, без `allow_always`; в `autopilot` и без gate — отказ;
   - symlink dotfiles (`$CODELAB_HOME/config.yaml` → `~/dotfiles/…`); проектный конфиг корня запуска из сессии с другим `cwd`; файл `--config`;
   - `exec`: `>`/`>>`, `tee`, `cp`, `mv`, `rename`, `ln -sf`, `install`, `dd of=`, `sed -i`, `cd ~/.codelab && …`; пути `~/…`, `$HOME/…`, `${HOME}/…`, `$CODELAB_HOME/…`, `${CODELAB_HOME}/…`, `../../.codelab/…` — значения из `AgentConfigPaths.expansions`; другой регистр при `caseInsensitive`;
@@ -194,11 +194,11 @@
   - чтение не ограничено.
 
   Красный.
-- [ ] 5.10 `[agent]` (OQ2 (а)) `AgentCoreServices.agentConfigPaths: AgentConfigPaths {paths, expansions, caseInsensitive}`; политика сравнивает цель после канонизации `BoundedEnv`, пересчитывает каноническую форму защищаемых путей на каждой проверке и расширяет шаблон `write to agent configuration`, в том числе для каталогов-предков (PERM-11, §7.6.1 — обновлён в итерации 0, задача 0.4; D8); `codelab_agent_io` — `config/agent_config_paths.dart` (`agentConfigPathsFor`); `AgentHost` и открыватель `codelab_embedded` передают значение. 5.9 зелёный.
-- [ ] 5.11 `[agent]` Тесты `apps/codelab_agent/test/config_reload_process_test.dart` и `agent_host_config_test.dart` (agent-binary «Перезагрузка конфига в serve», все сценарии): правка → `config_option_update` не позже 5 с; битая правка → ни одного кадра; `--llm-script` без источника; источник закрыт после остановки; начальные `streamFunction` и `services.models` из одного вызова `modelsFor`. Плюс `agent_host_ws_commands_test.dart` (agent-binary, сценарий «WebSocket без /config»; R0-3): у `--ws` нет `config` и `mcp` в списке команд, `/config check` уходит модели. Красный.
-- [ ] 5.12 `[agent]` `AgentHost`: `FileConfigSource`, `modelsFor`, `agentConfigPaths`, `configCommand: false` для `--ws`, закрытие после `runtime.dispose()`; `apps/codelab_agent/AGENTS.md`. 5.11 зелёный.
-- [ ] 5.13 `[agent]` Тесты `codelab_embedded/test/embedded_config_reload_test.dart` (embedded-agent «Перезагрузка конфига встроенного агента», все сценарии): правка из другого процесса, `dispose` закрывает наблюдатель, новый ключ провайдера, срыв открытия после создания источника. Красный.
-- [ ] 5.14 `[agent]` `codelab_embedded`: источник в открывателе, `agentConfigPaths`, начальные функция модели и каталог из `modelsFor`, шаг `config_source` в `dispose`; `codelab_embedded/AGENTS.md`. 5.13 зелёный.
+- [x] 5.10 `[agent]` (OQ2 (а)) `AgentCoreServices.agentConfigPaths: AgentConfigPaths {paths, expansions, caseInsensitive}`; политика сравнивает цель после канонизации `BoundedEnv`, пересчитывает каноническую форму защищаемых путей на каждой проверке и расширяет шаблон `write to agent configuration`, в том числе для каталогов-предков (PERM-11, §7.6.1 — обновлён в итерации 0, задача 0.4; D8); `codelab_agent_io` — `config/agent_config_paths.dart` (`agentConfigPathsFor`): защита `$CODELAB_HOME/secrets.yaml` — всегда, при любом `secrets.backend` (R5-1), а наблюдение `ConfigWatcher` за ним — только при `file` (перезагрузка, D7, задача 5.6); удаление и усечение защищаемого файла (`rm`, `unlink`, `mv <защищаемый> …`, `truncate`, `>`) — тот же шаблон (R5-2); каталог-предок — любой предок каждой формы защищаемого пути, кроме `/` (`rm`/`rmdir`/`mkdir` и предок-источник `mv`/`ln` — всегда, предок-назначение — пока его нет на диске); запись `exec` по ссылке на защищаемый файл — вторым проходом через `PathResolver`; висячая ссылка на месте предка — известная граница (R5-3, Risks); `AgentHost` и открыватель `codelab_embedded` передают значение. 5.9 зелёный.
+- [x] 5.11 `[agent]` Тесты `apps/codelab_agent/test/config_reload_process_test.dart` и `agent_host_config_test.dart` (agent-binary «Перезагрузка конфига в serve», все сценарии): правка → `config_option_update` не позже 5 с; битая правка → ни одного кадра; `--llm-script` без источника; источник закрыт после остановки; начальные `streamFunction` и `services.models` из одного вызова `modelsFor`. Плюс `agent_host_ws_commands_test.dart` (agent-binary, сценарий «WebSocket без /config»; R0-3): у `--ws` нет `config` и `mcp` в списке команд, `/config check` уходит модели. Красный.
+- [x] 5.12 `[agent]` `AgentHost`: `FileConfigSource`, `modelsFor`, `agentConfigPaths`, `configCommand: false` для `--ws`, закрытие после `runtime.dispose()`; `apps/codelab_agent/AGENTS.md`. 5.11 зелёный.
+- [x] 5.13 `[agent]` Тесты `codelab_embedded/test/embedded_config_reload_test.dart` (embedded-agent «Перезагрузка конфига встроенного агента», все сценарии): правка из другого процесса, `dispose` закрывает наблюдатель, новый ключ провайдера, срыв открытия после создания источника. Красный.
+- [x] 5.14 `[agent]` `codelab_embedded`: источник в открывателе, `agentConfigPaths`, начальные функция модели и каталог из `modelsFor`, шаг `config_source` в `dispose`; `codelab_embedded/AGENTS.md`. 5.13 зелёный.
 
 **Критерий итерации 5.** Работающий `serve --stdio` и встроенный агент подхватывают правку `config.yaml` и замену ключа в `secrets.yaml` без перезапуска; невалидная правка не меняет поведение агента.
 
@@ -237,7 +237,10 @@
   - параллельный `prompt` во время `/mcp reload` отклонён, в том числе без моста ACP; `/mcp reload` после отложенной замены (сценарии «Параллельный промпт во время /mcp reload», «/mcp reload после отложенной замены»).
 
   Красный.
-- [ ] 7.2 `[agent]` `commands/builtin_commands.dart`, `SlashCommandSource.builtin`, перехват в `AgentSession.prompt` до шаблонов под тем же слотом хода, объявление по `services.config`, `configCommand` и capability `mcp`, лог `command.builtin`. 7.1 зелёный.
+- [ ] 7.2 `[agent]` `commands/builtin_commands.dart`, `SlashCommandSource.builtin`, перехват в `AgentSession.prompt` до шаблонов под тем же слотом хода, объявление по `services.config`, `configCommand` и capability `mcp`, лог `command.builtin`:
+  - снять `skip` у контрольного теста `apps/codelab_agent/test/agent_host_ws_commands_test.dart` (stdio объявляет `config` и `mcp`), R0-3.
+
+  7.1 зелёный.
 - [ ] 7.3 `[protocol]` Фикстура `packages/dart/codelab_acp_testing/fixtures/acp/slash-mcp-list.json` и фабрика агентского прогона (`setup.config.mcp.servers`; acp-golden-fixtures «Фикстуры файлов проекта этапа 8», сценарий «Таблица /mcp list»). Обновлённые `acp/available-commands-no-tools.json` и `acp/prompt-template-command.json` (список `mcp`, `review`; оба кадра `available_commands_update` второй фикстуры). Тесты `codelab_agent_acp/test/conformance_test.dart` и `session_new_test.dart` (agent-acp-server «session/new», сценарии «Режимы и опции новой сессии», «Команды шаблонов после session/new»; «Уведомления после перезагрузки конфигурации», сценарий «Ответ встроенной команды»). Красный.
 - [ ] 7.4 `[protocol]` `codelab_agent_acp`: `available_commands_update` со встроенными командами, кадры ответа команды; прочие фикстуры, сверяющие список команд побайтово, обновлены. Клиентский прогон фикстур (`melos run` клиентского драйвера) зелёный без изменений клиента. 7.3 зелёный.
 

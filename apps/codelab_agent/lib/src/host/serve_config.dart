@@ -56,6 +56,43 @@ ConfigLoadResult loadServeConfig(
   }
 }
 
+/// Источник конфига живого `serve`: те же параметры загрузки, что у
+/// [loadServeConfig] (design.md change `add-config-writer-and-reload`, D7,
+/// D13; agent-binary «Перезагрузка конфига в serve»).
+///
+/// Почему рядом с [loadServeConfig]: перезагрузка обязана читать слои теми же
+/// корнем, окружением, флагами, предконфигурацией, файлом `--config` и
+/// известными переменными, что стартовая загрузка, иначе «перезагрузка»
+/// дала бы другой конфиг, чем при старте. Параметры собраны в одном файле,
+/// чтобы разойтись они не могли.
+///
+/// Как использовать: после успешного [loadServeConfig] и только без
+/// `--llm-script` (сценарий не читает файлы — источника у него нет);
+/// [initial] — этот результат, [cwd] — тот же корень. Конструктор сам
+/// запускает наблюдатель, поэтому создавать источник нужно непосредственно
+/// перед сборкой ядра, а владелец (`AgentHost`) закрывает его
+/// `await source.close()` после `runtime.dispose()`.
+FileConfigSource serveConfigSource(
+  ServeOptions options, {
+  required ConfigLoadResult initial,
+  required String cwd,
+  required Clock clock,
+  required Logger logger,
+}) {
+  assert(options.llmScript == null, 'the script run has no config source');
+  return FileConfigSource(
+    initial: initial,
+    cwd: cwd,
+    environment: options.environment,
+    flags: options.flags,
+    preconfigFlags: options.preconfig,
+    extraConfig: options.configPath,
+    knownVariables: {options.tokenEnv},
+    clock: clock,
+    logger: logger,
+  );
+}
+
 /// Уровень и файл лога после загрузки конфига: флаг сильнее переменной,
 /// переменная сильнее `logging.*` (agent-binary «Логи бинаря»).
 ///

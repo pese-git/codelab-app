@@ -866,9 +866,32 @@ final List<SettingDescriptor> _descriptors = List.unmodifiable([
   _opaque('memory'),
   _opaque('steering'),
   _opaque('lsp'),
-  // Итерация 5 (задача 5.4) заменит дескриптор листьями `config.watch` и
-  // `config.poll_interval` вместе со схемой (D4, «Порядок итераций»).
-  _opaque('config', layers: _userAndLocal),
+  // Наблюдение за файлами конфига (D7): листья вместо прежнего непрозрачного
+  // узла; наблюдатель создаётся один раз, поэтому `restartRequired`. Менять
+  // их из UI бессмысленно — `fileOnly`.
+  _fileOnly(
+    'config.watch',
+    SettingType.bool,
+    'Advanced',
+    'Watch config files',
+    'Reload the config when its files change.',
+    'the watcher is created once at start',
+    defaultValue: true,
+    restartRequired: true,
+    layers: _userAndLocal,
+  ),
+  _fileOnly(
+    'config.poll_interval',
+    SettingType.duration,
+    'Advanced',
+    'Config poll interval',
+    'How often files are polled where file events are unavailable; '
+        '1s..60s.',
+    'the watcher is created once at start',
+    defaultValue: '2s',
+    restartRequired: true,
+    layers: _userAndLocal,
+  ),
 ]);
 
 /// Реестр настроек: таблица, поиск и разбор значения CLI (D4).

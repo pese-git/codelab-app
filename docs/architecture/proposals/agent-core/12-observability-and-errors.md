@@ -189,6 +189,7 @@ final class LogRecord {           // то, что получает sink хост
 | `config.preconfig.shadowed` | info | `by: "flags"` — флаги `--provider-type`/`--provider-config` затенили `CODELAB_PROVIDER_*` |
 | `config.write` | info | `path`, `keys` |
 | `config.write.stale_lock` | warning | `path`, `age_ms` — lock старше 10 с удалён |
+| `config.watch.debounce` | debug | `path` — замечено событие ФС по наблюдаемому файлу, debounce (пере)запущен |
 | `config.watch.fallback` | info | `path`, `reason` (`runtimeType`) — ошибка потока событий, файл переведён на опрос |
 | `config.watch.failed` | warning | `path`, `error_class` — исключение опроса, опрос продолжается |
 | `config.reload.applied` | info | `keys`, `restart_required` |

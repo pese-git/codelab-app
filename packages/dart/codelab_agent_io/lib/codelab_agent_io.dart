@@ -36,6 +36,8 @@ export 'src/cli/secret_commands.dart'
         SecretSetOptions;
 export 'src/cli/secret_input.dart'
     show MultilineSecretException, SecretInput, StdinSecretInput;
+export 'src/config/agent_config_paths.dart'
+    show agentConfigPathsFor, watchedConfigFiles;
 export 'src/config/config_loader.dart'
     show
         ConfigCandidateResult,
@@ -44,8 +46,19 @@ export 'src/config/config_loader.dart'
         checkConfigFileName,
         codelabHomeOf,
         maxConfigBytes;
+export 'src/config/config_watcher.dart'
+    show
+        ConfigFileProbe,
+        ConfigFileStamp,
+        ConfigWatcher,
+        DirectoryChange,
+        DirectoryEventsFactory,
+        configWatchDebounce,
+        defaultConfigFileProbe,
+        defaultDirectoryEvents;
 export 'src/config/config_writer.dart' show ConfigWriteResult, ConfigWriter;
 export 'src/config/config_warnings.dart' show logConfigWarnings;
+export 'src/config/file_config_source.dart' show FileConfigSource;
 export 'src/config/environment_layer.dart' show testSecretStorePath;
 export 'src/config/provider_preconfig.dart' show ProviderPreconfigFlags;
 export 'src/env/host_path.dart';

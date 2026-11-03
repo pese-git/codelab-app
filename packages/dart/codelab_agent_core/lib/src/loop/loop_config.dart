@@ -322,10 +322,18 @@ final class AgentLoopConfig {
   /// `effectiveContextWindow(model, cap)` (CMP-6).
   final int? contextWindowCap;
 
+  /// Копия с другой моделью, очередями, бюджетом хода или ограничением окна.
+  ///
+  /// [budget] и [contextWindowCap] нужны живой перезагрузке конфигурации
+  /// (`budget.*`, `compaction.*` — со следующего хода; design.md change
+  /// `add-config-writer-and-reload`, D8). [contextWindowCap] — запись
+  /// `(value: …)`, чтобы можно было сбросить ограничение в `null`.
   AgentLoopConfig copyWith({
     ModelRef? model,
     MessageQueue<SteeringItem>? steering,
     MessageQueue<Message>? followUp,
+    TurnBudget? budget,
+    ({int? value})? contextWindowCap,
   }) => AgentLoopConfig(
     sessionId: sessionId,
     model: model ?? this.model,
@@ -333,7 +341,7 @@ final class AgentLoopConfig {
     executor: executor,
     clock: clock,
     ids: ids,
-    budget: budget,
+    budget: budget ?? this.budget,
     transformContext: transformContext,
     beforeToolCall: beforeToolCall,
     afterToolCall: afterToolCall,
@@ -349,6 +357,8 @@ final class AgentLoopConfig {
     logger: logger,
     estimateTokens: estimateTokens,
     emergencyCompact: emergencyCompact,
-    contextWindowCap: contextWindowCap,
+    contextWindowCap: contextWindowCap == null
+        ? this.contextWindowCap
+        : contextWindowCap.value,
   );
 }

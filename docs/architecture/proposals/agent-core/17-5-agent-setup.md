@@ -155,6 +155,20 @@ final class ConfigLoadResult {
   final Map<String, Object?> values; // 8.10 (D8): плоская карта листьев итогового дерева, основа diff перезагрузки
   CoreConfig orThrow();            // config или ConfigException / ConfigInlineSecretException
 }
+// 8.10 (D8): CoreConfig.withoutProjectValues — та же плоская карта для снимка withoutProject
+// (null — снимка без проекта нет). Лежит в CoreConfig, а не в ConfigLoadResult: адаптеры
+// источника пересобирают ConfigLoadResult и потеряли бы её, и сравнение второго снимка дало бы
+// пустой diff (fail-open); отсутствующая карта сравнивается как пустая (fail closed).
+// Отложенное перезагрузки — структурой, а не строками ключей показа:
+final class DeferredConfigParts {
+  final Set<String> providers;     // провайдеры R0-4: группа адреса и аутентификации прежняя
+  final Set<String> servers;       // имена mcp.servers: прежний элемент, нового нет — исключается
+  final bool permissions;          // раздел permissions прежний (R0-1)
+  final bool defaultModel;         // agent.default_model прежняя
+  DeferredConfigParts union(DeferredConfigParts other);   // отложенное по любому из двух снимков
+}
+// static CoreConfig CoreConfig.withDeferred(CoreConfig previous, CoreConfig next,
+//     DeferredConfigParts deferred, {Map<String, Object?>? withoutProjectValues});
 // codelab.toml не читается (§15.7, решение пользователя 2026-10-29): поля legacy нет, найденный
 // файл — предупреждение config.legacy_found в warnings.
 // ConfigInlineSecretException с 8.9 (change add-agent-secret-store, D2) несёт key первой проблемы
@@ -168,7 +182,8 @@ abstract interface class ConfigSource {
   /// Загрузка для корня запуска хоста; ConfigLoadResult — как при старте (полный снимок и withoutProject).
   /// Доверие проектам закреплено на initial до перезапуска: загрузчик передаёт список в
   /// CoreConfig.fromLayers(..., pinnedTrustedProjects:), доверие вычисляет ядро (D8).
-  Future<ConfigLoadResult> load();
+  /// rebase: false — загрузка для проверки (/config check): база наблюдателя не сдвигается (D7).
+  Future<ConfigLoadResult> load({bool rebase = true});
   /// Сигнал «прочитанные файлы изменились» — уже после debounce 300 мс и сравнения sha256.
   Stream<void> get changes;
 }
@@ -177,16 +192,20 @@ enum ConfigReloadOutcome { applied, unchanged, failed }
 final class ConfigApplyReport {
   final ConfigReloadOutcome outcome;
   final List<ConfigIssue> issues;                       // только failed
-  final List<String> changedKeys, restartRequiredKeys;  // листовые пути; mcp.servers — "mcp.servers[<name>]"
+  final List<String> changedKeys;          // применённые листья; mcp.servers — "mcp.servers[<name>]"; отсортирован
+  final List<String> restartRequiredKeys;  // ключи показа: лист, "mcp.servers[<name>]", "providers.<id>"; отсортирован
 }
 // AgentRuntime (§10.3) получает:
-//   Future<ConfigApplyReport> reloadConfig();   // ConfigSource.changes, /config reload, /mcp reload
-//   Future<ConfigLoadResult> checkConfig();     // /config check: загрузка без применения
-//   ConfigStatus configStatus();
+//   Future<ConfigApplyReport> reloadConfig();   // ConfigSource.changes, /config reload, /mcp reload; не бросает
+//   Future<ConfigLoadResult> checkConfig();     // /config check: load(rebase: false), план по обоим снимкам,
+//                                               // withDeferred + validateSnapshot, без применения; отложенные
+//                                               // ключи — warnings с event 'config.reload.restart_required' и key
+//   ConfigStatus configStatus();                // работает и без источника
+//   без ConfigSource reloadConfig и checkConfig бросают StateError (D8, «Контракт вызовов»)
 final class ConfigStatus {
   final DateTime loadedAt; final List<String> sources;
   final DateTime? lastFailureAt; final List<ConfigIssue> lastIssues;   // пусто, если последняя попытка удалась
-  final List<String> pendingRestartKeys;
+  final List<String> pendingRestartKeys;   // restartRequiredKeys последней успешной перезагрузки
 }
 
 // buildAgentCore (§10.3) получает параметр modelsFor — функцию хоста, которая строит функцию
@@ -731,7 +750,8 @@ apply(base, edits):
   `privatetoken`. Значение такого имени без `${secret:…}` и `${VAR}` → `ConfigInlineSecretException` с
   `suggestedSecretName` (`SecretNames.forMcp(server, key)`, у провайдера — `suggestFor(path)`), без
   значения в тексте. Правило получают `codelab mcp add`, `config set`, будущая страница MCP-серверов
-  и предконфигурация (§17.5.3). Ручная правка файла с таким литералом до 8.11 загружается: пункты 2–3
+  и предконфигурация (§17.5.3), а перезагрузка — для «провайдера с ключом» (R0-4); функции имён
+  (`isSecretLikeName`, `hasSecretReference`) — одна копия в публичном барели ядра. Ручная правка файла с таким литералом до 8.11 загружается: пункты 2–3
   CFG-9 по шаблонам §12.4 остаются за 8.11. Fail closed на пути записи дешевле, чем объяснять, почему
   CLI записал токен в файл (ревью итерации 0, D5). Ревью итерации 3: в поддеревьях непрозрачных
   узлов (`providers.*.auth`, `key_rotation`, `tools.web`, `llm`, `hooks`, …) правило имён действует
@@ -935,25 +955,43 @@ apply(base, edits):
 `<root>/.codelab/config.yaml` и `config.local.yaml`, включая ещё не существующие, а при
 `secrets.backend: file` — `$CODELAB_HOME/secrets.yaml`. Последний пункт закрывает ограничение 8.9:
 замена ключа даёт перезагрузку без изменений конфига, а она сбрасывает кэш резолвера и пересобирает
-функцию модели. Механизм — `FileSystemEntity.watch` на родительском каталоге (замена файла через
-rename — событие каталога); если каталога нет, `watch` бросает или файловая система без событий —
-опрос раз в `config.poll_interval` (`"2s"`, `1s..60s`) по `(exists, mtime, size)` и sha256 при их
-смене. Событие запускает таймер 300 мс на часах `Clock` ядра (`FakeClock` в тестах); новые события
-перезапускают его (debounce). Совпадение sha256 всех файлов с последней загрузкой — не изменение.
-События по служебным файлам `ConfigWriter` (`config.yaml.lock`, `*.lock.stale-*`, `*.tmp-*`) в
-`$CODELAB_HOME` и `.codelab/` перезагрузку не запускают — шаблоны имён берутся из
+функцию модели. Механизм — `Directory.watch` на родительском каталоге, одна подписка на каталог
+(замена файла через rename — событие каталога). Отсутствующий каталог распознаётся до подписки: на
+macOS `watch` по нему не бросает и молчит, поэтому настоящая фабрика событий сама бросает
+`PathNotFoundException`. Нет каталога, фабрика бросила, поток вернул ошибку или завершился (`onDone`) — файлы каталога
+уходят на опрос раз в `config.poll_interval` (`"2s"`, `1s..60s`) по `(exists, mtime, size)` и
+остаются на нём до закрытия (каталог `.codelab/`, созданный позже, наблюдается опросом). Сигнал
+запускает только событие с точным именем наблюдаемого файла (путь или цель `rename`); оно включает
+таймер 300 мс на часах `Clock` ядра (`FakeClock` в тестах), новые события перезапускают его
+(debounce). Затем считаются sha256 всех файлов: совпадение с базой — не изменение; отсутствующий и
+нечитаемый файл — отдельные состояния; файл больше лимита загрузчика (`maxConfigBytes`) не
+читается и сравнивается по `(size, mtime)`. База обновляется при каждом сигнале и в `rebase()`,
+который `load()` вызывает перед чтением слоёв: собственное чтение повторного сигнала не даёт, правка
+во время чтения — даёт. `rebase()` — только на пути перезагрузки: `checkConfig()` вызывает
+`load(rebase: false)`, иначе `/config check` во время debounce сдвинул бы базу, и правка не дала бы
+сигнала (D7). Для файла-ссылки наблюдаются и лексический путь, и каталог канонической цели
+(цель пересчитывается в `rebase()`), содержимое сравнивается по лексическому пути. События по
+служебным файлам `ConfigWriter` (`config.yaml.lock`, `*.lock.stale-*`, `*.tmp-*`) в
+`$CODELAB_HOME` и `.codelab/` перезагрузку не запускают — их распознаёт предикат из
 `config_write_lock.dart`; запись писателя даёт один сигнал по итоговому `rename` (D7 change
-`add-config-writer-and-reload`).
+`add-config-writer-and-reload`). Хост создаёт источник до сборки ядра; правка между стартовой
+загрузкой и созданием источника сигнала не даёт (известная граница, Risks change). Наблюдатель и
+загрузчик работают синхронным IO (`statSync` на тике опроса, чтение и `resolveSymbolicLinksSync` по
+сигналу, `ConfigLoader.load`), в том числе в изоляте UI десктопа; файлы маленькие, чтение ограничено
+лимитом размера — принято (Risks change, «Синхронный IO наблюдателя»).
 Окружение и флаги не перечитываются: они не меняются у живого процесса. `config.watch = false` —
 источник без наблюдателя: `changes` не срабатывает, `/config reload` работает. Ошибка потока
 `watch` переводит файл на опрос с `config.watch.fallback {path, reason}`, исключение опроса —
 `config.watch.failed {path, error_class}`, опрос продолжается. Владелец источника — хост, который
 его создал; хост закрывает его после `runtime.dispose()`. Тот же список файлов (плюс
-`$CODELAB_HOME/agents` и `prompts`) хост передаёт политике как пути PERM-11 —
+`$CODELAB_HOME/agents`, `prompts` и `$CODELAB_HOME/secrets.yaml` при любом `secrets.backend`,
+хотя наблюдатель следит за ним только при `file`, R5-1) хост передаёт политике как пути PERM-11 —
 `AgentCoreServices.agentConfigPaths`, канонические, из одной функции `agentConfigPathsFor`
 (`codelab_agent_io`): что агент перечитывает на лету, то модель не правит без человека (OQ2; D8;
-§7.6.1). Unit-тесты наблюдателя подают события через шов-фабрику потока, настоящий `watch`
-проверяет один интеграционный тест с пределом времени (D7).
+§7.6.1). Unit-тесты наблюдателя подают события через шов-фабрику
+`Stream<DirectoryChange> Function(Directory)` (`FileSystemEvent` запечатан и в тестах не строится)
+и замер опроса через шов `ConfigFileProbe`; настоящий `watch` проверяет один интеграционный тест с
+пределом времени (D7).
 
 **Снимок — на корень запуска хоста** (отступление 8.10, D8). Снимок — пара «полный `CoreConfig` +
 `withoutProject`» (D9 change `add-agent-configuration`), и перезагрузка заменяет её целиком. Снимка
@@ -966,7 +1004,8 @@ reloadConfig():                          // ConfigSource.changes, /config reload
 1. перезагрузка уже идёт → отметить повтор (не больше одного в очереди), вернуть Future повтора;
    все вызовы во время идущей получают итог повтора, который видит последние файлы
 2. result := await config.load(); dispose() во время ожидания → результат отбрасывается, ничего
-   не применяется, уведомлений нет; внутренний CancelToken рантайма проверяется после каждого await
+   не применяется, уведомлений нет, итог unchanged; до замены снимка других await нет
+   исключение load() или modelsFor → как шаг 3, но лог config.reload.failed {error_class} без текста
 3. result.issues не пусто →
      status.lastFailureAt := now; status.lastIssues := issues
      лог error config.reload.failed {sources, issues: [{source, line, column, key, kind}]}, без значений
@@ -981,23 +1020,35 @@ reloadConfig():                          // ConfigSource.changes, /config reload
    (api_key_secret, api_key_env, подстановка в base_url/headers/auth_header) — новый или со сменой группы
    kind, base_url, headers, auth_header, api_key_secret, api_key_env; ссылки на модели нового
    отложенного провайдера, в том числе agent.default_model);
+   план строится по обоим снимкам — полному и withoutProject (сессии вне корня запуска): ключ
+   отложен, если отложен по любому из сравнений (ключ, перекрытый проектным слоем в полном снимке,
+   может измениться в withoutProject; его листья — CoreConfig.withoutProjectValues); набор
+   отложенного — DeferredConfigParts {providers, servers, permissions, defaultModel} (план,
+   union по обоим снимкам) — передаётся в withDeferred структурированно, строки ключей показа
+   повторно не разбираются (имя сервера может содержать ']': разбор дал бы null и оставил бы новый
+   stdio-сервер в снимке — fail-open);
    доверие закреплено в ядре (CoreConfig.fromLayers(pinnedTrustedProjects:) — проектные слои и
-   CoreConfig.trustedProjects); остальное — CoreConfig.withDeferred над CoreConfig и withoutProject
-   (permissions, элементы серверов, группа полей провайдера с прежними key и headerTemplates;
-   модели — новые), прежние HostSettings и values подставляет рантайм; повторная семантическая
+   CoreConfig.trustedProjects); остальное — CoreConfig.withDeferred(previous, next, deferred,
+   withoutProjectValues:) над CoreConfig и withoutProject (permissions, элементы серверов, группа
+   полей провайдера с прежними key и headerTemplates; модели — новые; итог хранит
+   withoutProjectValues после подстановки — основу следующего сравнения), прежние HostSettings и values подставляет рантайм; повторная семантическая
    проверка (validateSnapshot); отложенная ссылка на модель нового провайдера — не failed;
    ошибка → как шаг 3
-   restart не пусто → status.pendingRestartKeys ∪= restart; лог warning config.reload.restart_required {keys}
+   status.pendingRestartKeys := restart — не объединение: values применённого снимка хранят прежние
+     значения отложенных листьев, поэтому неотменённый ключ снова попадает в restart, а возвращённый
+     в файле к прежнему значению уходит; restart не пусто → лог warning config.reload.restart_required {keys}
 6. secrets?.invalidate() и models := modelsFor(next) — всегда, даже при пустом diff: значение в
      хранилище могло смениться, а цепочки провайдеров держат разрешённый ключ
    атомарно заменить запись (config, withoutProject, models) — одно присваивание; шаг, ход и
      проверка разрешения читают запись один раз
-   diff и restart пусты → лог debug config.reload.noop; итог unchanged
+   diff пуст → лог debug config.reload.noop; итог unchanged (diff только из отложенных ключей — applied)
 7. для каждой живой сессии (возвращённой до замены и не закрытой):
      a. серверы конфига — McpSessionTools.replaceServers (§17.5.7, D10): без хода — сразу,
         во время хода — после TurnEnded
-     b. список моделей нового каталога отличается от каталога сессии → событие ModelOptionsChanged
-        → config_option_update с полным снимком опций сессии (§13.6)
+     b. список моделей нового каталога отличается от прежнего → событие ModelOptionsChanged
+        → config_option_update с полным снимком опций сессии (§13.6); публикуется сразу, вне очереди
+        агента (и во время хода), в журнал сессии не пишется и в историю хода не буферизуется
+        (подписчик, подключившийся к ходу позже, его не получает)
 8. status.lastIssues := []; лог info config.reload.applied {keys, restart_required}; итог applied
 ```
 
@@ -1379,7 +1430,7 @@ stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` о
 Новые ключи этого раздела (дополнение §15.4): `secrets.backend` (`"auto"`) — только глобальный
 конфиг; `config.watch` (`true`) и `poll_interval` (`"2s"`, `1s..60s`) — слои 2, 4 и
 `--config`/`CODELAB_CONFIG`, в проектном слое 3 отбрасываются с `config.project.untrusted_key`
-(design.md change `add-config-writer-and-reload`, D7).
+всегда, в слое 4 — только у недоверенного проекта (design.md change `add-config-writer-and-reload`, D7).
 
 **Объём в 1.0** (D4). Таблица выше — целевой состав. Дескрипторы сборки 1.0 — на ключи схемы этой
 сборки:
@@ -1499,7 +1550,7 @@ mcp:
 
 События лога (дополнение §12.3): `config.reload.applied`, `config.reload.failed`,
 `config.reload.noop`, `config.reload.restart_required`, `config.reload.model_orphaned`,
-`config.preconfig.shadowed`, `config.write`, `config.write.stale_lock`, `config.watch.fallback`, `config.watch.failed`,
+`config.preconfig.shadowed`, `config.write`, `config.write.stale_lock`, `config.watch.debounce` (debug, `path`), `config.watch.fallback`, `config.watch.failed`,
 `command.builtin` (уровни и поля — §12.3, таблица событий 8.10; design.md change
 `add-config-writer-and-reload`, D14); `secrets.lookup` (только `--debug-secrets`), `secrets.backend.selected`,
 `secrets.backend.unavailable`, `secrets.backend.plaintext`, `secrets.file.refused` (поля и условия —

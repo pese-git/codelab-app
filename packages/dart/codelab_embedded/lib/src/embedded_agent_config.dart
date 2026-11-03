@@ -54,6 +54,9 @@ final class EmbeddedHostServices {
     this.closeHttpOnDispose = false,
     this.mcp,
     this.projectFiles,
+    this.agentConfigPaths,
+    this.configSource,
+    this.closeConfigSource,
   });
 
   /// Локальный env хоста: базовое окружение инструментов ядра.
@@ -85,6 +88,26 @@ final class EmbeddedHostServices {
 
   final McpConnector? mcp;
   final ProjectFilesSource? projectFiles;
+
+  /// Пути конфигурации агента для PERM-11 (design.md change
+  /// `add-config-writer-and-reload`, D8): открыватель настольных хостов
+  /// строит их `agentConfigPathsFor` из тех же входов, что загрузка конфига.
+  /// `null` — у сценарных открывателей `$CODELAB_HOME` не читается, защищает
+  /// только список §7.6.1.
+  final AgentConfigPaths? agentConfigPaths;
+
+  /// Источник перезагрузки конфига (change `add-config-writer-and-reload`,
+  /// D7, D13): открыватель настольных хостов создаёт `FileConfigSource` после
+  /// успешной загрузки. Если задан, `createEmbeddedAgent` строит `modelsFor`
+  /// над конфигом, а ядро получает источник в `AgentCoreServices.config`.
+  /// `null` — у сценарных открывателей перезагрузки нет.
+  final ConfigSource? configSource;
+
+  /// Закрытие [configSource] (наблюдатели, таймеры). Источник — класс
+  /// `dart:io`, поэтому web-безопасный пакет знает только эту функцию; её
+  /// зовёт `EmbeddedAgent.dispose()` отдельным шагом `config_source` после
+  /// `runtime.dispose()`. Должна быть идемпотентной.
+  final Future<void> Function()? closeConfigSource;
 }
 
 /// Невалидная конфигурация встроенного агента: проблемы загрузчика без

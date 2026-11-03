@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
-import 'literal_secret_rule.dart';
-
 /// Предконфигурация провайдера, заданная флагами `serve` (`--provider-type`,
 /// `--provider-config`).
 ///

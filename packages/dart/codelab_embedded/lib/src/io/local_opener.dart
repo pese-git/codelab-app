@@ -30,8 +30,11 @@ import '../embedded_agent_config.dart';
 /// временный. [debugSecrets] включает `secrets.lookup` (`--debug-secrets`;
 /// `CODELAB_DEBUG_SECRETS=1` читается здесь же). [httpClient] — шов тестов
 /// (`MockClient`): переданный клиент агент не закрывает, созданный
-/// самостоятельно — закрывает в `dispose` (D6). Невалидный конфиг, `~user` в
-/// `CODELAB_HOME` и недоступное хранилище секретов дают
+/// самостоятельно — закрывает в `dispose` (D6). [clock] — шов детерминизма
+/// (PKG-6): часы сессий, MCP и таймеров источника конфигурации; тест
+/// передаёт `FakeClock` и по `pendingTimers` проверяет, что `dispose` не
+/// оставил таймеров (change `add-config-writer-and-reload`, D13). Невалидный
+/// конфиг, `~user` в `CODELAB_HOME` и недоступное хранилище секретов дают
 /// [EmbeddedAgentConfigException]; профиль вне `embedded-*` —
 /// `HostWiringException`. Нет ключа провайдера — не ошибка открытия: первый ход
 /// завершается ошибкой провайдера с именем секрета (D13, п. 2).
@@ -40,6 +43,7 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
   required Logger logger,
   bool debugSecrets = false,
   web.Client? httpClient,
+  Clock clock = const SystemClock(),
 }) => ({required String cwd, required String hostProfile}) async {
   // Чужой профиль отвергается до загрузки конфига, чтения секретов и
   // создания HTTP-клиента.
@@ -85,9 +89,21 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
   // Ресурсы — только после успешной загрузки конфига и выбора хранилища.
   final owned = httpClient == null;
   final http = httpClient ?? web.Client();
-  const clock = SystemClock();
   final env = LocalExecutionEnv(cwd: cwd, hostEnvironment: environment);
+  // Источник перезагрузки (D7, D13): параметры загрузки те же, что у
+  // `ConfigLoader().load` выше, а наблюдатель стартует в конструкторе, поэтому
+  // создаётся сразу после стартовой загрузки и внутри `try`: любой срыв
+  // открытия дальше закрывает его до проброса ошибки.
+  FileConfigSource? source;
   try {
+    source = FileConfigSource(
+      initial: loaded,
+      cwd: cwd,
+      environment: environment,
+      clock: clock,
+      logger: logger,
+    );
+    final watching = source;
     return await createEmbeddedAgent(
       config: EmbeddedAgentConfig(
         hostProfile: hostProfile,
@@ -125,13 +141,23 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
           clock: clock,
         ),
         projectFiles: ProjectFilesLoader(home: home, local: env),
+        // PERM-11 (D8): что агент перечитывает на лету, модель не правит без
+        // человека; те же входы, что у загрузки конфига выше.
+        agentConfigPaths: agentConfigPathsFor(
+          cwd: cwd,
+          environment: environment,
+        ),
+        configSource: source,
+        closeConfigSource: watching.close,
       ),
     );
   } catch (_) {
     // Ошибка до готовности агента (неверный профиль, сбой сборки): агента
     // у вызывающего не будет, поэтому созданный здесь клиент закрывается.
     // `close` у клиентов идемпотентен, повторное закрытие внутри сборки
-    // безвредно.
+    // безвредно. Источник закрывается после освобождения ядра (если оно
+    // было собрано) и до проброса ошибки: утечки наблюдателя нет (D13).
+    await source?.close();
     if (owned) {
       http.close();
     }

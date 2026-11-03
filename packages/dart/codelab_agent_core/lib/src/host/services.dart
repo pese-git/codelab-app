@@ -1,6 +1,9 @@
+import '../config/config_source.dart';
 import '../env/execution_env.dart';
 import '../llm/model_catalog.dart';
+import '../llm/stream_function.dart';
 import '../mcp/mcp_connector.dart';
+import '../permissions/agent_config_paths.dart';
 import '../permissions/gate.dart';
 import '../project/project_files.dart';
 import '../secrets/secret_resolver.dart';
@@ -8,6 +11,14 @@ import '../session/session_store.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
 import '../util/logger.dart';
+
+/// Функция модели и каталог, которые хост строит по `CoreConfig`
+/// (design.md change `add-config-writer-and-reload`, D8).
+///
+/// Почему запись: `http.Client` и сервисы LLM принадлежат хосту (PKG-6), ядро
+/// их не создаёт. Хост с источником конфига собирает пару одним замыканием
+/// `modelsFor` для старта и для каждой применённой перезагрузки.
+typedef ConfiguredModels = ({StreamFunction stream, ModelCatalog catalog});
 
 /// Всё внешнее, что хост передаёт ядру (`agent-core-architecture` §10.3).
 ///
@@ -29,6 +40,8 @@ final class AgentCoreServices {
     this.mcp,
     this.projectFiles,
     this.secrets,
+    this.config,
+    this.agentConfigPaths,
   });
 
   /// Local | ACP client | memory (tests).
@@ -79,4 +92,26 @@ final class AgentCoreServices {
   /// хранилища, тесты): сервер со ссылкой не подключается, причина
   /// `no secret store`.
   final SecretResolver? secrets;
+
+  /// Источник конфигурации работающего агента (design.md change
+  /// `add-config-writer-and-reload`, D7, D8).
+  ///
+  /// Почему порт сервисов: файлы и наблюдатель — забота хоста, а ядро только
+  /// подписывается на сигнал и вызывает загрузку. `null` — перезагрузки нет:
+  /// подписки, `reloadConfig`/`checkConfig` и команды `/config` нет
+  /// (`--llm-script`, тесты, мобильные и web-хосты). С источником
+  /// `buildAgentCore` требует `modelsFor` (`HostWiringException`). Владелец —
+  /// хост: он закрывает источник после `runtime.dispose()`.
+  final ConfigSource? config;
+
+  /// Пути конфигурации агента для PERM-11 (design.md change
+  /// `add-config-writer-and-reload`, D8; `agent-core-architecture` §7.6.1):
+  /// то, что агент перечитывает на лету, модель не правит без человека.
+  /// Хост строит значение одной функцией (`agentConfigPathsFor` пакета
+  /// `codelab_agent_io`) из тех же входов, что источник конфига. Почему поле
+  /// сервисов, а не `HostProfile`: пути — данные запуска процесса, профиль
+  /// описывает возможности платформы. `null` — хост пути не передал
+  /// (`--llm-script`, web, тесты): действует список §7.6.1 относительно
+  /// корня сессии.
+  final AgentConfigPaths? agentConfigPaths;
 }

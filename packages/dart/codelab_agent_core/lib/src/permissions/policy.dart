@@ -1,10 +1,13 @@
 import '../cancel/cancel_token.dart';
+import '../env/execution_env.dart' show PathResolver;
 import '../loop/agent_events.dart' show ToolOutcome;
 import '../loop/loop_config.dart';
 import '../tools/agent_tool.dart';
 import '../tools/builtin/common.dart' show pathPattern;
 import 'critical_patterns.dart';
 import '../util/logger.dart';
+import '../util/posix_path.dart';
+import 'agent_config_paths.dart';
 import 'gate.dart';
 import 'modes.dart';
 import 'pattern.dart';
@@ -44,16 +47,28 @@ final class Denied extends PolicyOutcome {
 /// Почему функция, а не вызов напрямую: тесты политики подменяют её, чтобы
 /// проверять порядок правил без разбора команд. [cwd] — корень сессии:
 /// цели команды (`.codelab/config.yaml`) сравниваются относительно него.
+/// [agentConfig] — пути конфигурации агента от хоста (PERM-11, D8) или `null`.
 typedef CriticalFinder =
-    String? Function(AgentTool tool, Map<String, Object?> args, String cwd);
+    String? Function(
+      AgentTool tool,
+      Map<String, Object?> args,
+      String cwd,
+      AgentConfigScope? agentConfig,
+    );
 
 /// Критические шаблоны команды `exec` по таблице §7.6 (шаг 3 `decide`).
 String? defaultCriticalFinder(
   AgentTool tool,
   Map<String, Object?> args,
   String cwd,
+  AgentConfigScope? agentConfig,
 ) => switch ((tool.name, args['command'])) {
-  ('exec', final String command) => findCritical(command, cwd: cwd)?.label,
+  ('exec', final String command) => findCritical(
+    command,
+    cwd: cwd,
+    commandCwd: args['cwd'] as String?,
+    agentConfig: agentConfig,
+  )?.label,
   _ => null,
 };
 
@@ -77,6 +92,8 @@ final class PermissionPolicy {
     PermissionDecisionStore? decisions,
     required this.logger,
     this.findCritical = defaultCriticalFinder,
+    this.agentConfigPaths,
+    this.pathResolver,
   }) : decisions = decisions ?? PermissionDecisionStore();
 
   /// Режим сессии; смена действует со следующего вызова.
@@ -96,6 +113,16 @@ final class PermissionPolicy {
 
   /// Критические шаблоны команд (§7.6).
   final CriticalFinder findCritical;
+
+  /// Пути конфигурации агента от хоста (PERM-11, D8); `null` — хост их не
+  /// передал, действует только список §7.6.1 относительно корня сессии.
+  final AgentConfigPaths? agentConfigPaths;
+
+  /// Тот же `PathResolver`, которым `BoundedEnv` канонизирует цель, но из env
+  /// хоста: через `env` сессии защищаемые пути вне корня не раскрыть
+  /// (containment их отвергает). `null` — ссылки не раскрываются, сравнение
+  /// только по тексту путей (fail-open лишь для env без `PathResolver`).
+  final PathResolver? pathResolver;
 
   final _turnAllow = <String>{};
   final _turnDeny = <String>{};
@@ -186,9 +213,13 @@ final class PermissionPolicy {
       return const Denied('plan mode: changes are not allowed');
     }
     final effective = effectiveMode;
+    // Область защищаемых путей хоста пересчитывается на каждой проверке
+    // (§7.6.1, D8): каталог мог стать ссылкой после старта.
+    final scope = await _scopeFor(tool, args);
     // Критический путь правки (§7.6.1, PERM-11): конфигурацию агента меняет
     // только человек, «разрешить всегда» на неё не действует.
-    if (_agentConfigTarget(tool, args, ctx.env.cwd) case final path?) {
+    if (await _agentConfigTarget(tool, args, ctx.env.cwd, scope)
+        case final path?) {
       if (effective == PermissionMode.autopilot || gate == null) {
         return Denied('Editing agent configuration requires a human: $path');
       }
@@ -201,7 +232,8 @@ final class PermissionPolicy {
         allowAlways: false,
       );
     }
-    if (findCritical(tool, args, ctx.env.cwd) case final label?) {
+    if (await _criticalLabel(tool, args, ctx.env.cwd, scope)
+        case final label?) {
       if (effective == PermissionMode.autopilot) {
         return Denied('critical command blocked in autopilot: $label');
       }
@@ -238,20 +270,69 @@ final class PermissionPolicy {
     };
   }
 
-  /// Цель правки из списка §7.6.1 относительно корня сессии или `null`.
-  /// Правку файла узнаём по `lockPath`: путь блокируют именно инструменты,
-  /// которые меняют файл (`write`, `edit`).
-  static String? _agentConfigTarget(
+  /// Область защищаемых путей хоста для вызова, который может писать:
+  /// инструмент правки файла (`lockPath`) или уровня `exec`. Остальным
+  /// (чтение, сеть) пути хоста не нужны, поэтому их IO не делается.
+  Future<AgentConfigScope?> _scopeFor(
+    AgentTool tool,
+    Map<String, Object?> args,
+  ) async {
+    final config = agentConfigPaths;
+    if (config == null ||
+        tool.lockPath(args) == null && tool.tierOf(args) != ToolTier.exec) {
+      return null;
+    }
+    return AgentConfigScope.resolve(config, pathResolver);
+  }
+
+  /// Критические шаблоны команды (§7.6) с путями хоста в двух фазах: первый
+  /// проход собирает проверенные пути, [AgentConfigScope.canonicalizeSeen]
+  /// раскрывает их ссылки, второй проход сравнивает ещё и канонические формы
+  /// (ссылка на защищаемый файл из другого места не прячет цель).
+  Future<String?> _criticalLabel(
     AgentTool tool,
     Map<String, Object?> args,
     String cwd,
-  ) {
+    AgentConfigScope? scope,
+  ) async {
+    if (scope == null) {
+      return findCritical(tool, args, cwd, null);
+    }
+    findCritical(tool, args, cwd, scope);
+    await scope.canonicalizeSeen(pathResolver);
+    return findCritical(tool, args, cwd, scope);
+  }
+
+  /// Цель правки из списка §7.6.1 или `agentConfigPaths` хоста либо `null`.
+  /// Правку файла узнаём по `lockPath`: путь блокируют именно инструменты,
+  /// которые меняют файл (`write`, `edit`). Цель сравнивается после раскрытия
+  /// `~` и канонизации (тот же результат, что для containment); возвращается
+  /// путь для сообщения — относительный внутри корня, иначе абсолютный.
+  Future<String?> _agentConfigTarget(
+    AgentTool tool,
+    Map<String, Object?> args,
+    String cwd,
+    AgentConfigScope? scope,
+  ) async {
     final raw = tool.lockPath(args);
     if (raw == null) {
       return null;
     }
-    final relative = pathPattern(raw, cwd);
-    return isAgentConfigPath(relative) ? relative : null;
+    final expanded = scope?.expand(raw) ?? raw;
+    final shown = pathPattern(expanded, cwd);
+    if (isAgentConfigPath(shown)) {
+      return shown;
+    }
+    if (scope == null) {
+      return null;
+    }
+    final abs = normalizePath(cwd, expanded);
+    if (abs == null) {
+      return null;
+    }
+    scope.covers(abs);
+    await scope.canonicalizeSeen(pathResolver);
+    return scope.covers(abs) ? shown : null;
   }
 
   Future<PolicyOutcome> _ask(

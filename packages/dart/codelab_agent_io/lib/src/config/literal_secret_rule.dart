@@ -14,39 +14,13 @@
 /// значение литеральный секрет, его нельзя записывать в конфиг (нужна ссылка
 /// `${secret:…}` или `${VAR}`). Ложное срабатывание (`X-Keyboard-Layout`)
 /// обходится ссылкой `${VAR}`: отказ дешевле, чем записанный токен.
+///
+/// Сами функции имён (`isSecretLikeName`, `hasSecretReference`) перенесены в
+/// ядро (`secret_name_rule.dart`, публичный барель): тем же правилом
+/// пользуется перезагрузка для определения «провайдер с ключом» (D8, R0-4).
 library;
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
-
-/// Корни секретных имён после нормализации (D5). `apikey` и `privatetoken`
-/// избыточны (покрыты `key` и `token`) и оставлены ради дословной сверки
-/// со списком D5.
-const _secretNameParts = [
-  'token',
-  'secret',
-  'password',
-  'apikey',
-  'auth',
-  'cookie',
-  'key',
-  'privatetoken',
-];
-
-/// Секретное ли имя заголовка или переменной (`Authorization`,
-/// `Proxy-Authorization`, `X-Api-Key`, `GITHUB_TOKEN`, `Cookie`).
-bool isSecretLikeName(String name) {
-  final normalized = name.toLowerCase().replaceAll(RegExp('[-_]'), '');
-  return _secretNameParts.any(normalized.contains);
-}
-
-final _reference = RegExp(r'\$\{[^}]+\}');
-
-/// Есть ли в значении ссылка `${secret:…}` или `${VAR}`.
-///
-/// Известная граница до 8.11 (D5, R1-1): смешанное значение
-/// `Bearer sk-… ${X}` содержит ссылку и поэтому проходит; пункты 2–3 CFG-9
-/// по шаблонам §12.4 остаются за 8.11.
-bool hasSecretReference(String value) => _reference.hasMatch(value);
 
 /// Литеральные секреты в итоговом поддереве документа, изменённые записью
 /// (design.md change `add-config-writer-and-reload`, D5, «Секреты»; CFG-9).

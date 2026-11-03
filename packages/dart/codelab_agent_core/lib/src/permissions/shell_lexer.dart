@@ -102,6 +102,9 @@ final class ShellSegment {
     this.redirections = const [],
     this.privileged = false,
     this.nested = const [],
+    this.launcherDir,
+    this.launcherOutputs = const [],
+    this.riskyEnvironment = false,
   });
 
   /// Слова без кавычек, начиная с имени команды; пустой список у сегмента
@@ -116,6 +119,22 @@ final class ShellSegment {
 
   /// Вложенные команды сегмента.
   final List<ShellScript> nested;
+
+  /// Каталог, в который лаунчер переводит команду: значение `env -C DIR` /
+  /// `--chdir`, `sudo -D DIR` / `--chdir`; `null` — лаунчер каталог не
+  /// менял. Нужен, чтобы относительные пути команды считались от него
+  /// (PERM-11, §7.6.1; R5-4).
+  final String? launcherDir;
+
+  /// Файлы, в которые пишет сам лаунчер (`time -o FILE`, `--output FILE`):
+  /// это цели записи, а не слова команды (PERM-11, §7.6.1; R5-4).
+  final List<String> launcherOutputs;
+
+  /// Среди присваиваний сегмента (`NAME=… cmd`, `env NAME=…`, `export
+  /// NAME=…`) есть переменная, подменяющая поведение git так, что итог
+  /// неизвестен: `GIT_CONFIG_*`, `GIT_EXEC_PATH`, `GIT_DIR`, `GIT_WORK_TREE`.
+  /// Правила PERM-11 считают такой сегмент критичным всегда (fail closed).
+  final bool riskyEnvironment;
 
   /// Базовое имя команды (`/bin/rm` → `rm`) или `null` без слов.
   String? get commandName => words.isEmpty ? null : baseName(words.first);
@@ -595,7 +614,32 @@ final class _ScriptBuilder {
     final all = [for (final word in _words) word.value];
     final (:privileged, :start) = _stripLaunchers(all);
     final words = all.sublist(start);
+    final (dir: launcherDir, outputs: launcherOutputs) = _launcherPaths(
+      all.sublist(0, start),
+    );
     final nested = [..._nested];
+    var risky = false;
+    // Присваивания: в префиксе (`NAME=… cmd`, `env NAME=…`) и аргументы
+    // `export`/`declare`. Значение переменной-команды — вложенный текст.
+    final assigned = [
+      for (final w in all.sublist(0, start))
+        if (_assignment.hasMatch(w)) w,
+      if (words.isNotEmpty && _declarations.contains(baseName(words.first)))
+        for (final w in words.skip(1))
+          if (_assignment.hasMatch(w)) w,
+    ];
+    for (final w in assigned) {
+      final eq = w.indexOf('=');
+      final key = w.substring(0, eq);
+      if (_riskyEnvironment.hasMatch(key)) {
+        risky = true;
+      } else if (_commandEnvironment.contains(key)) {
+        final value = w.substring(eq + 1).replaceFirst(RegExp(r'^\|+'), '');
+        if (value.isNotEmpty) {
+          nested.add(_Lexer(value).parse(depth + 1));
+        }
+      }
+    }
     if (words.isNotEmpty) {
       final name = baseName(words.first);
       if (shellNames.contains(name)) {
@@ -605,6 +649,10 @@ final class _ScriptBuilder {
         }
       } else if (name == 'eval' && words.length > 1) {
         nested.add(_Lexer(words.sublist(1).join(' ')).parse(depth + 1));
+      } else {
+        for (final text in _commandOptionValues(name, words)) {
+          nested.add(_Lexer(text).parse(depth + 1));
+        }
       }
     }
     return ShellSegment(
@@ -612,8 +660,50 @@ final class _ScriptBuilder {
       redirections: List.unmodifiable(_redirections),
       privileged: privileged,
       nested: List.unmodifiable(nested),
+      launcherDir: launcherDir,
+      launcherOutputs: List.unmodifiable(launcherOutputs),
+      riskyEnvironment: risky,
     );
   }
+}
+
+/// Значения опций снятых лаунчеров, важные для путей: каталог (`env -C`,
+/// `sudo -D`, `--chdir`) и файлы вывода (`time -o`, `--output`). Слова
+/// [prefix] — всё, что [_stripLaunchers] снял с начала сегмента.
+({String? dir, List<String> outputs}) _launcherPaths(List<String> prefix) {
+  String? dir;
+  final outputs = <String>[];
+  String? launcher;
+  for (var i = 0; i < prefix.length; i++) {
+    final word = prefix[i];
+    if (!word.startsWith('-') && !_assignment.hasMatch(word)) {
+      launcher = baseName(word);
+      continue;
+    }
+    String? value;
+    var long = '';
+    if (word.contains('=') && word.startsWith('--')) {
+      long = word.substring(0, word.indexOf('='));
+      value = word.substring(word.indexOf('=') + 1);
+    } else if (i + 1 < prefix.length) {
+      long = word;
+      value = prefix[i + 1];
+    }
+    if (value == null) {
+      continue;
+    }
+    final chdir = switch (launcher) {
+      'env' => long == '-C' || long == '--chdir',
+      'sudo' || 'doas' => long == '-D' || long == '--chdir',
+      _ => false,
+    };
+    if (chdir) {
+      dir = value;
+    } else if (launcher == 'time' && (long == '-o' || long == '--output')) {
+      outputs.add(value);
+    }
+  }
+  return (dir: dir, outputs: outputs);
 }
 
 /// Индекс строки команды у `sh -c CMD` (в том числе `-lc`, `-ec`): `null`,
@@ -746,3 +836,111 @@ int _skipOptions(
   }
   return i;
 }
+
+/// Ключи конфигурации `git`, значение которых git исполняет как команду
+/// (`git -c core.pager=…`).
+final _gitCommandKey = RegExp(
+  r'^(core\.(pager|fsmonitor|sshcommand|editor|askpass|gitproxy)|'
+  r'interactive\.difffilter|diff\.external|diff\..*\.(textconv|command)|sequence\.editor|alias\..+|'
+  r'credential\.helper|gpg\..*program|merge\..*\.driver|'
+  r'filter\..*\.(clean|smudge|process)|pager\..+|web\.browser|'
+  r'(browser|difftool|mergetool)\..*\.cmd|receive\.procreceive)$',
+  caseSensitive: false,
+);
+
+/// Значения опций, которые сами исполняются как команды: `git -c KEY=CMD`
+/// для ключей [_gitCommandKey] (у `alias.*` ведущий `!` снимается),
+/// `rg --pre CMD`, `find -exec|-execdir|-ok|-okdir CMD … ;|+`. Каждое
+/// разбирается как вложенный текст той же семантикой, что `sh -c`, поэтому
+/// его сегменты проходят все правила PERM-11 и §7.6 (R5-4, повторное ревью).
+Iterable<String> _commandOptionValues(String? name, List<String> words) sync* {
+  switch (name) {
+    case 'git':
+      for (var i = 1; i < words.length && words[i].startsWith('-'); i++) {
+        final w = words[i];
+        final glued = w.length > 2 && w.startsWith('-c') && w[2] != '-';
+        if ((w == '-c' && i + 1 < words.length) || glued) {
+          // `-c k=v` и слитная форма `-ck=v`.
+          final value = glued ? w.substring(2) : words[++i];
+          final eq = value.indexOf('=');
+          if (eq > 0 && _gitCommandKey.hasMatch(value.substring(0, eq))) {
+            final command = value.substring(eq + 1);
+            yield command.startsWith('!') ? command.substring(1) : command;
+          }
+        } else if (const {
+          '-C',
+          '--git-dir',
+          '--work-tree',
+          '--namespace',
+        }.contains(w)) {
+          i++;
+        }
+      }
+    case 'rg':
+      for (var i = 1; i < words.length; i++) {
+        if (words[i] == '--pre' && i + 1 < words.length) {
+          yield words[++i];
+        } else if (words[i].startsWith('--pre=')) {
+          yield words[i].substring('--pre='.length);
+        }
+      }
+    case 'watch':
+      // Остаток после опций — строка команды (`watch -n 1 "cmd"`).
+      final command = <String>[];
+      for (var i = 1; i < words.length; i++) {
+        final w = words[i];
+        if (command.isEmpty && w.startsWith('-')) {
+          if (w == '-n' || w == '--interval') {
+            i++;
+          }
+        } else {
+          command.add(w);
+        }
+      }
+      if (command.isNotEmpty) {
+        yield command.join(' ');
+      }
+    case 'script':
+      for (var i = 1; i < words.length; i++) {
+        if ((words[i] == '-c' || words[i] == '--command') &&
+            i + 1 < words.length) {
+          yield words[++i];
+        } else if (words[i].startsWith('--command=')) {
+          yield words[i].substring('--command='.length);
+        }
+      }
+    case 'find':
+      for (var i = 1; i < words.length; i++) {
+        if (const {'-exec', '-execdir', '-ok', '-okdir'}.contains(words[i])) {
+          final command = <String>[];
+          for (i++; i < words.length; i++) {
+            if (words[i] == ';' || words[i] == '+') {
+              break;
+            }
+            command.add(words[i]);
+          }
+          if (command.isNotEmpty) {
+            yield command.join(' ');
+          }
+        }
+      }
+  }
+}
+
+/// Встроенные команды, задающие переменные окружения следующим командам
+/// цепочки (`export GIT_PAGER=…; git log`).
+const _declarations = {'export', 'declare', 'typeset', 'readonly', 'local'};
+
+/// Переменные, значение которых программы исполняют как команду (pager,
+/// редакторы, ssh, askpass, `LESSOPEN`): разбираются как вложенный `sh -c`.
+const _commandEnvironment = {
+  'GIT_PAGER', 'PAGER', 'GIT_EXTERNAL_DIFF', 'GIT_EDITOR', 'EDITOR', 'VISUAL',
+  'GIT_SEQUENCE_EDITOR', 'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_ASKPASS',
+  'SSH_ASKPASS', 'LESSOPEN', 'LESSCLOSE', //
+};
+
+/// Переменные, меняющие поведение git неизвестным образом.
+final _riskyEnvironment = RegExp(
+  r'^(GIT_CONFIG_COUNT|GIT_CONFIG_KEY_\d+|GIT_CONFIG_VALUE_\d+|'
+  r'GIT_CONFIG_PARAMETERS|GIT_EXEC_PATH|GIT_DIR|GIT_WORK_TREE)$',
+);
