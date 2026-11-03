@@ -597,4 +597,157 @@ providers:
       );
     });
   });
+
+  // Живая перезагрузка: источник конфига и `modelsFor` хоста (agent-binary
+  // «Перезагрузка конфига в serve»; задача 5.11, design.md change
+  // `add-config-writer-and-reload`, D8, D13).
+  group('config reload wiring', () {
+    /// Хост со счётчиком `modelsFor`: функция модели — скрипт, каталог —
+    /// из конфигурации (как у настоящей фабрики).
+    Future<(AgentHost, AcpPeer, List<CoreConfig>)> startCounting(
+      ServeOptions options,
+      String reply,
+    ) async {
+      final calls = <CoreConfig>[];
+      final script = ScriptedStreamFunction.fromJson({
+        'steps': [
+          {
+            'reply': [
+              {'text': reply},
+            ],
+            'stopReason': 'stop',
+          },
+        ],
+      });
+      final host = await AgentHost.build(
+        options,
+        logger: RecordingLogger(),
+        loaded: loadServeConfig(options, cwd: temp.path),
+        cwd: temp.path,
+        modelsFor: (config) {
+          calls.add(config);
+          return (
+            stream: script.call,
+            catalog: StaticModelCatalog(
+              config.providers,
+              logger: RecordingLogger(),
+            ),
+          );
+        },
+      );
+      final link = InProcessAcpLink();
+      unawaited(host.createServer().serve(link.agent));
+      await link.client.start();
+      addTearDown(() => host.shutdown(grace: Duration.zero));
+      return (host, AcpPeer(link.client), calls);
+    }
+
+    test('the initial stream function and catalog come from ONE modelsFor '
+        'call; a reload calls it again (scenario "Начальные значения из '
+        'одного вызова")', () async {
+      final path = writeConfig(providers);
+      final (host, peer, calls) = await startCounting(
+        options(['--config', path]),
+        'from-modelsFor',
+      );
+
+      expect(calls, hasLength(1));
+      expect(host.core.runtime.models.models.map((m) => m.id.value), [
+        'openai/gpt-5',
+        'anthropic/claude-sonnet-4',
+      ]);
+      final session = await peer.openSession(temp.path);
+      expect(await peer.prompt(session, 'hi'), 'end_turn');
+      expect(peer.agentText(session), 'from-modelsFor');
+      expect(calls, hasLength(1), reason: 'a turn does not rebuild models');
+
+      File(path).writeAsStringSync(
+        providers.replaceFirst('gpt-5: {}', 'gpt-5: {}\n      gpt-6: {}'),
+      );
+      final report = await host.core.runtime.reloadConfig();
+
+      expect(report.outcome, ConfigReloadOutcome.applied);
+      expect(calls, hasLength(2));
+      expect(host.core.runtime.models.models.map((m) => m.id.value), [
+        'openai/gpt-5',
+        'openai/gpt-6',
+        'anthropic/claude-sonnet-4',
+      ]);
+    });
+
+    test('the default modelsFor builds the catalog of the new snapshot '
+        '(a model added to the file appears after a reload)', () async {
+      final path = writeConfig(providers);
+      final (host, _) = await start(options(['--config', path]));
+
+      File(path).writeAsStringSync(
+        providers.replaceFirst('gpt-5: {}', 'gpt-5: {}\n      gpt-6: {}'),
+      );
+      final report = await host.core.runtime.reloadConfig();
+
+      expect(report.outcome, ConfigReloadOutcome.applied);
+      expect(
+        host.core.runtime.models.models.map((m) => m.id.value),
+        contains('openai/gpt-6'),
+      );
+    });
+
+    test('the source is closed after shutdown (changes is done); not '
+        'before', () async {
+      final path = writeConfig(providers);
+      final (host, _) = await start(options(['--config', path]));
+      final source = host.configSource;
+      expect(source, isNotNull);
+      var done = false;
+      source!.changes.listen((_) {}, onDone: () => done = true);
+      await pumpEventQueue();
+      expect(done, isFalse);
+
+      await host.shutdown(grace: Duration.zero);
+      await pumpEventQueue();
+
+      expect(done, isTrue);
+    });
+
+    test('config.watch: false still gives a source (/config reload works) '
+        'and it is closed after shutdown', () async {
+      final path = writeConfig('${providers}config:\n  watch: false\n');
+      final (host, _) = await start(options(['--config', path]));
+      var done = false;
+      host.configSource!.changes.listen((_) {}, onDone: () => done = true);
+
+      await host.shutdown(grace: Duration.zero);
+      await pumpEventQueue();
+
+      expect(done, isTrue);
+    });
+
+    test('--llm-script has no source: no reload, no config command '
+        '(scenario "Сценарий без перезагрузки")', () async {
+      final path = writeConfig(providers);
+      final (host, peer) = await start(
+        options([
+          '--llm-script',
+          'test/llm_scripts/hello.json',
+          '--config',
+          path,
+        ]),
+      );
+
+      expect(host.configSource, isNull);
+      await peer.openSession(temp.path);
+      await pumpEventQueue();
+      final names = [
+        for (final n in peer.notifications)
+          if (n.params case {
+            'update': {
+              'sessionUpdate': 'available_commands_update',
+              'availableCommands': final List<Object?> commands,
+            },
+          })
+            for (final c in commands) (c! as Map)['name'],
+      ];
+      expect(names, isNot(contains('config')));
+    });
+  });
 }

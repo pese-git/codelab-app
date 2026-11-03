@@ -16,5 +16,6 @@ Future<AgentHost> buildHost(
   options,
   logger: logger,
   loaded: loadServeConfig(options, cwd: cwd),
+  cwd: cwd,
   httpClient: httpClient,
 );

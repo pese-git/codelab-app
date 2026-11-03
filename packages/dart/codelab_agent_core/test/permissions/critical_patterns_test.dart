@@ -268,11 +268,21 @@ void main() {
       );
     });
 
-    test('чтение и копирование из конфигурации не ограничены', () {
+    test('чтение конфигурации не ограничено, кроме белого списка (R5-4)', () {
       expect(findCritical('cat .codelab/config.yaml'), isNull);
-      expect(findCritical('cp .codelab/config.yaml backup.yaml'), isNull);
-      expect(findCritical("sed 's/a/b/' .codelab/config.yaml"), isNull);
       expect(findCritical('echo x > .codelab/notes.md'), isNull);
+      // `cp` и `sed` не в белом списке чтения: решение пользователя
+      // 2026-11-03 — критичны, даже когда путь только источник.
+      for (final command in [
+        'cp .codelab/config.yaml backup.yaml',
+        "sed 's/a/b/' .codelab/config.yaml",
+      ]) {
+        expect(
+          findCritical(command)?.label,
+          'write to agent configuration',
+          reason: command,
+        );
+      }
     });
 
     test('isAgentConfigPath', () {

@@ -22,6 +22,7 @@ String kindOf(AgentEvent event) => switch (event) {
   TurnEnded() => 'turn.end',
   ContextCompacted() => 'compacted',
   SessionTitleChanged() => 'title',
+  ModelOptionsChanged() => 'model.options',
 };
 
 void main() {

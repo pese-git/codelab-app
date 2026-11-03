@@ -126,6 +126,100 @@ void main() {
     );
   });
 
+  group('invalidate', () {
+    test('drops the cache: the next request reads the store again', () async {
+      // Сценарий «Сброс кэша» (agent-secrets; design.md change
+      // `add-config-writer-and-reload`, D8).
+      final store = FakeSecretStore(values: {'codelab/a': 'v1'});
+      final r = resolver(store);
+      expect(
+        ((await r.secret('codelab/a', purpose: 'p')) as SecretFound).value,
+        'v1',
+      );
+      store.values['codelab/a'] = 'v2';
+
+      r.invalidate();
+      final lookup = await r.secret('codelab/a', purpose: 'p');
+
+      expect((lookup as SecretFound).value, 'v2');
+      expect(lookup.source, 'fake');
+      expect(store.reads, ['codelab/a', 'codelab/a']);
+    });
+
+    test('drops a cached value of the override variable too', () async {
+      final env = <String, String>{'CODELAB_SECRET_CODELAB_A': 'e1'};
+      final r = resolver(FakeSecretStore(), environment: env);
+      await r.secret('codelab/a', purpose: 'p');
+      env['CODELAB_SECRET_CODELAB_A'] = 'e2';
+
+      expect(
+        ((await r.secret('codelab/a', purpose: 'p')) as SecretFound).value,
+        'e1',
+      );
+      r.invalidate();
+      expect(
+        ((await r.secret('codelab/a', purpose: 'p')) as SecretFound).value,
+        'e2',
+      );
+    });
+
+    test('a read begun before invalidate gives its value to its callers but '
+        'does not enter the cache', () async {
+      // Сценарий «Чтение во время сброса».
+      final gate = Completer<void>();
+      final store = FakeSecretStore(values: {'codelab/a': 'v1'}, gate: gate);
+      final r = resolver(store);
+
+      final early = r.secret('codelab/a', purpose: 'p');
+      await _flush();
+      r.invalidate();
+      gate.complete();
+      final earlyLookup = await early;
+      store.values['codelab/a'] = 'v2';
+      final next = await r.secret('codelab/a', purpose: 'p');
+
+      expect((earlyLookup as SecretFound).value, 'v1');
+      expect((next as SecretFound).value, 'v2');
+      expect(next.source, 'fake', reason: 'not served from the stale cache');
+      expect(store.reads, ['codelab/a', 'codelab/a']);
+    });
+
+    test('a request after invalidate does not join the stale read', () async {
+      // Single-flight действует внутри поколения (design.md D8).
+      final gate = Completer<void>();
+      final store = FakeSecretStore(values: {'codelab/a': 'v1'}, gate: gate);
+      final r = resolver(store);
+
+      final early = r.secret('codelab/a', purpose: 'p');
+      await _flush();
+      store.values['codelab/a'] = 'v2';
+      r.invalidate();
+      final late = r.secret('codelab/a', purpose: 'p');
+      await _flush();
+      gate.complete();
+
+      expect(store.reads, ['codelab/a', 'codelab/a']);
+      expect(((await early) as SecretFound).value, 'v2');
+      expect(((await late) as SecretFound).value, 'v2');
+    });
+
+    test('keeps single flight inside one generation', () async {
+      final gate = Completer<void>();
+      final store = FakeSecretStore(values: {'codelab/a': 'v'}, gate: gate);
+      final r = resolver(store)..invalidate();
+
+      final all = Future.wait([
+        r.secret('codelab/a', purpose: 'p'),
+        r.secret('codelab/a', purpose: 'p'),
+      ]);
+      await _flush();
+      gate.complete();
+      await all;
+
+      expect(store.reads, ['codelab/a']);
+    });
+  });
+
   group('single flight', () {
     test('concurrent requests of one name make one read', () async {
       final gate = Completer<void>();
