@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
@@ -9,6 +10,7 @@ import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
 import '../support/config_writer_harness.dart';
+import '../support/fake_secret_process_runner.dart';
 
 /// Запись конфига `ConfigWriter` (agent-configuration «Запись конфига
 /// ConfigWriter», сценарии «Сохранение формата», «Ключ модели с точкой»,
@@ -625,6 +627,27 @@ mcp:
       },
     );
 
+    test('число проблем одной сигнатуры выросло: лишние — новые (ревью '
+        'R3-3, D5)', () async {
+      const original =
+          '${baseConfig}mcp:\n  servers:\n'
+          '    - name: x\n      command: a\n'
+          '    - name: x\n      command: b\n';
+      h.write(h.userPath, original);
+
+      await expectLater(
+        apply([
+          const SetValue('mcp.servers', [
+            {'name': 'x', 'command': 'a'},
+            {'name': 'x', 'command': 'b'},
+            {'name': 'x', 'command': 'c'},
+          ]),
+        ]),
+        throwsA(isA<ConfigException>()),
+      );
+      expect(h.read(h.userPath), original);
+    });
+
     test('новая ошибка рядом со старой по-прежнему блокирует', () async {
       h.write(h.userPath, '${baseConfig}budget:\n  max_steps: 0\n');
 
@@ -636,14 +659,28 @@ mcp:
   });
 
   group('прежние проблемы файла не ослабляют отказы', () {
+    test('Ошибка ранней ступени: unset bogus_key записывается, прежняя '
+        'max_steps — предупреждение (R3-3, решение 2026-11-03)', () async {
+      h.write(
+        h.userPath,
+        '${baseConfig}bogus_key: 1\nbudget:\n  max_steps: 0\n',
+      );
+
+      final result = await apply([const UnsetValue('bogus_key')]);
+
+      expect(h.read(h.userPath), isNot(contains('bogus_key')));
+      expect(result.warnings.map((w) => w.key), contains('budget.max_steps'));
+    });
+
     test(
-      'Ошибка ранней ступени: правка не прячет проблему поздней ступени',
+      'Новая ошибка поздней ступени при ранней: файл не меняется (R3-3)',
       () async {
-        const original = '${baseConfig}bogus_key: 1\nbudget:\n  max_steps: 0\n';
+        final original =
+            '${baseConfig}bogus_key: 1\nbudget:\n  max_steps: 40\n';
         h.write(h.userPath, original);
 
         await expectLater(
-          apply([const UnsetValue('bogus_key')]),
+          apply([const SetValue('budget.max_steps', 0)]),
           throwsA(
             isA<ConfigException>().having(
               (e) => e.issues.map((i) => i.key),
@@ -655,6 +692,63 @@ mcp:
         expect(h.read(h.userPath), original);
       },
     );
+
+    test('ошибка ранней ступени обрывала проверку базы: unset api_key при '
+        'прежних base_url и каталоге записывается (R3-1, решение '
+        '2026-11-03)', () async {
+      const original = '''
+agent:
+  default_model: lm/m
+providers:
+  lm:
+    api_key: sk-fake-1
+    base_url: "https://u:p@ss@host/v1"
+    kind: openai-compatible
+    models:
+      m:
+        context_window: 8192
+''';
+      h.write(h.userPath, original);
+
+      final result = await apply([const UnsetValue('providers.lm.api_key')]);
+
+      expect(h.read(h.userPath), isNot(contains('api_key')));
+      expect(
+        result.warnings.map((w) => w.key),
+        containsAll(['providers.lm.base_url', 'agent.default_model']),
+      );
+    });
+
+    test('при ранней ошибке базы новая ошибка поздней ступени блокирует '
+        '(R3-1)', () async {
+      const original = '''
+agent:
+  default_model: lm/m
+providers:
+  lm:
+    api_key: sk-fake-1
+    base_url: https://host/v1
+    kind: openai-compatible
+    models:
+      m: {}
+''';
+      h.write(h.userPath, original);
+
+      await expectLater(
+        apply([
+          const UnsetValue('providers.lm.api_key'),
+          const SetValue('providers.lm.base_url', 'ftp://host/v1'),
+        ]),
+        throwsA(
+          isA<ConfigException>().having(
+            (e) => e.issues.map((i) => i.key),
+            'keys',
+            contains('providers.lm.base_url'),
+          ),
+        ),
+      );
+      expect(h.read(h.userPath), original);
+    });
 
     test('литеральный секрет отклоняется и при прежних проблемах', () async {
       const original = '${baseConfig}bogus_key: 1\n';
@@ -718,6 +812,137 @@ mcp:
 
       expect(File(h.projectPath).existsSync(), isFalse);
       expect(Directory('${h.cwd}/.codelab').existsSync(), isFalse);
+    });
+
+    test('два прежних ошибочных элемента списка в слое недоверенного проекта '
+        'не отменяют отказ untrusted_key (ревью R3-3)', () async {
+      h.write(h.userPath, baseConfig);
+      const original = 'mcp:\n  servers:\n    - command: x\n    - command: y\n';
+      h.write(h.projectPath, original);
+
+      await expectLater(
+        apply([
+          const SetValue('permissions.mode', 'bypass'),
+        ], target: ConfigTarget.project(h.cwd)),
+        throwsA(
+          isA<ConfigException>().having(
+            (e) => e.toString(),
+            'text',
+            contains('trusted_projects'),
+          ),
+        ),
+      );
+      expect(h.read(h.projectPath), original);
+    });
+
+    for (final (title, yaml) in [
+      ('name не строка', 'mcp:\n  servers:\n    - name: 5\n      command: x\n'),
+      (
+        'ключ с кавычкой в элементе',
+        'mcp:\n  servers:\n    - name: q\n      type: stdio\n'
+            '      command: x\n      a"b: 1\n',
+      ),
+      ('ключ с кавычкой на верхнем уровне', 'x"y: 1\n'),
+      ('"mode.x" рядом с mode', 'permissions:\n  "mode.x": 1\n'),
+      (
+        '"servers.x" рядом со списком',
+        'mcp:\n  "servers.x": 1\n  servers:\n    - name: s\n'
+            '      type: stdio\n      command: x\n',
+      ),
+      (
+        'имя сервера с "]" и bogus',
+        'mcp:\n  servers:\n    - name: "a]b"\n      type: stdio\n'
+            '      command: x\n      bogus: 1\n',
+      ),
+      (
+        'десять серверов с одним именем',
+        'mcp:\n  servers:\n${'    - name: d\n      type: stdio\n      command: x\n' * 10}',
+      ),
+    ]) {
+      test('порча проектного слоя ($title) не отменяет отказ при записи '
+          'permissions.mode (ревью R3-3, fail-closed)', () async {
+        h.write(h.userPath, baseConfig);
+        h.write(h.projectPath, yaml);
+
+        await expectLater(
+          apply([
+            const SetValue('permissions.mode', 'bypass'),
+          ], target: ConfigTarget.project(h.cwd)),
+          throwsA(isA<ConfigException>()),
+        );
+        expect(h.read(h.projectPath), yaml);
+      });
+    }
+
+    test('удаление испорченного элемента проходит, если кандидат проверяется '
+        'полностью (ревью R3-3)', () async {
+      h.write(
+        h.userPath,
+        '${baseConfig}mcp:\n  servers:\n'
+        '    - name: bad\n      command: x\n      a"b: 1\n',
+      );
+
+      await apply([const RemoveMcpServer('bad')]);
+
+      expect(h.read(h.userPath), isNot(contains('bad')));
+    });
+
+    group('проверка неполна (fail-closed, R3-3)', () {
+      ConfigIssue incompleteIssue() => ConfigIssue(
+        kind: ConfigIssueKind.semantic,
+        key: '',
+        source: h.userPath,
+        message: 'the config could not be fully checked; fix the file by hand',
+        event: validationIncompleteEvent,
+      );
+
+      ConfigWriter writerWith(
+        List<ConfigIssue> candidate,
+        List<ConfigIssue> baseline,
+      ) {
+        var calls = 0;
+        return ConfigWriter(
+          codelabHome: h.home,
+          environment: {'CODELAB_HOME': h.home},
+          loader: ConfigLoader(),
+          candidateCheck:
+              (target, text, {required cwd, required environment, platform}) =>
+                  (
+                    issues: calls++ == 0 ? candidate : baseline,
+                    warnings: const [],
+                  ),
+          logger: h.logger,
+          processRunner: FakeSecretProcessRunner(),
+          clock: h.clock,
+          random: Random(7),
+          cwd: h.cwd,
+        );
+      }
+
+      test('кандидат с неполнотой: отказ, даже если она есть и в базе, файл '
+          'не изменён', () async {
+        h.write(h.userPath, baseConfig);
+        final writer = writerWith([incompleteIssue()], [incompleteIssue()]);
+
+        await expectLater(
+          writer.apply(await writer.read(const ConfigTarget.user()), [
+            const SetValue('budget.max_steps', 7),
+          ]),
+          throwsA(isA<ConfigException>()),
+        );
+        expect(h.read(h.userPath), baseConfig);
+      });
+
+      test('база неполна, кандидат полный: запись проходит', () async {
+        h.write(h.userPath, baseConfig);
+        final writer = writerWith(const [], [incompleteIssue()]);
+
+        await writer.apply(await writer.read(const ConfigTarget.user()), [
+          const SetValue('budget.max_steps', 7),
+        ]);
+
+        expect(h.read(h.userPath), contains('max_steps: 7'));
+      });
     });
 
     test('доверенный проект: запись проходит', () async {

@@ -450,6 +450,37 @@ mcp:
       );
     }, tags: scriptedOnly);
 
+    test(
+      'config unset api_key при прежних base_url и каталоге: код 0, '
+      'предупреждения, секрета в выводе нет (R3-1, решение 2026-11-03)',
+      () async {
+        final cli = await expectSame(
+          ['config', 'unset', 'providers.lm.api_key'],
+          files: {
+            'config.yaml': '''
+agent:
+  default_model: lm/m
+providers:
+  lm:
+    api_key: sk-fake-1
+    base_url: "https://u:p@ss@host/v1"
+    kind: openai-compatible
+    models:
+      m:
+        context_window: 8192
+''',
+          },
+        );
+
+        expect(cli.exitCode, 0, reason: '$cli');
+        expect(cli.stdout, startsWith('Removed providers.lm.api_key from'));
+        expect(cli.stdout, contains('warning: providers.lm.base_url'));
+        expect(cli.stdout, contains('warning: agent.default_model'));
+        expect('${cli.stdout}${cli.stderr}', isNot(contains('sk-fake-1')));
+      },
+      tags: scriptedOnly,
+    );
+
     test('--project вместе с --local: 64 и один текст у обоих', () async {
       for (final args in [
         ['config', 'set', 'budget.max_steps', '1', '--project', '--local'],
