@@ -260,6 +260,12 @@ final class ConfigLoader {
   /// читаются с диска. Незаданная `${VAR}` попадает в `warnings`, а не в
   /// `issues` (окружение агента может отличаться от окружения писателя);
   /// значения кандидата в проблемы не попадают (CFG-2).
+  ///
+  /// Проверка идёт в режиме `collectAll` ядра (R3-1, R3-3, решение
+  /// пользователя 2026-11-03): ошибка ранней ступени не скрывает ошибки
+  /// поздних, поэтому набор проблем исходного файла и кандидата полный и
+  /// сравнивается писателем по сигнатуре. Обычная загрузка [load] режима не
+  /// использует.
   ConfigCandidateResult validateCandidate(
     ConfigTarget target,
     String text, {
@@ -273,6 +279,7 @@ final class ConfigLoader {
       environment: env,
       platform: platform,
       candidate: (kind: kind, text: text),
+      collectAll: true,
     ).result;
 
     var loaded = run(environment);
@@ -327,6 +334,7 @@ final class ConfigLoader {
     Set<String> knownVariables = const {},
     String? platform,
     ({ConfigLayerKind kind, String text})? candidate,
+    bool collectAll = false,
   }) {
     final extraPath =
         _nonEmpty(extraConfig) ?? _nonEmpty(environment['CODELAB_CONFIG']);
@@ -473,6 +481,7 @@ final class ConfigLoader {
       layers,
       environment: environment,
       projectRoot: root,
+      collectAll: collectAll,
     );
     final windowsFile = scripted
         ? null

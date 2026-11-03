@@ -22,6 +22,13 @@ const inlineSecretKeys = {'api_key', 'apiKey', 'token', 'secret', 'password'};
 /// D5, шаг 6).
 const unsetVariableEvent = 'config.variable.unset';
 
+/// Событие служебной проблемы «проверка неполна» (`ConfigIssue.event`):
+/// режим `collectAll` не смог вырезать ошибочный ключ или исчерпал число
+/// кругов, поэтому поздние ступени (в том числе правила доверия) не
+/// выполнены (R3-3, решение 2026-11-03). Писатель всегда считает её новой
+/// проблемой кандидата (fail-closed); значений ключей в ней нет.
+const validationIncompleteEvent = 'config.validation.incomplete';
+
 /// Класс проблемы конфигурации (`agent-core-architecture` §15.1, §17.5.2).
 ///
 /// Почему отдельный enum: тестам и `ConfigInlineSecretException` нужен класс

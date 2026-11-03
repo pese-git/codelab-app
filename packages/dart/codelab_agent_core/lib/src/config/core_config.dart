@@ -91,12 +91,23 @@ final class CoreConfig {
   /// [projectRoot] — канонический корень проектных слоёв (доверие §15.3 и
   /// [withoutProject], D9). Исключений не бросает: либо `config` без проблем,
   /// либо непустой `issues`.
+  ///
+  /// [collectAll] (R3-1, решение 2026-11-03; design.md change
+  /// `add-config-writer-and-reload`, D5) — режим писателя: ошибка проверки
+  /// слоя не обрывает следующие ступени, ключи с ошибкой исключаются, а в
+  /// `issues` попадают проблемы всех ступеней, включая каскадные. Обычная
+  /// загрузка (`false`) не меняется.
   static ConfigLoadResult fromLayers(
     List<ConfigTree> layers, {
     required Map<String, String> environment,
     String? projectRoot,
-  }) =>
-      resolveConfig(layers, environment: environment, projectRoot: projectRoot);
+    bool collectAll = false,
+  }) => resolveConfig(
+    layers,
+    environment: environment,
+    projectRoot: projectRoot,
+    collectAll: collectAll,
+  );
 
   final ModelRef defaultModel;
 
