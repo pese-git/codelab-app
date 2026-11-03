@@ -5,7 +5,7 @@
 Источники:
 - `openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md` — D1–D8 (пакет, точки входа, сторож, локальное исполнение, конфиг, жизненный цикл, сценарий модели);
 - `openspec/specs/embedded-agent/spec.md` — требования пакета;
-- `openspec/changes/add-config-writer-and-reload/design.md` — D7, D8, D11, D13 (источник конфига, `modelsFor`, PERM-11, `Random` супервизора MCP);
+- `openspec/changes/archive/2026-11-03-add-config-writer-and-reload/design.md` — D7, D8, D11, D13 (источник конфига, `modelsFor`, PERM-11, `Random` супервизора MCP);
 - `docs/architecture/proposals/agent-core-architecture.md` §10 (сборка ядра, профили, HOST-1…HOST-7), §13.1 (`AcpServerConfig.localEnv`);
 - `docs/architecture/proposals/dart-agent-and-clients/09-12-stage-7-embedded.md`.
 

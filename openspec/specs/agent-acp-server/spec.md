@@ -49,13 +49,13 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
    - сбой или пропуск сервера НЕ SHALL быть ошибкой запроса.
 3. Сессия создаётся через `AgentRuntime.createSession` с env и `AcpPermissionGate` соединения, хуком `markInProgress` и серверами шага 2. Создание ждёт подключения серверов (параллельно, каждый — не дольше своего `connectTimeout`).
 4. Ответ `NewSessionResponse(sessionId, modes, configOptions)`.
-5. После ответа — `available_commands_update` с командами `AgentSession.commands` в их порядке: элемент `AvailableCommand {name, description, input: {hint}?}`, поле `input` — только при `inputHint` (`14-Slash Commands.md`; design.md change `add-agent-project-files`, D9). Без команд список пуст. Инструменты модели в список НЕ SHALL попадать (R-07).
+5. После ответа — `available_commands_update` с командами `AgentSession.commands` в их порядке: сначала встроенные команды сессии (`config`, `mcp` — capability `agent-slash-commands`, «Встроенные команды config и mcp»), затем шаблоны. Элемент — `AvailableCommand {name, description, input: {hint}?}`, поле `input` — только при `inputHint` (`14-Slash Commands.md`; design.md change `add-agent-project-files`, D9; design.md change `add-config-writer-and-reload`, D12). Без команд список пуст. Инструменты модели в список НЕ SHALL попадать (R-07).
 
 До ответа на `session/new` уведомления этой сессии НЕ SHALL отправляться (ACP-8). Инструменты подключённых серверов SHALL быть доступны модели с первого хода этой сессии (R-24). Это заменяет поведение этапа 4, в котором каждый сервер пропускался (R-02).
 
 #### Scenario: Режимы и опции новой сессии
 - **WHEN** клиент создаёт сессию с абсолютным `cwd`
-- **THEN** ответ содержит `modes` с пятью режимами и `configOptions` `mode` и `model`, а следующий кадр — `available_commands_update` с пустым списком, если у сессии нет шаблонов команд
+- **THEN** ответ содержит `modes` с пятью режимами и `configOptions` `mode` и `model`, а следующий кадр — `available_commands_update`; если у сессии нет ни шаблонов команд, ни встроенных команд (ядро без `ConfigSource` и без capability `mcp`), список пуст
 
 #### Scenario: Относительный cwd
 - **WHEN** `session/new` приходит с `cwd: "work/demo"`
@@ -82,8 +82,8 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 - **THEN** ответ `session/new` успешен, лог `mcp.server.failed`, инструментов сервера в сессии нет
 
 #### Scenario: Команды шаблонов после session/new
-- **WHEN** у сессии есть встроенные инструменты, fake MCP-сервер с инструментом `echo` и шаблон `.codelab/prompts/review.md` доверенного проекта (`trusted_projects` с `${cwd}`) с `argument-hint: "<path> [focus]"`
-- **THEN** кадр после ответа `session/new` — `available_commands_update` ровно с одной командой `{"name":"review","description":…,"input":{"hint":"<path> [focus]"}}`, без имён `read`, `exec` и `mcp__fake__echo` (фикстура `acp/available-commands-no-tools`, R-07)
+- **WHEN** у сессии есть встроенные инструменты, fake MCP-сервер с инструментом `echo` и шаблон `.codelab/prompts/review.md` доверенного проекта (`trusted_projects` с `${cwd}`) с `argument-hint: "<path> [focus]"`, а ядро собрано без `ConfigSource`
+- **THEN** кадр после ответа `session/new` — `available_commands_update` ровно с двумя командами: `mcp` (встроенная, capability `mcp` включена) и `{"name":"review","description":…,"input":{"hint":"<path> [focus]"}}`, без имён `read`, `exec` и `mcp__fake__echo` (фикстура `acp/available-commands-no-tools`, R-07)
 
 Шаблон лежит в проекте, а не в `$CODELAB_HOME/prompts/`: формат фикстур пишет файлы только в `cwd` через `setup.files` (acp-golden-fixtures). Пользовательскую область (`$CODELAB_HOME/prompts/*.md`) покрывает тест хоста `apps/codelab_agent/test/agent_host_project_files_test.dart`.
 
@@ -285,4 +285,31 @@ ACP-сервер агента SHALL пропускать такой сервер
 #### Scenario: Без localEnv поведение прежнее
 - **WHEN** сервер создан без `localEnv`, клиент объявил `fs.readTextFile`, а модель зовёт `read`
 - **THEN** агент отправляет клиенту `fs/read_text_file`
+
+### Requirement: Уведомления после перезагрузки конфигурации
+Событие сессии `ModelOptionsChanged` (capability `agent-runtime`, «Живая перезагрузка конфигурации») адаптер SHALL отображать в `config_option_update` с полным снимком опций сессии (`13-Session Config Options.md`; design.md change `add-config-writer-and-reload`, D8). `switch` проекции событий SHALL оставаться исчерпывающим.
+
+Правила отправки:
+- **Порядок.** Уведомление НЕ SHALL отправляться сессии до ответа на её `session/new` или `session/load` (ACP-8).
+- **Неудача.** Неудачная перезагрузка НЕ SHALL порождать ни одного кадра.
+- **Ход.** Во время хода уведомление SHALL идти в общем порядке событий сессии.
+- **Опция `model`.** Текущее значение — модель сессии, даже если её больше нет в каталоге: такая модель SHALL оставаться в `options`.
+
+Ответ встроенной команды SHALL уходить кадрами `agent_message_chunk` с текстом и ответом `session/prompt` со `stopReason: end_turn` (или `cancelled`), без `tool_call`, `plan` и `usage_update`. Новых методов, полей и `_meta` адаптер НЕ SHALL вводить.
+
+#### Scenario: Список моделей изменился
+- **WHEN** у соединения две живые сессии, и перезагрузка добавляет модель в каталог
+- **THEN** каждая сессия получает ровно одно `config_option_update`, опция `model` содержит новую модель, `currentValue` сессии прежний (`config_reload_notifications_test.dart`)
+
+#### Scenario: Неудачная перезагрузка
+- **WHEN** перезагрузка завершается итогом `failed`
+- **THEN** клиент не получает ни одного кадра
+
+#### Scenario: Модель сессии удалена
+- **WHEN** перезагрузка удаляет из каталога текущую модель сессии
+- **THEN** `config_option_update` содержит её как `currentValue` и в `options`, следующий ход идёт на неё
+
+#### Scenario: Ответ встроенной команды
+- **WHEN** клиент присылает `session/prompt` с текстом `/mcp list`
+- **THEN** кадры — `agent_message_chunk` с таблицей, затем ответ `{"stopReason":"end_turn"}`
 
