@@ -153,7 +153,7 @@
     настроек, `AgentConfigStore`) — §12.4, change `add-provider-setup-ui`. Без 8.10 конфиг
     правится вручную, а `config check` (8.5) его проверяет.
 
-    **Change** [`add-config-writer-and-reload`](../../../../openspec/changes/add-config-writer-and-reload/)
+    **Change** [`add-config-writer-and-reload`](../../../../openspec/changes/archive/2026-11-03-add-config-writer-and-reload/)
     — девять итераций, каждая — отдельный PR (или 2–3) в `develop` (design.md, D16): 0 — документы;
     1 — L-25; 2 — реестр и типы правок (E-15); 3 — `ConfigWriter`; 4 — подкоманды записи у обоих
     бинарей и мост `codelab_setup`; 5 — живая перезагрузка (ядро, `FileConfigSource`, хосты,
@@ -188,7 +188,7 @@
     существующим `replaceServers` после хода (D10, D11); без fsync каталога при записи (D5).
     Сторож импортов и allowlist зависимостей не меняются; `yaml_edit` уже в `ioAllowlist` (D1, D2).
 
-    **Итог 8.10.** Сделано change [`add-config-writer-and-reload`](../../../../openspec/changes/add-config-writer-and-reload/)
+    **Итог 8.10.** Сделано change [`add-config-writer-and-reload`](../../../../openspec/changes/archive/2026-11-03-add-config-writer-and-reload/)
     (итерации 0–8): предконфигурация провайдера `CODELAB_PROVIDER_*` и флаги `serve`
     `--provider-type`/`--provider-config` первыми в слоях 6 и 7, слияние с `providers.<id>` доверенных
     файлов, литеральный секретный заголовок — `inlineSecret` (D3; L-25); `SettingsRegistry` ядра с
@@ -343,8 +343,8 @@ stdio MUST) записано в §13.15, включение явным флаг�
   `settings_registry_complete_test.dart` (`core/settings-registry-complete`, E-15),
   `provider_preconfig_env_test.dart` (`core/provider-preconfig-from-env`, L-25),
   `cli_config_commands_test.dart` и фикстура `acp/slash-mcp-list` зелёные. Тесты — change
-  `add-config-writer-and-reload` (итерации 1–8); отметка **«Выполнено»** ставится по итогу его задачи
-  8.4 (DoD: прогон тестов, `guard`, `web-compile`):
+  `add-config-writer-and-reload` (итерации 1–8). **Выполнено** (задача 8.4 change, DoD: тесты, `guard`,
+  `web-compile` и `openspec validate --strict` зелёные; PR #230):
 
   | Строка | Проверка | Тесты 8.10 |
   |---|---|---|
