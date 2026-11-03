@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import '../env/host_path.dart';
+import 'config_link_containment.dart' show projectLayerFiles;
 import 'config_loader.dart';
 import 'config_paths.dart' show canonicalDirectory;
 
@@ -48,8 +49,9 @@ List<String> watchedConfigFiles({
     '$home/config.yaml',
     if (explicit != null)
       isAbsoluteConfigPath(explicit) ? explicit : '$root/$explicit',
-    '$root/.codelab/config.yaml',
-    '$root/.codelab/config.local.yaml',
+    // Пути проектных слоёв строит `projectLayerFiles` (8.5): источник файлов
+    // с признаком слоя сравнивает не строки разных видов, а те же значения.
+    ...projectLayerFiles(cwd),
     if (secretsFile) '$home/secrets.yaml',
   ];
 }

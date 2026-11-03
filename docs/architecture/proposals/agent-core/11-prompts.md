@@ -366,7 +366,7 @@ final class PromptOverrides {                    // часть CoreConfig (§10.
 | `--system-prompt-file <path>` | `prompts.system`, `prompts.system_text` | то же из файла |
 | `--append-system-prompt <text>` | `prompts.append_system`, `prompts.append_system_text` | дополнение после базы |
 
-1. **Приоритет.** Флаг — слой 6 (§15.2): он перекрывает оба ключа своей строки из любого слоя
+1. **Приоритет.** Флаг — слой 7 (§15.2): он перекрывает оба ключа своей строки из любого слоя
    конфига; значения не складываются (флаг `--append-system-prompt` не дописывается к
    `prompts.append_system`, а заменяет его). `--system-prompt` вместе с `--system-prompt-file` —
    ошибка использования `--system-prompt and --system-prompt-file are mutually exclusive`

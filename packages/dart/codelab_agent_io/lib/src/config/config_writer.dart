@@ -7,6 +7,7 @@ import 'package:meta/meta.dart';
 
 import '../secrets/secret_process_runner.dart';
 import 'config_loader.dart';
+import 'config_link_containment.dart';
 import 'config_paths.dart';
 import 'config_write_lock.dart';
 import 'literal_secret_rule.dart';
@@ -365,86 +366,24 @@ final class ConfigWriter {
   String _targetPath(ConfigTarget target) {
     final path = _resolveTarget(_layerPath(target));
     if (target.layer != ConfigLayer.user) {
-      // Корень записывается теми же разделителями, что и путь из
-      // `_resolveTarget` (всегда `/`): на Windows `resolveSymbolicLinks`
-      // даёт `\`, и сравнение иначе отклоняло бы любую запись. Ветка
-      // Windows автотестом не проверяется (нужна настоящая ОС).
-      final root =
-          '${canonicalDirectory(target.cwd!).replaceAll(r'\', '/')}/.codelab/';
-      if (!path.startsWith(root)) {
+      final root = projectCodelabDirectory(target.cwd!);
+      if (!isWithinDirectory(root, path)) {
         throw ConfigException([
-          configEditIssue(
-            _layerPath(target),
-            'the config file resolves outside $root; symbolic links of '
-            'a project config must stay inside .codelab',
-          ),
+          configEditIssue(_layerPath(target), configEscapeMessage(root)),
         ]);
       }
     }
     return path;
   }
 
-  /// Раскрывает символические ссылки файла и его каталогов (D5, п. 5) и
-  /// нормализует путь: правится цель, ссылка остаётся ссылкой.
-  ///
-  /// Идёт по сегментам слева направо, держа канонический путь уже
-  /// пройденного: `..` берёт родителя канонического пути (а не лексический,
-  /// который ошибся бы после ссылки), ссылка подставляет свою цель в начало
-  /// очереди. Первый несуществующий сегмент завершает разбор: хвост дальше
-  /// только добавляется, а `..` в хвосте — `ConfigException`, иначе
-  /// относительная ссылка `../../x/y.yaml` на несуществующий каталог обошла
-  /// бы проверку «внутри `.codelab`» (ревью безопасности итерации 3).
-  /// Ссылка на несуществующий файл ведёт к будущей цели. Больше 32
-  /// переходов — `ConfigException` (цикл ссылок).
+  /// Раскрывает ссылки файла общим с загрузчиком помощником
+  /// `resolveConfigLinks` (8.5: одна логика containment на запись и чтение).
   String _resolveTarget(String path) {
-    ConfigException refuse(String message) =>
-        ConfigException([configEditIssue(path, message)]);
-
-    final pending = path.split(RegExp(r'[/\\]'));
-    // Буква диска Windows — корень, а не сегмент.
-    var resolved = '';
-    final unc = RegExp(r'^[/\\]{2}[^/\\]+[/\\][^/\\]+').firstMatch(path);
-    if (unc != null) {
-      // UNC `\\server\share`: ведущие `//` не теряются.
-      resolved = unc.group(0)!.replaceAll(r'\', '/');
-      pending.removeRange(0, 4);
-    } else if (pending.isNotEmpty &&
-        RegExp(r'^[A-Za-z]:$').hasMatch(pending.first)) {
-      resolved = pending.removeAt(0);
+    try {
+      return resolveConfigLinks(path);
+    } on ConfigLinkException catch (error) {
+      throw ConfigException([configEditIssue(path, error.message)]);
     }
-    var hops = 0;
-    while (pending.isNotEmpty) {
-      final segment = pending.removeAt(0);
-      if (segment.isEmpty || segment == '.') {
-        continue;
-      }
-      if (segment == '..') {
-        final cut = resolved.lastIndexOf('/');
-        resolved = cut < 0 ? '' : resolved.substring(0, cut);
-        continue;
-      }
-      final candidate = '$resolved/$segment';
-      final type = FileSystemEntity.typeSync(candidate, followLinks: false);
-      if (type == FileSystemEntityType.link) {
-        if (++hops > 32) {
-          throw refuse('too many symbolic links: $path');
-        }
-        final target = Link(candidate).targetSync();
-        if (isAbsoluteConfigPath(target)) {
-          resolved = '';
-        }
-        pending.insertAll(0, target.split(RegExp(r'[/\\]')));
-      } else if (type == FileSystemEntityType.notFound) {
-        final tail = [segment, ...pending];
-        if (tail.contains('..')) {
-          throw refuse('invalid path: $path');
-        }
-        return '$resolved/${tail.where((s) => s.isNotEmpty && s != '.').join('/')}';
-      } else {
-        resolved = candidate;
-      }
-    }
-    return resolved.isEmpty ? '/' : resolved;
   }
 
   /// Создаёт недостающие каталоги файла и запоминает созданные: при отказе

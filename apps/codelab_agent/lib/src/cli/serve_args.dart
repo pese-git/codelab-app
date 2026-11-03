@@ -112,7 +112,7 @@ final class ServeOptions {
   /// Корень состояния (`CODELAB_HOME`, по умолчанию `~/.codelab`).
   final String codelabHome;
 
-  /// `--config <path>`: дополнительный файл конфигурации (слой 4а); `null` —
+  /// `--config <path>`: дополнительный файл конфигурации (слой 5); `null` —
   /// флага нет (тогда действует `CODELAB_CONFIG`).
   final String? configPath;
 

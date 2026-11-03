@@ -5,6 +5,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:meta/meta.dart';
 
 import '../secrets/secrets_backend_problem.dart';
+import 'config_link_containment.dart';
 import 'environment_layer.dart';
 import 'legacy_notice.dart';
 import 'provider_preconfig.dart';
@@ -393,7 +394,35 @@ final class ConfigLoader {
         }
         text = candidate.text;
       } else {
-        if (!FileSystemEntity.isFileSync(path)) {
+        // 8.5: проектный слой читается только по реальному пути внутри
+        // `<cwd>/.codelab` (проверенное и открытое совпадают). Существующая
+        // цель вне `.codelab`, цикл и `..` в хвосте — проблема с путём слоя,
+        // без содержимого и цели ссылки; висячая ссылка (внутрь или наружу) —
+        // слой молча отсутствует: ничего снаружи не читается, а проект с
+        // `.codelab`-ссылкой на общий каталог без config-файлов должен
+        // запускаться. Слой `user` и `--config` пользователь выбрал сам.
+        var readFrom = path;
+        if (kind == ConfigLayerKind.project ||
+            kind == ConfigLayerKind.projectLocal) {
+          switch (checkProjectLayer(path, root)) {
+            case ProjectLayerReadable(:final realPath):
+              readFrom = realPath;
+            case ProjectLayerAbsent():
+              return;
+            case ProjectLayerRefused(:final message):
+              yamlFound = true;
+              issues.add(
+                ConfigIssue(
+                  kind: ConfigIssueKind.syntax,
+                  key: '',
+                  source: path,
+                  message: message,
+                ),
+              );
+              return;
+          }
+        }
+        if (!FileSystemEntity.isFileSync(readFrom)) {
           if (origin != null) {
             issues.add(
               ConfigIssue(
@@ -407,7 +436,7 @@ final class ConfigLoader {
           return;
         }
         yamlFound = true;
-        text = _readText(path, issues, origin: origin);
+        text = _readText(path, issues, origin: origin, readFrom: readFrom);
         if (text == null) {
           return;
         }
@@ -585,8 +614,14 @@ final class ConfigLoader {
   /// Читает файл не больше [maxConfigBytes]: размер проверяется по `stat` до
   /// чтения, чтобы файл в гигабайты не попал в память (CFG-21). Байты
   /// декодируются строго: не-UTF-8 — проблема файла, а не молчаливая замена
-  /// символов, которая исказила бы ключи.
-  String? _readText(String path, List<ConfigIssue> issues, {String? origin}) {
+  /// символов, которая исказила бы ключи. [readFrom] — реальный путь проектного
+  /// слоя (8.5): читается он, а в проблемах называется [path].
+  String? _readText(
+    String path,
+    List<ConfigIssue> issues, {
+    String? origin,
+    String? readFrom,
+  }) {
     void fail(String message, {bool unreadable = false}) => issues.add(
       ConfigIssue(
         kind: ConfigIssueKind.syntax,
@@ -596,11 +631,12 @@ final class ConfigLoader {
       ),
     );
     try {
-      if (File(path).statSync().size > maxConfigBytes) {
+      final actual = readFrom ?? path;
+      if (File(actual).statSync().size > maxConfigBytes) {
         fail('the file is larger than 1 MiB');
         return null;
       }
-      return utf8.decode(File(path).readAsBytesSync());
+      return utf8.decode(File(actual).readAsBytesSync());
     } on FileSystemException catch (error) {
       fail(
         'cannot read the file: $path: '

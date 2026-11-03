@@ -2,7 +2,7 @@
 
 Правила этого приложения дополняют корневой `AGENTS.md` и `packages/dart/codelab_client_core/AGENTS.md`.
 
-Источники: `docs/architecture/proposals/dart-agent-and-clients/09-11-stage-6-cli-mvp.md` (задачи 6.1–6.10; подкоманда `config` — абзац «Подкоманды `config`, `provider`, `mcp` и `secret` по этапам»), §12.2 (отображение и ввод CLI), §9.10 (API kit), документ ядра §13 (коды выхода из событий) и §14 (фикстуры); `design.md` OpenSpec change `add-codelab-cli`; для полноэкранного режима — §12.2.7 и `design.md` change `add-cli-tui`; для встроенного агента — `09-12-stage-7-embedded.md` (задача 7.6) и `design.md` change `add-embedded-agent-mode` (D2, D3, D6–D8, D13). Если документов не хватает, сначала дополняется документация, потом пишется код.
+Источники: `docs/architecture/proposals/dart-agent-and-clients/09-11-stage-6-cli-mvp.md` (задачи 6.1–6.10; подкоманда `config` — абзац «Подкоманды `config`, `provider`, `mcp` и `secret` по этапам»), §12.2 (отображение и ввод CLI), §9.10 (API kit), документ ядра §13 (коды выхода из событий) и §14 (фикстуры); `design.md` OpenSpec change `add-codelab-cli`; для полноэкранного режима — §12.2.7 и `design.md` change `add-cli-tui`; для встроенного агента — `09-12-stage-7-embedded.md` (задача 7.6) и `design.md` change `add-embedded-agent-mode` (D2, D3, D6–D8, D13); для подкоманд `config|provider|mcp` — `design.md` change `add-config-writer-and-reload` (D6). Если документов не хватает, сначала дополняется документация, потом пишется код.
 
 ## 1. Назначение
 

@@ -110,7 +110,10 @@ ConfigFileStamp defaultConfigFileProbe(String path) {
 /// Как использовать: `FileConfigSource` создаёт наблюдатель по списку
 /// `watchedConfigFiles(...)`, вызывает [start], слушает [changes], а после
 /// `runtime.dispose()` вызывает [close]. Швы тестов — [DirectoryEventsFactory]
-/// и [ConfigFileProbe]; часы — `FakeClock`.
+/// и [ConfigFileProbe]; часы — `FakeClock`. `readablePath` (8.5) — вердикт
+/// containment проектных слоёв: файл читается и замеряется по возвращённому
+/// пути, а при `null` не читается, не замеряется и не наблюдается по каталогу
+/// (опрашивается только вердикт); смена вердикта даёт сигнал.
 final class ConfigWatcher {
   ConfigWatcher({
     required List<String> files,
@@ -119,12 +122,14 @@ final class ConfigWatcher {
     Duration pollInterval = const Duration(seconds: 2),
     DirectoryEventsFactory? directoryEvents,
     ConfigFileProbe? probe,
+    String? Function(String file)? readablePath,
   }) : _files = List.unmodifiable(files),
        _clock = clock,
        _logger = logger,
        _pollInterval = pollInterval,
        _directoryEvents = directoryEvents ?? defaultDirectoryEvents,
-       _probe = probe ?? defaultConfigFileProbe;
+       _probe = probe ?? defaultConfigFileProbe,
+       _readablePath = readablePath ?? _identity;
 
   final List<String> _files;
   final Clock _clock;
@@ -132,6 +137,38 @@ final class ConfigWatcher {
   final Duration _pollInterval;
   final DirectoryEventsFactory _directoryEvents;
   final ConfigFileProbe _probe;
+
+  /// Containment проектных слоёв (8.5): путь, по которому файл можно читать
+  /// (реальный путь внутри `.codelab`), или `null`, если загрузчик его не
+  /// читает (цель вне `.codelab`, цикл, висячая ссылка наружу). Пересчитывается
+  /// при каждом снимке: ссылку могли перенаправить, и возврат «внутрь» даёт
+  /// сигнал. Заблокированный файл не читается, не замеряется и не
+  /// наблюдается по каталогу — только опрашивается вердикт (см. [_blocked]).
+  final String? Function(String file) _readablePath;
+
+  static String? _identity(String file) => file;
+
+  /// Отпечаток файла, который читать нельзя (8.5): не равен ни «нет файла»,
+  /// ни содержимому, поэтому смена ссылки наружу/внутрь даёт сигнал.
+  static const _blockedDigest = 'blocked';
+
+  /// Штамп заблокированного файла при опросе (`size: -1` отличает его от
+  /// «нет файла» — `size: 0`).
+  static const ConfigFileStamp _blockedStamp = (
+    exists: false,
+    modified: null,
+    size: -1,
+  );
+
+  /// Заблокированные файлы, переведённые на опрос вердикта (не отказ `watch`):
+  /// подписка на каталог такого файла могла бы следить за каталогом вне
+  /// проекта (`.codelab` — ссылка наружу).
+  final _blocked = <String>{};
+
+  /// Файлы, ушедшие на опрос из-за отказа потока каталога (D7): остаются на
+  /// нём до [close], в отличие от [_blocked], которые уходят с опроса при
+  /// возврате ссылки внутрь `.codelab`.
+  final _fallenBack = <String>{};
 
   final _controller = StreamController<void>.broadcast();
 
@@ -186,6 +223,8 @@ final class ConfigWatcher {
     _debounce?.cancel();
     _pollTimer?.cancel();
     _polled.clear();
+    _blocked.clear();
+    _fallenBack.clear();
     final watches = [..._directories.values];
     _directories.clear();
     for (final watch in watches) {
@@ -199,8 +238,9 @@ final class ConfigWatcher {
   /// Почему и лексический путь, и каноническая цель: `config.yaml` часто
   /// ссылка в dotfiles, и правка цели — событие другого каталога. Ссылку
   /// могли перенаправить, поэтому цели пересчитываются в [rebase] и перед
-  /// сравнением в [_fire]. Содержимое всегда читается по лексическому пути —
-  /// так же, как читает загрузчик.
+  /// сравнением в [_fire]. Содержимое читается по [_readablePath] — так же,
+  /// как читает загрузчик (для проектных слоёв это реальный путь внутри
+  /// `.codelab`, 8.5).
   void _syncDirectories() {
     final wanted = <String, ({Set<String> names, Set<String> owners})>{};
     void want(String path, String owner) {
@@ -213,12 +253,27 @@ final class ConfigWatcher {
     }
 
     for (final file in _files) {
+      final readable = _readablePath(file);
+      if (readable == null) {
+        // 8.5: ни каталог файла (он может быть ссылкой наружу), ни каталог
+        // цели не наблюдаются; вердикт перепроверяет опрос.
+        // Файл на опросе после ошибки потока остаётся на нём (D7): вердикт
+        // перепроверит тот же опрос, а снимать его при возврате нельзя.
+        if (!_fallenBack.contains(file) && _blocked.add(file)) {
+          _polled[file] = _blockedStamp;
+        }
+        continue;
+      }
+      if (_blocked.remove(file)) {
+        _polled.remove(file);
+      }
       want(file, file);
-      final target = _canonicalTarget(file);
+      final target = _canonicalTarget(readable);
       if (target != null && target != file) {
         want(target, file);
       }
     }
+    _armPoll();
     for (final dir in _directories.keys.toList()) {
       if (!wanted.containsKey(dir)) {
         unawaited(_directories.remove(dir)!.subscription?.cancel());
@@ -330,14 +385,20 @@ final class ConfigWatcher {
         'config.watch.fallback',
         fields: {'path': file, 'reason': error.runtimeType.toString()},
       );
+      _blocked.remove(file);
+      _fallenBack.add(file);
       _polled[file] = _safeProbe(file);
     }
     _armPoll();
   }
 
   ConfigFileStamp? _safeProbe(String file) {
+    final readable = _readablePath(file);
+    if (readable == null) {
+      return _blockedStamp;
+    }
     try {
-      return _probe(file);
+      return _probe(readable);
     } on Object catch (error) {
       _logger.log(
         LogLevel.warning,
@@ -389,8 +450,12 @@ final class ConfigWatcher {
   };
 
   String? _digest(String file) {
+    final readable = _readablePath(file);
+    if (readable == null) {
+      return _blockedDigest;
+    }
     try {
-      final entity = File(file);
+      final entity = File(readable);
       final stat = entity.statSync();
       if (stat.type == FileSystemEntityType.notFound) {
         return null;
