@@ -102,16 +102,67 @@ void main() {
     expect(issuesAt(result, 'mcp.servers[d].call_timeout'), isEmpty);
   });
 
-  test('enabled: false removes the server and logs mcp.server.skipped', () {
+  test(
+    'enabled: false keeps the server with enabled == false and still '
+    'logs mcp.server.skipped (change `add-config-writer-and-reload`, D10)',
+    () {
+      final result = withServers([
+        {'name': 'off', 'type': 'stdio', 'command': 'c', 'enabled': false},
+        {'name': 'on', 'type': 'stdio', 'command': 'c'},
+      ]);
+
+      final servers = result.config!.mcpServers;
+      expect([for (final s in servers) s.name], ['off', 'on']);
+      expect([for (final s in servers) s.enabled], [false, true]);
+      final skipped = warningsOf(result, 'mcp.server.skipped').single;
+      expect(skipped.fields, {'server': 'off', 'reason': 'disabled in config'});
+      expect(skipped.level, LogLevel.info);
+    },
+  );
+
+  test('a disabled server is not validated: no problems for a bad value or '
+      'an unset variable, as before', () {
     final result = withServers([
-      {'name': 'off', 'type': 'stdio', 'command': 'c', 'enabled': false},
-      {'name': 'on', 'type': 'stdio', 'command': 'c'},
+      {
+        'name': 'off',
+        'type': 'stdio',
+        'command': 'c',
+        'call_timeout': '1ms',
+        'env': {'K': r'${CODELAB_TEST_UNSET_VARIABLE}'},
+        'enabled': false,
+      },
     ]);
 
-    expect([for (final s in result.config!.mcpServers) s.name], ['on']);
-    final skipped = warningsOf(result, 'mcp.server.skipped').single;
-    expect(skipped.fields, {'server': 'off', 'reason': 'disabled in config'});
-    expect(skipped.level, LogLevel.info);
+    expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+    expect(result.config!.mcpServers, isEmpty);
+    expect(warningsOf(result, 'mcp.server.skipped'), hasLength(1));
+  });
+
+  test('a disabled http server keeps its url and enabled == false', () {
+    final result = withServers([
+      {
+        'name': 'gh',
+        'type': 'http',
+        'url': 'https://gh.test/mcp',
+        'enabled': false,
+      },
+    ]);
+
+    final server = result.config!.mcpServers.single;
+    expect(server, isA<McpHttpServerConfig>());
+    expect(server.enabled, isFalse);
+    expect(result.values['mcp.servers[gh]'], containsPair('enabled', false));
+  });
+
+  test('a disabled element without type or command cannot be launched and '
+      'is dropped as before, without a problem', () {
+    final result = withServers([
+      {'name': 'off', 'enabled': false},
+    ]);
+
+    expect(result.issues, isEmpty);
+    expect(result.config!.mcpServers, isEmpty);
+    expect(warningsOf(result, 'mcp.server.skipped'), hasLength(1));
   });
 
   test('a duplicate name in one file is a problem', () {

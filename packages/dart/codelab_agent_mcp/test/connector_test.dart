@@ -156,7 +156,18 @@ void main() {
         expect(failed['reason'], contains('MCP server "my.srv"'));
         expect(later.closedTransports, 1);
         expect(first.closedTransports, 0);
-        expect(session.servers.map((s) => s.name), ['my.srv']);
+        // Сервер, отключённый коллизией, остаётся в сводке (D11).
+        expect(
+          [
+            for (final s in session.servers)
+              '${s.name}:${s.state.name}:${s.toolCount}',
+          ],
+          ['my.srv:connected:1', 'my_srv:disabled:0'],
+        );
+        expect(
+          session.servers.last.lastError,
+          'tool name collision: mcp__my_srv__t',
+        );
       },
     );
 

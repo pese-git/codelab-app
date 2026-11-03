@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 /// Подставной [McpConnector] для тестов ядра: ядро не знает протокола MCP
@@ -50,12 +52,24 @@ final class FakeMcpConnector implements McpConnector {
   final requests = <McpConnectRequest>[];
   final sessions = <FakeMcpSessionTools>[];
 
+  /// Серверы каждого `connect` после раскрытия секретов — то, что получила бы
+  /// попытка подключения настоящего коннектора (D11): шаблоны раскрыты
+  /// замыканием запроса, а сервер, чей секрет не раскрыт, в списке есть
+  /// только в [requests] (настоящий коннектор делает его `failed`).
+  final expanded = <List<McpServerConfig>>[];
+
+  /// Причины отказа раскрытия по имени сервера для каждого `connect`.
+  final expandFailures = <Map<String, String>>[];
+
   @override
   Future<McpSessionTools> connect(McpConnectRequest request) async {
     requests.add(request);
     if (failWith case final error?) {
       throw error;
     }
+    final failures = <String, String>{};
+    expanded.add(await expandServers(request, request.servers, failures));
+    expandFailures.add(failures);
     final tools = toolsOf?.call(request) ?? const <AgentTool>[];
     final session = FakeMcpSessionTools(
       tools: tools,
@@ -63,6 +77,7 @@ final class FakeMcpConnector implements McpConnector {
       toolsOnReplace: toolsOnReplace,
       failReplaceWith: failReplaceWith,
       blockReplaceUntil: replaceBlocksUntilCancel ? request.cancel : null,
+      request: request,
       failToolsReadAfterReplace: failToolsReadAfterReplace,
       servers: [
         for (final s in request.servers)
@@ -79,6 +94,30 @@ final class FakeMcpConnector implements McpConnector {
   }
 }
 
+/// Раскрывает секреты [servers] замыканием запроса, как перед попыткой
+/// подключения; отказ пишет в [failures] (лог `mcp.server.failed` — дело настоящего
+/// коннектора, тесты его пакета).
+Future<List<McpServerConfig>> expandServers(
+  McpConnectRequest request,
+  List<McpServerConfig> servers,
+  Map<String, String> failures,
+) async {
+  final out = <McpServerConfig>[];
+  for (final server in servers) {
+    final expand = request.expandSecrets;
+    if (expand == null || server.secretValues.isEmpty) {
+      out.add(server);
+      continue;
+    }
+    try {
+      out.add(await expand(server));
+    } on McpSecretsException catch (error) {
+      failures[server.name] = error.reason;
+    }
+  }
+  return out;
+}
+
 final class FakeMcpSessionTools implements McpSessionTools {
   FakeMcpSessionTools({
     required List<AgentTool> tools,
@@ -88,7 +127,19 @@ final class FakeMcpSessionTools implements McpSessionTools {
     this.failReplaceWith,
     this.blockReplaceUntil,
     this.failToolsReadAfterReplace = false,
+    this.request,
   }) : _tools = tools;
+
+  /// Запрос подключения сессии: из него берётся замыкание раскрытия секретов
+  /// для [replacedExpanded].
+  final McpConnectRequest? request;
+
+  /// Серверы каждого `replaceServers` после раскрытия секретов.
+  final replacedExpanded = <List<McpServerConfig>>[];
+
+  /// Если задан, `replaceServers` ждёт его завершения (медленное
+  /// подключение).
+  Completer<void>? replaceGate;
 
   final CancelToken? blockReplaceUntil;
   final bool failToolsReadAfterReplace;
@@ -119,6 +170,12 @@ final class FakeMcpSessionTools implements McpSessionTools {
   var closed = 0;
   McpToolsUpdate? pending;
 
+  /// Имена из каждого вызова `reconnect` (D11), по порядку.
+  final reconnected = <String>[];
+
+  /// `(имя, enabled)` из каждого вызова `setEnabled` (D11), по порядку.
+  final enabledCalls = <(String, bool)>[];
+
   @override
   McpToolsUpdate? takeUpdate() {
     final update = pending;
@@ -129,6 +186,10 @@ final class FakeMcpSessionTools implements McpSessionTools {
   @override
   Future<void> replaceServers(List<McpServerConfig> servers) async {
     replaced.add(servers);
+    if (request case final request?) {
+      replacedExpanded.add(await expandServers(request, servers, {}));
+    }
+    await replaceGate?.future;
     await blockReplaceUntil?.onCancel;
     _replacedOnce = true;
     if (failReplaceWith case final error?) {
@@ -147,6 +208,13 @@ final class FakeMcpSessionTools implements McpSessionTools {
       ];
     }
   }
+
+  @override
+  Future<void> reconnect(String name) async => reconnected.add(name);
+
+  @override
+  Future<void> setEnabled(String name, bool enabled) async =>
+      enabledCalls.add((name, enabled));
 
   @override
   Future<void> close() async {
