@@ -67,9 +67,13 @@ agent:
     expect(await agent.nextStdoutLine(), isNull, reason: 'stdout stays empty');
   }, timeout: const Timeout(Duration(seconds: 60)));
 
-  test('a key written as a value: the secret is in neither stderr nor the '
-      'log file', () async {
-    File('$project/.codelab/config.yaml').writeAsStringSync(
+  // R8-4 (design.md change `add-config-literal-secrets-and-migrate`, D4):
+  // литерал в файле конфига — предупреждение, а не отказ старта. Слой —
+  // пользовательский: проект вне `trusted_projects` свои `providers` не даёт.
+  test('a key written as a value: the agent starts with a warning; the '
+      'secret is in neither stderr nor the log file', () async {
+    Directory('${temp.path}/home').createSync();
+    File('${temp.path}/home/config.yaml').writeAsStringSync(
       'providers:\n  p:\n    kind: openai-compatible\n'
       '    base_url: https://llm.test/v1\n    api_key: sk-test-secret\n'
       '    models:\n      m: {}\nagent:\n  default_model: p/m\n',
@@ -77,12 +81,25 @@ agent:
     final logFile = '${temp.path}/logs/agent.log';
 
     final agent = await start(['--log-file', logFile, '--log-level', 'trace']);
+    agent.sendJson({
+      'jsonrpc': '2.0',
+      'id': 1,
+      'method': 'initialize',
+      'params': {'protocolVersion': 1},
+    });
+    final initialized = await agent.responseTo(1);
+    await agent.closeStdin();
+    final code = await agent.exitCode.timeout(const Duration(seconds: 20));
 
-    expect(await agent.exitCode.timeout(const Duration(seconds: 20)), 64);
-    expect(agent.stderrText, contains('config.yaml:5:'));
-    expect(agent.stderrText, contains('providers.p.api_key'));
+    expect(initialized['result'], isNotNull, reason: agent.stderrText);
+    expect(code, 0, reason: agent.stderrText);
+    expect(agent.stderrText, contains('config.secret.in_file'));
+    expect(agent.stderrText, contains('a secret is stored in the config file'));
     expect(agent.stderrText, isNot(contains('sk-test-secret')));
-    expect(File(logFile).readAsStringSync(), isNot(contains('sk-test-secret')));
+    final logged = File(logFile).readAsStringSync();
+    expect(logged, contains('config.secret.in_file'));
+    expect(logged, contains('"key":"providers.p.api_key"'));
+    expect(logged, isNot(contains('sk-test-secret')));
   }, timeout: const Timeout(Duration(seconds: 60)));
 
   test('a syntax error of the file has its line', () async {

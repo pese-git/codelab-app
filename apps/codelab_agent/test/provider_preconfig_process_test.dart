@@ -214,6 +214,26 @@ void main() {
       expect(current, 'a/m1');
     }, timeout: slow);
 
+    test('--provider-config @path with api_key stays an error: the file is a '
+        'flag value, not a config layer (R8-4 does not apply)', () async {
+      File('$project/p.json').writeAsStringSync(
+        '{"id":"a","model":"m1","context_window":1000,'
+        '"api_key":"not-a-real-key-at-path"}',
+      );
+      final agent = await start(const [
+        'serve',
+        '--stdio',
+        '--provider-type',
+        'openai-compatible',
+        '--provider-config',
+        '@p.json',
+      ]);
+
+      expect(await exitOf(agent), 64);
+      expect(agent.stderrText, contains('codelab secret set codelab/a'));
+      expect(agent.stderrText, isNot(contains('not-a-real-key-at-path')));
+    }, timeout: slow);
+
     test('--model beats the flags preconfiguration, CODELAB_MODEL loses to '
         'it', () async {
       File('$home/config.yaml').writeAsStringSync('''

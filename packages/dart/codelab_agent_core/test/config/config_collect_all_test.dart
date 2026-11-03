@@ -14,7 +14,8 @@ void main() {
     'providers': {
       'lm': {
         'kind': 'openai-compatible',
-        'api_key': 'sk-fake-1',
+        'colour':
+            'red', // неизвестный ключ: ошибка слоя (литеральный api_key с R8-4 — предупреждение)
         'base_url': 'ftp://host/v1',
         'models': {
           'm': {'context_window': 8192},
@@ -28,7 +29,7 @@ void main() {
   test('обычный режим обрывается на ошибке проверки слоя', () {
     final result = load([layer(broken())]);
 
-    expect(keys(result), {'providers.lm.api_key'});
+    expect(keys(result), {'providers.lm.colour'});
   });
 
   test('collectAll: ступени после ошибки слоя выполняются, каскад виден', () {
@@ -40,7 +41,7 @@ void main() {
 
     expect(result.config, isNull);
     expect(keys(result), {
-      'providers.lm.api_key',
+      'providers.lm.colour',
       'providers.lm.base_url',
       'agent.default_model',
     });
@@ -305,7 +306,7 @@ void main() {
       expect(marks, hasLength(1));
       expect(marks.single.key, isEmpty);
       expect(marks.single.message, contains('could not be fully checked'));
-      expect(keys(result), contains('providers.lm.api_key'));
+      expect(keys(result), contains('providers.lm.colour'));
     });
 
     test('ключ проблемы не опознан: вырезается весь слой и это degraded', () {
