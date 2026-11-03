@@ -1202,8 +1202,9 @@ sequenceDiagram
 `{"name":"config","description":"Reload or check the agent config","input":{"hint":"reload | check"}}`.
 
 **Механизм 8.10** (D12, OQ1 (а); минимальный, его расширит change встроенных команд):
-`AgentSession.prompt` до разворачивания шаблонов проверяет первый текстовый блок — `/config` или
-`/mcp` и пробел или конец строки. Команда исполняется без модели событиями `TurnStarted`,
+`AgentSession.prompt` до разворачивания шаблонов проверяет первый текстовый блок — первый символ
+`/` (ведущие пробелы не пропускаются, как у шаблонов), затем `config` или `mcp` и пробел или конец
+строки. Команда исполняется без модели событиями `TurnStarted`,
 `MessageStarted`, `MessageDelta`, `MessageEnded`, `TurnEnded(endTurn)`; ни промпт, ни ответ в
 журнал не пишутся (CFG-18), источник — `SlashCommandSource.builtin`, лог
 `command.builtin {session_id, name, subcommand}` без аргументов. Строки от пользователя (`<id>`,
@@ -1215,18 +1216,33 @@ change встроенных команд).
 `AgentSession.prompt` той же сессии во время неё отклоняется так же, как во время хода модели;
 правило держит `AgentSession`, поэтому оно действует и вне моста ACP. Ходом модели команда не
 является: отсрочку замены серверов до `TurnEnded` она не вызывает, и замена, вызванная `/mcp
-reload`, применяется до ответа. `session/cancel` во время `/config reload` отменяет только ожидание
-ответа: перезагрузка доводится до конца, команда отвечает `stopReason: cancelled` без текста и
-освобождает слот.
+reload`, применяется до ответа.
+
+**Отмена** (D12, «Отмена встроенной команды»). `session/cancel` и закрытие сессии во время любой
+встроенной команды отменяют только ожидание ответа: команда отвечает `stopReason: cancelled` без
+текста, освобождает слот и пишет `command.builtin.cancelled {session_id, name, subcommand}` (info).
+Начатая перезагрузка и уже исполняемое ручное действие над сервером доводятся до конца; новых
+действий отменённая команда не начинает: `/mcp reload` после отмены серверы `failed` не будит, а
+её действие, ещё ждавшее в очереди замен, не исполняется (§17.5.7).
+
+**Отказ команды** (D12). Исключение внутри команды (кроме сбоя загрузки у `/config check`)
+завершает ход как сбой хода модели: `AgentError(cls: hook, 'the built-in command failed (<Type>)')`
+и `TurnEnded(failed)` без сообщения; мост отвечает `-32603` (§13.8, ACP-7); лог warning
+`command.builtin.failed {session_id, name, subcommand, error_class}`, только `runtimeType`.
+
+**Доставка событий** (D12, ACP-3). К возврату `AgentSession.prompt` все события хода доставлены
+подписчикам `events`. У встроенной команды нет записи журнала, которая отдала бы управление, поэтому
+после `TurnEnded` она отдаёт один оборот цикла событий (`await Future<void>(() {})`) — это не таймер
+ожидания (PKG-6): длительности нет, часы не читаются.
 
 | Команда | Ответ (фиксированный английский текст) |
 |---|---|
-| `/config reload` | `Config reloaded: <n> keys changed.` \| `Config unchanged.` \| `Config reload failed (<n> issues). Current settings kept. Run /config check.`; при отложенных ключах — строка `Restart required: <k1>, <k2>` |
-| `/config check` | перезагрузка без применения. Первая строка — ровно `Config: valid` или `Config: invalid (issues: <n>)`, та же строка, что итог `config check` CLI; при `invalid` — по строке на проблему `- ` + `ConfigIssue.toString()`: `- <source>[:<line>:<column>]: <key>: <message>` (без `<key>: ` при пустом ключе) — тот же формат, что у `config check` (D12 design.md change `add-config-writer-and-reload`); затем `Sources: …` и `Restart required: …` (если есть). Клиенты определяют исход только по первой строке |
+| `/config reload` | первая строка по исходу: `applied` — `Config reloaded: 1 key changed.` при одном применённом ключе, `Config reloaded: <n> keys changed.` при `n ≥ 2`, `Config reloaded: no keys applied now.`, если `changedKeys` пуст и все изменённые ключи отложены (R7-1); `unchanged` — `Config unchanged.`; `failed` — `Config reload failed (1 issue). Current settings kept. Run /config check.` при одной проблеме, `Config reload failed (<n> issues). Current settings kept. Run /config check.` при `n ≥ 2` (R7-2). Затем при непустом `restartRequiredKeys` — строка `Restart required: <k1>, <k2>`. У `unchanged` её не бывает: ожидающий ключ снова попадает в diff, и исход — `applied` (design.md change `add-config-writer-and-reload`, D8, D12) |
+| `/config check` | перезагрузка без применения. Первая строка — ровно `Config: valid` или `Config: invalid (issues: <n>)`, та же строка, что итог `config check` CLI (без склонения и при `n = 1`); при `invalid` — по строке на проблему `- ` + `ConfigIssue.toString()`: `- <source>[:<line>:<column>]: <key>: <message>` (без `<key>: ` при пустом ключе) — тот же формат, что у `config check` (D12 design.md change `add-config-writer-and-reload`); затем `Sources: …` и `Restart required: …` (если есть). Клиенты определяют исход только по первой строке. Если загрузка бросила исключение (сбой чтения, а не проблемы конфига) — ровно `Config check failed (<ErrorType>). See the agent log.` (`<ErrorType>` — `runtimeType`, текст исключения не выводится), лог warning `config.check.failed {session_id, error_class}` |
 | `/config` с другим аргументом | `Usage: /config reload \| /config check` |
 
 `/status` (§13.6) получает строки: `Config: ok` или
-`Config: reload failed at <ISO-время> (<n> issues). Run /config check.`, и при наличии —
+`Config: reload failed at <ISO-время> (<n> issues). Run /config check.` (при одной проблеме — `1 issue`, R7-2), и при наличии —
 `Restart required: <ключи>` — вместе с change встроенных команд, не в 8.10 (D12).
 
 ## 17.5.7. Алгоритм: MCP-переподключение и команды (E-04, E-13)
@@ -1346,23 +1362,45 @@ config` сохраняется. Проблемы построения выклю
 | Вызов | Действие | Ответ |
 |---|---|---|
 | `/mcp list` (и `/mcp` без аргументов) | `McpSessionTools.servers` | таблица ниже |
-| `/mcp reload` | `reloadConfig()`, затем немедленное пробуждение всех `failed`. `/mcp` — не ход модели, поэтому замена серверов конфига (D10) происходит до ответа, и таблица показывает состояние на момент ответа | строка итога (`Config reloaded: …` или `Config reload failed (<n> issues); MCP servers unchanged. Run /config check.`), затем таблица |
+| `/mcp reload` | `reloadConfig()`, затем — только при исходе `applied` или `unchanged` — немедленное пробуждение всех `failed`; при `failed` серверы не будятся: прежний снимок остаётся целиком, как и обещает `MCP servers unchanged`, а серверы `failed` ждут своего расписания. `/mcp` — не ход модели, поэтому замена серверов конфига (D10) происходит до ответа, и таблица показывает состояние на момент ответа | строки итога — те же, что у `/config reload` (§17.5.6: `Config reloaded: 1 key changed.`, `Config reloaded: <n> keys changed.`, `Config reloaded: no keys applied now.`, `Config unchanged.`, затем `Restart required: …`), кроме исхода `failed`: `Config reload failed (1 issue); MCP servers unchanged. Run /config check.` при одной проблеме, `Config reload failed (<n> issues); MCP servers unchanged. Run /config check.` при `n ≥ 2` (R7-1, R7-2); затем таблица |
 | `/mcp reload <id>` | `McpSessionTools.reconnect(id)` без перечитывания конфига; работает и для `session`-сервера | таблица |
 | `/mcp disable <id>`, `/mcp enable <id>` | `setEnabled` — только для этой сессии, в памяти: не пишется ни в конфиг, ни в журнал; после `session/load` действует конфиг. `enable` подключает и сервер с `enabled: false` в конфиге — с параметрами применённого снимка (это действие человека, R0-1 к нему не относится; R6-1), и выключенный коллизией имён — повторная коллизия снова даёт `disabled` (D11). `<id>` ищется только среди серверов применённого снимка: отложенный новый — `Unknown MCP server`, у отложенного изменённого включается прежний вариант (D10) | таблица |
 | неизвестный `<id>` | — | `Unknown MCP server: <id>. Run /mcp list.` |
 | другой аргумент | — | `Usage: /mcp list \| /mcp reload [<id>] \| /mcp enable <id> \| /mcp disable <id>` |
 
-Таблица `/mcp list` — фиксированный английский текст в блоке ```` ```text ````, колонки выровнены
-пробелами по самой длинной ячейке плюс два пробела; `LAST ERROR` — `lastError` или `-`, для
-`failed` с суффиксом ` (retry in <n>s)`; пустой список — строка `No MCP servers.` без блока:
+Таблица `/mcp list` — фиксированный английский текст, побайтово (D12, «Таблица `/mcp list`»;
+образец — фикстура `acp/slash-mcp-list`); пустой список — строка `No MCP servers.` без блока:
+- текст: ```` ```text ```` и `\n`, шапка `MCP servers (<n>)` (`n` — число серверов) и `\n`, строки
+  таблицы через `\n`, затем `\n` и закрывающая ограда ```` ``` ````; после ограды `\n` нет — текст ею
+  заканчивается (у `/mcp reload` строки итога стоят перед блоком);
+- первая строка таблицы — заголовки; каждая колонка, кроме последней, дополняется пробелами справа
+  до длины самой длинной ячейки колонки (с заголовком) **в рунах** плюс два, поэтому разделитель —
+  не меньше двух пробелов; последняя колонка `LAST ERROR` не дополняется, хвостовых пробелов нет;
+- `SOURCE` — `config` | `session`, `TRANSPORT` — `stdio` | `http`, `STATE` — `connecting` |
+  `connected` | `failed` | `disabled`, `TOOLS` — `toolCount` (у `disabled` — `0`);
+- `LAST ERROR` — `lastError`, а при `lastError == null` — `-` в любом состоянии, в том числе у
+  сервера с `enabled: false` в конфиге; только у `failed` с назначенным повтором к ячейке
+  дописывается ` (retry in <n>s)`: `n` — `retryIn`, округлённый до целых секунд (половина — вверх),
+  не меньше `1`;
+- порядок строк — `McpSessionTools.servers` без пересортировки: серверы применённого снимка конфига
+  в порядке `mcp.servers`, затем серверы клиента ACP (`session/new`, `session/load`) в порядке
+  запроса; сервер клиента с тем же `name` затеняет сервер конфига, строка у имени одна.
 
 ```text
 MCP servers (3)
 ID        SOURCE   TRANSPORT  STATE      TOOLS  LAST ERROR
 github    config   http       connected  12     -
-docs      session  stdio      failed     4      process exited with code 1 (retry in 8s)
 local-db  config   stdio      disabled   0      disabled by /mcp disable
+docs      session  stdio      failed     4      process exited with code 1 (retry in 8s)
 ```
+
+**Ручные действия и ход модели** (D11, D12). `/mcp reload <id>` и `/mcp enable|disable` идут через
+очередь замен сессии. Ручные `reconnect` и `setEnabled` не меняют набор инструментов и системный
+промпт посреди шага: действие, завершившееся во время хода модели, применяется на границе шага тем же
+`takeUpdate()`, что после таймерного переподключения (п. 4 `supervise`). Сбой ручного действия —
+`mcp.server.failed {session_id, server, transport, action, reason}` (warning; `action` —
+`reconnect`, `enable` или `disable`, `reason` — `MCP action failed: <runtimeType>`): схема события
+та же, что у сбоя подключения (§15.5, §12.3), с добавленным `action`.
 
 Постоянные изменения (добавить, изменить, удалить, выключить сервер) делают клиенты через
 `ConfigWriter` (§17.5.5); агент подхватывает их перезагрузкой. Страница настроек app для
@@ -1593,7 +1631,7 @@ mcp:
 События лога (дополнение §12.3): `config.reload.applied`, `config.reload.failed`,
 `config.reload.noop`, `config.reload.restart_required`, `config.reload.model_orphaned`,
 `config.preconfig.shadowed`, `config.write`, `config.write.stale_lock`, `config.watch.debounce` (debug, `path`), `config.watch.fallback`, `config.watch.failed`,
-`command.builtin` (уровни и поля — §12.3, таблица событий 8.10; design.md change
+`command.builtin`, `command.builtin.cancelled`, `command.builtin.failed`, `config.check.failed` (уровни и поля — §12.3, таблица событий 8.10; design.md change
 `add-config-writer-and-reload`, D14); `secrets.lookup` (только `--debug-secrets`), `secrets.backend.selected`,
 `secrets.backend.unavailable`, `secrets.backend.plaintext`, `secrets.file.refused` (поля и условия —
 §12.3, таблица `secrets.*`; design.md change `add-agent-secret-store`, D10); `config.secret.unavailable`
@@ -1675,13 +1713,13 @@ agent:
 работать со старым конфигом. `/config reload`:
 
 ```text
-Config reload failed (1 issues). Current settings kept. Run /config check.
+Config reload failed (1 issue). Current settings kept. Run /config check.
 ```
 
 `/status` с change встроенных команд (не 8.10, D12):
 
 ```text
-Config: reload failed at 2026-10-21T08:03:10Z (1 issues). Run /config check.
+Config: reload failed at 2026-10-21T08:03:10Z (1 issue). Run /config check.
 ```
 
 `/config check`:

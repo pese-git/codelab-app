@@ -225,7 +225,7 @@
 
 ## 7. Команды `/config` и `/mcp` (итерация 7; D12; OQ1 (а))
 
-- [ ] 7.1 `[agent]` Тесты `codelab_agent_core/test/commands/builtin_commands_test.dart` (agent-slash-commands «Встроенные команды config и mcp», все сценарии; «Список команд сессии», сценарии «Встроенные команды идут первыми», «Перезагрузка не меняет список»):
+- [x] 7.1 `[agent]` Тесты `codelab_agent_core/test/commands/builtin_commands_test.dart` (agent-slash-commands «Встроенные команды config и mcp», все сценарии; «Список команд сессии», сценарии «Встроенные команды идут первыми», «Перезагрузка не меняет список»):
   - тексты побайтово, таблица `/mcp list`;
   - без модели и без журнала;
   - `Usage`, неизвестный `<id>`;
@@ -234,16 +234,30 @@
   - `session/cancel` → `cancelled`, слот освобождён;
   - без `ConfigSource` и при `configCommand: false` — текст модели (сценарий «WebSocket без /config»);
   - первая строка `/config check` — `Config: valid` / `Config: invalid (issues: <n>)`, строки проблем — `ConfigIssue.toString()`;
+  - R7-1: исход `applied` с пустым `changedKeys` и непустым `restartRequiredKeys` — `Config reloaded: no keys applied now.` и `Restart required: …` у `/config reload` и `/mcp reload` (перед таблицей); повторная перезагрузка без правок при ожидающих ключах — снова так же, а не `Config unchanged.`; `unchanged` — ровно `Config unchanged.` без `Restart required` (сценарии «Перезагрузка только с отложенными ключами», «Повторная перезагрузка без правок», «/mcp reload только с отложенными ключами»);
+  - R7-2: склонение — `Config reloaded: 1 key changed.` / `2 keys changed.`, `Config reload failed (1 issue). …` / `(2 issues)`, у `/mcp reload` — `Config reload failed (1 issue); MCP servers unchanged. …` / `(2 issues)`; `/config check` с одной проблемой — по-прежнему `Config: invalid (issues: 1)` (сценарии «Один изменённый ключ», «Одна проблема при перезагрузке», «/config check после ручной ошибки»);
   - параллельный `prompt` во время `/mcp reload` отклонён, в том числе без моста ACP; `/mcp reload` после отложенной замены (сценарии «Параллельный промпт во время /mcp reload», «/mcp reload после отложенной замены»).
 
   Красный.
-- [ ] 7.2 `[agent]` `commands/builtin_commands.dart`, `SlashCommandSource.builtin`, перехват в `AgentSession.prompt` до шаблонов под тем же слотом хода, объявление по `services.config`, `configCommand` и capability `mcp`, лог `command.builtin`:
+- [x] 7.2 `[agent]` `commands/builtin_commands.dart`, `SlashCommandSource.builtin`, перехват в `AgentSession.prompt` до шаблонов под тем же слотом хода, объявление по `services.config`, `configCommand` и capability `mcp`, лог `command.builtin`:
   - снять `skip` у контрольного теста `apps/codelab_agent/test/agent_host_ws_commands_test.dart` (stdio объявляет `config` и `mcp`), R0-3;
   - провести `/mcp reload <id>`, `/mcp enable|disable` (`McpSessionTools.reconnect`, `setEnabled`) через очередь замен сессии (D10, D11): прямые `_McpState.reconnect`/`setEnabled` рантайма удалены в итерации 6, а ручное действие не должно обгонять идущую замену и подключать сервер, который она удаляет (agent-mcp-client «Переподключение и состояние серверов сессии»).
 
   7.1 зелёный.
-- [ ] 7.3 `[protocol]` Фикстура `packages/dart/codelab_acp_testing/fixtures/acp/slash-mcp-list.json` и фабрика агентского прогона (`setup.config.mcp.servers`; acp-golden-fixtures «Фикстуры файлов проекта этапа 8», сценарий «Таблица /mcp list»). Обновлённые `acp/available-commands-no-tools.json` и `acp/prompt-template-command.json` (список `mcp`, `review`; оба кадра `available_commands_update` второй фикстуры). Тесты `codelab_agent_acp/test/conformance_test.dart` и `session_new_test.dart` (agent-acp-server «session/new», сценарии «Режимы и опции новой сессии», «Команды шаблонов после session/new»; «Уведомления после перезагрузки конфигурации», сценарий «Ответ встроенной команды»). Красный.
-- [ ] 7.4 `[protocol]` `codelab_agent_acp`: `available_commands_update` со встроенными командами, кадры ответа команды; прочие фикстуры, сверяющие список команд побайтово, обновлены. Клиентский прогон фикстур (`melos run` клиентского драйвера) зелёный без изменений клиента. 7.3 зелёный.
+- [x] 7.3 `[protocol]` Фикстура `packages/dart/codelab_acp_testing/fixtures/acp/slash-mcp-list.json` и фабрика агентского прогона (`setup.config.mcp.servers`; acp-golden-fixtures «Фикстуры файлов проекта этапа 8», сценарий «Таблица /mcp list»). Обновлённые `acp/available-commands-no-tools.json` и `acp/prompt-template-command.json` (список `mcp`, `review`; оба кадра `available_commands_update` второй фикстуры). Тесты `codelab_agent_acp/test/conformance_test.dart` и `session_new_test.dart` (agent-acp-server «session/new», сценарии «Режимы и опции новой сессии», «Команды шаблонов после session/new»; «Уведомления после перезагрузки конфигурации», сценарий «Ответ встроенной команды»). Красный.
+- [x] 7.4 `[protocol]` `codelab_agent_acp`: `available_commands_update` со встроенными командами, кадры ответа команды; прочие фикстуры, сверяющие список команд побайтово, обновлены. Клиентский прогон фикстур (`melos run` клиентского драйвера) зелёный без изменений клиента. 7.3 зелёный.
+
+- [x] 7.5 `[agent]` Исправления по ревью итерации 7 (D12: «Тексты», «Таблица `/mcp list`», «Отмена встроенной команды», «Контракт `AgentSession.prompt` и доставка событий»; D14; §17.5.6, §17.5.7, §12.3). Сначала тесты в `codelab_agent_core/test/commands/builtin_commands_test.dart`, группа `review fixes of iteration 7` — красный; затем `commands/builtin_commands.dart` и `_Session` в `runtime/agent_runtime.dart` — зелёный:
+  - `/mcp reload` при исходе `failed` не вызывает `reconnect` (agent-slash-commands, сценарий «/mcp reload при невалидном конфиге не будит серверы»);
+  - отмена `session/cancel` и `close()` во время команды — `TurnEnded(cancelled)` без сообщения, слот свободен, лог `command.builtin.cancelled`; отменённый `/mcp reload` не будит серверы, его действие, ждавшее в очереди замен, не исполняется (сценарии «Отменённый /mcp reload», «Закрытие сессии во время команды»);
+  - ручное действие, завершившееся во время хода модели, меняет набор инструментов только на границе шага (`takeUpdate()`, D11), а не прямой заменой `tools`/`systemPrompt` агента (сценарий «Отменённый /mcp reload», последний пункт);
+  - `/config check` при исключении загрузки — `Config check failed (<ErrorType>). See the agent log.` и `config.check.failed {session_id, error_class}` без текста исключения (сценарий «Сбой загрузки при /config check»);
+  - сбой ручного действия — `mcp.server.failed {session_id, server, transport, action, reason}` (сценарий «Сбой ручного действия /mcp»);
+  - отказ команды — `AgentError(hook)` + `TurnEnded(failed)`, лог `command.builtin.failed`, ответ моста `-32603` (сценарий «Отказ встроенной команды»); ведущий пробел — текст модели (сценарий «Ведущий пробел — не команда»);
+  - ячейки и порядок таблицы: `-` при `lastError == null` в любом состоянии, ` (retry in <n>s)` только у `failed`, округление и минимум `1`, порядок `McpSessionTools.servers`, конец текста — ограда без `\n` (сценарий «Ячейки таблицы /mcp list»; `acp/slash-mcp-list` не меняется);
+  - контракт доставки: к возврату `prompt` встроенной команды подписчик `events` получил `TurnEnded` (ACP-3); пауза — один оборот цикла событий, без `Clock`/`Timer` (PKG-6).
+
+  Документы (D12, D14, §17.5.6, §17.5.7, §17.5.9, §12.3) обновлены вместе с этой задачей.
 
 **Критерий итерации 7.** `acp/slash-mcp-list` зелёная; в палитре codelab-app и в `/agent:` CLI видны `mcp` и, при источнике конфига, `config`.
 
