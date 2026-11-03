@@ -23,6 +23,12 @@ FakeMcpServer _server(List<String> tools) => FakeMcpServer(
   tools: [for (final t in tools) FakeMcpTool(t)],
 );
 
+/// Имена серверов, которые сейчас подключены (сводка несёт и отключённые, D11).
+List<String> _connected(McpSessionTools session) => [
+  for (final s in session.servers)
+    if (s.state == McpServerState.connected) s.name,
+];
+
 List<String> _names(McpSessionTools session) => [
   for (final t in session.tools) t.name,
 ];
@@ -140,7 +146,7 @@ void main() {
     await session.replaceServers([_stdio('my.srv'), _stdio('my_srv')]);
 
     expect(_names(session), ['mcp__my_srv__t']);
-    expect(session.servers.map((s) => s.name), ['my_srv']);
+    expect(_connected(session), ['my_srv']);
     expect(fakes['my_srv']!.closedTransports, 0);
     expect(fakes['my.srv']!.closedTransports, 1);
     final failed = h.logger.eventsOf('mcp.server.failed').single.fields;
@@ -171,11 +177,12 @@ void main() {
     final session = await connector().connect(
       request([_stdio('my_srv'), _stdio('my.srv')]),
     );
-    expect(session.servers.map((s) => s.name), ['my_srv']);
+    expect(_connected(session), ['my_srv']);
 
     await session.replaceServers([_stdio('my.srv')]);
 
     expect(session.servers.map((s) => s.name), ['my.srv']);
+    expect(_connected(session), ['my.srv']);
     expect(_names(session), ['mcp__my_srv__t']);
     expect(factory.opened, ['my_srv', 'my.srv', 'my.srv']);
   });

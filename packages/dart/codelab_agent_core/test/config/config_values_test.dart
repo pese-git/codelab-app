@@ -93,8 +93,9 @@ void main() {
       expect(result.values.toString(), isNot(contains('ghp-fake-value')));
     });
 
-    test('a disabled server is not in values (it is not in the config '
-        'either)', () {
+    test('a disabled server is in values with enabled: false, like in the '
+        'config (D10, change `add-config-writer-and-reload`); an element that '
+        'cannot be launched is in neither', () {
       final result = load([
         layer(
           withValues(baseValues(), {
@@ -107,6 +108,7 @@ void main() {
                   'enabled': false,
                 },
                 {'name': 'on', 'type': 'stdio', 'command': 'x'},
+                {'name': 'bare', 'enabled': false},
               ],
             },
           }),
@@ -114,9 +116,11 @@ void main() {
       ]);
 
       expect(result.values.keys.where((k) => k.startsWith('mcp.servers')), [
+        'mcp.servers[off]',
         'mcp.servers[on]',
       ]);
-      expect(result.config!.mcpServers.map((s) => s.name), ['on']);
+      expect(result.values['mcp.servers[off]'], containsPair('enabled', false));
+      expect(result.config!.mcpServers.map((s) => s.name), ['off', 'on']);
     });
 
     test('keys dropped by the trust rules of an untrusted project are not in '

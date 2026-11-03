@@ -532,6 +532,17 @@ final class SpyMcpSession implements McpSessionTools {
     }
   }
 
+  /// Имена из вызовов `reconnect` и `(имя, enabled)` из `setEnabled` (D11).
+  final reconnected = <String>[];
+  final enabledCalls = <(String, bool)>[];
+
+  @override
+  Future<void> reconnect(String name) async => reconnected.add(name);
+
+  @override
+  Future<void> setEnabled(String name, bool enabled) async =>
+      enabledCalls.add((name, enabled));
+
   @override
   Future<void> close() async {
     closed = true;

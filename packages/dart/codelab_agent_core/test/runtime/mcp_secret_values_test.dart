@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
@@ -32,12 +31,20 @@ McpStdioServerConfig _docs() => const McpStdioServerConfig(
 );
 
 /// Секреты MCP-серверов конфигурации (agent-secrets «Секреты MCP-серверов
-/// конфигурации»; design.md change `add-agent-secret-store`, D4, D12):
-/// рантайм раскрывает шаблоны перед `connect`.
+/// конфигурации»; design.md change `add-agent-secret-store`, D4, D12, и
+/// `add-config-writer-and-reload`, D11).
+///
+/// Контракт с итерации 6: рантайм не раскрывает шаблоны сам, а передаёт
+/// коннектору нераскрытые серверы и замыкание `McpConnectRequest.expandSecrets`;
+/// коннектор зовёт его перед каждой попыткой. `FakeMcpConnector` повторяет это:
+/// `expanded` — серверы после раскрытия, `expandFailures` — отказы. Сервер с
+/// недоступным секретом остаётся в списке коннектора (там он `failed` и
+/// повторяется), а не выпадает из него.
 void main() {
   late RecordingStore store;
   late FakeMcpConnector mcp;
   late FakeSecretStore secrets;
+  SecretResolver? resolver;
 
   setUp(() {
     store = RecordingStore();
@@ -51,6 +58,13 @@ void main() {
     bool withSecrets = true,
   }) {
     final logger = RecordingLogger();
+    resolver = withSecrets
+        ? SecretResolver(
+            store: backend ?? secrets,
+            environment: const {},
+            logger: logger,
+          )
+        : null;
     return CoreHarness.build(
       baseEnv: MemoryExecutionEnv(cwd: '/proj'),
       narrow: noExec,
@@ -58,13 +72,7 @@ void main() {
       sessions: store,
       mcp: mcp,
       mcpServers: config ?? [_gh(), _docs()],
-      secrets: withSecrets
-          ? SecretResolver(
-              store: backend ?? secrets,
-              environment: const {},
-              logger: logger,
-            )
-          : null,
+      secrets: resolver,
     );
   }
 
@@ -78,7 +86,7 @@ void main() {
           SessionSpec(cwd: '/proj'),
         );
 
-        final servers = mcp.requests.single.servers;
+        final servers = mcp.expanded.single;
         expect([for (final s in servers) s.name], ['gh', 'docs']);
         final gh = servers.first as McpHttpServerConfig;
         expect(gh.headers, [
@@ -117,7 +125,7 @@ void main() {
 
       await h.core.runtime.createSession(SessionSpec(cwd: '/proj'));
 
-      final fs = mcp.requests.single.servers.single as McpStdioServerConfig;
+      final fs = mcp.expanded.single.single as McpStdioServerConfig;
       expect(fs.env, {'K': 'v', 'TOKEN': 'Bearer $_token'});
     });
 
@@ -139,8 +147,7 @@ void main() {
           ),
         );
 
-        final client =
-            mcp.requests.single.servers.single as McpHttpServerConfig;
+        final client = mcp.expanded.single.single as McpHttpServerConfig;
         expect(client.headers, [
           ('Authorization', r'${secret:codelab/openai}'),
         ]);
@@ -158,13 +165,14 @@ void main() {
 
       await h.core.runtime.createSession(SessionSpec(cwd: '/proj'));
 
-      expect(mcp.requests.single.servers, hasLength(2));
+      expect(mcp.expanded.single, hasLength(2));
       expect(secrets.reads, [_name]);
     });
   });
 
   group('failures', () {
-    test('a missing secret fails only its server', () async {
+    test('a missing secret fails only its server; it stays in the list the '
+        'connector gets', () async {
       final h = build(backend: FakeSecretStore());
 
       final session = await h.core.runtime.createSession(
@@ -172,12 +180,12 @@ void main() {
       );
 
       expect(session, isNotNull);
-      expect([for (final s in mcp.requests.single.servers) s.name], ['docs']);
-      final failed = h.logger.eventsOf('mcp.server.failed').single;
-      expect(failed.level, LogLevel.warning);
-      expect(failed.fields['server'], 'gh');
-      expect(failed.fields['transport'], 'http');
-      expect(failed.fields['reason'], 'secret $_name is not set');
+      expect(
+        [for (final s in mcp.requests.single.servers) s.name],
+        ['gh', 'docs'],
+      );
+      expect([for (final s in mcp.expanded.single) s.name], ['docs']);
+      expect(mcp.expandFailures.single, {'gh': 'secret $_name is not set'});
     });
 
     test('an unavailable store fails its server with the backend', () async {
@@ -193,11 +201,9 @@ void main() {
 
       await h.core.runtime.createSession(SessionSpec(cwd: '/proj'));
 
-      expect([for (final s in mcp.requests.single.servers) s.name], ['docs']);
-      expect(
-        h.logger.eventsOf('mcp.server.failed').single.fields['reason'],
-        'secret $_name cannot be read: file is unavailable',
-      );
+      expect(mcp.expandFailures.single, {
+        'gh': 'secret $_name cannot be read: file is unavailable',
+      });
     });
 
     test('without services.secrets the reason is no secret store', () async {
@@ -205,20 +211,35 @@ void main() {
 
       await h.core.runtime.createSession(SessionSpec(cwd: '/proj'));
 
-      expect([for (final s in mcp.requests.single.servers) s.name], ['docs']);
-      expect(
-        h.logger.eventsOf('mcp.server.failed').single.fields['reason'],
-        'no secret store',
-      );
+      expect(mcp.expandFailures.single, {'gh': 'no secret store'});
     });
 
-    test('when every server fails the connector is not called', () async {
+    test('when every server fails the connector is still called: the servers '
+        'are failed there and retried (scenario "Секрет не задан при '
+        'повторе")', () async {
       final h = build(config: [_gh()], backend: FakeSecretStore());
 
       await h.core.runtime.createSession(SessionSpec(cwd: '/proj'));
 
-      expect(mcp.requests, isEmpty);
-      expect(h.logger.eventsOf('mcp.server.failed'), hasLength(1));
+      expect(mcp.requests, hasLength(1));
+      expect(mcp.requests.single.servers.single.secretValues, isNotEmpty);
+      expect(mcp.expanded.single, isEmpty);
+      expect(mcp.expandFailures.single, {'gh': 'secret $_name is not set'});
+    });
+
+    test('the closure expands again on every call: a rotated secret is taken '
+        'on the next attempt', () async {
+      final h = build(config: [_gh()]);
+      await h.core.runtime.createSession(SessionSpec(cwd: '/proj'));
+      final expand = mcp.requests.single.expandSecrets!;
+      final server = mcp.requests.single.servers.single;
+      secrets.values[_name] = 'tok-rotated';
+
+      // Кэш резолвера живёт до `invalidate` (перезагрузка конфига его сбрасывает).
+      resolver!.invalidate();
+      final again = await expand(server) as McpHttpServerConfig;
+
+      expect(again.headers.last, ('Authorization', 'Bearer tok-rotated'));
     });
   });
 
@@ -233,7 +254,7 @@ void main() {
 
       await h.core.runtime.loadSession(created.id, const SessionHostPorts());
 
-      final gh = mcp.requests.last.servers.first as McpHttpServerConfig;
+      final gh = mcp.expanded.last.first as McpHttpServerConfig;
       expect(gh.headers, [
         ('X-Plain', 'v'),
         ('Authorization', 'Bearer $_token'),
@@ -260,11 +281,10 @@ void main() {
 
       await h.core.runtime.loadSession(created.id, const SessionHostPorts());
 
-      expect([for (final s in mcp.requests.last.servers) s.name], ['docs']);
-      expect(
-        h.logger.eventsOf('mcp.server.failed').single.fields['reason'],
-        'secret $_name cannot be read: file is unavailable',
-      );
+      expect([for (final s in mcp.expanded.last) s.name], ['docs']);
+      expect(mcp.expandFailures.last, {
+        'gh': 'secret $_name cannot be read: file is unavailable',
+      });
       expect(
         [for (final r in h.logger.records) '${r.fields} ${r.error}'].join(),
         isNot(contains(_token)),
@@ -286,11 +306,11 @@ void main() {
       final session = await h.core.runtime.createSession(
         SessionSpec(cwd: '/proj'),
       );
-      final connected = mcp.requests.single.servers.single;
+      final connected = mcp.expanded.single.single;
 
       await session.setMcpServers([client('other', 'plain')]);
 
-      final replaced = mcp.sessions.single.replaced.single;
+      final replaced = mcp.sessions.single.replacedExpanded.single;
       expect([for (final s in replaced) s.name], ['gh', 'other']);
       final gh = replaced.first as McpHttpServerConfig;
       expect(gh.headers, contains(('Authorization', 'Bearer $_token')));
@@ -298,7 +318,7 @@ void main() {
       // раскрытые конфиги до и после смены совпадают, переподключения нет.
       expect(gh.sameConnection(connected), isTrue);
       expect(secrets.reads, [_name]);
-      expect(h.logger.eventsOf('mcp.server.failed'), isEmpty);
+      expect(mcp.expandFailures.single, isEmpty);
     });
 
     test('a client server named like a config server with a reference gets '
@@ -310,71 +330,11 @@ void main() {
 
       await session.setMcpServers([client('gh', r'${secret:codelab/other}')]);
 
-      final replaced = mcp.sessions.single.replaced.single;
+      final replaced = mcp.sessions.single.replacedExpanded.single;
       final gh = replaced.single as McpHttpServerConfig;
       expect(gh.origin, McpServerOrigin.session);
       expect(gh.headers, [('Authorization', r'${secret:codelab/other}')]);
       expect(secrets.reads, [_name]);
     });
-
-    test('close() during expansion ends quietly: no mcp.server.failed '
-        'and no connector call', () async {
-      // Секрета нет, первый сервер выпал; значение появится позже, и
-      // смена наборов упрётся в хранилище (ненайденное не кэшируется).
-      final backend = FakeSecretStore();
-      final h = build(config: [_gh()], backend: backend);
-      final session = await h.core.runtime.createSession(
-        SessionSpec(cwd: '/proj'),
-      );
-      expect(h.logger.eventsOf('mcp.server.failed'), hasLength(1));
-      final gate = Completer<void>();
-      backend
-        ..values[_name] = _token
-        ..gate = gate;
-
-      final changing = session.setMcpServers([client('other', 'plain')]);
-      await pumpEventQueue();
-      final closing = session.close();
-      await pumpEventQueue();
-      gate.complete();
-      await changing;
-      await closing;
-
-      expect(h.logger.eventsOf('mcp.server.failed'), hasLength(1));
-      expect(mcp.requests, isEmpty);
-    });
-  });
-
-  group('dispose', () {
-    test(
-      'during expansion the result is discarded and connect is not called',
-      () async {
-        final gate = Completer<void>();
-        final h = build(
-          backend: FakeSecretStore(values: {_name: _token}, gate: gate),
-        );
-
-        final creating = h.core.runtime.createSession(
-          SessionSpec(cwd: '/proj'),
-        );
-        final cancelled = expectLater(
-          creating,
-          throwsA(isA<CancelledException>()),
-        );
-        await pumpEventQueue();
-        final disposing = h.core.runtime.dispose();
-        // Отмена доходит до токена сессии микрозадачей (CAN-1): значение
-        // приходит уже после неё, как у загрузки файлов проекта.
-        await pumpEventQueue();
-        gate.complete();
-
-        await cancelled;
-        await disposing;
-        expect(mcp.requests, isEmpty);
-        // agent-runtime «Закрытие во время раскрытия секретов»: тихий конец,
-        // а не сбой сервера.
-        expect(h.logger.eventsOf('mcp.server.failed'), isEmpty);
-      },
-    );
   });
 }

@@ -801,6 +801,163 @@ void main() {
       expect(report.changedKeys, containsAll(['mcp.servers[a]']));
       expect(rig.serverNames(), isEmpty);
     });
+
+    test('disabling is applied as a disabled server in the snapshot; enabling '
+        'it back waits for a restart (R0-1; D10)', () async {
+      final rig = await _Rig.create(
+        user: withValues(_user(), {
+          'mcp': {
+            'servers': [_stdio('a')],
+          },
+        }),
+      );
+      _put(rig.user, 'mcp.servers', [_stdio('a', enabled: false)]);
+
+      final disabled = await rig.runtime.reloadConfig();
+
+      expect(disabled.restartRequiredKeys, isEmpty);
+      expect(disabled.changedKeys, ['mcp.servers[a]']);
+      expect(rig.disabledServerNames(), ['a']);
+      expect(rig.serverNames(), isEmpty);
+
+      _put(rig.user, 'mcp.servers', [_stdio('a')]);
+
+      final enabled = await rig.runtime.reloadConfig();
+
+      expect(enabled.restartRequiredKeys, ['mcp.servers[a]']);
+      expect(rig.disabledServerNames(), ['a'], reason: 'the old variant stays');
+      expect(rig.serverNames(), isEmpty);
+    });
+
+    test('a changed command of a disabled stdio server waits as well; '
+        'disabling stays live (R6-1)', () async {
+      final rig = await _Rig.create(
+        user: withValues(_user(), {
+          'mcp': {
+            'servers': [_stdio('off', enabled: false), _stdio('on')],
+          },
+        }),
+      );
+      _put(rig.user, 'mcp.servers', [
+        _stdio('off', command: 'other-mcp', enabled: false),
+        _stdio('on', enabled: false),
+      ]);
+
+      final report = await rig.runtime.reloadConfig();
+
+      expect(report.restartRequiredKeys, ['mcp.servers[off]']);
+      expect(report.changedKeys, ['mcp.servers[on]']);
+      expect((rig.server('off') as McpStdioServerConfig).command, 'fake-mcp');
+      expect(rig.disabledServerNames(), ['off', 'on']);
+    });
+
+    test(
+      'disabling together with a changed command: the disabling is applied, '
+      'the command waits; the old element stays with enabled: false (R6-1)',
+      () async {
+        final rig = await _Rig.create(
+          user: withValues(_user(), {
+            'mcp': {
+              'servers': [_stdio('a')],
+            },
+          }),
+        );
+        _put(rig.user, 'mcp.servers', [
+          _stdio('a', command: 'other-mcp', enabled: false),
+        ]);
+
+        final report = await rig.runtime.reloadConfig();
+
+        expect(report.outcome, ConfigReloadOutcome.applied);
+        expect(report.restartRequiredKeys, ['mcp.servers[a]']);
+        expect(rig.disabledServerNames(), ['a']);
+        expect((rig.server('a') as McpStdioServerConfig).command, 'fake-mcp');
+        expect(
+          rig.runtime.appliedValues['mcp.servers[a]'],
+          allOf(
+            containsPair('command', 'fake-mcp'),
+            containsPair('enabled', false),
+          ),
+        );
+        expect(rig.runtime.configStatus().pendingRestartKeys, [
+          'mcp.servers[a]',
+        ]);
+
+        // Следующая перезагрузка сравнивает с применённым элементом: правка
+        // команды по-прежнему ждёт перезапуска.
+        final again = await rig.runtime.reloadConfig();
+
+        expect(again.restartRequiredKeys, ['mcp.servers[a]']);
+        expect((rig.server('a') as McpStdioServerConfig).command, 'fake-mcp');
+      },
+    );
+
+    test('a project layer that disables and changes a server: the disabling '
+        'is in the full snapshot only, the snapshot without the project keeps '
+        'the user server enabled (R6-1)', () async {
+      final project = <String, Object?>{
+        'mcp': {
+          'servers': [_stdio('p1')],
+        },
+      };
+      final rig = await _Rig.create(
+        root: '/w/p',
+        user: withValues(_user(), {
+          'trusted_projects': ['/w/p'],
+          'mcp': {
+            'servers': [_stdio('x')],
+          },
+        }),
+        project: project,
+      );
+      _put(project, 'mcp.servers', [
+        _stdio('x', command: 'evil-mcp', enabled: false),
+      ]);
+
+      final report = await rig.runtime.reloadConfig();
+
+      expect(report.restartRequiredKeys, contains('mcp.servers[x]'));
+      final full = rig.runtime.config.mcpServers.firstWhere(
+        (s) => s.name == 'x',
+      );
+      expect(full.enabled, isFalse);
+      expect((full as McpStdioServerConfig).command, 'fake-mcp');
+      final bare = rig.runtime.config.withoutProject!.mcpServers.firstWhere(
+        (s) => s.name == 'x',
+      );
+      expect(bare.enabled, isTrue);
+      expect((bare as McpStdioServerConfig).command, 'fake-mcp');
+    });
+
+    test('an http server without a substitution is enabled live; with a '
+        'substitution it waits (R0-4)', () async {
+      final rig = await _Rig.create(
+        user: withValues(_user(), {
+          'mcp': {
+            'servers': [
+              {..._http('plain'), 'enabled': false},
+              {
+                ..._http(
+                  'keyed',
+                  headers: {'X-Gw': r'${secret:codelab/mcp/k/x}'},
+                ),
+                'enabled': false,
+              },
+            ],
+          },
+        }),
+      );
+      _put(rig.user, 'mcp.servers', [
+        _http('plain'),
+        _http('keyed', headers: {'X-Gw': r'${secret:codelab/mcp/k/x}'}),
+      ]);
+
+      final report = await rig.runtime.reloadConfig();
+
+      expect(report.restartRequiredKeys, ['mcp.servers[keyed]']);
+      expect(rig.serverNames(), ['plain']);
+      expect(rig.disabledServerNames(), ['keyed']);
+    });
   });
 
   // ---- R0-4: секрет не уходит на другой адрес ------------------------------
@@ -1774,8 +1931,19 @@ final class _Rig {
   CatalogProvider provider(String id) =>
       runtime.config.providers.firstWhere((p) => p.config.name == id);
 
+  /// Включённые серверы применённого снимка. Выключенные (`enabled: false`)
+  /// теперь тоже входят в `CoreConfig.mcpServers` (D10, change
+  /// `add-config-writer-and-reload`), но процесса у них нет, поэтому «сервер
+  /// подключён» проверяется по включённым.
   List<String> serverNames() => [
-    for (final s in runtime.config.mcpServers) s.name,
+    for (final s in runtime.config.mcpServers)
+      if (s.enabled) s.name,
+  ];
+
+  /// Имена выключенных серверов применённого снимка.
+  List<String> disabledServerNames() => [
+    for (final s in runtime.config.mcpServers)
+      if (!s.enabled) s.name,
   ];
 
   McpServerConfig server(String name) =>
