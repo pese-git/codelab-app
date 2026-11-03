@@ -80,6 +80,7 @@ void main() {
     Duration pollInterval = const Duration(seconds: 2),
     DirectoryEventsFactory? events,
     ConfigFileProbe? probe,
+    String? Function(String file)? readablePath,
   }) {
     final watcher = ConfigWatcher(
       files: files,
@@ -88,6 +89,7 @@ void main() {
       pollInterval: pollInterval,
       directoryEvents: events ?? fakeEvents,
       probe: probe,
+      readablePath: readablePath,
     );
     watchers.add(watcher);
     watcher.changes.listen((_) => signals++);
@@ -103,6 +105,122 @@ void main() {
       ),
     );
   }
+
+  // Containment проектных слоёв (8.5): `readablePath` возвращает путь для
+  // чтения или `null`, если загрузчик файл не читает.
+  group('readablePath (project layer containment)', () {
+    test('a redirect outside gives one signal, the target is neither read '
+        'nor probed nor watched; a return inside gives a signal', () async {
+      final inside = file('$project/.codelab/shared.yaml');
+      final outsideFile = file('${root.path}/other/config.yaml', 'x: 1\n');
+      final layer = '$project/.codelab/config.yaml';
+      Link(layer).createSync(inside);
+      var allowed = true;
+      final probed = <String>[];
+      watch(
+        [layer],
+        // Широковещательные потоки: после возврата внутрь наблюдатель
+        // подписывается на каталог заново.
+        events: (directory) {
+          requestedDirectories.add(directory.path);
+          return controllers
+              .putIfAbsent(
+                directory.path,
+                () => StreamController<DirectoryChange>.broadcast(sync: true),
+              )
+              .stream;
+        },
+        readablePath: (f) => allowed ? f : null,
+        probe: (path) {
+          probed.add(path);
+          return (exists: true, modified: DateTime(2020), size: 1);
+        },
+      );
+
+      // Перенаправление наружу: ссылка меняется, загрузчик файл больше не читает.
+      File(layer).deleteSync();
+      Link(layer).createSync(outsideFile);
+      allowed = false;
+      emit('$project/.codelab', 'config.yaml');
+      await clock.elapse(const Duration(milliseconds: 300));
+      expect(signals, 1);
+
+      // Правка цели снаружи: ни события каталога цели, ни второго сигнала.
+      expect(
+        requestedDirectories.where((d) => d.startsWith('${root.path}/other')),
+        isEmpty,
+      );
+      File(outsideFile).writeAsStringSync('x: 2\n');
+      await clock.elapse(const Duration(seconds: 5));
+      expect(signals, 1);
+      expect(probed.where((p) => p.contains('other')), isEmpty);
+
+      // Возврат внутрь: опрос заметил смену и дал сигнал.
+      File(layer).deleteSync();
+      Link(layer).createSync(inside);
+      allowed = true;
+      await clock.elapse(const Duration(seconds: 5));
+      expect(signals, 2);
+    });
+
+    test(
+      'a file on error polling stays on polling after block and return',
+      () async {
+        final layer = file('$project/.codelab/config.yaml');
+        var allowed = true;
+        watch(
+          [layer],
+          events: (directory) {
+            requestedDirectories.add(directory.path);
+            return controllers
+                .putIfAbsent(
+                  directory.path,
+                  () => StreamController<DirectoryChange>.broadcast(sync: true),
+                )
+                .stream;
+          },
+          readablePath: (f) => allowed ? f : null,
+        );
+
+        // Поток каталога упал: файл ушёл на опрос (D7).
+        controllers['$project/.codelab']!.addError(StateError('stream died'));
+        await pumpEventQueue();
+        expect(logger.eventsOf('config.watch.fallback'), hasLength(1));
+
+        allowed = false;
+        await clock.elapse(const Duration(seconds: 5));
+        expect(signals, 1);
+        allowed = true;
+        await clock.elapse(const Duration(seconds: 5));
+        expect(signals, 2);
+
+        File(layer).writeAsStringSync('a: 2222\n');
+        await clock.elapse(const Duration(seconds: 5));
+
+        expect(signals, 3, reason: 'the edit must still be seen by polling');
+      },
+    );
+
+    test(
+      'a blocked file stamp differs from a missing file in poll mode',
+      () async {
+        final layer = '$project/.codelab/config.yaml';
+        var allowed = false;
+        watch(
+          [layer],
+          readablePath: (f) => allowed ? f : null,
+          probe: (_) => (exists: false, modified: null, size: 0),
+        );
+
+        await clock.elapse(const Duration(seconds: 5));
+        expect(signals, 0);
+        allowed = true;
+        await clock.elapse(const Duration(seconds: 5));
+
+        expect(signals, 1, reason: 'blocked is not the same as a missing file');
+      },
+    );
+  });
 
   group('debounce and comparison', () {
     test(

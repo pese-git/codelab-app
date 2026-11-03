@@ -49,6 +49,7 @@ final class ConfigWriterHarness {
     String? platform,
     Map<String, String> environment = const {},
     String Function(String home)? homeFor,
+    String cwdName = 'proj',
   }) {
     // Каталог сразу канонический (на macOS `/var` — ссылка на
     // `/private/var`): писатель раскрывает ссылки, и пути в ожиданиях теста
@@ -59,7 +60,7 @@ final class ConfigWriterHarness {
           .resolveSymbolicLinksSync(),
     );
     final home = '${root.path}/home';
-    final cwd = '${root.path}/proj';
+    final cwd = '${root.path}/$cwdName';
     Directory(home).createSync();
     Directory(cwd).createSync();
     final clock = FakeClock();
