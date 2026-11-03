@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 import '../host/host_profile.dart';
 import '../llm/decorators/retry.dart';
 import '../llm/model_catalog.dart';
@@ -36,54 +38,37 @@ ConfigLoadResult resolveConfig(
   List<ConfigTree> layers, {
   required Map<String, String> environment,
   String? projectRoot,
+  bool collectAll = false,
 }) => _resolve(
   layers,
   environment: environment,
   projectRoot: projectRoot,
   fallbackModel: null,
+  collectAll: collectAll,
 );
 
-/// Внутренний проход. [fallbackModel] задаётся только при сборке снимка без
-/// проектных слоёв (D9): если `agent.default_model` в нём не задан или не
-/// разрешается, берётся модель полного снимка, а не ошибка. Остальные
-/// проблемы снимка без проекта возвращаются как проблемы загрузки (отказ):
-/// иначе сессия вне корня запуска получила бы неполную конфигурацию.
-ConfigLoadResult _resolve(
-  List<ConfigTree> layers, {
-  required Map<String, String> environment,
-  required String? projectRoot,
-  required ModelRef? fallbackModel,
-}) {
-  final sources = [for (final layer in layers) layer.source];
-
-  // Проектные слои без корня проекта: доверие проверить не к чему. Это
-  // ошибка программиста хоста, а не пользователя, поэтому исключение (D7).
-  if (projectRoot == null &&
-      layers.any(
-        (l) =>
-            l.kind == ConfigLayerKind.project ||
-            l.kind == ConfigLayerKind.projectLocal,
-      )) {
-    throw ArgumentError.value(
-      projectRoot,
-      'projectRoot',
-      'is required when project layers are passed',
-    );
-  }
-
-  // Шаги 1–2: проверка каждого слоя по схеме до слияния, чтобы проблема
-  // называла файл и строку слоя, который её содержит.
-  final issues = <ConfigIssue>[
-    for (final layer in layers) ...validateLayer(layer),
-    for (final layer in layers) ..._trustedProjectsPlacement(layer),
-    ..._trustedProjectsPaths(layers, environment),
+/// Предупреждения без повторов (событие, ключ, источник): доверие считается и
+/// по исходным слоям, и по вырезанным.
+List<ConfigIssue> _mergeWarnings(
+  List<ConfigIssue> first,
+  List<ConfigIssue> second,
+) {
+  final seen = <String>{};
+  return [
+    for (final w in [...first, ...second])
+      if (seen.add('${w.event}|${w.key}|${w.source}')) w,
   ];
-  if (issues.isNotEmpty) {
-    return ConfigLoadResult(issues: issues, sources: sources);
-  }
+}
 
-  // Шаг 4: правила доверия применяются к слоям `project` и `projectLocal` до
-  // слияния и сравнивают их с итогом слоёв ниже (D7).
+/// Шаг 4: правила доверия к проектным слоям (D7). Вынесен, чтобы режим
+/// `collectAll` мог выполнить его по ИСХОДНЫМ слоям до любого вырезания
+/// (R3-3, третье ревью): отброшенные доверием ключи «блокируют всегда», и
+/// никакая порча слоя не должна их скрывать.
+({List<ConfigTree> effective, List<ConfigIssue> warnings}) _applyTrust(
+  List<ConfigTree> layers,
+  Map<String, String> environment,
+  String? projectRoot,
+) {
   final trusted =
       projectRoot != null &&
       _trustedRoots(layers, environment).any((r) => samePath(r, projectRoot));
@@ -114,6 +99,154 @@ ConfigLoadResult _resolve(
     effective.add(outcome.layer);
     trustWarnings.addAll(outcome.warnings);
   }
+  return (effective: effective, warnings: trustWarnings);
+}
+
+/// Вход для тестов: тот же `resolveConfig` в режиме `collectAll` с заданным
+/// числом кругов [rounds] (ветка «проверка неполна», R3-3). Не экспортируется
+/// из `codelab_agent_core.dart`; публичный API ядра не меняется.
+@visibleForTesting
+ConfigLoadResult resolveCollectAllForTesting(
+  List<ConfigTree> layers, {
+  required Map<String, String> environment,
+  String? projectRoot,
+  required int rounds,
+}) => _resolve(
+  layers,
+  environment: environment,
+  projectRoot: projectRoot,
+  fallbackModel: null,
+  collectAll: true,
+  rounds: rounds,
+);
+
+/// Вход для тестов: вырезание ключей проблем [issues] из [layer]; `degraded`
+/// — сработал фолбэк «весь слой».
+@visibleForTesting
+({ConfigTree layer, bool removed, bool degraded}) withoutKeysForTesting(
+  ConfigTree layer,
+  List<ConfigIssue> issues,
+) => _withoutKeys(layer, issues);
+
+/// Внутренний проход. [fallbackModel] задаётся только при сборке снимка без
+/// проектных слоёв (D9): если `agent.default_model` в нём не задан или не
+/// разрешается, берётся модель полного снимка, а не ошибка. Остальные
+/// проблемы снимка без проекта возвращаются как проблемы загрузки (отказ):
+/// иначе сессия вне корня запуска получила бы неполную конфигурацию.
+ConfigLoadResult _resolve(
+  List<ConfigTree> layers, {
+  required Map<String, String> environment,
+  required String? projectRoot,
+  required ModelRef? fallbackModel,
+  bool collectAll = false,
+  int rounds = 8,
+}) {
+  final sources = [for (final layer in layers) layer.source];
+
+  // Проектные слои без корня проекта: доверие проверить не к чему. Это
+  // ошибка программиста хоста, а не пользователя, поэтому исключение (D7).
+  if (projectRoot == null &&
+      layers.any(
+        (l) =>
+            l.kind == ConfigLayerKind.project ||
+            l.kind == ConfigLayerKind.projectLocal,
+      )) {
+    throw ArgumentError.value(
+      projectRoot,
+      'projectRoot',
+      'is required when project layers are passed',
+    );
+  }
+
+  // Шаги 1–2: проверка каждого слоя по схеме до слияния, чтобы проблема
+  // называла файл и строку слоя, который её содержит.
+  final issues = <ConfigIssue>[
+    for (final layer in layers) ...validateLayer(layer),
+    for (final layer in layers) ..._trustedProjectsPlacement(layer),
+    ..._trustedProjectsPaths(layers, environment),
+  ];
+  if (issues.isNotEmpty) {
+    if (!collectAll) {
+      return ConfigLoadResult(issues: issues, sources: sources);
+    }
+    // R3-1 / R3-3 (решение пользователя 2026-11-03): полный набор проблем
+    // без обрыва ступеней. Ключи с ошибкой слоя исключаются (так же, как
+    // сборка исключает недопустимый элемент), остальные ступени
+    // выполняются, и каскад (`default_model` не в каталоге) виден. Ошибки
+    // слоя идут первыми; повтор той же проблемы из следующего круга
+    // отбрасывается.
+    //
+    // Fail-closed: если круг ничего не вырезал или число кругов исчерпано,
+    // поздние ступени (правила доверия) не выполнены, и это нельзя
+    // выдавать за полный набор: добавляется служебная проблема
+    // [validationIncompleteEvent].
+    final incompleteIssue = ConfigIssue(
+      kind: ConfigIssueKind.semantic,
+      key: '',
+      source: issues.first.source,
+      message: 'the config could not be fully checked; fix the file by hand',
+      event: validationIncompleteEvent,
+    );
+    ConfigLoadResult incomplete() => ConfigLoadResult(
+      issues: [...issues, incompleteIssue],
+      sources: sources,
+    );
+    if (rounds <= 0) {
+      return incomplete();
+    }
+    // Доверие по исходным слоям (до вырезания). Сбой на испорченном слое —
+    // тоже неполнота (fail-closed).
+    var degraded = false;
+    var originalTrust = const <ConfigIssue>[];
+    try {
+      originalTrust = _applyTrust(layers, environment, projectRoot).warnings;
+    } on Object {
+      degraded = true;
+    }
+    var progress = false;
+    final pruned = [
+      for (final layer in layers)
+        () {
+          final cut = _withoutKeys(layer, issues);
+          progress = progress || cut.removed;
+          degraded = degraded || cut.degraded;
+          return cut.layer;
+        }(),
+    ];
+    if (!progress) {
+      return incomplete();
+    }
+    final rest = _resolve(
+      pruned,
+      environment: environment,
+      projectRoot: projectRoot,
+      fallbackModel: fallbackModel,
+      collectAll: true,
+      rounds: rounds - 1,
+    );
+    String sig(ConfigIssue i) => '${i.kind.name}|${i.key}|${i.source}';
+    final seen = {for (final i in issues) sig(i)};
+    return ConfigLoadResult(
+      issues: [
+        ...issues,
+        for (final i in rest.issues)
+          if (!seen.contains(sig(i))) i,
+        // Фолбэк «весь слой» отбросил больше пути проблемы, в том числе
+        // ключи под правилом доверия: результат нельзя выдавать за полный.
+        if (degraded &&
+            !rest.issues.any((i) => i.event == validationIncompleteEvent))
+          incompleteIssue,
+      ],
+      warnings: _mergeWarnings(originalTrust, rest.warnings),
+      sources: sources,
+    );
+  }
+
+  // Шаг 4: правила доверия применяются к слоям `project` и `projectLocal` до
+  // слияния и сравнивают их с итогом слоёв ниже (D7).
+  final applied = _applyTrust(layers, environment, projectRoot);
+  final effective = applied.effective;
+  final trustWarnings = applied.warnings;
 
   final builder = _Builder(
     effective,
@@ -1330,4 +1463,184 @@ final class _Builder {
     }
     return out;
   }
+}
+
+/// Копия [layer] без ключей, названных проблемами [issues] этого слоя
+/// (режим `collectAll`; R3-1, решение 2026-11-03), и признак, что что-то
+/// вырезано.
+///
+/// Почему: проверка слоя нашла ошибочный ключ, и сборка не должна ни читать
+/// его значение неверного типа, ни повторять ту же проблему.
+///
+/// Как работает: сначала все пути разрешаются в цели по исходному дереву, и
+/// только потом цели удаляются; элементы одного списка — по убыванию индекса,
+/// иначе номера следующих проблем указывали бы на сдвинутые элементы. Путь не
+/// разбирается `splitKeyPath`, а сопоставляется строкой с ключами дерева
+/// (`KeyPath.child` не квотирует `"` внутри имени, и разбор такого пути
+/// невозможен). Не найденный до конца путь вырезает ближайшего найденного
+/// предка; не найденный вовсе (ключ верхнего уровня не опознан) — весь слой,
+/// чтобы круг всегда давал прогресс; такой фолбэк даёт `degraded`, и результат
+/// помечается проблемой «проверка неполна» (ревью R3-3).
+({ConfigTree layer, bool removed, bool degraded}) _withoutKeys(
+  ConfigTree layer,
+  List<ConfigIssue> issues,
+) {
+  var values = _deepCopy(layer.values) as Map<String, Object?>;
+  final cut = _Cut();
+  var wholeLayer = false;
+  var fallback = false;
+  for (final issue in issues) {
+    if (issue.source != layer.source || _exact(values, issue.key, cut)) {
+      continue;
+    }
+    fallback = true;
+    final ancestor = _nearestAncestor(values, issue.key, cut);
+    if (ancestor == null) {
+      wholeLayer = true;
+    } else {
+      ancestor();
+    }
+  }
+  var removed = false;
+  if (wholeLayer && values.isNotEmpty) {
+    values = <String, Object?>{};
+    removed = true;
+  } else {
+    for (final (map, key) in cut.mapKeys) {
+      map.remove(key);
+      removed = true;
+    }
+    for (final MapEntry(key: list, value: indexes) in cut.listIndexes.entries) {
+      for (final index in (indexes.toList()..sort()).reversed) {
+        list.removeAt(index);
+        removed = true;
+      }
+    }
+  }
+  return (
+    layer: ConfigTree(
+      kind: layer.kind,
+      source: layer.source,
+      values: values,
+      positions: layer.positions,
+    ),
+    removed: removed,
+    degraded: fallback && removed,
+  );
+}
+
+Object? _deepCopy(Object? v) => switch (v) {
+  Map<String, Object?>() => {
+    for (final e in v.entries) e.key: _deepCopy(e.value),
+  },
+  List<Object?>() => [for (final e in v) _deepCopy(e)],
+  _ => v,
+};
+
+/// Результат вырезания: цели и признак запасного вырезания.
+final class _Cut {
+  final mapKeys = <(Map<String, Object?>, String)>[];
+  final listIndexes = <List<Object?>, Set<int>>{};
+}
+
+/// Точный поиск узла по остатку пути [rest] с возвратом: сначала ключ,
+/// равный всему остатку, затем префиксы от длинного к короткому, при неудаче
+/// — следующий кандидат (результат не зависит от порядка ключей). В [cut]
+/// записывается только найденный узел; неудачные ветки ничего не пишут.
+///
+/// Элемент списка: токен до подходящей `]` (имя может содержать `]`) ищется
+/// по `name`-строке; номер — только для элемента без строкового `name` или
+/// для списка строк, так сервер с именем `"0"` не путается с номером 0.
+/// Дубликаты имени: остаются первый, остальные вырезаются за один круг.
+bool _exact(Object? node, String rest, _Cut cut) {
+  if (node is Map<String, Object?>) {
+    final candidates = [
+      for (final key in node.keys) (key, KeyPath.root.child(key).value),
+    ]..sort((a, b) => b.$2.length.compareTo(a.$2.length));
+    for (final (key, segment) in candidates) {
+      if (rest == segment) {
+        cut.mapKeys.add((node, key));
+        return true;
+      }
+    }
+    for (final (key, segment) in candidates) {
+      if (rest.length > segment.length && rest.startsWith(segment)) {
+        final tail = rest.substring(segment.length);
+        if ((tail.startsWith('.') || tail.startsWith('[')) &&
+            _exact(
+              node[key],
+              tail.startsWith('.') ? tail.substring(1) : tail,
+              cut,
+            )) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  if (node is List<Object?> && rest.startsWith('[')) {
+    for (
+      var end = rest.indexOf(']');
+      end > 0;
+      end = rest.indexOf(']', end + 1)
+    ) {
+      final tail = rest.substring(end + 1);
+      if (tail.isNotEmpty && !tail.startsWith('.')) {
+        continue;
+      }
+      final token = rest.substring(1, end);
+      var indexes = [
+        for (var i = 0; i < node.length; i++)
+          if (node[i] is Map && (node[i] as Map)['name'] == token) i,
+      ];
+      if (indexes.isEmpty) {
+        final n = int.tryParse(token);
+        if (n != null && n >= 0 && n < node.length) {
+          final item = node[n];
+          if (!(item is Map && item['name'] is String)) {
+            indexes = [n];
+          }
+        }
+      }
+      if (indexes.isEmpty) {
+        continue;
+      }
+      if (tail.isEmpty) {
+        (cut.listIndexes[node] ??= {}).addAll(
+          indexes.length > 1 ? indexes.skip(1) : indexes,
+        );
+        return true;
+      }
+      if (_exact(node[indexes.first], tail.substring(1), cut)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/// Запасной поиск: самый глубокий узел, на который указывает начало пути
+/// (жадно, по самому длинному ключу). Вырезание такого предка всегда
+/// помечается `degraded` — это отбрасывает больше, чем путь проблемы.
+void Function()? _nearestAncestor(Object? node, String rest, _Cut cut) {
+  if (node is! Map<String, Object?>) {
+    return null;
+  }
+  final candidates = [
+    for (final key in node.keys) (key, KeyPath.root.child(key).value),
+  ]..sort((a, b) => b.$2.length.compareTo(a.$2.length));
+  for (final (key, segment) in candidates) {
+    if (!rest.startsWith(segment)) {
+      continue;
+    }
+    final tail = rest.substring(segment.length);
+    if (tail.startsWith('.')) {
+      final deeper = _nearestAncestor(node[key], tail.substring(1), cut);
+      if (deeper != null) {
+        return deeper;
+      }
+    }
+    return () => cut.mapKeys.add((node, key));
+  }
+  return null;
 }

@@ -97,6 +97,17 @@ enum ConfigWriteSeam {
 /// питания можно потерять только последнюю правку, повреждённого файла не
 /// будет — как у `secrets.yaml`); новый ключ `yaml_edit` вставляет по
 /// алфавиту, если ключи отображения уже отсортированы, иначе в конец.
+/// Проверка итогового текста слоя ([ConfigLoader.validateCandidate]); тип
+/// нужен шву `candidateCheck` писателя.
+typedef ConfigCandidateCheck =
+    ConfigCandidateResult Function(
+      ConfigTarget target,
+      String text, {
+      required String cwd,
+      required Map<String, String> environment,
+      String? platform,
+    });
+
 final class ConfigWriter {
   ConfigWriter({
     required String codelabHome,
@@ -109,13 +120,13 @@ final class ConfigWriter {
     String? cwd,
     String? platform,
     @visibleForTesting Future<void> Function(ConfigWriteSeam point)? seam,
+    @visibleForTesting ConfigCandidateCheck? candidateCheck,
   }) : // Относительный `codelabHome` привязывается к каталогу процесса сразу:
        // резолвер ссылок идёт от корня и иначе прочёл бы его как абсолютный.
        _codelabHome = isAbsoluteConfigPath(codelabHome)
            ? codelabHome
            : Directory(codelabHome).absolute.path,
        _environment = Map.unmodifiable(environment),
-       _loader = loader,
        _logger = logger,
        _runner = processRunner,
        _locks = ConfigWriteLocks(
@@ -129,11 +140,13 @@ final class ConfigWriter {
        _random = random,
        _cwd = cwd,
        _platform = platform,
-       _seam = seam;
+       _seam = seam,
+       // Шов теста: ветку «проверка неполна» (R3-3) входом файла не получить.
+       _checkCandidate = candidateCheck ?? loader.validateCandidate;
 
   final String _codelabHome;
   final Map<String, String> _environment;
-  final ConfigLoader _loader;
+  final ConfigCandidateCheck _checkCandidate;
   final Logger _logger;
   final SecretProcessRunner _runner;
   final ConfigWriteLocks _locks;
@@ -697,7 +710,7 @@ final class ConfigWriter {
 
     final cwd = target.cwd ?? _cwd ?? Directory.current.path;
     final environment = {..._environment, 'CODELAB_HOME': _codelabHome};
-    final check = _loader.validateCandidate(
+    final check = _checkCandidate(
       target,
       text,
       cwd: cwd,
@@ -734,7 +747,7 @@ final class ConfigWriter {
     // которых не было до правки. Прежние (по ключу и виду, без значений)
     // идут предупреждениями результата: иначе первая запись в пустой слой
     // упиралась бы в `agent.default_model: required`.
-    final baseline = _loader.validateCandidate(
+    final baseline = _checkCandidate(
       target,
       original,
       cwd: cwd,
@@ -746,18 +759,30 @@ final class ConfigWriter {
     // (синтаксис) различаются текстом, иначе разные ошибки слиплись бы.
     String signature(ConfigIssue i) =>
         '${i.kind.name}|${i.key}|${i.source}|${i.key.isEmpty ? i.message : ''}';
-    final existing = {for (final i in baseline.issues) signature(i)};
-    final fresh = [
-      for (final i in check.issues)
-        if (!existing.contains(signature(i))) i,
-    ];
+    // Мультимножество (D5, §17.5.5): прежние проблемы вычитаются по одной,
+    // поэтому рост числа проблем одной сигнатуры даёт новые (ревью R3-3).
+    final budget = <String, int>{};
+    for (final i in baseline.issues) {
+      budget.update(signature(i), (n) => n + 1, ifAbsent: () => 1);
+    }
+    final fresh = <ConfigIssue>[];
+    final carried = <ConfigIssue>[];
+    for (final i in check.issues) {
+      final left = budget[signature(i)] ?? 0;
+      // «Проверка неполна» в кандидате — всегда новая проблема (fail-closed,
+      // решение 2026-11-03): поздние ступени, включая правила доверия, не
+      // выполнены. Неполная БАЗА правку не блокирует: иначе испорченный
+      // элемент нельзя было бы удалить.
+      if (left > 0 && i.event != validationIncompleteEvent) {
+        budget[signature(i)] = left - 1;
+        carried.add(i);
+      } else {
+        fresh.add(i);
+      }
+    }
     if (fresh.isNotEmpty) {
       throw ConfigException(fresh);
     }
-    final carried = [
-      for (final i in check.issues)
-        if (existing.contains(signature(i))) i,
-    ];
 
     return (
       warnings: [
