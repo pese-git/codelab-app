@@ -120,6 +120,8 @@ EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
             http: StreamableHttpTransportFactory(client: http, clock: clock),
           ),
           clock: clock,
+          // Джиттер задержек повтора MCP-серверов (D11, PKG-6).
+          random: Random(0),
         ),
         logger: logger,
         clock: clock,

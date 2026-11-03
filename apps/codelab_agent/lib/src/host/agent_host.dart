@@ -342,6 +342,8 @@ final class AgentHost {
               ),
             ),
             clock: clock,
+            // Джиттер задержек повтора MCP-серверов (D11, PKG-6).
+            random: Random.secure(),
           ),
         ),
         config: config,

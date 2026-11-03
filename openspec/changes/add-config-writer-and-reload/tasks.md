@@ -204,7 +204,7 @@
 
 ## 6. Переподключение MCP (итерация 6; D10, D11; E-04)
 
-- [ ] 6.1 `[agent]` Тесты `codelab_agent_mcp/test/supervisor/mcp_reconnect_test.dart` и `mcp_supervisor_state_test.dart` на `FakeMcpServer`, `FakeClock`, `Random(0)` (agent-mcp-client «Переподключение и состояние серверов сессии», все сценарии; `core/mcp-reconnect-after-crash`, CFG-17):
+- [x] 6.1 `[agent]` Тесты `codelab_agent_mcp/test/supervisor/mcp_reconnect_test.dart` и `mcp_supervisor_state_test.dart` на `FakeMcpServer`, `FakeClock`, `Random(0)` (agent-mcp-client «Переподключение и состояние серверов сессии», все сценарии; `core/mcp-reconnect-after-crash`, CFG-17):
   - задержки 1, 2, 4, 8, 16, 30, 30 с;
   - сброс после 10 с;
   - вызов в полёте и во время простоя;
@@ -216,10 +216,10 @@
   - логи на 1-м и 10-м сбое.
 
   Красный.
-- [ ] 6.2 `[agent]` `mcp/mcp_connector.dart` ядра: поля `McpServerSummary` с умолчаниями, `reconnect`, `setEnabled`, функция раскрытия секретов в `McpConnectRequest`; `McpServerConfig.enabled` и передача выключенных серверов из `resolve.dart` (сейчас выбрасываются, строки 872–882) с сохранением `mcp.server.skipped` (D10); `McpClientConnector`: автомат, задержки, поколения, `Random` и `Clock` от хоста, `_ConnectedSession`; реализации интерфейса в тестах — `codelab_agent_core/test/mcp/fake_mcp_connector.dart`, `codelab_agent_acp/test/support/server_harness.dart` (D11); `codelab_agent_mcp/AGENTS.md`. 6.1 зелёный, `web-compile` зелёный.
-- [ ] 6.3 `[agent]` Тесты `codelab_agent_core/test/runtime/mcp_apply_config_test.dart` на fake-коннекторе (agent-runtime «Серверы конфигурации при перезагрузке», все сценарии): изменён один сервер; удаление во время хода; сервер клиента не тронут; последний побеждает. Неизменённый `failed` будится сразу; общая очередь с `setMcpServers`; новый и изменённый stdio-сервер (без прежнего `sameConnection`, в том числе `http` → `stdio`) и HTTP-сервер с подстановкой `${…}` (`X-Gw: ${secret:…}`, `Authorization: Bearer ${GITHUB_TOKEN}`) в желаемый список не попадают (R0-1, R0-4), HTTP-сервер без подстановок — попадает; включение stdio-сервера из `enabled: false` отложено; `enabled: true → false` закрывает сервер. Красный.
-- [ ] 6.4 `[agent]` Рантайм: шаг 7a перезагрузки через `replaceServers` и очередь сессии. Хосты (`AgentHost`, `codelab_embedded`) передают `Random` коннектору. 6.3 зелёный.
-- [ ] 6.5 `[agent]` Процессный тест `apps/codelab_agent/test/mcp_reconnect_process_test.dart`: stdio fake-сервер (`fake_mcp_stdio_server.dart`) завершается после первого вызова; следующий вызов после переподключения — `completed`; после закрытия сессии процессов нет. Красный → зелёный без изменения кода или с правкой хоста.
+- [x] 6.2 `[agent]` `mcp/mcp_connector.dart` ядра: поля `McpServerSummary` с умолчаниями, `reconnect`, `setEnabled`, функция раскрытия секретов в `McpConnectRequest`; `McpServerConfig.enabled` и передача выключенных серверов из `resolve.dart` (сейчас выбрасываются, строки 872–882) с сохранением `mcp.server.skipped` (D10); `McpClientConnector`: автомат, задержки, поколения, `Random` и `Clock` от хоста, `_ConnectedSession`; реализации интерфейса в тестах — `codelab_agent_core/test/mcp/fake_mcp_connector.dart`, `codelab_agent_acp/test/support/server_harness.dart` (D11); `codelab_agent_mcp/AGENTS.md`. 6.1 зелёный, `web-compile` зелёный.
+- [x] 6.3 `[agent]` Тесты `codelab_agent_core/test/runtime/mcp_apply_config_test.dart` на fake-коннекторе (agent-runtime «Серверы конфигурации при перезагрузке», все сценарии): изменён один сервер; удаление во время хода; сервер клиента не тронут; последний побеждает. Неизменённый `failed` будится сразу; общая очередь с `setMcpServers`; новый и изменённый stdio-сервер (без прежнего `sameConnection`, в том числе `http` → `stdio`) и HTTP-сервер с подстановкой `${…}` (`X-Gw: ${secret:…}`, `Authorization: Bearer ${GITHUB_TOKEN}`) в желаемый список не попадают (R0-1, R0-4), HTTP-сервер без подстановок — попадает; включение stdio-сервера из `enabled: false` отложено; `enabled: true → false` закрывает сервер. Красный.
+- [x] 6.4 `[agent]` Рантайм: шаг 7a перезагрузки через `replaceServers` и очередь сессии. Хосты (`AgentHost`, `codelab_embedded`) передают `Random` коннектору. 6.3 зелёный.
+- [x] 6.5 `[agent]` Процессный тест `apps/codelab_agent/test/mcp_reconnect_process_test.dart`: stdio fake-сервер (`fake_mcp_stdio_server.dart`) завершается после первого вызова; следующий вызов после переподключения — `completed`; после закрытия сессии процессов нет. Красный → зелёный без изменения кода или с правкой хоста.
 
 **Критерий итерации 6.** E-04 зелёный (`core/mcp-reconnect-after-crash`, `mcp_apply_config_test.dart`).
 
@@ -238,7 +238,8 @@
 
   Красный.
 - [ ] 7.2 `[agent]` `commands/builtin_commands.dart`, `SlashCommandSource.builtin`, перехват в `AgentSession.prompt` до шаблонов под тем же слотом хода, объявление по `services.config`, `configCommand` и capability `mcp`, лог `command.builtin`:
-  - снять `skip` у контрольного теста `apps/codelab_agent/test/agent_host_ws_commands_test.dart` (stdio объявляет `config` и `mcp`), R0-3.
+  - снять `skip` у контрольного теста `apps/codelab_agent/test/agent_host_ws_commands_test.dart` (stdio объявляет `config` и `mcp`), R0-3;
+  - провести `/mcp reload <id>`, `/mcp enable|disable` (`McpSessionTools.reconnect`, `setEnabled`) через очередь замен сессии (D10, D11): прямые `_McpState.reconnect`/`setEnabled` рантайма удалены в итерации 6, а ручное действие не должно обгонять идущую замену и подключать сервер, который она удаляет (agent-mcp-client «Переподключение и состояние серверов сессии»).
 
   7.1 зелёный.
 - [ ] 7.3 `[protocol]` Фикстура `packages/dart/codelab_acp_testing/fixtures/acp/slash-mcp-list.json` и фабрика агентского прогона (`setup.config.mcp.servers`; acp-golden-fixtures «Фикстуры файлов проекта этапа 8», сценарий «Таблица /mcp list»). Обновлённые `acp/available-commands-no-tools.json` и `acp/prompt-template-command.json` (список `mcp`, `review`; оба кадра `available_commands_update` второй фикстуры). Тесты `codelab_agent_acp/test/conformance_test.dart` и `session_new_test.dart` (agent-acp-server «session/new», сценарии «Режимы и опции новой сессии», «Команды шаблонов после session/new»; «Уведомления после перезагрузки конфигурации», сценарий «Ответ встроенной команды»). Красный.

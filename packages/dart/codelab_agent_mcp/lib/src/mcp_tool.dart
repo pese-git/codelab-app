@@ -25,7 +25,7 @@ final class McpTool extends AgentTool {
   McpTool._({
     required this.serverName,
     required this.definition,
-    required McpClient client,
+    required McpToolCaller client,
     required String name,
     required String description,
     required Map<String, Object?> parameters,
@@ -42,7 +42,7 @@ final class McpTool extends AgentTool {
   static McpTool? create({
     required String server,
     required McpToolDefinition definition,
-    required McpClient client,
+    required McpToolCaller client,
     required Logger logger,
     required SessionId sessionId,
   }) {
@@ -108,7 +108,7 @@ final class McpTool extends AgentTool {
   /// `name` сервера (часть префикса).
   final String serverName;
   final McpToolDefinition definition;
-  final McpClient _client;
+  final McpToolCaller _client;
   final String _name;
   final String _description;
   final Map<String, Object?> _parameters;

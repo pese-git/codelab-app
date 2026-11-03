@@ -68,6 +68,8 @@ final class DeferredConfigParts {
   const DeferredConfigParts({
     this.providers = const {},
     this.servers = const {},
+    this.disabledServers = const {},
+    this.disabledServersWithoutProject = const {},
     this.permissions = false,
     this.defaultModel = false,
   });
@@ -80,6 +82,28 @@ final class DeferredConfigParts {
   /// нет — он исключается.
   final Set<String> servers;
 
+  /// Подмножество [servers]: сервер выключен этой же правкой, а правка его
+  /// соединения отложена (R6-1). В снимке остаётся прежний элемент с
+  /// `enabled: false`: выключение действует сразу, `/mcp enable` подключит
+  /// прежние параметры.
+  final Set<String> disabledServers;
+
+  /// То же для снимка без проекта: выключение применяется только в том
+  /// снимке, чей план его дал (проектный слой может выключить сервер только в
+  /// полном снимке).
+  final Set<String> disabledServersWithoutProject;
+
+  /// Отложенные части для снимка без проекта: его собственный набор
+  /// выключаемых серверов.
+  DeferredConfigParts get forWithoutProject => DeferredConfigParts(
+    providers: providers,
+    servers: servers,
+    disabledServers: disabledServersWithoutProject,
+    disabledServersWithoutProject: disabledServersWithoutProject,
+    permissions: permissions,
+    defaultModel: defaultModel,
+  );
+
   /// Весь раздел `permissions` берётся прежним.
   final bool permissions;
 
@@ -90,9 +114,17 @@ final class DeferredConfigParts {
       providers.isEmpty && servers.isEmpty && !permissions && !defaultModel;
 
   /// Объединение: отложенное в любом из снимков откладывается в обоих.
+  /// Исключение — `disabledServers` и `disabledServersWithoutProject`: они
+  /// описывают снимок, чей план их дал, и здесь суммируются только как набор
+  /// имён; `planConfigReload` задаёт их по снимкам отдельно (R6-1).
   DeferredConfigParts union(DeferredConfigParts other) => DeferredConfigParts(
     providers: {...providers, ...other.providers},
     servers: {...servers, ...other.servers},
+    disabledServers: {...disabledServers, ...other.disabledServers},
+    disabledServersWithoutProject: {
+      ...disabledServersWithoutProject,
+      ...other.disabledServersWithoutProject,
+    },
     permissions: permissions || other.permissions,
     defaultModel: defaultModel || other.defaultModel,
   );
@@ -231,6 +263,8 @@ final class CoreConfig {
         for (final server in next.mcpServers)
           if (!servers.contains(server.name))
             server
+          else if (deferred.disabledServers.contains(server.name))
+            ?oldServers[server.name]?.withEnabled(false)
           else
             ?oldServers[server.name],
       ],
@@ -249,7 +283,11 @@ final class CoreConfig {
       providerProblems: problems,
       withoutProject: bare == null
           ? null
-          : withDeferred(previous.withoutProject ?? previous, bare, deferred),
+          : withDeferred(
+              previous.withoutProject ?? previous,
+              bare,
+              deferred.forWithoutProject,
+            ),
       withoutProjectValues: withoutProjectValues,
     );
   }

@@ -99,10 +99,16 @@ bool _isModelRefKey(String key) =>
 ///    по группе полей, если он новый или поле группы изменилось; ключ показа
 ///    — `providers.<id>`. Модели существующего провайдера применяются.
 /// 2. Ссылка на модели нового отложенного провайдера откладывается с ним.
-/// 3. Сервер `mcp.servers[<имя>]` откладывается, если он включён, нет
-///    прежнего с `sameConnection`, и он `stdio` (R0-1) либо `http` с
-///    подстановкой `${…}` в `url`, `headers`, `env` (R0-4). Удаление и
-///    выключение применяются.
+/// 3. Сервер `mcp.servers[<имя>]` откладывается, если нет прежнего с
+///    `sameConnection` (включение `false → true` при тех же параметрах тоже
+///    откладывается) и он `stdio` (R0-1) либо `http` с подстановкой `${…}` в
+///    `url`, `headers`, `env` (R0-4) — независимо от `enabled` (R6-1: у
+///    выключенного сервера правка команды тоже ждёт перезапуска, иначе
+///    `/mcp enable` запустил бы непроверенную команду). Удаление, выключение
+///    `true → false` и правка без смены соединения при том же `enabled`
+///    применяются. Выключение вместе с правкой соединения: выключение
+///    применяется, правка ждёт — в снимке и в `values` прежний элемент с
+///    `enabled: false`, ключ в `restartRequiredKeys` (R6-1).
 /// 4. Остальное: дескриптор реестра с `restartRequired` — отложен; ключ без
 ///    дескриптора — отложен (fail closed: расхождение схемы и реестра не
 ///    должно превращаться в живое применение).
@@ -132,9 +138,19 @@ ConfigReloadPlan planConfigReload({
     );
   }
 
-  final deferred = snapshots
+  // Выключение вместе с правкой соединения (R6-1) действует в том снимке,
+  // чей план его дал: объединять по снимкам его нельзя.
+  final unionDeferred = snapshots
       .map((plan) => plan.deferred)
       .reduce((a, b) => a.union(b));
+  final deferred = DeferredConfigParts(
+    providers: unionDeferred.providers,
+    servers: unionDeferred.servers,
+    disabledServers: snapshots.first.deferred.disabledServers,
+    disabledServersWithoutProject: snapshots.last.deferred.disabledServers,
+    permissions: unionDeferred.permissions,
+    defaultModel: unionDeferred.defaultModel,
+  );
   final restart = <String>{for (final plan in snapshots) ...plan.restart};
   final reverted = <String>{};
   final changed = <String>{};
@@ -159,7 +175,10 @@ ConfigReloadPlan planConfigReload({
     final values = {...plan.nextValues};
     for (final key in reverted) {
       if (plan.previousValues.containsKey(key)) {
-        values[key] = plan.previousValues[key];
+        final before = plan.previousValues[key];
+        values[key] = plan.disabledKeys.contains(key) && before is Map
+            ? {...before, 'enabled': false}
+            : before;
       } else {
         values.remove(key);
       }
@@ -187,6 +206,7 @@ final class _SnapshotPlan {
     required this.diff,
     required this.restart,
     required this.reverted,
+    required this.disabledKeys,
     required this.deferred,
   });
 
@@ -196,6 +216,9 @@ final class _SnapshotPlan {
   final List<String> diff;
   final Set<String> restart;
   final Set<String> reverted;
+
+  /// Подмножество [reverted]: элемент остаётся прежним, но с `enabled: false`.
+  final Set<String> disabledKeys;
   final DeferredConfigParts deferred;
 }
 
@@ -225,6 +248,8 @@ _SnapshotPlan _planSnapshot(
   // разбора ключей (имя с `[`, `]`, `"` не разбирается, R0-1).
   final deferredProviders = <String>{};
   final deferredServers = <String>{};
+  final disabledServers = <String>{};
+  final disabledKeys = <String>{};
   var deferredPermissions = false;
   var deferredModel = false;
 
@@ -297,9 +322,16 @@ _SnapshotPlan _planSnapshot(
     if (!diffSet.contains(key)) {
       continue;
     }
+    // R6-1: правка параметров соединения откладывается и у выключенного
+    // сервера — `/mcp enable` подключит сервер с параметрами применённого
+    // снимка, и непроверенная команда не должна попасть в него живой
+    // перезагрузкой. Применяются: правка без смены соединения при том же
+    // `enabled` (например, `call_timeout`) и выключение `true → false`.
     final old = previousServers[name];
     if (old != null && old.sameConnection(fresh)) {
-      continue;
+      if (old.enabled == fresh.enabled || !fresh.enabled) {
+        continue;
+      }
     }
     final defer = switch (fresh) {
       McpStdioServerConfig() => true,
@@ -309,6 +341,12 @@ _SnapshotPlan _planSnapshot(
       restart.add(key);
       reverted.add(key);
       deferredServers.add(name);
+      // Выключение вместе с правкой соединения: выключение применяется, а
+      // правка ждёт перезапуска — остаётся прежний элемент с `enabled: false`.
+      if (old != null && old.enabled && !fresh.enabled) {
+        disabledServers.add(name);
+        disabledKeys.add(key);
+      }
     }
   }
 
@@ -341,9 +379,11 @@ _SnapshotPlan _planSnapshot(
     diff: diff,
     restart: restart,
     reverted: reverted,
+    disabledKeys: disabledKeys,
     deferred: DeferredConfigParts(
       providers: deferredProviders,
       servers: deferredServers,
+      disabledServers: disabledServers,
       permissions: deferredPermissions,
       defaultModel: deferredModel,
     ),

@@ -201,7 +201,7 @@ final class PromptInputs {
   final String cwd, platform; final DateTime today;   // modeName = mode.value
   final ModeId mode; final HostProfile profile;      // уже суженный профиль: CorePlan строится из этих же секций
   final Set<String> toolNames;               // итоговый набор инструментов сессии после выключений (§6.3.8)
-  final List<McpServerSummary> mcpServers;   // подключённые серверы и число включённых инструментов; McpSessionTools.servers (§10.3)
+  final List<McpServerSummary> mcpServers;   // McpSessionTools.servers (§10.3): с 8.10 — все серверы сессии с состоянием; в секцию mcp входят серверы с toolCount > 0
   final ProjectContext? projectContext;      // файлы AGENTS.md после assembleProjectContext (бюджет и усечение)
   final ({String name, String body})? agentProfile;   // имя и тело выбранного определения агента (§15.8); null — default
   final PromptOverrides overrides;           // из конфига, §11.6

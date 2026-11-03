@@ -139,6 +139,8 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
             http: StreamableHttpTransportFactory(client: http, clock: clock),
           ),
           clock: clock,
+          // Джиттер задержек повтора MCP-серверов (D11, PKG-6).
+          random: Random.secure(),
         ),
         projectFiles: ProjectFilesLoader(home: home, local: env),
         // PERM-11 (D8): что агент перечитывает на лету, модель не правит без

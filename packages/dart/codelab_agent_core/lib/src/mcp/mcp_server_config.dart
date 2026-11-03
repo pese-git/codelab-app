@@ -31,10 +31,23 @@ sealed class McpServerConfig {
     this.connectTimeout = defaultMcpConnectTimeout,
     this.callTimeout,
     this.secretValues = const {},
+    this.enabled = true,
   });
 
   final String name;
   final McpServerOrigin origin;
+
+  /// `false` — ключ конфигурации `mcp.servers[*].enabled: false`: сервер
+  /// доходит до коннектора, держится в состоянии `disabled` без подключения,
+  /// и `/mcp list` его показывает; `setEnabled(name, true)` подключает его в
+  /// сессии, не меняя конфиг (design.md change `add-config-writer-and-reload`,
+  /// D10, D11).
+  ///
+  /// Не входит в [sameConnection]: это не параметр соединения, а выбор, нужен
+  /// ли процесс. Смену признака сравнивают отдельно (`replaceServers`,
+  /// `planConfigReload`): `true → false` закрывает сервер, `false → true` —
+  /// новый сервер (для stdio — после перезапуска, R0-1).
+  final bool enabled;
   final Duration connectTimeout;
 
   /// Предел одного `tools/call` этого сервера (ключ конфигурации
@@ -54,9 +67,15 @@ sealed class McpServerConfig {
 
   /// Копия сервера, где шаблоны [secretValues] раскрыты в значения [values]
   /// (ключ как в [secretValues]) и добавлены к `env`/`headers`; шаблонов у
-  /// копии нет. Значения живут только в объекте, переданном коннектору
+  /// копии нет, а [enabled] и остальные параметры сохраняются. Значения живут только в объекте, переданном коннектору
   /// (D4): `toString` их не раскрывает.
   McpServerConfig withSecrets(Map<String, String> values);
+
+  /// Копия с другим [enabled]; остальные параметры прежние. Нужна перезагрузке
+  /// конфига (R6-1): выключение применяется сразу, а правка соединения того
+  /// же элемента ждёт перезапуска, поэтому в снимке остаётся прежний элемент
+  /// с `enabled: false`.
+  McpServerConfig withEnabled(bool enabled);
 
   /// Ключ транспорта для capability `mcp`: `stdio` или `http`.
   String get transport;
@@ -81,6 +100,7 @@ final class McpStdioServerConfig extends McpServerConfig {
     super.connectTimeout,
     super.callTimeout,
     super.secretValues,
+    super.enabled,
   });
 
   final String command;
@@ -106,7 +126,21 @@ final class McpStdioServerConfig extends McpServerConfig {
         origin: origin,
         connectTimeout: connectTimeout,
         callTimeout: callTimeout,
+        enabled: enabled,
       );
+
+  @override
+  McpStdioServerConfig withEnabled(bool enabled) => McpStdioServerConfig(
+    name: name,
+    command: command,
+    args: args,
+    env: env,
+    origin: origin,
+    connectTimeout: connectTimeout,
+    callTimeout: callTimeout,
+    secretValues: secretValues,
+    enabled: enabled,
+  );
 
   @override
   bool sameConnection(McpServerConfig other) =>
@@ -131,6 +165,7 @@ final class McpHttpServerConfig extends McpServerConfig {
     super.connectTimeout,
     super.callTimeout,
     super.secretValues,
+    super.enabled,
     this.secretHeaderPositions = const {},
   });
 
@@ -173,8 +208,22 @@ final class McpHttpServerConfig extends McpServerConfig {
       origin: origin,
       connectTimeout: connectTimeout,
       callTimeout: callTimeout,
+      enabled: enabled,
     );
   }
+
+  @override
+  McpHttpServerConfig withEnabled(bool enabled) => McpHttpServerConfig(
+    name: name,
+    url: url,
+    headers: headers,
+    origin: origin,
+    connectTimeout: connectTimeout,
+    callTimeout: callTimeout,
+    secretValues: secretValues,
+    secretHeaderPositions: secretHeaderPositions,
+    enabled: enabled,
+  );
 
   int _position(String header) =>
       secretHeaderPositions[header] ?? 1 << 30; // без индекса — в конец
