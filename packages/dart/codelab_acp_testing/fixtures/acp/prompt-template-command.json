@@ -5,7 +5,7 @@
     "14-Slash Commands.md#running-commands",
     "03-Session Setup.md#loading-a-session"
   ],
-  "description": "Шаблон .codelab/prompts/review.md доверенного проекта: после session/new available_commands_update содержит review с input.hint; промпт «/review lib/parser \"error handling\"» доходит до модели развёрнутым текстом; после session/load реплей содержит user_message_chunk с исходной командой (E-07).",
+  "description": "Шаблон .codelab/prompts/review.md доверенного проекта: после session/new available_commands_update содержит встроенную mcp и review с input.hint; промпт «/review lib/parser \"error handling\"» доходит до модели развёрнутым текстом; после session/load реплей содержит user_message_chunk с исходной командой и тот же список команд (E-07; design.md change add-config-writer-and-reload, D12).",
   "goals": [
     "E-07"
   ],
@@ -116,7 +116,7 @@
     },
     {
       "dir": "a2c",
-      "note": "D9: команда шаблона с input.hint; встроенных инструментов в списке нет",
+      "note": "D9, D12: встроенная mcp, затем команда шаблона с input.hint; встроенных инструментов в списке нет",
       "frame": {
         "jsonrpc": "2.0",
         "method": "session/update",
@@ -125,6 +125,13 @@
           "update": {
             "sessionUpdate": "available_commands_update",
             "availableCommands": [
+              {
+                "name": "mcp",
+                "description": "List, reload, enable or disable MCP servers",
+                "input": {
+                  "hint": "list | reload [<id>] | enable <id> | disable <id>"
+                }
+              },
               {
                 "name": "review",
                 "description": "Review a path with a focus",
@@ -302,6 +309,13 @@
           "update": {
             "sessionUpdate": "available_commands_update",
             "availableCommands": [
+              {
+                "name": "mcp",
+                "description": "List, reload, enable or disable MCP servers",
+                "input": {
+                  "hint": "list | reload [<id>] | enable <id> | disable <id>"
+                }
+              },
               {
                 "name": "review",
                 "description": "Review a path with a focus",

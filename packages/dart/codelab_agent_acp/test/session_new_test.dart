@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' hide SessionId;
@@ -428,4 +429,180 @@ void main() {
 
     expect(response.error, isNull);
   });
+
+  // --- Встроенные команды (agent-acp-server «session/new», шаг 5; design.md
+  // change `add-config-writer-and-reload`, D12; задача 7.3) ---
+
+  const mcpCommand = {
+    'name': 'mcp',
+    'description': 'List, reload, enable or disable MCP servers',
+    'input': {'hint': 'list | reload [<id>] | enable <id> | disable <id>'},
+  };
+  const configCommand = {
+    'name': 'config',
+    'description': 'Reload or check the agent config',
+    'input': {'hint': 'reload | check'},
+  };
+
+  /// Список из кадра `available_commands_update` после `session/new`.
+  Future<List<Object?>> announcedCommands() async {
+    final frame = (await h.client.next()) as JsonRpcNotification;
+    final update = (frame.params! as Map)['update'] as Map;
+    expect(update['sessionUpdate'], 'available_commands_update');
+    return update['availableCommands'] as List<Object?>;
+  }
+
+  test('with the mcp capability the list holds the builtin mcp '
+      '(scenario "Режимы и опции новой сессии")', () async {
+    h = await ServerHarness.start(mcp: (_) => SpyMcpConnector());
+    await h.initialize();
+
+    await newSession('/work/demo');
+
+    expect(await announcedCommands(), [mcpCommand]);
+  });
+
+  test('with a config source and the mcp capability the list is config, '
+      'then mcp (D12: "Встроенные команды идут первыми")', () async {
+    h = await ServerHarness.start(
+      mcp: (_) => SpyMcpConnector(),
+      configSource: _FixedConfigSource(),
+    );
+    await h.initialize();
+
+    await newSession('/work/demo');
+
+    expect(await announcedCommands(), [configCommand, mcpCommand]);
+  });
+
+  test('a builtin command is answered by agent_message_chunk and end_turn '
+      'without the model and the journal '
+      '(scenario "Ответ встроенной команды")', () async {
+    h = await ServerHarness.start(mcp: (_) => SpyMcpConnector());
+    await h.initialize();
+    final id =
+        (await newSession('/work/demo')).resultMap['sessionId']! as String;
+    await announcedCommands();
+    final before = (await h.store.open(SessionId(id))).records.length;
+
+    final response = await h.prompt(id, '/mcp list');
+    final frames = await h.client.drain();
+
+    expect(response.error, isNull);
+    expect(response.resultMap, {'stopReason': 'end_turn'});
+    // Ровно один кадр: ни tool_call, ни plan, ни usage_update.
+    expect(TestClient.updates(frames), [
+      {
+        'sessionUpdate': 'agent_message_chunk',
+        'content': {'type': 'text', 'text': 'No MCP servers.'},
+      },
+    ]);
+    // Ответ уходит раньше ответа на `session/prompt` (ACP-3).
+    final order = h.client.received;
+    expect(order.indexOf(frames.single), lessThan(order.indexOf(response)));
+    expect(h.model.requests, isEmpty);
+    expect((await h.store.open(SessionId(id))).records, hasLength(before));
+  });
+
+  test(
+    'an unknown /mcp argument is answered with Usage and no model call',
+    () async {
+      h = await ServerHarness.start(mcp: (_) => SpyMcpConnector());
+      await h.initialize();
+      final id =
+          (await newSession('/work/demo')).resultMap['sessionId']! as String;
+      await announcedCommands();
+
+      final response = await h.prompt(id, '/mcp frob');
+      final frames = await h.client.drain();
+
+      expect(response.error, isNull);
+      expect(response.resultMap, {'stopReason': 'end_turn'});
+      expect(TestClient.updates(frames), [
+        {
+          'sessionUpdate': 'agent_message_chunk',
+          'content': {
+            'type': 'text',
+            'text':
+                'Usage: /mcp list | /mcp reload [<id>] | /mcp enable <id> | '
+                '/mcp disable <id>',
+          },
+        },
+      ]);
+      expect(h.model.requests, isEmpty);
+    },
+  );
+
+  // agent-slash-commands «Встроенные команды config и mcp»: `session/cancel`
+  // во время команды отменяет только ожидание ответа (D12).
+  test('session/cancel during /config reload answers cancelled without text '
+      'and frees the slot', () async {
+    final source = _FixedConfigSource()..gate = Completer<void>();
+    h = await ServerHarness.start(
+      mcp: (_) => SpyMcpConnector(),
+      configSource: source,
+    );
+    await h.initialize();
+    final id =
+        (await newSession('/work/demo')).resultMap['sessionId']! as String;
+    await announcedCommands();
+
+    final turn = h.prompt(id, '/config reload');
+    await pumpEventQueue();
+    await h.client.notify('session/cancel', {'sessionId': id});
+    final response = await turn;
+    source.gate!.complete();
+    final frames = await h.client.drain();
+
+    expect(response.resultMap, {'stopReason': 'cancelled'});
+    expect(TestClient.updates(frames), isEmpty);
+    // Слот свободен: следующая команда исполняется.
+    final next = await h.prompt(id, '/mcp list');
+    expect(next.resultMap, {'stopReason': 'end_turn'});
+  });
+}
+
+/// Неизменный [ConfigSource] с одним провайдером: нужен только затем, чтобы у
+/// ядра был источник конфига и оно объявило `/config` (D12).
+final class _FixedConfigSource implements ConfigSource {
+  _FixedConfigSource() {
+    initial = _load();
+    expect(initial.issues, isEmpty, reason: initial.issues.join('\n'));
+  }
+
+  @override
+  late final ConfigLoadResult initial;
+
+  ConfigLoadResult _load() => CoreConfig.fromLayers(
+    [
+      ConfigTree(
+        kind: ConfigLayerKind.user,
+        source: '/home/u/.codelab/config.yaml',
+        values: <String, Object?>{
+          'providers': <String, Object?>{
+            'a': <String, Object?>{
+              'kind': 'openai-compatible',
+              'base_url': 'https://a.test/v1',
+              'models': <String, Object?>{'m1': <String, Object?>{}},
+            },
+          },
+          'agent': <String, Object?>{'default_model': 'a/m1'},
+        },
+      ),
+    ],
+    environment: const {},
+    projectRoot: '/work/demo',
+  );
+
+  /// Если задан, `load` ждёт его завершения (отмена во время команды).
+  Completer<void>? gate;
+
+  @override
+  Future<ConfigLoadResult> load({bool rebase = true}) async {
+    await gate?.future;
+    return _load();
+  }
+
+  @override
+  Stream<void> get changes => const Stream.empty();
 }

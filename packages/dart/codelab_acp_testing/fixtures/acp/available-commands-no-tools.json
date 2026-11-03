@@ -5,7 +5,7 @@
     "14-Slash Commands.md#availablecommand",
     "03-Session Setup.md#mcp-servers"
   ],
-  "description": "Встроенные инструменты, fake MCP-сервер с echo и один шаблон проекта: available_commands_update после session/new содержит только шаблон review, имён инструментов модели в списке нет (R-07, часть шаблонов).",
+  "description": "Встроенные инструменты, fake MCP-сервер с echo и один шаблон проекта: available_commands_update после session/new содержит встроенную mcp и шаблон review, имён инструментов модели в списке нет (R-07, часть шаблонов и встроенных команд; design.md change add-config-writer-and-reload, D12).",
   "goals": [
     "R-07"
   ],
@@ -130,7 +130,7 @@
     },
     {
       "dir": "a2c",
-      "note": "R-07: только шаблон; read, exec и mcp__fake__echo в список не попадают",
+      "note": "R-07, D12: встроенная mcp первой, затем шаблон; read, exec и mcp__fake__echo в список не попадают",
       "frame": {
         "jsonrpc": "2.0",
         "method": "session/update",
@@ -139,6 +139,13 @@
           "update": {
             "sessionUpdate": "available_commands_update",
             "availableCommands": [
+              {
+                "name": "mcp",
+                "description": "List, reload, enable or disable MCP servers",
+                "input": {
+                  "hint": "list | reload [<id>] | enable <id> | disable <id>"
+                }
+              },
               {
                 "name": "review",
                 "description": "Review a path",

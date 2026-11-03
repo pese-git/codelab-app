@@ -1,0 +1,455 @@
+{
+  "id": "acp/slash-mcp-list",
+  "spec": [
+    "14-Slash Commands.md#advertising-commands",
+    "14-Slash Commands.md#running-commands",
+    "03-Session Setup.md#mcp-servers",
+    "03-Session Setup.md#loading-a-session"
+  ],
+  "description": "Встроенная команда /mcp без модели: session/new с сервером клиента docs и конфигом прогона с двумя серверами (github, local-db с enabled: false). /mcp list — один agent_message_chunk с таблицей agent-core-architecture §17.5.7 побайтово и stopReason end_turn; /mcp disable github — строка disabled; /mcp frob — Usage. Scripted-модель не получает запросов, после session/load реплей без команд (E-13, агентская часть; E-04; design.md change add-config-writer-and-reload, D12).",
+  "goals": [
+    "E-13",
+    "E-04"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "config": {
+      "mcp": {
+        "servers": [
+          {
+            "name": "github",
+            "type": "stdio",
+            "command": "github"
+          },
+          {
+            "name": "local-db",
+            "type": "stdio",
+            "command": "local-db",
+            "enabled": false
+          }
+        ]
+      }
+    },
+    "mcp": {
+      "github": {
+        "tools": [
+          {
+            "name": "echo",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          }
+        ]
+      },
+      "local-db": {
+        "tools": [
+          {
+            "name": "query",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          }
+        ]
+      },
+      "docs": {
+        "tools": [
+          {
+            "name": "lookup",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": []
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ initialize; поля проверяет acp/initialize-capabilities",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент создаёт сессию с одним сервером docs; серверы github и local-db приходят из конфига прогона",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": [
+            {
+              "name": "docs",
+              "command": "docs",
+              "args": [],
+              "env": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ ждёт подключения серверов (ACP-8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D12: capability mcp включена, источника конфига у прогона нет — в списке только встроенная mcp",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "mcp",
+                "description": "List, reload, enable or disable MCP servers",
+                "input": {
+                  "hint": "list | reload [<id>] | enable <id> | disable <id>"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "E-13: таблица серверов; серверы конфига идут первыми, затем сервер session/new",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId1"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/mcp list"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "таблица agent-core-architecture §17.5.7 побайтово: выключенный конфигом local-db — disabled",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "```text\nMCP servers (3)\nID        SOURCE   TRANSPORT  STATE      TOOLS  LAST ERROR\ngithub    config   stdio      connected  2      -\nlocal-db  config   stdio      disabled   0      -\ndocs      session  stdio      connected  1      -\n```"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3); запросов к scripted-модели нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId1}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "выключение только в этой сессии",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId2"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/mcp disable github"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "github в состоянии disabled, остальные строки прежние",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "```text\nMCP servers (3)\nID        SOURCE   TRANSPORT  STATE      TOOLS  LAST ERROR\ngithub    config   stdio      disabled   0      disabled by /mcp disable\nlocal-db  config   stdio      disabled   0      -\ndocs      session  stdio      connected  1      -\n```"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3); запросов к scripted-модели нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId2}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "неизвестный аргумент",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId3"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/mcp frob"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "строка Usage без обращения к модели",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Usage: /mcp list | /mcp reload [<id>] | /mcp enable <id> | /mcp disable <id>"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3); запросов к scripted-модели нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId3}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент загружает сессию заново",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "loadId"
+        },
+        "method": "session/load",
+        "params": {
+          "sessionId": "${sessionId}",
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "реплей пуст: ни команды, ни ответы в журнал не пишутся (CFG-18)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "standard"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "список команд сессии прежний",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "mcp",
+                "description": "List, reload, enable or disable MCP servers",
+                "input": {
+                  "hint": "list | reload [<id>] | enable <id> | disable <id>"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/load — после реплея (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${loadId}",
+        "result": {
+          "modes": {
+            "$any": {
+              "availableModes": [
+                {
+                  "id": "standard",
+                  "name": "Standard"
+                }
+              ],
+              "currentModeId": "standard"
+            }
+          },
+          "configOptions": {
+            "$any": []
+          }
+        }
+      }
+    }
+  ]
+}

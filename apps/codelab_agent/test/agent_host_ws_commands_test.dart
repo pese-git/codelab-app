@@ -79,9 +79,8 @@ agent:
   ];
 
   // Контроль теста: без него `--ws` без `config`/`mcp` прошёл бы и в мире, где
-  // команд нет вообще. Встроенные `/config` и `/mcp` появляются с задачей 7.2
-  // (`commands/builtin_commands.dart`): до неё тест пропущен, а проверки
-  // `--ws` ниже зелёные тривиально. Снять `skip` вместе с 7.2.
+  // команд нет вообще. Встроенные `/config` и `/mcp` объявляет ядро
+  // (`commands/builtin_commands.dart`, задача 7.2).
   test('--stdio announces config and mcp (the control of the test)', () async {
     final (peer, _) = await start('--stdio');
 
@@ -89,7 +88,7 @@ agent:
     await pumpEventQueue();
 
     expect(commandNames(peer), containsAll(['config', 'mcp']));
-  }, skip: 'встроенные /config и /mcp — задача 7.2');
+  });
 
   test('--ws announces neither config nor mcp', () async {
     final (peer, _) = await start('--ws');
