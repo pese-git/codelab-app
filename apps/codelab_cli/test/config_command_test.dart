@@ -28,7 +28,13 @@ void main() {
   late String project;
 
   setUp(() {
-    temp = Directory.systemTemp.createTempSync('codelab_cli_config_cmd_');
+    // Каталог сразу канонический: писатель раскрывает ссылки (на macOS `/var` —
+    // ссылка на `/private/var`), и путь в выводе должен совпасть с ожиданием.
+    temp = Directory(
+      Directory.systemTemp
+          .createTempSync('codelab_cli_config_cmd_')
+          .resolveSymbolicLinksSync(),
+    );
     home = '${temp.path}/home';
     project = '${temp.path}/project';
     Directory(home).createSync();
@@ -149,21 +155,20 @@ void main() {
     expect(io.stderrText, isNotEmpty);
   });
 
-  for (final args in [
-    ['config', 'set', 'budget.max_steps', '10'],
-    ['config', 'migrate'],
-    ['config', 'get', 'x'],
-    ['config', 'unset', 'x'],
-    ['config', 'path'],
-  ]) {
-    test('${args.join(' ')}: 64, Unknown command, file untouched', () async {
+  // Подкоманды записи и чтения зарегистрированы (change
+  // `add-config-writer-and-reload`, D6): незнакомой остаются `migrate` и любое
+  // другое слово. Прежний тест требовал `Unknown command` и для `set`, `get`,
+  // `unset`, `path`; теперь они рабочие, а контракт «неизвестная подкоманда —
+  // 64» проверяется на `migrate` и `frobnicate`.
+  for (final sub in ['migrate', 'frobnicate']) {
+    test('config $sub: 64, Unknown command, file untouched', () async {
       final file = File('$project/.codelab/config.yaml')
         ..writeAsStringSync('budget:\n  max_steps: 3\n');
 
-      final (code, io) = await run(args);
+      final (code, io) = await run(['config', sub]);
 
       expect(code, 64);
-      expect(io.stderrText, contains('Unknown command'));
+      expect(io.stderrText, contains('Unknown command config $sub'));
       expect(io.stdoutText, isEmpty);
       expect(file.readAsStringSync(), 'budget:\n  max_steps: 3\n');
     });
@@ -174,7 +179,12 @@ void main() {
 
     expect(code, 64);
     expect(io.stdoutText, isEmpty);
-    expect(io.stderrText, contains('config check'));
+    expect(
+      io.stderrText,
+      contains(
+        'config needs a subcommand: codelab config path|get|set|unset|check',
+      ),
+    );
   });
 
   test('--help names config check', () async {
@@ -315,4 +325,375 @@ agent:
       expect(all, isNot(contains(secret)));
     }
   });
+
+  group(
+    'config path, get, set, unset (change add-config-writer-and-reload, D6)',
+    () {
+      final env = <String, String>{};
+
+      setUp(() {
+        env
+          ..clear()
+          ..addAll({'CODELAB_HOME': home, 'HOME': '${temp.path}/no-home'});
+      });
+
+      Future<void> expectSameAsBridge(
+        ConfigCommandResult expected,
+        int code,
+        FakeCliIo io,
+      ) async {
+        expect(code, expected.exitCode, reason: io.stderrText);
+        expect(io.stdoutText, expected.stdout.map((l) => '$l\n').join());
+        expect(io.stderrText, expected.stderr.map((l) => '$l\n').join());
+      }
+
+      test(
+        'set пишет в user-слой, комментарии сохранены, вывод как у моста',
+        () async {
+          File('$home/config.yaml').writeAsStringSync(
+            '# my settings\n$_globalConfig'
+            'budget:\n  max_steps: 3 # three\n',
+          );
+          final (code, io) = await run([
+            'config',
+            'set',
+            'budget.max_steps',
+            '10',
+          ]);
+
+          expect(code, 0, reason: io.stderrText);
+          expect(
+            io.stdoutText,
+            'Updated budget.max_steps in $home/config.yaml\n',
+          );
+          final text = File('$home/config.yaml').readAsStringSync();
+          expect(text, contains('# my settings'));
+          expect(text, contains('max_steps: 10 # three'));
+          // Тот же результат даёт общий ConfigCommands (D6): байты совпадают.
+          File('$home/config.yaml').writeAsStringSync(
+            '# my settings\n$_globalConfig'
+            'budget:\n  max_steps: 3 # three\n',
+          );
+          final expected = await ConfigCommands().set(
+            ConfigSetOptions(
+              key: 'budget.max_steps',
+              value: '10',
+              cwd: Directory.current.path,
+              environment: env,
+            ),
+          );
+          expect(File('$home/config.yaml').readAsStringSync(), text);
+          expect(expected.stdout, [
+            'Updated budget.max_steps in $home/config.yaml',
+          ]);
+        },
+      );
+
+      test('-C <dir> config set --local создаёт config.local.yaml проекта, '
+          'глобальный конфиг не тронут', () async {
+        final before = File('$home/config.yaml').readAsStringSync();
+
+        final (code, io) = await run([
+          '-C',
+          project,
+          'config',
+          'set',
+          'permissions.mode',
+          'plan',
+          '--local',
+        ]);
+
+        expect(code, 0, reason: io.stderrText);
+        expect(
+          File('$project/.codelab/config.local.yaml').readAsStringSync(),
+          contains('mode: plan'),
+        );
+        expect(File('$home/config.yaml').readAsStringSync(), before);
+      });
+
+      test('--cwd подкоманды сильнее общего -C для get', () async {
+        final other = '${temp.path}/other';
+        Directory('$other/.codelab').createSync(recursive: true);
+        File(
+          '$project/.codelab/config.yaml',
+        ).writeAsStringSync('budget:\n  max_steps: 7\n');
+
+        final (code, io) = await run([
+          '-C',
+          other,
+          'config',
+          'get',
+          'budget.max_steps',
+          '--layer',
+          'project',
+          '--cwd',
+          project,
+        ]);
+
+        expect(code, 0, reason: io.stderrText);
+        expect(io.stdoutText, '7\nlayer: project\n');
+      });
+
+      test('get без --layer — merged; вывод как у моста', () async {
+        File(
+          '$project/.codelab/config.yaml',
+        ).writeAsStringSync('budget:\n  max_steps: 7\n');
+
+        final (code, io) = await run([
+          'config',
+          'get',
+          'budget.max_steps',
+          '--cwd',
+          project,
+        ]);
+
+        await expectSameAsBridge(
+          await ConfigCommands().get(
+            ConfigGetOptions(
+              key: 'budget.max_steps',
+              cwd: project,
+              environment: env,
+              layer: ConfigGetLayer.merged,
+            ),
+          ),
+          code,
+          io,
+        );
+      });
+
+      test('get отсутствующего ключа: код 1', () async {
+        final (code, io) = await run(['config', 'get', 'budget.max_steps']);
+
+        expect(code, 1);
+        expect(io.stdoutText, isEmpty);
+        expect(io.stderrText, contains('budget.max_steps is not set'));
+      });
+
+      test('unset отсутствующей записи: код 0 и «is not set in»', () async {
+        final (code, io) = await run(['config', 'unset', 'budget.max_steps']);
+
+        expect(code, 0, reason: io.stderrText);
+        expect(
+          io.stdoutText,
+          'budget.max_steps is not set in $home/config.yaml\n',
+        );
+      });
+
+      test('set, затем unset удаляет ключ', () async {
+        await run(['config', 'set', 'budget.max_steps', '10']);
+        final (code, io) = await run(['config', 'unset', 'budget.max_steps']);
+
+        expect(code, 0, reason: io.stderrText);
+        expect(
+          io.stdoutText,
+          'Removed budget.max_steps from $home/config.yaml\n',
+        );
+        expect(
+          File('$home/config.yaml').readAsStringSync(),
+          isNot(contains('max_steps')),
+        );
+      });
+
+      test('path без флагов печатает слои; вывод как у моста', () async {
+        final (code, io) = await run(['config', 'path', '--cwd', project]);
+
+        await expectSameAsBridge(
+          await ConfigCommands().path(
+            ConfigPathOptions(cwd: project, environment: env),
+          ),
+          code,
+          io,
+        );
+        expect(io.stdoutText, startsWith('user: $home/config.yaml (exists)\n'));
+      });
+
+      test('path --local печатает один путь', () async {
+        final (code, io) = await run([
+          'config',
+          'path',
+          '--local',
+          '--cwd',
+          project,
+        ]);
+
+        expect(code, 0, reason: io.stderrText);
+        expect(io.stdoutText, endsWith('config.local.yaml\n'));
+        expect(io.stdoutText.trimRight().split('\n'), hasLength(1));
+      });
+
+      test('неизвестный ключ set: код 64, файл не изменён', () async {
+        final before = File('$home/config.yaml').readAsStringSync();
+        final (code, io) = await run([
+          'config',
+          'set',
+          'budget.max_stepz',
+          '1',
+        ]);
+
+        expect(code, 64);
+        expect(io.stdoutText, isEmpty);
+        expect(io.stderrText, contains('budget.max_steps'));
+        expect(File('$home/config.yaml').readAsStringSync(), before);
+      });
+
+      test('--project и --local вместе, лишние и недостающие аргументы, '
+          'неверный --layer: 64, stdout пуст, файл не изменён', () async {
+        final before = File('$home/config.yaml').readAsStringSync();
+        for (final args in [
+          ['config', 'set', 'budget.max_steps'],
+          ['config', 'set', 'a', 'b', 'c'],
+          ['config', 'get'],
+          ['config', 'get', 'a', 'b'],
+          ['config', 'unset'],
+          ['config', 'get', 'a', '--layer', 'bogus'],
+        ]) {
+          final (code, io) = await run(args);
+
+          expect(code, 64, reason: '$args: ${io.stderrText}');
+          expect(io.stdoutText, isEmpty, reason: '$args');
+          expect(io.stderrText, contains('codelab config'), reason: '$args');
+          expect(io.stderrText, isNot(contains('codelab-agent')));
+        }
+        expect(File('$home/config.yaml').readAsStringSync(), before);
+      });
+
+      test('--project и --local вместе: 64 и текст общего кода, файл не '
+          'изменён', () async {
+        final before = File('$home/config.yaml').readAsStringSync();
+        for (final sub in [
+          ['set', 'budget.max_steps', '1'],
+          ['unset', 'budget.max_steps'],
+          ['path'],
+        ]) {
+          final (code, io) = await run([
+            'config',
+            ...sub,
+            '--project',
+            '--local',
+          ]);
+
+          expect(code, 64, reason: '$sub');
+          expect(io.stdoutText, isEmpty, reason: '$sub');
+          expect(
+            io.stderrText,
+            contains('--project and --local cannot be combined'),
+            reason: '$sub',
+          );
+        }
+        expect(File('$home/config.yaml').readAsStringSync(), before);
+      });
+
+      // Ревью итерации 4 (safety L): значение `set` может начинаться с `-` и
+      // быть секретом; текст `package:args` его процитировал бы.
+      test('ошибка разбора set и unset — фиксированная фраза без слов argv, '
+          'справка config', () async {
+        const leak = '--sk-LEAK-0123456789';
+        for (final (args, verb) in [
+          (['config', 'set', 'budget.max_steps', leak], 'set'),
+          (['config', 'unset', leak], 'unset'),
+          (['config', 'set', 'a', 'b', '--bogus=$leak'], 'set'),
+          (['--approve=$leak', 'config', 'set', 'a', 'b'], 'set'),
+        ]) {
+          final (code, io) = await run(args);
+
+          expect(code, 64, reason: '$args');
+          expect(io.stdoutText, isEmpty, reason: '$args');
+          expect(
+            io.stderrText,
+            startsWith('codelab: invalid arguments for config $verb\n'),
+            reason: '$args',
+          );
+          expect(io.stderrText, contains('codelab config set'));
+          expect(io.stderrText, isNot(contains('LEAK')), reason: '$args');
+          expect(io.stderrText, isNot(contains('codelab-agent')));
+        }
+      });
+
+      test(
+        'ошибка разбора get называет причину: фраза не подменяется',
+        () async {
+          final (code, io) = await run([
+            'config',
+            'get',
+            'a',
+            '--layer',
+            'bogus',
+          ]);
+
+          expect(code, 64);
+          expect(
+            io.stderrText,
+            isNot(contains('invalid arguments for config')),
+          );
+        },
+      );
+
+      test('допустимые значения --layer совпадают с ConfigGetLayer', () {
+        // cli_args.dart не вправе импортировать мост (guard), поэтому список
+        // там записан литералом; тест держит его равным общему перечислению.
+        for (final layer in ConfigGetLayer.values) {
+          expect(
+            parseCliArgs([
+              'config',
+              'get',
+              'a',
+              '--layer',
+              layer.name,
+            ]).subcommand?.option('layer'),
+            layer.name,
+          );
+        }
+        expect(
+          () => parseCliArgs(['config', 'get', 'a', '--layer', 'bogus']),
+          throwsA(isA<UsageError>()),
+        );
+      });
+
+      // Спека «Флаги подключения с config — ошибка использования»: и для
+      // подкоманд записи, конфиг не меняется.
+      for (final flags in [
+        ['-p', 'hi'],
+        ['--agent', 'x'],
+        ['--prompt-file', 'f'],
+        ['--ui', 'tui'],
+      ]) {
+        test(
+          '${flags.join(' ')} с config set: 64, конфиг не изменён',
+          () async {
+            final before = File('$home/config.yaml').readAsStringSync();
+
+            final (code, io) = await run([
+              ...flags,
+              'config',
+              'set',
+              'budget.max_steps',
+              '1',
+            ]);
+
+            expect(code, 64);
+            expect(io.stdoutText, isEmpty);
+            expect(io.stderrText, contains('does not apply to config'));
+            expect(File('$home/config.yaml').readAsStringSync(), before);
+          },
+        );
+      }
+
+      test(
+        'запись не создаёт sessions/, profiles.json и cli_history',
+        () async {
+          await run(['config', 'set', 'budget.max_steps', '10']);
+          await run(['config', 'get', 'budget.max_steps']);
+          await run(['config', 'unset', 'budget.max_steps']);
+
+          final names = Directory(home)
+              .listSync()
+              .map((e) => e.uri.pathSegments.where((s) => s.isNotEmpty).last)
+              .toSet();
+          expect(names, isNot(contains('sessions')));
+          expect(names, isNot(contains('profiles.json')));
+          expect(names, isNot(contains('cli_history')));
+        },
+      );
+    },
+  );
 }

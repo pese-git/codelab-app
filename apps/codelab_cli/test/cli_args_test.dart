@@ -162,10 +162,10 @@ void main() {
     }
   });
 
+  // `provider` и `mcp` убраны из списка: теперь это зарегистрированные
+  // подкоманды (change `add-config-writer-and-reload`, D6).
   test('subcommands of later stages are unknown commands', () {
     for (final command in [
-      'provider',
-      'mcp',
       'sessions',
       'update',
       'login',

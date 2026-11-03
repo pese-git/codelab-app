@@ -90,26 +90,23 @@ agent:
     expect(snapshot('$project/.codelab'), projectBefore);
   }, tags: scriptedOnly);
 
-  for (final args in [
-    ['config', 'set', 'budget.max_steps', '10'],
-    ['config', 'migrate'],
-  ]) {
-    test(
-      '${args.join(' ')}: 64 and Unknown command, config untouched',
-      () async {
-        final result = await CliProcess.run(args, environment: environment);
+  // `config set` теперь рабочая подкоманда (change
+  // `add-config-writer-and-reload`, D6), её проверяет
+  // `config_write_command_test.dart`; неизвестной остаётся `migrate`.
+  test('config migrate: 64 and Unknown command, config untouched', () async {
+    final result = await CliProcess.run([
+      'config',
+      'migrate',
+    ], environment: environment);
 
-        expect(result.exitCode, 64, reason: '$result');
-        expect(result.stderr, contains('Unknown command'));
-        expect(result.stdout, isEmpty);
-        expect(
-          File('$project/.codelab/config.yaml').readAsStringSync(),
-          'budget:\n  max_steps: 0\n',
-        );
-      },
-      tags: scriptedOnly,
+    expect(result.exitCode, 64, reason: '$result');
+    expect(result.stderr, contains('Unknown command'));
+    expect(result.stdout, isEmpty);
+    expect(
+      File('$project/.codelab/config.yaml').readAsStringSync(),
+      'budget:\n  max_steps: 0\n',
     );
-  }
+  }, tags: scriptedOnly);
 
   test(
     'the output and the exit code match codelab-agent config check',

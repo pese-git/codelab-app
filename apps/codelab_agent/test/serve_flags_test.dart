@@ -29,8 +29,13 @@ void main() {
   Matcher usageError(Object message) =>
       throwsA(isA<UsageError>().having((e) => e.message, 'message', message));
 
-  test('the general usage names `config check`', () {
-    expect(serveUsage(), contains('codelab-agent config check [--cwd <dir>]'));
+  // agent-binary «Общая справка называет подкоманды» (change
+  // `add-config-writer-and-reload`, D6): `config`, `provider` и `mcp`.
+  test('the general usage names `config`, `provider` and `mcp`', () {
+    final usage = serveUsage();
+    expect(usage, contains('codelab-agent config check|path|get|set|unset'));
+    expect(usage, contains('codelab-agent provider add|list|remove'));
+    expect(usage, contains('codelab-agent mcp add|list|remove'));
   });
 
   group('--debug-secrets (change add-agent-secret-store, D11)', () {
