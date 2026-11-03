@@ -252,14 +252,19 @@ D8, D10, D11):
 enum McpServerState { connecting, connected, failed, disabled }
 enum McpServerOrigin { config, session }      // mcp.servers конфига или session/new.mcpServers
 final class McpServerSummary {
-  final String name; final int toolCount;               // как до 8.10
+  // новые поля — с умолчаниями: origin = session, transport = 'stdio', state = connected
+  final String name; final int toolCount;               // как до 8.10; у disabled — 0
   final McpServerOrigin origin; final String transport; // stdio | http
   final McpServerState state;
-  final String? lastError;                              // текст кода CodeLab, ≤ 200 символов
-  final Duration? retryIn;                              // только failed
+  final String? lastError;                              // текст кода CodeLab, ≤ 200 символов, без значений
+  final Duration? retryIn;                              // только failed с назначенным повтором
 }
+// McpServerConfig: + bool enabled (умолчание true; не входит в sameConnection)
+// McpConnectRequest: + McpSecretExpander? expandSecrets  // раскрытие ${secret:…} перед каждой попыткой
+typedef McpSecretExpander = Future<McpServerConfig> Function(McpServerConfig server);
+final class McpSecretsException implements Exception { final String reason; }  // текст без значения
 // McpSessionTools (§10.3):
-//   List<McpServerSummary> get servers;      // все серверы сессии в порядке списка
+//   List<McpServerSummary> get servers;      // ВСЕ серверы сессии в порядке списка, включая failed и disabled
 //   Future<void> reconnect(String name);     // /mcp reload <id>: разорвать и подключить сразу
 //   Future<void> setEnabled(String name, bool enabled);   // /mcp enable|disable: только эта сессия, в памяти
 //   Future<void> replaceServers(List<McpServerConfig> servers);   // как до 8.10; им же — перезагрузка (§17.5.7)
@@ -480,13 +485,20 @@ agent-configuration «Слои конфигурации и их порядок»
   `ProviderConfig.secrets` попадают и собранные строки (`Bearer <v>`), и сырые значения ссылок —
   тело `401` часто цитирует сам токен. Отмена хода во время ожидания завершает поток сразу ошибкой
   класса `aborted` (`StopReason.aborted`, LLM-7); позднее значение только наполняет кэш.
-- **MCP-сервер конфига — перед `connect`.** `AgentRuntimeImpl` раскрывает шаблоны серверов
-  параллельно при `createSession`, `loadSession` и `setMcpServers`, в токене отмены создания
-  сессии (у замены — уровня сессии). Ненайденный секрет или недоступное хранилище —
-  `mcp.server.failed {server, transport, reason}` с причиной `secret <name> is not set` или
-  `secret <name> cannot be read: <backend> is unavailable` (значение — никогда); сессия создаётся
-  без инструментов этого сервера. `dispose()`/`close()` во время раскрытия отбрасывают результат
-  без `connect` и без `mcp.server.failed`. Заголовки после раскрытия — в порядке файла конфига.
+- **MCP-сервер конфига — перед каждой попыткой подключения** (8.10; design.md change
+  `add-config-writer-and-reload`, D11). `AgentRuntimeImpl` передаёт коннектору серверы с шаблонами
+  и замыкание раскрытия `McpConnectRequest.expandSecrets` над резолвером; коннектор зовёт его перед
+  каждой попыткой (первой и повторной) сервера с шаблонами, а раскрытую копию держит только в этой
+  попытке. Ненайденный секрет, недоступное хранилище или отсутствие резолвера —
+  `McpSecretsException(reason)` с причиной `secret <name> is not set`,
+  `secret <name> cannot be read: <backend> is unavailable` или `no secret store` (значение —
+  никогда): транспорт не открывается, сервер остаётся в списке сессии в `failed` с `lastError`,
+  на первом сбое — `mcp.server.failed {server, transport, reason}`, дальше — повтор по расписанию
+  §17.5.7, поэтому после `codelab secret set` сервер подключается сам. Сессия создаётся без
+  инструментов этого сервера. До 8.10 сервер с ненайденным секретом выпадал до `connect`.
+  `dispose()`/`close()` во время раскрытия отбрасывают попытку: транспорт не открывается,
+  `mcp.server.failed` нет, сервер — `failed` с `connection cancelled` без таймера. Заголовки после
+  раскрытия — в порядке файла конфига.
 - **Только `env` и `headers`.** `${secret:…}` в `args`, `url` MCP-сервера и `base_url` провайдера —
   проблема конфига `secret references ${secret:…} are allowed only in env and headers values`
   (§15.5, п. 7): argv и URL видны в `ps` и логах.
@@ -1013,10 +1025,13 @@ reloadConfig():                          // ConfigSource.changes, /config reload
 4. diff := листовые ключи с другим значением; mcp.servers — по name и sameConnection
 5. restart := diff ∩ {d.restartRequired} (§17.5.8; ключи хоста sessions.*, logging.*, profile.* —
    все restartRequired; R0-1: permissions.*, trusted_projects и элементы mcp.servers[<name>] с
-   type: stdio без прежнего old.enabled && old.sameConnection(new) — новые, включённые из
-   enabled: false, сменившие тип http → stdio, с другими command/args/env; R0-4, ссылка — по
-   значению (любая подстановка ${…}: ${secret:…} или ${VAR}): HTTP-серверы без прежнего
-   old.enabled && old.sameConnection(new) с подстановкой в url/headers/env; провайдер с ключом
+   type: stdio без прежнего old с old.sameConnection(new) && (old.enabled || !new.enabled) —
+   новые (и сразу выключенные), включённые из enabled: false, сменившие тип http → stdio, с другими
+   command/args/env, в том числе выключенные (R6-1: иначе /mcp enable подключил бы команду,
+   вписанную в выключенный сервер); выключение true → false применяется сразу, а вместе с правкой
+   соединения — выключение сразу, параметры прежние; R0-4, ссылка — по значению (любая
+   подстановка ${…}: ${secret:…} или ${VAR}): HTTP-серверы по тому же условию с подстановкой в
+   url/headers/env; провайдер с ключом
    (api_key_secret, api_key_env, подстановка в base_url/headers/auth_header) — новый или со сменой группы
    kind, base_url, headers, auth_header, api_key_secret, api_key_env; ссылки на модели нового
    отложенного провайдера, в том числе agent.default_model);
@@ -1085,8 +1100,8 @@ ACP-8. Расхождение списка моделей в этом окне �
 | `tools.project_context.*` | новые сессии (файлы проекта фиксируются при создании, D9) |
 | `redact.*` | не применяется до 8.11 (`config.key.not_applied`) |
 | `tools.disabled`, `exec.*`, `tools.untrusted_paths` и другие ключи без потребителя (`applied: false`) | не применяются (`config.key.not_applied`); `restartRequired` решает change потребителя (D8, «Обязанность будущих change»): снятие `tools.disabled` на лету снова включает инструмент |
-| `permissions.*`, `trusted_projects`, новый или изменённый (`command`, `args`, `env`) stdio-сервер `mcp.servers[<name>]`, в том числе включённый из `enabled: false` | только после перезапуска: ослабление прав на лету не применяется (R0-1, решение пользователя 2026-11-02; защита в глубину поверх PERM-11) |
-| новый или изменённый HTTP-сервер с подстановкой `${…}` (`${secret:…}` или `${VAR}` — по значению) в `url`/`headers`/`env`; новый провайдер с ключом и смена группы `kind`, `base_url`, `headers`, `auth_header`, `api_key_secret`, `api_key_env` у провайдера с ключом (группа атомарна); ссылки на модели нового отложенного провайдера, в том числе `agent.default_model` | только после перезапуска: секрет не уходит на новый адрес без перезапуска (R0-4, решение пользователя 2026-11-02); новые модели провайдера применяются |
+| `permissions.*`, `trusted_projects`, новый или изменённый (`command`, `args`, `env`) stdio-сервер `mcp.servers[<name>]`, в том числе включённый из `enabled: false` и выключенный (`enabled: false`, R6-1, решение пользователя 2026-11-03) | только после перезапуска: ослабление прав на лету не применяется (R0-1, решение пользователя 2026-11-02; защита в глубину поверх PERM-11) |
+| новый или изменённый HTTP-сервер с подстановкой `${…}` (`${secret:…}` или `${VAR}` — по значению) в `url`/`headers`/`env`, в том числе выключенный (R6-1); новый провайдер с ключом и смена группы `kind`, `base_url`, `headers`, `auth_header`, `api_key_secret`, `api_key_env` у провайдера с ключом (группа атомарна); ссылки на модели нового отложенного провайдера, в том числе `agent.default_model` | только после перезапуска: секрет не уходит на новый адрес без перезапуска (R0-4, решение пользователя 2026-11-02); новые модели провайдера применяются |
 | `sessions.*`, `logging.*` (включая `logging.level`, OQ5), `profile.*`, `secrets.backend`, `config.*` | только после перезапуска (`restartRequired`) |
 
 **Доверие закреплено на стартовом снимке** (D8, «Пересборка снимка с отложенными ключами»).
@@ -1249,16 +1264,27 @@ supervise(server):
    prompts → команды <server>:<prompt>; attempt := 0, если прошлое соединение прожило ≥ 10 с
      (иначе attempt не сбрасывается: сервер, падающий сразу после подключения, не дёргается раз в секунду)
 3. сбой → state := failed; lastError := текст кода CodeLab без текстов сервера (≤ 200 символов;
-     Redactor — 8.11); неудачное повторное раскрытие ${secret:…} — тоже сбой попытки:
-     lastError "secret <name> is not set" или "secret <name> cannot be read: <backend> is unavailable" (D11)
+     Redactor — 8.11); неудачное раскрытие ${secret:…} (McpSecretsException) — тоже сбой попытки,
+     транспорт не открывается: lastError "secret <name> is not set",
+     "secret <name> cannot be read: <backend> is unavailable" или "no secret store" (D11)
+   отмена токена запроса (закрытие сессии, dispose) во время попытки → state := failed,
+     lastError "connection cancelled", без таймера и без mcp.server.failed
    вызовы этого сервера в полёте → результат isError: "MCP server <id> disconnected during the call: <reason>"
      (повтора нет: у вызова могли быть побочные эффекты)
    delay := min(30 с, 2^attempt с × (1 + 0.2·r)), r ∈ [0, 1) из Random хоста; attempt += 1
-   лог warning mcp.server.failed на 1-м и каждом 10-м подряд сбое, info mcp.server.retry — на остальных
+   лог warning mcp.server.failed {server, transport, reason} на 1-м и каждом 10-м подряд сбое,
+     info mcp.server.retry {server, attempt, delay_ms} — на остальных (attempt — номер сбоя подряд с 1);
+     пишет только супервизор: McpClient под коннектором создаётся с logFailures: false
    ждать delay, или wake (перезагрузка, /mcp reload), или отмены сессии → п. 1
-4. пока failed после успешного подключения, инструменты сервера остаются в реестре (схемы стабильны);
-   вызов → isError "MCP server <id> is not connected (retry in <n>s). Continue without it or try later."
+4. пока сервер не connected после успешного подключения, инструменты остаются в реестре (схемы
+   стабильны); McpTool вызывает McpToolCaller сервера, а не клиента, поэтому после переподключения
+   тот же инструмент идёт на новое соединение; вызов в простое →
+   isError "MCP server <id> is not connected (retry in <n>s). Continue without it or try later."
+   без обращения к транспорту (n — секунды до попытки, округлённые, ≥ 1)
    сервер, ни разу не подключившийся, инструментов не имеет (§13.4)
+   новый набор после таймерного переподключения — только через takeUpdate() на границе шага;
+   явные действия (начальное подключение, reconnect, setEnabled(true), replaceServers) кладут набор
+   в tools сессии коннектора сразу
 5. disabled → закрыть транспорт, снять таймер; инструменты и команды сервера удаляются
 6. закрытие сессии → закрыть транспорт; stdio-процессу SIGTERM, через 5 с SIGKILL
 
@@ -1275,8 +1301,11 @@ onPromptsListChanged(server): prompts/list → команды → CommandsChange
 серверы конфига при перезагрузке (D10):  // существующий McpSessionTools.replaceServers
 1. желаемый список := новые серверы конфига, затем текущие серверы session/new (берутся на момент
    применения); сервер session/new с тем же name затеняет сервер конфига
-2. совпавшие по sameConnection остаются; неизменённый сервер в failed будится сразу
-3. исчезнувшие и выключенные (enabled: false) закрываются
+2. совпавшие по sameConnection и enabled остаются; неизменённый сервер в failed будится сразу;
+   выбор /mcp enable|disable у неизменённого сервера сохраняется (R6-2): выключенный командой не
+   будится, включённый командой вопреки enabled: false не закрывается
+3. исчезнувшие и выключенные (enabled: true → false) закрываются; изменённый сервер — новое состояние
+   из конфига; отложенные правки (R0-1, R0-4, R6-1) применённый элемент не меняют
 4. новые подключаются и занимают имена инструментов последними (коллизия отключает новый сервер)
 когда: без хода — до итога reloadConfig; во время хода — после TurnEnded. Замены от перезагрузки и от
   session/load идут через одну очередь сессии со счётчиком поколений: последний желаемый набор
@@ -1294,7 +1323,20 @@ onPromptsListChanged(server): prompts/list → команды → CommandsChange
 **Выключенные серверы конфига** (D10). `CoreConfig.mcpServers` и `McpConnectRequest.servers` несут и
 серверы с `enabled: false` (`McpServerConfig.enabled`): коннектор держит их в `disabled` без
 подключения, `/mcp list` их показывает; лог загрузки `mcp.server.skipped` с причиной `disabled in
-config` сохраняется.
+config` сохраняется. Проблемы построения выключенного сервера конфиг невалидным не делают, элемент
+без `type` либо `command`/`url` выпадает с тем же `mcp.server.skipped`; `values` содержит и
+выключенные серверы. Правка параметров соединения выключенного stdio-сервера или HTTP-сервера с
+подстановкой ждёт перезапуска, как у включённого (R6-1, решение пользователя 2026-11-03): иначе
+модель вписала бы команду в выключенный сервер, а человек включил бы его `/mcp enable`, не видя
+подмены.
+
+**Ручной выбор и перезагрузка** (R6-2, решение пользователя 2026-11-03). `/mcp enable|disable`
+действует, пока элемент этого сервера в применённом снимке не изменился (`sameConnection` и
+`enabled`); правки других ключей и серверов его не сбрасывают; правка самого сервера в файле, в том
+числе `enabled`, даёт новое состояние из конфига с учётом R0-1, R0-4 и R6-1. Правка сроков
+(`connect_timeout`, `call_timeout`) у сервера с ручным выбором сбрасывает выбор и пересоздаёт
+соединение (stdio — перезапуск процесса); у нетронутого сервера правка одних сроков соединение не
+сбрасывает.
 
 **Команда `/mcp`** — одна запись в `available_commands_update` (между `config` и `help`; в 8.10 —
 сразу после `config`, D12):
@@ -1306,7 +1348,7 @@ config` сохраняется.
 | `/mcp list` (и `/mcp` без аргументов) | `McpSessionTools.servers` | таблица ниже |
 | `/mcp reload` | `reloadConfig()`, затем немедленное пробуждение всех `failed`. `/mcp` — не ход модели, поэтому замена серверов конфига (D10) происходит до ответа, и таблица показывает состояние на момент ответа | строка итога (`Config reloaded: …` или `Config reload failed (<n> issues); MCP servers unchanged. Run /config check.`), затем таблица |
 | `/mcp reload <id>` | `McpSessionTools.reconnect(id)` без перечитывания конфига; работает и для `session`-сервера | таблица |
-| `/mcp disable <id>`, `/mcp enable <id>` | `setEnabled` — только для этой сессии, в памяти: не пишется ни в конфиг, ни в журнал; после `session/load` действует конфиг. `enable` подключает и сервер с `enabled: false` в конфиге (это действие человека, R0-1 к нему не относится), и выключенный коллизией имён — повторная коллизия снова даёт `disabled` (D11). `<id>` ищется только среди серверов применённого снимка: отложенный новый — `Unknown MCP server`, у отложенного изменённого включается прежний вариант (D10) | таблица |
+| `/mcp disable <id>`, `/mcp enable <id>` | `setEnabled` — только для этой сессии, в памяти: не пишется ни в конфиг, ни в журнал; после `session/load` действует конфиг. `enable` подключает и сервер с `enabled: false` в конфиге — с параметрами применённого снимка (это действие человека, R0-1 к нему не относится; R6-1), и выключенный коллизией имён — повторная коллизия снова даёт `disabled` (D11). `<id>` ищется только среди серверов применённого снимка: отложенный новый — `Unknown MCP server`, у отложенного изменённого включается прежний вариант (D10) | таблица |
 | неизвестный `<id>` | — | `Unknown MCP server: <id>. Run /mcp list.` |
 | другой аргумент | — | `Usage: /mcp list \| /mcp reload [<id>] \| /mcp enable <id> \| /mcp disable <id>` |
 

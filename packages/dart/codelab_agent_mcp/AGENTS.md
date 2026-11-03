@@ -13,6 +13,14 @@
 
 `codelab_agent_mcp` — свой минимальный dual-era MCP-клиент (design.md, D1, D2): кодек JSON-RPC (D4), `McpClient` (D5, D8), `McpTool` (D7), `McpClientConnector` (D6) и streamable HTTP на `package:http` (D10). Ядро знает только порты `McpConnector` / `McpTransport` (`lib/src/mcp/` ядра); протокол MCP живёт здесь.
 
+Сессия `McpClientConnector` — ещё и супервизор своих серверов (change `add-config-writer-and-reload`, D11; `agent-core-architecture` §17.5.7): автомат `connecting`/`connected`/`failed`/`disabled`, повтор с задержкой `min(30 с, 2^attempt с × (1 + 0.2·r))`, сброс счётчика после соединения ≥ 10 с, `reconnect`/`setEnabled`, повторное раскрытие `${secret:…}` перед каждой попыткой (`McpConnectRequest.expandSecrets`, значение в коннекторе не хранится). Правила:
+* таймеры — только `Clock.timer`, джиттер — `Random`, оба приходят от хоста (PKG-6); коннектор не создаёт `Timer` и не читает системные часы;
+* устаревший результат подключения (поколение сервера сменилось или сессия закрыта) закрывается сразу и не регистрируется; `close()` отменяет таймеры и идущие рукопожатия;
+* `mcp.server.failed` пишет только супервизор — на 1-м и каждом 10-м сбое подряд, остальные — `mcp.server.retry`; `McpClient` под коннектором создаётся с `logFailures: false`;
+* `McpTool` вызывает не клиента, а `McpToolCaller` сервера: после переподключения старые инструменты работают на новом соединении, а во время простоя получают `is not connected (retry in <n>s)` без обращения к транспорту;
+* набор инструментов после переподключения попадает в реестр только через `takeUpdate()` на границе шага; неизменённый набор обновления не даёт;
+* `lastError` и поля логов — тексты кода CodeLab ≤ 200 символов, без значений `env`, `headers` и секретов.
+
 ## 2. Границы
 
 * Пакет НЕ ДОЛЖЕН импортировать `dart:io`, `dart:isolate`, `dart:ffi`, `dart:html`, `dart:js_interop`, `package:web/`, `package:flutter/`, `package:codelab_acp_*`, `package:codelab_client_*` и `package:codelab_agent_io/` — в том числе `lib/testing.dart` (PKG-3): правило `rules.dart` сторожа, проверка — `melos run guard`.
@@ -26,4 +34,5 @@
 * TDD — по `packages/dart/codelab_agent_core/AGENTS.md` §2.
 * Сервер в тестах — `FakeMcpServer` из `lib/testing.dart` (D15): эпохи `modern`, `legacy`, `dualEra`, запись вызовов и отмен. Реального процесса и сети нет; stdio-процесс проверяет `apps/codelab_agent`.
 * Время — `FakeClock`; синхронизация — события и completer-ы, не `Future.delayed`.
+* Тесты супервизора — `test/supervisor/` на стенде `test/support/supervisor_rig.dart` (`FakeClock`, `Random(0)`, `FakeMcpServer.crash`, `SpyTransportFactory` с задержкой `open`).
 * Секреты (`env`, `headers`) не попадают в логи: `mcp_logs_no_secrets_test.dart`.

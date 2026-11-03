@@ -12,9 +12,10 @@ import 'key_path.dart';
 /// (сегмент с символами вне `A-Za-z0-9_./-` — в кавычках); список — один лист
 /// (`permissions.deny`), чтобы изменение элемента давало один ключ, а не
 /// индекс; исключение — `mcp.servers`: каждый элемент лежит целиком под
-/// `mcp.servers[<имя>]`, и только у серверов из [enabledServers] (выключенный
-/// сервер в `CoreConfig` не попадает, и условие «включение из
-/// `enabled: false`» проверяется как «элемента не было» — D8, задача 5.4).
+/// `mcp.servers[<имя>]`, и только у серверов из [servers] — тех, что попали в
+/// `CoreConfig.mcpServers`. Выключенный сервер (`enabled: false`) теперь тоже
+/// там (D10 change `add-config-writer-and-reload`), а элемент, который нечем
+/// запустить (`{name, enabled: false}` без `type`), — нет.
 /// Пустое отображение — один лист-маркер `{}` (появление и исчезновение пустого
 /// узла, например модели без параметров, — изменение). Значения копируются: карта не должна
 /// меняться вместе со слоями хоста.
@@ -22,7 +23,7 @@ import 'key_path.dart';
 /// Как использовать: `_Builder` вызывает один раз после слияния слоёв.
 Map<String, Object?> flattenConfigValues(
   Map<String, Object?> tree,
-  Set<String> enabledServers,
+  Set<String> servers,
 ) {
   final out = <String, Object?>{};
 
@@ -43,7 +44,7 @@ Map<String, Object?> flattenConfigValues(
         for (final item in list) {
           if (item is Map<String, Object?> &&
               item['name'] is String &&
-              enabledServers.contains(item['name'])) {
+              servers.contains(item['name'])) {
             out[path.at(item['name']! as String).value] = _copy(item);
           }
         }

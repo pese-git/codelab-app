@@ -1068,20 +1068,43 @@ final class _Builder {
     final name = raw['name']! as String;
     final at = KeyPath('mcp.servers').at(name);
     final origin = _serverOrigin(name);
+    if (raw['enabled'] != false) {
+      return _buildMcpServer(raw, name, at, origin, enabled: true);
+    }
+    _warn(
+      'mcp.server.skipped',
+      at.value,
+      origin,
+      'the server is disabled in the config',
+      fields: {'server': name, 'reason': 'disabled in config'},
+      level: LogLevel.info,
+    );
+    // Выключенный сервер доходит до коннектора с `enabled == false`, чтобы
+    // `/mcp list` его показывал, а `/mcp enable` мог подключить (D10, D11).
+    // Но проверять его строже, чем раньше, нельзя: конфиг с неполным или
+    // «сломанным» выключенным сервером был валиден и остаётся валидным. Поэтому
+    // сервер строится «тихо»: проблемы и предупреждения построения
+    // откатываются, а элемент, который не из чего собрать (`{name,
+    // enabled: false}` в проектном слое поверх сервера пользователя), как и
+    // прежде, выпадает из списка.
+    final issuesMark = issues.length;
+    final warningsMark = warnings.length;
+    final server = _buildMcpServer(raw, name, at, origin, enabled: false);
+    issues.removeRange(issuesMark, issues.length);
+    warnings.removeRange(warningsMark, warnings.length);
+    return server;
+  }
+
+  McpServerConfig? _buildMcpServer(
+    Map<String, Object?> raw,
+    String name,
+    KeyPath at,
+    ConfigTree origin, {
+    required bool enabled,
+  }) {
     void bad(String field, String message) =>
         _issue(ConfigIssueKind.value, at.child(field), message, origin: origin);
 
-    if (raw['enabled'] == false) {
-      _warn(
-        'mcp.server.skipped',
-        at.value,
-        origin,
-        'the server is disabled in the config',
-        fields: {'server': name, 'reason': 'disabled in config'},
-        level: LogLevel.info,
-      );
-      return null;
-    }
     final type = raw['type'];
     if (type == null) {
       bad('type', 'required (stdio or http)');
@@ -1172,6 +1195,7 @@ final class _Builder {
         connectTimeout: connect ?? defaultMcpConnectTimeout,
         callTimeout: call,
         secretValues: secretValues,
+        enabled: enabled,
       );
     } else {
       final rawUrl = raw['url'];
@@ -1218,6 +1242,7 @@ final class _Builder {
               callTimeout: call,
               secretValues: secretValues,
               secretHeaderPositions: positions,
+              enabled: enabled,
             );
     }
     return failed ? null : server;

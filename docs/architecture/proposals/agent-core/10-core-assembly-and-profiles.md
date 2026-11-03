@@ -124,7 +124,7 @@ abstract interface class SecretStore {
 ```dart
 abstract interface class McpConnector {            // AgentCoreServices.mcp
   Set<String> get transports;                      // 'stdio', 'http' — для проверки HOST-3
-  Future<McpSessionTools> connect(McpConnectRequest request);   // sessionId, cwd, servers, reservedNames, logger, cancel
+  Future<McpSessionTools> connect(McpConnectRequest request);   // sessionId, cwd, servers, reservedNames, logger, cancel; с 8.10 — expandSecrets (McpSecretExpander: раскрытие ${secret:…} перед каждой попыткой, ошибка — McpSecretsException(reason); §17.5.4, D11)
 }
 abstract interface class McpSessionTools {         // объект MCP-части одной сессии
   List<AgentTool> get tools;                       // в порядке регистрации (§6.4)
@@ -165,8 +165,13 @@ followed`, `connection failed: <runtimeType>`, `HTTP session expired`; в лог
 `replaceServers(servers)` получает полный желаемый список после слияния и фильтра ядра (серверы
 конфига, затем серверы клиента): серверы конфига не трогаются, совпавшие по `sameConnection`
 остаются, исчезнувшие закрываются, новые подключаются и занимают имена инструментов последними
-(коллизия отключает новый сервер), отключённый или не подключившийся сервер пробуется заново; сбой
-сервера — `mcp.server.failed`, а не исключение.
+(коллизия отключает новый сервер), отключённый коллизией или не подключившийся сервер пробуется
+заново; сбой сервера — `mcp.server.failed`, а не исключение. С 8.10 (change
+`add-config-writer-and-reload`, D10, D11) сервер прежний, только если совпали `sameConnection` и
+`McpServerConfig.enabled` (признак в `sameConnection` не входит): `true → false` закрывает сервер,
+`false → true` подключает новый; выключенный `setEnabled(name, false)` неизменённый сервер не
+будится — ручной выбор держится, пока элемент сервера не изменился; у сервера с ручным выбором изменением считается и правка сроков (R6-2). Супервизия
+(переподключение, состояния `McpServerSummary`, `Clock` и `Random` от хоста) — §17.5.7.
 
 Решения — `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md` (D3, D6).
 

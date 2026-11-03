@@ -610,14 +610,27 @@ final class AgentRuntimeImpl implements AgentRuntime {
     if (_disposed) {
       return _discarded();
     }
+    final ConfigApplyReport report;
+    // Замены серверов конфига живых сессий (шаг 7а), начатые этим снимком.
+    final applies = <Future<void>>[];
     try {
-      return _applyLoaded(result);
+      report = _applyLoaded(result, applies);
     } on Object catch (error, stack) {
       return _failedByException(error, stack);
     }
+    // Шаг 7а: серверы конфига живых сессий (D10). Ожидание — после замены
+    // снимка, поэтому «двойного снимка» нет; сбой замены не меняет итог
+    // (`_applyMcpServers` не бросает).
+    if (applies.isNotEmpty) {
+      await Future.wait(applies);
+    }
+    return report;
   }
 
-  ConfigApplyReport _applyLoaded(ConfigLoadResult result) {
+  ConfigApplyReport _applyLoaded(
+    ConfigLoadResult result,
+    List<Future<void>> applies,
+  ) {
     final loaded = result.config;
     // Шаг 3: невалидный конфиг — прежний снимок цел, клиентам ничего (CFG-15).
     if (loaded == null || result.issues.isNotEmpty) {
@@ -684,6 +697,12 @@ final class AgentRuntimeImpl implements AgentRuntime {
     // Шаг 7: серверы конфига живых сессий применяет шаг 7а (задача 6.4, через
     // `replaceServers` и очередь сессии); здесь — модель и опции (7б).
     _notifySessions(previous, next);
+    if (!plan.isEmpty) {
+      applies.addAll([
+        for (final session in [..._sessions])
+          if (session._handedOut && !session._closed) session._applyConfigMcp(),
+      ]);
+    }
     if (plan.restartRequiredKeys.isNotEmpty) {
       services.logger.log(
         LogLevel.warning,
@@ -918,6 +937,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
       registry: sessionRegistry,
       state: mcp,
     );
+    // Отмена во время подключения (`dispose()`, закрытие сессии): коннектор
+    // вернулся, не дожидаясь зависшего раскрытия секретов, но серверы,
+    // подключившиеся раньше, уже в `mcp`. Сессию с ними не выдаём — иначе она
+    // попала бы в `_sessions` после `dispose()` (agent-runtime «Закрытие
+    // во время раскрытия секретов»).
+    if (_disposed || mcp.cancel.token.isCancelled) {
+      await mcp.close();
+      mcp.cancel.token.throwIfCancelled();
+      throw const CancelledException(ShutdownCancel());
+    }
     final tools = ToolServices(clock: services.clock, logger: logger);
     final gate = profile.isOn(HostCapability.interactiveApproval)
         ? ports.gate ?? services.gate
@@ -1014,10 +1043,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
       env: env,
       registry: sessionRegistry,
       mcp: mcp,
+      clientMcp: mcpServers,
+      // Снимок на момент применения, а не на момент создания сессии: после
+      // перезагрузки конфига сервера конфига берутся из нового снимка (D10).
       replaceMcp: (servers) => _replaceMcp(
         id: id,
         cwd: cwd,
-        settings: settings,
+        settings: _applied.config.forSessionCwd(canonicalCwd),
         servers: servers,
         logger: logger,
         registry: sessionRegistry,
@@ -1312,13 +1344,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     required ToolRegistry registry,
     required _McpState state,
   }) async {
-    final planned = _planMcp(id, logger, settings, servers);
-    final accepted = await _expandMcpSecrets(
-      id,
-      logger,
-      planned,
-      state.cancel.token,
-    );
+    final accepted = _planMcp(id, logger, settings, servers);
     if (accepted.isEmpty) {
       return;
     }
@@ -1415,59 +1441,29 @@ final class AgentRuntimeImpl implements AgentRuntime {
     return accepted;
   }
 
-  /// Раскрывает шаблоны `${secret:…}` серверов конфигурации через
-  /// `services.secrets` перед `connect` (design.md change
-  /// `add-agent-secret-store`, D4; agent-secrets «Секреты MCP-серверов
-  /// конфигурации»).
+  /// Замыкание раскрытия `${secret:…}` для коннектора (design.md change
+  /// `add-config-writer-and-reload`, D11, «Секреты при переподключении»;
+  /// agent-secrets «Секреты MCP-серверов конфигурации»).
   ///
-  /// Почему здесь: значения нужны только на момент подключения, и держать их
-  /// в `CoreConfig` строками нельзя (CFG-10: в лог и журнал они не
-  /// попадают). Серверы без шаблонов — клиента ACP и конфига без ссылок —
-  /// проходят как есть: `${secret:…}` от клиента остаётся литералом.
-  ///
-  /// Серверы раскрываются параллельно. Секрет не найден или хранилище
-  /// недоступно — сервер выпадает из списка с `mcp.server.failed {server,
-  /// transport, reason}`, остальные подключаются. Ожидание ограничено
-  /// [cancel] (`close()` сессии или `dispose()` рантайма): отмена бросает
-  /// [CancelledException], результат отбрасывается и `connect` не вызывается;
-  /// запоздавшие значения только наполнят кэш резолвера. Лог получает
-  /// причину с именем секрета, без значения.
-  Future<List<McpServerConfig>> _expandMcpSecrets(
-    SessionId id,
-    Logger logger,
-    List<McpServerConfig> servers,
-    CancelToken cancel,
-  ) async {
-    if (servers.every((server) => server.secretValues.isEmpty)) {
-      return servers;
-    }
-    final resolver = services.secrets;
-    final work = Future.wait([
-      for (final server in servers) _expandServerSecrets(server, resolver),
-    ]);
-    await Future.any<void>([work, cancel.onCancel]);
-    cancel.throwIfCancelled();
-    final results = await work;
-    cancel.throwIfCancelled();
-    final expanded = <McpServerConfig>[];
-    for (final (index, (server, reason)) in results.indexed) {
-      if (server != null) {
-        expanded.add(server);
-        continue;
-      }
-      logger.log(
-        LogLevel.warning,
-        'mcp.server.failed',
-        fields: {
-          'session_id': id.value,
-          'server': servers[index].name,
-          'transport': servers[index].transport,
-          'reason': reason,
-        },
-      );
+  /// Почему замыкание, а не раскрытие до `connect`: коннектор зовёт его перед
+  /// каждой попыткой, в том числе повторной, поэтому после
+  /// `SecretResolver.invalidate` новая попытка берёт новое значение, а
+  /// значение не живёт в коннекторе. Сервер, чей секрет не задан или
+  /// недоступен, не выпадает из списка, а становится `failed` с `lastError`
+  /// «secret NAME is not set» или «secret NAME cannot be read: BACKEND is
+  /// unavailable» (без значения) и повторяется по расписанию. Серверы без
+  /// шаблонов (клиента ACP: `${secret:…}` от клиента — литерал) проходят как
+  /// есть, и коннектор замыкание для них не зовёт.
+  McpSecretExpander get _secretExpander => (server) async {
+    final (expanded, reason) = await _expandServerSecrets(
+      server,
+      services.secrets,
+    );
+    if (expanded == null) {
+      throw McpSecretsException(reason ?? 'secret cannot be read');
     }
     return expanded;
-  }
+  };
 
   /// Один сервер: раскрытый конфиг или причина отказа; не бросает.
   Future<(McpServerConfig?, String?)> _expandServerSecrets(
@@ -1525,6 +1521,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
           reservedNames: state.baseNames,
           logger: logger,
           cancel: state.cancel.token,
+          expandSecrets: _secretExpander,
         ),
       );
       state.apply(connected, registry, logger, id);
@@ -1549,18 +1546,12 @@ final class AgentRuntimeImpl implements AgentRuntime {
     required ToolRegistry registry,
     required _McpState state,
   }) async {
-    final planned = _planMcp(
+    final accepted = _planMcp(
       id,
       logger,
       settings,
       servers,
       logConfigSkips: false,
-    );
-    final accepted = await _expandMcpSecrets(
-      id,
-      logger,
-      planned,
-      state.cancel.token,
     );
     final current = state.tools;
     if (current == null) {
@@ -1750,6 +1741,7 @@ final class _Session implements AgentSession {
     required ToolRegistry registry,
     required _McpState mcp,
     required Future<void> Function(List<McpServerConfig> servers) replaceMcp,
+    required List<McpServerConfig> clientMcp,
     required AgentCoreServices services,
     required Logger logger,
     required String Function(String cwd, ModeId mode, AgentDefinition? agent)
@@ -1777,6 +1769,7 @@ final class _Session implements AgentSession {
        _registry = registry,
        _mcp = mcp,
        _replaceMcp = replaceMcp,
+       _clientMcp = List.unmodifiable(clientMcp),
        _services = services,
        _logger = logger,
        _compose = compose,
@@ -1871,6 +1864,12 @@ final class _Session implements AgentSession {
   final ToolRegistry _registry;
   final _McpState _mcp;
   final Future<void> Function(List<McpServerConfig> servers) _replaceMcp;
+
+  /// Серверы клиента (`session/new`, `session/load`, `setMcpServers`): при
+  /// перезагрузке конфига к ним добавляются новые серверы конфига (D10).
+  /// Берётся последний присланный список, а не тот, с которым сессия
+  /// создана.
+  List<McpServerConfig> _clientMcp;
 
   /// Хвост очереди смен MCP-серверов: смены идут по одной, а ход и закрытие
   /// сессии ждут её хвост, чтобы набор не менялся посреди хода (D11).
@@ -2187,12 +2186,30 @@ final class _Session implements AgentSession {
       throw StateError('the session is closed');
     }
     final next = List<McpServerConfig>.unmodifiable(servers);
+    _clientMcp = next;
     _mcpGeneration++;
     if (_agent.isRunning) {
       _pendingMcp = next;
       return;
     }
     await _enqueueMcp(next, _mcpGeneration);
+  }
+
+  /// Шаг 7а перезагрузки конфига (D10): желаемый список — серверы нового
+  /// снимка, затем серверы клиента на момент применения — идёт через ту же
+  /// очередь и счётчик поколений, что `setMcpServers`: последний побеждает.
+  /// Без хода замена завершена к возврату; во время хода (промпт, ушедший в
+  /// цикл) она откладывается до `TurnEnded`.
+  Future<void> _applyConfigMcp() async {
+    if (_closed) {
+      return;
+    }
+    _mcpGeneration++;
+    if (_agent.isRunning) {
+      _pendingMcp = _clientMcp;
+      return;
+    }
+    await _enqueueMcp(_clientMcp, _mcpGeneration);
   }
 
   void _startPendingMcp() {
@@ -2232,11 +2249,6 @@ final class _Session implements AgentSession {
       _agent
         ..tools = _visibleTools()
         ..systemPrompt = _compose(cwd, _mode, _activeAgent);
-    } on CancelledException {
-      // `close()` или `dispose()` во время раскрытия секретов: результат
-      // отбрасывается без записи `mcp.server.failed` (agent-secrets
-      // «Секреты MCP-серверов конфигурации», D4).
-      return;
     } on Object catch (error, stack) {
       _logger.log(
         LogLevel.warning,

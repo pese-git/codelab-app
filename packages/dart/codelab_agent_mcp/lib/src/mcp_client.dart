@@ -80,6 +80,24 @@ final class McpCallError extends McpCallOutcome {
   final String text;
 }
 
+/// Исполнитель вызовов инструмента одного сервера (design.md change
+/// `add-config-writer-and-reload`, D11).
+///
+/// Почему порт, а не `McpClient`: после переподключения у сервера новый
+/// клиент, а `McpTool` живёт, пока реестр не обновится на границе шага.
+/// Инструмент держит исполнителя сервера (его реализует супервизор
+/// коннектора) и всегда попадает в текущее соединение или получает готовый
+/// текст «не подключён». `McpClient` реализует порт для прямого использования
+/// и тестов.
+abstract interface class McpToolCaller {
+  Future<McpCallOutcome> callTool(
+    String name,
+    Map<String, Object?> arguments, {
+    required CancelToken cancel,
+    String? toolCallId,
+  });
+}
+
 // Внутренние исходы запроса.
 final class _RpcError implements Exception {
   const _RpcError(this.error, this.method);
@@ -151,7 +169,7 @@ final class _Pending {
 /// рукопожатие эпохи и читает `tools/list`. Провал — [McpConnectException]
 /// после лога `mcp.server.failed` и закрытия транспорта. Дальше
 /// [callTool] исполняет вызовы, [close] закрывает соединение.
-final class McpClient {
+final class McpClient implements McpToolCaller {
   McpClient._({
     required this.server,
     required McpTransport transport,
@@ -161,7 +179,10 @@ final class McpClient {
     required this.options,
     required McpEraCache? eraCache,
     required this.onToolsChanged,
+    required this.onClosed,
+    required bool logFailures,
   }) : _transport = transport,
+       _logFailures = logFailures,
        _clock = clock,
        _logger = logger,
        _eraCache = eraCache,
@@ -184,6 +205,8 @@ final class McpClient {
     McpClientOptions options = const McpClientOptions(),
     McpEraCache? eraCache,
     void Function(List<McpToolDefinition> tools)? onToolsChanged,
+    void Function(McpTransportClosed closed)? onClosed,
+    bool logFailures = true,
   }) async {
     final client = McpClient._(
       server: server,
@@ -194,6 +217,8 @@ final class McpClient {
       options: options,
       eraCache: eraCache,
       onToolsChanged: onToolsChanged,
+      onClosed: onClosed,
+      logFailures: logFailures,
     );
     return client._start();
   }
@@ -202,6 +227,18 @@ final class McpClient {
   final SessionId sessionId;
   final McpClientOptions options;
   final void Function(List<McpToolDefinition> tools)? onToolsChanged;
+
+  /// Зовётся один раз, когда транспорт закрылся сам (процесс вышел, сессия
+  /// HTTP потеряна) уже после успешного подключения; не зовётся при
+  /// `close()` клиента и при провале подключения (там — [McpConnectException]).
+  /// Так супервизор коннектора узнаёт о падении сервера (D11).
+  final void Function(McpTransportClosed closed)? onClosed;
+
+  /// `false` — `mcp.server.failed` пишет владелец клиента: супервизор
+  /// коннектора ведёт счёт сбоев подряд и пишет `failed` на 1-м и каждом
+  /// 10-м, `retry` — на остальных (D11). Умолчание `true` — прямое
+  /// использование клиента.
+  final bool _logFailures;
 
   final McpTransport _transport;
   final Clock _clock;
@@ -321,7 +358,9 @@ final class McpClient {
 
   Future<McpClient> _fail(String reason) async {
     final text = truncateRunes(reason, 200);
-    _log(LogLevel.warning, 'mcp.server.failed', {'reason': text});
+    if (_logFailures) {
+      _log(LogLevel.warning, 'mcp.server.failed', {'reason': text});
+    }
     await close();
     throw McpConnectException(text);
   }
@@ -914,6 +953,7 @@ final class McpClient {
   /// транспорта и эпохи один раз и бросает [CancelledException]; поздний
   /// ответ игнорируется (`AGENTS.md` §9). Обрыв не повторяется: у вызова
   /// могли быть побочные эффекты. [toolCallId] — только для логов.
+  @override
   Future<McpCallOutcome> callTool(
     String name,
     Map<String, Object?> arguments, {
@@ -1239,9 +1279,12 @@ final class McpClient {
       ack.completeError(_Disconnected(closed.reason));
     }
     if (wasConnected && !_closing) {
-      _log(LogLevel.warning, 'mcp.server.failed', {
-        'reason': 'disconnected: ${closed.reason}',
-      });
+      if (_logFailures) {
+        _log(LogLevel.warning, 'mcp.server.failed', {
+          'reason': 'disconnected: ${closed.reason}',
+        });
+      }
+      onClosed?.call(closed);
     }
   }
 
