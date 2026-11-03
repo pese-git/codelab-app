@@ -117,6 +117,7 @@ final class ConfigLoadResult {
     this.issues = const [],
     this.warnings = const [],
     this.sources = const [],
+    this.values = const {},
   });
 
   final CoreConfig? config;
@@ -128,6 +129,21 @@ final class ConfigLoadResult {
 
   /// Источники слоёв по порядку.
   final List<String> sources;
+
+  /// Плоская карта листьев итогового дерева после слияния (design.md change
+  /// `add-config-writer-and-reload`, D8, «ConfigLoadResult.values»).
+  ///
+  /// Почему: перезагрузка сравнивает прежний и новый снимок по ключам, а у
+  /// `CoreConfig` и `HostSettings` общего вида листьев нет. Карта — основа
+  /// списка `changedKeys` и решения об отложенных ключах.
+  ///
+  /// Что внутри: путь ключа (формат [KeyPath], как у `SettingsRegistry`) →
+  /// значение листа «как в файлах», без раскрытия `${…}`. Список — один лист
+  /// (`permissions.deny`); отображение раскрыто до листьев; элемент
+  /// `mcp.servers` лежит целиком под `mcp.servers[<имя>]`, и только у
+  /// включённого сервера (выключенного нет и в `CoreConfig`). Пусто при
+  /// проблемах загрузки. В лог и отчёты попадают только ключи.
+  final Map<String, Object?> values;
 
   /// Конфиг или исключение: так делает хост, которому ошибка конфигурации —
   /// отказ при старте (`serve`, код `64`). При секрете значением бросается

@@ -7,7 +7,7 @@ import '../permissions/policy.dart';
 import '../tools/agent_tool.dart' show ToolTier;
 import 'config_issue.dart';
 import 'config_tree.dart';
-import 'key_path.dart';
+import 'key_path.dart' show samePath;
 import 'redact_settings.dart';
 import 'resolve.dart';
 import 'schema.dart' show defaultProjectContextMaxBytes;
@@ -51,6 +51,53 @@ final class PermissionsConfig {
   final Set<ToolTier> extraDeniedTiers;
 }
 
+/// Отложенные до перезапуска части `CoreConfig` в структурированном виде
+/// (design.md change `add-config-writer-and-reload`, D8, «Пересборка снимка
+/// с отложенными ключами»; R0-1).
+///
+/// Почему не строки ключей: `CoreConfig.withDeferred` раньше разбирал ключи
+/// показа обратно в имена, а имя сервера с `[`, `]`, `"` не разбирается:
+/// разбор давал `null`, и новый stdio-сервер оставался в снимке (fail-open).
+/// Имена и идентификаторы берёт `planConfigReload` из самих снимков.
+///
+/// Как использовать: `planConfigReload` возвращает значение в
+/// `ConfigReloadPlan.deferred` (объединение по полному снимку и снимку без
+/// проекта); рантайм передаёт его в [CoreConfig.withDeferred]. Тесты строят
+/// значение напрямую.
+final class DeferredConfigParts {
+  const DeferredConfigParts({
+    this.providers = const {},
+    this.servers = const {},
+    this.permissions = false,
+    this.defaultModel = false,
+  });
+
+  /// Идентификаторы провайдеров, чья группа адреса и аутентификации (и
+  /// ссылки на модели нового провайдера) остаётся прежней.
+  final Set<String> providers;
+
+  /// Имена серверов `mcp.servers`: прежний элемент того же имени, а нового
+  /// нет — он исключается.
+  final Set<String> servers;
+
+  /// Весь раздел `permissions` берётся прежним.
+  final bool permissions;
+
+  /// `agent.default_model` остаётся прежней.
+  final bool defaultModel;
+
+  bool get isEmpty =>
+      providers.isEmpty && servers.isEmpty && !permissions && !defaultModel;
+
+  /// Объединение: отложенное в любом из снимков откладывается в обоих.
+  DeferredConfigParts union(DeferredConfigParts other) => DeferredConfigParts(
+    providers: {...providers, ...other.providers},
+    servers: {...servers, ...other.servers},
+    permissions: permissions || other.permissions,
+    defaultModel: defaultModel || other.defaultModel,
+  );
+}
+
 /// Проверенная конфигурация ядра.
 ///
 /// Почему одно значение: сборка ядра (`buildAgentCore`) и все сессии
@@ -77,6 +124,7 @@ final class CoreConfig {
     this.trustedProjects = const [],
     this.projectRoot,
     this.withoutProject,
+    this.withoutProjectValues,
   });
 
   /// Проверяет слои от низшего приоритета к высшему и собирает конфигурацию
@@ -97,17 +145,179 @@ final class CoreConfig {
   /// слоя не обрывает следующие ступени, ключи с ошибкой исключаются, а в
   /// `issues` попадают проблемы всех ступеней, включая каскадные. Обычная
   /// загрузка (`false`) не меняется.
+  ///
+  /// [pinnedTrustedProjects] (design.md change `add-config-writer-and-reload`,
+  /// D8, «Пересборка снимка с отложенными ключами») — закреплённый список
+  /// доверия: по нему, а не по `trusted_projects` слоёв, оцениваются проектные
+  /// слои 3–4 и заполняется `trustedProjects` полного снимка и
+  /// `withoutProject`. Почему в ядре: доверие решает, какие ключи проектных
+  /// слоёв войдут в дерево, и после слияния этого не восстановить. Хост
+  /// передаёт `initial.config.trustedProjects` на каждой перезагрузке; новое
+  /// значение ключа попадает только в `ConfigLoadResult.values`. `null` —
+  /// доверие по слоям, как при старте. Элементы уже канонические (список
+  /// стартового снимка), повторно не раскрываются.
   static ConfigLoadResult fromLayers(
     List<ConfigTree> layers, {
     required Map<String, String> environment,
     String? projectRoot,
     bool collectAll = false,
+    List<String>? pinnedTrustedProjects,
   }) => resolveConfig(
     layers,
     environment: environment,
     projectRoot: projectRoot,
     collectAll: collectAll,
+    pinnedTrustedProjects: pinnedTrustedProjects,
   );
+
+  /// Подставляет в [next] отложенные до перезапуска части из [previous]
+  /// (design.md change `add-config-writer-and-reload`, D8, «Пересборка
+  /// снимка с отложенными ключами», звено 2).
+  ///
+  /// Почему в ядре и чистой функцией: какие части отложить, видно только
+  /// после сравнения с применённым снимком (R0-1, R0-4), а подстановка
+  /// работает над `CoreConfig` и его [withoutProject]; `HostSettings` и
+  /// `values` лежат в `ConfigLoadResult`, их подставляет рантайм.
+  ///
+  /// [deferred] — структурированные части (имена серверов и идентификаторы
+  /// провайдеров из снимков, а не разбор ключей показа): `permissions`
+  /// целиком прежние, `defaultModel` прежняя, сервер из `servers` — прежний
+  /// элемент того же имени (нового нет — он исключается), провайдер из
+  /// `providers` — группа адреса и аутентификации прежняя (`CatalogProvider`
+  /// собирается из прежних `config`, `key` и `headerTemplates` и новых
+  /// `models`, запись `providerProblems` прежняя; нового провайдера
+  /// [previous] не знает — он исключается). Остальное ([trustedProjects],
+  /// бюджет, сжатие, `effort`) берётся из [next]: доверие уже закреплено
+  /// `fromLayers(pinnedTrustedProjects:)`.
+  ///
+  /// [withoutProjectValues] — `values` снимка без проекта после подстановки
+  /// (`ConfigReloadPlan.appliedWithoutProjectValues`); по умолчанию — из
+  /// [next]. Следующая перезагрузка сравнивает с ними (R0-1).
+  ///
+  /// Как использовать: рантайм вызывает после `planConfigReload` и затем
+  /// проверяет итог [validateSnapshot]. Снимок без проекта подставляется
+  /// тем же способом относительно `previous.withoutProject` (или `previous`,
+  /// если у прежнего снимка проектных слоёв не было).
+  static CoreConfig withDeferred(
+    CoreConfig previous,
+    CoreConfig next,
+    DeferredConfigParts deferred, {
+    Map<String, Object?>? withoutProjectValues,
+  }) {
+    if (deferred.isEmpty) {
+      return withoutProjectValues == null
+          ? next
+          : next._copyWith(
+              withoutProject: next.withoutProject,
+              withoutProjectValues: withoutProjectValues,
+            );
+    }
+    final providers = deferred.providers;
+    final servers = deferred.servers;
+    final oldProviders = {for (final p in previous.providers) p.config.name: p};
+    final oldServers = {for (final s in previous.mcpServers) s.name: s};
+    final problems = {...next.providerProblems};
+    for (final id in providers) {
+      problems.remove(id);
+      if (previous.providerProblems[id] case final problem?) {
+        problems[id] = problem;
+      }
+    }
+    final bare = next.withoutProject;
+    return next._copyWith(
+      defaultModel: deferred.defaultModel ? previous.defaultModel : null,
+      permissions: deferred.permissions ? previous.permissions : null,
+      mcpServers: [
+        for (final server in next.mcpServers)
+          if (!servers.contains(server.name))
+            server
+          else
+            ?oldServers[server.name],
+      ],
+      providers: [
+        for (final provider in next.providers)
+          if (!providers.contains(provider.config.name))
+            provider
+          else if (oldProviders[provider.config.name] case final old?)
+            CatalogProvider(
+              old.config,
+              models: provider.models,
+              key: old.key,
+              headerTemplates: old.headerTemplates,
+            ),
+      ],
+      providerProblems: problems,
+      withoutProject: bare == null
+          ? null
+          : withDeferred(previous.withoutProject ?? previous, bare, deferred),
+      withoutProjectValues: withoutProjectValues,
+    );
+  }
+
+  /// Единственное место, где `CoreConfig` копируется поле за полем: новое
+  /// поле нельзя забыть в одной из точек подстановки. `null` — поле берётся
+  /// у этого снимка; [withoutProject] подставляется всегда (его `null` значит
+  /// «снимка нет»).
+  CoreConfig _copyWith({
+    ModelRef? defaultModel,
+    PermissionsConfig? permissions,
+    List<McpServerConfig>? mcpServers,
+    List<CatalogProvider>? providers,
+    Map<String, String>? providerProblems,
+    required CoreConfig? withoutProject,
+    Map<String, Object?>? withoutProjectValues,
+  }) => CoreConfig(
+    defaultModel: defaultModel ?? this.defaultModel,
+    permissions: permissions ?? this.permissions,
+    budget: budget,
+    compaction: compaction,
+    effort: effort,
+    mcpServers: mcpServers ?? this.mcpServers,
+    providers: providers ?? this.providers,
+    providerProblems: providerProblems ?? this.providerProblems,
+    redact: redact,
+    projectContextMaxBytes: projectContextMaxBytes,
+    trustedProjects: trustedProjects,
+    projectRoot: projectRoot,
+    withoutProject: withoutProject,
+    withoutProjectValues: withoutProjectValues ?? this.withoutProjectValues,
+  );
+
+  /// Семантическая проверка снимка после подстановки отложенных частей
+  /// (D8, шаг 5): модель по умолчанию должна быть в каталоге провайдеров.
+  ///
+  /// Почему повторно: `fromLayers` проверил новый снимок целиком, но
+  /// [withDeferred] мог вернуть прежнюю ссылку на модель, которой в новых
+  /// моделях провайдера уже нет. Отложенная ссылка на модель нового
+  /// провайдера эту проверку не роняет: она откладывается вместе с
+  /// провайдером.
+  ///
+  /// Возвращает проблемы (пусто — снимок годится); значений в тексте нет.
+  /// Проверяются и [withoutProject]. Рантайм при непустом результате
+  /// возвращает итог `failed`.
+  List<ConfigIssue> validateSnapshot() {
+    final issues = <ConfigIssue>[];
+    final ref = '${defaultModel.provider}/${defaultModel.id}';
+    final known = providers.any(
+      (p) =>
+          p.config.name == defaultModel.provider &&
+          p.models.containsKey(defaultModel.id),
+    );
+    if (!known) {
+      issues.add(
+        ConfigIssue(
+          kind: ConfigIssueKind.value,
+          key: 'agent.default_model',
+          source: 'config reload',
+          message: '$ref is not in the model catalog',
+        ),
+      );
+    }
+    if (withoutProject case final bare?) {
+      issues.addAll(bare.validateSnapshot());
+    }
+    return issues;
+  }
 
   final ModelRef defaultModel;
 
@@ -158,6 +368,17 @@ final class CoreConfig {
 
   /// Снимок без проектных слоёв для сессий вне [projectRoot] (D9, OQ1 (а)).
   final CoreConfig? withoutProject;
+
+  /// Плоская карта листьев [withoutProject] (как `ConfigLoadResult.values`
+  /// полного снимка); `null` — снимка без проекта нет.
+  ///
+  /// Почему здесь, а не в `ConfigLoadResult`: значения нужны перезагрузке
+  /// конфигурации, чтобы сравнить второй снимок (R0-1: правка слоя, скрытая
+  /// проектным слоем в полном снимке, видна только в нём), и должны ехать
+  /// вместе с самим снимком через любой адаптер источника конфигурации.
+  /// Заполняет `fromLayers`; потребитель — `planConfigReload`. Без значений
+  /// сравнение считает карту пустой (fail closed: расхождение откладывается).
+  final Map<String, Object?>? withoutProjectValues;
 
   /// Конфигурация сессии с данным [cwd]: полная для сессии в [projectRoot] и
   /// [withoutProject] для любой другой. Сравнивается равенство путей, а не

@@ -66,10 +66,12 @@ import 'validate.dart' show configModeId;
   }
   // Эти разделы не читаются из проекта (слой 3) даже с доверием (§15.3:
   // «нет» в его столбце). `sessions` и `logging` определяют, куда агент
-  // пишет. У `config.local.yaml` столбец «да», но только для доверенного
-  // проекта: недоверенный подчиняется правилам слоя 3.
+  // пишет, `config` — как хост следит за файлами конфига (D7, change
+  // `add-config-writer-and-reload`). У `config.local.yaml` столбец «да», но
+  // только для доверенного проекта: недоверенный подчиняется правилам
+  // слоя 3.
   if (isProject || !trusted) {
-    for (final section in const ['sessions', 'logging', 'exec']) {
+    for (final section in const ['sessions', 'logging', 'exec', 'config']) {
       if (values.remove(section) != null) {
         warn(section, '$section is not read from a project config');
       }

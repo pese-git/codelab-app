@@ -226,6 +226,12 @@ final class ConfigLoader {
   /// [platform] подменяет `Platform.operatingSystem` в тестах: на `windows`
   /// `secrets.backend: file` — проблема конфигурации (change
   /// `add-agent-secret-store`, D14).
+  ///
+  /// [pinnedTrustedProjects] — закреплённое доверие проектам (design.md change
+  /// `add-config-writer-and-reload`, D8): загрузчик лишь передаёт список в
+  /// `CoreConfig.fromLayers`, а доверие вычисляет ядро. Передаёт
+  /// `FileConfigSource` (`initial.config.trustedProjects`); `null` — доверие
+  /// по слоям, как при старте.
   ConfigLoadResult load({
     required String cwd,
     required Map<String, String> environment,
@@ -235,6 +241,7 @@ final class ConfigLoader {
     bool scripted = false,
     Set<String> knownVariables = const {},
     String? platform,
+    List<String>? pinnedTrustedProjects,
   }) => loadWithLayers(
     cwd: cwd,
     environment: environment,
@@ -244,6 +251,7 @@ final class ConfigLoader {
     scripted: scripted,
     knownVariables: knownVariables,
     platform: platform,
+    pinnedTrustedProjects: pinnedTrustedProjects,
   ).result;
 
   /// Проверяет итоговый [text] слоя [target] теми же слоями и `fromLayers`,
@@ -335,6 +343,7 @@ final class ConfigLoader {
     String? platform,
     ({ConfigLayerKind kind, String text})? candidate,
     bool collectAll = false,
+    List<String>? pinnedTrustedProjects,
   }) {
     final extraPath =
         _nonEmpty(extraConfig) ?? _nonEmpty(environment['CODELAB_CONFIG']);
@@ -482,6 +491,7 @@ final class ConfigLoader {
       environment: environment,
       projectRoot: root,
       collectAll: collectAll,
+      pinnedTrustedProjects: pinnedTrustedProjects,
     );
     final windowsFile = scripted
         ? null
@@ -492,6 +502,7 @@ final class ConfigLoader {
           issues: [...result.issues, windowsFile],
           warnings: [...warnings, ...result.warnings],
           sources: result.sources,
+          values: result.values,
         ),
         layers: layers,
       );
@@ -503,6 +514,7 @@ final class ConfigLoader {
         issues: result.issues,
         warnings: [...warnings, ...result.warnings],
         sources: result.sources,
+        values: result.values,
       ),
       layers: layers,
     );

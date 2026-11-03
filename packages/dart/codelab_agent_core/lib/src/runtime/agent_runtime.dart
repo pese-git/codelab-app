@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:collection/collection.dart' show ListEquality;
+import 'package:meta/meta.dart' show visibleForTesting;
+
 import '../agents/agent_definition.dart';
 import '../cancel/cancel_token.dart';
 import '../commands/command_template.dart';
@@ -10,10 +13,15 @@ import '../compaction/compactor.dart';
 import '../compaction/estimate.dart';
 import '../compaction/settings.dart';
 import '../compaction/summarizer.dart';
+import '../config/config_issue.dart';
+import '../config/config_reload_plan.dart';
+import '../config/config_source.dart';
 import '../config/core_config.dart';
+import '../config/host_settings.dart';
 import '../config/key_path.dart' show pathComponents, samePath;
 import '../env/bounded_env.dart';
 import '../env/execution_env.dart';
+import '../llm/event_stream.dart';
 import '../llm/messages.dart';
 import '../llm/model_catalog.dart';
 import '../llm/model_ref.dart';
@@ -46,6 +54,7 @@ import '../util/result.dart';
 import '../host/host_profile.dart';
 import '../host/services.dart';
 import 'agent_session.dart';
+import 'config_reload.dart';
 
 /// Кто пишет журналы этого ядра (поле `agent` заголовка, §8.2.1).
 /// Предел фазы чтения файлов проекта в `session/new` (D6).
@@ -103,6 +112,32 @@ abstract interface class AgentRuntime {
     int pageSize = 50,
   });
 
+  /// Перезагружает конфигурацию из [AgentCoreServices.config] и применяет
+  /// её к работающему агенту (design.md change
+  /// `add-config-writer-and-reload`, D8; CFG-15, CFG-16).
+  ///
+  /// Почему на рантайме: снимок, функция модели и каталог заменяются одной
+  /// атомарной операцией, а живые сессии получают `ModelOptionsChanged`.
+  /// Вызывают сигнал `ConfigSource.changes` (рантайм подписан сам),
+  /// `/config reload` и `/mcp reload`. Не бросает: ошибка загрузки или
+  /// повторной проверки — итог `failed` с прежним снимком. Перезагрузка,
+  /// начатая во время идущей, ставит не больше одного повтора, и все такие
+  /// вызовы получают его итог. После `dispose()` результат отбрасывается
+  /// (итог `unchanged`, снимок не меняется). Без источника — [StateError].
+  Future<ConfigApplyReport> reloadConfig();
+
+  /// Загружает конфигурацию без применения (`/config check`): по доверию,
+  /// закреплённому в `ConfigSource.initial`. Отложенные до перезапуска ключи
+  /// (новое `trusted_projects` и др.) приходят предупреждениями результата с
+  /// событием `config.reload.restart_required` и ключом в `key` — команда
+  /// печатает их строкой `Restart required`. Состояние рантайма не меняется.
+  /// Исключение загрузки уходит вызывающему. Без источника — [StateError].
+  Future<ConfigLoadResult> checkConfig();
+
+  /// Состояние конфигурации на момент вызова; без источника — снимок
+  /// сборки без источников.
+  ConfigStatus configStatus();
+
   /// Отменяет идущие ходы, дожидается записи журналов и закрывает потоки
   /// событий.
   Future<void> dispose();
@@ -113,20 +148,77 @@ final class AgentRuntimeImpl implements AgentRuntime {
   AgentRuntimeImpl({
     required this.profile,
     required this.services,
-    required this.config,
+    required CoreConfig config,
     required this.registry,
-    required this.stream,
-  }) : models = services.models ?? FixedModelCatalog([config.defaultModel]);
+    required StreamFunction stream,
+    this.modelsFor,
+    this.configCommand = true,
+  }) : _applied = _Applied(
+         config: config,
+         stream: stream,
+         catalog: services.models ?? FixedModelCatalog([config.defaultModel]),
+         values: services.config?.initial.values ?? const {},
+         host: services.config?.initial.host,
+         loadedAt: services.clock.now(),
+         sources: services.config?.initial.sources ?? const [],
+       ) {
+    // Подписка принадлежит рантайму и живёт до `dispose()`; сигнал после
+    // `dispose()` не приходит (D8, «Конкурентность и поздние события»).
+    _configSubscription = services.config?.changes.listen(_onConfigSignal);
+  }
 
   final HostProfile profile;
   final AgentCoreServices services;
-  final CoreConfig config;
   final ToolRegistry registry;
-  final StreamFunction stream;
+
+  /// Функция хоста: функция модели и каталог по `CoreConfig` применённого
+  /// снимка (D8). `null` — перезагрузки нет. При сборке не вызывается.
+  final ConfiguredModels Function(CoreConfig config)? modelsFor;
+
+  /// Объявлять ли встроенную команду `/config` (`false` у `serve --ws`, R0-3).
+  /// Потребитель — встроенные команды (задача 7.2); рантайм только хранит
+  /// флаг, чтобы сессии объявили команды по нему и по `services.config`.
+  final bool configCommand;
+
+  /// Применённый снимок: заменяется целиком одним присваиванием (D8,
+  /// «Двойной снимок невозможен»). Шаг, ход или проверка читают его один раз.
+  _Applied _applied;
+
+  /// Применённый `CoreConfig` (шов тестов и `forSessionCwd` сессий).
+  @visibleForTesting
+  CoreConfig get config => _applied.config;
+
+  /// `values` применённого снимка: прежние значения отложенных листьев
+  /// (D8, шаг 5). Шов тестов.
+  @visibleForTesting
+  Map<String, Object?> get appliedValues => _applied.values;
+
+  /// Прежние `HostSettings`: ключи хоста `restartRequired` и до перезапуска не
+  /// меняются. Шов тестов; `null` без источника.
+  @visibleForTesting
+  HostSettings? get appliedHost => _applied.host;
+
+  /// Функция модели применённого снимка.
+  StreamFunction get stream => _applied.stream;
 
   @override
-  final ModelCatalog models;
+  ModelCatalog get models => _applied.catalog;
   final _sessions = <_Session>[];
+
+  StreamSubscription<void>? _configSubscription;
+  var _disposed = false;
+
+  /// Идущая перезагрузка и повтор, поставленный во время неё (шаг 1 D8).
+  Future<ConfigApplyReport>? _reloading;
+  Completer<ConfigApplyReport>? _repeat;
+
+  /// Ключи, ждущие перезапуска, по последней успешной перезагрузке. Сравнение
+  /// идёт с применённым снимком, где отложенные листья остаются прежними,
+  /// поэтому множество уже накопительное, а вернувшийся в файле ключ из него
+  /// пропадает.
+  var _pending = const <String>[];
+  DateTime? _lastFailureAt;
+  var _lastIssues = const <ConfigIssue>[];
 
   /// Корни, для которых `config.session.outside_root` уже записан: одна
   /// запись на `cwd` за жизнь рантайма (D9).
@@ -140,6 +232,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
 
   @override
   Future<AgentSession> createSession(SessionSpec spec) async {
+    // Снимок начала: сессия, создаваемая во время замены, получает его
+    // целиком (D8, «Создание сессии»).
+    final start = _applied;
     final header = SessionHeader(
       id: newSessionId(services.clock, services.ids),
       cwd: spec.cwd,
@@ -151,12 +246,14 @@ final class AgentRuntimeImpl implements AgentRuntime {
     final resolved = await _canonicalCwd(spec.cwd);
     final canonicalCwd = resolved.path;
     final settings = await _sessionConfig(
+      start,
       header.id,
       spec.cwd,
       canonicalCwd,
       spec.ports.logger ?? services.logger,
     );
     final model = _resolve(
+      start,
       spec.model ?? settings.defaultModel,
       settings.effort,
     );
@@ -179,6 +276,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         ...spec.ports.extraAfterToolCall,
       ],
       mcpServers: spec.mcpServers,
+      catalog: start.catalog,
     );
     try {
       await session._writer.append(
@@ -188,6 +286,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
       await _abandon(session);
       rethrow;
     }
+    // «Живая» для перезагрузки — возвращённая вызывающему (ACP-8: до ответа
+    // `session/new` уведомлений нет).
+    session._handedOut = true;
     return session;
   }
 
@@ -219,11 +320,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
     String? cwd,
     List<McpServerConfig> mcpServers = const [],
   }) async {
+    final start = _applied;
     final snapshot = await _store.open(id);
     final restored = buildLlmContext(snapshot);
     final resolved = await _canonicalCwd(cwd ?? snapshot.header.cwd);
     final canonicalCwd = resolved.path;
     final settings = await _sessionConfig(
+      start,
       id,
       cwd ?? snapshot.header.cwd,
       canonicalCwd,
@@ -237,15 +340,15 @@ final class AgentRuntimeImpl implements AgentRuntime {
     // Модель журнала выигрывает, если её знает каталог (D3); иначе —
     // поведение этапа 3: модель конфигурации и новая model_change.
     final journalModel = switch (restored.model) {
-      final ModelChangeRecord record => models.resolve(
+      final ModelChangeRecord record => start.catalog.resolve(
         ModelId('${record.provider}/${record.modelId}'),
         effort: effort,
       ),
       null => null,
     };
     final chosen = model != null
-        ? _resolve(model, effort)
-        : journalModel ?? _resolve(settings.defaultModel, effort);
+        ? _resolve(start, model, effort)
+        : journalModel ?? _resolve(start, settings.defaultModel, effort);
     final header = snapshot.header.cwd;
     final session = await _open(
       snapshot: snapshot,
@@ -263,6 +366,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       extraBeforeToolCall: ports.extraBeforeToolCall,
       extraAfterToolCall: ports.extraAfterToolCall,
       mcpServers: mcpServers,
+      catalog: start.catalog,
     );
     try {
       await session._heal();
@@ -283,11 +387,11 @@ final class AgentRuntimeImpl implements AgentRuntime {
         );
       }
       session._restoreHistory();
-      final base = _agentBaseOf(snapshot);
+      final base = _agentBaseOf(snapshot, start.catalog);
       await session._restoreAgent(
         restored.config['agent'],
         baseMode: base.mode ?? settings.permissions.mode ?? profile.defaultMode,
-        baseModel: base.model ?? _resolve(settings.defaultModel, effort),
+        baseModel: base.model ?? _resolve(start, settings.defaultModel, effort),
       );
       if (cwd != null && cwd != header) {
         await session._writer.append(
@@ -304,13 +408,17 @@ final class AgentRuntimeImpl implements AgentRuntime {
       await _abandon(session);
       rethrow;
     }
+    session._handedOut = true;
     return session;
   }
 
   /// База агента из журнала: режим и модель до записи, которая перевела
   /// сессию из `default` в агента (D11). Поля `null` — записей не было, и
   /// вызывающий берёт значения конфигурации сессии.
-  ({ModeId? mode, ModelRef? model}) _agentBaseOf(SessionSnapshot snapshot) {
+  ({ModeId? mode, ModelRef? model}) _agentBaseOf(
+    SessionSnapshot snapshot,
+    ModelCatalog catalog,
+  ) {
     ModeId? mode;
     ModelRef? model;
     ({ModeId? mode, ModelRef? model}) base = (mode: null, model: null);
@@ -320,7 +428,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         case ModeChangeRecord(:final modeId):
           mode = ModeId.values.where((m) => m.value == modeId).firstOrNull;
         case ModelChangeRecord(:final provider, modelId: final id):
-          model = models.resolve(ModelId('$provider/$id'));
+          model = catalog.resolve(ModelId('$provider/$id'));
         case ConfigChangeRecord(optionId: 'agent', :final value):
           if (current == defaultAgentName && value != defaultAgentName) {
             base = (mode: mode, model: model);
@@ -349,11 +457,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
   /// иначе получила бы снимок без проекта и потеряла бы его `permissions.deny`
   /// (приоритет 1).
   Future<CoreConfig> _sessionConfig(
+    _Applied start,
     SessionId id,
     String cwd,
     String canonical,
     Logger logger,
   ) async {
+    final config = start.config;
     final settings = config.forSessionCwd(canonical);
     if (!identical(settings, config) &&
         _outsideRootLogged.add(pathComponents(cwd).join('/'))) {
@@ -393,8 +503,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
 
   /// Ссылка каталога с уровнем рассуждения сессии; модели нет в каталоге —
   /// ссылка как есть, но тоже с уровнем только при рассуждении (§2.12.3).
-  ModelRef _resolve(ModelRef model, ReasoningEffort effort) =>
-      models.resolve(
+  ModelRef _resolve(_Applied from, ModelRef model, ReasoningEffort effort) =>
+      from.catalog.resolve(
         ModelId('${model.provider}/${model.id}'),
         effort: effort,
       ) ??
@@ -409,12 +519,337 @@ final class AgentRuntimeImpl implements AgentRuntime {
 
   @override
   Future<void> dispose() async {
+    // Сначала отказ от сигналов и отбрасывание идущей перезагрузки: её
+    // результат после `dispose()` не применяется (D8, шаг 2).
+    _disposed = true;
+    await _configSubscription?.cancel();
+    _configSubscription = null;
+    if (_repeat case final repeat? when !repeat.isCompleted) {
+      repeat.complete(_discarded());
+    }
+    _repeat = null;
     _shutdown.cancel(const ShutdownCancel());
     for (final session in _sessions) {
       await session.close();
     }
     _sessions.clear();
   }
+
+  // ---- перезагрузка конфигурации (design.md change
+  // `add-config-writer-and-reload`, D8, D14; CFG-15, CFG-16) -----------------
+
+  ConfigSource _requireSource() =>
+      services.config ?? (throw StateError('the runtime has no ConfigSource'));
+
+  /// Итог перезагрузки, результат которой отброшен из-за `dispose()`.
+  ConfigApplyReport _discarded() =>
+      ConfigApplyReport(outcome: ConfigReloadOutcome.unchanged);
+
+  /// Сигнал `ConfigSource.changes`: ошибка перезагрузки не должна уйти в зону
+  /// хоста (AGENTS.md §12). `reloadConfig` не бросает, а эта защита в глубину
+  /// пишет `config.reload.failed` с `error_class`, если что-то всё же бросило.
+  void _onConfigSignal(void _) {
+    unawaited(
+      reloadConfig().then<void>(
+        (_) {},
+        onError: (Object error, StackTrace stack) {
+          services.logger.log(
+            LogLevel.error,
+            'config.reload.failed',
+            fields: {'error_class': error.runtimeType.toString()},
+            error: error.runtimeType,
+            stack: stack,
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Future<ConfigApplyReport> reloadConfig() {
+    final source = _requireSource();
+    if (_disposed) {
+      return Future.value(_discarded());
+    }
+    // Шаг 1 (коалесценция): во время идущей перезагрузки ставится не больше
+    // одного повтора, и все такие вызовы получают его итог — он видит
+    // последние файлы.
+    if (_reloading != null) {
+      return (_repeat ??= Completer<ConfigApplyReport>()).future;
+    }
+    return _startReload(source);
+  }
+
+  Future<ConfigApplyReport> _startReload(ConfigSource source) {
+    final run = _reloadOnce(source);
+    _reloading = run;
+    // `run` не завершается ошибкой: исключения превращены в итог `failed`.
+    unawaited(
+      run.whenComplete(() {
+        _reloading = null;
+        final repeat = _repeat;
+        _repeat = null;
+        if (repeat == null || repeat.isCompleted) {
+          return;
+        }
+        repeat.complete(_disposed ? _discarded() : _startReload(source));
+      }),
+    );
+    return run;
+  }
+
+  Future<ConfigApplyReport> _reloadOnce(ConfigSource source) async {
+    final ConfigLoadResult result;
+    try {
+      result = await source.load();
+    } on Object catch (error, stack) {
+      return _failedByException(error, stack);
+    }
+    // Шаг 2: после `dispose()` результат отбрасывается; дальше до замены
+    // снимка нет ни одного `await` (D8, «Двойной снимок невозможен»).
+    if (_disposed) {
+      return _discarded();
+    }
+    try {
+      return _applyLoaded(result);
+    } on Object catch (error, stack) {
+      return _failedByException(error, stack);
+    }
+  }
+
+  ConfigApplyReport _applyLoaded(ConfigLoadResult result) {
+    final loaded = result.config;
+    // Шаг 3: невалидный конфиг — прежний снимок цел, клиентам ничего (CFG-15).
+    if (loaded == null || result.issues.isNotEmpty) {
+      return _failedByIssues(
+        result.issues.isNotEmpty
+            ? result.issues
+            : [
+                ConfigIssue(
+                  kind: ConfigIssueKind.semantic,
+                  key: '',
+                  source: 'config reload',
+                  message: 'the config source returned no config',
+                ),
+              ],
+        result.sources,
+      );
+    }
+    final previous = _applied;
+    // Шаги 4–5: ключи diff, отложенные ключи, прежние значения отложенных.
+    final plan = planConfigReload(
+      previousValues: previous.values,
+      previous: previous.config,
+      nextValues: result.values,
+      next: loaded,
+    );
+    // План покрывает оба снимка: полный и без проекта (R0-1); применяется
+    // он целиком или не применяется вовсе.
+    final merged = CoreConfig.withDeferred(
+      previous.config,
+      loaded,
+      plan.deferred,
+      withoutProjectValues: plan.appliedWithoutProjectValues,
+    );
+    final recheck = merged.validateSnapshot();
+    if (recheck.isNotEmpty) {
+      return _failedByIssues(recheck, result.sources);
+    }
+    // Шаг 6: пересборка функции модели и сброс кэша секретов — при каждой
+    // успешной загрузке, даже без изменённых ключей: значение в хранилище или
+    // переменная могли смениться, а цепочки провайдеров держат ключ. Сброс
+    // идёт после сборки: если `modelsFor` бросил, снимок прежний, и кэш его
+    // секретов не сбрасывается. Сборка ключ не читает
+    // (`createConfiguredStreamFunction` разрешает лениво); если начнёт —
+    // сброс нужно вернуть до сборки.
+    final build =
+        modelsFor ??
+        (throw StateError('the runtime has a ConfigSource but no modelsFor'));
+    final models = build(merged);
+    services.secrets?.invalidate();
+    // Одна атомарная замена записи: снимок, значения, функция модели и
+    // каталог. `HostSettings` не меняются до перезапуска (D8, шаг 5).
+    final next = _Applied(
+      config: merged,
+      stream: models.stream,
+      catalog: models.catalog,
+      values: plan.appliedValues,
+      host: previous.host,
+      loadedAt: services.clock.now(),
+      sources: result.sources,
+    );
+    _applied = next;
+    _pending = plan.restartRequiredKeys;
+    _lastIssues = const [];
+    // Шаг 7: серверы конфига живых сессий применяет шаг 7а (задача 6.4, через
+    // `replaceServers` и очередь сессии); здесь — модель и опции (7б).
+    _notifySessions(previous, next);
+    if (plan.restartRequiredKeys.isNotEmpty) {
+      services.logger.log(
+        LogLevel.warning,
+        'config.reload.restart_required',
+        fields: {'keys': plan.restartRequiredKeys},
+      );
+    }
+    if (plan.isEmpty) {
+      services.logger.log(LogLevel.debug, 'config.reload.noop');
+      return ConfigApplyReport(outcome: ConfigReloadOutcome.unchanged);
+    }
+    services.logger.log(
+      LogLevel.info,
+      'config.reload.applied',
+      fields: {
+        'keys': plan.changedKeys,
+        'restart_required': plan.restartRequiredKeys,
+      },
+    );
+    return ConfigApplyReport(
+      outcome: ConfigReloadOutcome.applied,
+      changedKeys: plan.changedKeys,
+      restartRequiredKeys: plan.restartRequiredKeys,
+    );
+  }
+
+  /// Шаг 7: живые сессии — возвращённые вызывающему и не закрытые. Сессия,
+  /// чья модель исчезла из каталога, закрепляется за прежней функцией модели;
+  /// изменившийся список моделей даёт `ModelOptionsChanged`.
+  void _notifySessions(_Applied before, _Applied after) {
+    final listChanged = !const ListEquality<String>().equals(
+      [for (final m in before.catalog.models) m.id.value],
+      [for (final m in after.catalog.models) m.id.value],
+    );
+    for (final session in [..._sessions]) {
+      if (!session._handedOut || session._closed) {
+        continue;
+      }
+      session._afterCatalogReplaced(before, after);
+      if (listChanged) {
+        session._publishFromRuntime(ModelOptionsChanged(session.id));
+      }
+    }
+  }
+
+  ConfigApplyReport _failedByIssues(
+    List<ConfigIssue> issues,
+    List<String> sources,
+  ) {
+    _lastFailureAt = services.clock.now();
+    _lastIssues = List.unmodifiable(issues);
+    // Только источник, позиция, путь и класс проблемы: значения ключей в лог не
+    // попадают (CFG-2, D14).
+    services.logger.log(
+      LogLevel.error,
+      'config.reload.failed',
+      fields: {
+        'sources': sources,
+        'issues': [
+          for (final issue in issues)
+            {
+              'source': issue.source,
+              'line': issue.line,
+              'column': issue.column,
+              'key': issue.key,
+              'kind': issue.kind.name,
+            },
+        ],
+      },
+    );
+    return ConfigApplyReport(
+      outcome: ConfigReloadOutcome.failed,
+      issues: issues,
+    );
+  }
+
+  ConfigApplyReport _failedByException(Object error, StackTrace stack) {
+    if (_disposed) {
+      return _discarded();
+    }
+    final issue = ConfigIssue(
+      kind: ConfigIssueKind.semantic,
+      key: '',
+      source: 'config reload',
+      message: 'the config could not be reloaded (${error.runtimeType})',
+    );
+    _lastFailureAt = services.clock.now();
+    _lastIssues = [issue];
+    // Текст исключения мог бы содержать значение: в лог идёт только класс.
+    services.logger.log(
+      LogLevel.error,
+      'config.reload.failed',
+      fields: {'error_class': error.runtimeType.toString()},
+      error: error.runtimeType,
+      stack: stack,
+    );
+    return ConfigApplyReport(
+      outcome: ConfigReloadOutcome.failed,
+      issues: [issue],
+    );
+  }
+
+  @override
+  Future<ConfigLoadResult> checkConfig() async {
+    final source = _requireSource();
+    // Проверка не сдвигает базу наблюдателя: иначе правка, ждущая debounce,
+    // перестала бы давать сигнал и не применилась бы (D7, D8).
+    final result = await source.load(rebase: false);
+    final config = result.config;
+    if (config == null || result.issues.isNotEmpty) {
+      return result;
+    }
+    final plan = planConfigReload(
+      previousValues: _applied.values,
+      previous: _applied.config,
+      nextValues: result.values,
+      next: config,
+    );
+    // То, что отклонила бы перезагрузка (`failed`), `check` не выдаёт за
+    // «valid»: тот же пересчёт снимка с отложенными частями и его проверка.
+    final recheck = CoreConfig.withDeferred(
+      _applied.config,
+      config,
+      plan.deferred,
+    ).validateSnapshot();
+    if (recheck.isNotEmpty) {
+      return ConfigLoadResult(
+        warnings: result.warnings,
+        issues: recheck,
+        sources: result.sources,
+      );
+    }
+    if (plan.restartRequiredKeys.isEmpty) {
+      return result;
+    }
+    // Отложенные ключи — предупреждения результата: команда `/config check`
+    // печатает их строкой `Restart required` (D8, шаг 5).
+    return ConfigLoadResult(
+      config: result.config,
+      host: result.host,
+      issues: result.issues,
+      warnings: [
+        ...result.warnings,
+        for (final key in plan.restartRequiredKeys)
+          ConfigIssue(
+            kind: ConfigIssueKind.semantic,
+            key: key,
+            source: 'config reload',
+            message: 'applies only after a restart',
+            event: 'config.reload.restart_required',
+            fields: {'key': key},
+          ),
+      ],
+      sources: result.sources,
+      values: result.values,
+    );
+  }
+
+  @override
+  ConfigStatus configStatus() => ConfigStatus(
+    loadedAt: _applied.loadedAt,
+    sources: _applied.sources,
+    lastFailureAt: _lastFailureAt,
+    lastIssues: _lastIssues,
+    pendingRestartKeys: _pending,
+  );
 
   static ModelChangeRecord _modelChange(
     String id,
@@ -445,6 +880,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     List<BeforeToolCallHook> extraBeforeToolCall = const [],
     List<AfterToolCallHook> extraAfterToolCall = const [],
     List<McpServerConfig> mcpServers = const [],
+    required ModelCatalog catalog,
   }) async {
     final id = snapshot.header.id;
     final env = await BoundedEnv.wrap(ports.env ?? services.baseEnv, cwd);
@@ -470,6 +906,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       settings: settings,
       logger: logger,
       cancel: mcp.cancel.token,
+      catalog: catalog,
     );
     final projectContext = project.context;
     await _connectMcp(
@@ -492,6 +929,19 @@ final class AgentRuntimeImpl implements AgentRuntime {
       rules: settings.permissions.rules,
       extraDeniedTiers: settings.permissions.extraDeniedTiers,
       logger: logger,
+      // Пути PERM-11 от хоста пересчитываются через резолвер хоста (D8):
+      // через `BoundedEnv` сессии защищаемые пути вне корня не раскрыть.
+      agentConfigPaths: services.agentConfigPaths,
+      // Резолвер — окружение сессии, если оно само `PathResolver`, иначе
+      // `baseEnv` хоста. Окружение сессии `serve` клиентское
+      // (`AcpClientExecutionEnv`, `ListingOverlayEnv`) и `PathResolver` не
+      // реализует; без второй ветки PERM-11 терял канонизацию и второй проход
+      // exec (ревью итерации 5).
+      pathResolver: switch ((ports.env, services.baseEnv)) {
+        (final PathResolver resolver, _) => resolver,
+        (_, final PathResolver resolver) => resolver,
+        _ => null,
+      },
     );
     final compaction = profile.isOn(HostCapability.compaction);
     // Сессия создаётся после агента, а аварийное сжатие — её метод.
@@ -500,7 +950,11 @@ final class AgentRuntimeImpl implements AgentRuntime {
       config: AgentLoopConfig(
         sessionId: id,
         model: model,
-        stream: stream,
+        // Функция модели читается в начале каждого шага из применённого
+        // снимка (или закреплённая за сессией, чья модель исчезла из каталога):
+        // перезагрузка действует «со следующего шага» (CFG-16, D8).
+        stream: (ref, context, {cancel}) =>
+            session._streamNow(ref, context, cancel: cancel),
         executor: ToolCallExecutor(
           registry: sessionRegistry,
           env: env,
@@ -550,7 +1004,10 @@ final class AgentRuntimeImpl implements AgentRuntime {
       mode: mode,
       model: model,
       effort: effort,
-      catalog: models,
+      canonicalCwd: canonicalCwd,
+      catalogOf: () => _applied.catalog,
+      streamOf: () => _applied.stream,
+      settingsOf: () => _applied.config.forSessionCwd(canonicalCwd),
       agent: agent,
       policy: policy,
       tools: tools,
@@ -577,7 +1034,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         agent: agent,
       ),
       snapshot: snapshot,
-      stream: stream,
+      compactionOn: compaction,
       compaction: compaction ? settings.compaction : null,
       templates: project.templates,
       agents: project.agents,
@@ -667,6 +1124,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     required CoreConfig settings,
     required Logger logger,
     required CancelToken cancel,
+    required ModelCatalog catalog,
   }) async {
     final source = services.projectFiles;
     if (source == null) {
@@ -820,7 +1278,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     // Определения агентов: та же проверка и тот же канал диагностики. Каталог
     // моделей сборки решает, существует ли модель определения (D10); тела
     // определений в лог не пишутся (D14).
-    final agents = parseAgentDefinitions(files.agents, models: models);
+    final agents = parseAgentDefinitions(files.agents, models: catalog);
     for (final item in agents.diagnostics) {
       diagnostic(
         item.level,
@@ -1152,6 +1610,32 @@ final class AgentRuntimeImpl implements AgentRuntime {
 
 /// Итог фазы файлов проекта: контекст инструкций, шаблоны команд и
 /// определения агентов.
+/// Применённый снимок рантайма: заменяется одним присваиванием (D8).
+///
+/// Почему запись, а не отдельные поля: шаг, ход и проверка разрешения читают
+/// полный `CoreConfig`, функцию модели и каталог вместе и не должны видеть
+/// смесь двух снимков. [values] и [host] — основа следующего сравнения;
+/// [host] не меняется до перезапуска (ключи хоста `restartRequired`).
+final class _Applied {
+  const _Applied({
+    required this.config,
+    required this.stream,
+    required this.catalog,
+    required this.values,
+    required this.host,
+    required this.loadedAt,
+    required this.sources,
+  });
+
+  final CoreConfig config;
+  final StreamFunction stream;
+  final ModelCatalog catalog;
+  final Map<String, Object?> values;
+  final HostSettings? host;
+  final DateTime loadedAt;
+  final List<String> sources;
+}
+
 final class _ProjectLoad {
   const _ProjectLoad(this.context, this.templates, this.agents);
 
@@ -1255,7 +1739,10 @@ final class _Session implements AgentSession {
     required ModeId mode,
     required ModelRef model,
     required ReasoningEffort effort,
-    required ModelCatalog catalog,
+    required this.canonicalCwd,
+    required ModelCatalog Function() catalogOf,
+    required StreamFunction Function() streamOf,
+    required CoreConfig Function() settingsOf,
     required Agent agent,
     required PermissionPolicy policy,
     required ToolServices tools,
@@ -1268,7 +1755,7 @@ final class _Session implements AgentSession {
     required String Function(String cwd, ModeId mode, AgentDefinition? agent)
     compose,
     required SessionSnapshot snapshot,
-    required StreamFunction stream,
+    required bool compactionOn,
     required CompactionOverrides? compaction,
     required List<CommandTemplate> templates,
     required List<AgentDefinition> agents,
@@ -1277,8 +1764,10 @@ final class _Session implements AgentSession {
        _modeFloor = modeFloor,
        agents = List.unmodifiable(agents),
        _effort = effort,
-       _catalog = catalog,
-       _stream = stream,
+       _catalogOf = catalogOf,
+       _streamOf = streamOf,
+       _settingsOf = settingsOf,
+       _compactionOn = compactionOn,
        _compaction = compaction,
        _model = model,
        _agent = agent,
@@ -1341,7 +1830,37 @@ final class _Session implements AgentSession {
   ModeId _mode;
   ModelRef _model;
   ReasoningEffort _effort;
-  final ModelCatalog _catalog;
+
+  /// Канонический `cwd`: по нему выбирается снимок конфигурации сессии.
+  final String canonicalCwd;
+
+  /// Каталог моделей применённого снимка: сессия читает его при каждой смене
+  /// модели, поэтому `setModel` видит модели после перезагрузки (D8).
+  final ModelCatalog Function() _catalogOf;
+  ModelCatalog get _catalog => _catalogOf();
+
+  final StreamFunction Function() _streamOf;
+
+  /// Конфигурация этой сессии по применённому снимку (`forSessionCwd`).
+  final CoreConfig Function() _settingsOf;
+
+  /// Функция модели прежнего снимка, закреплённая за сессией, чья модель
+  /// исчезла из каталога (D8, «Модель сессии исчезла из каталога»).
+  StreamFunction? _pinnedStream;
+
+  /// Модель, о которой уже записано `config.reload.model_orphaned`: одна
+  /// запись на сессию и модель.
+  final _orphanLogged = <String>{};
+
+  /// Сессия возвращена вызывающему; до этого перезагрузка её не уведомляет.
+  bool _handedOut = false;
+
+  /// Вызов функции модели шага: закреплённая или текущая.
+  AssistantMessageEventStream _streamNow(
+    ModelRef model,
+    LlmContext context, {
+    CancelToken? cancel,
+  }) => (_pinnedStream ?? _streamOf())(model, context, cancel: cancel);
 
   /// Новая модель, которую идущий ход получит на границе шага.
   ModelRef? _pendingModel;
@@ -1368,10 +1887,12 @@ final class _Session implements AgentSession {
   final AgentCoreServices _services;
   final Logger _logger;
   late final SessionWriter _writer;
-  final StreamFunction _stream;
 
   /// Переопределения сжатия; `null` — capability `compaction` выключена.
-  final CompactionOverrides? _compaction;
+  /// Обновляются на границе хода из применённого снимка (`compaction.*` —
+  /// со следующего хода, D8).
+  CompactionOverrides? _compaction;
+  final bool _compactionOn;
 
   /// Фоновое сжатие после хода: следующий [prompt] ждёт его (§9.5).
   Future<void>? _background;
@@ -1436,7 +1957,32 @@ final class _Session implements AgentSession {
     return ConfigChangeResult(changeId: changeId, model: model);
   });
 
+  /// Каталог моделей заменён перезагрузкой (D8, «Модель сессии исчезла из
+  /// каталога»). Модель, бывшая в прежнем каталоге и пропавшая из нового,
+  /// остаётся модели сессии, а сессия закрепляется за функцией модели прежнего
+  /// снимка до смены модели; `config.reload.model_orphaned` пишется один раз
+  /// на сессию и модель. Модель вернулась в каталог — закрепление снимается.
+  void _afterCatalogReplaced(_Applied before, _Applied after) {
+    final id = ModelId('${_model.provider}/${_model.id}');
+    if (after.catalog.resolve(id) != null) {
+      _pinnedStream = null;
+      return;
+    }
+    if (_pinnedStream == null && before.catalog.resolve(id) != null) {
+      _pinnedStream = before.stream;
+    }
+    if (_pinnedStream != null && _orphanLogged.add(id.value)) {
+      _logger.log(
+        LogLevel.info,
+        'config.reload.model_orphaned',
+        fields: {'session_id': this.id.value, 'model': id.value},
+      );
+    }
+  }
+
   Future<void> _changeModel(ModelRef model) async {
+    // Явная смена модели возвращает сессию на текущую функцию модели.
+    _pinnedStream = null;
     _apply(model);
     await _writer.append(
       (id, parent, at) => AgentRuntimeImpl._modelChange(id, parent, at, model),
@@ -1541,6 +2087,7 @@ final class _Session implements AgentSession {
     }
     _policy.clearTurnGrants();
     _tools.approvalWait.reset();
+    _refreshSettings();
     _ended = null;
     // Выбор агента между ходами уже в `_agent`; отложенный флаг прошлого хода
     // не нужен.
@@ -1568,6 +2115,33 @@ final class _Session implements AgentSession {
       budgetExceeded: ended.budgetExceeded,
       held: ended.held,
     );
+  }
+
+  /// Бюджет хода и параметры сжатия — из применённого снимка на границе хода
+  /// (`budget.*`, `compaction.*` действуют «со следующего хода», CFG-16, D8).
+  /// Права и режим здесь не читаются: они меняются только перезапуском
+  /// (R0-1).
+  void _refreshSettings() {
+    final settings = _settingsOf();
+    _agent.config = _agent.config.copyWith(
+      budget: settings.budget,
+      contextWindowCap: (value: settings.compaction.contextWindowCap),
+    );
+    if (_compactionOn) {
+      _compaction = settings.compaction;
+    }
+  }
+
+  /// Событие уровня сессии вне очереди агента (перезагрузка конфигурации):
+  /// закрытой сессии не шлётся (D8, «Гонка с close() сессии»).
+  ///
+  /// Только живым подписчикам, мимо буфера хода `_turn`: событие описывает
+  /// момент перезагрузки, а новый подписчик получает буфер как «события
+  /// текущего хода» и не должен проигрывать старое `ModelOptionsChanged`.
+  void _publishFromRuntime(AgentEvent event) {
+    if (!_closed && !_live.isClosed) {
+      _live.add(event);
+    }
   }
 
   /// Сообщение пользователя; команда шаблона разворачивается здесь, до записи
@@ -2034,7 +2608,7 @@ final class _Session implements AgentSession {
       writer: _writer,
       trigger: trigger,
       summarize: modelSummarizer(
-        stream: _stream,
+        stream: _streamNow,
         model: model,
         sessionId: id,
         settings: settings,

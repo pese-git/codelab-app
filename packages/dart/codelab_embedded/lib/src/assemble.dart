@@ -39,12 +39,18 @@ const embeddedAgentVersion = '0.1.0';
 /// `AcpAgentServer.serve`, чтобы тест отказа `serve` (D6, «Отказ агента»)
 /// мог воспроизвести ошибку, которую настоящий сервер извне не вызвать. Хосты
 /// его не задают.
+///
+/// [modelsFor] — перезагрузка конфига (change `add-config-writer-and-reload`,
+/// D13): нужна ровно тогда, когда `services.configSource` задан, иначе
+/// `buildAgentCore` бросает `HostWiringException`; начальные [streamFunction]
+/// и [models] вызывающий строит из той же функции.
 Future<EmbeddedAgent> assembleEmbeddedAgent({
   required EmbeddedAgentConfig config,
   required EmbeddedHostServices services,
   required StreamFunction streamFunction,
   required ModelCatalog models,
   Map<HostCapability, CapabilityState> extraNarrowing = const {},
+  ConfiguredModels Function(CoreConfig config)? modelsFor,
   Future<void> Function(AcpAgentServer server, AcpTransport transport)? serve,
 }) async {
   final embedded = config.hostProfile.startsWith('embedded-');
@@ -68,9 +74,12 @@ Future<EmbeddedAgent> assembleEmbeddedAgent({
       secrets: services.secrets,
       mcp: services.mcp,
       projectFiles: services.projectFiles,
+      agentConfigPaths: services.agentConfigPaths,
+      config: services.configSource,
     ),
     config: config.core,
     streamFunction: streamFunction,
+    modelsFor: modelsFor,
   );
   // Ядро уже собрано: любая ошибка до готовности агента (конструктор сервера,
   // например HostWiringException, или start пары) без освобождения утекла бы
@@ -223,6 +232,11 @@ final class _Agent implements EmbeddedAgent {
         () => _server.shutdown(grace: const Duration(seconds: 5)),
       );
       await _step('runtime', () => _core.runtime.dispose());
+      // После runtime: перезагрузка могла идти до его остановки, а источник
+      // нужен ей до конца (D13). Свой шаг — сбой закрытия не мешает остальным.
+      if (_services.closeConfigSource case final close?) {
+        await _step('config_source', close);
+      }
       await _step('link', () => _link.agent.close());
       if (_services.closeHttpOnDispose) {
         await _step('http', () async => _services.http.close());
@@ -260,6 +274,13 @@ Future<void> _releaseCore(
     await core.runtime.dispose();
   } catch (error) {
     failed('runtime', error);
+  }
+  if (services.closeConfigSource case final close?) {
+    try {
+      await close();
+    } catch (error) {
+      failed('config_source', error);
+    }
   }
   if (services.closeHttpOnDispose) {
     try {

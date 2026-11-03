@@ -10,14 +10,23 @@
 ///
 /// Для чего: [findCritical] — шаг 3 алгоритма `decide` политики разрешений;
 /// [isAgentConfigPath] — общая проверка путей §7.6.1 для `exec` и для
-/// `write`/`edit`.
+/// `write`/`edit` (живёт в `agent_config_rules.dart`, здесь реэкспорт). Здесь
+/// остаются таблица §7.6 и обход сегментов; правила конфигурации агента —
+/// `agent_config_rules.dart`, маски — `shell_glob.dart`, разбор аргументов —
+/// `command_args.dart`.
 ///
 /// Как использовать: политика вызывает `findCritical(command, cwd: root)` для
 /// `exec` и показывает `reason: 'critical command: ${match.label}'`.
 library;
 
 import '../util/posix_path.dart';
+import 'agent_config_paths.dart';
+import 'agent_config_rules.dart';
+import 'command_args.dart';
 import 'shell_lexer.dart';
+
+// `policy.dart` и тесты берут проверку проектных путей отсюда (§7.6.1).
+export 'agent_config_rules.dart' show isAgentConfigPath;
 
 /// Совпадение с критическими шаблонами.
 ///
@@ -98,8 +107,18 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
 ///
 /// Как использовать: [cwd] — абсолютный POSIX-корень сессии; от него
 /// нормализуются цели правила `write to agent configuration` (§7.6.1) и
-/// относительные пути защищённых целей. `cd` внутри команды не учитывается.
-CriticalMatch? findCritical(String command, {String cwd = '/'}) {
+/// относительные пути защищённых целей. [commandCwd] — каталог, в котором
+/// запускается команда (аргумент `cwd` инструмента `exec`), по умолчанию
+/// [cwd]; `cd` внутри команды сдвигает его для следующих слов. [agentConfig] —
+/// пути конфигурации агента от хоста (PERM-11, D8) в пересчитанном виде:
+/// запись в них, жёсткая ссылка на них и подмена их каталогов-предков
+/// совпадают с тем же правилом `write to agent configuration`.
+CriticalMatch? findCritical(
+  String command, {
+  String cwd = '/',
+  String? commandCwd,
+  AgentConfigScope? agentConfig,
+}) {
   final ShellScript script;
   try {
     script = parseShell(command);
@@ -107,16 +126,18 @@ CriticalMatch? findCritical(String command, {String cwd = '/'}) {
     return const CriticalMatch([unparsableCommandLabel]);
   }
   final root = normalizePath('/', cwd) ?? '/';
+  final start = commandCwd == null
+      ? root
+      : normalizePath(root, commandCwd) ?? root;
+  final config = ConfigCheck(root, agentConfig);
   final found = <String>{};
   if (forkBomb.hasMatch(command)) {
     found.add(_forkBombLabel);
   }
   for (final pipeline in script.allPipelines) {
     _checkPipeline(pipeline, found);
-    for (final segment in pipeline.stages) {
-      _checkSegment(segment, root, found);
-    }
   }
+  _walk(script, root, config, start, found);
   if (found.isEmpty) {
     return null;
   }
@@ -126,40 +147,35 @@ CriticalMatch? findCritical(String command, {String cwd = '/'}) {
   ]);
 }
 
-/// Является ли путь путём конфигурации агента в проекте (§7.6.1).
-///
-/// Почему: конфигурацию агента правят только человек и клиенты, модель — нет
-/// (PERM-11); одно и то же правило нужно `exec` и `write`/`edit`.
-///
-/// Для чего: [relativePath] — уже нормализованный путь относительно корня
-/// сессии (POSIX); начальный `./` допускается. Совпадают
-/// `.codelab/config*.yaml` (в том числе `config.yaml` и `config.local.yaml`),
-/// `.codelab/cli.yaml` и всё внутри `.codelab/agents`, `skills`, `prompts`,
-/// `hooks` — включая сами каталоги, ведь копирование в каталог пишет в него.
-/// Сравнение без учёта регистра: на macOS файловая система обычно к нему
-/// нечувствительна, и `.CodeLab/Config.yaml` — тот же файл.
-///
-/// Как использовать: политика вызывает для цели `write`/`edit` после
-/// `relativeTo(root, normalizePath(root, path))`.
-bool isAgentConfigPath(String relativePath) {
-  var path = relativePath.toLowerCase();
-  while (path.startsWith('./')) {
-    path = path.substring(2);
+/// Обходит сегменты по порядку записи и ведёт текущий каталог: `cd` сдвигает
+/// его для следующих сегментов, поэтому `cd ~/.codelab && echo x > config.yaml`
+/// пишет в защищаемый файл (§7.6.1). Подоболочка и подстановка получают копию
+/// каталога; ошибка в оценке `cd` (неизвестная переменная) каталог не меняет.
+void _walk(
+  ShellScript script,
+  String root,
+  ConfigCheck config,
+  String dir,
+  Set<String> found,
+) {
+  var current = dir;
+  for (final pipeline in script.pipelines) {
+    for (final segment in pipeline.stages) {
+      // `env -C DIR cmd` / `sudo -D DIR cmd` запускают команду в DIR, но
+      // следующие сегменты остаются в прежнем каталоге.
+      final launcherDir = segment.launcherDir;
+      final here = launcherDir == null
+          ? current
+          : config.cdTarget([launcherDir], current) ?? current;
+      _checkSegment(segment, root, config, here, found);
+      for (final nested in segment.nested) {
+        _walk(nested, root, config, here, found);
+      }
+      if (const {'cd', 'pushd'}.contains(segment.commandName)) {
+        current = config.cdTarget(segment.arguments, current) ?? current;
+      }
+    }
   }
-  final segments = [
-    for (final s in path.split('/'))
-      if (s.isNotEmpty && s != '.') s,
-  ];
-  if (segments.length < 2 || segments.first != '.codelab') {
-    return false;
-  }
-  final second = segments[1];
-  if (const {'agents', 'skills', 'prompts', 'hooks'}.contains(second)) {
-    return true;
-  }
-  return segments.length == 2 &&
-      (second == 'cli.yaml' ||
-          second.startsWith('config') && second.endsWith('.yaml'));
 }
 
 const _downloaders = {'curl', 'wget', 'fetch'};
@@ -227,8 +243,6 @@ const _accountFiles = {
 };
 
 final _diskDevicePath = RegExp(r'^/dev/(sd|hd|vd|xvd|nvme|disk|rdisk|mmcblk)');
-final _shortFlags = RegExp(r'^-[A-Za-z]+$');
-final _recursiveFlag = RegExp(r'^-[A-Za-z]*[rR][A-Za-z]*$');
 const _protectedBranches = {'main', 'master', 'develop', 'trunk'};
 
 /// «Скачать и выполнить» в одном конвейере: стадия загрузчика и любая
@@ -247,7 +261,13 @@ void _checkPipeline(ShellPipeline pipeline, Set<String> found) {
   }
 }
 
-void _checkSegment(ShellSegment segment, String root, Set<String> found) {
+void _checkSegment(
+  ShellSegment segment,
+  String root,
+  ConfigCheck config,
+  String dir,
+  Set<String> found,
+) {
   final name = segment.commandName;
   final args = segment.arguments;
   if (segment.privileged) {
@@ -267,8 +287,12 @@ void _checkSegment(ShellSegment segment, String root, Set<String> found) {
   if (writes.common.any(_isSshPath)) {
     found.add(_sshConfig);
   }
-  if (writes.agentConfig.any((t) => _isInAgentConfig(t, root)) ||
-      writes.directories.any((t) => _isCodelabDirectory(t, root))) {
+  if (writes.agentConfig.any((t) => config.isConfig(t, dir)) ||
+      writes.directories.any((t) => config.isConfigDirectory(t, dir)) ||
+      replacesConfigAncestor(segment, config, dir) ||
+      hardLinksConfig(segment, config, dir) ||
+      touchesConfig(segment, config, dir) ||
+      writesViaBroadDirectory(segment, config, dir)) {
     found.add(_agentConfig);
   }
   if (_executesNested.contains(name) &&
@@ -280,8 +304,8 @@ void _checkSegment(ShellSegment segment, String root, Set<String> found) {
   }
   switch (name) {
     case 'rm':
-      final recursive = _hasRecursiveFlag(args);
-      final targets = _positionals(args);
+      final recursive = hasRecursiveFlag(args);
+      final targets = positionalArgs(args);
       if (args.contains('--no-preserve-root') ||
           recursive && targets.any((t) => _isProtected(t, root))) {
         found.add(_rmProtected);
@@ -294,8 +318,8 @@ void _checkSegment(ShellSegment segment, String root, Set<String> found) {
         found.add(_findProtected);
       }
     case 'chmod' || 'chown' || 'chgrp':
-      if (_hasRecursiveFlag(args) &&
-          _positionals(args).any((t) => _isProtected(t, root))) {
+      if (hasRecursiveFlag(args) &&
+          positionalArgs(args).any((t) => _isProtected(t, root))) {
         found.add(_permissionsProtected);
       }
     case 'sudo' || 'doas' || 'su' || 'pkexec':
@@ -303,7 +327,7 @@ void _checkSegment(ShellSegment segment, String root, Set<String> found) {
     case 'shutdown' || 'reboot' || 'halt' || 'poweroff':
       found.add(_shutdown);
     case 'init':
-      if (const {'0', '6'}.contains(_positionals(args).firstOrNull)) {
+      if (const {'0', '6'}.contains(positionalArgs(args).firstOrNull)) {
         found.add(_shutdown);
       }
     case 'systemctl':
@@ -311,7 +335,7 @@ void _checkSegment(ShellSegment segment, String root, Set<String> found) {
         'poweroff',
         'reboot',
         'halt',
-      }.contains(_positionals(args).firstOrNull)) {
+      }.contains(positionalArgs(args).firstOrNull)) {
         found.add(_shutdown);
       }
     case 'kill':
@@ -320,6 +344,9 @@ void _checkSegment(ShellSegment segment, String root, Set<String> found) {
       }
     case 'git':
       _checkGit(args, found);
+      if (gitWipesTree(args, config, dir)) {
+        found.add(_agentConfig);
+      }
     case final String n when _isFormatCommand(n, args, root):
       found.add(_format);
   }
@@ -344,8 +371,8 @@ final class _WriteTargets {
   /// [common], `ln` и `sed -i` — для конфигурации агента (§7.6.1).
   final List<String> agentConfig;
 
-  /// Назначения `cp`/`mv`/`ln`: `mv evil .codelab` заменяет каталог
-  /// конфигурации целиком.
+  /// Назначения `cp`/`mv`/`ln`/`install`: `mv evil .codelab` заменяет
+  /// каталог конфигурации целиком.
   final List<String> directories;
 
   factory _WriteTargets.of(ShellSegment segment) {
@@ -359,15 +386,45 @@ final class _WriteTargets {
     final directories = <String>[];
     switch (segment.commandName) {
       case 'tee':
-        common.addAll(_positionals(args));
+        common.addAll(positionalArgs(args));
       case 'cp' || 'mv':
-        final (:destinations, :targets) = _copyTargets(args);
+        final (:destinations, :targets, :sources) = copyTargets(args);
         common.addAll(targets);
-        directories.addAll(destinations);
-      case 'ln':
-        final (:destinations, :targets) = _copyTargets(args);
+        // Цели `dst/<имя источника>` проверяются и как каталоги: `cp -r
+        // evil/.codelab .` вливает чужой `.codelab` в `./.codelab` (R5-4).
+        directories.addAll([...destinations, ...targets]);
+        if (segment.commandName == 'mv') {
+          // Перенос защищаемого файла в другое место убирает его с пути.
+          agentConfig.addAll(sources);
+        }
+      case 'install':
+        final (:destinations, :targets, sources: _) = copyTargets(
+          args,
+          withValue: _installWithValue,
+        );
         agentConfig.addAll(targets);
         directories.addAll(destinations);
+      case 'ln':
+        final (:destinations, :targets, sources: _) = copyTargets(args);
+        agentConfig.addAll(targets);
+        directories.addAll(destinations);
+      case 'rename' || 'rm' || 'unlink':
+        // Удаление или переименование защищаемого файла так же выводит
+        // конфигурацию из-под контроля человека, как запись (решение
+        // пользователя 2026-11-03).
+        agentConfig.addAll(positionalArgs(args));
+      case 'truncate':
+        agentConfig.addAll(
+          positionalArgs(
+            args,
+            withValue: const {'-s', '--size', '-r', '--reference'},
+          ),
+        );
+      case 'dd':
+        agentConfig.addAll([
+          for (final a in args)
+            if (a.startsWith('of=')) a.substring(3),
+        ]);
       case 'sed' when _sedInPlace(args):
         agentConfig.addAll(_sedFiles(args));
     }
@@ -378,44 +435,19 @@ final class _WriteTargets {
   }
 }
 
-/// Назначение `cp`/`mv`/`ln` (`-t DIR` или последний позиционный аргумент)
-/// и пути, которые появятся, если назначение — каталог (`cp passwd /etc/`).
-({List<String> destinations, List<String> targets}) _copyTargets(
-  List<String> args,
-) {
-  const withValue = {'-t', '-S', '--target-directory', '--suffix'};
-  String? directory;
-  for (var i = 0; i < args.length; i++) {
-    final a = args[i];
-    if (a == '--') {
-      break;
-    }
-    if (a == '-t' && i + 1 < args.length) {
-      directory = args[i + 1];
-    } else if (a.startsWith('--target-directory=')) {
-      directory = a.substring('--target-directory='.length);
-    }
-  }
-  final positionals = _positionals(args, withValue: withValue);
-  final List<String> sources;
-  final String destination;
-  if (directory != null) {
-    destination = directory;
-    sources = positionals;
-  } else if (positionals.length >= 2) {
-    destination = positionals.last;
-    sources = positionals.sublist(0, positionals.length - 1);
-  } else {
-    return (destinations: const [], targets: const []);
-  }
-  return (
-    destinations: [destination],
-    targets: [
-      destination,
-      for (final source in sources) '$destination/${baseName(source)}',
-    ],
-  );
-}
+/// Опции `install` со значением сверх общих для `cp`/`mv`/`ln`.
+const _installWithValue = {
+  '-t',
+  '-S',
+  '--target-directory',
+  '--suffix',
+  '-m',
+  '--mode',
+  '-o',
+  '--owner',
+  '-g',
+  '--group',
+};
 
 bool _sedInPlace(List<String> args) => args.any(
   (a) =>
@@ -433,48 +465,11 @@ List<String> _sedFiles(List<String> args) {
         a.startsWith('--expression') ||
         a.startsWith('--file'),
   );
-  final positionals = _positionals(
+  final positionals = positionalArgs(
     args,
     withValue: const {'-e', '-f', '-l', '--expression', '--file'},
   );
   return hasScriptOption ? positionals : positionals.skip(1).toList();
-}
-
-/// Позиционные аргументы: без опций и их значений из [withValue]; после
-/// `--` все слова позиционные.
-List<String> _positionals(
-  List<String> args, {
-  Set<String> withValue = const {},
-}) {
-  final result = <String>[];
-  var options = true;
-  for (var i = 0; i < args.length; i++) {
-    final a = args[i];
-    if (options && a == '--') {
-      options = false;
-    } else if (options && a.startsWith('-') && a.length > 1) {
-      if (withValue.contains(a)) {
-        i++;
-      }
-    } else {
-      result.add(a);
-    }
-  }
-  return result;
-}
-
-/// Рекурсивный флаг §7.6: `-r`, `-R`, `--recursive` или кластер коротких
-/// флагов с `r`/`R` (`-rf`, `-fR`).
-bool _hasRecursiveFlag(List<String> args) {
-  for (final a in args) {
-    if (a == '--') {
-      return false;
-    }
-    if (a == '--recursive' || _recursiveFlag.hasMatch(a)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /// Защищённая цель `P` §7.6. Цель с переменной, кроме `$HOME`, не
@@ -576,10 +571,10 @@ bool _isFormatCommand(String name, List<String> args, String root) {
       'erasedisk',
       'erasevolume',
       'partitiondisk',
-    }.contains(_positionals(args).firstOrNull?.toLowerCase());
+    }.contains(positionalArgs(args).firstOrNull?.toLowerCase());
   }
   if (name == 'shred') {
-    return _positionals(args).any((t) {
+    return positionalArgs(args).any((t) {
       final path = t.contains(r'$') ? null : normalizePath(root, t);
       return path != null && path.startsWith('/dev/');
     });
@@ -588,27 +583,13 @@ bool _isFormatCommand(String name, List<String> args, String root) {
 }
 
 void _checkGit(List<String> args, Set<String> found) {
-  var i = 0;
-  while (i < args.length && args[i].startsWith('-')) {
-    final a = args[i];
-    i +=
-        const {
-          '-C',
-          '-c',
-          '--git-dir',
-          '--work-tree',
-          '--namespace',
-        }.contains(a)
-        ? 2
-        : 1;
-  }
-  if (i >= args.length) {
+  final parsed = gitSubcommand(args);
+  if (parsed == null) {
     return;
   }
-  final subcommand = args[i];
-  final rest = args.sublist(i + 1);
+  final (:subcommand, :rest, globals: _) = parsed;
   bool shortFlag(String a, String letter) =>
-      _shortFlags.hasMatch(a) && a.contains(letter);
+      shortFlagPattern.hasMatch(a) && a.contains(letter);
   switch (subcommand) {
     case 'push':
       final force = rest.any(
@@ -620,7 +601,7 @@ void _checkGit(List<String> args, Set<String> found) {
             shortFlag(a, 'f') ||
             shortFlag(a, 'd'),
       );
-      final refspecs = _positionals(
+      final refspecs = positionalArgs(
         rest,
         withValue: const {'-o', '--push-option', '--repo', '--receive-pack'},
       );
@@ -631,7 +612,7 @@ void _checkGit(List<String> args, Set<String> found) {
     case 'filter-branch' || 'filter-repo':
       found.add(_gitRewrite);
     case 'reflog':
-      if (_positionals(rest).firstOrNull == 'expire' &&
+      if (positionalArgs(rest).firstOrNull == 'expire' &&
           rest.any(
             (a) => RegExp(r'^--expire(-unreachable)?=(now|all)$').hasMatch(a),
           )) {
@@ -651,7 +632,7 @@ void _checkGit(List<String> args, Set<String> found) {
       final forceDelete =
           rest.any((a) => shortFlag(a, 'D')) || delete && forced;
       if (forceDelete &&
-          _positionals(rest).any(
+          positionalArgs(rest).any(
             (b) => _protectedBranches.contains(b) || b.startsWith('release/'),
           )) {
         found.add(_gitRewrite);
@@ -685,24 +666,3 @@ bool _isSshPath(String target) {
   }
   return false;
 }
-
-/// Путь внутри корня сессии относительно него или `null` для целей с
-/// переменной, `~` или вне корня (§7.6.1: правило — про проект).
-String? _workspaceRelative(String target, String root) {
-  if (target.contains(r'$') || target.startsWith('~')) {
-    return null;
-  }
-  final path = normalizePath(root, target);
-  if (path == null || !isInside(root, path) || path == root) {
-    return null;
-  }
-  return relativeTo(root, path);
-}
-
-bool _isInAgentConfig(String target, String root) {
-  final relative = _workspaceRelative(target, root);
-  return relative != null && isAgentConfigPath(relative);
-}
-
-bool _isCodelabDirectory(String target, String root) =>
-    _workspaceRelative(target, root)?.toLowerCase() == '.codelab';

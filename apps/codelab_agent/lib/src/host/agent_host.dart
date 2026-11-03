@@ -9,8 +9,10 @@ import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:codelab_agent_io/testing.dart';
 import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
 import 'package:http/http.dart' as http;
+import 'package:meta/meta.dart';
 
 import '../cli/serve_args.dart';
+import 'serve_config.dart';
 
 /// Версия бинаря в `agentInfo` ответа `initialize`.
 const agentVersion = '0.1.0';
@@ -37,6 +39,14 @@ const agentVersion = '0.1.0';
 /// `ConfigException`; затем [createServer] и `server.serve(transport)`; в
 /// конце — [shutdown]. [httpClient] — шов тестов (`MockClient`); без него
 /// создаётся один `http.Client` на процесс (PKG-6).
+///
+/// Живая перезагрузка (design.md change `add-config-writer-and-reload`, D8,
+/// D13; agent-binary «Перезагрузка конфига в serve»): без `--llm-script` хост
+/// создаёт `FileConfigSource` корня запуска, передаёт его ядру вместе с
+/// `modelsFor` и владеет им — [shutdown] закрывает источник после
+/// `runtime.dispose()`. `--ws` собирает ядро с `configCommand: false`: ответ
+/// `/config check` содержит пути и тексты проблем машины агента, а клиент
+/// WebSocket может быть на другой (R0-3).
 final class AgentHost {
   AgentHost._({
     required this.core,
@@ -44,24 +54,43 @@ final class AgentHost {
     required Logger logger,
     required Clock clock,
     required http.Client httpClient,
+    required FileConfigSource? source,
   }) : _logger = logger,
        _clock = clock,
-       _httpClient = httpClient;
+       _httpClient = httpClient,
+       _source = source;
 
   final BuiltAgentCore core;
   final AcpServerConfig serverConfig;
   final Logger _logger;
   final Clock _clock;
   final http.Client _httpClient;
+  final FileConfigSource? _source;
   final _servers = <AcpAgentServer>[];
 
+  /// Источник конфига, переданный ядру; `null` со сценарием `--llm-script`.
+  ///
+  /// Для чего: тесты проверяют, что источник есть и закрыт после [shutdown];
+  /// закрывает его только хост.
+  @visibleForTesting
+  ConfigSource? get configSource => _source;
+
+  /// [cwd] — корень проектных слоёв: тот же, что у `loadServeConfig` для
+  /// [loaded] (источник перезагрузки и пути PERM-11 строятся от него); по
+  /// умолчанию каталог процесса. [modelsFor] — шов тестов: заменяет фабрику
+  /// «функция модели и каталог по снимку»; по умолчанию — провайдеры
+  /// конфигурации (`createConfiguredStreamFunction` + `StaticModelCatalog`).
+  /// Со сценарием не используется.
   static Future<AgentHost> build(
     ServeOptions options, {
     required Logger logger,
     required ConfigLoadResult loaded,
     Clock clock = const SystemClock(),
     http.Client? httpClient,
+    String? cwd,
+    @visibleForTesting ConfiguredModels Function(CoreConfig config)? modelsFor,
   }) async {
+    final root = cwd ?? Directory.current.path;
     // Невалидный конфиг — `ConfigException` со всеми проблемами; значения
     // секретов в них нет (CFG-2).
     final loadedConfig = loaded;
@@ -95,6 +124,9 @@ final class AgentHost {
     final ModelCatalog catalog;
     final StreamFunction streamFunction;
     final SessionStore sessions;
+    // Фабрика пары «функция модели + каталог» для перезагрузки; со сценарием
+    // источника нет, и она не нужна (D8, «modelsFor и streamFunction»).
+    ConfiguredModels Function(CoreConfig config)? reloadModels;
     // Один резолвер на процесс: им пользуются функция модели (ключ и заголовки
     // провайдеров, при первом запросе) и ядро (MCP-серверы конфигурации, перед
     // подключением; D4). Хранилище выбирает `openHostSecrets` по
@@ -180,17 +212,30 @@ final class AgentHost {
     } else {
       // Каталог — модели всех провайдеров конфигурации, запрос уходит
       // провайдеру выбранной модели (D11).
-      catalog = StaticModelCatalog(config.providers, logger: logger);
-      streamFunction = createConfiguredStreamFunction(
-        config,
-        CoreLlmServices(
-          httpClient: client,
-          clock: clock,
-          random: Random.secure(),
-          logger: logger,
-        ),
-        secrets: secrets,
+      // Одна фабрика на старт и на каждую перезагрузку: хост с источником
+      // строит начальную функцию и каталог одним вызовом того же замыкания
+      // (D8, «modelsFor и streamFunction при сборке»). Сервисы LLM — одни на
+      // процесс (PKG-6); цепочки провайдеров строятся заново на каждом
+      // снимке, потому что держат разрешённый ключ.
+      final llm = CoreLlmServices(
+        httpClient: client,
+        clock: clock,
+        random: Random.secure(),
+        logger: logger,
       );
+      reloadModels =
+          modelsFor ??
+          (snapshot) => (
+            stream: createConfiguredStreamFunction(
+              snapshot,
+              llm,
+              secrets: secrets,
+            ),
+            catalog: StaticModelCatalog(snapshot.providers, logger: logger),
+          );
+      final initialModels = reloadModels(config);
+      catalog = initialModels.catalog;
+      streamFunction = initialModels.stream;
       sessions = openHostSessions(
         codelabHome: options.codelabHome,
         settings: settings,
@@ -234,44 +279,82 @@ final class AgentHost {
     final profile = HostProfile.of('agent-serve')
         .narrowed(settings.profileNarrowing['agent-serve'] ?? const {})
         .narrowed(narrowing);
-    final core = buildAgentCore(
-      profile: profile,
-      services: AgentCoreServices(
-        baseEnv: localEnv,
-        gate: const _ConnectionGate(),
-        logger: logger,
-        clock: clock,
-        ids: RandomIdGenerator(Random.secure()),
-        sessions: sessions,
-        platform: Platform.operatingSystem,
-        models: catalog,
-        secrets: secrets,
-        // Файлы проекта сессии: `AGENTS.md`/`CLAUDE.md` в системный промпт.
-        // Читаются с локальной ФС процесса только по stdio: по WebSocket
-        // загрузчик не передаётся (D2). Сценарий `--llm-script` не трогает `$CODELAB_HOME`
-        // (`home: null`) и читает только контекст проекта: так прогон
-        // детерминирован и не зависит от файлов разработчика (D16).
-        projectFiles: stdio
-            ? ProjectFilesLoader(
-                home: options.llmScript == null ? options.codelabHome : null,
-                local: localEnv,
-              )
-            : null,
-        // MCP-серверы сессии: процессы stdio запускает `codelab_agent_io`,
-        // streamable HTTP — `codelab_agent_mcp` на HTTP-клиенте хоста;
-        // закрываются они вместе с сессией (design.md change
-        // `add-agent-mcp-client`, D3, D6, D9, D10).
-        mcp: McpClientConnector(
-          transports: McpTransports(
-            stdio: StdioMcpTransportFactory(),
-            http: StreamableHttpTransportFactory(client: client, clock: clock),
-          ),
+    // Источник создаётся последним перед сборкой: конструктор запускает
+    // наблюдатель, и всё, что может бросить раньше (сценарий, секреты,
+    // журнал), не должно оставить его работающим. Со сценарием источника нет
+    // (D13); `config.watch: false` даёт источник без наблюдателя.
+    final source = options.llmScript != null
+        ? null
+        : serveConfigSource(
+            options,
+            initial: loadedConfig,
+            cwd: root,
+            clock: clock,
+            logger: logger,
+          );
+    final BuiltAgentCore core;
+    try {
+      core = buildAgentCore(
+        profile: profile,
+        services: AgentCoreServices(
+          baseEnv: localEnv,
+          gate: const _ConnectionGate(),
+          logger: logger,
           clock: clock,
+          ids: RandomIdGenerator(Random.secure()),
+          sessions: sessions,
+          platform: Platform.operatingSystem,
+          models: catalog,
+          secrets: secrets,
+          // Источник перезагрузки (D8, D13); `null` — сценарий.
+          config: source,
+          // Пути PERM-11 (D8): те же входы, что у загрузки конфига. Сценарий
+          // `--llm-script` `$CODELAB_HOME` не читает, поэтому защищает только
+          // список §7.6.1.
+          agentConfigPaths: options.llmScript != null
+              ? null
+              : agentConfigPathsFor(
+                  cwd: root,
+                  environment: options.environment,
+                  extraConfig: options.configPath,
+                ),
+          // Файлы проекта сессии: `AGENTS.md`/`CLAUDE.md` в системный промпт.
+          // Читаются с локальной ФС процесса только по stdio: по WebSocket
+          // загрузчик не передаётся (D2). Сценарий `--llm-script` не трогает `$CODELAB_HOME`
+          // (`home: null`) и читает только контекст проекта: так прогон
+          // детерминирован и не зависит от файлов разработчика (D16).
+          projectFiles: stdio
+              ? ProjectFilesLoader(
+                  home: options.llmScript == null ? options.codelabHome : null,
+                  local: localEnv,
+                )
+              : null,
+          // MCP-серверы сессии: процессы stdio запускает `codelab_agent_io`,
+          // streamable HTTP — `codelab_agent_mcp` на HTTP-клиенте хоста;
+          // закрываются они вместе с сессией (design.md change
+          // `add-agent-mcp-client`, D3, D6, D9, D10).
+          mcp: McpClientConnector(
+            transports: McpTransports(
+              stdio: StdioMcpTransportFactory(),
+              http: StreamableHttpTransportFactory(
+                client: client,
+                clock: clock,
+              ),
+            ),
+            clock: clock,
+          ),
         ),
-      ),
-      config: config,
-      streamFunction: streamFunction,
-    );
+        config: config,
+        streamFunction: streamFunction,
+        modelsFor: reloadModels,
+        // `serve --ws`: ответ `/config check` содержит пути и тексты проблем
+        // машины агента, а клиент может быть на другой (R0-3, D12, D13).
+        configCommand: stdio,
+      );
+    } on Object {
+      await source?.close();
+      rethrow;
+    }
     return AgentHost._(
       core: core,
       serverConfig: AcpServerConfig(
@@ -290,6 +373,7 @@ final class AgentHost {
       logger: logger,
       clock: clock,
       httpClient: client,
+      source: source,
     );
   }
 
@@ -314,7 +398,15 @@ final class AgentHost {
     }
     _servers.clear();
     await core.runtime.dispose();
-    _httpClient.close();
+    // Источник закрывается ПОСЛЕ `runtime.dispose()`: рантайм владеет подпиской
+    // на `changes` и отменяет её сам; закрытый раньше источник оборвал бы
+    // перезагрузку, идущую во время остановки (D7, D13). Закрытие не должно
+    // помешать освободить HTTP-клиент.
+    try {
+      await _source?.close();
+    } finally {
+      _httpClient.close();
+    }
   }
 }
 

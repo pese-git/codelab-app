@@ -1,0 +1,142 @@
+/// Файлы конфигурации агента: что наблюдает `ConfigWatcher` и что защищает
+/// политика разрешений (design.md change `add-config-writer-and-reload`, D7,
+/// D8, «Пути конфигурации агента для PERM-11»; PERM-11, `agent-core-
+/// architecture` §7.6.1).
+///
+/// Почему одна функция на оба списка: «что агент перечитывает на лету, то
+/// модель не правит без человека». Два независимых вычисления разошлись бы
+/// (новый слой конфига попал бы в наблюдатель, но не под защиту), поэтому
+/// [agentConfigPathsFor] строится поверх [watchedConfigFiles] по тем же
+/// входам, что у `ConfigLoader.load`.
+///
+/// Как использовать: `AgentHost` и открыватель `codelab_embedded` вызывают
+/// [agentConfigPathsFor] один раз при сборке и кладут результат в
+/// `AgentCoreServices.agentConfigPaths`; `ConfigWatcher` берёт список из
+/// [watchedConfigFiles].
+library;
+
+import 'dart:io';
+
+import 'package:codelab_agent_core/codelab_agent_core.dart';
+
+import '../env/host_path.dart';
+import 'config_loader.dart';
+import 'config_paths.dart' show canonicalDirectory;
+
+/// Файлы, которые загрузчик читает или прочитал бы (D7), в порядке слоёв.
+///
+/// Для чего: `$CODELAB_HOME/config.yaml`; файл `--config`/`CODELAB_CONFIG`
+/// (относительный — от корня запуска); `<корень запуска>/.codelab/
+/// config.yaml` и `config.local.yaml`, в том числе ещё не созданные;
+/// `$CODELAB_HOME/secrets.yaml` при [secretsFile] (`secrets.backend: file`).
+///
+/// Как использовать: параметры — те же, что у `ConfigLoader.load`; [cwd]
+/// канонизируется, как у загрузчика. Пути лексические, без разбора ссылок
+/// (наблюдателю нужен путь, который пишет писатель). Неверный
+/// `CODELAB_HOME` бросает `ConfigUsageException`, как загрузчик.
+List<String> watchedConfigFiles({
+  required String cwd,
+  required Map<String, String> environment,
+  String? extraConfig,
+  bool secretsFile = false,
+}) {
+  final home = codelabHomeOf(environment);
+  final root = canonicalDirectory(cwd);
+  final explicit =
+      _nonEmpty(extraConfig) ?? _nonEmpty(environment['CODELAB_CONFIG']);
+  return [
+    '$home/config.yaml',
+    if (explicit != null)
+      isAbsoluteConfigPath(explicit) ? explicit : '$root/$explicit',
+    '$root/.codelab/config.yaml',
+    '$root/.codelab/config.local.yaml',
+    if (secretsFile) '$home/secrets.yaml',
+  ];
+}
+
+/// Пути конфигурации агента для политики разрешений (PERM-11, D8).
+///
+/// Почему канонические: политика сравнивает цель `write`/`edit` после
+/// канонизации `BoundedEnv`, а `$CODELAB_HOME/config.yaml` может быть ссылкой
+/// на `~/dotfiles/codelab.yaml` — цель ссылки и есть тот файл, который
+/// правит инструмент (agent-permissions «Символическая ссылка»).
+///
+/// Для чего: [watchedConfigFiles] плюс каталоги `$CODELAB_HOME/agents` и
+/// `prompts` (паритет с проектными `.codelab/agents/**`, `prompts/**`). Пути
+/// абсолютные, `~` раскрыт, ссылки раскрыты по самому глубокому
+/// существующему предку (так же для ещё не созданных файлов).
+/// `expansions` — `HOME` и `CODELAB_HOME` окружения хоста для раскрытия в
+/// командах `exec`; они лексические: так их видит оболочка.
+///
+/// Как использовать: [caseInsensitive] — признак файловой системы без
+/// учёта регистра; без него — по платформе (macOS и Windows). Ссылка, цель
+/// которой ещё не существует, не раскрывается (`realpath` её не видит):
+/// остаток пути берётся как есть.
+AgentConfigPaths agentConfigPathsFor({
+  required String cwd,
+  required Map<String, String> environment,
+  String? extraConfig,
+  bool? caseInsensitive,
+}) {
+  final home = codelabHomeOf(environment);
+  final files = [
+    ...watchedConfigFiles(
+      cwd: cwd,
+      environment: environment,
+      extraConfig: extraConfig,
+      // Защита не зависит от `secrets.backend`: файл остаётся под PERM-11 и
+      // тогда, когда бэкенд позже переключат на `file` (решение пользователя
+      // 2026-11-03); наблюдение (`watchedConfigFiles`) зависит от бэкенда.
+      secretsFile: true,
+    ),
+    '$home/agents',
+    '$home/prompts',
+  ];
+  final windows = Platform.isWindows;
+  final userHome = userHomeOf(environment);
+  return AgentConfigPaths(
+    paths: [
+      for (final file in files)
+        toCorePath(_canonicalPath(file), windows: windows),
+    ],
+    expansions: {
+      if (userHome != null) 'HOME': toCorePath(userHome, windows: windows),
+      'CODELAB_HOME': toCorePath(home, windows: windows),
+    },
+    caseInsensitive: caseInsensitive ?? (Platform.isMacOS || windows),
+  );
+}
+
+/// Путь с раскрытыми ссылками по самому глубокому существующему предку;
+/// остаток (ещё не созданные звенья) добавляется как есть.
+String _canonicalPath(String path) {
+  var prefix = File(path).absolute.path;
+  final rest = <String>[];
+  while (true) {
+    try {
+      final resolved =
+          FileSystemEntity.typeSync(prefix, followLinks: false) ==
+              FileSystemEntityType.notFound
+          ? null
+          : File(prefix).resolveSymbolicLinksSync();
+      if (resolved != null) {
+        return rest.isEmpty
+            ? resolved
+            : [resolved, ...rest.reversed].join(Platform.pathSeparator);
+      }
+    } on FileSystemException {
+      // Ссылка в никуда или нет доступа: поднимаемся к предку.
+    }
+    final parent = File(prefix).parent.path;
+    if (parent == prefix) {
+      return File(path).absolute.path;
+    }
+    rest.add(
+      prefix.substring(parent.length).replaceAll(RegExp(r'^[\\/]+'), ''),
+    );
+    prefix = parent;
+  }
+}
+
+String? _nonEmpty(String? value) =>
+    value == null || value.isEmpty ? null : value;

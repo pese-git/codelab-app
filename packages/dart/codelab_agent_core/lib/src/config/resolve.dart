@@ -15,6 +15,7 @@ import '../secrets/secret_template.dart';
 import '../tools/agent_tool.dart' show ToolTier;
 import '../util/logger.dart';
 import 'config_issue.dart';
+import 'config_values.dart';
 import 'config_tree.dart';
 import 'core_config.dart';
 import 'host_settings.dart';
@@ -39,12 +40,14 @@ ConfigLoadResult resolveConfig(
   required Map<String, String> environment,
   String? projectRoot,
   bool collectAll = false,
+  List<String>? pinnedTrustedProjects,
 }) => _resolve(
   layers,
   environment: environment,
   projectRoot: projectRoot,
   fallbackModel: null,
   collectAll: collectAll,
+  pinnedTrustedProjects: pinnedTrustedProjects,
 );
 
 /// Предупреждения без повторов (событие, ключ, источник): доверие считается и
@@ -68,10 +71,13 @@ List<ConfigIssue> _mergeWarnings(
   List<ConfigTree> layers,
   Map<String, String> environment,
   String? projectRoot,
+  List<String>? pinnedTrustedProjects,
 ) {
   final trusted =
       projectRoot != null &&
-      _trustedRoots(layers, environment).any((r) => samePath(r, projectRoot));
+      (pinnedTrustedProjects ?? _trustedRoots(layers, environment)).any(
+        (r) => samePath(r, projectRoot),
+      );
   final effective = <ConfigTree>[];
   final trustWarnings = <ConfigIssue>[];
   for (var i = 0; i < layers.length; i++) {
@@ -140,6 +146,7 @@ ConfigLoadResult _resolve(
   required ModelRef? fallbackModel,
   bool collectAll = false,
   int rounds = 8,
+  List<String>? pinnedTrustedProjects,
 }) {
   final sources = [for (final layer in layers) layer.source];
 
@@ -199,7 +206,12 @@ ConfigLoadResult _resolve(
     var degraded = false;
     var originalTrust = const <ConfigIssue>[];
     try {
-      originalTrust = _applyTrust(layers, environment, projectRoot).warnings;
+      originalTrust = _applyTrust(
+        layers,
+        environment,
+        projectRoot,
+        pinnedTrustedProjects,
+      ).warnings;
     } on Object {
       degraded = true;
     }
@@ -223,6 +235,7 @@ ConfigLoadResult _resolve(
       fallbackModel: fallbackModel,
       collectAll: true,
       rounds: rounds - 1,
+      pinnedTrustedProjects: pinnedTrustedProjects,
     );
     String sig(ConfigIssue i) => '${i.kind.name}|${i.key}|${i.source}';
     final seen = {for (final i in issues) sig(i)};
@@ -244,7 +257,12 @@ ConfigLoadResult _resolve(
 
   // Шаг 4: правила доверия применяются к слоям `project` и `projectLocal` до
   // слияния и сравнивают их с итогом слоёв ниже (D7).
-  final applied = _applyTrust(layers, environment, projectRoot);
+  final applied = _applyTrust(
+    layers,
+    environment,
+    projectRoot,
+    pinnedTrustedProjects,
+  );
   final effective = applied.effective;
   final trustWarnings = applied.warnings;
 
@@ -253,6 +271,7 @@ ConfigLoadResult _resolve(
     environment: environment,
     fallbackModel: fallbackModel,
     warnings: trustWarnings,
+    pinnedTrustedProjects: pinnedTrustedProjects,
   )..build();
   if (builder.issues.isNotEmpty) {
     return ConfigLoadResult(
@@ -267,6 +286,7 @@ ConfigLoadResult _resolve(
   // сборки (провайдеры, каталог, профиль) берутся из полного снимка, а
   // `defaultModel` второго снимка при отсутствии ключа — модель полного.
   CoreConfig? bare;
+  var bareValues = const <String, Object?>{};
   final hasProjectLayers = layers.any(
     (l) =>
         l.kind == ConfigLayerKind.project ||
@@ -283,6 +303,7 @@ ConfigLoadResult _resolve(
       environment: environment,
       projectRoot: null,
       fallbackModel: full.defaultModel,
+      pinnedTrustedProjects: pinnedTrustedProjects,
     );
     if (second.issues.isNotEmpty) {
       return ConfigLoadResult(
@@ -292,6 +313,7 @@ ConfigLoadResult _resolve(
       );
     }
     bare = second.config;
+    bareValues = second.values;
   }
 
   return ConfigLoadResult(
@@ -311,10 +333,13 @@ ConfigLoadResult _resolve(
             trustedProjects: full.trustedProjects,
             projectRoot: projectRoot,
             withoutProject: bare,
+            // R0-1: значения второго снимка для сравнения при перезагрузке.
+            withoutProjectValues: bare == null ? null : bareValues,
           ),
     host: builder.host,
     warnings: builder.warnings,
     sources: sources,
+    values: builder.values,
   );
 }
 
@@ -431,11 +456,16 @@ final class _Builder {
     required this.environment,
     required this.fallbackModel,
     List<ConfigIssue> warnings = const [],
+    this.pinnedTrustedProjects,
   }) : warnings = [...warnings];
 
   final List<ConfigTree> layers;
   final Map<String, String> environment;
   final ModelRef? fallbackModel;
+
+  /// Закреплённый список доверия (`CoreConfig.fromLayers`); `null` — доверие
+  /// по пользовательскому слою.
+  final List<String>? pinnedTrustedProjects;
 
   final issues = <ConfigIssue>[];
   final List<ConfigIssue> warnings;
@@ -443,6 +473,9 @@ final class _Builder {
   late Map<String, Object?> merged;
   CoreConfig? config;
   HostSettings? host;
+
+  /// Плоская карта листьев итогового дерева (`ConfigLoadResult.values`).
+  Map<String, Object?> values = const {};
 
   void build() {
     for (final layer in layers) {
@@ -464,6 +497,8 @@ final class _Builder {
     final profiles = _profiles();
     final projectContextMaxBytes = _projectContextMaxBytes();
     final secretsBackend = _secretsBackend();
+    final configWatch = _bool(['config', 'watch']);
+    final configPollInterval = _configPollInterval();
 
     if (issues.isNotEmpty || model == null) {
       return;
@@ -479,8 +514,12 @@ final class _Builder {
       providerProblems: problems,
       redact: redact,
       projectContextMaxBytes: projectContextMaxBytes,
-      trustedProjects: _trustedRoots(layers, environment),
+      trustedProjects:
+          pinnedTrustedProjects ?? _trustedRoots(layers, environment),
     );
+    values = flattenConfigValues(merged, {
+      for (final server in mcpServers) server.name,
+    });
     host = HostSettings(
       sessionsDir: _path(['sessions', 'dir']),
       fsync: _str(['sessions', 'fsync']),
@@ -491,6 +530,8 @@ final class _Builder {
       logFile: _path(['logging', 'file']),
       secretsBackend: secretsBackend,
       profileNarrowing: profiles,
+      configWatch: configWatch,
+      configPollInterval: configPollInterval,
     );
   }
 
@@ -635,6 +676,25 @@ final class _Builder {
       'this key is read but not applied by this version of the agent',
       fields: {'key': key, 'source': layer.source},
     );
+  }
+
+  /// `config.poll_interval`: `1s..60s` (D7, agent-configuration «Ключи
+  /// config.watch и config.poll_interval»).
+  Duration? _configPollInterval() {
+    final value = _dur(['config', 'poll_interval']);
+    if (value == null) {
+      return null;
+    }
+    if (value < const Duration(seconds: 1) ||
+        value > const Duration(seconds: 60)) {
+      _bad(
+        ['config', 'poll_interval'],
+        'must be between 1s and 60s',
+        kind: ConfigIssueKind.value,
+      );
+      return null;
+    }
+    return value;
   }
 
   /// `secrets.backend` (D7): `auto` | `env` | `file`. `keychain` в схеме

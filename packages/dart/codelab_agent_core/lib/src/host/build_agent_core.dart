@@ -59,12 +59,29 @@ final class BuiltAgentCore {
 /// тестах. Несовместимые сервисы (журнал в памяти при `sessionPersistence`,
 /// env без shell при `shellExec`) — `HostWiringException`;
 /// `CoreConfig.compaction.enabled: false` выключает capability `compaction`.
+///
+/// Живая перезагрузка (design.md change `add-config-writer-and-reload`, D8):
+/// [streamFunction] остаётся функцией модели начального снимка, начальный
+/// каталог — `AgentCoreServices.models`. [modelsFor] нужен, если передан
+/// `AgentCoreServices.config` (иначе `HostWiringException`), и вызывается
+/// только на снимках, применённых перезагрузкой, — при сборке нет; хост с
+/// источником строит начальную пару одним вызовом того же замыкания. Без
+/// источника [modelsFor] не требуется и не вызывается. [configCommand] `false`
+/// не объявляет и не исполняет встроенную `/config` (`serve --ws`, R0-3).
 BuiltAgentCore buildAgentCore({
   required HostProfile profile,
   required AgentCoreServices services,
   required CoreConfig config,
   required StreamFunction streamFunction,
+  ConfiguredModels Function(CoreConfig config)? modelsFor,
+  bool configCommand = true,
 }) {
+  if (services.config != null && modelsFor == null) {
+    throw const HostWiringException(
+      'AgentCoreServices.config требует modelsFor: перезагрузка строит '
+      'функцию модели и каталог по новому снимку',
+    );
+  }
   final narrowed = profile.narrowed({
     if (services.gate == null)
       HostCapability.interactiveApproval: const CapabilityOff(
@@ -164,6 +181,8 @@ BuiltAgentCore buildAgentCore({
       config: config,
       registry: registry,
       stream: streamFunction,
+      modelsFor: services.config == null ? null : modelsFor,
+      configCommand: configCommand,
     ),
   );
 }

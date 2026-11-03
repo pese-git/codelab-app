@@ -40,12 +40,12 @@ Future<EmbeddedAgent> createEmbeddedAgent({
   required EmbeddedHostServices services,
 }) async {
   checkEmbeddedProfile(config.hostProfile);
-  return assembleEmbeddedAgent(
-    config: config,
-    services: services,
-    models: StaticModelCatalog(config.core.providers, logger: services.logger),
-    streamFunction: createConfiguredStreamFunction(
-      config.core,
+  // Одна функция строит и начальные модель и каталог, и каждый снимок
+  // перезагрузки (change `add-config-writer-and-reload`, D13): разойтись им
+  // нечему.
+  ConfiguredModels modelsFor(CoreConfig core) => (
+    stream: createConfiguredStreamFunction(
+      core,
       CoreLlmServices(
         httpClient: services.http,
         clock: services.clock,
@@ -54,5 +54,14 @@ Future<EmbeddedAgent> createEmbeddedAgent({
       ),
       secrets: services.secrets,
     ),
+    catalog: StaticModelCatalog(core.providers, logger: services.logger),
+  );
+  final initial = modelsFor(config.core);
+  return assembleEmbeddedAgent(
+    config: config,
+    services: services,
+    models: initial.catalog,
+    streamFunction: initial.stream,
+    modelsFor: services.configSource == null ? null : modelsFor,
   );
 }

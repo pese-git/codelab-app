@@ -18,3 +18,4 @@ library;
 export 'src/scripted/cwd_tracking_store.dart';
 export 'src/scripted/llm_script.dart';
 export 'src/scripted/scripted_providers.dart';
+export 'src/testing/rewrite_until.dart';

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../util/logger.dart';
 import 'secret_lookup.dart';
 import 'secret_names.dart';
@@ -21,10 +23,12 @@ import 'secret_store.dart';
 /// `api_key_env`. Порядок `secret`: кэш, переменная
 /// `SecretNames.envOverride(name)`, хранилище. Кэшируются только найденные
 /// значения, поэтому секрет, записанный после старта, подхватывается
-/// следующим запросом; замена уже прочитанного видна после перезапуска до 8.10
-/// (D3, D15). Значение секрета не попадает ни в лог, ни в `toString` ни одного
-/// результата; в режиме [debug] пишется `secrets.lookup` с именем, назначением,
-/// источником и признаком `found` (D10, CFG-10).
+/// следующим запросом; замену уже прочитанного значения подхватывает
+/// [invalidate], который вызывает перезагрузка конфигурации (design.md change
+/// `add-config-writer-and-reload`, D8). Значение секрета не попадает ни в лог,
+/// ни в `toString` ни одного результата; в режиме [debug] пишется
+/// `secrets.lookup` с именем, назначением, источником и признаком `found`
+/// (D10, CFG-10).
 final class SecretResolver {
   SecretResolver({
     required DescribedSecretStore store,
@@ -43,7 +47,29 @@ final class SecretResolver {
 
   final _cache = <String, String>{};
   final _inflight = <String, Future<SecretLookup>>{};
+
+  /// Поколение кэша: растёт при [invalidate]. Чтение, начатое в старом
+  /// поколении, не кладёт значение в кэш нового (D8).
+  int _generation = 0;
   final _warned = <String>{};
+
+  /// Сбрасывает кэш найденных значений (в том числе значений переменных
+  /// переопределения) и начинает новое поколение.
+  ///
+  /// Почему: ключ в хранилище или переменная могли смениться, а кэш процесса
+  /// отдавал бы прежнее значение до перезапуска (D8, шаг 6 перезагрузки).
+  /// Чтение, начатое до сброса и завершившееся после, отдаёт значение своим
+  /// вызывающим, но в кэш не попадает: устаревшее значение не переживает
+  /// сброс. Запрос после сброса не присоединяется к старому чтению —
+  /// single-flight действует внутри поколения.
+  ///
+  /// Как использовать: рантайм вызывает на каждой успешной перезагрузке
+  /// конфигурации, даже без изменённых ключей. Синхронный, не бросает.
+  void invalidate() {
+    _generation++;
+    _cache.clear();
+    _inflight.clear();
+  }
 
   /// Разрешает секрет по имени; не бросает исключений.
   ///
@@ -80,18 +106,34 @@ final class SecretResolver {
       return Future.value(SecretFound(override, 'env'));
     }
     // Single-flight: одновременные запросы одного имени ждут одного `read`.
-    return _inflight[name] ??= _read(name)
-      ..whenComplete(() => _inflight.remove(name));
+    final existing = _inflight[name];
+    if (existing != null) {
+      return existing;
+    }
+    final flight = _read(name, _generation);
+    _inflight[name] = flight;
+    // Удаляем только своё чтение: после invalidate на месте может стоять
+    // чтение нового поколения.
+    unawaited(
+      flight.whenComplete(() {
+        if (identical(_inflight[name], flight)) {
+          _inflight.remove(name);
+        }
+      }),
+    );
+    return flight;
   }
 
-  Future<SecretLookup> _read(String name) async {
+  Future<SecretLookup> _read(String name, int generation) async {
     final backend = _store.backend.id;
     try {
       final value = await _store.read(name);
       if (value == null || value.isEmpty) {
         return SecretMissing(backend);
       }
-      _cache[name] = value;
+      if (generation == _generation) {
+        _cache[name] = value;
+      }
       return SecretFound(value, backend);
     } on SecretStoreUnavailableException catch (error) {
       _warnOnce(error.backend, error.reason);

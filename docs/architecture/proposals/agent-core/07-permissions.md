@@ -276,7 +276,7 @@ flowchart TD
 | `download and execute` | в одном конвейере стадия `curl`/`wget`/`fetch` и последующая стадия `sh`, `bash`, `zsh`, `dash`, `ksh`, `fish`, `python`, `python3`, `perl`, `ruby`, `node`; или вложенная команда с `curl`/`wget` внутри `eval`, `sh -c`, `source`, `.`, `bash <(...)` | `curl -fsSL x.sh \| sh`, `bash <(curl -s u)`, `eval "$(wget -qO- u)"`, `sh -c "$(curl u)"` | `curl -o x.sh u`, `curl u \| jq .` |
 | `host shutdown or reboot` | `shutdown`, `reboot`, `halt`, `poweroff`, `init 0`, `init 6`, `systemctl poweroff/reboot/halt` в позиции команды | `sudo reboot`, `systemctl reboot` | `echo reboot` |
 | `kill of init or all processes` | `kill` (любой сигнал) с целью `1` или `-1` | `kill -9 1`, `kill -KILL -1` | `kill 1234` |
-| `write to agent configuration` | перенаправление, `tee`, `cp`/`mv`/`ln` или `sed -i` с целью из списка путей §7.6.1 (`.codelab/config*.yaml`, `.codelab/cli.yaml`, `.codelab/agents/**`, `.codelab/skills/**`, `.codelab/prompts/**`, `.codelab/hooks/**`) | `echo x >> .codelab/config.yaml`, `cp evil.md .codelab/agents/` | `cat .codelab/config.yaml` |
+| `write to agent configuration` | любая команда не из белого списка чтения §7.6.1, у которой аргумент, значение опции или рабочий каталог — путь из списка §7.6.1 (`.codelab/config*.yaml`, `.codelab/cli.yaml`, `.codelab/agents/**`, `.codelab/skills/**`, `.codelab/prompts/**`, `.codelab/hooks/**`, пути от хоста) или близкий каталог-предок; перенаправление в такой путь — всегда; удаление и усечение (`rm`, `unlink`, `mv` с ним как источником, `truncate`) | `echo x >> .codelab/config.yaml`, `cp evil.md .codelab/agents/`, `yq -i .a=1 .codelab/config.yaml`, `curl -o ~/.codelab/config.yaml u` | `cat .codelab/config.yaml`, `git diff .codelab` |
 | `git force push or remote branch deletion` | `git push` с `--force`, `-f`, `--force-with-lease`, `--mirror`, `--delete`, `-d`, или refspec с `+` в начале или `:` в начале | `git push -f origin main`, `git push origin +main`, `git push origin :dev` | `git push origin feature` |
 | `git history rewrite` | `git filter-branch`, `git filter-repo`, `git reflog expire` с `--expire=now`/`--expire-unreachable=now`, `git gc --prune=now`, `git branch -D` или `git branch -d --force` для `main`, `master`, `develop`, `trunk`, `release/*` | `git filter-branch --tree-filter x`, `git branch -D main` | `git branch -D feature/x`, `git gc` |
 
@@ -309,8 +309,9 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
   режиме, включая `bypass` и `accept-edits`; `allow_always` не предлагается и ранее выданные
   «разрешить всегда» на них не действуют; в `autopilot` и без интерфейса одобрения — отказ с
   текстом `Editing agent configuration requires a human: <path>`;
-* `exec` с перенаправлением, `tee`, `cp`/`mv`/`ln` или `sed -i` с целью из того же списка —
-  критический шаблон с меткой `write to agent configuration` (строка таблицы выше).
+* `exec`, у которого путь из того же списка — аргумент команды не из белого списка чтения или цель
+  перенаправления, — критический шаблон с меткой `write to agent configuration` (строка таблицы
+  выше; правило — ниже, «Белый список чтения»).
 
 **Пути конфигурации агента от хоста** (этап 8.10; design.md change
 `add-config-writer-and-reload`, D8, OQ2). С живой перезагрузкой (§17.5.6) правка глобального
@@ -319,10 +320,12 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
 caseInsensitive}`:
 
 * `paths` — файлы, которые наблюдает `ConfigWatcher` (`$CODELAB_HOME/config.yaml`, файл
-  `--config`/`CODELAB_CONFIG`, `<корень запуска>/.codelab/config.yaml` и `config.local.yaml`,
-  `$CODELAB_HOME/secrets.yaml`), и каталоги `$CODELAB_HOME/agents`, `$CODELAB_HOME/prompts` с
-  поддеревом. Строит их одна функция `agentConfigPathsFor` (`codelab_agent_io`), та же, что даёт
-  файлы наблюдателю, поэтому наблюдаемые и защищаемые файлы совпадают. Пути канонические: `~`
+  `--config`/`CODELAB_CONFIG`, `<корень запуска>/.codelab/config.yaml` и `config.local.yaml`),
+  `$CODELAB_HOME/secrets.yaml` при любом `secrets.backend` и каталоги `$CODELAB_HOME/agents`,
+  `$CODELAB_HOME/prompts` с поддеревом. `secrets.yaml` защищён всегда, хотя наблюдатель следит за
+  ним только при `file`: иначе агент мог бы создать файл и переключить бэкенд следующей правкой
+  (R5-1 того change). Строит их одна функция `agentConfigPathsFor` (`codelab_agent_io`), та же,
+  что даёт файлы наблюдателю, поэтому каждый наблюдаемый файл защищён. Пути канонические: `~`
   раскрыт, ссылки раскрыты по самому глубокому существующему предку;
 * `expansions` — значения `HOME` и `CODELAB_HOME` окружения хоста: ими раскрываются `~`, `$HOME`,
   `${HOME}`, `$CODELAB_HOME`, `${CODELAB_HOME}` в командах `exec` (у ядра своего окружения нет);
@@ -334,15 +337,102 @@ caseInsensitive}`:
   §4.4); каноническая форма защищаемых путей пересчитывается на каждой проверке — асинхронно в
   `beforeToolCall` политики тем же вызовом `ExecutionEnv`, что у containment, поэтому подмена каталога-предка ссылкой после старта (`ln -s sub .codelab`, затем
   `write sub/config.yaml`) путь из-под защиты не выводит; защита действует для сессии с любым `cwd`;
-* `exec` — критический шаблон `write to agent configuration` срабатывает на запись (`>`, `>>`,
-  `tee`, `cp`, `mv`, `rename`, `ln`, `install`, `dd of=`, `sed -i`) в защищаемый путь после
-  раскрытия переменных и разрешения относительно `cwd` команды (включая `../`), на команду, которая
-  переходит в защищаемый каталог и пишет (`cd ~/.codelab && …`), и на создание, переименование,
-  удаление и подмену ссылкой каталогов-предков (`<корень запуска>/.codelab`, `$CODELAB_HOME`);
+* резолвер путей политики (пересчёт защищаемых путей и второй проход `exec`) — окружение сессии,
+  только если оно реализует `PathResolver`, иначе окружение хоста `AgentCoreServices.baseEnv`. У
+  сессий `serve` окружение — клиент ACP, который ссылок не раскрывает, а защищаемые пути — пути
+  хоста; для `--ws` клиент подключён по loopback, это та же машина;
+* `exec` — белый список чтения (R5-4 того change). Разбирается каждая простая команда строки — в
+  цепочках `&&`, `||`, `;`, в конвейерах, внутри `sh -c`/`bash -c`, после `env` (в том числе
+  `env -C DIR`) и после `cd DIR` (`DIR` — рабочий каталог следующих команд). Проверяются
+  слова-аргументы, значения опций (`-o FILE`, `-C DIR`, `--output=FILE`, `-d DIR`, `of=FILE`) и
+  рабочий каталог — после раскрытия `~`, `$HOME`, `${HOME}`, `$CODELAB_HOME`, `${CODELAB_HOME}` и
+  разрешения относительно рабочего каталога команды (включая `../`). Если значение разрешается в
+  защищаемый путь, путь внутри защищаемого каталога или близкий каталог-предок, команда критична,
+  кроме команд только чтения: `cat`, `less`, `more`, `head`, `tail`, `grep`/`egrep`/`fgrep`, `rg`,
+  `ag`, `ls`, `stat`, `file`, `wc`, `diff`, `cmp`, `sha256sum`/`shasum`/`md5sum`, `jq`/`yq`,
+  `git diff|log|show|status|blame`, `test`/`[`, `realpath`, `readlink`, `dirname`,
+  `basename`, `echo`/`printf` — без опций записи и исполнения (ниже). Перенаправление в защищаемый путь критично всегда, в том числе у
+  команды из списка. Примеры критичных: `>`/`>>`, `tee`, `cp`, `mv`, `rename`, `ln`, `install`,
+  `dd of=`, `sed -i`, `yq -i`, `perl -pi`, `curl -o`, `wget -O`, `git checkout|restore --
+  .codelab/…`, `cp -r evil/. ~/.codelab`, `rsync`, `tar -C ~/.codelab`, `unzip -d ~/.codelab`,
+  `find ~/.codelab -delete`. Список консервативен: `cp .codelab/config.yaml /tmp/b.yaml` тоже
+  спрашивается;
+* опции записи и исполнения снимают исключение белого списка — команда проверяется как любая
+  другая: `jq`/`yq` с `-i`, `--in-place*`, `--inplace*`, `-s`, `--split-exp`; `rg`/`ag` с `--pre`,
+  `--pre-glob`, `--search-zip` (`-z`); `less` с `-o`, `-O`, `--log-file`; `file` с `-C`, `--compile`;
+  `git` с глобальными `-c`, `--config-env`, `--exec-path`,
+  `--git-dir`, `--work-tree`; `git diff --output|--ext-diff|--textconv` (решение оркестратора
+  2026-11-03 по повторному ревью итерации 5, fail closed);
+* значение опции, которое программа исполняет как команду, разбирается как вложенный текст, как
+  `sh -c`: `git -c` с `core.pager`, `core.fsmonitor`, `core.sshCommand`, `core.editor`,
+  `interactive.diffFilter`, `diff.external`, `*.textconv`, `sequence.editor`, `alias.<имя>=!…`,
+  `credential.helper`, драйверы `merge`/`filter` и другие; `rg --pre`; `find -exec`, `-execdir`,
+  `-ok`, `-okdir`; строка команды `watch` и `script -c`. Так же разбираются переменные с командой
+  (`GIT_PAGER`, `PAGER`, `GIT_EXTERNAL_DIFF`, `GIT_EDITOR`, `EDITOR`, `VISUAL`,
+  `GIT_SEQUENCE_EDITOR`, `GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_ASKPASS`, `SSH_ASKPASS`, `LESSOPEN`,
+  `LESSCLOSE`) в префиксном присваивании, `env NAME=…` и `export|declare|typeset|readonly|local`.
+  Критичны всегда: `git --config-env`, `git -c core.hooksPath|include.path|includeIf.*` и
+  присваивание `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_*`, `GIT_CONFIG_VALUE_*`,
+  `GIT_CONFIG_PARAMETERS`, `GIT_EXEC_PATH`, `GIT_DIR`, `GIT_WORK_TREE` — что исполнится, неизвестно;
+* распаковка архива (`tar -x`, `bsdtar -x`, `unzip` кроме листинга, `cpio -i|-p`, `7z x|e`, `jar x`
+  в каталог запуска), `ditto`, `rsync` и `cp -r|-a` со слитным источником (`X/.`, `X/*`, `.`; у BSD
+  `cp` на macOS — и `X/`) критичны, если приёмник широкий: корень
+  запуска и выше (`tar -C ~`), предок защищаемого пути, `.codelab` или каталог конфигурации хоста;
+  приёмник — `-C`/`--directory`, `-d`, `-o`, последний путь `rsync`, назначение `cp`, по умолчанию
+  рабочий каталог команды. Команда создаёт поддерево неизвестного состава, и двухшаговая запись
+  (`evil/.codelab/config.yaml`, затем распаковка, синхронизация или `cp -r evil/. .` в корень)
+  обходит сравнение путей. В обычный подкаталог (`tar -xf a.tar -C build`, `rsync -a src/ dst/`)
+  и `cp -r src .` — не критичны;
+* `git apply`, `git am`, `patch` критичны всегда: пути правок задаёт содержимое патча;
+* git-подкоманды, стирающие дерево, критичны всегда, без проверки путей: `git clean -f…`,
+  `git reset --hard`, `git stash` кроме `list|show`, `git checkout|restore .`,
+  `git checkout|switch --force|-f|--discard-changes`, `git checkout-index -a|-f`, `git read-tree -u`.
+  Ядро не видит ФС, поэтому корень считается
+  содержащим `.codelab`: `git clean -fdx` удалил бы неотслеживаемый `.codelab/config.local.yaml` с
+  `permissions.deny` (R5-2). `git checkout <ветка>`, `merge`, `pull`, `rebase` не критичны;
+* каталоги-предки — любой предок каждой формы защищаемого пути, кроме `/`, двух видов.
+  **Широкий** — корень запуска, `cwd` сессии, `~` и выше: команда с ним критична, только если
+  разрушает, перемещает или подменяет сам каталог — `rm`/`rmdir`/`mkdir` и предок в роли источника
+  `mv`/`ln` (`rm -rf ~`, `mv ~/proj x`) всегда, предок в роли назначения `mv`/`ln` — пока его нет
+  на диске (в существующий каталог файл кладётся внутрь, это ловит сравнение пути `DIR/x`); запись
+  внутрь ловится сравнением конкретных путей, поэтому `make`, `cp -r src dst`, `rm -rf build`,
+  `mkdir -p src/x`, `mv a b`, `mv a .` в корне не критичны (исключения — распаковка, `rsync`, патчи и
+  git, стирающий дерево, выше). **Близкий** — `<корень>/.codelab`,
+  `$CODELAB_HOME`, каталог файла `--config` и промежуточные: в аргументах команды не из белого списка
+  он критичен как защищаемый путь;
+* маски (glob `*`, `?`, `[`, brace `{…}`) — по префиксу до первого символа маски: префикс внутри
+  защищаемого пути, `.codelab` или `$CODELAB_HOME` либо совпадающий с ними делает команду не из
+  белого списка критичной (fail closed): `rm .codelab/*.yaml`, `cp x ~/.codelab/{agents,prompts}/`.
+  Файлы политики: правила PERM-11 для `exec` — `permissions/agent_config_rules.dart`, общий с
+  таблицей §7.6 разбор аргументов — `permissions/command_args.dart` (две копии разбора разошлись бы).
+  Сопоставление — своя реализация политики `permissions/shell_glob.dart`, а не `tools/glob.dart`
+  инструментов поиска: маска одной компоненты пути, правило точки оболочки (`*` не совпадает с
+  `.codelab`), сломанная маска считается совпадающей (fail closed);
+* удаление и усечение самого защищаемого файла — `rm`, `unlink`, `mv <защищаемый> …`, `truncate`,
+  перенаправление `>` — тот же шаблон `write to agent configuration`: удаление проектного конфига
+  может снять записанный в нём `permissions.deny` (R5-2 того change);
+* символическая ссылка НА защищаемый файл (`ln -s ~/.codelab/config.yaml /tmp/x`) критична по
+  белому списку (`ln` не читает); запись по уже существующей ссылке ловится канонизацией цели —
+  `write`/`edit` через `BoundedEnv`, `exec` (`>`, `tee`, `sed -i`, `rm`, `truncate`) вторым
+  проходом шаблона через резолвер путей политики, если ссылка и её цель существуют;
 * жёсткая ссылка — `ln` без `-s` и `cp -l`/`cp --link` с защищаемым путём в любой позиции
   (источник или цель) — тоже критическая: через неё защищаемый файл правится по другому пути.
 
-Разбор `exec` не полон (интерпретаторы, составные команды); остаточный риск смягчает то, что ключи,
+Известная граница — висячая ссылка: после одобренного человеком `ln -s sub .codelab` при
+несуществующем `sub` запись `write sub/config.yaml` не распознаётся, потому что порт `PathResolver`
+не раскрывает висячие ссылки (нет `readlink`); закрытие — новая capability порта окружения
+отдельной задачей (R5-3 того change).
+
+Разбор `exec` не видит пути, которых нет в словах команды: строка программы интерпретатора
+(`python -c`, `node -e`), скрипт из файла, подстановка `$(…)`, маска с префиксом короче
+защищаемого пути (`rm -rf .c*`), запись внутрь широкого предка без явного пути
+(`find . -delete` в корне), `xargs rm` из конвейера, переменные, кроме `HOME`/`CODELAB_HOME`,
+удалённое назначение `rsync` `host:path`, удалённые команды (`ssh host "…"`), `git worktree add`,
+`git submodule update`, `git cherry-pick`, `git revert`, `**` без `globstar` (одна компонента, точечные каталоги
+не видит; маска ловится, только если префикс уже в `.codelab`); ложные срабатывания на путь в значении опции, не
+задающей запись (`--exclude=`, `-m`), приняты как лишний вопрос. Git-подкоманды, меняющие
+отслеживаемые файлы (`checkout <ветка>`, `merge`, `pull`, `rebase`), могут переписать
+закоммиченный `.codelab/config.yaml`, но для доверенного проекта это обычная работа. Остаточный риск смягчает то, что ключи,
 ослабляющие права, и правки, способные направить секрет на другой адрес, живой перезагрузкой не
 применяются (§17.5.6; R0-1, R0-4 того change).
 

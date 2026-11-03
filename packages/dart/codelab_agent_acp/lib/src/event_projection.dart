@@ -36,6 +36,7 @@ const projectionTable = <Type, String>{
   ContextCompacted: 'not sent',
   SessionTitleChanged: 'session_info_update',
   TurnEnded: 'the answer to session/prompt',
+  ModelOptionsChanged: 'config_option_update',
 };
 
 /// Кадры события [event]; пустой список — событие не передаётся.
@@ -103,6 +104,14 @@ List<acp.SessionUpdate> projectEvent(
     acp.SessionUpdate.currentModeUpdate(
       currentModeId: acp.SessionModeId(mode.value),
     ),
+    acp.SessionUpdate.configOptionUpdate(configOptions: configOptions()),
+  ],
+  // Каталог моделей изменился после применённой перезагрузки конфигурации:
+  // клиент получает полный снимок опций сессии, `model.currentValue` остаётся
+  // моделью сессии (design.md change `add-config-writer-and-reload`, D8).
+  // Ни до ответа на `session/new`/`session/load` (ACP-8), ни при неудачной
+  // перезагрузке событие не публикуется: порядок гарантирует мост и ядро.
+  ModelOptionsChanged() => [
     acp.SessionUpdate.configOptionUpdate(configOptions: configOptions()),
   ],
   SessionTitleChanged(:final title, :final updatedAt) => [
