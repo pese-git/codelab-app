@@ -793,6 +793,32 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
 7. **Ключи тестов:** `tool-pane-terminal`, `terminal-tab-<id>`, `terminal-new-tab`,
    `terminal-disclosure`.
 
+**A13. Секреты в файле конфига встроенного агента (задача 8.11; решения пользователя 2026-11-04
+R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Литеральный секрет в файле
+конфига не мешает старту встроенного агента, а даёт предупреждение загрузки `config.secret.in_file`.
+Мост сводит его к признаку `EmbeddedAgent.secretsInConfig`. Раньше предупреждения конфига были видны
+только в окне лога.
+- Резолвер `lib/app/` передаёт признак в `SecretMigrationOffer`.
+- `SecretMigrationCubit` (application) ведёт автомат
+  `hidden → offered → planning → planReady|planFailed → applying → applied|applyFailed`.
+- Порт `SecretMigrationRunner` реализован только в `lib/app/` через `SecretMigrator` из
+  `codelab_embedded/io.dart` (app уже опирается на этот барель; нового ребра графа нет): `--all` для
+  папки проекта, без `--force`, с тем же `CODELAB_HOME`, `CODELAB_CONFIG` и окружением, что у
+  открывателя встроенного агента. Тексты ошибок — только из типизированного отчёта или имени типа,
+  никогда из `error.toString()`.
+- Над транскриптом — Fluent `InfoBar` уровня `warning` (как `CodeLabConnectionBanner`) с текстом
+  `Secrets are stored in the agent config file.` и кнопкой `Migrate secrets`. Закрытие крестиком
+  скрывает его до следующего подключения; признак вычисляется при открытии агента и до
+  переподключения не пересчитывается.
+- Диалог:
+  - план без значений;
+  - бэкенд `env` → сообщение и `Close`;
+  - конфликт имени с хранилищем → текст и `Close`;
+  - находки только в `CODELAB_CONFIG` → план и `Close`;
+  - иначе → `Migrate`/`Cancel`.
+- После переноса — `Restart agent`: повторное подключение тем же профилем, недоступно во время хода.
+- Поздние результаты отбрасываются по номеру попытки. Виджеты IO не делают.
+
 ## 12.3.4. Примеры
 
 Ответ агента «Исправил:\n\n```dart\nfinal a = 1;\n```\nГотово.» во время стрима, сразу после

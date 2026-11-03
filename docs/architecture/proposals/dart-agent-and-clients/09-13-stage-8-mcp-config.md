@@ -57,7 +57,7 @@
    `codelab config check [--cwd <dir>]` (через мост `codelab_setup`). Тесты:
    `core/config-legacy-found-warning`, `config_yaml_profile_test.dart`,
    `config_legacy_found_test.dart`. Здесь же читаются ключи `redact.*` редакции секретов
-   (задача 8.11; agent-core-architecture §12.4.3, правило доверия проекту §15.3).
+   (потребитель — редакция секретов P-10, перенесена после 1.0 решением пользователя 2026-11-04 R8-1; agent-core-architecture §12.4.3, правило доверия проекту §15.3).
 6. **8.6. Инструкции проекта** (agent-core-architecture §11.5; change
    [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/), D2, D5):
    `ProjectFilesLoader` (`codelab_agent_io`, порт ядра `ProjectFilesSource`) читает файлы с локальной
@@ -220,29 +220,38 @@
     * задача 8.5 — containment ссылок проектных слоёв и при чтении: проектный файл с целью вне
       `<cwd>/.codelab` — проблема загрузки, наблюдатель цель снаружи не читает (D5, D7);
     * известные границы до 8.11 — смешанное значение секретного заголовка (R1-1) и литеральные
-      токены в `mcp.servers[*].args` (R4-6); висячая ссылка на месте каталога-предка в PERM-11 (R5-3).
+      токены в `mcp.servers[*].args` (R4-6) — закрываются 8.11 (предупреждение, отказ записи,
+      маскирование); висячая ссылка на месте каталога-предка в PERM-11 (R5-3).
 
     Клиентская часть (мастер, страницы настроек, `AgentConfigStore`, реэкспорт `ConfigEdit` и
     `SettingsRegistry` в основном барели моста) — change `add-provider-setup-ui`. Сторож импортов и
     allowlist зависимостей не менялись; новое ребро графа — нет (D1).
-11. **8.11. Редакция секретов** (P-10, *Should — не блокирует MVP*; перенесена с этапа 3):
-    вывод инструментов (`exec env`, `read .env`), промпт пользователя и лог не попадают в журнал
-    сессии и к провайдеру с сырыми секретами. Состав:
-    * `Redactor` в `codelab_agent_core` с послойным алгоритмом agent-core-architecture §12.4.1:
-      слои `exact`, `credential_files`, `formats`, `pem`, `connection_strings`, `key_values`;
-      `entropy` выключен; белый список `git_sha`, `uuid`; идемпотентность и сохранение числа строк;
-    * признак `AgentTool.redactResult` — `false` у `write` и `edit` (§6.2);
-    * точки применения §12.4.2 — `userInput`, `toolResult`, `providerRequest`, `journal`, `log`
-      (точка `spill` — вместе с выносом результата, задача 3.8);
-    * источники точных секретов (§12.4) — переменные окружения по шаблону имён, ключ провайдера,
-      значения `SecretStore` (8.9) и токены MCP-серверов (8.1) через `addExactSecret`;
-    * ключи `redact.*` из конфигурации (8.5) с правилом доверия проекту (§12.4.3, §15.3).
+11. **8.11. Секреты в конфиге** (P-12, пункты 2–3 CFG-9; *Should — не блокирует MVP*). Change
+    `add-config-literal-secrets-and-migrate` (прежнее имя `add-agent-core-secret-redaction` — до решения R8-1). Решения пользователя
+    2026-11-04 — design.md change, «Open Questions»:
+    * **R8-1:** редакция секретов (P-10: `Redactor`, точки §12.4.2, `AgentTool.redactResult`,
+      ключи `redact.*`) переносится **после 1.0**. До 1.0 агент работает «как Claude Code»: вывод
+      инструментов, промпт, запрос к провайдеру, журнал и ACP не редактируются (D1, D2). Прежний
+      состав задачи и находки ревью — вход будущего change (design.md, «Перенесено после 1.0»).
+    * **R8-4:** литеральный секрет в файле конфига (CFG-9, пп. 1–3, R1-1, DSN) — предупреждение
+      `config.secret.in_file` с подсказкой `codelab secret migrate`, а не ошибка. Литеральный
+      `api_key` работает как ключ провайдера; ссылки п. 3, похожие на значение, не разрешаются (D3, D4).
+    * **R8-5:** запись литерала через CLI отклоняется, в том числе по шаблону в `headers`, `env` и
+      `mcp.servers[*].args` (R4-6); `config get` маскирует `args` (D5). Взамен —
+      `mcp add --header-stdin|--env-stdin` (D11).
+    * `secret migrate` у обоих бинарей (D7) и `secret set|delete` с именем-значением (D6).
+    * **R8-3:** предупреждение и кнопка `Migrate secrets` в codelab-app (D8).
 
-    Команда `/redact stats | layers` — после MVP (§13.4). До этой задачи журналы этапов 4–7
-    хранят вывод инструментов как есть. Тесты: `core/redaction-before-journal`,
-    `core/redaction-preserves-line-count`, `core/redaction-write-results-exempt`. Вынос
-    результата (задача 3.8, change `add-agent-core-output-spill`) идёт после неё: файл выноса не
-    должен содержать сырых секретов (SPL-3).
+    Итерации (каждая — PR в `develop`):
+    0. документы;
+    1. распознавание и предупреждения загрузки;
+    2. писатель и R4-6;
+    3. `secret migrate`, `mcp add` из stdin;
+    4. codelab-app;
+    5. матрица и DoD.
+
+    Вынос результата (задача 3.8, change `add-agent-core-output-spill`, SPL-3) от 8.11 больше не
+    зависит: редакция файла выноса — вместе с P-10 после 1.0.
 
 **OpenSpec change.** [`add-agent-mcp-client`](../../../../openspec/changes/archive/2026-10-29-add-agent-mcp-client/) (8.1–8.4; scope: протокол MCP, транспорты, имена и
 виды MCP-инструментов, проверка разрешений; решение о библиотеке MCP — в его `design.md`),
@@ -253,9 +262,9 @@
 [`add-agent-secret-store`](../../../../openspec/changes/archive/2026-11-01-add-agent-secret-store/) (8.9; scope: имена секретов, порядок разрешения, бэкенды `env` и `file`, команды
 `secret`, диагностика без значений; бэкенды ОС — черновик `add-agent-os-secret-backends` после 1.0) и `add-config-writer-and-reload` (8.10, Should; scope:
 запись конфига, наблюдатель и перезагрузка, реестр настроек, переподключение MCP в сессии
-коннектора, команды `config`/`provider`/`mcp` на запись, агентские `/config` и `/mcp`) и `add-agent-core-secret-redaction` (8.11, Should; scope:
-слои и точки применения редакции, `AgentTool.redactResult`, источники точных секретов, ключи
-`redact.*`). `tasks.md` — пары "тест → реализация" со ссылкой на
+коннектора, команды `config`/`provider`/`mcp` на запись, агентские `/config` и `/mcp`) и `add-config-literal-secrets-and-migrate` (8.11, Should; scope после решений 2026-11-04: секреты в файле
+конфига — предупреждение, запись литерала отклоняется, маскирование `args`, `secret migrate`,
+`mcp add` из stdin, кнопка codelab-app; редакция P-10 — после 1.0). `tasks.md` — пары "тест → реализация" со ссылкой на
 критерий (§9.0, правило 3).
 
 Бинарь (`add-agent-mcp-client`, итерация 3) собирает `McpClientConnector` со
@@ -285,7 +294,7 @@ stdio MUST) записано в §13.15, включение явным флаг�
 В `design.md` записываются: кандидаты, отметки по каждому пункту, решение и версия пакета (если
 выбран).
 
-**Что прочитать.** Документ ядра §6, §7, §10 (capability `mcp`), §11, §12.4 (редакция, 8.11), §15; спецификация MCP
+**Что прочитать.** Документ ядра §6, §7, §10 (capability `mcp`), §11, §12.4 (редакция — после 1.0, R8-1), §15; спецификация MCP
 (стандарт протокола, раздел о транспортах); `docs/protocols/acp/protocol/03-Session Setup.md`,
 `14-Slash Commands.md`.
 
@@ -357,12 +366,13 @@ stdio MUST) записано в §13.15, включение явным флаг�
 
   `melos run guard` и `web-compile` — условие задачи 8.4 change; страница MCP-серверов app
   (`app:mcp_settings_flow_test.dart`) — change `add-provider-setup-ui`.
-* Если сделано (8.11, Should — не блокирует MVP): `core/redaction-before-journal`,
-  `core/redaction-preserves-line-count`, `core/redaction-write-results-exempt` зелёные; журнал
-  сессии с выводом `exec env` и `read .env` не содержит значений секретов.
+* Если сделано (8.11, Should — не блокирует MVP): `core/config-warns-inline-api-key` и тесты
+  итераций 1–4 change `add-config-literal-secrets-and-migrate` зелёные; литерал в файле конфига даёт
+  предупреждение без значения, `secret migrate` переносит его в хранилище. Тесты редакции
+  `core/redaction-*` — после 1.0 (R8-1).
 
 **Зависимости.** Этап 4; задачи 8.5–8.9 не зависят от MCP и идут параллельно; 8.11 — после
-8.5 и 8.9 (ключи `redact.*` и источник `SecretStore`). Этап 7 ждёт
+8.5, 8.9 и 8.10 (схема конфига, хранилище секретов, писатель `ConfigWriter`). Этап 7 ждёт
 8.5 и 8.9 (порядок D3: `{6, 8} → 7`); 8.10 его не блокирует.
 
 **Риски.** Нет зрелого MCP SDK на Dart — свой клиент (протокол небольшой); готовые пакеты pub.dev

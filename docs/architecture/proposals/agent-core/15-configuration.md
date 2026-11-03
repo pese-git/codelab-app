@@ -238,23 +238,31 @@ providers:
 | `stall_retries`, `stall_key_rotations` | int | `llm.retry.stall_retries`, `.stall_key_rotations` | после MVP: переопределение `llm.retry.*` на провайдера (§17.10.10.1) |
 | `stall_base_delay`, `stall_max_delay` | duration | `llm.retry.stall_base_delay`, `.stall_max_delay` | после MVP: переопределение `llm.retry.*` на провайдера (§17.10.10.1) |
 
-Ключ API **нельзя** писать в конфиг значением: ключ `api_key` — проблема `inlineSecret`, у хоста —
-`ConfigInlineSecretException` (`suggestedSecretName`, с этапа 8.9) с текстом
-`providers.openai.api_key: secrets are not stored in the config; run: codelab secret set
-codelab/openai, then use api_key_secret: codelab/openai (or api_key_env with an environment
-variable)`.
+Ключ API **не записывается** в конфиг значением: писатель, подкоманды CLI и страницы настроек
+отклоняют литерал (`ConfigInlineSecretException`, `suggestedSecretName`). Литерал, вписанный в
+**файл** руками, с 8.11 — **предупреждение**, а не ошибка (решение пользователя 2026-11-04 R8-4;
+design.md change `add-config-literal-secrets-and-migrate`, D4). Литеральный `api_key` работает как ключ провайдера, а загрузка пишет
+`config.secret.in_file` по единому шаблону (§17.5.4): `providers.openai.api_key: a secret is stored in
+the config file; move it to the secret store: codelab secret migrate` — без значения. `api_key` вместе с `api_key_env` или
+`api_key_secret` у одного провайдера после слияния слоёв — проблема загрузки `api_key, api_key_env and
+api_key_secret are mutually exclusive`: конфликт источников (решение пользователя 2026-11-04 R8-6). До
+8.11 (с этапа 8.9) литеральный `api_key` был проблемой `inlineSecret`. В предконфигурации из окружения
+(§17.5.3) он ею остаётся.
 Без `api_key_env` и `api_key_secret` запросы идут без ключа (локальные Ollama, LM Studio).
 Провайдер `cli` из флагов (`--provider`, §15.6) получает `api_key_env: CODELAB_API_KEY`, только
 если переменная задана и непуста, а слой флагов заменяет `providers.cli` целиком: `headers` и
 ссылки на ключ одноимённого провайдера из файлов не уходят на адрес `--base-url`
 (change `add-agent-configuration`, D4).
-`api_key_env` и `api_key_secret` взаимоисключающие: оба сразу — `ConfigException`. Кроме
-`api_key` отклоняются ключи `apiKey`, `token`, `secret`, `password` в `providers.*` и в элементах
-`mcp.servers` (CFG-9, п. 1, §17.5.4; подсказка `codelab secret set <name>` с именем
-`SecretNames.suggestFor` — с этапа 8.9); в `tools.web.search.backends.*` — вместе с инструментом
-поиска (§17.1.6). Литеральные значения `headers.*` и `mcp.servers.*.env.*`, похожие на ключ по
-шаблонам §12.4, и ключ, вписанный в `api_key_env`/`api_key_secret` вместо имени (CFG-9, п. 2–3), —
-8.11; до него ключ вместо имени чаще всего отсекает формат имени (§17.5.4).
+`api_key_env` и `api_key_secret` взаимоисключающие: оба сразу — `ConfigException`. Ключи `apiKey`,
+`token`, `secret`, `password` в `providers.*` и в элементах `mcp.servers` в файле дают то же
+предупреждение и не применяются (CFG-9, п. 1, §17.5.4; подсказка `codelab secret set <name>` с
+именем `SecretNames.suggestFor`); в `tools.web.search.backends.*` — вместе с инструментом поиска
+(§17.1.6). С 8.11 предупреждение дают и литеральные части `headers.*` и `mcp.servers.*.env.*` по
+шаблонам §12.4 — в том числе смешанное `Bearer sk-… ${X}` (R1-1) и DSN, разрезанный подстановкой —
+и ключ, вписанный в `api_key_env`/`api_key_secret`/`${secret:…}` вместо имени (CFG-9, пп. 2–3). Такая
+ссылка не разрешается: ошибка хода говорит, что делать, и значения не содержит (design.md change `add-config-literal-secrets-and-migrate`, D3, D4). Для ключей
+недоверенного проекта, которые доверие и так отбрасывает, предупреждения нет. Перенос всех
+находок — `codelab secret migrate` (§17.5.5; D7).
 
 **`providers.<id>.models.<model>`** — `<model>` — id модели у провайдера: один ключ YAML, даже
 если в нём есть `.` или `/` (`gpt-4o`, `qwen2.5-coder-32b`, `org/model`); с `:` или пробелом,
@@ -623,9 +631,10 @@ loadConfig(cwd, env, flags):
      auth.toml, codelab.local.toml (§15.7) без чтения: найден хотя бы один → одно
      предупреждение config.legacy_found {files} на процесс и cwd; YAML найден → предупреждения нет
 3. для каждого слоя: validateKeys(layer, schema)          // строгость, ниже; позиции — из positions
-     встроенные секреты (CFG-9, п. 1, §17.5.4): ключи api_key, apiKey, token, secret, password в
-       providers.* и mcp.servers → проблема inlineSecret (orThrow — ConfigInlineSecretException);
-       литералы по шаблонам §12.4 (п. 2–3) — 8.11
+     секреты в файле (CFG-9, пп. 1–3, §17.5.4; с 8.11 — R8-4): findInlineSecrets(layer) →
+       предупреждение config.secret.in_file на находку (кроме ключей недоверенного проекта,
+       отбрасываемых шагом 4); api_key вместе с api_key_env/api_key_secret → ConfigException;
+       предконфигурация (слой 6) — проблема inlineSecret, как с 8.10
 4. для слоёв 3–4: применить правила доверия §15.3
 5. merged := merge(layers) по правилам §15.2
 6. interpolate(merged)                                    // ${ENV}; ${secret:<name>} — шаблон без чтения (с 8.9, D4); ниже
@@ -1218,7 +1227,7 @@ compaction:
 ## 15.10. Инварианты
 
 1. **CFG-1.** Неизвестный ключ, неверный тип и незаданная переменная в `${…}` — ошибка при старте с файлом, строкой, столбцом и путём ключа.
-2. **CFG-2.** Ключ API не хранится в конфиге значением; только `api_key_env` или `api_key_secret`.
+2. **CFG-2.** Ключ API не записывается в конфиг значением (писатель, CLI и клиенты пишут только `api_key_env` или `api_key_secret`); литерал, вписанный в файл руками, загружается с предупреждением `config.secret.in_file` и подсказкой `secret migrate` (решение пользователя 2026-11-04 R8-4, design.md change `add-config-literal-secrets-and-migrate`, D4).
 3. **CFG-3.** Проектный конфиг без доверия не может расширить права агента: разрешающие правила, MCP-серверы, провайдеры и промпты из него игнорируются с предупреждением; режим одобрения — только ужесточается.
 4. **CFG-4.** `autopilot` включается только флагом запуска.
 5. **CFG-5.** Ядро получает только провалидированный `CoreConfig` и не читает файлы конфига; разборщики YAML (`yaml`, `yaml_edit`) живут только в `codelab_agent_io`; TOML агент не разбирает.

@@ -621,7 +621,7 @@ JSON-RPC ошибку: ответ всегда `cancelled`, как требуе�
 успешный, а `codelab -p` вернёт код 0. JSON-RPC ошибка на запрос — штатный способ сообщить, что
 операция не удалась; codelab-app превращает её в состояние «ход завершился ошибкой». Все
 уведомления хода, ушедшие до сбоя, остаются у клиента. Класс и текст ошибки идут в `data`
-(свободное поле JSON-RPC) после редакции (OBS-2).
+(свободное поле JSON-RPC) после редакции (OBS-2; до 1.0 — только вычистка `ProviderConfig.secrets` из текстов ошибок провайдера, редакция §12.4 — после 1.0, решение пользователя 2026-11-04 R8-1, design.md change `add-config-literal-secrets-and-migrate`, D2).
 
 ```json
 {"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"Turn failed: provider authentication error","data":{"codelab":{"errorClass":"auth","message":"401 Unauthorized from openai: check api_key_env","retryable":false}}}}

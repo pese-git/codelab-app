@@ -185,7 +185,7 @@ followed`, `connection failed: <runtimeType>`, `HTTP session expired`; в лог
 вовсе — ни из хранилища, ни прямым чтением окружения: `api_key_env` и `api_key_secret` дают ошибку
 хода `API key variable <VAR> cannot be read: the host has no secret resolver` (для секрета —
 `API key secret <name> cannot be read: …`), иначе чтение выпало бы из `secrets.lookup` и будущей
-регистрации в `Redactor` (D4). Поэтому каждый хост, которому нужен ключ, передаёт резолвер:
+регистрации в `Redactor` после 1.0 (D4). Поэтому каждый хост, которому нужен ключ, передаёт резолвер:
 настольные — через `openHostSecrets` (D15). `SecretStore` остаётся портом хранилища под
 резолвером; все хранилища реализуют расширение `DescribedSecretStore` (`backend` —
 `SecretBackendInfo`: id бэкенда, запись, причина, по которой `auto` не выбрал хранилище ОС).
@@ -195,9 +195,11 @@ followed`, `connection failed: <runtimeType>`, `HTTP session expired`; в лог
 `codelab_agent_io` и `MemorySecretStore` ядра для тестов. Связка ключей ОС (Keychain, Secret
 Service, Credential Manager) — после 1.0, черновик `add-agent-os-secret-backends` (D13). Ядро
 читает секреты только через `SecretResolver` (кэш процесса, переопределение из окружения,
-single-flight). Регистрация каждого прочитанного значения в `Redactor` (§12.4) добавляется
-change 8.11 в ту же точку резолвера; до него значения ключа и заголовков провайдера вычищаются из
-текстов ошибок через `ProviderConfig.secrets` (D10).
+single-flight). Регистрация каждого прочитанного значения в `Redactor` (§12.4) добавляется в ту же
+точку резолвера change редакции после 1.0 (P-10; решение пользователя 2026-11-04 R8-1, design.md
+change `add-config-literal-secrets-and-migrate`, D1); до него значения ключа и заголовков провайдера, в том
+числе литеральный `api_key` из файла конфига (§17.5.4), вычищаются из текстов ошибок через
+`ProviderConfig.secrets` (D10).
 
 **Один снимок на корень запуска (change `add-agent-configuration`, D9; с 8.10 так и остаётся —
 design.md change `add-config-writer-and-reload`, D8).** Снимка на каждый `cwd` сессии нет: чтение
