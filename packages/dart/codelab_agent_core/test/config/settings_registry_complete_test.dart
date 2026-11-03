@@ -14,20 +14,21 @@ import 'config_support.dart';
 /// Ключи «только после перезапуска» (design.md change
 /// `add-config-writer-and-reload`, D8, таблица перезапуска; R0-1, OQ5):
 /// ключи хоста `sessions.*`, `logging.*` (в том числе `logging.level`),
-/// `profile.*`, затем `secrets.backend` и ключи, ослабляющие права, —
-/// `permissions.*`, `trusted_projects`.
+/// `profile.*`, `config.*`, затем `secrets.backend` и ключи, ослабляющие
+/// права, — `permissions.*`, `trusted_projects`.
 ///
 /// Почему константа теста, а не вывод из реестра: пункт 6 сверяет признак
 /// `restartRequired` реестра с внешним списком; список, построенный из самого
 /// реестра, проверял бы реестр сам собой.
 ///
-/// Раздел `config` сюда НЕ входит: в итерации 2 он непрозрачен и покрыт одним
-/// дескриптором `map`/`fileOnly` (D4, «Порядок итераций»). Ключи `config.*`
-/// добавляет задача 5.4 вместе со схемой.
+/// Ключи `config.*` (`config.watch`, `config.poll_interval`) добавила задача
+/// 5.4 вместе со схемой: наблюдатель создаётся один раз (D7, D4,
+/// «Порядок итераций»).
 const restartKeyPatterns = [
   'sessions.*',
   'logging.*',
   'profile.*',
+  'config.*',
   'secrets.backend',
   'permissions.*',
   'trusted_projects',
@@ -192,6 +193,10 @@ const specOnlyDefaults = {
   'loop.empty_response_retries',
   'logging.level',
   'secrets.backend',
+  // Умолчания применяет хост (`FileConfigSource`): `HostSettings` хранит
+  // `null` для незаданного ключа (D7, §15.4).
+  'config.watch',
+  'config.poll_interval',
 };
 
 /// Допустим ли [value] в [key] для настоящего валидатора: `true` — проблем
@@ -644,16 +649,24 @@ void main() {
       }
     });
 
-    test('the opaque config section is one fileOnly map without restart '
-        'until iteration 5', () {
-      final config = byKey('config');
+    test('config.watch and config.poll_interval are fileOnly leaves that '
+        'require a restart; the opaque config map is gone (D7, D4)', () {
+      final watch = byKey('config.watch');
+      final poll = byKey('config.poll_interval');
 
-      expect(config.type, SettingType.map);
-      expect(config.scope, SettingScope.fileOnly);
-      expect(config.restartRequired, isFalse);
+      expect(watch.type, SettingType.bool);
+      expect(watch.defaultValue, true);
+      expect(poll.type, SettingType.duration);
+      expect(poll.defaultValue, '2s');
+      for (final d in [watch, poll]) {
+        expect(d.scope, SettingScope.fileOnly, reason: d.key);
+        expect(d.restartRequired, isTrue, reason: d.key);
+        expect(d.layers, {ConfigLayer.user, ConfigLayer.projectLocal});
+      }
       expect(
-        SettingsRegistry.all.where((d) => d.key.startsWith('config.')),
+        SettingsRegistry.all.where((d) => d.key == 'config'),
         isEmpty,
+        reason: 'the section is covered by its leaves',
       );
     });
   });

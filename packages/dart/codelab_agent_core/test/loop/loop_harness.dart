@@ -217,4 +217,5 @@ String describe(AgentEvent e) => switch (e) {
   ContextCompacted(:final tokensBefore, :final tokensAfter) =>
     'ContextCompacted($tokensBefore -> $tokensAfter)',
   SessionTitleChanged(:final title) => 'SessionTitleChanged($title)',
+  ModelOptionsChanged() => 'ModelOptionsChanged',
 };

@@ -33,6 +33,7 @@ final class CoreHarness {
     PermissionsConfig? permissions,
     ProjectFilesSource? projectFiles,
     SecretResolver? secrets,
+    AgentConfigPaths? agentConfigPaths,
   }) {
     final c = clock ?? FakeClock();
     final logger = RecordingLogger();
@@ -57,6 +58,7 @@ final class CoreHarness {
         mcp: mcp,
         projectFiles: projectFiles,
         secrets: secrets,
+        agentConfigPaths: agentConfigPaths,
       ),
       config: CoreConfig(
         defaultModel: defaultModel ?? testModel,

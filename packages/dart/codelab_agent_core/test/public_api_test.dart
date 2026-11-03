@@ -74,6 +74,10 @@ void main() {
       'src/config/core_config.dart',
       'src/config/host_settings.dart',
       'src/config/redact_settings.dart',
+      // Живая перезагрузка: порт источника и типы отчёта (change
+      // `add-config-writer-and-reload`, D7, D8).
+      'src/config/config_source.dart',
+      'src/runtime/config_reload.dart',
     ]) {
       expect(barrel, contains("export '$public"), reason: public);
     }
@@ -84,6 +88,7 @@ void main() {
       'src/config/merge.dart',
       'src/config/interpolate.dart',
       'src/config/resolve.dart',
+      'src/config/config_reload_plan.dart',
     ]) {
       expect(barrel, isNot(contains("export '$internal")), reason: internal);
     }

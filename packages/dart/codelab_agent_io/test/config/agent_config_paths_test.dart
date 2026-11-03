@@ -1,0 +1,205 @@
+import 'dart:io';
+
+import 'package:codelab_agent_io/codelab_agent_io.dart';
+import 'package:test/test.dart';
+
+/// `agentConfigPathsFor` — пути PERM-11 для политики разрешений (design.md
+/// change `add-config-writer-and-reload`, D7, D8; задача 5.9): те же файлы,
+/// что наблюдает `ConfigWatcher` (`watchedConfigFiles`), плюс каталоги
+/// `$CODELAB_HOME/agents` и `prompts`; пути абсолютные и канонические.
+/// Всё идёт во временных каталогах, настоящий `~/.codelab` не читается.
+void main() {
+  late Directory tmp;
+  late String base;
+
+  setUp(() {
+    tmp = Directory.systemTemp.createTempSync('agent_config_paths_');
+    // Каталог самого `tmp` на macOS (`/var` → `/private/var`) — ссылка: берём
+    // канонический, чтобы проверять только ссылки теста.
+    base = tmp.resolveSymbolicLinksSync();
+  });
+
+  tearDown(() => tmp.deleteSync(recursive: true));
+
+  Map<String, String> env({
+    String? home,
+    String? codelabHome,
+    String? config,
+  }) => {
+    'HOME': home ?? '$base/home',
+    'CODELAB_HOME': ?codelabHome,
+    'CODELAB_CONFIG': ?config,
+  };
+
+  test('the set is what ConfigWatcher watches plus agents and prompts', () {
+    Directory('$base/root').createSync();
+    final environment = env(codelabHome: '$base/state');
+
+    final watched = watchedConfigFiles(
+      cwd: '$base/root',
+      environment: environment,
+      extraConfig: '$base/extra.yaml',
+      secretsFile: true,
+    );
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root',
+      environment: environment,
+      extraConfig: '$base/extra.yaml',
+    );
+
+    expect(watched, [
+      '$base/state/config.yaml',
+      '$base/extra.yaml',
+      '$base/root/.codelab/config.yaml',
+      '$base/root/.codelab/config.local.yaml',
+      '$base/state/secrets.yaml',
+    ]);
+    expect(paths.paths, [
+      ...watched,
+      '$base/state/agents',
+      '$base/state/prompts',
+    ]);
+  });
+
+  test('secrets.yaml is protected with any backend', () {
+    Directory('$base/root').createSync();
+    final environment = env(codelabHome: '$base/state');
+
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root',
+      environment: environment,
+    );
+    final watched = watchedConfigFiles(
+      cwd: '$base/root',
+      environment: environment,
+    );
+
+    // Наблюдение зависит от бэкенда (перезагрузка), защита — нет (PERM-11).
+    expect(paths.paths, contains('$base/state/secrets.yaml'));
+    expect(watched, isNot(contains('$base/state/secrets.yaml')));
+  });
+
+  test('CODELAB_CONFIG and a relative --config resolve against the root', () {
+    Directory('$base/root').createSync();
+
+    final fromEnv = watchedConfigFiles(
+      cwd: '$base/root',
+      environment: env(
+        codelabHome: '$base/state',
+        config: '$base/from_env.yaml',
+      ),
+    );
+    final relative = watchedConfigFiles(
+      cwd: '$base/root',
+      environment: env(codelabHome: '$base/state'),
+      extraConfig: 'conf/agent.yaml',
+    );
+
+    expect(fromEnv, contains('$base/from_env.yaml'));
+    expect(relative, contains('$base/root/conf/agent.yaml'));
+  });
+
+  test('~ is expanded and symlinks are resolved', () {
+    Directory('$base/real_root/.codelab').createSync(recursive: true);
+    Link('$base/root_link').createSync('$base/real_root');
+    Directory('$base/home/dotfiles').createSync(recursive: true);
+    Directory('$base/home/.codelab').createSync(recursive: true);
+    File('$base/home/dotfiles/codelab.yaml').writeAsStringSync('a: 1\n');
+    Link(
+      '$base/home/.codelab/config.yaml',
+    ).createSync('$base/home/dotfiles/codelab.yaml');
+
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root_link',
+      environment: env(codelabHome: '~/.codelab'),
+    );
+
+    expect(
+      paths.paths,
+      containsAll([
+        // Ссылка dotfiles раскрыта до цели (agent-permissions «Символическая ссылка»).
+        '$base/home/dotfiles/codelab.yaml',
+        // Корень запуска по ссылке дан каноническим, файла ещё нет.
+        '$base/real_root/.codelab/config.yaml',
+        '$base/real_root/.codelab/config.local.yaml',
+        // Каталога нет: самый глубокий существующий предок плюс остаток.
+        '$base/home/.codelab/agents',
+        '$base/home/.codelab/prompts',
+      ]),
+    );
+    expect(paths.paths.where((p) => p.contains('root_link')), isEmpty);
+  });
+
+  test('a missing file below a linked directory resolves via the ancestor', () {
+    Directory('$base/root').createSync();
+    Directory('$base/elsewhere').createSync();
+    Link('$base/root/.codelab').createSync('$base/elsewhere');
+
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root',
+      environment: env(codelabHome: '$base/state'),
+    );
+
+    expect(
+      paths.paths,
+      containsAll([
+        '$base/elsewhere/config.yaml',
+        '$base/elsewhere/config.local.yaml',
+      ]),
+    );
+  });
+
+  test('expansions carry HOME and CODELAB_HOME of the host environment', () {
+    Directory('$base/root').createSync();
+
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root',
+      environment: env(home: '/h', codelabHome: '~/state'),
+    );
+
+    // Раскрытие в командах `exec` идёт по тем значениям, что видит оболочка:
+    // лексическим, а не каноническим.
+    expect(paths.expansions, {'HOME': '/h', 'CODELAB_HOME': '/h/state'});
+  });
+
+  test('CODELAB_HOME defaults to ~/.codelab', () {
+    Directory('$base/root').createSync();
+
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root',
+      environment: env(home: '$base/home'),
+    );
+
+    expect(paths.expansions['CODELAB_HOME'], '$base/home/.codelab');
+    expect(paths.paths, contains('$base/home/.codelab/config.yaml'));
+  });
+
+  test('caseInsensitive follows the argument, then the platform', () {
+    Directory('$base/root').createSync();
+    final environment = env(codelabHome: '$base/state');
+
+    expect(
+      agentConfigPathsFor(
+        cwd: '$base/root',
+        environment: environment,
+        caseInsensitive: true,
+      ).caseInsensitive,
+      isTrue,
+    );
+    expect(
+      agentConfigPathsFor(
+        cwd: '$base/root',
+        environment: environment,
+        caseInsensitive: false,
+      ).caseInsensitive,
+      isFalse,
+    );
+    expect(
+      agentConfigPathsFor(
+        cwd: '$base/root',
+        environment: environment,
+      ).caseInsensitive,
+      Platform.isMacOS || Platform.isWindows,
+    );
+  });
+}

@@ -49,6 +49,8 @@ final class PolicyHarness {
     PermissionGate? gate,
     PolicyRules rules = const PolicyRules(),
     Set<ToolTier> extraDeniedTiers = const {},
+    AgentConfigPaths? agentConfigPaths,
+    PathResolver? pathResolver,
   }) async {
     final logger = RecordingLogger();
     final policy = PermissionPolicy(
@@ -57,6 +59,8 @@ final class PolicyHarness {
       gate: gate,
       rules: rules,
       extraDeniedTiers: extraDeniedTiers,
+      agentConfigPaths: agentConfigPaths,
+      pathResolver: pathResolver,
       logger: logger,
     );
     return PolicyHarness._(h, policy, logger);

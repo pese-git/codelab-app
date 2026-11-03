@@ -37,6 +37,11 @@ final class TestAcpClient {
   /// Все кадры агента в порядке прихода.
   final received = <JsonRpcMessage>[];
 
+  final _frames = StreamController<JsonRpcMessage>.broadcast(sync: true);
+
+  /// Кадры агента по мере прихода: тест ждёт событие, а не время.
+  Stream<JsonRpcMessage> get frames => _frames.stream;
+
   Future<void> start() => _transport.start();
 
   /// Запросы агента клиенту: методы в порядке прихода.
@@ -124,6 +129,7 @@ final class TestAcpClient {
 
   void _onMessage(JsonRpcMessage message) {
     received.add(message);
+    _frames.add(message);
     switch (message) {
       case JsonRpcResponse():
         _pending.remove(message.id)?.complete(message);
