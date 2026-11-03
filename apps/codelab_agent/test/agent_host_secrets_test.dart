@@ -174,6 +174,46 @@ agent:
       );
     });
 
+    test('a key written instead of a name: no lookup, no request, no value, '
+        'the turn error says to migrate (CFG-9 p.3)', () async {
+      const token = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789';
+      final path = writeConfig(
+        providerConfig.replaceFirst(
+          'api_key_secret: codelab/p',
+          'api_key_env: $token',
+        ),
+      );
+      final logger = RecordingLogger();
+      final (client, authorizations) = recordingClient();
+      final peer = await start(
+        options(
+          ['--config', path, '--debug-secrets'],
+          environment: {token: 'x'},
+        ),
+        client: client,
+        logger: logger,
+      );
+
+      final error = await promptError(peer);
+
+      expect(
+        '$error',
+        contains(
+          'API key reference providers.p.api_key_env looks like a secret '
+          'value, not a name; run: codelab secret migrate',
+        ),
+      );
+      expect(authorizations, isEmpty);
+      expect(logger.eventsOf('secrets.lookup'), isEmpty);
+      expect(
+        [
+          '$error',
+          for (final r in logger.records) '${r.event} ${r.fields} ${r.error}',
+        ].join('\n'),
+        isNot(contains(token)),
+      );
+    });
+
     test('CODELAB_DEBUG_SECRETS=1 works like the flag', () async {
       final logger = await run(const [], {
         'CODELAB_SECRET_CODELAB_P': value,

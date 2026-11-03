@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 // Тест проверяет применённый снимок рантайма (`config`, `appliedValues`,
@@ -6,12 +8,16 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/runtime/agent_runtime.dart'
     show AgentRuntimeImpl;
 import 'package:codelab_agent_core/testing.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:test/test.dart';
 
 import '../config/config_support.dart' show baseValues, layer, withValues;
 import '../host/core_harness.dart'
     show callStep, inMemoryJournal, noExec, textStep;
+import '../support/call_sequence.dart' show collect, terminalOf;
 import '../support/fake_secret_store.dart';
+import '../support/provider_harness.dart' show readSseFixture;
 import '../support/manual_stream.dart';
 
 /// Живая перезагрузка конфигурации в `AgentRuntime` (agent-runtime «Живая
@@ -1067,6 +1073,66 @@ void main() {
       final report = await rig.runtime.reloadConfig();
 
       expect(report.restartRequiredKeys, ['providers.l']);
+    });
+
+    test('a literal api_key: after a base_url change the applied snapshot '
+        'still sends the request to the old address with the old key '
+        '(R0-4, TEST-005)', () async {
+      const key = 'sk-proj-AbCdEfGhIjKlMnOpQrStUvWx';
+      final rig = await _Rig.create(
+        user: withValues(_user(), {
+          'providers': {
+            'lit': {
+              'kind': 'openai-compatible',
+              'base_url': 'https://old.test/v1',
+              'api_key': key,
+              'models': {'lm': <String, Object?>{}},
+            },
+          },
+        }),
+      );
+      _put(rig.user, 'providers.lit.base_url', 'https://new.test/v1');
+
+      final report = await rig.runtime.reloadConfig();
+
+      expect(report.restartRequiredKeys, ['providers.lit']);
+      final requests = <http.BaseRequest>[];
+      final clock = FakeClock();
+      final stream = createRoutedStreamFunction(
+        [for (final p in rig.runtime.config.providers) p.config],
+        CoreLlmServices(
+          httpClient: MockClient.streaming((request, _) async {
+            requests.add(request);
+            return http.StreamedResponse(
+              Stream.value(utf8.encode(readSseFixture('openai/text.sse'))),
+              200,
+              headers: {'content-type': 'text/event-stream'},
+            );
+          }),
+          clock: clock,
+          random: Random(1),
+          logger: rig.logger,
+        ),
+      );
+      final model = ModelRef(
+        provider: 'lit',
+        id: 'lm',
+        api: ProviderApi.openaiChat,
+        baseUrl: Uri.parse('https://old.test/v1'),
+        contextWindow: 8000,
+        maxOutputTokens: 1000,
+      );
+      final context = LlmContext(
+        systemPrompt: 's',
+        messages: [
+          UserMessage(const [TextContent('hi')], timestamp: DateTime.utc(2026)),
+        ],
+      );
+
+      terminalOf(await collect(stream(model, context), clock));
+
+      expect(requests.single.url.host, 'old.test');
+      expect(requests.single.headers['Authorization'], 'Bearer $key');
     });
 
     test('a provider without a key applies fully, a new one too', () async {

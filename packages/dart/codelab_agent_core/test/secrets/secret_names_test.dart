@@ -73,6 +73,24 @@ void main() {
     });
   });
 
+  group('names that contain sk- (L3)', () {
+    test('the suggestion matches the name provider add chooses and is not '
+        'treated as a secret value as a reference name', () {
+      const id = 'sk-anthropic-production-key';
+      expect(SecretNames.suggestFor('providers.$id.api_key'), 'codelab/$id');
+      expect(SecretNames.forMcp(id, 'token'), 'codelab/mcp/$id/token');
+      for (final name in [
+        'codelab/$id',
+        'codelab/mcp/$id/token',
+        'codelab/openai',
+        'codelab/mcp/gh/authorization',
+      ]) {
+        expect(SecretNames.problem(name), isNull, reason: name);
+        expect(literalSecretTag(name, asName: true), isNull, reason: name);
+      }
+    });
+  });
+
   group('suggestFor and forMcp', () {
     test('a provider key suggests codelab/<id>', () {
       expect(

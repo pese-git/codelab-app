@@ -276,28 +276,33 @@ agent:
       );
     });
 
-    test(
-      'an inline key in the config is a problem without the value',
-      () async {
-        writeHome(
-          providers().replaceFirst(
-            'api_key_secret: codelab/p',
-            'api_key: sk-leak-0123456789',
-          ),
-        );
+    // R8-4 (design.md change `add-config-literal-secrets-and-migrate`, D4):
+    // литерал в файле — предупреждение, агент открывается и использует его
+    // как ключ; значение не попадает ни в лог, ни в кадры клиенту.
+    test('an inline key in the config is a warning, the agent opens and the '
+        'value reaches neither the log nor the client', () async {
+      writeHome(
+        providers().replaceFirst(
+          'api_key_secret: codelab/p',
+          'api_key: sk-leak-0123456789',
+        ),
+      );
+      final (mock, authorizations) = denyingClient();
 
-        final thrown = await opener()(
+      final session = await connect(
+        await opener(http: mock)(
           cwd: project.path,
           hostProfile: 'embedded-cli',
-        ).then<Object?>((_) => null, onError: (Object e) => e);
+        ),
+      );
+      await promptOutcome(session);
 
-        expect(thrown, isA<EmbeddedAgentConfigException>());
-        expect(
-          (thrown! as EmbeddedAgentConfigException).message,
-          isNot(contains('sk-leak')),
-        );
-      },
-    );
+      expect(authorizations, ['Bearer sk-leak-0123456789']);
+      final warning = logger.eventsOf('config.secret.in_file').single;
+      expect(warning.fields['key'], 'providers.p.api_key');
+      expect(logger.records.join('\n'), isNot(contains('sk-leak')));
+      expect(frames(), isNot(contains('sk-leak')));
+    });
 
     test('CODELAB_HOME with ~user and CODELAB_CONFIG with a foreign '
         'extension are config exceptions with the loader text', () async {

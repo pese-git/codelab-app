@@ -206,7 +206,8 @@ agent:
     expect(Directory('$home/logs').existsSync(), isFalse);
   });
 
-  test('an inline secret never reaches the output', () async {
+  test('an inline secret is a warning and never reaches the output '
+      '(R8-4: not an error any more)', () async {
     write(
       '$home/config.yaml',
       providers.replaceFirst(
@@ -217,9 +218,9 @@ agent:
 
     final result = await check();
 
-    expect(result.exitCode, 1);
+    expect(result.exitCode, 0);
     final all = [...result.stdout, ...result.stderr].join('\n');
-    expect(all, contains('providers.p.api_key'));
+    expect(all, contains('providers.p.api_key: a secret is stored'));
     expect(all, isNot(contains('sk-test-secret')));
   });
 

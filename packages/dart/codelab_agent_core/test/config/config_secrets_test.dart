@@ -9,31 +9,17 @@ const _secret = 'sk-test-secret';
 /// ссылками»; CFG-2; `core/config-rejects-inline-api-key`; design.md change
 /// `add-agent-configuration`, D8).
 void main() {
-  group('an inline secret', () {
-    for (final key in ['api_key', 'apiKey', 'token', 'secret', 'password']) {
-      test('$key in providers.* is rejected without the value', () {
-        final result = load([
-          layer(
-            withValues(baseValues(), {
-              'providers': {
-                'p': {key: _secret},
-              },
-            }),
-          ),
-        ]);
-
-        final issue = issuesAt(result, 'providers.p.$key').single;
-        expect(issue.kind, ConfigIssueKind.inlineSecret);
-        expect(issue.message, contains('api_key_env'));
-        expect(result.issues.join('\n'), isNot(contains(_secret)));
-        expect(result.config, isNull);
-      });
-    }
-
-    test('in an mcp.servers item is rejected too', () {
+  // До R8-4 (design.md change `add-config-literal-secrets-and-migrate`, D4)
+  // здесь были отказы загрузки `inlineSecret`; теперь литерал в файле —
+  // предупреждение, подробные сценарии — `config_inline_secret_test.dart`.
+  group('an inline secret in a file is a warning, not an error', () {
+    test('providers.* and an mcp.servers item load with the warning only', () {
       final result = load([
         layer(
           withValues(baseValues(), {
+            'providers': {
+              'p': {'apiKey': _secret},
+            },
             'mcp': {
               'servers': [
                 {
@@ -48,28 +34,29 @@ void main() {
         ),
       ]);
 
-      final issue = issuesAt(result, 'mcp.servers[gh].token').single;
-      expect(issue.kind, ConfigIssueKind.inlineSecret);
-      expect(result.issues.join('\n'), isNot(contains(_secret)));
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      expect(warningsOf(result, 'config.secret.in_file').map((w) => w.key), [
+        'providers.p.apiKey',
+        'mcp.servers[gh].token',
+      ]);
+      expect(result.warnings.join('\n'), isNot(contains(_secret)));
     });
 
-    test('orThrow throws ConfigInlineSecretException with the key path', () {
-      final result = load([
-        layer(
-          withValues(baseValues(), {
-            'providers': {
-              'p': {'api_key': _secret},
-            },
-          }),
-        ),
-      ]);
-
+    test('orThrow maps an issue of the inlineSecret kind to '
+        'ConfigInlineSecretException (synthetic issue: the file loader never '
+        'produces one now)', () {
+      const issue = ConfigIssue(
+        kind: ConfigIssueKind.inlineSecret,
+        key: 'providers.p.api_key',
+        source: 'x',
+        message: 'm',
+      );
       try {
-        result.orThrow();
+        const ConfigLoadResult(issues: [issue]).orThrow();
         fail('must throw');
       } on ConfigInlineSecretException catch (error) {
         expect(error.key, 'providers.p.api_key');
-        expect(error.toString(), isNot(contains(_secret)));
+        expect(error.suggestedSecretName, 'codelab/p');
       }
     });
   });
