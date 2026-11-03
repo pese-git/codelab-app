@@ -403,6 +403,19 @@ mcp:
         expect(load().config!.mcpServers, isEmpty);
       },
     );
+
+    test('RemoveMcpServer("0") не удаляет первый элемент по номеру: только '
+        'по name (ревью итерации 4, safety M)', () async {
+      h.write(h.userPath, withServers);
+      final before = h.read(h.userPath);
+
+      await expectLater(
+        apply([const RemoveMcpServer('0')]),
+        throwsA(isA<ConfigException>()),
+      );
+
+      expect(h.read(h.userPath), before);
+    });
   });
 
   group('отказы без изменения файла', () {

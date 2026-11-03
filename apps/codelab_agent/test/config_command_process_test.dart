@@ -268,8 +268,11 @@ agent:
     expect(code, 1, reason: agent.stderrText);
   }, timeout: const Timeout(Duration(seconds: 90)));
 
+  // `config set` теперь рабочая подкоманда (change
+  // `add-config-writer-and-reload`, D6; её сценарии — в
+  // `config_write_command_process_test.dart`); `migrate` и пустая команда
+  // по-прежнему ошибка использования.
   for (final args in [
-    ['config', 'set', 'budget.max_steps', '10'],
     ['config', 'migrate'],
     ['config'],
   ]) {
