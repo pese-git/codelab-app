@@ -7,6 +7,7 @@ import 'package:meta/meta.dart';
 
 import '../secrets/secret_process_runner.dart';
 import 'config_loader.dart';
+import 'config_paths.dart';
 import 'config_write_lock.dart';
 import 'literal_secret_rule.dart';
 import 'yaml_document_edit.dart';
@@ -280,29 +281,66 @@ final class ConfigWriter {
     }
   }
 
+  /// Проверяет [edits] так же, как [apply], но ничего не пишет: ни файла, ни
+  /// lock, ни каталогов (design.md change `add-config-writer-and-reload`, D6,
+  /// `--api-key-stdin`, шаг 1 «проверка кандидата без записи»).
+  ///
+  /// Почему отдельный метод: `provider add --api-key-stdin` сохраняет ключ
+  /// в хранилище *до* записи конфига. Если итог заведомо невалиден (литеральный
+  /// секрет, новая ошибка загрузки, запрещённый слой), ключ не должен
+  /// сохраняться и запрашиваться. Метод идёт через те же `_checkEdits`,
+  /// `ConfigDocumentEditor` и `_validate`, поэтому проверка не расходится с
+  /// записью.
+  ///
+  /// Как использовать: [base] — снимок после [read]; исключения те же, что у
+  /// [apply], кроме [ConfigConflictException] (файл не блокируется, а
+  /// конфликт увидит последующий [apply]). Результат несёт путь, предупреждения
+  /// и ключи «после перезапуска» без записи.
+  Future<ConfigWriteResult> validate(
+    ConfigSnapshot base,
+    List<ConfigEdit> edits,
+  ) async {
+    final target = base.target;
+    final path = _targetPath(target);
+    _checkEdits(edits, target);
+    try {
+      final bytes = _readBytes(path);
+      final original = bytes == null ? '' : _decode(bytes, path);
+      final text = const ConfigDocumentEditor().apply(
+        original,
+        edits,
+        path,
+        target.layer,
+      );
+      final result = _validate(
+        target: target,
+        path: path,
+        original: original,
+        text: text,
+        edits: edits,
+      );
+      return ConfigWriteResult(
+        path: path,
+        fingerprint: bytes == null
+            ? configFingerprint(const [])
+            : configFingerprint(bytes),
+        warnings: result.warnings,
+        restartRequiredKeys: result.restartRequiredKeys,
+      );
+    } on FileSystemException catch (error) {
+      throw ConfigException([
+        configEditIssue(path, 'cannot read $path: ${error.runtimeType}'),
+      ]);
+    }
+  }
+
   // ---- пути ---------------------------------------------------------------
 
-  /// Файл слоя до разрешения ссылок: `user` — `$CODELAB_HOME/config.yaml`,
-  /// проектные — `<cwd>/.codelab/config[.local].yaml` для канонического
-  /// корня, как у [ConfigLoader].
-  String _layerPath(ConfigTarget target) {
-    switch (target.layer) {
-      case ConfigLayer.user:
-        return '$_codelabHome/config.yaml';
-      case ConfigLayer.project:
-        return '${_canonicalDir(target.cwd!)}/.codelab/config.yaml';
-      case ConfigLayer.projectLocal:
-        return '${_canonicalDir(target.cwd!)}/.codelab/config.local.yaml';
-    }
-  }
-
-  String _canonicalDir(String dir) {
-    try {
-      return Directory(dir).resolveSymbolicLinksSync();
-    } on FileSystemException {
-      return Directory(dir).absolute.path;
-    }
-  }
+  /// Файл слоя до разрешения ссылок цели — общая с `config path` функция
+  /// [configLayerFilePath], чтобы подкоманда называла файл, в который пишет
+  /// писатель.
+  String _layerPath(ConfigTarget target) =>
+      configLayerFilePath(target, _codelabHome);
 
   /// Файл цели после разрешения ссылок. Для проектных слоёв раскрытая цель
   /// (и сам `.codelab`, если он ссылка) обязана лежать внутри канонического
@@ -319,7 +357,7 @@ final class ConfigWriter {
       // даёт `\`, и сравнение иначе отклоняло бы любую запись. Ветка
       // Windows автотестом не проверяется (нужна настоящая ОС).
       final root =
-          '${_canonicalDir(target.cwd!).replaceAll(r'\', '/')}/.codelab/';
+          '${canonicalDirectory(target.cwd!).replaceAll(r'\', '/')}/.codelab/';
       if (!path.startsWith(root)) {
         throw ConfigException([
           configEditIssue(

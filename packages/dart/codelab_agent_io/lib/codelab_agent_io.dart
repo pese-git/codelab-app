@@ -10,7 +10,23 @@ library;
 
 export 'src/cli/exit_codes.dart';
 export 'src/cli/config_commands.dart'
-    show CheckOptions, ConfigCommandResult, ConfigCommands;
+    show
+        CheckOptions,
+        ConfigCommandResult,
+        ConfigCommands,
+        ConfigGetLayer,
+        ConfigGetOptions,
+        ConfigPathOptions,
+        ConfigSetOptions,
+        ConfigUnsetOptions;
+export 'src/cli/mcp_server_commands.dart'
+    show McpAddOptions, McpListOptions, McpRemoveOptions, McpServerCommands;
+export 'src/cli/provider_commands.dart'
+    show
+        ProviderAddOptions,
+        ProviderCommands,
+        ProviderListOptions,
+        ProviderRemoveOptions;
 export 'src/cli/secret_commands.dart'
     show
         SecretCommandResult,

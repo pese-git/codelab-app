@@ -81,10 +81,13 @@ final class ConfigDocumentEditor {
           UnsetValue(:final key) => _remove(text, key, path),
           RemoveTable(:final key) => _remove(text, key, path),
           UpsertMcpServer(:final server) => _upsertServer(text, server, path),
+          // Только по `name`: `mcp remove 0` не должен удалить первый
+          // сервер по номеру (ревью итерации 4, safety M).
           RemoveMcpServer(:final name) => _remove(
             text,
             'mcp.servers[$name]',
             path,
+            byNumber: false,
           ),
         };
       } on ConfigException {
@@ -198,10 +201,10 @@ final class ConfigDocumentEditor {
     return '$head${rendered.replaceAll('\n', newline)}';
   }
 
-  String _remove(String text, String key, String path) {
+  String _remove(String text, String key, String path, {bool byNumber = true}) {
     final segments = splitKeyPath(key)!;
     final editor = YamlEditor(text);
-    final r = _resolve(editor, segments);
+    final r = _resolve(editor, segments, byNumber: byNumber);
     if (r.resolved != segments.length || r.path.isEmpty) {
       throw ConfigException([
         configEditIssue(path, 'not present in $path', key: key),
@@ -279,8 +282,9 @@ final class ConfigDocumentEditor {
   /// последнего найденного узла, число найденных сегментов и сам узел.
   ({List<Object> path, int resolved, YamlNode node}) _resolve(
     YamlEditor editor,
-    List<KeyPathSegment> segments,
-  ) {
+    List<KeyPathSegment> segments, {
+    bool byNumber = true,
+  }) {
     var node = editor.parseAt(const []);
     final path = <Object>[];
     var resolved = 0;
@@ -289,7 +293,7 @@ final class ConfigDocumentEditor {
         if (node is! YamlList) {
           break;
         }
-        final index = _elementIndex(node, segment.value);
+        final index = _elementIndex(node, segment.value, byNumber: byNumber);
         if (index == null) {
           break;
         }

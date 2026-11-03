@@ -9,6 +9,8 @@
 - лишние или недостающие аргументы;
 - ошибка разбора аргументов: неизвестный флаг, флаг без значения.
 
+Присланные слова argv НЕ SHALL цитироваться в stderr у `config set`, `config unset`, `provider` и `mcp` (design.md change `add-config-writer-and-reload`, D6): ошибка разбора печатает фиксированную фразу `invalid arguments for config set` (`… config unset`, `… provider`, `… mcp`), неизвестная подкоманда и лишние аргументы — `unknown <cmd> arguments (<n>)`, где `<n>` — число лишних слов. У `config check|path|get` ошибка разбора МОЖЕТ печатать причину `package:args`.
+
 Общая справка бинаря (`serveUsage`, печатается при ошибке использования `serve`) SHALL упоминать `config`, `provider` и `mcp`.
 
 #### Scenario: Проверка без сервера
@@ -26,6 +28,10 @@
 #### Scenario: Ошибка разбора аргументов config
 - **WHEN** запускается `codelab-agent config check --bogus` или `codelab-agent config check --cwd` без значения
 - **THEN** код `64`, stderr содержит причину и справку команды `config`, stdout пуст
+
+#### Scenario: Ошибка разбора аргументов записи не цитирует argv
+- **WHEN** запускается `codelab-agent config set budget.max_steps --sk-1`, `codelab-agent provider add gw --api-key sk-1` или `codelab-agent mcp frob`
+- **THEN** код `64`, stdout пуст, stderr содержит соответственно `invalid arguments for config set`, `invalid arguments for provider`, `unknown mcp arguments (1)` и справку команды; ни `sk-1`, ни `frob` в stderr нет
 
 #### Scenario: Общая справка называет подкоманды
 - **WHEN** бинарь запущен с неизвестным флагом `serve`, например `codelab-agent serve --stdio --bogus`

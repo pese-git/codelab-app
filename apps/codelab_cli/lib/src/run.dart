@@ -62,6 +62,11 @@ Future<int> runCodelab(
         ..writeln()
         ..writeln(secretUsage());
     }
+    if (error.usage case final usage?) {
+      io.stderr
+        ..writeln()
+        ..writeln(usage);
+    }
     return usageExit;
   } finally {
     await io.flush();
@@ -105,7 +110,13 @@ Future<int> _run(
         stderr: io.stderr,
       );
     case CliCommand.config:
-      return _runConfigCheck(options, environment, io);
+      return options.subcommand!.name == 'check'
+          ? _runConfigCheck(options, environment, io)
+          : _runConfigEdit(options, environment, io);
+    case CliCommand.provider:
+      return _runProvider(options, environment, io);
+    case CliCommand.mcp:
+      return _runMcp(options, environment, io);
     case CliCommand.secret:
       return _runSecret(options, environment, io);
     case CliCommand.headless:
@@ -154,6 +165,186 @@ Future<int> _runConfigCheck(
     // Как у `codelab-agent config`: неожиданное исключение — одна строка и
     // код `1`, а не трасса Dart и код `255`.
     io.stderr.writeln('codelab: config failed: $error');
+    return failureExit;
+  }
+}
+
+/// Папка проекта подкоманд записи: `--cwd` подкоманды, общий `-C`, текущая.
+///
+/// Путь как есть, без normalize, как у `config check`: загрузчик и писатель
+/// канонизируют его сами, а текст ошибки совпадает с `codelab-agent` (D14).
+String _projectDir(CliOptions options) => options.cwd ?? Directory.current.path;
+
+/// Печатает результат общей подкоманды и возвращает её код выхода.
+int _printResult(ConfigCommandResult result, CliIo io) {
+  result.stdout.forEach(io.stdout.writeln);
+  result.stderr.forEach(io.stderr.writeln);
+  return result.exitCode;
+}
+
+/// `codelab config path|get|set|unset`: чтение и правка файлов конфига без
+/// агента.
+///
+/// Почему через мост: вывод, коды и байты файла обязаны совпасть с
+/// `codelab-agent config …` — реализация одна, `ConfigCommands` (design.md
+/// change `add-config-writer-and-reload`, D6). Транспорт и `ClientWorkspace`
+/// не создаются; `CodelabHome.ensureExists` не вызывается, поэтому
+/// `sessions/`, `profiles.json` и `cli_history` не появляются. Неожиданное
+/// исключение — строка и код `1`, а не трасса и `255`, как у `config check`.
+Future<int> _runConfigEdit(
+  CliOptions options,
+  Map<String, String> environment,
+  CliIo io,
+) async {
+  final sub = options.subcommand!;
+  final commands = ConfigCommands();
+  final cwd = _projectDir(options);
+  try {
+    return _printResult(switch (sub.name) {
+      'path' => await commands.path(
+        ConfigPathOptions(
+          cwd: cwd,
+          environment: environment,
+          // Без флагов — все слои; флаг выбирает один; оба сразу — код 64
+          // от общего кода (D6).
+          project: sub.flag('project'),
+          local: sub.flag('local'),
+        ),
+      ),
+      'get' => await commands.get(
+        ConfigGetOptions(
+          key: sub.rest.single,
+          cwd: cwd,
+          environment: environment,
+          // Без `--layer` — merged: итог всех слоёв (решение D6).
+          layer: ConfigGetLayer.parse(sub.option('layer')),
+        ),
+      ),
+      'set' => await commands.set(
+        ConfigSetOptions(
+          key: sub.rest[0],
+          value: sub.rest[1],
+          cwd: cwd,
+          environment: environment,
+          project: sub.flag('project'),
+          local: sub.flag('local'),
+        ),
+      ),
+      _ => await commands.unset(
+        ConfigUnsetOptions(
+          key: sub.rest.single,
+          cwd: cwd,
+          environment: environment,
+          project: sub.flag('project'),
+          local: sub.flag('local'),
+        ),
+      ),
+    }, io);
+  } on Object catch (error) {
+    // Текст исключения мог бы процитировать значение: только тип (CFG-10).
+    io.stderr.writeln('codelab: config failed: ${error.runtimeType}');
+    return failureExit;
+  }
+}
+
+/// `codelab provider add|list|remove`: провайдеры в файлах конфига без агента.
+///
+/// Почему через мост: как у `config`, вывод и байты общие с
+/// `codelab-agent provider` (`ProviderCommands`, D6). Ключ читается только
+/// скрытым вводом `StdinSecretInput` с `--api-key-stdin` и нигде не
+/// печатается; в stderr при сбое — только тип исключения (CFG-10).
+Future<int> _runProvider(
+  CliOptions options,
+  Map<String, String> environment,
+  CliIo io,
+) async {
+  final sub = options.subcommand!;
+  final commands = ProviderCommands();
+  final cwd = _projectDir(options);
+  try {
+    return _printResult(switch (sub.name) {
+      'list' => await commands.list(
+        ProviderListOptions(cwd: cwd, environment: environment),
+      ),
+      'remove' => await commands.remove(
+        ProviderRemoveOptions(
+          id: sub.rest.single,
+          cwd: cwd,
+          environment: environment,
+          project: sub.flag('project'),
+          local: sub.flag('local'),
+        ),
+      ),
+      _ => await commands.add(
+        ProviderAddOptions(
+          id: sub.rest.single,
+          cwd: cwd,
+          environment: environment,
+          kind: sub.option('kind'),
+          baseUrl: sub.option('base-url'),
+          model: sub.option('model'),
+          contextWindow: sub.option('context-window'),
+          apiKeySecret: sub.option('api-key-secret'),
+          apiKeyEnv: sub.option('api-key-env'),
+          apiKeyStdin: sub.flag('api-key-stdin'),
+          makeDefault: sub.flag('default'),
+          project: sub.flag('project'),
+          local: sub.flag('local'),
+        ),
+        StdinSecretInput(),
+      ),
+    }, io);
+  } on Object catch (error) {
+    io.stderr.writeln('codelab: provider failed: ${error.runtimeType}');
+    return failureExit;
+  }
+}
+
+/// `codelab mcp add|list|remove`: MCP-серверы в файлах конфига без агента.
+///
+/// Через `McpServerCommands` (D6); к серверам не подключается. Значения
+/// `--env` и `--header` не печатаются.
+Future<int> _runMcp(
+  CliOptions options,
+  Map<String, String> environment,
+  CliIo io,
+) async {
+  final sub = options.subcommand!;
+  final commands = McpServerCommands();
+  final cwd = _projectDir(options);
+  try {
+    return _printResult(switch (sub.name) {
+      'list' => await commands.list(
+        McpListOptions(cwd: cwd, environment: environment),
+      ),
+      'remove' => await commands.remove(
+        McpRemoveOptions(
+          name: sub.rest.single,
+          cwd: cwd,
+          environment: environment,
+          project: sub.flag('project'),
+          local: sub.flag('local'),
+        ),
+      ),
+      _ => await commands.add(
+        McpAddOptions(
+          name: sub.rest.single,
+          cwd: cwd,
+          environment: environment,
+          type: sub.option('type'),
+          command: sub.option('command'),
+          args: sub.multiOption('arg'),
+          env: sub.multiOption('env'),
+          url: sub.option('url'),
+          headers: sub.multiOption('header'),
+          disabled: sub.flag('disabled'),
+          project: sub.flag('project'),
+          local: sub.flag('local'),
+        ),
+      ),
+    }, io);
+  } on Object catch (error) {
+    io.stderr.writeln('codelab: mcp failed: ${error.runtimeType}');
     return failureExit;
   }
 }

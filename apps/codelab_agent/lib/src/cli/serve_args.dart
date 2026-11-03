@@ -12,6 +12,8 @@ import 'package:codelab_agent_io/codelab_agent_io.dart'
         maxConfigBytes;
 
 import 'config_cli.dart';
+import 'mcp_cli.dart';
+import 'provider_cli.dart';
 import 'secret_cli.dart';
 
 /// Транспорт команды `serve`.
@@ -228,10 +230,12 @@ final ArgParser _serveParser = ArgParser()
 final ArgParser _parser = ArgParser()
   ..addCommand('serve', _serveParser)
   ..addCommand('config', configParser)
+  ..addCommand('provider', providerParser)
+  ..addCommand('mcp', mcpParser)
   ..addCommand('secret', secretParser);
 
-/// Разбирает верхний уровень командной строки: `serve`, `config` или
-/// `secret`.
+/// Разбирает верхний уровень командной строки: `serve`, `config`,
+/// `provider`, `mcp` или `secret`.
 ///
 /// Почему отдельная функция: `run.dart` выбирает команду по результату, а
 /// каждая команда сама проверяет свои аргументы. Ошибка разбора — [UsageError].
@@ -247,7 +251,9 @@ ArgResults parseCommandLine(List<String> args) {
 /// нет.
 String serveUsage() =>
     'Usage: codelab-agent serve (--stdio | --ws) [options]\n'
-    '       codelab-agent config check [--cwd <dir>]\n'
+    '       codelab-agent config check|path|get|set|unset ...\n'
+    '       codelab-agent provider add|list|remove ...\n'
+    '       codelab-agent mcp add|list|remove ...\n'
     '       codelab-agent secret set|delete|list\n\n'
     '${_serveParser.usage}';
 

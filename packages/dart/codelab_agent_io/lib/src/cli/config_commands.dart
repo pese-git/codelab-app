@@ -1,12 +1,18 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:meta/meta.dart';
 
 import '../config/config_loader.dart';
+import '../config/config_paths.dart';
+import '../config/config_writer.dart' show ConfigWriteSeam;
 import '../env/local_execution_env.dart';
 import '../project/project_files_loader.dart';
 import '../secrets/open_secret_store.dart';
+import '../secrets/secret_process_runner.dart';
+import 'config_edit_runner.dart';
+import 'config_output.dart';
 import 'exit_codes.dart';
 import 'secret_commands.dart' show SecretStoreOpener;
 import 'silent_logger.dart';
@@ -28,6 +34,150 @@ final class CheckOptions {
 
   /// Переменные процесса: из них берутся `CODELAB_HOME`, `HOME` и ключи API.
   final Map<String, String> environment;
+}
+
+/// Слой, из которого читает `config get` (design.md change
+/// `add-config-writer-and-reload`, D6).
+///
+/// Почему отдельный enum: у чтения, в отличие от записи, есть ещё итоговый
+/// вид [merged] — значение слоя-победителя среди всех слоёв, включая файл
+/// `CODELAB_CONFIG`, окружение и флаги. Без флага приложение передаёт [merged]:
+/// так `config get agent.default_model` показывает и `CODELAB_MODEL`.
+///
+/// Как использовать: приложение разбирает значение `--layer` через [parse], а
+/// допустимые значения опции берёт из `values.map((l) => l.name)`; разбора
+/// строки в каждом приложении отдельно нет (ревью итерации 4, arch L1).
+/// Приложение (`codelab`) держит свой литерал допустимых значений `--layer`
+/// без импорта этого пакета; его равенство [values] проверяет тест.
+enum ConfigGetLayer {
+  /// Слой-победитель среди всех слоёв — значение по умолчанию.
+  merged,
+
+  /// Только `$CODELAB_HOME/config.yaml`.
+  user,
+
+  /// Только `<cwd>/.codelab/config.yaml`.
+  project,
+
+  /// Только `<cwd>/.codelab/config.local.yaml`.
+  local;
+
+  /// Слой по имени из `--layer`; `null` (флаг не задан) — [merged].
+  /// Неизвестное имя — [ArgumentError]: приложение отсекает его списком
+  /// допустимых значений опции, до вызова.
+  static ConfigGetLayer parse(String? name) =>
+      name == null ? merged : values.byName(name);
+}
+
+/// Параметры `config path`, уже разобранные приложением (D6).
+///
+/// Как использовать: без [project] и [local] — вывести все слои и файл
+/// `CODELAB_CONFIG`; с одним из них — только путь файла слоя. Оба флага —
+/// код `64`. [cwd] — `--cwd` подкоманды или каталог процесса.
+final class ConfigPathOptions {
+  const ConfigPathOptions({
+    required this.cwd,
+    required this.environment,
+    this.project = false,
+    this.local = false,
+  });
+
+  /// Каталог проекта для слоёв `project` и `local`.
+  final String cwd;
+
+  /// Переменные процесса: `CODELAB_HOME`, `CODELAB_CONFIG`.
+  final Map<String, String> environment;
+
+  /// `--project`: вывести только путь `<cwd>/.codelab/config.yaml`.
+  final bool project;
+
+  /// `--local`: вывести только путь `<cwd>/.codelab/config.local.yaml`.
+  final bool local;
+}
+
+/// Параметры `config get <key> [--layer …]` (D6).
+///
+/// Значения переменных окружения из [environment] в вывод не попадают
+/// (R0-2).
+final class ConfigGetOptions {
+  const ConfigGetOptions({
+    required this.key,
+    required this.cwd,
+    required this.environment,
+    this.layer = ConfigGetLayer.merged,
+  });
+
+  /// Путь ключа в форме `KeyPath` (`providers.gw.headers`, `mcp.servers[gh]`).
+  final String key;
+
+  /// Каталог проекта для слоёв `project` и `local`.
+  final String cwd;
+
+  /// Переменные процесса: `CODELAB_HOME`, `CODELAB_CONFIG`, `CODELAB_*`.
+  final Map<String, String> environment;
+
+  /// `--layer`; по умолчанию [ConfigGetLayer.merged].
+  final ConfigGetLayer layer;
+}
+
+/// Параметры `config set <key> <value>` (D6). [value] — строка из argv,
+/// разбираемая `SettingsRegistry.parseCliValue`; в вывод и ошибки не
+/// попадает. Оба флага слоя — код `64`.
+final class ConfigSetOptions {
+  const ConfigSetOptions({
+    required this.key,
+    required this.value,
+    required this.cwd,
+    required this.environment,
+    this.project = false,
+    this.local = false,
+  });
+
+  /// Путь ключа в форме `KeyPath`.
+  final String key;
+
+  /// Новое значение строкой, как в argv.
+  final String value;
+
+  /// Каталог проекта для слоёв `project` и `local`.
+  final String cwd;
+
+  /// Переменные процесса: `CODELAB_HOME` и др.
+  final Map<String, String> environment;
+
+  /// `--project`: писать в `<cwd>/.codelab/config.yaml`.
+  final bool project;
+
+  /// `--local`: писать в `<cwd>/.codelab/config.local.yaml`.
+  final bool local;
+}
+
+/// Параметры `config unset <key>` (D6): принимает и ключ вне реестра, если он
+/// есть в файле (так удаляются опечатки и `api_key`). Оба флага слоя — код
+/// `64`.
+final class ConfigUnsetOptions {
+  const ConfigUnsetOptions({
+    required this.key,
+    required this.cwd,
+    required this.environment,
+    this.project = false,
+    this.local = false,
+  });
+
+  /// Путь ключа в форме `KeyPath`.
+  final String key;
+
+  /// Каталог проекта для слоёв `project` и `local`.
+  final String cwd;
+
+  /// Переменные процесса: `CODELAB_HOME` и др.
+  final Map<String, String> environment;
+
+  /// `--project`: править `<cwd>/.codelab/config.yaml`.
+  final bool project;
+
+  /// `--local`: править `<cwd>/.codelab/config.local.yaml`.
+  final bool local;
 }
 
 /// Результат подкоманды: код выхода и строки двух потоков (D13).
@@ -83,6 +233,10 @@ final class ConfigCommands {
     @visibleForTesting Duration projectFilesTimeout = _defaultTimeout,
     @visibleForTesting String? platform,
     @visibleForTesting SecretStoreOpener? openStore,
+    @visibleForTesting SecretProcessRunner? processRunner,
+    @visibleForTesting Clock? clock,
+    @visibleForTesting Random? random,
+    @visibleForTesting Future<void> Function(ConfigWriteSeam point)? writeSeam,
   }) : _projectFiles = projectFiles,
        _projectFilesTimeout = projectFilesTimeout,
        _platform = platform ?? Platform.operatingSystem,
@@ -95,7 +249,14 @@ final class ConfigCommands {
                  home: home,
                  logger: const SilentLogger(),
                  platform: platform,
-               ));
+               )),
+       _runner = ConfigEditRunner(
+         processRunner: processRunner,
+         clock: clock,
+         random: random,
+         platform: platform,
+         seam: writeSeam,
+       );
 
   /// Как `_projectFilesTimeout` рантайма (D14 change `add-agent-project-files`): `check` показывает то, что
   /// увидит сессия.
@@ -105,6 +266,259 @@ final class ConfigCommands {
   final Duration _projectFilesTimeout;
   final String _platform;
   final SecretStoreOpener _openStore;
+  final ConfigEditRunner _runner;
+
+  /// `path`: файлы слоёв конфига (D6). Ничего не читает и не создаёт, кроме
+  /// проверки существования.
+  ///
+  /// Без [ConfigPathOptions.project] и [ConfigPathOptions.local] — по строке на слой (`user`, `project`,
+  /// `local`) и, если задана `CODELAB_CONFIG`, на её файл, с пометкой
+  /// `exists`/`missing`; со слоем — один путь без пометки, удобный для
+  /// `$EDITOR $(codelab config path --local)`.
+  Future<ConfigCommandResult> path(ConfigPathOptions options) async {
+    final layer = ConfigFileLayer.fromFlags(
+      project: options.project,
+      local: options.local,
+    );
+    if (layer == null) {
+      return const ConfigCommandResult(
+        exitCode: configUsageExit,
+        stderr: ['config path: ${ConfigFileLayer.conflictMessage}'],
+      );
+    }
+    final cwd = options.cwd;
+    if (!Directory(cwd).existsSync()) {
+      return ConfigCommandResult(
+        exitCode: configUsageExit,
+        stderr: ['config path: no such directory: $cwd'],
+      );
+    }
+    final String home;
+    try {
+      home = codelabHomeOf(options.environment);
+    } on ConfigUsageException catch (error) {
+      return ConfigCommandResult(
+        exitCode: configUsageExit,
+        stderr: ['config path: ${error.message}'],
+      );
+    }
+    // Пути считает та же функция, что и писатель: `--local` указывает на
+    // файл, в который пишет `config set --local` (ревью итерации 4, arch L3).
+    final files = {
+      for (final file in ConfigFileLayer.values)
+        file: configLayerFilePath(file.target(cwd), home),
+    };
+    if (options.project || options.local) {
+      return ConfigCommandResult(
+        exitCode: configValidExit,
+        stdout: [files[layer]!],
+      );
+    }
+    String mark(String path) =>
+        '$path (${FileSystemEntity.isFileSync(path) ? 'exists' : 'missing'})';
+    final extra = options.environment['CODELAB_CONFIG'];
+    return ConfigCommandResult(
+      exitCode: configValidExit,
+      stdout: [
+        for (final MapEntry(:key, :value) in files.entries)
+          '${key.name}: ${mark(value)}',
+        if (extra != null && extra.isNotEmpty) 'CODELAB_CONFIG: ${mark(extra)}',
+      ],
+    );
+  }
+
+  /// `get`: сырое значение ключа из слоя-победителя и имя слоя, с
+  /// маскированием R0-2 (D6; `maskConfigValue`).
+  ///
+  /// Почему сырое: `${VAR}` и `${secret:…}` не раскрываются ни при каком
+  /// слое, включая `merged`: значение переменной — содержимое окружения, а оно
+  /// может быть секретом. Работает и с невалидным конфигом (так находят
+  /// ошибку): перечитываются слои загрузчика, а не итог. Исключение — файл с
+  /// синтаксической ошибкой: его слоя нет, и подкоманда называет ошибку вместо
+  /// ложного «ключ не задан».
+  ///
+  /// Коды: `0` значение найдено; `1` ключа нет в слое или файл не
+  /// разобран; `64` неверный путь, каталог или `CODELAB_HOME`.
+  Future<ConfigCommandResult> get(ConfigGetOptions options) async {
+    if (splitKeyPath(options.key) == null) {
+      return const ConfigCommandResult(
+        exitCode: configUsageExit,
+        stderr: ['config get: not a valid key path'],
+      );
+    }
+    if (!Directory(options.cwd).existsSync()) {
+      return ConfigCommandResult(
+        exitCode: configUsageExit,
+        stderr: ['config get: no such directory: ${options.cwd}'],
+      );
+    }
+    final ({ConfigLoadResult result, List<ConfigTree> layers}) loaded;
+    try {
+      loaded = ConfigLoader().loadWithLayers(
+        cwd: options.cwd,
+        environment: options.environment,
+        platform: _platform,
+      );
+    } on ConfigUsageException catch (error) {
+      return ConfigCommandResult(
+        exitCode: configUsageExit,
+        stderr: ['config get: ${error.message}'],
+      );
+    }
+    final syntax = [
+      for (final issue in loaded.result.issues)
+        if (issue.kind == ConfigIssueKind.syntax) '$issue',
+    ];
+    if (syntax.isNotEmpty) {
+      return ConfigCommandResult(exitCode: configInvalidExit, stderr: syntax);
+    }
+    final only = switch (options.layer) {
+      ConfigGetLayer.merged => null,
+      ConfigGetLayer.user => ConfigLayerKind.user,
+      ConfigGetLayer.project => ConfigLayerKind.project,
+      ConfigGetLayer.local => ConfigLayerKind.projectLocal,
+    };
+    final found = findLayerValue(loaded.layers, options.key, only: only);
+    if (found == null) {
+      return ConfigCommandResult(
+        exitCode: configInvalidExit,
+        stderr: [
+          'config get: ${options.key} is not set'
+              '${options.layer == ConfigGetLayer.merged ? '' : ' in the ${options.layer.name} layer'}',
+        ],
+      );
+    }
+    return ConfigCommandResult(
+      exitCode: configValidExit,
+      stdout: [
+        ...renderConfigValue(
+          maskConfigValue(found.value, key: options.key, layer: found.layer),
+        ),
+        'layer: ${configLayerName(found.layer.kind)}',
+      ],
+    );
+  }
+
+  /// `set`: записывает значение ключа в слой через `ConfigWriter` (D5, D6).
+  ///
+  /// Значение разбирает `SettingsRegistry.parseCliValue`; неизвестный ключ и
+  /// неверное значение — код `64`, значение не цитируется. Ключ из
+  /// `inlineSecretKeys` реестру не предъявляется: ответ должен быть «секрет
+  /// значением» (код `1` с подсказкой `codelab secret set`), а не «неизвестный
+  /// ключ» (D5, порядок проверок писателя).
+  Future<ConfigCommandResult> set(ConfigSetOptions options) async {
+    final key = options.key;
+    final segments = splitKeyPath(key);
+    if (segments == null) {
+      return const ConfigCommandResult(
+        exitCode: configUsageExit,
+        stderr: ['config set: not a valid key path'],
+      );
+    }
+    final last = segments.last;
+    final Object value;
+    if (!last.isElement && inlineSecretKeys.contains(last.value)) {
+      // Значение уходит писателю как есть и отвергается им без цитирования.
+      value = options.value;
+    } else {
+      final descriptor = SettingsRegistry.lookup(key);
+      if (descriptor == null) {
+        final near = _nearestSettingKey(key, segments);
+        return ConfigCommandResult(
+          exitCode: configUsageExit,
+          stderr: [
+            'config set: unknown key $key'
+                '${near == null ? '' : '; did you mean $near?'}',
+          ],
+        );
+      }
+      try {
+        value = SettingsRegistry.parseCliValue(descriptor, options.value);
+      } on ConfigValueException catch (error) {
+        return ConfigCommandResult(
+          exitCode: configUsageExit,
+          stderr: ['config set: ${error.key}: expected ${error.expected}'],
+        );
+      }
+    }
+    final outcome = await _runner.apply(
+      label: 'config set',
+      environment: options.environment,
+      cwd: options.cwd,
+      project: options.project,
+      local: options.local,
+      edits: (_) => [SetValue(key, value)],
+    );
+    return switch (outcome) {
+      EditFinished(:final result) => result,
+      EditWritten(:final result) => ConfigCommandResult(
+        exitCode: configValidExit,
+        stdout: [
+          'Updated $key in ${result.path}',
+          ...ConfigEditRunner.successLines(result),
+        ],
+      ),
+    };
+  }
+
+  /// `unset`: удаляет ключ из слоя (D6). Принимает и ключ вне реестра, если
+  /// он есть в файле: так удаляются опечатки и запрещённый `api_key`.
+  /// Ключа в файле нет — код `0` без записи (идемпотентно, как `secret
+  /// delete`).
+  Future<ConfigCommandResult> unset(ConfigUnsetOptions options) async {
+    final key = options.key;
+    if (splitKeyPath(key) == null) {
+      return const ConfigCommandResult(
+        exitCode: configUsageExit,
+        stderr: ['config unset: not a valid key path'],
+      );
+    }
+    final outcome = await _runner.apply(
+      label: 'config unset',
+      environment: options.environment,
+      cwd: options.cwd,
+      project: options.project,
+      local: options.local,
+      edits: (_) => [UnsetValue(key)],
+      // Наличие — по пути, а не по значению: `max_steps:` (null) в файле есть.
+      shortCircuit: (snapshot) => configKeyPresent(snapshot, key)
+          ? null
+          : ConfigCommandResult(
+              exitCode: configValidExit,
+              stdout: ['$key is not set in ${snapshot.path}'],
+            ),
+    );
+    return switch (outcome) {
+      EditFinished(:final result) => result,
+      EditWritten(:final result) => ConfigCommandResult(
+        exitCode: configValidExit,
+        stdout: [
+          'Removed $key from ${result.path}',
+          ...ConfigEditRunner.successLines(result),
+        ],
+      ),
+    };
+  }
+
+  /// Ближайший ключ реестра для подсказки «did you mean»: шаблоны с `*`
+  /// получают сегменты пользователя на месте звёздочек, поэтому опечатка в
+  /// `providers.gw.kindd` находит `providers.gw.kind`.
+  String? _nearestSettingKey(String key, List<KeyPathSegment> segments) {
+    final candidates = <String>[];
+    for (final d in SettingsRegistry.all) {
+      final pattern = d.key.split('.');
+      if (pattern.length != segments.length) {
+        continue;
+      }
+      candidates.add(
+        [
+          for (var i = 0; i < pattern.length; i++)
+            pattern[i] == '*' ? segments[i].value : pattern[i],
+        ].join('.'),
+      );
+    }
+    return nearestKey(key, candidates);
+  }
 
   /// Печатает слои, проблемы и предупреждения, итог — последней строкой.
   ///

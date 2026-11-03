@@ -8,7 +8,8 @@
 **Ошибки использования** — код `64`:
 - флаги подключения и запроса (`-a`/`--agent`, `-m`/`--model`, `--mode`, `-r`/`--resume`, `-c`/`--continue`, `-p`/`--print`, `-f`/`--prompt-file`, `--approve`, `--timeout`, `--ui`) вместе с `config`;
 - `codelab config` без подкоманды — текст `config needs a subcommand: codelab config path|get|set|unset|check` в stderr;
-- неизвестная подкоманда (в том числе `migrate`) — `Unknown command config <sub>` в stderr.
+- неизвестная подкоманда (в том числе `migrate`) — `Unknown command config <sub>` в stderr;
+- ошибка разбора аргументов `config set` и `config unset` — фиксированная фраза `invalid arguments for config set` (`… config unset`) и справка `config` без цитирования слов argv: значение могло начинаться с `-` и оказаться разобранным как флаг (design.md change `add-config-writer-and-reload`, D6).
 
 Клиент НЕ SHALL импортировать `package:codelab_agent_*` напрямую.
 
@@ -55,7 +56,13 @@
 ## ADDED Requirements
 
 ### Requirement: Подкоманды codelab provider и codelab mcp
-`codelab provider add|list|remove` и `codelab mcp add|list|remove` SHALL вызывать общие `ProviderCommands` и `McpServerCommands` через `package:codelab_setup/io.dart` (только из `lib/src/run.dart`). Вывод, коды выхода и записанные байты SHALL совпадать с `codelab-agent provider|mcp` (design.md change `add-config-writer-and-reload`, D6). Правила флагов подключения, `cwd` и неизвестной подкоманды — как у `codelab config`.
+`codelab provider add|list|remove` и `codelab mcp add|list|remove` SHALL вызывать общие `ProviderCommands` и `McpServerCommands` через `package:codelab_setup/io.dart` (только из `lib/src/run.dart`). Вывод, коды выхода и записанные байты SHALL совпадать с `codelab-agent provider|mcp` (design.md change `add-config-writer-and-reload`, D6). Флаги подключения и запроса вместе с `provider` и `mcp` — ошибка использования `64`, как у `codelab config`.
+
+**`cwd`.** `provider list` и `mcp list` SHALL принимать `--cwd` подкоманды; порядок — `--cwd` подкоманды, общий `-C`/`--cwd`, текущий каталог. У `provider add|remove` и `mcp add|remove` `--cwd` подкоманды нет: папка — общий `-C`/`--cwd`, иначе текущий каталог.
+
+**Ошибки использования** (код `64`, справка команды в stderr, stdout пуст); присланные слова argv НЕ SHALL цитироваться — среди них мог оказаться ключ или значение заголовка:
+- неизвестная подкоманда или лишние позиционные аргументы — `codelab: unknown provider arguments (<n>)` (`… mcp …`), где `<n>` — число лишних слов; текст совпадает с `codelab-agent`, кроме имени бинаря;
+- ошибка разбора аргументов (неизвестный флаг, флаг без значения) — `codelab: invalid arguments for provider` (`… mcp`).
 
 `codelab provider add` без обязательных флагов (`--kind`, `--model`, `--context-window`) в этой сборке SHALL быть ошибкой использования `64`: мастер на TTY — change `add-provider-setup-ui`. Ключ `--api-key-stdin` SHALL читаться скрытым вводом `StdinSecretInput`, как у `codelab secret set`. Значение ключа НЕ SHALL попадать в stdout, `profiles.json`, `cli_history` и лог CLI.
 
@@ -71,4 +78,12 @@
 
 #### Scenario: provider add без флагов
 - **WHEN** запускается `codelab provider add gw` на TTY
-- **THEN** код `64`, stderr называет недостающие флаги, файлы не изменены
+- **THEN** код `64`, одна строка stderr называет `--kind`, `--model` и `--context-window`, файлы не изменены
+
+#### Scenario: Неизвестная подкоманда provider не цитируется
+- **WHEN** запускаются `codelab provider frob` и `codelab-agent provider frob`
+- **THEN** у обоих код `64`, stdout пуст, stderr содержит `unknown provider arguments (1)` и справку `provider`, не содержит `frob`
+
+#### Scenario: --cwd у provider list и mcp list
+- **WHEN** запускается `codelab -C <a> mcp list --cwd <b>`, где сервер `docs` задан только в `<b>/.codelab/config.local.yaml` доверенного проекта
+- **THEN** код `0`, stdout содержит строку `docs` со слоем `local`; вывод совпадает с `codelab-agent mcp list --cwd <b>`

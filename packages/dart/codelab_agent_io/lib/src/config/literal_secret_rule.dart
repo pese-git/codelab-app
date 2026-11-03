@@ -262,6 +262,12 @@ bool _isOpaque(String path) {
   return type == SettingType.map || type == SettingType.mapList;
 }
 
+/// Секретное ли имя для нестрокового значения (число, булево) — то же
+/// правило, что у писателя, для маскирования вывода (`cli/config_output.dart`,
+/// design.md change `add-config-writer-and-reload`, D6, R0-2): запись и
+/// вывод не расходятся в том, что считать секретным числом.
+bool isSecretScalarName(String name) => _isSecretScalarName(name);
+
 /// Секретное ли имя для нестрокового значения (число, булево).
 ///
 /// Подстрока `token`/`key` дала бы ложные срабатывания на счётчиках

@@ -114,6 +114,7 @@ final class SecretCommandResult {
     this.stdout = const [],
     this.stderr = const [],
     this.showUsage = false,
+    this.replaced = false,
   });
 
   /// `0`, `1` (ошибка хранилища или конфигурации) или `64` (ошибка
@@ -129,6 +130,12 @@ final class SecretCommandResult {
   /// Приложение должно добавить к stderr справку `secret`: ошибка
   /// использования (неверное имя, значение аргументом).
   final bool showUsage;
+
+  /// `set` заменил уже существовавший секрет (`SecretUpdated`). Нужен
+  /// `provider add --api-key-stdin`: он печатает предупреждение о замене
+  /// (design.md change `add-config-writer-and-reload`, D6), не разбирая
+  /// текст `stdout`.
+  final bool replaced;
 }
 
 /// Общая реализация подкоманд `secret set|delete|list` для `codelab-agent` и
@@ -295,6 +302,7 @@ final class SecretCommands {
     SecretUpdated(:final backend) => session.finish(
       configValidExit,
       stdout: ['Updated secret $name in $backend'],
+      replaced: true,
     ),
     SecretInvalidName(:final reason) => _usage(reason),
     SecretInvalidValue(:final reason) => session.finish(
@@ -520,8 +528,10 @@ final class _Session {
     int exitCode, {
     List<String> stdout = const [],
     List<String> stderr = const [],
+    bool replaced = false,
   }) => SecretCommandResult(
     exitCode: exitCode,
+    replaced: replaced,
     stdout: stdout,
     stderr: [
       ...warnings,

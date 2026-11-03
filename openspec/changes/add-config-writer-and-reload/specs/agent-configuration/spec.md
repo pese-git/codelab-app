@@ -228,17 +228,28 @@
 Результат каждой подкоманды — `{exitCode, stdout, stderr}`. Набор флагов и действия — таблица §17.5.5. Аргументы разбирает каждое приложение. Вывод и коды выхода SHALL быть общими для `codelab-agent` и `codelab`.
 
 **Правила:**
-- **Слой.** По умолчанию — `user`; `--project` и `--local` — слои 3 и 4 для `cwd`. `cwd` — `--cwd` подкоманды, иначе каталог процесса; канонизирует его загрузчик.
-- **`config get`** SHALL печатать сырое значение слоя-источника и имя слоя. Подстановки `${VAR}` и `${secret:…}` НЕ SHALL раскрываться ни при каком `--layer`, включая `merged`.
+- **Слой.** Подкоманды записи (`config set`, `config unset`, `provider add`, `provider remove`, `mcp add`, `mcp remove`) SHALL по умолчанию писать в слой `user`; `--project` и `--local` — слои 3 и 4 для `cwd`. `config get` без `--layer` SHALL читать `merged`.
+- **`cwd`** — `--cwd` подкоманды (есть у `config path|get|set|unset|check`, `provider list`, `mcp list`), иначе каталог процесса; канонизирует его загрузчик.
+- **`config get`** SHALL печатать сырое значение слоя-победителя (скаляр — одной строкой, отображение и список — JSON с отступом), затем строку `layer: <name>`, где `<name>` — `user`, `project`, `local`, `extra` (файл `CODELAB_CONFIG`/`--config`), `env` или `flags`. Победитель — старший слой, где ключ задан; его поддерево берётся целиком. Подстановки `${VAR}` и `${secret:…}` НЕ SHALL раскрываться ни при каком `--layer`, включая `merged`. Отсутствующий ключ — код `1`.
+- **Удаление отсутствующей записи** (`config unset`, `provider remove`, `mcp remove`) SHALL завершаться кодом `0` без записи файла и печатать `<key> is not set in <path>`.
+- **Наличие ключа** для `config get`, `config unset`, `provider remove` и `mcp remove` SHALL определяться по пути в документе слоя, а не по значению: ключ со значением `null` присутствует, и `config unset` SHALL его удалять.
+- **`provider add <id>`** для существующего провайдера SHALL обновлять его (upsert): переданные флаги перезаписывают свои поля, остальные поля и модели сохраняются.
+- **Источник ключа** (R4-4): `provider add` с любым из `--api-key-stdin`, `--api-key-secret`, `--api-key-env` SHALL заменять источник ключа целиком — поля другого источника (`api_key_secret`, `api_key_env`) удаляются той же записью. Пары `api_key_env` + `api_key_secret` у провайдера после команды НЕ SHALL быть. Без флага ключа источник не меняется.
+- **Недостающие обязательные флаги** `provider add` (`--kind`, `--model`, `--context-window`) SHALL перечисляться все одной строкой stderr.
+- **`provider remove`** при ссылке из `agent.*` SHALL завершаться кодом `1`, stderr SHALL содержать `change the model first: config set agent.default_model <provider>/<model>`.
+- **`mcp add` и `mcp remove`** SHALL отклонять имя сервера с пробелом, `[`, `]` или `"` кодом `64`.
+- **`mcp remove <name>`** SHALL искать сервер только по `name`, никогда по номеру элемента списка.
+- **Ошибка разбора аргументов** `config set`, `config unset`, `provider` и `mcp` SHALL печатать фиксированную фразу (`invalid arguments for config set`, `invalid arguments for config unset`, `invalid arguments for provider`, `invalid arguments for mcp`) и справку, не цитируя слова argv.
 - **Маскирование** (R0-2; design.md, D6) — в `config get` и `provider list`:
-  - значение любого листа, чьё имя — ключ из `inlineSecretKeys` или секретное по нормализованному правилу требования «Запись конфига ConfigWriter» (на любой глубине дерева, не только в `headers` и `env`), без `${secret:…}` и `${VAR}` SHALL печататься как `<redacted>`; значение со ссылкой — как есть;
+  - значение любого листа без дескриптора реестра и элемента отображения с произвольными ключами (`headers`, `env`), чьё имя — ключ из `inlineSecretKeys` или секретное по нормализованному правилу требования «Запись конфига ConfigWriter» (на любой глубине дерева), без `${secret:…}` и `${VAR}` SHALL печататься как `<redacted>`; значение со ссылкой — как есть; скалярный лист, описанный реестром (`api_key_secret`, `api_key_env`, `auth_header`), SHALL печататься как есть;
   - непрозрачное поддерево схемы (`providers.*.auth`, `providers.*.key_rotation`, разделы после MVP и другие узлы без схемы листьев) SHALL печататься как `<opaque: edit the file>` без содержимого;
   - значение из слоя окружения SHALL заменяться именем источника: `<from env:CODELAB_PROVIDER_CONFIG>`, `<from env:CODELAB_MODEL>`;
-  - userinfo SHALL удаляться из URL (`base_url`, `url`);
+  - URL (`base_url`, `url`) SHALL разбираться как URI и печататься без userinfo (R4-5); неразбираемый URL и URL с `@` без авторитета (`user:pass@host`) SHALL печататься как `<redacted>`; значение query-параметра или пары `имя=значение` во фрагменте с секретным именем (то же нормализованное правило имён) без ссылки `${…}` SHALL печататься как `<redacted>`, значение-ссылка — как есть;
   - отображения и списки маскируются поэлементно.
 - **`config set`** SHALL разбирать значение через `SettingsRegistry.parseCliValue`.
-- **`provider list`** SHALL первой строкой печатать `Secrets: <backend>`, затем по провайдеру итогового конфига — id, kind, base_url, модели и источник ключа без значения (`secret <name>: found|not set|unavailable`, `env <VAR>: set|not set`).
-- **`mcp list`** SHALL печатать серверы файлов по слоям (name, type, layer, enabled) без подключения к ним.
+- **`config path`** без флага слоя SHALL печатать строки `user: <path> (exists|missing)`, `project: …`, `local: …` и при заданной `CODELAB_CONFIG` — `CODELAB_CONFIG: …`; с `--project`/`--local` — только путь.
+- **`provider list`** SHALL первой строкой печатать `Secrets: <backend>`, затем по строке на провайдера итогового конфига `<id>  kind: …  base_url: …  models: a, b  key: <source>` (без `base_url` — `(default)`); источник ключа без значения (`secret <name>: found|not set|unavailable`, `env <VAR>: set|not set`).
+- **`mcp list`** SHALL печатать серверы файлов по слоям строками `<name>  type: …  layer: …  enabled: true|false` без подключения к ним.
 - **`provider add --api-key-stdin`**:
   1. проверить кандидат конфига без записи;
   2. проверить хранилище `SecretAdmin.checkStore("codelab/<id>")`;
@@ -251,8 +262,8 @@
 - **Коды выхода:**
   - `0` — успех;
   - `1` — новая ошибка загрузки итога (R3-1), отказ доверия, `inlineSecret`, конфликт, хранилище секретов только для чтения или недоступно;
-  - `64` — ошибка использования: неизвестный ключ `set`, неверное значение, недостающий обязательный флаг `provider add` (`--kind`, `--model`, `--context-window`), несовместимые флаги, лишние аргументы.
-- **Вывод успешной записи** SHALL содержать путь файла, строки `warning:` предупреждений писателя и `note: restart the agent to apply: <keys>` для ключей `restartRequired`.
+  - `64` — ошибка использования: неизвестный ключ `set`, неверное значение, недостающий обязательный флаг `provider add` (`--kind`, `--model`, `--context-window`), несовместимые флаги, лишние аргументы, недопустимое имя MCP-сервера.
+- **Вывод успешной записи** SHALL содержать строку `Updated <key> in <path>` (`Updated providers.<id> in <path>`, `Updated mcp.servers[<name>] in <path>`) или `Removed <key> from <path>`, строки `warning:` предупреждений писателя и `note: restart the agent to apply: <keys>` для ключей `restartRequired`.
 
 Значения секретов и раскрытые подстановки НЕ SHALL попадать в stdout, stderr и лог.
 
@@ -267,6 +278,14 @@
 #### Scenario: get маскирует секреты
 - **WHEN** файл содержит `providers.p.api_key: sk-1`, `providers.p.base_url: https://u:pw@h/v1`, `mcp.servers[gh].headers.Authorization: "Bearer lit"` и `mcp.servers[gh].env.GITHUB_TOKEN: "${GH}"`, а окружение — `CODELAB_MODEL=p/m`; вызываются `config get providers.p`, `config get mcp.servers --layer merged`, `config get agent.default_model`
 - **THEN** вывод содержит `<redacted>` вместо `sk-1` и `Bearer lit`, `https://h/v1` без `u:pw`, `${GH}` как есть и `<from env:CODELAB_MODEL>`; ни `sk-1`, ни `pw`, ни `lit` в выводе нет (`config_output_test.dart`)
+
+#### Scenario: Маскирование URL
+- **WHEN** файл содержит `providers.p.base_url: "https://u:p@ss@host/v1?api_key=X&v=2"`, и вызываются `config get providers.p.base_url` и `provider list`
+- **THEN** вывод не содержит `p@ss` и `X`, содержит `host/v1` и `v=2`
+
+#### Scenario: Неразбираемый URL
+- **WHEN** `providers.p.base_url` содержит строку, которую нельзя разобрать как URI, и вызывается `config get providers.p.base_url`
+- **THEN** stdout содержит `<redacted>` вместо значения, код `0`
 
 #### Scenario: Непрозрачные поддеревья
 - **WHEN** файл содержит `providers.p.auth: {client_secret: s-1}` и `providers.p.key_rotation: {keys: [k-1]}`, и вызывается `config get providers.p`
@@ -286,7 +305,63 @@
 
 #### Scenario: provider remove со ссылкой
 - **WHEN** `agent.default_model: gw/m`, вызывается `provider remove gw`
-- **THEN** код `1`, проблема `agent.default_model` с подсказкой сменить модель, файл не изменён
+- **THEN** код `1`, проблема `agent.default_model` и строка `change the model first: config set agent.default_model <provider>/<model>` в stderr, файл не изменён
+
+#### Scenario: get без --layer читает итог
+- **WHEN** `budget.max_steps: 10` в `config.yaml`, `budget.max_steps: 20` в `.codelab/config.yaml` проекта, и вызывается `config get budget.max_steps --cwd <project>`
+- **THEN** код `0`, stdout — `20` и `layer: project`
+
+#### Scenario: get отсутствующего ключа
+- **WHEN** ключ `budget.max_steps` не задан ни в одном слое, и вызывается `config get budget.max_steps`
+- **THEN** код `1`, stdout пуст
+
+#### Scenario: config unset отсутствующего ключа
+- **WHEN** `config.yaml` не содержит `budget.max_steps`, и вызывается `config unset budget.max_steps`
+- **THEN** код `0`, stdout — `budget.max_steps is not set in <home>/config.yaml`, файл не изменён
+
+#### Scenario: provider remove отсутствующего провайдера
+- **WHEN** `config.yaml` не содержит `providers.gw`, и вызывается `provider remove gw`
+- **THEN** код `0`, stdout — `providers.gw is not set in <home>/config.yaml`, файл не изменён
+
+#### Scenario: mcp remove отсутствующего сервера
+- **WHEN** `config.yaml` не содержит сервера `github`, и вызывается `mcp remove github`
+- **THEN** код `0`, stdout — `mcp.servers[github] is not set in <home>/config.yaml`, файл не изменён
+
+#### Scenario: unset ключа со значением null
+- **WHEN** `config.yaml` содержит `budget:` с вложенным `max_steps:` без значения, и вызывается `config unset budget.max_steps`
+- **THEN** код `0`, stdout — `Removed budget.max_steps from <home>/config.yaml`, строки `max_steps:` в файле нет
+
+#### Scenario: Флаг ключа заменяет источник ключа
+- **WHEN** `secrets.backend: file`, `config.yaml` содержит `providers.gw` с `api_key_env: GW_KEY`, и вызывается `provider add gw --kind openai-compatible --model m --context-window 8192 --api-key-stdin` с ключом в stdin
+- **THEN** код `0`, `providers.gw` содержит `api_key_secret: codelab/gw` и не содержит `api_key_env`
+
+#### Scenario: provider add без обязательных флагов
+- **WHEN** вызывается `provider add gw` без `--kind`, `--model` и `--context-window`
+- **THEN** код `64`, одна строка stderr называет `--kind`, `--model` и `--context-window`; файлы не изменены
+
+#### Scenario: mcp remove не ищет по номеру
+- **WHEN** `mcp.servers` содержит один сервер `github`, и вызывается `mcp remove 0`
+- **THEN** код `0`, stdout — `mcp.servers[0] is not set in <home>/config.yaml`, сервер `github` на месте, файл не изменён
+
+#### Scenario: Недопустимое имя в mcp remove
+- **WHEN** вызывается `mcp remove "my server"`
+- **THEN** код `64`, файл не изменён
+
+#### Scenario: provider add обновляет провайдера
+- **WHEN** `config.yaml` содержит `providers.gw` с `base_url: https://x/v1` и `api_key_secret: codelab/gw`, хранилище `file` уже содержит секрет `codelab/gw`, и вызывается `provider add gw --kind openai-compatible --model m --context-window 8192 --api-key-stdin` с новым ключом в stdin
+- **THEN** код `0`, секрет `codelab/gw` заменён новым значением, `base_url` сохранён; stdout содержит `warning: replaced the existing secret codelab/gw` и `Updated providers.gw in <home>/config.yaml`, ни старого, ни нового значения ключа в выводе нет
+
+#### Scenario: Недопустимое имя MCP-сервера
+- **WHEN** вызывается `mcp add "my server" --type http --url https://h`
+- **THEN** код `64`, файл не изменён
+
+#### Scenario: Ошибка разбора аргументов не цитирует argv
+- **WHEN** вызывается `provider add gw --api-key sk-1`
+- **THEN** код `64`, stderr содержит `invalid arguments for provider` и справку, не содержит `sk-1`
+
+#### Scenario: Ошибка разбора аргументов config set не цитирует argv
+- **WHEN** вызывается `config set budget.max_steps --sk-1`
+- **THEN** код `64`, stderr содержит `invalid arguments for config set` и справку, не содержит `sk-1`
 
 #### Scenario: mcp add с литеральным токеном
 - **WHEN** вызывается `mcp add github --type http --url https://h --header Authorization="Bearer ghp_x"`
