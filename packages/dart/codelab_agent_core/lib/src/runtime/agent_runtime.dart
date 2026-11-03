@@ -6,6 +6,7 @@ import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../agents/agent_definition.dart';
 import '../cancel/cancel_token.dart';
+import '../commands/builtin_commands.dart';
 import '../commands/command_template.dart';
 import '../commands/expand_command.dart';
 import '../commands/slash_command.dart';
@@ -25,6 +26,7 @@ import '../llm/event_stream.dart';
 import '../llm/messages.dart';
 import '../llm/model_catalog.dart';
 import '../llm/model_ref.dart';
+import '../llm/usage.dart';
 import '../llm/stream_function.dart';
 import '../loop/agent.dart';
 import '../loop/agent_events.dart';
@@ -1044,6 +1046,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
       registry: sessionRegistry,
       mcp: mcp,
       clientMcp: mcpServers,
+      // Встроенные команды (D12): `config` — только с источником конфига и
+      // `configCommand` (R0-3), `mcp` — с capability профиля.
+      reloadConfig: services.config != null && configCommand
+          ? reloadConfig
+          : null,
+      checkConfig: checkConfig,
+      mcpCommand: profile.isOn(HostCapability.mcp),
       // Снимок на момент применения, а не на момент создания сессии: после
       // перезагрузки конфига сервера конфига берутся из нового снимка (D10).
       replaceMcp: (servers) => _replaceMcp(
@@ -1742,6 +1751,9 @@ final class _Session implements AgentSession {
     required _McpState mcp,
     required Future<void> Function(List<McpServerConfig> servers) replaceMcp,
     required List<McpServerConfig> clientMcp,
+    required Future<ConfigApplyReport> Function()? reloadConfig,
+    required Future<ConfigLoadResult> Function() checkConfig,
+    required bool mcpCommand,
     required AgentCoreServices services,
     required Logger logger,
     required String Function(String cwd, ModeId mode, AgentDefinition? agent)
@@ -1774,7 +1786,13 @@ final class _Session implements AgentSession {
        _logger = logger,
        _compose = compose,
        _templates = List.unmodifiable(templates),
-       commands = availableCommands(templates),
+       commands = List.unmodifiable([
+         ...BuiltinCommands.declare(
+           config: reloadConfig != null,
+           mcp: mcpCommand,
+         ),
+         ...availableCommands(templates),
+       ]),
        _titled = _hasTitle(snapshot) {
     _writer = SessionWriter(
       store: services.sessions,
@@ -1787,6 +1805,40 @@ final class _Session implements AgentSession {
     // Писатель — первый подписчик агента: запись идёт до того, как событие
     // увидят остальные (§8.3, SES-8).
     _agent.subscribe(_onEvent);
+    _builtin = BuiltinCommands(
+      reloadConfig: reloadConfig,
+      checkConfig: () async {
+        try {
+          return await checkConfig();
+        } on Object catch (error) {
+          // Текст ответа без сообщения исключения (оно может нести путь или
+          // значение); причина — в логе только с классом (D12, §16).
+          _logger.log(
+            LogLevel.warning,
+            'config.check.failed',
+            fields: {
+              'session_id': id.value,
+              'error_class': error.runtimeType.toString(),
+            },
+          );
+          rethrow;
+        }
+      },
+      mcpDeclared: mcpCommand,
+      servers: () => _mcp.tools?.servers ?? const [],
+      reconnect: (name, cancelled) => _runMcpAction(
+        (tools) => tools.reconnect(name),
+        server: name,
+        action: 'reconnect',
+        cancelled: cancelled,
+      ),
+      setEnabled: (name, enabled, cancelled) => _runMcpAction(
+        (tools) => tools.setEnabled(name, enabled),
+        server: name,
+        action: enabled ? 'enable' : 'disable',
+        cancelled: cancelled,
+      ),
+    );
   }
 
   @override
@@ -1798,6 +1850,19 @@ final class _Session implements AgentSession {
 
   @override
   final List<SlashCommand> commands;
+
+  /// Исполнитель встроенных команд `/config` и `/mcp` (D12).
+  late final BuiltinCommands _builtin;
+
+  /// Слот хода занят встроенной командой: второй `prompt` отклоняется так
+  /// же, как во время хода модели (D12, «Слот хода и ход модели»). Отдельный
+  /// от `_agent.isRunning` флаг — команда не ход модели и не откладывает
+  /// замену серверов до `TurnEnded` (D10).
+  var _builtinRunning = false;
+
+  /// Сигнал отмены ожидания ответа команды (`session/cancel`, токен
+  /// промпта); перезагрузка, начатая рантаймом, при этом доводится до конца.
+  Completer<void>? _builtinCancel;
 
   @override
   final List<AgentDefinition> agents;
@@ -1882,6 +1947,10 @@ final class _Session implements AgentSession {
   /// Номер последнего вызова `setMcpServers`: устаревший набор, стоявший в
   /// очереди, не применяется после нового (последний вызов побеждает).
   var _mcpGeneration = 0;
+
+  /// Ручное действие над сервером закончилось во время хода модели: реестр
+  /// и схемы инструментов обновит граница шага (D6, D11).
+  var _mcpRefreshPending = false;
   var _closed = false;
   final AgentCoreServices _services;
   final Logger _logger;
@@ -2046,7 +2115,13 @@ final class _Session implements AgentSession {
   /// Забирает ожидающее обновление MCP-инструментов: реестр сессии, набор
   /// агента и системный промпт (секция `mcp`, §11.5).
   bool _applyMcpUpdate() {
-    if (!_mcp.takeUpdate(_registry, _logger, id)) {
+    var changed = _mcp.takeUpdate(_registry, _logger, id);
+    if (_mcpRefreshPending) {
+      _mcpRefreshPending = false;
+      _mcp.refresh(_registry, _logger, id);
+      changed = true;
+    }
+    if (!changed) {
       return false;
     }
     _agent
@@ -2081,8 +2156,13 @@ final class _Session implements AgentSession {
     for (var work = _mcpWork; work != null; work = _mcpWork) {
       await work;
     }
-    if (_agent.isRunning) {
+    if (_agent.isRunning || _builtinRunning) {
       throw StateError('a turn is already running');
+    }
+    // Встроенная команда перехватывается до разворачивания шаблонов под тем
+    // же слотом хода; слот занимается без `await` после проверки (D12).
+    if (_matchBuiltin(content) case final call?) {
+      return _runBuiltin(call, content, cancel);
     }
     _policy.clearTurnGrants();
     _tools.approvalWait.reset();
@@ -2140,6 +2220,138 @@ final class _Session implements AgentSession {
   void _publishFromRuntime(AgentEvent event) {
     if (!_closed && !_live.isClosed) {
       _live.add(event);
+    }
+  }
+
+  BuiltinInvocation? _matchBuiltin(List<ContentBlock> content) {
+    final index = content.indexWhere((block) => block is TextContent);
+    if (index < 0) {
+      return null;
+    }
+    return _builtin.match((content[index] as TextContent).text);
+  }
+
+  /// Даёт подписчикам `events` получить опубликованные события.
+  ///
+  /// Почему: `events` — `Stream.multi`, он доставляет события цепочкой
+  /// микрозадач. Ход модели отдаёт управление при записи журнала, а у
+  /// встроенной команды записи нет: без паузы `prompt` вернулся бы раньше,
+  /// чем подписчик без паузы подписки (мост ACP) увидел `TurnEnded`, и ответ
+  /// на `session/prompt` стал бы ошибкой (ACP-3, D12). Один оборот цикла
+  /// событий гарантирует, что все микрозадачи доставки выполнены, сколько бы
+  /// звеньев в цепочке ни было. Это не ожидание по времени и не таймер
+  /// ожидания (PKG-6).
+  Future<void> _drainSubscribers() => Future<void>(() {});
+
+  /// Исполняет встроенную команду без модели и без журнала (CFG-18, D12):
+  /// события хода публикуются мимо писателя журнала, ответ — одно сообщение.
+  ///
+  /// Слот занят на всё время команды. Отмена (`session/cancel`, токен
+  /// промпта) завершает ход `cancelled` без текста и освобождает слот;
+  /// начатая перезагрузка доводится до конца — её результат общий.
+  Future<TurnResult> _runBuiltin(
+    BuiltinInvocation call,
+    List<ContentBlock> content,
+    CancelToken? cancel,
+  ) async {
+    _builtinRunning = true;
+    final cancelled = _builtinCancel = Completer<void>();
+    cancel?.onCancel.then((_) {
+      if (!cancelled.isCompleted) {
+        cancelled.complete();
+      }
+    });
+    try {
+      _ended = null;
+      final now = _services.clock.now();
+      _publish(
+        TurnStarted(
+          id,
+          turnId: TurnId(_services.ids.nextId()),
+          input: [UserMessage(content, timestamp: now)],
+        ),
+      );
+      _logger.log(
+        LogLevel.info,
+        'command.builtin',
+        fields: {
+          'session_id': id.value,
+          'name': call.name,
+          'subcommand': call.subcommand,
+        },
+      );
+      // Ошибка `run` или порта становится исходом, а не необработанной
+      // ошибкой: после отмены её никто не ждёт.
+      final work = _builtin
+          .run(call, cancelled: () => cancelled.isCompleted)
+          .then<({String? text, Object? error})>(
+            (text) => (text: text, error: null),
+            onError: (Object error) => (text: null, error: error),
+          );
+      final outcome = await Future.any<({String? text, Object? error})?>([
+        work,
+        cancelled.future.then((_) => null),
+      ]);
+      if (outcome == null) {
+        _logger.log(
+          LogLevel.info,
+          'command.builtin.cancelled',
+          fields: {
+            'session_id': id.value,
+            'name': call.name,
+            'subcommand': call.subcommand,
+          },
+        );
+        _publish(
+          TurnEnded(id, reason: TurnEndReason.cancelled, usage: const Usage()),
+        );
+      } else if (outcome.error case final error?) {
+        // Тот же путь, что у сбоя хода модели: `AgentError` и
+        // `TurnEnded(failed)`; мост ACP отвечает `-32603`. В событии и в логе
+        // только класс ошибки: текст может нести путь или значение (§16).
+        final errorClass = error.runtimeType.toString();
+        _logger.log(
+          LogLevel.warning,
+          'command.builtin.failed',
+          fields: {
+            'session_id': id.value,
+            'name': call.name,
+            'subcommand': call.subcommand,
+            'error_class': errorClass,
+          },
+        );
+        _publish(
+          AgentError(
+            id,
+            cls: AgentErrorClass.hook,
+            message: 'the built-in command failed ($errorClass)',
+          ),
+        );
+        _publish(
+          TurnEnded(id, reason: TurnEndReason.failed, usage: const Usage()),
+        );
+      } else {
+        final text = outcome.text!;
+        final message = AssistantMessage(
+          content: [TextContent(text)],
+          model: _model,
+          usage: const Usage(),
+          stopReason: StopReason.stop,
+          timestamp: now,
+        );
+        _publish(MessageStarted(id, message: message));
+        _publish(MessageDelta(id, delta: text, partial: message));
+        _publish(MessageEnded(id, message: message));
+        _publish(
+          TurnEnded(id, reason: TurnEndReason.completed, usage: const Usage()),
+        );
+      }
+      await _drainSubscribers();
+      final ended = _ended!;
+      return TurnResult(reason: ended.reason, usage: ended.usage);
+    } finally {
+      _builtinCancel = null;
+      _builtinRunning = false;
     }
   }
 
@@ -2221,19 +2433,70 @@ final class _Session implements AgentSession {
   }
 
   /// Смены идут по одной в порядке вызовов; [_mcpWork] — их хвост.
-  Future<void> _enqueueMcp(List<McpServerConfig> servers, int generation) {
+  Future<void> _enqueueMcp(List<McpServerConfig> servers, int generation) =>
+      _enqueueMcpJob(() => _applyMcpServers(servers, generation));
+
+  /// Ставит задание в общую очередь замен: ручное действие `/mcp` не
+  /// обгоняет идущую замену и не подключает сервер, который она удаляет
+  /// (D10, D11).
+  Future<void> _enqueueMcpJob(Future<void> Function() job) {
     final previous = _mcpWork ?? Future<void>.value();
     late final Future<void> work;
-    work = previous
-        .then((_) => _applyMcpServers(servers, generation))
-        .whenComplete(() {
-          if (identical(_mcpWork, work)) {
-            _mcpWork = null;
-          }
-        });
+    work = previous.then((_) => job()).whenComplete(() {
+      if (identical(_mcpWork, work)) {
+        _mcpWork = null;
+      }
+    });
     _mcpWork = work;
     return work;
   }
+
+  /// Ручное действие над сервером (`reconnect`, `setEnabled`) через очередь
+  /// замен; после него реестр инструментов и промпт приводятся к набору
+  /// коннектора. Не бросает: сбой — запись в лог (как у замены).
+  ///
+  /// [cancelled] — команда отменена, пока задание стояло в очереди: оно не
+  /// выполняется. Во время хода модели набор не меняется (D6, D11): реестр и
+  /// агент обновит граница шага через [_applyMcpUpdate].
+  Future<void> _runMcpAction(
+    Future<void> Function(McpSessionTools tools) run, {
+    required String server,
+    required String action,
+    required bool Function() cancelled,
+  }) => _enqueueMcpJob(() async {
+    final tools = _mcp.tools;
+    if (_closed || tools == null || cancelled()) {
+      return;
+    }
+    try {
+      await run(tools);
+      if (_agent.isRunning) {
+        _mcpRefreshPending = true;
+        return;
+      }
+      _mcp.refresh(_registry, _logger, id);
+      _agent
+        ..tools = _visibleTools()
+        ..systemPrompt = _compose(cwd, _mode, _activeAgent);
+    } on Object catch (error, stack) {
+      _logger.log(
+        LogLevel.warning,
+        'mcp.server.failed',
+        fields: {
+          'session_id': id.value,
+          'server': server,
+          'transport': tools.servers
+              .where((s) => s.name == server)
+              .map((s) => s.transport)
+              .firstOrNull,
+          'action': action,
+          'reason': 'MCP action failed: ${error.runtimeType}',
+        },
+        error: error.runtimeType,
+        stack: stack,
+      );
+    }
+  });
 
   /// Не бросает: сбой смены — запись в лог, а прежний набор остаётся
   /// (`session/load` не должен падать из-за сервера MCP, §13.4, шаг 4).
@@ -2266,7 +2529,19 @@ final class _Session implements AgentSession {
   }
 
   @override
-  Future<void> cancel() async => _agent.abort(const UserCancel());
+  Future<void> cancel() async {
+    _agent.abort(const UserCancel());
+    _cancelBuiltin();
+  }
+
+  /// Завершает ожидание ответа идущей встроенной команды (`session/cancel`,
+  /// закрытие сессии): ход заканчивается `cancelled`, слот свободен.
+  void _cancelBuiltin() {
+    final waiting = _builtinCancel;
+    if (waiting != null && !waiting.isCompleted) {
+      waiting.complete();
+    }
+  }
 
   @override
   Future<ConfigChangeResult> setMode(ModeId mode) => _serial((changeId) async {
@@ -2490,6 +2765,7 @@ final class _Session implements AgentSession {
   Future<void> close() async {
     _closed = true;
     _pendingMcp = null;
+    _cancelBuiltin();
     // Идущая замена серверов не должна держать закрытие до `connectTimeout`.
     _mcp.cancel.cancel(const ShutdownCancel());
     _agent.abort(const ShutdownCancel());

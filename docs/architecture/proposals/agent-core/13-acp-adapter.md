@@ -426,7 +426,7 @@ Slash-команды приходят обычным `session/prompt` с тек�
 все, как `/status`, отвечают
 `agent_message_chunk` с фиксированным английским текстом и `stopReason: end_turn`, в журнал не
 пишутся и модели не отправляются; `/status` получает строку `Config: ok` или
-`Config: reload failed at <ISO-время> (<n> issues). Run /config check.` и, если есть отложенные
+`Config: reload failed at <ISO-время> (<n> issues). Run /config check.` (при одной проблеме — `1 issue`, R7-2) и, если есть отложенные
 ключи, `Restart required: <ключи>` (§17.5.6) — вместе с change встроенных команд, не в 8.10. В MVP `/status` также показывает строку
 `System prompt: custom (<source>)` или `System prompt: appended (<source>)`, если базовый промпт
 заменён или дополнен (§11.6.1), и `Tools disabled: <names>`, если инструменты выключены (§6.3.8).

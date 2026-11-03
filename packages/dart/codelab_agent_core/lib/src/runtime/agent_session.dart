@@ -54,12 +54,17 @@ abstract interface class AgentSession {
   /// шага.
   Future<void> setEffort(ReasoningEffort effort);
 
-  /// Команды шаблонов проекта и пользователя в байтовом порядке имён
-  /// (design.md change `add-agent-project-files`, D7, D9).
+  /// Команды сессии: сначала встроенные (`config`, `mcp`; design.md change
+  /// `add-config-writer-and-reload`, D12), затем команды шаблонов проекта и
+  /// пользователя в байтовом порядке имён (design.md change
+  /// `add-agent-project-files`, D7, D9).
   ///
+  /// `config` объявлена, если ядру передан `ConfigSource` и `buildAgentCore`
+  /// вызван с `configCommand: true`; `mcp` — при включённой capability `mcp`.
   /// Список строится при открытии сессии и не меняется до её закрытия. ACP-
   /// адаптер публикует его как `available_commands_update`; инструменты
-  /// модели в него не входят (R-07). Без порта файлов проекта список пуст.
+  /// модели в него не входят (R-07). Без встроенных команд и без порта файлов
+  /// проекта список пуст.
   List<SlashCommand> get commands;
 
   /// Определения агентов со `scope` `session` и `both` в байтовом порядке имён
@@ -98,8 +103,19 @@ abstract interface class AgentSession {
   /// шаблоны и PERM-11 выбор агента не меняет.
   Future<ConfigChangeResult> setAgent(String name);
 
-  /// Запускает ход; второй вызов во время хода — [StateError] (LOOP-10).
-  /// Возвращается после `TurnEnded` и записи журнала.
+  /// Запускает ход; второй вызов во время хода или встроенной команды —
+  /// [StateError] (LOOP-10). Возвращается после `TurnEnded` и записи журнала.
+  ///
+  /// Контракт доставки: к возврату все события хода (включая `TurnEnded`)
+  /// доставлены подписчикам [events], не ставящим подписку на паузу, — так
+  /// мост ACP строит ответ на `session/prompt` по `TurnEnded` (ACP-3).
+  ///
+  /// Встроенные команды `/config` и `/mcp` (первый текстовый блок, слово до
+  /// первого пробельного символа) исполняются здесь же, без модели и без
+  /// записи в журнал (CFG-18): события `TurnStarted`, одно сообщение агента,
+  /// `TurnEnded(completed)`; отмена — `TurnEnded(cancelled)` без текста, сбой
+  /// — `AgentError` и `TurnEnded(failed)`. Команда занимает слот хода, но
+  /// ходом модели не является (D12).
   Future<TurnResult> prompt(List<ContentBlock> content, {CancelToken? cancel});
 
   Future<void> cancel();

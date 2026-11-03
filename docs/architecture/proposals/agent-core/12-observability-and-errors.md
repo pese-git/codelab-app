@@ -200,10 +200,15 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp.server.state` | debug | `session_id`, `server`, `from`, `to` |
 | `mcp.server.retry` | info | `session_id`, `server`, `attempt`, `delay_ms` |
 | `command.builtin` | info | `session_id`, `name`, `subcommand` (без аргументов) |
+| `command.builtin.cancelled` | info | `session_id`, `name`, `subcommand` — встроенная команда отменена `session/cancel` или закрытием сессии |
+| `command.builtin.failed` | warning | `session_id`, `name`, `subcommand`, `error_class` (`runtimeType`) — исключение внутри встроенной команды; ход завершён `AgentError` + `TurnEnded(failed)`, текст исключения не пишется (D12) |
+| `config.check.failed` | warning | `session_id`, `error_class` (`runtimeType`) — загрузка у `/config check` бросила исключение; текст исключения не пишется |
 
 С 8.10 `mcp.server.failed` пишется на 1-м и каждом 10-м подряд сбое сервера, `mcp.server.retry` — на
 остальных, `mcp.server.connect` — при каждом успешном подключении, в том числе повторном; причины —
-тексты кода CodeLab, без текстов сервера (D11). `logging.level` в 1.0 — `restartRequired` (OQ5):
+тексты кода CodeLab, без текстов сервера (D11). Сбой ручного действия `/mcp` (`reconnect`, `setEnabled`) — тоже
+`mcp.server.failed` по прежней схеме `{session_id, server, transport, reason}` с добавленным полем
+`action` (`reconnect` | `enable` | `disable`) и `reason: "MCP action failed: <runtimeType>"` (D12). `logging.level` в 1.0 — `restartRequired` (OQ5):
 уровень логгера принадлежит хосту, а канала «хост, примени новые настройки хоста» в ядре нет.
 
 После MVP (§17) добавляются области:
