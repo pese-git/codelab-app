@@ -5,11 +5,14 @@
 - `api_key_secret` — через `SecretResolver.secret`;
 - `api_key_env` — через `SecretResolver.env`;
 - `${secret:<name>}` в `providers.<id>.headers.*` — через `SecretResolver.secret`;
-- литеральный `api_key` из файла конфига (R8-4; design.md change `add-config-literal-secrets-and-migrate`, D4) — как есть, без резолвера: `ProviderConfig.apiKey`; значение SHALL входить в `ProviderConfig.secrets` и вычищаться из текстов ошибок провайдера.
+- литеральный `api_key` из файла конфига (R8-4; design.md change `add-config-literal-secrets-and-migrate`, D4) — как есть, без резолвера: `ProviderConfig.apiKey`; литерал длиной от 8 символов SHALL входить в `ProviderConfig.secrets` и вычищаться из текстов ошибок провайдера, более короткий — нет. Порог 8 действует только для литерального `api_key` из файла; ключи из хранилища и окружения SHALL вычищаться без порога;
+- `api_key: ${VAR}` и `api_key: ${secret:<name>}` — ссылка, как в заголовках (R8-8): `${VAR}` раскрывается при загрузке, `${secret:<name>}` — через `SecretResolver.secret` при запросе.
+
+Не-HTTP исключения транспорта (например, `FormatException`) SHALL попадать в текст ошибки хода только через `redactSecrets` или именем типа.
 
 Ссылка `api_key_env`, `api_key_secret` или `${secret:…}`, чьё значение похоже на секрет (`literalSecretTag != null`), НЕ SHALL разрешаться: ошибка хода `auth` без HTTP-запроса с текстом `API key reference providers.<id>.<key> looks like a secret value, not a name; run: codelab secret migrate`; значение НЕ SHALL попадать в текст и в `secrets.lookup`.
 
-Хост без `SecretResolver` ключ провайдера НЕ SHALL получать: ни из хранилища, ни прямым чтением окружения. Ссылка тогда SHALL давать ошибку хода класса `auth` без HTTP-запроса: `API key variable <VAR> cannot be read: the host has no secret resolver` для `api_key_env`, `API key secret <name> cannot be read: the host has no secret resolver` для `api_key_secret`, `secret <name> cannot be read (providers.<id>.headers.<H>): the host has no secret resolver` для заголовка. Каждый хост, которому нужен ключ провайдера, SHALL передавать резолвер (настольные хосты — `openHostSecrets`, design.md D4, D15).
+Хост без `SecretResolver` ключ провайдера НЕ SHALL получать: ни из хранилища, ни прямым чтением окружения — кроме подстановки `${VAR}` в `api_key` и `headers`, которую раскрывает загрузка конфига (R8-8; design.md change `add-config-literal-secrets-and-migrate`, D4). Ссылка тогда SHALL давать ошибку хода класса `auth` без HTTP-запроса: `API key variable <VAR> cannot be read: the host has no secret resolver` для `api_key_env`, `API key secret <name> cannot be read: the host has no secret resolver` для `api_key_secret`, `secret <name> cannot be read (providers.<id>.headers.<H>): the host has no secret resolver` для заголовка. Каждый хост, которому нужен ключ провайдера, SHALL передавать резолвер (настольные хосты — `openHostSecrets`, design.md D4, D15).
 
 Ответы:
 - `SecretMissing` для ключа SHALL давать ошибку хода класса `auth` без HTTP-запроса с текстом `API key secret <name> is not set. Run: codelab secret set <name>`;
@@ -37,6 +40,14 @@
 #### Scenario: Сырое значение в теле ошибки
 - **WHEN** провайдер задаёт `headers.Authorization: "Bearer ${secret:codelab/gw}"`, хранилище содержит `tok-test-raw-value`, а сервер отвечает `401` с телом, где есть только `tok-test-raw-value` без `Bearer `
 - **THEN** текст ошибки хода класса `auth` не содержит `tok-test-raw-value`
+
+#### Scenario: Ссылка-значение в заголовке провайдера
+- **WHEN** провайдер `gw` задаёт `headers.X-Api-Key: "${secret:ghp_abcdefghijklmnopqrstuvwxyz0123456789}"`, и сессия делает ход его моделью
+- **THEN** ход завершается ошибкой `auth` без HTTP-запроса с текстом `API key reference providers.gw.headers.X-Api-Key looks like a secret value, not a name; run: codelab secret migrate`; хранилище не вызывалось
+
+#### Scenario: Короткий литеральный ключ
+- **WHEN** `providers.local.api_key: ollama`, и сервер отвечает `401` с телом `ollama model not found`
+- **THEN** текст ошибки хода содержит `ollama` без маркера
 
 #### Scenario: Литеральный ключ в файле
 - **WHEN** `config.yaml` задаёт `providers.p.api_key: sk-test-literal-0123456789`, а провайдер отвечает `401` с телом, содержащим этот ключ

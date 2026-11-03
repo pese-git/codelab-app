@@ -207,6 +207,7 @@ SettingDescriptor _fileOnly(
   String description,
   String reason, {
   Object? defaultValue,
+  bool secret = false,
   bool restartRequired = false,
   List<String>? enumValues,
   num? min,
@@ -221,6 +222,7 @@ SettingDescriptor _fileOnly(
   label: label,
   description: description,
   defaultValue: defaultValue,
+  secret: secret,
   restartRequired: restartRequired,
   enumValues: enumValues,
   min: min,
@@ -314,6 +316,19 @@ final List<SettingDescriptor> _descriptors = List.unmodifiable([
     'Providers',
     'Base URL',
     'Endpoint of the provider API.',
+  ),
+  // Литеральный ключ из файла (design.md change
+  // `add-config-literal-secrets-and-migrate`, D4, R8-4): читается и работает,
+  // но клиенты его не пишут — запись секрета значением запрещена (CFG-2), а
+  // перенос в хранилище делает `secret migrate`.
+  _fileOnly(
+    'providers.*.api_key',
+    SettingType.string,
+    'Providers',
+    'API key (literal)',
+    'API key stored in the config file as is; move it to the secret store.',
+    'a secret is never written by clients; run: codelab secret migrate',
+    secret: true,
   ),
   _shared(
     'providers.*.api_key_env',

@@ -541,15 +541,28 @@ agent-configuration «Слои конфигурации и их порядок»
   проектных, `codelab secret set <suggestedSecretName>` у `CODELAB_CONFIG` (`migrate` его не пишет).
   `config check` печатает предупреждение строкой `warning:`.
 - **Ссылка п. 3, похожая на значение,** не даёт проблемы формата имени: в `CoreConfig` она попадает
-  маркером `UnusableKeyRef`, который не ищется в хранилище (`config check`), не даёт
-  `config.provider.key_missing`, `providerProblems` и `secrets.lookup`.
+  маркером — `UnusableKeyRef` у ключа провайдера, `UnusableSecretReference` в шаблоне заголовка или
+  `env`. Маркер не ищется в хранилище (`config check`), не даёт `config.provider.key_missing`,
+  `providerProblems` и `secrets.lookup`. Токен в `${ghp_…}` вместо имени переменной — та же находка
+  (`referenceName`, маркер `UnusableSecretReference`): окружение не читается, проблемы загрузки нет —
+  только предупреждение; MCP-сервер — `failed`, провайдер — ошибка `auth` хода. Шаблон `sk-…` к именам
+  применяется только в начале значения (`literalSecretTag(value, asName: true)`).
 - **Реестр:** дескриптор `providers.*.api_key` — `fileOnly`, `secret: true`; `provider add --api-key-*`
-  удаляет литерал (R4-4, R8-6); `provider list` — `key: literal in config file`; `config get` печатает
+  удаляет литерал (R4-4, R8-6); `provider list` — `key: literal in config file` (у `api_key: ${VAR}` — `env <VAR>: set|not set`);
+  `url`/`base_url` в `config get` после удаления userinfo проверяются `hasInlineSecret` (токен в пути →
+  `<redacted>`); `config get` печатает
   литеральный `api_key` и ссылку п. 3 как `<redacted>`.
 - **`--provider-config @путь`** — файл, но не слой конфига: `api_key` там остаётся проблемой
   `inlineSecret`, перенос невозможен.
-- **Литеральный `api_key`** — ключ провайдера (`ProviderConfig.apiKey`, без резолвера; значение
-  входит в `ProviderConfig.secrets`). Вместе с `api_key_env`/`api_key_secret` — проблема
+- **Литеральный `api_key`** — ключ провайдера (`ProviderConfig.apiKey`, без резолвера). Литерал от 8
+  символов входит в `ProviderConfig.secrets`; порог действует только для литерала из файла, ключи
+  хранилища и окружения вычищаются без порога. Литерал с управляющими или не-ASCII символами — проблема
+  загрузки без значения (`api_key must be printable ASCII`; у литерала секретно названного заголовка
+  провайдера — `<Header> must be printable ASCII`, у MCP-заголовков проверки нет). Смесь литерала и
+  ссылки — `api_key may use ${secret:…} only as the whole value`. Порог — флаг
+  `ProviderConfig.literalApiKey`, его ставит только загрузка. `api_key: "${VAR}"` и `api_key: "${secret:<name>}"` — ссылка, как в
+  заголовках: без предупреждения, R8-6 и R0-4 — как для подстановки, `migrate` не трогает (решение
+  пользователя 2026-11-04 R8-8). Вместе с `api_key_env`/`api_key_secret` — проблема
   `api_key, api_key_env and api_key_secret are mutually exclusive` (два источника ключа —
   неоднозначность). Прочие ключи п. 1 (`apiKey`, `token`, `secret`, `password`) не применяются.
 - **Ссылка п. 3, похожая на значение,** не разрешается: ошибка хода `API key reference

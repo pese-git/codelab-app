@@ -48,14 +48,14 @@
 
 ## 1. Распознавание и предупреждения загрузки (итерация 1)
 
-- [ ] 1.1 `[agent]` Красный тест `codelab_agent_core/test/config/inline_secrets_test.dart` (agent-configuration «Литеральные секреты в файле конфига»; находки №8, №10):
+- [x] 1.1 `[agent]` Красный тест `codelab_agent_core/test/config/inline_secrets_test.dart` (agent-configuration «Литеральные секреты в файле конфига»; находки №8, №10):
   - `literalSecretTag` по каждому шаблону: позитивные и негативные примеры (`task-list`); литеральные части (`Bearer ${secret:x}` — `null`, `Bearer ghp_… ${X}` — `github`); DSN с паролем, разрезанным подстановкой (L5); белый список; тег без значения;
   - 1 МиБ враждебного текста для «присваивания секрета» — не дольше 2 с;
   - `findInlineSecrets` даёт находки пп. 1–3 с путём, видом, `suggestedSecretName` и участками;
   - значения п. 3: совпадающее с шаблоном (`sk-proj-…`, `ghp_<36 строчных>`) — находка; несовпадающее (`sk-test-secret-123`, `sk-Test Secret`) — нет (H2 арх.).
 
   Затем — `config/inline_secrets.dart` и экспорт в публичный барель (D3).
-- [ ] 1.2 `[agent]` Красный тест `test/config/config_secret_in_file_test.dart` (agent-configuration «Секреты только ссылками», «Литеральные секреты в файле конфига»):
+- [x] 1.2 `[agent]` Красный тест `test/config/config_secret_in_file_test.dart` (agent-configuration «Секреты только ссылками», «Литеральные секреты в файле конфига»):
   - литеральный `api_key` — предупреждение и ключ провайдера (`core/config-warns-inline-api-key`);
   - `api_key` + `api_key_secret` — проблема источников;
   - `token` у сервера — предупреждение, поле не применяется;
@@ -72,17 +72,17 @@
   - текст без значений.
 
   Затем — `config/resolve.dart` на находках задачи 1.1 (D4). Существующие тесты, которые меняют ожидание: `config_inline_secret_test.dart` (`core/config-rejects-inline-api-key` → `core/config-warns-inline-api-key`) и `apps/codelab_agent/test/config_invalid_process_test.dart` (литеральный `api_key: sk-test-secret` сейчас ждёт отказ старта; теперь старт с предупреждением и без значения в stderr и логе).
-- [ ] 1.3 `[agent]` Красный тест `test/llm/literal_api_key_test.dart` (agent-secrets «Ключ провайдера при запросе»): литеральный ключ идёт в запрос без резолвера и вычищается из текста ошибки 401; ссылка п. 3 даёт ошибку `auth` без HTTP-запроса и без значения в тексте и в `secrets.lookup`; MCP-сервер с такой ссылкой — `failed` с тем же текстом. Затем — ключ провайдера и `_expandServerSecrets` (D4).
-- [ ] 1.4 `[agent]` Красный тест `codelab_agent_io/test/cli/config_check_secret_warning_test.dart`: `config check` печатает `warning:` по шаблону D4, код прежний; маркер `UnusableKeyRef` не ищется в хранилище (нет строки `secret <имя> is not set`), не даёт `config.provider.key_missing`, не попадает в `providerProblems` и `secrets.lookup` (`--debug-secrets`). Затем — `config_warnings.dart`, `config_commands.dart`, `resolve.dart` (D4).
-- [ ] 1.5 `[agent]` Красный тест `codelab_agent_core/test/runtime/config_reload_literals_test.dart` (agent-runtime «Живая перезагрузка конфигурации», сценарии с литералами): HTTP-сервер с литеральным `Authorization` при смене `url`; провайдер с литеральным `api_key` при смене `base_url`; новый сервер с литералом — всё после перезапуска. Затем — `config_reload_plan.dart`: `api_key` в `_providerGroup`, находки в `_providerWithKey` и `_serverHasSubstitution` (D12).
-- [ ] 1.6 `[agent]` Красный тест `codelab_agent_io/test/cli/provider_commands_test.dart`: `provider add --api-key-secret` при литеральном `api_key` удаляет его (R4-4, R8-6); `provider list` — `key: literal in config file`. Затем — `_keySourceFields` и вывод `provider list` (D4).
+- [x] 1.3 `[agent]` Красный тест `test/llm/literal_api_key_test.dart` (agent-secrets «Ключ провайдера при запросе»): литеральный ключ идёт в запрос без резолвера и вычищается из текста ошибки 401; ссылка п. 3 даёт ошибку `auth` без HTTP-запроса и без значения в тексте и в `secrets.lookup`; MCP-сервер с такой ссылкой — `failed` с тем же текстом. Затем — ключ провайдера и `_expandServerSecrets` (D4).
+- [x] 1.4 `[agent]` Красный тест `codelab_agent_io/test/cli/config_check_secret_warning_test.dart`: `config check` печатает `warning:` по шаблону D4, код прежний; маркер `UnusableKeyRef` не ищется в хранилище (нет строки `secret <имя> is not set`), не даёт `config.provider.key_missing`, не попадает в `providerProblems` и `secrets.lookup` (`--debug-secrets`). Затем — `config_warnings.dart`, `config_commands.dart`, `resolve.dart` (D4). *Ревью итерации 1: реализация оказалась следствием 1.2 (маркер и предупреждения валидатора); отдельного кода в `config_commands.dart` не потребовалось.*
+- [x] 1.5 `[agent]` Красный тест `codelab_agent_core/test/runtime/config_reload_literals_test.dart` (agent-runtime «Живая перезагрузка конфигурации», сценарии с литералами): HTTP-сервер с литеральным `Authorization` при смене `url`; провайдер с литеральным `api_key` при смене `base_url`; новый сервер с литералом — всё после перезапуска. Затем — `config_reload_plan.dart`: `api_key` в `_providerGroup`, находки в `_providerWithKey` и `_serverHasSubstitution` (D12).
+- [x] 1.6 `[agent]` Красный тест — новый файл `codelab_agent_io/test/cli/provider_commands_test.dart`: `provider add --api-key-secret` при литеральном `api_key` удаляет его (R4-4, R8-6); `provider list` — `key: literal in config file`. Затем — `_keySourceFields` и вывод `provider list` (D4).
 
 **Критерий итерации 1.** Литералы в файлах дают предупреждения, литеральный `api_key` работает, ссылки п. 3 не разрешаются; ни один текст не содержит значения.
 
 ## 2. Писатель и R4-6 (итерация 2)
 
 - [ ] 2.1 `[agent]` Красный тест `codelab_agent_io/test/config/literal_secret_rule_test.dart`: писатель отклоняет литерал по шаблону в `headers`/`env` (R1-1) и в элементе `args` с подсказкой `--env` (OQ3, R8-5); прежний литерал файла — предупреждение, `config unset` его удаляет. Затем — `literal_secret_rule.dart` поверх `literalSecretTag` (D5).
-- [ ] 2.2 `[agent]` Красный тест в `codelab_agent_io/test/cli/config_output_test.dart` (agent-configuration «Маскирование args MCP-серверов в выводе», «Подкоманды записи и чтения конфига», сценарий «config get не печатает литеральный ключ»): `args`, литеральный `api_key` и ссылка п. 3 в листе реестра — `<redacted>`, значения с `${…}` проходят `literalSecretTag`. Затем — `cli/config_output.dart` без раннего выхода для листьев реестра (D5).
+- [ ] 2.2 `[agent]` Красный тест в `codelab_agent_io/test/cli/config_output_test.dart` (agent-configuration «Маскирование args MCP-серверов в выводе»): элементы `args` — по шаблону, после секретного флага, `--flag=value`; ссылки `${…}` — как есть. Затем — маскирование `args` в `cli/config_output.dart` (D5). *Ревью итерации 1: маскер всех листьев `config get`/`provider list` (литеральный `api_key`, ссылка п. 3 в листах реестра, значения с `${…}`; сценарий «config get не печатает литеральный ключ») перенесён в итерацию 1; в 2.2 остаются `args`, а писатель — в 2.1.*
 - [ ] 2.3 `[client]` E2e-тест совпадения `apps/codelab_cli/test/e2e/config_get_args_masking_test.dart`: вывод `codelab config get mcp.servers` совпадает с `codelab-agent`. Кода в CLI не ожидается.
 
 **Критерий итерации 2.** R1-1 и R4-6 закрыты на записи и в выводе.

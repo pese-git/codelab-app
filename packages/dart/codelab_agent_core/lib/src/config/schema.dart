@@ -61,15 +61,19 @@ final class StringMapNode extends SchemaNode {
 ///
 /// [named] — схема значений по произвольному имени (`providers.<id>`);
 /// [nameFormat] проверяет имя; [nameLabel] называет его в сообщении.
-/// [rejectsInlineSecrets] — секция, в которой ключи `api_key`, `token` и т. п.
-/// дают `inlineSecret` (CFG-2).
+/// [toleratesInlineSecrets] — секция, в которой ключи `inlineSecretKeys`
+/// (`api_key`, `token`, …), не описанные в [fields], не дают проблемы схемы:
+/// литерал в файле — предупреждение `config.secret.in_file` и не применяется,
+/// а не отказ загрузки (CFG-9, пункт 1; design.md change
+/// `add-config-literal-secrets-and-migrate`, D4, R8-4). Ключ, описанный в
+/// [fields] (`providers.<id>.api_key`), проверяется как обычный.
 final class SectionNode extends SchemaNode {
   const SectionNode(
     this.fields, {
     this.named,
     this.nameFormat,
     this.nameLabel = 'name',
-    this.rejectsInlineSecrets = false,
+    this.toleratesInlineSecrets = false,
     super.applied,
   });
 
@@ -77,7 +81,7 @@ final class SectionNode extends SchemaNode {
   final SchemaNode? named;
   final RegExp? nameFormat;
   final String nameLabel;
-  final bool rejectsInlineSecrets;
+  final bool toleratesInlineSecrets;
 }
 
 /// Список отображений (`mcp.servers`, `exec.secrets`); [keyField] — поле
@@ -337,7 +341,7 @@ const SectionNode _mcpServerSchema = SectionNode({
   'enabled': _bool,
   'connect_timeout': _dur,
   'call_timeout': _dur,
-}, rejectsInlineSecrets: true);
+}, toleratesInlineSecrets: true);
 
 const SectionNode _providerSchema = SectionNode({
   'kind': ScalarNode(
@@ -346,6 +350,10 @@ const SectionNode _providerSchema = SectionNode({
     allowedLabel: 'provider kind',
   ),
   'base_url': _str,
+  // Литеральный ключ из файла (R8-4, D4): работает как ключ провайдера и
+  // сопровождается предупреждением `config.secret.in_file`, кроме ссылки
+  // `${VAR}`/`${secret:x}` (R8-8): она раскрывается как в заголовках.
+  'api_key': _str,
   'api_key_env': _str,
   'api_key_secret': _str,
   'auth_header': _str,
@@ -380,7 +388,7 @@ const SectionNode _providerSchema = SectionNode({
   'stall_key_rotations': _opaque,
   'stall_base_delay': _opaque,
   'stall_max_delay': _opaque,
-}, rejectsInlineSecrets: true);
+}, toleratesInlineSecrets: true);
 
 const SectionNode _modelSchema = SectionNode({
   'context_window': _int,

@@ -12,7 +12,8 @@ import 'decorators/retry.dart';
 import 'decorators/watchdog.dart';
 import 'errors.dart';
 import 'event_stream.dart';
-import 'model_catalog.dart' show EnvKeyRef, ProviderKeyRef, SecretKeyRef;
+import 'model_catalog.dart'
+    show EnvKeyRef, ProviderKeyRef, SecretKeyRef, UnusableKeyRef;
 import 'model_ref.dart';
 import 'provider_config.dart';
 import 'providers/anthropic.dart';
@@ -138,9 +139,10 @@ StreamFunction createConfiguredStreamFunction(
 /// отдаёт в `buildAgentCore(streamFunction: …)`. Значения секретов хост не
 /// читает.
 ///
-/// Предупреждение: если [keys] опустить, запросы пойдут без ключа (как у
-/// локального сервера) — ключ из `ProviderConfig.apiKey` берётся только у
-/// записи, собранной хостом вручную. Для провайдеров конфига всегда
+/// Предупреждение: если [keys] опустить, запросы пойдут с ключом из
+/// `ProviderConfig.apiKey` (литеральный `api_key` файла конфига или запись,
+/// собранная хостом вручную), а ссылки `api_key_env`/`api_key_secret` не
+/// разрешатся — запросы уйдут без ключа. Для провайдеров конфига всегда
 /// передавайте `keys` из `CatalogProvider.key`.
 StreamFunction createRoutedStreamFunction(
   List<ProviderConfig> providers,
@@ -251,6 +253,12 @@ final class _ResolvedProvider {
   final String? failure;
 }
 
+/// Отказ для ссылки, в которую вписано значение секрета: называет ключ
+/// конфига и команду переноса, значения в тексте нет.
+String _unusableReference(String keyPath) =>
+    'API key reference $keyPath looks like a secret value, not a name; run: '
+    'codelab secret migrate';
+
 /// Читает ключ и значения заголовков через [secrets]; не бросает исключений.
 ///
 /// Тексты отказов: секрет не задан — команда `codelab secret set`;
@@ -266,9 +274,26 @@ Future<_ResolvedProvider> _resolveSecrets(
   final id = config.name;
   String? apiKey;
   final rawValues = <String>[];
+  // Маркеры всех шаблонов — до первого обращения к хранилищу, как в рантайме
+  // MCP: значение, вписанное вместо имени, не должно уйти в `secrets.lookup`
+  // и в тексты ни при каком порядке ссылок.
+  for (final MapEntry(key: header, value: template) in templates.entries) {
+    if (template.parts.any((part) => part is UnusableSecretReference)) {
+      return _ResolvedProvider.failed(
+        _unusableReference('providers.$id.headers.$header'),
+      );
+    }
+  }
   switch (key) {
     case null:
       break;
+    case UnusableKeyRef(:final keyPath):
+      // В ссылку вписан сам ключ (CFG-9, пункт 3): ни хранилище, ни окружение
+      // не опрашиваются, чтобы значение не попало в `secrets.lookup` и в
+      // тексты ошибок (design.md change `add-config-literal-secrets-and-migrate`,
+      // D4). Проверка стоит до `secrets == null`: подсказка про перенос
+      // полезнее, чем «нет резолвера».
+      return _ResolvedProvider.failed(_unusableReference(keyPath));
     case EnvKeyRef(:final variable):
       if (secrets == null) {
         return _ResolvedProvider.failed(

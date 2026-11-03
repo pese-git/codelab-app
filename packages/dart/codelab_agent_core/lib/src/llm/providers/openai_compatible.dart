@@ -28,6 +28,7 @@ StreamFunction openAiCompatibleStreamFunction(
       (state) =>
           _OpenAiTurn(config, services, model, state).run(context, cancel),
       classify: classifyException,
+      secrets: config.secrets,
     );
 
 /// Finish reasons of §2.7.

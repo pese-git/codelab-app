@@ -16,6 +16,11 @@ import 'host_settings.dart';
 /// (регистр важен: `apiKey` и `api_key` — разные имена).
 const inlineSecretKeys = {'api_key', 'apiKey', 'token', 'secret', 'password'};
 
+/// Событие предупреждения «секрет лежит в файле конфига» (`ConfigIssue.event`,
+/// поля `key`, `source`): CFG-9, пункты 1–3, в файловом слое (design.md change
+/// `add-config-literal-secrets-and-migrate`, D4, R8-4). Значения в записи нет.
+const secretInFileEvent = 'config.secret.in_file';
+
 /// Событие проблемы «переменная `${NAME}` не задана» (`ConfigIssue.event`,
 /// поле `variable`): структурный признак для писателя конфига, чтобы он не
 /// разбирал текст сообщения (design.md change `add-config-writer-and-reload`,
@@ -49,7 +54,10 @@ enum ConfigIssueKind {
   /// Значение вне допустимого: перечисление, формат, подстановка.
   value,
 
-  /// Секрет, записанный значением (CFG-2).
+  /// Секрет, записанный значением (CFG-2): отказ записи `ConfigWriter` и
+  /// предконфигурации из окружения. Литерал в **файле** конфига с R8-4 — не
+  /// проблема, а предупреждение [secretInFileEvent] (design.md change
+  /// `add-config-literal-secrets-and-migrate`, D4).
   inlineSecret,
 
   /// Межключевая проверка §15.5, шаг 8.
@@ -146,8 +154,10 @@ final class ConfigLoadResult {
   final Map<String, Object?> values;
 
   /// Конфиг или исключение: так делает хост, которому ошибка конфигурации —
-  /// отказ при старте (`serve`, код `64`). При секрете значением бросается
-  /// [ConfigInlineSecretException] (§17.5.2).
+  /// отказ при старте (`serve`, код `64`). При проблеме вида
+  /// `ConfigIssueKind.inlineSecret` (писатель, предконфигурация; файл конфига
+  /// её больше не даёт, R8-4) бросается [ConfigInlineSecretException]
+  /// (§17.5.2).
   CoreConfig orThrow() {
     final config = this.config;
     if (config != null && issues.isEmpty) {

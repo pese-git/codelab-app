@@ -243,7 +243,13 @@ providers:
 **файл** руками, с 8.11 — **предупреждение**, а не ошибка (решение пользователя 2026-11-04 R8-4;
 design.md change `add-config-literal-secrets-and-migrate`, D4). Литеральный `api_key` работает как ключ провайдера, а загрузка пишет
 `config.secret.in_file` по единому шаблону (§17.5.4): `providers.openai.api_key: a secret is stored in
-the config file; move it to the secret store: codelab secret migrate` — без значения. `api_key` вместе с `api_key_env` или
+the config file; move it to the secret store: codelab secret migrate` — без значения. `api_key: "${VAR}"`
+и `api_key: "${secret:<name>}"` — ссылка, а не литерал: раскрывается как в заголовках, без
+предупреждения, `secret migrate` её не трогает (решение пользователя 2026-11-04 R8-8, design.md change `add-config-literal-secrets-and-migrate`, D4).
+Литерал от 8 символов вычищается из текстов ошибок провайдера (более короткий, вроде `ollama`, — нет);
+литерал с управляющими или не-ASCII символами — проблема загрузки без значения (`api_key must be
+printable ASCII`); смесь литерала и ссылки в `api_key` — `api_key may use ${secret:…} only as the whole
+value` (§17.5.4). `api_key` вместе с `api_key_env` или
 `api_key_secret` у одного провайдера после слияния слоёв — проблема загрузки `api_key, api_key_env and
 api_key_secret are mutually exclusive`: конфликт источников (решение пользователя 2026-11-04 R8-6). До
 8.11 (с этапа 8.9) литеральный `api_key` был проблемой `inlineSecret`. В предконфигурации из окружения
@@ -896,8 +902,9 @@ warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Mo
 проходит обычную строгую проверку (§15.5), поэтому неизвестный ключ, вид провайдера вне
 `openai-compatible | anthropic | gemini` и определения агентов в YAML (`agents.definitions`, DF-12)
 дают ошибку, а не подмену значением по умолчанию или провайдером `mock` (DF-15). Литеральный ключ API в
-конфиг не переносят (CFG-2): `api_key = "${VAR}"` превращается в `api_key_env: VAR`, а литерал
-хранится в переменной окружения или в хранилище секретов.
+конфиг не переносят (CFG-2): `api_key = "${VAR}"` превращается в `api_key_env: VAR` (с 8.11 допустима и
+форма `api_key: "${VAR}"` — ссылка, R8-8; `api_key_env` предпочтительнее), а литерал хранится в
+переменной окружения или в хранилище секретов.
 
 **Таблица соответствия** (для ручного переноса; своя запись схемы, не алгоритм чтения):
 

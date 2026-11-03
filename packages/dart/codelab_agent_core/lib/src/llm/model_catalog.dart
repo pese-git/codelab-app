@@ -126,6 +126,26 @@ final class SecretKeyRef extends ProviderKeyRef {
   final String name;
 }
 
+/// Ссылка на ключ, в которую вписан сам ключ вместо имени (CFG-9, пункт 3;
+/// design.md change `add-config-literal-secrets-and-migrate`, D4).
+///
+/// Почему маркер, а не ссылка: значение вроде `api_key_env: ghp_…` как *имя*
+/// попало бы в тексты ошибок, события и `secrets.lookup` — туда, где имена
+/// печатаются. Поэтому загрузка не строит [EnvKeyRef]/[SecretKeyRef], а
+/// кладёт маркер без значения.
+///
+/// Для чего: `createRoutedStreamFunction` по маркеру завершает ход ошибкой
+/// `auth` без HTTP-запроса и без обращения к хранилищу; `config check`,
+/// `config.provider.key_missing` и `providerProblems` его не видят.
+///
+/// Как использовать: создаёт только загрузка конфига. [keyPath] — путь ключа
+/// (`providers.<id>.api_key_env`), он и попадает в текст ошибки.
+final class UnusableKeyRef extends ProviderKeyRef {
+  const UnusableKeyRef(this.keyPath);
+
+  final String keyPath;
+}
+
 /// A provider with the models its config declares, in config order.
 ///
 /// [key] и [headerTemplates] — ссылки на секреты, которые разрешаются при

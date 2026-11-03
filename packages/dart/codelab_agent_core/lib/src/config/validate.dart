@@ -1,4 +1,3 @@
-import '../secrets/secret_names.dart';
 import 'config_issue.dart';
 import 'config_tree.dart';
 import 'key_path.dart';
@@ -63,15 +62,15 @@ final class LayerWalk {
   void _section(Map<String, Object?> map, SectionNode node, KeyPath path) {
     for (final MapEntry(key: name, value: value) in map.entries) {
       final child = path.child(name);
-      if (node.rejectsInlineSecrets && inlineSecretKeys.contains(name)) {
-        _issue(
-          ConfigIssueKind.inlineSecret,
-          child,
-          _inlineSecretMessage(child),
-        );
+      final field = node.fields[name];
+      // Ключ из `inlineSecretKeys` без поля в схеме — литеральный секрет в
+      // файле: проблемы схемы нет, загрузка предупреждает отдельно
+      // (`inline_secrets.dart`) и ключ не применяет (CFG-9, R8-4, D4).
+      if (field == null &&
+          node.toleratesInlineSecrets &&
+          inlineSecretKeys.contains(name)) {
         continue;
       }
-      final field = node.fields[name];
       if (field != null) {
         _node(value, field, child);
         continue;
@@ -111,22 +110,6 @@ final class LayerWalk {
       path,
       hint == null ? 'unknown key' : 'unknown key (did you mean $hint?)',
     );
-  }
-
-  /// Текст не содержит значения: оно может быть секретом (CFG-2). Подсказка
-  /// называет команду `codelab secret set <name>` с именем
-  /// `SecretNames.suggestFor(путь ключа)` и ссылку, которой заменить ключ
-  /// (agent-configuration «Секреты только ссылками»; design.md change
-  /// `add-agent-secret-store`, D2).
-  String _inlineSecretMessage(KeyPath key) {
-    final name = SecretNames.suggestFor(key.value);
-    return key.value.startsWith('mcp.servers')
-        ? 'secrets are not stored in the config; run: codelab secret set '
-              '$name, then use \${secret:$name} in env or headers '
-              '(or reference an environment variable with \${NAME})'
-        : 'secrets are not stored in the config; run: codelab secret set '
-              '$name, then use api_key_secret: $name '
-              '(or api_key_env with an environment variable)';
   }
 
   void _node(Object? value, SchemaNode node, KeyPath path) {
