@@ -49,3 +49,6 @@ fvm dart run tool/llm_smoke.dart
 
 `CODELAB_SMOKE_PROVIDER=anthropic` с `CODELAB_SMOKE_BASE_URL=https://api.anthropic.com` проверяет адаптер Anthropic; `CODELAB_SMOKE_REASONING=low|medium|high` включает рассуждение; `CODELAB_SMOKE_THINKING=budget` нужен моделям Claude 4.5 и старше (по умолчанию `adaptive` — для Claude 4.6 и новее). Для локальных серверов (Ollama, LM Studio) ключ не нужен. Если поток провайдера расходится с фикстурой, фикстура исправляется со ссылкой на документацию провайдера.
 
+## 5. Секреты в конфиге (задача 8.11)
+
+Источник — design.md OpenSpec change `add-config-literal-secrets-and-migrate` (D3, D4; после архивации — тот же change в `openspec/changes/archive/`). Распознавание литеральных секретов конфига (CFG-9, пп. 1–3) живёт только в `lib/src/config/inline_secrets.dart` (`literalSecretTag`, `findInlineSecrets`, публичный барель): валидатор ядра, писатель и маскирование `codelab_agent_io`, `secret migrate` своих копий не заводят. Находки и предупреждения не содержат значений. Шаблоны пишутся по §12.4 и публичным описаниям форматов токенов; правила gitleaks, detect-secrets, trufflehog не копируются (корневой `AGENTS.md` §5). Редакция вывода к модели (P-10, §12.4) — после 1.0 (решение пользователя 2026-11-04 R8-1).

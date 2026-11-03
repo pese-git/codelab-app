@@ -110,7 +110,7 @@ codelab config get|set|unset|path|check ...   конфиг встроенног�
 codelab config export-providers|import-providers ...   обмен провайдерами без секретов (agent-core §17.14.4)
 codelab provider add|list|remove ...          провайдеры; add без флагов на TTY — мастер (§12.4.4)
 codelab mcp add|list|remove ...               MCP-серверы в конфиге
-codelab secret set|delete|list ...            секреты агента (8.9: бэкенды env и file)
+codelab secret set|delete|list|migrate ...    секреты агента (8.9: бэкенды env и file; migrate — 8.11)
 codelab update [--check] [--channel stable|beta|pinned] [--version <x.y.z>] [--allow-downgrade] [--yes]   самообновление (после MVP, §12.6.4)
 codelab login <provider> [--device] [--no-browser] [--timeout <duration>]   вход по подписке (после MVP, agent-core §17.10.6)
 codelab logout <provider>                     удалить токен входа (после MVP, agent-core §17.10.6)
@@ -120,7 +120,7 @@ codelab --version | --help
 
 Подкоманды `config`, `provider`, `mcp` и `secret` по этапам: `config check [--cwd <dir>]` — этап 8,
 задача 8.5 (проверка; `get|path` — позже; план сборки встроенного агента в `config check` — этап 7,
-задача 7.6); `secret set|delete|list` — этап 8, задача 8.9 (нужна MVP);
+задача 7.6); `secret set|delete|list` — этап 8, задача 8.9 (нужна MVP); `secret migrate` и флаги `mcp add --header-stdin|--env-stdin` — задача 8.11 (Should; design.md change `add-config-literal-secrets-and-migrate`, D7, D11);
 `config path|get|set|unset`, `provider add|list|remove`, `mcp add|list|remove` — этап 8, задача 8.10
 (Should — не блокирует MVP; change `add-config-writer-and-reload`, D6); мастер `provider add` — этап 9 (задача 9.6, Should);
 `config export-providers|import-providers` — после MVP (E-14). До своего этапа подкоманда не
@@ -155,15 +155,23 @@ D12). В 8.5 создаётся минимальный пакет `codelab_setup
 доступен только `env`; хранилища ОС — после 1.0 (черновик `add-agent-os-secret-backends`). `set`
 читает значение только из stdin (с TTY — без эха), значение аргументом — код 64. Флаги подключения
 и запроса вместе с `secret` — код 64, как у `config`; `codelab secret` без подкоманды или с неизвестной
-подкомандой — код 64 и `codelab: secret needs a subcommand: set, delete or list`, ошибка разбора
+подкомандой — код 64 и `codelab: secret needs a subcommand: set, delete, list or migrate`, ошибка разбора
 argv — код 64 и `codelab: invalid arguments for secret`; присланные слова не цитируются (среди них
 может быть значение секрета). Ошибки использования (неверное имя, значение аргументом, argv) идут со
 справкой `secret`, ошибки значения (пустое, многострочное, не UTF-8, длинное, коллизия) — без неё;
 недопустимый `CODELAB_CONFIG` подкоманды пропускают с `warning: CODELAB_CONFIG ignored: <reason>`
 (D8). Подкоманды не запускают агента, не создают `sessions/`, `profiles.json` и
-`cli_history`; файл `secrets.yaml` пишут только `set` и `delete` при бэкенде `file`, создаёт —
-только `set`. Сторож и `cliAllowlist` не меняются: `codelab_setup/io.dart` по-прежнему
+`cli_history`; файл `secrets.yaml` пишут только `set`, `delete` и `migrate` при бэкенде `file`,
+создаёт — только запись (`set`, `migrate`). Сторож и `cliAllowlist` не меняются: `codelab_setup/io.dart` по-прежнему
 импортируется только из `run.dart`.
+
+`secret migrate [--project|--local|--all] [--cwd <dir>] [--dry-run] [--force]` (8.11; design.md change
+`add-config-literal-secrets-and-migrate`, D7) переносит в хранилище литеральные секреты, о которых предупреждает
+загрузка конфига (CFG-9, пп. 1–3; решение пользователя 2026-11-04 R8-4), и заменяет их в файлах
+ссылками; регистрируется так же (`SecretCommands.migrate` через `codelab_setup/io.dart`). Её `--cwd` —
+флаг подкоманды после `migrate`; `-C`/`--cwd` верхнего уровня вместе с `secret` по-прежнему код 64.
+`codelab mcp add` получает флаги `--header-stdin <Name> [--header-scheme <Scheme>]` и `--env-stdin <NAME>`
+(8.11, D11): значение из stdin уходит в хранилище, в файл — `${secret:…}`, один флаг на вызов.
 
 `codelab config path|get|set|unset`, `codelab provider add|list|remove` и `codelab mcp add|list|remove`
 (этап 8, задача 8.10; design.md change `add-config-writer-and-reload`, D6) регистрируются так же,

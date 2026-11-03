@@ -110,8 +110,8 @@ final class SecretResolver {
 - `SecretLookup` вместо `String?`: со `String?` ошибка хода «хранилище недоступно» и «секрет не
   задан» была бы одинаковой и в первом случае вводила бы в заблуждение (приоритет наблюдаемости
   выше простоты);
-- параметра `redactor` нет: `Redactor` появится в 8.11 вместе со своим параметром конструктора
-  (D10; §12.4, абзац «До 8.11»);
+- параметра `redactor` нет: `Redactor` появится вместе со своим параметром конструктора в change
+  редакции после 1.0 (D10; §12.4; решение пользователя 2026-11-04 R8-1, design.md change `add-config-literal-secrets-and-migrate`, D1);
 - `invalidate()` нет: перезагрузки конфига в 8.9 нет, сброс кэша добавит 8.10 вместе с ней
   (§17.5.6);
 - таймаута в резолвере нет: ядро не создаёт таймеры (PKG-6), предел ожидания соблюдают бэкенды
@@ -460,7 +460,7 @@ agent-configuration «Слои конфигурации и их порядок»
 файлами по §15.2: одноимённый провайдер из файла дополняется, поля окружения побеждают.
 `host.config.loaded` перечисляет источники (`"env:CODELAB_PROVIDER_CONFIG"`), но не значения.
 Значения `headers` проходят тот же путь шаблонов, что у файлов (`SecretTemplate`, D4 change
-`add-agent-secret-store`); регистрация значений как точных секретов `Redactor` (§12.4, п. 4) — 8.11
+`add-agent-secret-store`); регистрация значений как точных секретов `Redactor` (§12.4, п. 4) — после 1.0 (R8-1)
 (D3).
 
 ## 17.5.4. Алгоритм: секреты (P-12, P-17)
@@ -509,7 +509,7 @@ agent-configuration «Слои конфигурации и их порядок»
   поэтому `${secret:…}` из чужого репозитория до резолвера не доходит; у доверенного проекта ссылка
   работает (§17.5.9).
 
-**Встроенный ключ — ошибка (CFG-9).** Валидатор §15.5 (шаг 3) отклоняет:
+**Секрет в конфиге (CFG-9).** Валидатор §15.5 (шаг 3) распознаёт:
 
 1. ключи `api_key`, `apiKey`, `token`, `secret`, `password` в `providers.*`,
    `tools.web.search.backends.*`, `mcp.servers.*`;
@@ -518,16 +518,54 @@ agent-configuration «Слои конфигурации и их порядок»
 3. значение `api_key_env` или `api_key_secret`, совпадающее с шаблоном §12.4 (частая ошибка:
    ключ вписан вместо имени).
 
-В 8.9 действует пункт 1 для `providers.*` и элементов `mcp.servers` (проблема `inlineSecret`
-валидатора; `inlineSecretKeys` — в `config_issue.dart` с 8.10); `tools.web.search.backends.*` в схеме 8.9 ещё
-непрозрачен и получит правило вместе с инструментом поиска (§17.1.6). Пункты 2–3 (проверка по
-шаблонам §12.4) — 8.11 (change `add-agent-core-secret-redaction`; design.md change
-`add-agent-secret-store`, D10, D12). До них большинство ключей, вписанных вместо имени, отсекает
-формат: `api_key_env` — имя переменной (`expected an environment variable name`; `sk-…` не
-проходит), `api_key_secret` — правило `SecretNames`; текст проблемы значения не цитирует. Ключ,
-похожий на имя переменной (`ghp_…`), формат не ловит — это остаётся за 8.11.
+В 8.9–8.10 пункт 1 для `providers.*` и элементов `mcp.servers` был ошибкой (проблема `inlineSecret`;
+`inlineSecretKeys` — в `config_issue.dart` с 8.10). `tools.web.search.backends.*` получит правило вместе с
+инструментом поиска (§17.1.6).
 
-Ошибка — `ConfigInlineSecretException` с подсказкой; значение в сообщение не попадает:
+**С 8.11 — предупреждение, а не ошибка** (решение пользователя 2026-11-04 R8-4, заменяет прежнее
+«ошибка загрузки»; design.md change `add-config-literal-secrets-and-migrate`, D3, D4). Путь «как Claude Code» до 1.0: `.mcp.json` допускает
+литералы, а ошибка старта из-за файла, правленного руками, хуже предупреждения с готовой командой
+переноса. Риск — проектный конфиг с секретом уйдёт в git: предупреждение это показывает, но не
+предотвращает.
+- **Распознавание** — функции ядра `literalSecretTag` и `findInlineSecrets` (`config/inline_secrets.dart`,
+  публичный барель):
+  - литеральные части значения между `${…}` проверяются по шаблонам §12.4: `Bearer ${secret:x}` —
+    без находки, `Bearer sk-… ${X}` (R1-1) — находка;
+  - пароль userinfo URL, который не состоит целиком из одной `${…}`, — находка (DSN, разрезанный
+    подстановкой);
+  - `url`/`base_url` не проверяются: `config get` печатает их без userinfo (R4-5).
+- **Предупреждение** на каждую находку файлового слоя (по слою, независимо от `enabled`):
+  `config.secret.in_file {key, source}` с файлом, строкой и столбцом, без значения. Шаблон текста один:
+  `<key>: a secret is stored in the config file; move it to the secret store: <command>`. Здесь
+  `<command>` — `codelab secret migrate` у слоя `user`, `codelab secret migrate --project|--local` у
+  проектных, `codelab secret set <suggestedSecretName>` у `CODELAB_CONFIG` (`migrate` его не пишет).
+  `config check` печатает предупреждение строкой `warning:`.
+- **Ссылка п. 3, похожая на значение,** не даёт проблемы формата имени: в `CoreConfig` она попадает
+  маркером `UnusableKeyRef`, который не ищется в хранилище (`config check`), не даёт
+  `config.provider.key_missing`, `providerProblems` и `secrets.lookup`.
+- **Реестр:** дескриптор `providers.*.api_key` — `fileOnly`, `secret: true`; `provider add --api-key-*`
+  удаляет литерал (R4-4, R8-6); `provider list` — `key: literal in config file`; `config get` печатает
+  литеральный `api_key` и ссылку п. 3 как `<redacted>`.
+- **`--provider-config @путь`** — файл, но не слой конфига: `api_key` там остаётся проблемой
+  `inlineSecret`, перенос невозможен.
+- **Литеральный `api_key`** — ключ провайдера (`ProviderConfig.apiKey`, без резолвера; значение
+  входит в `ProviderConfig.secrets`). Вместе с `api_key_env`/`api_key_secret` — проблема
+  `api_key, api_key_env and api_key_secret are mutually exclusive` (два источника ключа —
+  неоднозначность). Прочие ключи п. 1 (`apiKey`, `token`, `secret`, `password`) не применяются.
+- **Ссылка п. 3, похожая на значение,** не разрешается: ошибка хода `API key reference
+  providers.<id>.<key> looks like a secret value, not a name; run: codelab secret migrate` (у
+  MCP-сервера — `failed`). Иначе токен ушёл бы как имя в тексты ошибок и в `secrets.lookup`.
+- **Недоверенный проект:** его `providers` и `mcp.servers` и так отбрасываются (`config.project.untrusted_key`),
+  предупреждения `in_file` нет — `secret migrate` не переносит чужие значения (H4).
+- **Предконфигурация** (§17.5.3) не меняется: `api_key` там — проблема `inlineSecret`.
+- **Запись** (писатель, `config set`, `mcp add`, `provider add`, страницы настроек) литерал
+  по-прежнему отклоняет, в том числе по шаблону в `headers`, `env` и `mcp.servers[*].args`
+  (решение R8-5; D5). Взамен — `mcp add --header-stdin|--env-stdin` (§17.5.5; D11).
+- **Подкоманды `secret set|delete`** отклоняют имя, похожее на значение, кодом `64`: `the secret name
+  looks like a secret value; pass the value on stdin` (D6).
+
+Ошибка писателя и предконфигурации — `ConfigInlineSecretException` с подсказкой; значение в сообщение
+не попадает (у предупреждения файла текст подсказки тот же плюс `codelab secret migrate`):
 `config.yaml:7:5: providers.openai.api_key: secrets are not stored in the config; run: codelab
 secret set codelab/openai, then use api_key_secret: codelab/openai (or api_key_env with an
 environment variable)`; у элемента `mcp.servers` вместо `api_key_secret` подсказка называет
@@ -559,8 +597,8 @@ debug: на каждом вызове — info secrets.lookup {name, purpose, so
 Таймаута в резолвере нет (PKG-6): предел ожидания держат бэкенды. Кэшируются только найденные
 значения, поэтому секрет, заданный `secret set` после старта, подхватывается следующим запросом
 без перезапуска, а замена уже прочитанного требует перезапуска до 8.10. Регистрация значения в
-`Redactor` (CFG-10) добавляется change 8.11 в шаги 3 и 5 до возврата `SecretFound` (D10;
-§12.4, абзац «До 8.11»).
+`Redactor` (CFG-10) добавляется в шаги 3 и 5 до возврата `SecretFound` change редакции после 1.0
+(D10; §12.4; решение R8-1).
 
 `SecretResolver.env(VAR, purpose)` синхронно читает только окружение, которое хост передал
 резолверу (окружение процесса), — дорога
@@ -763,8 +801,8 @@ apply(base, edits):
   `suggestedSecretName` (`SecretNames.forMcp(server, key)`, у провайдера — `suggestFor(path)`), без
   значения в тексте. Правило получают `codelab mcp add`, `config set`, будущая страница MCP-серверов
   и предконфигурация (§17.5.3), а перезагрузка — для «провайдера с ключом» (R0-4); функции имён
-  (`isSecretLikeName`, `hasSecretReference`) — одна копия в публичном барели ядра. Ручная правка файла с таким литералом до 8.11 загружается: пункты 2–3
-  CFG-9 по шаблонам §12.4 остаются за 8.11. Fail closed на пути записи дешевле, чем объяснять, почему
+  (`isSecretLikeName`, `hasSecretReference`) — одна копия в публичном барели ядра. Ручная правка файла с таким литералом загружается; с 8.11
+  литерал по шаблонам §12.4 даёт предупреждение `config.secret.in_file` (CFG-9, пп. 2–3; R8-4). Fail closed на пути записи дешевле, чем объяснять, почему
   CLI записал токен в файл (ревью итерации 0, D5). Ревью итерации 3: в поддеревьях непрозрачных
   узлов (`providers.*.auth`, `key_rotation`, `tools.web`, `llm`, `hooks`, …) правило имён действует
   на любой лист; `inlineSecretKeys` сравниваются после той же нормализации имени; нестроковый
@@ -897,9 +935,11 @@ apply(base, edits):
   `url`) разбирается как URI и печатается без userinfo, неразбираемый URL и URL с `@` без авторитета → `<redacted>`, значение
   query-параметра или пары во фрагменте с секретным именем без `${…}` → `<redacted>` (R4-5: `https://u:p@ss@host/v1?api_key=X&v=2`
   не выводит ни `p@ss`, ни `X`); отображения и списки — поэлементно. Маскирует одна функция
-  `cli/config_output.dart`. Известная граница до 8.11 (R4-6, вместе с R1-1): литеральный токен в
-  `mcp.servers[*].args` (`--token X`, `--api-key=X`) запись не отклоняет, а `config get` печатает как
-  есть — аргументы процесса не имеют имён, и правило имён к ним неприменимо.
+  `cli/config_output.dart`. С 8.11 (R4-6; design.md change `add-config-literal-secrets-and-migrate`, D5, OQ3) `config get` маскирует
+  элементы `mcp.servers[*].args`: по шаблону §12.4 → `<redacted>`, после флага с секретным именем
+  (`--token X`) → `<redacted>`, `--api-key=X` → `--api-key=<redacted>`, ссылки — как есть; запись
+  элемента `args` по шаблону отклоняется с подсказкой `--env <NAME>='${secret:…}'`; загрузка `args`
+  не проверяет.
 - **`get` никогда не раскрывает подстановки.** Печатается сырое значение слоя-победителя
   (`"${GITHUB_TOKEN}"`, `"Bearer ${secret:…}"`), даже при `--layer merged`: значение `${VAR}` —
   содержимое окружения, а оно может быть секретом. Значения ключей `secret: true` — имена секретов,
@@ -944,12 +984,45 @@ apply(base, edits):
 | `provider add <id> --kind <kind> [--base-url U] --model M --context-window N [--api-key-secret S \| --api-key-env V \| --api-key-stdin] [--default] [--project\|--local]` | одна `apply` со списком `SetValue` ключей `providers.<id>.*` и `providers.<id>.models.<M>.*`; `--api-key-stdin` сначала пишет секрет `codelab/<id>`; `--default` — `SetValue("agent.default_model", "<id>/<M>")`; существующий `<id>` — upsert; флаг ключа добавляет `UnsetValue` полей другого источника ключа, которые есть в файле слоя (R4-4) |
 | `provider list [--cwd D]` | по строке на провайдера итогового конфига: id, kind, base_url, модели, источник ключа (`secret codelab/x: found\|not set\|unavailable`, `env VAR: set\|not set`); первая строка — `Secrets: <backend.id>`, при `unavailableReason` — `Secrets: env (<причина>)` |
 | `provider remove <id> [--project\|--local]` | `RemoveTable("providers.<id>")`; ссылка из `agent.*` (после MVP — и `llm.roles.*`) → `ConfigException` с подсказкой сменить модель |
-| `mcp add <name> --type stdio --command C [--arg A]… [--env K=V]… \| --type http --url U [--header K=V]… [--disabled] [--project\|--local]` | `UpsertMcpServer`; литеральный секрет в `--header`/`--env` → `ConfigInlineSecretException` с подсказкой `${secret:<name>}` (D5) |
+| `mcp add <name> --type stdio --command C [--arg A]… [--env K=V]… \| --type http --url U [--header K=V]… [--header-stdin Name [--header-scheme S] \| --env-stdin NAME] [--disabled] [--project\|--local]` | `UpsertMcpServer`; литеральный секрет в `--header`/`--env` → `ConfigInlineSecretException` с подсказкой `${secret:<name>}` (D5); с 8.11 — флаги stdin: значение в хранилище, в файл — `${secret:…}` (design.md change `add-config-literal-secrets-and-migrate`, D11) |
 | `mcp list [--cwd D]` | серверы файлов по слоям: name, type, слой, enabled (без подключения) |
 | `mcp remove <name> [--project\|--local]` | `RemoveMcpServer`: только по `name`, никогда по номеру элемента |
 | `secret set\|delete\|list` | §17.5.4 |
+| `secret migrate [--project\|--local\|--all] [--cwd D] [--dry-run] [--force]` | с 8.11 (D7): переносит находки `findInlineSecrets` в хранилище и заменяет их ссылками; ниже |
 | `config export-providers [--layer user\|project\|local\|merged] [--output F] [--provider ID]…` | после MVP: файл обмена провайдеров без значений секретов (§17.14.4.3) |
 | `config import-providers <file\|-> [--force] [--dry-run] [--skip-agent] [--map-secret OLD=NEW]… [--project\|--local]` | после MVP: слияние провайдеров, моделей и ролей одной `apply`; существующее не меняется без `--force` (§17.14.4.4) |
+
+**`mcp add --header-stdin <Name> [--header-scheme <Scheme>] | --env-stdin <NAME>`** (8.11; решение
+пользователя 2026-11-04 R8-5; design.md change `add-config-literal-secrets-and-migrate`, D11). Значение из stdin (`SecretInput`, как у
+`--api-key-stdin`) сохраняется под `SecretNames.forMcp(server, key)`, а в файл пишется
+`${secret:<имя>}` (со схемой — `"Bearer ${secret:<имя>}"`). Флаг допускается один на вызов (stdin
+один). Бэкенд только для чтения — код `1` без чтения stdin. Существующий секрет заменяется с
+`warning: replaced the existing secret`. Порядок: кандидат, `checkStore`, stdin, секрет, конфиг.
+Литерал в argv (`claude mcp add --header …` в Claude Code) отклонён: история shell, `ps`, логи CI.
+
+**`secret migrate`** (8.11; D7). Движок `SecretMigrator` (`codelab_agent_io`) возвращает отчёт без
+значений; `SecretCommands.migrate` и кнопка codelab-app (D8) — его обёртки.
+- Загрузка обычная, со всеми проверками.
+- Переносятся находки `findInlineSecrets` применяемых слоёв:
+  - `api_key`/`apiKey` и ключ вместо имени → `api_key_secret: <name>`;
+  - прочие ключи п. 1 → значение сохраняется **до** удаления ключа, плюс строка `action required`;
+  - участки в `headers`/`env` → `${secret:<name>}` (`<name>-2` для следующих участков одного значения;
+    не пул `_2` §17.10.4);
+  - `${secret:<литерал>}` → ссылка на `<name>`.
+- Не переносятся (строка `not migrated`, код не меняется):
+  - `args` — с подсказкой `--env`;
+  - недоверенные проекты — значения в хранилище не попадают никогда (H4);
+  - `CODELAB_CONFIG`.
+- Слои: по умолчанию `user`; `--project`, `--local`, `--all`.
+- Порядок:
+  1. без записи — находки, доверие писателя, `checkStore`, конфликты, `validateCandidate`;
+  2. конфликты — то же значение переиспользуется, другое → код `1` до записи (внутри запуска и с
+     хранилищем); `--force` заменяет **безвозвратно** с предупреждением;
+  3. по файлу — секреты, затем одна атомарная `ConfigWriter.apply`;
+  4. сбой конфига после секретов — код `1` с именами, повтор переиспользует значения.
+- `--dry-run` — план с тем же кодом.
+- После переноса — `restart the agent to use the moved secrets` (смена источника ключа — `restartRequired`,
+  R0-4).
 
 Команды `config migrate` нет: `codelab.toml` не читается и не переводится (§15.7), запись конфига
 от его наличия не зависит.
@@ -1038,7 +1111,9 @@ reloadConfig():                          // ConfigSource.changes, /config reload
    подстановка ${…}: ${secret:…} или ${VAR}): HTTP-серверы по тому же условию с подстановкой в
    url/headers/env; провайдер с ключом
    (api_key_secret, api_key_env, подстановка в base_url/headers/auth_header) — новый или со сменой группы
-   kind, base_url, headers, auth_header, api_key_secret, api_key_env; ссылки на модели нового
+   kind, base_url, headers, auth_header, api_key_secret, api_key_env; с 8.11 литерал приравнен к
+   подстановке (design.md change add-config-literal-secrets-and-migrate, D12): находка findInlineSecrets в элементе сервера или провайдера, литеральный api_key
+   делают его «с ключом», а api_key входит в группу; ссылки на модели нового
    отложенного провайдера, в том числе agent.default_model);
    план строится по обоим снимкам — полному и withoutProject (сессии вне корня запуска): ключ
    отложен, если отложен по любому из сравнений (ключ, перекрытый проектным слоем в полном снимке,
@@ -1103,10 +1178,10 @@ ACP-8. Расхождение списка моделей в этом окне �
 | `budget.*`, `compaction.*` | следующий ход |
 | `mcp.servers`: HTTP-серверы без подстановок `${…}`, удаление и выключение любых серверов | после текущего хода, без хода — сразу (D10) |
 | `tools.project_context.*` | новые сессии (файлы проекта фиксируются при создании, D9) |
-| `redact.*` | не применяется до 8.11 (`config.key.not_applied`) |
+| `redact.*` | не применяется до change редакции после 1.0 (`config.key.not_applied`; R8-1) |
 | `tools.disabled`, `exec.*`, `tools.untrusted_paths` и другие ключи без потребителя (`applied: false`) | не применяются (`config.key.not_applied`); `restartRequired` решает change потребителя (D8, «Обязанность будущих change»): снятие `tools.disabled` на лету снова включает инструмент |
 | `permissions.*`, `trusted_projects`, новый или изменённый (`command`, `args`, `env`) stdio-сервер `mcp.servers[<name>]`, в том числе включённый из `enabled: false` и выключенный (`enabled: false`, R6-1, решение пользователя 2026-11-03) | только после перезапуска: ослабление прав на лету не применяется (R0-1, решение пользователя 2026-11-02; защита в глубину поверх PERM-11) |
-| новый или изменённый HTTP-сервер с подстановкой `${…}` (`${secret:…}` или `${VAR}` — по значению) в `url`/`headers`/`env`, в том числе выключенный (R6-1); новый провайдер с ключом и смена группы `kind`, `base_url`, `headers`, `auth_header`, `api_key_secret`, `api_key_env` у провайдера с ключом (группа атомарна); ссылки на модели нового отложенного провайдера, в том числе `agent.default_model` | только после перезапуска: секрет не уходит на новый адрес без перезапуска (R0-4, решение пользователя 2026-11-02); новые модели провайдера применяются |
+| новый или изменённый HTTP-сервер с подстановкой `${…}` (`${secret:…}` или `${VAR}` — по значению) или литеральным секретом (находка `findInlineSecrets`, с 8.11, design.md change `add-config-literal-secrets-and-migrate`, D12) в `url`/`headers`/`env`, в том числе выключенный (R6-1); новый провайдер с ключом (в том числе литеральным `api_key` или литералом в элементе) и смена группы `kind`, `base_url`, `headers`, `auth_header`, `api_key_secret`, `api_key_env`, `api_key` у провайдера с ключом (группа атомарна); ссылки на модели нового отложенного провайдера, в том числе `agent.default_model` | только после перезапуска: секрет не уходит на новый адрес без перезапуска (R0-4, решение пользователя 2026-11-02); новые модели провайдера применяются |
 | `sessions.*`, `logging.*` (включая `logging.level`, OQ5), `profile.*`, `secrets.backend`, `config.*` | только после перезапуска (`restartRequired`) |
 
 **Доверие закреплено на стартовом снимке** (D8, «Пересборка снимка с отложенными ключами»).
@@ -1285,7 +1360,7 @@ supervise(server):
    prompts → команды <server>:<prompt>; attempt := 0, если прошлое соединение прожило ≥ 10 с
      (иначе attempt не сбрасывается: сервер, падающий сразу после подключения, не дёргается раз в секунду)
 3. сбой → state := failed; lastError := текст кода CodeLab без текстов сервера (≤ 200 символов;
-     Redactor — 8.11); неудачное раскрытие ${secret:…} (McpSecretsException) — тоже сбой попытки,
+     Redactor — после 1.0, R8-1); неудачное раскрытие ${secret:…} (McpSecretsException) — тоже сбой попытки,
      транспорт не открывается: lastError "secret <name> is not set",
      "secret <name> cannot be read: <backend> is unavailable" или "no secret store" (D11)
    отмена токена запроса (закрытие сессии, dispose) во время попытки → state := failed,
@@ -1645,7 +1720,7 @@ mcp:
 
 Подкоманды CLI — таблица §17.5.5 и §17.5.4: `codelab config get|set|unset|path|check|export-providers|import-providers`,
 `codelab provider add|list|remove`, `codelab mcp add|list|remove`,
-`codelab secret set|delete|list` (8.9, D8: те же подкоманды у `codelab-agent`, бэкенд — из
+`codelab secret set|delete|list|migrate` (8.9, D8; `migrate` — 8.11, design.md change `add-config-literal-secrets-and-migrate`, D7: те же подкоманды у `codelab-agent`, бэкенд — из
 `secrets.backend`; `config check` с 8.9 печатает бэкенд и строку `warning:` на каждый незаданный
 ссылочный секрет, при `file` — строку об открытом тексте всегда, а отказ `file` — одной строкой
 (права — `<path> has permissions <mode>; run: chmod 600 <path>`, иначе `file is unavailable

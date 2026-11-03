@@ -31,7 +31,7 @@ abstract base class AgentTool {
   /// С этапа 3 (§17.4.2): результат больше лимитов усечения выносится в файл, а не усекается.
   bool get spillable => false;
   SpillDirection get spillDirection => SpillDirection.head;
-  bool get redactResult => true;   // false — результат не редактируется (код модели, §12.4.2)
+  bool get redactResult => true;   // после 1.0 (P-10, §12.4, R8-1): false — результат не редактируется (код модели, §12.4.2)
   /// true — инструмент усекает вывод сам со своим уведомлением (§6.3.5); иначе точка исполнения
   /// усекает голову с общим уведомлением `[Output truncated: showing the first N lines of M.]` (TOOL-9).
   bool get truncatesOutput => false;
@@ -151,7 +151,7 @@ final class ToolRegistry {
      `ImagePreparer.prepare` (§17.11.2.1); сбой → блок заменяется `TextContent("[image omitted: <message>]")`,
      `isError` не меняется. Без `services.images` — пропуск.
    * **8a. Доверие:** `trust` и `source` по §6.3.6 (для `read`/`search` вынесенного файла — из `SpillRef`, §17.4.4).
-   * **8b. Редакция:** если `tool.redactResult` — каждый `TextContent` проходит `Redactor.redact(text, RedactionContext(point: toolResult, toolName, readPath))` (§12.4.1); иначе пропускается. `write` и `edit` возвращают `redactResult == false`; MCP-инструменты — `!redact.exempt_tools.contains(name)`.
+   * **8b. Редакция** (после 1.0, P-10, §12.4; до 1.0 шаг пропускается — решение пользователя 2026-11-04 R8-1, design.md change `add-config-literal-secrets-and-migrate`, D1): если `tool.redactResult` — каждый `TextContent` проходит `Redactor.redact(text, RedactionContext(point: toolResult, toolName, readPath))` (§12.4.1); иначе пропускается. `write` и `edit` возвращают `redactResult == false`; MCP-инструменты — `!redact.exempt_tools.contains(name)`.
    * **8c. Вынос или усечение:** `tool.spillable`, `services.spill != null` и текст больше лимитов усечения → вынос в файл (§17.4.3); иначе усечение (§6.3.5). Вынос появляется на этапе 3 вместе с журналом; до него и при выключенной capability `outputSpill` — всегда усечение.
    * **8d. Ограда** недоверенного вывода с `source` из 8a (§6.3.6).
 9. Только для вызовов, дошедших до шага 7; после `Block`, отмены и ошибок шагов 1a–3b цепочка не вызывается. Цепочка `afterToolCall` — переопределение полей (§5.2; после MVP последним идёт хук языковых серверов, §17.8.5). Порядок: хуки хоста, пользовательские хуки `after_tool` (§17.14.2.3), хук языковых серверов.
