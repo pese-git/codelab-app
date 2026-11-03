@@ -435,6 +435,46 @@ agent:
       expect(allOutput(result), isNot(contains('sk-1')));
     });
 
+    test('unset api_key при прежних base_url и каталоге: код 0, прежние '
+        'проблемы — предупреждения (R3-1, решение 2026-11-03)', () async {
+      write(userPath, '''
+agent:
+  default_model: lm/m
+providers:
+  lm:
+    api_key: sk-fake-1
+    base_url: "https://u:p@ss@host/v1"
+    kind: openai-compatible
+    models:
+      m:
+        context_window: 8192
+''');
+
+      final result = await unsetKey('providers.lm.api_key');
+
+      expect(result.exitCode, 0, reason: allOutput(result));
+      expect(
+        result.stdout.first,
+        'Removed providers.lm.api_key from $userPath',
+      );
+      final warnings = [
+        for (final line in result.stdout)
+          if (line.startsWith('warning:')) line,
+      ];
+      expect(
+        warnings.any((w) => w.contains('providers.lm.base_url')),
+        isTrue,
+        reason: allOutput(result),
+      );
+      expect(
+        warnings.any((w) => w.contains('agent.default_model')),
+        isTrue,
+        reason: allOutput(result),
+      );
+      expect(read(userPath), isNot(contains('api_key')));
+      expect(allOutput(result), isNot(contains('sk-fake-1')));
+    });
+
     test('ключ со значением null задан: unset удаляет его, а не молчит '
         '(ревью итерации 4, safety M)', () async {
       for (final empty in ['', ' ~', ' null']) {
