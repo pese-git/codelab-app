@@ -266,6 +266,53 @@ $tail''';
     expect(logger.records.join('\n'), isNot(contains(keyB)));
   });
 
+  test('a project config replaced by a link outside .codelab fails the reload '
+      'and never leaks the outside file (task 8.5)', () async {
+    const secretMarker = 'outside-marker-7f3a91';
+    final outside = File('${temp.path}/other/config.yaml')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync('$secretMarker: 1\n');
+    final layer = File('${project.path}/.codelab/config.yaml')
+      ..parent.createSync(recursive: true);
+    layer.writeAsStringSync('budget:\n  max_steps: 5\n');
+    writeConfig(config());
+    await connect(
+      await localEmbeddedAgentOpener(
+        environment: {'CODELAB_HOME': home},
+        logger: logger,
+        httpClient: MockClient((_) async => throw StateError('no net')),
+      )(cwd: project.path, hostProfile: 'embedded-cli'),
+    );
+
+    final failed = logger.next((event) => event == 'config.reload.failed');
+    // Чётные попытки — ссылка наружу, нечётные — обычный файл с новым хвостом:
+    // каждая смена меняет отпечаток наблюдателя, поэтому пропущенное ОС
+    // событие не оставляет тест без сигнала.
+    await rewriteUntil(failed, (n) {
+      if (layer.existsSync() || Link(layer.path).existsSync()) {
+        layer.deleteSync();
+      }
+      if (n.isEven) {
+        Link(layer.path).createSync(outside.path);
+      } else {
+        layer.writeAsStringSync('budget:\n  max_steps: 5\n# edit $n\n');
+      }
+    });
+
+    final log = logger.records.join('\n');
+    // В журнал идут источник, класс и позиция проблемы, без текста (CFG-2).
+    expect(
+      log,
+      contains(
+        '${Directory(project.path).resolveSymbolicLinksSync()}/.codelab/config.yaml',
+      ),
+    );
+    expect(log, contains('kind: syntax'));
+    expect(log, isNot(contains(secretMarker)));
+    expect(log, isNot(contains(outside.path)));
+    expect(agent!.clientTransport.state, isNot(AcpTransportState.failed));
+  });
+
   test('a failure after the source is created closes it before the error '
       'is rethrown (scenario "срыв открытия")', () async {
     writeConfig(config());

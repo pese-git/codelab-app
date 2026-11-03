@@ -404,6 +404,49 @@ void main() {
       },
     );
 
+    // POSIX: `\` — обычный символ имени, а не разделитель; проверка не
+    // должна «видеть» `a/b` там, где загрузчик откроет ссылку `a\b`.
+    test(
+      'ссылка на имя с обратной косой, ведущее наружу, отклоняется',
+      () async {
+        Directory('${h.cwd}/.codelab/a').createSync(recursive: true);
+        h.write('${h.cwd}/.codelab/a/b', '# inside decoy\n');
+        h.write('$outside/real.yaml', 'budget:\n  max_steps: 9\n');
+        Link('${h.cwd}/.codelab/a\\b').createSync('$outside/real.yaml');
+        Link(h.projectPath).createSync('a\\b');
+
+        await expectRefused();
+
+        expect(h.read('$outside/real.yaml'), 'budget:\n  max_steps: 9\n');
+      },
+      skip: Platform.isWindows ? 'на Windows `\\` — разделитель' : null,
+    );
+
+    test('cwd с обратной косой в имени: запись внутри .codelab работает, '
+        'ссылка наружу отклоняется', () async {
+      h.dispose();
+      h = ConfigWriterHarness.create(cwdName: 'pr\\oj');
+      outside = '${h.root.path}/outside';
+      Directory(outside).createSync();
+      h.write(h.userPath, '${baseConfig}trusted_projects: ["${h.cwd}"]\n');
+      project = ConfigTarget.project(h.cwd);
+
+      await h.writer
+          .read(project)
+          .then(
+            (snapshot) => h.writer.apply(snapshot, [
+              const SetValue('budget.max_steps', 3),
+            ]),
+          );
+      expect(h.read(h.projectPath), contains('max_steps: 3'));
+
+      File(h.projectPath).deleteSync();
+      h.write('$outside/real.yaml', 'budget:\n  max_steps: 9\n');
+      Link(h.projectPath).createSync('$outside/real.yaml');
+      await expectRefused();
+      expect(h.read('$outside/real.yaml'), 'budget:\n  max_steps: 9\n');
+    }, skip: Platform.isWindows ? 'на Windows `\\` недопустим в имени' : null);
+
     test('ссылка внутри .codelab допустима', () async {
       Directory('${h.cwd}/.codelab').createSync();
       h.write('${h.cwd}/.codelab/shared.yaml', '# shared\n');
