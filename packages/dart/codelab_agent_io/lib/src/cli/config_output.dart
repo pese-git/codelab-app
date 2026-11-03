@@ -29,10 +29,15 @@ const opaqueMask = '<opaque: edit the file>';
 /// - значение слоя без файла ([layer] — окружение, флаги) → `<from env:…>` /
 ///   `<from flags>` вместо значения: переменная могла прийти из секретного
 ///   хранилища оркестратора;
+/// - строковый лист (кроме адресов) с литералом по шаблону секрета, в том
+///   числе в литеральной части смешанного значения и в `${secret:<токен>}`,
+///   → [redactedMask] — независимо от имени и от реестра
+///   (`literalSecretTag`, `hasInlineSecret`; D5);
 /// - лист, чьё имя — ключ из `inlineSecretKeys` или секретное по нормализованному
 ///   правилу писателя (`isSecretLikeName`), без `${…}` → [redactedMask];
 ///   листья, описанные схемой (`api_key_secret`, `api_key_env`, `auth_header`,
-///   `max_output_tokens`), хранят имена и счётчики и печатаются как есть;
+///   `max_output_tokens`), хранят имена и счётчики и печатаются как есть,
+///   кроме `api_key` (литерал) и значений по шаблону секрета;
 /// - `base_url` и `url` — без userinfo, значения секретных query-параметров
 ///   → [redactedMask], неразбираемый адрес → [redactedMask] ([maskUrl]);
 /// - отображения и списки маскируются поэлементно на любой глубине.
@@ -133,15 +138,47 @@ final class _Masker {
     if (_foreignLabel(path) case final label?) {
       return label;
     }
+    // Любой лист со значением по шаблону секрета скрывается независимо от
+    // имени и от реестра: `api_key_env: ghp_…`, `X-Team: Bearer sk-…`,
+    // `${secret:<токен>}`. Адреса исключены — их печатает [maskUrl] без
+    // userinfo (R4-5). Имена переменной и секрета проверяются как имена
+    // (`sk-` внутри слова не секрет, L3). Ссылки `${VAR}` и `${secret:x}`
+    // шаблонов не дают и печатаются как есть (R8-8).
+    if (value is String && name != 'base_url' && name != 'url') {
+      final isName = name == 'api_key_env' || name == 'api_key_secret';
+      final hidden = isName
+          ? literalSecretTag(value, asName: true) != null
+          : hasInlineSecret(value);
+      if (hidden) {
+        return redactedMask;
+      }
+    }
     final shown = value is String && (name == 'base_url' || name == 'url')
         ? maskUrl(value)
         : value;
+    // Адрес после `maskUrl` (без userinfo) тоже может нести токен — в пути
+    // или в query под несекретным именем: скрывается целиком.
+    if (shown is String &&
+        (name == 'base_url' || name == 'url') &&
+        _urlCarriesSecret(shown)) {
+      return redactedMask;
+    }
     // Лист, описанный схемой, хранит имя секрета или переменной, число или
     // перечисление: имя «api_key_secret» не делает значение секретом.
     final d = SettingsRegistry.lookup(path);
     if (d != null &&
         d.type != SettingType.map &&
         d.type != SettingType.mapList) {
+      // Исключение — `providers.*.api_key`: лист реестра, но его значение —
+      // сам ключ (литерал файла, R8-4; design.md change
+      // `add-config-literal-secrets-and-migrate`, D4). Ссылка `${…}` без
+      // литеральных частей печатается как есть (R8-8).
+      if (inlineSecretKeys.contains(name) &&
+          value is String &&
+          value.isNotEmpty &&
+          (!hasSecretReference(value) || literalSecretTag(value) != null)) {
+        return redactedMask;
+      }
       return shown;
     }
     final secretName =
@@ -390,3 +427,29 @@ String _restore(String text, List<String> refs) =>
       // Литерал, похожий на токен, но без ссылки с таким номером, остаётся.
       return index < refs.length ? refs[index] : match.group(0)!;
     });
+
+String _decoded(String part) {
+  try {
+    return Uri.decodeComponent(part);
+  } on ArgumentError {
+    return part;
+  }
+}
+
+/// Несёт ли адрес (уже после [maskUrl]) токен в пути, значении параметра
+/// запроса или фрагменте. Части проверяются порознь: строка запроса целиком
+/// (`a=1&b=2`) совпала бы с «присваиванием секрета» без всякого секрета.
+bool _urlCarriesSecret(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null) {
+    return false;
+  }
+  final parts = [
+    _decoded(uri.path),
+    _decoded(uri.fragment),
+    for (final values in uri.queryParametersAll.values) ...values,
+  ];
+  // Участки, уже скрытые `maskUrl`, не считаются (`token=<redacted>` иначе
+  // совпало бы с «присваиванием секрета»).
+  return parts.any((p) => hasInlineSecret(p.replaceAll(redactedMask, '')));
+}

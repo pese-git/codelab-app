@@ -13,7 +13,9 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// Как использовать: `logConfigWarnings(logger, loaded)` сразу после
 /// `ConfigLoader.load`. Предупреждение — событие со своим именем (без имени —
 /// `config.warning`) и уровнем из [ConfigIssue.level]; в `message` нет
-/// значений ключей (CFG-2).
+/// значений ключей (CFG-2). Предупреждение `config.secret.in_file` (секрет в
+/// файле конфига, design.md change `add-config-literal-secrets-and-migrate`,
+/// D4) идёт этим же путём: поля `key` и `source`, текст с командой переноса.
 void logConfigWarnings(Logger logger, ConfigLoadResult loaded) {
   for (final warning in loaded.warnings) {
     logger.log(

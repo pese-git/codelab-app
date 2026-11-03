@@ -41,6 +41,7 @@ import '../project/project_files.dart';
 import '../prompts/compose.dart';
 import '../secrets/secret_lookup.dart';
 import '../secrets/secret_resolver.dart';
+import '../secrets/secret_template.dart' show UnusableSecretReference;
 import '../session/ids.dart';
 import '../session/projections.dart';
 import '../session/records.dart';
@@ -1481,6 +1482,19 @@ final class AgentRuntimeImpl implements AgentRuntime {
   ) async {
     if (server.secretValues.isEmpty) {
       return (server, null);
+    }
+    // В ссылку вписан сам секрет (CFG-9, пункт 3): отказ до любого
+    // обращения к хранилищу, чтобы значение не ушло в `secrets.lookup` и
+    // тексты (design.md change `add-config-literal-secrets-and-migrate`, D4).
+    for (final MapEntry(key: field, value: template)
+        in server.secretValues.entries) {
+      if (template.parts.any((part) => part is UnusableSecretReference)) {
+        return (
+          null,
+          'secret reference mcp.servers[${server.name}].$field looks like a '
+              'secret value, not a name; run: codelab secret migrate',
+        );
+      }
     }
     if (resolver == null) {
       return (null, 'no secret store');

@@ -1,7 +1,10 @@
 import 'package:collection/collection.dart';
 
 import '../mcp/mcp_server_config.dart';
+import 'config_issue.dart' show inlineSecretKeys;
+import 'config_tree.dart';
 import 'core_config.dart';
+import 'inline_secrets.dart';
 import 'key_path.dart';
 import 'secret_name_rule.dart';
 import 'settings_registry.dart';
@@ -69,6 +72,7 @@ const _providerGroup = {
   'base_url',
   'headers',
   'auth_header',
+  'api_key',
   'api_key_secret',
   'api_key_env',
 };
@@ -456,6 +460,22 @@ bool _providerWithKey(Map<String, Object?> values, String id) {
       values['$prefix.api_key_env'] != null) {
     return true;
   }
+  // Литеральный `api_key` (и ссылка `${…}` в нём, R8-8) и ключи
+  // `inlineSecretKeys` — тот же «ключ», что ссылка: секрет уходит на новый
+  // адрес так же, как подстановка (D12, R0-4). Проверка идёт по плоским
+  // ключам, а не по пересобранному дереву: `KeyPath` не квотирует точку в
+  // имени заголовка (`X.Custom`), и разбор ключа обратно разделил бы имя на
+  // сегменты — литерал терялся бы.
+  for (final MapEntry(:key, :value) in values.entries) {
+    if (!key.startsWith('$prefix.')) {
+      continue;
+    }
+    final rest = key.substring(prefix.length + 1);
+    final filled = value is String ? value.isNotEmpty : value != null;
+    if (filled && (rest == 'api_key' || inlineSecretKeys.contains(rest))) {
+      return true;
+    }
+  }
   for (final field in const ['base_url', 'auth_header']) {
     if (_hasSubstitution(values['$prefix.$field'])) {
       return true;
@@ -474,7 +494,9 @@ bool _providerWithKey(Map<String, Object?> values, String id) {
     }
     // Подстановка в значении или литерал в секретно названном заголовке
     // (правило имён D5, после ручной правки).
-    if (hasSecretReference(value) || isSecretLikeName(name)) {
+    if (hasSecretReference(value) ||
+        isSecretLikeName(name) ||
+        hasInlineSecret(value)) {
       return true;
     }
   }
@@ -491,6 +513,30 @@ bool _hasSubstitution(Object? node) => switch (node) {
 };
 
 /// Подстановка в полях подключения сервера: `url`, `headers`, `env` (R0-4).
+/// Литерал по шаблону в `headers`/`env` и ключи `inlineSecretKeys` элемента
+/// (находки CFG-9) приравнены к подстановке: секрет в самом элементе уйдёт на
+/// новый `url` так же, как значение из хранилища (D12).
 bool _serverHasSubstitution(Object? element) =>
     element is Map<String, Object?> &&
-    [element['url'], element['headers'], element['env']].any(_hasSubstitution);
+    ([
+          element['url'],
+          element['headers'],
+          element['env'],
+        ].any(_hasSubstitution) ||
+        // Заголовок с секретным именем несёт ключ и без шаблона значения
+        // (`X-Api-Key: <hex>`) — как у провайдера (R0-4).
+        (element['headers'] is Map<String, Object?> &&
+            (element['headers']! as Map<String, Object?>).keys.any(
+              isSecretLikeName,
+            )) ||
+        findInlineSecrets(
+          ConfigTree(
+            kind: ConfigLayerKind.user,
+            source: 'values',
+            values: {
+              'mcp': {
+                'servers': [element],
+              },
+            },
+          ),
+        ).isNotEmpty);

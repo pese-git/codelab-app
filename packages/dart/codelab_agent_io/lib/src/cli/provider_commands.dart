@@ -187,9 +187,13 @@ final class ProviderCommands {
   static final _modelFormat = RegExp(r'^[^\s"]+$');
   static final _plainSegment = RegExp(r'^[A-Za-z0-9_\-]+$');
 
-  /// Взаимоисключающие источники ключа провайдера (`resolve.dart`: «api_key_env
-  /// and api_key_secret are mutually exclusive»).
-  static const _keySourceFields = ['api_key_env', 'api_key_secret'];
+  /// Взаимоисключающие источники ключа провайдера (`resolve.dart`: «api_key,
+  /// api_key_env and api_key_secret are mutually exclusive»). Литеральный
+  /// `api_key` — тоже источник (R8-6; design.md change
+  /// `add-config-literal-secrets-and-migrate`, D4): `add` с любым из флагов
+  /// ключа удаляет его той же правкой, иначе рядом с новой ссылкой остался бы
+  /// старый секрет в файле и пара источников.
+  static const _keySourceFields = ['api_key', 'api_key_env', 'api_key_secret'];
 
   /// `add`: провайдер, его модель и ссылка на ключ одной правкой (D6).
   ///
@@ -464,8 +468,21 @@ final class ProviderCommands {
       final name = provider.config.name;
       final prefix =
           'providers.${_plainSegment.hasMatch(name) ? name : '"$name"'}';
+      String envKeyState(String? variable) => variable == null
+          ? 'from environment'
+          : 'env $variable: '
+                '${(options.environment[variable] ?? '').isEmpty ? 'not set' : 'set'}';
       final keyState = switch (provider.key) {
+        // Литеральный `api_key` файла (R8-4) — не ссылка: `key` пуст, а
+        // значение лежит в `ProviderConfig.apiKey`. Значение не печатается.
+        null when provider.config.literalApiKey => 'literal in config file',
+        // `api_key: ${VAR}` (R8-8): ключ взят из переменной при загрузке;
+        // источник показывается как у `api_key_env`, значение — нет.
+        null when provider.config.apiKey != null => envKeyState(
+          _referencedVariable(findLayerValue(loaded.layers, '$prefix.api_key')),
+        ),
         null => 'none',
+        UnusableKeyRef() => 'unusable reference (looks like a secret value)',
         EnvKeyRef(:final variable) =>
           'env $variable: '
               '${(options.environment[variable] ?? '').isEmpty ? 'not set' : 'set'}',
@@ -531,6 +548,16 @@ final class ProviderCommands {
         ],
       ),
     };
+  }
+
+  /// Имя переменной, если значение `api_key` — ровно одна ссылка `${VAR}`.
+  static String? _referencedVariable(LayerValue? found) {
+    final value = found?.value;
+    return value is String
+        ? RegExp(
+            r'^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$',
+          ).firstMatch(value)?.group(1)
+        : null;
   }
 
   Future<String> _secretState(SecretResolver? resolver, String name) async {

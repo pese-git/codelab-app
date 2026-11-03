@@ -119,6 +119,7 @@ final class LogRecord {           // то, что получает sink хост
 | `serve.config.invalid` | error | `issues` — список `{source, line, column, key, kind}`; те же строки в stderr, код выхода `64` |
 | `config.env.unknown` | warning | `message` |
 | `config.project.untrusted_key` (новое) | warning | `key`, `source`; в том числе смягчение `permissions.mode` и `trusted_projects` в проектном слое (§15.3) |
+| `config.secret.in_file` (8.11) | warning | `key`, `source`; литеральный секрет в файле конфига, текст по шаблону §17.5.4 без значения (решение пользователя 2026-11-04 R8-4, design.md change `add-config-literal-secrets-and-migrate`, D4) |
 | `config.key.not_applied` (новое) | warning | `key`, `source`; ключ без потребителя или раздел «после MVP», один раз на лист за загрузку (§15.5) |
 | `config.provider.key_missing` (новое) | warning | `provider`, `variable` |
 | `config.file.ignored` (новое) | warning | `path`, `hint` (`config.yml` рядом с `config.yaml`) |
@@ -334,6 +335,12 @@ $ CODELAB_LOG_FILE=/tmp/agent.log codelab-agent serve --stdio --log-file ./debug
 > секрете в файле конфига и запрет записи литерала (CFG-9, §17.5.4). Находки ревью и решения
 > первой версии change (OQ1, OQ4, OQ5) — вход будущего change: design.md, раздел «Перенесено
 > после 1.0». Ключи `redact.*` до него — `config.key.not_applied`.
+>
+> Таблица шаблонов ниже уже используется в 8.11 для распознавания литералов в конфиге
+> (`config/inline_secrets.dart`, design.md change `add-config-literal-secrets-and-migrate`, D3) с отступлениями реализации: JWT — заголовок
+> не длиннее 256 символов, поиск без `RegExp`; схема «URL с паролем» — не длиннее 31 символа; пробелы
+> между частями — `\s{0,16}`; PEM — метка `{0,32}`, участок до строки `END`; части имени
+> «присваивания секрета» — не длиннее 64 символов.
 
 `Redactor` применяется **перед** логом, перед записью в журнал сессии, перед payload
 `AgentError`, перед отправкой текста результата инструмента модели (секрет из вывода `env` не

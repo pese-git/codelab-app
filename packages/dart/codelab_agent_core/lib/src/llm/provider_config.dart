@@ -78,6 +78,7 @@ final class ProviderConfig {
     this.timeouts = LlmTimeouts.defaults,
     this.retry = const RetryPolicy(),
     List<String> extraSecrets = const [],
+    this.literalApiKey = false,
   }) : authHeader =
            authHeader ??
            (api == ProviderApi.anthropicMessages
@@ -98,11 +99,18 @@ final class ProviderConfig {
   final ProviderApi api;
   final Uri baseUrl;
 
-  /// Значение ключа, если оно уже есть у хоста. `null` — запросы без
+  /// Значение ключа, если оно уже есть у хоста: литеральный `api_key` файла
+  /// конфига (R8-4; design.md change `add-config-literal-secrets-and-migrate`,
+  /// D4) или запись, собранная хостом вручную. `null` — запросы без
   /// авторизации (локальные серверы) либо ключ — ссылка, которую
   /// `createRoutedStreamFunction` разрешает при первом запросе (design.md
   /// change `add-agent-secret-store`, D4).
   final String? apiKey;
+
+  /// [apiKey] — литерал из файла конфига (R8-4): к нему применим порог
+  /// [minScrubbedKeyLength]. Ключ из хранилища, окружения или от хоста
+  /// вычищается из текстов ошибок при любой длине.
+  final bool literalApiKey;
 
   /// `Authorization` — `Bearer <key>`; любое другое имя — ключ как есть.
   final String authHeader;
@@ -148,6 +156,7 @@ final class ProviderConfig {
     api: api,
     baseUrl: baseUrl,
     apiKey: apiKey ?? this.apiKey,
+    literalApiKey: apiKey == null && literalApiKey,
     authHeader: authHeader,
     headers: headers ?? this.headers,
     maxTokensField: maxTokensField,
@@ -163,10 +172,24 @@ final class ProviderConfig {
     extraSecrets: [...this.extraSecrets, ...extraSecrets],
   );
 
-  /// Значения, которые не попадают в тексты ошибок и логи: ключ, значения
-  /// заголовков и исходные значения секретов шаблонов (design.md, D7).
+  /// Наименьшая длина литерального ключа, который вычищается из текстов
+  /// ошибок. Короче —
+  /// не секрет, а заглушка локального сервера (`x`, `ollama`): вычистка
+  /// превратила бы любое такое слово в тексте ошибки в `[REDACTED]`
+  /// (design.md change `add-config-literal-secrets-and-migrate`, D4, Risks;
+  /// то же «длина ≥ 8», что у точных секретов `agent-core-architecture`
+  /// §12.4).
+  static const int minScrubbedKeyLength = 8;
+
+  /// Значения, которые не попадают в тексты ошибок и логи: ключ длиной от
+  /// [minScrubbedKeyLength], значения заголовков и исходные значения секретов
+  /// шаблонов (design.md, D7). Литеральный `api_key` из файла конфига входит
+  /// сюда как обычный ключ (R8-4).
   List<String> get secrets => [
-    if (apiKey case final key? when key.isNotEmpty) key,
+    if (apiKey case final key?
+        when key.isNotEmpty &&
+            (!literalApiKey || key.length >= minScrubbedKeyLength))
+      key,
     for (final value in headers.values)
       if (value.isNotEmpty) value,
     for (final value in extraSecrets)

@@ -9,7 +9,7 @@ import 'events.dart';
 import 'messages.dart';
 import 'model_ref.dart';
 import 'overflow.dart';
-import 'providers/http_support.dart' show ProviderHttpException;
+import 'providers/http_support.dart' show ProviderHttpException, redactSecrets;
 import 'usage.dart';
 
 /// Common frame of a provider adapter (`agent-core-architecture` §2.5).
@@ -26,6 +26,7 @@ AssistantMessageEventStream runProvider(
   Clock clock,
   Future<void> Function(ProviderStreamState state) body, {
   LlmErrorClass Function(Object error)? classify,
+  Iterable<String> secrets = const [],
 }) {
   final out = AssistantMessageEventStream();
   final state = ProviderStreamState(model, clock, out);
@@ -40,7 +41,7 @@ AssistantMessageEventStream runProvider(
       state.fail(LlmErrorClass.aborted, 'Request was aborted', aborted: true);
     } catch (error) {
       final errorClass = classify?.call(error) ?? LlmErrorClass.unknown;
-      state.fail(errorClass, _safeErrorText(error, errorClass));
+      state.fail(errorClass, _safeErrorText(error, errorClass, secrets));
     } finally {
       out.end();
     }
@@ -48,21 +49,38 @@ AssistantMessageEventStream runProvider(
   return out;
 }
 
-/// Текст исключения без URL: `base_url` и заголовки могут нести токен
-/// (`${ENV}`, change `add-agent-configuration`, D4), а `ClientException`
-/// печатает `uri=<полный URL>`.
+/// Текст исключения без URL и без известных секретов ([secrets]).
+///
+/// Почему: `base_url` и заголовки могут нести токен (`${ENV}`, change
+/// `add-agent-configuration`, D4), а `ClientException` печатает
+/// `uri=<полный URL>`; `FormatException` проверки заголовка цитирует значение
+/// заголовка, то есть ключ.
 ///
 /// Сетевой сбой — `connection failed: <тип>`, как в транспорте MCP; ошибка
 /// провайдера уже отредактирована и остаётся как есть; прочий текст
 /// сохраняется, но любой `http(s)://…` в нём заменяется на `<url>`.
-String _safeErrorText(Object error, LlmErrorClass errorClass) {
+String _safeErrorText(
+  Object error,
+  LlmErrorClass errorClass,
+  Iterable<String> secrets,
+) {
   if (error is ProviderHttpException) {
     return '$error';
   }
   if (errorClass == LlmErrorClass.network) {
     return 'connection failed: ${error.runtimeType}';
   }
-  return '$error'.replaceAll(RegExp(r'https?://\S+'), '<url>');
+  // `package:http` отвергает заголовок с недопустимым символом
+  // `FormatException`, чей текст цитирует всё значение заголовка, то есть
+  // ключ: только тип. Прочий текст проходит вычистку известных секретов.
+  if (error is FormatException &&
+      error.message.toLowerCase().contains('header')) {
+    return 'invalid request header: ${error.runtimeType}';
+  }
+  return redactSecrets(
+    '$error'.replaceAll(RegExp(r'https?://\S+'), '<url>'),
+    secrets,
+  );
 }
 
 /// Mutable accumulator of one answer. Every method that emits pushes one

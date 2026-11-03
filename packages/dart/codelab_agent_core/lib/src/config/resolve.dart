@@ -19,11 +19,13 @@ import 'config_values.dart';
 import 'config_tree.dart';
 import 'core_config.dart';
 import 'host_settings.dart';
+import 'inline_secrets.dart';
 import 'interpolate.dart';
 import 'key_path.dart';
 import 'merge.dart';
 import 'redact_settings.dart';
 import 'schema.dart';
+import 'secret_name_rule.dart' show isSecretLikeName;
 import 'trust.dart';
 import 'validate.dart';
 
@@ -433,6 +435,10 @@ List<ConfigIssue> _trustedProjectsPaths(
 
 final _envName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
 
+/// Печатаемый ASCII (`0x20..0x7e`): значение ключа уходит в заголовок HTTP.
+bool _printableAscii(String text) =>
+    text.codeUnits.every((c) => c >= 0x20 && c <= 0x7e);
+
 final class _SilentLogger implements Logger {
   const _SilentLogger();
 
@@ -483,6 +489,7 @@ final class _Builder {
         _notApplied(path, layer);
       }
     }
+    _warnSecretsInFiles();
     merged = mergeLayers(layers);
 
     final problems = <String, String>{};
@@ -660,6 +667,55 @@ final class _Builder {
     );
   }
 
+  /// Предупреждение `config.secret.in_file` на каждую находку CFG-9 (пп. 1–3)
+  /// в файловых слоях (design.md change `add-config-literal-secrets-and-migrate`,
+  /// D4, R8-4).
+  ///
+  /// Почему по слоям `effective`, а не по исходным: правило доверия §15.3 уже
+  /// убрало из недоверенного проекта `providers` и `mcp.servers`, поэтому
+  /// предупреждения для чужих секретов нет — достаточно `untrusted_key`.
+  /// Находки считаются по слою независимо от `enabled` сервера: откат
+  /// предупреждений выключенных серверов (`_mcpServer`) их не снимает, потому
+  /// что они рождаются здесь, до построения серверов.
+  ///
+  /// Команда в тексте зависит от слоя: `secret migrate` переносит только
+  /// `user`, `project` и `projectLocal`; файл `CODELAB_CONFIG`/`--config` он
+  /// не пишет (D7), и совет «migrate» там был бы тупиком. Окружение, флаги и
+  /// хранилище приложения — не файлы, для них предупреждения нет. Литеральный
+  /// `api_key` в `appStorage` возможен только если хост приложения положил его
+  /// туда сам: писатель и клиенты секрет значением не пишут (CFG-2, D5), а
+  /// переносить в хранилище секретов там нечего.
+  void _warnSecretsInFiles() {
+    for (final layer in layers) {
+      final String Function(InlineSecretFinding) command;
+      switch (layer.kind) {
+        case ConfigLayerKind.user:
+          command = (_) => 'codelab secret migrate';
+        case ConfigLayerKind.project:
+          command = (_) => 'codelab secret migrate --project';
+        case ConfigLayerKind.projectLocal:
+          command = (_) => 'codelab secret migrate --local';
+        case ConfigLayerKind.extra:
+          command = (f) => 'codelab secret set ${f.suggestedSecretName}';
+        case ConfigLayerKind.defaults ||
+            ConfigLayerKind.environment ||
+            ConfigLayerKind.flags ||
+            ConfigLayerKind.appStorage:
+          continue;
+      }
+      for (final finding in findInlineSecrets(layer)) {
+        _warn(
+          secretInFileEvent,
+          finding.keyPath,
+          layer,
+          'a secret is stored in the config file; move it to the secret '
+          'store: ${command(finding)}',
+          fields: {'key': finding.keyPath, 'source': layer.source},
+        );
+      }
+    }
+  }
+
   void _notApplied(String key, ConfigTree layer) {
     // Одно предупреждение на ключ за загрузку; источник — слой с последним
     // словом (D6).
@@ -833,6 +889,20 @@ final class _Builder {
       if (expanded == null) {
         continue;
       }
+      // Литерал секретного заголовка с управляющим или не-ASCII символом
+      // `package:http` отвергает с текстом, цитирующим значение; поэтому
+      // отказ при загрузке, без значения.
+      if (expanded.secrets.isEmpty &&
+          isSecretLikeName(name) &&
+          !_printableAscii(expanded.text)) {
+        _issue(
+          ConfigIssueKind.value,
+          path,
+          '$name must be printable ASCII',
+          origin: _origin([...at, 'headers', name]),
+        );
+        continue;
+      }
       if (expanded.secrets.isNotEmpty) {
         headerTemplates[name] = expanded.template;
       } else {
@@ -842,10 +912,32 @@ final class _Builder {
 
     final keyEnv = _str([...at, 'api_key_env']);
     final keySecret = _str([...at, 'api_key_secret']);
-    // Имя не должно оказаться ключом, вписанным вместо имени (CFG-9,
-    // §17.5.4): значение не попадает ни в проблему, ни в `providerProblems`,
-    // ни в поле `variable` предупреждения.
-    if (keyEnv != null && !_envName.hasMatch(keyEnv)) {
+    final rawApiKey = switch (_str([...at, 'api_key'])) {
+      final String text when text.isNotEmpty => text,
+      _ => null,
+    };
+    // R8-6: `api_key` — ещё один источник ключа. Проверка идёт по слитому
+    // дереву, поэтому `api_key` пользователя и `api_key_secret` доверенного
+    // проекта тоже дают конфликт. Это не «секрет в файле», а неоднозначность:
+    // агент не стартует, пока источник не один. Ссылка `${VAR}`/`${secret:x}`
+    // (R8-8) — тоже источник.
+    if (rawApiKey != null && (keyEnv != null || keySecret != null)) {
+      _bad(
+        [...at, 'api_key'],
+        'api_key, api_key_env and api_key_secret are mutually exclusive',
+        kind: ConfigIssueKind.value,
+      );
+      return null;
+    }
+    // Значение, совпавшее с шаблоном секрета, вписано вместо имени (CFG-9,
+    // пункт 3): формат имени не проверяется, чтобы значение не попало в
+    // проблему, `providerProblems` или `variable` предупреждения. Загрузка
+    // кладёт маркер [UnusableKeyRef], а не ссылку (D4).
+    final envIsSecret =
+        keyEnv != null && literalSecretTag(keyEnv, asName: true) != null;
+    final secretIsSecret =
+        keySecret != null && literalSecretTag(keySecret, asName: true) != null;
+    if (keyEnv != null && !envIsSecret && !_envName.hasMatch(keyEnv)) {
       _bad(
         [...at, 'api_key_env'],
         'expected an environment variable name',
@@ -853,7 +945,9 @@ final class _Builder {
       );
       return null;
     }
-    if (keySecret != null && SecretNames.problem(keySecret) != null) {
+    if (keySecret != null &&
+        !secretIsSecret &&
+        SecretNames.problem(keySecret) != null) {
       _bad(
         [...at, 'api_key_secret'],
         SecretNames.problem(keySecret)!,
@@ -874,6 +968,10 @@ final class _Builder {
         kind: ConfigIssueKind.value,
       );
       return null;
+    } else if (envIsSecret) {
+      key = UnusableKeyRef(_kp([...at, 'api_key_env']).value);
+    } else if (secretIsSecret) {
+      key = UnusableKeyRef(_kp([...at, 'api_key_secret']).value);
     } else if (keyEnv != null) {
       key = EnvKeyRef(keyEnv);
       final value = environment[keyEnv];
@@ -891,10 +989,56 @@ final class _Builder {
       key = SecretKeyRef(keySecret);
     }
 
+    // `api_key`: литерал работает как есть (R8-4), ссылка раскрывается как в
+    // заголовках (R8-8, решение пользователя 2026-11-04): `${VAR}` — значение
+    // переменной, `${secret:x}` целиком — ссылка на секрет.
+    String? keyLiteral;
+    var keyIsLiteral = false;
+    if (rawApiKey != null) {
+      final keyPath = _kp([...at, 'api_key']);
+      final expanded = _interpolate(
+        rawApiKey,
+        keyPath,
+        _origin([...at, 'api_key']),
+      );
+      if (expanded == null) {
+        return null;
+      }
+      if (expanded.secrets.isEmpty) {
+        if (!_printableAscii(expanded.text)) {
+          _bad(
+            [...at, 'api_key'],
+            'api_key must be printable ASCII',
+            kind: ConfigIssueKind.value,
+          );
+          return null;
+        }
+        keyLiteral = expanded.text;
+        keyIsLiteral = !rawApiKey.contains(r'${');
+      } else {
+        switch (expanded.template.parts) {
+          case [SecretReference(:final name)]:
+            key = SecretKeyRef(name);
+          case [UnusableSecretReference()]:
+            key = UnusableKeyRef(keyPath.value);
+          default:
+            _bad(
+              [...at, 'api_key'],
+              r'api_key may use ${secret:…} only as the whole value',
+              kind: ConfigIssueKind.value,
+            );
+            return null;
+        }
+      }
+    }
+
     final provider = ProviderConfig(
       name: id,
       api: api,
       baseUrl: baseUrl,
+      // Литеральный ключ файла работает как есть, без резолвера (D4, R8-4).
+      apiKey: keyLiteral,
+      literalApiKey: keyIsLiteral,
       headers: headers,
       authHeader: _str([...at, 'auth_header']),
       reasoningFormat: switch (_str([...at, 'reasoning_format'])) {
@@ -1021,7 +1165,19 @@ final class _Builder {
       );
       return null;
     }
+    // В скобки вписан сам секрет вместо имени (CFG-9, пункт 3): формат имени
+    // не проверяется (значение не должно попасть в проблему), а в шаблон
+    // вместо ссылки кладётся маркер, который никто не разрешает (D4).
+    // Список `secrets` остаётся прежним: непустой список — признак шаблона,
+    // иначе значение `${secret:<токен>}` ушло бы строкой как литерал.
+    final unusable = {
+      for (final name in expansion.secretRefs)
+        if (literalSecretTag(name, asName: true) != null) name,
+    };
     for (final name in expansion.secretRefs) {
+      if (unusable.contains(name)) {
+        continue;
+      }
       if (SecretNames.problem(name) case final problem?) {
         _issue(ConfigIssueKind.value, path, problem, origin: origin);
         return null;
@@ -1030,7 +1186,17 @@ final class _Builder {
     return (
       text: expansion.text,
       secrets: expansion.secretRefs,
-      template: expansion.template,
+      template: unusable.isEmpty
+          ? expansion.template
+          : SecretTemplate([
+              for (final part in expansion.template.parts)
+                if (part case SecretReference(
+                  :final name,
+                ) when unusable.contains(name))
+                  const UnusableSecretReference()
+                else
+                  part,
+            ]),
     );
   }
 

@@ -1,4 +1,5 @@
 import '../secrets/secret_template.dart';
+import 'inline_secrets.dart' show literalSecretTag;
 
 /// Подстановка `${ENV}` в разрешённых ключах (`agent-core-architecture`
 /// §15.5, «Подстановка `${ENV}`»; design.md change `add-agent-configuration`,
@@ -76,6 +77,18 @@ Expansion expandEnvironment(String source, Map<String, String> environment) {
       i += match.group(0)!.length;
     } else if (_variable.firstMatch(rest) case final match?) {
       final name = match.group(1)!;
+      if (literalSecretTag(name, asName: true) != null) {
+        // Токен вписан вместо имени переменной (`${ghp_…}`, CFG-9, пункт 3):
+        // как `${secret:<токен>}` — маркер, окружение не читается, имя не
+        // попадает ни в `missing`, ни в текст. Имя остаётся в [secretRefs]
+        // только как признак шаблона для потребителя.
+        secrets.add(name);
+        flush();
+        parts.add(const UnusableSecretReference());
+        out.write(match.group(0));
+        i += match.group(0)!.length;
+        continue;
+      }
       final value = environment[name];
       if (value == null) {
         missing.add(name);

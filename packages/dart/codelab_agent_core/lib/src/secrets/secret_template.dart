@@ -63,6 +63,30 @@ final class SecretReference extends SecretTemplatePart {
   String toString() => 'SecretReference($name)';
 }
 
+/// Маркер `${secret:<литерал>}`: в скобки вписан сам секрет вместо имени
+/// (CFG-9, пункт 3; design.md change `add-config-literal-secrets-and-migrate`,
+/// D4).
+///
+/// Почему отдельная часть без данных: имя вроде `ghp_…` нельзя ни хранить в
+/// шаблоне (оно попало бы в `names`, `secrets.lookup`, тексты ошибок), ни
+/// разрешать. Потребитель (рантайм, фабрика провайдера) видит маркер и
+/// отказывает без обращения к хранилищу, называя ключ конфига, а не значение.
+///
+/// Как использовать: создаёт загрузка конфига; [SecretTemplate.names] маркер
+/// не включает, [SecretTemplate.render] на нём бросает `StateError`.
+final class UnusableSecretReference extends SecretTemplatePart {
+  const UnusableSecretReference();
+
+  @override
+  bool operator ==(Object other) => other is UnusableSecretReference;
+
+  @override
+  int get hashCode => 0x5ec;
+
+  @override
+  String toString() => 'UnusableSecretReference';
+}
+
 /// Значение ключа конфига с `${secret:<name>}`: список литералов и ссылок.
 ///
 /// Почему шаблон, а не строка: литерал `$${secret:x}` после раскрытия
@@ -101,6 +125,8 @@ final class SecretTemplate {
           out.write(
             values[name] ?? (throw StateError('secret is not resolved')),
           );
+        case UnusableSecretReference():
+          throw StateError('secret reference is unusable');
       }
     }
     return out.toString();

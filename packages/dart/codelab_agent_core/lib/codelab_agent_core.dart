@@ -22,6 +22,13 @@ export 'src/config/config_source.dart';
 export 'src/config/config_tree.dart';
 export 'src/config/core_config.dart';
 export 'src/config/host_settings.dart';
+export 'src/config/inline_secrets.dart'
+    show
+        InlineSecretFinding,
+        InlineSecretKind,
+        findInlineSecrets,
+        hasInlineSecret,
+        literalSecretTag;
 export 'src/config/key_path.dart'
     show KeyPath, KeyPathSegment, nearestKey, splitKeyPath;
 export 'src/config/redact_settings.dart';
