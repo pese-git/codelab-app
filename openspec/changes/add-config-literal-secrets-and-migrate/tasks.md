@@ -117,9 +117,9 @@
 
 ## 4. codelab-app (итерация 4)
 
-- [ ] 4.1 `[agent]` Красный тест `codelab_embedded/test/secrets_in_config_test.dart` (embedded-agent «Признак секретов в файле конфига», включая «Мигратор доступен через io.dart»). Затем — `EmbeddedAgent.secretsInConfig` в открывателях и реэкспорт `SecretMigrator` в `codelab_embedded/io.dart`; `melos run guard` и `web-compile` зелёные (D8).
-- [ ] 4.2 `[desktop]` Красный тест `apps/codelab_desktop/test/features/workbench/application/secret_migration_cubit_test.dart` (agent-workbench-ui «Перенос секретов встроенного агента»): автомат `hidden → offered → planning → planReady|planFailed → applying → applied|applyFailed` на фейке порта; бэкенд `env`; конфликт; поздний результат после закрытия; `Restart agent` недоступна во время хода. Затем — порт `SecretMigrationRunner` и `SecretMigrationCubit` (D8).
-- [ ] 4.3 `[desktop]` Красный тест резолвера и порта `apps/codelab_desktop/test/app/embedded_secret_offer_test.dart`:
+- [x] 4.1 `[agent]` Красный тест `codelab_embedded/test/secrets_in_config_test.dart` (embedded-agent «Признак секретов в файле конфига», включая «Мигратор доступен через io.dart»). Затем — `EmbeddedAgent.secretsInConfig` в открывателях и реэкспорт `SecretMigrator` в `codelab_embedded/io.dart`; `melos run guard` и `web-compile` зелёные (D8).
+- [x] 4.2 `[desktop]` Красный тест `apps/codelab_desktop/test/features/workbench/application/secret_migration_cubit_test.dart` (agent-workbench-ui «Перенос секретов встроенного агента»): автомат `hidden → offered → planning → planReady|planFailed → applying → applied|applyFailed` на фейке порта; бэкенд `env`; конфликт; поздний результат после закрытия; `Restart agent` недоступна во время хода. Затем — порт `SecretMigrationRunner` и `SecretMigrationCubit` (D8).
+- [x] 4.3 `[desktop]` Красный тест резолвера и порта `apps/codelab_desktop/test/app/embedded_secret_offer_test.dart`:
   - `secretsInConfig` передаётся в `SecretMigrationOffer` и сбрасывается при закрытии агента;
   - порт берёт тот же `CODELAB_HOME`, `CODELAB_CONFIG` и окружение, что открыватель (`app_scope.dart`);
   - `planFailed`/`applyFailed` и лог — без `error.toString()`;
@@ -127,7 +127,7 @@
   - находки только в `CODELAB_CONFIG` — только `Close`.
 
   Затем — `lib/app/embedded_transport_resolver.dart`, `SecretMigrationOffer`, реализация порта через `codelab_embedded/io.dart` (D8).
-- [ ] 4.4 `[desktop]` Красный widget-тест `apps/codelab_desktop/test/features/workbench/presentation/secret_migration_banner_test.dart`: `InfoBar` с текстом и кнопкой, диалог с планом, тексты для `env` и конфликта, кнопка `Restart agent`. Затем — presentation (D8). `fvm flutter analyze` и тесты app; интеграционный прогон — только в `release/*`.
+- [x] 4.4 `[desktop]` Красный widget-тест `apps/codelab_desktop/test/features/workbench/presentation/secret_migration_banner_test.dart`: `InfoBar` с текстом и кнопкой, диалог с планом, тексты для `env` и конфликта, кнопка `Restart agent`. Затем — presentation (D8). `fvm flutter analyze` и тесты app; интеграционный прогон — только в `release/*`.
 
 **Критерий итерации 4.** App не блокирует старт, предлагает перенос и перезапуск; виджеты без IO.
 

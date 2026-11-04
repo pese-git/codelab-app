@@ -51,6 +51,8 @@ final class $CodeLabRootLifecycleModuleContract
             currentScope.resolve<EmbeddedTransportResolver>(),
             currentScope.resolve<EmbeddedCloseSettings>(),
             currentScope.resolve<CodeLabShellCubit>(),
+            currentScope.resolve<SecretMigrationCubit>(),
+            currentScope.resolve<SecretMigrationOffer>(),
           ),
         )
         .singleton();

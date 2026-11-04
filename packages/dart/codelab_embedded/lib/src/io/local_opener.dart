@@ -36,7 +36,10 @@ import '../embedded_agent_config.dart';
 /// оставил таймеров (change `add-config-writer-and-reload`, D13). Невалидный
 /// конфиг, `~user` в `CODELAB_HOME` и недоступное хранилище секретов дают
 /// [EmbeddedAgentConfigException]; профиль вне `embedded-*` —
-/// `HostWiringException`. Нет ключа провайдера — не ошибка открытия: первый ход
+/// `HostWiringException`. `EmbeddedAgent.secretsInConfig` — `true`, если среди
+/// предупреждений загрузки есть `config.secret.in_file` (D8 change
+/// `add-config-literal-secrets-and-migrate`); старт такие предупреждения не
+/// блокируют. Нет ключа провайдера — не ошибка открытия: первый ход
 /// завершается ошибкой провайдера с именем секрета (D13, п. 2).
 EmbeddedAgentOpener localEmbeddedAgentOpener({
   required Map<String, String> environment,
@@ -105,6 +108,9 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
     );
     final watching = source;
     return await createEmbeddedAgent(
+      // Признак для кнопки «Перенести секреты» (D8): только факт наличия
+      // предупреждения, без путей ключей и значений; не пересчитывается.
+      secretsInConfig: loaded.warnings.any((w) => w.event == secretInFileEvent),
       config: EmbeddedAgentConfig(
         hostProfile: hostProfile,
         core: config,
