@@ -2,7 +2,7 @@
 
 ### Requirement: Профили подключения CLI
 Значение `--agent` (`-a`) SHALL разбираться так:
-- `embedded` или `default` — `EmbeddedProfile(hostProfile: 'embedded-cli')`: встроенный агент в процессе CLI (требование «Встроенный агент в CLI»); `default` — алиас `embedded` (design.md change `add-app-settings-shell`, D21), `profiles.json` для обоих НЕ SHALL читаться;
+- `embedded` или `default` — `EmbeddedProfile(hostProfile: 'embedded-cli')`: встроенный агент в процессе CLI (требование «Встроенный агент в CLI»); `default` — алиас `embedded` (design.md change `add-app-settings-shell`, D21). Для выбора агента запись из `profiles.json` НЕ SHALL использоваться. При `default` файл читается только ради предупреждения о старой записи `default`, и любая ошибка этого чтения SHALL игнорироваться. При `embedded` файл НЕ SHALL читаться;
 - `stdio:<команда> [аргументы]` — `StdioProfile` с разбором аргументов как в shell (кавычки, экранирование);
 - `ws://…` или `wss://…` — `WebSocketProfile` со ссылкой `tokenRef: env:CODELAB_AGENT_TOKEN`: токен читается из переменной `CODELAB_AGENT_TOKEN`;
 - иначе — id профиля из `$CODELAB_HOME/profiles.json` (`CODELAB_HOME` по умолчанию — `~/.codelab`), хранимого `JsonFileProfileStore`.
@@ -11,7 +11,7 @@
 
 Id `embedded` и `default` зарезервированы (`reservedProfileIds` kit). Запись с id `default`, лежащая в `profiles.json` от прежней версии, SHALL игнорироваться: `profiles list` её не показывает, `profiles show default` печатает встроенный профиль. При `codelab profiles list`, `codelab profiles show default` и `-a default`, если такая запись есть, CLI SHALL печатать в stderr одно предупреждение `profile "default" in profiles.json is ignored: default is the built-in agent; remove it with codelab profiles remove default`. Команду, аргументы, URL и `env` записи предупреждение НЕ SHALL содержать. Файл автоматически НЕ SHALL перезаписываться, а `codelab profiles remove default` SHALL удалять запись. Подсказки о смене правила выбора CLI НЕ SHALL печатать (D21, п. 2).
 
-Токен WebSocket-профиля SHALL разрешать общий источник kit `ProfileSecretSource` по правилу `ProfileTokenRef` (design.md change `add-app-settings-shell`, D15). Ссылка `env:<NAME>` читает переменную окружения процесса для любого допустимого имени, поэтому профиль, созданный в codelab-app со ссылкой `env:DEVBOX_TOKEN`, работает в CLI. Пустая или отсутствующая переменная и ссылка другого вида дают подключение без токена, как раньше. Значение токена в stdout, stderr и журнал НЕ SHALL попадать.
+Токен WebSocket-профиля SHALL разрешать общий источник kit `ProfileSecretSource` по правилу `ProfileTokenRef` (design.md change `add-app-settings-shell`, D15). Ссылка `env:<NAME>` читает переменную окружения процесса для любого допустимого имени, поэтому профиль, созданный в codelab-app со ссылкой `env:DEVBOX_TOKEN`, работает в CLI. Пустая или отсутствующая переменная и ссылка другого вида дают подключение без токена, как раньше. Значение токена в stdout, stderr и журнал НЕ SHALL попадать. Значение ссылки не вида `env:` тоже НЕ SHALL выводиться: `codelab profiles show` печатает `token: unrecognized token reference (not supported in this version)`, а диагностика называет только id профиля.
 
 Команда `codelab profiles list|show <id>|add <id> <значение --agent>|remove <id>` SHALL работать без запуска агента; значение токена в `profiles.json` НЕ SHALL записываться. Id нового профиля в `profiles add` SHALL проходить общее правило kit `isValidProfileId` (`^[a-z0-9][a-z0-9._-]{0,63}$`); нарушение — код `64` с текстом правила. Профили, сохранённые раньше с другими id (например, с заглавными буквами), SHALL читаться, показываться и выбираться `-a <id>` как прежде, а формат `profiles.json` НЕ SHALL меняться. `embedded` в `profiles add` — ни как id, ни как значение — SHALL давать код `64` и `embedded is built in; use --agent embedded`; `default` — так же, код `64` и `default is the built-in agent; use --agent embedded`. Ошибка подключения SHALL давать понятное сообщение в stderr и код `1` (U-06).
 
@@ -49,7 +49,7 @@ Id `embedded` и `default` зарезервированы (`reservedProfileIds` 
 
 #### Scenario: Встроенный агент явно
 - **WHEN** запускается `codelab -a embedded -p hi` при профиле `default` в `profiles.json`
-- **THEN** ход проводит встроенный агент, процесс из `default` не запускается, `profiles.json` не читается
+- **THEN** ход проводит встроенный агент, процесс из `default` не запускается, `profiles.json` не читается (при `-a embedded`)
 
 #### Scenario: embedded нельзя сохранить профилем
 - **WHEN** выполняется `codelab profiles add x embedded` или `codelab profiles add embedded stdio:x`
@@ -70,3 +70,11 @@ Id `embedded` и `default` зарезервированы (`reservedProfileIds` 
 #### Scenario: Старые профили читаются как раньше
 - **WHEN** `profiles.json` от прежней версии содержит профиль `Old` (WebSocket, `tokenRef: env:CODELAB_AGENT_TOKEN`), и выполняются `codelab profiles add Dev stdio:x` и `codelab -a Old -p hi`
 - **THEN** первая команда завершается кодом `64` с текстом правила id и не меняет файл, а вторая выбирает профиль `Old` с токеном из `CODELAB_AGENT_TOKEN`
+
+#### Scenario: Ссылка не вида env: не выводится
+- **WHEN** `profiles.json` содержит WebSocket-профиль `devbox` с `tokenRef: sk-test-leak-0123456789`, и выполняются `codelab profiles show devbox` и `codelab -a devbox -p hi --verbose`
+- **THEN** `show` печатает `token: unrecognized token reference (not supported in this version)`; подключение идёт без токена; ни stdout, ни stderr не содержат `sk-test-leak-0123456789`
+
+#### Scenario: -a default при битом profiles.json
+- **WHEN** `profiles.json` — не JSON, и запускается `codelab -a default -p hi` из тестовой точки входа со сценарием модели
+- **THEN** ход проводит встроенный агент, код `0`, ошибки чтения файла и кода `64` нет

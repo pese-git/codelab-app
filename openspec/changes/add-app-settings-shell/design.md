@@ -127,12 +127,16 @@ App:   general, appearance, keyboard
 - `ConnectionSettingsReady`:
   - `rows` — встроенный агент первым, далее профили `ProfileStore` в порядке файла;
   - `defaultProfileId`;
-  - `currentProfileId` — профиль текущего окна из `WorkspaceState.profile`;
-  - `connection` — `CodeLabConnectionStatus`;
+  - `currentProfileId` — id профиля, к которому workspace сейчас подключён: принятый профиль в `Connected` или `Reconnecting`, иначе `null`. По нему ставится «Current» (D6);
+  - `attemptProfileId` и `attemptStatus` — профиль последней попытки (`ConnectionCommands.attemptProfile`) и её состояние для бейджа (D6);
+  - `connection` — `ConnectionView` kit (закрытая иерархия, а не `CodeLabConnectionStatus`);
   - `connectOnStart`;
-  - `lastProbes` — `id → ProfileProbeOutcome` за жизнь страницы;
-  - `banner` — `saved`/`removed`/`failed(message)`;
-- `ConnectionSettingsUnreadable(reason)` — `profiles.json` не разбирается или имеет неизвестную версию.
+  - `failure` — строка ошибки последней операции страницы (`String?`, без `toString()` исключений; D17);
+  - `lastProbes` — `id → ProfileProbeOutcome` за жизнь страницы. Появляется в итерации 3 вместе с «Test connection»; в итерации 2 этого поля нет;
+- `ConnectionSettingsUnreadable(reason)` — три случая:
+  - `profiles.json` не разбирается;
+  - `profiles.json` имеет неизвестную версию;
+  - `CODELAB_HOME` недопустим (D7).
 
 Три вида данных разведены, как требует `state-management.md` §63:
 - **сохранённые настройки** — профили в `profiles.json`, профиль по умолчанию и «Connect on start» в `shared_preferences`;
@@ -141,13 +145,20 @@ App:   general, appearance, keyboard
 
 В `shared_preferences` пишутся только сохранённые настройки, а не состояние Cubit целиком (§49, §50). Открыт ли диалог — эфемерное состояние presentation (`showDialog`), а не флаг в Cubit (§46, §48).
 
-В `ConnectionSettingsUnreadable` страница показывает строку встроенного агента (она не из файла) и InfoBar `error` с текстом «Cannot read ~/.codelab/profiles.json: <причина>. Fix or remove the file; CodeLab will not overwrite it.». «Add profile», «Rename» и «Remove» недоступны: битый файл пользователя не перезаписывается — целостность данных (AGENTS.md §2, п. 3). CLI в той же ситуации выходит с кодом `64`.
+В `ConnectionSettingsUnreadable` страница показывает строку встроенного агента (она не из файла) и InfoBar `error`: «Cannot read ~/.codelab/profiles.json: <причина>. Fix or remove the file; CodeLab will not overwrite it.», а для недопустимого `CODELAB_HOME` — его причину (D7). «Add profile», «Rename» и «Remove» недоступны: битый файл пользователя не перезаписывается — целостность данных (AGENTS.md §2, п. 3). CLI в той же ситуации выходит с кодом `64`. Блок «Behavior» («Connect on start», «Restart agent») в `Unreadable` виден и работает: он не зависит от `profiles.json`.
 
-Профиль текущего окна app не перечитывает из файла: это `WorkspaceState.profile`. Удаление или переименование этого профиля в CLI не рвёт соединение. Строка отмечается «Current» по совпадению id. Если профиля в файле больше нет, текущий показывается отдельной строкой «Current connection (not saved)».
+**Строка профиля (находки ручного прогона итерации 2).**
+- Заголовок — `label`, одна строка с многоточием и полным текстом в подсказке (`Tooltip`).
+- Если `label` пуст или совпадает со значением `--agent`, из которого CLI создал профиль (начинается с `stdio:`, `ws://`, `wss://`; так `inlineAgentProfile` заполняет `label`), заголовком становится `id`. Иначе вся команда профиля CLI повторялась бы в заголовке.
+- Вторая строка — команда stdio без аргументов или origin WS-адреса (`scheme://host:port`).
+- Метка «Current» (решение пользователя 2026-11-05) — только у профиля, к которому workspace сейчас подключён: принятый профиль в `Connected` или `Reconnecting`. После сбоя и во время новой попытки «Current» нет ни у кого. Исключение — отказ до обращения к workspace при живом соединении (D6): тогда «Current» остаётся у живого профиля.
+- Бейдж (ключ `connection-profile-status-<id>`) стоит у строки профиля **последней попытки** (`ConnectionCommands.attemptProfile`): `Connecting…`, `Connected` или `Failed`. Текста ошибки в бейдже нет: причина — в `connectionMessage` и диагностике.
+
+Профиль подключения app не перечитывает из файла: это принятый профиль `ConnectionCubit` (D6). Удаление или переименование этого профиля в CLI не рвёт соединение. Строка отмечается «Current» по совпадению id. Если профиля в файле больше нет, текущий показывается отдельной строкой «Current connection (not saved)».
 
 Файл перечитывается при открытии страницы и после каждой собственной записи. Слежения за файлом нет: правка CLI видна при следующем открытии страницы (см. риски).
 
-Связь с workbench идёт через application API, а не через внутренности feature (`layers-and-dependencies.md` §27). `ConnectionSettingsCubit` получает узкий интерфейс `ConnectionCommands` (`connect(profile)`, `reconnect()`, `current`), который реализует `ConnectionCubit` feature `workbench`. Так одна и та же логика номера попытки и диагностики подключения не дублируется.
+Связь с workbench идёт через application API, а не через внутренности feature (`layers-and-dependencies.md` §27). `ConnectionSettingsCubit` получает узкий интерфейс `ConnectionCommands` (`connect(profile)`, `reconnect()`, `restartTarget`, `attemptProfile`), который реализует `ConnectionCubit` feature `workbench`. Цель «Restart agent» страница берёт из `restartTarget`, бейдж — из `attemptProfile`, а «Current» — из принятого профиля и состояния соединения (D6). Так одна и та же логика номера попытки и диагностики подключения не дублируется.
 
 ### D5. Профиль по умолчанию и профиль текущего окна
 
@@ -178,12 +189,34 @@ App:   general, appearance, keyboard
 
 ### D6. `ConnectionCubit` переходит с формы на профиль
 
-`ConnectionFormState` теряет поля формы и тип подключения и получает `profile` (`ConnectionProfile`) — профиль текущего окна, а до первого подключения профиль по умолчанию. Методы:
+Прежний `ConnectionFormState` заменён на `WindowConnectionState`: полей формы и типа подключения нет, есть `profile` (`ConnectionProfile`) — профиль окна; до первого выбора это профиль по умолчанию. Методы:
 - `selectTransport`, `updateStdio*`, `updateWebSocket*` удаляются;
 - `connect([ConnectionProfile? profile])` подключает `profile` или текущий профиль;
 - `reconnect()` — тот же профиль.
 
 Логика номера попытки, проверка папки проекта (для `StdioProfile` и `EmbeddedProfile`) и тексты диагностики сохраняются; тип для текстов берётся из ветки профиля. `ConnectionCubit` реализует `ConnectionCommands` (D4).
+
+**Профиль окна и принятые подключения** (ревью итерации 2, MEDIUM-B).
+- **До первого принятого подключения** профиль окна — последний выбранный: «Connect» в строке сразу делает его профилем окна, экран подключения показывает его, а Reconnect работает с ним, даже если попытка не удалась. Иначе после неудачного первого Connect нечего было бы повторить.
+- **После первого принятого подключения** профиль окна меняется только тогда, когда новая попытка принята (`Connected` этой попытки). `connect(profile)` не переписывает `WindowConnectionState.profile` до этого. При `ConnectionFailed` профиль окна остаётся профилем последнего принятого подключения.
+- После каждого `await` (проверка папки, `ClientWorkspace.connect`) сверяется номер попытки. Вытесненная попытка не меняет ни профиль окна, ни статус. Поздний Connect, завершившийся после более нового, соединение не перехватывает (AGENTS.md §9, §12).
+
+**Цель перезапуска, «Current» и бейдж** (MEDIUM-A; решение пользователя 2026-11-05). У трёх мест разные источники, но все они в `ConnectionCubit`:
+- `restartTarget` — профиль последнего принятого подключения, а до первого принятого — последний выбранный. Из него считаются цель, подпись («Restart agent» / «Reconnect») и доступность кнопки (D9);
+- «Current» — только у принятого профиля, пока соединение `Connected` или `Reconnecting`;
+- `attemptProfile` — профиль последней попытки. У его строки стоит бейдж `Connecting…` / `Connected` / `Failed`.
+
+**Connect к другому профилю разрывает текущее соединение до проверки нового.** Это поведение kit: `ClientWorkspace.connect` заменяет транспорт. Если новая попытка не удалась, старого соединения уже нет: «Current» нет ни у кого, `Failed` стоит у строки новой попытки, а «Restart agent» переподключает прежний принятый профиль. Единственное исключение — отказ до обращения к workspace (ниже): только тогда живое соединение сохраняется.
+
+**Отказ Connect до обращения к workspace при живом соединении** (safety LOW и nit). Пустая команда stdio или отсутствующая папка проекта обнаруживаются до вызова `ClientWorkspace.connect`. Если workspace в этот момент подключён:
+- статус окна остаётся `connected`, «Current» — у живого профиля;
+- причина идёт **только в диагностику**: `connectionMessage` не меняется, и баннер ошибки поверх рабочего соединения не появляется;
+- последующая настоящая потеря соединения даёт `lost`, как обычно.
+
+**Гонка: отказ до kit не вытесняет попытку, уже переданную в kit** (safety MEDIUM). Номер попытки увеличивается только тогда, когда попытка доходит до `ClientWorkspace.connect`. Отказ до обращения к workspace номер не меняет. Поэтому, если Connect к `A` уже ждёт рукопожатия, а Connect к `B` отклонён из-за отсутствующей папки, исход `A` применяется как обычно: `connected` и «Current» у `A`. Иначе ложный отказ `B` отбросил бы настоящий успех `A` как «вытесненный», и окно показало бы неверный статус при живом соединении.
+
+Почему: статус `failed` при живом соединении скрыл бы его от логики «lost» и показывал бы пользователю ложное состояние.
+- Диагностика stdio называет только команду (`Starting stdio ACP agent: <command>.`), без аргументов и `env`: в аргументах может оказаться токен (`observability.md` §44). Прежние тексты с аргументами меняются явно, с этим обоснованием.
 
 «Run agent from project directory» становится полем stdio-профиля (`runInProjectDirectory`); переключатель `SettingsCubit.toggleRunAgentFromProjectDirectory` удаляется. Сценарий «stdio process spawn directory can be decoupled from the project» переходит в поле диалога.
 
@@ -200,7 +233,14 @@ App:   general, appearance, keyboard
 `profiles.json`:
 - формат не меняется (`version: 1`, те же поля);
 - app пишет его тем же `JsonFileProfileStore`, что CLI (временный файл и переименование, `save` читает файл перед записью);
-- путь — `$CODELAB_HOME/profiles.json` (`CODELAB_HOME` непуст, иначе `~/.codelab`); вычисляется в `lib/app/` из того же окружения, что открыватель встроенного агента, шов теста — `createCodeLabRootScope(environment:)`;
+- путь — `$CODELAB_HOME/profiles.json`. Для клиентов правило разрешения `CODELAB_HOME` одно — функция `resolveCodelabHome(environment)` в `codelab_client_io` (ревью итерации 2), ошибка — `CodelabHomeException`. Её используют CLI (`CodelabHome.resolve` — обёртка) и app. С агентским `codelabHomeOf` правила совпадают во всём, кроме одного случая (см. ниже):
+  - пустое или незаданное значение → `<HOME>/.codelab` (`USERPROFILE` на Windows);
+  - `~` и `~/…` раскрываются через `HOME`;
+  - `~user/…`, а также `~` без `HOME` — ошибка с причиной.
+  
+  **Принятое расхождение.** Агентский `codelabHomeOf` без `HOME` берёт `./.codelab` в рабочей папке, а клиентская функция бросает исключение. Клиент строже сознательно: app, запущенное без `HOME`, создало бы `profiles.json` в случайной текущей папке процесса (у app из Finder это `/`), и профили CLI и app разошлись бы молча. Явная ошибка даёт пользователю причину. Агентское поведение этот change не меняет.
+  
+  CLI переходит на эту функцию, а `CodelabHome.resolve` становится её обёрткой (тексты ошибок CLI не меняются). App вызывает её в `lib/app/` из того же окружения, что открыватель встроенного агента (шов `createCodeLabRootScope(environment:)`). Недопустимое значение даёт в app `ConnectionSettingsUnreadable` с причиной, и запись невозможна. Встроенный агент app по-прежнему разрешает свой `CODELAB_HOME` через `codelabHomeOf` в `codelab_embedded`. Табличного теста против агента нет: клиентскую функцию проверяют тесты `codelab_client_io` и обёртки CLI;
 - битый или незнакомый файл не перезаписывается (D4);
 - встроенный профиль в файл не пишется (`ArgumentError` хранилища, spec acp-client-kit).
 
@@ -216,12 +256,12 @@ App:   general, appearance, keyboard
 
 ### D9. «Restart agent» — существующее переподключение
 
-`ClientWorkspace.restart` (§12.6.7: `session/cancel`, завершение процесса с ожиданием, `RestartOutcome`) не реализован. Цель U-26 — Could этапа 9+, а изобретать новое поведение kit без требования нельзя. Поэтому строка «Restart agent» блока «Behavior» вызывает `ConnectionCubit.reconnect()` — то же, что кнопка «Restart agent» диалога переноса секретов (spec agent-workbench-ui «Перенос секретов встроенного агента»):
+`ClientWorkspace.restart` (§12.6.7: `session/cancel`, завершение процесса с ожиданием, `RestartOutcome`) не реализован. Цель U-26 — Could этапа 9+, а изобретать новое поведение kit без требования нельзя. Поэтому строка «Restart agent» блока «Behavior» вызывает `ConnectionCubit.reconnect()`. Переподключается **профиль последнего принятого подключения** — `ConnectionCommands.restartTarget` (D6), а до первого принятого — последний выбранный. Неудачный Connect к другому профилю цель не меняет (D6, ревью итерации 2). Это то же действие, что кнопка «Restart agent» диалога переноса секретов (spec agent-workbench-ui «Перенос секретов встроенного агента»):
 - встроенный агент — резолвер сначала освобождает прежнего агента (`dispose`), затем открывает нового с перечитанным конфигом (D6 change `add-embedded-agent-mode`);
 - stdio — прежний транспорт закрывается, процесс стартует заново;
 - WebSocket — процесс на чужой машине, поэтому кнопка называется «Reconnect».
 
-Текст строки честный и не обещает `session/cancel`: «Reconnects with the same profile and reloads open sessions. A running turn is interrupted; queued prompts stay.»; для WebSocket — «Reconnects to the remote agent…». Обрыв хода и сохранность очереди — уже существующее поведение `reconnect` (spec acp-client-kit «Сессии после переподключения»). Кнопка недоступна без текущего профиля и во время `connecting`/`reconnecting`.
+Текст строки честный, называет цель и не обещает `session/cancel`: `Reconnects <title> and reloads open sessions. A running turn is interrupted; queued prompts stay.`, где `<title>` — заголовок профиля цели по правилу D4. Для WebSocket подпись кнопки — «Reconnect». Обрыв хода и сохранность очереди — уже существующее поведение `reconnect` (spec acp-client-kit «Сессии после переподключения»). Подпись и доступность считаются по `restartTarget`: кнопка недоступна без цели и во время `connecting`/`reconnecting`. Блок «Behavior» виден и в `ConnectionSettingsUnreadable` (D4).
 
 В CommandBar страницы остаётся только «Add profile», дублирующая кнопка «Restart agent» с холста убрана: у одного действия одно место, рядом с объяснением последствий. Когда появится `restart()`, кнопка переключится на него без изменения UI (`12-6` §12.6.7, `agent-parity-goals.md` U-26).
 
@@ -241,7 +281,7 @@ Expander «Join a session started in the CLI» (D-10, Could) — статичн�
 
 **Тип.** `ProfileKind.stdio | webSocket`. Список предлагаемых типов вычисляет `profileKindsFor(resolvers)` по `TransportResolver.supports` на образцовом профиле каждого типа (SETUP-22): на хосте без stdio-резолвера stdio нет.
 
-**Имя и id.** `label` обязателен. `suggestProfileId(label)` даёт нижний регистр, каждый символ вне `[a-z0-9]` заменяется на `-`, повторы и крайние `-` убираются. Правило id — `isValidProfileId`: `^[a-z0-9][a-z0-9._-]{0,63}$`, подмножество правила CLI (`^[A-Za-z0-9][A-Za-z0-9_.-]*$`). Нижний регистр выбран заранее для change B: тогда имя секрета `codelab/profiles/<id>/token` пройдёт `SecretNames`. `:` исключено правилом. Ошибки:
+**Имя и id.** `label` обязателен. `suggestProfileId(label)` даёт нижний регистр, каждый символ вне `[a-z0-9]` заменяется на `-`, повторы и крайние `-` убираются. API id (`isValidProfileId`, `suggestProfileId`, `reservedProfileIds`, `isReservedProfileId`) лежит в отдельном файле kit `codelab_client_core/lib/src/connection/profile_ids.dart`: его используют и `ProfileDraft`, и CLI `profiles add`, а черновика CLI не нужен. Правило id — `isValidProfileId`: `^[a-z0-9][a-z0-9._-]{0,63}$`, подмножество правила CLI (`^[A-Za-z0-9][A-Za-z0-9_.-]*$`). Нижний регистр выбран заранее для change B: тогда имя секрета `codelab/profiles/<id>/token` пройдёт `SecretNames`. `:` исключено правилом. Ошибки:
 - `idEmpty`;
 - `idInvalid`;
 - `idReserved` — `embedded` или `default` (общее множество kit `reservedProfileIds`; D21);
@@ -315,7 +355,14 @@ Id неизменяем после сохранения; «Rename» меняет
 - в «Add connection profile» под полем токена — подсказка «CodeLab reads the token from this environment variable when it connects. Token values are not saved in profiles.json.»;
 - вторая строка подсказки — «Apps opened from Finder do not see variables set in your shell profile.» (macOS; `apps/codelab_desktop/AGENTS.md`) — это честно описывает, почему токен может не дойти;
 - если переменная не задана в окружении app, строка профиля и проверка показывают «<NAME> is not set in CodeLab's environment.»;
-- профиль со ссылкой не вида `env:` (вручную правленый файл или будущий change B) показывается строкой «Token: <ref> (not supported in this version)». Подключение тогда идёт без токена с предупреждением в диагностике `Token reference <ref> is not supported in this version; connecting without a token.`. Имя ссылки — не секрет, значение не читается.
+- профиль со ссылкой не вида `env:` (вручную правленый файл или будущий change B) показывается строкой `unrecognized token reference (not supported in this version)`; так же печатает `codelab profiles show`.
+
+**Значение такой ссылки нигде не выводится** (решение оркестратора по безопасности, ревью итерации 2; AGENTS.md §2, §10, §16). Вместо имени секрета в файле мог оказаться сам токен, вписанный вручную. Поэтому:
+- в UI, CLI, журнале и диагностике нет `ref`, только `profile_id`;
+- подключение идёт без токена, как раньше;
+- предупреждение диагностики: `The token-reference format of profile <id> is not supported in this version; connecting without a token.`.
+
+Почему дефис в «token-reference»: шаблон редактора `SecretRedactor` (`codelab_client_acp/lib/src/domain/secret_redaction.dart`) `\b(Basic|Bearer|Digest|Token)\s+[A-Za-z0-9._~+/=-]+` без учёта регистра съел бы «token reference» как «Token <значение>». Слитное «token-reference» и «a token.» в конце фразы под шаблон не попадают. Текст UI и `profiles show` через редактор не проходит, поэтому там остаётся «unrecognized token reference».
 
 О будущем хранилище секретов UI ничего не говорит: обещание функции, которой в сборке нет, хуже её отсутствия. Задана ли переменная, проверяет `AddProfileCubit` через узкий порт окружения (`Map<String, String>` из composition root). Значение он при этом не читает, виджеты окружения не видят.
 
@@ -349,7 +396,7 @@ Id неизменяем после сохранения; «Rename» меняет
 
 `ProfileTokenRef.parse(ref)` (kit) в этом change различает:
 - `env:<NAME>` для **любой** переменной с допустимым именем → `EnvTokenRef(name)`;
-- любую другую строку → `UnsupportedTokenRef(ref)`.
+- любую другую строку → `UnsupportedTokenRef(ref)`; его `toString()` маскирует значение — `UnsupportedTokenRef(<redacted>)`: туда мог попасть вписанный вручную токен (D13).
 
 Форму «имя секрета» добавит change B.
 
@@ -396,9 +443,11 @@ Id неизменяем после сохранения; «Rename» меняет
 | `connection_profile.probe_discarded` | debug | `operation_id` |
 | `connection_profile.default_changed` | info | `profile_id` |
 | `connection_profile.unreadable` | warning | `error_type` |
-| `connection_profile.default_ignored` | warning | — (только факт; поля записи не пишутся) |
+| `connection_profile.default_ignored` | warning | — (только факт; поля записи не пишутся; один раз за жизнь страницы, а не при каждом `reload`) |
 | `connection_profile.default_removed` | info | — |
 | `connection_profile.token_ref_unsupported` | warning | `profile_id` |
+| `connection_profile.default_unresolved` | warning | `error_type` — резолвер профиля по умолчанию не прочитал `profiles.json` |
+| `connection_profile.default_reset` | info | — сохранённый `codelab.connection.default_profile` указывал на пропавший профиль и сброшен |
 | `connection.connect_on_start` | info | `profile_id`, `type` |
 
 Уровень `error` не используется: всё это ожидаемые ситуации, которые пользователь видит и исправляет сам (§9).
@@ -408,7 +457,8 @@ Id неизменяем после сохранения; «Rename» меняет
 Номер проверки называется `operation_id` (§4). Для подключения в событиях уже есть `attempt` у `ConnectionCubit`.
 
 В события не попадают (§43–§46):
-- аргументы и значения `env` stdio — только `type` и, при необходимости, имя исполняемого файла;
+- аргументы и значения `env` stdio — только `type` и, при необходимости, имя исполняемого файла; диагностика подключения stdio тоже пишет только команду (D6);
+- значение ссылки на токен не вида `env:` — только `profile_id` (D13);
 - значение переменной токена — только признак `token: env`, имя переменной тоже не пишется;
 - путь, query и userinfo URL — только `scheme://host:port`;
 - путь к `profiles.json` (на экране он показывается, в лог не идёт);
@@ -419,12 +469,12 @@ Id неизменяем после сохранения; «Rename» меняет
 | Пакет | Что меняется | Слой |
 |---|---|---|
 | `codelab_client_core` | `ProfileDraft`, `ProfileProbe`, `ProfileTokenRef`, `ProfileSecretSource`, `isValidProfileId`, `reservedProfileIds`/`isReservedProfileId`, `usableStoredProfiles`, `suggestProfileId`, `profileKindsFor` | core, web-безопасно |
-| `codelab_client_io` | `classifyProbeFailure` | io |
+| `codelab_client_io` | `classifyProbeFailure`, `resolveCodelabHome`, `CodelabHomeException`; зависимость `path` | io |
 | `codelab_ui` | три виджета D16 | ui_kit |
 | `apps/codelab_desktop` | навигация, feature `settings`, `ConnectionCubit`, composition root | app |
 | `apps/codelab_cli` | `ProfileSecretSource` вместо `EnvSecretSource`, `isValidProfileId` и `reservedProfileIds`, без `--agent` и с `-a default` — встроенный агент, предупреждение о старой записи `default` (D21) | app |
 
-Новых зависимостей и рёбер графа нет: app уже зависит от `codelab_client_core`, `codelab_client_io` и `codelab_ui`. Allowlist ядра, kit, `codelab_client_io` и app не меняется. Новых правил в `codelab_architecture_tests/test/support/rules.dart` нет. Правило «stage 7» для `features/settings/presentation` (запрет `codelab_setup/io.dart` и `dart:io`, SETUP-9) и ребро `codelab_desktop → codelab_setup` переходят в change B вместе с первым импортом `codelab_setup` в app. Граф в `README.md` не меняется.
+Новых рёбер графа нет: app уже зависит от `codelab_client_core`, `codelab_client_io` и `codelab_ui`. `codelab_client_io` получает `resolveCodelabHome`, `CodelabHomeException` и зависимость `path` (она уже в allowlist пакета). Allowlist ядра, kit, `codelab_client_io` и app не меняется. Новых правил в `codelab_architecture_tests/test/support/rules.dart` нет. Правило «stage 7» для `features/settings/presentation` (запрет `codelab_setup/io.dart` и `dart:io`, SETUP-9) и ребро `codelab_desktop → codelab_setup` переходят в change B вместе с первым импортом `codelab_setup` в app. Граф в `README.md` не меняется.
 
 ### D19. Тесты по веткам
 
@@ -450,6 +500,7 @@ Id неизменяем после сохранения; «Rename» меняет
 | «Use for new windows» | флажок | «Use by default» с подсказкой (Q3) | окно одно |
 | Встроенный агент | «InProcessAcpLink», «providers and MCP edited here (D-04)» | «Runs inside CodeLab; no separate process.» | страниц Providers/MCP в этом change нет; внутренние имена типов в UI не нужны |
 | Заголовок встроенного | «Default · Connected» | «Default» и «Current» — разные метки | D5 |
+| Строка профиля | заголовок — имя, статус «Connected» текстом в описании | заголовок `label` с многоточием и подсказкой, `id` при пустом `label` или `label` вида `stdio:`/`ws://`/`wss://`; бейдж `Connecting…`/`Connected`/`Failed` у текущего профиля (D4) | находки ручного прогона итерации 2 |
 | Поиск | «Find a setting» | по заголовкам и ключевым словам страниц (D3) | нечёткий поиск по значениям не нужен |
 | Узкая раскладка | `max-width:760px` | навигация сверху при < 760 px | только экран настроек |
 | `AddProfile` (телефон) | «Use for new sessions» | вне охвата (§12.8) | мобильной сборки нет |
@@ -458,10 +509,10 @@ Id неизменяем после сохранения; «Rename» меняет
 
 Решения пользователя 2026-11-04 (Q1 и уточнение того же дня) меняют правило CLI из D13, п. 1 change `add-embedded-agent-mode`. Прежнее правило: «профиль `default` из `profiles.json`, если есть, иначе встроенный». Новое:
 - `codelab` без `--agent` **всегда** запускает встроенный агент (`EmbeddedProfile(hostProfile: 'embedded-cli')`);
-- `default` — алиас `embedded`: `-a default` и `-a embedded` означают одно и то же, и `profiles.json` при этом не читается;
+- `default` — алиас `embedded`: `-a default` и `-a embedded` означают одно и то же. Для выбора агента запись из файла не используется. При `-a default` файл читается только ради предупреждения о старой записи `default`, и любая ошибка этого чтения игнорируется. При `-a embedded` и без `--agent` файл не читается вовсе;
 - правило одно для REPL, `--ui tui`, `-p` и `test-scenario` (как D13, п. 7).
 
-**Резерв id.** Множество `reservedProfileIds = {embedded, default}` и функция `isReservedProfileId` живут в kit (`codelab_client_core/lib/src/connection/profile_draft.dart`). Ими пользуются `ProfileDraft` (app, D11) и `codelab profiles add` (CLI). Резерв отделён от синтаксиса id (`isValidProfileId`): нужно разное сообщение об ошибке.
+**Резерв id.** Множество `reservedProfileIds = {embedded, default}` и функция `isReservedProfileId` живут в kit (`codelab_client_core/lib/src/connection/profile_ids.dart`, D11). Ими пользуются `ProfileDraft` (app, D11) и `codelab profiles add` (CLI). Резерв отделён от синтаксиса id (`isValidProfileId`): нужно разное сообщение об ошибке.
 - `codelab profiles add default …` и `codelab profiles add x default` дают код `64` и `default is the built-in agent; use --agent embedded` — в стиле прежнего `embedded is built in; use --agent embedded`, который не меняется.
 - `JsonFileProfileStore.save` отклоняет профиль с зарезервированным id `ArgumentError`, как сейчас `EmbeddedProfile`; файл при этом не меняется.
 
@@ -475,7 +526,7 @@ Id неизменяем после сохранения; «Rename» меняет
 - App показывает то же предупреждение InfoBar-ом на странице «Connection» (D5).
 
 Технические решения оркестратора 2026-11-04:
-1. **Без `--agent` CLI не читает `profiles.json`.** Битый или незнакомый файл не мешает запуску встроенного агента. Код `64` за битый файл — только когда файл действительно нужен: `-a <id>` (кроме `embedded` и `default`) и подкоманды `codelab profiles …`.
+1. **Без `--agent` CLI не читает `profiles.json`.** Битый или незнакомый файл не мешает запуску встроенного агента. Код `64` за битый файл — только когда файл действительно нужен: `-a <id>` (кроме `embedded` и `default`) и подкоманды `codelab profiles …`. При `-a default` ошибка чтения файла игнорируется (см. выше).
 
    В коде: `resolveAgentProfile` (`apps/codelab_cli/lib/src/profiles/profile_arg.dart`) для `value == null`, `embedded` и `default` возвращает встроенный профиль до обращения к хранилищу. `final id = value ?? defaultProfileId;` и константа `defaultProfileId` удаляются. Справка `--agent` в `cli_args.dart` перестаёт упоминать `profile "default" if it exists`.
 2. **Подсказку о смене правила CLI не печатает.** Dart CLI ещё не выпущен (этап 9), и на старое правило никто не опирается. Строки о неявном выборе встроенного агента по-прежнему нет (D13, п. 8 change `add-embedded-agent-mode`); выбранный профиль виден с `--verbose` и `/profile`. Предупреждение о старой записи `default` — не подсказка о смене правила: оно сообщает о данных пользователя, которые больше не используются.
@@ -502,7 +553,8 @@ Id неизменяем после сохранения; «Rename» меняет
 
 ## Risks / Trade-offs
 
-- **[Гонка записи `profiles.json` app и CLI]** Оба пишут через `profiles.json.tmp` и переименование, и одновременная запись может потерять профиль из второй. → `save` перечитывает файл непосредственно перед записью; окно гонки — миллисекунды ручных действий. Блокировка файла — отдельный change, если гонку увидят на практике.
+- **[Одновременная запись `profiles.json` из app и CLI]** Временный файл теперь уникальный (`profiles.json.<pid>.<случайный суффикс>.tmp`), запись атомарна (переименование). Два процесса больше не пишут в один `.tmp` и не оставляют полфайла. Побеждает последняя запись: профиль, добавленный другим процессом между чтением и записью, может потеряться. → `save` перечитывает файл непосредственно перед записью, окно гонки — миллисекунды ручных действий. Блокировка файла — отдельный change, если гонку увидят на практике.
+- **[Принятый риск D15: чужая переменная как Bearer]** Ссылка `env:<NAME>` допускает любую переменную. Подложенный `profiles.json` (общий каталог, чужой dotfiles-репозиторий) может указать удалённый `wss://` и `env:AWS_SECRET_ACCESS_KEY`. Тогда значение уйдёт на чужой хост заголовком `Authorization`, причём теперь и без клика — через «Connect on start», если этот профиль выбран по умолчанию. Риск принят: `profiles.json` лежит в домашнем каталоге пользователя с его правами, как и конфиг агента, и CLI ведёт себя так же. Смягчение — профиль по умолчанию выбирается только явно, а без выбора это встроенный агент (D5). При «Connect on start» к WebSocket-профилю с `env:`-ссылкой страница «Connection» показывает имя переменной в строке профиля. Allowlist имён переменных — кандидат для change B вместе с хранилищем секретов.
 - **[Устаревший список]** Слежения за файлом нет (D4). → Файл перечитывается при открытии страницы. Профиль, удалённый в CLI, при «Connect» из устаревшего списка подключится данными из памяти, без повреждения файла.
 - **[Поздний исход проверки]** Диалог закрыт или проверка повторена. → Номер проверки; отмена закрывает транспорт, исход отбрасывается с событием (D12). Тест проверяет, что процесс stdio завершён после закрытия диалога.
 - **[Позднее подключение из «Connect on start»]** Пользователь нажал «Connect» другого профиля, пока шло автоподключение. → Существующий номер попытки `ConnectionCubit`/`ClientWorkspace` (spec acp-client-kit «Повторный Connect во время подключения»).
