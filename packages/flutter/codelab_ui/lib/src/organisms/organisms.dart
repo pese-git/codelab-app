@@ -9,6 +9,7 @@ export 'codelab_progress_checklist.dart';
 export 'codelab_prompt_queue_panel.dart';
 export 'codelab_session_pane_header.dart';
 export 'codelab_session_sidebar.dart';
+export 'codelab_settings_navigation.dart';
 export 'codelab_tool_dock.dart';
 export 'codelab_tool_call_tile.dart';
 export 'codelab_transcript_notice.dart';

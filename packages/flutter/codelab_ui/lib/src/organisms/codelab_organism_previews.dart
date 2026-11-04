@@ -11,6 +11,7 @@ import 'codelab_connection_screen.dart';
 import 'codelab_progress_checklist.dart';
 import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
+import 'codelab_settings_navigation.dart';
 import 'codelab_tool_dock.dart';
 import 'codelab_transcript_panel.dart';
 import 'codelab_transcript_row.dart';
@@ -474,6 +475,43 @@ void codelabPreviewConnect() {}
 void codelabPreviewReconnect() {}
 
 void codelabPreviewEditProfile() {}
+
+@Preview(
+  name: 'Settings navigation',
+  group: codelabOrganismPreviewGroup,
+  size: Size(900, 420),
+)
+Widget codelabSettingsNavigationPreview() {
+  // `NavigationView` требует Navigator и локализации, поэтому превью
+  // собирается внутри собственного `FluentApp`.
+  return FluentApp(
+    debugShowCheckedModeBanner: false,
+    home: CodeLabSettingsNavigation(
+      items: const [
+        CodeLabSettingsNavItem(
+          id: 'connection',
+          title: 'Connection',
+          icon: FluentIcons.plug_connected,
+          group: 'Agent',
+        ),
+        CodeLabSettingsNavItem(
+          id: 'general',
+          title: 'General',
+          icon: FluentIcons.settings,
+          group: 'App',
+        ),
+      ],
+      selectedId: 'connection',
+      onSelected: (_) {},
+      onQueryChanged: (_) {},
+      onBack: () {},
+      child: const Padding(
+        padding: EdgeInsets.all(24),
+        child: CodeLabText('Page body', role: CodeLabTextRole.title),
+      ),
+    ),
+  );
+}
 
 class _AcpOrganismPreviewSurface extends StatelessWidget {
   const _AcpOrganismPreviewSurface({required this.child});

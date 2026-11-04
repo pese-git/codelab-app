@@ -12,6 +12,7 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
     this.onInspectorNext,
     this.onNewSession,
     this.onToggleSidebar,
+    this.onOpenSettings,
     this.enabled = true,
     super.key,
   });
@@ -31,6 +32,11 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   /// Cmd/Ctrl+B — свернуть или развернуть сайдбар; что именно, решает хост
   /// по классу раскладки.
   final VoidCallback? onToggleSidebar;
+
+  /// Cmd/Ctrl+, — открыть настройки (spec app-settings «Переход в настройки
+  /// и обратно», DSK-24; change `add-app-settings-shell`). Что именно
+  /// открывается, решает хост; на экране настроек сочетание не привязывают.
+  final VoidCallback? onOpenSettings;
   final bool enabled;
 
   @override
@@ -60,6 +66,12 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
           onToggleSidebar!;
       bindings[const SingleActivator(LogicalKeyboardKey.keyB, meta: true)] =
           onToggleSidebar!;
+    }
+    if (onOpenSettings != null) {
+      bindings[const SingleActivator(LogicalKeyboardKey.comma, control: true)] =
+          onOpenSettings!;
+      bindings[const SingleActivator(LogicalKeyboardKey.comma, meta: true)] =
+          onOpenSettings!;
     }
     if (onApprove != null) {
       bindings[const SingleActivator(LogicalKeyboardKey.enter, control: true)] =

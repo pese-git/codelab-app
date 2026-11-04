@@ -10,6 +10,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ConfigTransportResolver,
         InMemorySecretSource,
         RecentProjectsStore,
+        SessionStatusView,
         WorkspaceDiagnostic;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart'
@@ -323,6 +324,61 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   Future<void> loadMoreSessions() => _sessions.loadMoreSessions();
 
   void selectSession(String sessionId) => _sessions.selectSession(sessionId);
+
+  /// Активирует сессию, только если она открыта в этом запуске (есть
+  /// `SessionHandle`); `false` — сессии нет, активная не меняется.
+  ///
+  /// Для чего: возврат из настроек (`NavigationCubit.back`, design.md change
+  /// `add-app-settings-shell`, D2) не должен выбирать закрытую или ещё не
+  /// загруженную сессию.
+  bool selectSessionIfOpen(String sessionId) {
+    if (_workspace.session(SessionId(sessionId)) == null) {
+      return false;
+    }
+    selectSession(sessionId);
+    return true;
+  }
+
+  /// Сессии с ожидающим запросом разрешения в порядке списка kit.
+  ///
+  /// Почему здесь: признак берётся из `SessionView.pendingApprovals` — тех
+  /// самых одобрений, что рисует лента, — а не из отдельного источника
+  /// (design.md change `add-app-settings-shell`, D2, «Ожидающее одобрение»).
+  /// Для чего: InfoBar экрана настроек. Значение читается при каждом
+  /// состоянии фасада; подписки на сессии оно не заводит.
+  List<String> get sessionIdsWithPendingApproval {
+    // После потери соединения запрос остаётся в `SessionView`, но отвечать на
+    // него уже некому: InfoBar не должен звать к мёртвому запросу (spec
+    // app-settings «Ожидающее одобрение видно из настроек»).
+    if (_connection.state.connectionStatus !=
+        CodeLabConnectionStatus.connected) {
+      return const [];
+    }
+    return [
+      for (final summary in _workspace.current.sessions)
+        // `detached`: сессию не загрузили после reconnect, её запрос — от
+        // прежнего соединения, отвечать на него некому.
+        if (summary.status != SessionStatusView.detached &&
+            (_workspace
+                    .session(summary.id)
+                    ?.current
+                    .pendingApprovals
+                    .isNotEmpty ??
+                false))
+          summary.id.value,
+    ];
+  }
+
+  /// Сессия, к которой ведёт «Back to session»: активная, если у неё есть
+  /// запрос, иначе первая в порядке сайдбара; `null` — запросов нет.
+  String? get sessionIdForPendingApproval {
+    final ids = sessionIdsWithPendingApproval;
+    if (ids.isEmpty) {
+      return null;
+    }
+    final active = _workspace.current.activeSessionId?.value;
+    return ids.contains(active) ? active : ids.first;
+  }
 
   Future<void> submitPrompt(String prompt) =>
       _activeSession.submitPrompt(prompt);
