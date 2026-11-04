@@ -28,6 +28,8 @@ void main() {
     expect(CodeLabTranscriptPanel, isA<Type>());
     expect(CodeLabWorkbenchLayout, isA<Type>());
     expect(CodeLabWorkbenchShortcuts, isA<Type>());
+    expect(CodeLabSettingsNavigation, isA<Type>());
+    expect(CodeLabSettingsNavItem, isA<Type>());
   });
 
   testWidgets('renders command palette default command list', (tester) async {
@@ -141,6 +143,30 @@ void main() {
     expect(openedPalette, isTrue);
     expect(previousInspector, isTrue);
     expect(nextInspector, isTrue);
+  });
+
+  testWidgets('routes Cmd/Ctrl+, to the settings callback', (tester) async {
+    var opened = 0;
+    await tester.pumpWidget(
+      FluentApp(
+        home: CodeLabWorkbenchShortcuts(
+          onOpenSettings: () => opened++,
+          child: const SizedBox(width: 320, height: 200),
+        ),
+      ),
+    );
+
+    for (final modifier in const [
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.metaLeft,
+    ]) {
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.comma);
+      await tester.sendKeyUpEvent(modifier);
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(opened, 2);
   });
 
   group('CodeLabApprovalPrompt', () {
