@@ -40,6 +40,9 @@ final class _HangingDispose implements embedded.EmbeddedAgent {
   Future<void> get closed => _inner.closed;
 
   @override
+  bool get secretsInConfig => _inner.secretsInConfig;
+
+  @override
   Future<void> dispose() => release.future;
 
   Future<void> disposeInner() => _inner.dispose();
