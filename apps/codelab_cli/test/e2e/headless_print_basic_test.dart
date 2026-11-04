@@ -40,19 +40,20 @@ Future<void> main() async {
   );
 
   test(
-    'cli/headless-print-basic: the default profile is used without '
-    '--agent',
+    'cli/headless-print-basic: a stored profile is used with -a <id>',
     () async {
       final launch = await E2eCliAgent.current.launch(tmp);
       final saved = await CliProcess.run([
         'profiles',
         'add',
-        'default',
+        e2eProfileId,
         launch.agent,
       ], environment: environment);
       expect(saved.exitCode, 0, reason: '$saved');
 
       final result = await CliProcess.run([
+        '-a',
+        e2eProfileId,
         '-p',
         'hello',
         '-C',
@@ -66,7 +67,7 @@ Future<void> main() async {
     tags: pythonAgent,
   );
 
-  // Без `--agent` и без профиля `default` запускается встроенный агент; без
+  // Без `--agent` запускается встроенный агент (D21); без
   // конфига рабочий бинарь отвечает кодом 64 с проблемой конфигурации и
   // подсказкой, а процесс агента не стартует (spec codelab-cli «Без профиля и
   // без конфига»; design.md change `add-embedded-agent-mode`, D5, D13 п. 1).

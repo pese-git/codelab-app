@@ -27,16 +27,10 @@ import '../test/support/transcript_rows.dart';
 CodeLabShellCubit _cubit(WidgetTester tester) =>
     codeLabDependenciesOf(tester.element(find.byType(CodeLabApp))).shellCubit;
 
-/// Вводит команду агента в форму и подключается (как в
-/// stdio_connect_flow_test.dart).
+/// Выбирает профиль агента на странице «Connection» и ждёт подключения
+/// (как в stdio_connect_flow_test.dart).
 Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
-  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-  await tester.pumpAndSettle();
-  await launch.enterConnection(tester);
-  await tester.tap(find.widgetWithText(Button, 'Close'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-  await tester.pump();
+  await launch.connect(tester, _cubit(tester));
   await _waitFor(
     tester,
     () =>

@@ -2,11 +2,13 @@
 //
 // Фиксирует поведение до переноса в `codelab_client_core`: переходы статуса,
 // реакцию на сбой транспорта, отсутствие секретов в диагностике и отписку
-// при `close()`. Текст тестов не меняется до конца change (design D1).
+// при `close()`. Задача 2.4 change `add-app-settings-shell` (D6): вызовы
+// формы (`updateStdioCommand`, `selectTransport`, …) заменены выбором
+// профиля — `connect(profile)`; проверяемые исходы прежние.
 
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
+import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_ui/codelab_ui.dart';
-import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'harness.dart';
@@ -42,8 +44,13 @@ void main() {
     () async {
       final h = ShellHarness();
 
-      h.cubit.updateStdioCommand('   ');
-      await h.cubit.connect();
+      await h.cubit.connect(
+        const ConnectionProfile.stdio(
+          id: 'blank',
+          label: 'Blank',
+          command: '   ',
+        ),
+      );
 
       expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       expect(h.stdioStarts, 0);
@@ -63,10 +70,9 @@ void main() {
       },
     );
 
-    h.cubit
-      ..selectTransport(CodeLabTransportType.webSocket)
-      ..updateWebSocketEndpoint('');
-    await h.cubit.connect();
+    await h.cubit.connect(
+      ConnectionProfile.webSocket(id: 'empty', label: 'Empty', uri: Uri()),
+    );
 
     expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     expect(wsStarts, 0);
@@ -76,6 +82,9 @@ void main() {
     'a WebSocket connect failure is reported without the bearer token',
     () async {
       final h = ShellHarness(
+        // Токен — значение переменной окружения app: профиль хранит только
+        // ссылку `env:` (D13, D15).
+        environment: {'DEVBOX_TOKEN': _token},
         webSocketTransportFactory: (config) {
           expect(config.token, _token);
           return ThrowingStartTransport(
@@ -87,11 +96,14 @@ void main() {
         },
       );
 
-      h.cubit
-        ..selectTransport(CodeLabTransportType.webSocket)
-        ..updateWebSocketEndpoint('wss://agent.example.test/acp')
-        ..updateWebSocketToken(_token);
-      await h.cubit.connect();
+      await h.cubit.connect(
+        ConnectionProfile.webSocket(
+          id: 'devbox',
+          label: 'Devbox',
+          uri: Uri.parse('wss://agent.example.test/acp'),
+          tokenRef: 'env:DEVBOX_TOKEN',
+        ),
+      );
 
       expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       expect(

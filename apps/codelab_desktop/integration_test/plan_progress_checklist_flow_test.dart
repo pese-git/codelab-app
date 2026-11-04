@@ -4,42 +4,11 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
-import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'support/e2e_agent.dart';
-
-// The transport setup form only lives inside the modal ConnectionSetupDialog
-// — see stdio_connect_flow_test.dart for the same helper.
-Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _closeConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(Button, 'Close'));
-  await tester.pumpAndSettle();
-}
-
-// Same rationale as stdio_connect_flow_test.dart's helper of the same name:
-// a real stdio round trip does not reliably keep scheduling frames for
-// `pumpAndSettle` to wait on, so poll the cubit's own state instead.
-Future<void> _tapConnectAndWaitUntilSettled(
-  WidgetTester tester,
-  CodeLabShellCubit shellCubit,
-) async {
-  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-  await tester.pump();
-  final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus ==
-          CodeLabConnectionStatus.connecting &&
-      DateTime.now().isBefore(deadline)) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-  await tester.pumpAndSettle();
-}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -68,10 +37,7 @@ void main() {
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
 
-      await _openConnectionSetupDialog(tester);
-      await launch.enterConnection(tester);
-      await _closeConnectionSetupDialog(tester);
-      await _tapConnectAndWaitUntilSettled(tester, shellCubit);
+      await launch.connect(tester, shellCubit);
 
       expect(find.text('Connected'), findsWidgets);
 

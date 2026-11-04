@@ -6,19 +6,19 @@ import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/core/platform/recent_projects_store.dart';
 import 'package:codelab_desktop/core/platform/working_directory_provider.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
-import 'package:codelab_desktop/features/workbench/presentation/widgets/connection_setup_dialog.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_log_pane.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_log_viewer_dialog.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/main_pane.dart';
 import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.dart'
     show selectPaletteCommand;
 import 'package:codelab_client_acp/codelab_client_acp.dart';
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show ConnectionProfile, ProfileSecretSource;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_ui/codelab_ui.dart';
-import 'package:fluent_ui/fluent_ui.dart'
-    show ComboBox, FluentApp, FluentIcons, TextBox;
+import 'package:fluent_ui/fluent_ui.dart' show ComboBox, FluentApp, FluentIcons;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +29,31 @@ import 'package:structured_log_fluent/structured_log_fluent.dart'
 
 import 'support/test_app_scope.dart';
 import 'support/transcript_rows.dart';
+
+/// stdio-профиль окна вместо прежней формы подключения (задача 2.4 change
+/// `add-app-settings-shell`, D6): по умолчанию — `codelabAgentStdioProfile`.
+ConnectionProfile _stdioProfile({
+  String command = 'codelab',
+  List<String> args = const ['serve', '--stdio'],
+  Map<String, String> env = const {'CODELAB_LOG_LEVEL': 'DEBUG'},
+  bool runInProjectDirectory = true,
+}) => ConnectionProfile.stdio(
+  id: 'window',
+  label: 'Codelab Agent',
+  command: command,
+  args: args,
+  env: env,
+  runInProjectDirectory: runInProjectDirectory,
+);
+
+/// WebSocket-профиль окна; токен — только ссылка `env:` (D13).
+ConnectionProfile _webSocketProfile(String endpoint, {String? tokenRef}) =>
+    ConnectionProfile.webSocket(
+      id: 'remote',
+      label: 'Remote ACP Agent',
+      uri: Uri.parse(endpoint),
+      tokenRef: tokenRef,
+    );
 
 /// The prompt composer's text field. `find.byType(EditableText).last` is
 /// ambiguous now: the docked `FluentLogViewer` has its own search box, which
@@ -80,10 +105,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('No active session'), findsOneWidget);
-    expect(
-      scope.resolve<CodeLabShellCubit>().state.transportType,
-      CodeLabTransportType.stdio,
-    );
+    expect(scope.resolve<CodeLabShellCubit>().state.transportLabel, 'stdio');
     expect(find.byType(CodeLabWorkbenchLayout), findsOneWidget);
     expect(find.byType(CodeLabConnectionScreen), findsOneWidget);
     expect(find.byType(CodeLabPromptComposer), findsOneWidget);
@@ -94,10 +116,9 @@ void main() {
     );
     expect(scope.resolve<StdioAcpAgentProfile>(), codelabAgentStdioProfile);
     expect(
-      scope.resolve<CodeLabShellCubit>().state.stdioCommand,
-      codelabAgentStdioProfile.command,
+      scope.resolve<CodeLabShellCubit>().state.connectionDetail,
+      'codelab',
     );
-    expect(scope.resolve<CodeLabShellCubit>().state.stdioArgs, 'serve --stdio');
     expect(scope.resolve<AcpClientApplication>(), isA<AcpClientApplication>());
     expect(scope.resolve<AcpTransport>(), same(binding.transport));
     expect(scope.resolve<CodeLabRootLifecycle>(), isA<CodeLabRootLifecycle>());
@@ -138,110 +159,95 @@ void main() {
     await closeCodeLabRootScope();
   });
 
-  testWidgets('selects WebSocket and keeps endpoint in shell state', (
-    tester,
-  ) async {
-    final binding = CodeLabTestBinding();
+  testWidgets('a WebSocket profile of the window keeps its endpoint in the '
+      'shell state', (tester) async {
+    final binding = CodeLabTestBinding(
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
+    );
 
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
 
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
-    expect(shellCubit.state.transportType, CodeLabTransportType.stdio);
+    expect(shellCubit.state.transportLabel, 'stdio');
     expect(find.text('Codelab Agent'), findsWidgets);
 
-    await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(CodeLabButton, 'WebSocket'));
-    await tester.pump(const Duration(milliseconds: 100));
-
     const endpoint = 'wss://agent.example.test/acp';
-    await tester.enterText(
-      find.byKey(const ValueKey('transport-field-Endpoint')),
-      endpoint,
+    await tester.runAsync(
+      () => shellCubit.connect(_webSocketProfile(endpoint)),
     );
     await tester.pump();
 
-    expect(shellCubit.state.transportType, CodeLabTransportType.webSocket);
-    expect(shellCubit.state.webSocketEndpoint, endpoint);
-    expect(shellCubit.state.connectionDetail, endpoint);
-    expect(binding.transport.state, AcpTransportState.idle);
+    expect(shellCubit.state.transportLabel, 'WebSocket');
+    expect(shellCubit.state.profileLabel, 'Remote ACP Agent');
+    // Деталь — только origin: путь и query могут нести токен (L1).
+    expect(shellCubit.state.connectionDetail, 'wss://agent.example.test');
     expect(binding.transport.sentMessages, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScope();
   });
 
-  testWidgets('does not open the connection setup dialog on first run', (
-    tester,
-  ) async {
+  testWidgets('does not open the settings screen on first run', (tester) async {
     final binding = CodeLabTestBinding();
 
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
 
-    expect(find.byType(ConnectionSetupDialog), findsNothing);
+    expect(find.byKey(const ValueKey('settings-nav-connection')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScope();
   });
 
-  testWidgets(
-    'Configure connection in the command bar opens the dialog regardless '
-    'of transcript state',
-    (tester) async {
-      final binding = CodeLabTestBinding();
+  testWidgets('Settings in the sidebar opens the Connection page regardless of '
+      'transcript state', (tester) async {
+    final binding = CodeLabTestBinding();
 
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
 
-      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+    await tester.pumpAndSettle();
 
-      expect(find.byType(ConnectionSetupDialog), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-nav-connection')),
+      findsOneWidget,
+    );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
 
-  testWidgets(
-    'Configure connection on the empty connection screen opens the same '
-    'dialog pre-filled with current values',
-    (tester) async {
-      tester.view.physicalSize = const Size(1400, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets('Configure connection on the empty connection screen opens the '
+      'Connection page showing the profile of the window', (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
 
-      final binding = CodeLabTestBinding();
+    final binding = CodeLabTestBinding();
 
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
-      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
 
-      final buttonFinder = find.descendant(
-        of: find.byType(CodeLabConnectionScreen),
-        matching: find.text('Configure connection'),
-      );
-      await tester.tap(buttonFinder);
-      await tester.pumpAndSettle();
+    final buttonFinder = find.descendant(
+      of: find.byType(CodeLabConnectionScreen),
+      matching: find.text('Configure connection'),
+    );
+    await tester.tap(buttonFinder);
+    await tester.pumpAndSettle();
 
-      expect(find.byType(ConnectionSetupDialog), findsOneWidget);
-      expect(
-        tester
-            .widget<TextBox>(
-              find.byKey(const ValueKey('transport-field-Command')),
-            )
-            .controller!
-            .text,
-        shellCubit.state.stdioCommand,
-      );
+    // Профиль по умолчанию тестовой сборки — stdio-профиль с меткой
+    // `Codelab Agent`: его строка стоит на странице.
+    expect(
+      find.byKey(ValueKey('connection-profile-row-${testStdioProfile.id}')),
+      findsOneWidget,
+    );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScope();
+  });
 
-  testWidgets('editing a field inside the connection setup dialog applies '
-      'immediately to shell state', (tester) async {
+  testWidgets('Esc closes the settings screen and keeps the connection state', (
+    tester,
+  ) async {
     final binding = CodeLabTestBinding();
 
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
@@ -250,50 +256,18 @@ void main() {
     await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const ValueKey('transport-field-Command')),
-      'custom-agent',
-    );
-    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
 
-    expect(shellCubit.state.stdioCommand, 'custom-agent');
+    expect(find.byKey(const ValueKey('settings-nav-connection')), findsNothing);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.disconnected,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScope();
   });
-
-  testWidgets(
-    'Esc closes the connection setup dialog and keeps the last-edited '
-    'field values',
-    (tester) async {
-      final binding = CodeLabTestBinding();
-
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
-      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
-
-      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Command')),
-        'custom-agent',
-      );
-      await tester.pump();
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ConnectionSetupDialog), findsNothing);
-      expect(shellCubit.state.stdioCommand, 'custom-agent');
-      expect(
-        shellCubit.state.connectionStatus,
-        CodeLabConnectionStatus.disconnected,
-      );
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
-    },
-  );
 
   test('creates a session and tracks it as active', () async {
     final initialTransport = FakeAcpTransport();
@@ -372,11 +346,8 @@ void main() {
       recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
-    shellCubit
-      ..selectTransport(CodeLabTransportType.webSocket)
-      ..updateWebSocketEndpoint('wss://agent.example.test/acp');
     await shellCubit.selectProject('/remote/workspace');
-    await shellCubit.connect();
+    await shellCubit.connect(_webSocketProfile('wss://agent.example.test/acp'));
     expect(
       shellCubit.state.connectionStatus,
       CodeLabConnectionStatus.connected,
@@ -443,7 +414,7 @@ void main() {
     await application.dispose();
   });
 
-  test("_stdioConfigFromState's cwd follows runAgentFromProjectDirectory: on "
+  test("the stdio cwd follows runInProjectDirectory of the profile: on "
       'matches the selected project, off is null', () async {
     final configs = <StdioAcpTransportConfig>[];
     final application = AcpClientApplication(transport: FakeAcpTransport());
@@ -467,14 +438,12 @@ void main() {
     );
 
     await shellCubit.selectProject('/workspace');
-    expect(shellCubit.state.runAgentFromProjectDirectory, isTrue);
-    await shellCubit.connect();
+    await shellCubit.connect(_stdioProfile());
     expect(configs.single.cwd, '/workspace');
 
-    shellCubit.toggleRunAgentFromProjectDirectory(false);
-    await shellCubit.reconnect();
+    await shellCubit.connect(_stdioProfile(runInProjectDirectory: false));
     expect(configs[1].cwd, isNull);
-    // The selected project itself is untouched by the toggle.
+    // Сам выбранный проект от профиля не меняется.
     expect(shellCubit.state.selectedProjectPath, '/workspace');
 
     await shellCubit.close();
@@ -1080,8 +1049,7 @@ void main() {
       logger: logger,
     );
 
-    shellCubit.updateStdioCommand('missing-codelab');
-    await shellCubit.connect();
+    await shellCubit.connect(_stdioProfile(command: 'missing-codelab'));
 
     expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     final lossMessages = logger.entries.where(
@@ -1745,8 +1713,9 @@ void main() {
     );
 
     await shellCubit.selectProject('/tmp/codelab');
-    shellCubit.updateStdioEnv('CODELAB_LOG_LEVEL=DEBUG\nEXTRA=value');
-    await shellCubit.connect();
+    await shellCubit.connect(
+      _stdioProfile(env: {'CODELAB_LOG_LEVEL': 'DEBUG', 'EXTRA': 'value'}),
+    );
 
     expect(configs, [
       const StdioAcpTransportConfig(
@@ -1764,11 +1733,11 @@ void main() {
     );
     expect(
       logger.entries.map((entry) => entry['event']),
-      contains('Starting stdio ACP agent: codelab serve --stdio.'),
+      contains('Starting stdio ACP agent: codelab.'),
     );
     expect(
       logger.entries.map((entry) => entry['event']),
-      contains('Stdio ACP agent started: codelab serve --stdio.'),
+      contains('Stdio ACP agent started: codelab.'),
     );
 
     await shellCubit.close();
@@ -1776,7 +1745,8 @@ void main() {
   });
 
   test(
-    'reconnect starts replacement stdio transport from editable state',
+    'reconnect starts replacement stdio transport with the profile of the window '
+    'and the current project',
     () async {
       final configs = <StdioAcpTransportConfig>[];
       final initialTransport = FakeAcpTransport();
@@ -1805,20 +1775,22 @@ void main() {
         logger: logger,
       );
 
-      await shellCubit.connect();
-      shellCubit
-        ..updateStdioCommand('custom-agent')
-        ..updateStdioArgs('serve --stdio --profile local')
-        ..updateStdioEnv('CODELAB_LOG_LEVEL=TRACE\nFEATURE_FLAG=enabled');
+      await shellCubit.connect(
+        _stdioProfile(
+          command: 'custom-agent',
+          args: const ['serve', '--stdio', '--profile', 'local'],
+          env: const {'CODELAB_LOG_LEVEL': 'TRACE', 'FEATURE_FLAG': 'enabled'},
+        ),
+      );
       await shellCubit.selectProject('/tmp/custom-codelab');
       await shellCubit.reconnect();
 
       expect(configs, [
         StdioAcpTransportConfig(
-          command: 'codelab',
-          args: const ['serve', '--stdio'],
+          command: 'custom-agent',
+          args: const ['serve', '--stdio', '--profile', 'local'],
           cwd: const IoWorkingDirectoryProvider().currentPath,
-          env: const {'CODELAB_LOG_LEVEL': 'DEBUG'},
+          env: const {'CODELAB_LOG_LEVEL': 'TRACE', 'FEATURE_FLAG': 'enabled'},
         ),
         const StdioAcpTransportConfig(
           command: 'custom-agent',
@@ -1835,15 +1807,11 @@ void main() {
       );
       expect(
         logger.entries.map((entry) => entry['event']),
-        contains(
-          'Reconnecting stdio ACP agent: custom-agent serve --stdio --profile local.',
-        ),
+        contains('Reconnecting stdio ACP agent: custom-agent.'),
       );
       expect(
         logger.entries.map((entry) => entry['event']),
-        contains(
-          'Stdio ACP agent reconnected: custom-agent serve --stdio --profile local.',
-        ),
+        contains('Stdio ACP agent reconnected: custom-agent.'),
       );
 
       await shellCubit.close();
@@ -1875,8 +1843,7 @@ void main() {
       logger: logger,
     );
 
-    shellCubit.updateStdioCommand('');
-    await shellCubit.connect();
+    await shellCubit.connect(_stdioProfile(command: ''));
 
     expect(configs, isEmpty);
     expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
@@ -1913,8 +1880,7 @@ void main() {
       logger: logger,
     );
 
-    shellCubit.updateStdioCommand('missing-codelab');
-    await shellCubit.connect();
+    await shellCubit.connect(_stdioProfile(command: 'missing-codelab'));
 
     expect(configs.single.command, 'missing-codelab');
     expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
@@ -1951,14 +1917,17 @@ void main() {
       workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      // Токен — значение переменной окружения: профиль хранит ссылку `env:`.
+      secrets: const ProfileSecretSource({'AGENT_TOKEN': 'secret-token'}),
       logger: logger,
     );
 
-    shellCubit
-      ..selectTransport(CodeLabTransportType.webSocket)
-      ..updateWebSocketEndpoint('wss://agent.example.test/acp')
-      ..updateWebSocketToken('secret-token');
-    await shellCubit.connect();
+    await shellCubit.connect(
+      _webSocketProfile(
+        'wss://agent.example.test/acp',
+        tokenRef: 'env:AGENT_TOKEN',
+      ),
+    );
 
     expect(configs, [
       WebSocketAcpTransportConfig(
@@ -1973,87 +1942,84 @@ void main() {
     );
     expect(
       logger.entries.map((entry) => entry['event']),
-      contains('WebSocket ACP agent connected: wss://agent.example.test/acp.'),
+      contains('WebSocket ACP agent connected: wss://agent.example.test.'),
     );
 
     await shellCubit.close();
     await application.dispose();
   });
 
-  test(
-    'reconnect starts replacement WebSocket transport from editable state',
-    () async {
-      final configs = <WebSocketAcpTransportConfig>[];
-      final initialTransport = FakeAcpTransport();
-      final connectedTransport = FakeAcpTransport();
-      final reconnectedTransport = FakeAcpTransport();
-      final replacements = [connectedTransport, reconnectedTransport];
-      final application = AcpClientApplication(transport: initialTransport);
-      final logger = _RecordingLogger();
-      final shellCubit = CodeLabShellCubit(
-        profile: codelabAgentStdioProfile,
-        application: application,
-        createSessionUseCase: CreateSession(application),
-        sendPromptUseCase: SendPrompt(application),
-        cancelTurnUseCase: CancelTurn(application),
-        reconnectUseCase: Reconnect(application),
-        respondToPermissionUseCase: RespondToPermission(application),
-        setSessionConfigOptionUseCase: SetSessionConfigOption(application),
-        stdioTransportFactory: (_) => FakeAcpTransport(),
-        webSocketTransportFactory: (config) {
-          configs.add(config);
-          return replacements.removeAt(0);
-        },
-        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
-        projectFolderPicker: _FakeProjectFolderPicker(),
-        recentProjectsStore: _FakeRecentProjectsStore(),
-        logger: logger,
-      );
+  test('reconnect starts replacement WebSocket transport and reads the token '
+      'from the environment again', () async {
+    final configs = <WebSocketAcpTransportConfig>[];
+    final initialTransport = FakeAcpTransport();
+    final connectedTransport = FakeAcpTransport();
+    final reconnectedTransport = FakeAcpTransport();
+    final replacements = [connectedTransport, reconnectedTransport];
+    final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
+    // Значение переменной меняется между подключениями: токен читается из
+    // окружения в момент открытия транспорта, а не хранится (D13, D15).
+    final environment = {'AGENT_TOKEN': 'initial-token'};
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) => FakeAcpTransport(),
+      webSocketTransportFactory: (config) {
+        configs.add(config);
+        return replacements.removeAt(0);
+      },
+      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
+      secrets: ProfileSecretSource(environment),
+      logger: logger,
+    );
 
-      shellCubit
-        ..selectTransport(CodeLabTransportType.webSocket)
-        ..updateWebSocketEndpoint('wss://agent.example.test/acp')
-        ..updateWebSocketToken('initial-token');
-      await shellCubit.connect();
+    await shellCubit.connect(
+      _webSocketProfile(
+        'wss://agent.example.test/acp-v2',
+        tokenRef: 'env:AGENT_TOKEN',
+      ),
+    );
 
-      shellCubit
-        ..updateWebSocketEndpoint('wss://agent.example.test/acp-v2')
-        ..updateWebSocketToken('rotated-token');
-      await shellCubit.reconnect();
+    environment['AGENT_TOKEN'] = 'rotated-token';
+    await shellCubit.reconnect();
 
-      expect(configs, [
-        WebSocketAcpTransportConfig(
-          uri: Uri.parse('wss://agent.example.test/acp'),
-          token: 'initial-token',
-        ),
-        WebSocketAcpTransportConfig(
-          uri: Uri.parse('wss://agent.example.test/acp-v2'),
-          token: 'rotated-token',
-        ),
-      ]);
-      expect(connectedTransport.state, AcpTransportState.closed);
-      expect(reconnectedTransport.state, AcpTransportState.connected);
-      expect(
-        shellCubit.state.connectionStatus,
-        CodeLabConnectionStatus.connected,
-      );
-      expect(
-        logger.entries.map((entry) => entry['event']),
-        contains(
-          'Reconnecting WebSocket ACP agent: wss://agent.example.test/acp-v2.',
-        ),
-      );
-      expect(
-        logger.entries.map((entry) => entry['event']),
-        contains(
-          'WebSocket ACP agent reconnected: wss://agent.example.test/acp-v2.',
-        ),
-      );
+    expect(configs, [
+      WebSocketAcpTransportConfig(
+        uri: Uri.parse('wss://agent.example.test/acp-v2'),
+        token: 'initial-token',
+      ),
+      WebSocketAcpTransportConfig(
+        uri: Uri.parse('wss://agent.example.test/acp-v2'),
+        token: 'rotated-token',
+      ),
+    ]);
+    expect(connectedTransport.state, AcpTransportState.closed);
+    expect(reconnectedTransport.state, AcpTransportState.connected);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
+    expect(
+      logger.entries.map((entry) => entry['event']),
+      contains('Reconnecting WebSocket ACP agent: wss://agent.example.test.'),
+    );
+    expect(
+      logger.entries.map((entry) => entry['event']),
+      contains('WebSocket ACP agent reconnected: wss://agent.example.test.'),
+    );
 
-      await shellCubit.close();
-      await application.dispose();
-    },
-  );
+    await shellCubit.close();
+    await application.dispose();
+  });
 
   test('reconnect reports WebSocket failure without crashing', () async {
     final initialTransport = FakeAcpTransport();
@@ -2082,10 +2048,7 @@ void main() {
       logger: logger,
     );
 
-    shellCubit
-      ..selectTransport(CodeLabTransportType.webSocket)
-      ..updateWebSocketEndpoint('wss://agent.example.test/acp');
-    await shellCubit.connect();
+    await shellCubit.connect(_webSocketProfile('wss://agent.example.test/acp'));
     expect(
       shellCubit.state.connectionStatus,
       CodeLabConnectionStatus.connected,
@@ -2205,8 +2168,7 @@ void main() {
         logger: logger,
       );
 
-      shellCubit.updateStdioCommand('missing-codelab');
-      await shellCubit.connect();
+      await shellCubit.connect(_stdioProfile(command: 'missing-codelab'));
 
       expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       final message = logger.entries.last['event'];

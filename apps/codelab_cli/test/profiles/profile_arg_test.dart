@@ -1,7 +1,10 @@
 // Значение `--agent` (tasks 2.3; spec codelab-cli «Профили подключения
 // CLI»; design.md change `add-codelab-cli`, D4).
 
+import 'dart:io';
+
 import 'package:codelab_cli/codelab_cli.dart';
+import 'package:codelab_client_io/codelab_client_io.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:test/test.dart';
 
@@ -101,48 +104,88 @@ void main() {
     );
   });
 
-  test('without --agent the profile is "default"', () async {
-    expect(
-      await resolveAgentProfile(null, store: store),
-      isA<StdioProfile>().having((p) => p.command, 'command', 'codelab-agent'),
-    );
-  });
-
-  test('without --agent and without "default" the embedded agent is '
-      'used (D13, п. 1)', () async {
-    expect(
-      await resolveAgentProfile(null, store: MemoryProfileStore()),
-      const ConnectionProfile.embedded(
+  test(
+    'without --agent the embedded agent is used and the store is '
+    'never read, even with a "default" record or a broken file (D21)',
+    () async {
+      const embedded = ConnectionProfile.embedded(
         id: 'embedded',
         label: 'Embedded agent',
         hostProfile: 'embedded-cli',
-      ),
-    );
-    // Другие профили без "default" его не заменяют.
+      );
+
+      expect(await resolveAgentProfile(null, store: store), embedded);
+      expect(
+        await resolveAgentProfile(null, store: MemoryProfileStore()),
+        embedded,
+      );
+      expect(
+        await resolveAgentProfile(null, store: MemoryProfileStore.broken()),
+        embedded,
+      );
+    },
+  );
+
+  test('-a default is an alias of embedded: the stored "default" record is '
+      'not used and a broken file does not matter (D21)', () async {
     expect(
-      await resolveAgentProfile(
-        null,
-        store: MemoryProfileStore([
-          const StdioProfile(id: 'py', label: 'Python', command: 'codelab'),
-        ]),
-      ),
-      isA<EmbeddedProfile>(),
+      await resolveAgentProfile('default', store: store),
+      embeddedCliProfile,
+    );
+    expect(
+      await resolveAgentProfile('default', store: MemoryProfileStore.broken()),
+      embeddedCliProfile,
     );
   });
 
-  test('a broken profiles file without --agent is a usage error, not a '
-      'silent switch to the embedded agent', () async {
-    await expectLater(
-      resolveAgentProfile(null, store: MemoryProfileStore.broken()),
-      throwsA(
-        isA<UsageError>().having(
-          (e) => e.message,
-          'message',
-          startsWith('Cannot read agent profiles:'),
-        ),
+  test('-a default ignores any read error of the store, not only a broken '
+      'format (EACCES is a FileSystemException)', () async {
+    final warnings = <String>[];
+
+    final profile = await resolveAgentProfile(
+      'default',
+      store: _UnreadableStore(),
+      onWarning: warnings.add,
+    );
+
+    expect(profile, embeddedCliProfile);
+    expect(warnings, isEmpty);
+  });
+
+  test('-a default with profiles.json as a directory starts the embedded '
+      'agent', () async {
+    final tmp = Directory.systemTemp.createTempSync('codelab_default_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    Directory('${tmp.path}/profiles.json').createSync();
+
+    expect(
+      await resolveAgentProfile(
+        'default',
+        store: JsonFileProfileStore('${tmp.path}/profiles.json'),
+        onWarning: (_) {},
       ),
+      embeddedCliProfile,
     );
   });
+
+  test(
+    'an old profile with capital letters is selected by -a as before',
+    () async {
+      final old = MemoryProfileStore([
+        ConnectionProfile.webSocket(
+          id: 'Old',
+          label: 'Old',
+          uri: Uri.parse('wss://agent.test/acp'),
+          tokenRef: 'env:CODELAB_AGENT_TOKEN',
+        ),
+      ]);
+
+      expect(
+        await resolveAgentProfile('Old', store: old),
+        isA<WebSocketProfile>().having((p) => p.id, 'id', 'Old'),
+      );
+    },
+  );
 
   test('a broken profiles file is a usage error', () async {
     await expectLater(
@@ -150,20 +193,17 @@ void main() {
       throwsA(isA<UsageError>()),
     );
   });
+}
 
-  group('EnvSecretSource', () {
-    test('reads env: references and nothing else', () async {
-      const secrets = EnvSecretSource({'CODELAB_AGENT_TOKEN': 'tok'});
+/// Хранилище, чтение которого падает как при `EACCES`.
+final class _UnreadableStore implements ProfileStore {
+  @override
+  Future<List<ConnectionProfile>> load() async =>
+      throw const FileSystemException('Permission denied', 'profiles.json');
 
-      expect(await secrets.read('env:CODELAB_AGENT_TOKEN'), 'tok');
-      expect(await secrets.read('env:MISSING'), isNull);
-      expect(await secrets.read('keychain:x'), isNull);
-    });
+  @override
+  Future<void> save(ConnectionProfile profile) async {}
 
-    test('an empty variable is no token', () async {
-      const secrets = EnvSecretSource({'CODELAB_AGENT_TOKEN': ''});
-
-      expect(await secrets.read('env:CODELAB_AGENT_TOKEN'), isNull);
-    });
-  });
+  @override
+  Future<bool> remove(String id) async => false;
 }

@@ -1,7 +1,12 @@
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
+import 'package:codelab_desktop/features/workbench/application/connection_cubit.dart'
+    show stdioConnectionProfileOf;
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart'
+    show codelabAgentStdioProfile;
+import 'package:codelab_client_core/codelab_client_core.dart' show ProfileStore;
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:cherrypick/cherrypick.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
@@ -10,6 +15,19 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart'
     show TestWidgetsFlutterBinding, addTearDown;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'in_memory_profile_store.dart';
+
+/// stdio-профиль, который тестовая сборка делает профилем по умолчанию.
+///
+/// Почему: до change `add-app-settings-shell` форма подключения стартовала с
+/// `codelabAgentStdioProfile`, и сотни проверок подключения опираются на «Connect
+/// запускает stdio-агента через `stdioTransportFactory`». Теперь профиль по
+/// умолчанию — встроенный агент (D5), поэтому тестовая сборка явно хранит
+/// выбор этого профиля, как это делает пользователь радиокнопкой
+/// (`codelab.connection.default_profile`). Тесты правила «нет выбора —
+/// встроенный агент» передают `stdioDefault: false`.
+final testStdioProfile = stdioConnectionProfileOf(codelabAgentStdioProfile);
 
 final class CodeLabTestBinding {
   CodeLabTestBinding({
@@ -21,6 +39,8 @@ final class CodeLabTestBinding {
     EmbeddedAgentOpener? embeddedOpener,
     Map<String, String>? environment,
     SettingsPages? settingsPages,
+    ProfileStore? profileStore,
+    bool stdioDefault = true,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -30,7 +50,11 @@ final class CodeLabTestBinding {
     // after test completion»). Пустое хранилище убирает обращение к каналу.
     // [preferences] — сохранённое прошлым запуском (недавние проекты,
     // снимок рабочего пространства).
-    SharedPreferences.setMockInitialValues(preferences);
+    SharedPreferences.setMockInitialValues({
+      if (stdioDefault)
+        'codelab.connection.default_profile': testStdioProfile.id,
+      ...preferences,
+    });
     scope = createCodeLabRootScope(
       transportFactory: () => this.transport,
       stdioTransportFactory: stdioTransportFactory,
@@ -41,6 +65,12 @@ final class CodeLabTestBinding {
       embeddedOpener: embeddedOpener,
       environment: environment,
       settingsPages: settingsPages,
+      // Файл профилей в `testWidgets` зависал бы в fake-async зоне: тесты
+      // работают с хранилищем в памяти, а настоящий файл проверяет
+      // `app_scope_profiles_test.dart`.
+      profileStore:
+          profileStore ??
+          InMemoryProfileStore([if (stdioDefault) testStdioProfile]),
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

@@ -1,49 +1,16 @@
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show ConnectionProfile;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
-import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'support/e2e_agent.dart';
-
-// The transport setup form only lives inside the modal ConnectionSetupDialog
-// (see complete-transport-setup-actions) — transport-field-* keys are not
-// reachable until it is open, and the dialog's barrier blocks taps on
-// anything behind it (e.g. the Connect button) while it is open.
-Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _closeConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(Button, 'Close'));
-  await tester.pumpAndSettle();
-}
-
-// The stdio connect round trip spawns a real child process and waits for a
-// real `initialize` response — this can take longer than a single
-// `pumpAndSettle` reliably waits for. Poll the cubit's own state instead of
-// relying on frame timing (same pattern used below for prompt/config-option
-// round trips).
-Future<void> _tapConnectAndWaitUntilSettled(
-  WidgetTester tester,
-  CodeLabShellCubit shellCubit,
-) async {
-  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-  await tester.pump();
-  final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus ==
-          CodeLabConnectionStatus.connecting &&
-      DateTime.now().isBefore(deadline)) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-  await tester.pumpAndSettle();
-}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -52,15 +19,16 @@ void main() {
     await tester.pumpWidget(E2eAgent.current.bootstrap());
     await tester.pumpAndSettle();
 
-    await _openConnectionSetupDialog(tester);
-    await tester.enterText(
-      find.byKey(const ValueKey('transport-field-Command')),
-      '',
+    // Профиль с пустой командой (файл могли править вручную): подключение
+    // обязано упасть с понятной причиной, а не исключением.
+    await E2eAgent.current.saveProfile(
+      const ConnectionProfile.stdio(id: 'blank', label: 'Blank', command: ''),
     );
-    await _closeConnectionSetupDialog(tester);
-    await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-    await tester.pumpAndSettle();
-
+    await connectProfileViaSettings(
+      tester,
+      codeLabDependenciesOf(tester.element(find.byType(CodeLabApp))).shellCubit,
+      'blank',
+    );
     expect(find.text('Failed'), findsWidgets);
     // Диагностика — в панели Protocol дока, а не в постоянной карточке
     // Debug log (change `redesign-workbench-shell`, D5).
@@ -96,10 +64,7 @@ void main() {
       tester.element(find.byType(CodeLabApp)),
     ).shellCubit;
 
-    await _openConnectionSetupDialog(tester);
-    await launch.enterConnection(tester);
-    await _closeConnectionSetupDialog(tester);
-    await _tapConnectAndWaitUntilSettled(tester, shellCubit);
+    await launch.connect(tester, shellCubit);
 
     expect(find.text('Connected'), findsWidgets);
     final diagnostics = codeLabDependenciesOf(
@@ -134,10 +99,7 @@ void main() {
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
 
-      await _openConnectionSetupDialog(tester);
-      await launch.enterConnection(tester);
-      await _closeConnectionSetupDialog(tester);
-      await _tapConnectAndWaitUntilSettled(tester, shellCubit);
+      await launch.connect(tester, shellCubit);
 
       expect(find.text('Connected'), findsWidgets);
 
@@ -198,10 +160,7 @@ void main() {
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
 
-      await _openConnectionSetupDialog(tester);
-      await launch.enterConnection(tester);
-      await _closeConnectionSetupDialog(tester);
-      await _tapConnectAndWaitUntilSettled(tester, shellCubit);
+      await launch.connect(tester, shellCubit);
 
       expect(find.text('Connected'), findsWidgets);
 
@@ -276,10 +235,7 @@ void main() {
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
 
-      await _openConnectionSetupDialog(tester);
-      await launch.enterConnection(tester);
-      await _closeConnectionSetupDialog(tester);
-      await _tapConnectAndWaitUntilSettled(tester, shellCubit);
+      await launch.connect(tester, shellCubit);
 
       expect(find.text('Connected'), findsWidgets);
 

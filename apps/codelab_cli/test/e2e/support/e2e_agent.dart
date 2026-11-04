@@ -11,6 +11,13 @@ typedef _Mode = CodelabCompatibleStdioAgentMode;
 /// Какой агент стоит за e2e терминального клиента.
 enum E2eAgentKind { scripted, dart, python, embedded }
 
+/// Id, под которым e2e сохраняет внешнего агента в `profiles.json`.
+///
+/// Почему: `default` зарезервирован за встроенным агентом и `profiles add
+/// default …` отклоняется (design.md change `add-app-settings-shell`, D21);
+/// тесту нужен свободный id, выбираемый `-a <id>`.
+const e2eProfileId = 'e2e-agent';
+
 /// Тег тестов поведения, которое есть только у scripted-агента, и тестов, не
 /// зависящих от агента; прогон против Dart-агента их исключает.
 const scriptedOnly = 'scripted-only';
@@ -96,7 +103,8 @@ final class E2eCliAgent {
   };
 
   /// Причина пропустить тест, которому нужен внешний агент в `profiles.json`
-  /// (`profiles add default <агент>`); `null` — тест идёт. Встроенный агент
+  /// (`profiles add `[e2eProfileId]` <агент>`, затем `-a `[e2eProfileId]);
+  /// `null` — тест идёт. Встроенный агент
   /// выбирается словом `embedded` и профилем не сохраняется (design.md change
   /// `add-embedded-agent-mode`, D7).
   String? get needsStoredProfile => kind == E2eAgentKind.embedded

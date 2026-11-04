@@ -31,12 +31,14 @@ void main() {
     final added = await CliProcess.run([
       'profiles',
       'add',
-      'default',
+      e2eProfileId,
       launch.agent,
     ], environment: env);
     expect(added.exitCode, 0, reason: '$added');
 
     final result = await CliProcess.run([
+      '-a',
+      e2eProfileId,
       '--cwd',
       dir.path,
       '-p',
@@ -47,8 +49,9 @@ void main() {
     expect(result.stdout, contains(launch.answer));
   }, skip: E2eCliAgent.current.needsStoredProfile);
 
-  test('cli/connect-profiles-stdio-ws-embedded: WebSocket with the token '
-      'from CODELAB_AGENT_TOKEN', () async {
+  /// Поднимает `codelab-agent serve --ws`, требующий [_token], и возвращает
+  /// порт. Сервер — всегда Dart-агент теста.
+  Future<String> startWebSocketAgent() async {
     final kernel = await E2eCliAgent.agentKernel();
     final script = File('${dir.path}/hello.json')
       ..writeAsStringSync(
@@ -92,7 +95,12 @@ void main() {
       }
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
-    final port = listening.firstMatch('$stderr')!.group(1);
+    return listening.firstMatch('$stderr')!.group(1)!;
+  }
+
+  test('cli/connect-profiles-stdio-ws-embedded: WebSocket with the token '
+      'from CODELAB_AGENT_TOKEN', () async {
+    final port = await startWebSocketAgent();
 
     final result = await CliProcess.run(
       ['--agent', 'ws://127.0.0.1:$port/acp', '--cwd', dir.path, '-p', 'hi'],
@@ -106,6 +114,74 @@ void main() {
     expect(result.stdout, contains('hello over websocket'));
     expect('${result.stdout}${result.stderr}', isNot(contains(_token)));
     // Сервер — всегда Dart-агент теста: в прогоне `dart` тест не повторяется.
+  }, tags: scriptedOnly);
+
+  test('cli/connect-profiles-stdio-ws-embedded: a profile with '
+      'tokenRef env:DEVBOX_TOKEN gets the token of that variable '
+      '(spec «Токен из произвольной переменной»; D15)', () async {
+    final port = await startWebSocketAgent();
+    final home = Directory('${dir.path}/codelab')..createSync();
+    File('${home.path}/profiles.json').writeAsStringSync(
+      jsonEncode({
+        'version': 1,
+        'profiles': [
+          {
+            'type': 'webSocket',
+            'id': 'devbox',
+            'label': 'Devbox',
+            'uri': 'ws://127.0.0.1:$port/acp',
+            'tokenRef': 'env:DEVBOX_TOKEN',
+          },
+        ],
+      }),
+    );
+
+    final result = await CliProcess.run(
+      ['-a', 'devbox', '--cwd', dir.path, '-p', 'hi'],
+      // CODELAB_AGENT_TOKEN CLI не задан: токен берётся только из ссылки.
+      environment: {'CODELAB_HOME': home.path, 'DEVBOX_TOKEN': _token},
+    );
+
+    expect(result.exitCode, 0, reason: '$result');
+    expect(result.stdout, contains('hello over websocket'));
+    expect('${result.stdout}${result.stderr}', isNot(contains(_token)));
+  }, tags: scriptedOnly);
+
+  // Регрессионная защита (spec codelab-cli «ссылка не вида env: не
+  // выводится»): ссылка не вида `env:` могла быть вписана вместо имени
+  // переменной вместе с секретом; CLI подключается без токена и нигде не
+  // печатает её, в том числе в журнале `--verbose`.
+  test('cli/connect-profiles-stdio-ws-embedded: a tokenRef that is not env: '
+      'goes without a token and is never printed', () async {
+    // Сервер без токена не стартует, поэтому «без токена» проверяется
+    // отказом сервера: ссылка не превратилась ни в какой токен.
+    final port = await startWebSocketAgent();
+    final home = Directory('${dir.path}/codelab')..createSync();
+    File('${home.path}/profiles.json').writeAsStringSync(
+      jsonEncode({
+        'version': 1,
+        'profiles': [
+          {
+            'type': 'webSocket',
+            'id': 'devbox',
+            'label': 'Devbox',
+            'uri': 'ws://127.0.0.1:$port/acp',
+            'tokenRef': 'sk-test-leak-123',
+          },
+        ],
+      }),
+    );
+
+    final result = await CliProcess.run(
+      ['-a', 'devbox', '--cwd', dir.path, '-p', 'hi', '--verbose'],
+      environment: {'CODELAB_HOME': home.path},
+    );
+
+    expect(result.exitCode, isNot(0), reason: '$result');
+    expect(result.stdout, isNot(contains('hello over websocket')));
+    final output = '${result.stdout}${result.stderr}';
+    expect(output, isNot(contains('sk-test-leak-123')));
+    expect(output, isNot(contains(_token)));
   }, tags: scriptedOnly);
 
   // Критерий `cli/connect-profiles-stdio-ws-embedded`, вариант `embedded`:

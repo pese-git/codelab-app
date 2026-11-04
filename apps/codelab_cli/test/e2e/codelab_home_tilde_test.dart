@@ -33,7 +33,7 @@ void main() {
       Directory(home).createSync();
 
       final result = await CliProcess.run(
-        ['profiles', 'add', 'default', 'stdio:agent'],
+        ['profiles', 'add', 'agent', 'stdio:agent'],
         environment: {'CODELAB_HOME': '~/cl', 'HOME': home},
         workingDirectory: work.path,
       );

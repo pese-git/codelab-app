@@ -159,4 +159,29 @@ void main() {
 
     expect(backs, 1);
   });
+
+  // Ключи для автотестов страниц настроек (находки ручного прогона
+  // итерации 2): поле поиска и «Back» находятся по строковым ключам, а
+  // «Back» подписана подсказкой.
+  testWidgets('the search field and the Back button have stable string keys', (
+    tester,
+  ) async {
+    await pumpNav(tester);
+
+    expect(find.byKey(const ValueKey('settings-search')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-back')), findsOneWidget);
+  });
+
+  testWidgets('the Back button has the tooltip "Back"', (tester) async {
+    await pumpNav(tester);
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('settings-back')),
+        matching: find.byType(Tooltip),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Back'), findsOneWidget);
+  });
 }

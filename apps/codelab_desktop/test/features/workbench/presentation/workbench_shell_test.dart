@@ -9,7 +9,6 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
-import 'package:codelab_desktop/features/workbench/presentation/widgets/connection_setup_dialog.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -363,21 +362,37 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('with no available pages Ctrl+, and Settings still open the '
-        'connection dialog', (tester) async {
+    testWidgets('with no available pages Ctrl+, and Settings open nothing: '
+        'there is no empty settings screen (SETUP-17)', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(settingsPages: const SettingsPages(available: {})),
+      );
+
+      await pressWithControl(tester, LogicalKeyboardKey.comma);
+      expect(settingsNav, findsNothing);
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+      await tester.pumpAndSettle();
+      expect(settingsNav, findsNothing);
+      expect(find.byType(CodeLabPromptComposer), findsOneWidget);
+
+      await tearDownApp(tester);
+    });
+
+    testWidgets('in the production build Settings opens the Connection '
+        'page', (tester) async {
       setWindow(tester, const Size(1440, 900));
       await pumpApp(tester, CodeLabTestBinding());
 
-      await pressWithControl(tester, LogicalKeyboardKey.comma);
-      expect(find.byType(ConnectionSetupDialog), findsOneWidget);
-      expect(settingsNav, findsNothing);
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
       await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
       await tester.pumpAndSettle();
-      expect(find.byType(ConnectionSetupDialog), findsOneWidget);
 
+      expect(settingsNav, findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('connection-profile-row-embedded')),
+        findsOneWidget,
+      );
       await tearDownApp(tester);
     });
 
@@ -517,6 +532,11 @@ void main() {
       final binding = CodeLabTestBinding(
         transport: FakeAcpTransport(),
         stdioTransportFactory: (_) => agent,
+        // Tab, Space и Enter на странице «Connection» могут нажать «Connect»
+        // встроенного агента: открыватель падает сразу, без настоящего
+        // ввода-вывода и таймеров.
+        embeddedOpener: ({required cwd, required hostProfile}) async =>
+            throw StateError('the embedded agent is not part of this test'),
         settingsPages: withConnection,
       );
       final cubit = await pumpApp(tester, binding);
