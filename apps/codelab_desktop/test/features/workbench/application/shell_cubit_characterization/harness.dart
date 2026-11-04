@@ -51,6 +51,7 @@ final class ShellHarness {
     FakeAcpTransport? agent,
     CodeLabStdioTransportFactory? stdioTransportFactory,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
+    Map<String, String>? environment,
   }) : agent = agent ?? FakeAcpTransport() {
     binding = CodeLabTestBinding(
       stdioTransportFactory:
@@ -60,6 +61,7 @@ final class ShellHarness {
             return this.agent;
           },
       webSocketTransportFactory: webSocketTransportFactory,
+      environment: environment,
     );
   }
 

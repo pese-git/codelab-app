@@ -191,8 +191,8 @@ void main() {
   }
 
   Future<CodeLabShellCubit> connected(Scope scope) async {
-    final shell = scope.resolve<CodeLabShellCubit>()
-      ..selectTransport(CodeLabTransportType.embedded);
+    // Без сохранённого выбора профиль по умолчанию — встроенный агент (D5).
+    final shell = scope.resolve<CodeLabShellCubit>();
     await shell.selectProject(project.path);
     await shell.connect();
     expect(shell.state.connectionStatus, CodeLabConnectionStatus.connected);
@@ -379,8 +379,7 @@ void main() {
     List<String> scopeLogEvents() => [
       for (final e in scope.resolve<LogBuffer>().entries.value) '${e['event']}',
     ];
-    final shell = scope.resolve<CodeLabShellCubit>()
-      ..selectTransport(CodeLabTransportType.embedded);
+    final shell = scope.resolve<CodeLabShellCubit>();
     await shell.selectProject(project.path);
     final statuses = <CodeLabConnectionStatus>[];
     final subscription = shell.stream.listen(

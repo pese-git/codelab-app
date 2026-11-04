@@ -5,11 +5,47 @@
 import 'dart:io';
 
 import 'package:codelab_client_io/codelab_client_io.dart';
+import 'package:codelab_client_io/src/stores/json_file.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:test/test.dart';
 
 void main() {
   late Directory tmp;
+
+  test('parallel writes to one file leave one whole document', () async {
+    final path = '${tmp.path}/shared/profiles.json';
+    final documents = [
+      for (var i = 0; i < 20; i++)
+        {'writer': i, 'payload': List.filled(2000, i)},
+    ];
+
+    await Future.wait([for (final d in documents) writeJsonObject(path, d)]);
+
+    final result = await readJsonObject(path);
+    // Файл целиком совпадает с записью ровно одного писателя.
+    expect(result, isNotNull);
+    expect(result, equals(documents[result!['writer'] as int]));
+    // Временные файлы не остаются рядом.
+    expect(Directory('${tmp.path}/shared').listSync().map((e) => e.path), [
+      path,
+    ]);
+  });
+
+  test('a failed rename removes the temporary file', () async {
+    // Цель — каталог: rename файла на каталог падает.
+    final path = '${tmp.path}/target';
+    Directory(path).createSync();
+    File('$path/keep').writeAsStringSync('x');
+
+    await expectLater(
+      writeJsonObject(path, {'a': 1}),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(tmp.listSync().map((e) => e.path), [
+      path,
+    ], reason: 'tmp-файл удалён');
+  });
 
   setUp(() => tmp = Directory.systemTemp.createTempSync('acp_client_io_'));
   tearDown(() => tmp.deleteSync(recursive: true));
@@ -108,6 +144,42 @@ void main() {
       );
 
       expect(File(path).readAsStringSync(), before);
+    });
+
+    test('a profile with a reserved id is not saved: ArgumentError, file '
+        'unchanged (spec «Записи профилей с зарезервированным id»; '
+        'D21)', () async {
+      final path = '${tmp.path}/profiles.json';
+      final store = JsonFileProfileStore(path);
+      await store.save(remote);
+      final before = File(path).readAsStringSync();
+
+      for (final id in reservedProfileIds) {
+        await expectLater(
+          store.save(StdioProfile(id: id, label: id, command: 'x')),
+          throwsArgumentError,
+          reason: id,
+        );
+      }
+
+      expect(File(path).readAsStringSync(), before);
+    });
+
+    test('an old "default" record is loaded as is and remove deletes '
+        'it (D21)', () async {
+      final path = '${tmp.path}/profiles.json';
+      File(path).writeAsStringSync(
+        '{"version": 1, "profiles": [{"type": "stdio", "id": "default", '
+        '"label": "Default", "command": "/opt/old", "args": [], "env": {}, '
+        '"runInProjectDirectory": false}, {"type": "stdio", "id": "local", '
+        '"label": "Local", "command": "x", "args": [], "env": {}, '
+        '"runInProjectDirectory": false}]}',
+      );
+      final store = JsonFileProfileStore(path);
+
+      expect((await store.load()).map((p) => p.id), ['default', 'local']);
+      expect(await store.remove('default'), isTrue);
+      expect((await store.load()).map((p) => p.id), ['local']);
     });
 
     test('a "type": "embedded" record is an unknown type on load '

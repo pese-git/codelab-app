@@ -6,8 +6,9 @@ import 'dart:convert';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show ConnectionProfile;
 import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart';
-import 'package:codelab_desktop/features/workbench/application/connection_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -124,9 +125,13 @@ void main() {
     test(
       'WebSocket is not checked: the folder belongs to the remote agent',
       () async {
-        cubit.selectTransport(CodeLabTransportType.webSocket);
-
-        await cubit.connect();
+        await cubit.connect(
+          ConnectionProfile.webSocket(
+            id: 'remote',
+            label: 'Remote',
+            uri: Uri.parse('wss://agent.example.test/acp'),
+          ),
+        );
 
         expect(cubit.state.connectionMessage, isNot(message));
         expect(_events(binding), isNot(contains(message)));

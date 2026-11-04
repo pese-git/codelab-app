@@ -121,14 +121,15 @@ void body() {
     entry: entry,
   );
 
-  /// Профиль `default` — внешний scripted-агент, чей ответ отличается от
-  /// ответа встроенного.
-  Future<void> addDefaultProfile(Map<String, String> environment) async {
+  /// Профиль `external` — внешний scripted-агент, чей ответ отличается от
+  /// ответа встроенного. Профиль `default` сохранить нельзя: он
+  /// зарезервирован (D21).
+  Future<void> addExternalProfile(Map<String, String> environment) async {
     final agent = await scriptedAgent(tmp);
     final added = await CliProcess.run([
       'profiles',
       'add',
-      'default',
+      'external',
       agent,
     ], environment: environment);
     expect(added.exitCode, 0, reason: '$added');
@@ -149,19 +150,59 @@ void body() {
       },
     );
 
-    test('the "default" profile beats the embedded agent', () async {
+    test('a stored profile does not beat the embedded agent without '
+        '--agent and is selected by -a <id>', () async {
       final environment = scripted(_textScript(_embeddedAnswer));
-      await addDefaultProfile(environment);
+      await addExternalProfile(environment);
 
-      final result = await run(['-p', 'hi'], environment);
+      final implicit = await run(['-p', 'hi'], environment);
+      final explicit = await run(['-a', 'external', '-p', 'hi'], environment);
 
-      expect(result.exitCode, 0, reason: '$result');
-      expect(result.stdout, 'hello from compatible stdio agent\n');
+      expect(implicit.exitCode, 0, reason: '$implicit');
+      expect(implicit.stdout, '$_embeddedAnswer\n');
+      expect(explicit.exitCode, 0, reason: '$explicit');
+      expect(explicit.stdout, 'hello from compatible stdio agent\n');
     });
 
-    test('-a embedded beats the "default" profile', () async {
+    test('-a default is the embedded agent, an old "default" record is '
+        'ignored with one warning and stays in the file (D21)', () async {
       final environment = scripted(_textScript(_embeddedAnswer));
-      await addDefaultProfile(environment);
+      Directory(home).createSync(recursive: true);
+      File('$home/profiles.json').writeAsStringSync(
+        jsonEncode({
+          'version': 1,
+          'profiles': [
+            {
+              'type': 'stdio',
+              'id': 'default',
+              'label': 'Default',
+              'command': '/opt/secret-agent',
+              'args': <String>[],
+              'env': <String, String>{},
+              'runInProjectDirectory': false,
+            },
+          ],
+        }),
+      );
+
+      final result = await run(['-a', 'default', '-p', 'hi'], environment);
+
+      expect(result.exitCode, 0, reason: '$result');
+      expect(result.stdout, '$_embeddedAnswer\n');
+      expect(
+        result.stderr,
+        contains('profile "default" in profiles.json is ignored'),
+      );
+      expect(result.stderr, isNot(contains('/opt/secret-agent')));
+      expect(
+        File('$home/profiles.json').readAsStringSync(),
+        contains('default'),
+      );
+    });
+
+    test('-a embedded beats a stored profile', () async {
+      final environment = scripted(_textScript(_embeddedAnswer));
+      await addExternalProfile(environment);
 
       final result = await run(['-a', 'embedded', '-p', 'hi'], environment);
 
@@ -169,17 +210,20 @@ void body() {
       expect(result.stdout, '$_embeddedAnswer\n');
     });
 
-    test('a broken profiles.json without --agent is 64, not a silent switch '
-        'to the embedded agent', () async {
+    test('a broken profiles.json without --agent does not stop the '
+        'embedded agent, with -a <id> it is 64', () async {
       final environment = scripted(_textScript(_embeddedAnswer));
       Directory(home).createSync(recursive: true);
       File('$home/profiles.json').writeAsStringSync('{not json');
 
-      final result = await run(['-p', 'hi'], environment);
+      final implicit = await run(['-p', 'hi'], environment);
+      final explicit = await run(['-a', 'dev', '-p', 'hi'], environment);
 
-      expect(result.exitCode, 64, reason: '$result');
-      expect(result.stdout, isEmpty);
-      expect(result.stderr, contains('Cannot read agent profiles'));
+      expect(implicit.exitCode, 0, reason: '$implicit');
+      expect(implicit.stdout, '$_embeddedAnswer\n');
+      expect(explicit.exitCode, 64, reason: '$explicit');
+      expect(explicit.stdout, isEmpty);
+      expect(explicit.stderr, contains('Cannot read agent profiles'));
     });
   });
 

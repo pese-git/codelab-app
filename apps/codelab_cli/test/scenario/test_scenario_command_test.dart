@@ -26,11 +26,14 @@ typedef _Run = ({
   String stderr,
 });
 
-Future<_Run> _testScenario(List<String> args) async {
+Future<_Run> _testScenario(
+  List<String> args, {
+  Map<String, String> environment = const {'HOME': '/nonexistent'},
+}) async {
   final io = FakeCliIo();
   final code = await runCodelab(
     ['test-scenario', ...args],
-    environment: const {'HOME': '/nonexistent'},
+    environment: environment,
     io: io,
   );
   return (
@@ -173,6 +176,71 @@ void main() {
 
     expect(run.code, 0, reason: run.stdout + run.stderr);
     expect(run.status.values, ['PASS']);
+  });
+
+  group('the profile choice (spec «Без --agent и без профиля default»; '
+      'D21)', () {
+    const oldDefault =
+        '{"version": 1, "profiles": [{"type": "stdio", "id": "default", '
+        '"label": "Default", "command": "/opt/secret-agent", "args": [], '
+        '"env": {}, "runInProjectDirectory": false}]}';
+    const warning =
+        'profile "default" in profiles.json is ignored: default is the '
+        'built-in agent; remove it with codelab profiles remove default';
+
+    Map<String, String> homeWith(String profiles) {
+      final home = Directory('${dir.path}/home')..createSync();
+      File('${home.path}/profiles.json').writeAsStringSync(profiles);
+      return {'CODELAB_HOME': home.path, 'HOME': '/nonexistent'};
+    }
+
+    test('an old "default" record does not replace the embedded agent '
+        'without --agent: no warning, the file is not read', () async {
+      final run = await _testScenario([
+        _fixture('acp/prompt-text-end-turn').sourcePath!,
+      ], environment: homeWith(oldDefault));
+
+      expect(run.code, 0, reason: run.stdout + run.stderr);
+      expect(run.status.values, ['PASS']);
+      expect(run.stderr, isEmpty);
+    });
+
+    test('--agent default is the embedded agent with one warning about '
+        'the old record, without its command', () async {
+      final run = await _testScenario([
+        _fixture('acp/prompt-text-end-turn').sourcePath!,
+        '--agent',
+        'default',
+      ], environment: homeWith(oldDefault));
+
+      expect(run.code, 0, reason: run.stdout + run.stderr);
+      expect(run.status.values, ['PASS']);
+      expect(run.stderr.trimRight(), warning);
+      expect(run.stderr, isNot(contains('/opt/secret-agent')));
+    });
+
+    test('a broken profiles.json without --agent is not 64: the embedded '
+        'agent plays', () async {
+      final run = await _testScenario([
+        _fixture('acp/prompt-text-end-turn').sourcePath!,
+      ], environment: homeWith('{not json'));
+
+      expect(run.code, 0, reason: run.stdout + run.stderr);
+      expect(run.status.values, ['PASS']);
+    });
+
+    test('a broken profiles.json with --agent <id> is 64 with the '
+        'reason', () async {
+      final run = await _testScenario([
+        _fixture('acp/prompt-text-end-turn').sourcePath!,
+        '--agent',
+        'dev',
+      ], environment: homeWith('[]'));
+
+      expect(run.code, 64);
+      expect(run.stderr, contains('Cannot read agent profiles'));
+      expect(run.stdout, isEmpty);
+    });
   });
 
   test('a broken fixture file is 64 with the path and the reason', () async {

@@ -23,16 +23,10 @@ import '../test/support/transcript_rows.dart';
 CodeLabShellCubit _cubit(WidgetTester tester) =>
     codeLabDependenciesOf(tester.element(find.byType(CodeLabApp))).shellCubit;
 
-/// Вводит команду агента в форму и подключается (как в
-/// stdio_connect_flow_test.dart).
+/// Выбирает профиль агента на странице «Connection» и ждёт подключения
+/// (как в stdio_connect_flow_test.dart).
 Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
-  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-  await tester.pumpAndSettle();
-  await launch.enterConnection(tester);
-  await tester.tap(find.widgetWithText(Button, 'Close'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-  await tester.pump();
+  await launch.connect(tester, _cubit(tester));
   await _waitFor(
     tester,
     () =>
@@ -41,27 +35,12 @@ Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
   );
 }
 
-/// Подключается по WebSocket к уже запущенному [agent].
+/// Подключается по WebSocket к уже запущенному [agent] строкой его профиля.
 Future<void> _connectWebSocket(
   WidgetTester tester,
   E2eWebSocketAgent agent,
 ) async {
-  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-  await tester.pumpAndSettle();
-  await tester.tap(find.widgetWithText(CodeLabButton, 'WebSocket'));
-  await tester.pumpAndSettle();
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Endpoint')),
-    agent.endpoint,
-  );
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Token')),
-    agent.token,
-  );
-  await tester.tap(find.widgetWithText(Button, 'Close'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-  await tester.pump();
+  await agent.connect(tester, _cubit(tester));
   await _waitFor(
     tester,
     () =>

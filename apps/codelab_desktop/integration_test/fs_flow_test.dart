@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -10,33 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'support/e2e_agent.dart';
-
-// See stdio_connect_flow_test.dart for why the connection setup dialog and
-// the connect round trip need this specific choreography.
-Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _closeConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(Button, 'Close'));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _tapConnectAndWaitUntilSettled(
-  WidgetTester tester,
-  CodeLabShellCubit shellCubit,
-) async {
-  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-  await tester.pump();
-  final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus ==
-          CodeLabConnectionStatus.connecting &&
-      DateTime.now().isBefore(deadline)) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-  await tester.pumpAndSettle();
-}
 
 /// Connects the real app to a real stdio agent of [mode], with the session's
 /// working directory set to [workingDirectory] — shared choreography for
@@ -50,31 +22,26 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   await tester.pumpWidget(E2eAgent.current.bootstrap());
   await tester.pumpAndSettle();
 
-  // Unlike the other e2e tests, this one points the session's working
-  // directory at a dedicated temp dir — which is also the agent process's
-  // OS-level spawn cwd (`StdioAcpTransportConfig.cwd` → `Process.start
-  // (workingDirectory: ...)`, see shell_cubit.dart `_stdioConfigFromState`).
-  // Поэтому команда и пути в `launch` абсолютные (e2e_agent.dart).
+  // В отличие от других e2e-тестов, этот направляет рабочую папку сессии в
+  // отдельный временный каталог — он же каталог запуска процесса агента
+  // (`StdioAcpTransportConfig.cwd` → `Process.start(workingDirectory: …)`,
+  // профиль с `runInProjectDirectory`). Поэтому команда и пути в `launch`
+  // абсолютные (e2e_agent.dart).
   final launch = await E2eAgent.current.launch(agentDirectory, mode: mode);
 
   final shellCubit = codeLabDependenciesOf(
     tester.element(find.byType(CodeLabApp)),
   ).shellCubit;
 
-  // "Working directory" is no longer a connection-dialog field — it is the
-  // independently-selected "project" (add-open-project-picker), applied to
-  // both the session's `cwd` and (by default, via
-  // `runAgentFromProjectDirectory`) the stdio spawn cwd. Selecting it via
-  // the cubit directly, rather than through the "Open Project" UI, mirrors
-  // the other e2e tests here that also drive connection state via
-  // `enterText` on the dialog's fields rather than pixel-perfect UI
-  // interactions for every input.
+  // Рабочая папка — не поле подключения, а независимо выбранный «проект»
+  // (add-open-project-picker): она задаёт `cwd` сессии и (для stdio-профиля
+  // с `runInProjectDirectory`, как у профиля теста) каталог запуска процесса.
+  // Проект выбирается напрямую через Cubit, а не через интерфейс «Open
+  // Project»; профиль агента тест подключает на странице «Connection»
+  // (`launch.connect`).
   await shellCubit.selectProject(workingDirectory);
 
-  await _openConnectionSetupDialog(tester);
-  await launch.enterConnection(tester);
-  await _closeConnectionSetupDialog(tester);
-  await _tapConnectAndWaitUntilSettled(tester, shellCubit);
+  await launch.connect(tester, shellCubit);
 
   expect(find.text('Connected'), findsWidgets);
 

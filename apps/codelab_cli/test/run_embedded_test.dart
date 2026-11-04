@@ -98,14 +98,25 @@ void main() {
     expect(io.stdoutText, 'hello from the embedded agent\n');
   });
 
-  test('without --agent the "default" profile beats the embedded agent '
-      '(spec «Профиль default сильнее встроенного агента»)', () async {
+  /// Запись `default` от прежней версии CLI: внешний агент, которого нет.
+  void writeOldDefault() {
     Directory(home).createSync(recursive: true);
     File('$home/profiles.json').writeAsStringSync(
       '{"version": 1, "profiles": [{"type": "stdio", "id": "default", '
       '"label": "Default", "command": "/nonexistent/agent", "args": [], '
       '"env": {}, "runInProjectDirectory": false}]}',
     );
+  }
+
+  const ignoredWarning =
+      'profile "default" in profiles.json is ignored: default is the '
+      'built-in agent; remove it with codelab profiles remove default';
+
+  test('without --agent the "default" record does not beat the embedded '
+      'agent and there is no warning (spec «-a default — встроенный агент»; '
+      'D21)', () async {
+    writeOldDefault();
+    final before = File('$home/profiles.json').readAsStringSync();
     final io = FakeCliIo();
 
     final code = await runCodelab(
@@ -115,35 +126,118 @@ void main() {
       embeddedOpener: scripted(),
     );
 
-    // Агент из "default" не запускается — это ошибка подключения, а не ход
-    // встроенного агента.
-    expect(code, 1);
-    expect(io.stdoutText, isEmpty);
-    expect(io.stderrText, contains('/nonexistent/agent'));
+    expect(code, 0, reason: io.stderrText);
+    expect(io.stdoutText, 'hello from the embedded agent\n');
+    expect(io.stderrText, isEmpty);
+    expect(File('$home/profiles.json').readAsStringSync(), before);
   });
 
-  test('a broken profiles.json without --agent is 64 and the embedded agent '
-      'is not started', () async {
+  test(
+    '-a default is the embedded agent: one warning about the old record '
+    'without its command (spec «-a default — встроенный агент»; D21)',
+    () async {
+      writeOldDefault();
+      final before = File('$home/profiles.json').readAsStringSync();
+      final io = FakeCliIo();
+
+      final code = await runCodelab(
+        ['-a', 'default', '-p', 'hi', '-C', project.path],
+        environment: {'CODELAB_HOME': home},
+        io: io,
+        embeddedOpener: scripted(),
+      );
+
+      expect(code, 0, reason: io.stderrText);
+      expect(io.stdoutText, 'hello from the embedded agent\n');
+      expect(io.stderrText.trimRight(), ignoredWarning);
+      expect(io.stderrText, isNot(contains('/nonexistent/agent')));
+      expect(File('$home/profiles.json').readAsStringSync(), before);
+    },
+  );
+
+  test('-a default without the old record does not warn', () async {
+    final io = FakeCliIo();
+
+    final code = await runCodelab(
+      ['-a', 'default', '-p', 'hi', '-C', project.path],
+      environment: {'CODELAB_HOME': home},
+      io: io,
+      embeddedOpener: scripted(),
+    );
+
+    expect(code, 0, reason: io.stderrText);
+    expect(io.stdoutText, 'hello from the embedded agent\n');
+    expect(io.stderrText, isEmpty);
+  });
+
+  test('-a default with a broken profiles.json runs the embedded agent '
+      'without a warning', () async {
     Directory(home).createSync(recursive: true);
     File('$home/profiles.json').writeAsStringSync('{not json');
-    var opened = 0;
+    final io = FakeCliIo();
+
+    final code = await runCodelab(
+      ['-a', 'default', '-p', 'hi', '-C', project.path],
+      environment: {'CODELAB_HOME': home},
+      io: io,
+      embeddedOpener: scripted(),
+    );
+
+    expect(code, 0, reason: io.stderrText);
+    expect(io.stdoutText, 'hello from the embedded agent\n');
+  });
+
+  test('a broken profiles.json without --agent does not stop the embedded '
+      'agent and is neither read nor changed (spec «Без --agent битый '
+      'profiles.json не мешает встроенному агенту»; D21)', () async {
+    Directory(home).createSync(recursive: true);
+    File('$home/profiles.json').writeAsStringSync('{not json');
     final io = FakeCliIo();
 
     final code = await runCodelab(
       ['-p', 'hi', '-C', project.path],
       environment: {'CODELAB_HOME': home},
       io: io,
-      embeddedOpener: ({required cwd, required hostProfile}) {
-        opened++;
-        throw StateError('must not be called');
-      },
+      embeddedOpener: scripted(),
     );
 
-    expect(code, 64);
-    expect(io.stdoutText, isEmpty);
-    expect(io.stderrText, contains('Cannot read agent profiles'));
-    expect(opened, 0);
+    expect(code, 0, reason: io.stderrText);
+    expect(io.stdoutText, 'hello from the embedded agent\n');
+    expect(File('$home/profiles.json').readAsStringSync(), '{not json');
   });
+
+  test(
+    'a broken profiles.json with -a <id> is 64 and no agent is '
+    'started (spec «profiles.json неверной структуры при -a <id>»)',
+    () async {
+      Directory(home).createSync(recursive: true);
+      for (final broken in [
+        '{not json',
+        '[]',
+        '{"version": 1, "profiles": '
+            '[{"type": "stdio", "label": "no id"}]}',
+      ]) {
+        File('$home/profiles.json').writeAsStringSync(broken);
+        var opened = 0;
+        final io = FakeCliIo();
+
+        final code = await runCodelab(
+          ['-a', 'dev', '-p', 'hi', '-C', project.path],
+          environment: {'CODELAB_HOME': home},
+          io: io,
+          embeddedOpener: ({required cwd, required hostProfile}) {
+            opened++;
+            throw StateError('must not be called');
+          },
+        );
+
+        expect(code, 64, reason: broken);
+        expect(io.stdoutText, isEmpty, reason: broken);
+        expect(io.stderrText, contains('Cannot read agent profiles'));
+        expect(opened, 0, reason: broken);
+      }
+    },
+  );
 
   test('EmbeddedAgentConfigException is 64: the text goes to stderr, stdout '
       'stays empty (spec «Невалидный конфиг встроенного агента»)', () async {
