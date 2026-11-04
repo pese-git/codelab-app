@@ -1126,6 +1126,24 @@ agent:
       expect((server['env'] as YamlMap)['MODE'], 'fast');
     });
 
+    test('Литеральный токен в args через mcp add: код 1, файл не тронут, '
+        'подсказка --env без значения (OQ3, R8-5)', () async {
+      const token = 'ghp_aB3dE5gH7jK9mN1pQ3sT5vX7zC9eF1hJ3kL5';
+      write(userPath, providers);
+      final before = File(userPath).readAsBytesSync();
+
+      final result = await mcpCommands().add(
+        addOf(command: 'gh-mcp', args: ['--token', token]),
+      );
+
+      expect(result.exitCode, 1, reason: allOutput(result));
+      expect(File(userPath).readAsBytesSync(), before);
+      final err = result.stderr.join('\n');
+      expect(err, contains('--env'));
+      expect(err, contains('\${secret:'));
+      expect(allOutput(result), isNot(contains(token)));
+    });
+
     test('http с заголовком-ссылкой и --disabled', () async {
       final result = await mcpCommands().add(
         addOf(

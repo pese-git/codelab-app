@@ -1085,13 +1085,14 @@ providers:
     });
 
     test(
-      'смешанное значение Bearer литерал + \${X} проходит (граница R1-1)',
+      'смешанное значение Bearer литерал + \${X} отклоняется (R1-1)',
       () async {
-        // Известная граница до 8.11 (D5, R1-1): правило видит наличие ссылки, а
-        // не литерал рядом с ней. Тест фиксирует поведение, а не требование.
+        // Граница до change add-config-literal-secrets-and-migrate (D5)
+        // закрыта: значение режется по `${…}`, литерал рядом со ссылкой
+        // распознаётся по шаблону.
         h.write(h.userPath, baseConfig);
 
-        await apply([
+        await expectRejected([
           SetValue('mcp.servers', [
             {
               ...server,
@@ -1100,9 +1101,7 @@ providers:
               },
             },
           ]),
-        ]);
-
-        expect(h.read(h.userPath), contains('not-a-real-key-m1'));
+        ], 'not-a-real-key-m1');
       },
     );
 

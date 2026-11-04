@@ -421,6 +421,271 @@ void main() {
     });
   });
 
+  group('args MCP-серверов (R4-6, OQ3; agent-configuration «Маскирование '
+      'args MCP-серверов в выводе», сценарий «Токены в args ручной правки»; '
+      'design.md change add-config-literal-secrets-and-migrate, D5)', () {
+    const ghp = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789';
+
+    /// Значение `args` сервера `gh`, пропущенное через маскер.
+    Object? maskArgs(List<Object?> args) {
+      final result = mask([
+        {'name': 'gh', 'type': 'stdio', 'command': 'x', 'args': args},
+      ], 'mcp.servers');
+      return ((result! as List).single as Map)['args'];
+    }
+
+    test('сценарий «Токены в args ручной правки»: точный результат', () {
+      final masked = maskArgs([
+        '--token',
+        'plain-value-1',
+        '--api-key=plain-value-2',
+        '--verbose',
+        ghp,
+        '\${TOKEN}',
+      ]);
+
+      expect(masked, [
+        '--token',
+        redacted,
+        '--api-key=$redacted',
+        '--verbose',
+        redacted,
+        '\${TOKEN}',
+      ]);
+      final text = renderConfigValue(masked).join('\n');
+      for (final secret in ['plain-value-1', 'plain-value-2', ghp]) {
+        expect(text, isNot(contains(secret)));
+      }
+    });
+
+    test('элемент по шаблону скрывается и без секретного флага', () {
+      expect(maskArgs([ghp]), [redacted]);
+      expect(maskArgs(['--url', 'Bearer $ghp']), ['--url', redacted]);
+    });
+
+    test('ссылка после секретного флага и флаг без значения — как есть', () {
+      expect(maskArgs(['--token', '\${secret:codelab/gh}', '--verbose']), [
+        '--token',
+        '\${secret:codelab/gh}',
+        '--verbose',
+      ]);
+      expect(maskArgs(['--token=\${TOKEN}']), ['--token=\${TOKEN}']);
+      // Следом идёт другой флаг: значения нет, скрывать нечего.
+      expect(maskArgs(['--token', '--verbose']), ['--token', '--verbose']);
+    });
+
+    test('несекретный флаг: значение после него остаётся', () {
+      expect(maskArgs(['--port', '8080', '--model=gpt']), [
+        '--port',
+        '8080',
+        '--model=gpt',
+      ]);
+    });
+
+    test('регистр, подчёркивание и одиночный дефис в имени флага', () {
+      expect(maskArgs(['-Api_Key', 'v1', '--Password=v2']), [
+        '-Api_Key',
+        redacted,
+        '--Password=$redacted',
+      ]);
+    });
+
+    test('каждый секретный флаг скрывает только свой следующий элемент', () {
+      expect(maskArgs(['--token', 'a1', 'b2', '--secret', 'c3']), [
+        '--token',
+        redacted,
+        'b2',
+        '--secret',
+        redacted,
+      ]);
+    });
+
+    test('args по ключу сервера с именем элемента', () {
+      expect(
+        maskConfigValue([
+          '--token',
+          'plain-value-1',
+        ], key: 'mcp.servers[gh].args'),
+        ['--token', redacted],
+      );
+    });
+  });
+
+  group('args: обходы выбора ключа и нестроковые/пограничные элементы', () {
+    const ghp = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789';
+    final args = <Object?>[
+      '--token',
+      'plain-value-1',
+      '--api-key=plain-value-2',
+      '--verbose',
+      ghp,
+      '\${TOKEN}',
+    ];
+    final servers = <Object?>[
+      {'name': 'gh', 'type': 'stdio', 'command': 'x', 'args': args},
+    ];
+    final layer = ConfigTree(
+      kind: ConfigLayerKind.user,
+      source: '/c.yaml',
+      values: {
+        'mcp': {'servers': servers},
+      },
+    );
+
+    /// То, что печатает `config get <key>` по слою пользователя.
+    Object? get(String key) {
+      final found = findLayerValue([layer], key)!;
+      return maskConfigValue(found.value, key: key, layer: found.layer);
+    }
+
+    String printed(String key) => renderConfigValue(get(key)).join('\n');
+
+    test('элемент args по индексу маскируется как в списке', () {
+      expect(get('mcp.servers[gh].args[1]'), redacted);
+      expect(get('mcp.servers[gh].args[2]'), '--api-key=$redacted');
+      expect(get('mcp.servers[gh].args[0]'), '--token');
+      expect(get('mcp.servers[gh].args[3]'), '--verbose');
+      expect(get('mcp.servers[gh].args[4]'), redacted);
+      expect(get('mcp.servers[gh].args[5]'), '\${TOKEN}');
+      expect(get('mcp.servers[0].args[1]'), redacted);
+    });
+
+    test('сегменты в кавычках не обходят маску', () {
+      for (final key in [
+        'mcp.servers[gh]."args"',
+        'mcp."servers"[gh].args',
+        '"mcp".servers[gh].args',
+        'mcp.servers[0].args',
+        'mcp.servers[gh]."args"[1]',
+      ]) {
+        final text = printed(key);
+        expect(text, isNot(contains('plain-value')), reason: key);
+        expect(text, isNot(contains(ghp)), reason: key);
+      }
+    });
+
+    test('родитель целиком: mcp, mcp.servers, mcp.servers[gh]', () {
+      for (final key in ['mcp', 'mcp.servers', 'mcp.servers[gh]']) {
+        final text = printed(key);
+        expect(text, isNot(contains('plain-value')), reason: key);
+        expect(text, isNot(contains(ghp)), reason: key);
+        expect(text, contains('--api-key=$redacted'), reason: key);
+      }
+    });
+
+    test('без слоя элемент args недостижим → fail closed', () {
+      expect(
+        maskConfigValue('plain-value-1', key: 'mcp.servers[gh].args[1]'),
+        redacted,
+      );
+      expect(
+        maskConfigValue('\${TOKEN}', key: 'mcp.servers[gh].args[1]'),
+        '\${TOKEN}',
+      );
+      expect(
+        maskConfigValue('--verbose', key: 'mcp.servers[gh].args[1]'),
+        '--verbose',
+      );
+      expect(
+        maskConfigValue('--k=plain', key: 'mcp.servers[gh].args[1]'),
+        '--k=$redacted',
+      );
+    });
+
+    Object? maskArgs(List<Object?> items) {
+      final result = mask([
+        {'name': 'gh', 'type': 'stdio', 'command': 'x', 'args': items},
+      ], 'mcp.servers');
+      return ((result! as List).single as Map)['args'];
+    }
+
+    test('нестроковый элемент после секретного флага скрывается', () {
+      expect(maskArgs(['--password', 12345678]), ['--password', redacted]);
+      expect(maskArgs(['--token', 123456789012, 'tail']), [
+        '--token',
+        redacted,
+        'tail',
+      ]);
+      // Не после секретного флага — как есть.
+      expect(maskArgs(['--port', 8080]), ['--port', 8080]);
+    });
+
+    test('значение с одним дефисом после секретного флага скрывается', () {
+      expect(maskArgs(['--password', '-s3cr3t']), ['--password', redacted]);
+      expect(maskArgs(['--token', '--verbose']), ['--token', '--verbose']);
+    });
+
+    test('литерал рядом со ссылкой после секретного флага скрывается', () {
+      expect(maskArgs(['--token', '\${X}literal']), ['--token', redacted]);
+      expect(maskArgs(['--token=\${X}literal']), ['--token=$redacted']);
+      expect(maskArgs(['--token', 'lit\${X}']), ['--token', redacted]);
+      // Чистая ссылка (в том числе несколько) — как есть.
+      expect(maskArgs(['--token', '\${A}\${B}']), ['--token', '\${A}\${B}']);
+      expect(maskArgs(['--token=\${A}']), ['--token=\${A}']);
+    });
+  });
+
+  group('args: вложенные элементы и запасная ветка; канонизация вне args', () {
+    const ghp = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789';
+    final layer = ConfigTree(
+      kind: ConfigLayerKind.user,
+      source: '/c.yaml',
+      values: {
+        'mcp': {
+          'servers': [
+            {
+              'name': 'gh',
+              'type': 'stdio',
+              'command': 'x',
+              'args': [
+                [ghp],
+                {'k': ghp},
+              ],
+            },
+          ],
+        },
+        'providers': {
+          'p': {
+            'headers': {'Authorization': 'Bearer lit-1'},
+          },
+        },
+      },
+    );
+
+    Object? get(String key) {
+      final found = findLayerValue([layer], key)!;
+      return maskConfigValue(found.value, key: key, layer: found.layer);
+    }
+
+    test('List/Map-элемент args непрозрачен, в списке и по пути', () {
+      final text = renderConfigValue(get('mcp.servers')).join('\n');
+      expect(text, isNot(contains(ghp)));
+      expect(text, contains(opaque));
+      expect(get('mcp.servers[gh].args[0]'), opaque);
+      expect(get('mcp.servers[gh].args[1]'), opaque);
+      expect(get('mcp.servers[gh].args[0][0]'), opaque);
+      expect(get('mcp.servers[gh].args[1].k'), opaque);
+    });
+
+    test('без слоя элемент с одним дефисом не печатается как есть', () {
+      expect(
+        maskConfigValue('-s3cr3t', key: 'mcp.servers[gh].args[1]'),
+        redacted,
+      );
+      expect(
+        maskConfigValue('--verbose', key: 'mcp.servers[gh].args[1]'),
+        '--verbose',
+      );
+    });
+
+    test('кавычки в сегментах вне args: маска как у providers.p.headers', () {
+      final plain = get('providers.p.headers');
+      expect(plain, {'Authorization': redacted});
+      expect(get('providers."p".headers'), plain);
+      expect(get('providers.p."headers"'), plain);
+    });
+  });
+
   group('render', () {
     test('скаляр — одна строка, структура — JSON построчно', () {
       expect(renderConfigValue('p/m'), ['p/m']);
