@@ -52,6 +52,13 @@ final class ConfigWriteResult {
   String toString() => 'ConfigWriteResult($path)';
 }
 
+/// Начало текста отказа записи в слой недоверенного проекта (§15.3, H4).
+///
+/// Почему константа: по ней `SecretMigrator` отличает отказ по доверию от
+/// прочих отказов кандидата (design.md change
+/// `add-config-literal-secrets-and-migrate`, D7).
+const untrustedProjectWritePrefix = 'ignored in an untrusted project';
+
 /// Точки записи, на которых тест может вклиниться (design.md change
 /// `add-config-writer-and-reload`, D5, D15).
 ///
@@ -143,11 +150,13 @@ final class ConfigWriter {
        _platform = platform,
        _seam = seam,
        // Шов теста: ветку «проверка неполна» (R3-3) входом файла не получить.
-       _checkCandidate = candidateCheck ?? loader.validateCandidate;
+       _loader = loader,
+       _candidateSeam = candidateCheck;
 
   final String _codelabHome;
   final Map<String, String> _environment;
-  final ConfigCandidateCheck _checkCandidate;
+  final ConfigLoader _loader;
+  final ConfigCandidateCheck? _candidateSeam;
   final Logger _logger;
   final SecretProcessRunner _runner;
   final ConfigWriteLocks _locks;
@@ -200,8 +209,9 @@ final class ConfigWriter {
   /// файл не перезаписывается.
   Future<ConfigWriteResult> apply(
     ConfigSnapshot base,
-    List<ConfigEdit> edits,
-  ) async {
+    List<ConfigEdit> edits, {
+    @internal List<PendingConfigText> pending = const [],
+  }) async {
     final target = base.target;
     // Ссылка проектного слоя наружу отклоняется до lock и до создания
     // каталогов (ревью безопасности итерации 3).
@@ -238,6 +248,7 @@ final class ConfigWriter {
         original: original,
         text: text,
         edits: edits,
+        pending: pending,
       );
 
       if (text == original) {
@@ -312,8 +323,9 @@ final class ConfigWriter {
   /// и ключи «после перезапуска» без записи.
   Future<ConfigWriteResult> validate(
     ConfigSnapshot base,
-    List<ConfigEdit> edits,
-  ) async {
+    List<ConfigEdit> edits, {
+    @internal List<PendingConfigText> pending = const [],
+  }) async {
     final target = base.target;
     final path = _targetPath(target);
     _checkEdits(edits, target);
@@ -332,6 +344,7 @@ final class ConfigWriter {
         original: original,
         text: text,
         edits: edits,
+        pending: pending,
       );
       return ConfigWriteResult(
         path: path,
@@ -347,6 +360,57 @@ final class ConfigWriter {
       ]);
     }
   }
+
+  /// Итоговый текст слоя [base] после [edits] без записи и без проверки.
+  ///
+  /// Для чего: `secret migrate --all` строит тексты всех выбранных файлов и
+  /// передаёт их остальным файлам как `pending` (R8-10). Отказ редактора
+  /// (`cannot edit … automatically`) — `ConfigException`, как у [apply].
+  @internal
+  Future<PendingConfigText> preview(
+    ConfigSnapshot base,
+    List<ConfigEdit> edits,
+  ) async {
+    final path = _targetPath(base.target);
+    _checkEdits(edits, base.target);
+    final bytes = _readBytes(path);
+    final original = bytes == null ? '' : _decode(bytes, path);
+    return PendingConfigText(
+      kind: configLayerKindOf(base.target.layer),
+      text: const ConfigDocumentEditor().apply(
+        original,
+        edits,
+        path,
+        base.target.layer,
+      ),
+    );
+  }
+
+  /// Проверка кандидата: тестовый шов `candidateCheck`, если он задан (он не
+  /// знает `pending` и не обходится при непустом), иначе загрузчик.
+  ConfigCandidateResult _checkCandidate(
+    ConfigTarget target,
+    String text, {
+    required String cwd,
+    required Map<String, String> environment,
+    String? platform,
+    List<PendingConfigText> pending = const [],
+  }) =>
+      _candidateSeam?.call(
+        target,
+        text,
+        cwd: cwd,
+        environment: environment,
+        platform: platform,
+      ) ??
+      _loader.validateCandidate(
+        target,
+        text,
+        cwd: cwd,
+        environment: environment,
+        platform: platform,
+        pending: pending,
+      );
 
   // ---- пути ---------------------------------------------------------------
 
@@ -631,6 +695,7 @@ final class ConfigWriter {
     required String original,
     required String text,
     required List<ConfigEdit> edits,
+    List<PendingConfigText> pending = const [],
   }) {
     final before = original.trim().isEmpty
         ? const <String, Object?>{}
@@ -656,6 +721,7 @@ final class ConfigWriter {
       cwd: cwd,
       environment: environment,
       platform: _platform,
+      pending: pending,
     );
 
     // Доверие проверяет `trust.dart` ядра внутри загрузки (§15.3): писатель
@@ -674,9 +740,9 @@ final class ConfigWriter {
           configEditIssue(
             path,
             target.layer == ConfigLayer.project
-                ? 'ignored in an untrusted project; use --local or add the '
+                ? '$untrustedProjectWritePrefix; use --local or add the '
                       'project to trusted_projects in the global config'
-                : 'ignored in an untrusted project; add the project to '
+                : '$untrustedProjectWritePrefix; add the project to '
                       'trusted_projects in the global config',
             key: warning.key,
           ),

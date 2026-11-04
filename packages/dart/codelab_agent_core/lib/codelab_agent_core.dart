@@ -84,6 +84,7 @@ export 'src/project/project_files.dart';
 export 'src/runtime/agent_runtime.dart' show AgentRuntime, coreAgentVersion;
 export 'src/runtime/agent_session.dart';
 export 'src/runtime/config_reload.dart';
+export 'src/secrets/before_1_note.dart';
 export 'src/secrets/memory_secret_store.dart';
 export 'src/secrets/secret_lookup.dart';
 export 'src/secrets/secret_names.dart';

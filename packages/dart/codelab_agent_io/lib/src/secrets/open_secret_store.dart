@@ -7,6 +7,21 @@ import 'file_secret_store.dart';
 import 'secret_process_runner.dart';
 import 'secrets_backend_problem.dart';
 
+/// Открывает хранилище секретов по значению `secrets.backend` (design.md
+/// change `add-agent-secret-store`, D7, D8).
+///
+/// Почему тип: `SecretCommands` и `ConfigCommands` получают хранилище одним
+/// способом, а тесты подменяют его фейком, не создавая файлов. По умолчанию —
+/// `openSecretStore` с тихим логгером. [choice] — значение `secrets.backend`
+/// (`null` — `auto`), [home] — `$CODELAB_HOME`. Недопустимое значение —
+/// `SecretStoreUnavailableException`.
+typedef SecretStoreOpener =
+    DescribedSecretStore Function({
+      required String? choice,
+      required Map<String, String> environment,
+      required String home,
+    });
+
 /// Причина, по которой `auto` дал `env` (`SecretBackendInfo.unavailableReason`
 /// и поле `reason` события `secrets.backend.selected`).
 ///

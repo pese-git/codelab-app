@@ -16,6 +16,16 @@ import 'host_settings.dart';
 /// (регистр важен: `apiKey` и `api_key` — разные имена).
 const inlineSecretKeys = {'api_key', 'apiKey', 'token', 'secret', 'password'};
 
+/// Текст проблемы «у провайдера больше одного источника ключа» (R8-6).
+///
+/// Почему константа: один и тот же текст выдаёт `resolve.dart` ядра, а
+/// `SecretMigrator` (`codelab_agent_io`) по нему распознаёт промежуточный
+/// конфликт, который снимают правки выбранных слоёв (R8-10, design.md change
+/// `add-config-literal-secrets-and-migrate`, D7). Ключ проблемы —
+/// `providers.<id>.api_key`.
+const providerKeySourcesConflictMessage =
+    'api_key, api_key_env and api_key_secret are mutually exclusive';
+
 /// Событие предупреждения «секрет лежит в файле конфига» (`ConfigIssue.event`,
 /// поля `key`, `source`): CFG-9, пункты 1–3, в файловом слое (design.md change
 /// `add-config-literal-secrets-and-migrate`, D4, R8-4). Значения в записи нет.

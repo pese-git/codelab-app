@@ -924,7 +924,7 @@ final class _Builder {
     if (rawApiKey != null && (keyEnv != null || keySecret != null)) {
       _bad(
         [...at, 'api_key'],
-        'api_key, api_key_env and api_key_secret are mutually exclusive',
+        providerKeySourcesConflictMessage,
         kind: ConfigIssueKind.value,
       );
       return null;

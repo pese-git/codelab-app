@@ -8,7 +8,7 @@ import '../config/config_writer.dart';
 import '../secrets/secret_process_runner.dart';
 import 'config_commands.dart' show ConfigCommandResult;
 import 'exit_codes.dart';
-import 'silent_logger.dart';
+import '../util/silent_logger.dart';
 
 /// Файловый слой, в который пишут и из которого читают подкоманды: флаги
 /// `--project` и `--local` (design.md change `add-config-writer-and-reload`,

@@ -24,8 +24,13 @@
 /// слой чтения — `ConfigGetLayer`) дают тот же вывод и коды выхода, что
 /// `codelab-agent`; типы, без которых их не собрать и не типизировать
 /// (`DescribedSecretStore`, `SecretStoreUnavailableException`, `Logger`,
-/// `LogLevel`), реэкспортируются из ядра. Остальное из §12.4.2 (`FileAgentConfigStore`) придёт со своими
-/// потребителями.
+/// `LogLevel`), реэкспортируются из ядра. Подкоманда `secret migrate` (change
+/// `add-config-literal-secrets-and-migrate`, D7): `SecretCommands().migrate(
+/// SecretMigrateOptions(…))` либо движок `SecretMigrator` с
+/// `SecretMigrationOptions`, отчёт `SecretMigrationReport` и его пункты; флаги
+/// `--header-stdin`, `--env-stdin`, `--header-scheme` — поля `McpAddOptions`.
+/// Строка о 1.0 для справок — `before1Note` (R8-7, D13). Остальное из §12.4.2
+/// (`FileAgentConfigStore`) придёт со своими потребителями.
 library;
 
 export 'package:codelab_agent_io/codelab_agent_io.dart'
@@ -47,6 +52,7 @@ export 'package:codelab_agent_io/codelab_agent_io.dart'
         ProviderCommands,
         ProviderListOptions,
         ProviderRemoveOptions,
+        SecretActionRequiredItem,
         SecretAdmin,
         SecretCollision,
         SecretCommandResult,
@@ -62,13 +68,25 @@ export 'package:codelab_agent_io/codelab_agent_io.dart'
         SecretListOptions,
         SecretListOutcome,
         SecretListing,
+        SecretMigrateOptions,
+        SecretMigrationAction,
+        SecretMigrationItem,
+        SecretMigrationOptions,
+        SecretMigrationReport,
+        SecretMigrator,
+        SecretMovedItem,
+        SecretNotMigratedItem,
         SecretNotSet,
+        SecretPlanItem,
         SecretReadOnly,
+        SecretReplacedItem,
+        SecretReusedItem,
         SecretSetOptions,
         SecretStored,
         SecretUpdated,
         SecretWriteOutcome,
         StdinSecretInput,
+        before1Note,
         configInvalidExit,
         configUsageExit,
         configValidExit,

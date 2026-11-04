@@ -8,8 +8,10 @@ import 'package:codelab_agent_io/codelab_agent_io.dart'
         SecretDeleteOptions,
         SecretInput,
         SecretListOptions,
+        SecretMigrateOptions,
         SecretSetOptions,
-        StdinSecretInput;
+        StdinSecretInput,
+        before1Note;
 
 import '../serve/exit_codes.dart';
 
@@ -24,19 +26,36 @@ import '../serve/exit_codes.dart';
 final ArgParser secretParser = ArgParser()
   ..addCommand('set', ArgParser())
   ..addCommand('delete', ArgParser())
-  ..addCommand('list', ArgParser());
+  ..addCommand('list', ArgParser())
+  // `migrate` (design.md change `add-config-literal-secrets-and-migrate`, D7):
+  // слои и режим — флагами, значений в argv нет; stdin не читается.
+  ..addCommand(
+    'migrate',
+    ArgParser()
+      ..addFlag('project', negatable: false)
+      ..addFlag('local', negatable: false)
+      ..addFlag('all', negatable: false)
+      ..addFlag('dry-run', negatable: false)
+      ..addFlag('force', negatable: false)
+      ..addOption('cwd'),
+  );
 
 /// Справка команды `secret` (в stderr при коде `64`).
 String secretUsage() =>
-    'Usage: codelab-agent secret set|delete|list\n\n'
+    'Usage: codelab-agent secret set|delete|list|migrate\n\n'
     '  codelab-agent secret set <name>     '
     'read the value from stdin (hidden on a terminal)\n'
     '  codelab-agent secret delete <name>\n'
-    '  codelab-agent secret list\n\n'
+    '  codelab-agent secret list\n'
+    '  codelab-agent secret migrate [--all | [--project] [--local]] '
+    '[--cwd <dir>] [--dry-run] [--force]\n'
+    '      move secrets written in config files to the store '
+    '(--force replaces a stored secret for good)\n\n'
     'Works on the backend chosen by secrets.backend in '
     r'$CODELAB_HOME/config.yaml or in the file named by CODELAB_CONFIG '
     '(serve --config is not seen). The value is never passed as an '
-    'argument and never printed.';
+    'argument and never printed.\n\n'
+    '$before1Note';
 
 /// Выполняет `codelab-agent secret …` и возвращает код выхода.
 ///
@@ -58,7 +77,9 @@ Future<int> runSecretCommand(
   final sub = secret.command;
   if (sub == null) {
     err
-      ..writeln('codelab-agent: secret needs a subcommand: set, delete or list')
+      ..writeln(
+        'codelab-agent: secret needs a subcommand: set, delete, list or migrate',
+      )
       ..writeln()
       ..writeln(secretUsage());
     return usageExit;
@@ -94,6 +115,25 @@ Future<int> runSecretCommand(
       }
       result = await service.delete(
         SecretDeleteOptions(name: sub.rest.single, environment: environment),
+      );
+    case 'migrate':
+      if (sub.rest.isNotEmpty) {
+        err
+          ..writeln('codelab-agent: secret migrate takes no arguments')
+          ..writeln()
+          ..writeln(secretUsage());
+        return usageExit;
+      }
+      result = await service.migrate(
+        SecretMigrateOptions(
+          environment: environment,
+          cwd: sub.option('cwd') ?? Directory.current.path,
+          project: sub.flag('project'),
+          local: sub.flag('local'),
+          all: sub.flag('all'),
+          dryRun: sub.flag('dry-run'),
+          force: sub.flag('force'),
+        ),
       );
     default:
       if (sub.rest.isNotEmpty) {

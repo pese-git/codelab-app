@@ -165,13 +165,14 @@ argv — код 64 и `codelab: invalid arguments for secret`; присланн�
 создаёт — только запись (`set`, `migrate`). Сторож и `cliAllowlist` не меняются: `codelab_setup/io.dart` по-прежнему
 импортируется только из `run.dart`.
 
-`secret migrate [--project|--local|--all] [--cwd <dir>] [--dry-run] [--force]` (8.11; design.md change
+`secret migrate [--all | [--project] [--local]] [--cwd <dir>] [--dry-run] [--force]` (8.11; design.md change
 `add-config-literal-secrets-and-migrate`, D7) переносит в хранилище литеральные секреты, о которых предупреждает
 загрузка конфига (CFG-9, пп. 1–3; решение пользователя 2026-11-04 R8-4), и заменяет их в файлах
 ссылками; регистрируется так же (`SecretCommands.migrate` через `codelab_setup/io.dart`). Её `--cwd` —
 флаг подкоманды после `migrate`; `-C`/`--cwd` верхнего уровня вместе с `secret` по-прежнему код 64.
 `codelab mcp add` получает флаги `--header-stdin <Name> [--header-scheme <Scheme>]` и `--env-stdin <NAME>`
-(8.11, D11): значение из stdin уходит в хранилище, в файл — `${secret:…}`, один флаг на вызов.
+(8.11, D11): значение из stdin уходит в хранилище, в файл — `${secret:…}` в одинарных кавычках, один
+флаг на вызов; порядок — кандидат, коллизия имени, `checkStore`, stdin, секрет, конфиг.
 
 `codelab config path|get|set|unset`, `codelab provider add|list|remove` и `codelab mcp add|list|remove`
 (этап 8, задача 8.10; design.md change `add-config-writer-and-reload`, D6) регистрируются так же,

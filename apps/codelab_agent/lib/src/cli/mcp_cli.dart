@@ -34,6 +34,20 @@ final ArgParser mcpParser = ArgParser()
           splitCommas: false,
           help: 'KEY=VALUE header of an http server; repeat for more.',
         )
+        ..addMultiOption(
+          'header-stdin',
+          splitCommas: false,
+          help: 'Header name whose value is read from stdin and stored.',
+        )
+        ..addOption(
+          'header-scheme',
+          help: 'Scheme prefix (Bearer) for --header-stdin.',
+        )
+        ..addMultiOption(
+          'env-stdin',
+          splitCommas: false,
+          help: 'Variable name whose value is read from stdin and stored.',
+        )
         ..addFlag(
           'disabled',
           negatable: false,
@@ -56,11 +70,16 @@ String mcpUsage() =>
     '[--arg <a>]... [--env KEY=VALUE]...\n'
     '       codelab-agent mcp add <name> --type http --url <url> '
     '[--header KEY=VALUE]...\n'
+    '           [--header-stdin <Name> [--header-scheme <Scheme>]]\n'
     '           [--disabled] [--project | --local]\n'
+    '       codelab-agent mcp add <name> --type stdio --command <cmd> '
+    '--env-stdin <NAME>\n'
     '       codelab-agent mcp list [--cwd <dir>]\n'
     '       codelab-agent mcp remove <name> [--project | --local]\n\n'
     'Edits the config file in place; it does not connect to servers. Put '
-    r'secrets in headers and variables as ${secret:name} or ${VAR}.';
+    r'secrets in headers and variables as ${secret:name} or ${VAR}. '
+    '--header-stdin and --env-stdin read ONE value from stdin (one flag per '
+    'call), store it and write a reference.';
 
 /// Выполняет `codelab-agent mcp …` и возвращает код выхода.
 ///
@@ -136,6 +155,9 @@ Future<int> runMcpCommand(
         disabled: sub.flag('disabled'),
         project: sub.flag('project'),
         local: sub.flag('local'),
+        headerStdin: sub.multiOption('header-stdin'),
+        headerScheme: sub.option('header-scheme'),
+        envStdin: sub.multiOption('env-stdin'),
       ),
     ),
     out,

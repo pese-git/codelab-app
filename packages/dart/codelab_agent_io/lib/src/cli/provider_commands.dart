@@ -14,7 +14,7 @@ import 'config_output.dart';
 import 'exit_codes.dart';
 import 'secret_commands.dart';
 import 'secret_input.dart';
-import 'silent_logger.dart';
+import '../util/silent_logger.dart';
 
 /// Параметры `provider add`, уже разобранные приложением (design.md change
 /// `add-config-writer-and-reload`, D6; `agent-core-architecture` §17.5.5).

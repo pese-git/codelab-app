@@ -340,6 +340,11 @@ Future<int> _runMcp(
           disabled: sub.flag('disabled'),
           project: sub.flag('project'),
           local: sub.flag('local'),
+          // Значение читается из stdin только при одном из `-stdin` флагов
+          // (change `add-config-literal-secrets-and-migrate`, D11).
+          headerStdin: sub.multiOption('header-stdin'),
+          headerScheme: sub.option('header-scheme'),
+          envStdin: sub.multiOption('env-stdin'),
         ),
       ),
     }, io);
@@ -349,7 +354,7 @@ Future<int> _runMcp(
   }
 }
 
-/// `codelab secret set|delete|list`: хранилище секретов без агента.
+/// `codelab secret set|delete|list|migrate`: хранилище секретов без агента.
 ///
 /// Почему через мост: клиент не импортирует `package:codelab_agent_*`, а вывод
 /// и коды обязаны совпасть с `codelab-agent secret` — реализация одна,
@@ -387,6 +392,19 @@ Future<int> _runSecret(
       case 'delete':
         result = await commands.delete(
           SecretDeleteOptions(name: rest.single, environment: environment),
+        );
+      case 'migrate':
+        final migrate = options.subcommand!;
+        result = await commands.migrate(
+          SecretMigrateOptions(
+            environment: environment,
+            cwd: _projectDir(options),
+            project: migrate.flag('project'),
+            local: migrate.flag('local'),
+            all: migrate.flag('all'),
+            dryRun: migrate.flag('dry-run'),
+            force: migrate.flag('force'),
+          ),
         );
       default:
         result = await commands.list(
