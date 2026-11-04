@@ -182,11 +182,11 @@
 - **THEN** проблема — `mcp.servers[github].headers.Authorization: variable GITHUB_TOKEN is not set`, сервер не построен
 
 ### Requirement: Секреты только ссылками
-Конфигурация НЕ SHALL хранить ключи API значением (CFG-2). Ключи `api_key`, `apiKey`, `token`, `secret`, `password` в `providers.*` и в элементах `mcp.servers` SHALL давать проблему `inlineSecret`; хост SHALL отказывать в старте исключением `ConfigInlineSecretException` с путём ключа и `suggestedSecretName` — именем `SecretNames.suggestFor(путь)` (capability `agent-secrets`, «Имена секретов»). Текст проблемы НЕ SHALL содержать значение и SHALL называть команду `codelab secret set <suggestedSecretName>`:
+Запись конфигурации (`ConfigWriter`, подкоманды CLI, страницы настроек клиентов) НЕ SHALL сохранять секрет значением (CFG-2; design.md change `add-config-literal-secrets-and-migrate`, D5). Литеральный секрет в **файле** конфига SHALL давать предупреждение, а не проблему (решение пользователя 2026-11-04 R8-4; требование «Литеральные секреты в файле конфига»): ключи `api_key`, `apiKey`, `token`, `secret`, `password` в `providers.*` и в элементах `mcp.servers` файловых слоёв SHALL давать предупреждение `config.secret.in_file` с путём ключа и текстом по шаблону `<key>: a secret is stored in the config file; move it to the secret store: <command>` требования «Литеральные секреты в файле конфига». Литеральный `providers.<id>.api_key` SHALL использоваться как ключ провайдера; значение `api_key` из одной подстановки `${VAR}` или `${secret:x}` SHALL быть ссылкой, а не литералом (R8-8): раскрывается как в заголовках, предупреждения не даёт, `secret migrate` его не трогает. Литерал `api_key` с управляющими или не-ASCII символами SHALL быть проблемой загрузки `value` с текстом `api_key must be printable ASCII`, литерал секретно названного заголовка провайдера — `<Header> must be printable ASCII`, смесь литерала и `${secret:…}` в `api_key` — `api_key may use ${secret:…} only as the whole value`; значение в тексты НЕ SHALL попадать; остальные из этих ключей НЕ SHALL применяться. **R8-6:** `api_key` вместе с `api_key_env` или `api_key_secret` у одного провайдера после слияния слоёв SHALL быть проблемой загрузки `value` с ключом `providers.<id>.api_key` и текстом `api_key, api_key_env and api_key_secret are mutually exclusive` — это конфликт источников, а не «секрет в файле». Проблема `inlineSecret` и `ConfigInlineSecretException` SHALL оставаться у писателя и у предконфигурации из окружения (требование «Предконфигурация провайдера из окружения»), включая файл флага `--provider-config @путь`: это значение флага, а не слой конфига. Текст проблемы `inlineSecret` НЕ SHALL содержать значение и SHALL называть команду `codelab secret set <suggestedSecretName>` (`SecretNames.suggestFor(путь)`, capability `agent-secrets`, «Имена секретов»):
 - у провайдера — и ссылку `api_key_secret: <suggestedSecretName>`;
-- у элемента `mcp.servers` — и подстановку `${secret:<suggestedSecretName>}` в `env` или `headers`.
+- у элемента `mcp.servers` — и подстановку `${secret:<suggestedSecretName>}` в `env` или `headers`;
 
-`api_key_env` и `api_key_secret` вместе SHALL быть проблемой с ключом `providers.<id>.api_key_secret`. Значение `api_key_env` SHALL быть именем переменной (`[A-Za-z_][A-Za-z0-9_]*`, иначе `expected an environment variable name`). Значение `api_key_secret` и имя в `${secret:<name>}` SHALL проходить правило `SecretNames` (иначе `expected a secret name: lowercase letters, digits and . _ / -, up to 128 characters`). Неверный формат — проблема `value` с путём ключа без значения в тексте. Проверка литералов по шаблонам §12.4 (пункты 2–3 CFG-9) — change `add-agent-core-secret-redaction`.
+`api_key_env` и `api_key_secret` вместе SHALL быть проблемой с ключом `providers.<id>.api_key_secret`. Значение `api_key_env` SHALL быть именем переменной (`[A-Za-z_][A-Za-z0-9_]*`, иначе `expected an environment variable name`). Значение `api_key_secret` и имя в `${secret:<name>}` SHALL проходить правило `SecretNames` (иначе `expected a secret name: lowercase letters, digits and . _ / -, up to 128 characters`). Неверный формат — проблема `value` с путём ключа без значения в тексте. Литералы по шаблонам §12.4 (пункты 2–3 CFG-9) SHALL распознаваться по требованию «Литеральные секреты в файле конфига»; распознавание идёт до проверки формата имени.
 
 - `api_key_env` незаданной переменной SHALL давать предупреждение `config.provider.key_missing {provider, variable}` при загрузке и ошибку хода `API key variable <VAR> is not set` при выборе модели этого провайдера без HTTP-запроса. Значение переменной SHALL читаться при запросе через `SecretResolver.env`.
 - `api_key_secret` и `${secret:<name>}` в `providers.*.headers.*`, `mcp.servers[*].env.*` и `mcp.servers[*].headers.*` SHALL разрешаться через `SecretResolver`: у провайдера — при запросе, у MCP-сервера — при подключении к сессии (capability `agent-secrets`, требования «Ключ провайдера при запросе» и «Секреты MCP-серверов конфигурации»). Загрузка НЕ SHALL читать хранилище секретов и НЕ SHALL пропускать MCP-сервер из-за ссылки на секрет.
@@ -198,20 +198,24 @@
 - **THEN** результат без `config` и `host`, проблема `value` с ключом `secrets.backend`, источником этого файла и строкой ключа `backend`, `toString()` содержит `secrets.backend: file backend is not supported on Windows; use env with CODELAB_SECRET_* variables`; `auto` и `env` на Windows проблем не дают
 
 #### Scenario: Ключ значением
-- **WHEN** `config.yaml` задаёт `providers.openai.api_key: sk-test-secret`
-- **THEN** запуск отклонён с проблемой `providers.openai.api_key`, текст содержит `codelab secret set codelab/openai` и `api_key_secret: codelab/openai`, у исключения `suggestedSecretName == "codelab/openai"`, а stderr, лог и вывод `config check` не содержат `sk-test-secret` (`core/config-rejects-inline-api-key`)
+- **WHEN** пользовательский `config.yaml` задаёт `providers.openai.api_key: sk-test-secret`, а сессия делает ход с моделью `openai`
+- **THEN** загрузка успешна с предупреждением `config.secret.in_file` с текстом `providers.openai.api_key: a secret is stored in the config file; move it to the secret store: codelab secret migrate`, без `sk-test-secret`; запрос к провайдеру идёт с этим ключом; stderr, лог и вывод `config check` не содержат `sk-test-secret` (`core/config-warns-inline-api-key`, заменяет `core/config-rejects-inline-api-key`)
+
+#### Scenario: Два источника ключа
+- **WHEN** пользовательский слой задаёт `providers.openai.api_key: sk-x…`, а проектный (доверенный) — `providers.openai.api_key_secret: codelab/openai`
+- **THEN** проблема `value` с ключом `providers.openai.api_key`, текст `api_key, api_key_env and api_key_secret are mutually exclusive` без значения; агент не стартует
 
 #### Scenario: Токен значением у MCP-сервера
 - **WHEN** элемент `mcp.servers` с `name: github` задаёт `token: ghp-test-secret`
-- **THEN** проблема `mcp.servers[github].token`, текст содержит `codelab secret set codelab/mcp/github/token` и `${secret:codelab/mcp/github/token}` и не содержит `ghp-test-secret`
+- **THEN** загрузка успешна с предупреждением `mcp.servers[github].token: a secret is stored in the config file; move it to the secret store: codelab secret migrate` без `ghp-test-secret`; поле `token` не применяется
 
 #### Scenario: Ключ вместо имени переменной
-- **WHEN** провайдер задаёт `api_key_env: sk-test-secret-123`
-- **THEN** проблема `providers.<id>.api_key_env` о формате имени, текст и лог не содержат `sk-test-secret-123`
+- **WHEN** провайдер `a` задаёт `api_key_env: sk-test-secret-123` (не совпадает с шаблоном `sk-…`: после префикса меньше 20 символов), а провайдер `b` — `api_key_env: sk-proj-AbCdEfGhIjKlMnOpQrStUvWx` (совпадает)
+- **THEN** у `a` — проблема `providers.a.api_key_env` о формате имени без значения в тексте; у `b` — проблемы формата нет, есть предупреждение `config.secret.in_file` для `providers.b.api_key_env`, а ход с моделью `b` завершается ошибкой `API key reference providers.b.api_key_env looks like a secret value, not a name; run: codelab secret migrate`; текст и лог не содержат ни одного из значений
 
 #### Scenario: Ключ вместо имени секрета
-- **WHEN** провайдер задаёт `api_key_secret: "sk-Test Secret"`
-- **THEN** проблема `providers.<id>.api_key_secret` с текстом правила имени, текст и лог не содержат значения
+- **WHEN** провайдер `a` задаёт `api_key_secret: "sk-Test Secret"` (не совпадает с шаблоном), а провайдер `b` — `api_key_secret: ghp_abcdefghijklmnopqrstuvwxyz0123456789` (совпадает с шаблоном GitHub и при этом проходит правило `SecretNames`)
+- **THEN** у `a` — проблема `providers.a.api_key_secret` с текстом правила имени; у `b` — предупреждение `config.secret.in_file`, ссылка не разрешается, хранилище не вызывается; текст и лог не содержат значений
 
 #### Scenario: Ссылка на секрет в args MCP-сервера
 - **WHEN** stdio-сервер `gh` задаёт `args: ["--token", "${secret:codelab/mcp/gh/token}"]`
@@ -258,7 +262,7 @@
 - запись `builtin` вне `git_sha`, `uuid` — проблема;
 - некомпилируемое регулярное выражение в `allowlist.patterns` — проблема с путём ключа.
 
-Проверенные значения SHALL попадать в `CoreConfig.redact`. Правила доверия проектного слоя SHALL соблюдаться: без доверия проект может только включить редакцию, добавить слои и убрать записи `allowlist`. До редактора задачи 8.11 явно заданный ключ `redact.*` SHALL давать `config.key.not_applied`.
+Проверенные значения SHALL попадать в `CoreConfig.redact`. Правила доверия проектного слоя SHALL соблюдаться: без доверия проект может только включить редакцию, добавить слои и убрать записи `allowlist`. До change редакции секретов (P-10, после 1.0; решение пользователя 2026-11-04 R8-1, design.md change `add-config-literal-secrets-and-migrate`, D2) явно заданный ключ `redact.*` SHALL давать `config.key.not_applied`.
 
 #### Scenario: Невалидное выражение
 - **WHEN** `redact.allowlist.patterns` содержит `"[a-"`
@@ -568,7 +572,7 @@
   - нестроковый скаляр (число, `bool`) под секретным именем SHALL считаться литералом;
   - изменённость элемента `mcp.servers` SHALL определяться по его номеру в списке, а не по `name`: при дублях `name` каждый элемент проверяется сам.
 - **Блокировка и отпечаток.** Брать эксклюзивный `<path>.lock` с содержимым `<pid> <nonce>`. Lock старше порога устаревания (10 с) снимается через `rename` в уникальное имя с повторной проверкой возраста и содержимого и `config.write.stale_lock`; свежий lock другого писателя возвращается на место, а запись получает `ConfigConflictException`. Занятый lock или отпечаток sha256 файла, отличный от `base.fingerprint`, дают `ConfigConflictException`. Брошенные `<path>.tmp-*` SHALL удаляться только после взятия lock. Таймаут смены прав (`chmod`, 5 s) SHALL быть строго меньше порога устаревания lock (10 s). Непосредственно перед `rename` писатель SHALL перечитывать свой lock (в нём его nonce) и отпечаток цели (совпадает с прочитанным под lock); иначе — `ConfigConflictException`, tmp удаляется, цель и чужой lock не трогаются.
-- **Правка.** Применять правки к байтам файла через `YamlEditor` (`package:yaml_edit`). Комментарии, пустые строки, порядок ключей, flow-стиль и перевод строк (LF/CRLF) вне изменённых узлов SHALL сохраняться побайтово. Новый ключ SHALL вставляться по правилу `YamlEditor` (R3-2): в отображение, ключи которого отсортированы по алфавиту, — на своё место по алфавиту, иначе — в конец отображения; новый элемент списка (`mcp.servers`) — в конец списка; недостающие предки — в блочном стиле с отступом файла. Известная граница: при вставке по алфавиту комментарий над следующим ключом оказывается над новым ключом; байты комментария сохраняются. Строку, которая по профилю §15.5 прочиталась бы не строкой (`off`, `yes`, `${VAR}`), SHALL писать в двойных кавычках. Отказ `YamlEditor` SHALL давать `ConfigException` с `cannot edit <key> automatically; edit the file manually`.
+- **Правка.** Применять правки к байтам файла через `YamlEditor` (`package:yaml_edit`). Комментарии, пустые строки, порядок ключей, flow-стиль и перевод строк (LF/CRLF) вне изменённых узлов SHALL сохраняться побайтово. Новый ключ SHALL вставляться по правилу `YamlEditor` (R3-2): в отображение, ключи которого отсортированы по алфавиту, — на своё место по алфавиту, иначе — в конец отображения; новый элемент списка (`mcp.servers`) — в конец списка; недостающие предки — в блочном стиле с отступом файла. Известная граница: при вставке по алфавиту комментарий над следующим ключом оказывается над новым ключом; байты комментария сохраняются. Строку, которая содержит `${`, SHALL писать в одинарных кавычках без экранирования `/` (`'Bearer ${secret:codelab/mcp/gh/x}'`): в двойных `yaml_edit` экранирует `/` как `\/`, и файл становится нечитаемым (design.md change `add-config-literal-secrets-and-migrate`, D5). Прочую строку, которая по профилю §15.5 прочиталась бы не строкой (`off`, `yes`), SHALL писать в двойных кавычках. Строку с управляющим символом (в том числе `\n`) SHALL писать в двойных кавычках: одинарные его не выражают. Отказ `YamlEditor` SHALL давать `ConfigException` с `cannot edit <key> automatically; edit the file manually`.
 - **Проверка.** Проверять итог `ConfigLoader.validateCandidate` по всем слоям с заменой целевого. Незаданная `${VAR}` — предупреждение результата, а не ошибка. Незаданную `${VAR}` писатель SHALL узнавать по структурному признаку проблемы ядра, а не по тексту сообщения. Итог кандидата и исходный текст слоя проверять тем же методом в режиме полной проверки без обрыва ступеней (R3-3); если полную проверку кандидата не удалось довести до конца (вырезан предок вместо точного пути или весь слой, нет прогресса, исчерпан лимит кругов; правило доверия SHALL вычисляться по исходным слоям до вырезания), проверка SHALL давать служебную проблему `config.validation.incomplete`, и запись SHALL отклоняться (fail-closed), даже если такая проблема была и в базе; неполнота одной базы запись НЕ SHALL блокировать: база сравнения SHALL содержать проблемы всех ступеней, включая каскадные, а не только ступени, на которой оборвалась бы обычная загрузка; сравнивать проблемы до и после правки по сигнатуре `kind|key|source`, без значений и без позиции `line:column` (R3-1); сравнение SHALL учитывать число проблем каждой сигнатуры, поэтому проблемы с пустым ключом НЕ SHALL схлопываться в одну: проблема, которой не было до правки, SHALL давать `ConfigException` с новыми проблемами без записи; проблема, которая была и до правки, SHALL возвращаться в `ConfigWriteResult.warnings`, а запись — выполняться. Литеральный секрет, вносимый правкой, ключ вне реестра, слой, не разрешённый дескриптором, и ключ, отброшенный правилом доверия, SHALL отклоняться всегда, независимо от сравнения. Правка SHALL блокироваться, только если в кандидате есть проблема, которой нет в полном наборе базы; поэтому проблема поздней ступени, открывшаяся после исправления ранней ошибки, НЕ SHALL считаться новой. Обычная загрузка (`config check`, `serve`, перезагрузка) по поведению НЕ SHALL меняться: она по-прежнему останавливается на первой провалившейся ступени.
 - **Замена.** Эксклюзивно создавать пустой `<path>.tmp-<pid>-<rand>` в каталоге цели, выставлять на него права исходного файла (кроме Windows) через `SecretProcessRunner` **до** записи содержимого, затем писать, сбрасывать на диск и атомарно переименовывать поверх цели. Сбой смены прав SHALL давать `ConfigException`, удалять tmp и не выполнять `rename`. Символическую ссылку SHALL раскрывать: правится цель, ссылка остаётся. Для слоя `user` ссылка MAY вести куда угодно (dotfiles). Для слоёв `project` и `projectLocal` раскрытая цель (и каталог `.codelab`, если он ссылка) SHALL лежать внутри канонического `<cwd>/.codelab`; иначе — `ConfigException` до взятия lock и до создания каталогов. Больше 32 переходов по ссылкам — `ConfigException` `too many symbolic links`. Каталог `$CODELAB_HOME`, созданный писателем, SHALL получать права `0700` (кроме Windows).
 - **Итог.** Писать лог `config.write {path, keys}` и возвращать `ConfigWriteResult {path, fingerprint, warnings, restartRequiredKeys}`.
@@ -695,6 +699,10 @@
 - **WHEN** рядом с целью лежит `<path>.tmp-*` старше 10 с, а lock занят другим живым писателем
 - **THEN** запись получает `ConfigConflictException`, и брошенный tmp этой записью не удаляется: чистка идёт только под lock
 
+#### Scenario: Ссылка на секрет в одинарных кавычках
+- **WHEN** применяется `UpsertMcpServer` stdio-сервера `gh` с `env.GH_TOKEN` = `Bearer ${secret:codelab/mcp/gh/x}` и `env.DEBUG` = строкой `off`
+- **THEN** файл содержит `GH_TOKEN: 'Bearer ${secret:codelab/mcp/gh/x}'` без `\/` и `DEBUG: "off"`; загрузка возвращает те же строки
+
 ### Requirement: Ссылки проектных слоёв при чтении
 `ConfigLoader` (`codelab_agent_io`) SHALL перед чтением файла слоя `project` (`<cwd>/.codelab/config.yaml`) и `projectLocal` (`<cwd>/.codelab/config.local.yaml`) проверять, куда ведут его символические ссылки (design.md, D5, п. 5, «Чтение проектных слоёв»):
 - **Существующий файл** SHALL проверяться и открываться по реальному пути, который даёт ОС (`realpath`, `resolveSymbolicLinksSync`), а не по лексическому пути и не по собственному разбору ссылок: проверенный и открытый пути совпадают. Посегментный обход с несуществующим хвостом — только у `ConfigWriter`, которому нужна будущая цель ещё не созданного файла.
@@ -769,21 +777,21 @@
 - **Удаление отсутствующей записи** (`config unset`, `provider remove`, `mcp remove`) SHALL завершаться кодом `0` без записи файла и печатать `<key> is not set in <path>`.
 - **Наличие ключа** для `config get`, `config unset`, `provider remove` и `mcp remove` SHALL определяться по пути в документе слоя, а не по значению: ключ со значением `null` присутствует, и `config unset` SHALL его удалять.
 - **`provider add <id>`** для существующего провайдера SHALL обновлять его (upsert): переданные флаги перезаписывают свои поля, остальные поля и модели сохраняются.
-- **Источник ключа** (R4-4): `provider add` с любым из `--api-key-stdin`, `--api-key-secret`, `--api-key-env` SHALL заменять источник ключа целиком — поля другого источника (`api_key_secret`, `api_key_env`) удаляются той же записью. Пары `api_key_env` + `api_key_secret` у провайдера после команды НЕ SHALL быть. Без флага ключа источник не меняется.
+- **Источник ключа** (R4-4): `provider add` с любым из `--api-key-stdin`, `--api-key-secret`, `--api-key-env` SHALL заменять источник ключа целиком — поля другого источника (`api_key_secret`, `api_key_env`, литеральный `api_key`) удаляются той же записью. Пары `api_key_env` + `api_key_secret` у провайдера после команды НЕ SHALL быть. Без флага ключа источник не меняется.
 - **Недостающие обязательные флаги** `provider add` (`--kind`, `--model`, `--context-window`) SHALL перечисляться все одной строкой stderr.
 - **`provider remove`** при ссылке из `agent.*` SHALL завершаться кодом `1`, stderr SHALL содержать `change the model first: config set agent.default_model <provider>/<model>`.
 - **`mcp add` и `mcp remove`** SHALL отклонять имя сервера с пробелом, `[`, `]` или `"` кодом `64`.
 - **`mcp remove <name>`** SHALL искать сервер только по `name`, никогда по номеру элемента списка.
 - **Ошибка разбора аргументов** `config set`, `config unset`, `provider` и `mcp` SHALL печатать фиксированную фразу (`invalid arguments for config set`, `invalid arguments for config unset`, `invalid arguments for provider`, `invalid arguments for mcp`) и справку, не цитируя слова argv.
 - **Маскирование** (R0-2; design.md, D6) — в `config get` и `provider list`:
-  - значение любого листа без дескриптора реестра и элемента отображения с произвольными ключами (`headers`, `env`), чьё имя — ключ из `inlineSecretKeys` или секретное по нормализованному правилу требования «Запись конфига ConfigWriter» (на любой глубине дерева), без `${secret:…}` и `${VAR}` SHALL печататься как `<redacted>`; значение со ссылкой — как есть; скалярный лист, описанный реестром (`api_key_secret`, `api_key_env`, `auth_header`), SHALL печататься как есть;
+  - значение любого листа без дескриптора реестра и элемента отображения с произвольными ключами (`headers`, `env`), чьё имя — ключ из `inlineSecretKeys` или секретное по нормализованному правилу требования «Запись конфига ConfigWriter» (на любой глубине дерева), без `${secret:…}` и `${VAR}` SHALL печататься как `<redacted>`; значение со ссылкой — как есть; скалярный лист, описанный реестром (`api_key_secret`, `api_key_env`, `auth_header`), SHALL печататься как есть, **кроме** листа с находкой `literalSecretTag` (литеральный `api_key`, ссылка-значение п. 3 в `api_key_env`/`api_key_secret`) — он SHALL печататься `<redacted>` (design.md change `add-config-literal-secrets-and-migrate`, D5); значения с `${…}` тоже SHALL проходить `literalSecretTag` по литеральным частям;
   - непрозрачное поддерево схемы (`providers.*.auth`, `providers.*.key_rotation`, разделы после MVP и другие узлы без схемы листьев) SHALL печататься как `<opaque: edit the file>` без содержимого;
   - значение из слоя окружения SHALL заменяться именем источника: `<from env:CODELAB_PROVIDER_CONFIG>`, `<from env:CODELAB_MODEL>`;
   - URL (`base_url`, `url`) SHALL разбираться как URI и печататься без userinfo (R4-5); неразбираемый URL и URL с `@` без авторитета (`user:pass@host`) SHALL печататься как `<redacted>`; значение query-параметра или пары `имя=значение` во фрагменте с секретным именем (то же нормализованное правило имён) без ссылки `${…}` SHALL печататься как `<redacted>`, значение-ссылка — как есть;
   - отображения и списки маскируются поэлементно.
 - **`config set`** SHALL разбирать значение через `SettingsRegistry.parseCliValue`.
 - **`config path`** без флага слоя SHALL печатать строки `user: <path> (exists|missing)`, `project: …`, `local: …` и при заданной `CODELAB_CONFIG` — `CODELAB_CONFIG: …`; с `--project`/`--local` — только путь.
-- **`provider list`** SHALL первой строкой печатать `Secrets: <backend>`, затем по строке на провайдера итогового конфига `<id>  kind: …  base_url: …  models: a, b  key: <source>` (без `base_url` — `(default)`); источник ключа без значения (`secret <name>: found|not set|unavailable`, `env <VAR>: set|not set`).
+- **`provider list`** SHALL первой строкой печатать `Secrets: <backend>`, затем по строке на провайдера итогового конфига `<id>  kind: …  base_url: …  models: a, b  key: <source>` (без `base_url` — `(default)`); источник ключа без значения (`secret <name>: found|not set|unavailable`, `env <VAR>: set|not set`, `literal in config file`; у `api_key: ${VAR}` — `env <VAR>: set|not set`, у `api_key: ${secret:x}` — `secret x: found|not set|unavailable`; у ссылки-значения п. 3 — `unusable reference (looks like a secret value)` без поиска в хранилище).
 - **`mcp list`** SHALL печатать серверы файлов по слоям строками `<name>  type: …  layer: …  enabled: true|false` без подключения к ним.
 - **`provider add --api-key-stdin`**:
   1. проверить кандидат конфига без записи;
@@ -982,4 +990,149 @@
 #### Scenario: Правка цели symlink даёт сигнал
 - **WHEN** `$CODELAB_HOME/config.yaml` — ссылка на `~/dotfiles/codelab/config.yaml`, и меняется файл цели в `~/dotfiles/codelab/`
 - **THEN** наблюдатель получает событие каталога цели и даёт ровно один сигнал после debounce; после `load()` (`rebase()`) перенаправленная ссылка наблюдается по новой цели
+
+### Requirement: Литеральные секреты в файле конфига
+Публичные функции ядра (`config/inline_secrets.dart`; design.md change `add-config-literal-secrets-and-migrate`, D3) SHALL быть одним источником находок для загрузки, писателя, маскирования и `secret migrate`:
+- `literalSecretTag(value)` — тег первого совпадения шаблонов §12.4 (`sk-…`, GitHub, AWS, Google, Slack, JWT, Bearer, PEM, присваивание секрета, URL с паролем) в **литеральных частях** значения (между подстановками `${…}`), с учётом встроенного белого списка `git_sha`, `uuid`, или `null`;
+- `findInlineSecrets(ConfigTree)` — список `InlineSecretFinding {keyPath, kind, tag, suggestedSecretName, spans}` для пунктов 1–3 CFG-9.
+
+Ни тег, ни находка НЕ SHALL содержать значение или его часть. Выражения с `(?i)` SHALL компилироваться с `caseSensitive: false`; части имени шаблона «присваивание секрета» SHALL быть ограничены 64 символами. Значение с URL-авторитетом, чей пароль userinfo не состоит целиком из одной подстановки `${…}`, SHALL давать находку `connection-string`, в том числе если подстановка разрезает пароль (`postgres://u:lit${X}@h/db`).
+
+Находка в файловом слое (`user`, `project`, `projectLocal`, `CODELAB_CONFIG`/`--config`) SHALL давать предупреждение `config.secret.in_file {key, source}` с файлом, строкой и столбцом и текстом по одному шаблону `<key>: a secret is stored in the config file; move it to the secret store: <command>`, где `<command>`:
+- `codelab secret migrate` — для слоя `user`;
+- `codelab secret migrate --project` / `--local` — для проектных слоёв;
+- `codelab secret set <suggestedSecretName>` — для `CODELAB_CONFIG`/`--config`.
+
+Загрузка НЕ SHALL прерываться (R8-4; D4). Находки SHALL считаться по слою независимо от `enabled` элемента. `config check` SHALL печатать его строкой `warning:` без изменения кода выхода. Что применяется:
+- литеральные части `providers.*.headers.*`, `mcp.servers[*].headers.*`, `mcp.servers[*].env.*` (п. 2, R1-1) — применяются как есть;
+- `api_key_env`, `api_key_secret` или имя в `${secret:<name>}`, совпавшие с шаблоном (п. 3), — проблемы формата имени НЕ SHALL быть; значение SHALL попадать в `CoreConfig` маркером, а не ссылкой: `UnusableKeyRef` у ключа провайдера, `UnusableSecretReference` в шаблоне заголовка или `env`. Токен вместо имени переменной в `${…}` (`${ghp_…}`) SHALL давать ту же находку (`referenceName`): переменная не читается, тексты проблемы и предупреждения имени не содержат. Шаблон `sk-…` к именам п. 3 SHALL применяться только в начале значения. Маркер НЕ SHALL участвовать в поиске в хранилище в `config check`, в `config.provider.key_missing`, `providerProblems` и `secrets.lookup`. Такая ссылка НЕ SHALL разрешаться: ход провайдера SHALL завершаться ошибкой `auth` без HTTP-запроса с текстом `API key reference providers.<id>.<key> looks like a secret value, not a name; run: codelab secret migrate`, а MCP-сервер — состоянием `failed` с тем же текстом для своего ключа; значение НЕ SHALL попадать ни в текст, ни в `secrets.lookup`.
+
+Для ключей недоверенного проектного слоя, которые правило доверия §15.3 отбрасывает (`providers.*`, `mcp.servers`), предупреждения `config.secret.in_file` НЕ SHALL быть: остаётся `config.project.untrusted_key`. Предконфигурация из окружения этим требованием не меняется. `url` и `base_url` на пароль в userinfo НЕ SHALL проверяться (`config get` печатает их без userinfo, R4-5).
+
+`ConfigWriter` SHALL применять `literalSecretTag` к изменённым значениям `headers` и `env` и к элементам `mcp.servers[*].args` (R4-6, OQ3) и отклонять запись `ConfigInlineSecretException` (R8-5); у элемента `args` подсказка SHALL называть `--env <NAME>='${secret:<suggestedSecretName>}'`. Прежний литерал файла SHALL переходить в предупреждения записи. Загрузка элементы `args` НЕ SHALL проверять.
+
+Дескриптор `providers.*.api_key` реестра настроек SHALL быть `fileOnly` с признаком `secret: true` (тест полноты CFG-19). `provider add` с любым из `--api-key-stdin`, `--api-key-secret`, `--api-key-env` SHALL удалять и литеральный `api_key` той же правкой (R4-4). `provider list` SHALL показывать источник ключа `key: literal in config file` без значения.
+
+#### Scenario: Ссылка в api_key
+- **WHEN** провайдер `p` задаёт `api_key: "${P_KEY}"` (переменная задана), а провайдер `q` — `api_key: "${secret:codelab/q}"`
+- **THEN** предупреждений `config.secret.in_file` нет; `p` получает значение переменной, `q` — секрет через резолвер; `api_key: "${P_KEY}"` вместе с `api_key_env` — проблема R8-6
+
+#### Scenario: Токен вместо имени переменной в подстановке
+- **WHEN** заголовок сервера `gh` — `Authorization: "Bearer ${ghp_abcdefghijklmnopqrstuvwxyz0123456789}"`, а заголовок провайдера `p` — `X-Api-Key: "${ghp_abcdefghijklmnopqrstuvwxyz0123456789}"`
+- **THEN** проблем загрузки нет, есть предупреждения `config.secret.in_file` для обоих ключей; в шаблонах — маркер `UnusableSecretReference`, окружение не читается; сервер `gh` — `failed`, ход провайдера `p` — ошибка `auth` без HTTP-запроса; ни текст, ни лог не содержат `ghp_`
+
+#### Scenario: Смесь литерала и ссылки в api_key
+- **WHEN** провайдер задаёт `api_key: "sk-lit ${secret:codelab/p}"`
+- **THEN** проблема `value` с ключом `providers.<id>.api_key` и текстом `api_key may use ${secret:…} only as the whole value`, без значения
+
+#### Scenario: Управляющий символ в заголовке провайдера
+- **WHEN** литеральный `providers.p.headers.X-Api-Key` содержит символ табуляции
+- **THEN** проблема `value` с текстом `X-Api-Key must be printable ASCII`, без значения; у MCP-сервера та же строка проблемы не даёт
+
+#### Scenario: Токен в URL в выводе config get
+- **WHEN** `providers.p.base_url: "https://h/v1/ghp_abcdefghijklmnopqrstuvwxyz0123456789?region=eu"`, выполняется `codelab config get providers.p.base_url`
+- **THEN** выводится `<redacted>`, токена в выводе нет
+
+#### Scenario: Имя секрета с sk- не в начале
+- **WHEN** провайдер задаёт `api_key_secret: codelab/sk-test-provider-key-name`
+- **THEN** находки нет, ссылка разрешается как обычное имя
+
+#### Scenario: Управляющий символ в ключе
+- **WHEN** `api_key` содержит символ табуляции
+- **THEN** проблема `value` с ключом `providers.<id>.api_key`, текст без значения
+
+#### Scenario: Литерал в файле CODELAB_CONFIG
+- **WHEN** файл `CODELAB_CONFIG` задаёт `providers.p.api_key: sk-<30 символов>`
+- **THEN** предупреждение с текстом `providers.p.api_key: a secret is stored in the config file; move it to the secret store: codelab secret set codelab/p`
+
+#### Scenario: Выключенный сервер
+- **WHEN** сервер `gh` с `enabled: false` содержит литеральный заголовок по шаблону
+- **THEN** предупреждение `config.secret.in_file` есть
+
+#### Scenario: config get не печатает литеральный ключ
+- **WHEN** файл задаёт `providers.p.api_key: sk-<30 символов>` и `providers.q.api_key_env: ghp_<36 символов>`, выполняются `codelab config get providers` и `codelab provider list`
+- **THEN** оба листа выведены как `<redacted>`, `provider list` показывает `key: literal in config file` у `p`; ни одно значение не напечатано
+
+#### Scenario: Смешанное значение заголовка
+- **WHEN** пользовательский `config.yaml` задаёт у MCP-сервера `gh` заголовок `Authorization: "Bearer ghp_<36 символов> ${X}"`
+- **THEN** загрузка успешна с предупреждением `mcp.servers[gh].headers.Authorization: a secret is stored in the config file; move it to the secret store: codelab secret migrate` без `ghp_`; заголовок применяется
+
+#### Scenario: Ссылка рядом с префиксом схемы
+- **WHEN** заголовок `Authorization: "Bearer ${secret:codelab/mcp/gh/authorization}"`
+- **THEN** предупреждений нет
+
+#### Scenario: Токен вместо имени переменной
+- **WHEN** провайдер `p` задаёт `api_key_env: ghp_<36 символов>`, и сессия делает ход с его моделью
+- **THEN** загрузка успешна с предупреждением; ход завершается ошибкой `auth` `API key reference providers.p.api_key_env looks like a secret value, not a name; run: codelab secret migrate` без HTTP-запроса; ни текст, ни лог не содержат значения
+
+#### Scenario: DSN, разрезанный подстановкой
+- **WHEN** сервер `db` задаёт `env.DATABASE_URL: "postgres://app:pw-lit${SUFFIX}@localhost/db"`, а `db2` — `env.DATABASE_URL: "postgres://app:${PW}@localhost/db"`
+- **THEN** предупреждение только у `mcp.servers[db].env.DATABASE_URL`, без `pw-lit` в тексте
+
+#### Scenario: Недоверенный проект
+- **WHEN** проект вне `trusted_projects` задаёт в `.codelab/config.yaml` `providers.p.api_key: sk-<30 символов>`
+- **THEN** загрузка успешна, есть `config.project.untrusted_key` для `providers`, предупреждения `config.secret.in_file` нет
+
+#### Scenario: Литеральный токен в args через mcp add
+- **WHEN** `codelab-agent mcp add gh --type stdio --command gh-mcp --arg --token --arg ghp_<36 символов>`
+- **THEN** код `1`, файл не тронут, stderr называет `--env` и `${secret:…}` и не содержит значения
+
+### Requirement: Маскирование args MCP-серверов в выводе
+Значения `url` и `base_url` в `config get` после удаления userinfo (R4-5) SHALL проверяться `hasInlineSecret`; находка (токен в пути или под несекретным именем query-параметра) SHALL давать `<redacted>`. Маскер `config get` и `provider list` SHALL прогонять через `literalSecretTag` все листья, включая листья, описанные реестром, и значения с `${…}`; лист с находкой SHALL печататься `<redacted>`, даже если это лист реестра (`api_key`, `api_key_env`, `api_key_secret`). `config get` SHALL маскировать элементы `mcp.servers[*].args` (R4-6; design.md change `add-config-literal-secrets-and-migrate`, D5):
+- элемент с `literalSecretTag != null` → `<redacted>`;
+- элемент после флага, чьё имя без ведущих `-` секретное по нормализованному правилу имён, → `<redacted>`;
+- `--<секретное имя>=<значение>` → `--<имя>=<redacted>`;
+- элемент, состоящий только из ссылок `${…}`, — как есть; литеральная часть рядом со ссылкой после секретного флага или в `--<секретное имя>=…` → `<redacted>` (fail closed);
+- элемент-список или элемент-отображение (невалидный конфиг ручной правки) — маска целиком.
+
+Маскирование SHALL действовать при любом `--layer`.
+
+#### Scenario: Токены в args ручной правки
+- **WHEN** файл задаёт `args: ["--token", "plain-value-1", "--api-key=plain-value-2", "--verbose", "ghp_<36 символов>", "${TOKEN}"]`, и выполняется `codelab config get mcp.servers`
+- **THEN** вывод содержит `"--token"`, `"<redacted>"`, `"--api-key=<redacted>"`, `"--verbose"`, `"<redacted>"`, `"${TOKEN}"` и не содержит ни одного из трёх значений; код `0`; вывод `codelab-agent config get` совпадает байт в байт
+
+### Requirement: Значение заголовка или переменной mcp add из stdin
+`mcp add` (`McpServerCommands`, оба бинаря) SHALL принимать флаги `--header-stdin <Name>` с необязательным `--header-scheme <Scheme>` и `--env-stdin <NAME>` (R8-5; design.md change `add-config-literal-secrets-and-migrate`, D11):
+- значение SHALL читаться из stdin через `SecretInput`, как у `secret set` и `provider add --api-key-stdin` (с TTY — скрытый ввод, без TTY — поток без одного завершающего перевода строки); пустое, многострочное или не UTF-8 значение — ошибка значения с кодом `64`;
+- значение SHALL сохраняться в хранилище секретов под `SecretNames.forMcp(<server>, <Name|NAME>)` (`codelab/mcp/<server>/<key>`), а в файл SHALL записываться значение `${secret:<имя>}` в `headers.<Name>` (с `--header-scheme S` — `S ${secret:<имя>}`) или в `env.<NAME>`; строка со ссылкой SHALL записываться в YAML в одинарных кавычках без экранирования `/` (`'Bearer ${secret:codelab/mcp/gh/x}'`; design.md, D5);
+- на вызов допускается ровно один флаг `--header-stdin` или `--env-stdin`; два и больше — код `64` с `only one of --header-stdin, --env-stdin can be used per call`;
+- `--header-stdin` при `--type stdio` — код `64` с `mcp add: --header-stdin is for --type http`; `--env-stdin` при `--type http` — код `64` с `mcp add: --env-stdin is for --type stdio`;
+- `--header-scheme` без `--header-stdin` — код `64` с `mcp add: --header-scheme requires --header-stdin`; схема SHALL быть token по RFC 9110 (непустая, только буквы, цифры и ``!#%&'*+.^_`|~-``; `$` и пробелы не допускаются), иначе код `64` с текстом ``mcp add: --header-scheme must be a token of letters, digits and !#%&'*+.^_`|~- (RFC 9110)``;
+- флаг `-stdin` с именем, уже заданным в том же вызове, — код `64`: `mcp add: --header-stdin name is also set by --header` (имена заголовков сравниваются без учёта регистра), `mcp add: --env-stdin name is also set by --env` (имена переменных сравниваются с учётом регистра, как в POSIX);
+- имя в `--header-stdin`/`--env-stdin` с `literalSecretTag(Name) != null` — код `64` с текстом `mcp add: <флаг> expects a header or variable name, not a secret value`; имя НЕ SHALL печататься;
+- порядок: кандидат конфига без записи; проверка коллизии имени секрета (ниже); `SecretAdmin.checkStore`; чтение stdin; сохранение секрета; одна атомарная запись. Коллизия SHALL проверяться раньше хранилища. Бэкенд только для чтения — код `1`, stdin не читается, подсказка `secrets.backend: file` или переменной `CODELAB_SECRET_<…>`; существующий собственный секрет этого сервера заменяется со строкой `warning: replaced the existing secret <имя>`; сбой записи конфига после сохранения — код `1`, stderr `the secret <имя> was stored; the config was not changed: <причина>`;
+- коллизия, до чтения stdin и до хранилища, кодом `1`: целевое имя секрета упомянуто в загруженном конфиге другим сервером или провайдером (`${secret:<имя>}` или `api_key_secret`), или `forMcp` другого сервера конфига даёт то же имя (`GH`/`gh`, `my server`/`my-server`). Текст: `secret <имя> is already used by <ключ>; store the value with codelab secret set <another name> and reference it with --header/--env`; `<ключ>` — путь ссылки (`mcp.servers[GH].headers.Authorization`), а при совпадении только по `forMcp` — элемент сервера (`mcp.servers[GH]`);
+- значение НЕ SHALL попадать в stdout, stderr, лог и argv; `--header Name='${…}'` и `--env K='${…}'` SHALL работать как прежде.
+
+#### Scenario: Токен заголовка из stdin
+- **WHEN** `secrets.backend: file`, вызывается `codelab-agent mcp add gh --type http --url https://h --header-stdin Authorization --header-scheme Bearer`, в stdin — `ghp-test-value-1\n`
+- **THEN** код `0`; хранилище содержит `codelab/mcp/gh/authorization` со значением `ghp-test-value-1`; файл содержит `Authorization: 'Bearer ${secret:codelab/mcp/gh/authorization}'`; ни stdout, ни stderr не содержат значения
+
+#### Scenario: Два флага stdin
+- **WHEN** вызывается `mcp add gh --type stdio --command x --env-stdin A --env-stdin B`
+- **THEN** код `64`, stdin не читается, файл и хранилище не изменены
+
+#### Scenario: Бэкенд env
+- **WHEN** `secrets.backend` не задан, вызывается `mcp add gh --type stdio --command x --env-stdin GITHUB_TOKEN`
+- **THEN** код `1`, подсказка `secrets.backend: file` или `CODELAB_SECRET_CODELAB_MCP_GH_GITHUB_TOKEN`; stdin не читается; файл не изменён
+
+#### Scenario: Имя секрета занято другим сервером
+- **WHEN** конфиг содержит сервер `GH` со ссылкой `${secret:codelab/mcp/gh/authorization}`, вызывается `mcp add gh --type http --url https://h --header-stdin Authorization`
+- **THEN** код `1`, stdin не читается, stderr — `secret codelab/mcp/gh/authorization is already used by mcp.servers[GH].headers.Authorization; store the value with codelab secret set <another name> and reference it with --header/--env`; файл и хранилище не изменены
+
+#### Scenario: Имя секрета совпало по forMcp
+- **WHEN** конфиг содержит сервер `GH` без ссылок на секреты, `secrets.backend` не задан (`env`), вызывается `mcp add gh --type http --url https://h --header-stdin Authorization`
+- **THEN** код `1`, stderr — `secret codelab/mcp/gh/authorization is already used by mcp.servers[GH]; …` без подсказки про `secrets.backend`; stdin не читается; файл не изменён
+
+#### Scenario: Флаг stdin не для этого типа
+- **WHEN** вызывается `mcp add gh --type stdio --command x --header-stdin Authorization` или `mcp add gh --type http --url https://h --env-stdin TOKEN`
+- **THEN** код `64` с `mcp add: --header-stdin is for --type http` или `mcp add: --env-stdin is for --type stdio`; stdin не читается, файл и хранилище не изменены
+
+#### Scenario: Имя stdin повторяет --header
+- **WHEN** вызывается `mcp add gh --type http --url https://h --header 'authorization=${X}' --header-stdin Authorization`
+- **THEN** код `64` с `mcp add: --header-stdin name is also set by --header`; stdin не читается
+
+#### Scenario: Имя заголовка похоже на токен
+- **WHEN** вызывается `mcp add gh --type http --url https://h --header-stdin ghp_<36 символов>`
+- **THEN** код `64`, stderr содержит `expects a header or variable name, not a secret value` и не содержит `ghp_`; stdin не читается
 
