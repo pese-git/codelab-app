@@ -220,8 +220,10 @@
     * задача 8.5 — containment ссылок проектных слоёв и при чтении: проектный файл с целью вне
       `<cwd>/.codelab` — проблема загрузки, наблюдатель цель снаружи не читает (D5, D7);
     * известные границы до 8.11 — смешанное значение секретного заголовка (R1-1) и литеральные
-      токены в `mcp.servers[*].args` (R4-6) — закрываются 8.11 (предупреждение, отказ записи,
-      маскирование); висячая ссылка на месте каталога-предка в PERM-11 (R5-3).
+      токены в `mcp.servers[*].args` (R4-6) — **закрыты 8.11** (change
+      `add-config-literal-secrets-and-migrate`): R1-1 — предупреждением `config.secret.in_file` при
+      загрузке и отказом записи, R4-6 — отказом записи по шаблону и маскированием `args` в
+      `config get` (D4, D5); висячая ссылка на месте каталога-предка в PERM-11 (R5-3).
 
     Клиентская часть (мастер, страницы настроек, `AgentConfigStore`, реэкспорт `ConfigEdit` и
     `SettingsRegistry` в основном барели моста) — change `add-provider-setup-ui`. Сторож импортов и
@@ -252,6 +254,13 @@
 
     Вынос результата (задача 3.8, change `add-agent-core-output-spill`, SPL-3) от 8.11 больше не
     зависит: редакция файла выноса — вместе с P-10 после 1.0.
+
+    Итоги (итерации 0–4 — PR #233–#237, итерация 5 — матрица и DoD): P-12 — **частично**: `env` и
+    `file`, CFG-9 пп. 1–3 выполнены, хранилище ОС — после 1.0; P-10 — после 1.0 (R8-1). R1-1 и R4-6
+    закрыты (п. 10). Отступления: литерал в файле — рабочий ключ провайдера с предупреждением
+    (ослабление CFG-2, R8-4); `url`/`base_url` с паролем не распознаются (L5); писатель в `args` не
+    смотрит пару «секретный флаг + значение» (R8-9). Новых пакетов, зависимостей, правил сторожа и
+    рёбер графа нет (D9).
 
 **OpenSpec change.** [`add-agent-mcp-client`](../../../../openspec/changes/archive/2026-10-29-add-agent-mcp-client/) (8.1–8.4; scope: протокол MCP, транспорты, имена и
 виды MCP-инструментов, проверка разрешений; решение о библиотеке MCP — в его `design.md`),
@@ -338,7 +347,7 @@ stdio MUST) записано в §13.15, включение явным флаг�
 
   | Строка | Проверка | Тесты 8.9 |
   |---|---|---|
-  | P-12 (частично) | `core/config-rejects-inline-api-key`; ссылки по имени; бэкенды `env` и `file` | `packages/dart/codelab_agent_core/test/config/config_inline_secret_test.dart`, `config_secret_refs_test.dart`; `test/secrets/secret_names_test.dart`, `secret_resolver_test.dart`; `test/llm/routed_stream_function_secrets_test.dart`; `test/runtime/mcp_secret_values_test.dart`; `packages/dart/codelab_agent_io/test/secrets/env_secret_store_test.dart`, `file_secret_store_test.dart`, `open_secret_store_test.dart`, `secret_admin_test.dart`, `host_secrets_test.dart`; `test/cli/secret_commands_test.dart`, `config_commands_test.dart` (группа `secrets`); `apps/codelab_agent/test/secret_store_process_test.dart`, `secret_command_process_test.dart`, `config_invalid_process_test.dart`; `apps/codelab_cli/test/secret_command_test.dart`, `e2e/secret_command_test.dart`. Хранилище ОС — после 1.0, пункты 2–3 CFG-9 — 8.11 |
+  | P-12 (частично) | `core/config-rejects-inline-api-key` (с 8.11 — `core/config-warns-inline-api-key`, строка 8.11 ниже); ссылки по имени; бэкенды `env` и `file` | `packages/dart/codelab_agent_core/test/config/config_inline_secret_test.dart`, `config_secret_refs_test.dart`; `test/secrets/secret_names_test.dart`, `secret_resolver_test.dart`; `test/llm/routed_stream_function_secrets_test.dart`; `test/runtime/mcp_secret_values_test.dart`; `packages/dart/codelab_agent_io/test/secrets/env_secret_store_test.dart`, `file_secret_store_test.dart`, `open_secret_store_test.dart`, `secret_admin_test.dart`, `host_secrets_test.dart`; `test/cli/secret_commands_test.dart`, `config_commands_test.dart` (группа `secrets`); `apps/codelab_agent/test/secret_store_process_test.dart`, `secret_command_process_test.dart`, `config_invalid_process_test.dart`; `apps/codelab_cli/test/secret_command_test.dart`, `e2e/secret_command_test.dart`. Хранилище ОС — после 1.0, пункты 2–3 CFG-9 — 8.11 |
   | P-17 | `core/debug-secrets-never-logs-value` | `packages/dart/codelab_agent_core/test/secrets/debug_secrets_test.dart`; `apps/codelab_agent/test/serve_flags_test.dart`, `agent_host_secrets_test.dart` (группа `--debug-secrets`), `secret_store_process_test.dart` |
 
   Значение не попадает в argv дочерних процессов — `codelab_agent_io/test/secrets/secret_admin_test.dart`
@@ -369,7 +378,16 @@ stdio MUST) записано в §13.15, включение явным флаг�
 * Если сделано (8.11, Should — не блокирует MVP): `core/config-warns-inline-api-key` и тесты
   итераций 1–4 change `add-config-literal-secrets-and-migrate` зелёные; литерал в файле конфига даёт
   предупреждение без значения, `secret migrate` переносит его в хранилище. Тесты редакции
-  `core/redaction-*` — после 1.0 (R8-1).
+  `core/redaction-*` — после 1.0 (R8-1). **Выполнено** (задачи 5.1–5.3 и 5.5 change; итерации 1–4 —
+  PR #233–#237; ручной smoke — задача 5.4, результат в описании PR итерации 5; зелёный `melos run check`
+  в CI pull request итерации 5 — условие merge):
+
+  | Строка | Проверка | Тесты 8.11 |
+  |---|---|---|
+  | P-12 (частично, CFG-9 пп. 1–3) | `core/config-warns-inline-api-key`; распознавание, предупреждения загрузки, литеральный `api_key`, ссылки п. 3, R0-4 (итерация 1) | `packages/dart/codelab_agent_core/test/config/config_inline_secret_test.dart`, `inline_secrets_test.dart`, `config_secret_in_file_test.dart`, `config_secrets_test.dart`, `config_collect_all_test.dart`; `test/llm/literal_api_key_test.dart`; `test/runtime/config_reload_literals_test.dart`, `config_reload_test.dart`; `test/secrets/secret_names_test.dart`; `packages/dart/codelab_agent_io/test/cli/config_check_secret_warning_test.dart`, `config_commands_test.dart`, `config_get_masking_test.dart`, `provider_commands_test.dart`; `packages/dart/codelab_embedded/test/io/local_opener_test.dart`; `apps/codelab_agent/test/config_invalid_process_test.dart`, `agent_host_secrets_test.dart`, `provider_preconfig_process_test.dart` |
+  | R1-1, R4-6 | отказ записи литерала по шаблону в `headers`, `env`, `args`; маскирование `args` в `config get` (итерация 2) | `packages/dart/codelab_agent_io/test/config/literal_secret_rule_test.dart`, `config_writer_test.dart`; `test/cli/config_output_test.dart`, `cli_config_commands_test.dart`; `apps/codelab_cli/test/e2e/config_get_args_masking_test.dart` |
+  | P-12: перенос | `secret migrate`, `mcp add --header-stdin\|--env-stdin`, имя-значение у `secret set\|delete`, строка о 1.0 в справке (итерация 3) | `packages/dart/codelab_agent_io/test/secrets/secret_migrator_test.dart`; `test/cli/secret_migrate_command_test.dart`, `mcp_add_stdin_test.dart`, `secret_commands_test.dart`; `packages/dart/codelab_setup/test/secret_migrate_exports_test.dart`; `apps/codelab_agent/test/secret_migrate_process_test.dart`, `mcp_add_stdin_process_test.dart`; `apps/codelab_cli/test/e2e/secret_migrate_test.dart`, `e2e/mcp_add_stdin_test.dart`, `e2e/secret_command_test.dart`, `secret_command_test.dart` |
+  | P-12: codelab-app | `EmbeddedAgent.secretsInConfig`, предупреждение и кнопка `Migrate secrets` (итерация 4) | `packages/dart/codelab_embedded/test/secrets_in_config_test.dart`; `apps/codelab_desktop/test/app/embedded_secret_offer_test.dart`, `app_scope_embedded_test.dart`; `test/features/workbench/application/secret_migration_cubit_test.dart`, `secret_migration_turns_test.dart`; `test/features/workbench/presentation/secret_migration_banner_test.dart` |
 
 **Зависимости.** Этап 4; задачи 8.5–8.9 не зависят от MCP и идут параллельно; 8.11 — после
 8.5, 8.9 и 8.10 (схема конфига, хранилище секретов, писатель `ConfigWriter`). Этап 7 ждёт

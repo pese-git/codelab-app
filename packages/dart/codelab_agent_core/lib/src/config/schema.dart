@@ -81,6 +81,11 @@ final class SectionNode extends SchemaNode {
   final SchemaNode? named;
   final RegExp? nameFormat;
   final String nameLabel;
+
+  /// Секция терпит литеральные ключи секретов вне [fields]: схема не даёт
+  /// проблемы, а находку превращает в предупреждение `config.secret.in_file`
+  /// слой поиска секретов (CFG-9; D4, R8-4). По умолчанию `false`: в прочих
+  /// секциях неизвестный ключ остаётся проблемой схемы.
   final bool toleratesInlineSecrets;
 }
 

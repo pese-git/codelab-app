@@ -578,7 +578,8 @@ agent-configuration «Слои конфигурации и их порядок»
   looks like a secret value; pass the value on stdin` (D6).
 
 Ошибка писателя и предконфигурации — `ConfigInlineSecretException` с подсказкой; значение в сообщение
-не попадает (у предупреждения файла текст подсказки тот же плюс `codelab secret migrate`):
+не попадает (у предупреждения файла — свой шаблон `<key>: a secret is stored in the config file; move it to the
+secret store: <command>`, см. выше):
 `config.yaml:7:5: providers.openai.api_key: secrets are not stored in the config; run: codelab
 secret set codelab/openai, then use api_key_secret: codelab/openai (or api_key_env with an
 environment variable)`; у элемента `mcp.servers` вместо `api_key_secret` подсказка называет
@@ -1773,23 +1774,29 @@ docker run \
 `CODELAB_PROVIDER_CONFIG.contex_window: unknown key (did you mean context_window?)` (тексты
 английские, design.md change `add-config-writer-and-reload`, D3).
 
-**Ключ в конфиге.** Файл содержит `api_key: sk-proj-…` в `providers.openai`. Старт:
+**Ключ в конфиге** (с 8.11; решение пользователя 2026-11-04 R8-4, design.md change
+`add-config-literal-secrets-and-migrate`, D4, D7). Пользовательский `config.yaml` содержит
+`api_key: sk-proj-…` в `providers.openai`. Агент стартует, литерал работает как ключ провайдера, а
+загрузка и `codelab config check` печатают предупреждение без значения:
 
 ```text
-config.yaml:9:5: providers.openai.api_key: secrets are not stored in the config; run: codelab secret set codelab/openai, then use api_key_secret: codelab/openai (or api_key_env with an environment variable)
+warning: config.yaml:9:5: providers.openai.api_key: a secret is stored in the config file; move it to the secret store: codelab secret migrate
 ```
 
-Исправление:
+Исправление одной командой (в 1.0 — при `secrets.backend: file`):
 
 ```bash
-codelab secret set codelab/openai                      # ввод без эха; в 1.0 — при secrets.backend: file
-codelab config unset providers.openai.api_key          # итог валиден — запись проходит (8.10)
-codelab config set providers.openai.api_key_secret codelab/openai
+codelab secret migrate --dry-run   # <path>: providers.openai.api_key -> api_key_secret: codelab/openai (new)
+codelab secret migrate             # Moved providers.openai.api_key in <path> to secret codelab/openai
+                                   # restart the agent to use the moved secrets
 ```
 
-В 1.0 при `secrets.backend: auto` (= `env`) `secret set` отвечает кодом `1` и подсказывает
-`secrets.backend: file` или переменную `CODELAB_SECRET_CODELAB_OPENAI`; `config set`/`unset` —
-8.10, до него ключ убирается из файла вручную.
+В файле `api_key` заменяется на `api_key_secret: codelab/openai`, комментарии сохраняются. При
+`secrets.backend: auto` (= `env`) `migrate` отвечает кодом `1` и подсказывает `secrets.backend: file`
+или переменную `CODELAB_SECRET_CODELAB_OPENAI`. Литерал в файле `CODELAB_CONFIG` `migrate` не пишет:
+подсказка там — `codelab secret set codelab/openai`, затем `config unset`/`set` вручную. До 8.11
+такой файл не загружался (проблема `inlineSecret`); в JSON предконфигурации (§17.5.3) `api_key`
+по-прежнему проблема.
 
 **Сохранение формата.** До `codelab config set agent.default_model anthropic/claude-sonnet-4`:
 
@@ -1846,8 +1853,8 @@ Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.ya
 
 Нумерация продолжает §15.10 (CFG-1 … CFG-8); CFG-20 и CFG-21 — тоже в §15.10.
 
-9. **CFG-9.** Ключ API и другой секрет не принимаются значением ни в файле конфига, ни в JSON предконфигурации: только `api_key_secret`, `api_key_env` или `${secret:…}`/`${ENV}`. Ошибка называет ключ и команду `codelab secret set <name>` и не содержит значения.
-10. **CFG-10.** Значение секрета не попадает в лог (в том числе при `--debug-secrets`: ни значение, ни длина, ни префикс, ни хеш), в сообщения об ошибках, в argv дочерних процессов и в файл конфига; каждое прочитанное значение регистрируется в `Redactor` до первого использования.
+9. **CFG-9.** Ключ API и другой секрет не принимаются значением в JSON предконфигурации и при записи (писатель, CLI, страницы настроек): только `api_key_secret`, `api_key_env` или `${secret:…}`/`${ENV}`; ошибка называет ключ и команду `codelab secret set <name>` и не содержит значения. Литерал в **файле** конфига (пп. 1–3, §17.5.4) с 8.11 — предупреждение `config.secret.in_file` с командой переноса, без значения, а не ошибка (решение пользователя 2026-11-04 R8-4; design.md change `add-config-literal-secrets-and-migrate`, D4).
+10. **CFG-10.** Значение секрета не попадает в лог (в том числе при `--debug-secrets`: ни значение, ни длина, ни префикс, ни хеш), в сообщения об ошибках, в argv дочерних процессов и в файл конфига. Регистрация каждого прочитанного значения в `Redactor` — после 1.0 вместе с P-10 (решение пользователя 2026-11-04 R8-1); в 1.0 тексты ошибок провайдера вычищаются по `ProviderConfig.secrets` (design.md change `add-config-literal-secrets-and-migrate`, D2).
 11. **CFG-11.** Открытое хранение секретов — только при `secrets.backend = "file"` в глобальном конфиге; без этого ключа агент не пишет секреты на диск сам.
 12. **CFG-12.** Приоритет источников провайдера: флаг → окружение → локальный проектный → проектный → пользовательский конфиг. Ошибка предконфигурации называет переменную и поле и не цитирует значение.
 13. **CFG-13.** `ConfigWriter` либо атомарно заменяет файл YAML-документом, прошедшим валидацию §15.5, либо не меняет его вовсе; байты вне изменённых узлов (комментарии, порядок ключей, стиль) сохраняются; файл, изменённый после чтения, не перезаписывается (`ConfigConflictException`); TOML писатель не пишет никогда (CFG-20).
@@ -1898,7 +1905,7 @@ Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.ya
 `add-config-writer-and-reload`, D15.
 
 * `provider_preconfig_env_test.dart` — критерий матрицы **`core/provider-preconfig-from-env`**: `TYPE` + `CONFIG` без файлов → каталог с `env/<model>`, `default_model` из JSON; `_BASE64` даёт тот же `CoreConfig`; файл с `default_model` проигрывает окружению, `CODELAB_MODEL` выигрывает у предконфигурации; битый JSON, обе переменные сразу, одна из пары, не base64, неизвестное поле, `api_key` → `ConfigIssue` с источником-переменной (`inlineSecret` у `api_key`); ни в одном сообщении и записи лога нет подстроки значения (CFG-12). Флаги `serve` — `apps/codelab_agent/test/serve_flags_test.dart` и `provider_preconfig_process_test.dart`: затеняют переменные (`config.preconfig.shadowed`), один флаг и сочетание с `--provider` — `64`.
-* `config_inline_secret_test.dart` — **`core/config-rejects-inline-api-key`**: `api_key` в провайдере, `Authorization = "Bearer ghp_…"` литералом в MCP, `api_key_env = "sk-…"`, `api_key` в JSON предконфигурации → `ConfigInlineSecretException` с `codelab secret set codelab/<id>`; текст исключения не содержит значения; `${secret:…}` и `${ENV}` принимаются (CFG-9). В 8.9 тест покрывает пункт 1 CFG-9 (ключ `api_key` и родственные, `suggestedSecretName`); литералы по шаблонам §12.4 (пункты 2–3) — 8.11 (design.md change `add-agent-secret-store`, D10, D12).
+* `config_inline_secret_test.dart` — **`core/config-warns-inline-api-key`** (с 8.11 заменил `core/config-rejects-inline-api-key`, решение пользователя 2026-11-04 R8-4): литеральный `api_key` в файле — предупреждение `config.secret.in_file` с `codelab secret migrate` и ключ провайдера; токен у элемента `mcp.servers` — предупреждение, поле не применяется; текст без значения; `${secret:…}` и `${ENV}` принимаются (CFG-9, п. 1). До 8.11 тот же файл проверял отказ загрузки `ConfigInlineSecretException` (design.md change `add-agent-secret-store`, D10, D12). Отказ для `api_key` в JSON предконфигурации — `provider_preconfig_env_test.dart`.
 * `debug_secrets_test.dart` — **`core/debug-secrets-never-logs-value`**: `MemorySecretStore` со значением `sk-test-0123456789abcdef` под `api_key_secret` провайдеров `openai` и `org`, резолвер с `debug`; две функции `createRoutedStreamFunction` над одним резолвером на фейковом `http.Client` → записи `secrets.lookup` с `found: true` по порядку `memory`, `memory`, `cache`, `cache`, повторный ход первой функции новых записей не добавляет; в сырых `LogRecord` **до** редакции нет значения, его подстрок из 4+ символов, длины и SHA-256 (hex и base64); без флага `secrets.lookup` нет (CFG-10).
 * `settings_registry_complete_test.dart` — **`core/settings-registry-complete`**: алгоритм §17.5.8; отдельный случай — фиктивный ключ, добавленный в схему теста, роняет проверку с текстом про `SettingDescriptor` (CFG-19).
 * `mcp_reconnect_test.dart` — **`core/mcp-reconnect-after-crash`**: fake-транспорт закрывается после подключения; fake `Clock` и `Random(0)` → задержки 1, 2, 4, 8, 16, 30, 30 с (с джиттером в пределах +20 %, не больше 30 с); после успеха и 10 с жизни счётчик сброшен; вызов во время простоя → текст `not connected`; вызов в полёте при падении → `disconnected during the call`; после переподключения с новым `tools/list` реестр меняется только на границе шага (CFG-17).
@@ -1926,6 +1933,14 @@ Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.ya
 — 8.10.
 * `cli_config_commands_test.dart` (8.10, `codelab_agent_io/test/cli/`): `config path|get|set|unset`, `provider add --api-key-stdin` на фейковом `SecretInput` (секрет записан, в конфиге только имя), `provider list|remove`, `mcp add|list|remove`, повтор при конфликте, предупреждение о замене существующего секрета (D6); `config_output_test.dart` — маскирование R0-2 по веткам (`inlineSecretKeys`, секретные заголовки и `env`, ссылки как есть, `<from env:…>`, userinfo URL, непрозрачные поддеревья `<opaque: edit the file>`); `config_edit_test.dart` (ядро) — `ConfigTarget`, `ConfigSnapshot.get`, равенство правок (D5); `codelab_setup/test/config_write_exports_test.dart` — реэкспорты моста.
 * Процессные тесты 8.10 (Dart VM, `Timeout(Duration(seconds: 60))`, временные каталоги; D15): `apps/codelab_agent/test/config_reload_process_test.dart` (правка `config.yaml` работающего `serve --stdio` → `config_option_update` не позже 5 с; битая правка → кадров нет), `config_write_command_process_test.dart`; `apps/codelab_cli/test/e2e/config_write_command_test.dart` — совпадение вывода `codelab` и `codelab-agent`; `codelab_embedded/test/embedded_config_reload_test.dart` — источник закрыт после `dispose`, наблюдателей и процессов не осталось.
+
+**Секреты в конфиге 8.11** (design.md change `add-config-literal-secrets-and-migrate`; решения
+пользователя R8-1…R8-11):
+* ядро, `codelab_agent_core/test/`: `config/inline_secrets_test.dart` — `literalSecretTag` по каждому шаблону, литеральные части между `${…}`, DSN с паролем, разрезанным подстановкой, белый список, враждебный 1 МиБ не дольше 2 с, `findInlineSecrets` пп. 1–3 (D3); `config/config_secret_in_file_test.dart` — предупреждения файловых слоёв по одному шаблону, `CODELAB_CONFIG` с `codelab secret set <name>`, недоверенный проект без `in_file`, предконфигурация без изменений, маркер `UnusableKeyRef` без проблемы формата, R8-6 через слои, выключенный сервер, дескриптор `providers.*.api_key` (D4); `config/config_inline_secret_test.dart` — `core/config-warns-inline-api-key`; `llm/literal_api_key_test.dart` — литеральный ключ без резолвера, вычистка из текста `401`, ссылка п. 3 — `auth` без HTTP (D2, D4); `runtime/config_reload_literals_test.dart` — литералы в правиле R0-4 (D12);
+* `codelab_agent_io/test/`: `cli/config_check_secret_warning_test.dart` — `warning:` в `config check`, маркер не ищется в хранилище; `cli/provider_commands_test.dart` — `key: literal in config file`, `--api-key-secret` удаляет литерал (R8-6); `cli/config_get_masking_test.dart`, `cli/config_output_test.dart` — маскирование литерального `api_key`, ссылки п. 3 и `args` (D5, R4-6); `config/literal_secret_rule_test.dart` — отказ записи по шаблону в `headers`, `env`, `args` (R1-1, OQ3, R8-5); `secrets/secret_migrator_test.dart` и `cli/secret_migrate_command_test.dart` — `secret migrate`: слои, `--dry-run`, бэкенд `env`, конфликт и `--force`, суффиксы `-2`, `cannot be stored`, недоверенный проект (H4), повтор после сбоя записи, итог слияния R8-10 и R8-11 (D7); `cli/mcp_add_stdin_test.dart` — `--header-stdin|--env-stdin|--header-scheme` (D11); `cli/secret_commands_test.dart` — имя, похожее на значение (D6);
+* мосты: `codelab_setup/test/secret_migrate_exports_test.dart`; `codelab_embedded/test/secrets_in_config_test.dart` — `EmbeddedAgent.secretsInConfig` и мигратор из `io.dart` (D8);
+* процессы и e2e: `apps/codelab_agent/test/config_invalid_process_test.dart` (литерал — старт с предупреждением, значения нет в stderr и логе), `secret_migrate_process_test.dart`, `mcp_add_stdin_process_test.dart`; `apps/codelab_cli/test/e2e/secret_migrate_test.dart`, `mcp_add_stdin_test.dart`, `config_get_args_masking_test.dart` — вывод, коды и байты файла совпадают с `codelab-agent`, строка о 1.0 в справке (R8-7, D13);
+* codelab-app: `apps/codelab_desktop/test/features/workbench/application/secret_migration_cubit_test.dart`, `secret_migration_turns_test.dart`, `test/features/workbench/presentation/secret_migration_banner_test.dart`, `test/app/embedded_secret_offer_test.dart`, `app_scope_embedded_test.dart` (D8).
 
 ---
 

@@ -24,6 +24,9 @@ import '../../application/secret_migration_cubit.dart';
 class SecretMigrationBanner extends StatelessWidget {
   const SecretMigrationBanner({required this.onRestart, super.key});
 
+  /// Перезапуск встроенного агента после переноса: повторное подключение тем
+  /// же профилем (D8, п. 5). Передаётся в диалог; вызывается по `Restart agent`,
+  /// когда ход не идёт. Само подключение выполняет владелец колбэка.
   final VoidCallback onRestart;
 
   @override
@@ -98,6 +101,9 @@ const restartWaitsForTurn = 'Wait for the current turn to finish.';
 class SecretMigrationDialog extends StatelessWidget {
   const SecretMigrationDialog({required this.onRestart, super.key});
 
+  /// Перезапуск агента по `Restart agent` (после успешного или частичного
+  /// переноса); тот же колбэк, что у `SecretMigrationBanner.onRestart`. После
+  /// вызова диалог закрывается через `SecretMigrationCubit.closeDialog`.
   final VoidCallback onRestart;
 
   @override
