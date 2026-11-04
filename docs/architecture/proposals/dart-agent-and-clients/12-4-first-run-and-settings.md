@@ -413,8 +413,8 @@ final class BootWatchdog {
 
 ## 12.4.3. Алгоритм: первый запуск CLI (U-17)
 
-Срабатывает, когда `codelab` запускается с профилем `embedded` (`-a embedded` или без `--agent`, если
-в `profiles.json` нет профиля `default`, §9.11) и в
+Срабатывает, когда `codelab` запускается с профилем `embedded` (`-a embedded` или без `--agent`: без
+него CLI всегда запускает встроенный агент, §9.11; change `add-app-settings-shell`, D21) и в
 `embedded`-профиле нет готового провайдера.
 
 1. До запуска агента `composition_root.dart` читает `AgentConfigStore.snapshot(cwd)` и вызывает
@@ -820,6 +820,21 @@ sequenceDiagram
 из навигации (SETUP-17). Ключи тестов — `settings-nav-<page>`; существующие `settings-providers` и
 `settings-mcp` сохраняются.
 
+**Реализация оболочки и «Connection»** — OpenSpec change `add-app-settings-shell`, первый из двух changes
+настроек (второй — `add-provider-setup-ui`). Решения change, уточняющие этот раздел:
+* видимые страницы задаёт composition root, порядок — таблица выше; поиск «Find a setting» — по
+  заголовкам и ключевым словам страниц; при окне уже 760 px навигация сверху (D3);
+* `AppDestination` в этом change — только `WorkbenchDestination` и `SettingsDestination`; остальные
+  экраны A13 вводит `add-app-navigation-shell` (D1);
+* радиокнопка строки профиля выбирает профиль по умолчанию (`codelab.connection.default_profile`,
+  без него — встроенный агент, как у `codelab` без `--agent`); «Connect» переключает текущее окно (D5).
+  `default` — алиас встроенного агента: id зарезервирован (как `embedded`, шаг 2 ниже), старая запись
+  `default` в `profiles.json` игнорируется, страница показывает о ней InfoBar с «Remove» (D5, D21);
+* «Restart agent» до `ClientWorkspace.restart` (§12.6.7) — переподключение тем же профилем, для
+  WebSocket — «Reconnect» (D9); «Connect on start» — `codelab.connection.connect_on_start`, по
+  умолчанию выключен (D8);
+* «Join a session started in the CLI» (D-10) — статичная справка без lease (D10).
+
 **Страница «Redaction» (D-24, Could).** Читает и пишет `redact.*` (agent-core-architecture
 §12.4.3) только в `ConfigTarget.user()` и `ConfigTarget.projectLocal(cwd)` (SETUP-3).
 
@@ -858,7 +873,8 @@ sequenceDiagram
 2. **Имя и id.** Поле «Name» (`label`), под ним id: по умолчанию — имя в нижнем регистре, всё
    кроме `[a-z0-9]` заменено на `-`; id можно поправить до сохранения, после — нет (на него
    ссылаются `--agent`, снимок восстановления и память модели папки, §12.6.9). Ошибки у поля:
-   id пуст, занят другим профилем, равен зарезервированному `embedded` или содержит `:` (иначе
+   id пуст, занят другим профилем, равен зарезервированному `embedded` или `default` (change
+   `add-app-settings-shell`, D21) или содержит `:` (иначе
    `--agent` разберёт его как `stdio:…` или URL).
 3. **Поля stdio.** «Command» и «Arguments» — одна строка аргументов, разбор как у shell
    (кавычки, экранирование; тот же разборщик, что `--agent stdio:…`, задача 6.2); «Run in the
@@ -889,6 +905,26 @@ sequenceDiagram
    подключения (подсказка «Disconnect first»); удаление спрашивает, удалить ли и секрет
    `codelab/profiles/<id>/token`, по умолчанию — да. Для этого `ProfileStore` получает метод
    `remove(String id)`.
+
+**Уточнения change `add-app-settings-shell`:**
+* id нового профиля — `^[a-z0-9][a-z0-9._-]{0,63}$`, подмножество правила CLI (общее правило
+  `isValidProfileId` для app и `codelab profiles add`). Нижний регистр выбран заранее, чтобы имя
+  секрета `codelab/profiles/<id>/token` проходило `SecretNames`. Занятость проверяется без учёта
+  регистра (D11);
+* **токен в `add-app-settings-shell` — только ссылка на переменную окружения** (решение пользователя
+  2026-11-04, Q2): в шаге 4 у «Token» два варианта — «No token» и «From environment variable»
+  (`tokenRef: env:<NAME>`, любая переменная). Значение токена app не принимает и не хранит;
+  подсказки называют переменную и предупреждают, что app из Finder не видит переменных оболочки
+  (D13). Ссылку одинаково понимают app и CLI (`ProfileTokenRef`, `ProfileSecretSource` kit; D15);
+* **в change `add-provider-setup-ui` переходят** «Use stored secret» и «Store a new token» (шаг 4),
+  проверка нового токена из памяти (шаг 5), порядок «секрет → профиль» с откатом (шаг 6,
+  SETUP-19 в части `SecretStore`), удаление `codelab/profiles/<id>/token` при «Remove» (шаг 8),
+  форма ссылки «имя секрета», порт `ProfileSecrets` поверх `ClientSecretAccess`
+  (`codelab_setup/io.dart`) и зависимость app от `codelab_setup`;
+* «Test connection» у встроенного агента не предлагается: проверка открыла бы второй экземпляр
+  ядра в процессе app (D12);
+* пометка «Not tested» — состояние страницы, в `profiles.json` не пишется (D14);
+* флажок шага 6 называется «Use by default»: окно в 1.0 одно (D5).
 
 Профили WebSocket не делают страницу записываемой для удалённого агента: «Add profile» меняет
 только локальный `profiles.json` клиента, поэтому кнопка доступна и при `RemoteReadOnly`
@@ -1240,6 +1276,16 @@ SETUP-21); `profile_probe_test.dart` (scripted-агент из `codelab_acp_test
 активного профиля недоступна; профиль stdio с несуществующей командой → «Command not found»,
 «Save» с пометкой «Not tested». Widget-тест `add_profile_dialog_test.dart`: без stdio-резолвера
 переключателя типа нет (SETUP-22).
+
+Полный список тестов оболочки и «Connection» задаёт `tasks.md` change `add-app-settings-shell`:
+* app — `navigation_cubit_test.dart`, `settings_shell_test.dart`, `connection_settings_cubit_test.dart`,
+  `connection_page_test.dart`, `add_profile_dialog_test.dart`;
+* kit — `profile_token_ref_test.dart`, `profile_draft_test.dart`, `profile_probe_test.dart`
+  (`profile_commit_test.dart` — в change `add-provider-setup-ui`);
+* `codelab_client_io` — `probe_failure_test.dart`;
+* CLI — `profile_token_test.dart`, `profiles_command_test.dart`;
+* интеграционные `settings_navigation_flow_test.dart` и `connection_profiles_flow_test.dart` — на
+  устройстве только в `release/*`.
 
 **Агент** (тесты ядра, здесь только ссылка): `acp/slash-mcp-list`, перечитывание конфига с
 `config_option_update` и сохранение старого конфига при невалидном новом — по §17.5 ядра.

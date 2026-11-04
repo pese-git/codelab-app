@@ -651,6 +651,12 @@ final class ToolDockState {
 final class SettingsDestination extends AppDestination { final SettingsPage page; }  // §12.4.9
 ```
 
+Иерархия вводится двумя OpenSpec changes. `add-app-settings-shell` вводит `NavigationCubit`,
+`WorkbenchDestination`, `SettingsDestination` (с `returnTo` — сессией, к которой ведут Esc и «Back»),
+сочетание Cmd/Ctrl+, и кнопку «Settings» сайдбара (design.md этого change, D1, D2).
+`add-app-navigation-shell` добавляет остальные ветки (`Boot`, `Onboarding`, `ProjectPicker`, оверлеи
+workbench) и сочетания шага 3 вместе с их экранами. Пустых веток «на вырост» нет (AGENTS.md §13).
+
 0. **Раскладка рабочего места** (идея — Claude desktop, собрано из виджетов `fluent_ui`):
 
    | Зона | Виджеты `fluent_ui` | Что в ней |
@@ -1013,7 +1019,7 @@ macOS. Пакет-виджет markdown не добавляется.
 * `session_search_cubit_test.dart` (после MVP, D-17): ввод склеивается 250 мс; `inactive` при пустом
   тексте и `All`; смена текста отбрасывает итог прежнего поколения; `close()` закрывает
   `SessionSearch` (DSK-21, DSK-22);
-* `navigation_cubit_test.dart` (A13): каждый `AppDestination` достижим из рабочего места одним
+* `navigation_cubit_test.dart` (A13; переходы workbench ↔ настройки — change `add-app-settings-shell`, остальное — `add-app-navigation-shell`): каждый `AppDestination` достижим из рабочего места одним
   переходом; Esc и «Back» возвращают к исходной сессии; второй запрос модального окна
   при открытом первом ставится в очередь (DSK-24, DSK-25);
 * `command_palette_cubit_test.dart` (R-20): группы и метки источника команд; «Go to» вызывает тот

@@ -50,7 +50,8 @@
    сборки (что включено и почему выключено).
    **Решение пользователя 2026-11-02** (design.md change `add-embedded-agent-mode`, D13):
    без `--agent` используется профиль `default` из `profiles.json`, если он есть, иначе встроенный
-   агент. Вне scope change `add-embedded-agent-mode`, отдельными change: план сборки в
+   агент (*изменено change `add-app-settings-shell`, D21, 2026-11-04: без `--agent` и с `-a default` —
+   всегда встроенный агент, id `default` зарезервирован*). Вне scope change `add-embedded-agent-mode`, отдельными change: план сборки в
    `codelab config check` (вывод обязан совпадать у CLI и `codelab-agent`, а план зависит от
    профиля хоста) и флаги CLI `--permission-mode`, `--config`, `--log-file` (таблица §9.11).
    До них работают `CODELAB_CONFIG`, `permissions.mode` конфига и `--approve`.
@@ -93,7 +94,8 @@
      закрытия 10 s (`embedded.close_timeout`), номер попытки подключения в `ClientWorkspace` против
      гонки повторного Connect (D6, D9). Should-часть (`codelab_setup` для мастера, D-05) — в change
      `add-provider-setup-ui`.
-   * **7.6** — в CLI без `--agent` берётся профиль `default`, иначе встроенный агент (D13, п. 1);
+   * **7.6** — в CLI без `--agent` берётся профиль `default`, иначе встроенный агент (D13, п. 1;
+     *изменено change `add-app-settings-shell`, D21: всегда встроенный агент*);
      резолвер — `apps/codelab_cli/lib/src/embedded_transport_resolver.dart`, открыватель — из
      `composition_root.dart`; `--debug-secrets` (D13, п. 9). План сборки в `codelab config check` и
      флаги `--permission-mode`, `--config`, `--log-file` — вне scope (D13, пп. 5–6).
