@@ -49,9 +49,13 @@ import '../features/workbench/application/secret_migration_cubit.dart';
 import '../features/workbench/application/secret_migration_runner.dart';
 import '../features/workbench/application/secret_migration_turns.dart';
 import '../features/workbench/application/shell_cubit.dart';
+import 'default_settings_pages.dart';
 import 'embedded_logger.dart';
 import 'embedded_secret_migration_runner.dart';
 import 'embedded_transport_resolver.dart';
+import 'navigation/navigation_cubit.dart';
+import 'navigation/settings_page.dart';
+import 'navigation/settings_page_store.dart';
 import 'secret_migration_offer.dart';
 
 part 'app_scope.module.cherrypick.g.dart';
@@ -67,6 +71,7 @@ Scope createCodeLabRootScope({
   agent.EmbeddedAgentOpener? embeddedOpener,
   Duration? embeddedCloseTimeout,
   Map<String, String>? environment,
+  SettingsPages? settingsPages,
 }) {
   final scope = CherryPick.openRootScope()
     ..installModules([
@@ -90,7 +95,9 @@ Scope createCodeLabRootScope({
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
       ),
-      CodeLabPresentationModule(),
+      CodeLabPresentationModule(
+        settingsPages: settingsPages ?? defaultSettingsPages,
+      ),
       $CodeLabTransportsModuleContract(),
       $CodeLabProtocolApplicationModuleContract(),
       $CodeLabRootLifecycleModuleContract(),
@@ -347,8 +354,39 @@ final class CodeLabPlatformModule extends Module {
 }
 
 final class CodeLabPresentationModule extends Module {
+  CodeLabPresentationModule({required SettingsPages settingsPages})
+    : _settingsPages = settingsPages;
+
+  /// Страницы настроек, видимые в этой сборке; шов тестов
+  /// (`createCodeLabRootScope(settingsPages:)`, design.md change
+  /// `add-app-settings-shell`, D3).
+  final SettingsPages _settingsPages;
+
   @override
   void builder(Scope currentScope) {
+    // Переходы рабочее место ↔ настройки (D1, D2). Активная сессия для
+    // `returnTo` читается у фасада в момент ухода.
+    bind<SettingsPages>().toInstance(_settingsPages);
+    bind<SettingsPageStore>().toInstance(
+      const SharedPreferencesSettingsPageStore(),
+    );
+    bind<NavigationCubit>()
+        .toProvide(
+          () => NavigationCubit(
+            store: currentScope.resolve<SettingsPageStore>(),
+            pages: currentScope.resolve<SettingsPages>(),
+            activeSessionId: () =>
+                currentScope.resolve<CodeLabShellCubit>().state.activeSessionId,
+            selectSessionIfOpen: (id) => currentScope
+                .resolve<CodeLabShellCubit>()
+                .selectSessionIfOpen(id),
+            logger: StructuredLogLogger('codelab_desktop.settings').bind({
+              logCategoryKey: applicationLogCategory,
+              logComponentKey: 'settings',
+            }),
+          ),
+        )
+        .singleton();
     // Токен WebSocket из формы подключения: Cubit кладёт значение, резолвер
     // читает его по ссылке профиля (design D8 change `extract-acp-client-kit`).
     bind<InMemorySecretSource>().toInstance(InMemorySecretSource());
@@ -472,6 +510,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     CodeLabShellCubit shellCubit,
     SecretMigrationCubit secretMigrationCubit,
     SecretMigrationOffer secretMigrationOffer,
+    NavigationCubit navigationCubit,
   ) => CodeLabRootLifecycle(
     application: application,
     transport: transport,
@@ -481,6 +520,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     shellCubit: shellCubit,
     secretMigrationCubit: secretMigrationCubit,
     secretMigrationOffer: secretMigrationOffer,
+    navigationCubit: navigationCubit,
   );
 }
 
@@ -494,6 +534,7 @@ final class CodeLabRootLifecycle implements Disposable {
     required CodeLabShellCubit shellCubit,
     required SecretMigrationCubit secretMigrationCubit,
     required SecretMigrationOffer secretMigrationOffer,
+    required NavigationCubit navigationCubit,
   }) : _application = application,
        _transport = transport,
        _workspace = workspace,
@@ -501,7 +542,8 @@ final class CodeLabRootLifecycle implements Disposable {
        _embeddedCloseSettings = embeddedCloseSettings,
        _shellCubit = shellCubit,
        _secretMigrationCubit = secretMigrationCubit,
-       _secretMigrationOffer = secretMigrationOffer;
+       _secretMigrationOffer = secretMigrationOffer,
+       _navigationCubit = navigationCubit;
 
   final AcpClientApplication _application;
   final AcpTransport _transport;
@@ -524,6 +566,7 @@ final class CodeLabRootLifecycle implements Disposable {
 
   /// Закрывается после резолвера: он до конца пишет в источник.
   final SecretMigrationOffer _secretMigrationOffer;
+  final NavigationCubit _navigationCubit;
   var _isDisposed = false;
 
   @override
@@ -533,6 +576,7 @@ final class CodeLabRootLifecycle implements Disposable {
     }
 
     _isDisposed = true;
+    await _navigationCubit.close();
     await _secretMigrationCubit.close();
     await _shellCubit.close();
     await _workspace.dispose();
@@ -558,6 +602,8 @@ final class CodeLabDependencies {
     required this.shellCubit,
     required this.logBuffer,
     required this.secretMigrationCubit,
+    required this.navigationCubit,
+    required this.settingsPages,
   });
 
   final AcpClientApplication application;
@@ -565,6 +611,14 @@ final class CodeLabDependencies {
 
   /// Предупреждение и диалог переноса секретов встроенного агента (D8).
   final SecretMigrationCubit secretMigrationCubit;
+
+  /// Переходы рабочее место ↔ настройки (design.md change
+  /// `add-app-settings-shell`, D2).
+  final NavigationCubit navigationCubit;
+
+  /// Страницы настроек, видимые в этой сборке; пока набор пуст, «Settings»
+  /// открывает прежний диалог подключения (Migration Plan, п. 2).
+  final SettingsPages settingsPages;
 
   /// Backs the in-app log viewer (docked panel and full-screen master-detail
   /// — `replace-debug-log-panel-with-fluent/design.md`, Decision 3/4).
@@ -625,6 +679,8 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     shellCubit: _scope.resolve<CodeLabShellCubit>(),
     logBuffer: _scope.resolve<LogBuffer>(),
     secretMigrationCubit: _scope.resolve<SecretMigrationCubit>(),
+    navigationCubit: _scope.resolve<NavigationCubit>(),
+    settingsPages: _scope.resolve<SettingsPages>(),
   );
 
   @override

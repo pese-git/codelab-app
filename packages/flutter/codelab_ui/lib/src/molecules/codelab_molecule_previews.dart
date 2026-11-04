@@ -5,6 +5,8 @@ import 'codelab_approval_option_group.dart';
 import 'codelab_connection_banner.dart';
 import 'codelab_connection_status_row.dart';
 import 'codelab_prompt_composer.dart';
+import 'codelab_settings_row.dart';
+import 'codelab_settings_section.dart';
 import 'codelab_tool_call_summary.dart';
 import 'codelab_view_mode.dart';
 import '../atomics/atomics.dart';
@@ -153,6 +155,33 @@ void codelabPreviewPromptSubmit(String prompt) {}
 void codelabPreviewApprovalSelected(String optionId) {}
 
 void codelabPreviewCancel() {}
+
+@Preview(
+  name: 'Settings section with rows',
+  group: codelabMoleculePreviewGroup,
+  size: Size(640, 220),
+)
+Widget codelabSettingsSectionPreview() {
+  return _AcpPreviewSurface(
+    child: CodeLabSettingsSection(
+      title: 'Behavior',
+      children: [
+        CodeLabSettingsRow(
+          leading: FluentIcons.power_button,
+          title: 'Connect on start',
+          description: 'Off: the app opens disconnected and waits for Connect',
+          trailing: ToggleSwitch(checked: true, onChanged: (_) {}),
+        ),
+        CodeLabSettingsRow(
+          leading: FluentIcons.refresh,
+          title: 'Restart agent',
+          description: 'Cancels running turns and reloads open sessions.',
+          trailing: Button(onPressed: () {}, child: const Text('Restart')),
+        ),
+      ],
+    ),
+  );
+}
 
 class _AcpPreviewSurface extends StatelessWidget {
   const _AcpPreviewSurface({required this.child});

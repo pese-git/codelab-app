@@ -8,6 +8,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
 import '../../../app/app_scope.dart';
+import '../../../app/navigation/navigation_cubit.dart';
 import '../application/shell_cubit.dart';
 import '../application/ui_mappers.dart'
     show connectionTooltipOf, sidebarProjectsOf;
@@ -58,6 +59,8 @@ class CodeLabShell extends StatelessWidget {
               state.connectionStatus == CodeLabConnectionStatus.connected
               ? () => unawaited(cubit.createSession())
               : null,
+          onOpenSettings: () =>
+              _openSettings(context, SettingsOpenSource.shortcut),
           onToggleSidebar: layoutClass.sidebarAsColumn
               ? cubit.toggleSidebarCollapsed
               : cubit.toggleSidebarOverlay,
@@ -128,7 +131,8 @@ class CodeLabShell extends StatelessWidget {
                         ? () => unawaited(cubit.loadMoreSessions())
                         : null,
                     onOpenFolder: () => unawaited(cubit.browseForProject()),
-                    onSettings: () => ConnectionSetupDialog.show(context),
+                    onSettings: () =>
+                        _openSettings(context, SettingsOpenSource.sidebar),
                   ),
                   sessionPane: WorkbenchMainPane(
                     state: state,
@@ -173,6 +177,21 @@ class CodeLabShell extends StatelessWidget {
       },
     );
   }
+}
+
+/// Открывает настройки: Cmd/Ctrl+, и кнопка «Settings» сайдбара.
+///
+/// Пока в сборке нет ни одной страницы настроек (`SettingsPages.isEmpty`,
+/// итерация 1 change `add-app-settings-shell`), открывается прежний диалог
+/// подключения: пустого экрана быть не должно (SETUP-17; Migration Plan,
+/// п. 2). Итерация 2 заменит диалог страницей «Connection» и уберёт ветку.
+void _openSettings(BuildContext context, SettingsOpenSource source) {
+  final dependencies = codeLabDependenciesOf(context);
+  if (dependencies.settingsPages.isEmpty) {
+    unawaited(ConnectionSetupDialog.show(context));
+    return;
+  }
+  unawaited(dependencies.navigationCubit.openSettings(source: source));
 }
 
 /// Панель Protocol дока: записи протокола текущей сессии (бывший Inspector)

@@ -53,6 +53,7 @@ final class $CodeLabRootLifecycleModuleContract
             currentScope.resolve<CodeLabShellCubit>(),
             currentScope.resolve<SecretMigrationCubit>(),
             currentScope.resolve<SecretMigrationOffer>(),
+            currentScope.resolve<NavigationCubit>(),
           ),
         )
         .singleton();
