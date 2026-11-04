@@ -51,14 +51,20 @@ abstract interface class RecentProjectsStore {
 /// Порт хранилища профилей подключения.
 ///
 /// Почему: CLI выбирает агента по сохранённому профилю
-/// (`codelab --agent <id>`, этап 6), а секреты в профиль не попадают —
-/// только ссылки (design D8).
+/// (`codelab --agent <id>`, этап 6), а app показывает те же профили на
+/// странице «Connection»; секреты в профиль не попадают — только ссылки
+/// (design D8). Файл общий (`$CODELAB_HOME/profiles.json`), поэтому оба
+/// клиента видят одни и те же данные (design.md change
+/// `add-app-settings-shell`, D7).
 ///
 /// Как использовать: [save] заменяет профиль с тем же `id` на месте или
-/// добавляет новый в конец; [load] возвращает профили в порядке хранения;
-/// [remove] удаляет профиль по `id` (`codelab profiles remove`, design.md
-/// change `add-codelab-cli`, D4). App этот порт не использует: форма
-/// подключения app — черновик в состоянии Cubit.
+/// добавляет новый в конец; [load] возвращает профили в порядке хранения и
+/// ничего не прячет — в том числе прежнюю запись `default`, которую
+/// потребитель отделяет через `usableStoredProfiles`; [remove] удаляет
+/// профиль по `id` без проверки резерва (`codelab profiles remove`, design.md
+/// change `add-codelab-cli`, D4; так удаляется и запись `default`, D21).
+/// Реализация [save] отклоняет профиль с зарезервированным id
+/// (`reservedProfileIds`) `ArgumentError`.
 abstract interface class ProfileStore {
   Future<List<ConnectionProfile>> load();
 

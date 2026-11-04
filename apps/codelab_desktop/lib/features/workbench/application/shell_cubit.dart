@@ -8,8 +8,10 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         AcpClientBackend,
         ClientWorkspace,
         ConfigTransportResolver,
-        InMemorySecretSource,
+        ConnectionProfile,
+        ProfileSecretSource,
         RecentProjectsStore,
+        SecretSource,
         SessionStatusView,
         WorkspaceDiagnostic;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
@@ -18,8 +20,10 @@ import 'package:codelab_acp_transports/codelab_acp_transports.dart'
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/platform/connection_preferences.dart';
 import '../../../core/platform/dock_layout_store.dart';
 import '../../../core/platform/project_folder_picker.dart';
+import '../../settings/application/default_profile_resolver.dart';
 import 'active_session_cubit.dart';
 import 'connection_cubit.dart';
 import 'layout_cubit.dart';
@@ -31,10 +35,7 @@ import 'transcript_view_cubit.dart';
 import 'ui_mappers.dart' show paletteCatalogOf;
 
 export 'connection_cubit.dart'
-    show
-        CodeLabStdioTransportFactory,
-        CodeLabTransportType,
-        CodeLabWebSocketTransportFactory;
+    show CodeLabStdioTransportFactory, CodeLabWebSocketTransportFactory;
 export 'layout_cubit.dart'
     show
         kDockMaxWidth,
@@ -60,6 +61,10 @@ export 'ui_mappers.dart'
 ///
 /// Как использовать: [CodeLabShellParts.build]; закрывает части фасад —
 /// на этом change он их единственный потребитель (design D10).
+/// [initialProfile] — профиль окна до первого подключения; с
+/// [defaultProfiles] его заменяет профиль по умолчанию (D5, change
+/// `add-app-settings-shell`), [preferences] включает «Connect on start»,
+/// [eventLogger] получает событие `connection.connect_on_start` (D17).
 final class CodeLabShellParts {
   CodeLabShellParts._({
     required this.changes,
@@ -73,16 +78,18 @@ final class CodeLabShellParts {
   });
 
   factory CodeLabShellParts.build({
-    required StdioAcpAgentProfile profile,
+    required ConnectionProfile initialProfile,
     required AcpClientApplication application,
     required ClientWorkspace workspace,
-    required InMemorySecretSource secrets,
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
     DirectoryExists? directoryExists,
     DockLayoutStore? dockLayoutStore,
+    DefaultProfileResolver? defaultProfiles,
+    ConnectionPreferences? preferences,
     Logger? logger,
+    Logger? eventLogger,
   }) {
     final changes = ShellChanges();
     final diagnostics = ShellDiagnostics(logger: logger);
@@ -102,12 +109,14 @@ final class CodeLabShellParts {
     );
     final connection = ConnectionCubit(
       changes: changes,
-      profile: profile,
+      initialProfile: initialProfile,
       workspace: workspace,
-      secrets: secrets,
       diagnostics: diagnostics,
       settings: settings,
       activeSession: activeSession,
+      defaultProfiles: defaultProfiles,
+      preferences: preferences,
+      eventLogger: eventLogger,
     );
     return CodeLabShellParts._(
       changes: changes,
@@ -166,14 +175,15 @@ final class CodeLabShellParts {
 /// публичные методы; сам пишет в журнал только диагностику kit.
 ///
 /// Как использовать: граф cherrypick (`app_scope.dart`) передаёт
-/// [workspace], [secrets] и [parts]. Без них Cubit строит рабочее
+/// [workspace], [secrets] и [parts]; [profile] ему не нужен — начальный
+/// профиль уже в [parts]. Без [parts] [profile] обязателен. Без них Cubit строит рабочее
 /// пространство и части сам поверх [application] и фабрик транспорта: так
 /// его создают тесты `widget_test.dart`. Параметры use case-ов
 /// `codelab_client_acp` (`createSessionUseCase`, `sendPromptUseCase` и другие)
 /// не используются; они остаются, пока эти тесты создают Cubit напрямую.
 final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   factory CodeLabShellCubit({
-    required StdioAcpAgentProfile profile,
+    StdioAcpAgentProfile? profile,
     required AcpClientApplication application,
     CreateSession? createSessionUseCase,
     SendPrompt? sendPromptUseCase,
@@ -184,7 +194,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     CodeLabStdioTransportFactory? stdioTransportFactory,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     ClientWorkspace? workspace,
-    InMemorySecretSource? secrets,
+    SecretSource? secrets,
     CodeLabShellParts? parts,
     required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
@@ -193,7 +203,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     DockLayoutStore? dockLayoutStore,
     Logger? logger,
   }) {
-    final secretSource = secrets ?? InMemorySecretSource();
+    // Без графа токена из окружения нет: ссылки `env:` дают подключение без
+    // токена (тесты передают свой источник).
+    final secretSource = secrets ?? const ProfileSecretSource({});
     final clientWorkspace =
         workspace ??
         ClientWorkspace(
@@ -212,10 +224,14 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       parts:
           parts ??
           CodeLabShellParts.build(
-            profile: profile,
+            initialProfile: stdioConnectionProfileOf(
+              profile ??
+                  (throw ArgumentError.notNull(
+                    'profile (required without parts)',
+                  )),
+            ),
             application: application,
             workspace: clientWorkspace,
-            secrets: secretSource,
             workingDirectoryProvider: workingDirectoryProvider,
             projectFolderPicker: projectFolderPicker,
             recentProjectsStore: recentProjectsStore,
@@ -254,35 +270,19 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   SettingsCubit get _settings => _parts.settings;
   LayoutCubit get _layout => _parts.layout;
 
-  void selectTransport(CodeLabTransportType transportType) =>
-      _connection.selectTransport(transportType);
-
-  void updateStdioProfileName(String value) =>
-      _connection.updateStdioProfileName(value);
-
-  void updateStdioCommand(String value) =>
-      _connection.updateStdioCommand(value);
-
-  void updateStdioArgs(String value) => _connection.updateStdioArgs(value);
-
-  void updateStdioEnv(String value) => _connection.updateStdioEnv(value);
-
-  void updateWebSocketEndpoint(String value) =>
-      _connection.updateWebSocketEndpoint(value);
-
-  void updateWebSocketToken(String value) =>
-      _connection.updateWebSocketToken(value);
-
   Future<void> selectProject(String path) => _settings.selectProject(path);
 
   Future<void> browseForProject() => _settings.browseForProject();
 
-  void toggleRunAgentFromProjectDirectory(bool value) =>
-      _settings.toggleRunAgentFromProjectDirectory(value);
-
-  Future<void> connect() => _connection.connect();
+  /// Подключает окно к [profile], а без него — к профилю окна (до первого
+  /// подключения — к профилю по умолчанию).
+  Future<void> connect([ConnectionProfile? profile]) =>
+      _connection.connect(profile);
 
   Future<void> reconnect() => _connection.reconnect();
+
+  /// «Connect on start» (D8): app зовёт его после первого кадра; один раз.
+  Future<void> connectOnStart() => _connection.connectOnStart();
 
   void resizeSessionsPane(double width) => _layout.resizeSessionsPane(width);
 
@@ -482,14 +482,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     final transcriptView = parts.transcriptView.state;
     return CodeLabShellState(
       connectionStatus: connection.connectionStatus,
-      transportType: connection.transportType,
-      stdioProfileName: connection.stdioProfileName,
-      stdioCommand: connection.stdioCommand,
-      stdioArgs: connection.stdioArgs,
-      stdioEnv: connection.stdioEnv,
-      webSocketEndpoint: connection.webSocketEndpoint,
-      webSocketToken: connection.webSocketToken,
-      transportLabel: connection.transportType.label,
+      transportLabel: connection.transportLabel,
       profileLabel: connection.selectedProfileLabel,
       connectionDetail: connection.selectedConnectionDetail,
       connectionMessage: connection.connectionMessage,
@@ -522,7 +515,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       sessionsPaneWidth: layout.sessionsPaneWidth,
       dockWidth: layout.dockWidth,
       selectedProjectPath: settings.selectedProjectPath,
-      runAgentFromProjectDirectory: settings.runAgentFromProjectDirectory,
       recentProjects: settings.recentProjects,
       hasMoreSessions: sessions.hasMoreSessions,
       currentPlan: active.currentPlan,

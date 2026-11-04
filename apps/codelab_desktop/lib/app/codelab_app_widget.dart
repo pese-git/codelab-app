@@ -17,12 +17,11 @@ class CodeLabApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final dependencies = codeLabDependenciesOf(context);
 
-    // BlocProvider wraps FluentApp (not `home`) so the cubit stays visible
-    // to every route on FluentApp's Navigator, including the modal dialog
-    // ConnectionSetupDialog pushes via showDialog — a route pushed by the
-    // same Navigator sits as a sibling of `home`'s content in the element
-    // tree, not a descendant of it, so a provider scoped inside `home`
-    // would not be reachable from the dialog.
+    // BlocProvider оборачивает FluentApp, а не `home`: Cubit должен быть
+    // виден каждому маршруту Navigator-а FluentApp, в том числе модальным
+    // диалогам `showDialog` (перенос секретов, удаление профиля). Маршрут
+    // того же Navigator-а в дереве — сосед содержимого `home`, а не его
+    // потомок, поэтому provider внутри `home` диалогу не виден.
     return MultiBlocProvider(
       providers: [
         BlocProvider.value(value: dependencies.shellCubit),
@@ -70,6 +69,18 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
 
   /// Предыдущее назначение: `BlocListener` отдаёт только текущее.
   AppDestination _previous = const WorkbenchDestination();
+
+  @override
+  void initState() {
+    super.initState();
+    // «Connect on start» (D8): после первого кадра, а не в `initState`, чтобы
+    // запуск не блокировал отрисовку окна (D-15). Один раз гарантирует Cubit.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(context.read<CodeLabShellCubit>().connectOnStart());
+      }
+    });
+  }
 
   @override
   void dispose() {

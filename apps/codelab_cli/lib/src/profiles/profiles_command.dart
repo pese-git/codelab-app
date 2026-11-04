@@ -6,11 +6,9 @@ import '../cli_args.dart';
 import '../exit_codes.dart';
 import 'profile_arg.dart';
 
-final _profileId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.-]*$');
-
 /// Команда `codelab profiles list|show <id>|add <id> <agent>|remove <id>`.
 ///
-/// Почему: без профиля `default` CLI не знает, какого агента запускать, а
+/// Почему: внешнего агента CLI запускает только по явному `-a <id>`, а
 /// писать `profiles.json` руками — ошибкоопасно (U-06, DoD §9.11). Команда
 /// работает без запуска агента.
 ///
@@ -18,6 +16,11 @@ final _profileId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.-]*$');
 /// результат — код выхода. Неверные аргументы — [UsageError] (код `64`
 /// у вызывающего); неизвестный профиль у `show` и `remove` — текст в
 /// [stderr] и [failureExit].
+///
+/// Прежняя запись `default` (D21): `list` её не показывает, `show default`
+/// печатает встроенный профиль, обе команды пишут в [stderr] одно
+/// предупреждение [ignoredDefaultProfileWarning]; удаление `default`
+/// работает как у любого профиля. Файл автоматически не меняется.
 Future<int> runProfilesCommand(
   List<String> args, {
   required ProfileStore store,
@@ -26,23 +29,40 @@ Future<int> runProfilesCommand(
 }) async {
   switch (args) {
     case ['list']:
-      final profiles = await _load(store);
-      if (profiles.isEmpty) {
+      final (:usable, :ignoredDefault) = usableStoredProfiles(
+        await _load(store),
+      );
+      if (ignoredDefault) {
+        stderr.writeln(ignoredDefaultProfileWarning);
+      }
+      if (usable.isEmpty) {
         stdout.writeln(
           'No agent profiles. Add one with '
-          '"codelab profiles add default stdio:<command>".',
+          '"codelab profiles add <id> stdio:<command>".',
         );
         return okExit;
       }
-      final width = profiles
+      final width = usable
           .map((profile) => profile.id.length)
           .reduce((a, b) => a > b ? a : b);
-      for (final profile in profiles) {
+      for (final profile in usable) {
         stdout.writeln('${profile.id.padRight(width)}  ${_summary(profile)}');
       }
       return okExit;
     case ['show', final id]:
-      final profile = (await _load(store)).where((p) => p.id == id).firstOrNull;
+      final (:usable, :ignoredDefault) = usableStoredProfiles(
+        await _load(store),
+      );
+      if (id == defaultAgentWord) {
+        // `default` — алиас встроенного агента (D21): запись файла не
+        // показывается, о ней предупреждение.
+        if (ignoredDefault) {
+          stderr.writeln(ignoredDefaultProfileWarning);
+        }
+        _show(embeddedCliProfile, stdout);
+        return okExit;
+      }
+      final profile = usable.where((p) => p.id == id).firstOrNull;
       if (profile == null) {
         stderr.writeln('codelab: Unknown agent profile "$id".');
         return failureExit;
@@ -50,14 +70,21 @@ Future<int> runProfilesCommand(
       _show(profile, stdout);
       return okExit;
     case ['add', final id, final value]:
-      // `embedded` встроен и в `profiles.json` не пишется (D7): ни как id, ни
-      // как значение.
+      // `embedded` и `default` встроены и в `profiles.json` не пишутся (D7,
+      // D21): ни как id, ни как значение. Резерв проверяется раньше
+      // синтаксиса id, чтобы сообщение называло причину.
       if (id == embeddedAgentWord || value == embeddedAgentWord) {
         throw const UsageError(embeddedIsBuiltInMessage);
       }
-      if (!_profileId.hasMatch(id)) {
+      if (isReservedProfileId(id) || value == defaultAgentWord) {
+        throw const UsageError(defaultIsBuiltInMessage);
+      }
+      // Правило id нового профиля — общее с app (D11, D15). Прежние профили с
+      // другими id читаются и выбираются как раньше: проверка только здесь.
+      if (!isValidProfileId(id)) {
         throw UsageError(
-          'Invalid profile id "$id": use letters, digits, ".", "_" and "-".',
+          'Invalid profile id "$id": use lowercase letters, digits, ".", '
+          '"_" and "-", starting with a letter or digit, up to 64 characters.',
         );
       }
       final profile = inlineAgentProfile(value, id: id);
@@ -118,9 +145,16 @@ void _show(ConnectionProfile profile, StringSink out) {
         ..writeln('type: webSocket')
         ..writeln('uri: ${profile.uri}');
       if (profile.tokenRef case final ref?) {
-        out.writeln(
-          'token: ${ref.startsWith('env:') ? '\$${ref.substring(4)}' : ref}',
-        );
+        // Только имя переменной; значение токена не читается. Ссылка не вида
+        // `env:` не печатается совсем: в поле, рассчитанное на имя, мог быть
+        // вписан сам секрет (решение по безопасности итерации 2 change
+        // `add-app-settings-shell`, приоритет 1 AGENTS.md §2).
+        out.writeln(switch (ProfileTokenRef.parse(ref)) {
+          EnvTokenRef(:final name) => 'token: \$$name',
+          UnsupportedTokenRef() =>
+            'token: unrecognized token reference (not supported in this '
+                'version)',
+        });
       }
     case EmbeddedProfile():
       out

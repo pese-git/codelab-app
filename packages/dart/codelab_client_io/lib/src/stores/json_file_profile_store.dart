@@ -10,7 +10,10 @@ import 'json_file.dart';
 ///
 /// Как использовать: `JsonFileProfileStore('<home>/.codelab/profiles.json')`;
 /// формат — `{"version": 1, "profiles": [...]}`. Нет файла — пустой список;
-/// битый файл или неизвестный вид профиля — `FormatException`.
+/// битый файл или неизвестный вид профиля — `FormatException`. [save]
+/// отклоняет `EmbeddedProfile` и зарезервированный id (`reservedProfileIds`)
+/// `ArgumentError`, файл при этом не меняется; [load] возвращает прежнюю
+/// запись `default` как есть, а [remove] её удаляет (D21).
 final class JsonFileProfileStore implements ProfileStore {
   JsonFileProfileStore(this.path);
 
@@ -49,6 +52,16 @@ final class JsonFileProfileStore implements ProfileStore {
         profile.id,
         'profile',
         'an embedded profile is built in and is not saved',
+      );
+    }
+    // `embedded` и `default` — имена встроенного агента (design.md change
+    // `add-app-settings-shell`, D21). Проверка тоже до чтения файла. Старая
+    // запись `default` в файле остаётся и удаляется только `remove`.
+    if (isReservedProfileId(profile.id)) {
+      throw ArgumentError.value(
+        profile.id,
+        'profile',
+        'the id is reserved for the built-in agent',
       );
     }
     final profiles = [...await load()];

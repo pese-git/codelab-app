@@ -104,6 +104,7 @@ Future<int> _run(
         profile: await resolveAgentProfile(
           options.agent,
           store: JsonFileProfileStore(home.profilesFile),
+          onWarning: io.stderr.writeln,
         ),
         environment: environment,
         stdout: io.stdout,
@@ -439,6 +440,7 @@ Future<int> _runRepl(
   final profile = await resolveAgentProfile(
     options.agent,
     store: JsonFileProfileStore(home.profilesFile),
+    onWarning: io.stderr.writeln,
   );
   await home.ensureExists();
 
@@ -471,8 +473,13 @@ Future<int> _runRepl(
     mode: options.configMode,
     // `/profile <id>` — те же формы, что у `--agent`, и профили
     // `profiles.json` (spec codelab-cli «Профили подключения CLI»).
-    resolveProfile: (id) =>
-        resolveAgentProfile(id, store: JsonFileProfileStore(home.profilesFile)),
+    resolveProfile: (id) => resolveAgentProfile(
+      id,
+      store: JsonFileProfileStore(home.profilesFile),
+      // Без предупреждения о прежней записи `default`: оно показывается один
+      // раз при старте (до TUI), а посреди сессии stderr писал бы поверх
+      // экрана интерфейса; в REPL оно также только шумит между ходами (D21).
+    ),
   );
   // SIGTERM — безопасное завершение с кодом 143; SIGINT вне raw-режима —
   // как Ctrl+C, а не остановка (spec codelab-cli «Сигналы CLI»; design.md,
@@ -511,6 +518,7 @@ Future<int> _runTui(
   final profile = await resolveAgentProfile(
     options.agent,
     store: JsonFileProfileStore(home.profilesFile),
+    onWarning: io.stderr.writeln,
   );
   await home.ensureExists();
 
@@ -533,8 +541,13 @@ Future<int> _runTui(
     continueLast: options.continueLast,
     model: options.model,
     mode: options.configMode,
-    resolveProfile: (id) =>
-        resolveAgentProfile(id, store: JsonFileProfileStore(home.profilesFile)),
+    resolveProfile: (id) => resolveAgentProfile(
+      id,
+      store: JsonFileProfileStore(home.profilesFile),
+      // Без предупреждения о прежней записи `default`: оно показывается один
+      // раз при старте (до TUI), а посреди сессии stderr писал бы поверх
+      // экрана интерфейса; в REPL оно также только шумит между ходами (D21).
+    ),
     unicode: supportsUnicode(environment),
     color:
         selectOutputSurface(
@@ -580,6 +593,7 @@ Future<int> _runHeadless(
   final profile = await resolveAgentProfile(
     options.agent,
     store: JsonFileProfileStore(home.profilesFile),
+    onWarning: io.stderr.writeln,
   );
 
   final runtime = buildCliRuntime(

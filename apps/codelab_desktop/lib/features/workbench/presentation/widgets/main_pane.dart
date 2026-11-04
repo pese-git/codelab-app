@@ -4,8 +4,8 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../../application/shell_cubit.dart';
-import '../workbench_shell.dart' show selectPaletteCommand;
-import 'connection_setup_dialog.dart';
+import '../workbench_shell.dart'
+    show openConnectionSettings, selectPaletteCommand;
 import '../../application/ui_mappers.dart' show projectNameOf;
 
 class WorkbenchMainPane extends StatelessWidget {
@@ -87,7 +87,7 @@ class WorkbenchMainPane extends StatelessWidget {
                     onConnect: cubit.connect,
                     onReconnect: cubit.reconnect,
                     onConfigureConnection: () =>
-                        ConnectionSetupDialog.show(context),
+                        openConnectionSettings(context),
                   ),
                 ),
               ],
@@ -121,7 +121,7 @@ class WorkbenchMainPane extends StatelessWidget {
               status: status,
               message: state.connectionMessage,
               onReconnect: cubit.reconnect,
-              onConfigureConnection: () => ConnectionSetupDialog.show(context),
+              onConfigureConnection: () => openConnectionSettings(context),
             ),
             const SizedBox(height: 12),
           ],

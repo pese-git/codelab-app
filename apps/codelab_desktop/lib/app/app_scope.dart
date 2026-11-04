@@ -7,6 +7,7 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_io/codelab_client_io.dart'
     show
         DirectoryExists,
+        JsonFileProfileStore,
         IoTerminalProcessRunner,
         IoTextFileIo,
         IoWorkingDirectoryProvider,
@@ -17,8 +18,10 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         AcpClientBackend,
         ClientWorkspace,
         ConfigTransportResolver,
-        InMemorySecretSource,
+        ProfileSecretSource,
+        ProfileStore,
         RecentProjectsStore,
+        SecretSource,
         WorkspaceSnapshotStore;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_acp_transports/io.dart';
@@ -41,10 +44,15 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import 'package:structured_log_remote_sync/structured_log_remote_sync.dart'
     show RemoteSyncLogOutput;
 
+import '../core/platform/connection_preferences.dart';
 import '../core/platform/dock_layout_store.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
+import '../features/settings/application/connection_settings_cubit.dart';
+import '../features/settings/application/default_profile_resolver.dart';
+import '../features/settings/application/embedded_profile.dart';
+import '../features/settings/application/profiles_unavailable.dart';
 import '../features/workbench/application/secret_migration_cubit.dart';
 import '../features/workbench/application/secret_migration_runner.dart';
 import '../features/workbench/application/secret_migration_turns.dart';
@@ -56,6 +64,7 @@ import 'embedded_transport_resolver.dart';
 import 'navigation/navigation_cubit.dart';
 import 'navigation/settings_page.dart';
 import 'navigation/settings_page_store.dart';
+import 'connection_environment.dart';
 import 'secret_migration_offer.dart';
 
 part 'app_scope.module.cherrypick.g.dart';
@@ -72,7 +81,14 @@ Scope createCodeLabRootScope({
   Duration? embeddedCloseTimeout,
   Map<String, String>? environment,
   SettingsPages? settingsPages,
+  ProfileStore? profileStore,
 }) {
+  // Одно окружение на открыватель встроенного агента, профили и токены:
+  // `CODELAB_HOME` и переменные читаются из одного места (design.md change
+  // `add-app-settings-shell`, D7, D15).
+  final connectionEnvironment = ConnectionEnvironment.of(
+    environment ?? Platform.environment,
+  );
   final scope = CherryPick.openRootScope()
     ..installModules([
       CodeLabLoggingModule(
@@ -90,10 +106,14 @@ Scope createCodeLabRootScope({
       CodeLabEmbeddedAgentModule(
         embeddedOpener: embeddedOpener,
         closeTimeout: embeddedCloseTimeout,
-        environment: environment,
+        environment: connectionEnvironment.variables,
       ),
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
+      ),
+      CodeLabConnectionModule(
+        environment: connectionEnvironment,
+        profileStore: profileStore,
       ),
       CodeLabPresentationModule(
         settingsPages: settingsPages ?? defaultSettingsPages,
@@ -353,6 +373,59 @@ final class CodeLabPlatformModule extends Module {
   }
 }
 
+/// Профили подключения, их настройки и источник токена (design.md change
+/// `add-app-settings-shell`, D5, D7, D15).
+///
+/// Почему отдельный модуль: профили, `shared_preferences` выбора по умолчанию
+/// и токены — один сквозной контур («где лежат профили и откуда берётся
+/// токен»), которым пользуются и рабочее место, и страница настроек.
+///
+/// Как использовать: [profileStore] — шов тестов
+/// (`createCodeLabRootScope(profileStore:)`: в `testWidgets` настоящий файл
+/// зависал бы); без него — `JsonFileProfileStore('$CODELAB_HOME/profiles.json')`,
+/// тот же файл, что у CLI. Токен профиля читает `ProfileSecretSource` из
+/// окружения: значение нигде не сохраняется.
+final class CodeLabConnectionModule extends Module {
+  CodeLabConnectionModule({
+    required ConnectionEnvironment environment,
+    ProfileStore? profileStore,
+  }) : _environment = environment,
+       _profileStore = profileStore;
+
+  final ConnectionEnvironment _environment;
+  final ProfileStore? _profileStore;
+
+  @override
+  void builder(Scope currentScope) {
+    bind<ConnectionEnvironment>().toInstance(_environment);
+    bind<ProfileStore>().toInstance(
+      _profileStore ??
+          switch (_environment.profilesPath) {
+            final path? => JsonFileProfileStore(path),
+            // Недопустимый CODELAB_HOME: ни записи, ни каталогов (D7).
+            null => UnavailableProfileStore(
+              _environment.homeProblem ?? 'the home folder is not available',
+            ),
+          },
+    );
+    bind<ConnectionPreferences>().toInstance(
+      const SharedPreferencesConnectionPreferences(),
+    );
+    bind<SecretSource>().toInstance(
+      ProfileSecretSource(_environment.variables),
+    );
+    bind<DefaultProfileResolver>()
+        .toProvide(
+          () => DefaultProfileResolver(
+            store: currentScope.resolve<ProfileStore>(),
+            preferences: currentScope.resolve<ConnectionPreferences>(),
+            logger: _settingsLogger(),
+          ),
+        )
+        .singleton();
+  }
+}
+
 final class CodeLabPresentationModule extends Module {
   CodeLabPresentationModule({required SettingsPages settingsPages})
     : _settingsPages = settingsPages;
@@ -380,16 +453,13 @@ final class CodeLabPresentationModule extends Module {
             selectSessionIfOpen: (id) => currentScope
                 .resolve<CodeLabShellCubit>()
                 .selectSessionIfOpen(id),
-            logger: StructuredLogLogger('codelab_desktop.settings').bind({
-              logCategoryKey: applicationLogCategory,
-              logComponentKey: 'settings',
-            }),
+            logger: _settingsLogger(),
           ),
         )
         .singleton();
-    // Токен WebSocket из формы подключения: Cubit кладёт значение, резолвер
-    // читает его по ссылке профиля (design D8 change `extract-acp-client-kit`).
-    bind<InMemorySecretSource>().toInstance(InMemorySecretSource());
+    // Токен WebSocket-профиля — ссылка `env:<NAME>`: значение читает
+    // `ProfileSecretSource` из окружения в момент открытия транспорта
+    // (design.md change `add-app-settings-shell`, D13, D15).
     bind<ClientWorkspace>()
         .toProvide(
           () => ClientWorkspace(
@@ -401,7 +471,7 @@ final class CodeLabPresentationModule extends Module {
                 stdio: currentScope.resolve<CodeLabStdioTransportFactory>(),
                 webSocket: currentScope
                     .resolve<CodeLabWebSocketTransportFactory>(),
-                secrets: currentScope.resolve<InMemorySecretSource>(),
+                secrets: currentScope.resolve<SecretSource>(),
               ),
               // Встроенный агент открывает только свой резолвер; у
               // `ConfigTransportResolver` профиль `embedded` не поддержан
@@ -418,16 +488,20 @@ final class CodeLabPresentationModule extends Module {
     bind<CodeLabShellParts>()
         .toProvide(
           () => CodeLabShellParts.build(
-            profile: currentScope.resolve<StdioAcpAgentProfile>(),
+            // До выбора профиль окна — встроенный агент; профиль по
+            // умолчанию подставляет `DefaultProfileResolver` (D5).
+            initialProfile: embeddedConnectionProfile,
             application: currentScope.resolve<AcpClientApplication>(),
             workspace: currentScope.resolve<ClientWorkspace>(),
-            secrets: currentScope.resolve<InMemorySecretSource>(),
             workingDirectoryProvider: currentScope
                 .resolve<WorkingDirectoryProvider>(),
             projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
             recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
             directoryExists: currentScope.resolve<DirectoryExists>(),
             dockLayoutStore: currentScope.resolve<DockLayoutStore>(),
+            defaultProfiles: currentScope.resolve<DefaultProfileResolver>(),
+            preferences: currentScope.resolve<ConnectionPreferences>(),
+            eventLogger: _settingsLogger(),
           ),
         )
         .singleton();
@@ -451,10 +525,8 @@ final class CodeLabPresentationModule extends Module {
     bind<CodeLabShellCubit>()
         .toProvide(
           () => CodeLabShellCubit(
-            profile: currentScope.resolve<StdioAcpAgentProfile>(),
             application: currentScope.resolve<AcpClientApplication>(),
             workspace: currentScope.resolve<ClientWorkspace>(),
-            secrets: currentScope.resolve<InMemorySecretSource>(),
             parts: currentScope.resolve<CodeLabShellParts>(),
             workingDirectoryProvider: currentScope
                 .resolve<WorkingDirectoryProvider>(),
@@ -463,8 +535,29 @@ final class CodeLabPresentationModule extends Module {
           ),
         )
         .singleton();
+    // Страница «Connection»: новый Cubit на каждое открытие (файл
+    // перечитывается при открытии, D4). Закрывает его страница.
+    bind<ConnectionSettingsCubit>().toProvide(() {
+      final environment = currentScope.resolve<ConnectionEnvironment>();
+      return ConnectionSettingsCubit(
+        store: currentScope.resolve<ProfileStore>(),
+        preferences: currentScope.resolve<ConnectionPreferences>(),
+        workspace: currentScope.resolve<ClientWorkspace>(),
+        commands: currentScope.resolve<CodeLabShellParts>().connection,
+        environment: environment.variables,
+        profilesPath: environment.profilesPath,
+        logger: _settingsLogger(),
+      );
+    });
   }
 }
+
+/// Структурный логгер событий настроек (design.md change
+/// `add-app-settings-shell`, D17): категория `application`, компонент
+/// `settings`.
+Logger _settingsLogger() => StructuredLogLogger(
+  'codelab_desktop.settings',
+).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'settings'});
 
 @module()
 abstract class CodeLabTransportsModuleContract extends Module {
@@ -604,6 +697,7 @@ final class CodeLabDependencies {
     required this.secretMigrationCubit,
     required this.navigationCubit,
     required this.settingsPages,
+    required this.createConnectionSettingsCubit,
   });
 
   final AcpClientApplication application;
@@ -616,9 +710,12 @@ final class CodeLabDependencies {
   /// `add-app-settings-shell`, D2).
   final NavigationCubit navigationCubit;
 
-  /// Страницы настроек, видимые в этой сборке; пока набор пуст, «Settings»
-  /// открывает прежний диалог подключения (Migration Plan, п. 2).
+  /// Страницы настроек, видимые в этой сборке.
   final SettingsPages settingsPages;
+
+  /// Создаёт Cubit страницы «Connection»; страница владеет им и закрывает
+  /// (design.md change `add-app-settings-shell`, D4).
+  final ConnectionSettingsCubit Function() createConnectionSettingsCubit;
 
   /// Backs the in-app log viewer (docked panel and full-screen master-detail
   /// — `replace-debug-log-panel-with-fluent/design.md`, Decision 3/4).
@@ -681,6 +778,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     secretMigrationCubit: _scope.resolve<SecretMigrationCubit>(),
     navigationCubit: _scope.resolve<NavigationCubit>(),
     settingsPages: _scope.resolve<SettingsPages>(),
+    createConnectionSettingsCubit: _scope.resolve<ConnectionSettingsCubit>,
   );
 
   @override

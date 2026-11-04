@@ -7,21 +7,23 @@ import '../cli_args.dart';
 const agentTokenVariable = 'CODELAB_AGENT_TOKEN';
 
 /// Ссылка на токен в `WebSocketProfile.tokenRef`: значение читает
-/// [EnvSecretSource], в профиль и `profiles.json` оно не попадает.
+/// `ProfileSecretSource` kit, в профиль и `profiles.json` оно не попадает.
 const agentTokenRef = 'env:$agentTokenVariable';
-
-/// Id профиля, который используется без `--agent`.
-const defaultProfileId = 'default';
 
 /// Слово `--agent`, которое выбирает встроенный агент.
 const embeddedAgentWord = 'embedded';
+
+/// Слово `--agent` — алиас [embeddedAgentWord] (design.md change
+/// `add-app-settings-shell`, D21): «профиль по умолчанию» у CLI и app —
+/// встроенный агент, а не запись файла.
+const defaultAgentWord = 'default';
 
 /// Профиль хоста встроенного агента CLI (design.md change
 /// `add-embedded-agent-mode`, D2).
 const embeddedHostProfile = 'embedded-cli';
 
-/// Встроенный агент CLI: выбирается словом `embedded` или умолчанием без
-/// `--agent` и `default` в `profiles.json`; в файл не записывается (D7).
+/// Встроенный агент CLI: выбирается словом `embedded`, алиасом `default` или
+/// умолчанием без `--agent`; в файл не записывается (D7, D21).
 const embeddedCliProfile = ConnectionProfile.embedded(
   id: embeddedAgentWord,
   label: 'Embedded agent',
@@ -33,46 +35,82 @@ const embeddedCliProfile = ConnectionProfile.embedded(
 const embeddedIsBuiltInMessage =
     'embedded is built in; use --agent $embeddedAgentWord';
 
+/// Текст отказа сохранить `default` профилем (spec codelab-cli «default
+/// зарезервирован в profiles add»; D21).
+const defaultIsBuiltInMessage =
+    'default is the built-in agent; use --agent $embeddedAgentWord';
+
+/// Предупреждение о прежней записи `default` в `profiles.json`: запись
+/// игнорируется. Команды, аргументов, URL и `env` записи в тексте нет
+/// (`observability.md`, D21).
+const ignoredDefaultProfileWarning =
+    'profile "default" in profiles.json is ignored: default is the built-in '
+    'agent; remove it with codelab profiles remove default';
+
 /// Превращает значение `--agent` в профиль подключения.
 ///
-/// Почему: у `--agent` четыре формы (`09-11`, таблица «Значение `--agent`»),
-/// и REPL, headless и `profiles add` должны понимать их одинаково
-/// (design.md change `add-codelab-cli`, D4).
+/// Почему: у `--agent` пять форм (`09-11`, таблица «Значение `--agent`»), и
+/// REPL, headless и `profiles add` должны понимать их одинаково (design.md
+/// change `add-codelab-cli`, D4).
 ///
-/// Как использовать: `await resolveAgentProfile(options.agent, store:
-/// store)`. [value] `null` — профиль `default` из `profiles.json`, если он
-/// там есть, иначе встроенный агент (D13, п. 1): новая установка получает
-/// встроенного агента, а явный выбор `profiles add default …` сохраняется.
-/// `embedded` хранилище не читает. Любая ошибка — [UsageError] (код `64`):
-/// неверная форма, неизвестный id, битый `profiles.json` (без `--agent` он не
-/// превращается тихо во встроенного агента).
+/// Как использовать: `await resolveAgentProfile(options.agent, store: store,
+/// onWarning: stderr.writeln)`. Правило выбора (design.md change
+/// `add-app-settings-shell`, D21):
+/// * [value] `null`, `embedded` и `default` — встроенный агент, и хранилище
+///   не читается: битый `profiles.json` ему не мешает;
+/// * `stdio:…`, `ws://…`, `wss://…` — разовый профиль;
+/// * иначе — id из `profiles.json`; запись `default` из файла не выбирается
+///   никогда ([usableStoredProfiles]).
+///
+/// Для `default` хранилище читается только ради предупреждения: если в нём
+/// осталась прежняя запись `default`, [onWarning] получает
+/// [ignoredDefaultProfileWarning]. Любая ошибка чтения тут молчит: без неё
+/// встроенный агент выбран верно. Любая другая ошибка — [UsageError] (код
+/// `64`): неверная форма, неизвестный id, битый `profiles.json` при `-a <id>`.
 Future<ConnectionProfile> resolveAgentProfile(
   String? value, {
   required ProfileStore store,
+  void Function(String warning)? onWarning,
 }) async {
-  if (value != null) {
-    if (inlineAgentProfile(value, id: 'inline') case final profile?) {
-      return profile;
-    }
+  if (value == null || value == embeddedAgentWord) {
+    return embeddedCliProfile;
   }
-  final id = value ?? defaultProfileId;
+  if (value == defaultAgentWord) {
+    if (onWarning != null && await _hasIgnoredDefault(store)) {
+      onWarning(ignoredDefaultProfileWarning);
+    }
+    return embeddedCliProfile;
+  }
+  if (inlineAgentProfile(value, id: 'inline') case final profile?) {
+    return profile;
+  }
   final List<ConnectionProfile> profiles;
   try {
     profiles = await store.load();
   } on FormatException catch (error) {
     throw UsageError('Cannot read agent profiles: ${error.message}');
   }
-  for (final profile in profiles) {
-    if (profile.id == id) {
+  for (final profile in usableStoredProfiles(profiles).usable) {
+    if (profile.id == value) {
       return profile;
     }
   }
-  if (value == null) {
-    // Так же выбирает агента весь CLI, включая `test-scenario` (решение
-    // пользователя 2026-11-02, U1; D13 п. 1).
-    return embeddedCliProfile;
+  throw UsageError(
+    'Unknown agent profile "$value". Run "codelab profiles list".',
+  );
+}
+
+/// Есть ли в хранилище прежняя запись `default`; нечитаемый файл — нет.
+///
+/// Ловится любая ошибка чтения, не только `FormatException`: `EACCES` или
+/// `profiles.json`-каталог (`FileSystemException`) не должны ронять запуск
+/// встроенного агента ради необязательного предупреждения (D21).
+Future<bool> _hasIgnoredDefault(ProfileStore store) async {
+  try {
+    return usableStoredProfiles(await store.load()).ignoredDefault;
+  } on Object {
+    return false;
   }
-  throw UsageError('Unknown agent profile "$id". Run "codelab profiles list".');
 }
 
 /// Профиль из формы `stdio:…`, URL или слова `embedded`; `null` — [value] похоже
@@ -116,28 +154,4 @@ ConnectionProfile? inlineAgentProfile(String value, {required String id}) {
     );
   }
   return null;
-}
-
-/// [SecretSource] из переменных окружения процесса CLI.
-///
-/// Почему: токен WebSocket-агента CLI получает только из окружения
-/// (`CODELAB_AGENT_TOKEN`), а не из файла; хранилища секретов CLI до этапа 8
-/// нет (design.md, D4).
-///
-/// Как использовать: `EnvSecretSource(Platform.environment)` передаётся в
-/// `ioTransportResolver`. Ссылка `env:<VAR>` даёт значение переменной;
-/// пустая переменная и другие ссылки — `null`.
-final class EnvSecretSource implements SecretSource {
-  const EnvSecretSource(this._environment);
-
-  final Map<String, String> _environment;
-
-  @override
-  Future<String?> read(String ref) async {
-    if (!ref.startsWith('env:')) {
-      return null;
-    }
-    final value = _environment[ref.substring('env:'.length)];
-    return value == null || value.isEmpty ? null : value;
-  }
 }
