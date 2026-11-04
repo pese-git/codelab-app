@@ -481,8 +481,12 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 | 28 | панель Terminal в доке (A16) | — | — | — | D-28 (change `add-integrated-terminal`) |
 | 29 | split view сессий, сайдбар по проектам, док панелей инструментов (A13, шаг 0) | — | — | — | R-21, S-18 (раскладка; док вводится вместе с первой панелью — Files, D-13) |
 
-Навигация настроек (§12.4.9) появляется на M3 вместе с первой страницей группы Agent; до M3
-подключение настраивает существующий `ConnectionSetupDialog`.
+Навигация настроек (§12.4.9) появляется на M3 вместе с первой страницей группы Agent — «Connection»
+(change `add-app-settings-shell`); этот change удаляет `ConnectionSetupDialog`. Страницы Providers и
+MCP servers встраиваются в ту же оболочку change `add-provider-setup-ui`. Он же добавляет к «Add
+connection profile» хранение токена в хранилище секретов агента: «Use stored secret», «Store a new
+token», порядок «секрет → профиль» с откатом и удаление `codelab/profiles/<id>/token` при «Remove».
+В `add-app-settings-shell` токен профиля — только ссылка `env:<NAME>` (решение 2026-11-04).
 
 На смартфоне и планшете (этап 10, M5) те же экраны получают раскладку по ширине окна и теряют
 действия, которых нет в профиле `mobile`: строки Run, `stdio`-MCP, skills, хуки, языковые серверы —
@@ -517,7 +521,8 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 
 | Change (рабочее имя) | Что вводит | Веха |
 |---|---|---|
-| `add-app-navigation-shell` | `NavigationCubit`, `AppDestination`, сочетания A13, навигация настроек §12.4.9 | M3 (с первой страницей настроек) |
+| `add-app-settings-shell` (создан) | `NavigationCubit` и `AppDestination` в части workbench ↔ настройки, Cmd/Ctrl+,, оболочка и навигация настроек §12.4.9, страница «Connection» (20) и «Add connection profile» (20a) с токеном только из переменной окружения: U-06, D-04, R-12 (частично); профиль по умолчанию в app — часть 9.3 | M3 (с первой страницей настроек) |
+| `add-app-navigation-shell` | остальные ветки `AppDestination` (Boot, Onboarding, ProjectPicker, оверлеи) и сочетания A13 вне настроек — вместе с их экранами | M3–M5, по экранам |
 | `add-usage-extension` (уже назван) | usage хода и шага; затем вкладки Usage и Timeline (A14) | M5 |
 | `add-subagent-board` | `_codelab/subagents/*` (§17.3.7), доска app (A15) и вид `tasks` CLI | M5 |
 | `add-background-jobs` (уже назван) | `_codelab/jobs/*` (§17.9.11) на той же доске | M5 |

@@ -242,7 +242,7 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 
 | Флаг | Сокращение | Значение | По умолчанию |
 |---|---|---|---|
-| `--agent <профиль>` | `-a` | `embedded`; id профиля из `profiles.json`; `stdio:<команда> [аргументы]`; `ws://…` или `wss://…` | с этапа 7 — профиль `default` из `profiles.json`, если он там есть, иначе `embedded`; битый `profiles.json` → код 64 с причиной, без перехода на `embedded` (design.md change `add-embedded-agent-mode`, D13, п. 1). До этапа 7 — профиль `default`; если файла или профиля нет — код 64 и `No default agent profile. Pass --agent or run "codelab profiles add default stdio:<command>".` (агент не запускается, `embedded` до этапа 7 → код 64 `Embedded agent is not available in this build.`) |
+| `--agent <профиль>` | `-a` | `embedded` (алиас `default`, change `add-app-settings-shell`, D21); id профиля из `profiles.json`; `stdio:<команда> [аргументы]`; `ws://…` или `wss://…` | `embedded` всегда (change `add-app-settings-shell`, D21; до него — профиль `default`, если есть, иначе `embedded`, D13 change `add-embedded-agent-mode`); без `--agent` `profiles.json` не читается, битый `profiles.json` → код 64 с причиной только при `-a <id>` |
 | `--cwd <dir>` | `-C` | рабочая папка сессии | текущая папка |
 | `--model <id>` | `-m` | значение опции конфигурации `model` после создания сессии; после MVP сильнее модели, запомненной для папки (U-27, §12.6.9), и не запоминается | из агента |
 | `--mode <id>` | | значение опции конфигурации `mode` | из агента |
@@ -459,8 +459,9 @@ codelab test-scenario <файл-или-папка>... [--agent <профиль>]
    диффом ожидаемого и фактического кадра.
 5. С `--update-golden` — записать фактические кадры агента в фикстуру (только для своего агента).
 
-Без `--agent` агент выбирается как во всём CLI: профиль `default`, иначе встроенный (design.md change
-`add-embedded-agent-mode`, D13, п. 1 и 7).
+Без `--agent` агент выбирается как во всём CLI: всегда встроенный; `--agent default` — алиас
+`--agent embedded` (design.md change `add-app-settings-shell`, D21; правило одно, D13, п. 7 change
+`add-embedded-agent-mode`).
 
 Вывод: строка `PASS|FAIL|SKIP <id> (<время>)` на фикстуру и итог. Код выхода: `0` — нет `FAIL` и
 сыграна хотя бы одна фикстура, `1` — есть `FAIL` или не сыграна ни одна фикстура (все пропущены,
@@ -502,7 +503,9 @@ codelab test-scenario <файл-или-папка>... [--agent <профиль>]
   хода зелёные против Python-агента локально (в CI Python-агента нет).
 * `codelab -p hi` без `--agent`: при профиле `default` в `profiles.json` ход проводит он; без
   профиля `default` — встроенный агент, как с `-a embedded` (с этапа 7; design.md change
-  `add-embedded-agent-mode`, D13, п. 1). С пустым `CODELAB_HOME` (нет `profiles.json` и
+  `add-embedded-agent-mode`, D13, п. 1). *Изменено change `add-app-settings-shell`, D21: без `--agent`
+  и с `-a default` — всегда встроенный агент; id `default` зарезервирован, старая запись `default` в
+  `profiles.json` игнорируется с предупреждением в stderr, удаляется `codelab profiles remove default`.* С пустым `CODELAB_HOME` (нет `profiles.json` и
   `config.yaml`) — код 64, проблема конфигурации встроенного агента и подсказка
   `Configure the embedded agent in <home>/config.yaml; check it with: codelab config check`;
   агент не запускается. До этапа 7 — код 64 и подсказка `codelab profiles add default …`.

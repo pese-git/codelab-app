@@ -638,6 +638,12 @@ sequenceDiagram
 
 В headless `/restart` не существует (промпт уходит как текст).
 
+**App до `restart()`.** Пока `ClientWorkspace.restart` не реализован, строка «Restart agent» страницы
+настроек «Connection» вызывает `reconnect()` тем же профилем, как «Restart agent» диалога переноса
+секретов. Отмены хода через `session/cancel` в этом режиме нет: ход прерывается заменой транспорта,
+очередь сохраняется (design.md change `add-app-settings-shell`, D9). После этого раздела кнопка
+переходит на `restart()` без изменения UI.
+
 **Как проверить.** `cli/restart-reloads-session` (`test/e2e/restart_reloads_session_test.dart`;
 критерий: «клиент завершает процесс внешнего агента (или пересоздаёт встроенный), подключается
 заново и загружает активную сессию через `session/load`; идущий ход сначала отменяется»):
