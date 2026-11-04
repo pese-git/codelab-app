@@ -93,7 +93,12 @@ const maxConfigBytes = 1024 * 1024;
 final class PendingConfigText {
   const PendingConfigText({required this.kind, required this.text});
 
+  /// Слой, чей файл получит [text]: кандидат этого слоя заменяется текстом
+  /// при слиянии, остальные слои читаются с диска (R8-10).
   final ConfigLayerKind kind;
+
+  /// Полный текст файла слоя после правки. Может содержать значения
+  /// секретов, поэтому в `toString` не попадает.
   final String text;
 
   @override

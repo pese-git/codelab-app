@@ -6,6 +6,7 @@
 - `docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md` §12.4.2 — полный состав моста;
 - `openspec/changes/archive/2026-10-30-add-agent-configuration/design.md` — D1, D13, D14, OQ2 (а);
 - `openspec/changes/archive/2026-11-03-add-config-writer-and-reload/design.md` — D6 (реэкспорт подкоманд записи);
+- design.md change `add-config-literal-secrets-and-migrate` — D7, D11, D13 (`secret migrate`, флаги stdin `mcp add`, строка о 1.0);
 - `openspec/specs/workspace-architecture/spec.md` — правило сторожа.
 
 Если документов не хватает, сначала дополняется документация, потом пишется код.
@@ -15,10 +16,11 @@
 Мост между клиентами (`apps/codelab_cli`, позже `apps/codelab_desktop`) и настройкой Dart-агента. Клиентам нельзя импортировать `package:codelab_agent_*` (`AGENTS.md` §5), поэтому нужные типы и подкоманды приходят отсюда.
 
 Сейчас состав минимальный:
-- `lib/codelab_setup.dart` — реэкспорт чистых типов ядра `ConfigIssue`, `ConfigIssueKind`, `ConfigLoadResult`;
+- `lib/codelab_setup.dart` — реэкспорт чистых типов ядра `ConfigIssue`, `ConfigIssueKind`, `ConfigLoadResult` и строки о 1.0 `before1Note` для справки `codelab` (R8-7, D13 change `add-config-literal-secrets-and-migrate`);
 - `lib/io.dart` — реэкспорт `ConfigCommands`, `CheckOptions`, `ConfigCommandResult` и кодов выхода `configValidExit`, `configInvalidExit`, `configUsageExit` из `codelab_agent_io`. Логика `config check` не дублируется (D13);
 - `lib/io.dart` также реэкспортирует подкоманды записи и чтения конфига (change `add-config-writer-and-reload`, D6): `ConfigCommands` получает `path`, `get`, `set`, `unset` с опциями `ConfigPathOptions`, `ConfigGetOptions`, `ConfigSetOptions`, `ConfigUnsetOptions` и слоем чтения `ConfigGetLayer`; `ProviderCommands` (`add`, `list`, `remove`) с `ProviderAddOptions`, `ProviderListOptions`, `ProviderRemoveOptions`; `McpServerCommands` (`add`, `list`, `remove`) с `McpAddOptions`, `McpListOptions`, `McpRemoveOptions`. Результат — тот же `ConfigCommandResult`; логика, маскирование вывода и запись через `ConfigWriter` живут в `codelab_agent_io` и здесь не дублируются.
 - `lib/io.dart` также реэкспортирует подкоманду `secret`: `SecretCommands`, `SecretCommandResult`, `SecretSetOptions`, `SecretDeleteOptions`, `SecretListOptions`, `SecretInput`, `StdinSecretInput`, `MultilineSecretException`, а для страницы настроек — `SecretAdmin` с результатами (`SecretWriteOutcome`, `SecretDeleteOutcome`, `SecretListOutcome` и их ветки) и фабрика `openSecretStore`; для её вызова и типизации из ядра реэкспортируются `DescribedSecretStore`, `SecretStoreUnavailableException`, `Logger`, `LogLevel`. Классы `EnvSecretStore`/`FileSecretStore` и `openHostSecrets` НЕ экспортируются (`add-agent-secret-store`, D8, D15). Логика секретов живёт в `codelab_agent_io`.
+- `lib/io.dart` также реэкспортирует `secret migrate` (change `add-config-literal-secrets-and-migrate`, D7): `SecretMigrateOptions`, движок `SecretMigrator` с `SecretMigrationOptions`, отчёт `SecretMigrationReport`, `SecretMigrationAction` и пункты (`SecretPlanItem`, `SecretMovedItem`, `SecretReusedItem`, `SecretReplacedItem`, `SecretActionRequiredItem`, `SecretNotMigratedItem`, `SecretMigrationItem`); флаги `mcp add --header-stdin|--env-stdin|--header-scheme` — поля `McpAddOptions` (D11).
 
 ## 2. Границы
 
@@ -37,4 +39,4 @@
 ## 4. Тесты
 
 * TDD — по `packages/dart/codelab_agent_core/AGENTS.md` §2.
-* Логика `config check`, подкоманд `secret` и подкоманд записи (`config path|get|set|unset`, `provider`, `mcp`) тестируется в `codelab_agent_io`; здесь — компиляция реэкспортов (`test/config_write_exports_test.dart`: опции и классы подкоманд записи из `io.dart`, `config set`/`get` через один `io.dart`; `test/secret_exports_test.dart`: символы подкоманды `secret`, `SecretAdmin` с результатами, `openSecretStore` и типы ядра из `io.dart`; `SecretAdmin` строится через один `io.dart`).
+* Логика `config check`, подкоманд `secret` и подкоманд записи (`config path|get|set|unset`, `provider`, `mcp`) тестируется в `codelab_agent_io`; здесь — компиляция реэкспортов (`test/config_write_exports_test.dart`: опции и классы подкоманд записи из `io.dart`, `config set`/`get` через один `io.dart`; `test/secret_exports_test.dart`: символы подкоманды `secret`, `SecretAdmin` с результатами, `openSecretStore` и типы ядра из `io.dart`; `SecretAdmin` строится через один `io.dart`; `test/secret_migrate_exports_test.dart`: символы `secret migrate` и флаги stdin `mcp add`).

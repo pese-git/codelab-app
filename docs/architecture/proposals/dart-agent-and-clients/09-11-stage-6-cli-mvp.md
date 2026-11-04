@@ -148,8 +148,8 @@ D12). В 8.5 создаётся минимальный пакет `codelab_setup
 выхода — в `SecretCommands`, поэтому stdout, stderr и код совпадают с `codelab-agent secret`
 (agent-core-architecture §17.5.4, абзац «CLI»). Бэкенд подкоманды берут из `secrets.backend` в
 `$CODELAB_HOME/config.yaml` и файле `CODELAB_CONFIG` — и только этот ключ, без полной загрузки
-конфига: невалидный конфиг с ключом, вписанным значением, не блокирует `secret set`, который его
-чинит. **В 1.0 запись возможна только с `secrets.backend: file`** (открытый `$CODELAB_HOME/secrets.yaml`,
+конфига: невалидный конфиг не блокирует `secret set`, который его чинит (литерал в файле с 8.11
+конфиг не ломает, а даёт предупреждение — R8-4). **В 1.0 запись возможна только с `secrets.backend: file`** (открытый `$CODELAB_HOME/secrets.yaml`,
 `0600`, только macOS и Linux): `auto` в 1.0 — бэкенд `env` (только чтение `CODELAB_SECRET_*`), и
 `secret set` отвечает кодом 1 с подсказкой `secrets.backend: file` или переменной; на Windows
 доступен только `env`; хранилища ОС — после 1.0 (черновик `add-agent-os-secret-backends`). `set`
@@ -172,7 +172,9 @@ argv — код 64 и `codelab: invalid arguments for secret`; присланн�
 флаг подкоманды после `migrate`; `-C`/`--cwd` верхнего уровня вместе с `secret` по-прежнему код 64.
 `codelab mcp add` получает флаги `--header-stdin <Name> [--header-scheme <Scheme>]` и `--env-stdin <NAME>`
 (8.11, D11): значение из stdin уходит в хранилище, в файл — `${secret:…}` в одинарных кавычках, один
-флаг на вызов; порядок — кандидат, коллизия имени, `checkStore`, stdin, секрет, конфиг.
+флаг на вызов; порядок — кандидат, коллизия имени, `checkStore`, stdin, секрет, конфиг. Справка
+`secret` и общая `codelab --help` несут строку `Note: before 1.0, tool output, prompts and session
+logs are not redacted: …` (R8-7, D13; константа `before1Note` из основного бареля `codelab_setup`).
 
 `codelab config path|get|set|unset`, `codelab provider add|list|remove` и `codelab mcp add|list|remove`
 (этап 8, задача 8.10; design.md change `add-config-writer-and-reload`, D6) регистрируются так же,
@@ -188,8 +190,9 @@ argv — код 64 и `codelab: invalid arguments for secret`; присланн�
 фраза `invalid arguments for config <sub>` (`… provider`, `… mcp`) без цитирования слов argv, как у
 `secret`: значение `config set` может начинаться с `-`, а ключ могли передать флагом. `config get` не
 раскрывает подстановки `${VAR}` и `${secret:…}` ни при каком `--layer`; `config get` и `provider list`
-маскируют литеральные секреты (`<redacted>`), значения из окружения (`<from env:…>`), userinfo URL и
-значения секретных query-параметров; неразбираемый URL — `<redacted>` (R0-2, R4-5 change
+маскируют литеральные секреты (`<redacted>`; с 8.11 — и литеральный `api_key`, ссылку п. 3 и
+элементы `mcp.servers[*].args`, D5 change `add-config-literal-secrets-and-migrate`), значения из
+окружения (`<from env:…>`), userinfo URL и значения секретных query-параметров; неразбираемый URL — `<redacted>` (R0-2, R4-5 change
 `add-config-writer-and-reload`). При
 `ConfigConflictException` подкоманда один раз перечитывает файл и повторяет правки; второй
 конфликт — код `1`. `provider add --api-key-stdin` читает ключ скрытым вводом `StdinSecretInput`, как

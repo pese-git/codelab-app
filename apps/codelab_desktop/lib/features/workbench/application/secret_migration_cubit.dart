@@ -73,6 +73,9 @@ final class SecretMigrationPlanReady extends SecretMigrationState {
 /// План не построен; [message] — безопасный текст без `error.toString()`.
 final class SecretMigrationPlanFailed extends SecretMigrationState {
   const SecretMigrationPlanFailed(this.message);
+
+  /// Текст проблемы для диалога: из отчёта порта или `Planning failed: <тип>.`
+  /// (D8); без значений секретов и путей, показывается как есть.
   final String message;
 }
 
@@ -115,10 +118,24 @@ final class SecretMigrationApplyFailed extends SecretMigrationState {
     this.canRestart = false,
     this.agentGone = false,
   });
+
+  /// Текст проблемы для диалога (из отчёта порта или `Migration failed: <тип>.`);
+  /// без значений секретов, показывается как есть.
   final String message;
+
+  /// Что уже перенесено при частичном сбое; пусто, если [movedAny] `false`.
   final List<String> items;
+
+  /// Часть файлов уже переписана: presentation показывает [items] и кнопку
+  /// `Restart agent`; иначе предлагается только `Close`.
   final bool movedAny;
+
+  /// `Restart agent` доступна: ход не идёт и агент не сменился. Пересчитывается
+  /// при смене активности хода, пока [movedAny] `true`.
   final bool canRestart;
+
+  /// Агент, для которого шёл перенос, сменился или закрыт: перезапускать
+  /// нечего, а `Close` решает по текущему предложению.
   final bool agentGone;
 }
 

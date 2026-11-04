@@ -127,10 +127,21 @@ final class SecretMigrateOptions {
   /// Корень проекта для слоёв `project` и `local` и для доверия проекту.
   final String cwd;
 
+  /// `--project`: перенести секреты слоя `project` (вместо `user`).
   final bool project;
+
+  /// `--local`: перенести секреты слоя `local` (вместо `user`).
   final bool local;
+
+  /// `--all`: перенести все слои сразу; несовместим с [project] и [local]
+  /// (ошибка использования, код `64`).
   final bool all;
+
+  /// `--dry-run`: только план и отчёт, файлы конфига и хранилище не меняются.
   final bool dryRun;
+
+  /// `--force`: заменить уже сохранённый секрет с другим значением;
+  /// безвозвратно, поэтому по умолчанию выключено.
   final bool force;
 }
 

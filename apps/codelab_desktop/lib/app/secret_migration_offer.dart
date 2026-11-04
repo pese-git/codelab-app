@@ -53,6 +53,18 @@ final class SecretMigrationOffer {
     return controller.stream;
   }
 
+  /// Задаёт текущее предложение переноса.
+  ///
+  /// Почему: признак «секреты в файле» вычисляет мост при открытии агента, а
+  /// не UI; закрытие агента обязано снять предложение (design.md change
+  /// `add-config-literal-secrets-and-migrate`, D8, пп. 1–2).
+  ///
+  /// Для чего: [cwd] — папка, с которой открыт агент с `secretsInConfig`, или
+  /// `null` (агент закрыт, секретов нет). Меняет [cwd] и [value] и публикует
+  /// смену в [changes]; то же значение повторно игнорируется.
+  ///
+  /// Как использовать: вызывает только `EmbeddedTransportResolver`. После
+  /// [close] значение запоминается, но подписчикам не доставляется.
   void set(String? cwd) {
     if (_cwd == cwd) return;
     _cwd = cwd;

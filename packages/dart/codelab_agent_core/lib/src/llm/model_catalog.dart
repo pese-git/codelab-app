@@ -143,6 +143,8 @@ final class SecretKeyRef extends ProviderKeyRef {
 final class UnusableKeyRef extends ProviderKeyRef {
   const UnusableKeyRef(this.keyPath);
 
+  /// Путь ключа конфига с вписанным ключом (`providers.<id>.api_key_env`);
+  /// только он, без значения, попадает в текст ошибки `auth` (D4, R8-4).
   final String keyPath;
 }
 

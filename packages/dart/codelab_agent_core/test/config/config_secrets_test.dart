@@ -6,8 +6,10 @@ import 'config_support.dart';
 const _secret = 'sk-test-secret';
 
 /// Секреты только ссылками (agent-configuration «Секреты только
-/// ссылками»; CFG-2; `core/config-rejects-inline-api-key`; design.md change
-/// `add-agent-configuration`, D8).
+/// ссылками»; CFG-2; `core/config-warns-inline-api-key` (заменил
+/// `core/config-rejects-inline-api-key`: R8-4 сделал литерал в файле
+/// предупреждением, а не отказом); design.md change `add-agent-configuration`,
+/// D8).
 void main() {
   // До R8-4 (design.md change `add-config-literal-secrets-and-migrate`, D4)
   // здесь были отказы загрузки `inlineSecret`; теперь литерал в файле —

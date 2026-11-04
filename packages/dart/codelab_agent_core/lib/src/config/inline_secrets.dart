@@ -74,6 +74,10 @@ final class InlineSecretFinding {
   /// Путь ключа в формате `KeyPath`: `providers.lm.api_key`,
   /// `mcp.servers[gh].headers.Authorization`.
   final String keyPath;
+
+  /// Вид находки (CFG-9, пункты 1-3; D3): по нему загрузка решает, что
+  /// предупреждать, а мигратор (D7) — переносить ли участки [spans] в
+  /// хранилище или только сообщить о находке.
   final InlineSecretKind kind;
 
   /// Метка формата (`sk`, `github`, `connection-string`, …) или `inline-key`
@@ -265,6 +269,13 @@ InlineSecretFinding _finding(
 bool hasInlineSecret(String value) =>
     valueFindings(KeyPath.root.child('x'), value).isNotEmpty;
 
+/// Находки в одном строковом значении по пути [path] (подробности для
+/// [findInlineSecrets] и [hasInlineSecret]).
+///
+/// Внутренняя для пакета: в барель `codelab_agent_core.dart` не
+/// экспортируется (design.md change `add-config-literal-secrets-and-migrate`,
+/// D3). Публична в `src` только ради соседних файлов ядра; снаружи пакета
+/// используйте [hasInlineSecret] или [findInlineSecrets].
 List<InlineSecretFinding> valueFindings(KeyPath path, String value) {
   final out = <InlineSecretFinding>[];
   final scan = _scan(value);
