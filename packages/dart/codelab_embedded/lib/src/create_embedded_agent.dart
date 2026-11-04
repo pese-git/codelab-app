@@ -34,10 +34,14 @@ void checkEmbeddedProfile(String hostProfile) {
 ///
 /// Как использовать: [config] — результат загрузчика, [services] — ресурсы
 /// хоста. Профиль вне `embedded-*` — [HostWiringException]; все ошибки
-/// сборки приходят через `Future`, а не синхронно.
+/// сборки приходят через `Future`, а не синхронно. [secretsInConfig] —
+/// значение `EmbeddedAgent.secretsInConfig`, его вычисляет открыватель по
+/// предупреждениям загрузки (change `add-config-literal-secrets-and-migrate`,
+/// D8); без него признак `false`.
 Future<EmbeddedAgent> createEmbeddedAgent({
   required EmbeddedAgentConfig config,
   required EmbeddedHostServices services,
+  bool secretsInConfig = false,
 }) async {
   checkEmbeddedProfile(config.hostProfile);
   // Одна функция строит и начальные модель и каталог, и каждый снимок
@@ -60,6 +64,7 @@ Future<EmbeddedAgent> createEmbeddedAgent({
   return assembleEmbeddedAgent(
     config: config,
     services: services,
+    secretsInConfig: secretsInConfig,
     models: initial.catalog,
     streamFunction: initial.stream,
     modelsFor: services.configSource == null ? null : modelsFor,

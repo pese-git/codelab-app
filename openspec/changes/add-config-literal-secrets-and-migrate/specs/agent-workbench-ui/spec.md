@@ -1,15 +1,18 @@
 ## ADDED Requirements
 
 ### Requirement: Перенос секретов встроенного агента
-Если встроенный агент открыт с `EmbeddedAgent.secretsInConfig == true`, рабочее место CodeLab SHALL показывать над транскриптом предупреждение уровня `warning` (Fluent `InfoBar`, как баннер соединения) с текстом `Secrets are stored in the agent config file.` и кнопкой `Migrate secrets` (решение пользователя 2026-11-04 R8-3; design.md change `add-config-literal-secrets-and-migrate`, D8). Подключение и работа агента при этом НЕ SHALL блокироваться. Закрытие предупреждения крестиком скрывает его до следующего подключения.
+Если встроенный агент открыт с `EmbeddedAgent.secretsInConfig == true`, рабочее место CodeLab SHALL показывать над транскриптом предупреждение уровня `warning` (Fluent `InfoBar`, как баннер соединения) с текстом `Secrets are stored in the agent config file.` и кнопкой `Migrate secrets` (решение пользователя 2026-11-04 R8-3; design.md change `add-config-literal-secrets-and-migrate`, D8). Подключение и работа агента при этом НЕ SHALL блокироваться. Закрытие предупреждения крестиком скрывает его до следующего подключения; `Close` после успешного переноса (`applied`) — тоже.
 
-`Migrate secrets` SHALL открывать диалог с планом переноса — строками отчёта `SecretMigrator` для папки проекта (`--all`, `--dry-run`), без значений секретов:
+`Migrate secrets` SHALL открывать диалог с планом переноса — строками отчёта `SecretMigrator` для папки, с которой открыт встроенный агент (`cwd` агента, а не текущая папка настроек; `--all`, `--dry-run`), без значений секретов:
 - бэкенд только для чтения → текст `Secrets cannot be stored: the env backend is read-only. Add secrets.backend: file to <home>/config.yaml, or set CODELAB_SECRET_* variables.` и только кнопка `Close`;
 - конфликт имени с хранилищем → текст конфликта и `Close`; замена существующего секрета в app НЕ SHALL предлагаться;
 - все находки только в файле `CODELAB_CONFIG` → строки плана и только `Close`;
+- пустой план → `Nothing to migrate.` и только `Close`;
 - иначе → `Migrate` и `Cancel`.
 
-`Migrate` SHALL выполнять перенос тем же движком через порт приложения. Реализация — в composition root через `package:codelab_embedded/io.dart` с тем же `CODELAB_HOME`, `CODELAB_CONFIG` и окружением, что у открывателя встроенного агента; виджеты НЕ SHALL обращаться к файлам и хранилищу. Тексты `planFailed`/`applyFailed` и записи лога app SHALL строиться только из типизированного отчёта или имени типа исключения, НЕ из `error.toString()`. Подсказка для бэкенда `env` на Windows SHALL совпадать с веткой `secret set` (только переменные `CODELAB_SECRET_*`). После успеха диалог SHALL показывать `Secrets moved. Restart the embedded agent to use them.` и кнопку `Restart agent`, которая повторяет подключение тем же профилем; во время идущего хода она SHALL быть недоступна. Поздний результат плана или переноса после закрытия диалога или новой попытки SHALL отбрасываться.
+Во время переноса диалог НЕ SHALL закрываться (`Esc` и щелчок вне диалога игнорируются); одновременно SHALL выполняться не больше одной операции плана или переноса.
+
+`Migrate` SHALL выполнять перенос тем же движком через порт приложения. Реализация — в composition root через `package:codelab_embedded/io.dart` с тем же `CODELAB_HOME`, `CODELAB_CONFIG` и окружением, что у открывателя встроенного агента; виджеты НЕ SHALL обращаться к файлам и хранилищу. Тексты `planFailed`/`applyFailed` и записи лога app SHALL строиться только из типизированного отчёта или имени типа исключения, НЕ из `error.toString()`. Подсказка для бэкенда `env` на Windows SHALL совпадать с веткой `secret set` (только переменные `CODELAB_SECRET_*`). После успеха диалог SHALL показывать `Secrets moved. Restart the embedded agent to use them.` и кнопку `Restart agent`, которая повторяет подключение тем же профилем; она SHALL быть недоступна, пока идёт ход в любой сессии встроенного агента (подсказка `Wait for the current turn to finish.`), и если за время переноса встроенный агент закрылся или сменился (подсказка `The embedded agent is no longer connected.`); `Close` тогда SHALL переходить по текущему состоянию предложения: нет агента со секретами — предупреждение скрыто, новый агент со секретами — предупреждение показано. Если перенос сорвался после того, как часть файлов уже перенесена (`movedAny`), диалог SHALL показывать перенесённое и предлагать `Restart agent`. Поздний результат плана или переноса после закрытия диалога или новой попытки SHALL отбрасываться. Лог app SHALL писать события `secret_migration.planned`, `secret_migration.applied`, `secret_migration.result_discarded`, `secret_migration.plan_failed`, `secret_migration.apply_failed` только с числами, id бэкенда и именами типов — без путей ключей, имён секретов и текстов.
 
 #### Scenario: Предупреждение и перенос
 - **WHEN** встроенный агент открыт с литеральным `api_key` в `<home>/config.yaml` и `secrets.backend: file`, пользователь нажимает `Migrate secrets`, затем `Migrate`
@@ -26,6 +29,38 @@
 #### Scenario: Окружение движка совпадает с агентом
 - **WHEN** приложение запущено с временными `CODELAB_HOME` и `CODELAB_CONFIG`, и пользователь открывает план
 - **THEN** план построен по тем же файлам, что открыватель встроенного агента (`app_scope.dart`), а не по `~/.codelab`
+
+#### Scenario: Папка агента, а не текущая папка
+- **WHEN** встроенный агент открыт для проекта `A`, пользователь переключает папку настроек на проект `B` без переподключения и нажимает `Migrate secrets`
+- **THEN** план построен по слоям проекта `A`; файлы проекта `B` не читались и не изменены
+
+#### Scenario: Диалог не закрывается во время переноса
+- **WHEN** порт `apply` ещё не завершён, а пользователь нажимает `Esc` и повторно `Migrate`
+- **THEN** диалог остаётся открытым в состоянии переноса, порт `apply` вызван один раз
+
+#### Scenario: Ход в другой сессии
+- **WHEN** перенос завершён (`applied`), а в неактивной сессии встроенного агента идёт ход
+- **THEN** `Restart agent` недоступна до конца хода
+
+#### Scenario: Агент сменился во время переноса
+- **WHEN** во время `applying` встроенный агент закрывается, а перенос затем завершается
+- **THEN** диалог показывает итог переноса, `Restart agent` недоступна с подсказкой `The embedded agent is no longer connected.`, а после `Close` предупреждение скрыто
+
+#### Scenario: Close после переноса
+- **WHEN** перенос завершён, и пользователь нажимает `Close`
+- **THEN** предупреждение `Secrets are stored in the agent config file.` не показывается до следующего подключения
+
+#### Scenario: Частичный перенос
+- **WHEN** перенос записал пользовательский файл и сорвался на проектном (`movedAny`)
+- **THEN** диалог показывает строки перенесённого и кнопку `Restart agent`
+
+#### Scenario: Пустой план
+- **WHEN** план не содержит ни одного пункта
+- **THEN** диалог показывает `Nothing to migrate.` и только `Close`
+
+#### Scenario: Лог без данных конфига
+- **WHEN** план и перенос выполнены для `providers.lm.api_key` с секретом `codelab/lm`
+- **THEN** лог app содержит `secret_migration.planned` и `secret_migration.applied` с числами и id бэкенда и не содержит `providers.lm`, `codelab/lm` и значения
 
 #### Scenario: Ошибка без текста исключения
 - **WHEN** порт бросает исключение, чей `toString()` содержит `sk-test-leak-0123456789`

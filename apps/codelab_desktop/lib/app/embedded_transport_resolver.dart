@@ -5,6 +5,8 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgent, EmbeddedAgentConfigException, EmbeddedAgentOpener;
 
+import 'secret_migration_offer.dart';
+
 /// Подключение отменено, пока встроенный агент открывался (или резолвер уже
 /// закрыт).
 ///
@@ -48,13 +50,20 @@ final class EmbeddedOpenCancelledException implements Exception {
 ///   журнал без владельца. Кнопки Disconnect и метода `disconnect` у
 ///   `ClientWorkspace` нет (решение L4): закрытие клиентского конца агент
 ///   замечает сам (D6, «Закрытие клиентом»);
+/// * **предложение переноса секретов**: после успешного открытия резолвер
+///   передаёт `EmbeddedAgent.secretsInConfig` в [SecretMigrationOffer] и
+///   сбрасывает его, когда агент закрыт; вместе с признаком передаётся `cwd`
+///   агента (перенос идёт по его файлам, а не по текущему проекту UI) (design.md change
+///   `add-config-literal-secrets-and-migrate`, D8, п. 2);
 /// * [close] вызывает `CodeLabRootLifecycle` при закрытии root scope: ждёт
 ///   открытие в полёте и `dispose` текущего агента, поэтому журнал дописан до
 ///   завершения закрытия.
 final class EmbeddedTransportResolver implements TransportResolver {
-  EmbeddedTransportResolver(this._opener);
+  EmbeddedTransportResolver(this._opener, {SecretMigrationOffer? offer})
+    : _offer = offer;
 
   final EmbeddedAgentOpener _opener;
+  final SecretMigrationOffer? _offer;
 
   /// Агент текущего соединения; `null` — ещё не открыт или уже освобождён.
   EmbeddedAgent? _running;
@@ -101,6 +110,10 @@ final class EmbeddedTransportResolver implements TransportResolver {
     }
     final previous = _running;
     _running = null;
+    // Предложение переноса принадлежит агенту: прежний уходит — признак
+    // сбрасывается, а новое открытие даст цикл `false → true` (закрытое
+    // крестиком предупреждение вернётся, D8).
+    _offer?.set(null);
     await previous?.dispose();
     final EmbeddedAgent agent;
     try {
@@ -118,7 +131,25 @@ final class EmbeddedTransportResolver implements TransportResolver {
       throw const EmbeddedOpenCancelledException();
     }
     _running = agent;
+    // Признак вычислил мост при открытии и после переноса не пересчитывает:
+    // предупреждение держится до переподключения (D8, п. 1).
+    _offer?.set(agent.secretsInConfig ? projectDirectory : null);
+    unawaited(
+      agent.closed.then<void>(
+        (_) => _clearOfferIfCurrent(agent),
+        onError: (Object _) => _clearOfferIfCurrent(agent),
+      ),
+    );
     return agent.clientTransport;
+  }
+
+  /// Агент закрылся сам (клиентский конец закрыт): признак сбрасывается, если
+  /// это ещё текущий агент; более новый агент своё значение не теряет.
+  void _clearOfferIfCurrent(EmbeddedAgent agent) {
+    final running = _running;
+    if (running == null || identical(running, agent)) {
+      _offer?.set(null);
+    }
   }
 
   /// Закрывает резолвер: дожидается открытия в полёте и `dispose` текущего
@@ -131,6 +162,7 @@ final class EmbeddedTransportResolver implements TransportResolver {
     await _tail;
     final agent = _running;
     _running = null;
+    _offer?.set(null);
     await agent?.dispose();
   }
 }

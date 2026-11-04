@@ -16,6 +16,7 @@ import 'widgets/debug_log_pane.dart';
 import 'widgets/debug_log_viewer_dialog.dart';
 import 'widgets/inspector_pane.dart';
 import 'widgets/main_pane.dart';
+import 'widgets/secret_migration_banner.dart';
 
 /// Рабочее место CodeLab: каркас из app bar, сайдбара по проектам, панели
 /// сессии и дока панелей инструментов (`dart-agent-and-clients` §12.3 A13,
@@ -129,7 +130,16 @@ class CodeLabShell extends StatelessWidget {
                     onOpenFolder: () => unawaited(cubit.browseForProject()),
                     onSettings: () => ConnectionSetupDialog.show(context),
                   ),
-                  sessionPane: WorkbenchMainPane(state: state, cubit: cubit),
+                  sessionPane: WorkbenchMainPane(
+                    state: state,
+                    cubit: cubit,
+                    // «Restart agent» — повторное подключение тем же
+                    // профилем; прежний агент закрывает резолвер (D6 change
+                    // `add-embedded-agent-mode`).
+                    secretMigrationBanner: SecretMigrationBanner(
+                      onRestart: () => unawaited(cubit.reconnect()),
+                    ),
+                  ),
                   dock: openPanes.isEmpty
                       ? null
                       : CodeLabToolDock(

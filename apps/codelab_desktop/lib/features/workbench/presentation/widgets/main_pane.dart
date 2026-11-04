@@ -12,11 +12,18 @@ class WorkbenchMainPane extends StatelessWidget {
   const WorkbenchMainPane({
     required this.state,
     required this.cubit,
+    this.secretMigrationBanner,
     super.key,
   });
 
   final CodeLabShellState state;
   final CodeLabShellCubit cubit;
+
+  /// Предупреждение о секретах в файле конфига встроенного агента (D8
+  /// change `add-config-literal-secrets-and-migrate`). Слот, а не прямое
+  /// обращение к `SecretMigrationCubit`: панель остаётся зависимой только от
+  /// фасада рабочего места, а предупреждение собирает `CodeLabShell`.
+  final Widget? secretMigrationBanner;
 
   @override
   Widget build(BuildContext context) {
@@ -118,6 +125,7 @@ class WorkbenchMainPane extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
+          ?secretMigrationBanner,
         ],
         Expanded(
           child: _ContentWithActivityBar(

@@ -17,8 +17,13 @@ class CodeLabApp extends StatelessWidget {
     // same Navigator sits as a sibling of `home`'s content in the element
     // tree, not a descendant of it, so a provider scoped inside `home`
     // would not be reachable from the dialog.
-    return BlocProvider.value(
-      value: dependencies.shellCubit,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: dependencies.shellCubit),
+        // Тот же уровень, что у Cubit рабочего места: диалог переноса
+        // секретов открывается маршрутом Navigator и видит его (D8).
+        BlocProvider.value(value: dependencies.secretMigrationCubit),
+      ],
       child: const FluentApp(title: 'CodeLab', home: CodeLabShell()),
     );
   }

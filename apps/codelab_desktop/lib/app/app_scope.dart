@@ -45,9 +45,14 @@ import '../core/platform/dock_layout_store.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
+import '../features/workbench/application/secret_migration_cubit.dart';
+import '../features/workbench/application/secret_migration_runner.dart';
+import '../features/workbench/application/secret_migration_turns.dart';
 import '../features/workbench/application/shell_cubit.dart';
 import 'embedded_logger.dart';
+import 'embedded_secret_migration_runner.dart';
 import 'embedded_transport_resolver.dart';
+import 'secret_migration_offer.dart';
 
 part 'app_scope.module.cherrypick.g.dart';
 
@@ -61,6 +66,7 @@ Scope createCodeLabRootScope({
   DirectoryExists? directoryExists,
   agent.EmbeddedAgentOpener? embeddedOpener,
   Duration? embeddedCloseTimeout,
+  Map<String, String>? environment,
 }) {
   final scope = CherryPick.openRootScope()
     ..installModules([
@@ -79,6 +85,7 @@ Scope createCodeLabRootScope({
       CodeLabEmbeddedAgentModule(
         embeddedOpener: embeddedOpener,
         closeTimeout: embeddedCloseTimeout,
+        environment: environment,
       ),
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
@@ -159,18 +166,27 @@ final class CodeLabEmbeddedAgentModule extends Module {
   CodeLabEmbeddedAgentModule({
     agent.EmbeddedAgentOpener? embeddedOpener,
     Duration? closeTimeout,
+    Map<String, String>? environment,
   }) : _embeddedOpener = embeddedOpener,
-       _closeTimeout = closeTimeout;
+       _closeTimeout = closeTimeout,
+       _environment = environment;
 
   final agent.EmbeddedAgentOpener? _embeddedOpener;
   final Duration? _closeTimeout;
 
+  /// Окружение процесса; шов тестов (`createCodeLabRootScope(environment:)`).
+  final Map<String, String>? _environment;
+
   @override
   void builder(Scope currentScope) {
+    // Одно окружение на открыватель и на порт переноса секретов: движок
+    // обязан читать те же `CODELAB_HOME` и `CODELAB_CONFIG`, что агент
+    // (design.md change `add-config-literal-secrets-and-migrate`, D8, п. 3).
+    final environment = _environment ?? Platform.environment;
     bind<agent.EmbeddedAgentOpener>().toInstance(
       _embeddedOpener ??
           localEmbeddedAgentOpener(
-            environment: Platform.environment,
+            environment: environment,
             logger: CodeLabEmbeddedLogger(),
           ),
     );
@@ -180,10 +196,20 @@ final class CodeLabEmbeddedAgentModule extends Module {
         logger: CodeLabEmbeddedLogger(),
       ),
     );
+    bind<SecretMigrationOffer>().toInstance(SecretMigrationOffer());
+    bind<SecretMigrationRunner>().toInstance(
+      EmbeddedSecretMigrationRunner(
+        environment: environment,
+        // Платформа — параметром на границе composition root (`AGENTS.md`
+        // §11), чтобы тест проверял ветку Windows без хоста.
+        platform: Platform.operatingSystem,
+      ),
+    );
     bind<EmbeddedTransportResolver>()
         .toProvide(
           () => EmbeddedTransportResolver(
             currentScope.resolve<agent.EmbeddedAgentOpener>(),
+            offer: currentScope.resolve<SecretMigrationOffer>(),
           ),
         )
         .singleton();
@@ -367,6 +393,23 @@ final class CodeLabPresentationModule extends Module {
           ),
         )
         .singleton();
+    // Перенос секретов встроенного агента (D8): предложение даёт резолвер,
+    // ход — по всем сессиям рабочего места (переподключение обрывает и
+    // фоновый ход). Начальные значения предложения и хода передаются первым
+    // событием: Cubit может создаться после открытия агента или посреди хода.
+    bind<SecretMigrationCubit>().toProvide(() {
+      final workspace = currentScope.resolve<ClientWorkspace>();
+      final offer = currentScope.resolve<SecretMigrationOffer>();
+      return SecretMigrationCubit(
+        runner: currentScope.resolve<SecretMigrationRunner>(),
+        turnActivity: turnActivityOf(workspace.current, workspace.state),
+        offered: offer.watch(),
+        logger: StructuredLogLogger('codelab_desktop.secret_migration').bind({
+          logCategoryKey: applicationLogCategory,
+          logComponentKey: 'secret_migration',
+        }),
+      );
+    }).singleton();
     bind<CodeLabShellCubit>()
         .toProvide(
           () => CodeLabShellCubit(
@@ -427,6 +470,8 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     EmbeddedTransportResolver embedded,
     EmbeddedCloseSettings embeddedCloseSettings,
     CodeLabShellCubit shellCubit,
+    SecretMigrationCubit secretMigrationCubit,
+    SecretMigrationOffer secretMigrationOffer,
   ) => CodeLabRootLifecycle(
     application: application,
     transport: transport,
@@ -434,6 +479,8 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     embedded: embedded,
     embeddedCloseSettings: embeddedCloseSettings,
     shellCubit: shellCubit,
+    secretMigrationCubit: secretMigrationCubit,
+    secretMigrationOffer: secretMigrationOffer,
   );
 }
 
@@ -445,12 +492,16 @@ final class CodeLabRootLifecycle implements Disposable {
     required EmbeddedTransportResolver embedded,
     required EmbeddedCloseSettings embeddedCloseSettings,
     required CodeLabShellCubit shellCubit,
+    required SecretMigrationCubit secretMigrationCubit,
+    required SecretMigrationOffer secretMigrationOffer,
   }) : _application = application,
        _transport = transport,
        _workspace = workspace,
        _embedded = embedded,
        _embeddedCloseSettings = embeddedCloseSettings,
-       _shellCubit = shellCubit;
+       _shellCubit = shellCubit,
+       _secretMigrationCubit = secretMigrationCubit,
+       _secretMigrationOffer = secretMigrationOffer;
 
   final AcpClientApplication _application;
   final AcpTransport _transport;
@@ -466,6 +517,13 @@ final class CodeLabRootLifecycle implements Disposable {
   final EmbeddedTransportResolver _embedded;
   final EmbeddedCloseSettings _embeddedCloseSettings;
   final CodeLabShellCubit _shellCubit;
+
+  /// Закрывается вместе с Cubit рабочего места: подписки на предложение и ход
+  /// освобождаются до закрытия агента.
+  final SecretMigrationCubit _secretMigrationCubit;
+
+  /// Закрывается после резолвера: он до конца пишет в источник.
+  final SecretMigrationOffer _secretMigrationOffer;
   var _isDisposed = false;
 
   @override
@@ -475,6 +533,7 @@ final class CodeLabRootLifecycle implements Disposable {
     }
 
     _isDisposed = true;
+    await _secretMigrationCubit.close();
     await _shellCubit.close();
     await _workspace.dispose();
     // Зависший `dispose` агента не держит закрытие scope вечно: по таймауту
@@ -487,6 +546,7 @@ final class CodeLabRootLifecycle implements Disposable {
         'embedded.close_timeout',
       ),
     );
+    await _secretMigrationOffer.close();
     await _transport.close();
     await _application.dispose();
   }
@@ -497,10 +557,14 @@ final class CodeLabDependencies {
     required this.application,
     required this.shellCubit,
     required this.logBuffer,
+    required this.secretMigrationCubit,
   });
 
   final AcpClientApplication application;
   final CodeLabShellCubit shellCubit;
+
+  /// Предупреждение и диалог переноса секретов встроенного агента (D8).
+  final SecretMigrationCubit secretMigrationCubit;
 
   /// Backs the in-app log viewer (docked panel and full-screen master-detail
   /// — `replace-debug-log-panel-with-fluent/design.md`, Decision 3/4).
@@ -560,6 +624,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     application: _scope.resolve<AcpClientApplication>(),
     shellCubit: _scope.resolve<CodeLabShellCubit>(),
     logBuffer: _scope.resolve<LogBuffer>(),
+    secretMigrationCubit: _scope.resolve<SecretMigrationCubit>(),
   );
 
   @override

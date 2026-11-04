@@ -33,6 +33,7 @@ final class SecretMigrationOptions {
     this.layers = const {ConfigLayer.user},
     this.dryRun = false,
     this.force = false,
+    this.testStorePath,
   });
 
   final String cwd;
@@ -40,6 +41,17 @@ final class SecretMigrationOptions {
   final Set<ConfigLayer> layers;
   final bool dryRun;
   final bool force;
+
+  /// Путь к `secrets.yaml` тестового хранилища (`testSecretStorePath` от
+  /// того же окружения, что у открывателя агента; `null` в рабочей сборке).
+  ///
+  /// Почему: в тестовой сборке (`CODELAB_ALLOW_TEST_SECRETS`) агент берёт
+  /// ключи из файла по этому пути, и перенос обязан писать туда же, иначе
+  /// агент и мигратор видят разные хранилища (change
+  /// `add-config-literal-secrets-and-migrate`, D8). Задан — выбор
+  /// `secrets.backend` игнорируется, бэкенд `file`, как у `openHostSecrets`.
+  /// Не действует, если в [SecretMigrator] подставлен `openStore` (тесты).
+  final String? testStorePath;
 
   @override
   String toString() =>
@@ -198,6 +210,9 @@ final class SecretMigrationReport {
     this.dryRun = false,
     this.movedAny = false,
     this.readOnlyBackend = false,
+    this.home,
+    this.nameConflict = false,
+    this.onlyExtraLayerFindings = false,
     this.showUsage = false,
     this.backendId,
   });
@@ -224,6 +239,29 @@ final class SecretMigrationReport {
 
   /// Бэкенд только для чтения (`env`): подсказка в [problems].
   final bool readOnlyBackend;
+
+  /// Путь `CODELAB_HOME`, вычисленный тем же `codelabHomeOf`, что и движок;
+  /// `null`, если отказ случился до его вычисления (код `64`).
+  ///
+  /// Почему поле: подсказка бэкенда `env` в app называет `<home>/config.yaml`
+  /// и не должна пересчитывать каталог сама (D8).
+  final String? home;
+
+  /// Отказ из-за конфликта имени: секрет с таким именем уже лежит в
+  /// хранилище с другим значением, а `--force` не задан (`exitCode == 1`,
+  /// ничего не записано, L7).
+  ///
+  /// Почему поле: codelab-app показывает для конфликта отдельный текст и
+  /// только `Close` (D8) и не должна разбирать текст [problems].
+  final bool nameConflict;
+
+  /// Находки есть, но все — `not migrated` из-за слоя `CODELAB_CONFIG`,
+  /// который команда не пишет (D7); переносить нечего, [canApply] `false`.
+  ///
+  /// Почему поле: app в этом случае показывает строки плана и только `Close`
+  /// (D8). Находки записываемых слоёв (в том числе их `not migrated`) поле
+  /// сбрасывают в `false`.
+  final bool onlyExtraLayerFindings;
 
   final bool showUsage;
 
@@ -302,6 +340,7 @@ final class SecretMigrator {
        _random = random ?? Random.secure(),
        _platform = platform ?? Platform.operatingSystem,
        _seam = writeSeam,
+       _customOpener = openStore != null,
        _openStore =
            openStore ??
            (({required choice, required environment, required home}) =>
@@ -320,6 +359,9 @@ final class SecretMigrator {
   final String _platform;
   final Future<void> Function(ConfigWriteSeam point)? _seam;
   final SecretStoreOpener _openStore;
+
+  /// Подставлен открыватель тестов: `testStorePath` ему не передаётся.
+  final bool _customOpener;
 
   /// Выполняет перенос (или его план при `dryRun`).
   Future<SecretMigrationReport> run(SecretMigrationOptions options) =>
@@ -455,6 +497,9 @@ final class _MigrationRun {
 
   late final Map<String, String> _env;
   late final String _home;
+
+  /// `_home` вычислен: отчёт отказа до этого момента несёт `home: null`.
+  var _homeKnown = false;
   late final String _cwd;
   late final ConfigWriter _writer;
   late final DescribedSecretStore _store;
@@ -490,6 +535,7 @@ final class _MigrationRun {
     List<String> problems, {
     bool usage = false,
     bool readOnly = false,
+    bool conflict = false,
   }) => throw _Stop(
     SecretMigrationReport(
       exitCode: code,
@@ -504,6 +550,8 @@ final class _MigrationRun {
       dryRun: _o.dryRun,
       movedAny: _done.isNotEmpty,
       readOnlyBackend: readOnly,
+      home: _homeKnown ? _home : null,
+      nameConflict: conflict,
       showUsage: usage,
       backendId: _backendId,
     ),
@@ -585,6 +633,7 @@ final class _MigrationRun {
     }
     try {
       _home = codelabHomeOf(_env);
+      _homeKnown = true;
     } on ConfigUsageException catch (error) {
       _fail(64, [error.message]);
     }
@@ -649,11 +698,23 @@ final class _MigrationRun {
 
   void _openStore() {
     try {
-      _store = _m._openStore(
-        choice: _secretsChoice,
-        environment: _env,
-        home: _home,
-      );
+      final testPath = _o.testStorePath;
+      _store = testPath != null && !_m._customOpener
+          // Тестовая сборка: то же хранилище, что у агента (D8).
+          ? openSecretStore(
+              choice: _secretsChoice,
+              environment: _env,
+              home: _home,
+              logger: const SilentLogger(),
+              runner: _m._runner,
+              platform: _m._platform,
+              testStorePath: testPath,
+            )
+          : _m._openStore(
+              choice: _secretsChoice,
+              environment: _env,
+              home: _home,
+            );
     } on SecretStoreUnavailableException catch (error) {
       _fail(1, ['secrets.backend: ${error.reason}']);
     }
@@ -1107,7 +1168,7 @@ final class _MigrationRun {
               '--force to replace it${_referencedTail(key)}',
     ];
     if (conflicts.isNotEmpty) {
-      _fail(1, conflicts);
+      _fail(1, conflicts, conflict: true);
     }
   }
 
@@ -1348,7 +1409,14 @@ final class _MigrationRun {
       items: items,
       warnings: _warnings,
       dryRun: planned,
+      home: _home,
       movedAny: !planned && _files.any((f) => f.units.isNotEmpty),
+      // Только находки `CODELAB_CONFIG`: все файлы без единиц правки и без
+      // собственных заметок, кроме незаписываемого слоя (D8).
+      onlyExtraLayerFindings:
+          items.isNotEmpty &&
+          items.every((i) => i is SecretNotMigratedItem) &&
+          _files.every((f) => f.label == 'CODELAB_CONFIG' || f.notes.isEmpty),
       backendId: _backendId,
     );
   }

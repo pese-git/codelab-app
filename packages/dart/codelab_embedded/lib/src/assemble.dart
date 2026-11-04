@@ -28,6 +28,10 @@ const embeddedAgentVersion = '0.1.0';
 /// (провайдеры конфига) и `lib/src/testing/` (сценарий). В публичный барель
 /// файл не экспортируется.
 ///
+/// [secretsInConfig] попадает в `EmbeddedAgent.secretsInConfig` как есть
+/// (D8 change `add-config-literal-secrets-and-migrate`); сценарий его не
+/// задаёт — `false`.
+///
 /// Как использовать: [extraNarrowing] — сужение профиля сверх
 /// `profile.<hostProfile>.*` конфига (хранилище в памяти у сценария).
 /// Профили `embedded-*` получают `services.localEnv` как
@@ -49,6 +53,7 @@ Future<EmbeddedAgent> assembleEmbeddedAgent({
   required EmbeddedHostServices services,
   required StreamFunction streamFunction,
   required ModelCatalog models,
+  bool secretsInConfig = false,
   Map<HostCapability, CapabilityState> extraNarrowing = const {},
   ConfiguredModels Function(CoreConfig config)? modelsFor,
   Future<void> Function(AcpAgentServer server, AcpTransport transport)? serve,
@@ -85,7 +90,14 @@ Future<EmbeddedAgent> assembleEmbeddedAgent({
   // например HostWiringException, или start пары) без освобождения утекла бы
   // ресурсами ядра и HTTP-клиентом, хотя вызывающий агента не получит.
   try {
-    return await _assemble(core, config, services, embedded, serve);
+    return await _assemble(
+      core,
+      config,
+      services,
+      embedded,
+      secretsInConfig,
+      serve,
+    );
   } catch (_) {
     await _releaseCore(core, services);
     rethrow;
@@ -97,6 +109,7 @@ Future<EmbeddedAgent> _assemble(
   EmbeddedAgentConfig config,
   EmbeddedHostServices services,
   bool embedded,
+  bool secretsInConfig,
   Future<void> Function(AcpAgentServer server, AcpTransport transport)? serve,
 ) async {
   final link = InProcessAcpLink();
@@ -123,6 +136,7 @@ Future<EmbeddedAgent> _assemble(
     server: server,
     core: core,
     services: services,
+    secretsInConfig: secretsInConfig,
   );
   await link.agent.start();
   agent._serve(serve ?? (server, transport) => server.serve(transport));
@@ -135,6 +149,7 @@ final class _Agent implements EmbeddedAgent {
     required AcpAgentServer server,
     required BuiltAgentCore core,
     required EmbeddedHostServices services,
+    required this.secretsInConfig,
   }) : _link = link,
        _server = server,
        _core = core,
@@ -149,6 +164,9 @@ final class _Agent implements EmbeddedAgent {
 
   @override
   AcpTransport get clientTransport => _link.client;
+
+  @override
+  final bool secretsInConfig;
 
   @override
   Future<void> get closed => _closed.future;
