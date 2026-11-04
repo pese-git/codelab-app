@@ -37,6 +37,9 @@ final class _FakeAgent implements EmbeddedAgent {
   Future<void> get closed => disposeGate.future;
 
   @override
+  bool get secretsInConfig => false;
+
+  @override
   Future<void> dispose() {
     disposeCalls++;
     return disposeGate.future;
