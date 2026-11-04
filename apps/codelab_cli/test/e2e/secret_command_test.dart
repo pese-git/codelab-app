@@ -80,7 +80,7 @@ void main() {
     expect(cli.stdout, isEmpty);
     expect(cli.stdout, other.stdout);
     expect(beforeUsage(cli.stderr), beforeUsage(other.stderr));
-    expect(cli.stderr, contains('codelab secret set|delete|list'));
+    expect(cli.stderr, contains('codelab secret set|delete|list|migrate'));
     expect('${cli.stdout}${cli.stderr}', isNot(contains(_leak)));
     expect(File('$home/secrets.yaml').existsSync(), isFalse);
   }, tags: scriptedOnly);
@@ -147,8 +147,10 @@ void main() {
         expect(
           result.stderr,
           startsWith(
-            'codelab: secret needs a subcommand: set, delete or '
-            'list\n\nUsage: codelab secret set|delete|list',
+            // Спека change `add-config-literal-secrets-and-migrate`: в
+            // перечне и справке появился `migrate`.
+            'codelab: secret needs a subcommand: set, delete, list or '
+            'migrate\n\nUsage: codelab secret set|delete|list|migrate',
           ),
         );
         expect(result.stderr, isNot(contains(_leak)));
