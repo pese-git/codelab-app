@@ -7,6 +7,7 @@ import 'package:codelab_agent_io/codelab_agent_io.dart'
     show
         ConfigUsageException,
         ProviderPreconfigFlags,
+        before1Note,
         checkConfigFileName,
         codelabHomeOf,
         maxConfigBytes;
@@ -254,7 +255,8 @@ String serveUsage() =>
     '       codelab-agent config check|path|get|set|unset ...\n'
     '       codelab-agent provider add|list|remove ...\n'
     '       codelab-agent mcp add|list|remove ...\n'
-    '       codelab-agent secret set|delete|list\n\n'
+    '       codelab-agent secret set|delete|list|migrate\n\n'
+    '$before1Note\n\n'
     '${_serveParser.usage}';
 
 /// Разбирает [args] и [environment] по правилам §15.6: флаг сильнее

@@ -109,12 +109,22 @@ final class ConfigDocumentEditor {
   }
 
   /// Значение для `YamlEditor`: строка, которую YAML 1.1 прочитал бы как
-  /// булево или null (`off`, `yes`), и строка с `${…}` — в двойных кавычках;
-  /// остальное решает `yaml_edit` (§17.5.5, п. 5).
+  /// булево или null (`off`, `yes`), — в двойных кавычках; строка с `${…}` —
+  /// в одинарных; остальное решает `yaml_edit` (§17.5.5, п. 5; agent-
+  /// configuration «Запись конфига ConfigWriter»).
+  ///
+  /// Почему ссылки в одинарных: `yaml_edit` экранирует в двойных кавычках `/`
+  /// как `\/` (`"${secret:codelab\/gh}"`) — значение то же, но файл нечитаем
+  /// (D5 change `add-config-literal-secrets-and-migrate`). В одинарных
+  /// экранирования нет, только удвоенная `'`. Строка с управляющим символом
+  /// (в том числе `\n`) остаётся в двойных: одинарные не умеют их записать,
+  /// `yaml_edit` сам выбирает escape-запись.
   Object? _wrap(Object? value) => switch (value) {
     final String s when _needsQuotes(s) => wrapAsYamlNode(
       s,
-      scalarStyle: ScalarStyle.DOUBLE_QUOTED,
+      scalarStyle: s.contains(r'${') && !_hasControl(s)
+          ? ScalarStyle.SINGLE_QUOTED
+          : ScalarStyle.DOUBLE_QUOTED,
     ),
     final Map<Object?, Object?> map => {
       for (final MapEntry(:key, :value) in map.entries) '$key': _wrap(value),
@@ -122,6 +132,9 @@ final class ConfigDocumentEditor {
     final List<Object?> list => [for (final item in list) _wrap(item)],
     _ => value,
   };
+
+  static bool _hasControl(String s) =>
+      s.codeUnits.any((c) => c < 0x20 || c == 0x7f);
 
   static final _ambiguousWord = RegExp(
     r'^(y|n|yes|no|on|off|true|false|null|~)$',

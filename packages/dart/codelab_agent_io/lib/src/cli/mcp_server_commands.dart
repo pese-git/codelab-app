@@ -11,6 +11,8 @@ import 'config_commands.dart' show ConfigCommandResult;
 import 'config_edit_runner.dart';
 import 'config_output.dart' show configLayerName;
 import 'exit_codes.dart';
+import 'secret_commands.dart';
+import 'secret_input.dart';
 
 /// Параметры `mcp add`, уже разобранные приложением (design.md change
 /// `add-config-writer-and-reload`, D6).
@@ -22,6 +24,12 @@ import 'exit_codes.dart';
 /// Как использовать: для `stdio` заданы [command], [args] и [env]; для `http`
 /// — [url] и [headers]. [disabled] — `--disabled` (`enabled: false`).
 /// [project] и [local] — флаги слоя; оба вместе — код `64`.
+///
+/// Значение секрета в параметрах отсутствует намеренно (R8-5, D11): флаги
+/// [headerStdin] и [envStdin] называют только имя заголовка или переменной, а
+/// само значение читается из `SecretInput`. Оба списка — потому что флаг
+/// повторяемый: приложение передаёт всё, что получило, а ошибку «больше
+/// одного» (код `64`) даёт общая часть, одинаково для обоих бинарей.
 final class McpAddOptions {
   const McpAddOptions({
     required this.name,
@@ -36,7 +44,22 @@ final class McpAddOptions {
     this.disabled = false,
     this.project = false,
     this.local = false,
+    this.headerStdin = const [],
+    this.headerScheme,
+    this.envStdin = const [],
   });
+
+  /// Повторяемый `--header-stdin <Name>`: значение заголовка из stdin
+  /// (только `http`). Допустим не больше одного флага `-stdin` на вызов.
+  final List<String> headerStdin;
+
+  /// `--header-scheme <Scheme>`: префикс заголовка (`Bearer`); только вместе с
+  /// `--header-stdin`. В хранилище лежит один токен, схема остаётся в конфиге.
+  final String? headerScheme;
+
+  /// Повторяемый `--env-stdin <NAME>`: значение переменной из stdin (только
+  /// `stdio`).
+  final List<String> envStdin;
 
   /// Имя сервера: ключ `mcp.servers[<name>]`.
   final String name;
@@ -131,8 +154,17 @@ final class McpServerCommands {
     @visibleForTesting Clock? clock,
     @visibleForTesting Random? random,
     @visibleForTesting String? platform,
+    @visibleForTesting SecretStoreOpener? openStore,
     @visibleForTesting Future<void> Function(ConfigWriteSeam point)? writeSeam,
   }) : _platform = platform ?? Platform.operatingSystem,
+       // Швы тестов `platform` и `openStore` передаются дальше без изменений.
+       _secrets = SecretCommands(
+         runner: processRunner,
+         // ignore: invalid_use_of_visible_for_testing_member
+         platform: platform,
+         // ignore: invalid_use_of_visible_for_testing_member
+         openStore: openStore,
+       ),
        _runner = ConfigEditRunner(
          processRunner: processRunner,
          clock: clock,
@@ -142,6 +174,7 @@ final class McpServerCommands {
        );
 
   final String _platform;
+  final SecretCommands _secrets;
   final ConfigEditRunner _runner;
 
   /// Имя не должно ломать запись пути `mcp.servers[<name>]`.
@@ -152,7 +185,19 @@ final class McpServerCommands {
   /// Ошибки использования (код `64`): нет или неизвестен `--type`, нет
   /// `--command` у `stdio` или `--url` у `http`, флаги чужого типа, пара без
   /// `=`.
-  Future<ConfigCommandResult> add(McpAddOptions options) async {
+  ///
+  /// Флаги `--header-stdin`/`--env-stdin` (R8-5, D11) сохраняют секрет в
+  /// хранилище под `SecretNames.forMcp(<server>, <ключ>)` и пишут в файл
+  /// только ссылку `${secret:<имя>}`; значение читается из [input]
+  /// (по умолчанию `StdinSecretInput`). Порядок как у
+  /// `provider add --api-key-stdin`: кандидат без записи, проверка
+  /// коллизии имени, `SecretCommands.set` (проверка хранилища, чтение,
+  /// сохранение), одна атомарная запись. Сбой записи после сохранения — код
+  /// `1`, stderr называет сохранённое имя.
+  Future<ConfigCommandResult> add(
+    McpAddOptions options, [
+    SecretInput? input,
+  ]) async {
     ConfigCommandResult usage(String message) => ConfigCommandResult(
       exitCode: configUsageExit,
       stderr: ['mcp add: $message'],
@@ -160,8 +205,20 @@ final class McpServerCommands {
     if (!_nameFormat.hasMatch(options.name)) {
       return usage('the server name must not contain whitespace, [, ] or "');
     }
+    // Один флаг `-stdin` на вызов: stdin один, два значения потребовали бы
+    // протокола разделителей, неоднозначного при скрытом вводе (D11).
+    if (options.headerStdin.length + options.envStdin.length > 1) {
+      return usage(
+        'only one of --header-stdin, --env-stdin can be used per call',
+      );
+    }
+    if (options.headerScheme != null && options.headerStdin.isEmpty) {
+      return usage('--header-scheme requires --header-stdin');
+    }
     final type = options.type;
     final server = <String, Object?>{'name': options.name};
+    // Ключ заголовка или переменной, значение которого придёт из stdin.
+    String? stdinKey;
     switch (type) {
       case 'stdio':
         if ((options.command ?? '').isEmpty) {
@@ -170,9 +227,22 @@ final class McpServerCommands {
         if (options.url != null || options.headers.isNotEmpty) {
           return usage('--url and --header are for --type http');
         }
+        if (options.headerStdin.isNotEmpty) {
+          return usage('--header-stdin is for --type http');
+        }
         final env = _pairs(options.env);
         if (env == null) {
           return usage('--env expects KEY=VALUE');
+        }
+        stdinKey = options.envStdin.isEmpty ? null : options.envStdin.single;
+        if (stdinKey != null) {
+          if (_stdinKeyProblem(stdinKey, '--env-stdin') case final problem?) {
+            return usage(problem);
+          }
+          if (env.containsKey(stdinKey)) {
+            return usage('--env-stdin name is also set by --env');
+          }
+          env[stdinKey] = _reference(options.name, stdinKey, null);
         }
         server
           ..['type'] = 'stdio'
@@ -192,9 +262,35 @@ final class McpServerCommands {
             options.env.isNotEmpty) {
           return usage('--command, --arg and --env are for --type stdio');
         }
+        if (options.envStdin.isNotEmpty) {
+          return usage('--env-stdin is for --type stdio');
+        }
         final headers = _pairs(options.headers);
         if (headers == null) {
           return usage('--header expects KEY=VALUE');
+        }
+        stdinKey = options.headerStdin.isEmpty
+            ? null
+            : options.headerStdin.single;
+        if (stdinKey != null) {
+          if (_stdinKeyProblem(stdinKey, '--header-stdin')
+              case final problem?) {
+            return usage(problem);
+          }
+          // Заголовки регистронезависимы (RFC 9110): `authorization` и
+          // `Authorization` — один заголовок.
+          final lower = stdinKey.toLowerCase();
+          if (headers.keys.any((key) => key.toLowerCase() == lower)) {
+            return usage('--header-stdin name is also set by --header');
+          }
+          final scheme = options.headerScheme;
+          if (scheme != null && !_schemeFormat.hasMatch(scheme)) {
+            return usage(
+              '--header-scheme must be a token of letters, digits and '
+              "!#%&'*+.^_`|~- (RFC 9110)",
+            );
+          }
+          headers[stdinKey] = _reference(options.name, stdinKey, scheme);
         }
         server
           ..['type'] = 'http'
@@ -210,24 +306,229 @@ final class McpServerCommands {
     if (options.disabled) {
       server['enabled'] = false;
     }
-    final outcome = await _runner.apply(
-      label: 'mcp add',
-      environment: options.environment,
-      cwd: options.cwd,
-      project: options.project,
-      local: options.local,
-      edits: (_) => [UpsertMcpServer(server)],
-    );
-    return switch (outcome) {
-      EditFinished(:final result) => result,
-      EditWritten(:final result) => ConfigCommandResult(
-        exitCode: configValidExit,
-        stdout: [
-          'Updated mcp.servers[${options.name}] in ${result.path}',
-          ...ConfigEditRunner.successLines(result),
+    List<ConfigEdit> editsFor(ConfigSnapshot _) => [UpsertMcpServer(server)];
+
+    var secretStdout = const <String>[];
+    var secretStderr = const <String>[];
+    final secretName = stdinKey == null
+        ? null
+        : SecretNames.forMcp(options.name, stdinKey);
+    if (secretName != null) {
+      // Шаг 1 D11: итог проверяется без записи, чтобы заведомо негодную
+      // правку не предварял ввод и сохранение секрета.
+      final check = await _runner.apply(
+        label: 'mcp add',
+        environment: options.environment,
+        cwd: options.cwd,
+        project: options.project,
+        local: options.local,
+        edits: editsFor,
+        dryRun: true,
+      );
+      if (check case EditFinished(:final result)) {
+        return result;
+      }
+      // Коллизия имени: молчаливая замена чужого секрета увела бы токен
+      // другого сервера или провайдера (D11, Risks «Межсерверная коллизия»).
+      final conflict = _nameConflict(options, secretName, stdinKey!);
+      if (conflict != null) {
+        return conflict;
+      }
+      // Шаги 2–4: проверка хранилища, чтение и сохранение — та же
+      // последовательность и те же тексты, что у `secret set`.
+      final stored = await _secrets.set(
+        SecretSetOptions(name: secretName, environment: options.environment),
+        input ?? StdinSecretInput(),
+      );
+      if (stored.exitCode != 0) {
+        return ConfigCommandResult(
+          exitCode: stored.exitCode,
+          stdout: stored.stdout,
+          stderr: stored.stderr,
+        );
+      }
+      secretStdout = [
+        ...stored.stdout,
+        if (stored.replaced)
+          'warning: replaced the existing secret $secretName',
+      ];
+      secretStderr = stored.stderr;
+    }
+
+    final ConfigEditOutcome outcome;
+    try {
+      outcome = await _runner.apply(
+        label: 'mcp add',
+        environment: options.environment,
+        cwd: options.cwd,
+        project: options.project,
+        local: options.local,
+        edits: editsFor,
+      );
+    } on Object catch (error) {
+      if (secretName == null) {
+        rethrow;
+      }
+      // Защитный рубеж шага 5: секрет уже в хранилище, и пользователь должен
+      // узнать об этом, даже если запись упала неожиданным исключением. Только
+      // тип: текст мог бы цитировать значения (CFG-10).
+      return ConfigCommandResult(
+        exitCode: configInvalidExit,
+        stdout: secretStdout,
+        stderr: [
+          ...secretStderr,
+          'the secret $secretName was stored; the config was not changed: '
+              'unexpected ${error.runtimeType}',
         ],
-      ),
-    };
+      );
+    }
+    switch (outcome) {
+      case EditFinished(:final result):
+        if (secretName == null) {
+          return result;
+        }
+        // Секрет остаётся в хранилище: без ссылки он безвреден, а повтор
+        // команды заменит его (D11).
+        return ConfigCommandResult(
+          exitCode: result.exitCode,
+          stdout: secretStdout,
+          stderr: [
+            ...secretStderr,
+            'the secret $secretName was stored; the config was not changed: '
+                '${result.stderr.join('; ')}',
+          ],
+        );
+      case EditWritten(:final result):
+        return ConfigCommandResult(
+          exitCode: configValidExit,
+          stdout: [
+            ...secretStdout,
+            'Updated mcp.servers[${options.name}] in ${result.path}',
+            ...ConfigEditRunner.successLines(result),
+          ],
+          stderr: secretStderr,
+        );
+    }
+  }
+
+  /// Схема заголовка (`Bearer`): без пробелов и `$`, чтобы значение
+  /// `"<схема> ${secret:…}"` не превратилось во что-то иное.
+  /// Схема авторизации — `token` RFC 9110 без `$` (D11): иначе значение
+  /// заголовка могло бы нести подстановку или разделитель.
+  static final _schemeFormat = RegExp(r"^[!#%&'*+.^_`|~0-9A-Za-z-]+$");
+
+  /// Значение `headers.<Name>` или `env.<NAME>`: только ссылка на секрет, при
+  /// заданной [scheme] — с префиксом (`Bearer ${secret:…}`).
+  static String _reference(String server, String key, String? scheme) {
+    final ref = '\${secret:${SecretNames.forMcp(server, key)}}';
+    return scheme == null ? ref : '$scheme $ref';
+  }
+
+  /// Проблема имени заголовка или переменной из `-stdin` (текст без самого
+  /// имени: в поле имени часто вписывают сам токен, D6, D11).
+  static String? _stdinKeyProblem(String key, String flag) {
+    if (key.isEmpty) {
+      return '$flag expects a name';
+    }
+    if (literalSecretTag(key) != null) {
+      return '$flag expects a header or variable name, not a secret value';
+    }
+    return null;
+  }
+
+  /// Ссылка `${secret:<имя>}` в значениях конфига.
+  static final _secretReference = RegExp(r'\$\{secret:([^}$]{1,200})\}');
+
+  /// Отказ (код `1`) при коллизии имени [secretName] до чтения stdin или
+  /// `null` (D11, Risks «Межсерверная коллизия имён»).
+  ///
+  /// Два случая: имя упомянуто в загруженном конфиге (`${secret:…}` или
+  /// `api_key_secret`) другим сервером или провайдером, либо `forMcp` другого
+  /// сервера конфига с тем же ключом даёт то же имя (`GH`/`gh`). Собственное
+  /// имя сервера не считается (повторный `mcp add`). Ошибка загрузки слоёв
+  /// здесь не отказ: итог уже проверен `dryRun`.
+  ConfigCommandResult? _nameConflict(
+    McpAddOptions options,
+    String secretName,
+    String key,
+  ) {
+    final List<ConfigTree> layers;
+    try {
+      layers = ConfigLoader()
+          .loadWithLayers(
+            cwd: options.cwd,
+            environment: options.environment,
+            platform: _platform,
+          )
+          .layers;
+    } on ConfigUsageException catch (error) {
+      return ConfigCommandResult(
+        exitCode: configUsageExit,
+        stderr: ['mcp add: ${error.message}'],
+      );
+    }
+    String? owner;
+    void refs(String path, Object? node) {
+      if (owner != null) {
+        return;
+      }
+      switch (node) {
+        case final String text:
+          final isName = path.endsWith('.api_key_secret') && text == secretName;
+          if (isName ||
+              _secretReference
+                  .allMatches(text)
+                  .any((m) => m.group(1) == secretName)) {
+            owner = path;
+          }
+        case final Map<Object?, Object?> map:
+          for (final MapEntry(:key, :value) in map.entries) {
+            refs('$path.$key', value);
+          }
+        case final List<Object?> list:
+          for (var i = 0; i < list.length; i++) {
+            refs('$path[$i]', list[i]);
+          }
+      }
+    }
+
+    for (final layer in layers) {
+      final providers = layer.values['providers'];
+      if (providers is Map<Object?, Object?>) {
+        for (final MapEntry(key: id, value: body) in providers.entries) {
+          refs('providers.$id', body);
+        }
+      }
+      final mcp = layer.values['mcp'];
+      final servers = mcp is Map<Object?, Object?> ? mcp['servers'] : null;
+      if (servers is! List<Object?>) {
+        continue;
+      }
+      for (final element in servers) {
+        if (element is! Map<Object?, Object?>) {
+          continue;
+        }
+        final other = element['name'];
+        if (other is! String || other == options.name) {
+          continue;
+        }
+        refs('mcp.servers[$other]', element);
+        if (owner == null && SecretNames.forMcp(other, key) == secretName) {
+          owner = 'mcp.servers[$other]';
+        }
+      }
+    }
+    if (owner case final used?) {
+      return ConfigCommandResult(
+        exitCode: configInvalidExit,
+        stderr: [
+          'secret $secretName is already used by $used; store the value '
+              'with codelab secret set <another name> and reference it with '
+              '--header/--env',
+        ],
+      );
+    }
+    return null;
   }
 
   /// `list`: серверы файлов по слоям — имя, тип, слой, `enabled` (D6). К

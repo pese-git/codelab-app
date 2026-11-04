@@ -1,6 +1,6 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
-/// Тихий логгер подкоманд `config` и `secret`.
+/// Тихий логгер подкоманд `config` и `secret` и движка `SecretMigrator`.
 ///
 /// Почему: каталог моделей, `openSecretStore` и `SecretResolver` требуют
 /// `Logger` и пишут в него события, а подкоманды печатают результат только
@@ -9,7 +9,8 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// события лога были бы шумом.
 ///
 /// Как использовать: передавать `const SilentLogger()` только внутри
-/// подкоманд; в хостах (`serve`) живёт настоящий логгер. Не экспортируется
+/// подкоманд и движков, которые вызывают и приложения (`SecretMigrator` для
+/// кнопки codelab-app, D8 change `add-config-literal-secrets-and-migrate`); в хостах (`serve`) живёт настоящий логгер. Не экспортируется
 /// из бареля пакета.
 final class SilentLogger implements Logger {
   const SilentLogger();

@@ -1,4 +1,5 @@
 import 'package:args/args.dart';
+import 'package:codelab_setup/codelab_setup.dart' show before1Note;
 
 /// Версия клиента; печатается `codelab --version`.
 const cliVersion = '0.1.0';
@@ -254,15 +255,28 @@ ArgParser _parser() {
     ..addCommand('config', _configParser())
     ..addCommand('provider', _providerParser())
     ..addCommand('mcp', _mcpParser())
-    // Три подкоманды без флагов: значение секрета читается только из stdin,
-    // флага `--value` нет (argv виден через `ps`; design.md change
-    // `add-agent-secret-store`, D8).
+    // `set`, `delete`, `list` без флагов: значение секрета читается только из
+    // stdin, флага `--value` нет (argv виден через `ps`; design.md change
+    // `add-agent-secret-store`, D8). `migrate` — слои и режим флагами,
+    // значений в argv нет, stdin не читается; его `--cwd` — флаг
+    // подкоманды, а общий `-C/--cwd` с `secret` по-прежнему 64 (design.md
+    // change `add-config-literal-secrets-and-migrate`, D7).
     ..addCommand(
       'secret',
       ArgParser()
         ..addCommand('set', ArgParser())
         ..addCommand('delete', ArgParser())
-        ..addCommand('list', ArgParser()),
+        ..addCommand('list', ArgParser())
+        ..addCommand(
+          'migrate',
+          ArgParser()
+            ..addFlag('project', negatable: false)
+            ..addFlag('local', negatable: false)
+            ..addFlag('all', negatable: false)
+            ..addFlag('dry-run', negatable: false)
+            ..addFlag('force', negatable: false)
+            ..addOption('cwd'),
+        ),
     )
     ..addCommand(
       'test-scenario',
@@ -403,6 +417,23 @@ ArgParser _mcpParser() => ArgParser()
           splitCommas: false,
           help: 'KEY=VALUE header of an http server; repeat for more.',
         )
+        // Значение читается из stdin, в файл идёт ссылка (change
+        // `add-config-literal-secrets-and-migrate`, D11); семантика как у
+        // `codelab-agent mcp add`, проверки флагов — в `McpServerCommands`.
+        ..addMultiOption(
+          'header-stdin',
+          splitCommas: false,
+          help: 'Header name whose value is read from stdin and stored.',
+        )
+        ..addOption(
+          'header-scheme',
+          help: 'Scheme prefix (Bearer) for --header-stdin.',
+        )
+        ..addMultiOption(
+          'env-stdin',
+          splitCommas: false,
+          help: 'Variable name whose value is read from stdin and stored.',
+        )
         ..addFlag(
           'disabled',
           negatable: false,
@@ -417,7 +448,8 @@ ArgParser _mcpParser() => ArgParser()
   ..addCommand('remove', _withLayerFlags(ArgParser()));
 
 /// Справка `codelab --help`.
-String cliUsage() => '''
+String cliUsage() =>
+    '''
 Usage:
   codelab [options] [first message]   interactive REPL
   codelab -p "<prompt>" [options]     headless: one turn, answer in stdout
@@ -426,11 +458,13 @@ Usage:
   codelab config path|get|set|unset ...   read and edit config files
   codelab provider add|list|remove ...    manage LLM providers in config
   codelab mcp add|list|remove ...         manage MCP servers in config
-  codelab secret set|delete|list      manage secrets (value on stdin)
+  codelab secret set|delete|list|migrate   manage secrets (set reads the value on stdin)
   codelab test-scenario <file-or-dir>... --agent <profile> [--filter <glob>] [--timeout <d>]
 
 Options:
-${_parser().usage}''';
+${_parser().usage}
+
+$before1Note''';
 
 /// Разбирает аргументы `codelab`.
 ///
@@ -618,11 +652,16 @@ String mcpUsage() =>
     '[--arg <a>]... [--env KEY=VALUE]...\n'
     '       codelab mcp add <name> --type http --url <url> '
     '[--header KEY=VALUE]...\n'
+    '           [--header-stdin <Name> [--header-scheme <Scheme>]]\n'
     '           [--disabled] [--project | --local]\n'
+    '       codelab mcp add <name> --type stdio --command <cmd> '
+    '--env-stdin <NAME>\n'
     '       codelab mcp list [--cwd <dir>]\n'
     '       codelab mcp remove <name> [--project | --local]\n\n'
     'Edits the config file in place; it does not connect to servers. Put '
-    r'secrets in headers and variables as ${secret:name} or ${VAR}.';
+    r'secrets in headers and variables as ${secret:name} or ${VAR}. '
+    '--header-stdin and --env-stdin read ONE value from stdin (one flag per '
+    'call), store it and write a reference.';
 
 /// Отклоняет флаги подключения и запроса при подкомандах записи.
 ///
@@ -747,16 +786,21 @@ void _checkArgumentCount(
 /// Своя у каждого бинаря, потому что называет его (`codelab-agent` печатает
 /// свою); общие тексты результатов даёт `SecretCommands` (D8).
 String secretUsage() =>
-    'Usage: codelab secret set|delete|list\n\n'
+    'Usage: codelab secret set|delete|list|migrate\n\n'
     '  codelab secret set <name>     '
     'read the value from stdin (hidden on a terminal)\n'
     '  codelab secret delete <name>\n'
-    '  codelab secret list\n\n'
+    '  codelab secret list\n'
+    '  codelab secret migrate [--all | [--project] [--local]] '
+    '[--cwd <dir>] [--dry-run] [--force]\n'
+    '      move secrets written in config files to the store '
+    '(--force replaces a stored secret for good)\n\n'
     'Works on the backend chosen by secrets.backend in '
     r'$CODELAB_HOME/config.yaml or in the file named by CODELAB_CONFIG. '
-    'The value is never passed as an argument and never printed.';
+    'The value is never passed as an argument and never printed.\n\n'
+    '$before1Note';
 
-/// `codelab secret set|delete|list`: [CliOptions.positional] — имя
+/// `codelab secret set|delete|list|migrate`: [CliOptions.positional] — имя
 /// подкоманды и её аргументы.
 ///
 /// Почему проверки здесь: ошибка использования — код `64` до любого
@@ -776,7 +820,7 @@ CliOptions _secretOptions(ArgResults results, ArgResults secret) {
   }
   final sub = secret.command;
   if (sub == null) {
-    throw usage('secret needs a subcommand: set, delete or list');
+    throw usage('secret needs a subcommand: set, delete, list or migrate');
   }
   switch (sub.name) {
     case 'set' when sub.rest.isEmpty:
@@ -785,11 +829,17 @@ CliOptions _secretOptions(ArgResults results, ArgResults secret) {
       throw usage('secret delete needs exactly one name');
     case 'list' when sub.rest.isNotEmpty:
       throw usage('secret list takes no arguments');
+    case 'migrate' when sub.rest.isNotEmpty:
+      throw usage('secret migrate takes no arguments');
   }
+  // `--all` вместе со слоем отсекает общий код `SecretCommands.migrate`
+  // (код 64 и справка), своей проверки здесь нет — как у `codelab-agent`.
   return _options(
     CliCommand.secret,
     results,
     positional: [sub.name!, ...sub.rest],
+    cwd: sub.name == 'migrate' ? sub.option('cwd') : null,
+    subcommand: sub.name == 'migrate' ? sub : null,
   );
 }
 

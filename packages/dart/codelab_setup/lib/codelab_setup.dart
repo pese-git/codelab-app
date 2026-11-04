@@ -17,4 +17,4 @@
 library;
 
 export 'package:codelab_agent_core/codelab_agent_core.dart'
-    show ConfigIssue, ConfigIssueKind, ConfigLoadResult;
+    show ConfigIssue, ConfigIssueKind, ConfigLoadResult, before1Note;

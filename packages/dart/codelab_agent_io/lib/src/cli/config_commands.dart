@@ -14,8 +14,7 @@ import '../secrets/secret_process_runner.dart';
 import 'config_edit_runner.dart';
 import 'config_output.dart';
 import 'exit_codes.dart';
-import 'secret_commands.dart' show SecretStoreOpener;
-import 'silent_logger.dart';
+import '../util/silent_logger.dart';
 
 /// Параметры `config check`, уже разобранные приложением (D13).
 ///

@@ -85,6 +85,21 @@ void checkConfigFileName(String path, {required String origin}) {
 /// architecture` §15.5). Настоящий конфиг на порядки меньше.
 const maxConfigBytes = 1024 * 1024;
 
+/// Итоговый текст слоя, который запишет та же операция следом (R8-10).
+///
+/// Почему: проверка кандидата одного файла сливает его с остальными слоями с
+/// диска; когда файлов несколько (`secret migrate --all`), нужен итог всех
+/// правок сразу. Значение — текст конфига: в `toString` не попадает.
+final class PendingConfigText {
+  const PendingConfigText({required this.kind, required this.text});
+
+  final ConfigLayerKind kind;
+  final String text;
+
+  @override
+  String toString() => 'PendingConfigText($kind)';
+}
+
 /// Итог [ConfigLoader.validateCandidate]: проблемы запрещают запись, а
 /// предупреждения (в том числе `config.project.untrusted_key` и незаданная
 /// `${VAR}`) сообщаются вызывающему (design.md change
@@ -264,6 +279,12 @@ final class ConfigLoader {
   /// окружения и правила доверия принадлежат загрузчику; писатель не
   /// повторяет их, иначе проверка записи разошлась бы с загрузкой.
   ///
+  /// [pending] — итоговые тексты ДРУГИХ слоёв, которые та же операция запишет
+  /// следом (`secret migrate --all`, R8-10): без них правка первого файла
+  /// сливалась бы с ещё не переписанным вторым и давала промежуточный
+  /// конфликт источников ключа (R8-6). По умолчанию пусто — одиночная запись
+  /// не меняется.
+  ///
   /// Как использовать: [cwd] — корень запуска (для слоёв `project` — каталог
   /// проекта), [environment] — переменные процесса писателя. Остальные слои
   /// читаются с диска. Незаданная `${VAR}` попадает в `warnings`, а не в
@@ -281,6 +302,7 @@ final class ConfigLoader {
     required String cwd,
     required Map<String, String> environment,
     String? platform,
+    @internal List<PendingConfigText> pending = const [],
   }) {
     final kind = configLayerKindOf(target.layer);
     ConfigLoadResult run(Map<String, String> env) => loadWithLayers(
@@ -288,6 +310,7 @@ final class ConfigLoader {
       environment: env,
       platform: platform,
       candidate: (kind: kind, text: text),
+      pending: pending,
       collectAll: true,
     ).result;
 
@@ -343,6 +366,7 @@ final class ConfigLoader {
     Set<String> knownVariables = const {},
     String? platform,
     ({ConfigLayerKind kind, String text})? candidate,
+    List<PendingConfigText> pending = const [],
     bool collectAll = false,
     List<String>? pinnedTrustedProjects,
   }) {
@@ -375,13 +399,17 @@ final class ConfigLoader {
     // ([origin]), а путь идёт в текст: так stderr называет, откуда пришёл путь.
     void readFile(String path, ConfigLayerKind kind, {String? origin}) {
       final String? text;
-      if (candidate != null && candidate.kind == kind) {
+      final PendingConfigText? replacement =
+          candidate != null && candidate.kind == kind
+          ? PendingConfigText(kind: candidate.kind, text: candidate.text)
+          : pending.where((p) => p.kind == kind).firstOrNull;
+      if (replacement != null) {
         // Кандидат записи заменяет слой целиком (D5, шаг 6): файла на диске
         // может не быть или он может отличаться от того, что будет записано.
         // Имя источника остаётся путём слоя, чтобы проблемы называли файл
         // конфига, а не tmp.
         yamlFound = true;
-        if (utf8.encode(candidate.text).length > maxConfigBytes) {
+        if (utf8.encode(replacement.text).length > maxConfigBytes) {
           issues.add(
             ConfigIssue(
               kind: ConfigIssueKind.syntax,
@@ -392,7 +420,7 @@ final class ConfigLoader {
           );
           return;
         }
-        text = candidate.text;
+        text = replacement.text;
       } else {
         // 8.5: проектный слой читается только по реальному пути внутри
         // `<cwd>/.codelab` (проверенное и открытое совпадают). Существующая

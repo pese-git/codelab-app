@@ -89,8 +89,8 @@
 
 ## 3. secret set|delete, secret migrate, mcp add из stdin (итерация 3)
 
-- [ ] 3.1 `[agent]` Красный тест в `codelab_agent_io/test/cli/secret_commands_test.dart` (agent-secrets «Имя секрета, похожее на значение»). Затем — проверка в `cli/secret_commands.dart` (D6).
-- [ ] 3.2 `[agent]` Красный тест `codelab_agent_io/test/secrets/secret_migrator_test.dart` (agent-secrets «Подкоманда secret migrate», все сценарии):
+- [x] 3.1 `[agent]` Красный тест в `codelab_agent_io/test/cli/secret_commands_test.dart` (agent-secrets «Имя секрета, похожее на значение»). Затем — проверка в `cli/secret_commands.dart` (D6).
+- [x] 3.2 `[agent]` Красный тест `codelab_agent_io/test/secrets/secret_migrator_test.dart` (agent-secrets «Подкоманда secret migrate», все сценарии):
   - перенос провайдера и смешанного заголовка с комментариями;
   - `token` сервера — сохранён до удаления;
   - `--dry-run`;
@@ -107,11 +107,11 @@
   - ни одного значения в отчёте и логе.
 
   Затем — `secrets/secret_migrator.dart` (D7).
-- [ ] 3.3 `[agent]` Красный тест `codelab_agent_io/test/cli/secret_migrate_command_test.dart`: строки CLI, флаги, коды, `restart the agent …`. Затем — `SecretCommands.migrate` (D7).
-- [ ] 3.4 `[agent]` Красный тест `codelab_agent_io/test/cli/mcp_add_stdin_test.dart` (agent-configuration «Значение заголовка или переменной mcp add из stdin»): заголовок со схемой и без, переменная; один флаг на вызов; `--header-scheme` без `--header-stdin`; имя одновременно в `--header` и `-stdin`; бэкенд `env` без чтения stdin; замена существующего секрета с предупреждением; сбой записи конфига после сохранения; имя, похожее на токен, — `64`; совпадение с `--header` без учёта регистра; имя секрета занято другим сервером или провайдером или совпало `forMcp` — код `1` до чтения stdin; значение нигде не напечатано. Затем — `McpServerCommands` (D11).
-- [ ] 3.5 `[agent]` `codelab_setup/io.dart`: реэкспорт `SecretMigrator`, `SecretMigrationReport`, опций и пунктов и опций `mcp add`; тест экспорта (находка №7).
-- [ ] 3.6 `[agent]` Красные процессные тесты `apps/codelab_agent/test/secret_migrate_process_test.dart` (agent-binary «Подкоманда secret бинаря», сценарий «Секрет из файла переносится») и `mcp_add_stdin_process_test.dart` («Флаги stdin у mcp add бинаря»). Затем — argv в `secret_cli.dart` и разбор `mcp add`; строка о 1.0 в справке `serve` и `secret` (R8-7, D13).
-- [ ] 3.7 `[client]` Красные e2e-тесты `apps/codelab_cli/test/e2e/secret_migrate_test.dart` и `mcp_add_stdin_test.dart` (codelab-cli «Подкоманда codelab secret», «Флаги stdin у codelab mcp add»): вывод, коды и байты файла совпадают с `codelab-agent`; `--cwd` подкоманды разрешён, `-C` верхнего уровня — `64`; справка `secret` и `codelab --help` содержат строку о 1.0 (R8-7). Затем — argv и справка в `codelab`.
+- [x] 3.3 `[agent]` Красный тест `codelab_agent_io/test/cli/secret_migrate_command_test.dart`: строки CLI, флаги, коды, `restart the agent …`. Затем — `SecretCommands.migrate` (D7).
+- [x] 3.4 `[agent]` Красный тест `codelab_agent_io/test/cli/mcp_add_stdin_test.dart` (agent-configuration «Значение заголовка или переменной mcp add из stdin»): заголовок со схемой и без, переменная; один флаг на вызов; `--header-scheme` без `--header-stdin`; имя одновременно в `--header` и `-stdin`; бэкенд `env` без чтения stdin; замена существующего секрета с предупреждением; сбой записи конфига после сохранения; имя, похожее на токен, — `64`; совпадение с `--header` без учёта регистра; имя секрета занято другим сервером или провайдером или совпало `forMcp` — код `1` до чтения stdin; значение нигде не напечатано. Затем — `McpServerCommands` (D11).
+- [x] 3.5 `[agent]` `codelab_setup/io.dart`: реэкспорт `SecretMigrator`, `SecretMigrationReport`, опций и пунктов и опций `mcp add`; тест экспорта (находка №7).
+- [x] 3.6 `[agent]` Красные процессные тесты `apps/codelab_agent/test/secret_migrate_process_test.dart` (agent-binary «Подкоманда secret бинаря», сценарий «Секрет из файла переносится») и `mcp_add_stdin_process_test.dart` («Флаги stdin у mcp add бинаря»). Затем — argv в `secret_cli.dart` и разбор `mcp add`; строка о 1.0 в справке `serve` и `secret` (R8-7, D13).
+- [x] 3.7 `[client]` Красные e2e-тесты `apps/codelab_cli/test/e2e/secret_migrate_test.dart` и `mcp_add_stdin_test.dart` (codelab-cli «Подкоманда codelab secret», «Флаги stdin у codelab mcp add»): вывод, коды и байты файла совпадают с `codelab-agent`; `--cwd` подкоманды разрешён, `-C` верхнего уровня — `64`; справка `secret` и `codelab --help` содержат строку о 1.0 (R8-7). Затем — argv и справка в `codelab`.
 
 **Критерий итерации 3.** Перенос и добавление секрета работают одной командой в обоих бинарях, без значений в выводе.
 

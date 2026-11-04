@@ -190,9 +190,9 @@
 ## ADDED Requirements
 
 ### Requirement: Подкоманда secret migrate
-`SecretCommands.migrate` (оба бинаря) SHALL быть обёрткой над движком `SecretMigrator` (`codelab_agent_io`), который возвращает типизированный отчёт без значений; CLI SHALL вызывать тот же движок через `package:codelab_setup/io.dart`, codelab-app — через `package:codelab_embedded/io.dart` (design.md change `add-config-literal-secrets-and-migrate`, D7). Синтаксис: `secret migrate [--project | --local | --all] [--cwd <dir>] [--dry-run] [--force]`.
+`SecretCommands.migrate` (оба бинаря) SHALL быть обёрткой над движком `SecretMigrator` (`codelab_agent_io`), который возвращает типизированный отчёт без значений; CLI SHALL вызывать тот же движок через `package:codelab_setup/io.dart`, codelab-app — через `package:codelab_embedded/io.dart` (design.md change `add-config-literal-secrets-and-migrate`, D7). Синтаксис: `secret migrate [--all | [--project] [--local]] [--cwd <dir>] [--dry-run] [--force]`.
 
-Команда SHALL загружать конфиг обычным `ConfigLoader` со всеми проверками; любая проблема загрузки — код `1` с проблемой. Переносятся находки `findInlineSecrets` применяемых слоёв:
+Команда SHALL загружать конфиг обычным `ConfigLoader` со всеми проверками; любая проблема загрузки — код `1` с проблемой. Исключение (R8-11): если единственные проблемы загрузки — R8-6 с ключом `providers.<id>.api_key` и правки выбранных слоёв их снимают, загрузка НЕ SHALL давать отказ; итог всех слоёв SHALL проверяться целиком («Итог слияния» ниже) до обращения к хранилищу и записи; любая другая проблема загрузки — код `1`. Хранилище для выбора имён и конфликтов SHALL читаться только после этой проверки и только по именам, на которые ссылаются владельцы с находками; имена, похожие на значение (`literalSecretTag != null`), НЕ SHALL читаться. Переносятся находки `findInlineSecrets` применяемых слоёв:
 - `api_key`/`apiKey` провайдера и литерал в `api_key_env`/`api_key_secret` → `api_key_secret: <name>` (`api_key`, `apiKey`, `api_key_env` удаляются той же правкой);
 - прочие ключи `inlineSecretKeys` провайдера или элемента `mcp.servers` → значение сохраняется в хранилище **до** удаления ключа; stdout получает `action required: reference ${secret:<name>} in <место>`;
 - участок секрета в строке `headers`/`env` → `${secret:<name>}` на месте участка, остальное сохраняется; второй и следующие участки одного значения — `<name>-2`, `<name>-3`;
@@ -204,20 +204,25 @@
 - элементы `mcp.servers[*].args` с подсказкой `--env <NAME>='${secret:…}'`;
 - недоверенные проектные слои — значение такого слоя НЕ SHALL попадать в хранилище;
 - значение, которое отклонила бы проверка `secretValueProblem` (перевод строки, например PEM; больше 64 КиБ; непарный суррогат), — строка `not migrated: <key> cannot be stored (<причина>)`;
+- литеральная часть вместе с подстановкой `${VAR}` в `providers.<id>.api_key`, когда загрузка проходит, — строка `not migrated: providers.<id>.api_key mixes a literal with a substitution; move it to api_key_secret manually`; файл и хранилище НЕ SHALL меняться для этого ключа;
+- правка, которую писатель отклонил бы по правилу имён (например, заголовок с секретным именем `token`), — строка `not migrated: <key> has a name reserved for secret keys, so it cannot be rewritten automatically; rename it or move the value to a secret by hand`; значение НЕ SHALL попадать в хранилище, файл для этого ключа НЕ SHALL меняться;
 - `CODELAB_CONFIG`.
 
-Слои: по умолчанию `user`; `--project`, `--local` — для `--cwd` (иначе каталога процесса); `--all` — `user`, `project`, `local`; `--all` с `--project`/`--local` — код `64`.
+Слои: по умолчанию `user`; `--project`, `--local` — для `--cwd` (иначе каталога процесса), вместе — оба проектных слоя без `user`; `--all` — `user`, `project`, `local`; `--all` с любым из `--project`, `--local` — код `64`.
 
 Порядок:
-1. Без записи: находки; проверка доверия писателя для каждой правки проектного слоя; `SecretAdmin.checkStore`; конфликты имён; кандидат каждого файла через `ConfigLoader.validateCandidate` без новых проблем. Отказ на этом шаге НЕ SHALL оставлять записей.
+1. Без записи: находки; проверка доверия писателя для каждой правки проектного слоя; итог слияния (ниже); `SecretAdmin.checkStore` — только если есть что переносить; конфликты имён; кандидат каждого файла через `ConfigLoader.validateCandidate` без новых проблем. Отказ на этом шаге НЕ SHALL оставлять записей.
+
+   **Итог слияния (R8-10).** Правило R8-6 (capability `agent-configuration`) SHALL проверяться для конфига, который получится после правок **всех** выбранных файлов вместе с невыбранными слоями, а не для каждого файла отдельно. Если итог оставил бы у провайдера `<p>` два источника ключа (литеральный `api_key` невыбранного слоя `<layer>` и новый `api_key_secret`), команда SHALL завершаться кодом `1` до записи и до обращения к хранилищу с текстом `secret migrate: the result would leave two key sources for providers.<p> (<layer> keeps its own); run with --all`; если источник остаётся в `CODELAB_CONFIG` — с текстом `secret migrate: the result would leave two key sources for providers.<p> (CODELAB_CONFIG keeps its own); remove the key from CODELAB_CONFIG`; `--dry-run` SHALL давать тот же отказ.
 2. Конфликт имени:
    - внутри запуска то же значение — один секрет; другое — следующее свободное имя `<name>-2`, `<name>-3` в порядке слоёв (`user`, `project`, `local`), затем порядка файла (так же разводятся имена `forMcp` разных серверов, совпавшие после нормализации);
-   - с хранилищем то же значение — `Reused secret <name> for <ключ> in <path>`, другое без `--force` — код `1` до записи с текстом `secret <name> already exists with a different value; rerun with --force to replace it`;
+   - имя, на которое тот же владелец ключа (`providers.<id>` или `mcp.servers[<имя>]`) уже ссылается в загруженном конфиге, а хранилище держит под ним другое значение или не держит его вовсе, SHALL пропускаться: берётся следующее `<name>-2`, `<name>-3`; ссылка другого владельца на то же имя SHALL оставаться конфликтом с хранилищем (без `--force` — код `1`, с `--force` — замена);
+   - с хранилищем то же значение — `Reused secret <name> for <ключ> in <path>`, другое без `--force` — код `1` до записи с текстом `secret <name> already exists with a different value; rerun with --force to replace it; also referenced by: <ключ> (<layer>), …` (ключи всех слоёв загруженного конфига, ссылающиеся на это имя; без таких ключей хвоста нет);
    - `--force` — замена со строкой `warning: replaced the existing secret <name>; the previous value cannot be restored; also referenced by: <ключи>` (ключи всех слоёв загруженного конфига, ссылающиеся на это имя; без таких ключей хвоста нет).
-3. По файлу: секреты, затем одна атомарная `ConfigWriter.apply`; `ConfigConflictException` — одно перечитывание.
+3. Секреты всех выбранных файлов SHALL сохраняться до первой записи конфига; затем по файлу одна атомарная `ConfigWriter.apply`; `ConfigConflictException` — одно перечитывание. Сбой хранилища НЕ SHALL оставлять переписанных файлов.
 4. Сбой записи конфига после сохранения секретов — код `1`, stderr называет сохранённые имена, файл не изменён; повторный запуск SHALL переиспользовать их.
 
-`--dry-run` SHALL выполнять шаги 1–2 и печатать план `<path>: <ключ> -> <ссылка> (new|reuse|replace)` без записи; код — как у настоящего запуска. Вывод: `Moved <ключ> in <path> to secret <name>`, при переносе последней строкой `restart the agent to use the moved secrets`; без находок — `Nothing to migrate`. Бэкенд только для чтения — код `1` с подсказкой `secrets.backend: file` или переменных `CODELAB_SECRET_<…>` (имена без значений). Значения, длины, префиксы и хеши НЕ SHALL попадать в stdout, stderr и лог. Коды: `0`, `1` (хранилище, конфликт, писатель, кандидат, загрузка), `64` (использование).
+`--dry-run` SHALL выполнять шаги 1–2 и печатать план `<path>: <ключ> -> <ссылка> (new|reuse|replace)` без записи; код — как у настоящего запуска. Вывод: `Moved <ключ> in <path> to secret <name>`; если значение совпало с хранилищем, строка `Reused secret <name> for <ключ> in <path>` SHALL печататься перед `Moved` того же ключа; при переносе последней строкой — `restart the agent to use the moved secrets`. `Nothing to migrate` SHALL печататься только при полностью пустом отчёте — без переносов и без строк `Reused`, `action required`, `not migrated`. Бэкенд только для чтения — код `1` с подсказкой `secrets.backend: file` или переменных `CODELAB_SECRET_<…>` (имена без значений), если есть что переносить; без переносов бэкенд не проверяется. Значения, длины, префиксы и хеши НЕ SHALL попадать в stdout, stderr и лог. Коды: `0`, `1` (хранилище, конфликт, два источника ключа в итоге, писатель, кандидат, загрузка), `64` (использование).
 
 #### Scenario: Перенос ключа провайдера и смешанного заголовка
 - **GIVEN** `secrets.backend: file`; `config.yaml` с комментариями содержит `providers.lm.api_key: sk-<30 символов>` и сервер `gh` с `Authorization: "Bearer ghp_<36 символов> ${X}"`
@@ -238,19 +243,29 @@
 
 #### Scenario: Конфликт имени
 - **WHEN** `codelab/lm` уже сохранён с другим значением
-- **THEN** без `--force` — код `1`, файл и хранилище не изменены, `--dry-run` даёт тот же код; с `--force` — код `0` и `warning: replaced the existing secret codelab/lm; the previous value cannot be restored`
+- **THEN** без `--force` — код `1`, stderr — `secret codelab/lm already exists with a different value; rerun with --force to replace it` (ссылающихся ключей нет — хвоста нет), файл и хранилище не изменены, `--dry-run` даёт тот же код; с `--force` — код `0` и `warning: replaced the existing secret codelab/lm; the previous value cannot be restored`
 
 #### Scenario: Одно имя у двух находок
-- **WHEN** пользовательский и проектный слой (`--all`, доверенный проект) задают `providers.lm.api_key` с разными значениями
-- **THEN** код `0`; пользовательский слой получает `api_key_secret: codelab/lm`, проектный — `codelab/lm-2`; `--dry-run` показывает оба имени со статусом `new`
+- **WHEN** пользовательский и проектный слой доверенного проекта задают `providers.lm.api_key` с разными значениями, запускается `secret migrate --all`
+- **THEN** код `0`; пользовательский слой получает `api_key_secret: codelab/lm`, проектный — `codelab/lm-2`; `--dry-run --all` показывает оба имени со статусом `new`
+
+#### Scenario: Ключ одного провайдера в двух слоях с --all
+- **GIVEN** `secrets.backend: file`; пользовательский слой и проектный слой доверенного проекта задают `providers.lm.api_key` с одним и тем же значением `sk-<30 символов>`
+- **WHEN** запускается `secret migrate --all`
+- **THEN** код `0`; хранилище содержит один секрет `codelab/lm`; оба файла содержат `api_key_secret: codelab/lm` и не содержат `api_key`; загрузка итогового конфига проходит без проблем R8-6
+
+#### Scenario: Часть слоёв оставила бы два источника ключа
+- **GIVEN** `secrets.backend: file`; пользовательский слой и проектный слой доверенного проекта задают литеральный `providers.lm.api_key`
+- **WHEN** запускается `secret migrate` (только `user`) или `secret migrate --dry-run`
+- **THEN** код `1`; stderr — `secret migrate: the result would leave two key sources for providers.lm (project keeps its own); run with --all`; оба файла не изменены; хранилище не вызывалось и не содержит `codelab/lm`; вывод без значений
 
 #### Scenario: Значение, которое хранилище не примет
 - **WHEN** `mcp.servers[gh].env.KEY` содержит многострочный PEM-блок
 - **THEN** строка `not migrated: mcp.servers[gh].env.KEY cannot be stored (secret value must be a single line)` без значения; остальные находки перенесены; код `0`; `--dry-run` показывает ту же строку
 
 #### Scenario: --force называет ссылающиеся ключи
-- **WHEN** пользовательский слой ссылается `api_key_secret: codelab/lm`, хранилище содержит `codelab/lm`, а проектный слой содержит литеральный `providers.lm.api_key` с другим значением; запускается `secret migrate --project --force`
-- **THEN** stdout содержит `warning: replaced the existing secret codelab/lm; the previous value cannot be restored; also referenced by: providers.lm.api_key_secret (user)`
+- **WHEN** пользовательский слой задаёт провайдер `q` с `api_key_secret: codelab/lm`, хранилище содержит `codelab/lm`, а проектный слой доверенного проекта содержит литеральный `providers.lm.api_key` с другим значением (провайдера `lm` в пользовательском слое нет); запускается `secret migrate --project --force`
+- **THEN** код `0`; stdout содержит `warning: replaced the existing secret codelab/lm; the previous value cannot be restored; also referenced by: providers.q.api_key_secret (user)`; проектный слой получает `api_key_secret: codelab/lm`
 
 #### Scenario: Недоверенный проект
 - **WHEN** проект вне `trusted_projects` содержит `providers.p.api_key: sk-<30 символов>`, запускается `secret migrate --all`
@@ -259,6 +274,44 @@
 #### Scenario: Повтор после сбоя записи конфига
 - **WHEN** секреты сохранены, а запись файла сорвалась (шов писателя), и команда запускается повторно
 - **THEN** первый запуск — код `1`, stderr называет `codelab/lm`, файл не изменён; второй — `Reused secret codelab/lm …`, файл перенесён, код `0`
+
+#### Scenario: Проектный и локальный слои вместе
+- **GIVEN** `secrets.backend: file`; пользовательский слой, проектный слой доверенного проекта и `config.local.yaml` содержат каждый литерал в `headers` разных MCP-серверов
+- **WHEN** запускается `secret migrate --project --local`
+- **THEN** код `0`; перенесены находки проектного и локального слоёв; пользовательский файл не изменён; `secret migrate --all --project` — код `64`
+
+#### Scenario: Литерал с подстановкой в api_key
+- **GIVEN** `providers.lm.api_key: "ghp_<36 символов> ${X}"`, переменная `X` задана
+- **WHEN** запускается `secret migrate`
+- **THEN** код `0`; stdout содержит `not migrated: providers.lm.api_key mixes a literal with a substitution; move it to api_key_secret manually` без значения; файл и хранилище не изменены
+
+#### Scenario: Заголовок с именем секретного ключа
+- **GIVEN** `secrets.backend: file`; `mcp.servers[gh].headers.token` содержит `ghp_<36 символов>`
+- **WHEN** запускается `secret migrate`
+- **THEN** код `0`; stdout содержит `not migrated: mcp.servers[gh].headers.token has a name reserved for secret keys, so it cannot be rewritten automatically; rename it or move the value to a secret by hand` без значения; файл и хранилище не изменены
+
+#### Scenario: Нечего переносить на бэкенде только для чтения
+- **WHEN** `secrets.backend` не задан (`env`), в слоях нет находок, запускается `secret migrate`
+- **THEN** код `0`, stdout — `Nothing to migrate`, подсказки про `secrets.backend` нет
+
+#### Scenario: Повтор после сбоя записи второго файла
+- **GIVEN** `secrets.backend: file`; пользовательский слой и проектный слой доверенного проекта задают `providers.lm.api_key` с одним значением; запись второго файла (`project`) срывается (шов писателя)
+- **WHEN** запускается `secret migrate --all`, затем `secret migrate --all` повторно
+- **THEN** первый запуск — код `1`, stderr называет `codelab/lm`, пользовательский файл перенесён, проектный не изменён (загрузка такого конфига даёт проблему R8-6); второй запуск не отказывает на этой проблеме, печатает `Reused secret codelab/lm …` и `Moved …` для проектного файла, код `0`; после него конфиг загружается без проблем
+
+#### Scenario: Ручная пара источников ключа
+- **GIVEN** `secrets.backend: file`; пользовательский слой задаёт `providers.lm.api_key_secret: codelab/lm`, проектный слой доверенного проекта — литеральный `providers.lm.api_key` (загрузка даёт проблему R8-6); других проблем нет
+- **WHEN** запускается `secret migrate --project`
+- **THEN** код `0`; литерал проектного слоя перенесён, проектный слой ссылается на секрет с его значением; итоговый конфиг загружается без проблем, ключом провайдера `lm` служит значение проектного слоя; если в конфиге есть ещё одна проблема (`budget.max_steps: 0`) — код `1`, файлы и хранилище не тронуты
+
+#### Scenario: Имя занято тем же провайдером
+- **GIVEN** `secrets.backend: file`; пользовательский слой задаёт `providers.lm.api_key_secret: codelab/lm`, хранилище не содержит `codelab/lm`; проектный слой доверенного проекта задаёт литеральный `providers.lm.api_key`
+- **WHEN** запускается `secret migrate --project`
+- **THEN** код `0`; проектный слой получает `api_key_secret: codelab/lm-2`, хранилище — `codelab/lm-2`; `codelab/lm` не создан
+
+#### Scenario: Источник ключа в CODELAB_CONFIG
+- **WHEN** и файл `CODELAB_CONFIG`, и пользовательский слой задают литеральный `providers.lm.api_key` (загрузка проходит с предупреждениями); запускается `secret migrate --all`
+- **THEN** код `1`, stderr — `secret migrate: the result would leave two key sources for providers.lm (CODELAB_CONFIG keeps its own); remove the key from CODELAB_CONFIG`; файлы и хранилище не изменены
 
 #### Scenario: args не переносятся
 - **WHEN** `mcp.servers[gh].args` содержит `ghp_<36 символов>`

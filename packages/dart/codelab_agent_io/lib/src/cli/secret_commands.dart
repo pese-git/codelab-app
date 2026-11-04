@@ -5,28 +5,20 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:meta/meta.dart';
 
 import '../config/config_loader.dart';
+import '../config/config_writer.dart' show ConfigWriteSeam;
 import '../config/yaml_reader.dart';
 import '../secrets/open_secret_store.dart';
 import '../secrets/secret_admin.dart';
+import '../secrets/secret_migrator.dart';
 import '../secrets/secret_process_runner.dart';
 import 'exit_codes.dart';
 import 'secret_input.dart';
-import 'silent_logger.dart';
+import '../util/silent_logger.dart';
 
-/// Открывает хранилище секретов по значению `secrets.backend` (design.md
-/// change `add-agent-secret-store`, D7, D8).
-///
-/// Почему тип: `SecretCommands` и `ConfigCommands` получают хранилище одним
-/// способом, а тесты подменяют его фейком, не создавая файлов. По умолчанию —
-/// `openSecretStore` с тихим логгером. [choice] — значение `secrets.backend`
-/// (`null` — `auto`), [home] — `$CODELAB_HOME`. Недопустимое значение —
-/// `SecretStoreUnavailableException`.
-typedef SecretStoreOpener =
-    DescribedSecretStore Function({
-      required String? choice,
-      required Map<String, String> environment,
-      required String home,
-    });
+// Тип перенесён в `open_secret_store.dart`, чтобы `SecretMigrator` (слой
+// `secrets/`) не импортировал `cli/`; прежние импорты `show SecretStoreOpener`
+// из этого файла продолжают работать.
+export '../secrets/open_secret_store.dart' show SecretStoreOpener;
 
 /// Параметры `secret set`, уже разобранные приложением (design.md change
 /// `add-agent-secret-store`, D8).
@@ -104,6 +96,44 @@ final class SecretListOptions {
   final Map<String, String> environment;
 }
 
+/// Параметры `secret migrate`, уже разобранные приложением (design.md change
+/// `add-config-literal-secrets-and-migrate`, D7).
+///
+/// Почему отдельный тип: разбор argv — дело `package:args` каждого
+/// приложения, общая часть получает типизированный вход, одинаковый у
+/// `codelab` и `codelab-agent`. Значения секретов в параметрах нет вовсе:
+/// движок читает их из файлов конфига, stdin не читается.
+///
+/// Как использовать: флаги слоёв как есть из argv — [project], [local],
+/// [all]; без них переносится слой `user`. [all] вместе с [project] или
+/// [local] — ошибка использования (`64`). [cwd] — значение `--cwd` либо
+/// каталог процесса; [dryRun] — только план; [force] — заменить секрет с
+/// другим значением (безвозвратно).
+final class SecretMigrateOptions {
+  const SecretMigrateOptions({
+    required this.environment,
+    required this.cwd,
+    this.project = false,
+    this.local = false,
+    this.all = false,
+    this.dryRun = false,
+    this.force = false,
+  });
+
+  /// Переменные процесса (`CODELAB_HOME`, `CODELAB_CONFIG`, `CODELAB_SECRET_*`);
+  /// в `toString` не попадают.
+  final Map<String, String> environment;
+
+  /// Корень проекта для слоёв `project` и `local` и для доверия проекту.
+  final String cwd;
+
+  final bool project;
+  final bool local;
+  final bool all;
+  final bool dryRun;
+  final bool force;
+}
+
 /// Результат подкоманды `secret`: код выхода и строки двух потоков.
 ///
 /// Почему данные, а не печать: приложение само пишет в свои stdout/stderr, а
@@ -138,7 +168,7 @@ final class SecretCommandResult {
   final bool replaced;
 }
 
-/// Общая реализация подкоманд `secret set|delete|list` для `codelab-agent` и
+/// Общая реализация подкоманд `secret set|delete|list|migrate` для `codelab-agent` и
 /// `codelab` (design.md change `add-agent-secret-store`, D8; agent-secrets
 /// «Подкоманды secret»).
 ///
@@ -156,7 +186,7 @@ final class SecretCommandResult {
 /// хранилища.
 ///
 /// Как использовать: `await SecretCommands().set(SecretSetOptions(…),
-/// StdinSecretInput())` (аналогично [delete], [list]); напечатать `stdout` и
+/// StdinSecretInput())` (аналогично [delete], [list], [migrate]); напечатать `stdout` и
 /// `stderr` результата, при [SecretCommandResult.showUsage] — ещё справку
 /// `secret`, и завершиться с `exitCode`. [runner] и [platform] — швы для
 /// бэкенда `file` и тестов Windows, [openStore] — только для тестов.
@@ -165,7 +195,10 @@ final class SecretCommands {
     SecretProcessRunner? runner,
     @visibleForTesting String? platform,
     @visibleForTesting SecretStoreOpener? openStore,
-  }) : _platform = platform ?? Platform.operatingSystem,
+    @visibleForTesting Future<void> Function(ConfigWriteSeam point)? writeSeam,
+  }) : _runnerArg = runner,
+       _writeSeam = writeSeam,
+       _platform = platform ?? Platform.operatingSystem,
        _openStore =
            openStore ??
            (({required choice, required environment, required home}) =>
@@ -178,6 +211,8 @@ final class SecretCommands {
                  platform: platform,
                ));
 
+  final SecretProcessRunner? _runnerArg;
+  final Future<void> Function(ConfigWriteSeam point)? _writeSeam;
   final String _platform;
   final SecretStoreOpener _openStore;
 
@@ -187,7 +222,7 @@ final class SecretCommands {
     SecretInput input,
   ) async {
     final name = options.name;
-    if (SecretNames.problem(name) case final problem?) {
+    if (_nameProblem(name) case final problem?) {
       return _usage(problem);
     }
     if (options.hasValueArgument) {
@@ -234,7 +269,7 @@ final class SecretCommands {
   /// `delete <name>`: идемпотентно, отсутствующее имя — код `0`.
   Future<SecretCommandResult> delete(SecretDeleteOptions options) async {
     final name = options.name;
-    if (SecretNames.problem(name) case final problem?) {
+    if (_nameProblem(name) case final problem?) {
       return _usage(problem);
     }
     final opened = _open(options.environment);
@@ -288,6 +323,68 @@ final class SecretCommands {
         stderr: ['cannot list secrets: $reason'],
       ),
     };
+  }
+
+  /// `migrate`: переносит литеральные секреты файлов конфига в хранилище
+  /// (agent-secrets «Подкоманда secret migrate»; design.md change
+  /// `add-config-literal-secrets-and-migrate`, D7).
+  ///
+  /// Почему здесь только обёртка: находки, имена, порядок записи и атомарность
+  /// принадлежат [SecretMigrator], который вызывает и codelab-app (D8); здесь
+  /// флаги слоёв, печать отчёта строками и общий для подкоманд `secret`
+  /// `warning: secrets are stored unencrypted in …`. Stdin не читается,
+  /// значения секретов в результат не попадают.
+  Future<SecretCommandResult> migrate(SecretMigrateOptions options) async {
+    if (options.all && (options.project || options.local)) {
+      return _usage(
+        'secret migrate: --all cannot be combined with --project or --local',
+      );
+    }
+    final layers = options.all
+        ? const {
+            ConfigLayer.user,
+            ConfigLayer.project,
+            ConfigLayer.projectLocal,
+          }
+        : options.project || options.local
+        ? {
+            if (options.project) ConfigLayer.project,
+            if (options.local) ConfigLayer.projectLocal,
+          }
+        : const {ConfigLayer.user};
+    final report =
+        await SecretMigrator(
+          processRunner: _runnerArg,
+          platform: _platform,
+          // Швы тестов `SecretCommands` пробрасываются движку; в рабочем коде
+          // это `openSecretStore` и `null`.
+          // ignore: invalid_use_of_visible_for_testing_member
+          openStore: _openStore,
+          // ignore: invalid_use_of_visible_for_testing_member
+          writeSeam: _writeSeam,
+        ).run(
+          SecretMigrationOptions(
+            cwd: options.cwd,
+            environment: options.environment,
+            layers: layers,
+            dryRun: options.dryRun,
+            force: options.force,
+          ),
+        );
+    return SecretCommandResult(
+      exitCode: report.exitCode,
+      showUsage: report.showUsage,
+      stdout: report.stdoutLines,
+      stderr: [
+        ...report.warnings,
+        // Как у `_Session.finish`: каждая подкоманда при бэкенде `file`,
+        // в том числе при ошибке (D8 change `add-agent-secret-store`).
+        if (report.backendId == 'file')
+          'warning: secrets are stored unencrypted in '
+              '${codelabHomeOf(options.environment)}/secrets.yaml',
+        ...report.problems,
+      ],
+    );
   }
 
   SecretCommandResult _writeResult(
@@ -346,6 +443,23 @@ final class SecretCommands {
       return raw.substring(0, raw.length - 1);
     }
     return raw;
+  }
+
+  /// Проблема имени для `set` и `delete`: сначала «имя похоже на значение»,
+  /// затем правила `SecretNames` (design.md change
+  /// `add-config-literal-secrets-and-migrate`, D6).
+  ///
+  /// Почему порядок: токен, вставленный вместо имени, обычно нарушает и
+  /// правила имён (регистр), но подсказка «передайте значение через stdin»
+  /// полезнее общей фразы о формате. Текст не содержит имени (оно могло быть
+  /// ключом), а `SecretNames.problem` не меняется. Хранилище до этой проверки
+  /// не открывается.
+  String? _nameProblem(String name) {
+    if (literalSecretTag(name) != null) {
+      return 'the secret name looks like a secret value; pass the value on '
+          'stdin';
+    }
+    return SecretNames.problem(name);
   }
 
   SecretCommandResult _usage(String message) => SecretCommandResult(
