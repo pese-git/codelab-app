@@ -1180,6 +1180,38 @@ agent:
       expectLoads();
     });
 
+    test('R8-6 вместе с посторонней проблемой загрузки: код 1 до '
+        'хранилища и записи (R8-11)', () async {
+      write(userPath, '''
+trusted_projects:
+  - $cwd
+providers:
+  lm:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    api_key_secret: codelab/lm
+    models:
+      m: {}
+agent:
+  default_model: lm/m
+budget:
+  max_steps: 0
+''');
+      write(projectPath, 'providers:\n  lm:\n    api_key: $ghp\n');
+      final projectBefore = read(projectPath);
+      final store = _SpyStore({'codelab/lm': sk});
+
+      final report = await run(
+        migrator(store: store),
+        layers: {ConfigLayer.project},
+      );
+
+      expect(report.exitCode, 1);
+      expect(store.reads, isEmpty);
+      expect(read(projectPath), projectBefore);
+      expect(report.stderrLines.join('\n'), contains('budget.max_steps'));
+    });
+
     test('конфликт источников без правок: код 1, как и раньше', () async {
       write(
         userPath,
