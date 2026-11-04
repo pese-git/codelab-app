@@ -36,10 +36,21 @@ final class SecretMigrationOptions {
     this.testStorePath,
   });
 
+  /// Папка проекта: от неё ищутся проектные слои (`--cwd`).
   final String cwd;
+
+  /// Окружение запуска: `CODELAB_HOME`, `CODELAB_CONFIG`, `HOME` — то же,
+  /// что видит агент.
   final Map<String, String> environment;
+
+  /// Слои для переноса: `user` по умолчанию, `--project`, `--local`, `--all`
+  /// (D7); итог проверяется по слиянию всех слоёв (R8-10).
   final Set<ConfigLayer> layers;
+
+  /// `--dry-run`: только план, без записи в хранилище и файлы.
   final bool dryRun;
+
+  /// `--force`: заменить секрет с другим значением; безвозвратно (L7).
   final bool force;
 
   /// Путь к `secrets.yaml` тестового хранилища (`testSecretStorePath` от
@@ -101,9 +112,17 @@ final class SecretPlanItem extends SecretMigrationItem {
     required this.action,
   });
 
+  /// Путь файла слоя — для вывода.
   final String path;
+
+  /// Путь ключа с литералом (`providers.lm.api_key`).
   final String key;
+
+  /// То, что встанет на место значения: `api_key_secret: <имя>` или
+  /// значение со ссылкой `${secret:<имя>}`.
   final String reference;
+
+  /// Что произойдёт с именем в хранилище.
   final SecretMigrationAction action;
 
   @override
@@ -120,8 +139,13 @@ final class SecretReusedItem extends SecretMigrationItem {
     required this.path,
   });
 
+  /// Имя секрета в хранилище.
   final String name;
+
+  /// Путь ключа, значение которого перенесено.
   final String key;
+
+  /// Путь файла слоя — для вывода.
   final String path;
 
   @override
@@ -137,8 +161,13 @@ final class SecretMovedItem extends SecretMigrationItem {
     required this.path,
   });
 
+  /// Имя секрета в хранилище.
   final String name;
+
+  /// Путь ключа, значение которого перенесено.
   final String key;
+
+  /// Путь файла слоя — для вывода.
   final String path;
 
   @override
@@ -151,6 +180,7 @@ final class SecretMovedItem extends SecretMigrationItem {
 final class SecretReplacedItem extends SecretMigrationItem {
   const SecretReplacedItem({required this.name, this.referencedBy = const []});
 
+  /// Имя заменённого секрета.
   final String name;
 
   /// Ключи всех слоёв загруженного конфига, ссылающиеся на [name]
@@ -170,7 +200,10 @@ final class SecretReplacedItem extends SecretMigrationItem {
 final class SecretActionRequiredItem extends SecretMigrationItem {
   const SecretActionRequiredItem({required this.name, required this.place});
 
+  /// Имя сохранённого секрета, на которое пользователь ставит ссылку.
   final String name;
+
+  /// Где вписать ссылку: файл слоя и место ключа.
   final String place;
 
   @override

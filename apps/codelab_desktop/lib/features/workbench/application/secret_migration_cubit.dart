@@ -75,7 +75,8 @@ final class SecretMigrationPlanFailed extends SecretMigrationState {
   const SecretMigrationPlanFailed(this.message);
 
   /// Текст проблемы для диалога: из отчёта порта или `Planning failed: <тип>.`
-  /// (D8); без значений секретов и путей, показывается как есть.
+  /// (D8); без значений секретов, но может содержать пути файлов конфига
+  /// (строки `problems` мигратора), поэтому в лог не пишется.
   final String message;
 }
 
