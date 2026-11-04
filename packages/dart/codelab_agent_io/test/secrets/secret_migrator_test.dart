@@ -291,6 +291,8 @@ ${ghServer(authorization: 'Bearer \${secret:$ghp2}')}''');
       expect(report.stdoutLines, ['Nothing to migrate']);
       expect(report.stderrLines, isEmpty);
       expect(report.canApply, isFalse);
+      expect(report.nameConflict, isFalse);
+      expect(report.onlyExtraLayerFindings, isFalse);
     });
   });
 
@@ -349,6 +351,33 @@ ${ghServer(authorization: 'Bearer \${secret:$ghp2}')}''');
   });
 
   group('бэкенд env (только чтение)', () {
+    test('report.home — CODELAB_HOME движка, и в отказе тоже', () async {
+      write(userPath, userConfig(key: sk));
+      final report = await run(migrator());
+      expect(report.exitCode, 1);
+      expect(report.home, home);
+      final ok = await run(migrator(store: MemorySecretStore()), dryRun: true);
+      expect(ok.home, home);
+    });
+
+    test('testStorePath: хранилище тестового файла вместо env', () async {
+      write(userPath, userConfig(key: sk));
+      final testStore = '${root.path}/test_store/secrets.yaml';
+      Directory('${root.path}/test_store').createSync();
+      final report = await SecretMigrator().run(
+        SecretMigrationOptions(
+          cwd: cwd,
+          environment: env(),
+          dryRun: true,
+          testStorePath: testStore,
+        ),
+      );
+      expect(report.exitCode, 0);
+      expect(report.readOnlyBackend, isFalse);
+      expect(report.backendId, 'file');
+      expect(report.canApply, isTrue);
+    });
+
     test('код 1 с подсказкой secrets.backend: file и именами переменных; '
         'файл не изменён', () async {
       write(
@@ -365,6 +394,7 @@ ${ghServer(authorization: 'Bearer \${secret:$ghp2}')}''');
 
       expect(report.exitCode, 1);
       expect(report.readOnlyBackend, isTrue);
+      expect(report.nameConflict, isFalse);
       expect(report.canApply, isFalse);
       final text = report.stderrLines.join('\n');
       expect(text, contains('secrets.backend: file'));
@@ -398,6 +428,8 @@ ${ghServer(authorization: 'Bearer \${secret:$ghp2}')}''');
 
       for (final report in [real, dry]) {
         expect(report.exitCode, 1);
+        expect(report.nameConflict, isTrue);
+        expect(report.canApply, isFalse);
         expect(
           report.stderrLines,
           contains(
@@ -1015,9 +1047,29 @@ providers:
       expect(report.stdoutLines, [
         'not migrated: $extra is not a writable layer',
       ]);
+      expect(report.onlyExtraLayerFindings, isTrue);
+      expect(report.canApply, isFalse);
+      expect(report.nameConflict, isFalse);
       expect(read(extra), before);
       expect(await store.names(), isEmpty);
       expectNoValues(report);
+    });
+
+    test('находки user и CODELAB_CONFIG вместе: onlyExtraLayerFindings '
+        'ложен, переносить есть что', () async {
+      write(userPath, userConfig(gatewayHeader: ghp));
+      final extra = '${root.path}/extra.yaml';
+      write(extra, 'providers:\n  lm:\n    api_key: $sk\n');
+
+      final report = await run(
+        migrator(store: MemorySecretStore()),
+        environment: env({'CODELAB_CONFIG': extra}),
+        dryRun: true,
+      );
+
+      expect(report.exitCode, 0);
+      expect(report.onlyExtraLayerFindings, isFalse);
+      expect(report.canApply, isTrue);
     });
 
     test(

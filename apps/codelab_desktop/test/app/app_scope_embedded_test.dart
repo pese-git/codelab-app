@@ -65,6 +65,9 @@ final class _TrackedAgent implements EmbeddedAgent {
   int disposeCalls = 0;
 
   @override
+  bool get secretsInConfig => inner.secretsInConfig;
+
+  @override
   AcpTransport get clientTransport => inner.clientTransport;
 
   @override
