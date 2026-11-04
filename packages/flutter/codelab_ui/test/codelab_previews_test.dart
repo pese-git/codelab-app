@@ -27,6 +27,9 @@ void main() {
 
     await tester.pumpWidget(codelabApprovalOptionGroupPreview());
     expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(codelabSettingsSectionPreview());
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('organism previews render in bounded preview surfaces', (
@@ -69,6 +72,10 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(codelabSettingsNavigationPreview());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(
       SizedBox(
