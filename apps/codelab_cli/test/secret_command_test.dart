@@ -99,7 +99,7 @@ void main() {
                 .having(
                   (e) => e.message,
                   'message',
-                  'secret needs a subcommand: set, delete or list',
+                  'secret needs a subcommand: set, delete, list or migrate',
                 )
                 .having((e) => e.showSecretUsage, 'showSecretUsage', isTrue),
           ),
@@ -217,8 +217,8 @@ void main() {
         expect(
           io.stderrText,
           startsWith(
-            'codelab: secret needs a subcommand: set, delete or list\n\n'
-            'Usage: codelab secret set|delete|list\n',
+            'codelab: secret needs a subcommand: set, delete, list or migrate\n\n'
+            'Usage: codelab secret set|delete|list|migrate\n',
           ),
         );
       },

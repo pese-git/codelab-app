@@ -344,6 +344,85 @@ void main() {
     });
   });
 
+  group('имя секрета, похожее на значение (D6)', () {
+    // Синтетические токены по шаблонам GitHub и `sk-`: не настоящие ключи.
+    final github = 'ghp_${'abcdef0123' * 3}abcdef';
+    const skToken = 'sk-proj-abcdefghijklmnopqrstuvwxyz0123456789';
+    const nameMessage =
+        'the secret name looks like a secret value; pass the value on stdin';
+
+    void expectRefused(SecretCommandResult result, String token) {
+      expect(result.exitCode, 64);
+      expect(result.stderr, contains(nameMessage));
+      // Имя не печатается ни целиком, ни префиксом.
+      final text = [...result.stdout, ...result.stderr].join('\n');
+      expect(text, isNot(contains(token)));
+      expect(text, isNot(contains(token.substring(0, 6))));
+    }
+
+    test('set: токен вместо имени — код 64, хранилище не открывается, '
+        'stdin не читается', () async {
+      for (final token in [github, skToken]) {
+        final opened = <String?>[];
+        final input = FakeSecretInput(value);
+
+        final result = await over(
+          MemorySecretStore(),
+          opened: opened,
+        ).set(setOf(token), input);
+
+        expectRefused(result, token);
+        expect(opened, isEmpty);
+        expect(input.events, isEmpty);
+      }
+    });
+
+    test(
+      'delete: токен вместо имени — код 64, хранилище не открывается',
+      () async {
+        for (final token in [github, skToken]) {
+          final opened = <String?>[];
+
+          final result = await over(
+            MemorySecretStore(),
+            opened: opened,
+          ).delete(SecretDeleteOptions(name: token, environment: env()));
+
+          expectRefused(result, token);
+          expect(opened, isEmpty);
+        }
+      },
+    );
+
+    test(
+      'set с лишним значением аргументом: имя-токен проверяется первым',
+      () async {
+        final result = await over(
+          MemorySecretStore(),
+        ).set(setOf(github, valueArgument: true), FakeSecretInput(value));
+
+        expectRefused(result, github);
+      },
+    );
+
+    test('обычное имя и неверное имя не затронуты: тексты SecretNames.problem '
+        'прежние', () async {
+      final bad = await over(
+        MemorySecretStore(),
+      ).set(setOf('Bad Name'), FakeSecretInput(value));
+      expect(bad.exitCode, 64);
+      expect(bad.stderr.join('\n'), contains('expected a secret name'));
+      expect(bad.stderr, isNot(contains(nameMessage)));
+
+      final good = await over(
+        MemorySecretStore(),
+      ).set(setOf('task-list'), FakeSecretInput(value));
+      expect(good.exitCode, 0);
+      expect(SecretNames.problem('task-list'), isNull);
+      expect(SecretNames.problem(skToken), isNull);
+    });
+  });
+
   group('set: бэкенд из конфига (D8)', () {
     test('невалидный конфиг с api_key значением не блокирует', () async {
       File('$home/config.yaml').writeAsStringSync('''

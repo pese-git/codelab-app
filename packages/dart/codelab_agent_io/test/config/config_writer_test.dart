@@ -125,7 +125,7 @@ void main() {
         final text = h.read(h.userPath);
         expect(text, contains('"off"'));
         expect(text, contains('"yes"'));
-        expect(text, contains(r'"${LLM_URL}"'));
+        expect(text, contains(r"'${LLM_URL}'"));
         final provider = loadYaml(text)['providers']['p'];
         expect(provider['models']['m']['name'], isA<String>());
         expect(provider['models']['m']['name'], 'off');
@@ -133,6 +133,28 @@ void main() {
         expect(provider['base_url'], r'${LLM_URL}');
       },
     );
+
+    test('ссылка со слэшем пишется в одинарных кавычках без экранирования '
+        '(D5); спецсимволы читаются обратно', () async {
+      h.write(h.userPath, baseConfig);
+      final values = {
+        'providers.p.headers.X-A': r'Bearer ${secret:codelab/mcp/gh/x}',
+        'providers.p.headers.X-B': r"it's ${a/b}",
+        'providers.p.headers.X-C': 'line1\nline2 \${X}',
+        'providers.p.headers.X-D': 'ctl\u0001 \${X} \\ back',
+      };
+      await h.writer.apply(await h.writer.read(const ConfigTarget.user()), [
+        for (final e in values.entries) SetValue(e.key, e.value),
+      ]);
+
+      final text = h.read(h.userPath);
+      expect(text, contains(r"X-A: 'Bearer ${secret:codelab/mcp/gh/x}'"));
+      expect(text, isNot(contains(r'\/')));
+      final headers = loadYaml(text)['providers']['p']['headers'];
+      for (final e in values.entries) {
+        expect(headers[e.key.split('.').last], e.value);
+      }
+    });
 
     // Загрузка требует `agent.default_model`, поэтому первая запись в пустой
     // слой несёт и провайдера, и модель по умолчанию одной правкой (как
@@ -534,7 +556,7 @@ mcp:
         result.warnings.map((w) => w.message).join('\n'),
         contains('NOT_SET_URL'),
       );
-      expect(h.read(h.userPath), contains(r'"${NOT_SET_URL}"'));
+      expect(h.read(h.userPath), contains(r"'${NOT_SET_URL}'"));
     });
 
     test(
@@ -1461,5 +1483,101 @@ ${baseConfig}mcp:
         );
       },
     );
+  });
+
+  group('итог нескольких файлов: preview и validate(pending:) (R8-10)', () {
+    const trusted = 'trusted_projects: [PROJECT]\n';
+
+    void twoLayers() {
+      h.write(
+        h.userPath,
+        trusted.replaceFirst('PROJECT', h.cwd) +
+            baseConfig.replaceFirst(
+              '    models:',
+              '    api_key: sk-${'a1b2c3d4e5' * 3}\n    models:',
+            ),
+      );
+      h.write(
+        h.projectPath,
+        'providers:\n  p:\n    api_key: ghp_${'abcdef0123' * 3}abcdef\n',
+      );
+    }
+
+    const user = ConfigTarget.user();
+    const project = ConfigTarget.project;
+
+    test('preview возвращает итоговый текст без записи', () async {
+      twoLayers();
+      final before = h.read(h.userPath);
+      final snapshot = await h.writer.read(user);
+
+      final text = await h.writer.preview(snapshot, [
+        const SetValue('providers.p.api_key_secret', 'codelab/p'),
+        const UnsetValue('providers.p.api_key'),
+      ]);
+
+      expect(text.text, contains('api_key_secret: codelab/p'));
+      expect(text.text, isNot(contains('api_key:')));
+      expect(h.read(h.userPath), before);
+    });
+
+    test('без pending правка одного слоя даёт конфликт источников ключа; с '
+        'итогом соседнего слоя — чисто', () async {
+      twoLayers();
+      final snapshot = await h.writer.read(user);
+      final edits = [
+        const SetValue('providers.p.api_key_secret', 'codelab/p'),
+        const UnsetValue('providers.p.api_key'),
+      ];
+      final neighbour = await h.writer
+          .preview(await h.writer.read(project(h.cwd)), [
+            const SetValue('providers.p.api_key_secret', 'codelab/p-2'),
+            const UnsetValue('providers.p.api_key'),
+          ]);
+
+      await expectLater(
+        h.writer.validate(snapshot, edits),
+        throwsA(
+          isA<ConfigException>().having(
+            (e) => e.issues.map((i) => i.message),
+            'messages',
+            contains(providerKeySourcesConflictMessage),
+          ),
+        ),
+      );
+      await h.writer.validate(snapshot, edits, pending: [neighbour]);
+    });
+
+    test('шов candidateCheck не обходится и при непустом pending', () async {
+      twoLayers();
+      var calls = 0;
+      final writer = ConfigWriter(
+        codelabHome: h.home,
+        environment: {'CODELAB_HOME': h.home},
+        loader: ConfigLoader(),
+        candidateCheck:
+            (target, text, {required cwd, required environment, platform}) {
+              calls++;
+              return (issues: const [], warnings: const []);
+            },
+        logger: h.logger,
+        processRunner: FakeSecretProcessRunner(),
+        clock: h.clock,
+        random: Random(7),
+        cwd: h.cwd,
+      );
+      final neighbour = await writer.preview(
+        await writer.read(project(h.cwd)),
+        [const UnsetValue('providers.p.api_key')],
+      );
+
+      await writer.validate(
+        await writer.read(user),
+        [const UnsetValue('providers.p.api_key')],
+        pending: [neighbour],
+      );
+
+      expect(calls, greaterThan(0));
+    });
   });
 }
