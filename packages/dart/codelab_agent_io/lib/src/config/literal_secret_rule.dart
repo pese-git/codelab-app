@@ -1,5 +1,7 @@
-/// Правило литеральных секретов в заголовках и переменных окружения конфига
-/// (design.md change `add-config-writer-and-reload`, D5; CFG-9, CFG-12).
+/// Правило литеральных секретов в заголовках, переменных окружения и элементах
+/// `args` MCP-серверов конфига (design.md change `add-config-writer-and-reload`,
+/// D5; CFG-9, CFG-12; change `add-config-literal-secrets-and-migrate`, D5, OQ3,
+/// R8-5: шаблоны `literalSecretTag` и подсказка `--env` для `args`).
 ///
 /// Почему отдельный файл: одно и то же правило имён нужно предконфигурации
 /// провайдера (D3, итерация 1), записи конфига `ConfigWriter` (D5, итерация 3)
@@ -33,6 +35,11 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// Для чего: `ConfigWriter.apply` вызывает функцию над деревом слоя до и
 /// после правок и отклоняет запись, если в изменённых листьях есть литерал.
 /// Правила (все на любой глубине итогового дерева):
+/// - литеральная часть значения `headers`/`env` по шаблону §12.4
+///   (`literalSecretTag`, R1-1) — при любом имени ключа; значение режется по
+///   `${…}`, поэтому ссылка рядом с литералом его не прикрывает;
+/// - элемент `mcp.servers[*].args` по шаблону §12.4 (R4-6, OQ3) — с подсказкой
+///   `--env <NAME>='${secret:<имя>}'` (R8-5); загрузка `args` не проверяет;
 /// - значение в `providers.*.headers`, `mcp.servers[*].headers`,
 ///   `mcp.servers[*].env`, `exec.env`, чьё имя секретное
 ///   ([isSecretLikeName]) и в нём нет ссылки ([hasSecretReference]);
@@ -50,6 +57,9 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// с `name` — по имени, иначе по номеру) в [before] другое или отсутствует:
 /// ручная правка с литералом до 8.11 загружается и не должна блокировать
 /// несвязанные записи (граница D5, R1-1).
+///
+/// Элементы `args` сравниваются по номеру (у строк нет `name`): вставка перед
+/// прежним литералом сдвигает его и даёт отказ — допустимо по D5.
 ///
 /// Как использовать: пустой результат — запись допустима. Проблема
 /// называет путь ключа и подсказку `codelab secret set <name>`; значения в
@@ -165,7 +175,37 @@ String? _literalMessage(_Leaf leaf) {
           shape[2] == '[]' &&
           shape[3] == 'env') ||
       (shape.length == 3 && shape[0] == 'exec' && shape[1] == 'env');
+  // Элемент `mcp.servers[*].args` (R4-6, OQ3): токен, поданный аргументом
+  // командной строки. Имя флага не смотрим (`--token <значение>` — два
+  // элемента), только значение по шаблону §12.4; значение с `${…}` режется
+  // по ссылкам в `literalSecretTag`. Подсказка ведёт в `--env`: сервер
+  // получит переменную окружения со ссылкой на хранилище (R8-5). Загрузка
+  // `args` не проверяет: некоторые серверы принимают токен только так.
+  final inArgs =
+      shape.length == 5 &&
+      shape[0] == 'mcp' &&
+      shape[1] == 'servers' &&
+      shape[2] == '[]' &&
+      shape[3] == 'args' &&
+      shape[4] == '[]';
+  if (inArgs) {
+    if (value is String && literalSecretTag(value) != null) {
+      return 'a literal secret in an argument; store it with `codelab secret '
+          'set $suggested` and pass it with '
+          "--env <NAME>='\${secret:$suggested}'";
+    }
+    return null;
+  }
+
   if (inHeaders || inEnv) {
+    // R1-1: литеральная часть значения по шаблону — отказ независимо от
+    // имени (`X-Team: Bearer ghp_…`, `GREETING=ghp_…`). Значение режется по
+    // `${…}`, поэтому ссылка не маскирует литерал рядом с ней.
+    if (value is String && literalSecretTag(value) != null) {
+      return 'a literal secret in a ${inHeaders ? 'header' : 'variable'}; '
+          'run: codelab secret set $suggested, '
+          '${reference.replaceAll('NAME', suggested)}';
+    }
     // Нестроковое значение (число, булево) под секретным именем — тоже
     // литерал: ссылку `${…}` оно содержать не может.
     // Строка — по подстроке имени; число и булево — только если имя в

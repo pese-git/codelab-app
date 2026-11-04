@@ -81,9 +81,9 @@
 
 ## 2. Писатель и R4-6 (итерация 2)
 
-- [ ] 2.1 `[agent]` Красный тест `codelab_agent_io/test/config/literal_secret_rule_test.dart`: писатель отклоняет литерал по шаблону в `headers`/`env` (R1-1) и в элементе `args` с подсказкой `--env` (OQ3, R8-5); прежний литерал файла — предупреждение, `config unset` его удаляет. Затем — `literal_secret_rule.dart` поверх `literalSecretTag` (D5).
-- [ ] 2.2 `[agent]` Красный тест в `codelab_agent_io/test/cli/config_output_test.dart` (agent-configuration «Маскирование args MCP-серверов в выводе»): элементы `args` — по шаблону, после секретного флага, `--flag=value`; ссылки `${…}` — как есть. Затем — маскирование `args` в `cli/config_output.dart` (D5). *Ревью итерации 1: маскер всех листьев `config get`/`provider list` (литеральный `api_key`, ссылка п. 3 в листах реестра, значения с `${…}`; сценарий «config get не печатает литеральный ключ») перенесён в итерацию 1; в 2.2 остаются `args`, а писатель — в 2.1.*
-- [ ] 2.3 `[client]` E2e-тест совпадения `apps/codelab_cli/test/e2e/config_get_args_masking_test.dart`: вывод `codelab config get mcp.servers` совпадает с `codelab-agent`. Кода в CLI не ожидается.
+- [x] 2.1 `[agent]` Красный тест `codelab_agent_io/test/config/literal_secret_rule_test.dart`: писатель отклоняет литерал по шаблону в `headers`/`env` (R1-1) и в элементе `args` с подсказкой `--env` (OQ3, R8-5); прежний литерал файла — предупреждение, `config unset` его удаляет. Затем — `literal_secret_rule.dart` поверх `literalSecretTag` (D5).
+- [x] 2.2 `[agent]` Красный тест в `codelab_agent_io/test/cli/config_output_test.dart` (agent-configuration «Маскирование args MCP-серверов в выводе»): элементы `args` — по шаблону, после секретного флага, `--flag=value`; ссылки `${…}` — как есть. Затем — маскирование `args` в `cli/config_output.dart` (D5). *Ревью итерации 1: маскер всех листьев `config get`/`provider list` (литеральный `api_key`, ссылка п. 3 в листах реестра, значения с `${…}`; сценарий «config get не печатает литеральный ключ») перенесён в итерацию 1; в 2.2 остаются `args`, а писатель — в 2.1.*
+- [x] 2.3 `[client]` E2e-тест совпадения `apps/codelab_cli/test/e2e/config_get_args_masking_test.dart`: вывод `codelab config get mcp.servers` совпадает с `codelab-agent`. Кода в CLI не ожидается.
 
 **Критерий итерации 2.** R1-1 и R4-6 закрыты на записи и в выводе.
 
