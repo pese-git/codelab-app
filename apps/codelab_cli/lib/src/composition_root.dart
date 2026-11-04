@@ -16,7 +16,6 @@ import 'cli_args.dart';
 import 'cli_logger.dart';
 import 'embedded_logger.dart';
 import 'embedded_transport_resolver.dart';
-import 'profiles/profile_arg.dart';
 
 /// Собранный клиентский слой одного запуска `codelab`.
 ///
@@ -129,7 +128,7 @@ CliRuntime buildCliRuntime({
   final workspace = ClientWorkspace(
     backend: AcpClientBackend(application),
     resolvers: [
-      ioTransportResolver(secrets: EnvSecretSource(environment)),
+      ioTransportResolver(secrets: ProfileSecretSource(environment)),
       resolver,
     ],
   );

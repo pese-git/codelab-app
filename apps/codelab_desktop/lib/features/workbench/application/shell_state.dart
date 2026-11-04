@@ -2,7 +2,6 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show CommandCatalog;
 import 'package:codelab_ui/codelab_ui.dart';
 
-import 'connection_cubit.dart';
 import 'ui_mappers.dart';
 
 /// Состояние рабочего места в прежней форме — то, что читают виджеты,
@@ -20,13 +19,6 @@ import 'ui_mappers.dart';
 final class CodeLabShellState {
   const CodeLabShellState({
     required this.connectionStatus,
-    required this.transportType,
-    required this.stdioProfileName,
-    required this.stdioCommand,
-    required this.stdioArgs,
-    required this.stdioEnv,
-    required this.webSocketEndpoint,
-    required this.webSocketToken,
     required this.transportLabel,
     required this.profileLabel,
     required this.connectionDetail,
@@ -60,7 +52,6 @@ final class CodeLabShellState {
     required this.sessionsPaneWidth,
     this.dockWidth = 360,
     required this.selectedProjectPath,
-    required this.runAgentFromProjectDirectory,
     required this.recentProjects,
     this.hasMoreSessions = false,
     required this.currentPlan,
@@ -69,13 +60,6 @@ final class CodeLabShellState {
 
   // Подключение — `ConnectionCubit`.
   final CodeLabConnectionStatus connectionStatus;
-  final CodeLabTransportType transportType;
-  final String stdioProfileName;
-  final String stdioCommand;
-  final String stdioArgs;
-  final String stdioEnv;
-  final String webSocketEndpoint;
-  final String webSocketToken;
   final String transportLabel;
   final String profileLabel;
   final String connectionDetail;
@@ -147,7 +131,6 @@ final class CodeLabShellState {
 
   // Проект — `SettingsCubit`.
   final String? selectedProjectPath;
-  final bool runAgentFromProjectDirectory;
   final List<CodeLabRecentProject> recentProjects;
 
   /// У агента есть следующая страница сессий — сайдбар показывает
@@ -161,13 +144,6 @@ final class CodeLabShellState {
   /// панели на подготовленном состоянии; фасад состояние так не меняет.
   CodeLabShellState copyWith({
     CodeLabConnectionStatus? connectionStatus,
-    CodeLabTransportType? transportType,
-    String? stdioProfileName,
-    String? stdioCommand,
-    String? stdioArgs,
-    String? stdioEnv,
-    String? webSocketEndpoint,
-    String? webSocketToken,
     String? transportLabel,
     String? profileLabel,
     String? connectionDetail,
@@ -201,7 +177,6 @@ final class CodeLabShellState {
     double? sessionsPaneWidth,
     double? dockWidth,
     String? selectedProjectPath,
-    bool? runAgentFromProjectDirectory,
     List<CodeLabRecentProject>? recentProjects,
     bool? hasMoreSessions,
     Object? currentPlan = _unset,
@@ -209,13 +184,6 @@ final class CodeLabShellState {
   }) {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
-      transportType: transportType ?? this.transportType,
-      stdioProfileName: stdioProfileName ?? this.stdioProfileName,
-      stdioCommand: stdioCommand ?? this.stdioCommand,
-      stdioArgs: stdioArgs ?? this.stdioArgs,
-      stdioEnv: stdioEnv ?? this.stdioEnv,
-      webSocketEndpoint: webSocketEndpoint ?? this.webSocketEndpoint,
-      webSocketToken: webSocketToken ?? this.webSocketToken,
       transportLabel: transportLabel ?? this.transportLabel,
       profileLabel: profileLabel ?? this.profileLabel,
       connectionDetail: connectionDetail ?? this.connectionDetail,
@@ -261,8 +229,6 @@ final class CodeLabShellState {
       sessionsPaneWidth: sessionsPaneWidth ?? this.sessionsPaneWidth,
       dockWidth: dockWidth ?? this.dockWidth,
       selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
-      runAgentFromProjectDirectory:
-          runAgentFromProjectDirectory ?? this.runAgentFromProjectDirectory,
       recentProjects: recentProjects ?? this.recentProjects,
       hasMoreSessions: hasMoreSessions ?? this.hasMoreSessions,
       currentPlan: identical(currentPlan, _unset)

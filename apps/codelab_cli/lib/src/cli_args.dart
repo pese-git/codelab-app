@@ -108,8 +108,9 @@ final class CliOptions {
   final CliCommand command;
   final List<String> positional;
 
-  /// Значение `--agent`: id профиля, `stdio:…`, URL или `embedded`; `null` —
-  /// профиль `default`, если он есть, иначе встроенный агент.
+  /// Значение `--agent`: id профиля, `stdio:…`, URL, `embedded` или `default`;
+  /// `null` — встроенный агент, как `embedded` (design.md change
+  /// `add-app-settings-shell`, D21).
   final String? agent;
 
   /// Рабочая папка сессии; `null` — текущая.
@@ -182,9 +183,9 @@ ArgParser _parser() {
       abbr: 'a',
       valueHelp: 'profile',
       help:
-          'Agent profile id, "embedded", "stdio:<command> [args]", ws:// or '
-          'wss:// URL (default: profile "default" if it exists, else '
-          '"embedded").',
+          'Agent profile id, "embedded", "default" (the embedded agent), '
+          '"stdio:<command> [args]", ws:// or wss:// URL (default: the '
+          'embedded agent).',
     )
     ..addOption('cwd', abbr: 'C', valueHelp: 'dir', help: 'Session folder.')
     ..addOption('model', abbr: 'm', valueHelp: 'id', help: 'Model option.')

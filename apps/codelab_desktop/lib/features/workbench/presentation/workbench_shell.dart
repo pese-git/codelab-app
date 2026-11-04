@@ -9,10 +9,10 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 
 import '../../../app/app_scope.dart';
 import '../../../app/navigation/navigation_cubit.dart';
+import '../../../app/navigation/settings_page.dart';
 import '../application/shell_cubit.dart';
 import '../application/ui_mappers.dart'
     show connectionTooltipOf, sidebarProjectsOf;
-import 'widgets/connection_setup_dialog.dart';
 import 'widgets/debug_log_pane.dart';
 import 'widgets/debug_log_viewer_dialog.dart';
 import 'widgets/inspector_pane.dart';
@@ -181,17 +181,26 @@ class CodeLabShell extends StatelessWidget {
 
 /// Открывает настройки: Cmd/Ctrl+, и кнопка «Settings» сайдбара.
 ///
-/// Пока в сборке нет ни одной страницы настроек (`SettingsPages.isEmpty`,
-/// итерация 1 change `add-app-settings-shell`), открывается прежний диалог
-/// подключения: пустого экрана быть не должно (SETUP-17; Migration Plan,
-/// п. 2). Итерация 2 заменит диалог страницей «Connection» и уберёт ветку.
+/// Почему через `NavigationCubit`: переход — состояние приложения, а не
+/// маршрут (design.md change `add-app-settings-shell`, D1). Открывается
+/// последняя страница или «Connection»; при пустом наборе страниц вызов
+/// ничего не делает (SETUP-17).
 void _openSettings(BuildContext context, SettingsOpenSource source) {
-  final dependencies = codeLabDependenciesOf(context);
-  if (dependencies.settingsPages.isEmpty) {
-    unawaited(ConnectionSetupDialog.show(context));
-    return;
-  }
-  unawaited(dependencies.navigationCubit.openSettings(source: source));
+  unawaited(
+    codeLabDependenciesOf(context).navigationCubit.openSettings(source: source),
+  );
+}
+
+/// «Configure connection» экрана подключения и баннера соединения: открывает
+/// страницу «Connection» (design.md change `add-app-settings-shell`, D6;
+/// вместо прежнего диалога подключения).
+void openConnectionSettings(BuildContext context) {
+  unawaited(
+    codeLabDependenciesOf(context).navigationCubit.openSettings(
+      page: SettingsPage.connection,
+      source: SettingsOpenSource.banner,
+    ),
+  );
 }
 
 /// Панель Protocol дока: записи протокола текущей сессии (бывший Inspector)

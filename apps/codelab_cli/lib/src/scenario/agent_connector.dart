@@ -35,7 +35,9 @@ import '../profiles/profile_arg.dart';
 /// для `runAgentFixtureOver`.
 final class ScenarioAgent {
   ScenarioAgent(this.profile, {required Map<String, String> environment})
-    : _resolver = ioTransportResolver(secrets: EnvSecretSource(environment));
+    : _resolver = ioTransportResolver(
+        secrets: ProfileSecretSource(environment),
+      );
 
   /// Профили хоста, которые встроенный агент играет в `test-scenario`.
   static const _embeddedProfiles = {'agent-serve', embeddedHostProfile};

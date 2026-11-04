@@ -16,7 +16,6 @@ import 'ui_mappers.dart';
 final class SettingsState {
   const SettingsState({
     this.selectedProjectPath,
-    this.runAgentFromProjectDirectory = true,
     this.recentProjects = const [],
   });
 
@@ -26,22 +25,14 @@ final class SettingsState {
   /// (add-open-project-picker/design.md, Decision 1).
   final String? selectedProjectPath;
 
-  /// Только stdio: процесс агента запускается в папке проекта. По умолчанию
-  /// `true` — прежнее неявное «cwd процесса == проект» (design.md,
-  /// Decision 2).
-  final bool runAgentFromProjectDirectory;
-
   /// Недавние проекты, самый свежий первым (design.md, Decision 4).
   final List<CodeLabRecentProject> recentProjects;
 
   SettingsState _copyWith({
     String? selectedProjectPath,
-    bool? runAgentFromProjectDirectory,
     List<CodeLabRecentProject>? recentProjects,
   }) => SettingsState(
     selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
-    runAgentFromProjectDirectory:
-        runAgentFromProjectDirectory ?? this.runAgentFromProjectDirectory,
     recentProjects: recentProjects ?? this.recentProjects,
   );
 }
@@ -81,8 +72,14 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
        super(const SettingsState()) {
     // Недавние проекты прошлого запуска видны до первого открытия выбора.
     unawaited(_loadRecentProjects());
-    unawaited(_restoreProject());
+    projectRestored = _restoreProject();
+    unawaited(projectRestored);
   }
+
+  /// Завершается, когда проект прошлого запуска восстановлен или решено его
+  /// не восстанавливать. «Connect on start» ждёт его, чтобы подключиться уже
+  /// с папкой проекта (spec app-settings «Блок «Behavior»», D8).
+  late final Future<void> projectRestored;
 
   final ClientWorkspace _workspace;
   final ShellDiagnostics _diagnostics;
@@ -161,9 +158,6 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     }
     await selectProject(path);
   }
-
-  void toggleRunAgentFromProjectDirectory(bool value) =>
-      emit(state._copyWith(runAgentFromProjectDirectory: value));
 
   /// Проект прошлого запуска выбирается, только если пользователь ещё не
   /// выбрал свой, пока снимок читался, и его папка ещё есть на диске.
