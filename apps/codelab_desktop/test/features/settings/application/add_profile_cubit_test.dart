@@ -456,6 +456,69 @@ void main() {
       expect(formOf(cubit).errors.containsKey(ProfileDraftField.id), isFalse);
     });
 
+    group('errors appear only for fields the user touched', () {
+      test('switching to WebSocket shows no error, yet Save and Test stay '
+          'blocked by validation', () async {
+        final cubit = await started();
+
+        cubit.selectKind(ProfileKind.webSocket);
+
+        expect(formOf(cubit).errors, isEmpty);
+        expect(formOf(cubit).canSave, isFalse);
+        expect(formOf(cubit).canTest, isFalse);
+      });
+
+      test('typing in one field shows only its own error', () async {
+        final cubit = await started();
+        cubit
+          ..selectKind(ProfileKind.webSocket)
+          ..setUrl('nope');
+
+        expect(formOf(cubit).errors.keys, [ProfileDraftField.url]);
+      });
+
+      test(
+        'leaving a field (touchField) shows its error without typing',
+        () async {
+          final cubit = await started();
+          cubit.selectKind(ProfileKind.webSocket);
+
+          cubit.touchField(ProfileDraftField.label);
+
+          expect(formOf(cubit).errors, {
+            ProfileDraftField.label: 'Enter a name.',
+          });
+        },
+      );
+
+      test('Save on an incomplete form shows every error', () async {
+        final cubit = await started();
+        cubit.selectKind(ProfileKind.webSocket);
+
+        await cubit.save();
+
+        expect(
+          formOf(cubit).errors.keys,
+          containsAll([ProfileDraftField.label, ProfileDraftField.url]),
+        );
+        expect(store.saves, 0);
+      });
+
+      test(
+        'touching a field keeps a running probe and a confirmation',
+        () async {
+          final cubit = await started();
+          fillStdio(cubit);
+          await cubit.testConnection();
+          final probe = formOf(cubit).probe;
+
+          cubit.touchField(ProfileDraftField.command);
+
+          expect(formOf(cubit).probe, probe);
+        },
+      );
+    });
+
     test('a secret-like env key blocks saving; the value is never shown or '
         'logged', () async {
       final cubit = await started();
