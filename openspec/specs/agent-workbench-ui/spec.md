@@ -294,37 +294,6 @@ CodeLab SHALL позволять пользователю менять шири�
 - **WHEN** пользователь изменил ширину дока и перезапустил CodeLab
 - **THEN** док открывается с той же шириной
 
-### Requirement: Connection profile is edited in a modal dialog
-CodeLab SHALL present the transport setup form (profile, command, args, environment for stdio; endpoint and token for WebSocket) inside a modal dialog rather than as a permanently visible panel in the main workbench pane. Working directory ("project") SHALL NOT be a field of this dialog — it is selected independently of the connection, via the "Open Project" picker (see "Project selection is independent of the connection type" below). For stdio, the dialog SHALL additionally present a "Run agent from project directory" toggle, defaulting to on, controlling whether the agent process is spawned with the currently selected project's directory as its OS-level working directory. The dialog SHALL be reachable both from a persistent "Configure connection" affordance in the command bar and from a compact "Configure connection" prompt on the empty/disconnected connection screen — the same label in both places, not two names for one action — and SHALL NOT open automatically on app start.
-
-#### Scenario: Opening the dialog from the command bar
-- **WHEN** a session is active (transcript non-empty) and user selects "Configure connection" in the command bar
-- **THEN** CodeLab opens the connection setup dialog over the current screen without navigating away from the active session
-
-#### Scenario: Opening the dialog from the empty connection screen
-- **WHEN** no transport is connected and user selects "Configure connection" on the connection screen
-- **THEN** CodeLab opens the same connection setup dialog, pre-filled with the current transport type and field values
-
-#### Scenario: Dialog does not open unprompted
-- **WHEN** CodeLab starts for the first time with no prior connection
-- **THEN** the connection setup dialog remains closed until the user explicitly opens it
-
-#### Scenario: Editing fields inside the dialog
-- **WHEN** user changes a field value while the dialog is open
-- **THEN** CodeLab applies the change to connection state immediately, the same way it does today for the inline form
-
-#### Scenario: Closing the dialog
-- **WHEN** user dismisses the dialog (close button or Esc)
-- **THEN** CodeLab returns to the workbench with the field values as last edited, without connecting or discarding them
-
-#### Scenario: stdio process runs from the project directory by default
-- **WHEN** transport is stdio, the "Run agent from project directory" toggle is on (default), and a project is selected (or none is, falling back to the current process directory)
-- **THEN** CodeLab spawns the agent process with that same directory as its OS-level working directory
-
-#### Scenario: stdio process spawn directory can be decoupled from the project
-- **WHEN** transport is stdio and the user turns off "Run agent from project directory"
-- **THEN** CodeLab spawns the agent process without an explicit working directory override (inherits CodeLab's own process directory), while the selected project's path is still sent as `cwd` in `session/new` for sessions created afterward
-
 ### Requirement: Схлопывание потоковых сообщений агента в transcript
 CodeLab SHALL отображать подряд идущие потоковые обновления одного и того же рода (`agent_message_chunk` либо `agent_thought_chunk`) в рамках одного prompt turn как единую, дописывающуюся запись transcript, а не как отдельную запись на каждое обновление. CodeLab SHALL начинать новую запись transcript всякий раз, когда между такими обновлениями встречается обновление turn другого рода, либо когда род потокового обновления меняется (сообщение ↔ размышление).
 
@@ -345,7 +314,7 @@ CodeLab SHALL отображать подряд идущие потоковые 
 - **THEN** CodeLab показывает уже полученную часть текста в соответствующей записи transcript, не дожидаясь завершения turn
 
 ### Requirement: Project selection is independent of the connection type
-CodeLab SHALL let the user select the working directory ("project") for sessions as an action independent of the transport connection, and SHALL apply the currently selected project to the next session created regardless of whether the active transport is stdio or WebSocket.
+CodeLab SHALL let the user select the working directory ("project") for sessions as an action independent of the connection profile, and SHALL apply the currently selected project to the next session created regardless of whether the active profile is the embedded agent, stdio or WebSocket. Whether a stdio agent process starts in the project directory SHALL be the `Run in the project folder` field of that stdio profile (`runInProjectDirectory`, default on in the "Add connection profile" dialog), not a separate workbench toggle (design.md change `add-app-settings-shell`, D6).
 
 #### Scenario: Project applies to a WebSocket session
 - **WHEN** CodeLab is connected via WebSocket and the user creates a new session
@@ -356,8 +325,16 @@ CodeLab SHALL let the user select the working directory ("project") for sessions
 - **THEN** CodeLab uses the same fallback it uses today (the CodeLab process's own current directory) as the session's `cwd`
 
 #### Scenario: Switching connection does not clear the selected project
-- **WHEN** the user reconnects or switches transport type while a project is selected
+- **WHEN** the user reconnects or connects another profile from the Connection settings page while a project is selected
 - **THEN** the selected project remains the same, and is used for the next session created after the switch
+
+#### Scenario: stdio process runs from the project directory by default
+- **WHEN** the current profile is a stdio profile with `Run in the project folder` on, and a project is selected (or none is, falling back to the current process directory)
+- **THEN** CodeLab spawns the agent process with that same directory as its OS-level working directory
+
+#### Scenario: stdio process spawn directory can be decoupled from the project
+- **WHEN** the current profile is a stdio profile with `Run in the project folder` off
+- **THEN** CodeLab spawns the agent process without an explicit working directory override, while the selected project's path is still sent as `cwd` in `session/new` for sessions created afterward
 
 ### Requirement: "Open Project" offers native browse and recent projects
 CodeLab SHALL let the user switch projects from the sessions sidebar: recent project directories are shown as collapsed project groups for one-click reselection, and an "Open folder…" item opens the operating system's native folder-selection dialog.
@@ -831,30 +808,38 @@ When the connection is established and the active session has no transcript item
 - **THEN** the session pane shows the empty state with the composer focused, and no Connect button
 
 ### Requirement: Тип подключения «Встроенный агент»
-Диалог подключения CodeLab SHALL предлагать третий тип подключения `Embedded agent` рядом с `stdio` и `WebSocket` (design.md change `add-embedded-agent-mode`, D9). У типа нет полей. Рабочая папка выбирается «Open Project», как у других типов. Конфигурация агента берётся из `$CODELAB_HOME/config.yaml` и проектного `.codelab/config.yaml`, ключи — из хранилища секретов агента. Подключение SHALL строить профиль `ConnectionProfile.embedded(hostProfile: 'embedded-app-desktop')`, а транспорт ему даёт `EmbeddedTransportResolver`, зарегистрированный в composition root (`apps/codelab_desktop/lib/app/`). Виджеты и Cubit-ы НЕ SHALL импортировать `package:codelab_embedded/io.dart`. Тип подключения по умолчанию в форме остаётся `stdio`.
+Встроенный агент SHALL быть первой строкой списка профилей страницы настроек «Connection» (spec app-settings «Список профилей на странице «Connection»»), а не типом в форме подключения (design.md change `add-app-settings-shell`, D6). У строки нет полей. Рабочая папка выбирается «Open Project», как у других профилей. Конфигурация агента берётся из `$CODELAB_HOME/config.yaml` и проектного `.codelab/config.yaml`, ключи — из хранилища секретов агента.
+
+Подключение SHALL строить профиль `ConnectionProfile.embedded(id: 'embedded', hostProfile: 'embedded-app-desktop')`, а транспорт ему даёт `EmbeddedTransportResolver`, зарегистрированный в composition root (`apps/codelab_desktop/lib/app/`). Виджеты и Cubit-ы НЕ SHALL импортировать `package:codelab_embedded/io.dart`.
+
+Без сохранённого выбора профиля по умолчанию профилем по умолчанию SHALL быть встроенный агент; профиль `default` из `profiles.json` app не учитывает (design.md change `add-app-settings-shell`, D5).
 
 Требования к поведению:
 - **Невалидная или отсутствующая конфигурация** встроенного агента SHALL переводить подключение в `ConnectionFailed` (design.md change `add-embedded-agent-mode`, D13, п. 2). Баннер соединения SHALL показывать текст `EmbeddedAgentConfigException`: проблемы загрузчика в форме `config check` и подсказку `Configure the embedded agent in <home>/config.yaml; check it with: codelab config check`. Значений секретов в нём нет.
-- **Нет ключа провайдера**: подключение SHALL открываться. Первый ход с этим провайдером SHALL завершаться ошибкой провайдера с именем секрета без значения и показываться заметкой «Failed turn» (требование «Failed turn notice with Retry»), как у внешнего агента. Отдельной проверки готовности провайдера при подключении нет.
+- **Нет ключа провайдера.** Подключение SHALL открываться. Первый ход с этим провайдером SHALL завершаться ошибкой провайдера с именем секрета без значения и показываться заметкой «Failed turn» (требование «Failed turn notice with Retry»), как у внешнего агента. Отдельной проверки готовности провайдера при подключении нет.
 - **Одобрения, очередь промптов, список сессий, отмена хода и транскрипт** встроенного агента SHALL работать теми же компонентами, что для внешнего агента.
 - **Обрыв соединения** (отказ встроенного агента, `ConnectionLost`) SHALL отображаться так же, как обрыв внешнего агента.
 - **Повторный Connect во время подключения** встроенного агента SHALL прерывать прежнюю попытку без промежуточного `ConnectionFailed`: баннер соединения показывает подключение новой попытки, агент прерванной попытки освобождается резолвером (требование acp-client-kit «Явный автомат соединения»; design.md change `add-embedded-agent-mode`, D6).
 - **Закрытие root scope** SHALL ждать остановки встроенного агента не дольше 10 s. По истечении приложение SHALL писать событие `embedded.close_timeout` уровня `warning` без текста ошибки и продолжать освобождение транспорта и `AcpClientApplication` (D9).
 
 #### Scenario: Выбор встроенного агента
-- **WHEN** пользователь открывает диалог подключения, выбирает `Embedded agent` и нажимает `Connect` при выбранном проекте
+- **WHEN** пользователь открывает страницу настроек «Connection» и нажимает «Connect» в строке «Embedded agent» при выбранном проекте
 - **THEN** CodeLab подключается к встроенному агенту без запуска дочернего процесса, а метка подключения — `Embedded agent`
 
+#### Scenario: Встроенный агент по умолчанию
+- **WHEN** CodeLab запускается впервые с пустым `CODELAB_HOME`, и пользователь нажимает «Connect» на экране подключения
+- **THEN** CodeLab подключается к встроенному агенту
+
 #### Scenario: Нет конфигурации встроенного агента
-- **WHEN** `$CODELAB_HOME` не содержит `config.yaml`, и пользователь подключается типом `Embedded agent`
+- **WHEN** `$CODELAB_HOME` не содержит `config.yaml`, и пользователь подключается к встроенному агенту
 - **THEN** подключение в состоянии `ConnectionFailed`, баннер показывает проблему конфигурации и подсказку `Configure the embedded agent in <home>/config.yaml; check it with: codelab config check`, где `<home>` — путь `CODELAB_HOME`
 
 #### Scenario: Невалидный проектный конфиг встроенного агента
-- **WHEN** выбранный проект содержит `.codelab/config.yaml` с `budget.max_steps: 0`, и пользователь подключается типом `Embedded agent`
+- **WHEN** выбранный проект содержит `.codelab/config.yaml` с `budget.max_steps: 0`, и пользователь подключается к встроенному агенту
 - **THEN** подключение в состоянии `ConnectionFailed`, баннер называет файл, строку и ключ `budget.max_steps` и содержит ту же подсказку
 
 #### Scenario: Нет ключа провайдера
-- **WHEN** `config.yaml` валиден и задаёт провайдера с `api_key_secret: codelab/p`, секрет `codelab/p` не задан, и пользователь подключается типом `Embedded agent` и отправляет промпт
+- **WHEN** `config.yaml` валиден и задаёт провайдера с `api_key_secret: codelab/p`, секрет `codelab/p` не задан, и пользователь подключается к встроенному агенту и отправляет промпт
 - **THEN** подключение установлено, ход завершается заметкой «Failed turn» с ошибкой провайдера, называющей `codelab/p`, без значения секрета
 
 #### Scenario: Одобрение во встроенном режиме
@@ -862,7 +847,7 @@ When the connection is established and the active session has no transcript item
 - **THEN** файл не изменён, а строка вызова в транскрипте показывает отказ
 
 #### Scenario: Повторный Connect во время подключения встроенного агента
-- **WHEN** пользователь подключается типом `Embedded agent`, и, пока агент ещё открывается, снова нажимает `Connect`
+- **WHEN** пользователь подключается к встроенному агенту, и, пока агент ещё открывается, снова нажимает `Connect`
 - **THEN** баннер соединения не показывает `ConnectionFailed` прерванной попытки, подключение завершается исходом второй попытки, а агент первой попытки остановлен
 
 #### Scenario: Зависшая остановка встроенного агента

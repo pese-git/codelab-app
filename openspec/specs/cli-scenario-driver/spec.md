@@ -6,7 +6,7 @@
 ### Requirement: Команда test-scenario
 `codelab test-scenario <файл-или-папка>... [--agent <профиль>] [--filter <glob по id>] [--timeout <длительность>]` SHALL проигрывать golden-фикстуры ACP (формат `agent-core-architecture` §14, загрузчик `codelab_acp_testing`) против агента, которого задаёт профиль подключения, через `runAgentFixtureOver` (H-04).
 
-Без `--agent` агент SHALL выбираться так же, как во всём CLI (capability `codelab-cli`, «Профили подключения CLI»; design.md change `add-embedded-agent-mode`, D13, п. 1 и 7): профиль `default` из `profiles.json`, если он там есть, иначе встроенный агент, как с `--agent embedded`. Битый `profiles.json` SHALL давать код `64` с причиной. О неявном выборе встроенного агента драйвер не сообщает отдельной строкой (D13, п. 8).
+Без `--agent` агент SHALL выбираться так же, как во всём CLI (capability `codelab-cli`, «Профили подключения CLI»; design.md change `add-app-settings-shell`, D21; D13, п. 7 change `add-embedded-agent-mode`): всегда встроенный агент, как с `--agent embedded`; `--agent default` — алиас `--agent embedded`: встроенный агент; запись из `profiles.json` для выбора не используется. Файл читается только ради предупреждения о старой записи `default` (codelab-cli), и любая ошибка этого чтения игнорируется. Без `--agent` драйвер НЕ SHALL читать `profiles.json`; битый `profiles.json` при `--agent <id>` SHALL давать код `64` с причиной. О неявном выборе встроенного агента драйвер не сообщает отдельной строкой (D13, п. 8).
 
 Для каждой фикстуры SHALL:
 1. пропускать с пометкой `SKIP` и причиной фикстуру без роли `agent` и фикстуру с `setup.transport` (её играет транспортный драйвер `codelab-agent` против процесса бинаря);
@@ -39,7 +39,15 @@
 
 #### Scenario: Без --agent при профиле default
 - **WHEN** `profiles.json` содержит профиль `default` с агентом-повторителем и `{fixture}` в аргументах, и `test-scenario` запускается без `--agent`
-- **THEN** фикстуры играются против процесса из профиля `default`
+- **THEN** фикстуры играются против встроенного агента, процесс из профиля `default` не запускается
+
+#### Scenario: --agent default — встроенный агент
+- **WHEN** тот же `profiles.json`, и `test-scenario` запускается с `--agent default`
+- **THEN** фикстуры играются против встроенного агента, как с `--agent embedded`; процесс из записи `default` не запускается, а stderr содержит одно предупреждение о проигнорированной записи
+
+#### Scenario: Без --agent битый profiles.json
+- **WHEN** `profiles.json` в `CODELAB_HOME` — не JSON, и `test-scenario` запускается без `--agent`
+- **THEN** фикстуры играются против встроенного агента, код выхода не `64`
 
 #### Scenario: Сторонний агент и сценарий модели
 - **WHEN** профиль — сторонний агент без `{fixture}`, а у фикстуры есть блок `llm`
