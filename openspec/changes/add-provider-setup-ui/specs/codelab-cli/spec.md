@@ -89,6 +89,41 @@
 - **WHEN** `budget.max_steps` задан в `<cwd>/.codelab/config.yaml` доверенного проекта, и пользователь меняет его на экране `/settings` в TUI
 - **THEN** значение записано в `<cwd>/.codelab/config.local.yaml`, проектный файл не изменён; с `ctrl+u` — в `~/.codelab/config.yaml`
 
+### Requirement: Отказ подключения из-за токена
+Если WebSocket-агент отклоняет рукопожатие со статусом 401 или 403, CLI SHALL печатать в stderr причину `the agent rejected the token (HTTP <код>)`, если токен был отправлен, и `the agent requires a token (HTTP <код>)`, если нет (нет ссылки, переменная не задана, у `secret:` нет значения), вместо общего текста сбоя транспорта (design.md change `add-provider-setup-ui`, D25; spec acp-client-kit «Отказ рукопожатия из-за токена»). Причина SHALL ставиться после того же префикса, что у остальных ошибок подключения этого места:
+- `codelab: cannot start the agent <адрес>: <причина>.` — старт REPL, `--ui tui` и `-p`;
+- `codelab: cannot connect to <адрес>: <причина>.` — после `/profile`;
+- `codelab: cannot reconnect: <причина>.` — `/reconnect` и переподключение.
+
+`<адрес>` — по требованию «Адрес WebSocket-профиля в выводе CLI». Остальные ошибки подключения SHALL печататься как раньше, код выхода `-p` при отказе подключения SHALL оставаться `1`. Значение токена, ссылка и имя переменной НЕ SHALL попадать в stdout, stderr и лог CLI.
+
+#### Scenario: Отправленный токен отклонён
+- **WHEN** `CODELAB_AGENT_TOKEN=sk-test-leak-0123456789`, и запускается `codelab -a ws://127.0.0.1:<порт> -p hi` против сервера, отвечающего на рукопожатие `401`
+- **THEN** код `1`, stderr содержит `codelab: cannot start the agent ws://127.0.0.1:<порт>: the agent rejected the token (HTTP 401).`, ни stdout, ни stderr не содержат маркера
+
+#### Scenario: Токена нет
+- **WHEN** переменная `CODELAB_AGENT_TOKEN` не задана (или профиль ссылается на `secret:` без значения), и запускается `codelab -a ws://127.0.0.1:<порт> -p hi` против сервера, отвечающего `403`
+- **THEN** код `1`, stderr содержит `cannot start the agent ws://127.0.0.1:<порт>: the agent requires a token (HTTP 403).`
+
+#### Scenario: Отказ после /profile в REPL
+- **WHEN** в REPL выполняется `/profile devbox`, а сервер профиля `devbox` отвечает `401` на отправленный токен
+- **THEN** печатается `codelab: cannot connect to <origin devbox>: the agent rejected the token (HTTP 401).`, REPL продолжает работу
+
+#### Scenario: Отказ при переподключении
+- **WHEN** в REPL выполняется `/reconnect`, а сервер отвечает `401` на отправленный токен
+- **THEN** печатается `codelab: cannot reconnect: the agent rejected the token (HTTP 401).`
+
+#### Scenario: Прочие ошибки без изменений
+- **WHEN** сервер отвечает на рукопожатие `500` или порт закрыт
+- **THEN** stderr содержит прежнюю строку того же префикса без слов о токене, код `-p` — `1`
+
+### Requirement: Адрес WebSocket-профиля в выводе CLI
+Везде, где CLI называет WebSocket-профиль в выводе (`describeProfile`: строки ошибок подключения, `--verbose`, `/profile`), адрес SHALL печататься только origin-ом `scheme://host:port` — без пути, query, fragment и userinfo, как `profileOrigin` у codelab-app (решение оркестратора, ревью `feature/ws-unauthorized-message`; design.md change `add-provider-setup-ui`, D25). Это видимое изменение вывода: путь (например, `/acp`) больше не печатается. Stdio-профили описываются как раньше.
+
+#### Scenario: Query и userinfo не выводятся
+- **WHEN** запускается `codelab -a 'ws://user:pass@127.0.0.1:<порт>/acp?t=sk-test-leak-0123456789#x' -p hi` против закрытого порта
+- **THEN** stderr содержит `ws://127.0.0.1:<порт>` и не содержит `/acp`, `t=`, маркера, `user`, `pass` и `#x`
+
 ## MODIFIED Requirements
 
 ### Requirement: Профили подключения CLI

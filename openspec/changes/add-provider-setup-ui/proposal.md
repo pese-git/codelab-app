@@ -75,14 +75,15 @@ Change `add-app-settings-shell` (A, архив `2026-11-05-add-app-settings-shel
   - MODIFIED: «Add connection profile» (токен из хранилища секретов), строка профиля (источник `secret:`), «Rename» и «Remove» (удаление собственного секрета), события журнала настроек.
 - `acp-client-kit`:
   - MODIFIED: ссылка на токен профиля (форма `secret:<имя>`);
-  - ADDED: запись профиля с новым токеном и откатом, проверка нового токена из памяти.
+  - ADDED: запись профиля с новым токеном и откатом, проверка нового токена из памяти, отказ рукопожатия из-за токена (D25).
 - `codelab-cli`:
   - MODIFIED: профили подключения (токен `secret:`, `profiles show`), подкоманды `provider` и `mcp` (мастер на TTY, клиентские флаги);
-  - ADDED: мастер первого запуска, `/provider` и `/settings` в REPL и TUI.
+  - ADDED: мастер первого запуска, `/provider` и `/settings` в REPL и TUI, отказ подключения из-за токена (D25).
 - `agent-secrets`: ADDED — клиентский доступ к секретам `ClientSecretAccess`.
 - `agent-mcp-client`: ADDED — поток состояний серверов сессии.
 - `embedded-agent`: ADDED — состояние MCP-серверов встроенного агента для хоста.
 - `codelab-tui`: MODIFIED — кадр TUI (модальный экран мастера и `/settings`, маска секрета) и одобрение в TUI (клавиши зоны одобрения не работают под модальным экраном).
+- `agent-workbench-ui`: ADDED — понятная причина отказа подключения из-за токена в баннере и диагностике (D25).
 - `workspace-architecture`: MODIFIED — сторож: `http` у `codelab_setup`, `codelab_setup` у app, границы `codelab_setup/io.dart` и `dart:io` в app.
 
 ## Impact

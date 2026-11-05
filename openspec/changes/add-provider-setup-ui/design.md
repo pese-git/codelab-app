@@ -639,6 +639,20 @@ Allowlist ядра (PKG-2) не меняется: поток состояний 
 | `CliMcp` (`/mcp disable`, `/tools`) | — | не входит | команды агента |
 | Phone / Tablet | `PhoneProviders`, `PhoneSettings`, `TabletSettings` | не входит | мобильной сборки нет (§12.8) |
 
+### D25. Отказ подключения из-за токена
+
+Smoke CLI показал: при 401/403 рукопожатия WebSocket и CLI, и app печатали общий `Failed to connect ACP transport.`, и пользователь не понимал, что дело в токене. Решение (решение оркестратора по итогам smoke, 2026-11-06):
+- **Где живёт определение.** В kit, `codelab_client_core/lib/src/connection/token_rejection.dart`, чистый Dart: `tokenRejectionStatus(error)` ищет `AcpWebSocketHandshakeRejected` с 401/403 по цепочке `cause` (`AcpClientApplicationException` → `AcpTransportException` → отказ рукопожатия), а не разбирает текст; `describeTokenRejection(error, {tokenSent})` даёт текст; `profileTokenSent(profile, SecretSource?)` говорит, был ли токен отправлен, **не читая значения**: для `ProfileSecretSource` с `secret:` — через `isSet` порта, для `env:` — по наличию непустой переменной. Хосты зовут `describeConnectFailureByToken(error, profile, SecretSource?)`: она сначала ищет статус и только при 401/403 обращается к источнику — при прочих ошибках токен вообще не трогается (решение оркестратора, ревью `feature/ws-unauthorized-message`). `classifyProbeFailure` (`codelab_client_io`) переходит на `tokenRejectionStatus`, поэтому таблица статусов одна у «Test connection» и у подключения.
+- **Тексты** — те же смыслы, что исходы проверки D12 change `add-app-settings-shell` («rejected» только если токен действительно отправлен), с кодом: `the agent rejected the token (HTTP <код>)` / `the agent requires a token (HTTP <код>)`. Код статуса — не секрет и помогает различить 401 и 403.
+- **Хосты:**
+  - CLI — причина после прежнего префикса места: `codelab: cannot start the agent <адрес>: …` (старт REPL, `--ui tui`, `-p`), `codelab: cannot connect to <адрес>: …` (после `/profile`), `codelab: cannot reconnect: …` (`/reconnect` и переподключение); код `-p` прежний `1`;
+  - app — диагностика `ConnectionCubit` и баннер сбоя подключения в main pane (spec agent-workbench-ui «Отказ подключения из-за токена в workbench»). Kit отдаёт строчный текст без точки, app делает первую букву заглавной и ставит точку (`The agent rejected the token (HTTP 401).`), как с подсказкой бэкенда в D3.
+- **Адрес в выводе CLI** (решение оркестратора по MAJOR ревью, безопасность): `describeProfile` для WebSocket-профиля печатает только origin `scheme://host:port`, как `profileOrigin` у app — без пути, query, fragment и userinfo, где мог оказаться токен. Это видимое изменение вывода: путь (`/acp`) больше не печатается (spec codelab-cli «Адрес WebSocket-профиля в выводе CLI").
+- **Без значений:** значение токена, ссылка и имя переменной в текст не входят (SETUP-1, D18).
+- ACP не меняется: статус рукопожатия даёт транспорт (D12 change A).
+
+*Альтернатива:* распознавать текст исключения `WebSocketException` в хостах — хрупко и дублирует таблицу статусов в трёх местах.
+
 ## Risks / Trade-offs
 
 - **[Секрет в журнале, состоянии или ошибке]** → значения живут только в `SecretValue`/`SecretText`, ключ для Check и токен для транспорта читаются в адаптере `lib/app/`/`run.dart` и сразу отдаются потребителю (D4); события — только id и виды (D18); тесты с маркером на всех путях (D22).
