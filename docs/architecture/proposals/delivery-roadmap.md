@@ -454,10 +454,10 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 | 02 | идущий ход | D-08, R-18, L-05 | — | — | C-03, D-23, D-25 |
 | 03 | файлы проекта | — | — | — | D-13 |
 | 04 | сессии | D-03, R-03, R-04 | — | D-17, S-09 | S-18, D-10 |
-| 05 | Providers | — | — | D-05 (часть 7.5, 8.10) | L-17, L-24 |
-| 05b | MCP servers | — | — | — | E-13 |
-| 06 | мастер провайдера | — | — | готовые пресеты для D-05 и U-17 (задача 9.6) | L-24 (свой провайдер) |
-| 07 | onboarding | — | — | — | D-11 |
+| 05 | Providers | — | — | D-05 (часть 7.5, 8.10) — change `add-provider-setup-ui` | L-17, L-24 (мастер — change `add-provider-setup-ui`; L-17 — позже) |
+| 05b | MCP servers | — | — | — | E-13 (change `add-provider-setup-ui`) |
+| 06 | мастер провайдера | — | — | готовые пресеты для D-05 и U-17 (задача 9.6) — change `add-provider-setup-ui` | L-24 (свой провайдер) — change `add-provider-setup-ui` |
+| 07 | onboarding | — | — | — | D-11 (отдельный change после `add-app-navigation-shell`; решение Q3 change `add-provider-setup-ui`) |
 | 08 | сторож запуска | D-15 | — | — | — |
 | 09 | узкий макет | — | — | — | D-21 (этап 10) |
 | 10 | Appearance | — | — | — | D-20 |
@@ -492,6 +492,14 @@ token», порядок «секрет → профиль» с откатом и
 статусы U-06, D-04 и R-12 — в `agent-parity-goals.md`. Хранилище секретов для токена остаётся за
 `add-provider-setup-ui`, D-10 и U-26 (M5) — справка и переподключение без lease и `restart()`.
 
+Change `add-provider-setup-ui` (создан 2026-11-05; [design.md](../../../openspec/changes/add-provider-setup-ui/design.md),
+D23) идёт итерациями: 0 — документы; 1 — токены профилей в хранилище секретов агента («Use stored
+secret», «Store a new token», ссылка `secret:<имя>`) и ребро `codelab_desktop → codelab_setup`;
+2 — страница Providers; 3 — мастер провайдера в app; 4 — CLI: мастер `codelab provider add`, первый
+запуск (U-17), `/provider` и `/settings` в REPL и `--ui tui`; 5 — MCP servers и «Agent status»;
+6 — правки UX, документы и DoD. Хранилища ОС в него не входят (`add-agent-os-secret-backends`,
+после 1.0): в 1.0 запись секретов из клиентов возможна только при `secrets.backend: file`.
+
 На смартфоне и планшете (этап 10, M5) те же экраны получают раскладку по ширине окна и теряют
 действия, которых нет в профиле `mobile`: строки Run, `stdio`-MCP, skills, хуки, языковые серверы —
 [§12.8](dart-agent-and-clients/12-8-phone-and-tablet.md). Отдельных экранов «только для
@@ -510,10 +518,10 @@ token», порядок «секрет → профиль» с откатом и
 | C10 | `/status`, `/usage` | R-08 | — | — | L-29 |
 | C11 | `/mcp`, `/tools` | — | E-04 | — | E-13, T-35 |
 | C12 | вопросы и ошибки | L-04, C-02, K-01, K-02 | L-08 | L-32 | T-22, U-26 |
-| C5 | первый запуск | — | — | U-17 | L-24 |
+| C5 | первый запуск | — | — | U-17 (change `add-provider-setup-ui`) | L-24 (change `add-provider-setup-ui`) |
 | C1 | полноэкранный TUI | — | — | — | U-12, U-13, U-22, U-36, U-37 |
 | C9 | доска задач | — | — | — | U-21, T-10, C-06 |
-| C13 | `/settings` | — | — | — | U-19, U-25 |
+| C13 | `/settings` | — | — | — | U-19 (change `add-provider-setup-ui`: REPL — список и пикер, TUI — экран по ключам реестра), U-25 |
 | C6 | `/theme` | — | — | — | U-18 |
 
 ### 10.3. OpenSpec changes экранов
@@ -527,6 +535,8 @@ token», порядок «секрет → профиль» с откатом и
 |---|---|---|
 | `add-app-settings-shell` (создан) | `NavigationCubit` и `AppDestination` в части workbench ↔ настройки, Cmd/Ctrl+,, оболочка и навигация настроек §12.4.9, страница «Connection» (20) и «Add connection profile» (20a) с токеном только из переменной окружения: U-06, D-04, R-12 (частично); профиль по умолчанию в app — часть 9.3 | M3 (с первой страницей настроек) |
 | `add-app-navigation-shell` | остальные ветки `AppDestination` (Boot, Onboarding, ProjectPicker, оверлеи) и сочетания A13 вне настроек — вместе с их экранами | M3–M5, по экранам |
+| `add-provider-setup-ui` (создан) | страницы Providers (05) и MCP servers (05b), мастер провайдера (06) в app и CLI, первый запуск CLI (C5), `/settings` (C13), токен профиля в хранилище секретов агента (20, R-12 в app), ребро `codelab_desktop → codelab_setup`; без хранилищ ОС и onboarding | M4 (D-05, U-17), M5 (L-24, E-13, U-19) |
+| `add-app-onboarding` (рабочее имя) | onboarding app (07, D-11) поверх того же `ProviderSetupFlow` — после `add-app-navigation-shell` (решение Q3 change `add-provider-setup-ui`) | M5 |
 | `add-usage-extension` (уже назван) | usage хода и шага; затем вкладки Usage и Timeline (A14) | M5 |
 | `add-subagent-board` | `_codelab/subagents/*` (§17.3.7), доска app (A15) и вид `tasks` CLI | M5 |
 | `add-background-jobs` (уже назван) | `_codelab/jobs/*` (§17.9.11) на той же доске | M5 |
