@@ -20,7 +20,12 @@ void main() {
       addTearDown(binding.scope.dispose);
 
       final buffer = binding.scope.resolve<LogBuffer>();
-      expect(buffer.entries.value, isEmpty);
+      // При сборке scope пишется только запись о бэкенде хранилища секретов
+      // (change `add-provider-setup-ui`, D18); событий соединения ещё нет.
+      expect(
+        [for (final entry in buffer.entries.value) entry['event']],
+        ['secrets.client.backend'],
+      );
 
       binding.transport.emitDiagnostic(
         message: 'stderr line',

@@ -698,6 +698,94 @@ void main() {
     expect(scanDesktopEmbedded(tmp), isEmpty);
   });
 
+  // IO-барель моста настроек в десктопном клиенте (design.md change
+  // `add-provider-setup-ui`, D20; workspace-architecture «IO-барель моста
+  // настроек вне composition root app», «dart:io в presentation настроек»):
+  // `codelab_setup/io.dart` — только `lib/app/`; `presentation/` настроек не
+  // знает ни его, ни `dart:io` (SETUP-9).
+  List<String> scanDesktopSetup(Directory tmp) {
+    final setupRules = rules.where(
+      (r) =>
+          r.dir.startsWith('apps/codelab_desktop/lib') &&
+          r.forbidden.any(
+            (f) => f == 'package:codelab_setup/io.dart' || f == 'dart:io',
+          ),
+    );
+    expect(
+      setupRules,
+      isNotEmpty,
+      reason: 'нужны правила codelab_setup/io.dart и dart:io для desktop',
+    );
+    return [
+      for (final rule in setupRules)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            rule.dir == 'apps/codelab_desktop/lib' ? 'lib' : 'lib/presentation',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+  }
+
+  test('allows the IO barrel of the settings bridge only in lib/app/ of the '
+      'desktop client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_desktop_setup_io_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_setup/io.dart';\n";
+    writeDesktop(tmp, {
+      'app/app_scope.dart': import,
+      'features/settings/application/provider_settings_cubit.dart': import,
+    });
+
+    expect(
+      scanDesktopSetup(tmp),
+      unorderedEquals([
+        endsWith(
+          'lib/features/settings/application/provider_settings_cubit.dart:1 '
+          '-> package:codelab_setup/io.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('forbids dart:io and the IO barrel of the settings bridge in the '
+      'settings presentation of the desktop client', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_desktop_settings_presentation_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final presentation = Directory(p.join(tmp.path, 'lib', 'presentation'))
+      ..createSync(recursive: true);
+    File(p.join(presentation.path, 'page.dart')).writeAsStringSync(
+      "import 'dart:io';\n"
+      "import 'package:codelab_setup/io.dart';\n",
+    );
+    File(
+      p.join(presentation.path, 'ok.dart'),
+    ).writeAsStringSync("import 'dart:async';\n");
+    final presentationRule = rules.firstWhere(
+      (r) => r.dir == 'apps/codelab_desktop/lib/features/settings/presentation',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('lib', forbidden: presentationRule.forbidden),
+    );
+
+    expect(
+      violations,
+      unorderedEquals([
+        endsWith('lib/presentation/page.dart:1 -> dart:io'),
+        endsWith(
+          'lib/presentation/page.dart:2 -> package:codelab_setup/io.dart',
+        ),
+      ]),
+    );
+  });
+
   // Встроенный агент `codelab_embedded` (design.md change
   // `add-embedded-agent-mode`, D3): основной барель чист и не знает IO-пакет
   // агента, `io.dart` и `testing.dart` вне запретов `webUnsafe`, но без ссылок

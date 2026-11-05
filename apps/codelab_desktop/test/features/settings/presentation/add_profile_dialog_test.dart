@@ -23,11 +23,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../support/fake_profile_secrets.dart';
 import '../../../support/in_memory_profile_store.dart';
 import '../../../support/test_app_scope.dart';
 
 const _both = [ProfileKind.stdio, ProfileKind.webSocket];
 const _defaultKey = 'codelab.connection.default_profile';
+
+/// Значение, которого не должно быть ни на экране после ввода, ни в журнале.
+const _leak = 'sk-test-leak-0123456789';
 
 Finder _key(String key) => find.byKey(ValueKey(key));
 
@@ -64,9 +68,12 @@ void main() {
     Map<String, String> environment = const {},
     ProfileStore? profileStore,
     String? profilesPath,
+    FakeProfileSecrets? profileSecrets,
   }) async {
+    final secrets = profileSecrets ?? FakeProfileSecrets();
     final cubit = AddProfileCubit(
       store: profileStore ?? store,
+      openSecrets: () async => secrets,
       preferences: const SharedPreferencesConnectionPreferences(),
       probe: ProfileProbe(
         resolvers: [
@@ -76,7 +83,7 @@ void main() {
               wsOpened++;
               return FakeAcpTransport();
             },
-            secrets: ProfileSecretSource(environment),
+            secrets: ProfileSecretSource(environment, stored: secrets),
           ),
         ],
       ),
@@ -372,22 +379,32 @@ void main() {
   });
 
   group('WebSocket token', () {
-    testWidgets('has exactly two choices, no field for the value and the '
-        'hints of D13', (tester) async {
+    testWidgets('has four choices in the order of D14 and the hints of D13', (
+      tester,
+    ) async {
       await openDialog(tester, kinds: const [ProfileKind.webSocket]);
 
       expect(_key('add-profile-token-none'), findsOneWidget);
+      expect(_key('add-profile-token-stored'), findsOneWidget);
+      expect(_key('add-profile-token-new'), findsOneWidget);
       expect(_key('add-profile-token-env'), findsOneWidget);
-      expect(find.byType(RadioButton<bool>), findsNWidgets(2));
+      expect(find.byType(RadioButton<AddProfileTokenKind>), findsNWidgets(4));
+      final tops = [
+        for (final key in const [
+          'add-profile-token-none',
+          'add-profile-token-stored',
+          'add-profile-token-new',
+          'add-profile-token-env',
+        ])
+          tester.getTopLeft(_key(key)).dy,
+      ];
+      expect(tops, [...tops]..sort());
       expect(find.text('No token'), findsOneWidget);
+      expect(find.text('Use stored secret'), findsOneWidget);
+      expect(find.text('Store a new token'), findsOneWidget);
       expect(find.text('From environment variable'), findsOneWidget);
-      expect(find.text('Use stored secret'), findsNothing);
-      expect(find.text('Store a new token'), findsNothing);
-      expect(
-        find.textContaining('Paste the token'),
-        findsNothing,
-        reason: 'the dialog does not accept token values',
-      );
+      // Поля значения нет, пока вариант не выбран.
+      expect(_key('add-profile-token-new-value'), findsNothing);
       expect(
         find.text(
           'CodeLab reads the token from this environment variable when it '
@@ -782,6 +799,281 @@ void main() {
           ),
         ),
         findsNothing,
+      );
+    });
+  });
+
+  group('token in the secret store (1.6, D14)', () {
+    const ownName = 'codelab/profiles/devbox/token';
+    const readOnlyHint =
+        "Secret store env is read-only. Add 'secrets.backend: file' to "
+        '/home/u/.codelab/config.yaml to store secrets in '
+        '/home/u/.codelab/secrets.yaml (plaintext, 0600), or set '
+        'CODELAB_SECRET_X in the environment.';
+
+    RadioButton<AddProfileTokenKind> radio(WidgetTester tester, String key) =>
+        tester.widget<RadioButton<AddProfileTokenKind>>(_key(key));
+
+    Future<AddProfileCubit> openWebSocket(
+      WidgetTester tester, {
+      FakeProfileSecrets? secrets,
+      String name = 'devbox',
+      String url = 'wss://devbox:7420',
+      ProfileStore? profileStore,
+    }) async {
+      final cubit = await openDialog(
+        tester,
+        kinds: const [ProfileKind.webSocket],
+        profileSecrets: secrets,
+        profileStore: profileStore,
+      );
+      await tester.enterText(_key('add-profile-name'), name);
+      await tester.enterText(_key('add-profile-url'), url);
+      await tester.pump();
+      return cubit;
+    }
+
+    Future<void> chooseNewToken(WidgetTester tester, String value) async {
+      await tester.tap(_key('add-profile-token-new'));
+      await tester.pump();
+      await tester.enterText(_key('add-profile-token-new-value'), value);
+      await tester.pump();
+    }
+
+    testWidgets('"Store a new token" shows a hidden field and the target '
+        'hint of the mockup', (tester) async {
+      await openWebSocket(tester);
+
+      await tester.tap(_key('add-profile-token-new'));
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<PasswordBox>(_key('add-profile-token-new-value'))
+            .revealMode,
+        PasswordRevealMode.hidden,
+      );
+      expect(
+        find.text(
+          'Saved as codelab/profiles/devbox/token in file. The value is '
+          'never shown again or written to profiles.json.',
+        ),
+        findsOneWidget,
+      );
+      expect(_key('add-profile-token-backend'), findsOneWidget);
+    });
+
+    testWidgets('a read-only store: "Store a new token" is disabled with the '
+        'hint, "From environment variable" works', (tester) async {
+      await openWebSocket(
+        tester,
+        secrets: FakeProfileSecrets(
+          backend: const ProfileSecretBackend(
+            id: 'env',
+            writable: false,
+            unavailableReason: readOnlyHint,
+          ),
+        ),
+      );
+
+      expect(radio(tester, 'add-profile-token-new').enabled, isFalse);
+      expect(radio(tester, 'add-profile-token-env').enabled, isTrue);
+      expect(find.text(readOnlyHint), findsOneWidget);
+      await tester.tap(_key('add-profile-token-new'));
+      await tester.pump();
+      expect(_key('add-profile-token-new-value'), findsNothing);
+    });
+
+    testWidgets('no stored secrets: "Use stored secret" is disabled with the '
+        'reason', (tester) async {
+      await openWebSocket(tester);
+
+      expect(radio(tester, 'add-profile-token-stored').enabled, isFalse);
+      expect(find.text('No stored secrets in file.'), findsOneWidget);
+    });
+
+    testWidgets('"Use stored secret" lists the names and writes only the '
+        'reference', (tester) async {
+      final secrets = FakeProfileSecrets(
+        values: {
+          'codelab/profiles/ci/token': _leak,
+          'codelab/profiles/devbox/token': 'x',
+        },
+      );
+      await openWebSocket(tester, secrets: secrets, name: 'ci');
+
+      await tester.tap(_key('add-profile-token-stored'));
+      await tester.pump();
+      expect(_key('add-profile-token-stored-name'), findsOneWidget);
+      await tester.tap(_key('add-profile-token-stored-name'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('codelab/profiles/ci/token').last);
+      await tester.pumpAndSettle();
+      await tester.tap(_key('add-profile-save'));
+      await tester.pumpAndSettle();
+
+      expect(_key('add-profile-saved'), findsOneWidget);
+      expect(
+        (store.profiles.single as WebSocketProfile).tokenRef,
+        'secret:codelab/profiles/ci/token',
+      );
+      expect(secrets.calls.where((c) => c.startsWith('store:')), isEmpty);
+      expect(secrets.values, hasLength(2));
+    });
+
+    testWidgets('"Store a new token" is saved in the store; the marker is '
+        'neither in profiles.json nor on the "Profile saved" screen', (
+      tester,
+    ) async {
+      final secrets = FakeProfileSecrets();
+      await openWebSocket(tester, secrets: secrets);
+      await chooseNewToken(tester, _leak);
+
+      await tester.tap(_key('add-profile-save'));
+      await tester.pumpAndSettle();
+
+      expect(_key('add-profile-saved'), findsOneWidget);
+      expect(secrets.values, {ownName: _leak});
+      expect(
+        (store.profiles.single as WebSocketProfile).tokenRef,
+        'secret:$ownName',
+      );
+      expect(store.profiles.toString(), isNot(contains(_leak)));
+      expect(find.textContaining(_leak), findsNothing);
+    });
+
+    testWidgets('an empty new token keeps Save unavailable', (tester) async {
+      await openWebSocket(tester);
+      await tester.tap(_key('add-profile-token-new'));
+      await tester.pump();
+
+      expect(_enabled(tester, 'add-profile-save'), isFalse);
+
+      await tester.enterText(_key('add-profile-token-new-value'), 'x');
+      await tester.pump();
+      expect(_enabled(tester, 'add-profile-save'), isTrue);
+    });
+
+    testWidgets('a secret of the same name already exists: the warning sits '
+        'at the token and nothing is written', (tester) async {
+      final secrets = FakeProfileSecrets(values: {ownName: 'older'});
+      await openWebSocket(tester, secrets: secrets);
+      await chooseNewToken(tester, _leak);
+
+      await tester.tap(_key('add-profile-save'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining(
+          'A stored token codelab/profiles/devbox/token already exists in '
+          'file. Choose it with "Use stored secret" or remove it with '
+          'codelab secret delete.',
+        ),
+        findsOneWidget,
+      );
+      expect(store.profiles, isEmpty);
+      expect(secrets.values, {ownName: 'older'});
+      expect(_key('add-profile-saved'), findsNothing);
+    });
+
+    testWidgets('a refused profile write rolls the secret back and shows '
+        'the error without the value', (tester) async {
+      final secrets = FakeProfileSecrets();
+      await openWebSocket(
+        tester,
+        secrets: secrets,
+        profileStore: _FailingStore(),
+      );
+      await chooseNewToken(tester, _leak);
+
+      await tester.tap(_key('add-profile-save'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Could not save the profile. Try again.'),
+        findsOneWidget,
+      );
+      expect(secrets.values, isEmpty);
+      // Поле ввода остаётся на экране (скрытое); значения нет ни в одном `Text`.
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Text && (w.data ?? '').contains(_leak),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('Cancel and Esc are blocked while the secret is being '
+        'written', (tester) async {
+      final secrets = FakeProfileSecrets()..storeGate = Completer<void>();
+      await openWebSocket(tester, secrets: secrets);
+      await chooseNewToken(tester, 'x');
+
+      await tester.tap(_key('add-profile-save'));
+      await tester.pump();
+      expect(
+        tester.widget<CodeLabButton>(_key('add-profile-cancel')).onPressed,
+        isNull,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('Add connection profile'), findsOneWidget);
+
+      secrets.storeGate!.complete();
+      await tester.pumpAndSettle();
+      expect(_key('add-profile-saved'), findsOneWidget);
+    });
+
+    testWidgets('ws:// to another machine asks before the probe and before '
+        'the save for a new token too', (tester) async {
+      await openWebSocket(tester, url: 'ws://10.0.0.5:8765/acp?t=x');
+      await chooseNewToken(tester, _leak);
+      expect(
+        find.text('ws:// to another machine: the token is sent unencrypted.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(_key('add-profile-test'));
+      await tester.pump();
+      expect(_key('add-profile-test-anyway'), findsOneWidget);
+      expect(wsOpened, 0);
+      expect(
+        find.textContaining(
+          'The token for ws://10.0.0.5:8765 will travel in clear text.',
+        ),
+        findsOneWidget,
+      );
+
+      // Правка значения токена снимает вопрос.
+      await tester.enterText(_key('add-profile-token-new-value'), 'other');
+      await tester.pump();
+      expect(_key('add-profile-test-anyway'), findsNothing);
+
+      await tester.tap(_key('add-profile-save'));
+      await tester.pumpAndSettle();
+      expect(_key('add-profile-save-anyway'), findsOneWidget);
+      expect(store.profiles, isEmpty);
+    });
+
+    testWidgets('choosing "Use stored secret" preselects the first name', (
+      tester,
+    ) async {
+      final secrets = FakeProfileSecrets(
+        values: {'codelab/profiles/ci/token': 'x'},
+      );
+      final cubit = await openWebSocket(tester, secrets: secrets, name: 'ci');
+      await tester.tap(_key('add-profile-token-stored'));
+      await tester.pump();
+
+      expect((cubit.state as AddProfileInProgress).form.secretNames, [
+        'codelab/profiles/ci/token',
+      ]);
+      expect(
+        find.descendant(
+          of: _key('add-profile-token-stored-name'),
+          matching: find.text('codelab/profiles/ci/token'),
+        ),
+        findsOneWidget,
       );
     });
   });

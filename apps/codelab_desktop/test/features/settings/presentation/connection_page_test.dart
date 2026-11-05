@@ -24,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../workbench/application/shell_cubit_characterization/harness.dart'
     show ThrowingStartTransport;
 
+import '../../../support/fake_profile_secrets.dart';
 import '../../../support/in_memory_profile_store.dart';
 import '../../../support/test_app_scope.dart';
 
@@ -56,6 +57,20 @@ final _tokened = ConnectionProfile.webSocket(
   label: 'Tokened',
   uri: Uri.parse('ws://tokened:1/acp?t=sk-test-leak-0123456789'),
   tokenRef: 'env:DEVBOX_TOKEN',
+);
+
+final _ownSecret = ConnectionProfile.webSocket(
+  id: 'devbox',
+  label: 'Devbox',
+  uri: Uri.parse('wss://devbox:7420'),
+  tokenRef: 'secret:codelab/profiles/devbox/token',
+);
+
+final _foreignSecret = ConnectionProfile.webSocket(
+  id: 'ci',
+  label: 'CI',
+  uri: Uri.parse('wss://ci:7420'),
+  tokenRef: 'secret:codelab/ws-ci',
 );
 
 final _named = ConnectionProfile.webSocket(
@@ -101,9 +116,11 @@ void main() {
     Map<String, String> environment = const {},
     CodeLabStdioTransportFactory? stdioTransportFactory,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
+    FakeProfileSecrets? secrets,
   }) async {
     final binding = CodeLabTestBinding(
       profileStore: store ?? InMemoryProfileStore(stored),
+      profileSecrets: secrets,
       stdioDefault: false,
       preferences: preferences,
       // Дом нужен для пути `profiles.json` в сообщении об ошибке чтения.
@@ -448,6 +465,126 @@ void main() {
       expect(find.textContaining(r'From $DEVBOX_TOKEN'), findsOneWidget);
       expect(find.textContaining('is not set'), findsNothing);
       expect(find.textContaining('sk-leak-0123456789'), findsNothing);
+      await tearDownApp(tester);
+    });
+  });
+
+  group('token secret of a WebSocket row (1.7, D14)', () {
+    String textOf(WidgetTester tester, String id) => tester
+        .widgetList<Text>(
+          find.descendant(
+            of: _key('connection-profile-token-$id'),
+            matching: find.byType(Text),
+          ),
+        )
+        .map((t) => t.data)
+        .join(' | ');
+
+    testWidgets('shows the secret name as text with "<backend> · set" or '
+        '"· missing"; the value is not read', (tester) async {
+      final secrets = FakeProfileSecrets(
+        values: {'codelab/profiles/devbox/token': 'sk-test-leak-0123456789'},
+      );
+      await openPage(
+        tester,
+        stored: [_ownSecret, _foreignSecret],
+        secrets: secrets,
+      );
+
+      expect(
+        textOf(tester, 'devbox'),
+        contains('Token secret codelab/profiles/devbox/token'),
+      );
+      expect(textOf(tester, 'devbox'), contains('file · set'));
+      expect(textOf(tester, 'ci'), contains('Token secret codelab/ws-ci'));
+      expect(textOf(tester, 'ci'), contains('file · missing'));
+      // Имя — текст, а не редактируемое поле (D24).
+      expect(
+        find.descendant(
+          of: _key('connection-profile-token-devbox'),
+          matching: find.byType(TextBox),
+        ),
+        findsNothing,
+      );
+      expect(secrets.calls.where((c) => c.startsWith('read:')), isEmpty);
+      expect(find.textContaining('sk-test-leak-0123456789'), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Remove of a profile with its own secret offers the flag, '
+        'on by default; the secret goes after the profile', (tester) async {
+      final store = InMemoryProfileStore([_ownSecret]);
+      final secrets = FakeProfileSecrets(
+        values: {'codelab/profiles/devbox/token': 'x'},
+      );
+      await openPage(tester, store: store, secrets: secrets);
+
+      await tester.tap(_key('connection-profile-remove-devbox'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Also delete the stored token codelab/profiles/devbox/token'),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<Checkbox>(_key('connection-remove-delete-token')).checked,
+        isTrue,
+      );
+      await tester.tap(_key('connection-remove-confirm'));
+      await tester.pumpAndSettle();
+
+      expect(store.profiles, isEmpty);
+      expect(secrets.values, isEmpty);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('clearing the flag keeps the secret', (tester) async {
+      final store = InMemoryProfileStore([_ownSecret]);
+      final secrets = FakeProfileSecrets(
+        values: {'codelab/profiles/devbox/token': 'x'},
+      );
+      await openPage(tester, store: store, secrets: secrets);
+
+      await tester.tap(_key('connection-profile-remove-devbox'));
+      await tester.pumpAndSettle();
+      await tester.tap(_key('connection-remove-delete-token'));
+      await tester.pump();
+      await tester.tap(_key('connection-remove-confirm'));
+      await tester.pumpAndSettle();
+
+      expect(store.profiles, isEmpty);
+      expect(secrets.values, {'codelab/profiles/devbox/token': 'x'});
+      await tearDownApp(tester);
+    });
+
+    testWidgets('a foreign secret has no flag and stays in the store', (
+      tester,
+    ) async {
+      final store = InMemoryProfileStore([_foreignSecret]);
+      final secrets = FakeProfileSecrets(values: {'codelab/ws-ci': 'x'});
+      await openPage(tester, store: store, secrets: secrets);
+
+      await tester.tap(_key('connection-profile-remove-ci'));
+      await tester.pumpAndSettle();
+      expect(_key('connection-remove-delete-token'), findsNothing);
+      await tester.tap(_key('connection-remove-confirm'));
+      await tester.pumpAndSettle();
+
+      expect(store.profiles, isEmpty);
+      expect(secrets.values, {'codelab/ws-ci': 'x'});
+      await tearDownApp(tester);
+    });
+
+    testWidgets('profiles without a secret reference show no flag', (
+      tester,
+    ) async {
+      await openPage(tester, stored: [_plain]);
+
+      await tester.tap(_key('connection-profile-remove-plain'));
+      await tester.pumpAndSettle();
+
+      expect(_key('connection-remove-delete-token'), findsNothing);
+      await tester.tap(_key('connection-remove-cancel'));
+      await tester.pumpAndSettle();
       await tearDownApp(tester);
     });
   });

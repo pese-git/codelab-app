@@ -9,6 +9,8 @@ import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:test/test.dart';
 
+import '../support/profile_fakes.dart';
+
 const _stdio = StdioProfile(id: 'dev', label: 'Dev', command: 'agent');
 
 ProfileProbe _probeOver(
@@ -151,6 +153,123 @@ void main() {
     expect(outcome.toString(), isNot(contains(leak)));
   });
 
+  group('a new token from memory (add-provider-setup-ui, D13)', () {
+    const leak = 'sk-test-leak-0123456789';
+    final profile = WebSocketProfile(
+      id: 'devbox',
+      label: 'Devbox',
+      uri: Uri.parse('wss://devbox:7420'),
+      tokenRef: 'secret:codelab/profiles/devbox/token',
+    );
+
+    test('the new token reaches the transport; nothing is stored and the '
+        'outcome does not carry it', () async {
+      final stored = FakeProfileSecrets();
+      WebSocketAcpTransportConfig? seen;
+      final probe = ProfileProbe(
+        resolvers: [
+          ConfigTransportResolver(
+            webSocket: (config) {
+              seen = config;
+              return FakeAcpTransport();
+            },
+            secrets: ProfileSecretSource(const {}, stored: stored),
+          ),
+        ],
+      );
+
+      final outcome = await probe.probe(profile, token: const SecretText(leak));
+
+      expect(outcome, isA<Reachable>());
+      expect(seen?.token, leak);
+      expect(stored.log.entries, isEmpty);
+      expect(stored.values, isEmpty);
+      expect(outcome.toString(), isNot(contains(leak)));
+    });
+
+    test('the new token also works for a profile without a token '
+        'reference', () async {
+      WebSocketAcpTransportConfig? seen;
+      final probe = ProfileProbe(
+        resolvers: [
+          ConfigTransportResolver(
+            webSocket: (config) {
+              seen = config;
+              return FakeAcpTransport();
+            },
+          ),
+        ],
+      );
+
+      await probe.probe(
+        WebSocketProfile(id: 'd', label: 'D', uri: Uri.parse('ws://localhost')),
+        token: const SecretText('t'),
+      );
+
+      expect(seen?.token, 't');
+    });
+
+    test('Use stored secret reads the stored value with the same source '
+        'as connect', () async {
+      WebSocketAcpTransportConfig? seen;
+      final probe = ProfileProbe(
+        resolvers: [
+          ConfigTransportResolver(
+            webSocket: (config) {
+              seen = config;
+              return FakeAcpTransport();
+            },
+            secrets: ProfileSecretSource(
+              const {},
+              stored: FakeProfileSecrets(
+                values: {'codelab/profiles/devbox/token': 'stored'},
+              ),
+            ),
+          ),
+        ],
+      );
+
+      await probe.probe(profile);
+
+      expect(seen?.token, 'stored');
+    });
+
+    test('an empty new token is refused explicitly: no transport, and the '
+        'store is not read for a secret reference', () async {
+      var opened = 0;
+      final stored = FakeProfileSecrets(
+        values: {'codelab/profiles/devbox/token': 'stored'},
+      );
+      final probe = ProfileProbe(
+        resolvers: [
+          ConfigTransportResolver(
+            webSocket: (config) {
+              opened++;
+              return FakeAcpTransport();
+            },
+            secrets: ProfileSecretSource(const {}, stored: stored),
+          ),
+        ],
+      );
+
+      final outcome = await probe.probe(profile, token: const SecretText(''));
+
+      expect(outcome, isA<Unsupported>());
+      expect(opened, 0);
+      expect(stored.log.entries, isEmpty);
+    });
+
+    test('a resolver that cannot take a one-off token gives Unsupported '
+        'instead of probing without it', () async {
+      final probe = ProfileProbe(resolvers: [_PlainResolver()]);
+
+      expect(
+        await probe.probe(profile, token: const SecretText('t')),
+        isA<Unsupported>(),
+      );
+    });
+  });
+
   group('failures', () {
     ProfileProbe throwingOpen(Object error, {ProbeFailureClassifier? c}) =>
         ProfileProbe(
@@ -242,4 +361,16 @@ void main() {
       );
     }
   });
+}
+
+/// Резолвер без поддержки одноразового источника секретов.
+final class _PlainResolver implements TransportResolver {
+  @override
+  bool supports(ConnectionProfile profile) => true;
+
+  @override
+  Future<AcpTransport> open(
+    ConnectionProfile profile, {
+    required String projectDirectory,
+  }) async => FakeAcpTransport();
 }

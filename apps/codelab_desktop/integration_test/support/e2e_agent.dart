@@ -4,11 +4,14 @@ import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ConnectionProfile, parseShellWords;
+    show ConnectionProfile, ProfileSecrets, parseShellWords;
 import 'package:codelab_client_io/codelab_client_io.dart'
     show JsonFileProfileStore;
 import 'package:codelab_desktop/app/app_scope.dart';
+import 'package:codelab_desktop/app/client_profile_secrets.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
+import 'package:codelab_desktop/app/connection_environment.dart';
+import 'package:codelab_desktop/app/embedded_logger.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgent, LogLevel, Logger;
@@ -135,23 +138,49 @@ final class E2eAgent {
   /// Как использовать: `await tester.pumpWidget(E2eAgent.current.bootstrap())`.
   /// Каждый вызов создаёт новый root scope, поэтому перезапуск app в тесте
   /// закрывает прежний `closeCodeLabRootScope()`.
-  Widget bootstrap() {
+  Widget bootstrap({ProfileSecrets? profileSecrets}) {
     // Данные прошлого теста не должны попасть в подключение нового.
     _embeddedSetup = null;
-    return _bootstrap();
+    return _bootstrap(profileSecrets);
+  }
+
+  /// Окружение app теста: временный `CODELAB_HOME` и токен WebSocket-агента.
+  Map<String, String> get _environment => {
+    ...Platform.environment,
+    'CODELAB_HOME': _homeDirectory.path,
+    webSocketTokenVariable: E2eWebSocketAgent.token,
+  };
+
+  /// Открывает хранилище секретов `file` во временном `CODELAB_HOME` теста
+  /// (design.md change `add-provider-setup-ui`, D3, D4; задача 1.15).
+  ///
+  /// Почему тест включает `file` сам: пользовательский слой `secrets.backend`
+  /// app не пишет (D3), а бэкенд по умолчанию — `env`, только для чтения.
+  /// Настоящие `~/.codelab` и хранилище ОС не затрагиваются. Результат
+  /// передаётся в `bootstrap(profileSecrets:)`; повторный вызов даёт ещё одно
+  /// чтение того же хранилища — так тест проверяет, что записал app.
+  Future<ProfileSecrets> openFileSecrets() async {
+    final home = _homeDirectory.path;
+    // Бэкенд `file` требует закрытый от группы `$CODELAB_HOME`.
+    await Process.run('/bin/chmod', ['700', home]);
+    final config = File('$home/config.yaml');
+    if (!config.existsSync()) {
+      config.writeAsStringSync('secrets:\n  backend: file\n');
+    }
+    return openProfileSecrets(
+      environment: ConnectionEnvironment.of(_environment),
+      logger: CodeLabEmbeddedLogger(),
+    );
   }
 
   /// Один корень для всех режимов: окружение app задаёт `CODELAB_HOME` с
   /// профилями теста и токен WebSocket-агента (D7, D15); открыватель со
   /// сценарием нужен только встроенному режиму (D9).
-  Widget _bootstrap() => CodeLabBootstrap(
+  Widget _bootstrap(ProfileSecrets? profileSecrets) => CodeLabBootstrap(
     scope: createCodeLabRootScope(
       embeddedOpener: kind == E2eAgentKind.embedded ? _embeddedOpener : null,
-      environment: {
-        ...Platform.environment,
-        'CODELAB_HOME': _homeDirectory.path,
-        webSocketTokenVariable: E2eWebSocketAgent.token,
-      },
+      environment: _environment,
+      profileSecrets: profileSecrets,
     ),
     child: const CodeLabApp(),
   );

@@ -6,7 +6,8 @@ import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart'
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart'
     show codelabAgentStdioProfile;
-import 'package:codelab_client_core/codelab_client_core.dart' show ProfileStore;
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show ProfileSecrets, ProfileStore;
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:cherrypick/cherrypick.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
@@ -53,6 +54,7 @@ final class CodeLabTestBinding {
     Map<String, String>? environment,
     SettingsPages? settingsPages,
     ProfileStore? profileStore,
+    ProfileSecrets? profileSecrets,
     bool stdioDefault = true,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
@@ -93,6 +95,10 @@ final class CodeLabTestBinding {
       profileStore:
           profileStore ??
           InMemoryProfileStore([if (stdioDefault) testStdioProfile]),
+      // Настоящее хранилище читало бы `$CODELAB_HOME` разработчика: тесты
+      // передают двойник (`FakeProfileSecrets`) либо остаются с хранилищем
+      // «не открыто».
+      profileSecrets: profileSecrets,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

@@ -275,6 +275,23 @@ const rules = [
       'package:codelab_agent_io/testing.dart',
     ],
   ),
-  // stage 7: apps/codelab_desktop/lib/features/settings/presentation —
-  //   ['package:codelab_setup/io.dart', 'dart:io'] (§12.4.2, SETUP-9)
+  // IO-барель моста настроек в десктопном клиенте: только composition root
+  // `lib/app/`, как `codelab_embedded/io.dart` (workspace-architecture
+  // «IO-барель моста настроек вне composition root app»; design.md change
+  // `add-provider-setup-ui`, D20). Cubit-ы и виджеты получают хранилище секретов
+  // портом `ProfileSecrets` kit, а не этим барелем.
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['package:codelab_setup/io.dart'],
+    exclude: ['app/'],
+    sealExclude: false,
+  ),
+  // Presentation настроек не знает ни `dart:io`, ни IO-барель моста: файлы,
+  // процессы и хранилище секретов — дело infrastructure и composition root
+  // (workspace-architecture «dart:io в presentation настроек»; §12.4.2,
+  // SETUP-9; `AGENTS.md` §6).
+  PackageRule(
+    'apps/codelab_desktop/lib/features/settings/presentation',
+    forbidden: ['dart:io', 'package:codelab_setup/io.dart'],
+  ),
 ];

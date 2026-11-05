@@ -89,6 +89,33 @@ const _stdio = ConnectionProfile.stdio(
   runInProjectDirectory: true,
 );
 
+/// Хранилище токенов профилей в памяти для проверки предупреждения D13.
+final class _Secrets implements ProfileSecrets {
+  _Secrets([this.values = const {}]);
+
+  final Map<String, String> values;
+
+  @override
+  ProfileSecretBackend get backend =>
+      const ProfileSecretBackend(id: 'file', writable: true);
+
+  @override
+  Future<List<String>> names() async => values.keys.toList();
+
+  @override
+  Future<bool> isSet(String name) async => values.containsKey(name);
+
+  @override
+  Future<String?> read(String name) async => values[name];
+
+  @override
+  Future<ProfileSecretWrite> store(String name, SecretText value) async =>
+      const Stored();
+
+  @override
+  Future<ProfileSecretDelete> delete(String name) async => const Deleted();
+}
+
 void main() {
   late CodeLabShellParts parts;
   late _RecordingResolver resolver;
@@ -100,7 +127,7 @@ void main() {
     TransportResolver? realResolver,
     DirectoryExists? directoryExists,
     List<ConnectionProfile> stored = const [],
-    SecretSource? secrets,
+    ProfileSecretSource? tokenSecrets,
   }) {
     resolver = _RecordingResolver();
     shellLog = RecordingLogger();
@@ -126,6 +153,7 @@ void main() {
       preferences: preferences,
       logger: shellLog,
       eventLogger: eventLog,
+      tokenSecrets: tokenSecrets,
     );
     addTearDown(parts.close);
     return parts;
@@ -267,6 +295,10 @@ void main() {
         parts.connection.state.connectionStatus,
         CodeLabConnectionStatus.connected,
       );
+      // ignore: avoid_print
+      print(
+        'DBG ${shellLog.entries.map((e) => e['event'])} ${eventLog.entries}',
+      );
       final warning = shellLog.entries.singleWhere(
         (e) => '${e['event']}'.contains('not supported in this version'),
       );
@@ -280,6 +312,67 @@ void main() {
       expect(
         '${shellLog.entries}${eventLog.entries}',
         isNot(contains('sk-test-leak-0123456789')),
+      );
+    });
+
+    ConnectionProfile secretProfile() => ConnectionProfile.webSocket(
+      id: 'ci',
+      label: 'CI',
+      uri: Uri.parse('wss://ci:7420/acp'),
+      tokenRef: 'secret:codelab/ws-ci',
+    );
+
+    test(
+      'a secret: reference without a value warns before connecting: the '
+      'diagnostic and the event name only the profile id (D13, D18)',
+      () async {
+        build(tokenSecrets: ProfileSecretSource(const {}, stored: _Secrets()));
+
+        await parts.connection.connect(secretProfile());
+
+        expect(
+          parts.connection.state.connectionStatus,
+          CodeLabConnectionStatus.connected,
+        );
+        // Текст сравнивается целиком: формулировка kit без «token <слово>»,
+        // иначе `SecretRedactor` затёр бы слово как пару «Token <значение>».
+        final warning = shellLog.entries.singleWhere(
+          (e) => e['event'] == secretMissingWarning('ci'),
+        );
+        expect(warning['level'], 'warning');
+        final event = eventLog.entries.singleWhere(
+          (e) => e['event'] == 'connection_profile.token_secret_missing',
+        );
+        expect(event.keys.toSet(), {'event', 'level', 'profile_id'});
+        expect(event['profile_id'], 'ci');
+        expect(
+          '${shellLog.entries}${eventLog.entries}',
+          isNot(contains('ws-ci')),
+        );
+      },
+    );
+
+    test('a secret that is set raises no warning', () async {
+      build(
+        tokenSecrets: ProfileSecretSource(
+          const {},
+          stored: _Secrets({'codelab/ws-ci': 'x'}),
+        ),
+      );
+
+      await parts.connection.connect(secretProfile());
+
+      expect(
+        shellLog.entries.where(
+          (e) => '${e['event']}'.contains('no stored secret value'),
+        ),
+        isEmpty,
+      );
+      expect(
+        eventLog.entries.where(
+          (e) => e['event'] == 'connection_profile.token_secret_missing',
+        ),
+        isEmpty,
       );
     });
 

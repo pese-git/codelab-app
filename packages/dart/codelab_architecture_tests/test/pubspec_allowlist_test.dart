@@ -134,8 +134,10 @@ const embeddedAllowlist = {
 /// Почему: клиенты НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*`; агент
 /// приходит в app только через мост `codelab_embedded`. Решения R4-3 и R6-2
 /// (design.md, таблица Open Questions): проверяются лишь пакеты `codelab_*`, сторонние зависимости app
-/// (`flutter_bloc`, `fluent_ui` и т.п.) не ограничиваются, а `codelab_setup`
-/// сюда не входит — его добавит change `add-provider-setup-ui`.
+/// (`flutter_bloc`, `fluent_ui` и т.п.) не ограничиваются. Настройки агента
+/// приходят в app мостом `codelab_setup` (design.md change
+/// `add-provider-setup-ui`, D20), `codelab_agent_io` рядом с ним по-прежнему
+/// запрещён.
 ///
 /// Как использовать: из `dependencies` `apps/codelab_desktop/pubspec.yaml`
 /// берутся ключи с префиксом `codelab_` и сверяются с этим множеством.
@@ -146,6 +148,7 @@ const desktopAllowlist = {
   'codelab_acp_protocol',
   'codelab_acp_transports',
   'codelab_embedded',
+  'codelab_setup',
   'codelab_ui',
 };
 
@@ -403,5 +406,41 @@ dependencies: # allowlist
     final extra = desktopViolations(pubspec);
 
     expect(extra, {'codelab_agent_core'});
+  });
+
+  test('the desktop app may depend on the settings bridge, not on the agent '
+      'IO package', () {
+    // workspace-architecture, сценарий «Мост настроек в зависимостях app»
+    // (design.md change `add-provider-setup-ui`, D20): `codelab_setup` и
+    // `codelab_embedded` — разрешённые мосты, `codelab_agent_io` рядом с ними
+    // по-прежнему нарушение.
+    const bridges = '''
+name: codelab_desktop
+dependencies: # allowlist
+  codelab_embedded:
+    path: ../../packages/dart/codelab_embedded
+  codelab_setup:
+    path: ../../packages/dart/codelab_setup
+''';
+    const withAgentIo = '''
+name: codelab_desktop
+dependencies: # allowlist
+  codelab_setup:
+    path: ../../packages/dart/codelab_setup
+  codelab_agent_io:
+    path: ../../packages/dart/codelab_agent_io
+''';
+
+    expect(desktopViolations(bridges), isEmpty);
+    expect(desktopViolations(withAgentIo), {'codelab_agent_io'});
+    expect(desktopAllowlist, contains('codelab_setup'));
+  });
+
+  test('the desktop app depends on the settings bridge in pubspec.yaml', () {
+    final pubspec = File(
+      p.join(root, 'apps/codelab_desktop/pubspec.yaml'),
+    ).readAsStringSync();
+
+    expect(dependencyKeys(pubspec), contains('codelab_setup'));
   });
 }

@@ -54,7 +54,7 @@ void main() {
 
     expect(code, 0);
     expect(io.stdoutText, contains('uri: wss://agent.test/acp'));
-    expect(io.stdoutText, contains(r'token: $CODELAB_AGENT_TOKEN'));
+    expect(io.stdoutText, contains('token: env CODELAB_AGENT_TOKEN'));
     final file = File('${tmp.path}/home/profiles.json').readAsStringSync();
     expect(file, isNot(contains('super-secret-token')));
     expect(io.stdoutText, isNot(contains('super-secret-token')));
