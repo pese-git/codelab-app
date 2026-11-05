@@ -405,6 +405,13 @@ void main() {
       expect(find.text('From environment variable'), findsOneWidget);
       // Поля значения нет, пока вариант не выбран.
       expect(_key('add-profile-token-new-value'), findsNothing);
+      // Подписи варианта «From environment variable» видны, только когда он
+      // выбран (как «Saved as …» у «Store a new token»).
+      expect(find.textContaining('CodeLab reads the token'), findsNothing);
+      expect(find.textContaining('Apps opened from Finder'), findsNothing);
+
+      await tester.tap(_key('add-profile-token-env'));
+      await tester.pump();
       expect(
         find.text(
           'CodeLab reads the token from this environment variable when it '
@@ -419,6 +426,10 @@ void main() {
         ),
         findsOneWidget,
       );
+
+      await tester.tap(_key('add-profile-token-none'));
+      await tester.pump();
+      expect(find.textContaining('Apps opened from Finder'), findsNothing);
     });
 
     testWidgets('the variable field defaults to CODELAB_AGENT_TOKEN', (
@@ -538,6 +549,31 @@ void main() {
 
       expect(_enabled(tester, 'add-profile-test'), isFalse);
       expect(find.text('Use ws:// or wss:// with a host.'), findsOneWidget);
+    });
+  });
+
+  group('errors only for touched fields', () {
+    testWidgets('switching to WebSocket shows no errors; typing shows its '
+        'own; leaving a field shows its error', (tester) async {
+      await openDialog(tester);
+
+      await tester.tap(_key('add-profile-type-websocket'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a name.'), findsNothing);
+      expect(find.text('Use ws:// or wss:// with a host.'), findsNothing);
+      expect(_enabled(tester, 'add-profile-save'), isFalse);
+
+      await tester.enterText(_key('add-profile-url'), 'nope');
+      await tester.pump();
+      expect(find.text('Use ws:// or wss:// with a host.'), findsOneWidget);
+      expect(find.text('Enter a name.'), findsNothing);
+
+      // Потеря фокуса поля имени без ввода показывает его ошибку.
+      await tester.tap(_key('add-profile-name'));
+      await tester.pump();
+      await tester.tap(_key('add-profile-url'));
+      await tester.pump();
+      expect(find.text('Enter a name.'), findsOneWidget);
     });
   });
 

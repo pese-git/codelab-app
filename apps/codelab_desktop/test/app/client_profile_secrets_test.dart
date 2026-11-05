@@ -140,6 +140,23 @@ void main() {
       expect((secrets as DescribedProfileSecrets).backendProblem, isNull);
     });
 
+    test(
+      'paths in the hint are shortened to ~ like the dialog subtitle',
+      () async {
+        final secrets = await open(extra: {'HOME': root.path});
+
+        final reason = secrets.backend.unavailableReason!;
+        expect(reason, contains('~/home/config.yaml'));
+        expect(reason, contains('~/home/secrets.yaml'));
+        expect(reason, isNot(contains(root.path)));
+        final result = await secrets.store(
+          'codelab/profiles/devbox/token',
+          const SecretText('v'),
+        );
+        expect((result as ReadOnly).reason, contains('~/home/config.yaml'));
+      },
+    );
+
     test('delete is refused too, and the override variable is read', () async {
       final secrets = await open(extra: {'CODELAB_SECRET_CODELAB_WS_CI': leak});
 
