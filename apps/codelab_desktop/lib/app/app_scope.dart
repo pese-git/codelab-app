@@ -21,6 +21,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ConfigTransportResolver,
         ProfileProbe,
         ProfileSecretSource,
+        ProfileSecrets,
         ProfileStore,
         RecentProjectsStore,
         SecretSource,
@@ -62,6 +63,9 @@ import '../features/workbench/application/secret_migration_cubit.dart';
 import '../features/workbench/application/secret_migration_runner.dart';
 import '../features/workbench/application/secret_migration_turns.dart';
 import '../features/workbench/application/shell_cubit.dart';
+import 'client_profile_secrets.dart'
+    show DescribedProfileSecrets, UnavailableProfileSecrets;
+import 'reopenable_profile_secrets.dart';
 import 'default_settings_pages.dart';
 import 'embedded_logger.dart';
 import 'embedded_secret_migration_runner.dart';
@@ -87,6 +91,8 @@ Scope createCodeLabRootScope({
   Map<String, String>? environment,
   SettingsPages? settingsPages,
   ProfileStore? profileStore,
+  ProfileSecrets? profileSecrets,
+  Future<ProfileSecrets> Function()? profileSecretsOpener,
 }) {
   // Одно окружение на открыватель встроенного агента, профили и токены:
   // `CODELAB_HOME` и переменные читаются из одного места (design.md change
@@ -119,6 +125,8 @@ Scope createCodeLabRootScope({
       CodeLabConnectionModule(
         environment: connectionEnvironment,
         profileStore: profileStore,
+        profileSecrets: profileSecrets,
+        profileSecretsOpener: profileSecretsOpener,
       ),
       CodeLabPresentationModule(
         settingsPages: settingsPages ?? defaultSettingsPages,
@@ -389,16 +397,31 @@ final class CodeLabPlatformModule extends Module {
 /// (`createCodeLabRootScope(profileStore:)`: в `testWidgets` настоящий файл
 /// зависал бы); без него — `JsonFileProfileStore('$CODELAB_HOME/profiles.json')`,
 /// тот же файл, что у CLI. Токен профиля читает `ProfileSecretSource` из
-/// окружения: значение нигде не сохраняется.
+/// окружения (`env:`) или из хранилища секретов агента (`secret:`, change
+/// `add-provider-setup-ui`, D13): значение нигде не сохраняется.
+///
+/// [profileSecrets] — хранилище секретов, открытое до сборки scope
+/// (`openProfileSecrets` в `main`: его `backend` синхронный, а открытие
+/// асинхронное); шов тестов. Без него — хранилище только для чтения с
+/// причиной «не открыто».
 final class CodeLabConnectionModule extends Module {
   CodeLabConnectionModule({
     required ConnectionEnvironment environment,
     ProfileStore? profileStore,
+    ProfileSecrets? profileSecrets,
+    Future<ProfileSecrets> Function()? profileSecretsOpener,
   }) : _environment = environment,
-       _profileStore = profileStore;
+       _profileStore = profileStore,
+       _profileSecrets = profileSecrets,
+       _profileSecretsOpener = profileSecretsOpener;
 
   final ConnectionEnvironment _environment;
   final ProfileStore? _profileStore;
+  final ProfileSecrets? _profileSecrets;
+
+  /// Фабрика переоткрытия хранилища (`openProfileSecrets` в `main`); без неё
+  /// переоткрытие возвращает прежнее хранилище.
+  final Future<ProfileSecrets> Function()? _profileSecretsOpener;
 
   @override
   void builder(Scope currentScope) {
@@ -416,9 +439,35 @@ final class CodeLabConnectionModule extends Module {
     bind<ConnectionPreferences>().toInstance(
       const SharedPreferencesConnectionPreferences(),
     );
-    bind<SecretSource>().toInstance(
-      ProfileSecretSource(_environment.variables),
+    // Хранилище переоткрывается при каждом открытии диалога и страницы
+    // (ревью итерации 1): правка `secrets.backend` применяется без
+    // перезапуска. Журнал настроен в `CodeLabLoggingModule` (ставится
+    // раньше): событие `secrets.client.backend` пишется здесь, а не при
+    // открытии хранилища в `main` (D18).
+    final secrets = ReopenableProfileSecrets(
+      initial:
+          _profileSecrets ??
+          UnavailableProfileSecrets('the secret store is not opened'),
+      open: _profileSecretsOpener,
+      onOpened: (opened) => _settingsLogger().info(
+        'secrets.client.backend',
+        context: {
+          'backend': opened.backend.id,
+          'writable': opened.backend.writable,
+          'reason': ?_problemOf(opened),
+        },
+      ),
     );
+    bind<ReopenableProfileSecrets>().toInstance(secrets);
+    bind<ProfileSecrets>().toInstance(secrets);
+    // Тот же источник читает токен при подключении и при проверке профиля:
+    // `env:` — из окружения, `secret:` — из хранилища без кэша (D13).
+    final tokenSource = ProfileSecretSource(
+      _environment.variables,
+      stored: secrets,
+    );
+    bind<SecretSource>().toInstance(tokenSource);
+    bind<ProfileSecretSource>().toInstance(tokenSource);
     bind<DefaultProfileResolver>()
         .toProvide(
           () => DefaultProfileResolver(
@@ -495,6 +544,7 @@ final class CodeLabPresentationModule extends Module {
             dockLayoutStore: currentScope.resolve<DockLayoutStore>(),
             defaultProfiles: currentScope.resolve<DefaultProfileResolver>(),
             preferences: currentScope.resolve<ConnectionPreferences>(),
+            tokenSecrets: currentScope.resolve<ProfileSecretSource>(),
             eventLogger: _settingsLogger(),
           ),
         )
@@ -546,6 +596,7 @@ final class CodeLabPresentationModule extends Module {
       final environment = currentScope.resolve<ConnectionEnvironment>();
       return AddProfileCubit(
         store: currentScope.resolve<ProfileStore>(),
+        openSecrets: currentScope.resolve<ReopenableProfileSecrets>().reopen,
         preferences: currentScope.resolve<ConnectionPreferences>(),
         probe: currentScope.resolve<ProfileProbe>(),
         // Типы профилей определяют резолверы, а не проверка платформы
@@ -564,6 +615,7 @@ final class CodeLabPresentationModule extends Module {
       final environment = currentScope.resolve<ConnectionEnvironment>();
       return ConnectionSettingsCubit(
         store: currentScope.resolve<ProfileStore>(),
+        openSecrets: currentScope.resolve<ReopenableProfileSecrets>().reopen,
         preferences: currentScope.resolve<ConnectionPreferences>(),
         workspace: currentScope.resolve<ClientWorkspace>(),
         commands: currentScope.resolve<CodeLabShellParts>().connection,
@@ -577,6 +629,12 @@ final class CodeLabPresentationModule extends Module {
     });
   }
 }
+
+/// Причина неисправности хранилища для события журнала (без путей).
+String? _problemOf(ProfileSecrets secrets) => switch (secrets) {
+  final DescribedProfileSecrets described => described.backendProblem,
+  _ => null,
+};
 
 /// Резолверы транспортов окна: один список для `ClientWorkspace`, проверки
 /// профиля и списка типов диалога, чтобы то, что можно проверить и
@@ -796,11 +854,20 @@ class CodeLabBootstrap extends StatefulWidget {
     required this.child,
     this.scope,
     this.logDirectoryPath,
+    this.profileSecrets,
+    this.profileSecretsOpener,
     super.key,
   });
 
   final Widget child;
   final Scope? scope;
+
+  /// Хранилище секретов, открытое в `main` (`openProfileSecrets`); без него
+  /// и без [scope] токены профилей в хранилище недоступны.
+  final ProfileSecrets? profileSecrets;
+
+  /// Фабрика переоткрытия хранилища (`openProfileSecrets`).
+  final Future<ProfileSecrets> Function()? profileSecretsOpener;
 
   /// Directory for logging sinks (`design.md` Decision 6) — resolved via
   /// `path_provider` in `main.dart` before `runApp()`, since that call is
@@ -816,7 +883,11 @@ class CodeLabBootstrap extends StatefulWidget {
 class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
   late final Scope _scope =
       widget.scope ??
-      createCodeLabRootScope(logDirectoryPath: widget.logDirectoryPath);
+      createCodeLabRootScope(
+        logDirectoryPath: widget.logDirectoryPath,
+        profileSecrets: widget.profileSecrets,
+        profileSecretsOpener: widget.profileSecretsOpener,
+      );
   late final CodeLabDependencies _dependencies = CodeLabDependencies(
     application: _scope.resolve<AcpClientApplication>(),
     shellCubit: _scope.resolve<CodeLabShellCubit>(),

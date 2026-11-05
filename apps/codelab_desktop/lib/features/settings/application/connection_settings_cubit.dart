@@ -7,11 +7,18 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ConnectionProfile,
         Connected,
         ConnectionView,
+        OwnSecretOutcome,
         ProbeCancellation,
+        ProfileCommitter,
+        ProfileNotFound,
         ProfileProbe,
         ProfileProbeOutcome,
+        ProfileRemoved,
         Reconnecting,
+        ProfileSecrets,
         ProfileStore,
+        RemoveFailed,
+        SecretTokenRef,
         UnsupportedTokenRef,
         ProfileTokenRef,
         WebSocketProfile,
@@ -33,6 +40,7 @@ export 'profile_view.dart'
         EnvTokenView,
         NoTokenView,
         ProfileTokenView,
+        SecretTokenView,
         UnsupportedTokenView,
         profileOrigin;
 
@@ -55,11 +63,16 @@ export 'profile_view.dart'
 /// попытки (AGENTS.md §9). Битый или незнакомый файл не перезаписывается:
 /// [ConnectionSettingsUnreadable], а [removeProfile] и
 /// [removeIgnoredDefault] ничего не делают. Значение токена в состояние и в
-/// журнал не попадает: из окружения читается только признак «задана»;
-/// события журнала — по D17, без путей, текстов исключений и имён переменных.
+/// журнал не попадает: из окружения читается только признак «задана», у
+/// секрета хранилища — только `isSet` (design.md change
+/// `add-provider-setup-ui`, D14); события журнала — по D17 и D18, без путей,
+/// текстов исключений, имён переменных и секретов. [removeProfile] удаляет
+/// профиль и, по флажку, его собственный секрет токена через
+/// `ProfileCommitter`: сначала профиль, потом секрет (SETUP-24).
 class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   ConnectionSettingsCubit({
     required ProfileStore store,
+    required Future<ProfileSecrets> Function() openSecrets,
     required ConnectionPreferences preferences,
     required ClientWorkspace workspace,
     required ConnectionCommands commands,
@@ -69,6 +82,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     required String Function() projectDirectory,
     Logger? logger,
   }) : _store = store,
+       _openSecrets = openSecrets,
        _probe = probe,
        _projectDirectory = projectDirectory,
        _preferences = preferences,
@@ -83,6 +97,22 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   }
 
   final ProfileStore _store;
+
+  /// Фабрика открытия хранилища секретов: оно переоткрывается при каждом
+  /// открытии страницы, чтобы правка `secrets.backend` применялась без
+  /// перезапуска (ревью итерации 1, design.md change `add-provider-setup-ui`,
+  /// D3). Пока оно открывается, состояние — [ConnectionSettingsLoading].
+  final Future<ProfileSecrets> Function() _openSecrets;
+
+  /// Открытие хранилища этой страницы: одно на жизнь Cubit, повторные
+  /// [reload] его переиспользуют.
+  Future<ProfileSecrets>? _opening;
+  ProfileSecrets? _secrets;
+  ProfileCommitter? _committer;
+
+  /// Есть ли секреты, на которые ссылаются профили страницы (`isSet`, без
+  /// чтения значения). Заполняется в [reload].
+  var _secretSet = <String, bool>{};
   final ConnectionPreferences _preferences;
   final ClientWorkspace _workspace;
   final ConnectionCommands _commands;
@@ -152,6 +182,15 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   /// каждой собственной записи.
   Future<void> reload() async {
     final attempt = ++_loadAttempt;
+    final secrets = _secrets ?? await (_opening ??= _openSecrets());
+    if (isClosed) {
+      // Поздний результат открытия после закрытия страницы отбрасывается.
+      return;
+    }
+    if (_secrets == null) {
+      _secrets = secrets;
+      _committer = ProfileCommitter(store: _store, secrets: secrets);
+    }
     List<ConnectionProfile>? loaded;
     Object? loadError;
     try {
@@ -187,6 +226,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     }
 
     final (:usable, :ignoredDefault) = usableStoredProfiles(loaded);
+    final secretStatus = await _loadSecretStatus(usable);
     if (savedDefault != null &&
         savedDefault != embeddedProfileId &&
         !usable.any((profile) => profile.id == savedDefault)) {
@@ -200,6 +240,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     }
     _readable = true;
     _stored = usable;
+    _secretSet = secretStatus;
     // Исход удалённого (например, из CLI) профиля не переживает перечитывание.
     // Исход изменённого профиля тоже сбрасывается: сравнение целиком.
     _probes.removeWhere((id, _) {
@@ -255,7 +296,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
         id == embeddedProfileId ? null : id,
       );
     } on Object catch (error) {
-      _fail(id, error, stage: 'default');
+      _fail(id, error.runtimeType.toString(), stage: 'default');
       return;
     }
     if (isClosed) {
@@ -294,7 +335,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     try {
       await _preferences.saveConnectOnStart(value);
     } on Object catch (error) {
-      _fail('', error);
+      _fail('', error.runtimeType.toString());
       return;
     }
     if (isClosed) {
@@ -321,7 +362,14 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   /// Встроенный агент и профиль текущего подключения отклоняются здесь, до
   /// `ProfileStore.remove`, а не только недоступностью кнопки; битый файл
   /// не трогается (spec app-settings «Rename» и «Remove» профиля).
-  Future<bool> removeProfile(String id) async {
+  ///
+  /// [deleteOwnSecret] — флажок «Also delete the stored token»: секрет
+  /// `codelab/profiles/<id>/token` удаляется только после успешной записи
+  /// файла, только если профиль ссылается именно на него и больше никто на
+  /// него не ссылается (SETUP-24; решает `ProfileCommitter`). Отказ удаления
+  /// секрета профиль не возвращает: страница называет команду
+  /// `codelab secret delete` (D13, D18).
+  Future<bool> removeProfile(String id, {bool deleteOwnSecret = false}) async {
     final current = state;
     if (current is! ConnectionSettingsReady) {
       return false;
@@ -330,24 +378,53 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     if (row == null || !row.canRemove) {
       return false;
     }
-    final bool removed;
-    try {
-      removed = await _store.remove(id);
-    } on Object catch (error) {
-      _fail(id, error, stage: 'profile');
-      return false;
-    }
+    final result = await _committer!.remove(
+      id,
+      deleteOwnSecret: deleteOwnSecret,
+    );
     if (isClosed) {
-      return removed;
+      return result is ProfileRemoved;
     }
-    if (removed) {
-      _logger?.info('connection_profile.removed', context: {'profile_id': id});
-      if (_defaultId == id) {
-        await _tryDropDefault();
-      }
+    switch (result) {
+      case RemoveFailed():
+        _fail(id, result.errorType ?? 'RemoveFailed', stage: 'profile');
+        return false;
+      case ProfileNotFound():
+        await reload();
+        return false;
+      case ProfileRemoved(:final secret, :final secretName):
+        _logger?.info(
+          'connection_profile.removed',
+          context: {'profile_id': id},
+        );
+        if (secret == OwnSecretOutcome.deleted) {
+          _logger?.info(
+            'connection_profile.token_deleted',
+            context: {'profile_id': id, 'backend': _secrets!.backend.id},
+          );
+        } else if (secret == OwnSecretOutcome.deleteFailed) {
+          _logger?.warning(
+            'connection_profile.token_delete_failed',
+            context: {
+              'profile_id': id,
+              'backend': _secrets!.backend.id,
+              'error_type': 'SecretDeleteFailed',
+            },
+          );
+        }
+        if (_defaultId == id) {
+          await _tryDropDefault();
+        }
+        await reload();
+        if (secret == OwnSecretOutcome.deleteFailed && !isClosed) {
+          // После `reload`: он сбрасывает прежнюю ошибку страницы.
+          _failure =
+              'The profile was removed, but the stored token $secretName was '
+              'not deleted. Remove it with codelab secret delete $secretName.';
+          _publish();
+        }
+        return true;
     }
-    await reload();
-    return removed;
   }
 
   /// «Rename»: меняет только `label` профиля [id]; `true` — запись изменена.
@@ -375,7 +452,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
       }
       await _store.save(profile.copyWith(label: text));
     } on Object catch (error) {
-      _fail(id, error, stage: 'profile');
+      _fail(id, error.runtimeType.toString(), stage: 'profile');
       return false;
     }
     if (isClosed) {
@@ -472,7 +549,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     try {
       removed = await _store.remove('default');
     } on Object catch (error) {
-      _fail('default', error, stage: 'profile');
+      _fail('default', error.runtimeType.toString(), stage: 'profile');
       return false;
     }
     if (isClosed) {
@@ -572,9 +649,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
       for (final profile in _stored)
         ConnectionProfileRow.stored(
           profile: profile,
-          token: profile is WebSocketProfile
-              ? tokenViewOf(profile, _environment)
-              : null,
+          token: profile is WebSocketProfile ? _tokenView(profile) : null,
           isDefault: _defaultId == profile.id,
           isCurrent: current?.id == profile.id,
           status: statusOf(profile.id),
@@ -588,9 +663,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
       rows.add(
         ConnectionProfileRow.unsaved(
           profile: current,
-          token: current is WebSocketProfile
-              ? tokenViewOf(current, _environment)
-              : null,
+          token: current is WebSocketProfile ? _tokenView(current) : null,
           status: statusOf(current.id),
         ),
       );
@@ -616,17 +689,51 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   /// [stage] — что не записалось: `profile` (файл профилей: «Rename»,
   /// «Remove») или `default` (ключ профиля по умолчанию); без значения — для
   /// прочих настроек страницы (D17).
-  void _fail(String profileId, Object error, {String? stage}) {
+  void _fail(String profileId, String errorType, {String? stage}) {
     _logger?.warning(
       'connection_profile.save_failed',
       context: {
         if (profileId.isNotEmpty) 'profile_id': profileId,
-        'error_type': error.runtimeType.toString(),
+        'error_type': errorType,
         'stage': ?stage,
       },
     );
     _failure = 'Could not save the change. Try again.';
     _publish();
+  }
+
+  /// Вид токена для строки: наличие секрета известно из последнего
+  /// [reload], значение не читается.
+  ProfileTokenView _tokenView(WebSocketProfile profile) => tokenViewOf(
+    profile,
+    _environment,
+    secretBackend: _secrets!.backend.id,
+    secretIsSet: (name) => _secretSet[name] ?? false,
+  );
+
+  /// `isSet` для каждого секрета, на который ссылаются профили страницы и
+  /// цель перезапуска. Нечитаемое хранилище даёт «нет»: страница не падает,
+  /// строка честно говорит `missing`; текст ошибки не пишется (D17).
+  Future<Map<String, bool>> _loadSecretStatus(
+    List<ConnectionProfile> profiles,
+  ) async {
+    final names = <String>{
+      for (final profile in [...profiles, ?_commands.restartTarget])
+        if (profile is WebSocketProfile && profile.tokenRef != null)
+          if (ProfileTokenRef.parse(profile.tokenRef!) case SecretTokenRef(
+            :final name,
+          ))
+            name,
+    };
+    final status = <String, bool>{};
+    for (final name in names) {
+      try {
+        status[name] = await _secrets!.isSet(name);
+      } on Object {
+        status[name] = false;
+      }
+    }
+    return status;
   }
 
   Future<void> _tryDropDefault() async {

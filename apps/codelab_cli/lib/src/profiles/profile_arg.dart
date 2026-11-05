@@ -40,6 +40,13 @@ const embeddedIsBuiltInMessage =
 const defaultIsBuiltInMessage =
     'default is the built-in agent; use --agent $embeddedAgentWord';
 
+/// Строка stderr CLI о пустом секрете токена профиля [profileId] (spec
+/// codelab-cli «Профили подключения CLI»): префикс `codelab:` и строчная
+/// буква, как у остальных сообщений CLI.
+String secretMissingMessage(String profileId) =>
+    'codelab: profile $profileId has no stored secret value; connecting '
+    'without a token.';
+
 /// Предупреждение о прежней записи `default` в `profiles.json`: запись
 /// игнорируется. Команды, аргументов, URL и `env` записи в тексте нет
 /// (`observability.md`, D21).

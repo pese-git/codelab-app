@@ -10,13 +10,15 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ConnectionLost,
         ConnectionProfile,
         EmbeddedProfile,
+        ProfileSecretSource,
         ProfileTokenRef,
         Reconnecting,
         StdioProfile,
         UnsupportedTokenRef,
         WebSocketProfile,
         WorkspaceState,
-        describeFailure;
+        describeFailure,
+        secretMissingWarning;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabConnectionStatus;
 
@@ -154,7 +156,9 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     DefaultProfileResolver? defaultProfiles,
     ConnectionPreferences? preferences,
     Logger? eventLogger,
-  }) : _workspace = workspace,
+    ProfileSecretSource? tokenSecrets,
+  }) : _tokenSecrets = tokenSecrets,
+       _workspace = workspace,
        _diagnostics = diagnostics,
        _settings = settings,
        _activeSession = activeSession,
@@ -182,6 +186,10 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   final ActiveSessionCubit _activeSession;
   final ConnectionPreferences? _preferences;
   final Logger? _eventLogger;
+
+  /// Источник токенов профилей: только чтобы предупредить о пустом секрете
+  /// до подключения (D13); значение не сохраняется.
+  final ProfileSecretSource? _tokenSecrets;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
 
   /// Профиль по умолчанию уже подставлен (или не нужен): `connect()` без
@@ -272,6 +280,10 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       ),
     );
     if (await _failIfProjectDirectoryMissing(target, intent, shown: shown)) {
+      return;
+    }
+    await _warnIfSecretMissing(target);
+    if (isClosed || intent != _intent) {
       return;
     }
     // Все проверки пройдены: с этого места попытка принадлежит kit.
@@ -368,6 +380,10 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       state._copyWith(connectionStatus: CodeLabConnectionStatus.reconnecting),
     );
     if (await _failIfProjectDirectoryMissing(profile, intent)) {
+      return;
+    }
+    await _warnIfSecretMissing(profile);
+    if (isClosed || intent != _intent) {
       return;
     }
     final attempt = ++_attempt;
@@ -610,6 +626,24 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         return false;
       default:
         return true;
+    }
+  }
+
+  /// Предупреждение D13 о `secret:` без значения: подключение пойдёт без
+  /// токена, и причину отказа сервера пользователь должен увидеть. Только id
+  /// профиля. Вызывается до начала попытки (`await` внутри попытки позволил бы
+  /// двум подключениям перемешаться).
+  Future<void> _warnIfSecretMissing(ConnectionProfile profile) async {
+    if (await _tokenSecrets?.isSecretMissing(profile) ?? false) {
+      _diagnostics.record(
+        secretMissingWarning(profile.id),
+        severity: DiagnosticSeverity.warning,
+        source: 'transport',
+      );
+      _eventLogger?.warning(
+        'connection_profile.token_secret_missing',
+        context: {'profile_id': profile.id},
+      );
     }
   }
 

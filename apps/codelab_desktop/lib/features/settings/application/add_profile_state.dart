@@ -1,10 +1,21 @@
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
+        EnvToken,
+        NewSecretToken,
+        NoToken,
         ProfileDraft,
         ProfileDraftField,
         ProfileKind,
         ProfileProbeOutcome,
-        Reachable;
+        Reachable,
+        StoredSecretToken;
+
+/// Вариант токена WebSocket-профиля, как его выбирает пользователь (D14).
+///
+/// Почему отдельный enum, а не `ProfileTokenChoice` kit: у каждого варианта
+/// форма показывает своё поле и подсказку, а `KeepTokenRef` в диалоге
+/// создания не встречается. Порядок значений — порядок радиокнопок.
+enum AddProfileTokenKind { none, stored, newToken, env }
 
 /// Всё, что форма «Add connection profile» показывает и редактирует.
 ///
@@ -19,8 +30,9 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 /// [canSave]). Виджет только показывает их и не решает, что допустимо
 /// (AGENTS.md §7, §10).
 ///
-/// Как использовать: создаёт только `AddProfileCubit`; значения токена здесь
-/// нет — черновик хранит `NoToken` или имя переменной (D13).
+/// Как использовать: создаёт только `AddProfileCubit`. Значение нового токена
+/// лежит в черновике только как `SecretText` (`NewSecretToken`): его
+/// `toString()` и `toString()` формы — `***` и без значения (D13).
 final class AddProfileForm {
   const AddProfileForm({
     required this.draft,
@@ -28,6 +40,10 @@ final class AddProfileForm {
     required this.useByDefault,
     required this.idEdited,
     required this.tokenEnvName,
+    required this.secretNames,
+    required this.storedSecretsHint,
+    required this.newTokenAvailable,
+    required this.newTokenHint,
     required this.touched,
     required this.probe,
     required this.probeText,
@@ -53,6 +69,34 @@ final class AddProfileForm {
   /// Имя переменной токена, которое помнится при переключении «No token» ↔
   /// «From environment variable».
   final String tokenEnvName;
+
+  /// Имена хранилища секретов для «Use stored secret» (`ProfileSecrets.names`).
+  final List<String> secretNames;
+
+  /// Почему «Use stored secret» недоступен (`No stored secrets in <backend>.`);
+  /// `null` — вариант доступен.
+  final String? storedSecretsHint;
+
+  /// «Store a new token» доступен: бэкенд принимает запись.
+  final bool newTokenAvailable;
+
+  /// Подсказка под «Store a new token»: куда сохранится значение или почему
+  /// вариант недоступен (D3, D14).
+  final String newTokenHint;
+
+  /// Вариант токена, выбранный в черновике.
+  AddProfileTokenKind get tokenKind => switch (draft.token) {
+    EnvToken() => AddProfileTokenKind.env,
+    StoredSecretToken() => AddProfileTokenKind.stored,
+    NewSecretToken() => AddProfileTokenKind.newToken,
+    NoToken() || _ => AddProfileTokenKind.none,
+  };
+
+  /// Выбранное имя «Use stored secret»; `null`, если выбран другой вариант.
+  String? get storedSecretName => switch (draft.token) {
+    StoredSecretToken(:final name) => name,
+    _ => null,
+  };
 
   /// Была ли правка: до неё ошибки пустой формы не показываются (форма не
   /// должна открываться красной), но [canSave] уже `false`.
@@ -99,6 +143,16 @@ final class AddProfileForm {
 /// идёт сохранение» не представимы.
 sealed class AddProfileState {
   const AddProfileState();
+}
+
+/// Хранилище секретов открывается, формы ещё нет.
+///
+/// Почему отдельное состояние: хранилище переоткрывается при каждом показе
+/// диалога (ревью итерации 1), и до ответа нельзя ни показывать варианты
+/// токена, ни принимать ввод. Явное состояние вместо набора флагов.
+/// Диалог рисует его индикатором загрузки.
+final class OpeningSecrets extends AddProfileState {
+  const OpeningSecrets();
 }
 
 /// Состояния, в которых диалог показывает форму.

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show EnvToken, ProfileDraftField, ProfileKind;
+    show ProfileDraftField, ProfileKind;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
@@ -52,7 +52,8 @@ Future<void> showAddProfileDialog(BuildContext context, AddProfileCubit cubit) {
 /// «Test connection»), что показывать (ошибки, подсказки, подтверждение) и
 /// чем заканчивается проверка, решает `AddProfileCubit`; виджет передаёт
 /// ввод и нажатия и не знает ни файлов, ни окружения, ни ACP (AGENTS.md §6,
-/// §7, §10). Значение токена здесь не вводится: только имя переменной (D13).
+/// §7, §10). Значение нового токена вводится в скрытое поле и сразу уходит в
+/// Cubit (`SecretText`); виджет его не хранит и не показывает (D13, D14).
 ///
 /// Как использовать: под `BlocProvider<AddProfileCubit>`; открывает его
 /// [showAddProfileDialog].
@@ -63,6 +64,7 @@ class AddProfileDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AddProfileCubit, AddProfileState>(
       builder: (context, state) => switch (state) {
+        OpeningSecrets() => const _OpeningDialog(),
         Saved() => _SavedDialog(saved: state),
         AddProfileInProgress() => _FormDialog(state: state),
       },
@@ -72,6 +74,33 @@ class AddProfileDialog extends StatelessWidget {
 
 /// Ширина диалога макета (`.ap-dlg`).
 const _dialogMaxWidth = 560.0;
+
+/// Пока открывается хранилище секретов: заголовок и индикатор.
+///
+/// Макета для этого состояния в `AddProfile` нет; взят существующий образец
+/// загрузки страницы «Connection» (`ProgressRing` в `ContentDialog`).
+class _OpeningDialog extends StatelessWidget {
+  const _OpeningDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return ContentDialog(
+      key: const ValueKey('add-profile-opening'),
+      constraints: const BoxConstraints(maxWidth: _dialogMaxWidth),
+      title: const CodeLabDialogTitle('Add connection profile'),
+      content: const Center(
+        child: SizedBox.square(dimension: 24, child: ProgressRing()),
+      ),
+      actions: [
+        CodeLabButton(
+          key: const ValueKey('add-profile-cancel'),
+          label: 'Cancel',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
+}
 
 class _FormDialog extends StatelessWidget {
   const _FormDialog({required this.state});
@@ -362,7 +391,6 @@ class _Fields extends StatelessWidget {
     CodeLabFormNote? Function(ProfileDraftField) error,
   ) {
     final draft = form.draft;
-    final token = draft.token;
     return [
       CodeLabFormRow(
         label: 'URL',
@@ -393,65 +421,160 @@ class _Fields extends StatelessWidget {
             'profile.',
           ),
         ],
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            RadioGroup<bool>(
-              groupValue: token is EnvToken,
-              onChanged: (isEnv) {
-                if (isEnv ?? false) {
-                  cubit.selectTokenEnv();
-                } else {
-                  cubit.selectTokenNone();
-                }
-              },
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  RadioButton<bool>(
-                    key: ValueKey('add-profile-token-none'),
-                    value: false,
-                    content: Text('No token'),
-                  ),
-                  SizedBox(height: 6),
-                  RadioButton<bool>(
-                    key: ValueKey('add-profile-token-env'),
-                    value: true,
-                    content: Text('From environment variable'),
-                  ),
-                ],
-              ),
-            ),
-            if (token is EnvToken) ...[
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.only(left: 28),
-                child: _FormTextBox(
-                  fieldKey: const ValueKey('add-profile-token-env-name'),
-                  value: form.tokenEnvName,
-                  placeholder: defaultTokenEnvName,
-                  mono: true,
-                  onChanged: cubit.setTokenEnvName,
-                ),
-              ),
-              if (form.tokenNotice case final notice?)
-                Padding(
-                  padding: const EdgeInsets.only(left: 28, top: 4),
-                  child: CodeLabFormNote(
-                    notice,
-                    tone: CodeLabFormNoteTone.warning,
-                  ),
-                ),
-              if (error(ProfileDraftField.token) case final note?)
-                Padding(
-                  padding: const EdgeInsets.only(left: 28, top: 4),
-                  child: note,
-                ),
-            ],
-          ],
-        ),
+        child: _TokenChoices(form: form, error: error(ProfileDraftField.token)),
       ),
     ];
+  }
+}
+
+/// Четыре варианта токена WebSocket-профиля (design.md change
+/// `add-provider-setup-ui`, D14; артборд `AddProfile`; «From environment
+/// variable» — отступление D24).
+///
+/// Почему отдельный виджет: у каждого варианта своё поле и подсказка, а
+/// доступность вариантов («Use stored secret» без имён, «Store a new token» в
+/// хранилище только для чтения) решает Cubit (`AddProfileForm`), виджет её
+/// только показывает (AGENTS.md §10).
+///
+/// Для чего: переводит выбор пользователя в вызовы `AddProfileCubit`. Значение
+/// нового токена вводится в `PasswordBox` без режима подглядывания и нигде
+/// больше не показывается; поле принадлежит этому виджету и исчезает при
+/// выборе другого варианта.
+class _TokenChoices extends StatelessWidget {
+  const _TokenChoices({required this.form, required this.error});
+
+  final AddProfileForm form;
+  final CodeLabFormNote? error;
+
+  static const _indent = EdgeInsets.only(left: 28, top: 4);
+
+  @override
+  Widget build(BuildContext context) {
+    final cubit = context.read<AddProfileCubit>();
+    final kind = form.tokenKind;
+    final storedHint = form.storedSecretsHint;
+    // Подсказка недоступного «Store a new token» видна всегда (причина, D3),
+    // доступного — только пока вариант выбран (артборд).
+    final showNewHint =
+        !form.newTokenAvailable || kind == AddProfileTokenKind.newToken;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        RadioGroup<AddProfileTokenKind>(
+          groupValue: kind,
+          onChanged: (value) {
+            switch (value) {
+              case AddProfileTokenKind.none:
+                cubit.selectTokenNone();
+              case AddProfileTokenKind.stored:
+                cubit.selectTokenStored();
+              case AddProfileTokenKind.newToken:
+                cubit.selectTokenNew();
+              case AddProfileTokenKind.env:
+                cubit.selectTokenEnv();
+              case null:
+                break;
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const RadioButton<AddProfileTokenKind>(
+                key: ValueKey('add-profile-token-none'),
+                value: AddProfileTokenKind.none,
+                content: Text('No token'),
+              ),
+              const SizedBox(height: 6),
+              RadioButton<AddProfileTokenKind>(
+                key: const ValueKey('add-profile-token-stored'),
+                value: AddProfileTokenKind.stored,
+                enabled: storedHint == null,
+                content: const Text('Use stored secret'),
+              ),
+              if (storedHint != null)
+                Padding(
+                  padding: _indent,
+                  child: CodeLabFormNote(
+                    storedHint,
+                    key: const ValueKey('add-profile-token-stored-hint'),
+                  ),
+                ),
+              if (kind == AddProfileTokenKind.stored)
+                Padding(
+                  padding: _indent,
+                  child: ComboBox<String>(
+                    key: const ValueKey('add-profile-token-stored-name'),
+                    isExpanded: true,
+                    value: form.storedSecretName,
+                    items: [
+                      for (final name in form.secretNames)
+                        ComboBoxItem<String>(value: name, child: Text(name)),
+                    ],
+                    onChanged: (name) {
+                      if (name != null) {
+                        cubit.setStoredSecret(name);
+                      }
+                    },
+                  ),
+                ),
+              const SizedBox(height: 6),
+              RadioButton<AddProfileTokenKind>(
+                key: const ValueKey('add-profile-token-new'),
+                value: AddProfileTokenKind.newToken,
+                enabled: form.newTokenAvailable,
+                content: const Text('Store a new token'),
+              ),
+              if (kind == AddProfileTokenKind.newToken)
+                Padding(
+                  padding: _indent,
+                  child: PasswordBox(
+                    key: const ValueKey('add-profile-token-new-value'),
+                    placeholder: 'Paste the token',
+                    // Значение не показывается ни во время ввода, ни после
+                    // (spec app-settings «Диалог «Add connection profile»»).
+                    revealMode: PasswordRevealMode.hidden,
+                    onChanged: cubit.setNewToken,
+                  ),
+                ),
+              if (showNewHint)
+                Padding(
+                  padding: _indent,
+                  child: CodeLabFormNote(
+                    form.newTokenHint,
+                    key: const ValueKey('add-profile-token-backend'),
+                  ),
+                ),
+              const SizedBox(height: 6),
+              const RadioButton<AddProfileTokenKind>(
+                key: ValueKey('add-profile-token-env'),
+                value: AddProfileTokenKind.env,
+                content: Text('From environment variable'),
+              ),
+            ],
+          ),
+        ),
+        if (kind == AddProfileTokenKind.env) ...[
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 28),
+            child: _FormTextBox(
+              fieldKey: const ValueKey('add-profile-token-env-name'),
+              value: form.tokenEnvName,
+              placeholder: defaultTokenEnvName,
+              mono: true,
+              onChanged: cubit.setTokenEnvName,
+            ),
+          ),
+          if (form.tokenNotice case final notice?)
+            Padding(
+              padding: _indent,
+              child: CodeLabFormNote(notice, tone: CodeLabFormNoteTone.warning),
+            ),
+        ],
+        // Ошибка поля токена: «секрет уже есть», пустой токен, имя секрета.
+        if (error case final note?) Padding(padding: _indent, child: note),
+      ],
+    );
   }
 }
 

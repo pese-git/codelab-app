@@ -1,3 +1,5 @@
+import 'connection_profile.dart';
+import 'profile_secrets.dart';
 import 'secret_source.dart';
 
 /// Допустимое имя переменной окружения в ссылке `env:<NAME>`.
@@ -8,29 +10,38 @@ final _variableName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
 /// Почему: app и CLI хранят токен профиля только ссылкой (`AGENTS.md` §10), а
 /// правило «что значит ссылка» должно быть одно — иначе профиль, созданный в
 /// app со ссылкой `env:DEVBOX_TOKEN`, не заработал бы в CLI (design.md change
-/// `add-app-settings-shell`, D15). Форму «имя секрета» добавит change
-/// `add-provider-setup-ui`, поэтому сейчас всё, кроме `env:<NAME>`, —
-/// [UnsupportedTokenRef].
+/// `add-app-settings-shell`, D15). Поддержаны две формы: `env:<NAME>` и
+/// `secret:<имя>` (design.md change `add-provider-setup-ui`, D13); всё
+/// остальное — [UnsupportedTokenRef].
 ///
 /// Для чего: [ProfileSecretSource] читает по ней значение, страница
 /// «Connection» app показывает по ней источник токена («From $NAME» или «не
 /// поддерживается»), не обращаясь к значению.
 ///
 /// Как использовать: `switch (ProfileTokenRef.parse(ref)) { EnvTokenRef(:final
-/// name) => …, UnsupportedTokenRef() => … }`. Разбор не бросает исключений и
+/// name) => …, SecretTokenRef(:final name) => …, UnsupportedTokenRef() => … }`. Разбор не бросает исключений и
 /// значения токена не видит.
 sealed class ProfileTokenRef {
   const ProfileTokenRef();
 
   /// `env:<NAME>` с допустимым именем (`^[A-Za-z_][A-Za-z0-9_]*$`) —
-  /// [EnvTokenRef]; всё остальное, включая `env:` с недопустимым именем и
-  /// имя секрета, — [UnsupportedTokenRef].
+  /// [EnvTokenRef]; `secret:<имя>` с именем по правилу [isValidSecretName] —
+  /// [SecretTokenRef]; всё остальное, включая искажённые префиксы, голое имя
+  /// секрета без префикса и `secret:Bad Name`, — [UnsupportedTokenRef].
+  /// Голое значение остаётся неподдерживаемым: это может быть токен,
+  /// вписанный не в то поле.
   factory ProfileTokenRef.parse(String ref) {
-    const prefix = 'env:';
-    if (ref.startsWith(prefix)) {
-      final name = ref.substring(prefix.length);
+    const envPrefix = 'env:';
+    const secretPrefix = 'secret:';
+    if (ref.startsWith(envPrefix)) {
+      final name = ref.substring(envPrefix.length);
       if (_variableName.hasMatch(name)) {
         return EnvTokenRef(name);
+      }
+    } else if (ref.startsWith(secretPrefix)) {
+      final name = ref.substring(secretPrefix.length);
+      if (isValidSecretName(name)) {
+        return SecretTokenRef(name);
       }
     }
     return UnsupportedTokenRef(ref);
@@ -56,8 +67,33 @@ final class EnvTokenRef extends ProfileTokenRef {
   String toString() => 'EnvTokenRef($name)';
 }
 
-/// Ссылка, которую эта версия не умеет разрешать: имя секрета или
-/// искажённый `env:`. Подключение с ней идёт без токена.
+/// Токен лежит в хранилище секретов агента под именем [name]
+/// (`secret:<имя>`, design.md change `add-provider-setup-ui`, D13).
+///
+/// Почему префикс `secret:`: старая сборка (change `add-app-settings-shell`)
+/// видит такую ссылку как неподдерживаемую и подключается без токена, не
+/// портя файл. Имя секрета — не секрет, поэтому в `toString` оно есть.
+final class SecretTokenRef extends ProfileTokenRef {
+  const SecretTokenRef(this.name);
+
+  final String name;
+
+  /// Ссылка в форме, которую хранит профиль: `secret:<name>`.
+  String get ref => 'secret:$name';
+
+  @override
+  bool operator ==(Object other) =>
+      other is SecretTokenRef && other.name == name;
+
+  @override
+  int get hashCode => Object.hash(SecretTokenRef, name);
+
+  @override
+  String toString() => 'SecretTokenRef($name)';
+}
+
+/// Ссылка, которую эта версия не умеет разрешать: голое имя секрета,
+/// `secret:` с недопустимым именем или искажённый `env:`. Подключение с ней идёт без токена.
 final class UnsupportedTokenRef extends ProfileTokenRef {
   const UnsupportedTokenRef(this.ref);
 
@@ -80,7 +116,7 @@ final class UnsupportedTokenRef extends ProfileTokenRef {
 }
 
 /// [SecretSource] токенов профилей: значение читается из окружения процесса
-/// по [ProfileTokenRef].
+/// или из хранилища секретов по [ProfileTokenRef].
 ///
 /// Почему: один источник на app и CLI (design.md change
 /// `add-app-settings-shell`, D15): прежний `EnvSecretSource` CLI и
@@ -88,24 +124,82 @@ final class UnsupportedTokenRef extends ProfileTokenRef {
 ///
 /// Для чего: `ConfigTransportResolver` читает через него Bearer-токен в
 /// момент открытия WebSocket; значение нигде не сохраняется и не
-/// логируется.
+/// логируется. Кэша нет намеренно: замена секрета другим процессом видна при
+/// следующем открытии транспорта (spec acp-client-kit «Ссылка на токен
+/// профиля»).
 ///
 /// Как использовать: composition root передаёт
-/// `ProfileSecretSource(Platform.environment)` (окружение — аргумент, чтобы
-/// ядро оставалось web-безопасным и тестируемым). Пустая или отсутствующая
-/// переменная и [UnsupportedTokenRef] дают `null` — подключение без токена.
+/// `ProfileSecretSource(Platform.environment, stored: profileSecrets)`
+/// (окружение и порт — аргументы, чтобы ядро оставалось web-безопасным и
+/// тестируемым). `env:` читает переменную, `secret:` — `stored.read(имя)`.
+/// Пустое значение, отсутствующий секрет, отсутствие порта `stored` и
+/// [UnsupportedTokenRef] дают `null` — подключение без токена. Исключение
+/// порта не глотается: открытие транспорта должно завершиться видимой
+/// ошибкой, а не тихим подключением без токена.
 final class ProfileSecretSource implements SecretSource {
-  const ProfileSecretSource(this._environment);
+  const ProfileSecretSource(this._environment, {ProfileSecrets? stored})
+    : _stored = stored;
 
   final Map<String, String> _environment;
+  final ProfileSecrets? _stored;
 
   @override
   Future<String?> read(String ref) async {
-    final parsed = ProfileTokenRef.parse(ref);
-    if (parsed is! EnvTokenRef) {
-      return null;
-    }
-    final value = _environment[parsed.name];
+    final value = switch (ProfileTokenRef.parse(ref)) {
+      EnvTokenRef(:final name) => _environment[name],
+      SecretTokenRef(:final name) => await _stored?.read(name),
+      UnsupportedTokenRef() => null,
+    };
     return value == null || value.isEmpty ? null : value;
   }
+
+  /// `true` — [profile] ссылается на `secret:<имя>`, а секрета нет (или порт
+  /// `stored` не передан, или хранилище не отвечает).
+  ///
+  /// Почему: подключение без токена при `secret:` без значения — не ошибка
+  /// (spec acp-client-kit «Ссылка на токен профиля»), но пользователь должен
+  /// узнать причину отказа сервера. Хост пишет предупреждение
+  /// [secretMissingWarning] до подключения (design.md change
+  /// `add-provider-setup-ui`, D13).
+  ///
+  /// Для чего: проверка наличия через `ProfileSecrets.isSet` — значение
+  /// второй раз не читается, и хранилище ОС не получает лишнего запроса;
+  /// переменная переопределения уже учтена в `isSet` порта.
+  ///
+  /// Как использовать: `await source.isSecretMissing(profile)` перед
+  /// `connect`. Для других ссылок (`env:`, без токена, неподдерживаемая) и
+  /// не-WebSocket профилей — `false`: их предупреждения устроены иначе.
+  /// Исключения порта не пробрасываются: «не удалось проверить» для
+  /// предупреждения то же, что «нет».
+  Future<bool> isSecretMissing(ConnectionProfile profile) async {
+    if (profile is! WebSocketProfile) {
+      return false;
+    }
+    final ref = profile.tokenRef;
+    if (ref == null) {
+      return false;
+    }
+    final parsed = ProfileTokenRef.parse(ref);
+    if (parsed is! SecretTokenRef) {
+      return false;
+    }
+    final stored = _stored;
+    if (stored == null) {
+      return true;
+    }
+    try {
+      return !await stored.isSet(parsed.name);
+    } on Object catch (_) {
+      return true;
+    }
+  }
 }
+
+/// Текст предупреждения D13 для профиля [profileId] с пустым секретом токена.
+///
+/// Только id профиля: имя секрета не секрет, но диагностика держится правила
+/// «только `profile_id`» (design.md change `add-provider-setup-ui`, D13).
+/// Сами предупреждения пишут хосты (журнал app, stderr CLI).
+String secretMissingWarning(String profileId) =>
+    'Profile $profileId has no stored secret value; connecting without '
+    'a token.';

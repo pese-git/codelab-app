@@ -10,7 +10,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         UnreachableReason,
         Unsupported;
 
-import 'profile_view.dart' show EnvTokenView, NoTokenView, ProfileTokenView;
+import 'profile_view.dart'
+    show EnvTokenView, NoTokenView, ProfileTokenView, SecretTokenView;
 
 /// Текст исхода проверки для диалога и строки профиля.
 ///
@@ -29,9 +30,9 @@ import 'profile_view.dart' show EnvTokenView, NoTokenView, ProfileTokenView;
 /// `Text`; [command] — значение поля Command (без аргументов и `env`) для
 /// stdio-профиля, [token] — источник токена WebSocket-профиля
 /// (`tokenViewOf`). «rejected the token» показывается только для
-/// `EnvTokenView(isSet: true)`: если переменная не задана или ссылка не
-/// поддерживается, токен не отправлялся и честный текст — «requires a
-/// token». Успешность — [probeOutcomeIsOk].
+/// `EnvTokenView(isSet: true)` и `SecretTokenView(isSet: true)`: если
+/// переменная не задана, секрета нет или ссылка не поддерживается, токен не
+/// отправлялся и честный текст — «requires a token». Успешность — [probeOutcomeIsOk].
 String probeOutcomeText(
   ProfileProbeOutcome outcome, {
   String? command,
@@ -43,7 +44,8 @@ String probeOutcomeText(
     ?_agent(agentName, agentVersion),
   ].join(' · '),
   Unauthorized() =>
-    token is EnvTokenView && token.isSet
+    (token is EnvTokenView && token.isSet) ||
+            (token is SecretTokenView && token.isSet)
         ? 'Unauthorized: the agent rejected the token'
         : 'Unauthorized: the agent requires a token',
   Unreachable(:final reason, :final statusCode) => switch (reason) {

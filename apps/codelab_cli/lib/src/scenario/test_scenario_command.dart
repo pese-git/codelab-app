@@ -6,6 +6,7 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../cli_args.dart';
 import '../exit_codes.dart';
+import '../profiles/profile_arg.dart';
 import 'agent_connector.dart';
 
 /// `codelab test-scenario <файл-или-папка>... --agent <профиль>` — golden-
@@ -32,6 +33,7 @@ Future<int> runTestScenario(
   required Map<String, String> environment,
   required StringSink stdout,
   required StringSink stderr,
+  ProfileSecrets? profileSecrets,
   Duration quietPeriod = const Duration(milliseconds: 200),
 }) async {
   final List<AcpFixture> fixtures;
@@ -50,7 +52,20 @@ Future<int> runTestScenario(
     for (final fixture in fixtures)
       if (filter == null || _glob(filter).hasMatch(fixture.id)) fixture,
   ];
-  final agent = ScenarioAgent(profile, environment: environment);
+  // Пустой секрет `secret:` профиля — то же предупреждение, что у остальных
+  // режимов (spec codelab-cli «Профили подключения CLI»).
+  if (profileSecrets != null &&
+      await ProfileSecretSource(
+        environment,
+        stored: profileSecrets,
+      ).isSecretMissing(profile)) {
+    stderr.writeln(secretMissingMessage(profile.id));
+  }
+  final agent = ScenarioAgent(
+    profile,
+    environment: environment,
+    profileSecrets: profileSecrets,
+  );
   var passed = 0;
   var failed = 0;
   var skipped = 0;

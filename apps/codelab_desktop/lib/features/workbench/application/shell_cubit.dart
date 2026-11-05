@@ -90,6 +90,7 @@ final class CodeLabShellParts {
     ConnectionPreferences? preferences,
     Logger? logger,
     Logger? eventLogger,
+    ProfileSecretSource? tokenSecrets,
   }) {
     final changes = ShellChanges();
     final diagnostics = ShellDiagnostics(logger: logger);
@@ -117,6 +118,7 @@ final class CodeLabShellParts {
       defaultProfiles: defaultProfiles,
       preferences: preferences,
       eventLogger: eventLogger,
+      tokenSecrets: tokenSecrets,
     );
     return CodeLabShellParts._(
       changes: changes,

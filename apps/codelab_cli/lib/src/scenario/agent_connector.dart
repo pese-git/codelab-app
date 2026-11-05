@@ -30,14 +30,20 @@ import '../profiles/profile_arg.dart';
 /// клиента-драйвер, как у бинаря по stdio), журнал сессий и `CODELAB_HOME` — во
 /// временной папке фикстуры (design.md change `add-embedded-agent-mode`, D8).
 ///
+/// [profileSecrets] даёт токен профиля `secret:<имя>` из того же хранилища,
+/// что у остальных режимов CLI.
+///
 /// Как использовать: `ScenarioAgent(profile, environment: …)`; [skipReason]
 /// до прогона — фикстура, которую этому агенту не сыграть; [connector] —
 /// для `runAgentFixtureOver`.
 final class ScenarioAgent {
-  ScenarioAgent(this.profile, {required Map<String, String> environment})
-    : _resolver = ioTransportResolver(
-        secrets: ProfileSecretSource(environment),
-      );
+  ScenarioAgent(
+    this.profile, {
+    required Map<String, String> environment,
+    ProfileSecrets? profileSecrets,
+  }) : _resolver = ioTransportResolver(
+         secrets: ProfileSecretSource(environment, stored: profileSecrets),
+       );
 
   /// Профили хоста, которые встроенный агент играет в `test-scenario`.
   static const _embeddedProfiles = {'agent-serve', embeddedHostProfile};

@@ -343,38 +343,69 @@ class _ConnectionPageState extends State<ConnectionPage> {
     ConnectionSettingsCubit cubit,
     ConnectionProfileRow row,
   ) async {
-    final confirmed = await _confirmRemove(
+    final decision = await _confirmRemove(
       title: 'Remove profile ${row.title}?',
       details:
           'The entry is deleted from profiles.json. Environment variables '
           'and other settings are not touched.',
+      // Флажок только у собственного секрета профиля; чужой секрет («Use
+      // stored secret») не удаляется никогда (design.md change
+      // `add-provider-setup-ui`, D14).
+      ownSecret: row.ownTokenSecret,
     );
-    if (confirmed && mounted) {
-      await cubit.removeProfile(row.id);
+    if (decision.confirmed && mounted) {
+      await cubit.removeProfile(row.id, deleteOwnSecret: decision.deleteSecret);
     }
   }
 
   Future<void> _removeIgnoredDefault(ConnectionSettingsCubit cubit) async {
-    final confirmed = await _confirmRemove(
+    final decision = await _confirmRemove(
       title: 'Remove the ignored "default" profile?',
       details:
           'Only the "default" entry is deleted from profiles.json; other '
           'profiles stay.',
     );
-    if (confirmed && mounted) {
+    if (decision.confirmed && mounted) {
       await cubit.removeIgnoredDefault();
     }
   }
 
-  Future<bool> _confirmRemove({
+  /// Диалог подтверждения «Remove». [ownSecret] — имя собственного секрета
+  /// токена профиля: тогда показывается флажок «Also delete the stored
+  /// token …», по умолчанию включённый (§12.4.9, шаг 8). Что с секретом
+  /// делать и можно ли, решает `ProfileCommitter`, виджет передаёт только
+  /// выбор пользователя.
+  Future<({bool confirmed, bool deleteSecret})> _confirmRemove({
     required String title,
     required String details,
+    String? ownSecret,
   }) async {
+    var deleteSecret = ownSecret != null;
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => ContentDialog(
         title: CodeLabDialogTitle(title),
-        content: Text(details),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(details),
+              if (ownSecret != null) ...[
+                const SizedBox(height: 12),
+                Checkbox(
+                  key: const ValueKey('connection-remove-delete-token'),
+                  checked: deleteSecret,
+                  onChanged: (value) =>
+                      setDialogState(() => deleteSecret = value ?? false),
+                  content: Flexible(
+                    child: Text('Also delete the stored token $ownSecret'),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
         actions: [
           Button(
             key: const ValueKey('connection-remove-cancel'),
@@ -389,7 +420,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ],
       ),
     );
-    return result ?? false;
+    final confirmed = result ?? false;
+    return (confirmed: confirmed, deleteSecret: confirmed && deleteSecret);
   }
 }
 
@@ -616,6 +648,21 @@ class _ProfileRowCard extends StatelessWidget {
           "$name is not set in CodeLab's environment.",
           role: CodeLabTextRole.caption,
         ),
+    ],
+    SecretTokenView(:final name, :final backend, :final isSet) => [
+      // Имя секрета — текст, а не редактируемое поле: правки профиля в 1.0
+      // нет (D24). Наличие определено без чтения значения.
+      CodeLabText('Token secret $name', role: CodeLabTextRole.caption),
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: CodeLabBadge(
+            label: '$backend · ${isSet ? 'set' : 'missing'}',
+            tone: isSet ? CodeLabTone.success : CodeLabTone.warning,
+          ),
+        ),
+      ),
     ],
     UnsupportedTokenView() => const [
       CodeLabText(

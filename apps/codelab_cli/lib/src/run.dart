@@ -1,6 +1,21 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show
+        Deleted,
+        Exists,
+        Failed,
+        NotSet,
+        ProfileSecretBackend,
+        ProfileSecretDelete,
+        ProfileSecretWrite,
+        ConnectionProfile,
+        ProfileSecretSource,
+        ProfileSecrets,
+        ReadOnly,
+        SecretText,
+        Stored;
 import 'package:codelab_client_io/codelab_client_io.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgentConfigException, EmbeddedAgentOpener;
@@ -9,7 +24,9 @@ import 'package:path/path.dart' as p;
 
 import 'cli_args.dart';
 import 'cli_io.dart';
+import 'cli_logger.dart';
 import 'composition_root.dart';
+import 'embedded_logger.dart';
 import 'exit_codes.dart';
 import 'headless/headless_runner.dart';
 import 'headless/outcome.dart';
@@ -96,6 +113,7 @@ Future<int> _run(
         store: JsonFileProfileStore(home.profilesFile),
         stdout: io.stdout,
         stderr: io.stderr,
+        openSecrets: () => _openProfileSecrets(environment, io, false),
       );
     case CliCommand.testScenario:
       final home = CodelabHome.resolve(environment);
@@ -109,6 +127,7 @@ Future<int> _run(
         environment: environment,
         stdout: io.stdout,
         stderr: io.stderr,
+        profileSecrets: await _openProfileSecrets(environment, io, false),
       );
     case CliCommand.config:
       return options.subcommand!.name == 'check'
@@ -445,12 +464,25 @@ Future<int> _runRepl(
   await home.ensureExists();
 
   final terminal = IoTerminal();
+  final profileSecrets = await _openProfileSecrets(
+    environment,
+    io,
+    options.verbose,
+  );
+  await _warnIfTokenSecretMissing(
+    profile,
+    profileSecrets,
+    environment,
+    io,
+    verbose: options.verbose,
+  );
   final runtime = buildCliRuntime(
     environment: environment,
     stderr: io.stderr,
     verbose: options.verbose,
     debugSecrets: options.debugSecrets,
     embeddedOpener: embeddedOpener,
+    profileSecrets: profileSecrets,
   );
   final repl = Repl(
     workspace: runtime.workspace,
@@ -522,12 +554,25 @@ Future<int> _runTui(
   );
   await home.ensureExists();
 
+  final profileSecrets = await _openProfileSecrets(
+    environment,
+    io,
+    options.verbose,
+  );
+  await _warnIfTokenSecretMissing(
+    profile,
+    profileSecrets,
+    environment,
+    io,
+    verbose: options.verbose,
+  );
   final runtime = buildCliRuntime(
     environment: environment,
     stderr: io.stderr,
     verbose: options.verbose,
     debugSecrets: options.debugSecrets,
     embeddedOpener: embeddedOpener,
+    profileSecrets: profileSecrets,
   );
   final tui = TuiRunner(
     workspace: runtime.workspace,
@@ -596,12 +641,25 @@ Future<int> _runHeadless(
     onWarning: io.stderr.writeln,
   );
 
+  final profileSecrets = await _openProfileSecrets(
+    environment,
+    io,
+    options.verbose,
+  );
+  await _warnIfTokenSecretMissing(
+    profile,
+    profileSecrets,
+    environment,
+    io,
+    verbose: options.verbose,
+  );
   final runtime = buildCliRuntime(
     environment: environment,
     stderr: io.stderr,
     verbose: options.verbose,
     debugSecrets: options.debugSecrets,
     embeddedOpener: embeddedOpener,
+    profileSecrets: profileSecrets,
   );
   final runner = HeadlessRunner(
     workspace: runtime.workspace,
@@ -649,3 +707,185 @@ Future<String> _sessionFolder(String? value) async {
   }
   return path;
 }
+
+/// Открывает хранилище секретов для токенов профилей `secret:<имя>`.
+///
+/// Почему здесь: IO-барель `codelab_setup/io.dart` разрешён только в
+/// `run.dart` (правило сторожа, design.md change `add-agent-configuration`,
+/// D14), а kit не знает стороны агента — порт `ProfileSecrets` собирается на
+/// стыке (design.md change `add-provider-setup-ui`, D13).
+///
+/// Для чего: подключение по `secret:` читает токен из того же хранилища, что
+/// codelab-app (`ClientSecretAccess`: переменная `CODELAB_SECRET_<…>`, затем
+/// бэкенд `secrets.backend`). Лог хранилища идёт в stderr только с `--verbose`
+/// и без значений.
+Future<ProfileSecrets> _openProfileSecrets(
+  Map<String, String> environment,
+  CliIo io,
+  bool verbose,
+) => openCliProfileSecrets(
+  environment: environment,
+  logger: verbose
+      ? CliEmbeddedLogger(io.stderr)
+      : const CliEmbeddedLogger.silent(),
+);
+
+/// Собирает [ProfileSecrets] CLI поверх `ClientSecretAccess` для
+/// `CODELAB_HOME` из [environment].
+///
+/// Почему публичная: адаптер живёт в `run.dart` (там разрешён IO-барель моста),
+/// а его поведение — порядок проверок, `Exists`, типизированные сбои —
+/// проверяется модульным тестом на временном `CODELAB_HOME`. Обычному коду
+/// нужен только `runCodelab`.
+Future<ProfileSecrets> openCliProfileSecrets({
+  required Map<String, String> environment,
+  required Logger logger,
+}) async {
+  final home = CodelabHome.resolve(environment).path;
+  final access = await ClientSecretAccess.open(
+    codelabHome: home,
+    environment: environment,
+    logger: logger,
+  );
+  return _ClientProfileSecrets(access, home);
+}
+
+/// Предупреждение D13 в stderr, если у профиля `secret:` без значения.
+///
+/// Почему до подключения и в stderr: подключение без токена — не ошибка, но
+/// сервер ответит отказом, и причину надо назвать; режимы REPL, TUI и
+/// headless пишут её тем же каналом, что остальные предупреждения старта
+/// (`onWarning: io.stderr.writeln`), до открытия экрана TUI. Текст — только id
+/// профиля (design.md change `add-provider-setup-ui`, D13).
+Future<void> _warnIfTokenSecretMissing(
+  ConnectionProfile profile,
+  ProfileSecrets secrets,
+  Map<String, String> environment,
+  CliIo io, {
+  required bool verbose,
+}) async {
+  if (await ProfileSecretSource(
+    environment,
+    stored: secrets,
+  ).isSecretMissing(profile)) {
+    io.stderr.writeln(secretMissingMessage(profile.id));
+    if (verbose) {
+      // Событие журнала `--verbose` (D18): только id профиля, как у app.
+      CliLogger(io.stderr).warning(
+        'connection_profile.token_secret_missing',
+        context: {'profile_id': profile.id},
+      );
+    }
+  }
+}
+
+/// [ProfileSecrets] kit поверх `ClientSecretAccess` моста настроек.
+///
+/// Почему адаптер: kit объявляет свой порт без зависимости от стороны агента
+/// (D13), а `ClientSecretAccess` отдаёт результаты `SecretAdmin`; здесь они
+/// переводятся в закрытые результаты порта. Значения в результаты не
+/// попадают, тексты сбоев — без цитат ввода.
+///
+/// Как использовать: создаётся только `_openProfileSecrets`; `read` и
+/// `isSet` идут без кэша, `store` не перезаписывает существующее имя
+/// (`Exists`, SETUP-5).
+final class _ClientProfileSecrets implements ProfileSecrets {
+  _ClientProfileSecrets(this._access, this._home);
+
+  final ClientSecretAccess _access;
+
+  /// Папка `CODELAB_HOME` для подсказки бэкенда только для чтения.
+  final String _home;
+
+  @override
+  ProfileSecretBackend get backend {
+    final info = _access.backend;
+    return ProfileSecretBackend(
+      id: info.id,
+      writable: info.writable,
+      unavailableReason: info.unavailableReason,
+    );
+  }
+
+  @override
+  Future<List<String>> names() async => switch (await _access.admin.list()) {
+    SecretListing(:final names) => names,
+    SecretListFailed(:final reason) => throw SecretStoreUnavailableException(
+      backend: _access.backend.id,
+      reason: reason,
+    ),
+  };
+
+  @override
+  Future<bool> isSet(String name) => _access.isSet(name);
+
+  @override
+  Future<String?> read(String name) => _access.read(name);
+
+  /// Порядок как у адаптера app: проверки без значения (`checkStore`: имя и
+  /// бэкенд только для чтения) раньше `isSet` (с учётом переменной
+  /// `CODELAB_SECRET_<…>`), и только затем запись. `SecretUpdated` — секрет
+  /// появился между проверкой и записью, то есть создан не нами: это
+  /// `Exists`, и откат его не трогает.
+  @override
+  Future<ProfileSecretWrite> store(String name, SecretText value) async {
+    try {
+      if (await _access.admin.checkStore(name) case final early?) {
+        return _writeResult(early);
+      }
+      if (await _access.isSet(name)) {
+        return const Exists();
+      }
+      return _writeResult(await _access.admin.store(name, value.reveal()));
+    } on Object catch (error) {
+      return Failed(_failureText(error));
+    }
+  }
+
+  @override
+  Future<ProfileSecretDelete> delete(String name) async {
+    try {
+      return switch (await _access.admin.delete(name)) {
+        SecretDeleted() => const Deleted(),
+        SecretNotSet() => const NotSet(),
+        final SecretReadOnly readOnly => _readOnly(readOnly),
+        SecretFailed(:final reason) => Failed(reason),
+        SecretInvalidName() => const Failed('Invalid secret name.'),
+      };
+    } on Object catch (error) {
+      return Failed(_failureText(error));
+    }
+  }
+
+  ProfileSecretWrite _writeResult(SecretWriteOutcome outcome) =>
+      profileSecretWriteOf(outcome, home: _home);
+
+  ReadOnly _readOnly(SecretReadOnly readOnly) =>
+      ReadOnly(secretReadOnlyHint(readOnly, _home));
+
+  // Текст чужого исключения мог бы процитировать значение: только тип.
+  static String _failureText(Object error) =>
+      'secret store failed: ${error.runtimeType}';
+}
+
+/// Переводит исход `SecretAdmin.store` в результат порта [ProfileSecrets].
+///
+/// Почему отдельная функция: перевод проверяется модульным тестом без
+/// хранилища. `SecretUpdated` — имя появилось между проверкой и записью, то
+/// есть секрет создан не нами: это [Exists], и откат записи профиля его не
+/// удаляет. Подсказка бэкенда только для чтения — строчная, без точки, как
+/// текст `codelab secret` (design.md change `add-provider-setup-ui`, D3).
+ProfileSecretWrite profileSecretWriteOf(
+  SecretWriteOutcome outcome, {
+  required String home,
+}) => switch (outcome) {
+  SecretStored() => const Stored(),
+  SecretUpdated() => const Exists(),
+  final SecretReadOnly readOnly => ReadOnly(secretReadOnlyHint(readOnly, home)),
+  SecretFailed(:final reason) => Failed(reason),
+  SecretInvalidName() => const Failed('Invalid secret name.'),
+  SecretInvalidValue(:final reason) => Failed('Invalid token: $reason.'),
+  SecretCollision(:final variable) => Failed(
+    'Another stored secret uses the same environment variable $variable.',
+  ),
+};

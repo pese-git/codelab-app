@@ -90,12 +90,19 @@ final class CliRuntime {
 /// [stderr] при [verbose] и [debugSecrets] (`--debug-secrets`). Тестовая точка
 /// входа подменяет открыватель сценарием модели (D8): `testing.dart` в рабочий
 /// код не импортируется.
+///
+/// [profileSecrets] — хранилище секретов для токенов профилей `secret:<имя>`
+/// (design.md change `add-provider-setup-ui`, D13): его собирает `run.dart`
+/// поверх `ClientSecretAccess`, потому что IO-барель моста разрешён только
+/// там. Без него `secret:` читается как «секрета нет» и подключение идёт без
+/// токена.
 CliRuntime buildCliRuntime({
   required Map<String, String> environment,
   required StringSink stderr,
   required bool verbose,
   bool debugSecrets = false,
   embedded.EmbeddedAgentOpener? embeddedOpener,
+  ProfileSecrets? profileSecrets,
   Duration embeddedCloseTimeout = const Duration(seconds: 10),
 }) {
   const textFileIo = IoTextFileIo();
@@ -128,7 +135,9 @@ CliRuntime buildCliRuntime({
   final workspace = ClientWorkspace(
     backend: AcpClientBackend(application),
     resolvers: [
-      ioTransportResolver(secrets: ProfileSecretSource(environment)),
+      ioTransportResolver(
+        secrets: ProfileSecretSource(environment, stored: profileSecrets),
+      ),
       resolver,
     ],
   );
