@@ -446,6 +446,46 @@ void main() {
     });
   });
 
+  group('one "not set" warning', () {
+    testWidgets('an unset variable gives exactly one "is not set" even after '
+        'Test connection: under the token field, not in the Check block', (
+      tester,
+    ) async {
+      await openDialog(tester, kinds: const [ProfileKind.webSocket]);
+      await tester.enterText(_key('add-profile-name'), 'Box');
+      await tester.enterText(_key('add-profile-url'), 'wss://box:1');
+      await tester.tap(_key('add-profile-token-env'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        _key('add-profile-token-env-name'),
+        'MISSING_TOKEN',
+      );
+      await tester.pump();
+
+      const notice = "MISSING_TOKEN is not set in CodeLab's environment.";
+      // Сначала до проверки: одно сообщение, под полем имени переменной.
+      expect(find.textContaining('is not set'), findsOneWidget);
+      expect(find.text(notice), findsOneWidget);
+
+      await tester.tap(_key('add-profile-test'));
+      await tester.pump();
+      await settleProbe(tester);
+
+      // После «Test connection» — по-прежнему одно, и под полем токена.
+      expect(find.textContaining('is not set'), findsOneWidget);
+      final fieldBottom = tester
+          .getBottomLeft(_key('add-profile-token-env-name'))
+          .dy;
+      expect(tester.getTopLeft(find.text(notice)).dy, greaterThan(fieldBottom));
+      expect(
+        tester.getTopLeft(find.text(notice)).dy,
+        lessThan(tester.getTopLeft(_key('add-profile-test')).dy),
+        reason: 'the notice is above the Check block, not inside it',
+      );
+      expect(find.textContaining('may reject'), findsNothing);
+    });
+  });
+
   group('check', () {
     testWidgets('Test connection shows the outcome and renames Save', (
       tester,

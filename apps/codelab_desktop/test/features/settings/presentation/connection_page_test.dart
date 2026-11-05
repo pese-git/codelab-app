@@ -247,6 +247,34 @@ void main() {
       await tearDownApp(tester);
     });
 
+    testWidgets('the Current row that is Connected has no Connect (restart '
+        'is "Restart agent"); other rows keep it', (tester) async {
+      await openPage(tester, stored: [_dev, _plain]);
+      expect(_key('connection-profile-connect-dev'), findsOneWidget);
+
+      await connectRow(tester, 'dev');
+
+      expect(find.text('Current'), findsOneWidget);
+      expect(_key('connection-profile-connect-dev'), findsNothing);
+      expect(_key('connection-profile-connect-plain'), findsOneWidget);
+      expect(_key('connection-profile-connect-embedded'), findsOneWidget);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('the Remove confirmation title is 20 px, weight 600', (
+      tester,
+    ) async {
+      await openPage(tester, stored: [_plain]);
+
+      await tester.tap(_key('connection-profile-remove-plain'));
+      await tester.pumpAndSettle();
+
+      final title = tester.widget<Text>(find.text('Remove profile Plain?'));
+      expect(title.style?.fontSize, 20);
+      expect(title.style?.fontWeight, FontWeight.w600);
+      await tearDownApp(tester);
+    });
+
     testWidgets('Remove is unavailable for the current profile with the '
         'hint "Disconnect first" and available for others', (tester) async {
       await openPage(tester, stored: [_dev, _plain]);
@@ -631,6 +659,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      final title = tester.widget<Text>(
+        find.text('Remove the ignored "default" profile?'),
+      );
+      expect(title.style?.fontSize, 20);
+      expect(title.style?.fontWeight, FontWeight.w600);
       await tester.tap(_key('connection-remove-cancel'));
       await tester.pumpAndSettle();
       expect(store.profiles.map((p) => p.id), ['default', 'dev']);
@@ -681,6 +714,9 @@ void main() {
       // «Current» — только у профиля с живым соединением: после неудачи
       // его нет ни у кого, а бейдж `Failed` — на строке попытки.
       expect(find.text('Current'), findsNothing);
+      // Без живого соединения Connect есть у обеих строк, и у неудачной тоже.
+      expect(_key('connection-profile-connect-dev'), findsOneWidget);
+      expect(_key('connection-profile-connect-plain'), findsOneWidget);
       expect(
         find.descendant(
           of: _key('connection-profile-status-plain'),

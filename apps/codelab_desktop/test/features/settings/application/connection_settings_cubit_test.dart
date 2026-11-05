@@ -923,6 +923,14 @@ void main() {
         await cubit.reload();
         await connectedTo(embeddedConnectionProfile);
         await pumpEventQueue();
+        // Встроенный агент «Current» в `Connected` — без «Connect» (spec
+        // app-settings: правило касается и его), у остальных он есть.
+        final live = cubit.state as ConnectionSettingsReady;
+        expect(
+          live.rows.firstWhere((r) => r.id == 'embedded').canConnect,
+          isFalse,
+        );
+        expect(live.rows.firstWhere((r) => r.id == 'dev').canConnect, isTrue);
         resolver.failIds.add('dev');
         final dev = (await JsonFileProfileStore(
           profilesFile.path,
@@ -936,6 +944,8 @@ void main() {
         ConnectionProfileRow row(String id) =>
             state.rows.firstWhere((r) => r.id == id);
         expect(state.rows.where((r) => r.isCurrent), isEmpty);
+        // Current нет ни у кого: «Connect» есть во всех строках.
+        expect(state.rows.every((r) => r.canConnect), isTrue);
         expect(row('embedded').status, isNull);
         expect(row('dev').status, ConnectionRowStatus.failed);
         expect(state.currentProfileId, isNull);
@@ -986,6 +996,8 @@ void main() {
         ConnectionRowStatus.connecting,
       );
       expect(state.rows.where((r) => r.isCurrent), isEmpty);
+      // `Connecting…`: «Connect» во всех строках, и у строки попытки тоже.
+      expect(state.rows.every((r) => r.canConnect), isTrue);
 
       open.complete();
       await connecting;
@@ -998,6 +1010,71 @@ void main() {
       );
       expect(state.rows.where((r) => r.isCurrent), isEmpty);
       expect(state.restartTarget?.id, 'dev');
+    });
+
+    test('Connect refused before the workspace is reached leaves the live '
+        'profile Current without Connect and the other one with it', () async {
+      await profilesFile.writeAsString(_file);
+      final cubit = build();
+      await cubit.reload();
+      final dev = (await JsonFileProfileStore(profilesFile.path).load()).first;
+      await connectedTo(dev);
+      await pumpEventQueue();
+
+      // `_Commands.connect` не трогает workspace — как отказ `ConnectionCubit`
+      // до обращения к нему (D5): состояние окна не меняется.
+      await cubit.connect('devbox');
+      await pumpEventQueue();
+
+      final state = cubit.state as ConnectionSettingsReady;
+      ConnectionProfileRow row(String id) =>
+          state.rows.firstWhere((r) => r.id == id);
+      expect(commands.connected.map((p) => p.id), ['devbox']);
+      expect(row('dev').isCurrent, isTrue);
+      expect(row('dev').canConnect, isFalse);
+      expect(row('devbox').canConnect, isTrue);
+    });
+
+    test('Connect is hidden while Reconnecting (the connection is accepted) '
+        'and shown after Failed', () async {
+      await profilesFile.writeAsString(_file);
+      final cubit = build();
+      await cubit.reload();
+      final dev = (await JsonFileProfileStore(profilesFile.path).load()).first;
+      await connectedTo(dev);
+      await pumpEventQueue();
+
+      var state = cubit.state as ConnectionSettingsReady;
+      ConnectionProfileRow row(String id) =>
+          state.rows.firstWhere((r) => r.id == id);
+      expect(row('dev').isCurrent, isTrue);
+      expect(row('dev').canConnect, isFalse);
+
+      // Переподключение держим на открытии транспорта: `Reconnecting`.
+      final open = Completer<void>();
+      resolver.gate = open.future;
+      final reconnecting = workspace.reconnect().then<void>(
+        (_) {},
+        onError: (Object _) {},
+      );
+      await pumpEventQueue();
+
+      state = cubit.state as ConnectionSettingsReady;
+      expect(workspace.current.connection, isA<Reconnecting>());
+      expect(row('dev').isCurrent, isTrue);
+      expect(row('dev').canConnect, isFalse);
+      expect(row('plain').canConnect, isTrue);
+
+      // Неудачное переподключение: «Current» нет, «Connect» возвращается.
+      resolver.failIds.add('dev');
+      open.complete();
+      await reconnecting;
+      await pumpEventQueue();
+
+      state = cubit.state as ConnectionSettingsReady;
+      expect(row('dev').isCurrent, isFalse);
+      expect(row('dev').status, ConnectionRowStatus.failed);
+      expect(row('dev').canConnect, isTrue);
     });
 
     test('a new accepted connection moves Current', () async {

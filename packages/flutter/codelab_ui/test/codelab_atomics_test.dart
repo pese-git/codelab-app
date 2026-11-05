@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  _dialogTitleTests();
   testWidgets(
     'CodeLabResizeHandle reports the total drag distance via onDelta',
     (tester) async {
@@ -73,5 +74,19 @@ void main() {
           .first,
     );
     expect(mouseRegion.cursor, SystemMouseCursors.resizeColumn);
+  });
+}
+
+void _dialogTitleTests() {
+  testWidgets('CodeLabDialogTitle is subtitle: 20 px, weight 600', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FluentApp(home: const Center(child: CodeLabDialogTitle('Title'))),
+    );
+
+    final text = tester.widget<Text>(find.text('Title'));
+    expect(text.style?.fontSize, 20);
+    expect(text.style?.fontWeight, FontWeight.w600);
   });
 }

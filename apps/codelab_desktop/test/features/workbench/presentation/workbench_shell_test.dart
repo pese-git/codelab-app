@@ -10,6 +10,7 @@ import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
@@ -633,7 +634,35 @@ void main() {
 
       await pressCtrl(tester, LogicalKeyboardKey.comma);
       expect(settingsNav, findsOneWidget);
-      await tabMany(tester, 25);
+      // Число Tab не подгоняется под раскладку страницы: Tab нажимается с
+      // верхней границей, пока фокус не окажется на переключателе
+      // «Connect on start» (Space и Enter на нём безвредны). На каждом шаге
+      // проверяется, что фокус не ушёл в скрытое рабочее место (H1
+      // итерации 1).
+      var onTarget = false;
+      for (var i = 0; i < 80 && !onTarget; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        final context = FocusManager.instance.primaryFocus?.context;
+        expect(context, isNotNull);
+        expect(
+          context!.findAncestorWidgetOfExactType<CodeLabShell>(),
+          isNull,
+          reason: 'focus left the settings screen for the workbench',
+        );
+        context.visitAncestorElements((element) {
+          if (element.widget.key ==
+              const ValueKey('connection-connect-on-start')) {
+            onTarget = true;
+          }
+          return !onTarget;
+        });
+      }
+      expect(
+        onTarget,
+        isTrue,
+        reason: 'Tab never reached the Connect on start toggle',
+      );
       await tester.sendKeyEvent(LogicalKeyboardKey.space);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await settle(tester);
