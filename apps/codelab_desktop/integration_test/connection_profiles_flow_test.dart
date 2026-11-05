@@ -134,7 +134,7 @@ void main() {
 
     await tester.tap(_key('add-profile-test'));
     await _pumpUntil(tester, _key('add-profile-probe-result'));
-    expect(find.text('Command not found'), findsOneWidget);
+    expect(find.text('Command not found: /nonexistent/agent'), findsOneWidget);
 
     await tester.tap(_key('add-profile-save'));
     await tester.pumpAndSettle();
