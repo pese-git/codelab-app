@@ -35,9 +35,9 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         selectableProfileTokenSecrets,
         suggestProfileId;
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../core/platform/connection_preferences.dart';
+import '../../../core/platform/home_path_label.dart';
 import 'add_profile_state.dart';
 import 'probe_outcome_view.dart';
 import 'profile_view.dart'
@@ -53,6 +53,11 @@ export 'probe_outcome_view.dart';
 
 /// Имя переменной токена по умолчанию, как у CLI (D13).
 const defaultTokenEnvName = 'CODELAB_AGENT_TOKEN';
+
+/// Все поля формы: «Save» на неполной форме показывает ошибки каждого.
+final _allFields = Set<ProfileDraftField>.unmodifiable(
+  ProfileDraftField.values,
+);
 
 /// Текст общего сбоя записи: без `toString()` исключения (D17).
 const _saveFailedMessage = 'Could not save the profile. Try again.';
@@ -142,13 +147,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     if (path == null) {
       return '~/.codelab/profiles.json';
     }
-    // Сокращение до `~` по правилам разделителя ОС (`package:path`): на Windows
-    // это `\`, и `startsWith('$home/')` не сработал бы.
-    final home = _environment['HOME'] ?? _environment['USERPROFILE'];
-    if (home != null && home.isNotEmpty && p.isWithin(home, path)) {
-      return '~${p.separator}${p.relative(path, from: home)}';
-    }
-    return path;
+    return homePathLabel(path, _environment);
   }
 
   /// Тип открытой формы; нужен «Add another» после сохранения.
@@ -216,7 +215,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
       Editing(
         _compose(
           draft: ProfileDraft(kind: _initialKind(_kinds)),
-          touched: false,
+          touched: const {},
         ),
       ),
     );
@@ -241,7 +240,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
   void setLabel(String value) => _change((form) {
     final draft = form.draft.copyWith(label: value);
     return form.idEdited ? draft : draft.copyWith(id: suggestProfileId(value));
-  });
+  }, touch: const {ProfileDraftField.label, ProfileDraftField.id});
 
   /// Правка id; пустое значение возвращает id, следующий за именем.
   void setId(String value) => _change(
@@ -249,35 +248,51 @@ class AddProfileCubit extends Cubit<AddProfileState> {
         ? form.draft.copyWith(id: suggestProfileId(form.draft.label))
         : form.draft.copyWith(id: value),
     idEdited: (form) => value.isNotEmpty,
+    touch: const {ProfileDraftField.id},
   );
 
-  void setCommand(String value) =>
-      _change((form) => form.draft.copyWith(command: value));
+  void setCommand(String value) => _change(
+    (form) => form.draft.copyWith(command: value),
+    touch: const {ProfileDraftField.command},
+  );
 
-  void setArgs(String value) =>
-      _change((form) => form.draft.copyWith(args: value));
+  void setArgs(String value) => _change(
+    (form) => form.draft.copyWith(args: value),
+    touch: const {ProfileDraftField.args},
+  );
 
   void setRunInProject(bool value) =>
       _change((form) => form.draft.copyWith(runInProjectDirectory: value));
 
-  void setEnv(String value) =>
-      _change((form) => form.draft.copyWith(env: value));
+  void setEnv(String value) => _change(
+    (form) => form.draft.copyWith(env: value),
+    touch: const {ProfileDraftField.env},
+  );
 
   // Любая правка URL или токена снимает подтверждение `ws://`: «A → B → A»
   // спрашивает снова (N3).
   void setUrl(String value) {
     _plaintextConfirmed = null;
-    _change((form) => form.draft.copyWith(url: value));
+    _change(
+      (form) => form.draft.copyWith(url: value),
+      touch: const {ProfileDraftField.url},
+    );
   }
 
   void selectTokenNone() {
     _plaintextConfirmed = null;
-    _change((form) => form.draft.copyWith(token: const NoToken()));
+    _change(
+      (form) => form.draft.copyWith(token: const NoToken()),
+      touch: const {ProfileDraftField.token},
+    );
   }
 
   void selectTokenEnv() {
     _plaintextConfirmed = null;
-    _change((form) => form.draft.copyWith(token: EnvToken(form.tokenEnvName)));
+    _change(
+      (form) => form.draft.copyWith(token: EnvToken(form.tokenEnvName)),
+      touch: const {ProfileDraftField.token},
+    );
   }
 
   /// «Use stored secret»: первое имя хранилища либо прежний выбор. Без имён
@@ -290,7 +305,10 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     final name = _storedChoice != null && _secretNames.contains(_storedChoice)
         ? _storedChoice!
         : _secretNames.first;
-    _change((form) => form.draft.copyWith(token: StoredSecretToken(name)));
+    _change(
+      (form) => form.draft.copyWith(token: StoredSecretToken(name)),
+      touch: const {ProfileDraftField.token},
+    );
   }
 
   /// Выбор имени в списке «Use stored secret»; неизвестное имя игнорируется.
@@ -300,7 +318,10 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     }
     _plaintextConfirmed = null;
     _storedChoice = name;
-    _change((form) => form.draft.copyWith(token: StoredSecretToken(name)));
+    _change(
+      (form) => form.draft.copyWith(token: StoredSecretToken(name)),
+      touch: const {ProfileDraftField.token},
+    );
   }
 
   /// «Store a new token»: пустое значение; предыдущий ввод не возвращается.
@@ -314,6 +335,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     _change(
       (form) =>
           form.draft.copyWith(token: NewSecretToken(const SecretText(''))),
+      touch: const {ProfileDraftField.token},
     );
   }
 
@@ -326,6 +348,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     _plaintextConfirmed = null;
     _change(
       (form) => form.draft.copyWith(token: NewSecretToken(SecretText(value))),
+      touch: const {ProfileDraftField.token},
     );
   }
 
@@ -339,6 +362,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
         ? form.draft.copyWith(token: EnvToken(value))
         : form.draft,
     tokenEnvName: value,
+    touch: const {ProfileDraftField.token},
   );
 
   void setUseByDefault(bool value) {
@@ -357,6 +381,32 @@ class AddProfileCubit extends Cubit<AddProfileState> {
       probe: form.probe,
     );
     emit(switch (state) {
+      Probing(:final probeId) => Probing(next, probeId: probeId),
+      _ => Editing(next),
+    });
+  }
+
+  /// Пользователь покинул поле [field] (потеря фокуса): его ошибка, если
+  /// есть, становится видна. Черновик, идущая проверка и подтверждение не
+  /// меняются.
+  void touchField(ProfileDraftField field) {
+    final current = state;
+    if (current is! Editing && current is! Probing) {
+      return;
+    }
+    final form = (current as AddProfileInProgress).form;
+    if (form.touched.contains(field)) {
+      return;
+    }
+    final next = _compose(
+      draft: form.draft,
+      useByDefault: form.useByDefault,
+      idEdited: form.idEdited,
+      tokenEnvName: form.tokenEnvName,
+      touched: {...form.touched, field},
+      probe: form.probe,
+    );
+    emit(switch (current) {
       Probing(:final probeId) => Probing(next, probeId: probeId),
       _ => Editing(next),
     });
@@ -445,7 +495,15 @@ class AddProfileCubit extends Cubit<AddProfileState> {
           useByDefault: form.useByDefault,
           idEdited: form.idEdited,
           tokenEnvName: form.tokenEnvName,
-          touched: form.touched,
+          // «Test connection» касается полей, нужных проверке.
+          touched: {
+            ...form.touched,
+            ProfileDraftField.command,
+            ProfileDraftField.args,
+            ProfileDraftField.env,
+            ProfileDraftField.url,
+            ProfileDraftField.token,
+          },
           probe: null,
         ),
         probeId: probeId,
@@ -524,7 +582,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     }
     if (!form.canSave) {
       // Пользователь нажал «Save» на неполной форме: показываем ошибки.
-      emit(Editing(_recompute(form, touched: true)));
+      emit(Editing(_recompute(form, touchAll: true)));
       return;
     }
     emit(Saving(form));
@@ -539,7 +597,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     _existingIds = ids;
     switch (form.draft.toProfile(ids)) {
       case DraftRejected():
-        emit(Editing(_recompute(form, touched: true)));
+        emit(Editing(_recompute(form, touchAll: true)));
       case DraftAccepted(:final warnings):
         if (_plaintextConfirmed != _plaintextKey(form.draft) &&
             warnings.any(
@@ -578,7 +636,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     _existingIds = ids;
     switch (form.draft.toProfile(ids)) {
       case DraftRejected():
-        emit(Editing(_recompute(form, touched: true)));
+        emit(Editing(_recompute(form, touchAll: true)));
       case DraftAccepted():
         await _commit(form);
     }
@@ -594,7 +652,14 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     // Новый профиль — новое подтверждение, даже при том же URL и токене.
     _plaintextConfirmed = null;
     _tokenSubmitError = null;
-    emit(Editing(_compose(draft: ProfileDraft(kind: _kind), touched: false)));
+    emit(
+      Editing(
+        _compose(
+          draft: ProfileDraft(kind: _kind),
+          touched: const {},
+        ),
+      ),
+    );
   }
 
   @override
@@ -638,6 +703,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     ProfileDraft Function(AddProfileForm form) edit, {
     bool Function(AddProfileForm form)? idEdited,
     String? tokenEnvName,
+    Set<ProfileDraftField> touch = const {},
   }) {
     final form = _editableForm();
     if (form == null) {
@@ -655,7 +721,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
           useByDefault: form.useByDefault,
           idEdited: idEdited?.call(form) ?? form.idEdited,
           tokenEnvName: tokenEnvName ?? form.tokenEnvName,
-          touched: true,
+          touched: {...form.touched, ...touch},
           probe: null,
         ),
       ),
@@ -714,7 +780,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
               'in ${_secrets.backend.id}. Choose it with "Use stored secret" '
               'or remove it with codelab secret delete.';
         }
-        emit(Editing(_recompute(form, touched: true)));
+        emit(Editing(_recompute(form, touchAll: true)));
       case ProfileSaveFailed():
         _failCommit(form, draftId, result, newToken: newToken);
     }
@@ -890,14 +956,15 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     }
   }
 
-  AddProfileForm _recompute(AddProfileForm form, {bool? touched}) => _compose(
-    draft: form.draft,
-    useByDefault: form.useByDefault,
-    idEdited: form.idEdited,
-    tokenEnvName: form.tokenEnvName,
-    touched: touched ?? form.touched,
-    probe: form.probe,
-  );
+  AddProfileForm _recompute(AddProfileForm form, {bool touchAll = false}) =>
+      _compose(
+        draft: form.draft,
+        useByDefault: form.useByDefault,
+        idEdited: form.idEdited,
+        tokenEnvName: form.tokenEnvName,
+        touched: touchAll ? _allFields : form.touched,
+        probe: form.probe,
+      );
 
   /// Собирает форму; имена хранилища, бэкенд и ошибка у поля токена берутся
   /// из полей Cubit-а, чтобы вызовы не передавали их каждый раз.
@@ -906,7 +973,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     bool useByDefault = false,
     bool idEdited = false,
     String tokenEnvName = defaultTokenEnvName,
-    required bool touched,
+    required Set<ProfileDraftField> touched,
     ProfileProbeOutcome? probe,
   }) => _composeForm(
     existingIds: _existingIds,
@@ -1002,7 +1069,7 @@ AddProfileForm _composeForm({
   bool useByDefault = false,
   bool idEdited = false,
   String tokenEnvName = defaultTokenEnvName,
-  required bool touched,
+  required Set<ProfileDraftField> touched,
   ProfileProbeOutcome? probe,
 }) {
   final issues = draft.validate(existingIds);
@@ -1019,9 +1086,12 @@ AddProfileForm _composeForm({
       ? token.name
       : null;
   final unset = tokenName != null && (environment[tokenName] ?? '').isEmpty;
-  final errorTexts = touched
-      ? _errorTexts(draft, blocking)
-      : const <ProfileDraftField, String>{};
+  final errorTexts = {
+    for (final entry in _errorTexts(draft, blocking).entries)
+      // Ошибка поля видна, только когда пользователь его трогал: ввод,
+      // потеря фокуса, «Save» или «Test» (UX по ручному прогону).
+      if (touched.contains(entry.key)) entry.key: entry.value,
+  };
   final ownName = isValidProfileId(draft.id.trim())
       ? ownTokenSecretName(draft.id.trim())
       : 'codelab/profiles/<id>/token';
