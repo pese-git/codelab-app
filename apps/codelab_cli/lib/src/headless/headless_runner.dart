@@ -39,13 +39,15 @@ final class HeadlessRunner {
     ApprovePolicy approve = ApprovePolicy.reject,
     Duration? timeout,
     Duration cancelGrace = const Duration(seconds: 2),
+    SecretSource? tokenSource,
   }) : _workspace = workspace,
        _stdout = stdout,
        _stderr = stderr,
        _verbose = verbose,
        _approve = approve,
        _timeout = timeout,
-       _cancelGrace = cancelGrace;
+       _cancelGrace = cancelGrace,
+       _tokenSource = tokenSource;
 
   final ClientWorkspace _workspace;
   final StringSink _stdout;
@@ -59,6 +61,10 @@ final class HeadlessRunner {
   /// Сколько ждать ответа агента на `session/cancel` после сигнала, прежде
   /// чем выйти без него (design.md, D13).
   final Duration _cancelGrace;
+
+  /// Источник токена профиля: по нему отказ рукопожатия называется «отверг
+  /// токен» или «требует токен» (`describeStartFailure`).
+  final SecretSource? _tokenSource;
 
   /// Элементы транскрипта до промпта (реплей загруженной сессии): их текст
   /// не выводится.
@@ -139,7 +145,11 @@ final class HeadlessRunner {
       } on Object catch (error) {
         final message = error is SessionSetupError
             ? error.message
-            : describeFailure(error);
+            : await describeStartFailure(
+                error,
+                profile,
+                tokenSource: _tokenSource,
+              );
         _stderr.writeln(
           sanitizeTerminalText(
             error is SessionSetupError

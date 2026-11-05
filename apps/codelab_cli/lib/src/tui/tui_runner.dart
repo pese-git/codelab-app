@@ -71,6 +71,7 @@ final class TuiRunner {
     List<tea.ProgramOption> programOptions = const [],
     Duration cancelGrace = const Duration(seconds: 2),
     DateTime Function()? clock,
+    SecretSource? tokenSource,
   }) : _workspace = workspace,
        _profile = profile,
        _cwd = cwd,
@@ -87,10 +88,15 @@ final class TuiRunner {
        _errorOutput = errorOutput ?? stderr,
        _programOptions = programOptions,
        _cancelGrace = cancelGrace,
+       _tokenSource = tokenSource,
        _clock = clock ?? DateTime.now;
 
   final ClientWorkspace _workspace;
   final ConnectionProfile _profile;
+
+  /// Источник токена профиля для текста отказа по токену
+  /// (`describeStartFailure`).
+  final SecretSource? _tokenSource;
   final String _cwd;
   final HistoryStore _history;
   final String? _firstMessage;
@@ -145,7 +151,7 @@ final class TuiRunner {
           error is SessionSetupError
               ? 'codelab: ${error.message}'
               : 'codelab: cannot start the agent ${describeProfile(_profile)}: '
-                    '${describeFailure(error)}',
+                    '${await describeStartFailure(error, _profile, tokenSource: _tokenSource)}',
         ),
       );
       return failureExit;
@@ -191,6 +197,7 @@ final class TuiRunner {
         program.quit();
       },
       resolveProfile: _resolveProfile,
+      tokenSource: _tokenSource,
       clock: _clock,
     )..attach(handle);
     _context = context;

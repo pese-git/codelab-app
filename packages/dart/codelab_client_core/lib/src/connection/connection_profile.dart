@@ -60,3 +60,22 @@ sealed class ConnectionProfile with _$ConnectionProfile {
     required String hostProfile,
   }) = EmbeddedProfile;
 }
+
+/// `scheme://host[:port]` адреса [uri] без userinfo, пути, query и fragment;
+/// IPv6-хост — в квадратных скобках (`ws://[::1]:8765`).
+///
+/// Почему: путь и query адреса могут нести токен, а userinfo — пароль, и в
+/// текст для человека (экран настроек, stderr CLI, журналы) они попадать не
+/// должны (AGENTS.md §10, §16; design.md change `add-app-settings-shell`, D10,
+/// D17). `Uri.host` отдаёт IPv6 без скобок, и без них `::1:8765` был бы
+/// неоднозначен.
+///
+/// Для чего: единственная формула origin для app и CLI.
+///
+/// Как использовать: `profileOrigin(profile.uri)` везде, где адрес
+/// WebSocket-профиля показывается человеку; порт печатается, только если он
+/// указан явно.
+String profileOrigin(Uri uri) {
+  final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
+  return '${uri.scheme}://$host${uri.hasPort ? ':${uri.port}' : ''}';
+}

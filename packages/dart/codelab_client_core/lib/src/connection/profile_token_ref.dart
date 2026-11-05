@@ -153,6 +153,31 @@ final class ProfileSecretSource implements SecretSource {
     return value == null || value.isEmpty ? null : value;
   }
 
+  /// `true` — по [profile] серверу уходит непустой токен; значение не
+  /// читается и наружу не выходит.
+  ///
+  /// Почему: тексту отказа по токену («отверг» или «требует») нужен только
+  /// факт «ушёл ли токен», а читать секрет ради `bool` нельзя: хранилище ОС
+  /// получило бы лишний запрос, а значение — лишнюю точку утечки (D13).
+  ///
+  /// Для чего: `env:` — непустая переменная окружения; `secret:` —
+  /// `ProfileSecrets.isSet` (как [isSecretMissing]); без ссылки,
+  /// неподдерживаемая ссылка, не-WebSocket профиль и сбой порта — `false`.
+  Future<bool> hasToken(ConnectionProfile profile) async {
+    if (profile is! WebSocketProfile) {
+      return false;
+    }
+    final ref = profile.tokenRef;
+    if (ref == null) {
+      return false;
+    }
+    return switch (ProfileTokenRef.parse(ref)) {
+      EnvTokenRef(:final name) => (_environment[name] ?? '').isNotEmpty,
+      SecretTokenRef() => !await isSecretMissing(profile),
+      UnsupportedTokenRef() => false,
+    };
+  }
+
   /// `true` — [profile] ссылается на `secret:<имя>`, а секрета нет (или порт
   /// `stored` не передан, или хранилище не отвечает).
   ///

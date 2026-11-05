@@ -18,6 +18,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         WebSocketProfile,
         WorkspaceState,
         describeFailure,
+        describeConnectFailureByToken,
         secretMissingWarning;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabConnectionStatus;
@@ -236,6 +237,13 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// отличает «Connect on start» от ручного Connect (D8).
   var _attempt = 0;
 
+  /// Причина отказа по токену текущей попытки (`the agent rejected the token
+  /// (HTTP 401)`) вместо текста kit «Failed to start ACP transport.»; `null` —
+  /// отказа по токену нет. Одно поле вместо флага: текст и есть признак, а
+  /// невозможной пары «отказ без текста» не бывает. Живёт, пока workspace
+  /// остаётся в `ConnectionFailed` этой попытки; новая попытка его сбрасывает.
+  String? _tokenRejection;
+
   /// Номер последнего вызова [connect]/[reconnect] до обращения к kit: им
   /// отбрасываются устаревшие ожидания (профиль по умолчанию, проверка
   /// папки). Отказ намерения [_attempt] не меняет.
@@ -288,6 +296,10 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     }
     // Все проверки пройдены: с этого места попытка принадлежит kit.
     final attempt = ++_attempt;
+    // Текст отказа прошлой попытки к новой не относится: kit может отклонить
+    // её до `connecting` (`_rejectUnsupported`), и тогда сброс из
+    // `_handleWorkspaceChange` не сработает.
+    _tokenRejection = null;
     _selected = target;
     _announceTarget();
     _warnIfTokenUnsupported(target);
@@ -343,18 +355,24 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       );
     } on Object catch (error) {
       if (isClosed) return;
+      // Текст отказа по токену строится до проверки номера попытки: чтение
+      // источника токена асинхронно, а после `await` вытесненная попытка
+      // уже не вправе менять состояние (§9).
+      final rejection = await _tokenRejectionText(error, target);
+      if (isClosed) return;
       if (attempt != _attempt) {
         _recordStaleAttempt(error);
         return;
       }
-      emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
+      _publishFailure(rejection);
       _diagnostics.record(
-        _byType(
-          target,
-          stdio: 'Failed to start stdio ACP agent: $error',
-          webSocket: 'Failed to connect WebSocket ACP agent: $error',
-          embedded: 'Failed to start embedded ACP agent: $error',
-        ),
+        rejection ??
+            _byType(
+              target,
+              stdio: 'Failed to start stdio ACP agent: $error',
+              webSocket: 'Failed to connect WebSocket ACP agent: $error',
+              embedded: 'Failed to start embedded ACP agent: $error',
+            ),
         severity: DiagnosticSeverity.error,
         source: 'transport',
       );
@@ -387,6 +405,10 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       return;
     }
     final attempt = ++_attempt;
+    // Текст отказа прошлой попытки к новой не относится: kit может отклонить
+    // её до `connecting` (`_rejectUnsupported`), и тогда сброс из
+    // `_handleWorkspaceChange` не сработает.
+    _tokenRejection = null;
     _selected = profile;
     _announceTarget();
     _warnIfTokenUnsupported(profile);
@@ -425,21 +447,24 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       );
     } on Object catch (error) {
       if (isClosed) return;
+      final rejection = await _tokenRejectionText(error, profile);
+      if (isClosed) return;
       if (attempt != _attempt) {
         _recordStaleAttempt(error);
         return;
       }
-      emit(state._copyWith(connectionStatus: CodeLabConnectionStatus.failed));
+      _publishFailure(rejection);
       _diagnostics.record(
-        _byType(
-          profile,
-          stdio:
-              'Failed to reconnect stdio ACP agent: ${describeFailure(error)}',
-          webSocket:
-              'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}',
-          embedded:
-              'Failed to reconnect embedded ACP agent: ${describeFailure(error)}',
-        ),
+        rejection ??
+            _byType(
+              profile,
+              stdio:
+                  'Failed to reconnect stdio ACP agent: ${describeFailure(error)}',
+              webSocket:
+                  'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}',
+              embedded:
+                  'Failed to reconnect embedded ACP agent: ${describeFailure(error)}',
+            ),
         severity: DiagnosticSeverity.error,
         source: 'transport',
       );
@@ -509,7 +534,13 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// kit; потерю kit публикует как `ConnectionLost` (design D1 change
   /// `add-connection-and-error-states`).
   void _handleWorkspaceChange(WorkspaceState workspace) {
+    // Отказ по токену живёт только пока kit в `ConnectionFailed`: любой иной
+    // статус (новая попытка, соединение) сбрасывает его.
+    if (workspace.connection is! ConnectionFailed) {
+      _tokenRejection = null;
+    }
     final message = switch (workspace.connection) {
+      ConnectionFailed() when _tokenRejection != null => _tokenRejection,
       ConnectionLost(:final message) ||
       ConnectionFailed(:final message) => message,
       _ => null,
@@ -531,6 +562,52 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         _activeSession.resetAfterConnectionLoss();
       }
     });
+  }
+
+  /// Текст отказа 401/403 для [profile] или `null`, если ошибка другая.
+  ///
+  /// Почему: kit отдаёт `ConnectionFailed.message` без причины, и баннер
+  /// показывал бы «Failed to start ACP transport.» (design.md change
+  /// `add-app-settings-shell`, D12). `tokenSent` берётся у того же
+  /// [ProfileSecretSource], которым composition root открывает транспорт;
+  /// значение токена читается и отбрасывается внутри [describeConnectFailureByToken].
+  Future<String?> _tokenRejectionText(
+    Object error,
+    ConnectionProfile profile,
+  ) async {
+    final text = await describeConnectFailureByToken(
+      error,
+      profile,
+      _tokenSecrets,
+    );
+    if (text == null || text.isEmpty) {
+      return text;
+    }
+    // Kit отдаёт строчный текст для CLI; остальные тексты баннера — с
+    // заглавной и точкой, поэтому app приводит его к тому же виду.
+    return '${text[0].toUpperCase()}${text.substring(1)}.';
+  }
+
+  String? _kitMessage(WorkspaceState workspace) =>
+      switch (workspace.connection) {
+        ConnectionLost(:final message) ||
+        ConnectionFailed(:final message) => message,
+        _ => null,
+      };
+
+  /// Ставит `failed` и запоминает [rejection]: баннер показывает его, а не
+  /// текст kit, который `_handleWorkspaceChange` уже мог записать (kit
+  /// публикует `ConnectionFailed` до того, как `connect` бросит ошибку).
+  void _publishFailure(String? rejection) {
+    _tokenRejection = rejection;
+    emit(
+      state._copyWith(
+        connectionStatus: CodeLabConnectionStatus.failed,
+        // Без отказа по токену — текст kit текущего состояния, а не прежний
+        // `connectionMessage`: он мог остаться от прошлой попытки.
+        connectionMessage: rejection ?? _kitMessage(_workspace.current),
+      ),
+    );
   }
 
   /// Сбой вытесненной попытки: статус не меняется, в журнал — уровнем info.

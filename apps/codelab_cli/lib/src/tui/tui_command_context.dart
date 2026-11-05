@@ -42,6 +42,7 @@ final class TuiCommandContext implements ReplContext {
     Future<ConnectionProfile> Function(String id)? resolveProfile,
     List<ReplCommand> commands = mvpReplCommands,
     DateTime Function()? clock,
+    SecretSource? tokenSource,
   }) : _workspace = workspace,
        _profile = profile,
        _cwd = cwd,
@@ -49,7 +50,8 @@ final class TuiCommandContext implements ReplContext {
        _onExit = onExit,
        _resolveProfile = resolveProfile,
        _commands = commands,
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now,
+       _tokenSource = tokenSource;
 
   final ClientWorkspace _workspace;
   ConnectionProfile _profile;
@@ -59,6 +61,10 @@ final class TuiCommandContext implements ReplContext {
   final Future<ConnectionProfile> Function(String id)? _resolveProfile;
   final List<ReplCommand> _commands;
   final DateTime Function() _clock;
+
+  /// Источник токена профиля для текста отказа по токену
+  /// (`describeStartFailure`).
+  final SecretSource? _tokenSource;
 
   SessionHandle? _session;
   StreamSubscription<SessionView>? _views;
@@ -149,7 +155,7 @@ final class TuiCommandContext implements ReplContext {
     } on Object catch (error) {
       say(
         'codelab: cannot connect to ${describeProfile(profile)}: '
-        '${describeFailure(error)}',
+        '${await describeStartFailure(error, profile, tokenSource: _tokenSource)}',
       );
       return;
     }
@@ -163,7 +169,10 @@ final class TuiCommandContext implements ReplContext {
     try {
       await _workspace.reconnect();
     } on Object catch (error) {
-      say('codelab: cannot reconnect: ${describeFailure(error)}');
+      say(
+        'codelab: cannot reconnect: '
+        '${await describeStartFailure(error, _profile, tokenSource: _tokenSource)}',
+      );
       return;
     }
     if (!await _reopenIfDetached()) {
