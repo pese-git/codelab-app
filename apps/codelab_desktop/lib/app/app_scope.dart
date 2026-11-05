@@ -8,6 +8,7 @@ import 'package:codelab_client_io/codelab_client_io.dart'
     show
         DirectoryExists,
         JsonFileProfileStore,
+        classifyProbeFailure,
         IoTerminalProcessRunner,
         IoTextFileIo,
         IoWorkingDirectoryProvider,
@@ -18,11 +19,14 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         AcpClientBackend,
         ClientWorkspace,
         ConfigTransportResolver,
+        ProfileProbe,
         ProfileSecretSource,
         ProfileStore,
         RecentProjectsStore,
         SecretSource,
-        WorkspaceSnapshotStore;
+        TransportResolver,
+        WorkspaceSnapshotStore,
+        profileKindsFor;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_acp_transports/io.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
@@ -49,6 +53,7 @@ import '../core/platform/dock_layout_store.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
+import '../features/settings/application/add_profile_cubit.dart';
 import '../features/settings/application/connection_settings_cubit.dart';
 import '../features/settings/application/default_profile_resolver.dart';
 import '../features/settings/application/embedded_profile.dart';
@@ -466,18 +471,7 @@ final class CodeLabPresentationModule extends Module {
             backend: AcpClientBackend(
               currentScope.resolve<AcpClientApplication>(),
             ),
-            resolvers: [
-              ConfigTransportResolver(
-                stdio: currentScope.resolve<CodeLabStdioTransportFactory>(),
-                webSocket: currentScope
-                    .resolve<CodeLabWebSocketTransportFactory>(),
-                secrets: currentScope.resolve<SecretSource>(),
-              ),
-              // Встроенный агент открывает только свой резолвер; у
-              // `ConfigTransportResolver` профиль `embedded` не поддержан
-              // (D7).
-              currentScope.resolve<EmbeddedTransportResolver>(),
-            ],
+            resolvers: _transportResolvers(currentScope),
             snapshots: currentScope.resolve<WorkspaceSnapshotStore>(),
           ),
         )
@@ -535,6 +529,35 @@ final class CodeLabPresentationModule extends Module {
           ),
         )
         .singleton();
+    // Проверка профиля («Test connection»): те же резолверы, что у
+    // `ClientWorkspace`, и классификатор ошибок IO-транспортов (D12). Токен
+    // даёт тот же `ProfileSecretSource` (D15).
+    bind<ProfileProbe>()
+        .toProvide(
+          () => ProfileProbe(
+            resolvers: _transportResolvers(currentScope),
+            classifier: classifyProbeFailure,
+          ),
+        )
+        .singleton();
+    // Диалог «Add connection profile»: новый Cubit на каждое открытие;
+    // закрывает его страница вместе с диалогом (D12).
+    bind<AddProfileCubit>().toProvide(() {
+      final environment = currentScope.resolve<ConnectionEnvironment>();
+      return AddProfileCubit(
+        store: currentScope.resolve<ProfileStore>(),
+        preferences: currentScope.resolve<ConnectionPreferences>(),
+        probe: currentScope.resolve<ProfileProbe>(),
+        // Типы профилей определяют резолверы, а не проверка платформы
+        // (SETUP-22, AGENTS.md §11).
+        kinds: profileKindsFor(_transportResolvers(currentScope)),
+        environment: environment.variables,
+        profilesPath: environment.profilesPath,
+        projectDirectory: () =>
+            currentScope.resolve<CodeLabShellParts>().settings.projectDirectory,
+        logger: _settingsLogger(),
+      );
+    });
     // Страница «Connection»: новый Cubit на каждое открытие (файл
     // перечитывается при открытии, D4). Закрывает его страница.
     bind<ConnectionSettingsCubit>().toProvide(() {
@@ -546,11 +569,29 @@ final class CodeLabPresentationModule extends Module {
         commands: currentScope.resolve<CodeLabShellParts>().connection,
         environment: environment.variables,
         profilesPath: environment.profilesPath,
+        probe: currentScope.resolve<ProfileProbe>(),
+        projectDirectory: () =>
+            currentScope.resolve<CodeLabShellParts>().settings.projectDirectory,
         logger: _settingsLogger(),
       );
     });
   }
 }
+
+/// Резолверы транспортов окна: один список для `ClientWorkspace`, проверки
+/// профиля и списка типов диалога, чтобы то, что можно проверить и
+/// добавить, совпадало с тем, что можно открыть (design.md change
+/// `add-app-settings-shell`, D12, SETUP-22).
+List<TransportResolver> _transportResolvers(Scope scope) => [
+  ConfigTransportResolver(
+    stdio: scope.resolve<CodeLabStdioTransportFactory>(),
+    webSocket: scope.resolve<CodeLabWebSocketTransportFactory>(),
+    secrets: scope.resolve<SecretSource>(),
+  ),
+  // Встроенный агент открывает только свой резолвер; у
+  // `ConfigTransportResolver` профиль `embedded` не поддержан (D7).
+  scope.resolve<EmbeddedTransportResolver>(),
+];
 
 /// Структурный логгер событий настроек (design.md change
 /// `add-app-settings-shell`, D17): категория `application`, компонент
@@ -698,6 +739,7 @@ final class CodeLabDependencies {
     required this.navigationCubit,
     required this.settingsPages,
     required this.createConnectionSettingsCubit,
+    required this.createAddProfileCubit,
   });
 
   final AcpClientApplication application;
@@ -716,6 +758,10 @@ final class CodeLabDependencies {
   /// Создаёт Cubit страницы «Connection»; страница владеет им и закрывает
   /// (design.md change `add-app-settings-shell`, D4).
   final ConnectionSettingsCubit Function() createConnectionSettingsCubit;
+
+  /// Создаёт Cubit диалога «Add connection profile»; страница владеет им и
+  /// закрывает вместе с диалогом (D12).
+  final AddProfileCubit Function() createAddProfileCubit;
 
   /// Backs the in-app log viewer (docked panel and full-screen master-detail
   /// — `replace-debug-log-panel-with-fluent/design.md`, Decision 3/4).
@@ -779,6 +825,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     navigationCubit: _scope.resolve<NavigationCubit>(),
     settingsPages: _scope.resolve<SettingsPages>(),
     createConnectionSettingsCubit: _scope.resolve<ConnectionSettingsCubit>,
+    createAddProfileCubit: _scope.resolve<AddProfileCubit>,
   );
 
   @override

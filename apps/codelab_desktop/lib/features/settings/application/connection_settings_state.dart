@@ -7,9 +7,12 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ConnectionProfile,
         ConnectionView,
         EmbeddedProfile,
+        ProfileProbeOutcome,
         Reconnecting,
+        StdioProfile,
         WebSocketProfile;
 
+import 'probe_outcome_view.dart';
 import 'profile_view.dart';
 
 /// Состояние подключения окна для бейджа строки текущего профиля.
@@ -62,6 +65,8 @@ final class ConnectionProfileRow {
     required this.isCurrent,
     required this.isUnsaved,
     required this.status,
+    this.probe,
+    this.isProbing = false,
   });
 
   /// Встроенный агент: не из файла, всегда первый.
@@ -87,6 +92,8 @@ final class ConnectionProfileRow {
     required bool isDefault,
     required bool isCurrent,
     required ConnectionRowStatus? status,
+    ProfileProbeOutcome? probe,
+    bool isProbing = false,
   }) => ConnectionProfileRow._(
     profile: profile,
     summary: profileSummary(profile),
@@ -95,6 +102,8 @@ final class ConnectionProfileRow {
     isCurrent: isCurrent,
     isUnsaved: false,
     status: status,
+    probe: probe,
+    isProbing: isProbing,
   );
 
   /// Профиль текущего окна, которого нет в файле: «Current connection (not
@@ -132,9 +141,32 @@ final class ConnectionProfileRow {
   /// у неудачной попытки — `Failed`, пока идёт попытка — `Connecting…`.
   final ConnectionRowStatus? status;
 
-  /// Проверка «Test connection» в этой странице ещё не делалась (D14):
-  /// результаты появятся в итерации 3.
-  bool get isTested => false;
+  /// Последний исход «Test connection» за жизнь страницы (D14); `null` — в
+  /// этом запуске строку не проверяли. В `profiles.json` исход не пишется.
+  final ProfileProbeOutcome? probe;
+
+  /// «Test connection» этой строки идёт сейчас.
+  final bool isProbing;
+
+  /// Текст [probe] для бейджа `connection-profile-probe-<id>` (D12): тот же,
+  /// что в диалоге; из профиля берутся только команда и источник токена.
+  String? get probeText {
+    final outcome = probe;
+    if (outcome == null) {
+      return null;
+    }
+    return probeOutcomeText(
+      outcome,
+      command: switch (profile) {
+        StdioProfile(:final command) => command,
+        _ => null,
+      },
+      token: token ?? const NoTokenView(),
+    );
+  }
+
+  /// Строку проверяли на этой странице (любым исходом).
+  bool get isTested => probe != null;
 
   String get id => profile.id;
   String get label => profile.label;
@@ -149,8 +181,8 @@ final class ConnectionProfileRow {
   /// У строки из файла есть «Test connection», «Rename» и «Remove».
   bool get hasFileActions => !isBuiltIn && !isUnsaved;
 
-  /// Метка «Not tested» (D14).
-  bool get showNotTested => hasFileActions && !isTested;
+  /// Метка «Not tested» (D14): пока строку не проверяли.
+  bool get showNotTested => hasFileActions && !isTested && !isProbing;
 
   /// «Remove» возможна для сохранённого профиля, не являющегося текущим:
   /// встроенный агент не из файла, а текущий связан с живым соединением
@@ -183,6 +215,7 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
     required this.currentProfile,
     required this.connection,
     required this.connectOnStart,
+    this.lastProbes = const {},
     this.failure,
   });
 
@@ -204,6 +237,10 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
   final ConnectionProfile? currentProfile;
   final ConnectionView connection;
   final bool connectOnStart;
+
+  /// Исходы «Test connection» по id профиля за жизнь страницы (D4, D14).
+  /// Это UI-состояние: в `profiles.json` оно не пишется.
+  final Map<String, ProfileProbeOutcome> lastProbes;
 
   /// Текст последнего сбоя действия страницы; `null` — сбоя нет.
   final String? failure;
@@ -260,6 +297,7 @@ final class ConnectionSettingsReady extends ConnectionSettingsLoaded {
     required super.connectOnStart,
     required this.defaultProfileId,
     required this.ignoredDefaultEntry,
+    super.lastProbes,
     super.failure,
   });
 
@@ -286,6 +324,7 @@ final class ConnectionSettingsUnreadable extends ConnectionSettingsLoaded {
     required super.connectOnStart,
     required this.path,
     required this.reason,
+    super.lastProbes,
     super.failure,
   });
 
