@@ -11,7 +11,7 @@
 - 1 — навигация, оболочка, виджеты;
 - 2 — страница «Connection», ссылка на токен, переход `ConnectionCubit`, CLI (в том числе правило без `--agent`, D21);
 - 3 — «Add connection profile», «Test connection», «Rename», «Remove»;
-- 4 — документы и Definition of Done.
+- 4 — правки UX после ручного прогона итерации 3 (4.0), документы и Definition of Done.
 
 Зависимости: 2 ← 1; 3 ← 2; 4 ← все. Вопросы Q1–Q5 решены 2026-11-04 (design.md, «Open Questions»).
 
@@ -363,22 +363,38 @@
 
 ## 4. Документы и Definition of Done (итерация 4)
 
-- [ ] 4.1 `[desktop]` Сверка документов с кодом:
-  - 12-4 §12.4.9 и §12.4.13 — имена тестов и ключей;
-  - 12-3 A13;
-  - `delivery-roadmap.md` §10.1 — строка 20 «U-06, D-04, R-12» закрыта этим change в части без хранилища секретов;
-  - `apps/codelab_desktop/AGENTS.md`, `codelab_client_core/AGENTS.md`, `codelab_client_io/AGENTS.md`, `apps/codelab_cli/AGENTS.md`.
-- [ ] 4.2 `[desktop]` `agent-parity-goals.md`:
+- [x] 4.0 `[desktop]` Решения пользователя 2026-11-05 после ручного прогона итерации 3 (D5, D9, D12, D13, D14, D16, D20). Родитель отмечается, когда выполнены все подзадачи.
+  - [x] 4.0.1 Заголовок подтверждения «Remove» (D14, D16, D20):
+    - красный тест `connection_page_test.dart` — «the Remove confirmation title is 20 px, weight 600»: заголовок «Remove profile <title>?» — 20 px, `FontWeight.w600`; тот же размер у подтверждения старой записи `default` («Remove the ignored "default" profile?»); `codelab_ui/test/codelab_atomics_test.dart` — «CodeLabDialogTitle is subtitle: 20 px, weight 600»;
+    - реализация: атом `CodeLabDialogTitle` (`codelab_ui/lib/src/atomics/`, экспорт в барель, стиль `CodeLabTextRole.subtitle`) — заголовок `ContentDialog` в диалогах «Add connection profile», «Profile saved» и в обоих подтверждениях «Remove»; локальный `_DialogTitle` из `add_profile_dialog.dart` удалён. Doc-комментарии «почему / для чего / как».
+  - [x] 4.0.2 «Connect» у текущего профиля (app-settings «Список профилей на странице «Connection»», сценарии «Connect скрыт у текущего профиля», «Connect при переподключении и после сбоя»; D5, D9, D20):
+    - красные тесты `connection_page_test.dart` (и при необходимости `connection_settings_cubit_test.dart`):
+      - «the Current row that is Connected has no Connect (restart is "Restart agent"); other rows keep it» — после принятого Connect к `dev` ключа `connection-profile-connect-dev` нет, у `plain` и `embedded` он есть; то же для встроенного агента в `Connected`;
+      - `Connecting…` (Current нет ни у кого) и `Failed` — «Connect» есть во всех строках, в том числе у строки попытки;
+      - `Reconnecting` («Current» и бейдж `Connecting…` у принятого профиля) — «Connect» у этой строки **нет**, у остальных есть;
+      - отказ Connect к `b` до обращения к workspace при живом `a` — у `a` «Connect» нет, у `b` есть;
+    - реализация: признак строки «Connect доступна» считает application (`ConnectionProfileRow`/`ConnectionSettingsCubit`), а не виджет: `canConnect => !isCurrent` — «Connect» скрыта у строки «Current», то есть в `Connected` и `Reconnecting` (D4, D5; уточнение оркестратора 2026-11-05). Виджет только не рисует кнопку.
+  - [x] 4.0.3 Одно предупреждение о незаданной переменной в «Add connection profile» (app-settings «Диалог «Add connection profile»», сценарий «Переменная не задана»; D12, D13; §12.4.9 шаг 5):
+    - красный тест `add_profile_dialog_test.dart` — «an unset variable gives exactly one "is not set" even after Test connection: under the token field, not in the Check block»: до и после «Test connection» ровно один текст `MISSING_TOKEN is not set in CodeLab's environment.` (под полем имени переменной), текста `may reject` нет; `add_profile_cubit_test.dart` — у формы нет заметки проверки;
+    - реализация: поле `AddProfileForm.probeNote` и заметка в блоке «Check» удалены; подсказка `tokenNotice` под полем токена остаётся. Строка профиля на странице по-прежнему показывает `<NAME> is not set in CodeLab's environment.` (`connection-profile-token-<id>`, тест «No token / From $NAME / not set / not supported» не меняется).
+  - [x] 4.0.4 Интеграционный тест `integration_test/connection_profiles_flow_test.dart`, случай «stdio with a missing command…», ждёт `find.text('Command not found')`, а `probeOutcomeText` для команды `/nonexistent/agent` даёт `Command not found: /nonexistent/agent` (D12, сценарий «Команда не найдена»). Тест приводится к тексту D12 (`find.text('Command not found: /nonexistent/agent')`); в `feature/*` — только `fvm flutter analyze` (D19). Найдено сверкой итерации 4.
+
+- [x] 4.1 `[desktop]` Сверка документов с кодом:
+  - [x] 12-4 §12.4.9 и §12.4.13 — имена тестов и ключей (сверено с `features/settings/presentation/*.dart`, тестами app, kit, `codelab_client_io`, `codelab_acp_transports` и CLI 2026-11-05);
+  - [x] 12-3 A13 — поля `SettingsDestination` (`page`, `returnTo`) и методы `NavigationCubit` этого change;
+  - [x] `delivery-roadmap.md` §10.1 — строка 20 «U-06, D-04, R-12» закрыта этим change в части без хранилища секретов;
+  - [x] `apps/codelab_desktop/AGENTS.md`, `codelab_client_core/AGENTS.md`, `codelab_client_io/AGENTS.md`, `apps/codelab_cli/AGENTS.md` — делают исполнители `[desktop]` и `[client]`.
+- [x] 4.2 `[desktop]` `agent-parity-goals.md`:
   - статусы U-06 (app) и D-04 (страница) — по факту реализации и тестов;
   - R-12 в app — «частично»: токен только из переменной окружения;
   - U-26 и D-10 остаются «— / нет» со ссылкой на D9 и D10.
-- [ ] 4.3 `[desktop]` DoD:
+- [x] 4.3 `[desktop]` DoD:
   - задачи 1–3 выполнены, тесты зелёные, `guard` и `web-compile` прошли;
   - `ConnectionSetupDialog`, `TransportSetupPanel`, `InMemorySecretSource` в app и `EnvSecretSource` в CLI удалены, ссылок на них нет;
   - тестовый маркер не найден в логах тестов;
   - ревью `architecture-reviewer` и `acp-safety-reviewer`;
   - пункт ревью: из холста (`dc-runtime.js`, разметка артбордов) ничего не скопировано (AGENTS.md §5).
-- [ ] 4.4 `[desktop]` Ручная проверка на macOS-сборке разработчика (не CI, не условие merge):
+- [x] 4.4 `[desktop]` Ручная проверка на macOS-сборке разработчика (не CI, не условие merge):
   - app, запущенное из терминала с `DEVBOX_TOKEN`, подключается к WebSocket-профилю;
   - из Finder строка показывает «not set»;
   - тот же профиль работает в `codelab -a <id>`.
