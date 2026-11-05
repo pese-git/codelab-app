@@ -24,14 +24,17 @@ final class ConnectionEnvironment {
   const ConnectionEnvironment({
     required this.variables,
     this.profilesPath,
+    this.codelabHome,
     this.homeProblem,
   });
 
   factory ConnectionEnvironment.of(Map<String, String> environment) {
     try {
+      final home = resolveCodelabHome(environment);
       return ConnectionEnvironment(
         variables: environment,
-        profilesPath: p.join(resolveCodelabHome(environment), 'profiles.json'),
+        profilesPath: p.join(home, 'profiles.json'),
+        codelabHome: home,
       );
     } on CodelabHomeException catch (error) {
       return ConnectionEnvironment(
@@ -45,6 +48,11 @@ final class ConnectionEnvironment {
 
   /// Путь к `profiles.json`; `null` — [homeProblem].
   final String? profilesPath;
+
+  /// Дом CodeLab (`CODELAB_HOME` или `~/.codelab`); `null` — [homeProblem].
+  /// Нужен странице «Providers» как дом агента по умолчанию (design.md change
+  /// `add-provider-setup-ui`, D5).
+  final String? codelabHome;
 
   /// Почему `CODELAB_HOME` недопустим; `null` — путь определён.
   final String? homeProblem;

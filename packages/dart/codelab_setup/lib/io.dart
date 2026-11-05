@@ -34,9 +34,19 @@
 /// codelabHome: …, environment: …, logger: …)` — выбор бэкенда по
 /// `secrets.backend`, `backend`, `admin`, `isSet`, `read` без кэша — и
 /// `secretReadOnlyHint(SecretReadOnly, home)` — одна подсказка про бэкенд только
-/// для чтения для `codelab secret set`, мастера и app. Остальное из §12.4.2
-/// (`FileAgentConfigStore`, `ioProviderCheck`) придёт со своими потребителями.
+/// для чтения для `codelab secret set`, мастера и app. Снимок и запись конфига
+/// агента, проверка `/models` и удаление секрета (change
+/// `add-provider-setup-ui`, D6, D8, D10): `FileAgentConfigStore(paths: …,
+/// environment: …, secrets: …)` реализует порт `AgentConfigStore` основного
+/// бареля, `ioProviderCheck()` даёт `ProviderCheck` на `IOClient`,
+/// `secretDeleterOf(access)` — `SecretDeleter` для `ProviderRemover`.
+/// Остальное из §12.4.2 (мастер, пути `$CODELAB_HOME`) придёт со своими
+/// потребителями.
 library;
+
+export 'src/io/file_agent_config_store.dart' show FileAgentConfigStore;
+export 'src/io/io_provider_check.dart' show ioProviderCheck;
+export 'src/io/secret_deleter.dart' show secretDeleterOf;
 
 export 'package:codelab_agent_io/codelab_agent_io.dart'
     show

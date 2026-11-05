@@ -8,14 +8,16 @@ environment:
   sdk: ">=3.8.0 <4.0.0"
 
 # allowlist — workspace-architecture «Автоматический сторож границ пакетов»
-# (setupAllowlist): ядро, IO-пакет агента (только lib/io.dart) и meta.
-# Расширение — только через OpenSpec change; `http` придёт с мастером
-# провайдера (этап 7, §12.4.2).
+# (setupAllowlist): ядро, IO-пакет агента (только lib/io.dart), `http` и meta.
+# Расширение — только через OpenSpec change. `http` — проверка `/models`
+# мастером провайдера и страницей Providers (`HttpProviderCheck`; change
+# `add-provider-setup-ui`, D8, D20); `IOClient` — только в lib/io.dart.
 dependencies:
   codelab_agent_core:
     path: ../codelab_agent_core
   codelab_agent_io:
     path: ../codelab_agent_io
+  http: ^1.5.0
   meta: ^1.16.0
 
 dev_dependencies:

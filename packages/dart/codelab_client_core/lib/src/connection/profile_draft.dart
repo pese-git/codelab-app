@@ -430,7 +430,7 @@ final class ProfileDraft {
               'use the Token setting instead.',
         ),
       );
-    } else if (scheme == 'ws' && !_isLocalHost(uri.host)) {
+    } else if (scheme == 'ws' && !isLocalHost(uri.host)) {
       out.add(
         const ProfileDraftIssue(
           code: ProfileDraftIssueCode.plaintextToRemote,
@@ -500,7 +500,12 @@ bool _looksLikeSecret(String key) {
       upper.endsWith('_SECRET');
 }
 
-bool _isLocalHost(String host) {
+/// Локальный ли [host]: `localhost`, `::1` или `127.x.x.x`.
+///
+/// Почему публичная: то же правило нужно странице Providers app для
+/// предупреждения о ключе по `http://` (design.md change
+/// `add-provider-setup-ui`, SETUP-10) — второй копии правила быть не должно.
+bool isLocalHost(String host) {
   final lower = host.toLowerCase();
   return lower == 'localhost' ||
       lower == '::1' ||

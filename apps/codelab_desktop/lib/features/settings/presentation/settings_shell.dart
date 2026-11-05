@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../../app/navigation/settings_page.dart';
 import '../application/settings_search_index.dart';
 import 'connection_page.dart';
+import 'providers_page.dart';
 
 /// Тела страниц настроек.
 ///
@@ -13,10 +14,14 @@ import 'connection_page.dart';
 /// порядок не меняются (design.md change `add-app-settings-shell`, D3).
 ///
 /// Как использовать: каждая страница из `SettingsPages.available` ДОЛЖНА
-/// иметь запись (проверяет тест). Итерация 2 добавила «Connection».
-final Map<SettingsPage, WidgetBuilder> settingsPageBuilders = Map.unmodifiable(
-  <SettingsPage, WidgetBuilder>{SettingsPage.connection: buildConnectionPage},
-);
+/// иметь запись (проверяет тест). Итерация 2 change `add-app-settings-shell`
+/// добавила «Connection», итерация 2 change `add-provider-setup-ui` —
+/// «Providers».
+final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
+    Map.unmodifiable(<SettingsPage, WidgetBuilder>{
+      SettingsPage.connection: buildConnectionPage,
+      SettingsPage.providers: buildProvidersPage,
+    });
 
 /// Ширина окна, меньше которой навигация настроек уходит наверх.
 ///

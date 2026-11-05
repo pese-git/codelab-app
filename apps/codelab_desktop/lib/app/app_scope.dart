@@ -37,6 +37,9 @@ import 'package:codelab_embedded/codelab_embedded.dart'
 // (design.md change `add-embedded-agent-mode`, D3): композиция — единственное
 // место, которое знает настольный открыватель.
 import 'package:codelab_embedded/io.dart' show localEmbeddedAgentOpener;
+// IO-барель моста настроек разрешён сторожем только в `lib/app/` (design.md
+// change `add-provider-setup-ui`, D20): проверка `/models` страницы Providers.
+import 'package:codelab_setup/io.dart' as setup_io show ioProviderCheck;
 import 'package:cherrypick/cherrypick.dart';
 import 'package:cherrypick_annotations/cherrypick_annotations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -59,6 +62,7 @@ import '../features/settings/application/connection_settings_cubit.dart';
 import '../features/settings/application/default_profile_resolver.dart';
 import '../features/settings/application/embedded_profile.dart';
 import '../features/settings/application/profiles_unavailable.dart';
+import '../features/settings/application/provider_settings_cubit.dart';
 import '../features/workbench/application/secret_migration_cubit.dart';
 import '../features/workbench/application/secret_migration_runner.dart';
 import '../features/workbench/application/secret_migration_turns.dart';
@@ -70,6 +74,7 @@ import 'default_settings_pages.dart';
 import 'embedded_logger.dart';
 import 'embedded_secret_migration_runner.dart';
 import 'embedded_transport_resolver.dart';
+import 'provider_settings_session.dart';
 import 'navigation/navigation_cubit.dart';
 import 'navigation/settings_page.dart';
 import 'navigation/settings_page_store.dart';
@@ -93,6 +98,7 @@ Scope createCodeLabRootScope({
   ProfileStore? profileStore,
   ProfileSecrets? profileSecrets,
   Future<ProfileSecrets> Function()? profileSecretsOpener,
+  ProviderSettingsOpener? providerSettingsOpener,
 }) {
   // Одно окружение на открыватель встроенного агента, профили и токены:
   // `CODELAB_HOME` и переменные читаются из одного места (design.md change
@@ -130,6 +136,7 @@ Scope createCodeLabRootScope({
       ),
       CodeLabPresentationModule(
         settingsPages: settingsPages ?? defaultSettingsPages,
+        providerSettingsOpener: providerSettingsOpener,
       ),
       $CodeLabTransportsModuleContract(),
       $CodeLabProtocolApplicationModuleContract(),
@@ -481,8 +488,17 @@ final class CodeLabConnectionModule extends Module {
 }
 
 final class CodeLabPresentationModule extends Module {
-  CodeLabPresentationModule({required SettingsPages settingsPages})
-    : _settingsPages = settingsPages;
+  CodeLabPresentationModule({
+    required SettingsPages settingsPages,
+    ProviderSettingsOpener? providerSettingsOpener,
+  }) : _settingsPages = settingsPages,
+       _providerSettingsOpener = providerSettingsOpener;
+
+  /// Открывает доступ к настройкам агента страницы «Providers»; шов тестов
+  /// (`createCodeLabRootScope(providerSettingsOpener:)`): без него — IO-сессия
+  /// `openProviderSettingsSession` (design.md change `add-provider-setup-ui`,
+  /// D4, D5).
+  final ProviderSettingsOpener? _providerSettingsOpener;
 
   /// Страницы настроек, видимые в этой сборке; шов тестов
   /// (`createCodeLabRootScope(settingsPages:)`, design.md change
@@ -622,6 +638,31 @@ final class CodeLabPresentationModule extends Module {
         environment: environment.variables,
         profilesPath: environment.profilesPath,
         probe: currentScope.resolve<ProfileProbe>(),
+        projectDirectory: () =>
+            currentScope.resolve<CodeLabShellParts>().settings.projectDirectory,
+        logger: _settingsLogger(),
+      );
+    });
+    // Страница «Providers»: новый Cubit на каждое открытие, снимок
+    // перечитывается при открытии (D10); закрывает его страница.
+    final providerCheck = setup_io.ioProviderCheck(
+      logger: CodeLabEmbeddedLogger(),
+    );
+    bind<ProviderSettingsCubit>().toProvide(() {
+      final environment = currentScope.resolve<ConnectionEnvironment>();
+      return ProviderSettingsCubit(
+        workspace: currentScope.resolve<ClientWorkspace>(),
+        defaultProfile: currentScope.resolve<DefaultProfileResolver>().resolve,
+        open:
+            _providerSettingsOpener ??
+            (access, env) => openProviderSettingsSession(
+              access,
+              env,
+              check: providerCheck,
+              logger: CodeLabEmbeddedLogger(),
+            ),
+        environment: environment.variables,
+        codelabHome: environment.codelabHome,
         projectDirectory: () =>
             currentScope.resolve<CodeLabShellParts>().settings.projectDirectory,
         logger: _settingsLogger(),
@@ -798,6 +839,7 @@ final class CodeLabDependencies {
     required this.settingsPages,
     required this.createConnectionSettingsCubit,
     required this.createAddProfileCubit,
+    required this.createProviderSettingsCubit,
   });
 
   final AcpClientApplication application;
@@ -820,6 +862,10 @@ final class CodeLabDependencies {
   /// Создаёт Cubit диалога «Add connection profile»; страница владеет им и
   /// закрывает вместе с диалогом (D12).
   final AddProfileCubit Function() createAddProfileCubit;
+
+  /// Создаёт Cubit страницы «Providers»; страница владеет им и закрывает
+  /// (design.md change `add-provider-setup-ui`, D10).
+  final ProviderSettingsCubit Function() createProviderSettingsCubit;
 
   /// Backs the in-app log viewer (docked panel and full-screen master-detail
   /// — `replace-debug-log-panel-with-fluent/design.md`, Decision 3/4).
@@ -897,6 +943,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     settingsPages: _scope.resolve<SettingsPages>(),
     createConnectionSettingsCubit: _scope.resolve<ConnectionSettingsCubit>,
     createAddProfileCubit: _scope.resolve<AddProfileCubit>,
+    createProviderSettingsCubit: _scope.resolve<ProviderSettingsCubit>,
   );
 
   @override
