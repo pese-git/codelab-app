@@ -1,5 +1,7 @@
 import 'package:codelab_ui/src/molecules/codelab_molecule_previews.dart';
 import 'package:codelab_ui/src/organisms/codelab_organism_previews.dart';
+import 'package:codelab_ui/codelab_ui.dart';
+import 'package:fluent_ui/fluent_ui.dart' show FluentTheme;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -30,6 +32,23 @@ void main() {
 
     await tester.pumpWidget(codelabSettingsSectionPreview());
     expect(tester.takeException(), isNull);
+
+    // Виджеты формы (3.8a, D16): светлая и тёмная тема, все тона заметок и
+    // оба состояния переключателя.
+    await tester.pumpWidget(codelabFormPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabForm), findsOneWidget);
+    expect(find.byType(CodeLabFormRow), findsWidgets);
+    expect(find.byType(CodeLabFormNote), findsNWidgets(3));
+    expect(find.byType(CodeLabSegmentedControl<String>), findsOneWidget);
+
+    await tester.pumpWidget(codelabFormDarkPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabForm), findsOneWidget);
+    expect(
+      FluentTheme.of(tester.element(find.byType(CodeLabForm))).brightness,
+      Brightness.dark,
+    );
   });
 
   testWidgets('organism previews render in bounded preview surfaces', (

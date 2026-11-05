@@ -111,6 +111,10 @@ final class E2eAgent {
     return created;
   }
 
+  /// Путь к `profiles.json` временного `CODELAB_HOME`: тесты диалога
+  /// «Add connection profile» проверяют, что записал app (общий файл с CLI).
+  String get profilesPath => '${_homeDirectory.path}/profiles.json';
+
   /// Сохраняет [profile] в `profiles.json` временного `CODELAB_HOME`.
   Future<void> saveProfile(ConnectionProfile profile) => JsonFileProfileStore(
     '${_homeDirectory.path}/profiles.json',
