@@ -277,8 +277,13 @@ final class McpSecretsException implements Exception { final String reason; }  /
 список клиентов, что и сессия коннектора, и пришлось бы синхронизировать два владельца одного
 транспорта; порт `McpSessionTools` уже стоит в точке расширения ядра. Отдельного
 `applyConfigServers` тоже нет: `replaceServers` с полным желаемым списком делает то же (D10,
-§17.5.7). Поток состояний `changes` для страницы настроек встроенного агента — вместе с потребителем,
-change `add-provider-setup-ui` (OQ4).
+§17.5.7). Поток состояний для страницы настроек встроенного агента вводит change
+`add-provider-setup-ui` вместе с потребителем (OQ4 закрыт, design.md change, D12):
+`McpSessionTools.changes` — широковещательный поток полных списков `McpServerSummary` после каждой
+смены состояния, числа инструментов, ошибки или состава серверов, без повтора последнего значения,
+закрывается в `close()`; `AgentRuntime.mcpStatus(SessionId)` — порт хоста (снимок `servers`,
+`changes`, `reconnect(name)`, `null` без MCP или для закрытой сессии); `EmbeddedAgent.mcpStatus` в
+`codelab_embedded` поверх него. ACP не меняется.
 
 **Правки конфига** — чистые типы ядра (`codelab_agent_core/lib/src/config/config_edit.dart`): их
 используют писатель `codelab_agent_io`, клиентский пакет `codelab_setup` (через реэкспорт, без
@@ -674,7 +679,13 @@ D15, D16). Резолвер у `codelab-agent` и у встроенного аг
 служба `codelab` в хранилищах ОС), поэтому `flutter_secure_storage` на
 desktop не применяется; программная запись для страницы настроек — `SecretAdmin` через
 `codelab_setup/io.dart` (результаты `SecretStored`, `SecretUpdated`, `SecretReadOnly`, `SecretFailed` и
-др.; `checkStore(name)` — проверки без значения, D15). Кэш найденных значений живёт до конца процесса: работающий агент видит
+др.; `checkStore(name)` — проверки без значения, D15). Клиенты (app и CLI) обращаются к хранилищу
+через `ClientSecretAccess` (`codelab_agent_io/lib/src/secrets/client_secret_access.dart`, реэкспорт
+из `codelab_setup/io.dart`; change `add-provider-setup-ui`, D4): бэкенд выбирается по
+`secrets.backend` пользовательского слоя (битый конфиг → `env` только для чтения), запись — через
+`SecretAdmin`, `isSet` — без чтения значения, `read` — без кэша, в порядке резолвера
+(`CODELAB_SECRET_<…>`, затем бэкенд). Подсказку бэкенда только для чтения строит общая
+`secretReadOnlyHint` (её же использует `SecretCommands`). Кэш найденных значений живёт до конца процесса: работающий агент видит
 замену уже прочитанного секрета только после перезапуска (до 8.10). Условие App Sandbox для
 будущего `keychain-macos` записано в черновике `add-agent-os-secret-backends`. Готовые пакеты (`flutter_secure_storage`, `keyring`, `keybay`) не берутся (пересмотр — при старте
 `add-agent-os-secret-backends`, если появится зрелый пакет без Flutter от подтверждённого издателя):
@@ -1512,9 +1523,10 @@ docs      session  stdio      failed     4      process exited with code 1 (retr
 
 Постоянные изменения (добавить, изменить, удалить, выключить сервер) делают клиенты через
 `ConfigWriter` (§17.5.5); агент подхватывает их перезагрузкой. Страница настроек app для
-встроенного агента будет читать состояние серверов напрямую и вызывать `reconnect` — поток
-состояний для неё вводит change `add-provider-setup-ui` вместе с потребителем (OQ4); для локального
-stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` обычным `session/prompt`.
+встроенного агента читает состояние серверов через `EmbeddedAgent.mcpStatus` и вызывает
+`reconnect` (change `add-provider-setup-ui`, D12; OQ4 закрыт); для локального stdio-агента и
+удалённого агента — отправляет `/mcp list` и `/mcp reload <id>` обычным `session/prompt` только по
+кнопке пользователя и только без идущего хода (SETUP-11).
 Машиночитаемый статус по ACP — не часть этого раздела; расширение `_meta.codelab`/`_codelab/*` —
 только отдельным OpenSpec (OQ4).
 

@@ -104,6 +104,23 @@ config|provider|mcp`. Основной барель `codelab_setup.dart` в 8.10
 Хранилища ОС — после 1.0 (черновик `add-agent-os-secret-backends`), без изменения этих типов: меняется
 только `openSecretStore`.
 
+**Уточнения change `add-provider-setup-ui`** (design.md change, D2, D4, D8, D13, D20):
+* **пресеты MVP** — таблица моста `codelab_setup/lib/src/provider/provider_presets.dart`: OpenAI,
+  Anthropic, OpenRouter, Ollama, «Custom OpenAI-compatible», «Custom Anthropic-compatible» (решение
+  Q5); переход в ядро (§17.10.2) — после MVP без изменения потребителей;
+* **секреты клиента** — `ClientSecretAccess` (`codelab_agent_io`, реэкспорт из `io.dart`): бэкенд по
+  `secrets.backend` пользовательского слоя (битый конфиг → `env` только для чтения), `SecretAdmin`
+  для записи, `isSet` без чтения значения и `read` без кэша в порядке резолвера агента
+  (`CODELAB_SECRET_<…>`, затем бэкенд). Подсказку бэкенда только для чтения строит одна функция
+  `secretReadOnlyHint` для `SecretCommands`, мастера и app (D3);
+* **проверка `/models`** — `HttpProviderCheck` поверх `http.Client` в основном бареле, фабрика
+  `IOClient` — `ioProviderCheck()` в `io.dart`; своей зависимости `http` у app нет; редиректы не
+  выполняются (SETUP-23);
+* **токен профиля** — порт kit `ProfileSecrets` и `SecretText` (kit не зависит от моста), реализация
+  поверх `ClientSecretAccess` в composition root app и в `run.dart` CLI (§12.4.9);
+* **запись на desktop в 1.0** — без хранилища ОС только при `secrets.backend: file`; кнопки,
+  которая сама пишет этот ключ, в app нет (решение Q1).
+
 | Барель | Содержимое | Можно | Нельзя |
 |---|---|---|---|
 | `codelab_setup.dart` (чистый Dart) | `ProviderSetupFlow`, пресеты, `ProviderCheck` и `HttpProviderCheck` поверх `http.Client`, `ProviderReadiness`, `McpServerDraft`, `SettingsAccess`, модели представления, порт `AgentConfigStore` и `ConfigSaveOutcome`; реэкспорт чистых типов ядра (§17.5.2): `ConfigLayer`, `ConfigTarget`, `ConfigSnapshot`, `ConfigEdit` и его подклассы, `ConfigConflictException` (D5 change `add-config-writer-and-reload`), `ConfigIssue`, `ConfigLoadResult`, `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType`, `SecretNames`, `SecretStore`, `DescribedSecretStore`, `SecretBackendInfo` (типы секретов — вместе со страницей настроек, не в 8.9; D1) | `codelab_agent_core`, `http`, `meta` | `dart:io`, `codelab_agent_io`, Flutter, `package:codelab_acp_*`, `package:codelab_client_*` |
@@ -111,7 +128,9 @@ config|provider|mcp`. Основной барель `codelab_setup.dart` в 8.10
 
 Сторож (§9.5) получает новое правило: основной барель `codelab_setup` не импортирует то, что
 запрещено `webUnsafe`, а также `package:codelab_agent_io`, `package:codelab_acp_`, `package:codelab_client_` и `package:flutter/`;
-presentation app не импортирует `package:codelab_setup/io.dart`. Клиенты по-прежнему не
+presentation app не импортирует `package:codelab_setup/io.dart` и `dart:io`, а остальной `lib/` app
+импортирует `io.dart` только из composition root `lib/app/` (change `add-provider-setup-ui`, D20).
+Клиенты по-прежнему не
 импортируют `codelab_agent_*` напрямую: нужные типы ядра приходят реэкспортом из
 `codelab_setup`, как `ProviderConfig` через `codelab_embedded`. `ConfigWriter` и бэкенды секретов
 видит только `io.dart`. `ConfigConflictException` — тип ядра (agent-core-architecture §17.5.2; D5
@@ -335,10 +354,12 @@ final class SettingFieldView {             // строка общего реда
 пользователь вписал ссылку сам (`"Bearer ${secret:…}"`), черновик сохраняет её как обычный текст.
 
 **Состояния Cubit-ов app.** Feature `apps/codelab_desktop/lib/features/settings/`:
-`application/` содержит Cubit-ы, `infrastructure/settings_module.dart` связывает
-`FileAgentConfigStore`, `openSecretStore(…)` с `SecretAdmin` (change `add-agent-secret-store`, D15) и
-`HttpProviderCheck(IOClient())` из `codelab_setup/io.dart`, `presentation/` содержит страницы.
-Presentation не видит ни файлов, ни хранилища секретов.
+`application/` содержит Cubit-ы, `presentation/` — страницы. IO-реализации собирает composition
+root `lib/app/` — единственное место импорта `codelab_setup/io.dart` в app (правило сторожа):
+`FileAgentConfigStore`, `ClientSecretAccess` (поверх `openSecretStore` и `SecretAdmin`) и
+`ioProviderCheck()`; Cubit-ы получают порты основного бареля (change `add-provider-setup-ui`, D4,
+D20). Presentation не видит ни файлов, ни хранилища секретов (SETUP-9). У `ProviderSettingsState` и
+`McpSettingsState` есть ещё состояние `…Unreadable` для битого `config.yaml`: запись недоступна.
 
 ```dart
 // apps/codelab_desktop/lib/features/settings/application/provider_settings_cubit.dart
@@ -370,7 +391,7 @@ final class McpSettingsReady extends McpSettingsState {
   final SettingsBanner? banner;
 }
 sealed class McpAgentStatus {}             // unavailable(reason) | loading | reply(text, at) | failed(message)
-                                           // | live(List<McpServerStatus>) — только встроенный агент, §12.4.6
+                                           // | live(List<McpServerSummary>) — только встроенный агент, §12.4.6
 ```
 
 **Сторож запуска** (`apps/codelab_desktop/lib/app/boot/`; чистый Dart без Flutter, кроме
@@ -418,18 +439,22 @@ final class BootWatchdog {
 `embedded`-профиле нет готового провайдера.
 
 1. До запуска агента `composition_root.dart` читает `AgentConfigStore.snapshot(cwd)` и вызывает
-   `checkProviderReadiness`. `ProviderReady` → обычный старт.
-2. `ConfigBroken` → мастер не запускается. В stderr печатаются ошибки с путём ключа (как
-   `codelab config check`), выход с кодом `64` (agent-core-architecture §13.10, §9.11). Мастер НЕ ДОЛЖЕН переписывать сломанный файл.
-3. Нет TTY на stdin или stdout (`-p`, pipe, CI) → мастер не запускается. В stderr:
-   `No model provider is configured. Run "codelab provider add" or set OPENAI_API_KEY / ANTHROPIC_API_KEY.`,
-   выход с кодом `1`, как при неудачном подключении (§9.11).
+   `checkProviderReadiness` — только в интерактивном режиме (REPL или `--ui tui`), когда stdin и
+   stdout — TTY. `ProviderReady` → обычный старт. В `--ui tui` мастер построчный и идёт до старта
+   экрана TUI (§12.2.7).
+2. `ConfigBroken` → мастер не запускается и файл не переписывает. Старт идёт прежним путём: в stderr
+   печатаются ошибки с путём ключа (как `codelab config check`), выход с кодом `64`
+   (agent-core-architecture §13.10, §9.11).
+3. Нет TTY на stdin или stdout или режим `-p` (pipe, CI) → мастер не запускается, поведение прежнее:
+   без конфига — код `64` и проблема конфига в stderr (§9.11), без ключа — ошибка первого хода
+   (решение Q4 change `add-provider-setup-ui`, D16; SETUP-7).
 4. `ProviderKeyMissing` (провайдер есть, ключа нет). Если `backend.writable`, CLI предлагает
    `Store a key for "<id>" in <backend.id>? [Y/n]`. «Да» → шаг ключа мастера в режиме правки
-   этого провайдера (`editing`, старт с `ChoosingKey`); «нет» → печать подсказки и выход `1`.
-   Бэкенд `env` (только чтение, ОС-хранилище недоступно) → вопроса нет: CLI печатает
+   этого провайдера (`editing`, старт с `ChoosingKey`); «нет» → подсказка и обычный старт.
+   Бэкенд только для чтения → вопроса нет: CLI печатает
    `No writable secret store (<backend.unavailableReason>). Set <SecretNames.envOverride(name)> or the provider's api_key_env variable.`
-   и выходит с кодом `1`.
+   и стартует обычным путём: первый ход даст прежнюю ошибку ключа, а в REPL можно выбрать модель
+   другого провайдера (D16).
 5. `NoProviderConfigured` → полный мастер `ProviderSetupFlow` (§12.4.4) с целью
    `ConfigTarget.user()` и `makeDefault: true`.
 6. `Done` → CLI продолжает старт обычным путём. Встроенный агент читает уже записанный конфиг,
@@ -487,6 +512,10 @@ stateDiagram-v2
    пресетов с `oauth` — вариант «Sign in» (`SignIn`): результат пишет `OAuthLoginService`
    (agent-core-architecture §17.10.6), проверка шага 4 идёт с полученным ключом. Введённый ключ живёт только в `SecretValue` черновика. При `UseEnvVar`
    проверка берёт значение переменной из окружения процесса клиента, если оно там есть.
+   Если секрет `codelab/<id>` уже есть в хранилище (остаток удалённого провайдера или ключ из
+   `codelab secret set`), шаг предлагает «Use the stored key» (`KeepStoredSecret`) или «Replace it»
+   (`replaceSecret: true` в плане); без явного «Replace it» существующий секрет не перезаписывается
+   (SETUP-5; change `add-provider-setup-ui`, D7).
 4. **Проверка до сохранения.** `Checking` вызывает `ProviderCheck.listModels` с таймаутом 10 с:
    * OpenAI-совместимый вид: `GET <base_url>/models`, заголовок `Authorization: Bearer <key>`
      (или `auth_header`);
@@ -501,6 +530,9 @@ stateDiagram-v2
    * ошибка соединения, TLS или таймаут → `unreachable`, `tlsError` или `timeout`.
 
    Тело ответа об ошибке в сообщение не попадает: только код статуса и вид отказа.
+   Запрос не следует редиректам: ответ `3xx` — `badResponse` со статусом, иначе ключ ушёл бы на
+   другой хост (SETUP-23; change `add-provider-setup-ui`, D8). Каждая проверка имеет номер попытки: «Retry», «Back»,
+   «Cancel» и `dispose()` делают прежнюю устаревшей, и её поздний результат отбрасывается (D7).
 5. **Отказ проверки.** `CheckFailed` предлагает «Retry», «Back», а для `unreachable`/`timeout`
    ещё «Save without check» (`SkipCheck`). `SkipCheck` требует подтверждения и добавляет в
    `Reviewing` предупреждение `Not verified: <kind>`. Молча сохранить после отказа нельзя.
@@ -545,6 +577,9 @@ stateDiagram-v2
    перечитает конфиг и пришлёт `config_option_update` с новым списком `model` (§17.5 ядра). CLI
    печатает `Saved provider "<id>". Models are available in /model.`, app показывает баннер
    `saved`. Если агент не подключён, новый провайдер подхватится при следующем запуске.
+   Если ключ заменён под тем же именем (`SecretUpdated`), работающий агент держит старое значение в
+   кэше резолвера, а конфиг не изменился: баннер app добавляет `The new key is used after Restart
+   agent (Settings › Connection).` (change `add-provider-setup-ui`, D9).
 10. **Конфликт.** `ConfigConflict` → `SaveFailed`. CLI печатает
     `Config file changed on disk since it was read: <path>. Run the command again.` и выходит с
     кодом `1`. App перечитывает снимок и возвращает пользователя в `Reviewing` с тем же планом и
@@ -552,8 +587,10 @@ stateDiagram-v2
 
 Точки входа мастера:
 
-* CLI: `codelab provider add` (без REPL) и `/provider add` в REPL. Шаги — вопросы в терминале
-  через `line_editor.dart`. Ключ вводится без эха.
+* CLI: `codelab provider add` (без REPL) и `/provider add` в построчном REPL. Шаги — вопросы в
+  терминале через `line_editor.dart`. Ключ вводится без эха.
+* CLI `--ui tui`: `/provider add` открывает модальный экран TUI на том же автомате (§12.2.7,
+  «Модальные экраны»; change `add-provider-setup-ui`, D17).
 * App: диалог `ProviderWizardDialog` на странице провайдеров.
 
 Флаги — те же, что у подкоманды ядра (§17.5.5: `<id> --kind --base-url --model --context-window
@@ -602,6 +639,22 @@ stateDiagram-v2
 7. Страница подписана на `WorkspaceState`. После `config_option_update` строка «Active in this
    session» показывает текущую модель активной сессии. Отдельный запрос не нужен.
 
+Уточнения change `add-provider-setup-ui` (D3, D5, D9, D10):
+* `SettingsAccess` вычисляется для профиля текущего подключения, а без подключения — для профиля по
+  умолчанию; смена подключения перечитывает доступ;
+* строка «Key storage» называет настоящий бэкенд (`env`, `file`; хранилища ОС — после
+  `add-agent-os-secret-backends`) с тегом `writable` или `read-only`; для `file` — строка об
+  открытом файле `<home>/secrets.yaml`; статус ключа — `Key: in <backend>`, `Key: missing in
+  <backend>`, `Key: env <VAR> (set|not set)`, `No key`;
+* «Check» читает ключ в адаптере composition root (`ClientSecretAccess.read`) и сразу отдаёт его
+  `ProviderCheck`; номер проверки на строку, повтор и уход со страницы отменяют прежнюю;
+* без провайдеров — `No providers yet. The embedded agent needs one to run a turn.` и «Add provider»;
+  битый `config.yaml` — ошибка загрузчика без записи (`ProviderSettingsUnreadable`);
+* после записи ключа под тем же именем баннер добавляет `The new key is used after Restart agent
+  (Settings › Connection).`; если агент не подключён — `Saved. Connect to start the agent with the new
+  provider.` и «Connect»;
+* секрет удаляется только после `ConfigSaved` (SETUP-24).
+
 ## 12.4.6. Алгоритм: страница MCP-серверов (E-13)
 
 1. **Список** берётся из конфига (`snapshot`): имя, тип, цель (команда или URL без значений
@@ -609,15 +662,18 @@ stateDiagram-v2
    опрашивается.
 2. **Состояние** серверов (подключён, число инструментов, последняя ошибка) берётся у агента
    активной сессии (§17.5.7):
-   * **встроенный агент** — `McpSupervisor` сессии напрямую: `snapshot()` и поток `changes`
-     (типы `McpSupervisor` и `McpServerStatus` реэкспортирует `codelab_embedded`) →
-     `McpAgentStatus.live`; таблица страницы строится из `McpServerStatus` (`state`, `toolCount`,
-     `lastError`, `retryIn`), без разбора текста;
-   * **локальный stdio-агент и удалённый агент** — команда `/mcp list` через
-     `SessionHandle.runCommand` активной сессии. Ответ — фиксированный текст ядра. Страница
-     показывает его как есть в панели «Agent status» моноширинным блоком и не разбирает.
-     Расширения ACP для структурированного статуса нет: текста достаточно человеку, а формат
-     принадлежит агенту. Команда и ответ видны в ленте сессии как обычный ход.
+   * **встроенный агент** — порт состояния MCP сессии `EmbeddedAgent.mcpStatus(sessionId)` поверх
+     `McpSessionTools.changes` ядра: снимок, поток изменений и `reconnect(name)` (типы
+     `McpServerSummary` и `McpServerState` реэкспортирует `codelab_embedded`; отдельного
+     `McpSupervisor` нет, §17.5.7) → `McpAgentStatus.live`; таблица страницы строится из
+     `McpServerSummary` (`state`, `toolCount`, `lastError`, `retryIn`), без разбора текста;
+   * **локальный stdio-агент и удалённый агент** — команда `/mcp list` обычным
+     `SessionHandle.send` активной сессии, только по кнопке «Refresh» и только когда соединение
+     `Connected` и нет идущего хода (решение Q2 change `add-provider-setup-ui`, D12). Ответ — фиксированный текст
+     ядра. Страница показывает его как есть в панели «Agent status» моноширинным блоком и не
+     разбирает. Расширения ACP для структурированного статуса нет: текста достаточно человеку, а
+     формат принадлежит агенту. Команда и ответ видны в ленте сессии как обычный ход; ответ,
+     пришедший после смены сессии или закрытия страницы, отбрасывается.
 
    Без активной сессии или если агент не объявил `/mcp` в `available_commands_update` →
    `McpAgentStatus.unavailable` с подсказкой «Open a session to see live status».
@@ -644,15 +700,20 @@ stateDiagram-v2
    (слияние по `name`, §15.2).
 5. **Применение.** После `ConfigSaved` агент перечитывает конфиг сам и присылает
    `available_commands_update` (MCP prompts как команды). Кнопка «Reconnect» строки — для
-   встроенного агента `McpSupervisor.reconnect(name)`, для остальных `/mcp reload <name>`;
-   «Reload all» — `/mcp reload`. После ответа страница повторяет `/mcp list` (встроенному агенту
-   повтор не нужен: состояние приходит из `changes`).
-6. **Невалидный результат.** Если агент отклонил новый конфиг (файл записан, но перечитывание
-   не прошло — например, переменная `${GITHUB_TOKEN}` не задана в окружении агента: писатель
+   встроенного агента `reconnect(name)` порта состояния MCP (`EmbeddedAgent.mcpStatus`), для
+   остальных — `/mcp reload <name>`; «Reload all» — `/mcp reload`. Для агента вне процесса команды
+   отправляются только по кнопке и только без идущего хода; автоматического повтора `/mcp list` нет,
+   свежий статус даёт кнопка «Refresh» (SETUP-11; change `add-provider-setup-ui`, D12). Встроенному агенту повтор не
+   нужен: состояние приходит потоком.
+6. **Невалидный результат.** Если агент отклонил бы новый конфиг (файл записан, но перечитывание
+   не проходит — например, переменная `${GITHUB_TOKEN}` не задана в окружении агента: писатель
    считает это предупреждением, загрузчик агента — ошибкой), агент работает на старом конфиге.
-   Страница после сохранения выполняет `/config check` и показывает ответ в баннере `rejected`,
-   если первая строка ответа — `Config: invalid` (формат — §17.5.6; остальной текст выводится
-   как есть). Предупреждения `ConfigSaved.warnings` показываются в баннере `saved` до этой
+   Страница после сохранения берёт свежий `snapshot` и загружает конфиг локально с окружением
+   агента: процесс app для встроенного агента, процесс app и `env` профиля для stdio `codelab-agent`.
+   Ошибки загрузки показываются баннером `rejected`: `Saved, but the agent rejected the new config`,
+   `Config: invalid`, проблемы с путём ключа и `The agent keeps running on the previous config until
+   this is fixed.`. `/config check` не отправляется: это ход в сессии пользователя
+   (change `add-provider-setup-ui`, D11). Предупреждения `ConfigSaved.warnings` показываются в баннере `saved` до этой
    проверки.
 
 ## 12.4.7. Алгоритм: сторож запуска (D-15)
@@ -794,6 +855,16 @@ sequenceDiagram
 рисует тот же список виджетами. Страница «General» в app дополнительно показывает клиентские
 настройки `codelab.sidebar.tab` и `codelab.file_browser.show_ignored` (`shared_preferences`,
 §12.6.8); `SettingsRegistry` их не содержит.
+
+Решения change `add-provider-setup-ui` (D17; решения пользователя Q6, Q8):
+* **в построчном REPL** `/settings` — `PickerSpec` со строками `key value source`; `/settings <key>` —
+  пикер значений или подсказка формата; `/settings <key> <value>` пишет в `user`, с `--local` — в
+  `projectLocal(cwd)`; `/settings <key> --reset` — `UnsetValue`;
+* **в `--ui tui`** — полноэкранный экран по артборду `CliSettings` (§12.2.7, «Модальные экраны») только
+  с ключами реестра. Ключей `cli.yaml` (`display.*`, `input.*`, `update.*`, `power.*`, §12.2.10) и
+  `agent.profile` на экране нет: файла `cli.yaml` в коде пока нет, у большинства ключей нет
+  поведения. Ключ проектного файла пишется в `.codelab/config.local.yaml` (SETUP-3), `ctrl+u` — в
+  `user`.
 
 **Навигация настроек app.** Все страницы настроек живут в одном `NavigationView` с поиском
 сверху и двумя группами (§12.3, A13: `SettingsDestination`). Открываются по Cmd/Ctrl+, и пунктом
@@ -1000,6 +1071,36 @@ sequenceDiagram
   при сохранении и перед проверкой — кнопки «Test anyway» в артборде нет, — запрет userinfo в URL,
   тип по умолчанию, правка id, вид «Rename») перечислены в design.md change, D20.
 
+**Уточнения change `add-provider-setup-ui`** (design.md change, D13, D14, D17, D24):
+* **ссылка на токен** — вторая форма `secret:<имя>` (имя по правилу `SecretNames`), рядом с `env:<NAME>`;
+  голое имя без префикса по-прежнему неподдерживаемая ссылка (D15 change `add-app-settings-shell`).
+  Читает её `ProfileSecretSource(environment, stored:)` через порт kit `ProfileSecrets`, который
+  composition root реализует поверх `ClientSecretAccess` (`codelab_setup/io.dart`), без кэша;
+* **«Token» шага 4** — четыре варианта: «No token», «Use stored secret» (имена
+  `ProfileSecrets.names()`), «Store a new token» (`PasswordBox`, имя `codelab/profiles/<id>/token`,
+  значение — `SecretText` в памяти), «From environment variable» (вариант change
+  `add-app-settings-shell` остаётся четвёртым: в 1.0 бэкенд по умолчанию `env` только для чтения).
+  При бэкенде только для чтения «Store a new token» неактивен с подсказкой
+  `Secret store <backend> is read-only. Add 'secrets.backend: file' to <home>/config.yaml …` — тем же
+  текстом, что у `codelab secret set` (D3, решение Q1);
+* **подтверждение `ws://` и текст «Unauthorized»** шагов 4–5 действуют для любого варианта с токеном, а
+  не только для переменной; смена выбранного секрета или значения нового токена сбрасывает
+  подтверждение;
+* **«Save» шага 6** идёт через `ProfileCommitter` kit: перечитывание id → `store` секрета →
+  `ProfileStore.save` → удаление созданного секрета, если профиль не записан. Существующий секрет
+  `codelab/profiles/<id>/token` не перезаписывается: ошибка у поля `tokenSecretExists`;
+* **«Remove» шага 8** предлагает флажок «Also delete the stored token codelab/profiles/<id>/token»
+  только для собственного секрета профиля; секрет удаляется после удаления профиля и только если на
+  него не ссылается другой профиль (SETUP-24);
+* **строка WebSocket-профиля** — `Token secret <имя>` и `<backend> · set|missing` (наличие без чтения
+  значения); имя — текст, а не поле: правки профиля в 1.0 нет;
+* **ключи тестов** диалога — `add-profile-token-stored`, `add-profile-token-stored-name`,
+  `add-profile-token-new`, `add-profile-token-new-value`, `add-profile-token-backend`; строки —
+  `connection-profile-token-<id>`; подтверждения «Remove» — `connection-remove-delete-token`;
+* **страницы «Providers» и «MCP servers»** видимы в навигации вместе с «Connection» (SETUP-17); их
+  ключи — `settings-providers`, `providers-<part>-<id>`, `provider-wizard`, `settings-mcp`,
+  `mcp-<part>-<name>` (D10, D11).
+
 Профили WebSocket не делают страницу записываемой для удалённого агента: «Add profile» меняет
 только локальный `profiles.json` клиента, поэтому кнопка доступна и при `RemoteReadOnly`
 (SETUP-2 касается конфига агента, а не профилей клиента).
@@ -1009,6 +1110,9 @@ sequenceDiagram
 спрашивает) → «Choose a model» (тот же `ProviderSetupFlow` в `ProviderWizardDialog`; шаг
 пропускается при `ProviderReady`) → «Privacy» (что пишется в логи, где лежат ключи, ссылка на политику конфиденциальности §12.7.7). Onboarding
 показывается после `BootReady` и не входит в шаги сторожа.
+
+Решение пользователя 2026-11-05 (Q3 change `add-provider-setup-ui`): onboarding app в этот change не входит. Это
+отдельный change после `add-app-navigation-shell`: тому нужен `OnboardingDestination`.
 
 ## 12.4.10. Примеры
 
@@ -1100,7 +1204,8 @@ mcp:
 * **Settings → MCP servers** (`settings-mcp`): таблица `github · http ·
   https://api.githubcopilot.com/mcp · enabled · user`, кнопки «Edit», «Remove», «Reconnect»;
   под таблицей «Agent status» — для встроенного агента колонки `STATE`, `TOOLS`, `LAST ERROR` из
-  `McpServerStatus`, для stdio-агента — текст ответа `/mcp list`; кнопка «Reload all».
+  `McpServerSummary` порта состояния MCP, для stdio-агента — текст ответа `/mcp list` (по кнопке
+  «Refresh»); кнопка «Reload all».
 * **Удалённый агент**: те же страницы без кнопок записи, баннер «Read-only: this agent runs on
   wss://build-box:8765».
 * **Диагностика запуска** (`boot-diagnostics`): заголовок «CodeLab could not finish starting»,
@@ -1129,9 +1234,10 @@ mcp:
    существовавший секрет НЕ ДОЛЖЕН удаляться или перезаписываться без выбора пользователя.
 6. **SETUP-6.** Конфликт записи (файл изменился на диске) НЕ ДОЛЖЕН разрешаться автоматической
    перезаписью. Пользователь ДОЛЖЕН увидеть конфликт, черновик ДОЛЖЕН сохраниться.
-7. **SETUP-7.** Мастер первого запуска НЕ ДОЛЖЕН запускаться без TTY и при невалидном конфиге. В
-   этих случаях CLI ДОЛЖЕН завершаться с подсказкой и не ждать ввода: без TTY — кодом `1`, при
-   невалидном конфиге — кодом `64` (§9.11).
+7. **SETUP-7.** Мастер первого запуска НЕ ДОЛЖЕН запускаться без TTY, в `-p` и при невалидном
+   конфиге. В этих случаях CLI ДОЛЖЕН вести себя как без мастера и не ждать ввода: без конфига и при
+   невалидном конфиге — код `64` с проблемами конфига (§9.11). Решение Q4 change `add-provider-setup-ui` (D16):
+   прежний код выхода сохраняется, отдельного кода `1` для «нет провайдера» нет.
 8. **SETUP-8.** Автомат мастера ДОЛЖЕН быть один (`ProviderSetupFlow`) для CLI, app,
    неинтерактивных флагов и onboarding. Клиенты НЕ ДОЛЖНЫ реализовывать шаги, проверку или
    порядок записи сами.
@@ -1144,8 +1250,11 @@ mcp:
     хоста — только после подтверждения.
 11. **SETUP-11.** Статус MCP агента вне процесса (stdio, WebSocket) ДОЛЖЕН показываться как текст
     ответа `/mcp list` без разбора; структурированный статус для него МОЖЕТ появиться только через
-    OpenSpec change с расширением ACP. Структурированный статус встроенного агента берётся только
-    из `McpSupervisor` его сессии (§17.5.7), не из разбора текста.
+    OpenSpec change с расширением ACP. Команды `/mcp list` и `/mcp reload` клиент ДОЛЖЕН отправлять
+    только по явному действию пользователя и только когда у активной сессии нет идущего хода.
+    Структурированный статус встроенного агента берётся только из порта состояния MCP его сессии
+    (`EmbeddedAgent.mcpStatus` поверх `McpSessionTools.changes`, §17.5.7), не из разбора текста
+    (change `add-provider-setup-ui`, D12).
 12. **SETUP-12.** Каждый шаг запуска app ДОЛЖЕН иметь таймаут. Зависший или упавший шаг ДОЛЖЕН
     приводить к экрану диагностики с именем шага и ошибкой, а не к пустому окну. `runApp` ДОЛЖЕН
     вызываться до первого асинхронного платформенного вызова.
@@ -1177,6 +1286,13 @@ mcp:
 22. **SETUP-22.** Типы профиля в «Add profile» ДОЛЖНЫ определяться зарегистрированными
     `TransportResolver`, а не проверкой платформы; на хосте без stdio-резолвера диалог НЕ ДОЛЖЕН
     предлагать stdio.
+23. **SETUP-23.** Проверочный запрос мастера провайдера НЕ ДОЛЖЕН следовать редиректам: ответ `3xx`
+    — отказ `badResponse`, а ключ НЕ ДОЛЖЕН уходить на адрес, отличный от введённого `base_url`
+    (change `add-provider-setup-ui`, D8).
+24. **SETUP-24.** Секрет провайдера, MCP-сервера или профиля подключения ДОЛЖЕН удаляться только
+    после успешного удаления записи, которая на него ссылается (`ConfigSaved`, удалённый профиль), и
+    только если на него не ссылается другая запись. Секрет, выбранный пользователем из хранилища
+    («Use stored secret»), клиент НЕ ДОЛЖЕН удалять (change `add-provider-setup-ui`, D10, D11, D13).
 
 ## 12.4.12. Обоснование
 
@@ -1205,8 +1321,9 @@ mcp:
   нового кода.
 * **Текст `/mcp list` без разбора для агента вне процесса.** Альтернатива — расширение `_meta`
   со статусом серверов — требует OpenSpec и версии формата ради одной панели. Текст уже объявлен
-  агентом и одинаков для CLI и app. Встроенный агент живёт в том же процессе, и его
-  `McpSupervisor` доступен без протокола, поэтому для него страница показывает живую таблицу.
+  агентом и одинаков для CLI и app. Встроенный агент живёт в том же процессе, и порт состояния MCP
+  его сессии (`EmbeddedAgent.mcpStatus`, change `add-provider-setup-ui`, D12) доступен без протокола, поэтому для него
+  страница показывает живую таблицу.
 * **Ссылки на секреты MCP через `${secret:<name>}`.** E-13 требует секретов по имени, а хранить
   только `${VAR}` заставило бы пользователя app заводить переменные окружения, которых у
   GUI-приложения на macOS обычно нет. Подстановка ядра (§17.5.4) работает в тех же местах, что
@@ -1221,7 +1338,7 @@ mcp:
   не делает, хуже её отсутствия.
 
 **Новые зависимости.** Пакет `codelab_setup` (внутренний). `http` в `codelab_setup` (уже есть в
-allowlist ядра). В app — `http` для `IOClient` в infrastructure, если её ещё нет транзитивно.
+allowlist ядра). Своей зависимости `http` у app нет: фабрику `IOClient` даёт `ioProviderCheck()` из `codelab_setup/io.dart` (change `add-provider-setup-ui`, D8).
 Сторонних пакетов раздел не добавляет. Хранилище ключей — решение ядра §17.5.4 (в 1.0 —
 переменные `CODELAB_SECRET_<…>` и открытый файл только явным выбором, связка ключей ОС — после 1.0;
 change `add-agent-secret-store`, D7, D13), реализация — в `codelab_agent_io`; вопрос §11 «Где хранить ключ API встроенного агента в app» этим закрыт.
@@ -1272,8 +1389,9 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
   OpenAI-compatible» с адресом тестового сервера, ключ, модель из списка → в конфиге
   `api_key_secret`, ключ только в тестовом хранилище, REPL стартует и выполняет ход на
   scripted-провайдере.
-* `cli/onboarding-headless-no-key`: `codelab -p "hi"` без провайдера → код `1`, подсказка в
-  stderr, ни одного вопроса (SETUP-7).
+* `cli/onboarding-headless-no-key`: `codelab -p "hi"` без провайдера → мастер не запускается,
+  поведение прежнее: код `64` и проблема конфига в stderr, ни одного вопроса (SETUP-7; решение Q4
+  change `add-provider-setup-ui`).
 * `cli/onboarding-broken-config`: битый конфиг → код `64`, ошибка с путём ключа, файл не изменён.
 * `cli/provider-wizard-writes-config` (L-24): `/provider add` в REPL против конфига с
   комментариями → файл совпадает с golden `test/e2e/golden/provider_add_config.yaml`, комментарии
@@ -1303,10 +1421,11 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
      `Authorization: "${secret:codelab/mcp/github/authorization}"`, значение только в хранилище;
   2. агент (встроенный, scripted MCP-сервер из `codelab_acp_testing`) присылает
      `available_commands_update`; «Agent status» показывает `connected` и число инструментов из
-     `McpSupervisor.snapshot()`;
-  3. «Reconnect» вызывает `McpSupervisor.reconnect("github")`, состояние проходит
-     `connecting → connected` через `changes`; тот же сценарий с локальным stdio-агентом
-     выполняет `/mcp reload github`, затем `/mcp list` и показывает текст ответа без изменений;
+     `EmbeddedAgent.mcpStatus(sessionId)` (поток `McpSessionTools.changes`, change `add-provider-setup-ui`, D12);
+  3. «Reconnect» вызывает `reconnect("github")` порта состояния, строка проходит
+     `connecting → connected` через поток; тот же сценарий с локальным stdio-агентом по кнопке
+     отправляет `/mcp reload github`, по «Refresh» — `/mcp list` и показывает текст ответа без
+     изменений (SETUP-11);
   4. удалить → запись и секреты `codelab/mcp/github/*` удалены;
   5. сервер из проектного слоя — только «Disable here», запись `enabled: false` в
      `config.local.yaml` (SETUP-3).
@@ -1383,6 +1502,27 @@ stdio-резолвера переключателя типа нет (SETUP-22).
   `profiles/profile_arg_test.dart`, `run_embedded_test.dart`, `scenario/test_scenario_command_test.dart`;
 * интеграционные `settings_navigation_flow_test.dart` и `connection_profiles_flow_test.dart` — в
   `feature/*` только компилируются, на устройстве — только в `release/*`.
+
+**Тесты change `add-provider-setup-ui`** (полный список — `tasks.md` change):
+* `codelab_agent_io` — `secrets/client_secret_access_test.dart` (`ClientSecretAccess`: порядок «переменная,
+  затем бэкенд», без кэша, бэкенд по пользовательскому слою), `secret_read_only_hint_test.dart`;
+* `codelab_agent_core` — `mcp/mcp_session_changes_test.dart`, `runtime/mcp_status_port_test.dart`;
+  `codelab_embedded` — `embedded_mcp_status_test.dart` (статус без промпта, закрытие при `dispose`);
+* `codelab_setup` — тесты таблицы выше, а также `http_provider_check_test.dart: redirect is not followed`
+  (SETUP-23) и `client_secret_access_exports_test.dart`;
+* kit — `profile_token_ref_test.dart` (форма `secret:`), `profile_secrets_test.dart`,
+  `profile_commit_test.dart`, `profile_probe_test.dart` (новый токен из памяти);
+* app — `provider_settings_cubit_test.dart`, `provider_wizard_cubit_test.dart`,
+  `mcp_settings_cubit_test.dart`, `providers_page_test.dart`, `provider_wizard_dialog_test.dart`,
+  `mcp_page_test.dart`; правки `add_profile_*_test.dart`, `connection_page_test.dart`;
+* `codelab_ui` — `codelab_key_value_list_test.dart`, `codelab_step_breadcrumb_test.dart`,
+  `codelab_status_table_test.dart`, `CodeLabMonospaceBlock` в `codelab_atomics_test.dart`;
+* CLI — `setup/provider_wizard_cli_test.dart`, `setup/first_run_test.dart`,
+  `repl/commands/provider_test.dart`, `settings_test.dart`; ядро экрана TUI —
+  `tui/core/tui_overlay_test.dart`, `provider_wizard_overlay_test.dart`, `overlay_focus_test.dart`,
+  `settings_overlay_test.dart`; PTY-e2e `cli/tui-provider-wizard`, `cli/tui-settings`,
+  `cli/tui-wizard-approval` (маркер `sk-test-leak-…` не появляется в снимках экрана, `cli_history`
+  и логе).
 
 **Агент** (тесты ядра, здесь только ссылка): `acp/slash-mcp-list`, перечитывание конфига с
 `config_option_update` и сохранение старого конфига при невалидном новом — по §17.5 ядра.
