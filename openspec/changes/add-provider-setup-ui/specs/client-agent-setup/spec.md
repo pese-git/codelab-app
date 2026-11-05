@@ -33,28 +33,34 @@
 ### Requirement: Доступ к настройкам агента
 `resolveSettingsAccess` SHALL определять, может ли клиент читать и писать конфиг агента профиля (design.md change `add-provider-setup-ui`, D5):
 - встроенный агент — `EditableSettings`;
-- stdio-профиль, чья команда — `codelab-agent` и, если клиент уже подключён, `agentInfo.name` в `initialize` равен `codelab-agent`, — `EditableSettings`. `CODELAB_HOME` берётся из `env` профиля, иначе из окружения клиента; файл `--config` из аргументов — только для чтения;
-- stdio-профиль другого агента — `NotManaged(agentName)`;
+- stdio-профиль, у команды которого базовое имя `codelab-agent` (параметр `command`), — `EditableSettings`. Самоназвание агента из `initialize` МОЖЕТ только опровергнуть это решение, когда клиенту оно доступно; в этой версии его в `WorkspaceState` нет, и решение принимается по команде (design.md change `add-provider-setup-ui`, D5). `CODELAB_HOME` берётся из `env` профиля, иначе из окружения клиента; файл `--config` из аргументов — только для чтения;
+- stdio-профиль с другой командой — `NotManaged(agentName)`, где `agentName` — базовое имя команды;
 - WebSocket-профиль — `RemoteReadOnly(endpoint)`.
 
 Цели записи `EditableSettings` SHALL быть только `ConfigTarget.user()` и `ConfigTarget.projectLocal(cwd)`. `projectLocal` SHALL предлагаться, только если известна папка проекта. Слой 3 и файл `--config` SHALL быть только для чтения (SETUP-3).
 
-#### Scenario: Доступ по профилю
-- **WHEN** `resolveSettingsAccess` вызывается для встроенного агента, для `codelab-agent serve --stdio`, для `python -m other` с `agentInfo.name: other` и для `wss://box:7420`
-- **THEN** результаты — `EditableSettings`, `EditableSettings`, `NotManaged('other')` и `RemoteReadOnly(wss://box:7420)`
+#### Scenario: Доступ по профилю (согласовано пользователем 2026-11-06)
+- **WHEN** `resolveSettingsAccess` вызывается для встроенного агента, для команды `/usr/local/bin/codelab-agent serve --stdio`, для `python -m other` и для `wss://box:7420`
+- **THEN** результаты — `EditableSettings`, `EditableSettings`, `NotManaged('python')` и `RemoteReadOnly(wss://box:7420)`
 
 #### Scenario: Цели без проектного слоя
 - **WHEN** `EditableSettings` построен с папкой проекта и с файлом `--config /etc/team.yaml`
 - **THEN** цели записи — `user` и `projectLocal(<папка>)`; `project` и `/etc/team.yaml` среди них нет
 
 ### Requirement: Снимок и запись конфига агента
-`AgentConfigStore.snapshot(cwd)` SHALL возвращать снимки слоёв `user`, `projectLocal` и `project`, итог загрузки (`config`, `issues`, `warnings`, `sources`), источник каждого листового ключа и описание бэкенда секретов. `apply(base, edits)` SHALL записывать правки одним вызовом `ConfigWriter.apply` и переводить результат и исключения ядра в `ConfigSaveOutcome`:
+`AgentConfigStore.snapshot(cwd)` SHALL возвращать снимки слоёв `user`, `projectLocal` и `project`, итог загрузки (`config`, `issues`, `warnings`, `sources`), источник каждого листового ключа (`origins: Map<String, ConfigSourceView>` — вид источника и подпись) и описание бэкенда секретов. `apply(base, edits)` SHALL записывать правки одним вызовом `ConfigWriter.apply` и переводить результат и исключения ядра в `ConfigSaveOutcome`:
 - `ConfigWriteResult` → `ConfigSaved(fingerprint, warnings, restartRequiredKeys)`;
 - `ConfigConflictException` → `ConfigConflict(path)`;
 - `ConfigInlineSecretException` → `ConfigInlineSecret(key, suggestedSecretName)`; проверяется раньше `ConfigException`;
 - `ConfigException(issues)` → `ConfigRejected(issues)`.
 
 Другие исключения НЕ SHALL перехватываться. Конфликт НЕ SHALL разрешаться автоматической перезаписью (SETUP-6).
+
+Слой 3 недоверенного проекта (не в `trusted_projects`) SHALL не попадать ни в слияние листьев снимка, в том числе запасное, когда загрузчик не дал итогового конфига, ни в источник листа `origins` (design.md change `add-provider-setup-ui`, D10). `supportsProviderCheck(kind)` и адрес по умолчанию для вида SHALL давать мост; проверка поддерживается для `openai-compatible` и `anthropic`. `displayBaseUrl(url)` SHALL возвращать адрес без userinfo, query и fragment.
+
+#### Scenario: Недоверенный проект не виден
+- **WHEN** `<cwd>/.codelab/config.yaml` недоверенного проекта задаёт провайдера `evil`, а пользовательский конфиг — `anthropic`, в том числе при битом пользовательском слое (запасное слияние)
+- **THEN** снимок не содержит листьев `providers.evil`, `origins` не ссылается на проектный файл
 
 #### Scenario: Конфликт не перезаписывает файл
 - **WHEN** между `snapshot` и `apply` тест меняет `config.yaml`
@@ -111,7 +117,11 @@
 - ошибка соединения, TLS или таймаут → `unreachable`, `tlsError` или `timeout`;
 - прочее → `badResponse`.
 
-Тело ответа об ошибке НЕ SHALL попадать в результат. По таймауту и при отмене соединение SHALL закрываться.
+Тело ответа об ошибке НЕ SHALL попадать в результат. `listModels` SHALL принимать отмену (`cancel`); по таймауту и при отмене соединение SHALL закрываться, а результат отменённой проверки — не возвращаться потребителю как исход.
+
+#### Scenario: Отмена закрывает соединение
+- **WHEN** проверка ждёт ответа сервера на loopback, и потребитель отменяет её
+- **THEN** соединение закрыто (сервер видит разрыв), исход отмены не принимается за `unreachable` или `timeout`
 
 #### Scenario: Заголовки и пути
 - **WHEN** `HttpProviderCheck` на `MockClient` проверяет OpenAI-совместимый `https://h/v1` и Anthropic `https://a` с ключом `k`
@@ -132,7 +142,7 @@
 3. если исход не `ConfigSaved`, а секрет на шаге 1 создан впервые, — `SecretAdmin.delete`. Заменённый ранее существовавший секрет НЕ SHALL удаляться;
 4. если запись секрета не удалась, конфиг НЕ SHALL писаться, а мастер SHALL возвращаться на шаг ключа.
 
-Удаление провайдера SHALL удалять секрет только после `ConfigSaved`.
+Удаление провайдера SHALL удалять секрет только после `ConfigSaved` и только если по свежему снимку после записи ни одна строка конфига на него не ссылается — ни `api_key_secret`, ни подстановка `${secret:<имя>}` в любом значении (заголовки провайдеров, `env` и `headers` MCP) (уточнение SETUP-24; design.md change `add-provider-setup-ui`, D9).
 
 #### Scenario: Откат созданного секрета
 - **WHEN** `StoreSecret` записан впервые, а `apply` возвращает `ConfigRejected`
@@ -142,6 +152,10 @@
 - **WHEN** пользователь выбрал «Replace it», секрет перезаписан, а `apply` возвращает `ConfigConflict`
 - **THEN** секрет не удалён, исход — `SaveFailed` с `ConfigConflict` и признаком «ключ уже заменён»
 
+#### Scenario: Ключ, на который ссылается MCP-сервер
+- **WHEN** удаляется провайдер `gw` с `api_key_secret: codelab/gw` и флажком удаления ключа, а заголовок MCP-сервера `docs` содержит `${secret:codelab/gw}`
+- **THEN** провайдер удалён, секрет `codelab/gw` остаётся; если ссылка `docs` появилась между снимком и записью, перепроверка по свежему снимку тоже оставляет секрет
+
 #### Scenario: Хранилище отказало
 - **WHEN** `SecretAdmin.store` возвращает `SecretFailed`
 - **THEN** `apply` не вызывался, мастер на шаге ключа с предложением переменной окружения
@@ -149,15 +163,36 @@
 ### Requirement: Готовность провайдера
 `checkProviderReadiness(snapshot, secrets, env)` SHALL возвращать:
 - `ProviderReady(model)`;
-- `NoProviderConfigured` — нет файла, провайдеров или `agent.default_model`, и других проблем нет;
+- `NoProviderConfigured` — нет файла, провайдеров или `agent.default_model`, и других проблем нет; признак SHALL вычислять функция моста `providerSetupNeeded(issues)` по `ConfigIssue.key` и `kind`, без разбора текста, общая для CLI и app (design.md change `add-provider-setup-ui`, D26);
 - `ProviderKeyMissing(providerId, reference, backend)` — у провайдера модели по умолчанию нет ключа: секрета нет в `names()` и нет переменной `CODELAB_SECRET_<…>`, либо не задана `api_key_env`;
 - `ConfigBroken(issues)` — прочие проблемы валидатора.
 
 Значения ключей НЕ SHALL читаться.
 
+#### Scenario: Признак «нет провайдера» по типизированным проблемам
+- **WHEN** `providerSetupNeeded` получает проблемы загрузки пустого `CODELAB_HOME`; затем те же проблемы плюс `budget.max_steps: 0`; затем проблему с текстом `agent.default_model: required`, но другого ключа
+- **THEN** результаты — `true`, `false`, `false`
+
 #### Scenario: Состояния готовности
 - **WHEN** функция вызывается для пустого `CODELAB_HOME`, для конфига с `api_key_secret: codelab/p` без секрета, для `api_key_env: K` при незаданной `K`, для `budget.max_steps: 0` и для полного конфига
 - **THEN** результаты — `NoProviderConfigured`, `ProviderKeyMissing(reference: secret codelab/p)`, `ProviderKeyMissing(reference: env K)`, `ConfigBroken` и `ProviderReady`
+
+### Requirement: Статус ключа и удаление провайдера
+`KeyStatusView` SHALL иметь пять видов: ключ в хранилище (`Key: in <backend>`), ключ отсутствует в хранилище (`Key: missing in <backend>`), переменная окружения (`Key: env <VAR> (set|not set)`), без ключа (`No key`) и литеральный ключ в файле конфига `KeyLiteralInConfig` (`Key: in config file (plain text)`). Ни один вид НЕ SHALL содержать значения ключа.
+
+План удаления провайдера (`ProviderRemover`) SHALL отказывать до записи типизированно: `unknownProvider`, `notEditable`, `multipleLayers` (листья провайдера в нескольких слоях), `layerUnreadable` (файл слоя не читается), `lastProvider`, `newDefaultRequired`, `newDefaultInvalid`, `defaultOverridden` (`agent.default_model` задан в слое выше слоя провайдера) (design.md change `add-provider-setup-ui`, D9).
+
+#### Scenario: Литеральный ключ
+- **WHEN** провайдер `old` задан в `config.yaml` с `api_key: sk-test-leak-0123456789`
+- **THEN** статус ключа — `KeyLiteralInConfig` с подписью `Key: in config file (plain text)`, ни вид, ни его `toString()` не содержат маркера
+
+#### Scenario: Провайдер в двух слоях
+- **WHEN** `providers.gw.kind` задан в `user`, а `providers.gw.models` — в `projectLocal`, и строится план удаления `gw`
+- **THEN** результат — отказ `multipleLayers`, файлы не изменены
+
+#### Scenario: Модель по умолчанию из верхнего слоя
+- **WHEN** провайдер `gw` и `agent.default_model: gw/m` заданы в `user`, а `agent.default_model` переопределён в `projectLocal`, и строится план удаления `gw`
+- **THEN** результат — отказ `defaultOverridden`, файлы не изменены
 
 ### Requirement: Черновик MCP-сервера
 `McpServerDraft` SHALL описывать форму добавления и правки сервера (§12.4.6, шаг 3).

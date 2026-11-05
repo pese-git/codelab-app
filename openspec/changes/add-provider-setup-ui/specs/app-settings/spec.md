@@ -22,9 +22,9 @@ Composition root SHALL делать видимыми страницы «Connecti
 - **WHEN** окно подключено к профилю `wss://devbox:7420/acp`, а в локальном `~/.codelab/config.yaml` есть провайдер `local`
 - **THEN** «Providers» показывает InfoBar с `wss://devbox:7420` без `/acp`, строки `local` нет, кнопок «Add provider», «Edit», «Remove» нет; локальный файл не читался
 
-#### Scenario: Сторонний stdio-агент
-- **WHEN** окно подключено к stdio-профилю `python -m other_agent`, который назвался в `initialize` `other-agent`
-- **THEN** обе страницы показывают `Provider settings are managed by other-agent.` и не пишут файлы
+#### Scenario: Сторонний stdio-агент (согласовано пользователем 2026-11-06)
+- **WHEN** окно подключено к stdio-профилю с командой `python` и аргументами `-m other_agent`
+- **THEN** обе страницы показывают `Provider settings are managed by python.` (решение по базовому имени команды: самоназвания агента из `initialize` клиенту в этой версии не доступно; design.md change `add-provider-setup-ui`, D5) и не пишут файлы
 
 ### Requirement: Страница «Providers»
 Страница «Providers» для `EditableSettings` SHALL показывать по артборду `Providers` (design.md, D10):
@@ -34,7 +34,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 - «Configured providers» — Expander на провайдера: id, метка «Default», подпись `<id> · <вид> · [<base_url> ·] <ключ> · <n> model(s)`, источник `defined in <file>` для слоя 3, файла `--config` и переменных окружения, тег последней проверки;
 - `Config file: <path>`.
 
-Статус ключа SHALL вычисляться без чтения значения: `Key: in <backend>`, `Key: missing in <backend>`, `Key: env <VAR> (set)` / `(not set)`, `No key`. Провайдеры слоя 3, `--config` и окружения SHALL показываться без «Edit» и «Remove».
+Статус ключа SHALL вычисляться без чтения значения: `Key: in <backend>`, `Key: missing in <backend>`, `Key: env <VAR> (set)` / `(not set)`, `No key`, `Key: in config file (plain text)` (литеральный `api_key` в файле). У провайдера с литеральным ключом «Check» SHALL быть неактивна с подсказкой `The key is written in config.yaml. Move it to the secret store: codelab secret migrate.`: app не читает литеральное значение из конфига, а проверка без ключа дала бы ложный `unauthorized` (design.md change `add-provider-setup-ui`, D10). Провайдеры слоя 3, `--config` и окружения SHALL показываться без «Edit» и «Remove».
 
 Действия:
 - **Check** SHALL читать ключ в адаптере composition root и передавать его прямо в `ProviderCheck`; в состоянии страницы остаётся только итог (`ok, <n> models`, вид отказа, время и длительность). Повторный Check и закрытие страницы SHALL отменять прежнюю проверку, поздний итог НЕ SHALL менять строку;
@@ -44,11 +44,38 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 Без провайдеров страница SHALL показывать `No providers yet. The embedded agent needs one to run a turn.` и «Add provider» (ключ `providers-empty`).
 
+Дополнительно для «Check» (design.md change `add-provider-setup-ui`, D8, D10):
+- для `http://` к хосту вне `localhost`, `127.0.0.0/8` и `::1` рядом с «Check» SHALL показываться предупреждение `The key is sent unencrypted to <host>.`; «Check» остаётся доступной без диалога, потому что адрес уже записан в конфиге (трактовка SETUP-10 для страницы, решение пользователя 2026-11-06). Подтверждение адреса остаётся в мастере;
+- для вида без проверки (`gemini` и неизвестные) «Check» SHALL быть неактивна с подсказкой `Check is not available for <kind> providers yet.`; список проверяемых видов и адреса по умолчанию даёт мост;
+- смена подключения окна SHALL отменять идущие проверки страницы (D21).
+
+Подпись строки SHALL показывать `base_url` без userinfo, query и fragment.
+
 Значение ключа НЕ SHALL попадать в состояние Cubit, на экран и в журнал (SETUP-1).
 
 #### Scenario: Статус ключа без чтения значения
 - **WHEN** конфиг задаёт провайдеров `anthropic` (`api_key_secret: codelab/anthropic`, секрет есть в `file`), `openai` (`api_key_env: OPENAI_API_KEY`, переменная задана) и `team` (`api_key_secret: codelab/team`, секрета нет)
 - **THEN** строки показывают `Key: in file`, `Key: env OPENAI_API_KEY (set)` и `Key: missing in file`; ни один секрет не читался
+
+#### Scenario: http:// к удалённому хосту
+- **WHEN** провайдер `lan` задан с `base_url: http://10.0.0.5:8000/v1`
+- **THEN** рядом с «Check» строки `lan` показано `The key is sent unencrypted to 10.0.0.5.`, «Check» доступна и выполняется без диалога; у `http://localhost:11434/v1` предупреждения нет
+
+#### Scenario: Вид без проверки
+- **WHEN** провайдер `g` задан с `kind: gemini`
+- **THEN** «Check» строки `g` неактивна с подсказкой `Check is not available for gemini providers yet.`, запроса нет
+
+#### Scenario: base_url без секретов в подписи
+- **WHEN** провайдер задан с `base_url: https://u:sk-test-leak-0123456789@llm.example/v1?k=x#f`
+- **THEN** подпись строки содержит `https://llm.example/v1` и не содержит `u:`, маркера, `k=x` и `#f`
+
+#### Scenario: Смена подключения отменяет Check
+- **WHEN** «Check» строки ждёт ответа, а окно переключается на другой профиль
+- **THEN** проверка отменена, соединение закрыто, итог не записан в строку
+
+#### Scenario: Литеральный ключ в config.yaml (согласовано пользователем 2026-11-06)
+- **WHEN** провайдер `old` задан в `config.yaml` с `api_key: sk-test-leak-0123456789`
+- **THEN** строка показывает `Key: in config file (plain text)`, «Check» неактивна с подсказкой про `codelab secret migrate`, запроса к `/models` нет, маркер не появляется на экране и в журнале
 
 #### Scenario: Check с неверным ключом
 - **WHEN** тестовый сервер `/models` отвечает `401`, и пользователь нажимает «Check» в строке `anthropic`
@@ -56,7 +83,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 #### Scenario: Закрытие страницы во время Check
 - **WHEN** «Check» ждёт ответа, и пользователь уходит со страницы
-- **THEN** запрос закрыт, итог не записан, журнал содержит `provider_settings.check_discarded`
+- **THEN** отмена передана в `ProviderCheck.listModels`, соединение закрыто (сервер видит разрыв), итог не записан, журнал содержит `provider_settings.check_discarded`
 
 #### Scenario: Удаление провайдера модели по умолчанию
 - **WHEN** провайдеры `anthropic` (модель по умолчанию) и `local`, пользователь удаляет `anthropic`, выбирает новую модель `local/qwen` и оставляет флажок удаления ключа

@@ -140,9 +140,11 @@ final class ClientSecretAccess {
 | Профиль | Доступ | Пути и `cwd` |
 |---|---|---|
 | встроенный | `EditableSettings` | `CODELAB_HOME` app, `cwd` — папка проекта сессии |
-| stdio, команда — `codelab-agent` (базовое имя), а после подключения `agentInfo.name == "codelab-agent"` | `EditableSettings` | `CODELAB_HOME` из `env` профиля, иначе app; `--config <file>` из аргументов — только чтение; `cwd` — папка проекта при `runInProjectDirectory`, иначе слой `projectLocal` недоступен |
-| stdio, другой агент | `NotManaged(agentName)` | — |
+| stdio, базовое имя команды — `codelab-agent` (`resolveSettingsAccess(command:)`) | `EditableSettings` | `CODELAB_HOME` из `env` профиля, иначе app; `--config <file>` из аргументов — только чтение; `cwd` — папка проекта при `runInProjectDirectory`, иначе слой `projectLocal` недоступен |
+| stdio, другая команда | `NotManaged(agentName)`, `agentName` — базовое имя команды | — |
 | WebSocket | `RemoteReadOnly(endpoint)` | — |
+
+**Решение по команде, а не по самоназванию** (решение оркестратора, итерация 2; согласовано пользователем 2026-11-06: для чужого агента текст `managed by <команда>`, например `managed by python`; публикация `agentInfo` — follow-up backlog roadmap §10.4). Имени агента из `initialize` (`agentInfo.name`) в `WorkspaceState` kit нет, поэтому «наш stdio-агент или чужой» решается по базовому имени команды профиля. Самоназвание могло бы только опровергнуть это решение (команда `codelab-agent`, а агент назвался иначе → `NotManaged`), но сейчас клиенту оно недоступно. Follow-up `[client]`: публиковать `agentInfo` в `WorkspaceState` и подключить опровержение (`delivery-roadmap.md` §10.4). Остаточный риск: обёртка с другим именем (`./run-agent.sh`) над `codelab-agent` даёт `NotManaged` — безопасно, запись просто недоступна.
 
 `RemoteReadOnly` и `NotManaged`:
 - локальный конфиг не читается (SETUP-2);
@@ -194,6 +196,9 @@ final class ClientSecretAccess {
 - **Тело ошибки** в результат не попадает: только статус и вид отказа.
 - **`http://` к нелокальному хосту** — только после подтверждения на шаге адреса (§12.4.4, шаг 2). Подтверждение привязано к адресу черновика и сбрасывается его правкой, как у `ws://` в A (D11 A).
 - **В журнале** — только `scheme://host:port`, без пути и query.
+- **Трактовка SETUP-10 на странице Providers** (решение пользователя 2026-11-06): адрес провайдера там уже записан в конфиге, поэтому «Check» строки с `http://` к нелокальному хосту доступна без диалога, а рядом с ней показывается предупреждение `The key is sent unencrypted to <host>.`. Подтверждение на шаге адреса остаётся только в мастере (итерация 3), где адрес вводится впервые.
+- **Правило «локальный хост» — одно** (решение оркестратора, итерация 3). Сейчас это публичная `isLocalHost` kit (`codelab_client_core/lib/src/connection/profile_draft.dart`): её используют `ProfileDraft` и предупреждение `http://` страницы Providers, а мастеру она нужна на шаге адреса. Перенести её «в мост с реэкспортом из kit» или в общий пакет нельзя: kit не зависит от стороны агента (§4.1, сторож), мост не импортирует `package:codelab_client_*` и `package:codelab_acp_*` (правило `codelab_setup`), а общего web-безопасного пакета у них нет. Поэтому правило остаётся в kit, а мост получает его параметром: `ProviderSetupFlow({…, required bool Function(String host) isLocalHost})`. App и CLI передают `isLocalHost` kit из composition root; тесты моста — свою функцию. Второй копии правила нет. Новый пакет ради одной функции отклонён как несоразмерный (AGENTS.md §13).
+- **Неподдерживаемый вид.** Проверку умеют только `openai-compatible` и `anthropic`. Какие виды проверяются и какой адрес по умолчанию у вида — решает мост (`supportsProviderCheck(kind)`, адрес по виду), а не app (решение оркестратора, ревью итерации 2).
 
 `codelab_setup` += `http` в allowlist. Пакет уже в allowlist ядра и у `codelab_embedded`, новой сторонней зависимости в monorepo нет.
 
@@ -208,6 +213,13 @@ final class ClientSecretAccess {
 После `ConfigSaved`:
 - **ключ заменён под тем же именем** (`SecretUpdated`). Работающий встроенный агент держит старое значение в кэше резолвера, а конфиг не изменился, поэтому перечитывания нет. Баннер `saved` получает строку `The new key is used after Restart agent (Settings › Connection).`;
 - **агент не подключён** (встроенный агент не открылся из-за отсутствия провайдера) — баннер `Saved. Connect to start the agent with the new provider.` с кнопкой «Connect» (`ConnectionCommands.connect` профиля по умолчанию).
+
+**Удаление провайдера — `ProviderRemover`** (мост, итерация 2). Уточнение SETUP-24 (решение оркестратора, ревью итерации 2): «ключ используется другим провайдером» учитывает не только `api_key_secret`, но и ссылки `${secret:<имя>}` в любой строке конфига (заголовки провайдеров, `env` и `headers` MCP); после `ConfigSaved` ссылки перепроверяются по свежему снимку, и секрет удаляется, только если ссылок не осталось. (решение оркестратора, итерация 2). План удаления отказывает до записи типизированно (`ProviderRemovalRefusal`): `unknownProvider`, `notEditable` (провайдер не только в слоях `user`/`projectLocal`), `lastProvider`, `newDefaultRequired`, `newDefaultInvalid`, а также сверх §12.4.5:
+- `multipleLayers` — листья провайдера лежат в нескольких слоях: один `apply` пишет один слой, половина записи оставила бы неполного провайдера;
+- `layerUnreadable` — файл слоя провайдера не читается, основы для записи нет;
+- `defaultOverridden` — `agent.default_model` задан в слое выше слоя провайдера, и правка нижнего слоя не сменила бы итоговую модель.
+
+Каждый отказ — неактивная «Remove» или текст в подтверждении, без записи. Типы моста итерации 2: `AgentConfigSnapshot.origins` — `Map<String, ConfigSourceView>` (вид источника и подпись), пятый статус ключа — `KeyLiteralInConfig` (D10).
 
 ### D10. Страница «Providers»
 
@@ -226,8 +238,14 @@ final class ClientSecretAccess {
 5. подвал `Config file: <path>` и строка про «Remove».
 
 Действия:
-- **Check** — адаптер `lib/app/` читает ключ (`ClientSecretAccess.read` или переменную `api_key_env` окружения агента) и сразу передаёт его в `ProviderCheck`. В состоянии остаётся `ProviderCheckView` (`ok(n, durationMs, at)` или вид отказа). Результат — UI-состояние страницы, в файл не пишется. Номер проверки на строку: повторный Check и закрытие страницы отменяют прежний.
+- **Check** — адаптер `lib/app/` читает ключ (`ClientSecretAccess.read` или переменную `api_key_env` окружения агента) и сразу передаёт его в `ProviderCheck`. В состоянии остаётся `ProviderCheckView` (`ok(n, durationMs, at)` или вид отказа). Результат — UI-состояние страницы, в файл не пишется. Номер проверки на строку: повторный Check и закрытие страницы отменяют прежний; отмена передаётся в `ProviderCheck.listModels(…, cancel:)`, и мост закрывает соединение запроса, а не только перестаёт ждать.
 - **Edit** — мастер с `editing` (§12.4.5, шаг 4).
+- **Неподдерживаемый вид провайдера** (`gemini` и неизвестные) — «Check» неактивна с подсказкой `Check is not available for <kind> providers yet.`; признак и адрес по умолчанию даёт мост (D8) (решение оркестратора, ревью итерации 2).
+- **`http://` к нелокальному хосту** — предупреждение `The key is sent unencrypted to <host>.` рядом с «Check», без диалога (D8, трактовка SETUP-10) (решение пользователя 2026-11-06).
+- **Подпись строки** показывает `base_url` через `displayBaseUrl` моста — без userinfo, query и fragment, как origin в CLI (D25) (решение оркестратора, ревью итерации 2).
+- **Недоверенный проект.** Слой 3 недоверенного проекта не попадает ни в запасное слияние листьев, ни в источник листа: строка не показывает провайдера и источника из файла, который агент не читает (решение оркестратора, ревью итерации 2).
+- **Временное состояние итерации 2** (решение оркестратора, итерация 2): мастера ещё нет (итерация 3), поэтому «Add provider» и «Edit» видны по разметке и с ключами артборда, но неактивны с подсказкой `Use codelab provider add in a terminal; the wizard comes in a later version.` Итерация 3 включает их, не меняя разметку.
+- **Литеральный ключ** (согласовано пользователем 2026-11-06; `providers.<id>.api_key` в файле, статус `KeyLiteralInConfig`, подпись `Key: in config file (plain text)`) — «Check» неактивна с подсказкой `The key is written in config.yaml. Move it to the secret store: codelab secret migrate.` (решение оркестратора, итерация 2). App не читает литеральное значение из конфига (SETUP-1), а Check без ключа дал бы ложный `unauthorized`. Текста именно для этого случая в существующих сообщениях нет; формулировка совпадает по команде с причиной `fileOnly` реестра (`a secret is never written by clients; run: codelab secret migrate`) и по смыслу — с баннером переноса секретов app (`Secrets are stored in the agent config file.`, change `add-config-literal-secrets-and-migrate`, D8).
 - **Remove** — подтверждение `Remove provider <id>?` (`CodeLabDialogTitle`):
   - флажок «Also delete the stored key»;
   - выбор «New default model», если удаляется провайдер модели по умолчанию;
@@ -235,7 +253,7 @@ final class ClientSecretAccess {
 
   Правки — одним `apply`. Секрет удаляется только после `ConfigSaved` (SETUP-24, итерация 0).
 - **Default model** — `SetValue("agent.default_model", …)` в слой, где ключ определён сейчас, если он редактируемый, иначе в `user` (§12.4.5, шаг 3).
-- **Пустой конфиг** (провайдеров нет) — строка `No providers yet. The embedded agent needs one to run a turn.` и «Add provider» (в холсте пустого состояния нет, D24).
+- **Пустой конфиг** (провайдеров нет) — строка `No providers yet. The embedded agent needs one to run a turn.` и «Add provider» (в холсте пустого состояния нет, D24). В итерации 2 это та же кнопка `providers-add`, что в шапке: неактивна с той же подсказкой `Use codelab provider add in a terminal; the wizard comes in a later version.`; отдельной кнопки и другого текста у пустого состояния нет. С итерации 3 обе кнопки открывают мастер.
 
 Ключи тестов:
 - тело — `settings-providers`;
@@ -388,7 +406,7 @@ final class ClientSecretAccess {
 `composition_root.dart` до запуска встроенного агента (без `--agent`, `-a embedded`, `-a default`) вызывает `checkProviderReadiness(snapshot, secrets, env)` — **только если stdin и stdout — TTY и режим не `-p`** (SETUP-7):
 - `ProviderReady` → обычный старт;
 - `ConfigBroken` (проблемы, кроме отсутствия провайдера и `agent.default_model`) → мастер не запускается, старт идёт прежним путём: `EmbeddedAgentConfigException`, код `64`;
-- `NoProviderConfigured` (нет файла, нет провайдеров или нет `agent.default_model`) → текст `CliSetup` (`No model provider is configured for the embedded agent.` …) и мастер с `ConfigTarget.user()`, `makeDefault: true`. `Done` → старт агента (он читает уже записанный файл). `Cancelled`/Ctrl+C → `130`;
+- `NoProviderConfigured` (нет файла, нет провайдеров или нет `agent.default_model`; признак — общий `providerSetupNeeded` моста, D26) → текст `CliSetup` (`No model provider is configured for the embedded agent.` …) и мастер с `ConfigTarget.user()`, `makeDefault: true`. `Done` → старт агента (он читает уже записанный файл). `Cancelled`/Ctrl+C → `130`;
 - `ProviderKeyMissing`:
   - бэкенд пишет → `Store a key for "<id>" in <backend>? [Y/n]` и шаг ключа в режиме правки;
   - «нет» → подсказка и обычный старт;
@@ -526,6 +544,7 @@ final class ClientSecretAccess {
 ### D19. Виджеты `codelab_ui`
 
 Переиспользуются виджеты A: `CodeLabSettingsRow`, `CodeLabSettingsSection`, `CodeLabExpanderCard`, `CodeLabBadge`, `CodeLabStatusIndicator`, `CodeLabForm*`, `CodeLabSegmentedControl`, `CodeLabDialogTitle`. Новые — только те, которых нет и которые встречаются больше одного раза:
+- **`CodeLabButtonEmphasis.subtle` и `.danger`** у существующего `CodeLabButton` (итерация 2) — кнопки строк провайдера `f-btn subtle` и `f-btn subtle danger` артборда `Providers` («Check», «Edit», «Remove»); новый виджет не нужен;
 - **`CodeLabKeyValueList`** (molecule) — таблица «подпись — значение» раскрытого Expander (`.kv` артбордов `Providers`, `Connection`);
 - **`CodeLabStepBreadcrumb`** (molecule) — строка шагов мастера `API type › Base URL › Key › Check › Model › Review` с текущим шагом;
 - **`CodeLabStatusTable`** (organism) — таблица «Agent status» (`ListView (table)` артборда `Mcp`) с колонками и действием строки;
@@ -571,7 +590,7 @@ Allowlist ядра (PKG-2) не меняется: поток состояний 
 | Операция | Владелец | Защита |
 |---|---|---|
 | снимок конфига страницы | `ProviderSettingsCubit`, `McpSettingsCubit` | номер загрузки: поздний снимок после новой загрузки или `close()` отбрасывается |
-| Check строки | `ProviderSettingsCubit` | номер на строку, отмена при повторе и `close()`, `check_discarded` |
+| Check строки | `ProviderSettingsCubit` | номер на строку, отмена при повторе, `close()` и смене подключения окна (новый `SettingsAccess`), `check_discarded` |
 | проверка мастера | `ProviderSetupFlow` | номер попытки, закрытие клиента запроса (D7) |
 | запись провайдера и MCP | Cubit мастера и страницы | состояние `Saving` до чтения базы; повторное «Save» игнорируется; Cancel и Esc заблокированы в `Saving` (как D14 A); конфликт — `ConfigConflict`, без автоповтора (SETUP-6) |
 | запись профиля с токеном | `AddProfileCubit` + `ProfileCommitter` | перечитывание id до записи секрета; откат секрета при отказе профиля |
@@ -619,6 +638,11 @@ Allowlist ядра (PKG-2) не меняется: поток состояний 
 | Навигация (`Providers`, `Mcp`) | все 11 пунктов | видимы Connection, Providers, MCP servers | SETUP-17 |
 | «Key storage» (`Providers`) | `keychain-macos`, тег `writable` | настоящий бэкенд (`env`/`file`), тег `writable`/`read-only`, причина при `unavailableReason`; для `file` — строка об открытом файле | хранилища ОС — после 1.0 (D1, D3) |
 | Статус ключа строки | `Key: in keychain-macos`, `Key: missing in keychain-macos` | `Key: in <backend>`, `Key: missing in <backend>`, `Key: env <VAR> (set\|not set)`, `No key` | то же |
+| `http://` к нелокальному хосту на странице Providers | нет | предупреждение `The key is sent unencrypted to <host>.` рядом с Check, без диалога (D8; решение пользователя 2026-11-06) | адрес уже в конфиге |
+| Неподдерживаемый вид провайдера | Check у каждой строки | Check неактивна: `Check is not available for <kind> providers yet.` (D10) | проверка есть только для `openai-compatible` и `anthropic` |
+| «Add provider», «Edit» в итерации 2 | активны | видны, неактивны с подсказкой `codelab provider add` до итерации 3 (D10) | мастер — итерация 3 |
+| Литеральный ключ в `config.yaml` | нет | `Key: in config file (plain text)`, Check неактивна с подсказкой `codelab secret migrate` (D10; согласовано 2026-11-06) | app не читает литерал; Check без ключа дал бы ложный `unauthorized` |
+| Встроенный агент без провайдера (баннер соединения) | нет: ни `Boot`, ни `States` такого состояния не показывают; ближайшее — шаг «Choose a model» артборда `Onboarding` (вне охвата, Q3) | баннер `No model provider is configured for the embedded agent.` с «Add provider» → мастер (D26) | решение пользователя 2026-11-06 |
 | Пустой список провайдеров | нет | строка `No providers yet…` и «Add provider» (D10) | состояние новой установки |
 | Битый `config.yaml` | нет | InfoBar ошибки загрузчика, запись недоступна (D10, D11) | целостность данных (§2) |
 | Ключ мастера (`Wizard`, `CliSetup`) | `Store in keychain-macos as codelab/<id>` | `Store in <backend> as codelab/<id>`; при read-only — варианта нет, причина D3 | D1, D3 |
@@ -652,6 +676,23 @@ Smoke CLI показал: при 401/403 рукопожатия WebSocket и CLI
 - ACP не меняется: статус рукопожатия даёт транспорт (D12 change A).
 
 *Альтернатива:* распознавать текст исключения `WebSocketException` в хостах — хрупко и дублирует таблицу статусов в трёх местах.
+
+### D26. Встроенный агент без провайдера: баннер с «Add provider»
+
+Решение пользователя 2026-11-06, итерация 3. На новой установке встроенный агент не открывается: `EmbeddedAgentConfigException` (`agent.default_model: required` …), и баннер соединения показывает сырой текст проблем с подсказкой `codelab config check`, без пути к настройке.
+
+- **Признак** — чистая функция моста `providerSetupNeeded(List<ConfigIssue> issues)` в основном бареле `codelab_setup`: `true`, если файла нет или все проблемы загрузчика — отсутствие обязательного `agent.default_model` и/или пустой набор `providers` (по `ConfigIssue.key` и `kind`, без разбора текста `message`). Любая другая проблема — `false`. Эту же функцию использует `checkProviderReadiness`, чтобы отличить `NoProviderConfigured` от `ConfigBroken`, — app (этот баннер) и CLI (первый запуск, D16) не расходятся. Какие `kind` даёт валидатор для отсутствующего обязательного ключа, фиксирует тест моста на пустом конфиге: при смене валидатора тест падает, а не признак тихо ломается.
+
+  *Почему мост, а не kit:* `ConfigIssue` — тип схемы агента, kit о нём не знает (§4.1); мост уже реэкспортирует `ConfigIssue` и держит `ProviderReadiness`.
+- **Как app узнаёт.** `EmbeddedTransportResolver` (`lib/app/`) получает `EmbeddedAgentConfigException.issues` и, если `providerSetupNeeded` истинно, записывает признак в порт `ProviderSetupOffer` composition root — тем же путём, что `SecretMigrationOffer` (D8 change `add-config-literal-secrets-and-migrate`). Наружу по-прежнему уходит `ClientWorkspaceException(message)`: публичный API kit не меняется. Признак сбрасывается при следующей попытке открытия и при успешном подключении.
+- **Баннер** (spec agent-workbench-ui «Встроенный агент без провайдера»): вместо сырого текста — `No model provider is configured for the embedded agent.` (тот же текст, что первая строка CLI, D16) и действие «Add provider» (`connection-banner-add-provider`). Прочие ошибки конфига показываются как сейчас.
+- **Действие** открывает мастер провайдера (D7) в `ProviderWizardDialog` поверх рабочего места, с `makeDefault: true` и целью `user`. После `ConfigSaved` app переподключает встроенного агента (`ConnectionCommands.connect` встроенного профиля), **только если** номер попытки подключения не изменился с момента сбоя: если пользователь за это время подключился к другому профилю, переподключения нет, а страница Providers показывает обычный баннер `saved` (AGENTS.md §9, D21). `Cancel` мастера оставляет баннер как есть.
+- Полный onboarding остаётся отдельным change (Q3).
+
+*Альтернативы:*
+- разбирать текст `message` на `agent.default_model: required` — хрупко и расходится с CLI;
+- открывать страницу Providers вместо мастера — лишний шаг, а пустая страница в итерации 2 и так ведёт в мастер;
+- типизированное исключение в `ClientWorkspace` — меняет публичный API kit ради одного случая встроенного агента.
 
 ## Risks / Trade-offs
 
@@ -697,6 +738,8 @@ Smoke CLI показал: при 401/403 рукопожатия WebSocket и CLI
 - **Q5** — (а): 6 пресетов холста (D2).
 - **Q6** — в `--ui tui` экран `CliSettings`, в REPL — список и пикер по реестру (D17).
 - **Q7** — мастер `/provider add` прямо в TUI на `ProviderSetupFlow` (D17).
+- **D5** — принадлежность stdio-агента по базовому имени команды, текст `managed by <команда>`; `agentInfo` — follow-up (решение пользователя 2026-11-06).
+- **Литеральный ключ и SETUP-10 на странице Providers** — D10, D8 (решения пользователя 2026-11-06).
 - **Q8** — (i): экран `/settings` в TUI только с ключами реестра; Display, Input, Updates, `power`, `agent.profile` — отступление D24 (D17).
 - **D24** — все отступления согласованы, в том числе строки TUI-экрана `/settings` только с ключами реестра, записи ключа проектного слоя в `config.local.yaml` и `/settings` в REPL по реестру.
 

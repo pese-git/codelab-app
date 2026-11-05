@@ -93,22 +93,39 @@
 ## 2. Providers: просмотр, «Default model», Check, Remove (итерация 2)
 
 Красные тесты:
-- [ ] 2.1 `[agent]` `codelab_setup/test/settings_access_test.dart` (client-agent-setup «Доступ к настройкам агента»): оба сценария; `CODELAB_HOME` из `env` stdio-профиля; без папки проекта `projectLocal` не предлагается.
-- [ ] 2.2 `[agent]` `codelab_setup/test/io/file_agent_config_store_test.dart` (client-agent-setup «Снимок и запись конфига агента»): каждое исключение `ConfigWriter` → свой исход, `ConfigInlineSecret` раньше `ConfigRejected`; «Конфликт не перезаписывает файл»; «Литеральный секрет»; источники ключей по слоям.
-- [ ] 2.3 `[agent]` `codelab_setup/test/views/provider_entry_view_test.dart` — статус ключа без чтения значения (`in <backend>`, `missing`, `env (set|not set)`, `No key`), `editable == false` для слоя 3, `--config` и окружения.
-- [ ] 2.4 `[agent]` `codelab_setup/test/http_provider_check_test.dart` (client-agent-setup «Проверка списка моделей»): «Заголовки и пути» (`MockClient`), 401/403/404/таймаут/TLS → виды отказа, «Тело ошибки скрыто», «Редирект не выполняется» (`HttpServer` loopback через `ioProviderCheck`), закрытие соединения по таймауту; `pubspec_allowlist_test.dart` — `http` в `setupAllowlist`, негативный тест переходит на `dio`; `import_guard_test.dart` — сценарий «http в мосте настроек».
-- [ ] 2.5 `[agent]` `codelab_setup/test/provider_remove_test.dart` — `RemoveTable` и новая модель по умолчанию одним `apply`, последнего провайдера удалить нельзя, секрет удаляется только после `ConfigSaved` (SETUP-24).
-- [ ] 2.6 `[desktop]` `features/settings/application/provider_settings_cubit_test.dart` (app-settings «Страница «Providers»», «Доступ к настройкам агента на страницах Providers и MCP servers»): строки по слоям, `editable`, статус ключа без чтения значения (SETUP-1), «Check с неверным ключом», «Закрытие страницы во время Check» (номер проверки), «Удаление провайдера модели по умолчанию», «Последний провайдер», «Конфликт записи», `Unreadable` для битого `config.yaml`, `ReadOnly` для WebSocket и стороннего агента без чтения файла, пустое состояние, «Active in this session» по `WorkspaceState`.
-- [ ] 2.7 `[desktop]` `presentation/providers_page_test.dart` — разметка D10 и ключи; `settings_shell_test.dart` — сценарии «Три страницы группы Agent» (в этой итерации — Connection и Providers) и «Поиск ключа API».
-- [ ] 2.8 `[desktop]` `codelab_ui`: `codelab_key_value_list_test.dart` (D19).
+- [x] 2.1 `[agent]` `codelab_setup/test/settings_access_test.dart` (client-agent-setup «Доступ к настройкам агента»): оба сценария; `CODELAB_HOME` из `env` stdio-профиля; без папки проекта `projectLocal` не предлагается.
+- [x] 2.2 `[agent]` `codelab_setup/test/io/file_agent_config_store_test.dart` (client-agent-setup «Снимок и запись конфига агента»): каждое исключение `ConfigWriter` → свой исход, `ConfigInlineSecret` раньше `ConfigRejected`; «Конфликт не перезаписывает файл»; «Литеральный секрет»; источники ключей по слоям.
+- [x] 2.3 `[agent]` `codelab_setup/test/views/provider_entry_view_test.dart` — статус ключа без чтения значения (`in <backend>`, `missing`, `env (set|not set)`, `No key`), `editable == false` для слоя 3, `--config` и окружения.
+- [x] 2.4 `[agent]` `codelab_setup/test/http_provider_check_test.dart` (client-agent-setup «Проверка списка моделей»): «Заголовки и пути» (`MockClient`), 401/403/404/таймаут/TLS → виды отказа, «Тело ошибки скрыто», «Редирект не выполняется» (`HttpServer` loopback через `ioProviderCheck`), закрытие соединения по таймауту; `pubspec_allowlist_test.dart` — `http` в `setupAllowlist`, негативный тест переходит на `dio`; `import_guard_test.dart` — сценарий «http в мосте настроек».
+- [x] 2.5 `[agent]` `codelab_setup/test/provider_remove_test.dart` — `RemoveTable` и новая модель по умолчанию одним `apply`, последнего провайдера удалить нельзя, секрет удаляется только после `ConfigSaved` (SETUP-24).
+- [x] 2.6 `[desktop]` `features/settings/application/provider_settings_cubit_test.dart` (app-settings «Страница «Providers»», «Доступ к настройкам агента на страницах Providers и MCP servers»): строки по слоям, `editable`, статус ключа без чтения значения (SETUP-1), «Check с неверным ключом», «Закрытие страницы во время Check» (номер проверки), «Удаление провайдера модели по умолчанию», «Последний провайдер», «Конфликт записи», `Unreadable` для битого `config.yaml`, `ReadOnly` для WebSocket и стороннего агента без чтения файла, пустое состояние, «Active in this session» по `WorkspaceState`.
+- [x] 2.7 `[desktop]` `presentation/providers_page_test.dart` — разметка D10 и ключи; `settings_shell_test.dart` — сценарии «Три страницы группы Agent» (в этой итерации — Connection и Providers) и «Поиск ключа API».
+- [x] 2.8 `[desktop]` `codelab_ui`: `codelab_key_value_list_test.dart` (D19).
 
 Реализация:
-- [ ] 2.9 `[agent]` `codelab_setup`: `SecretValue`, `SettingsAccess`/`resolveSettingsAccess`, `AgentConfigStore`/`AgentConfigSnapshot`/`ConfigSaveOutcome`, модели представления, `ProviderCheck`/`HttpProviderCheck`, реэкспорт типов ядра; `io.dart` — `FileAgentConfigStore`, `ioProviderCheck`; `pubspec.yaml` += `http`; `setupAllowlist` += `http`. 2.1–2.5 зелёные, `web-compile`, `guard`.
-- [ ] 2.10 `[desktop]` `codelab_ui`: `CodeLabKeyValueList` с превью. 2.8 зелёный.
-- [ ] 2.11 `[desktop]` `lib/app/`: сборка `FileAgentConfigStore`, `ioProviderCheck` и адаптера Check (ключ читается и сразу передаётся проверке); `ProviderSettingsCubit`; `ProvidersPage` (`settings-providers`); `SettingsPage.providers` в `default_settings_pages.dart`; ключевые слова поиска; события `provider_settings.*`. 2.6, 2.7 зелёные.
-- [ ] 2.12 `[desktop]` `integration_test/embedded_provider_settings_flow_test.dart`, шаги 2, 5, 6 §12.4.13 (Check с неверным ключом, Remove с флажком, WebSocket-профиль только для чтения). В `feature/*` — только `fvm flutter analyze`.
+- [x] 2.9 `[agent]` `codelab_setup`: `SecretValue`, `SettingsAccess`/`resolveSettingsAccess`, `AgentConfigStore`/`AgentConfigSnapshot`/`ConfigSaveOutcome`, модели представления, `ProviderCheck`/`HttpProviderCheck`, реэкспорт типов ядра; `io.dart` — `FileAgentConfigStore`, `ioProviderCheck`; `pubspec.yaml` += `http`; `setupAllowlist` += `http`. 2.1–2.5 зелёные, `web-compile`, `guard`.
+- [x] 2.10 `[desktop]` `codelab_ui`: `CodeLabKeyValueList` с превью. 2.8 зелёный.
+- [x] 2.11 `[desktop]` `lib/app/`: сборка `FileAgentConfigStore`, `ioProviderCheck` и адаптера Check (ключ читается и сразу передаётся проверке); `ProviderSettingsCubit`; `ProvidersPage` (`settings-providers`); `SettingsPage.providers` в `default_settings_pages.dart`; ключевые слова поиска; события `provider_settings.*`. 2.6, 2.7 зелёные.
+- [x] 2.12 `[desktop]` `integration_test/embedded_provider_settings_flow_test.dart`, шаги 2, 5, 6 §12.4.13 (Check с неверным ключом, Remove с флажком, WebSocket-профиль только для чтения). В `feature/*` — только `fvm flutter analyze`.
+
+Правки по ревью итерации 2 и решения пользователя 2026-11-06 (design.md D5, D8, D9, D10, D21, D24):
+- [x] 2.13 `[agent]` Красные `codelab_setup`: `provider_remove_test.dart` — сценарий client-agent-setup «Ключ, на который ссылается MCP-сервер» (ссылки `${secret:…}` в любой строке, перепроверка по свежему снимку после `ConfigSaved`); `io/file_agent_config_store_test.dart` — «Недоверенный проект не виден» (запасное слияние и `origins`); тесты `supportsProviderCheck`, адреса по виду и `displayBaseUrl` (userinfo, query, fragment).
+- [x] 2.14 `[agent]` Реализация: учёт ссылок `${secret:…}` и перепроверка в `ProviderRemover`; фильтр слоя 3 недоверенного проекта; `supportsProviderCheck`, адреса по виду, `displayBaseUrl` в основном бареле. 2.13 зелёный, `web-compile`.
+- [x] 2.15 `[desktop]` Красные app: `provider_settings_cubit_test.dart` и `providers_page_test.dart` — сценарии app-settings «http:// к удалённому хосту», «Вид без проверки», «base_url без секретов в подписи», «Смена подключения отменяет Check», «Литеральный ключ в config.yaml»; текст `managed by <команда>` в «Сторонний stdio-агент».
+- [x] 2.16 `[desktop]` Реализация: предупреждение `The key is sent unencrypted to <host>.`, неактивная Check для неподдерживаемого вида (признак из моста), подпись через `displayBaseUrl`, отмена проверок при смене подключения. 2.15 зелёный.
+
+Решения итерации 2 (оркестратор; design.md D5, D9, D10, D19, D24):
+- временное состояние: «Add provider» и «Edit» по разметке и с ключами артборда, но неактивны с подсказкой `codelab provider add` — задача 3.8 их включает;
+- `SettingsAccess` stdio — по базовому имени команды (`resolveSettingsAccess(command:)`); `agentInfo` в `WorkspaceState` — follow-up `[client]` в `delivery-roadmap.md` §10.4;
+- `KeyLiteralInConfig` и неактивная Check с подсказкой `codelab secret migrate` — в 2.3, 2.6, 2.7;
+- отмена `ProviderCheck.listModels(cancel:)` с закрытием соединения — в 2.4 (`[agent]`) и 2.6;
+- отказы `ProviderRemover` `multipleLayers`, `layerUnreadable`, `defaultOverridden` — в 2.5;
+- `CodeLabButtonEmphasis.subtle`/`.danger` — в 2.8/2.10 (`codelab_button_emphasis_test.dart`).
 
 ## 3. Мастер провайдера в app (итерация 3)
+
+Подготовка (до задач мастера; design.md D8, «Правило «локальный хост» — одно»):
+- [ ] 3.0 `[agent]` Красный тест `provider_setup_flow_test.dart` — шаг адреса спрашивает подтверждение `http://` только когда переданный `isLocalHost` ложен (две подменные функции); реализация параметра `isLocalHost` у `ProviderSetupFlow` без собственной копии правила. `[desktop]`/`[client]` — передача `isLocalHost` kit из composition root app и `run.dart` CLI, проверка `grep`: определение `isLocalHost` в monorepo одно.
 
 Красные тесты:
 - [ ] 3.1 `[agent]` `codelab_setup/test/provider_setup_flow_test.dart` (client-agent-setup «Мастер провайдера», «Значение секрета в памяти клиента»): «От пресета до записи», read-only бэкенд без `StoreSecret` с причиной, «Отказ проверки без пропуска», `SkipCheck` только после подтверждения с предупреждением (SETUP-4), `notFound` → ручная модель и вариант с `/v1`, неизвестное окно → `EnteringModelDetails`, id custom-хоста и суффиксы, «Поздний результат проверки», «Существующий секрет», `http://` к нелокальному хосту требует подтверждения и сбрасывается правкой, событие не к месту игнорируется, «Значение не печатается», «Один автомат для двух клиентов» (общий набор событий).
@@ -120,8 +137,15 @@
 Реализация:
 - [ ] 3.6 `[agent]` `codelab_setup`: `ProviderPreset` и таблица (D2), `ProviderSetupFlow`, `ProviderSetupPlan`, `ProviderSetupCommitter`, `ProviderReadiness`/`checkProviderReadiness`; подсказка окна из каталога моделей ядра (реэкспорт функции поиска). 3.1–3.3 зелёные, `web-compile`.
 - [ ] 3.7 `[desktop]` `codelab_ui`: `CodeLabStepBreadcrumb` с превью. 3.5 зелёный.
-- [ ] 3.8 `[desktop]` `ProviderWizardCubit`, `ProviderWizardDialog` (`provider-wizard`, разметка артборда `Wizard`), «Add provider» и «Edit» страницы; `ProviderSetupCommitter` поверх `ClientSecretAccess.admin` и `FileAgentConfigStore`; события `provider_wizard.*`. 3.4 зелёный.
+- [ ] 3.8 `[desktop]` `ProviderWizardCubit`, `ProviderWizardDialog` (`provider-wizard`, разметка артборда `Wizard`), «Add provider» и «Edit» страницы становятся активными (в итерации 2 — неактивны с подсказкой); `ProviderSetupCommitter` поверх `ClientSecretAccess.admin` и `FileAgentConfigStore`; события `provider_wizard.*`. 3.4 зелёный.
 - [ ] 3.9 `[desktop]` `integration_test/embedded_provider_settings_flow_test.dart`, шаги 1, 3, 4 §12.4.13 (мастер до «Save» с ключом в тестовом хранилище и моделью в селекторе композера; «Edit» с `KeepStoredSecret`; конфликт). В `feature/*` — только `fvm flutter analyze`.
+
+Встроенный агент без провайдера (решение пользователя 2026-11-06; design.md D26):
+- [ ] 3.10 `[agent]` Красный `codelab_setup/test/provider_setup_needed_test.dart` (client-agent-setup «Признак «нет провайдера» по типизированным проблемам»; проблемы берутся из настоящего загрузчика на пустом `CODELAB_HOME`, а не построены вручную) и правка `provider_readiness_test.dart`: `NoProviderConfigured` через тот же признак.
+- [ ] 3.11 `[agent]` Реализация `providerSetupNeeded` в основном бареле моста; `checkProviderReadiness` на нём. 3.10 зелёный, `web-compile`.
+- [ ] 3.12 `[desktop]` Красные app: `embedded_transport_resolver_test.dart` (признак в `ProviderSetupOffer` только при `providerSetupNeeded`, сброс при следующей попытке и успехе); виджет-тест баннера (agent-workbench-ui «Встроенный агент без провайдера»: «Новая установка», «Провайдер добавлен из баннера», «Другой профиль за время мастера», «Прочая ошибка конфига»); `providers_page_test.dart` — пустое состояние итерации 2 с той же неактивной кнопкой и подсказкой, с итерации 3 — открывает мастер.
+- [ ] 3.13 `[desktop]` Реализация: порт `ProviderSetupOffer` в `lib/app/`, запись признака в `EmbeddedTransportResolver`, текст и действие баннера, мастер из баннера и переподключение с проверкой номера попытки. 3.12 зелёный.
+- [ ] 3.14 `[desktop]` `integration_test/embedded_provider_settings_flow_test.dart` — шаг «пустой `CODELAB_HOME` → баннер → Add provider → мастер → переподключение». В `feature/*` — только `fvm flutter analyze`.
 
 ## 4. CLI: мастер, первый запуск, `/provider`, `/settings` (итерация 4)
 
