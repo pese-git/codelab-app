@@ -60,7 +60,7 @@ final class ReplHarness {
       resolveProfile: (id) async =>
           profiles[id] ??
           (throw UsageError(
-            'Unknown agent profile "$id". Run "codelab profiles list".',
+            'Unknown agent profile. Run "codelab profiles list".',
           )),
     ).run();
     if (acceptSession) {

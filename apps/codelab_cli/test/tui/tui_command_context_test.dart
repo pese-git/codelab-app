@@ -2,6 +2,8 @@
 // (tasks 5.3 change `add-cli-tui`; spec codelab-tui «Команды и пикеры TUI»;
 // design.md, D10).
 
+import 'dart:io';
+
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_cli/codelab_cli.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
@@ -98,6 +100,39 @@ void main() {
 
     expect(exits, [0]);
     expect(context.keys, same(KeyBindings.tui));
+  });
+
+  // Значения аргументов stdio-профиля не печатаются (design.md change
+  // `redact-cli-stdio-profile-args`, D1, D2).
+  test('switchProfile to a stdio profile that fails to start prints the '
+      'argument count, not the values', () async {
+    const marker = 'sk-test-leak-0123456789';
+    agent.restartAgent();
+    agent.openError = const ProcessException(
+      '/nonexistent/agent',
+      ['--api-key', marker, marker],
+      'No such file or directory',
+      2,
+    );
+
+    await context.switchProfile(
+      const StdioProfile(
+        id: 'broken',
+        label: 'Broken',
+        command: '/nonexistent/agent',
+        args: ['--api-key', marker, marker],
+      ),
+    );
+
+    final note = sent.whereType<NoteMsg>().last.text;
+    expect(
+      note,
+      startsWith(
+        'codelab: cannot connect to "/nonexistent/agent" with 3 arguments:',
+      ),
+    );
+    expect(note, isNot(contains(marker)));
+    expect(note, isNot(contains('--api-key')));
   });
 
   // Тот же текст отказа по токену, что при старте (spec codelab-cli «Отказ

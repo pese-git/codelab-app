@@ -10,6 +10,8 @@ import 'package:test/test.dart';
 
 import '../support/memory_profile_store.dart';
 
+const _marker = 'sk-test-leak-0123456789';
+
 void main() {
   final store = MemoryProfileStore([
     const StdioProfile(
@@ -38,10 +40,42 @@ void main() {
 
   test('stdio: without a command or with a broken quote is a usage '
       'error', () async {
-    for (final value in ['stdio:', 'stdio:   ', 'stdio:run "oops']) {
+    for (final value in [
+      'stdio:',
+      'stdio:   ',
+      'stdio:my-agent --api-key $_marker $_marker "oops',
+    ]) {
       await expectLater(
         resolveAgentProfile(value, store: store),
-        throwsA(isA<UsageError>()),
+        throwsA(
+          isA<UsageError>()
+              .having(
+                (e) => e.message,
+                'message',
+                startsWith('Invalid agent command: '),
+              )
+              .having((e) => e.message, 'message', isNot(contains(_marker)))
+              .having((e) => e.message, 'message', isNot(contains('stdio'))),
+        ),
+        reason: value,
+      );
+    }
+  });
+
+  test('a value without a prefix is not repeated in the unknown-profile '
+      'error (D6)', () async {
+    for (final value in ['my-agent --api-key $_marker $_marker', _marker]) {
+      await expectLater(
+        resolveAgentProfile(value, store: store),
+        throwsA(
+          isA<UsageError>()
+              .having(
+                (e) => e.message,
+                'message',
+                'Unknown agent profile. Run "codelab profiles list".',
+              )
+              .having((e) => e.message, 'message', isNot(contains(_marker))),
+        ),
         reason: value,
       );
     }
@@ -98,7 +132,7 @@ void main() {
         isA<UsageError>().having(
           (e) => e.message,
           'message',
-          contains('Unknown agent profile "nope"'),
+          'Unknown agent profile. Run "codelab profiles list".',
         ),
       ),
     );
@@ -186,6 +220,20 @@ void main() {
       );
     },
   );
+
+  // Правило D3 design.md change `redact-cli-stdio-profile-args`: label,
+  // заполненный из значения `--agent`, в `/profile` не печатается.
+  group('isLabelFromAgentValue', () {
+    for (final label in ['', '  ', ' stdio:x', 'ws://h', 'wss://h']) {
+      test('"$label" is taken from --agent', () {
+        expect(isLabelFromAgentValue(label), isTrue);
+      });
+    }
+
+    test('a human label is kept', () {
+      expect(isLabelFromAgentValue('Dev agent'), isFalse);
+    });
+  });
 
   test('a broken profiles file is a usage error', () async {
     await expectLater(

@@ -1,5 +1,6 @@
-// Текст причины сбоя старта агента и адрес профиля в нём (spec codelab-cli
-// «Отказ подключения из-за токена»; AGENTS.md §10, §16).
+// Текст причины сбоя старта агента и описание профиля в нём (spec codelab-cli
+// «Отказ подключения из-за токена», «Аргументы stdio-профиля в выводе CLI»;
+// AGENTS.md §10, §16).
 
 import 'package:codelab_cli/codelab_cli.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
@@ -92,6 +93,36 @@ void main() {
       );
 
       expect(describeProfile(profile), 'wss://host.example');
+    });
+  });
+
+  // Значения аргументов stdio-профиля не печатаются (design.md change
+  // `redact-cli-stdio-profile-args`, D1, D2).
+  group('describeProfile of a stdio profile', () {
+    const marker = 'sk-test-leak-0123456789';
+
+    StdioProfile stdio(String command, [List<String> args = const []]) =>
+        StdioProfile(id: 'p', label: 'P', command: command, args: args);
+
+    test('without arguments it is the quoted command', () {
+      expect(describeProfile(stdio('codelab-agent')), '"codelab-agent"');
+    });
+
+    test('one argument is "1 argument"', () {
+      expect(
+        describeProfile(stdio('codelab-agent', ['--stdio'])),
+        '"codelab-agent" with 1 argument',
+      );
+    });
+
+    test('argument values never reach the description', () {
+      final text = describeProfile(
+        stdio('my-agent', ['--api-key', marker, marker]),
+      );
+
+      expect(text, '"my-agent" with 3 arguments');
+      expect(text, isNot(contains(marker)));
+      expect(text, isNot(contains('--api-key')));
     });
   });
 }
