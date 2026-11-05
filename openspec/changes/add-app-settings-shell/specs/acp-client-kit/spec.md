@@ -18,6 +18,7 @@
 
 **WebSocket.**
 - URL SHALL иметь схему `ws` или `wss` и непустой хост.
+- URL с userinfo (имя пользователя, с паролем или без) SHALL давать проблему `urlUserInfo` с текстом `Remove the user name and password from the URL; use the Token setting instead.`, и `toProfile` профиль НЕ SHALL строить: userinfo попал бы в `profiles.json` и ушёл бы на сервер заголовком Basic auth (design.md change `add-app-settings-shell`, D11). Текст проблемы НЕ SHALL содержать URL и userinfo.
 - `ws://` к хосту вне `localhost`, `127.0.0.0/8` и `::1` SHALL давать предупреждение `plaintextToRemote`. Оно требует подтверждения, но не запрещает сохранение.
 - Выбор токена — `NoToken`, `EnvToken(name)` с именем переменной по правилу `^[A-Za-z_][A-Za-z0-9_]*$` (профиль получает `tokenRef: env:<name>`) или `KeepTokenRef(ref)` для существующего профиля.
 
@@ -39,6 +40,10 @@
 - **WHEN** проверяются URL `ws://localhost:8765`, `ws://10.0.0.5:8765` и `wss://devbox:7420`
 - **THEN** предупреждение `plaintextToRemote` есть только у второго
 
+#### Scenario: Userinfo в URL
+- **WHEN** проверяются WebSocket-черновики с URL `ws://u:sk-test-leak-0123456789@10.0.0.5:8765` и `wss://u@devbox:7420`
+- **THEN** у обоих есть проблема `urlUserInfo`, её текст не содержит `u:`, `u@` и `sk-test-leak-0123456789`, а `toProfile` профиль не строит
+
 #### Scenario: Токен из переменной окружения
 - **WHEN** WebSocket-черновик с `EnvToken('DEVBOX_TOKEN')` превращается в профиль, а черновик с `EnvToken('1BAD')` проверяется
 - **THEN** профиль хранит `tokenRef: env:DEVBOX_TOKEN`, а второй черновик даёт проблему имени переменной
@@ -58,13 +63,13 @@
 Исход — `ProfileProbeOutcome`:
 - `Reachable(latency, agentName, agentVersion)`;
 - `Unauthorized`;
-- `Unreachable(message)`;
+- `Unreachable(message, {reason = UnreachableReason.unknown, statusCode})` — `reason` типа `UnreachableReason` (enum: `connectionRefused`, `hostNotFound`, `tlsFailed`, `httpStatus`, `unknown`); `statusCode` — HTTP-статус отказа рукопожатия WebSocket (не 401/403) — SHALL быть задан только при `httpStatus`;
 - `TimedOut`;
 - `NotAcp`;
 - `CommandNotFound`;
 - `Unsupported`.
 
-Сообщение SHALL проходить `describeFailure`. Ошибки IO-транспорта SHALL классифицироваться функцией, которую передаёт хост (`classifyProbeFailure` из `codelab_client_io`). Если причину нельзя установить по типу ошибки, исход SHALL быть `Unreachable`; по тексту исход НЕ SHALL угадываться. Отменённая проверка SHALL закрывать транспорт и завершаться без исхода для вызывающего.
+`message` SHALL проходить `describeFailure` и предназначен только для журнала и диагностики: хосты НЕ SHALL строить из него текст для пользователя (design.md change `add-app-settings-shell`, D12). Ошибки IO-транспорта SHALL классифицироваться функцией, которую передаёт хост (`classifyProbeFailure` из `codelab_client_io`). Причина SHALL определяться только по типам и кодам ошибок; если её нельзя установить по типу ошибки, исход SHALL быть `Unreachable` с причиной `unknown`; по тексту исход и причина НЕ SHALL угадываться. Ошибка, которую классификатор хоста не распознал или которого нет, SHALL давать `Unreachable` с причиной `unknown`. Отменённая проверка SHALL закрывать транспорт и завершаться без исхода для вызывающего.
 
 #### Scenario: Успешная проверка
 - **WHEN** проверяется stdio-профиль scripted-агента из `codelab_acp_testing`
@@ -112,9 +117,14 @@
 - `ioTransportResolver` — `ConfigTransportResolver` kit с настоящими транспортами stdio и WebSocket;
 - `JsonFileProfileStore` (`$CODELAB_HOME/profiles.json`, общий файл CLI и app);
 - `JsonFileRecentProjectsStore`;
-- `classifyProbeFailure` — перевод ошибок IO-транспортов в исход `ProfileProbe`: отсутствующая команда — `CommandNotFound`, отказ рукопожатия WebSocket со статусом 401 или 403 — `Unauthorized`, остальное — `Unreachable`.
+- `classifyProbeFailure` — перевод ошибок IO-транспортов в исход `ProfileProbe` только по типам и кодам ошибок, без разбора текста:
+  - отсутствующая команда (`ProcessException` с errno `ENOENT`) — `CommandNotFound`;
+  - `AcpWebSocketHandshakeRejected` со статусом 401 или 403 — `Unauthorized`, с другим статусом — `Unreachable` с причиной `httpStatus` и этим `statusCode`;
+  - `SocketException`, чей `osError.errorCode` — код «соединение отклонено» текущей платформы, — `Unreachable(connectionRefused)`; код «хост не найден» (ошибка разрешения имени) — `Unreachable(hostNotFound)`; коды берутся из таблицы по платформе;
+  - `HandshakeException` или `TlsException` — `Unreachable(tlsFailed)`;
+  - остальное — `Unreachable(unknown)`.
 
-Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app. `ProfileStore.remove(id)` SHALL удалять профиль с этим `id` и возвращать `true`, а без такого профиля — возвращать `false` и не менять файл.
+Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app. `ProfileStore.remove(id)` SHALL удалять профиль с этим `id` и возвращать `true`, а без такого профиля — возвращать `false` и не менять файл. `JsonFileProfileStore` SHALL записывать `profiles.json` через уникальный временный файл в том же каталоге, сброшенный на диск (`flush`) до атомарного переименования: прерванная запись НЕ SHALL оставлять под именем `profiles.json` пустой или неполный файл (design.md change `add-app-settings-shell`, D7).
 
 #### Scenario: Профили сохраняются в JSON
 - **WHEN** `JsonFileProfileStore` сохраняет профиль `WebSocketProfile` и читает его заново
@@ -127,3 +137,23 @@
 #### Scenario: Классификация отсутствующей команды
 - **WHEN** `StdioAcpTransport` с командой `/nonexistent/agent` не стартует, и ошибка передана `classifyProbeFailure`
 - **THEN** результат — `CommandNotFound`
+
+#### Scenario: Закрытый порт
+- **WHEN** `WebSocketAcpTransport` подключается к закрытому порту loopback, и ошибка передана `classifyProbeFailure`
+- **THEN** результат — `Unreachable` с причиной `connectionRefused`
+
+#### Scenario: Хост не найден
+- **WHEN** `classifyProbeFailure` получает `SocketException` разрешения имени с кодом «хост не найден» текущей платформы
+- **THEN** результат — `Unreachable` с причиной `hostNotFound`
+
+#### Scenario: Сбой TLS
+- **WHEN** `WebSocketAcpTransport` подключается по `wss://` к серверу на loopback, который не говорит TLS, и ошибка передана `classifyProbeFailure`
+- **THEN** результат — `Unreachable` с причиной `tlsFailed`
+
+#### Scenario: Отказ рукопожатия по статусу
+- **WHEN** WebSocket-сервер на loopback отвечает на рукопожатие статусом 401, затем 403, затем 500
+- **THEN** результаты — `Unauthorized`, `Unauthorized` и `Unreachable` с причиной `httpStatus` и `statusCode` 500
+
+#### Scenario: Нераспознанная ошибка
+- **WHEN** `classifyProbeFailure` получает исключение незнакомого типа, чей текст содержит `connection refused` и `401`
+- **THEN** результат — `Unreachable` с причиной `unknown`: текст ошибки не влияет на классификацию
