@@ -31,6 +31,15 @@ void main() {
     ]);
   });
 
+  test('a rewrite replaces the whole previous content', () async {
+    final path = '${tmp.path}/profiles.json';
+    await writeJsonObject(path, {'a': List.filled(500, 1), 'old': true});
+
+    await writeJsonObject(path, {'b': 2});
+
+    expect(await readJsonObject(path), {'b': 2});
+  });
+
   test('a failed rename removes the temporary file', () async {
     // Цель — каталог: rename файла на каталог падает.
     final path = '${tmp.path}/target';

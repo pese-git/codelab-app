@@ -8,6 +8,8 @@
 // дружит с настоящим файлом); сам файл проверяют тесты Cubit-а.
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart'
+    show AcpWebSocketHandshakeRejected;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
@@ -47,6 +49,13 @@ final _plain = ConnectionProfile.webSocket(
   id: 'plain',
   label: 'Plain',
   uri: Uri.parse('ws://plain:1/acp'),
+);
+
+final _tokened = ConnectionProfile.webSocket(
+  id: 'tokened',
+  label: 'Tokened',
+  uri: Uri.parse('ws://tokened:1/acp?t=sk-test-leak-0123456789'),
+  tokenRef: 'env:DEVBOX_TOKEN',
 );
 
 final _named = ConnectionProfile.webSocket(
@@ -118,6 +127,23 @@ void main() {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
+    await tester.pumpAndSettle();
+  }
+
+  /// Ждёт исход «Test connection» строки [id]: проба опирается на настоящие
+  /// события, которые fake-async зона сама не продвигает, поэтому реальное
+  /// время и кадры чередуются, пока в строке не появится исход.
+  Future<void> probeFinished(WidgetTester tester, String id) async {
+    for (
+      var i = 0;
+      i < 100 && _key('connection-profile-probe-$id').evaluate().isEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     await tester.pumpAndSettle();
   }
 
@@ -690,6 +716,192 @@ void main() {
         ),
         findsOneWidget,
       );
+      await tearDownApp(tester);
+    });
+  });
+
+  group('rename and test connection (iteration 3)', () {
+    testWidgets('Rename edits the label in the row and changes only the '
+        'label: id, command, arguments and env stay', (tester) async {
+      final store = InMemoryProfileStore([_dev, _plain]);
+      await openPage(tester, store: store);
+
+      await tester.tap(_key('connection-profile-rename-dev'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextBox>(_key('connection-profile-rename-field-dev'))
+            .controller!
+            .text,
+        'Dev',
+      );
+      await tester.enterText(
+        _key('connection-profile-rename-field-dev'),
+        '  Build box  ',
+      );
+      await tester.pump();
+      await tester.tap(_key('connection-profile-rename-save-dev'));
+      await tester.pumpAndSettle();
+
+      final original = _dev as StdioProfile;
+      final renamed = store.profiles.first as StdioProfile;
+      expect(renamed.id, 'dev');
+      expect(renamed.label, 'Build box');
+      expect(renamed.command, original.command);
+      expect(renamed.args, original.args);
+      expect(renamed.env, original.env);
+      expect(renamed.runInProjectDirectory, original.runInProjectDirectory);
+      expect(store.profiles.last, _plain);
+      expect(find.text('Build box'), findsWidgets);
+      expect(_key('connection-profile-rename-field-dev'), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Cancel leaves the label; an empty name cannot be saved', (
+      tester,
+    ) async {
+      final store = InMemoryProfileStore([_dev]);
+      await openPage(tester, store: store);
+
+      await tester.tap(_key('connection-profile-rename-dev'));
+      await tester.pumpAndSettle();
+      await tester.enterText(_key('connection-profile-rename-field-dev'), '');
+      await tester.pump();
+      expect(
+        tester
+            .widget<CodeLabButton>(_key('connection-profile-rename-save-dev'))
+            .onPressed,
+        isNull,
+      );
+
+      await tester.tap(_key('connection-profile-rename-cancel-dev'));
+      await tester.pumpAndSettle();
+
+      expect(store.profiles.single, _dev);
+      expect(_key('connection-profile-rename-field-dev'), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Rename is unavailable for the built-in agent', (tester) async {
+      await openPage(tester, stored: [_dev]);
+
+      expect(_key('connection-profile-rename-embedded'), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Test connection shows the outcome in the row and removes '
+        'the "Not tested" badge', (tester) async {
+      await openPage(tester, stored: [_plain]);
+      Finder notTested() => find.descendant(
+        of: _key('connection-profile-row-plain'),
+        matching: find.text('Not tested'),
+      );
+      expect(notTested(), findsOneWidget);
+
+      await tester.tap(_key('connection-profile-test-plain'));
+      await probeFinished(tester, 'plain');
+
+      expect(
+        find.descendant(
+          of: _key('connection-profile-probe-plain'),
+          matching: find.textContaining('Reachable · '),
+        ),
+        findsOneWidget,
+      );
+      expect(notTested(), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('a failed test shows the outcome without the address', (
+      tester,
+    ) async {
+      await openPage(
+        tester,
+        stored: [_plain],
+        webSocketTransportFactory: (_) =>
+            throw StateError('refused ws://plain:1/acp?t=secret'),
+      );
+
+      await tester.tap(_key('connection-profile-test-plain'));
+      await probeFinished(tester, 'plain');
+
+      expect(
+        find.descendant(
+          of: _key('connection-profile-probe-plain'),
+          matching: find.text('Unreachable'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('t=secret'), findsNothing);
+      await tearDownApp(tester);
+    });
+  });
+
+  group('row probe texts come from typed data (3.8b, D12)', () {
+    String probeText(WidgetTester tester, String id) => tester
+        .widget<CodeLabBadge>(
+          find.descendant(
+            of: _key('connection-profile-probe-$id'),
+            matching: find.byType(CodeLabBadge),
+          ),
+        )
+        .label;
+
+    testWidgets('an HTTP status of the handshake is shown as "Unreachable: '
+        'HTTP <status>", the URL with the marker is not', (tester) async {
+      await openPage(
+        tester,
+        stored: [_tokened],
+        webSocketTransportFactory: (_) =>
+            throw const AcpWebSocketHandshakeRejected(502),
+      );
+
+      await tester.tap(_key('connection-profile-test-tokened'));
+      await probeFinished(tester, 'tokened');
+
+      expect(probeText(tester, 'tokened'), 'Unreachable: HTTP 502');
+      expect(find.textContaining('sk-test-leak'), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('401 with a token from a set variable: the agent rejected '
+        'the token', (tester) async {
+      await openPage(
+        tester,
+        stored: [_tokened],
+        environment: const {'DEVBOX_TOKEN': 'sk-test-leak-0123456789'},
+        webSocketTransportFactory: (_) =>
+            throw const AcpWebSocketHandshakeRejected(401),
+      );
+
+      await tester.tap(_key('connection-profile-test-tokened'));
+      await probeFinished(tester, 'tokened');
+
+      expect(
+        probeText(tester, 'tokened'),
+        'Unauthorized: the agent rejected the token',
+      );
+      expect(find.textContaining('sk-test-leak'), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('401 without a token, and with a variable that is not set: '
+        'the agent requires a token', (tester) async {
+      await openPage(
+        tester,
+        stored: [_plain, _tokened],
+        webSocketTransportFactory: (_) =>
+            throw const AcpWebSocketHandshakeRejected(401),
+      );
+
+      await tester.tap(_key('connection-profile-test-plain'));
+      await probeFinished(tester, 'plain');
+      await tester.tap(_key('connection-profile-test-tokened'));
+      await probeFinished(tester, 'tokened');
+
+      const text = 'Unauthorized: the agent requires a token';
+      expect(probeText(tester, 'plain'), text);
+      expect(probeText(tester, 'tokened'), text);
       await tearDownApp(tester);
     });
   });
