@@ -6,6 +6,7 @@ import 'package:codelab_client_io/codelab_client_io.dart'
     show CodelabHomeException, resolveCodelabHome;
 import 'package:codelab_setup/io.dart' as setup;
 
+import '../core/platform/home_path_label.dart';
 import 'connection_environment.dart';
 
 /// Открывает [ProfileSecrets] поверх `ClientSecretAccess` для `CODELAB_HOME`
@@ -49,13 +50,16 @@ Future<ProfileSecrets> openProfileSecrets({
     logger: logger,
   );
   final info = access.backend;
+  // В подсказках путь дома сокращён до `~` тем же кодом, что подзаголовок
+  // диалога «Add connection profile» (`homePathLabel`).
+  final shownHome = homePathLabel(home, environment.variables);
   // Причина настройки (битый `config.yaml`, недопустимое `secrets.backend`)
   // приходит отдельным полем; обычный `auto → env` его не заполняет, и для
   // него остаётся совет CLI (design.md change `add-provider-setup-ui`, D3).
   final problem = access.configProblem;
   return ClientProfileSecrets._(
     access,
-    home,
+    shownHome,
     ProfileSecretBackend(
       id: info.id,
       writable: info.writable,
@@ -63,7 +67,7 @@ Future<ProfileSecrets> openProfileSecrets({
           ? info.unavailableReason
           : problem != null
           ? _sentence(problem)
-          : await _readOnlyReason(access, home),
+          : await _readOnlyReason(access, shownHome),
     ),
     problem,
   );

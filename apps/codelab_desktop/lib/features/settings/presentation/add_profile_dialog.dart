@@ -285,6 +285,7 @@ class _Fields extends StatelessWidget {
           ],
           child: _FormTextBox(
             fieldKey: const ValueKey('add-profile-name'),
+            field: ProfileDraftField.label,
             value: draft.label,
             placeholder: 'devbox 2',
             onChanged: cubit.setLabel,
@@ -335,6 +336,7 @@ class _Fields extends StatelessWidget {
         notes: [?error(ProfileDraftField.command)],
         child: _FormTextBox(
           fieldKey: const ValueKey('add-profile-command'),
+          field: ProfileDraftField.command,
           value: draft.command,
           placeholder: 'codelab-agent',
           mono: true,
@@ -351,6 +353,7 @@ class _Fields extends StatelessWidget {
         ],
         child: _FormTextBox(
           fieldKey: const ValueKey('add-profile-args'),
+          field: ProfileDraftField.args,
           value: draft.args,
           placeholder: 'serve --stdio',
           mono: true,
@@ -375,6 +378,7 @@ class _Fields extends StatelessWidget {
         notes: [?error(ProfileDraftField.env)],
         child: _FormTextBox(
           fieldKey: const ValueKey('add-profile-env'),
+          field: ProfileDraftField.env,
           value: draft.env,
           placeholder: 'RUST_LOG=info',
           mono: true,
@@ -401,6 +405,7 @@ class _Fields extends StatelessWidget {
         ],
         child: _FormTextBox(
           fieldKey: const ValueKey('add-profile-url'),
+          field: ProfileDraftField.url,
           value: draft.url,
           placeholder: 'wss://host:7420',
           mono: true,
@@ -409,18 +414,6 @@ class _Fields extends StatelessWidget {
       ),
       CodeLabFormRow(
         label: 'Token',
-        // Подсказки D13 показываются всегда: они объясняют, почему вариантов
-        // два и почему значения токена здесь нет.
-        notes: const [
-          CodeLabFormNote(
-            'CodeLab reads the token from this environment variable when it '
-            'connects. Token values are not saved in profiles.json.',
-          ),
-          CodeLabFormNote(
-            'Apps opened from Finder do not see variables set in your shell '
-            'profile.',
-          ),
-        ],
         child: _TokenChoices(form: form, error: error(ProfileDraftField.token)),
       ),
     ];
@@ -559,10 +552,28 @@ class _TokenChoices extends StatelessWidget {
             padding: const EdgeInsets.only(left: 28),
             child: _FormTextBox(
               fieldKey: const ValueKey('add-profile-token-env-name'),
+              field: ProfileDraftField.token,
               value: form.tokenEnvName,
               placeholder: defaultTokenEnvName,
               mono: true,
               onChanged: cubit.setTokenEnvName,
+            ),
+          ),
+          // Подписи варианта видны, только когда он выбран (как «Saved as …»
+          // у «Store a new token»): они объясняют, откуда берётся токен и
+          // почему приложение из Finder может его не увидеть.
+          const Padding(
+            padding: _indent,
+            child: CodeLabFormNote(
+              'CodeLab reads the token from this environment variable when '
+              'it connects. Token values are not saved in profiles.json.',
+            ),
+          ),
+          const Padding(
+            padding: _indent,
+            child: CodeLabFormNote(
+              'Apps opened from Finder do not see variables set in your '
+              'shell profile.',
             ),
           ),
           if (form.tokenNotice case final notice?)
@@ -604,6 +615,7 @@ class _IdLine extends StatelessWidget {
           width: 200,
           child: _FormTextBox(
             fieldKey: const ValueKey('add-profile-id'),
+            field: ProfileDraftField.id,
             value: id,
             placeholder: 'profile-id',
             mono: true,
@@ -754,10 +766,14 @@ class _FormTextBox extends StatefulWidget {
     required this.fieldKey,
     required this.value,
     required this.onChanged,
+    this.field,
     this.placeholder,
     this.mono = false,
     this.maxLines = 1,
   });
+
+  /// Поле черновика: при потере фокуса Cubit показывает его ошибку.
+  final ProfileDraftField? field;
 
   /// Ключ самого `TextBox`: по нему тесты вводят и читают текст.
   final Key fieldKey;
@@ -775,6 +791,22 @@ class _FormTextBoxState extends State<_FormTextBox> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.value,
   );
+  final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocus);
+  }
+
+  // Потеря фокуса — «пользователь покинул поле»: ошибка поля становится
+  // видна, даже если он ничего не ввёл (решает Cubit, `touchField`).
+  void _onFocus() {
+    final field = widget.field;
+    if (!_focusNode.hasFocus && field != null && mounted) {
+      context.read<AddProfileCubit>().touchField(field);
+    }
+  }
 
   @override
   void didUpdateWidget(_FormTextBox oldWidget) {
@@ -789,6 +821,9 @@ class _FormTextBoxState extends State<_FormTextBox> {
 
   @override
   void dispose() {
+    _focusNode
+      ..removeListener(_onFocus)
+      ..dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -798,6 +833,7 @@ class _FormTextBoxState extends State<_FormTextBox> {
     return TextBox(
       key: widget.fieldKey,
       controller: _controller,
+      focusNode: _focusNode,
       placeholder: widget.placeholder,
       minLines: 1,
       maxLines: widget.maxLines,
