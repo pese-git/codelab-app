@@ -1,6 +1,8 @@
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../../cli_args.dart';
+import '../../profiles/profile_arg.dart';
+import '../../session_setup.dart';
 import '../repl_command.dart';
 
 /// `/profile [id]` — текущий профиль или подключение к другому: id из
@@ -21,13 +23,19 @@ final class ProfileCommand implements ReplCommand {
   Future<void> run(ReplContext context, List<String> args) async {
     if (args.isEmpty) {
       final profile = context.profile;
-      context.say(
-        'Profile ${profile.id} (${profile.label}): ${switch (profile) {
-          StdioProfile(:final command, :final args) => 'stdio ${[command, ...args].join(' ')}',
-          WebSocketProfile(:final uri) => '$uri',
-          EmbeddedProfile(:final hostProfile) => 'embedded $hostProfile',
-        }}',
-      );
+      // `label` профиля из `--agent` — исходная командная строка; в скобках
+      // его нет (D3), а описание stdio — команда и число аргументов (D1, D2).
+      final label = isLabelFromAgentValue(profile.label)
+          ? ''
+          : ' (${profile.label})';
+      final description = switch (profile) {
+        StdioProfile() => 'stdio ${describeProfile(profile)}',
+        // Только origin: query и userinfo несут секреты (требование «Адрес
+        // WebSocket-профиля в выводе CLI» change `add-provider-setup-ui`).
+        WebSocketProfile() => describeProfile(profile),
+        EmbeddedProfile(:final hostProfile) => 'embedded $hostProfile',
+      };
+      context.say('Profile ${profile.id}$label: $description');
       return;
     }
     final ConnectionProfile profile;

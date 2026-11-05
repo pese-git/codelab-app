@@ -102,9 +102,30 @@ Future<ConnectionProfile> resolveAgentProfile(
       return profile;
     }
   }
-  throw UsageError(
-    'Unknown agent profile "$value". Run "codelab profiles list".',
-  );
+  // Значение не цитируется: без префикса `stdio:` оно может оказаться
+  // командной строкой с токеном (`-a 'my-agent --token sk-…'`), а голый токен
+  // проходит и проверку id (design.md change `redact-cli-stdio-profile-args`,
+  // D6). Список id — `codelab profiles list`.
+  throw const UsageError('Unknown agent profile. Run "codelab profiles list".');
+}
+
+/// Взят ли [label] профиля из значения `--agent` (`stdio:…`, `ws://…`,
+/// `wss://…`) или пуст.
+///
+/// Почему: [inlineAgentProfile] кладёт в `label` исходную строку `--agent`, а
+/// у stdio-профиля это командная строка с аргументами; печатать её как
+/// подпись значит повторить значения (design.md change
+/// `redact-cli-stdio-profile-args`, D3). Правило то же, что `profileTitle`
+/// codelab-app.
+///
+/// Как использовать: `/profile` не выводит `label` в скобках, если ответ
+/// `true`.
+bool isLabelFromAgentValue(String label) {
+  final trimmed = label.trim();
+  return trimmed.isEmpty ||
+      trimmed.startsWith('stdio:') ||
+      trimmed.startsWith('ws://') ||
+      trimmed.startsWith('wss://');
 }
 
 /// Есть ли в хранилище прежняя запись `default`; нечитаемый файл — нет.
@@ -134,10 +155,13 @@ ConnectionProfile? inlineAgentProfile(String value, {required String id}) {
     try {
       words = parseShellWords(value.substring('stdio:'.length));
     } on FormatException catch (error) {
-      throw UsageError('Invalid agent command "$value": ${error.message}.');
+      // Значение `--agent` в тексте не повторяется: в нём может быть токен
+      // (design.md change `redact-cli-stdio-profile-args`, D4); `source`
+      // ошибки разбора тоже не печатается.
+      throw UsageError('Invalid agent command: ${error.message}.');
     }
     if (words.isEmpty || words.first.isEmpty) {
-      throw UsageError('Invalid agent command "$value": no command.');
+      throw const UsageError('Invalid agent command: no command.');
     }
     return ConnectionProfile.stdio(
       id: id,
