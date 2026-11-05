@@ -4,6 +4,7 @@ import 'package:flutter/widget_previews.dart';
 import 'codelab_approval_option_group.dart';
 import 'codelab_connection_banner.dart';
 import 'codelab_connection_status_row.dart';
+import 'codelab_form.dart';
 import 'codelab_prompt_composer.dart';
 import 'codelab_settings_row.dart';
 import 'codelab_settings_section.dart';
@@ -183,17 +184,82 @@ Widget codelabSettingsSectionPreview() {
   );
 }
 
+/// Образец формы «Add connection profile» (макет `AddProfile`): переключатель
+/// типа, поле с подсказкой, предупреждением и ошибкой.
+///
+/// Почему отдельная функция: светлое и тёмное превью показывают одно и то же,
+/// и содержимое не должно разойтись (design.md change
+/// `add-app-settings-shell`, D16, задача 3.8a).
+Widget _formSample() {
+  return CodeLabForm(
+    children: [
+      CodeLabFormRow(
+        label: 'Type',
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: CodeLabSegmentedControl<String>(
+            value: 'websocket',
+            semanticLabel: 'Profile type',
+            options: const [
+              CodeLabSegment(value: 'stdio', label: 'Local stdio'),
+              CodeLabSegment(value: 'websocket', label: 'WebSocket'),
+            ],
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+      CodeLabFormRow(
+        label: 'URL',
+        notes: const [
+          CodeLabFormNote('Use ws:// or wss:// with a host.'),
+          CodeLabFormNote(
+            'ws:// to another machine: the token is sent unencrypted.',
+            tone: CodeLabFormNoteTone.warning,
+          ),
+          CodeLabFormNote('Enter a name.', tone: CodeLabFormNoteTone.error),
+        ],
+        child: const TextBox(placeholder: 'wss://host:7420/acp'),
+      ),
+    ],
+  );
+}
+
+@Preview(
+  name: 'Form rows and notes',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 220),
+)
+Widget codelabFormPreview() {
+  return _AcpPreviewSurface(child: _formSample());
+}
+
+@Preview(
+  name: 'Form rows and notes (dark)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 220),
+  brightness: Brightness.dark,
+)
+Widget codelabFormDarkPreview() {
+  return _AcpPreviewSurface(brightness: Brightness.dark, child: _formSample());
+}
+
 class _AcpPreviewSurface extends StatelessWidget {
-  const _AcpPreviewSurface({required this.child});
+  const _AcpPreviewSurface({
+    required this.child,
+    this.brightness = Brightness.light,
+  });
 
   final Widget child;
+
+  /// Тема превью: тёмный вариант нужен виджетам с тонами и обводками (D16).
+  final Brightness brightness;
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.ltr,
       child: FluentTheme(
-        data: FluentThemeData(),
+        data: FluentThemeData(brightness: brightness),
         child: Builder(
           builder: (context) {
             return ColoredBox(

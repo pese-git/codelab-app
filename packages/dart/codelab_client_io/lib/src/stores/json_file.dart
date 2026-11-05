@@ -26,7 +26,9 @@ Future<Map<String, Object?>?> readJsonObject(String path) async {
 /// записи писали бы в один файл и переименование отдало бы смесь. Имя
 /// содержит pid и случайный суффикс, поэтому каждый писатель работает со
 /// своим файлом, а `rename` в том же каталоге атомарен: итог — запись
-/// последнего писателя целиком. При сбое временный файл удаляется.
+/// последнего писателя целиком. Права доступа прежнего файла не переносятся:
+/// в `dart:io` нет API установки режима без запуска процесса. При сбое
+/// временный файл удаляется.
 Future<void> writeJsonObject(String path, Map<String, Object?> value) async {
   final file = File(path);
   await file.parent.create(recursive: true);
@@ -35,6 +37,9 @@ Future<void> writeJsonObject(String path, Map<String, Object?> value) async {
   try {
     await temporary.writeAsString(
       const JsonEncoder.withIndent('  ').convert(value),
+      // flush: данные дошли до диска до rename, иначе после сбоя питания
+      // на месте профилей может оказаться пустой файл.
+      flush: true,
     );
     await temporary.rename(path);
   } on Object {

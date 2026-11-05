@@ -7,6 +7,9 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ConnectionProfile,
         Connected,
         ConnectionView,
+        ProbeCancellation,
+        ProfileProbe,
+        ProfileProbeOutcome,
         Reconnecting,
         ProfileStore,
         UnsupportedTokenRef,
@@ -20,6 +23,7 @@ import '../../../core/platform/connection_preferences.dart';
 import 'connection_commands.dart';
 import 'connection_settings_state.dart';
 import 'embedded_profile.dart';
+import 'probe_outcome_view.dart';
 import 'profiles_unavailable.dart';
 import 'profile_view.dart';
 
@@ -61,8 +65,12 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     required ConnectionCommands commands,
     required Map<String, String> environment,
     required String? profilesPath,
+    required ProfileProbe probe,
+    required String Function() projectDirectory,
     Logger? logger,
   }) : _store = store,
+       _probe = probe,
+       _projectDirectory = projectDirectory,
        _preferences = preferences,
        _workspace = workspace,
        _commands = commands,
@@ -83,12 +91,35 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   final Map<String, String> _environment;
   final String? _profilesPath;
   final Logger? _logger;
+
+  /// Проверка профиля строки «Test connection» (D12); та же, что у диалога.
+  final ProfileProbe _probe;
+
+  /// Папка проекта для stdio-профилей с «Run in the project folder».
+  final String Function() _projectDirectory;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
   late final StreamSubscription<ConnectionProfile?> _targetSubscription;
 
   /// Номер чтения: результат, пришедший после более нового [reload],
   /// отбрасывается.
   var _loadAttempt = 0;
+
+  /// Исходы проверок за жизнь страницы (D14).
+  final _probes = <String, ProfileProbeOutcome>{};
+
+  /// Профиль, для которого получен исход в [_probes]: после перечитывания
+  /// исход остаётся, только если профиль с тем же id не изменился (другой
+  /// URL, команда или ссылка на токен) — иначе метка «проверен» относилась бы
+  /// к чужой конфигурации (целостность данных, корневой `AGENTS.md` §2).
+  final _probedProfiles = <String, ConnectionProfile>{};
+
+  /// Успешные проверки диалога, ещё не привязанные к прочитанному профилю.
+  final _pendingTested = <String, ProfileProbeOutcome>{};
+
+  /// Идущие проверки строк: id → (номер, отмена). Новая проверка той же
+  /// строки и `close()` отменяют прежнюю (AGENTS.md §9).
+  final _probing = <String, ({int operation, ProbeCancellation cancel})>{};
+  var _probeSeq = 0;
 
   // Загруженные данные; состояние собирается из них и из `WorkspaceState`.
   List<ConnectionProfile> _stored = const [];
@@ -169,6 +200,26 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     }
     _readable = true;
     _stored = usable;
+    // Исход удалённого (например, из CLI) профиля не переживает перечитывание.
+    // Исход изменённого профиля тоже сбрасывается: сравнение целиком.
+    _probes.removeWhere((id, _) {
+      final stored = usable.where((p) => p.id == id).firstOrNull;
+      final probed = _probedProfiles[id];
+      return stored == null ||
+          probed == null ||
+          !_sameConnection(stored, probed);
+    });
+    _probedProfiles.removeWhere((id, _) => !_probes.containsKey(id));
+    // Исходы диалога привязываются к только что прочитанному профилю; чтение,
+    // вытесненное более новым, их не теряет — они ждут в `_pendingTested`.
+    for (final MapEntry(:key, :value) in _pendingTested.entries) {
+      final added = usable.where((p) => p.id == key).firstOrNull;
+      if (added != null) {
+        _probes[key] = value;
+        _probedProfiles[key] = added;
+      }
+    }
+    _pendingTested.clear();
     _defaultId = savedDefault ?? embeddedProfileId;
     _connectOnStart = connectOnStart;
     _ignoredDefault = ignoredDefault;
@@ -204,7 +255,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
         id == embeddedProfileId ? null : id,
       );
     } on Object catch (error) {
-      _fail(id, error);
+      _fail(id, error, stage: 'default');
       return;
     }
     if (isClosed) {
@@ -283,7 +334,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     try {
       removed = await _store.remove(id);
     } on Object catch (error) {
-      _fail(id, error);
+      _fail(id, error, stage: 'profile');
       return false;
     }
     if (isClosed) {
@@ -299,6 +350,117 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     return removed;
   }
 
+  /// «Rename»: меняет только `label` профиля [id]; `true` — запись изменена.
+  ///
+  /// Профиль берётся из файла как он есть сейчас, а не из копии страницы:
+  /// поле, которое успел поменять CLI, не теряется. Встроенный агент, неизвестный
+  /// id, пустое имя и нечитаемый файл отклоняются здесь, а не только
+  /// недоступной кнопкой (spec app-settings «Rename» и «Remove» профиля).
+  Future<bool> renameProfile(String id, String label) async {
+    final current = state;
+    final text = label.trim();
+    if (current is! ConnectionSettingsReady || text.isEmpty) {
+      return false;
+    }
+    final row = current.rows.where((r) => r.id == id).firstOrNull;
+    if (row == null || !row.hasFileActions) {
+      return false;
+    }
+    try {
+      final stored = await _store.load();
+      final profile = stored.where((p) => p.id == id).firstOrNull;
+      if (profile == null) {
+        await reload();
+        return false;
+      }
+      await _store.save(profile.copyWith(label: text));
+    } on Object catch (error) {
+      _fail(id, error, stage: 'profile');
+      return false;
+    }
+    if (isClosed) {
+      return true;
+    }
+    // Имя в журнал не пишется: оно может оказаться чем угодно (D17).
+    _logger?.info('connection_profile.renamed', context: {'profile_id': id});
+    await reload();
+    return true;
+  }
+
+  /// «Test connection» строки [id]: один `initialize` без сессии (D12).
+  ///
+  /// Исход остаётся за страницей до закрытия ([ConnectionSettingsLoaded.lastProbes])
+  /// и снимает метку «Not tested». Недоступна для встроенного агента (Q4) и
+  /// неизвестных id. Повторный вызов и `close()` отменяют идущую проверку.
+  Future<void> testProfile(String id) async {
+    final current = state;
+    if (current is! ConnectionSettingsReady) {
+      return;
+    }
+    final row = current.rows.where((r) => r.id == id).firstOrNull;
+    if (row == null || !row.hasFileActions) {
+      return;
+    }
+    _probing[id]?.cancel.cancel();
+    final operation = ++_probeSeq;
+    final cancellation = ProbeCancellation();
+    _probing[id] = (operation: operation, cancel: cancellation);
+    _logger?.info(
+      'connection_profile.probe_started',
+      context: {
+        'operation_id': operation,
+        'profile_id': id,
+        'type': row.profile is WebSocketProfile ? 'websocket' : 'stdio',
+      },
+    );
+    _publish();
+    final stopwatch = Stopwatch()..start();
+    final outcome = await _probe.probe(
+      row.profile,
+      projectDirectory: _projectDirectory(),
+      cancellation: cancellation,
+    );
+    // Файл могли перечитать за время проверки: исход профиля, который
+    // изменился по значимым полям (или исчез), относится к чужой конфигурации.
+    final storedNow = _stored.where((p) => p.id == id).firstOrNull;
+    final changed =
+        storedNow == null || !_sameConnection(storedNow, row.profile);
+    if (isClosed ||
+        _probing[id]?.operation != operation ||
+        outcome == null ||
+        changed) {
+      _logger?.debug(
+        'connection_profile.probe_discarded',
+        context: {'operation_id': operation, 'profile_id': id},
+      );
+      return;
+    }
+    _probing.remove(id);
+    _probes[id] = outcome;
+    _probedProfiles[id] = row.profile;
+    _logger?.info(
+      'connection_profile.probe_finished',
+      context: {
+        'operation_id': operation,
+        'profile_id': id,
+        'outcome': probeOutcomeName(outcome),
+        'duration_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _publish();
+  }
+
+  /// Профиль [id] записан диалогом «Add connection profile»: запоминает
+  /// успешную проверку диалога ([tested]) и перечитывает файл.
+  ///
+  /// Без успешной проверки строка остаётся с меткой «Not tested» (D14).
+  Future<void> profileAdded(String id, ProfileProbeOutcome? tested) async {
+    if (tested != null) {
+      _pendingTested[id] = tested;
+    }
+    await reload();
+  }
+
   /// Удаляет из файла прежнюю запись `default` после подтверждения на
   /// странице (D5, D21); остальные записи не трогает.
   Future<bool> removeIgnoredDefault() async {
@@ -310,7 +472,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     try {
       removed = await _store.remove('default');
     } on Object catch (error) {
-      _fail('default', error);
+      _fail('default', error, stage: 'profile');
       return false;
     }
     if (isClosed) {
@@ -325,6 +487,11 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
 
   @override
   Future<void> close() async {
+    // Закрытие страницы отменяет идущие проверки строк: транспорты
+    // закрываются, исходы отбрасываются.
+    for (final probing in _probing.values) {
+      probing.cancel.cancel();
+    }
     await _workspaceSubscription.cancel();
     await _targetSubscription.cancel();
     return super.close();
@@ -394,6 +561,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
           connectOnStart: _connectOnStart,
           path: _profilesPath,
           reason: _unreadableReason,
+          lastProbes: Map.unmodifiable(_probes),
           failure: _failure,
         ),
       );
@@ -410,6 +578,8 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
           isDefault: _defaultId == profile.id,
           isCurrent: current?.id == profile.id,
           status: statusOf(profile.id),
+          probe: _probes[profile.id],
+          isProbing: _probing.containsKey(profile.id),
         ),
     ];
     if (current != null &&
@@ -434,6 +604,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
         connection: workspace.connection,
         connectOnStart: _connectOnStart,
         ignoredDefaultEntry: _ignoredDefault,
+        lastProbes: Map.unmodifiable(_probes),
         failure: _failure,
       ),
     );
@@ -441,12 +612,17 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
 
   /// Сбой записи: на экране — общий текст, в журнале — только имя типа
   /// (`error.toString()` может нести секрет, D17).
-  void _fail(String profileId, Object error) {
+  ///
+  /// [stage] — что не записалось: `profile` (файл профилей: «Rename»,
+  /// «Remove») или `default` (ключ профиля по умолчанию); без значения — для
+  /// прочих настроек страницы (D17).
+  void _fail(String profileId, Object error, {String? stage}) {
     _logger?.warning(
       'connection_profile.save_failed',
       context: {
         if (profileId.isNotEmpty) 'profile_id': profileId,
         'error_type': error.runtimeType.toString(),
+        'stage': ?stage,
       },
     );
     _failure = 'Could not save the change. Try again.';
@@ -478,3 +654,8 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     _ => 'the file cannot be read (${error.runtimeType})',
   };
 }
+
+/// Совпадают ли профили по тому, что определяет подключение: имя (`label`)
+/// не в счёт, поэтому «Rename» не сбрасывает метку «проверен».
+bool _sameConnection(ConnectionProfile a, ConnectionProfile b) =>
+    a.copyWith(label: '') == b.copyWith(label: '');

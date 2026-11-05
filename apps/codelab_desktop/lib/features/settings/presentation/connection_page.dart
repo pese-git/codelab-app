@@ -5,7 +5,9 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/app_scope.dart';
+import '../application/add_profile_cubit.dart' show probeOutcomeIsOk;
 import '../application/connection_settings_cubit.dart';
+import 'add_profile_dialog.dart';
 
 /// Тело страницы «Connection» для таблицы `settingsPageBuilders`.
 ///
@@ -68,20 +70,12 @@ class _ConnectionPageHostState extends State<ConnectionPageHost> {
 /// токена здесь недоступно: строка показывает только источник.
 ///
 /// Как использовать: `Cubit` берётся из `BlocProvider` выше по дереву.
-/// [onAddProfile], [onTestProfile] и [onRenameProfile] — точки итерации 3
-/// (диалог «Add connection profile», «Test connection», «Rename»); без
-/// обработчика кнопка недоступна.
+/// «Add profile» открывает диалог (`showAddProfileDialog`) с Cubit-ом из
+/// composition root; «Test connection» и «Rename» строки вызывают
+/// `ConnectionSettingsCubit`. Правка имени идёт в самой строке: открытый
+/// редактор — эфемерное состояние страницы.
 class ConnectionPage extends StatefulWidget {
-  const ConnectionPage({
-    this.onAddProfile,
-    this.onTestProfile,
-    this.onRenameProfile,
-    super.key,
-  });
-
-  final VoidCallback? onAddProfile;
-  final ValueChanged<ConnectionProfileRow>? onTestProfile;
-  final ValueChanged<ConnectionProfileRow>? onRenameProfile;
+  const ConnectionPage({super.key});
 
   @override
   State<ConnectionPage> createState() => _ConnectionPageState();
@@ -90,6 +84,10 @@ class ConnectionPage extends StatefulWidget {
 class _ConnectionPageState extends State<ConnectionPage> {
   /// Раскрытие справки — эфемерное состояние виджета (`state-management.md`).
   var _helpExpanded = false;
+
+  /// Строка, в которой открыт редактор «Rename»; эфемерное состояние
+  /// виджета, как и справка.
+  String? _renamingId;
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +128,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
               label: 'Add profile',
               icon: FluentIcons.add,
               emphasis: CodeLabButtonEmphasis.primary,
-              onPressed: ready == null ? null : widget.onAddProfile,
+              onPressed: ready == null
+                  ? null
+                  : () => unawaited(_addProfile(cubit)),
             ),
           ],
         ),
@@ -207,12 +207,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       row: row,
                       editable: ready != null,
                       onConnect: () => unawaited(cubit.connect(row.id)),
-                      onTest: widget.onTestProfile == null
-                          ? null
-                          : () => widget.onTestProfile!(row),
-                      onRename: widget.onRenameProfile == null
-                          ? null
-                          : () => widget.onRenameProfile!(row),
+                      onTest: () => unawaited(cubit.testProfile(row.id)),
+                      renaming: _renamingId == row.id,
+                      onStartRename: () => setState(() => _renamingId = row.id),
+                      onCancelRename: () => setState(() => _renamingId = null),
+                      onSaveRename: (label) =>
+                          unawaited(_renameProfile(cubit, row.id, label)),
                       onRemove: () => unawaited(_removeProfile(cubit, row)),
                     ),
                   ],
@@ -304,6 +304,39 @@ class _ConnectionPageState extends State<ConnectionPage> {
     ),
   );
 
+  /// «Add profile»: диалог с собственным Cubit-ом (D12).
+  ///
+  /// Cubit живёт ровно столько, сколько диалог: закрытие диалога любым
+  /// способом (Done, Cancel, Esc) отменяет идущую проверку. Если профиль
+  /// записан, страница перечитывает файл и запоминает успешную проверку.
+  Future<void> _addProfile(ConnectionSettingsCubit settings) async {
+    final add = codeLabDependenciesOf(context).createAddProfileCubit();
+    unawaited(add.start());
+    await showAddProfileDialog(context, add);
+    // Профилей за жизнь диалога может быть несколько («Add another»), и
+    // закрыт он мог быть любым способом: метки берутся из всех записанных, а не
+    // из последнего состояния (M1).
+    final saved = add.savedProfiles;
+    await add.close();
+    if (!mounted) {
+      return;
+    }
+    for (final (:profileId, :probe) in saved) {
+      await settings.profileAdded(profileId, probe);
+    }
+  }
+
+  Future<void> _renameProfile(
+    ConnectionSettingsCubit cubit,
+    String id,
+    String label,
+  ) async {
+    final renamed = await cubit.renameProfile(id, label);
+    if (renamed && mounted) {
+      setState(() => _renamingId = null);
+    }
+  }
+
   /// Подтверждение и удаление: решение — за пользователем, запрет удаления
   /// текущего и встроенного — за Cubit (проверяется и при прямом вызове).
   Future<void> _removeProfile(
@@ -367,7 +400,10 @@ class _ProfileRowCard extends StatelessWidget {
     required this.editable,
     required this.onConnect,
     required this.onTest,
-    required this.onRename,
+    required this.renaming,
+    required this.onStartRename,
+    required this.onCancelRename,
+    required this.onSaveRename,
     required this.onRemove,
   });
 
@@ -376,8 +412,13 @@ class _ProfileRowCard extends StatelessWidget {
   /// Файл прочитан: «Rename» и «Remove» доступны (битый файл не трогаем).
   final bool editable;
   final VoidCallback onConnect;
-  final VoidCallback? onTest;
-  final VoidCallback? onRename;
+  final VoidCallback onTest;
+
+  /// Открыт редактор «Rename» этой строки.
+  final bool renaming;
+  final VoidCallback onStartRename;
+  final VoidCallback onCancelRename;
+  final ValueChanged<String> onSaveRename;
   final VoidCallback onRemove;
 
   @override
@@ -417,61 +458,84 @@ class _ProfileRowCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          // Одна строка с многоточием; полный текст — в
-                          // подсказке (D4).
-                          Tooltip(
-                            message: row.title,
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 420),
-                              child: Text(
-                                row.title,
-                                key: ValueKey('connection-profile-title-$id'),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: FluentTheme.of(
-                                  context,
-                                ).typography.bodyStrong,
+                      if (renaming)
+                        _RenameEditor(
+                          // Id в ключе: у каждой строки свой редактор.
+                          key: ValueKey('connection-profile-rename-editor-$id'),
+                          id: id,
+                          initial: row.label,
+                          onSave: onSaveRename,
+                          onCancel: onCancelRename,
+                        )
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            // Одна строка с многоточием; полный текст — в
+                            // подсказке (D4).
+                            Tooltip(
+                              message: row.title,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 420,
+                                ),
+                                child: Text(
+                                  row.title,
+                                  key: ValueKey('connection-profile-title-$id'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: FluentTheme.of(
+                                    context,
+                                  ).typography.bodyStrong,
+                                ),
                               ),
                             ),
-                          ),
-                          if (row.isDefault)
-                            const CodeLabBadge(
-                              label: 'Default',
-                              tone: CodeLabTone.accent,
-                            ),
-                          if (row.isCurrent)
-                            const CodeLabBadge(
-                              label: 'Current',
-                              tone: CodeLabTone.success,
-                            ),
-                          // Состояние соединения окна — без текста ошибки: её
-                          // показывает баннер рабочего места (D4).
-                          if (row.status case final status?)
-                            KeyedSubtree(
-                              key: ValueKey('connection-profile-status-$id'),
-                              child: CodeLabBadge(
-                                label: status.label,
-                                tone: switch (status) {
-                                  ConnectionRowStatus.connecting =>
-                                    CodeLabTone.warning,
-                                  ConnectionRowStatus.connected =>
-                                    CodeLabTone.success,
-                                  ConnectionRowStatus.failed =>
-                                    CodeLabTone.danger,
-                                },
+                            if (row.isDefault)
+                              const CodeLabBadge(
+                                label: 'Default',
+                                tone: CodeLabTone.accent,
                               ),
-                            ),
-                          // Результат проверки хранится только за жизнь
-                          // страницы (D14); «Test connection» — итерация 3.
-                          if (row.showNotTested)
-                            const CodeLabBadge(label: 'Not tested'),
-                        ],
-                      ),
+                            if (row.isCurrent)
+                              const CodeLabBadge(
+                                label: 'Current',
+                                tone: CodeLabTone.success,
+                              ),
+                            // Состояние соединения окна — без текста ошибки: её
+                            // показывает баннер рабочего места (D4).
+                            if (row.status case final status?)
+                              KeyedSubtree(
+                                key: ValueKey('connection-profile-status-$id'),
+                                child: CodeLabBadge(
+                                  label: status.label,
+                                  tone: switch (status) {
+                                    ConnectionRowStatus.connecting =>
+                                      CodeLabTone.warning,
+                                    ConnectionRowStatus.connected =>
+                                      CodeLabTone.success,
+                                    ConnectionRowStatus.failed =>
+                                      CodeLabTone.danger,
+                                  },
+                                ),
+                              ),
+                            // Исход «Test connection» хранится только за жизнь
+                            // страницы (D14); тексты без аргументов, `env` и сообщения транспорта
+                            // (команда в `Command not found` — по D12).
+                            if (row.probe case final probe?)
+                              KeyedSubtree(
+                                key: ValueKey('connection-profile-probe-$id'),
+                                child: CodeLabBadge(
+                                  label: row.probeText ?? '',
+                                  tone: probeOutcomeIsOk(probe)
+                                      ? CodeLabTone.success
+                                      : CodeLabTone.danger,
+                                ),
+                              ),
+                            if (row.showNotTested)
+                              const CodeLabBadge(label: 'Not tested'),
+                          ],
+                        ),
                       const SizedBox(height: 2),
                       if (row.isUnsaved)
                         const CodeLabText(
@@ -500,7 +564,8 @@ class _ProfileRowCard extends StatelessWidget {
                     key: ValueKey('connection-profile-test-$id'),
                     label: 'Test connection',
                     icon: FluentIcons.plug_connected,
-                    onPressed: editable ? onTest : null,
+                    isLoading: row.isProbing,
+                    onPressed: editable && !row.isProbing ? onTest : null,
                   ),
                 CodeLabButton(
                   key: ValueKey('connection-profile-connect-$id'),
@@ -512,7 +577,7 @@ class _ProfileRowCard extends StatelessWidget {
                   CodeLabButton(
                     key: ValueKey('connection-profile-rename-$id'),
                     label: 'Rename',
-                    onPressed: editable ? onRename : null,
+                    onPressed: editable && !renaming ? onStartRename : null,
                   ),
                 if (row.hasFileActions) _removeButton(),
               ],
@@ -556,4 +621,79 @@ class _ProfileRowCard extends StatelessWidget {
       ),
     ],
   };
+}
+
+/// Редактор «Rename» в строке профиля: имя, «Save» и «Cancel».
+///
+/// Почему в строке, а не диалогом: меняется одно поле, и подпись должна
+/// оставаться рядом со строкой (design.md change `add-app-settings-shell`,
+/// D14). Контроллер принадлежит State и освобождается в `dispose`.
+///
+/// Для чего: собирает ввод; пустое имя не сохраняется (кнопка недоступна), а
+/// запись и отклонение пустого имени повторяет Cubit. Начальное значение —
+/// `label` профиля, как он записан в файле.
+class _RenameEditor extends StatefulWidget {
+  const _RenameEditor({
+    required this.id,
+    required this.initial,
+    required this.onSave,
+    required this.onCancel,
+    super.key,
+  });
+
+  final String id;
+  final String initial;
+  final ValueChanged<String> onSave;
+  final VoidCallback onCancel;
+
+  @override
+  State<_RenameEditor> createState() => _RenameEditorState();
+}
+
+class _RenameEditorState extends State<_RenameEditor> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = _controller.text.trim();
+    return Row(
+      children: [
+        Expanded(
+          child: TextBox(
+            key: ValueKey('connection-profile-rename-field-${widget.id}'),
+            controller: _controller,
+            autofocus: true,
+            placeholder: 'Name',
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) {
+              if (name.isNotEmpty) {
+                widget.onSave(name);
+              }
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        CodeLabButton(
+          key: ValueKey('connection-profile-rename-save-${widget.id}'),
+          label: 'Save',
+          emphasis: CodeLabButtonEmphasis.primary,
+          onPressed: name.isEmpty ? null : () => widget.onSave(name),
+        ),
+        const SizedBox(width: 8),
+        CodeLabButton(
+          key: ValueKey('connection-profile-rename-cancel-${widget.id}'),
+          label: 'Cancel',
+          onPressed: widget.onCancel,
+        ),
+      ],
+    );
+  }
 }
