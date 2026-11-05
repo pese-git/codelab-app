@@ -232,7 +232,7 @@ App:   general, appearance, keyboard
 
 `profiles.json`:
 - формат не меняется (`version: 1`, те же поля);
-- app пишет его тем же `JsonFileProfileStore`, что CLI (временный файл и переименование, `save` читает файл перед записью);
+- app пишет его тем же `JsonFileProfileStore`, что CLI (временный файл и переименование, `save` читает файл перед записью). Временный файл записывается с `flush: true` и только потом переименовывается (ревью итерации 3): без сброса на диск сбой питания сразу после `rename` мог оставить под именем `profiles.json` пустой или неполный файл, то есть потерять все профили пользователя (AGENTS.md §2, п. 3);
 - путь — `$CODELAB_HOME/profiles.json`. Для клиентов правило разрешения `CODELAB_HOME` одно — функция `resolveCodelabHome(environment)` в `codelab_client_io` (ревью итерации 2), ошибка — `CodelabHomeException`. Её используют CLI (`CodelabHome.resolve` — обёртка) и app. С агентским `codelabHomeOf` правила совпадают во всём, кроме одного случая (см. ниже):
   - пустое или незаданное значение → `<HOME>/.codelab` (`USERPROFILE` на Windows);
   - `~` и `~/…` раскрываются через `HOME`;
@@ -279,7 +279,7 @@ Expander «Join a session started in the CLI» (D-10, Could) — статичн�
 
 Это одна логика для app и будущего `codelab profiles add` (§12.4.9). Правила безопасности (секретоподобный `env`, зарезервированный id) проверяются в `toProfile`, а не только в UI-валидации формы (`state-management.md` §65): другого пути из черновика в профиль нет.
 
-**Тип.** `ProfileKind.stdio | webSocket`. Список предлагаемых типов вычисляет `profileKindsFor(resolvers)` по `TransportResolver.supports` на образцовом профиле каждого типа (SETUP-22): на хосте без stdio-резолвера stdio нет.
+**Тип.** `ProfileKind.stdio | webSocket`. Список предлагаемых типов вычисляет `profileKindsFor(resolvers)` по `TransportResolver.supports` на образцовом профиле каждого типа (SETUP-22): на хосте без stdio-резолвера stdio нет. Новый черновик получает первый доступный тип: «Local stdio», а без stdio-резолвера — «WebSocket» (решение пользователя 2026-11-05; в артборде выбран WebSocket как демо-состояние, D20).
 
 **Имя и id.** `label` обязателен. `suggestProfileId(label)` даёт нижний регистр, каждый символ вне `[a-z0-9]` заменяется на `-`, повторы и крайние `-` убираются. API id (`isValidProfileId`, `suggestProfileId`, `reservedProfileIds`, `isReservedProfileId`) лежит в отдельном файле kit `codelab_client_core/lib/src/connection/profile_ids.dart`: его используют и `ProfileDraft`, и CLI `profiles add`, а черновика CLI не нужен. Правило id — `isValidProfileId`: `^[a-z0-9][a-z0-9._-]{0,63}$`, подмножество правила CLI (`^[A-Za-z0-9][A-Za-z0-9_.-]*$`). Нижний регистр выбран заранее для change B: тогда имя секрета `codelab/profiles/<id>/token` пройдёт `SecretNames`. `:` исключено правилом. Ошибки:
 - `idEmpty`;
@@ -297,7 +297,11 @@ Id неизменяем после сохранения; «Rename» меняет
 
 **WebSocket.**
 - «URL» — схема `ws` или `wss` и непустой хост, иначе `urlInvalid`.
-- `ws://` к нелокальному хосту (не `localhost`, `127.0.0.0/8`, `::1`) даёт предупреждение `plaintextToRemote`. Оно не блокирует сохранение, но требует подтверждения «Save anyway», как SETUP-10.
+- URL с userinfo (`ws://user:pass@host…`, в том числе только с именем) отклоняется проблемой `urlUserInfo` с текстом `Remove the user name and password from the URL; use the Token setting instead.`; `toProfile` профиль не строит (решение оркестратора, ревью итерации 3). Почему запрет, а не предупреждение: userinfo — секрет, который попал бы в `profiles.json` открытым текстом, а `WebSocket.connect` из `dart:io` отправил бы его на сервер заголовком `Authorization: Basic …` — мимо правила «токен только ссылкой `env:`» (D13). Текст проблемы не содержит ни URL, ни userinfo. Профили, уже созданные CLI с userinfo, читаются как раньше; userinfo в UI и журнале не показывается (D10, D17).
+- `ws://` к нелокальному хосту (не `localhost`, `127.0.0.0/8`, `::1`) даёт предупреждение `plaintextToRemote`. Под полем URL — предупреждение: с токеном (`EnvToken`) `ws:// to another machine: the token is sent unencrypted.`, без токена `ws:// to another machine: traffic is sent unencrypted.`. Оно не блокирует сохранение, но **всегда** требует подтверждения «Save anyway», как SETUP-10, — и с токеном, и без: по `ws://` открытым текстом идут и промпты с файлами (решение пользователя 2026-11-05). Подтверждение — InfoBar `warning` «Unencrypted connection» внутри диалога, как в артборде `AddProfile`: с токеном — `The token for <scheme://host:port> will travel in clear text. Use wss:// if the host supports it.`, без токена — `Prompts and files sent to <scheme://host:port> will travel in clear text. Use wss:// if the host supports it.`; в адресе только `scheme://host:port` (D17, D20).
+- **Подтверждение перед «Test connection»** (решение пользователя 2026-11-05, ревью итерации 3). Проверка тоже отправляет токен: при `ws://` к нелокальному хосту и токене `EnvToken` «Test connection» сначала показывает тот же InfoBar «Unencrypted connection» с текстом про токен и кнопкой «Test anyway» (ключ `add-profile-test-anyway`). Без «Test anyway» проверка не начинается, транспорт не открывается и токен не отправляется. «С токеном» здесь — выбран «From environment variable», независимо от того, задана ли переменная: правило совпадает с предупреждением под URL, а пользователь не обязан знать окружение app. Без токена (`NoToken`) или к локальному хосту проверка начинается сразу: без токена проверка шлёт только `initialize`, без промптов и файлов.
+- **Одно подтверждение на комбинацию URL + токен.** Черновик помнит, для какой пары «URL, выбор токена» (`NoToken` или `EnvToken(name)`) открытый текст уже подтверждён — «Test anyway» или «Save anyway». Подтверждённый Test не спрашивает снова перед Save, и наоборот. Любая правка URL, варианта токена или имени переменной сбрасывает подтверждение, даже если значение вернули к прежнему (A → B → A спрашивает снова): подтверждение хранится в текущем черновике и прежних пар не помнит. «Add another» начинает новый черновик без подтверждения (N3 повторного ревью). Отказ — правка черновика или «Cancel»; отдельной кнопки отказа у InfoBar нет, как в артборде.
+- **Строка сохранённого профиля подтверждения не спрашивает** (решение пользователя 2026-11-05): «Test connection» и «Connect» в строке страницы идут сразу. Подтверждение касается черновика в диалоге; профиль из диалога уже подтверждён при сохранении, а профиль из CLI или файла — явная конфигурация пользователя. Подтверждать Test, но не Connect, было бы непоследовательно, а подтверждение у Connect — отдельное изменение поведения. Остаточный риск — профиль `ws://` из CLI или ручной правки файла (Risks).
 - «Token» — `ProfileTokenChoice`, в этом change три формы (D13):
   - `NoToken`;
   - `EnvToken(name)` — имя переменной по правилу `^[A-Za-z_][A-Za-z0-9_]*$`, в профиль идёт `tokenRef: env:<name>`;
@@ -317,29 +321,78 @@ Id неизменяем после сохранения; «Rename» меняет
 Исход — `ProfileProbeOutcome`:
 - `Reachable(latency, agentName?, agentVersion?)`;
 - `Unauthorized`;
-- `Unreachable(message)`;
+- `Unreachable(String message, {UnreachableReason reason = UnreachableReason.unknown, int? statusCode})` — `statusCode` задаётся только при `httpStatus` (проверяет `assert`); `reason` типа `UnreachableReason` (решение пользователя 2026-11-05):
+  - `connectionRefused`;
+  - `hostNotFound`;
+  - `tlsFailed`;
+  - `httpStatus` — исход несёт `statusCode` отказа рукопожатия WebSocket (не 401/403: те дают `Unauthorized`);
+  - `unknown` — причина не распознана;
 - `TimedOut`;
 - `NotAcp` — ответ не разобран или протокол несовместим;
 - `CommandNotFound`;
 - `Unsupported` — нет резолвера.
 
-Тексты UI — §12.4.9, шаг 5; `message` проходит `describeFailure` (без секретов). Если у `EnvToken` переменная не задана в окружении app, перед проверкой показывается заметка «CODELAB_AGENT_TOKEN is not set in CodeLab's environment; the agent may reject the connection.» с настоящим именем переменной. Проверка всё равно выполняется.
+`message` проходит `describeFailure` (без секретов) и остаётся только для журнала и диагностики: в UI его нет.
 
-Классифицировать ошибки IO-транспортов kit не может: `ProcessException` и `WebSocketException` — типы `dart:io`. Поэтому composition root передаёт классификатор `ProbeFailureClassifier` из `codelab_client_io` (`classifyProbeFailure`). Он смотрит на `AcpTransportException.code` и `cause`:
+**Тексты исхода в UI** (решение пользователя 2026-11-05; §12.4.9, шаг 5). Как в артборде `AddProfile`, но детали берутся только из типизированных данных исхода и полей профиля, никогда из текста исключения:
+
+| Исход | Текст |
+|---|---|
+| `Reachable` | `Reachable · <N> ms · <name> <version>` |
+| `CommandNotFound` | `Command not found: <command>` — значение поля «Command» профиля, без аргументов и `env` |
+| `Unreachable(connectionRefused)` | `Unreachable: connection refused` |
+| `Unreachable(hostNotFound)` | `Unreachable: host not found` |
+| `Unreachable(tlsFailed)` | `Unreachable: TLS handshake failed` |
+| `Unreachable(httpStatus)` | `Unreachable: HTTP <status>` — `statusCode` из `AcpWebSocketHandshakeRejected` |
+| `Unreachable(unknown)` | `Unreachable` |
+| `Unauthorized`, токен отправлен: `tokenRef: env:<NAME>` и `<NAME>` задана в окружении app (порт окружения Cubit, D13) | `Unauthorized: the agent rejected the token` |
+| `Unauthorized`, во всех остальных случаях: «No token», переменная не задана, неподдерживаемая ссылка | `Unauthorized: the agent requires a token` |
+| `TimedOut` | `Timed out` |
+| `NotAcp` | `Not an ACP agent` |
+| `Unsupported` | `Not supported here` |
+
+Почему не текст исключения: `describeFailure` убирает известные секреты, но в сообщении транспорта остаются путь и query URL, аргументы команды и произвольный текст сервера (D17, `observability.md` §44–§46). Причина в enum и статус в `int` безопасны по построению. Текст считает одна функция `probeOutcomeText` слоя application app (`features/settings/application/probe_outcome_view.dart`, L2 ревью итерации 3). Её вызывают Cubit-ы — `AddProfileCubit` для диалога и `ConnectionSettingsCubit`/его состояние для строки профиля (`connection-profile-probe-<id>`), — а виджеты получают готовую строку. Функции нужны исход, профиль (команда, ссылка на токен) и признак «переменная задана» из порта окружения Cubit-а; в presentation ни исхода, ни окружения нет. Текст `Unauthorized` описывает то, что реально ушло на сервер (решение оркестратора 2026-11-05): без значения переменной токен не отправляется, и «rejected the token» было бы неправдой.
+
+Если у `EnvToken` переменная не задана в окружении app, перед проверкой показывается заметка «CODELAB_AGENT_TOKEN is not set in CodeLab's environment; the agent may reject the connection.» с настоящим именем переменной. Проверка всё равно выполняется.
+
+Классифицировать ошибки IO-транспортов kit не может: `ProcessException`, `SocketException`, `HandshakeException` и `WebSocketException` — типы `dart:io`. Поэтому composition root передаёт классификатор `ProbeFailureClassifier` из `codelab_client_io` (`classifyProbeFailure`). Он смотрит на `AcpTransportException.code` и `cause`, только на типы и коды:
 - отсутствующая команда (`ProcessException` с errno `ENOENT`) → `CommandNotFound`;
-- ответ рукопожатия WebSocket 401/403 → `Unauthorized`, только если транспорт сохраняет статус.
+- `AcpWebSocketHandshakeRejected` (задача 3.3a) со статусом 401/403 → `Unauthorized`, с другим статусом → `Unreachable(httpStatus)` со `statusCode`;
+- `SocketException` → по `osError.errorCode` из таблицы кодов по платформе (macOS, Linux, Windows): «соединение отклонено» → `connectionRefused`, «хост не найден» → `hostNotFound`;
+- `HandshakeException` / `TlsException` → `tlsFailed`;
+- всё остальное, в том числе `SocketException` с незнакомым кодом, → `Unreachable(unknown)`.
 
-Задача 3.3 сначала проверяет это тестом. Если статус теряется, `Unauthorized` по тексту не угадывается, а показывается `Unreachable` с сообщением; типизированный статус в `codelab_acp_transports` — отдельная задача `[protocol]` (см. риски).
+По тексту ошибки ни исход, ни причина не угадываются: неизвестная причина честно даёт `Unreachable` без уточнения. Без классификатора kit сам даёт `Unreachable(unknown)`.
+
+*Альтернативы:*
+- (а) показывать `Unreachable: <message>` после `describeFailure` — текст транспорта может нести путь, query и ответ сервера;
+- (б) только `Unreachable` без причины (первая версия D12) — пользователь решил показывать причину, как в артборде;
+- (в) разбирать текст `SocketException.message` — зависит от локали и версии ОС, запрещено D12.
+
+**Статус отказа рукопожатия — штатное рукопожатие SDK** (задача 3.3a; решение оркестратора, ревью итерации 3). `WebSocketAcpTransport` по-прежнему подключается через `WebSocket.connect` из `dart:io`. При отказе рукопожатия SDK бросает `WebSocketException` с типизированным полем `httpStatusCode` (`int?`; заполняется, когда сервер ответил статусом, отличным от 101). Транспорт переводит его в `AcpTransportException(startFailed)` с `cause` = `AcpWebSocketHandshakeRejected(statusCode)`; текст `WebSocketException.message` не разбирается и в `AcpWebSocketHandshakeRejected` не попадает. Если `httpStatusCode` равен `null` (сеть, TLS, обрыв), остаётся прежняя ошибка, и классификатор решает по её типу.
+- **Редиректы.** Рукопожатие ведёт `HttpClient` SDK: при редиректе на другой origin он не переносит `Authorization` и `Cookie` (`shouldCopyHeaderOnRedirect`), так что токен не уходит на чужой хост. Сам редирект SDK выполняет, в том числе с `wss://` на `http://` другого origin; запрет редиректов — отдельная задача backlog (Risks, `delivery-roadmap.md` §10.4).
+- **Значение заголовка.** Если значение заголовка (токен из переменной окружения) содержит недопустимый для HTTP символ, `dart:io` бросает `FormatException`, текст которой содержит само значение. Транспорт ловит её и отдаёт `AcpTransportException(startFailed)` с общим текстом без значения и без исходной `FormatException` в `cause`: иначе токен попал бы в диагностику и `Unreachable.message` (AGENTS.md §10, §16).
+- **Зависимости.** Новых зависимостей у `codelab_acp_transports` нет; `crypto` не добавляется. Минимальный Dart SDK workspace — 3.10: в нём есть `WebSocketException.httpStatusCode` (N4 повторного ревью; `technology-stack.md`).
+
+*Альтернативы статуса рукопожатия:*
+- (а) собственное рукопожатие на `HttpClient` + `WebSocket.fromUpgradedSocket` — отклонено после ревью итерации 3: `close()` во время рукопожатия оставлял незакрываемый сокет, проверки RFC 6455 (`Sec-WebSocket-Accept`, `Upgrade`, `Connection`) были неполными, а для ключа понадобилась бы зависимость `crypto`;
+- (б) разбор текста `WebSocketException.message` — запрещён (выше): текст зависит от версии SDK.
 
 **Состояние диалога.** `AddProfileCubit` (`features/settings/application/`) ведёт закрытую иерархию `AddProfileState`:
 - `Editing(draft, issues)`;
 - `Probing(draft, probeId)`;
-- `ConfirmingPlaintext(draft)`;
+- `ConfirmingPlaintext(form, message)` — подтверждение перед записью, кнопка «Save anyway»;
+- `ConfirmingPlaintextProbe(form, message)` — подтверждение перед проверкой, кнопка «Test anyway» (D11). Два `final`-класса, а не поле `action`: `switch` по состоянию остаётся исчерпывающим, и диалог не может показать «Test anyway» для записи (N5 повторного ревью);
 - `Saving(draft)`;
 - `Saved(profileId, tested, useByDefault)`;
 - `SaveFailed(draft, message)`.
 
-Невозможные сочетания вроде «идёт проверка, и идёт сохранение» исключены (`state-management.md` §13).
+Невозможные сочетания вроде «идёт проверка, и идёт сохранение» исключены (`state-management.md` §13). Подтверждённая пара «URL, выбор токена» (D11) — часть черновика формы, а не отдельный флаг: правка URL или токена создаёт новый черновик без подтверждения.
+
+**Корректность записи и закрытия** (решения оркестратора, ревью итерации 3; D14):
+- пока идёт запись (`Saving`), «Cancel» неактивна, а Esc и закрытие диалога заблокированы: закрытие посреди записи оставило бы файл записанным, а страницу — без исхода, и пользователь не знал бы, сохранён ли профиль;
+- «Save» переводит Cubit в `Saving` **до** чтения списка id: повторное нажатие в `Saving` игнорируется, второй записи нет (AGENTS.md §12);
+- «Save anyway» перед записью заново читает список id; если id за время подтверждения занят (например, `codelab profiles add` в терминале), черновик возвращается в `Editing` с проблемой `idTaken`, а существующий профиль не перезаписывается (`ProfileStore.save` с тем же id заменил бы чужую запись).
 
 **Отмена и поздние результаты.** У каждой проверки свой номер. Новая проверка, закрытие диалога и `close()` Cubit-а отменяют прежнюю: транспорт закрывается, исход отбрасывается с событием `connection_profile.probe_discarded` (AGENTS.md §9, §12).
 
@@ -388,7 +441,13 @@ Id неизменяем после сохранения; «Rename» меняет
 
 «Use by default» после успешной записи пишет `codelab.connection.default_profile`; текущее подключение диалог не меняет. Без успешной проверки в этом запуске строка получает метку «Not tested». Метка — UI-состояние страницы (`lastProbes`), в `profiles.json` она не пишется: менять общий формат ради метки несоразмерно.
 
-**«Rename»** — встроенный редактор `label` (`TextBox`) и `save` с тем же id.
+**Страница после закрытия диалога** (ревью итерации 3). Диалог возвращает странице все профили, сохранённые за его жизнь, а не только последний: «Save» → «Add another» → «Cancel» сохраняет первый профиль, и он тоже должен появиться в списке. Страница перечитывает `profiles.json` и ставит каждому сохранённому профилю его собственный исход проверки из диалога (`Reachable` или «Not tested»), а не исход последнего черновика.
+
+Исход проверки в `lastProbes` привязан к полям профиля, значимым для подключения (тип, команда, аргументы, `env`, `runInProjectDirectory`, URL, `tokenRef`), а не только к id. Если при перечитывании профиль с тем же id изменился в этих полях (CLI переписал команду или URL, профиль удалён и создан заново), исход для этого id сбрасывается. Иначе строка показывала бы `Reachable` для профиля, который никто не проверял. Изменение `label` («Rename») исход не сбрасывает. Исход проверки, пришедший для профиля, который за время проверки изменился в значимых полях, отбрасывается: он относится к прежней конфигурации (N1 повторного ревью; AGENTS.md §9).
+
+**«Rename»** — встроенный редактор `label` (`TextBox`) прямо в строке профиля и `save` с тем же id. Ключи: контейнер редактора `connection-profile-rename-editor-<id>`, поле `connection-profile-rename-field-<id>`, кнопки `connection-profile-rename-save-<id>` и `connection-profile-rename-cancel-<id>`. Отдельного диалога нет: меняется одно поле, а в артборде вида редактора нет (D20). Ошибка записи — `connection_profile.save_failed` (`stage: profile`, D17).
+
+**Сохранение и «Use by default».** Если профиль записан, а ключ `codelab.connection.default_profile` записать не удалось, профиль остаётся сохранённым, диалог переходит в «Profile saved» без обещания профиля по умолчанию (`Saved.useByDefault == false`), а событие `connection_profile.save_failed` получает `stage: default`. Откатывать запись профиля не нужно: профиль корректен и без отметки по умолчанию, а повторное «Save» невозможно — id уже занят.
 
 **«Remove»** недоступна у встроенного профиля и у профиля текущего подключения, с подсказкой «Disconnect first». Disconnect появится отдельным change; до него нужно подключиться к другому профилю. Подтверждение — «Remove profile <label>?». Удаляется только запись в `profiles.json`: секретов профиль в этом change не создаёт, и переменные окружения app не трогает. Эти проверки (SETUP-21) — application policy `ConnectionSettingsCubit`, они повторяются перед вызовом `ProfileStore.remove`, а не только в виде недоступной кнопки.
 
@@ -418,7 +477,13 @@ Id неизменяем после сохранения; «Rename» меняет
 
 Строка профиля собирается в presentation app из готовых виджетов: `CodeLabExpanderCard` (шапка 48 px, раскрытие решает владелец), `RadioButton`, `CodeLabBadge` («Default», «Current», «Not tested»), `CodeLabStatusIndicator` (результат проверки) и `CodeLabButton`. Отдельный виджет для неё не нужен.
 
-Превью — в `codelab_molecule_previews.dart` и `codelab_organism_previews.dart`, по образцу существующих.
+Итерация 3 добавляет виджеты формы диалога «Add connection profile» (`molecules/codelab_form.dart`) — по разметке артборда `AddProfile`, без бизнес-логики:
+- **`CodeLabForm`** — столбец строк формы с промежутками макета;
+- **`CodeLabFormRow`** — подпись поля слева, поле и подсказка справа;
+- **`CodeLabFormNote`** — заметка под полем с тоном (`CodeLabFormNoteTone`): подсказка, предупреждение, ошибка;
+- **`CodeLabSegmentedControl<T>`** — переключатель вариантов (`CodeLabSegment<T>`): тип «Local stdio» / «WebSocket», источник токена.
+
+Превью **обязательны** для каждого нового виджета `codelab_ui` (и итерации 1, и итерации 3) — в `codelab_molecule_previews.dart` и `codelab_organism_previews.dart`, по образцу существующих. Виджет без превью считается незавершённым (задачи 1.5 и 3.8a).
 
 ### D17. Наблюдаемость
 
@@ -437,10 +502,10 @@ Id неизменяем после сохранения; «Rename» меняет
 | `connection_profile.saved` | info | `profile_id`, `type`, `token: none \| env`, `tested` |
 | `connection_profile.renamed` | info | `profile_id` |
 | `connection_profile.removed` | info | `profile_id` |
-| `connection_profile.save_failed` | warning | `profile_id`, `error_type` |
+| `connection_profile.save_failed` | warning | `profile_id`, `error_type`, `stage: profile \| default` — не записан профиль (в том числе «Rename» и «Remove») или ключ «Use by default» после успешной записи профиля (D14) |
 | `connection_profile.probe_started` | info | `operation_id`, `profile_id?`, `type` |
-| `connection_profile.probe_finished` | info | `operation_id`, `outcome`, `duration_ms` |
-| `connection_profile.probe_discarded` | debug | `operation_id` |
+| `connection_profile.probe_finished` | info | `operation_id`, `profile_id?`, `outcome`, `duration_ms` |
+| `connection_profile.probe_discarded` | debug | `operation_id`, `profile_id?` |
 | `connection_profile.default_changed` | info | `profile_id` |
 | `connection_profile.unreadable` | warning | `error_type` |
 | `connection_profile.default_ignored` | warning | — (только факт; поля записи не пишутся; один раз за жизнь страницы, а не при каждом `reload`) |
@@ -454,7 +519,7 @@ Id неизменяем после сохранения; «Rename» меняет
 
 События InfoBar одобрения нужны, чтобы по журналу было видно: пользователь узнал о запросе, находясь в настройках. В них нет id сессии, id запроса и полей tool call: id запроса уже пишет журнал разрешений kit (§16), а здесь он только раздвоил бы корреляцию. `settings.pending_approval_shown` пишется один раз при появлении InfoBar, а не на каждой перерисовке.
 
-Номер проверки называется `operation_id` (§4). Для подключения в событиях уже есть `attempt` у `ConnectionCubit`.
+Номер проверки называется `operation_id` (§4). Для подключения в событиях уже есть `attempt` у `ConnectionCubit`. Все три события проверки (`probe_started`, `probe_finished`, `probe_discarded`) несут `profile_id` (ревью итерации 3, N2): на странице — id профиля строки, в диалоге — id черновика (поле id формы). По одному `operation_id` нельзя сказать, какой профиль проверялся, если проверок несколько. Поле отсутствует, только если id черновика пуст.
 
 В события не попадают (§43–§46):
 - аргументы и значения `env` stdio — только `type` и, при необходимости, имя исполняемого файла; диагностика подключения stdio тоже пишет только команду (D6);
@@ -469,12 +534,13 @@ Id неизменяем после сохранения; «Rename» меняет
 | Пакет | Что меняется | Слой |
 |---|---|---|
 | `codelab_client_core` | `ProfileDraft`, `ProfileProbe`, `ProfileTokenRef`, `ProfileSecretSource`, `isValidProfileId`, `reservedProfileIds`/`isReservedProfileId`, `usableStoredProfiles`, `suggestProfileId`, `profileKindsFor` | core, web-безопасно |
-| `codelab_client_io` | `classifyProbeFailure`, `resolveCodelabHome`, `CodelabHomeException`; зависимость `path` | io |
-| `codelab_ui` | три виджета D16 | ui_kit |
+| `codelab_acp_transports` | `AcpWebSocketHandshakeRejected` из `WebSocketException.httpStatusCode`; `FormatException` значения заголовка → ошибка без значения (D12, задача 3.3a) | transports, IO-часть в `io.dart` |
+| `codelab_client_io` | `classifyProbeFailure`, `resolveCodelabHome`, `CodelabHomeException`; зависимость `path`; `flush` временного файла `profiles.json` перед `rename` (D7) | io |
+| `codelab_ui` | виджеты D16: три итерации 1 и четыре виджета формы итерации 3 | ui_kit |
 | `apps/codelab_desktop` | навигация, feature `settings`, `ConnectionCubit`, composition root | app |
 | `apps/codelab_cli` | `ProfileSecretSource` вместо `EnvSecretSource`, `isValidProfileId` и `reservedProfileIds`, без `--agent` и с `-a default` — встроенный агент, предупреждение о старой записи `default` (D21) | app |
 
-Новых рёбер графа нет: app уже зависит от `codelab_client_core`, `codelab_client_io` и `codelab_ui`. `codelab_client_io` получает `resolveCodelabHome`, `CodelabHomeException` и зависимость `path` (она уже в allowlist пакета). Allowlist ядра, kit, `codelab_client_io` и app не меняется. Новых правил в `codelab_architecture_tests/test/support/rules.dart` нет. Правило «stage 7» для `features/settings/presentation` (запрет `codelab_setup/io.dart` и `dart:io`, SETUP-9) и ребро `codelab_desktop → codelab_setup` переходят в change B вместе с первым импортом `codelab_setup` в app. Граф в `README.md` не меняется.
+Новых рёбер графа нет: app уже зависит от `codelab_client_core`, `codelab_client_io` и `codelab_ui`, а `codelab_client_io` — от `codelab_acp_transports`. `AcpWebSocketHandshakeRejected` объявлен в web-безопасной части `codelab_acp_transports` (без `dart:io`), бросает его только `io.dart`; новых внешних зависимостей у пакета нет (`crypto` не добавляется). `codelab_client_io` получает `resolveCodelabHome`, `CodelabHomeException` и зависимость `path` (она уже в allowlist пакета). Allowlist ядра, kit, `codelab_client_io` и app не меняется. Новых правил в `codelab_architecture_tests/test/support/rules.dart` нет. Правило «stage 7» для `features/settings/presentation` (запрет `codelab_setup/io.dart` и `dart:io`, SETUP-9) и ребро `codelab_desktop → codelab_setup` переходят в change B вместе с первым импортом `codelab_setup` в app. Граф в `README.md` не меняется.
 
 ### D19. Тесты по веткам
 
@@ -504,6 +570,14 @@ Id неизменяем после сохранения; «Rename» меняет
 | Поиск | «Find a setting» | по заголовкам и ключевым словам страниц (D3) | нечёткий поиск по значениям не нужен |
 | Узкая раскладка | `max-width:760px` | навигация сверху при < 760 px | только экран настроек |
 | `AddProfile` (телефон) | «Use for new sessions» | вне охвата (§12.8) | мобильной сборки нет |
+| Тексты проверки (`AddProfile`) | `Command not found: <cmd>`, `Unreachable: connection refused`, `Unauthorized: the agent requires a token` — из демо-скрипта | те же тексты, но детали только из типизированных данных: `Command not found: <command>` (поле «Command» без аргументов и `env`); `Unreachable: connection refused` / `host not found` / `TLS handshake failed` / `HTTP <status>` по `UnreachableReason`, иначе `Unreachable`; `Unauthorized: the agent rejected the token`, только если токен отправлен (`env:<NAME>` и переменная задана), иначе `Unauthorized: the agent requires a token` (D12) | решение пользователя 2026-11-05: текст исключения может нести путь, query и секреты (D17) |
+| Подтверждение `ws://` (`AddProfile`) | InfoBar `warning` «Unencrypted connection» внутри диалога, `The token for {{url}} will travel in clear text. Use wss:// if the host supports it.`, «Save anyway» — только при токене | тот же InfoBar внутри диалога, но всегда для `ws://` к нелокальному хосту (spec app-settings). С токеном — текст артборда; без токена — `Prompts and files sent to <scheme://host:port> will travel in clear text. Use wss:// if the host supports it.` в той же разметке. В адресе только `scheme://host:port`. Кнопки отказа нет, как в артборде: отказ — правка черновика или «Cancel» (D11) | решение пользователя 2026-11-05: промпты и файлы по `ws://` тоже открыты; путь, query и userinfo не показываются (D17) |
+| Подтверждение перед «Test connection» (`AddProfile`) | нет: проверка по `ws://` с токеном начинается сразу; кнопки «Test anyway» в артборде нет | при `ws://` к нелокальному хосту и токене из переменной — тот же InfoBar с текстом про токен и кнопкой «Test anyway» (`add-profile-test-anyway`); одно подтверждение на пару URL + токен для Test и Save, правка URL или токена его сбрасывает (D11) | решение пользователя 2026-11-05 (ревью итерации 3): проверка тоже отправляет токен открытым текстом |
+| URL с userinfo (`AddProfile`) | не описан | отклоняется: `Remove the user name and password from the URL; use the Token setting instead.` (D11) | ревью итерации 3: userinfo попал бы в `profiles.json` и ушёл бы заголовком Basic auth |
+| Предупреждение под URL (`AddProfile`) | `ws:// to another machine: the token is sent unencrypted.` | с токеном (`EnvToken`) — текст артборда; без токена — `ws:// to another machine: traffic is sent unencrypted.` (D11) | решение оркестратора 2026-11-05: без токена фраза о токене неверна |
+| Тип по умолчанию в диалоге | выбран «WebSocket» | «Local stdio» — первый доступный тип; без stdio-резолвера — «WebSocket» (D11) | решение пользователя 2026-11-05: в артборде выбор WebSocket — демо-состояние |
+| id в диалоге | id показан текстом под именем | поле id редактируемо до сохранения, подпись «cannot change after saving» (spec app-settings, §12.4.9 шаг 2) | решение оркестратора 2026-11-05: spec уже требует правки id |
+| «Rename» | кнопка без вида редактора | встроенный редактор `label` в строке профиля; ключи `connection-profile-rename-editor-<id>` (контейнер), `connection-profile-rename-field-<id>`, `connection-profile-rename-save-<id>`, `connection-profile-rename-cancel-<id>` (D14) | решение оркестратора 2026-11-05: одно поле не требует диалога |
 
 ### D21. CLI: без `--agent` и с `-a default` — встроенный агент
 
@@ -553,15 +627,19 @@ Id неизменяем после сохранения; «Rename» меняет
 
 ## Risks / Trade-offs
 
-- **[Одновременная запись `profiles.json` из app и CLI]** Временный файл теперь уникальный (`profiles.json.<pid>.<случайный суффикс>.tmp`), запись атомарна (переименование). Два процесса больше не пишут в один `.tmp` и не оставляют полфайла. Побеждает последняя запись: профиль, добавленный другим процессом между чтением и записью, может потеряться. → `save` перечитывает файл непосредственно перед записью, окно гонки — миллисекунды ручных действий. Блокировка файла — отдельный change, если гонку увидят на практике.
+- **[Одновременная запись `profiles.json` из app и CLI]** Временный файл теперь уникальный (`profiles.json.<pid>.<случайный суффикс>.tmp`), записывается с `flush: true`, запись атомарна (переименование; D7). Два процесса больше не пишут в один `.tmp` и не оставляют полфайла. Побеждает последняя запись: профиль, добавленный другим процессом между чтением и записью, может потеряться. → `save` перечитывает файл непосредственно перед записью, окно гонки — миллисекунды ручных действий. Блокировка файла — отдельный change, если гонку увидят на практике.
 - **[Принятый риск D15: чужая переменная как Bearer]** Ссылка `env:<NAME>` допускает любую переменную. Подложенный `profiles.json` (общий каталог, чужой dotfiles-репозиторий) может указать удалённый `wss://` и `env:AWS_SECRET_ACCESS_KEY`. Тогда значение уйдёт на чужой хост заголовком `Authorization`, причём теперь и без клика — через «Connect on start», если этот профиль выбран по умолчанию. Риск принят: `profiles.json` лежит в домашнем каталоге пользователя с его правами, как и конфиг агента, и CLI ведёт себя так же. Смягчение — профиль по умолчанию выбирается только явно, а без выбора это встроенный агент (D5). При «Connect on start» к WebSocket-профилю с `env:`-ссылкой страница «Connection» показывает имя переменной в строке профиля. Allowlist имён переменных — кандидат для change B вместе с хранилищем секретов.
 - **[Устаревший список]** Слежения за файлом нет (D4). → Файл перечитывается при открытии страницы. Профиль, удалённый в CLI, при «Connect» из устаревшего списка подключится данными из памяти, без повреждения файла.
 - **[Поздний исход проверки]** Диалог закрыт или проверка повторена. → Номер проверки; отмена закрывает транспорт, исход отбрасывается с событием (D12). Тест проверяет, что процесс stdio завершён после закрытия диалога.
 - **[Позднее подключение из «Connect on start»]** Пользователь нажал «Connect» другого профиля, пока шло автоподключение. → Существующий номер попытки `ConnectionCubit`/`ClientWorkspace` (spec acp-client-kit «Повторный Connect во время подключения»).
-- **[Unauthorized не определяется]** Транспорт WebSocket может не сохранять статус рукопожатия. → По тексту не угадываем, показываем `Unreachable` с сообщением. Задача 3.3 проверяет это и при необходимости заводит задачу `[protocol]` на типизированный статус в `codelab_acp_transports`.
+- **[Unauthorized не определяется]** Транспорт терял статус отказа рукопожатия (найдено в 3.3). → Задача 3.3a: `WebSocketAcpTransport` берёт статус из типизированного поля SDK `WebSocketException.httpStatusCode` и отдаёт `AcpWebSocketHandshakeRejected(statusCode)`; 401/403 → `Unauthorized`, прочие статусы → `Unreachable(httpStatus)`. Рукопожатие остаётся штатным (`WebSocket.connect`), собственного нет (D12): редиректы на другой origin не переносят `Authorization` (`shouldCopyHeaderOnRedirect` SDK), а `FormatException` с недопустимым значением заголовка заменяется ошибкой без значения. По тексту не угадываем. Остаточный риск: если будущая версия SDK перестанет заполнять `httpStatusCode`, исход станет `Unreachable(unknown)` — тест 3.3 на loopback (401/403/500) это поймает.
+- **[Коды `SocketException` по платформам]** `osError.errorCode` для «соединение отклонено» и «хост не найден» разные на macOS, Linux и Windows. → Таблица кодов по платформе в `classifyProbeFailure`; незнакомый код даёт `Unreachable` без причины, а не неверную причину (D12). Тест закрытого порта идёт на loopback и не зависит от сети; «хост не найден» проверяется на построенном `SocketException`, без DNS.
 - **[Токен недоступен app из Finder]** Переменная окружения задана в оболочке, а приложение запущено из Finder. → Подсказка в диалоге и строка «<NAME> is not set in CodeLab's environment.» (D13). Полное решение — хранилище секретов в change B.
 - **[Секрет в логах и ошибках]** → События только с id и типами (D17), `describeFailure` для сообщений. Тест подставляет маркер `sk-test-leak-…` в значение переменной токена, в `env` stdio, в URL и в текст исключения.
-- **[Утечка токена по `ws://`]** → Предупреждение и подтверждение при сохранении (D11).
+- **[Утечка токена и данных по `ws://`]** → Предупреждение и подтверждение при сохранении для любого `ws://` к нелокальному хосту, с токеном и без; подтверждение перед «Test connection», если выбран токен из переменной (D11). Подтверждение привязано к паре URL + токен и сбрасывается при их правке. Userinfo в URL отклоняется, поэтому секрет не уходит заголовком Basic auth и не пишется в `profiles.json`. «Test connection» и «Connect» в строке сохранённого профиля подтверждения не спрашивают (решение пользователя 2026-11-05, D11). Остаточный риск: профиль `ws://` к удалённому хосту, созданный `codelab profiles add` или ручной правкой `profiles.json`, никогда не проходил подтверждения; его токен и промпты уйдут открытым текстом по первому «Connect». Предупреждение под URL видно только в диалоге.
+- **[Редирект `wss://` → `http://` другого origin]** (решение пользователя 2026-11-05). `WebSocket.connect` следует редиректу, и через `IOWebSocketChannel` это не отключается. Токен не переносится (`shouldCopyHeaderOnRedirect`), но промпты и файлы пошли бы открытым текстом без подтверждения SETUP-10. Так же ведёт себя `develop`, этот change риск не вводит. Запрет редиректов WebSocket-транспорта — задача backlog `[protocol]` (`delivery-roadmap.md` §10.4).
+- **[Права `profiles.json` при перезаписи]** Запись через временный файл и `rename` не сохраняет права прежнего файла: в `dart:io` нет API для смены прав без запуска процесса (`chmod`). Новый файл получает права по umask. Секретов в файле нет (токен — только ссылка `env:`, D13), но `env` stdio-профиля может содержать чувствительные значения с ключом, не похожим на секрет (SETUP-19 ловит только ключи). Риск принят; сохранение прав — вместе с блокировкой файла, если понадобится.
+- **[Двойная запись и закрытие во время записи]** → `Saving` до чтения id, блокировка «Cancel»/Esc в `Saving`, перечитывание id перед «Save anyway» (D12, D14).
 - **[Containment]** Профиль stdio запускает произвольную команду пользователя — так же, как сегодняшняя форма и `codelab -a stdio:…`. Агентских действий без одобрения не появляется. `fs/*` и `terminal/*` ограничены папкой сессии, как раньше (AGENTS.md §10).
 - **[Forward compatibility ACP]** Проверка — обычный `initialize`: незнакомые поля ответа игнорируются, несовместимая версия даёт `NotAcp` с текстом версии.
 - **[Web-безопасность]** Всё новое в kit — чистый Dart без `dart:io`; классификатор IO живёт в `codelab_client_io`. `melos run web-compile` входит в задачи kit.

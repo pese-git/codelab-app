@@ -133,7 +133,7 @@ InfoBar SHALL исчезать, когда ожидающих запросов �
 - метку «Current» — только у профиля, к которому workspace сейчас подключён (принятый профиль в `Connected` или `Reconnecting`). После сбоя и во время новой попытки «Current» НЕ SHALL быть ни у одной строки, кроме случая отказа до обращения к workspace при живом соединении;
 - бейдж попытки (ключ `connection-profile-status-<id>`): `Connecting…`, `Connected` или `Failed` — у строки профиля последней попытки (`ConnectionCommands.attemptProfile`), без текста ошибки;
 - метки «Default», «Current» и «Not tested»;
-- результат последней проверки в этом открытии страницы.
+- результат последней проверки в этом открытии страницы (ключ `connection-profile-probe-<id>`, текст — по требованию «Диалог «Add connection profile»», раздел «Проверка»).
 
 Строка SHALL предлагать действия «Test connection», «Connect», «Rename» и «Remove». У встроенного агента НЕ SHALL быть «Test connection», «Rename» и «Remove». «Remove» SHALL быть недоступна у профиля текущего подключения, с подсказкой «Disconnect first».
 
@@ -277,7 +277,7 @@ Connect к другому профилю SHALL разрывать текущее
 ### Requirement: Диалог «Add connection profile»
 Кнопка «Add profile» SHALL открывать `ContentDialog` «Add connection profile». Логика черновика SHALL жить в `codelab_client_core` (`ProfileDraft`, `ProfileProbe`; spec acp-client-kit), а диалог только рисует её через `AddProfileCubit`.
 
-**Тип.** Типы SHALL определяться зарегистрированными `TransportResolver`. Если хост поддерживает один тип, переключателя типа SHALL не быть (SETUP-22).
+**Тип.** Типы SHALL определяться зарегистрированными `TransportResolver`. Если хост поддерживает один тип, переключателя типа SHALL не быть (SETUP-22). Новый диалог SHALL открываться на первом доступном типе: «Local stdio», а без stdio-резолвера — «WebSocket» (решение пользователя 2026-11-05).
 
 **Имя и id.** Поле «Name» и под ним id: по умолчанию из имени, редактируемый до сохранения. Подпись «cannot change after saving». Ошибки id выводятся у поля.
 
@@ -288,8 +288,8 @@ Connect к другому профилю SHALL разрывать текущее
 - «Environment» — свёрнуто, строки `KEY=value`.
 
 **WebSocket.**
-- «URL».
-- Предупреждение `ws:// to another machine: the token is sent unencrypted.` для `ws://` к нелокальному хосту.
+- «URL». URL с userinfo (`ws://user:pass@host…`, в том числе только с именем) SHALL отклоняться ошибкой у поля `Remove the user name and password from the URL; use the Token setting instead.` (проблема черновика `urlUserInfo`), и профиль НЕ SHALL сохраняться: userinfo попал бы в `profiles.json` и ушёл бы на сервер заголовком Basic auth. Текст ошибки НЕ SHALL содержать URL и userinfo.
+- Предупреждение под полем для `ws://` к нелокальному хосту: с токеном («From environment variable») — `ws:// to another machine: the token is sent unencrypted.`, без токена — `ws:// to another machine: traffic is sent unencrypted.`.
 - «Token» в этой версии SHALL предлагать ровно два варианта (design.md, D13):
   - «No token»;
   - «From environment variable» — поле имени переменной, по умолчанию `CODELAB_AGENT_TOKEN`, в профиль идёт `tokenRef: env:<NAME>`.
@@ -298,19 +298,37 @@ Connect к другому профилю SHALL разрывать текущее
 - Если переменная не задана в окружении app, диалог SHALL показывать `<NAME> is not set in CodeLab's environment.`.
 - Вариантов хранилища секретов и обещаний о них диалог НЕ SHALL показывать.
 
-**Проверка.** «Test connection» SHALL выполнять `ProfileProbe` и показывать исход:
-- `Reachable · <ms> ms · <agentInfo.name> <version>`;
-- `Unauthorized`;
-- `Unreachable`;
+**Проверка.** «Test connection» SHALL выполнять `ProfileProbe` и показывать исход (решение пользователя 2026-11-05, design.md D12):
+- `Reachable · <N> ms · <name> <version>` — имя и версия из `agentInfo` ответа `initialize`;
+- `Command not found: <command>` — значение поля «Command» профиля, без аргументов и `env`;
+- `Unreachable: connection refused`, `Unreachable: host not found`, `Unreachable: TLS handshake failed` или `Unreachable: HTTP <status>` по типизированной причине `UnreachableReason` исхода (`connectionRefused`, `hostNotFound`, `tlsFailed`, `httpStatus` со `statusCode`), а при причине `unknown` — просто `Unreachable`;
+- `Unauthorized: the agent rejected the token`, если токен действительно отправлен: у профиля `tokenRef: env:<NAME>`, и переменная `<NAME>` задана в окружении app. Во всех остальных случаях («No token», переменная не задана, неподдерживаемая ссылка) — `Unauthorized: the agent requires a token`: текст описывает то, что реально ушло на сервер;
 - `Timed out`;
-- `Not an ACP agent`;
-- `Command not found`.
+- `Not an ACP agent`.
+
+Детали текста SHALL браться только из типизированных данных исхода и полей профиля. Текст исключения и поле `message` исхода `Unreachable` НЕ SHALL показываться в UI: `message` после `describeFailure` предназначен только для журнала и диагностики. Тот же текст SHALL показываться в строке профиля на странице «Connection» (ключ `connection-profile-probe-<id>`).
 
 Повторная проверка и закрытие диалога SHALL отменять идущую проверку, а её поздний исход НЕ SHALL менять диалог.
 
-**Сохранение.** Кнопка SHALL называться «Save» после успешной проверки и «Save without test» иначе; без успешной проверки строка профиля получает метку «Not tested». `ws://` к нелокальному хосту SHALL требовать подтверждения «Save anyway». Флажок «Use by default» (по умолчанию выключен) делает профиль профилем по умолчанию; текущее подключение диалог НЕ SHALL менять.
+**Подтверждение `ws://` перед проверкой** (решение пользователя 2026-11-05). Если URL — `ws://` к хосту вне `localhost`, `127.0.0.0/8` и `::1`, а токен — «From environment variable» (задана переменная или нет), «Test connection» SHALL сначала показывать InfoBar «Unencrypted connection» с текстом `The token for <scheme://host:port> will travel in clear text. Use wss:// if the host supports it.` и кнопкой «Test anyway» (ключ `add-profile-test-anyway`). До «Test anyway» проверка НЕ SHALL начинаться: транспорт не открывается, токен не отправляется. С «No token» или к локальному хосту проверка SHALL начинаться сразу.
+
+**Сохранение.** Кнопка SHALL называться «Save» после успешной проверки и «Save without test» иначе; без успешной проверки строка профиля получает метку «Not tested». Флажок «Use by default» (по умолчанию выключен) делает профиль профилем по умолчанию; текущее подключение диалог НЕ SHALL менять.
+
+Нажатие «Save» SHALL переводить диалог в состояние записи до чтения списка существующих id; повторное нажатие в этом состоянии НЕ SHALL давать второй записи. Пока идёт запись, «Cancel» SHALL быть неактивна, а Esc и закрытие диалога SHALL быть заблокированы. «Save anyway» SHALL перед записью заново читать список id: если id уже занят, диалог SHALL показывать ошибку `idTaken` у поля id, а существующий профиль НЕ SHALL перезаписываться.
+
+**Подтверждение `ws://` к нелокальному хосту.** Сохранение профиля с `ws://` к хосту вне `localhost`, `127.0.0.0/8` и `::1` SHALL всегда требовать подтверждения — и с токеном, и без него (решение пользователя 2026-11-05). Подтверждение — панель InfoBar уровня `warning` внутри диалога «Add connection profile», как в артборде `AddProfile`, с заголовком «Unencrypted connection» и кнопкой «Save anyway» (ключ `add-profile-save-anyway`); текст:
+- с токеном — `The token for <scheme://host:port> will travel in clear text. Use wss:// if the host supports it.`;
+- без токена — `Prompts and files sent to <scheme://host:port> will travel in clear text. Use wss:// if the host supports it.`.
+
+В адресе SHALL показываться только `scheme://host:port`; путь, query и userinfo URL НЕ SHALL показываться. Отдельной кнопки отказа у панели нет: отказ — правка черновика или «Cancel»; без «Save anyway» запись НЕ SHALL происходить.
+
+Подтверждение SHALL действовать для пары «URL, выбор токена» черновика: после «Test anyway» перед «Save» и после «Save anyway» перед «Test connection» повторного подтверждения НЕ SHALL быть. Изменение URL, варианта токена или имени переменной SHALL сбрасывать подтверждение, даже если значение затем возвращено к прежнему; «Add another» SHALL начинать черновик без подтверждения.
+
+«Test connection» и «Connect» в строке сохранённого профиля на странице «Connection» подтверждения `ws://` НЕ SHALL спрашивать (решение пользователя 2026-11-05).
 
 После сохранения диалог SHALL показывать экран «Profile saved» с id, текстом `The current connection is unchanged. Use Connect in the profile row to switch now.` и кнопками «Done» и «Add another». «Cancel» и Esc без сохранения SHALL закрывать диалог без записи в `profiles.json` и `shared_preferences`.
+
+После закрытия диалога страница «Connection» SHALL показывать все профили, сохранённые за жизнь диалога (в том числе сохранённые до «Add another»), каждый со своим исходом проверки из диалога или меткой «Not tested». Исход проверки в строке профиля SHALL сбрасываться, если при перечитывании `profiles.json` профиль с тем же id изменился в полях, значимых для подключения (тип, команда, аргументы, `env`, папка запуска, URL, ссылка на токен); изменение `label` («Rename») исход НЕ SHALL сбрасывать. Исход, пришедший для профиля, который за время проверки изменился в этих полях, SHALL отбрасываться.
 
 #### Scenario: Ошибки id
 - **WHEN** пользователь вводит имя `Embedded`, затем `Default`, затем имя, чей id совпадает с существующим `dev`, затем правит id на `a:b`
@@ -340,8 +358,96 @@ Connect к другому профилю SHALL разрывать текущее
 - **WHEN** «Test connection» stdio-профиля ждёт ответа на `initialize`, и пользователь закрывает диалог
 - **THEN** процесс агента проверки завершён, и исход проверки не записан в состояние страницы
 
+#### Scenario: Тип по умолчанию
+- **WHEN** пользователь открывает «Add connection profile» на хосте со stdio- и WebSocket-резолверами, а затем на хосте только с WebSocket-резолвером
+- **THEN** в первом случае выбран «Local stdio», во втором переключателя типа нет и открыта форма WebSocket
+
+#### Scenario: Команда не найдена
+- **WHEN** stdio-черновик с «Command» `/nonexistent/agent` и аргументами `--token sk-test-leak-0123456789` проверяется
+- **THEN** диалог показывает `Command not found: /nonexistent/agent`, без аргументов
+
+#### Scenario: Причины недоступности
+- **WHEN** «Test connection» WebSocket-профиля получает по очереди исходы `Unreachable` с причинами `connectionRefused`, `hostNotFound`, `tlsFailed`, `httpStatus` со `statusCode` 500 и `unknown`, у каждого `message` содержит `sk-test-leak-0123456789`
+- **THEN** диалог показывает `Unreachable: connection refused`, `Unreachable: host not found`, `Unreachable: TLS handshake failed`, `Unreachable: HTTP 500` и `Unreachable`, а маркер на экране не появляется
+
+#### Scenario: Отказ в доступе с токеном и без
+- **WHEN** app запущено с `DEVBOX_TOKEN=t`, и проверка WebSocket-профиля с «From environment variable» `DEVBOX_TOKEN`, затем с «From environment variable» `MISSING_TOKEN` (переменной нет в окружении app), затем с «No token» даёт исход `Unauthorized`
+- **THEN** диалог показывает `Unauthorized: the agent rejected the token`, затем дважды `Unauthorized: the agent requires a token`
+
+#### Scenario: Предупреждение под URL
+- **WHEN** в поле «URL» введён `ws://10.0.0.5:8765` при «From environment variable», затем выбран «No token»
+- **THEN** под полем сначала `ws:// to another machine: the token is sent unencrypted.`, затем `ws:// to another machine: traffic is sent unencrypted.`
+
+#### Scenario: Подтверждение ws:// с токеном
+- **WHEN** пользователь сохраняет WebSocket-профиль `ws://10.0.0.5:8765/acp?t=x` с «From environment variable» `DEVBOX_TOKEN`
+- **THEN** в диалоге показана панель «Unencrypted connection» с текстом `The token for ws://10.0.0.5:8765 will travel in clear text. Use wss:// if the host supports it.` и кнопкой «Save anyway»; текст не содержит `/acp` и `t=`; профиль записан только после «Save anyway»
+
+#### Scenario: Подтверждение ws:// без токена
+- **WHEN** пользователь сохраняет WebSocket-профиль `ws://10.0.0.5:8765` с «No token»
+- **THEN** в диалоге показана панель «Unencrypted connection» с текстом `Prompts and files sent to ws://10.0.0.5:8765 will travel in clear text. Use wss:// if the host supports it.` и кнопкой «Save anyway»; без подтверждения `profiles.json` не изменён
+
+#### Scenario: Локальный ws:// без подтверждения
+- **WHEN** пользователь сохраняет WebSocket-профиль `ws://localhost:8765`
+- **THEN** профиль записывается без панели «Unencrypted connection»
+
+#### Scenario: Подтверждение ws:// перед проверкой
+- **WHEN** app запущено с `DEVBOX_TOKEN=t`, пользователь вводит `ws://10.0.0.5:8765` с «From environment variable» `DEVBOX_TOKEN` и нажимает «Test connection»
+- **THEN** в диалоге показана панель «Unencrypted connection» с текстом про токен и кнопкой «Test anyway» (`add-profile-test-anyway`); транспорт не открыт, и сервер не получил ни одного запроса, пока пользователь не нажал «Test anyway»
+
+#### Scenario: Проверка без токена и к локальному хосту сразу
+- **WHEN** пользователь нажимает «Test connection» для `ws://10.0.0.5:8765` с «No token», затем для `ws://localhost:8765` с «From environment variable» `DEVBOX_TOKEN`
+- **THEN** обе проверки начинаются без панели «Unencrypted connection»
+
+#### Scenario: Одно подтверждение на URL и токен
+- **WHEN** пользователь подтвердил «Test anyway» для `ws://10.0.0.5:8765` с «From environment variable» `DEVBOX_TOKEN`, проверка завершилась, и пользователь нажимает «Save»
+- **THEN** профиль записан без повторной панели «Unencrypted connection»
+
+#### Scenario: Возврат к прежнему значению не восстанавливает подтверждение
+- **WHEN** пользователь подтвердил «Test anyway» для `ws://10.0.0.5:8765` с `DEVBOX_TOKEN`, меняет URL на `ws://10.0.0.6:8765`, возвращает `ws://10.0.0.5:8765` и нажимает «Save»
+- **THEN** снова показана панель «Unencrypted connection» с кнопкой «Save anyway»
+
+#### Scenario: Add another начинает без подтверждения
+- **WHEN** пользователь сохранил профиль `ws://10.0.0.5:8765` после «Save anyway», нажал «Add another», ввёл тот же URL с другим id и нажимает «Save»
+- **THEN** снова показана панель «Unencrypted connection»
+
+#### Scenario: Строка сохранённого профиля не спрашивает подтверждения
+- **WHEN** `profiles.json` содержит профиль `remote` с `ws://10.0.0.5:8765` и `tokenRef: env:DEVBOX_TOKEN`, и пользователь нажимает «Test connection», затем «Connect» в строке `remote`
+- **THEN** проверка и подключение начинаются без панели «Unencrypted connection»
+
+#### Scenario: Смена токена или URL сбрасывает подтверждение
+- **WHEN** пользователь подтвердил «Test anyway» для `ws://10.0.0.5:8765` с `DEVBOX_TOKEN`, меняет имя переменной на `OTHER_TOKEN` и нажимает «Save», затем отказывается правкой URL на `ws://10.0.0.6:8765` и нажимает «Test connection»
+- **THEN** перед «Save» снова показана панель с кнопкой «Save anyway», а перед проверкой — панель с адресом `ws://10.0.0.6:8765` и кнопкой «Test anyway»; ни запись, ни проверка без подтверждения не происходят
+
+#### Scenario: Userinfo в URL
+- **WHEN** пользователь вводит URL `ws://u:sk-test-leak-0123456789@10.0.0.5:8765`
+- **THEN** у поля «URL» показано `Remove the user name and password from the URL; use the Token setting instead.`, «Save» и «Save without test» недоступны, `profiles.json` не изменён, а ни диалог, ни журнал не содержат `u:` и `sk-test-leak-0123456789`
+
+#### Scenario: Запись блокирует закрытие
+- **WHEN** пользователь нажал «Save», и запись в `profiles.json` ещё не завершилась
+- **THEN** «Cancel» неактивна, Esc не закрывает диалог, а повторное нажатие «Save» не даёт второй записи
+
+#### Scenario: Id занят во время подтверждения
+- **WHEN** показана панель «Unencrypted connection» для черновика с id `devbox`, за это время `codelab profiles add devbox …` записал профиль `devbox`, и пользователь нажимает «Save anyway»
+- **THEN** у поля id показано `A profile with id "devbox" already exists.`, профиль, записанный CLI, не изменён
+
+#### Scenario: Add another, затем Cancel
+- **WHEN** пользователь проверяет и сохраняет профиль `a`, нажимает «Add another», сохраняет без проверки профиль `b`, снова нажимает «Add another», затем «Cancel»
+- **THEN** страница «Connection» показывает строки `a` с результатом проверки `Reachable` и `b` с меткой «Not tested»
+
+#### Scenario: Изменённый профиль теряет исход проверки
+- **WHEN** строка профиля `dev` показывает результат проверки `Reachable`, `codelab` меняет команду профиля `dev` в `profiles.json`, и страница перечитывает файл
+- **THEN** строка `dev` больше не показывает `Reachable`
+
+#### Scenario: Rename сохраняет исход проверки
+- **WHEN** строка профиля `dev` показывает `Reachable`, и пользователь переименовывает `dev` в «Build box»
+- **THEN** строка `dev` по-прежнему показывает `Reachable`
+
+#### Scenario: Исход для изменившегося профиля отбрасывается
+- **WHEN** идёт «Test connection» в строке `dev`, за это время `codelab` меняет URL профиля `dev`, страница перечитывает файл, и затем приходит исход `Reachable`
+- **THEN** строка `dev` не показывает `Reachable`
+
 ### Requirement: «Rename» и «Remove» профиля
-«Rename» SHALL менять только `label` профиля; id SHALL оставаться прежним.
+«Rename» SHALL менять только `label` профиля; id SHALL оставаться прежним. «Rename» SHALL открывать встроенный редактор `label` прямо в строке профиля (design.md, D14): контейнер редактора `connection-profile-rename-editor-<id>`, поле `connection-profile-rename-field-<id>`, кнопки `connection-profile-rename-save-<id>` и `connection-profile-rename-cancel-<id>`. Отмена SHALL закрывать редактор без записи в `profiles.json`.
 
 «Remove» SHALL спрашивать подтверждение «Remove profile <title>?» (`title` — по правилу заголовка строки) и удалять только запись из `profiles.json`; переменные окружения и другие хранилища app НЕ SHALL трогать. Удаление профиля по умолчанию SHALL сбрасывать `codelab.connection.default_profile`. Запрет удаления встроенного профиля и профиля текущего подключения SHALL проверяться перед вызовом `ProfileStore.remove`, а не только недоступностью кнопки.
 
@@ -357,9 +463,11 @@ Connect к другому профилю SHALL разрывать текущее
 Экран настроек и страница «Connection» SHALL писать в журнал приложения структурные события с `profile_id` и номером проверки `operation_id` (design.md, D17):
 - `settings.opened`, `settings.page_selected`, `settings.closed`;
 - `connection_profile.saved`, `connection_profile.renamed`, `connection_profile.removed`, `connection_profile.save_failed`;
-- `connection_profile.probe_started`, `connection_profile.probe_finished`, `connection_profile.probe_discarded`;
+- `connection_profile.probe_started`, `connection_profile.probe_finished`, `connection_profile.probe_discarded` — все три с `profile_id`: на странице — id профиля строки, в диалоге — id черновика (поля нет, только если id черновика пуст);
 - `connection_profile.default_changed`, `connection_profile.unreadable`, `connection_profile.token_ref_unsupported`, `connection_profile.default_ignored`, `connection_profile.default_removed`;
 - `connection.connect_on_start`.
+
+`connection_profile.save_failed` SHALL содержать поле `stage`: `profile` — не записан профиль в `profiles.json`, `default` — профиль записан, но не записан ключ «Use by default» `codelab.connection.default_profile`.
 
 События и тексты ошибок на экране НЕ SHALL содержать:
 - значения и имена переменных токена и значения ссылок на токен не вида `env:`;
@@ -368,5 +476,5 @@ Connect к другому профилю SHALL разрывать текущее
 - текст `toString()` исключений — только имя типа.
 
 #### Scenario: Маркер секрета не утекает
-- **WHEN** app запущено с `DEVBOX_TOKEN=sk-test-leak-0123456789`, пользователь проверяет и сохраняет WebSocket-профиль с `env:DEVBOX_TOKEN` и URL `wss://u:p@host:1/acp?t=sk-test-leak-0123456789`, а запись профиля завершается исключением, чей `toString()` содержит тот же маркер
-- **THEN** журнал содержит `connection_profile.save_failed` с именем типа исключения, а ни журнал, ни диалог не содержат `sk-test-leak-0123456789`, `u:p`, `/acp` и `t=`
+- **WHEN** app запущено с `DEVBOX_TOKEN=sk-test-leak-0123456789`, пользователь проверяет и сохраняет WebSocket-профиль с `env:DEVBOX_TOKEN` и URL `wss://host:1/acp?t=sk-test-leak-0123456789`, а запись профиля завершается исключением, чей `toString()` содержит тот же маркер
+- **THEN** журнал содержит `connection_profile.save_failed` с именем типа исключения, а ни журнал, ни диалог не содержат `sk-test-leak-0123456789`, `/acp` и `t=`

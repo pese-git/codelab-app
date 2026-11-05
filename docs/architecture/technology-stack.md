@@ -21,7 +21,7 @@
 
 | Область                    | Технология              |
 | -------------------------- | ----------------------- |
-| Язык                       | Dart                    |
+| Язык                       | Dart (минимальный SDK workspace — 3.10: `WebSocketException.httpStatusCode`, change `add-app-settings-shell`, D12) |
 | UI                         | Flutter Desktop         |
 | Design system              | Fluent UI (`fluent_ui`) |
 | State management           | `flutter_bloc`          |

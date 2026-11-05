@@ -55,6 +55,7 @@
 ### Modified Capabilities
 - `agent-workbench-ui`: удаляется требование «Connection profile is edited in a modal dialog»; «Тип подключения «Встроенный агент»» и «Project selection is independent of the connection type» переписываются под профили: встроенный агент — первая строка списка, а не тип в форме; «Run in the project folder» — поле stdio-профиля.
 - `acp-client-kit`: черновик профиля `ProfileDraft` с правилами id и полей, проверка `ProfileProbe`, ссылка на токен `ProfileTokenRef` (только `env:<NAME>`) и источник `ProfileSecretSource`, классификатор `classifyProbeFailure`. `ProfileStore` теперь используют и CLI, и app.
+- `agent-transports`: `WebSocketAcpTransport` отдаёт статус отказа рукопожатия типизированно (`AcpWebSocketHandshakeRejected` из `WebSocketException.httpStatusCode`) и не выводит значение заголовка в ошибке (design.md, D12).
 - `codelab-cli`:
   - без `--agent` и с `-a default` — встроенный агент, `profiles.json` при этом не читается;
   - id `default` зарезервирован, а о старой записи `default` выводится предупреждение;

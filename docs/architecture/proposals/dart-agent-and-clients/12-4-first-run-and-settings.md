@@ -868,8 +868,9 @@ sequenceDiagram
 1. **Тип.** Переключатель «Local stdio» / «WebSocket». Список типов — те, для которых в
    composition root зарегистрирован `TransportResolver` (`supports`), а не проверка платформы
    (`AGENTS.md` §11): на смартфоне и планшете stdio-резолвера нет (§12.8.2), поэтому переключателя
-   нет и диалог сразу открывается на WebSocket. Встроенный профиль не создаётся: он один и уже
-   есть в списке.
+   нет и диалог сразу открывается на WebSocket. Иначе новый диалог открывается на «Local stdio» —
+   первом доступном типе (решение пользователя 2026-11-05). Встроенный профиль не создаётся: он
+   один и уже есть в списке.
 2. **Имя и id.** Поле «Name» (`label`), под ним id: по умолчанию — имя в нижнем регистре, всё
    кроме `[a-z0-9]` заменено на `-`; id можно поправить до сохранения, после — нет (на него
    ссылаются `--agent`, снимок восстановления и память модели папки, §12.6.9). Ошибки у поля:
@@ -882,24 +883,62 @@ sequenceDiagram
    `KEY=value`, свернуто. Значение, похожее на секрет (`*_KEY`, `*_TOKEN`, `*_SECRET`), не
    принимается в `env`: подсказка предлагает задать его в окружении системы или в конфиге агента
    ссылкой `${secret:…}` (SETUP-19).
-4. **Поля WebSocket.** «URL» — только `ws://` и `wss://`, хост обязателен. `ws://` к нелокальному
-   хосту — предупреждение «The token is sent unencrypted» и подтверждение при сохранении (как
-   SETUP-10). «Token»: «No token», «Use stored secret» (выбор имени из хранилища) или «Store a new
+4. **Поля WebSocket.** «URL» — только `ws://` и `wss://`, хост обязателен. URL с userinfo
+   (`ws://user:pass@host`) отклоняется: «Remove the user name and password from the URL; use the
+   Token setting instead.» — иначе секрет попал бы в `profiles.json` и ушёл бы заголовком Basic
+   auth (change `add-app-settings-shell`, D11). `ws://` к нелокальному
+   хосту — предупреждение под полем («ws:// to another machine: the token is sent unencrypted.»
+   с токеном, «ws:// to another machine: traffic is sent unencrypted.» без него) и подтверждение при сохранении (как
+   SETUP-10) — всегда, с токеном и без (решение пользователя 2026-11-05). Панель InfoBar «Unencrypted
+   connection» внутри диалога (как в артборде) с кнопкой «Save anyway»; кнопки отказа нет — отказ
+   это правка черновика или «Cancel». Текст: с токеном — «The token for <scheme://host:port> will
+   travel in clear text. Use wss:// if the host supports it.», без токена — «Prompts and files
+   sent to <scheme://host:port> will travel in clear text. Use wss:// if the host supports it.»;
+   в адресе только `scheme://host:port`. Одно подтверждение действует для пары «URL, выбор токена»
+   и для «Save», и для «Test connection» (шаг 5); правка URL или токена его сбрасывает. «Token»: «No token», «Use stored secret» (выбор имени из хранилища) или «Store a new
    token» (поле со скрытым вводом; имя секрета `codelab/profiles/<id>/token`). Под полем — имя
    бэкенда хранилища из `SecretBackendInfo`; значение токена после ввода не показывается.
-5. **«Test connection».** `ProfileProbe.probe(draft, timeout: 10 s)`: открыть транспорт через тот
+5. **«Test connection».** При `ws://` к нелокальному хосту и токене из переменной окружения
+   проверка сначала показывает ту же панель «Unencrypted connection» с текстом про токен и
+   кнопкой «Test anyway»; без неё транспорт не открывается и токен не отправляется (решение
+   пользователя 2026-11-05). Без токена или к локальному хосту проверка начинается сразу. Затем
+   `ProfileProbe.probe(draft, timeout: 10 s)`: открыть транспорт через тот
    же `TransportResolver`, отправить `initialize`, закрыть транспорт; `session/new` не
-   отправляется, stdio-процесс завершается после ответа или таймаута. Результат в диалоге:
-   «Reachable · 38 ms · <agentInfo.name> <version>», «Unauthorized», «Unreachable», «Timed out»,
-   «Not an ACP agent» (ответ не разобран) или «Command not found». Новый токен из шага 4
-   проверяется до записи в хранилище — `ProfileProbe` получает его как `SecretValue` в памяти.
+   отправляется, stdio-процесс завершается после ответа или таймаута. Результат в диалоге
+   (решение пользователя 2026-11-05, change `add-app-settings-shell`, D12):
+   * «Reachable · <N> ms · <name> <version>» — имя и версия из `agentInfo`;
+   * «Command not found: <command>» — значение поля «Command» профиля, без аргументов и `env`;
+   * «Unreachable: connection refused», «Unreachable: host not found», «Unreachable: TLS
+     handshake failed» или «Unreachable: HTTP <status>» (отказ рукопожатия не 401/403, статус из
+     `AcpWebSocketHandshakeRejected.statusCode`, который транспорт берёт из типизированного
+     `WebSocketException.httpStatusCode` штатного `WebSocket.connect`, без собственного
+     рукопожатия); просто «Unreachable», если причина не
+     распознана. Причину даёт типизированное поле `UnreachableReason` исхода (`connectionRefused`,
+     `hostNotFound`, `tlsFailed`, `httpStatus` со `statusCode`, `unknown`); её определяет
+     классификатор `classifyProbeFailure` в `codelab_client_io` по типам и кодам ошибок
+     (`SocketException.osError.errorCode` по платформе, `HandshakeException`/`TlsException`,
+     `AcpWebSocketHandshakeRejected`), а не по тексту;
+   * «Unauthorized: the agent rejected the token», если токен действительно отправлен (у профиля
+     `tokenRef: env:<NAME>`, и переменная задана в окружении app); во всех остальных случаях
+     («No token», переменная не задана, неподдерживаемая ссылка) — «Unauthorized: the agent
+     requires a token»: текст описывает то, что реально ушло на сервер;
+   * «Timed out», «Not an ACP agent» (ответ не разобран) или «Not supported here» (нет резолвера).
+
+   Детали берутся только из типизированных данных исхода и полей профиля, никогда из текста
+   исключения: поле `message` у `Unreachable` (после `describeFailure`) идёт только в журнал и
+   диагностику и в UI не показывается. Новый токен из шага 4 проверяется до записи в хранилище —
+   `ProfileProbe` получает его как `SecretValue` в памяти.
 6. **«Save».** Доступна при валидном черновике; проверка не обязательна, но без успешной
    проверки строка профиля получает пометку «Not tested». Порядок записи — «секрет → профиль»:
    новый токен пишется в `SecretStore`, затем профиль — в `ProfileStore`; если профиль не
    записан, созданный этим диалогом секрет удаляется (как SETUP-5). Флажок «Use for new
    windows» (по умолчанию выключен) делает профиль активным для новых окон; текущее подключение
    диалог не меняет — переключение кнопкой «Connect» в строке профиля.
-7. **Отмена.** «Cancel» и Esc закрывают диалог без записи; черновик не сохраняется.
+7. **Отмена.** «Cancel» и Esc закрывают диалог без записи; черновик не сохраняется. Пока идёт
+   запись, «Cancel», Esc и закрытие диалога заблокированы, а повторное «Save» второй записи не
+   даёт; «Save anyway» перед записью заново проверяет, что id свободен. После закрытия страница
+   показывает все профили, сохранённые за жизнь диалога (в том числе до «Add another»), каждый
+   со своим исходом проверки (change `add-app-settings-shell`, D12, D14).
 8. **Строка профиля после сохранения:** «Test connection», «Connect», «Rename» (меняет `label`,
    не `id`), «Remove». «Remove» недоступна у встроенного профиля и у профиля текущего
    подключения (подсказка «Disconnect first»); удаление спрашивает, удалить ли и секрет
@@ -924,7 +963,11 @@ sequenceDiagram
 * «Test connection» у встроенного агента не предлагается: проверка открыла бы второй экземпляр
   ядра в процессе app (D12);
 * пометка «Not tested» — состояние страницы, в `profiles.json` не пишется (D14);
-* флажок шага 6 называется «Use by default»: окно в 1.0 одно (D5).
+* флажок шага 6 называется «Use by default»: окно в 1.0 одно (D5);
+* «Rename» шага 8 — встроенный редактор `label` в строке профиля, без отдельного диалога (D14);
+* отступления от артбордов `AddProfile` и `Connection` (тексты проверки, подтверждение `ws://`
+  при сохранении и перед проверкой — кнопки «Test anyway» в артборде нет, — запрет userinfo в URL,
+  тип по умолчанию, правка id, вид «Rename») перечислены в design.md change, D20.
 
 Профили WebSocket не делают страницу записываемой для удалённого агента: «Add profile» меняет
 только локальный `profiles.json` клиента, поэтому кнопка доступна и при `RemoteReadOnly`
@@ -1273,7 +1316,7 @@ SETUP-21); `profile_probe_test.dart` (scripted-агент из `codelab_acp_test
 → WebSocket на scripted-агента теста → «Store a new token» → «Test connection» показывает
 `Reachable` → «Save» → строка профиля в списке, в `profiles.json` есть `tokenRef` и нет значения
 токена, токен в тестовом хранилище; тот же профиль виден `codelab profiles list`; «Remove» у
-активного профиля недоступна; профиль stdio с несуществующей командой → «Command not found»,
+активного профиля недоступна; профиль stdio с несуществующей командой → «Command not found: <command>»,
 «Save» с пометкой «Not tested». Widget-тест `add_profile_dialog_test.dart`: без stdio-резолвера
 переключателя типа нет (SETUP-22).
 

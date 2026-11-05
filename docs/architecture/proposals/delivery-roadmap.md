@@ -529,6 +529,15 @@ token», порядок «секрет → профиль» с откатом и
 | `add-redaction-settings` | страница «Redaction», `RedactionPreview` (§12.4.9) | M5 |
 | `add-integrated-terminal` (уже создан) | панель терминала пользователя (D-28, §12.3 A16); выбор PTY-стратегии — задача 1.1 change | M5 |
 
+### 10.4. Backlog: задачи вне changes
+
+Задачи, найденные ревью changes, без своего change. Каждая получает change или входит в
+ближайший change своей области.
+
+| Задача | Исполнитель | Откуда | Суть |
+|---|---|---|---|
+| Запрет редиректов WebSocket-транспорта | `[protocol]` | ревью итерации 3 `add-app-settings-shell` (design.md, Risks; решение пользователя 2026-11-05) | `WebSocket.connect` следует редиректу, в том числе `wss://` → `http://` другого origin, и через `IOWebSocketChannel` это не отключается. Токен SDK не переносит (`shouldCopyHeaderOnRedirect`), но промпты и файлы пошли бы открытым текстом без подтверждения SETUP-10. Нужно: `WebSocketAcpTransport` не следует редиректам (ответ 3xx — отказ рукопожатия со статусом), тест на loopback. Поведение то же в `develop` |
+
 ---
 
 [План миграции](dart-agent-and-clients/09-00-migration-plan.md) ·
