@@ -34,6 +34,18 @@ final class StdioAcpTransport implements AcpTransport {
   @override
   AcpTransportState get state => _state;
 
+  /// Запускает процесс агента и подключает его stdio.
+  ///
+  /// Почему аргументы убираются из ошибки: `ProcessException.toString()`
+  /// включает аргументы команды, а они попадают в журналы, баннеры и вывод
+  /// клиентов (design.md change `redact-cli-stdio-profile-args`, D8).
+  ///
+  /// Для чего: единственное место, закрывающее утечку для всех потребителей.
+  ///
+  /// Как использовать: вызывать один раз; при ошибке запуска бросается
+  /// `ProcessException` без `arguments` (тип, `message`, `errorCode`,
+  /// `executable` сохранены), та же копия лежит в `cause` события
+  /// `AcpTransportFailure` с кодом `startFailed`. Прочие ошибки — как раньше.
   @override
   Future<void> start() async {
     _ensureNotClosed();
@@ -57,15 +69,28 @@ final class StdioAcpTransport implements AcpTransport {
       _listenToProcess(process);
       _setState(AcpTransportState.connected);
     } on Object catch (error, stackTrace) {
+      // D8 (change `redact-cli-stdio-profile-args`): `ProcessException`
+      // печатает `Command: <exe> <args>`, а аргументы агента могут быть
+      // ключами. Копия без аргументов сохраняет тип, `message`, `errorCode` и
+      // `executable`, поэтому `on ProcessException` и классификация ENOENT у
+      // потребителей работают как раньше. Исходный стек сохраняем.
+      final sanitized = error is ProcessException
+          ? ProcessException(
+              error.executable,
+              const [],
+              error.message,
+              error.errorCode,
+            )
+          : error;
       _fail(
         AcpTransportException(
           code: AcpTransportErrorCode.startFailed,
           message: 'Failed to start stdio ACP agent.',
-          cause: error,
+          cause: sanitized,
           stackTrace: stackTrace,
         ),
       );
-      rethrow;
+      Error.throwWithStackTrace(sanitized, stackTrace);
     }
   }
 

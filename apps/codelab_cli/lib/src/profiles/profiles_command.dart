@@ -1,9 +1,8 @@
-import 'dart:convert';
-
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../cli_args.dart';
 import '../exit_codes.dart';
+import '../session_setup.dart';
 import 'profile_arg.dart';
 
 /// Команда `codelab profiles list|show <id>|add <id> <agent>|remove <id>`.
@@ -97,9 +96,11 @@ Future<int> runProfilesCommand(
       }
       final profile = inlineAgentProfile(value, id: id);
       if (profile == null) {
-        throw UsageError(
-          'Invalid agent "$value": use "stdio:<command> [args]", ws:// or '
-          'wss://.',
+        // Значение не повторяется: без префикса оно может быть командной
+        // строкой с токеном (design.md change `redact-cli-stdio-profile-args`,
+        // D6).
+        throw const UsageError(
+          'Invalid agent: use "stdio:<command> [args]", ws:// or wss://.',
         );
       }
       await store.save(profile);
@@ -128,15 +129,22 @@ Future<List<ConnectionProfile>> _load(ProfileStore store) async {
 }
 
 String _summary(ConnectionProfile profile) => switch (profile) {
+  StdioProfile(:final command, :final args) when args.isEmpty =>
+    'stdio: $command',
+  // Значения аргументов не печатаются (D1, D2): только команда и их число.
   StdioProfile(:final command, :final args) =>
-    'stdio: ${[command, ...args].join(' ')}',
+    'stdio: $command (${argumentCount(args.length)})',
   WebSocketProfile(:final uri) => 'ws: $uri',
   // В `profiles.json` его не бывает (D7); ветка нужна исчерпывающему switch.
   EmbeddedProfile(:final hostProfile) => 'embedded: $hostProfile',
 };
 
-/// Аргументы печатаются JSON-массивом: так видно границы слов с пробелами.
-/// Значение токена не печатается никогда — только откуда оно берётся.
+/// Значения аргументов stdio-профиля не печатаются — только их число
+/// (`args: <N> (values hidden)`): среди них бывает токен, а по строке
+/// секретный аргумент не отличить от обычного (design.md change
+/// `redact-cli-stdio-profile-args`, D1). Значения видны только в
+/// `$CODELAB_HOME/profiles.json`. Значение токена не печатается никогда —
+/// только откуда оно берётся.
 Future<void> _show(
   ConnectionProfile profile,
   StringSink out,
@@ -148,7 +156,11 @@ Future<void> _show(
       out
         ..writeln('type: stdio')
         ..writeln('command: ${profile.command}')
-        ..writeln('args: ${jsonEncode(profile.args)}');
+        ..writeln(
+          profile.args.isEmpty
+              ? 'args: 0'
+              : 'args: ${profile.args.length} (values hidden)',
+        );
       if (profile.env.isNotEmpty) {
         out.writeln('env: ${profile.env.keys.join(', ')}');
       }

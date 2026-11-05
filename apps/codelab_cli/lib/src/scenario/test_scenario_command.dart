@@ -108,6 +108,18 @@ Future<int> runTestScenario(
   return failed == 0 ? okExit : failureExit;
 }
 
+/// Играет одну фикстуру и превращает любой сбой в строки `FAIL`.
+///
+/// Почему причина запуска процесса — только `ProcessException.message`:
+/// `ProcessException.toString()` печатает `Command: <команда и аргументы>`, а
+/// аргументы агента могут нести ключ (`--api-key sk-…`), который
+/// `SecretRedactor` не маскирует. Основная защита — `StdioAcpTransport`
+/// (D8), здесь вторая линия на случай ошибки не из транспорта (connector
+/// драйвера, будущие транспорты): строка `Command: …` в stdout не попадает
+/// никогда (design.md change `redact-cli-stdio-profile-args`, D9).
+///
+/// Имя команды строка `FAIL` не называет: она стоит под id фикстуры, а
+/// профиль задан флагом `--agent` того же запуска.
 Future<_Outcome> _play(
   AcpFixture fixture,
   ScenarioAgent agent, {
@@ -128,9 +140,10 @@ Future<_Outcome> _play(
   } on AgentFixtureFailure catch (failure) {
     return _Outcome('FAIL', _diff(failure));
   } on Object catch (error) {
-    return _Outcome('FAIL', [
-      'the agent did not run the fixture: ${describeFailure(error)}',
-    ]);
+    final reason = error is ProcessException
+        ? error.message
+        : describeFailure(error);
+    return _Outcome('FAIL', ['the agent did not run the fixture: $reason']);
   }
 }
 
