@@ -10,7 +10,7 @@ import 'package:codelab_client_core/codelab_client_core.dart' show ProfileStore;
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:cherrypick/cherrypick.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
-    show EmbeddedAgentOpener;
+    show EmbeddedAgent, EmbeddedAgentOpener;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart'
     show TestWidgetsFlutterBinding, addTearDown;
@@ -28,6 +28,19 @@ import 'in_memory_profile_store.dart';
 /// (`codelab.connection.default_profile`). Тесты правила «нет выбора —
 /// встроенный агент» передают `stdioDefault: false`.
 final testStdioProfile = stdioConnectionProfileOf(codelabAgentStdioProfile);
+
+/// Открыватель встроенного агента по умолчанию в тестах: сразу падает.
+///
+/// Почему: настоящий `localEmbeddedAgentOpener` без заданного окружения читает
+/// реальный `~/.codelab` разработчика, и исход теста зависел бы от машины.
+/// Для чего: тесты, которым встроенный агент не нужен, получают
+/// предсказуемый `ConnectionFailed` без ввода-вывода и таймеров.
+/// Как использовать: подставляется `CodeLabTestBinding`, если не переданы
+/// ни `embeddedOpener`, ни `environment`.
+Future<EmbeddedAgent> _embeddedAgentNotInThisTest({
+  required String cwd,
+  required String hostProfile,
+}) async => throw StateError('the embedded agent is not part of this test');
 
 final class CodeLabTestBinding {
   CodeLabTestBinding({
@@ -62,7 +75,16 @@ final class CodeLabTestBinding {
       // Тесты работают с вымышленными путями вроде `/work/app`; по
       // умолчанию любая папка считается существующей.
       directoryExists: directoryExists ?? (_) async => true,
-      embeddedOpener: embeddedOpener,
+      // Без своего окружения настоящий открыватель читал бы реальный
+      // `~/.codelab/config.yaml` разработчика: исход теста зависел бы от
+      // машины, а открытый агент оставлял бы таймер опроса конфига
+      // (`ConfigWatcher`) в fake-async зоне. Поэтому по умолчанию встроенный
+      // агент не открывается; тест с временным `CODELAB_HOME` передаёт
+      // `environment:` и получает настоящий открыватель на изолированной
+      // папке.
+      embeddedOpener:
+          embeddedOpener ??
+          (environment == null ? _embeddedAgentNotInThisTest : null),
       environment: environment,
       settingsPages: settingsPages,
       // Файл профилей в `testWidgets` зависал бы в fake-async зоне: тесты

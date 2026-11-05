@@ -532,11 +532,9 @@ void main() {
       final binding = CodeLabTestBinding(
         transport: FakeAcpTransport(),
         stdioTransportFactory: (_) => agent,
-        // Tab, Space и Enter на странице «Connection» могут нажать «Connect»
-        // встроенного агента: открыватель падает сразу, без настоящего
-        // ввода-вывода и таймеров.
-        embeddedOpener: ({required cwd, required hostProfile}) async =>
-            throw StateError('the embedded agent is not part of this test'),
+        // Встроенный агент не открывается: Space и Enter на странице
+        // «Connection» могут нажать его «Connect», а тестовая сборка по
+        // умолчанию даёт падающий открыватель (`CodeLabTestBinding`).
         settingsPages: withConnection,
       );
       final cubit = await pumpApp(tester, binding);
