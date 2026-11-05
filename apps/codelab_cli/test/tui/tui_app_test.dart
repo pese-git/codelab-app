@@ -176,6 +176,43 @@ void main() {
     });
   });
 
+  // Значения аргументов stdio-профиля не печатаются (design.md change
+  // `redact-cli-stdio-profile-args`, D1, D2; spec codelab-cli «Аргументы
+  // stdio-профиля в выводе CLI»: «Ошибка запуска в --ui tui»).
+  test('a stdio start failure prints the command and the argument count, '
+      'not the values', () async {
+    const marker = 'sk-test-leak-0123456789';
+    await agent.dispose();
+    agent = FakeAgent(
+      openError: const ProcessException(
+        '/nonexistent/agent',
+        ['--api-key', marker, marker],
+        'No such file or directory',
+        2,
+      ),
+    );
+
+    final code = await runner(
+      profile: const StdioProfile(
+        id: 'broken',
+        label: 'Broken',
+        command: '/nonexistent/agent',
+        args: ['--api-key', marker, marker],
+      ),
+    ).run();
+
+    expect(code, 1);
+    expect(
+      errors.toString(),
+      contains(
+        'codelab: cannot start the agent "/nonexistent/agent" with 3 '
+        'arguments:',
+      ),
+    );
+    expect(errors.toString(), isNot(contains(marker)));
+    expect(errors.toString(), isNot(contains('--api-key')));
+  });
+
   test('the first message is sent at once', () async {
     final exit = await started(firstMessage: 'hello');
 

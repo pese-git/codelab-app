@@ -8,7 +8,8 @@ import 'dart:io';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart'
     show writeCodelabCompatibleStdioAgent;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart'
-    show AcpTransport;
+    show AcpTransport, StdioAcpTransportConfig;
+import 'package:codelab_acp_transports/io.dart' show StdioAcpTransport;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_client_io/codelab_client_io.dart';
 import 'package:test/test.dart';
@@ -25,6 +26,36 @@ void main() {
     );
 
     expect(outcome, isA<CommandNotFound>());
+  });
+
+  // Транспорт убирает аргументы из ProcessException (agent-transports «Ошибка
+  // запуска stdio transport без аргументов», D8 change
+  // `redact-cli-stdio-profile-args`), но тип и errno должны остаться, иначе
+  // классификация ENOENT сломается («Классификация не меняется»).
+  test('a start failure of a stdio transport with arguments is still '
+      'CommandNotFound', () async {
+    final transport = StdioAcpTransport(
+      const StdioAcpTransportConfig(
+        command: '/nonexistent/agent',
+        args: [
+          '--api-key',
+          'sk-test-leak-0123456789',
+          'sk-test-leak-0123456789',
+        ],
+      ),
+    );
+    addTearDown(transport.close);
+
+    Object? error;
+    try {
+      await transport.start();
+    } on Object catch (thrown) {
+      error = thrown;
+    }
+
+    expect(error, isA<ProcessException>());
+    expect((error! as ProcessException).arguments, isEmpty);
+    expect(classifyProbeFailure(error), isA<CommandNotFound>());
   });
 
   test('a closed port is Unreachable.connectionRefused', () async {

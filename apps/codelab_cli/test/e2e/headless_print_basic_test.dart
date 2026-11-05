@@ -105,6 +105,95 @@ Future<void> main() async {
     expect(result.stderr, contains('/nonexistent/agent'));
   }, tags: scriptedOnly);
 
+  test('cli/headless-print-basic: a start failure of a profile with one '
+      'argument says "1 argument" and hides the value', () async {
+    final result = await CliProcess.run([
+      '-p',
+      'hi',
+      '-a',
+      'stdio:/nonexistent/agent --stdio',
+      '-C',
+      tmp.path,
+    ], environment: environment);
+
+    expect(result.exitCode, 1, reason: '$result');
+    expect(result.stdout, isEmpty);
+    expect(
+      result.stderr,
+      contains(
+        'codelab: cannot start the agent "/nonexistent/agent" with 1 '
+        'argument:',
+      ),
+    );
+    expect(result.stderr, isNot(contains('--stdio')));
+  }, tags: scriptedOnly);
+
+  // Регрессионная защита, а не доказательство D8: строка журнала печатает
+  // `AcpTransportException.toString()` без вложенного `cause`, поэтому и до
+  // D8 аргументов в ней не было (design.md, Context). Тест ловит будущий путь,
+  // который выведет причину целиком; `SecretRedactor` флаг `--api-key` не
+  // знает.
+  test('cli/headless-print-basic: --verbose does not leak the arguments of '
+      'a start failure through the log', () async {
+    final result = await CliProcess.run([
+      '-p',
+      'hi',
+      '--verbose',
+      '-a',
+      'stdio:/nonexistent/agent --api-key sk-test-leak-0123456789 '
+          'sk-test-leak-0123456789',
+      '-C',
+      tmp.path,
+    ], environment: environment);
+
+    expect(result.exitCode, 1, reason: '$result');
+    for (final out in [result.stdout, result.stderr]) {
+      expect(out, isNot(contains('sk-test-leak-0123456789')));
+      expect(out, isNot(contains('--api-key')));
+    }
+  }, tags: scriptedOnly);
+
+  test('cli/headless-print-basic: a start failure prints the command and the '
+      'argument count, not the values', () async {
+    final result = await CliProcess.run([
+      '-p',
+      'hi',
+      '-a',
+      'stdio:/nonexistent/agent --api-key sk-test-leak-0123456789 sk-test-leak-0123456789',
+      '-C',
+      tmp.path,
+    ], environment: environment);
+
+    expect(result.exitCode, 1, reason: '$result');
+    expect(result.stdout, isEmpty);
+    expect(
+      result.stderr,
+      contains(
+        'codelab: cannot start the agent "/nonexistent/agent" with 3 '
+        'arguments:',
+      ),
+    );
+    expect(result.stderr, isNot(contains('sk-test-leak-0123456789')));
+    expect(result.stderr, isNot(contains('--api-key')));
+  }, tags: scriptedOnly);
+
+  test('cli/headless-print-basic: a value without a prefix is not repeated '
+      'in the unknown-profile error', () async {
+    final result = await CliProcess.run([
+      '-p',
+      'hi',
+      '-a',
+      'my-agent --api-key sk-test-leak-0123456789 sk-test-leak-0123456789',
+      '-C',
+      tmp.path,
+    ], environment: environment);
+
+    expect(result.exitCode, 64, reason: '$result');
+    expect(result.stdout, isEmpty);
+    expect(result.stderr, contains('Unknown agent profile.'));
+    expect(result.stderr, isNot(contains('sk-test-leak-0123456789')));
+  }, tags: scriptedOnly);
+
   test('an unknown flag is 64 with an empty stdout', () async {
     final result = await CliProcess.run([
       '--output-format',

@@ -1,12 +1,15 @@
 // Команда `codelab profiles` (tasks 2.3; spec codelab-cli «Профили
 // подключения CLI»; design.md change `add-codelab-cli`, D4).
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_cli/codelab_cli.dart';
 import 'package:test/test.dart';
 
 import '../support/fake_cli_io.dart';
+
+const _marker = 'sk-test-leak-0123456789';
 
 void main() {
   late Directory tmp;
@@ -28,7 +31,8 @@ void main() {
     return (code, io);
   }
 
-  test('add then show keeps quoted arguments', () async {
+  test('add then show keeps quoted arguments in profiles.json and shows only '
+      'their count (D1)', () async {
     final (added, addIo) = await run([
       'add',
       'py',
@@ -42,7 +46,53 @@ void main() {
     expect(shown, 0);
     expect(io.stdoutText, contains('type: stdio'));
     expect(io.stdoutText, contains('command: python'));
-    expect(io.stdoutText, contains('args: ["-m","codelab agent","--stdio"]'));
+    expect(io.stdoutText, contains('args: 3 (values hidden)'));
+    expect(io.stdoutText, isNot(contains('codelab agent')));
+    final saved =
+        (jsonDecode(File('${tmp.path}/home/profiles.json').readAsStringSync())
+                as Map<String, Object?>)['profiles']
+            as List<Object?>;
+    final entry = saved.single! as Map<String, Object?>;
+    expect(entry['command'], 'python');
+    expect(entry['args'], ['-m', 'codelab agent', '--stdio']);
+  });
+
+  test('list and show print argument counts, never values (D2)', () async {
+    await run(['add', 'dev', 'stdio:my-agent --api-key $_marker $_marker']);
+    await run(['add', 'bare', 'stdio:bare-agent']);
+
+    final (_, list) = await run(['list']);
+    final (_, showDev) = await run(['show', 'dev']);
+    final (_, showBare) = await run(['show', 'bare']);
+
+    expect(list.stdoutText.trimRight().split('\n'), [
+      'dev   stdio: my-agent (3 arguments)',
+      'bare  stdio: bare-agent',
+    ]);
+    expect(showDev.stdoutText, contains('args: 3 (values hidden)'));
+    expect(showBare.stdoutText, contains('args: 0'));
+    for (final io in [list, showDev, showBare]) {
+      expect(io.stdoutText + io.stderrText, isNot(contains(_marker)));
+      expect(io.stdoutText + io.stderrText, isNot(contains('--api-key')));
+    }
+  });
+
+  test('add with a value without a known prefix does not repeat it and '
+      'leaves the store unchanged (D6)', () async {
+    final (code, io) = await run([
+      'add',
+      'dev',
+      'my-agent --api-key $_marker $_marker',
+    ]);
+
+    expect(code, 64);
+    expect(io.stdoutText, isEmpty);
+    expect(
+      io.stderrText,
+      contains('Invalid agent: use "stdio:<command> [args]", ws:// or wss://.'),
+    );
+    expect(io.stderrText, isNot(contains(_marker)));
+    expect(File('${tmp.path}/home/profiles.json').existsSync(), isFalse);
   });
 
   test('a WebSocket profile stores the token reference, never a '
@@ -68,7 +118,7 @@ void main() {
 
     expect(code, 0);
     expect(io.stdoutText.trimRight().split('\n'), [
-      'dev     stdio: codelab-agent serve --stdio',
+      'dev     stdio: codelab-agent (2 arguments)',
       'remote  ws: ws://127.0.0.1:8765',
     ]);
     expect(io.stderrText, isEmpty);

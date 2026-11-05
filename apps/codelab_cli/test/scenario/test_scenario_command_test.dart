@@ -340,4 +340,27 @@ void main() {
     expect(run.code, 1, reason: run.stdout);
     expect(run.status.values, ['FAIL']);
   });
+
+  // D8 и D9 change `redact-cli-stdio-profile-args`; spec cli-scenario-driver
+  // «Несуществующая команда агента». Без D8 драйвер печатал бы
+  // `ProcessException.toString()` с `Command: <аргументы>`, а D9 — вторая
+  // линия защиты на случай, если такая ошибка придёт не из транспорта.
+  test('an agent that does not start prints only the OS reason, never the '
+      'arguments', () async {
+    const marker = 'sk-test-leak-0123456789';
+    final run = await _testScenario([
+      _fixture('acp/initialize-capabilities').sourcePath!,
+      '--agent',
+      'stdio:/nonexistent/agent --api-key $marker $marker {fixture}',
+    ]);
+
+    expect(run.code, 1, reason: run.stdout);
+    expect(run.status.values, ['FAIL']);
+    expect(run.stdout, contains('the agent did not run the fixture: '));
+    for (final out in [run.stdout, run.stderr]) {
+      expect(out, isNot(contains(marker)));
+      expect(out, isNot(contains('--api-key')));
+      expect(out, isNot(contains('Command:')));
+    }
+  });
 }
