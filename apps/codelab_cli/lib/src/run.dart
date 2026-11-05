@@ -485,6 +485,7 @@ Future<int> _runRepl(
     profileSecrets: profileSecrets,
   );
   final repl = Repl(
+    tokenSource: ProfileSecretSource(environment, stored: profileSecrets),
     workspace: runtime.workspace,
     terminal: terminal,
     profile: profile,
@@ -575,6 +576,7 @@ Future<int> _runTui(
     profileSecrets: profileSecrets,
   );
   final tui = TuiRunner(
+    tokenSource: ProfileSecretSource(environment, stored: profileSecrets),
     workspace: runtime.workspace,
     profile: profile,
     cwd: cwd,
@@ -662,6 +664,7 @@ Future<int> _runHeadless(
     profileSecrets: profileSecrets,
   );
   final runner = HeadlessRunner(
+    tokenSource: ProfileSecretSource(environment, stored: profileSecrets),
     workspace: runtime.workspace,
     stdout: io.stdout,
     stderr: io.stderr,

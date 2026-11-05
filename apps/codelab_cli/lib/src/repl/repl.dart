@@ -70,6 +70,7 @@ final class Repl implements ReplContext {
     Duration exitWindow = const Duration(seconds: 1),
     Duration cancelGrace = const Duration(seconds: 2),
     DateTime Function()? clock,
+    SecretSource? tokenSource,
   }) : _workspace = workspace,
        _terminal = terminal,
        _profile = profile,
@@ -88,11 +89,16 @@ final class Repl implements ReplContext {
        _escapeTimeout = escapeTimeout,
        _exitWindow = exitWindow,
        _cancelGrace = cancelGrace,
+       _tokenSource = tokenSource,
        _clock = clock ?? DateTime.now;
 
   final ClientWorkspace _workspace;
   final Terminal _terminal;
   ConnectionProfile _profile;
+
+  /// Источник токена профиля для текста отказа по токену
+  /// (`describeStartFailure`).
+  final SecretSource? _tokenSource;
   final String _cwd;
   final HistoryStore _historyStore;
   final OutputSurface _surface;
@@ -296,7 +302,7 @@ final class Repl implements ReplContext {
     } on Object catch (error) {
       say(
         'codelab: cannot connect to ${describeProfile(profile)}: '
-        '${describeFailure(error)}',
+        '${await describeStartFailure(error, profile, tokenSource: _tokenSource)}',
       );
       return;
     }
@@ -310,7 +316,10 @@ final class Repl implements ReplContext {
     try {
       await _workspace.reconnect();
     } on Object catch (error) {
-      say('codelab: cannot reconnect: ${describeFailure(error)}');
+      say(
+        'codelab: cannot reconnect: '
+        '${await describeStartFailure(error, _profile, tokenSource: _tokenSource)}',
+      );
       return;
     }
     if (!await _reopenIfDetached()) {
@@ -343,7 +352,7 @@ final class Repl implements ReplContext {
           error is SessionSetupError
               ? 'codelab: ${error.message}'
               : 'codelab: cannot start the agent ${describeProfile(_profile)}: '
-                    '${describeFailure(error)}',
+                    '${await describeStartFailure(error, _profile, tokenSource: _tokenSource)}',
         ),
       );
       throw const _OpenFailed();

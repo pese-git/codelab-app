@@ -44,10 +44,12 @@ ProfileProbeOutcome? classifyProbeFailure(Object error) {
       return const CommandNotFound();
     }
     if (current is AcpWebSocketHandshakeRejected) {
-      final status = current.statusCode;
-      if (status == HttpStatus.unauthorized || status == HttpStatus.forbidden) {
+      // 401/403 определяет kit (`tokenRejectionStatus`): таблица статусов
+      // одна для проверки профиля и для подключения.
+      if (tokenRejectionStatus(current) != null) {
         return const Unauthorized();
       }
+      final status = current.statusCode;
       return Unreachable(
         describeFailure(error),
         reason: UnreachableReason.httpStatus,

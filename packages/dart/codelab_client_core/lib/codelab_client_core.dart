@@ -24,6 +24,7 @@ export 'src/connection/profile_probe.dart';
 export 'src/connection/profile_secrets.dart';
 export 'src/connection/profile_token_ref.dart';
 export 'src/connection/secret_source.dart';
+export 'src/connection/token_rejection.dart';
 export 'src/connection/transport_resolver.dart';
 export 'src/diagnostics/diagnostics.dart';
 export 'src/inspector/inspector_projection.dart';

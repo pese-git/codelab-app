@@ -7,18 +7,13 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         SecretTokenRef,
         StdioProfile,
         UnsupportedTokenRef,
-        WebSocketProfile;
+        WebSocketProfile,
+        profileOrigin;
 
-/// `scheme://host[:port]` адреса [uri] без userinfo, пути и query.
-///
-/// Почему: страница и журнал показывают, куда подключён app, но путь и query
-/// могут нести токен, а userinfo — пароль (design.md change
-/// `add-app-settings-shell`, D10, D17).
-///
-/// Как использовать: единственный способ превратить URL профиля в текст для
-/// экрана настроек; порт показывается, только если он указан явно.
-String profileOrigin(Uri uri) =>
-    '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
+// Origin адреса профиля — формула kit; реэкспорт сохраняет прежний импорт
+// `profileOrigin` из этого файла у остальных файлов app.
+export 'package:codelab_client_core/codelab_client_core.dart'
+    show profileOrigin;
 
 /// Заголовок профиля: `label`, а при пустом `label` и при `label` из значения
 /// `--agent` (`stdio:…`, `ws://…`, `wss://…`; так CLI заполняет `label`

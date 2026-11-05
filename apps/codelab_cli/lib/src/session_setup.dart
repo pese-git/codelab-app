@@ -89,9 +89,48 @@ Future<void> applyConfigFlag(
 }
 
 /// Какого агента не удалось запустить: команда или адрес, без токена.
+///
+/// Почему адрес WebSocket — только origin `scheme://host[:port]`: query вида
+/// `?t=<токен>` и userinfo `user:pass@` несут секреты и не должны попадать в
+/// stderr и журналы (AGENTS.md §10, §16; `profileOrigin` kit — та же формула,
+/// что у экрана настроек app, IPv6 в скобках). Путь тоже отбрасывается — он может нести идентификатор.
+///
+/// Для чего: единый текст для строк `cannot start the agent`, `cannot
+/// connect to`, `cannot reconnect`, `/profile`. Команда stdio-профиля
+/// печатается как раньше.
 String describeProfile(ConnectionProfile profile) => switch (profile) {
   StdioProfile(:final command, :final args) =>
     '"${[command, ...args].join(' ')}"',
-  WebSocketProfile(:final uri) => '$uri',
+  WebSocketProfile(:final uri) => profileOrigin(uri),
   EmbeddedProfile(:final hostProfile) => 'embedded agent ($hostProfile)',
 };
+
+/// Причина, по которой агент [profile] не запустился или не принял
+/// подключение, для строки `codelab: cannot start the agent …: <причина>`.
+///
+/// Почему отдельная функция: REPL, TUI и `-p` печатают одну и ту же причину;
+/// без неё отказ рукопожатия (HTTP 401/403) выглядел бы как «Failed to
+/// connect ACP transport.», а токен и статус были бы видны только в журнале
+/// агента (`serve.ws.unauthorized`).
+///
+/// Для чего: отказ по токену даёт `the agent rejected the token (HTTP 401).`
+/// или `the agent requires a token (HTTP 401).` (определение — kit,
+/// [describeTokenRejection]; значение токена в текст не попадает); все
+/// прочие ошибки — прежний `describeFailure`, без изменений.
+///
+/// Как использовать: [tokenSource] — тот же источник, что открывает транспорт
+/// (`ProfileSecretSource`): по нему видно, ушёл ли токен. Без него токен
+/// считается неотправленным.
+Future<String> describeStartFailure(
+  Object error,
+  ConnectionProfile profile, {
+  SecretSource? tokenSource,
+}) async {
+  // Порядок чтения токена — в kit: без 401/403 источник не вызывается.
+  final rejection = await describeConnectFailureByToken(
+    error,
+    profile,
+    tokenSource,
+  );
+  return rejection == null ? describeFailure(error) : '$rejection.';
+}
