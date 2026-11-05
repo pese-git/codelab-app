@@ -166,7 +166,7 @@ void main() {
       StdioProfile(
         id: 'x',
         label: 'X',
-        command: Platform.resolvedExecutable,
+        command: _dartExecutable(),
         args: [agent.path, 'serve', '--stdio'],
       ),
       projectDirectory: tmp.path,
@@ -202,4 +202,20 @@ final class _ThrowingResolver implements TransportResolver {
     ConnectionProfile profile, {
     required String projectDirectory,
   }) => Future.error(error);
+}
+
+/// Путь к настоящему `dart` для запуска скрипта-агента.
+///
+/// Почему: под `flutter test`/melos на CI `Platform.resolvedExecutable` — не
+/// чистый `dart`, и его вывод в stdout ломает ACP-поток агента («invalid ACP
+/// JSON-RPC»). Так же устроен `io_transport_resolver_test.dart`.
+String _dartExecutable() {
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  if (flutterRoot != null) {
+    final dart = File('$flutterRoot/bin/cache/dart-sdk/bin/dart');
+    if (dart.existsSync()) {
+      return dart.path;
+    }
+  }
+  return Platform.resolvedExecutable;
 }
