@@ -976,7 +976,8 @@ sequenceDiagram
    проверка сначала показывает ту же панель «Unencrypted connection» с текстом про токен и
    кнопкой «Test anyway»; без неё транспорт не открывается и токен не отправляется (решение
    пользователя 2026-11-05). Без токена или к локальному хосту проверка начинается сразу. Затем
-   `ProfileProbe.probe(draft, timeout: 10 s)`: открыть транспорт через тот
+   `ProfileProbe.probe(profile, token: SecretText?, timeout: 10 s)` (профиль из черновика
+   `toProfile`; change `add-provider-setup-ui`, D13): открыть транспорт через тот
    же `TransportResolver`, отправить `initialize`, закрыть транспорт; `session/new` не
    отправляется, stdio-процесс завершается после ответа или таймаута. Результат в диалоге
    (решение пользователя 2026-11-05, change `add-app-settings-shell`, D12):
@@ -1006,7 +1007,9 @@ sequenceDiagram
    Детали берутся только из типизированных данных исхода и полей профиля, никогда из текста
    исключения: поле `message` у `Unreachable` (после `describeFailure`) идёт только в журнал и
    диагностику и в UI не показывается. Новый токен из шага 4 проверяется до записи в хранилище —
-   `ProfileProbe` получает его как `SecretValue` в памяти.
+   `ProfileProbe` получает его как `SecretText` в памяти и подставляет одноразовым источником
+   через `SecretRebindableResolver.withSecrets`; резолвер без этой возможности даёт `Unsupported`,
+   а пустое значение — явный отказ без открытия транспорта (change `add-provider-setup-ui`, D13).
 6. **«Save».** Доступна при валидном черновике; проверка не обязательна, но без успешной
    проверки строка профиля получает пометку «Not tested». Порядок записи — «секрет → профиль»:
    новый токен пишется в `SecretStore`, затем профиль — в `ProfileStore`; если профиль не
@@ -1072,6 +1075,12 @@ sequenceDiagram
   тип по умолчанию, правка id, вид «Rename») перечислены в design.md change, D20.
 
 **Уточнения change `add-provider-setup-ui`** (design.md change, D13, D14, D17, D24):
+* **«Use stored secret»** показывает только имена `codelab/profiles/*`, которые принимает kit
+  (`selectableProfileTokenSecrets`): ключи провайдеров и секреты MCP туда не попадают, чтобы ключ LLM не
+  ушёл агенту как Bearer; ручная ссылка `secret:<любое допустимое имя>` в `profiles.json` работает
+  (решение пользователя 2026-11-05, D14). App перечитывает `secrets.backend` (`ClientSecretAccess`)
+  при каждом открытии «Connection», «Add connection profile» и «Providers» (D3, D4). Перед
+  подключением профиля с незаданным секретом app и CLI пишут диагностику с одним `profile_id` (D13);
 * **ссылка на токен** — вторая форма `secret:<имя>` (имя по правилу `SecretNames`), рядом с `env:<NAME>`;
   голое имя без префикса по-прежнему неподдерживаемая ссылка (D15 change `add-app-settings-shell`).
   Читает её `ProfileSecretSource(environment, stored:)` через порт kit `ProfileSecrets`, который

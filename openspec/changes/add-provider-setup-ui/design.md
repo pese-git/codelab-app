@@ -91,9 +91,12 @@ B не зависит от черновика хранилищ ОС и не пе
 - `writable == true` — вариант доступен, подпись называет `backend.id` и имя секрета;
 - `writable == false` — варианта нет или он неактивен. Подсказка строится из `SecretReadOnly` (`variable`, `fileBackendOffered`), как у `codelab secret set` (spec agent-secrets «Программная запись секретов»):
   - `Secret store <backend.id> is read-only. Add 'secrets.backend: file' to <home>/config.yaml to store secrets in <home>/secrets.yaml (plaintext, 0600), or set <CODELAB_SECRET_…> in the environment.` — если `fileBackendOffered`; это тот же текст, что `_readOnlyHint` у `codelab secret set` (`codelab_agent_io/lib/src/cli/secret_commands.dart`), чтобы app и CLI говорили одно;
-  - `Secret store <backend.id> is read-only. Set <CODELAB_SECRET_…> in the environment.` — на Windows.
+  - `Secret store <backend.id> is read-only. Set <CODELAB_SECRET_…> in the environment.` — на Windows;
+  - **если `ClientSecretAccess.configProblem` не пуст** (битый `config.yaml`, недопустимое значение `secrets.backend`; D4) — показывается эта причина, а не совет добавить `secrets.backend: file`: совет «добавьте ключ» при сломанном файле ведёт не туда (решение оркестратора, ревью итерации 1).
 
-  Текст строит одна функция `secretReadOnlyHint(SecretReadOnly, home)` в `codelab_agent_io` (выносится из `SecretCommands._readOnlyHint` без смены вывода CLI), её реэкспортирует `codelab_setup/io.dart`. Пользуются ею `SecretCommands`, мастер CLI и адаптеры app; в Cubit-ы app приходит готовая строка.
+  Текст строит одна функция `secretReadOnlyHint(SecretReadOnly, home)` в `codelab_agent_io` (выносится из `SecretCommands._readOnlyHint` без смены вывода CLI), её реэкспортирует `codelab_setup/io.dart`. Пользуются ею `SecretCommands`, мастер CLI и адаптеры app; в Cubit-ы app приходит готовая строка. Функция возвращает текст CLI дословно — `secret store <id> is read-only. …` со строчной буквы (вывод `codelab secret set` не меняется); адаптер app в `lib/app/` делает первую букву заглавной, поэтому в UI подсказка начинается с `Secret store …`, как в сценариях app-settings (решение оркестратора, итерация 1).
+
+**Когда app перечитывает бэкенд** (решение пользователя 2026-11-05, ревью итерации 1): `ClientSecretAccess` открывается заново — с повторным чтением `secrets.backend` — при каждом открытии диалога «Add connection profile», страницы «Connection» и (с итерации 2) страницы «Providers». Поэтому правка `secrets.backend: file` в `config.yaml` применяется без перезапуска app. Транспорт подключения читает секрет через тот же экземпляр, что открыла последняя страница или диалог; до первого открытия — экземпляр composition root.
 
 Ключ `secrets.backend` app не пишет: в реестре он `fileOnly` с причиной «an open secrets file is chosen only by a deliberate edit». Кнопки «хранить ключи в открытом файле» в app нет (Q1 (а), вариант (б) отклонён).
 
@@ -113,14 +116,17 @@ final class ClientSecretAccess {
   static Future<ClientSecretAccess> open({required String codelabHome,
       required Map<String, String> environment, required Logger logger});
   SecretBackendInfo get backend;            // id, writable, unavailableReason
+  String? get configProblem;                // не null, только если open откатился на env из-за config.yaml
   SecretAdmin get admin;                    // store / checkStore / delete / list
   Future<bool> isSet(String name);          // names() или CODELAB_SECRET_<…>; значение не читается
   Future<String?> read(String name);        // CODELAB_SECRET_<…>, затем бэкенд; без кэша
 }
 ```
 
-- **Выбор бэкенда.** `open` читает из пользовательского слоя (`$CODELAB_HOME/config.yaml`) только `secrets.backend`: ключ допустим только в слое `user` (`_userOnly`). Значение передаётся в `openSecretStore`, как это делает `openHostSecrets`. Если файл не читается или значение недопустимо, получается `env` с `unavailableReason`: запись не происходит, пока конфиг сломан. Причина — текст `secretsBackendProblem` без значений.
+- **Выбор бэкенда.** `open` читает из пользовательского слоя (`$CODELAB_HOME/config.yaml`) только `secrets.backend`: ключ допустим только в слое `user` (`_userOnly`). Значение передаётся в `openSecretStore`, как это делает `openHostSecrets`. Если файл не читается или значение недопустимо, получается `env` с `unavailableReason`: запись не происходит, пока конфиг сломан. Причина — текст `secretsBackendProblem` без значений. Её же отдаёт поле `configProblem`: оно не пусто только при таком откате и отличает сломанный конфиг от обычного `auto → env`, у которого тоже есть `backend.unavailableReason` (разбирать текст причины хрупко; решение оркестратора, повторное ревью итерации 1). При `auto → env` UI по-прежнему советует добавить `secrets.backend: file` (D3).
 - **Чтение без кэша.** Резолвер агента кэширует найденное до конца процесса. Клиенту кэш не нужен: токен профиля читается при каждом открытии транспорта, ключ провайдера — при каждом «Check». Замена в другом процессе видна сразу. Порядок «переменная `CODELAB_SECRET_<…>`, затем бэкенд» — тот же, что у `SecretResolver` (agent-secrets «Резолвер секретов»): значение из переменной побеждает, иначе клиент и агент разошлись бы.
+- **Время жизни.** Экземпляр не кэширует выбор бэкенда навсегда: хост вызывает `open` заново там, где пользователь ожидает свежего состояния (D3) (решение пользователя 2026-11-05, ревью итерации 1). `open` дешёвый — одно чтение `config.yaml`, без процессов для `env` и `file`.
+- **Гонка «проверили — записали».** `SecretAdmin.store` пишет и существующее имя (`SecretUpdated`). Если имя появилось между `checkStore`/`names()` и `store`, клиент считает результат `SecretUpdated` равным `Exists`: секрет не создан этой операцией и при отказе следующего шага не откатывается (решение оркестратора, ревью итерации 1). Атомарного «создать, только если имени нет» в порте нет — задача backlog `[agent]` `SecretAdmin.create` (`delivery-roadmap.md` §10.4).
 - **Где значение.** `read` возвращает `String?` только адаптерам `lib/app/` и `run.dart`, которые сразу отдают его транспорту или `ProviderCheck`. В состояние, события и тексты оно не попадает (SETUP-1).
 
 *Альтернативы:*
@@ -318,15 +324,19 @@ final class ClientSecretAccess {
 
   Реализация — в composition root app (`lib/app/`) и в `run.dart` CLI поверх `ClientSecretAccess` (D4). Kit не знает `codelab_setup`.
 - **`SecretText`** (kit) — обёртка значения нового токена в черновике: `toString()` и JSON — `***`, `reveal()` только для `ProfileSecrets.store` и проверки. Отдельный от `SecretValue` моста тип нужен потому, что kit не зависит от стороны агента. Дублирование — десять строк, и это цена границы §4.1.
-- **`ProfileSecretSource(environment, {ProfileSecrets? stored})`** — `secret:` читает `stored.read(name)`; без `stored`, при пустом или отсутствующем значении — `null`, подключение без токена с предупреждением диагностики `The token secret of profile <id> is not set; connecting without a token.` (имя секрета — не секрет, но диагностика держится правила A: только `profile_id`).
+- **`ProfileSecretSource(environment, {ProfileSecrets? stored})`** — `secret:` читает `stored.read(name)`; без `stored`, при пустом или отсутствующем значении — `null`, подключение без токена.
+- **Предупреждение о незаданном секрете** выдаёт хост — app и CLI — перед подключением профиля с `secret:`, если `ProfileSecretSource.isSecretMissing(profile)` истинно. Это метод источника (не расширение): он проверяет `ProfileSecrets.isSet(name)` порта и значение не читает; для `env:`, профиля без токена, неподдерживаемой ссылки и не-WebSocket — `false`, ошибка порта считается «не задан». Текст — функция kit `secretMissingWarning(profileId)`: диагностика `Profile <id> has no stored secret value; connecting without a token.` и событие с единственным полем `profile_id` (имя секрета — не секрет, но диагностика держится правила A) (решение оркестратора, ревью итерации 1). Kit-источник сам ничего не пишет: у него нет логгера и `profile_id`. Формулировка без «token <слово>» намеренно: `SecretRedactor` диагностики (`\bToken\s+…`) затёр бы слово как значение токена (решение оркестратора, ревью итерации 1).
 - **`ProfileCommitter`** (kit; тест `profile_commit_test.dart`, названный в §12.4.13):
   1. перечитать id (как «Save anyway» в A);
-  2. если выбран «Store a new token»: `store('codelab/profiles/<id>/token', value)`; `Exists` → проблема черновика `tokenSecretExists` без записи;
-  3. `ProfileStore.save(profile с tokenRef: secret:codelab/profiles/<id>/token)`;
-  4. если шаг 3 не удался, а секрет создан на шаге 2, — `delete`. Ошибка отката — событие `connection_profile.token_rollback_failed` и текст `The profile was not saved; the token stays in <backend> as <name>. Remove it with codelab secret delete <name>.`.
+  2. если выбран «Store a new token»: `store('codelab/profiles/<id>/token', value)`; `Exists` (в том числе `SecretUpdated` из гонки, D4) → проблема черновика `tokenSecretExists` без записи профиля и без отката;
+  3. ещё раз проверить id — уже после записи секрета: `codelab profiles add` в другом процессе мог занять его за время шага 2. Занятый id → проблема `idTaken` и откат секрета, созданного на шаге 2 (решение оркестратора, ревью итерации 1);
+  4. `ProfileStore.save(profile с tokenRef: secret:codelab/profiles/<id>/token)`;
+  5. если шаг 4 не удался, а секрет создан на шаге 2, — `delete`. Ошибка отката — событие `connection_profile.token_rollback_failed` и текст `The profile was not saved; the token stays in <backend> as <name>. Remove it with codelab secret delete <name>.`.
+
+  Результаты `ProfileSaveFailed` и `RemoveFailed` несут `errorType` — имя типа исключения для события журнала, без `toString()` (решение оркестратора, ревью итерации 1).
 
   Имя всегда `codelab/profiles/<id>/token`, где id нового профиля по правилу A (`^[a-z0-9][a-z0-9._-]{0,63}$`) — оно проходит `SecretNames`.
-- **Проверка нового токена.** `ProfileProbe.probe(draft, token: SecretText?)` передаёт транспорту значение из памяти через одноразовый `SecretSource`, до записи в хранилище (§12.4.9, шаг 5). Для «Use stored secret» проверка читает секрет тем же `ProfileSecretSource`, что подключение.
+- **Проверка нового токена.** `ProfileProbe.probe(profile, token: SecretText?)` (профиль из `ProfileDraft.toProfile`; токен подставляется через `SecretRebindableResolver.withSecrets`, резолвер без этой возможности даёт `Unsupported`, а не проверку без токена; пустой `NewSecretToken` — явный отказ проверки без открытия транспорта, а не проверка без токена (решение оркестратора, ревью итерации 1)) передаёт транспорту значение из памяти через одноразовый `SecretSource`, до записи в хранилище (§12.4.9, шаг 5). Для «Use stored secret» проверка читает секрет тем же `ProfileSecretSource`, что подключение.
 - **Удаление.** `ProfileCommitter.remove(id, {deleteOwnSecret})`:
   1. `ProfileStore.remove`;
   2. после успеха — `ProfileSecrets.delete` собственного `codelab/profiles/<id>/token`, если флажок выбран. Секрет удаляется, только если профиль ссылается именно на него и ни один другой профиль файла на него не ссылается. Чужие секреты («Use stored secret») не удаляются никогда. Ошибка удаления секрета профиль не возвращает: событие `connection_profile.token_delete_failed` и подсказка `codelab secret delete <name>`.
@@ -335,7 +345,7 @@ final class ClientSecretAccess {
 
 «Add connection profile», поле «Token» WebSocket — четыре варианта в порядке:
 1. «No token»;
-2. «Use stored secret» — ComboBox имён `ProfileSecrets.names()` (артборд). Пустой список или бэкенд с ошибкой — вариант неактивен с подсказкой `No stored secrets in <backend>.`;
+2. «Use stored secret» — ComboBox имён `ProfileSecrets.names()`, отфильтрованных функцией kit `selectableProfileTokenSecrets(names)`: только `codelab/profiles/*`, которые принимает `ProfileTokenRef` (`secret:<имя>` разбирается в `SecretTokenRef`). Ключи провайдеров (`codelab/<id>`) и секреты MCP (`codelab/mcp/…`) в список не попадают: ключ LLM не должен уйти агенту заголовком Bearer (решение пользователя 2026-11-05, ревью итерации 1). Ручная ссылка `secret:<любое допустимое имя>` в `profiles.json` по-прежнему работает: фильтр ограничивает только выбор в UI. Пустой отфильтрованный список или бэкенд с ошибкой — вариант неактивен с подсказкой `No stored secrets in <backend>.`;
 3. «Store a new token» — `PasswordBox` и подпись холста `Saved as codelab/profiles/<id>/token in <backend>. The value is never shown again or written to profiles.json.`. При read-only бэкенде вариант неактивен с подсказкой D3;
 4. «From environment variable» — как в A (D13 A).
 
@@ -495,11 +505,12 @@ final class ClientSecretAccess {
 | `mcp_settings.status_subscribed` / `status_unsubscribed` | debug | — |
 | `mcp_settings.command_sent` | info | `command: list \| reload`, `server?` |
 | `connection_profile.token_stored` | info | `profile_id`, `backend` |
-| `connection_profile.token_rollback` / `token_rollback_failed` | warning | `profile_id`, `error_type?` |
-| `connection_profile.token_deleted` / `token_delete_failed` | info / warning | `profile_id`, `error_type?` |
-| `secrets.client.backend` | info | `backend`, `writable` |
+| `connection_profile.token_rollback` / `token_rollback_failed` | warning | `profile_id`, `backend`, `error_type?` |
+| `connection_profile.token_deleted` / `token_delete_failed` | info / warning | `profile_id`, `backend`, `error_type?` |
+| `connection_profile.token_secret_missing` | warning | `profile_id` — секрет `secret:` не задан перед подключением (D13) |
+| `secrets.client.backend` | info | `backend`, `writable`, `reason?` — `unavailableReason` бэкенда, текст без значений (D3) |
 
-`connection_profile.saved` получает `token: none | env | secret` (было `none | env`).
+`connection_profile.saved` получает `token: none | env | secret` (было `none | env`). Все пять событий `connection_profile.token_*` несут `profile_id` и `backend`, как требует spec app-settings «События журнала настроек без секретов» (решение оркестратора, ревью итерации 1).
 
 В события не попадают (§43–§46):
 - значения ключей и токенов;
@@ -632,6 +643,8 @@ Allowlist ядра (PKG-2) не меняется: поток состояний 
 
 - **[Секрет в журнале, состоянии или ошибке]** → значения живут только в `SecretValue`/`SecretText`, ключ для Check и токен для транспорта читаются в адаптере `lib/app/`/`run.dart` и сразу отдаются потребителю (D4); события — только id и виды (D18); тесты с маркером на всех путях (D22).
 - **[Перезапись пользовательского `config.yaml`]** → только `ConfigWriter` (комментарии и порядок сохраняются, валидатор до замены, атомарная замена, блокировка); конфликт — `ConfigConflict` без автоповтора с сохранённым черновиком (SETUP-6); битый файл не пишется (D10). Остаточный риск: правка в редакторе пользователя между снимком и записью — именно её ловит fingerprint.
+- **[Гонка записи секрета]** → между проверкой имени и `SecretAdmin.store` другой процесс может записать то же имя; клиент считает `SecretUpdated` равным `Exists` и не откатывает такой секрет (D4). Остаточный риск: значение, записанное другим процессом в этом окне, перезаписано значением пользователя app. Исправление — атомарный `SecretAdmin.create` (backlog `[agent]`, `delivery-roadmap.md` §10.4).
+- **[Ключ LLM как Bearer]** → «Use stored secret» показывает только `codelab/profiles/*` (D14); ручная ссылка `secret:` на другой секрет в `profiles.json` остаётся на ответственности пользователя, как `env:` у A.
 - **[Перезапись чужого секрета]** → существующее имя не перезаписывается без «Replace it» (D7, D11, D13); при откате удаляется только созданный этой операцией секрет (SETUP-5).
 - **[Открытый файл секретов]** → `file` выбирает только пользователь правкой или `codelab config set` (D3); UI называет файл открытым. Кнопки, которая сама включает `file`, нет — решение Q1 (а).
 - **[Ключ уходит на чужой хост]** → проверка только на введённый `base_url`, без редиректов (SETUP-23), `http://` к нелокальному хосту — с подтверждением (SETUP-10); ключ провайдера используется только с адресом своего провайдера.
