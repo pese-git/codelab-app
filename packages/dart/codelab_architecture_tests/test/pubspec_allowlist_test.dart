@@ -103,10 +103,17 @@ const cliAllowlist = {
 /// Допустимые зависимости моста настроек `codelab_setup` (workspace-
 /// architecture «Автоматический сторож границ пакетов»; design.md change
 /// `add-agent-configuration`, D14): ядро агента, его IO-пакет (используется
-/// только в `lib/io.dart`) и `meta`. Мост — единственное место, через которое
-/// клиенты (CLI, desktop) достают конфигурацию агента, не импортируя
-/// `package:codelab_agent_*` сами.
-const setupAllowlist = {'codelab_agent_core', 'codelab_agent_io', 'meta'};
+/// только в `lib/io.dart`), `http` и `meta`. Мост — единственное место, через
+/// которое клиенты (CLI, desktop) достают конфигурацию агента, не импортируя
+/// `package:codelab_agent_*` сами. `http` — проверка `/models` мастером и
+/// страницей Providers (`HttpProviderCheck`; design.md change
+/// `add-provider-setup-ui`, D8, D20); `IOClient` разрешён только `io.dart`.
+const setupAllowlist = {
+  'codelab_agent_core',
+  'codelab_agent_io',
+  'http',
+  'meta',
+};
 
 /// Допустимые зависимости моста встроенного агента `codelab_embedded`
 /// (workspace-architecture «Автоматический сторож границ пакетов»; design.md
@@ -306,18 +313,36 @@ dependencies: # allowlist
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });
 
-  test('reports http in the dependencies of the setup bridge', () {
-    // Мост не ходит в сеть до появления мастера провайдера (этап 7):
-    // `http` в allowlist не входит (change `add-agent-configuration`, D14).
+  test('reports dio in the dependencies of the setup bridge', () {
+    // `http` теперь разрешён (проверка `/models`, change
+    // `add-provider-setup-ui`, D8, D20), поэтому негативный пример — любой
+    // другой HTTP-клиент.
     const pubspec = '''
 name: codelab_setup
 dependencies: # allowlist
   codelab_agent_core:
     path: ../codelab_agent_core
-  http: ^1.5.0
+  dio: ^5.0.0
 ''';
 
-    expect(dependencyKeys(pubspec).difference(setupAllowlist), {'http'});
+    expect(dependencyKeys(pubspec).difference(setupAllowlist), {'dio'});
+  });
+
+  test('the setup bridge may depend on http', () {
+    // Сценарий workspace-architecture «http в мосте настроек».
+    const pubspec = '''
+name: codelab_setup
+dependencies: # allowlist
+  codelab_agent_core:
+    path: ../codelab_agent_core
+  codelab_agent_io:
+    path: ../codelab_agent_io
+  http: ^1.5.0
+  meta: ^1.16.0
+''';
+
+    expect(setupAllowlist, contains('http'));
+    expect(dependencyKeys(pubspec).difference(setupAllowlist), isEmpty);
   });
 
   test('the terminal client may depend on the embedded agent bridge', () {

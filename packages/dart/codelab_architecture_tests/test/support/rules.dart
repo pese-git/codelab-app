@@ -275,6 +275,20 @@ const rules = [
       'package:codelab_agent_io/testing.dart',
     ],
   ),
+  // Клиент HTTP для `dart:io` и браузера — только `io.dart` моста настроек:
+  // основной барель проверяет `/models` поверх абстрактного `http.Client`
+  // (`package:http/http.dart` web-безопасен) и обязан собираться в JS и Wasm;
+  // `IOClient` создаёт `ioProviderCheck()` (workspace-architecture «http в
+  // мосте настроек»; design.md change `add-provider-setup-ui`, D8, D20).
+  PackageRule(
+    'packages/dart/codelab_setup',
+    forbidden: [
+      'package:http/io_client.dart',
+      'package:http/browser_client.dart',
+    ],
+    exclude: ['lib/io.dart', 'lib/src/io/'],
+    sealExclude: false,
+  ),
   // IO-барель моста настроек в десктопном клиенте: только composition root
   // `lib/app/`, как `codelab_embedded/io.dart` (workspace-architecture
   // «IO-барель моста настроек вне composition root app»; design.md change

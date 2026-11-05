@@ -271,6 +271,41 @@ void main() {
     expect(backs, 2);
   });
 
+  test('the production set shows Connection and Providers in the Agent '
+      'group (SETUP-17)', () {
+    expect(defaultSettingsPages.visible, [
+      SettingsPage.connection,
+      SettingsPage.providers,
+    ]);
+  });
+
+  testWidgets('Three pages of the Agent group: Connection and Providers in '
+      'this order, no App title', (tester) async {
+    await pumpShell(tester, available: defaultSettingsPages.available);
+
+    final connection = tester.getTopLeft(_nav(SettingsPage.connection));
+    final providers = tester.getTopLeft(_nav(SettingsPage.providers));
+    expect(connection.dy, lessThan(providers.dy));
+    expect(find.text('Agent'), findsOneWidget);
+    expect(find.text('App'), findsNothing);
+  });
+
+  testWidgets('search "api key" keeps Providers', (tester) async {
+    await pumpShell(
+      tester,
+      available: {SettingsPage.connection, SettingsPage.providers},
+    );
+
+    await tester.enterText(
+      find.byKey(CodeLabSettingsNavigation.searchKey),
+      'api key',
+    );
+    await tester.pumpAndSettle();
+
+    expect(_nav(SettingsPage.providers), findsOneWidget);
+    expect(_nav(SettingsPage.connection), findsNothing);
+  });
+
   test('the production builder table is immutable', () {
     expect(
       () =>
@@ -316,6 +351,21 @@ void main() {
       ]) {
         expect(SettingsSearchIndex.search(visible, word), [
           SettingsPage.connection,
+        ], reason: word);
+      }
+    });
+
+    test('matches Providers keywords', () {
+      const pages = [SettingsPage.connection, SettingsPage.providers];
+      for (final word in const [
+        'provider',
+        'model',
+        'api key',
+        'key storage',
+        'base url',
+      ]) {
+        expect(SettingsSearchIndex.search(pages, word), [
+          SettingsPage.providers,
         ], reason: word);
       }
     });
