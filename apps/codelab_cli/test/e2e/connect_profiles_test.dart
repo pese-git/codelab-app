@@ -18,6 +18,9 @@ import 'support/e2e_agent.dart';
 
 const _token = 'e2e-secret-token';
 
+/// Фиктивный секрет в query адреса профиля: в вывод CLI не попадает.
+const _urlLeak = 'sk-test-leak-query';
+
 void main() {
   late Directory dir;
 
@@ -237,6 +240,65 @@ void main() {
     final output = '${result.stdout}${result.stderr}';
     expect(output, isNot(contains('sk-test-leak-123')));
     expect(output, isNot(contains(_token)));
+  }, tags: scriptedOnly);
+
+  // Отказ рукопожатия по токену называется своими словами (spec codelab-cli
+  // «Отказ подключения из-за токена»): «отверг токен» — токен ушёл, «требует
+  // токен» — нет. Значения токенов (фиктивные) в вывод не попадают.
+  test('cli/connect-profiles-stdio-ws-embedded: a wrong token is reported as '
+      'rejected, a missing one as required', () async {
+    final port = await startWebSocketAgent();
+    const wrong = 'sk-test-leak-wrong';
+    final home = Directory('${dir.path}/codelab')..createSync();
+    File('${home.path}/profiles.json').writeAsStringSync(
+      jsonEncode({
+        'version': 1,
+        'profiles': [
+          {
+            'type': 'webSocket',
+            'id': 'devbox',
+            'label': 'Devbox',
+            'uri': 'ws://127.0.0.1:$port/acp?t=$_urlLeak',
+            'tokenRef': 'env:DEVBOX_TOKEN',
+          },
+        ],
+      }),
+    );
+    // В тексте — только origin: query адреса несёт секрет.
+    final url = 'ws://127.0.0.1:$port';
+
+    final rejected = await CliProcess.run(
+      ['-a', 'devbox', '--cwd', dir.path, '-p', 'hi'],
+      environment: {'CODELAB_HOME': home.path, 'DEVBOX_TOKEN': wrong},
+    );
+    final required = await CliProcess.run(
+      ['-a', 'devbox', '--cwd', dir.path, '-p', 'hi'],
+      // DEVBOX_TOKEN не задан: токен не отправляется.
+      environment: {'CODELAB_HOME': home.path},
+    );
+
+    expect(rejected.exitCode, 1, reason: '$rejected');
+    expect(
+      rejected.stderr,
+      contains(
+        'codelab: cannot start the agent $url: '
+        'the agent rejected the token (HTTP 401).',
+      ),
+    );
+    expect(required.exitCode, 1, reason: '$required');
+    expect(
+      required.stderr,
+      contains(
+        'codelab: cannot start the agent $url: '
+        'the agent requires a token (HTTP 401).',
+      ),
+    );
+    final output =
+        '${rejected.stdout}${rejected.stderr}${required.stdout}${required.stderr}';
+    expect(output, isNot(contains(wrong)));
+    expect(output, isNot(contains(_token)));
+    expect(output, isNot(contains(_urlLeak)));
+    expect(output, isNot(contains('/acp')));
   }, tags: scriptedOnly);
 
   // Критерий `cli/connect-profiles-stdio-ws-embedded`, вариант `embedded`:

@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_cli/codelab_cli.dart';
+import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:dart_tui/dart_tui.dart' as tea;
 import 'package:test/test.dart';
 
@@ -77,14 +78,20 @@ void main() {
     await agent.dispose();
   });
 
-  TuiRunner runner({String? firstMessage}) => TuiRunner(
+  final errors = StringBuffer();
+
+  TuiRunner runner({
+    String? firstMessage,
+    ConnectionProfile profile = FakeAgent.profile,
+  }) => TuiRunner(
     workspace: agent.workspace,
-    profile: FakeAgent.profile,
+    profile: profile,
+    tokenSource: fakeTokenSource,
     cwd: '/w',
     history: _NoHistory(),
     firstMessage: firstMessage,
     output: sink,
-    errorOutput: StringBuffer(),
+    errorOutput: errors,
     programOptions: [
       tea.withInput(input.stream),
       tea.withOutput(sink),
@@ -130,6 +137,43 @@ void main() {
       text.substring(text.lastIndexOf('\x1b[?1049l')),
       contains('Hello there'),
     );
+  });
+
+  group('a handshake rejected because of the token', () {
+    Future<int> runRejected(int status, WebSocketProfile profile) async {
+      await agent.dispose();
+      agent = FakeAgent(openError: handshakeRejected(status));
+      return runner(profile: profile).run();
+    }
+
+    test('with a token the message says the agent rejected it', () async {
+      expect(await runRejected(401, wsProfile()), 1);
+
+      expect(
+        errors.toString(),
+        contains(
+          'codelab: cannot start the agent ws://127.0.0.1:9: '
+          'the agent rejected the token (HTTP 401).',
+        ),
+      );
+      expect(errors.toString(), isNot(contains(fakeTokenMarker)));
+      for (final leak in fakeUrlLeaks) {
+        expect(errors.toString(), isNot(contains(leak)));
+      }
+    });
+
+    test('without a token the message says the agent requires one', () async {
+      await runRejected(403, wsProfile(withToken: false));
+
+      expect(errors.toString(), contains('the agent requires a token'));
+      expect(errors.toString(), contains('(HTTP 403)'));
+    });
+
+    test('other statuses keep the previous text', () async {
+      await runRejected(500, wsProfile());
+
+      expect(errors.toString(), contains('Failed to connect ACP transport.'));
+    });
   });
 
   test('the first message is sent at once', () async {

@@ -10,6 +10,7 @@
 
 import 'dart:async';
 
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
@@ -38,6 +39,13 @@ final class _RecordingResolver implements TransportResolver {
   /// Id профилей, открытие которых падает (недоступный агент).
   final failFor = <String>{};
 
+  /// Ошибка открытия по id профиля: отказ рукопожатия, а не `StateError`.
+  final failWith = <String, Object>{};
+
+  /// Профили, которых ни один резолвер не поддерживает: kit отклоняет их
+  /// до публикации `connecting`.
+  final unsupported = <String>{};
+
   /// Открытые транспорты по порядку: тест обрывает соединение первого.
   final transports = <FakeAcpTransport>[];
 
@@ -45,7 +53,7 @@ final class _RecordingResolver implements TransportResolver {
   final holds = <String, Future<void>>{};
 
   @override
-  bool supports(ConnectionProfile profile) => true;
+  bool supports(ConnectionProfile profile) => !unsupported.contains(profile.id);
 
   @override
   Future<AcpTransport> open(
@@ -54,6 +62,10 @@ final class _RecordingResolver implements TransportResolver {
   }) async {
     profiles.add(profile);
     await holds[profile.id];
+    final failure = failWith[profile.id];
+    if (failure != null) {
+      throw failure;
+    }
     if (failFor.contains(profile.id)) {
       throw StateError('agent ${profile.id} is unavailable');
     }
@@ -802,6 +814,186 @@ void main() {
         CodeLabConnectionStatus.connected,
       );
       expect(parts.connection.restartTarget, remote);
+    });
+  });
+  group('a token rejected by the agent (HTTP 401/403)', () {
+    const marker = 'sk-test-leak-9f3a';
+    final remote = ConnectionProfile.webSocket(
+      id: 'remote',
+      label: 'Remote',
+      uri: Uri.parse('wss://remote:1/acp'),
+      tokenRef: 'secret:codelab/ws-remote',
+    );
+    Object rejection(int status) => AcpTransportException(
+      code: AcpTransportErrorCode.startFailed,
+      message: 'Failed to start ACP transport.',
+      cause: AcpWebSocketHandshakeRejected(status),
+    );
+
+    ProfileSecretSource withToken() => ProfileSecretSource(
+      const {},
+      stored: _Secrets({'codelab/ws-remote': marker}),
+    );
+
+    String logged() => '${shellLog.entries}${eventLog.entries}';
+
+    test('connect: the banner and the diagnostic say the token was rejected, '
+        'not the generic text; the token value is nowhere', () async {
+      build(tokenSecrets: withToken());
+      resolver.failWith['remote'] = rejection(401);
+
+      await parts.connection.connect(remote);
+      await pumpEventQueue();
+
+      final state = parts.connection.state;
+      expect(state.connectionStatus, CodeLabConnectionStatus.failed);
+      expect(
+        state.connectionMessage,
+        'The agent rejected the token (HTTP 401).',
+      );
+      expect(logged(), contains('The agent rejected the token (HTTP 401).'));
+      expect(logged(), isNot(contains('AcpWebSocketHandshakeRejected')));
+      expect('$state${logged()}', isNot(contains(marker)));
+    });
+
+    test('without a token the text says the agent requires one', () async {
+      build(tokenSecrets: ProfileSecretSource(const {}, stored: _Secrets()));
+      resolver.failWith['remote'] = rejection(403);
+
+      await parts.connection.connect(remote);
+      await pumpEventQueue();
+
+      expect(
+        parts.connection.state.connectionMessage,
+        'The agent requires a token (HTTP 403).',
+      );
+    });
+
+    test('reconnect keeps the same text', () async {
+      build(tokenSecrets: withToken());
+      await parts.connection.connect(remote);
+      resolver.failWith['remote'] = rejection(401);
+
+      await parts.connection.reconnect();
+      await pumpEventQueue();
+
+      expect(
+        parts.connection.state.connectionMessage,
+        'The agent rejected the token (HTTP 401).',
+      );
+      expect(logged(), contains('The agent rejected the token (HTTP 401).'));
+      expect(logged(), isNot(contains(marker)));
+    });
+
+    test('another failure is shown as before: the exact kit text', () async {
+      build(tokenSecrets: withToken());
+      resolver.failWith['remote'] = rejection(500);
+
+      await parts.connection.connect(remote);
+      await pumpEventQueue();
+
+      final kit = workspace.current.connection;
+      expect(kit, isA<ConnectionFailed>());
+      expect(
+        parts.connection.state.connectionMessage,
+        (kit as ConnectionFailed).message,
+      );
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.failed,
+      );
+    });
+
+    test('a later attempt rejected before the kit publishes connecting does '
+        'not keep the token text of the previous one', () async {
+      build(tokenSecrets: withToken());
+      resolver.failWith['remote'] = rejection(401);
+      await parts.connection.connect(remote);
+      await pumpEventQueue();
+      resolver.unsupported.add('nope');
+
+      await parts.connection.connect(
+        const ConnectionProfile.stdio(id: 'nope', label: 'Nope', command: 'x'),
+      );
+      await pumpEventQueue();
+
+      final message = parts.connection.state.connectionMessage;
+      expect(message, contains('No transport resolver supports'));
+      expect(message, isNot(contains('token')));
+    });
+
+    test('the banner text is cleared when the kit goes to connecting and '
+        'connected', () async {
+      build(tokenSecrets: withToken());
+      resolver.failWith['remote'] = rejection(401);
+      await parts.connection.connect(remote);
+      await pumpEventQueue();
+      expect(parts.connection.state.connectionMessage, isNotNull);
+
+      resolver.failWith.clear();
+      final handshake = Completer<void>();
+      resolver.holds['remote'] = handshake.future;
+      final next = parts.connection.connect(remote);
+      await pumpEventQueue();
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connecting,
+      );
+      expect(parts.connection.state.connectionMessage, isNull);
+
+      handshake.complete();
+      await next;
+      await pumpEventQueue();
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      expect(parts.connection.state.connectionMessage, isNull);
+    });
+
+    test(
+      'the banner text is cleared when the kit goes to reconnecting',
+      () async {
+        build(tokenSecrets: withToken());
+        await parts.connection.connect(remote);
+        resolver.failWith['remote'] = rejection(401);
+        await parts.connection.reconnect();
+        await pumpEventQueue();
+        expect(parts.connection.state.connectionMessage, isNotNull);
+
+        resolver.failWith.clear();
+        final handshake = Completer<void>();
+        resolver.holds['remote'] = handshake.future;
+        final next = parts.connection.reconnect();
+        await pumpEventQueue();
+        expect(
+          parts.connection.state.connectionStatus,
+          CodeLabConnectionStatus.reconnecting,
+        );
+        expect(parts.connection.state.connectionMessage, isNull);
+        handshake.complete();
+        await next;
+      },
+    );
+
+    test('a superseded attempt does not overwrite the current one', () async {
+      build(tokenSecrets: withToken());
+      final handshake = Completer<void>();
+      resolver.holds['remote'] = handshake.future;
+      resolver.failWith['remote'] = rejection(401);
+
+      final a = parts.connection.connect(remote);
+      await pumpEventQueue();
+      await parts.connection.connect(embeddedConnectionProfile);
+      handshake.complete();
+      await a;
+      await pumpEventQueue();
+
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      expect(parts.connection.state.connectionMessage, isNull);
     });
   });
 }

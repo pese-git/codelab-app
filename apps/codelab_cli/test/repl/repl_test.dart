@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_cli/codelab_cli.dart';
+import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:test/test.dart';
 
 import '../support/fake_agent.dart';
@@ -45,10 +46,12 @@ void main() {
   Repl repl({
     String? firstMessage,
     OutputSurface surface = OutputSurface.ansi,
+    ConnectionProfile profile = FakeAgent.profile,
   }) => Repl(
     workspace: agent.workspace,
     terminal: terminal,
-    profile: FakeAgent.profile,
+    profile: profile,
+    tokenSource: fakeTokenSource,
     cwd: '/work',
     history: history,
     surface: surface,
@@ -223,6 +226,47 @@ void main() {
     expect(code, 1);
     expect(terminal.errorText, contains('no such agent'));
     expect(terminal.rawEnabled, isFalse);
+  });
+
+  group('a handshake rejected because of the token', () {
+    test('with a token the message says the agent rejected it', () async {
+      await agent.dispose();
+      agent = FakeAgent(openError: handshakeRejected(401));
+
+      final code = await repl(profile: wsProfile()).run();
+
+      expect(code, 1);
+      expect(
+        terminal.errorText,
+        contains(
+          'codelab: cannot start the agent ws://127.0.0.1:9: '
+          'the agent rejected the token (HTTP 401).',
+        ),
+      );
+      expect(terminal.errorText, isNot(contains(fakeTokenMarker)));
+      for (final leak in fakeUrlLeaks) {
+        expect(terminal.errorText, isNot(contains(leak)));
+      }
+    });
+
+    test('without a token the message says the agent requires one', () async {
+      await agent.dispose();
+      agent = FakeAgent(openError: handshakeRejected(401));
+
+      final code = await repl(profile: wsProfile(withToken: false)).run();
+
+      expect(code, 1);
+      expect(terminal.errorText, contains('the agent requires a token'));
+    });
+
+    test('other statuses keep the previous text', () async {
+      await agent.dispose();
+      agent = FakeAgent(openError: handshakeRejected(500));
+
+      await repl(profile: wsProfile()).run();
+
+      expect(terminal.errorText, contains('Failed to connect ACP transport.'));
+    });
   });
 
   test('interrupt() cancels the turn and gives the signal code', () async {
