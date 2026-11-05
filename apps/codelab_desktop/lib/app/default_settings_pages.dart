@@ -8,9 +8,10 @@ import 'navigation/settings_page.dart';
 /// Для чего: источник по умолчанию для `createCodeLabRootScope`; тесты
 /// подставляют свой набор через `settingsPages:`.
 ///
-/// Как использовать: итерация 2 добавила «Connection» (Migration Plan, п. 3);
-/// следующие страницы появятся вместе со своими телами. Страница из набора
-/// ДОЛЖНА иметь построитель в `settingsPageBuilders`.
+/// Как использовать: change `add-app-settings-shell` добавил «Connection»,
+/// change `add-provider-setup-ui` (итерация 2) — «Providers» (Migration Plan,
+/// п. 2; SETUP-17); следующие страницы появятся вместе со своими телами.
+/// Страница из набора ДОЛЖНА иметь построитель в `settingsPageBuilders`.
 const defaultSettingsPages = SettingsPages(
-  available: {SettingsPage.connection},
+  available: {SettingsPage.connection, SettingsPage.providers},
 );
