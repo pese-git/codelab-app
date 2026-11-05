@@ -22,6 +22,7 @@ import 'package:codelab_desktop/features/settings/application/connection_setting
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../support/fake_profile_secrets.dart';
 import '../../../support/recording_logger.dart';
 
 const _defaultKey = 'codelab.connection.default_profile';
@@ -194,6 +195,7 @@ void main() {
   late _Commands commands;
   late RecordingLogger logger;
   late AcpClientApplication application;
+  late FakeProfileSecrets secrets;
 
   ConnectionSettingsCubit build({
     Map<String, String> environment = const {},
@@ -202,6 +204,7 @@ void main() {
   }) {
     final cubit = ConnectionSettingsCubit(
       store: store ?? JsonFileProfileStore(profilesFile.path),
+      openSecrets: () async => secrets,
       preferences: const SharedPreferencesConnectionPreferences(),
       workspace: workspace,
       commands: commands,
@@ -238,6 +241,7 @@ void main() {
     );
     commands = _Commands();
     logger = RecordingLogger();
+    secrets = FakeProfileSecrets();
     addTearDown(() async {
       await workspace.dispose();
       await application.dispose();
@@ -596,6 +600,264 @@ void main() {
     });
   });
 
+  group('token secret in the row and Remove (1.7, D13, D14, D18)', () {
+    const ownName = 'codelab/profiles/devbox/token';
+    const leak = 'sk-test-leak-0123456789';
+    const withSecrets = """
+{"version":1,"profiles":[
+ {"type":"webSocket","id":"devbox","label":"Devbox","uri":"wss://devbox:7420",
+  "tokenRef":"secret:codelab/profiles/devbox/token"},
+ {"type":"webSocket","id":"ci","label":"CI","uri":"wss://ci:7420",
+  "tokenRef":"secret:codelab/ws-ci"}
+]}
+""";
+    // `twin` ссылается на секрет `devbox`: общий секрет не удаляется.
+    const withTwin = """
+{"version":1,"profiles":[
+ {"type":"webSocket","id":"devbox","label":"Devbox","uri":"wss://devbox:7420",
+  "tokenRef":"secret:codelab/profiles/devbox/token"},
+ {"type":"webSocket","id":"twin","label":"Twin","uri":"wss://twin:7420",
+  "tokenRef":"secret:codelab/profiles/devbox/token"}
+]}
+""";
+
+    SecretTokenView? token(ConnectionSettingsReady state, String id) =>
+        state.rows.firstWhere((row) => row.id == id).token as SecretTokenView?;
+
+    test('the row knows the name, the backend and whether the secret is '
+        'set, without reading the value', () async {
+      secrets = FakeProfileSecrets(values: {ownName: leak});
+      await profilesFile.writeAsString(withSecrets);
+
+      final state = await ready(build());
+
+      expect(
+        token(state, 'devbox'),
+        const SecretTokenView(ownName, backend: 'file', isSet: true),
+      );
+      expect(
+        token(state, 'ci'),
+        const SecretTokenView('codelab/ws-ci', backend: 'file', isSet: false),
+      );
+      expect(secrets.calls.where((c) => c.startsWith('read:')), isEmpty);
+      expect(
+        state.rows.map((row) => '${row.token}').join(),
+        isNot(contains(leak)),
+      );
+    });
+
+    test('an unreadable store means "missing", not a failed page', () async {
+      secrets = FakeProfileSecrets(values: {ownName: leak})
+        ..isSetFailure = StateError(leak);
+      await profilesFile.writeAsString(withSecrets);
+
+      final state = await ready(build());
+
+      expect(token(state, 'devbox')!.isSet, isFalse);
+      expect(token(state, 'ci')!.isSet, isFalse);
+      expect(logger.entries.toString(), isNot(contains(leak)));
+    });
+
+    test('only the secret named after the profile is deletable together '
+        'with it', () async {
+      await profilesFile.writeAsString(withTwin);
+
+      final state = await ready(build());
+
+      ConnectionProfileRow row(String id) =>
+          state.rows.firstWhere((r) => r.id == id);
+      expect(row('devbox').ownTokenSecret, ownName);
+      // Профиль, ссылающийся на чужое имя `codelab/profiles/devbox/token`,
+      // собственным секретом его не считает.
+      expect(row('twin').ownTokenSecret, isNull);
+    });
+
+    test('Remove with the flag: the profile first, then the secret; both '
+        'are logged with the profile id and the backend only', () async {
+      secrets = FakeProfileSecrets(values: {ownName: leak});
+      await profilesFile.writeAsString(withSecrets);
+      final cubit = build();
+      await cubit.reload();
+
+      expect(
+        await cubit.removeProfile('devbox', deleteOwnSecret: true),
+        isTrue,
+      );
+
+      final stored = await JsonFileProfileStore(profilesFile.path).load();
+      expect([for (final p in stored) p.id], ['ci']);
+      expect(secrets.values, isEmpty);
+      expect(
+        logger.entries.where((e) => e['event'] == 'connection_profile.removed'),
+        [containsPair('profile_id', 'devbox')],
+      );
+      expect(
+        logger.entries.singleWhere(
+          (e) => e['event'] == 'connection_profile.token_deleted',
+        ),
+        allOf(
+          containsPair('profile_id', 'devbox'),
+          containsPair('backend', 'file'),
+        ),
+      );
+      expect(logger.entries.toString(), isNot(contains(leak)));
+    });
+
+    test('the page opens the store itself: Loading until it is open, a '
+        'late open after close is dropped', () async {
+      final gate = Completer<void>();
+      await profilesFile.writeAsString(withSecrets);
+      final cubit = ConnectionSettingsCubit(
+        store: JsonFileProfileStore(profilesFile.path),
+        openSecrets: () async {
+          await gate.future;
+          return secrets;
+        },
+        preferences: const SharedPreferencesConnectionPreferences(),
+        workspace: workspace,
+        commands: commands,
+        environment: const {},
+        profilesPath: profilesFile.path,
+        probe: ProfileProbe(resolvers: [resolver]),
+        projectDirectory: () => '/work',
+        logger: logger,
+      );
+      final loading = cubit.reload();
+      await pumpEventQueue();
+      expect(cubit.state, isA<ConnectionSettingsLoading>());
+
+      await cubit.close();
+      gate.complete();
+      await loading;
+
+      expect(cubit.state, isA<ConnectionSettingsLoading>());
+    });
+
+    test('every opening of the page reopens the store', () async {
+      await profilesFile.writeAsString(withSecrets);
+      var opened = 0;
+      ConnectionSettingsCubit page() {
+        final cubit = ConnectionSettingsCubit(
+          store: JsonFileProfileStore(profilesFile.path),
+          openSecrets: () async {
+            opened++;
+            return secrets;
+          },
+          preferences: const SharedPreferencesConnectionPreferences(),
+          workspace: workspace,
+          commands: commands,
+          environment: const {},
+          profilesPath: profilesFile.path,
+          probe: ProfileProbe(resolvers: [resolver]),
+          projectDirectory: () => '/work',
+          logger: logger,
+        );
+        addTearDown(cubit.close);
+        return cubit;
+      }
+
+      final first = page();
+      await first.reload();
+      await first.reload();
+      expect(opened, 1);
+      await page().reload();
+      expect(opened, 2);
+    });
+
+    test('Remove without the flag keeps the secret', () async {
+      secrets = FakeProfileSecrets(values: {ownName: leak});
+      await profilesFile.writeAsString(withSecrets);
+      final cubit = build();
+      await cubit.reload();
+
+      expect(await cubit.removeProfile('devbox'), isTrue);
+
+      expect(secrets.values, {ownName: leak});
+      expect(
+        logger.entries.where(
+          (e) => e['event'] == 'connection_profile.token_deleted',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a foreign secret is not deleted even with the flag', () async {
+      secrets = FakeProfileSecrets(values: {'codelab/ws-ci': leak});
+      await profilesFile.writeAsString(withSecrets);
+      final cubit = build();
+      await cubit.reload();
+
+      expect(await cubit.removeProfile('ci', deleteOwnSecret: true), isTrue);
+
+      expect(secrets.values, {'codelab/ws-ci': leak});
+      expect(secrets.calls.where((c) => c.startsWith('delete:')), isEmpty);
+    });
+
+    test('a secret another profile still points at is not deleted', () async {
+      secrets = FakeProfileSecrets(values: {ownName: leak});
+      await profilesFile.writeAsString(withTwin);
+      final cubit = build();
+      await cubit.reload();
+
+      await cubit.removeProfile('devbox', deleteOwnSecret: true);
+
+      expect(secrets.values, {ownName: leak});
+    });
+
+    test('a refused secret deletion does not bring the profile back; the '
+        'page says how to remove it', () async {
+      secrets = FakeProfileSecrets(values: {ownName: leak})
+        ..nextDelete = const Failed('cannot delete');
+      await profilesFile.writeAsString(withSecrets);
+      final cubit = build();
+      await cubit.reload();
+
+      expect(
+        await cubit.removeProfile('devbox', deleteOwnSecret: true),
+        isTrue,
+      );
+
+      final stored = await JsonFileProfileStore(profilesFile.path).load();
+      expect(stored.any((p) => p.id == 'devbox'), isFalse);
+      expect(
+        (cubit.state as ConnectionSettingsReady).failure,
+        'The profile was removed, but the stored token $ownName was not '
+        'deleted. Remove it with codelab secret delete $ownName.',
+      );
+      expect(
+        logger.entries.singleWhere(
+          (e) => e['event'] == 'connection_profile.token_delete_failed',
+        ),
+        allOf(
+          containsPair('profile_id', 'devbox'),
+          containsPair('backend', 'file'),
+        ),
+      );
+      expect(logger.entries.toString(), isNot(contains(leak)));
+    });
+
+    test('a failed profile write leaves the secret alone (SETUP-24)', () async {
+      secrets = FakeProfileSecrets(values: {ownName: leak});
+      await profilesFile.writeAsString(withSecrets);
+      final store = _BreakableStore(JsonFileProfileStore(profilesFile.path))
+        ..failWrites = true;
+      final cubit = build(store: store);
+      await cubit.reload();
+
+      expect(
+        await cubit.removeProfile('devbox', deleteOwnSecret: true),
+        isFalse,
+      );
+
+      expect(secrets.values, {ownName: leak});
+      expect(
+        logger.entries.where((e) => e['event'] == 'connection_profile.removed'),
+        isEmpty,
+      );
+      expect(logger.entries.toString(), isNot(contains(leak)));
+    });
+  });
+
   group('legacy "default" entry (D5, D21, task 2.15)', () {
     test('the entry is not a row, the flag is set, the file is unchanged '
         'and the log has only the fact', () async {
@@ -871,6 +1133,7 @@ void main() {
       );
       final cubit = ConnectionSettingsCubit(
         store: JsonFileProfileStore(profilesFile.path),
+        openSecrets: () async => secrets,
         preferences: preferences,
         workspace: workspace,
         commands: commands,

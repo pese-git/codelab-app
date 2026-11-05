@@ -147,6 +147,61 @@ void main() {
     expect('${result.stdout}${result.stderr}', isNot(contains(_token)));
   }, tags: scriptedOnly);
 
+  // Токен из хранилища секретов (task 1.8 change `add-provider-setup-ui`;
+  // spec codelab-cli «Токен из хранилища секретов»): временный CODELAB_HOME с
+  // бэкендом `file`, значение — фиктивный токен сервера теста.
+  test('cli/connect-profiles-stdio-ws-embedded: a profile with tokenRef '
+      'secret:<name> gets the token from the secret store', () async {
+    final port = await startWebSocketAgent();
+    final home = Directory('${dir.path}/codelab')..createSync();
+    File(
+      '${home.path}/config.yaml',
+    ).writeAsStringSync('secrets:\n  backend: file\n');
+    const name = 'codelab/profiles/devbox/token';
+    File('${home.path}/profiles.json').writeAsStringSync(
+      jsonEncode({
+        'version': 1,
+        'profiles': [
+          {
+            'type': 'webSocket',
+            'id': 'devbox',
+            'label': 'Devbox',
+            'uri': 'ws://127.0.0.1:$port/acp',
+            'tokenRef': 'secret:$name',
+          },
+        ],
+      }),
+    );
+    final environment = {'CODELAB_HOME': home.path};
+    final stored = await CliProcess.run(
+      ['secret', 'set', name],
+      environment: environment,
+      stdin: _token,
+    );
+    expect(stored.exitCode, 0, reason: stored.stderr);
+
+    final shown = await CliProcess.run([
+      'profiles',
+      'show',
+      'devbox',
+    ], environment: environment);
+    final result = await CliProcess.run([
+      '-a',
+      'devbox',
+      '--cwd',
+      dir.path,
+      '-p',
+      'hi',
+    ], environment: environment);
+
+    expect(shown.stdout, contains('token: secret $name (set)'));
+    expect(result.exitCode, 0, reason: result.stderr);
+    expect(result.stdout, contains('hello over websocket'));
+    final output =
+        '${shown.stdout}${shown.stderr}${result.stdout}${result.stderr}';
+    expect(output, isNot(contains(_token)));
+  }, tags: scriptedOnly);
+
   // Регрессионная защита (spec codelab-cli «ссылка не вида env: не
   // выводится»): ссылка не вида `env:` могла быть вписана вместо имени
   // переменной вместе с секретом; CLI подключается без токена и нигде не

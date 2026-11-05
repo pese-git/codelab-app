@@ -1,8 +1,11 @@
 // `ScenarioAgent.skipReason` для фикстур с `setup.mcp` (change
 // `add-agent-mcp-client`, D15; spec cli-scenario-driver «Команда
 // test-scenario»).
+import 'dart:io';
+
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_cli/codelab_cli.dart';
+import 'package:codelab_acp_transports/io.dart' show WebSocketAcpTransport;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:test/test.dart';
 
@@ -16,6 +19,7 @@ ScenarioAgent _agent(String command, [List<String> args = const []]) =>
     );
 
 void main() {
+  secretTokenTests();
   final withMcp = _fixture('acp/mcp-stdio-tool-call');
 
   test('fixture setup.mcp is non-empty (guard for the tests below)', () {
@@ -103,5 +107,63 @@ void main() {
       expect(agent.isCodelabAgent, isFalse);
       expect(agent.takesFixture, isFalse);
     });
+  });
+}
+
+/// Хранилище секретов в памяти для проверки токена `secret:`.
+final class _MemorySecrets implements ProfileSecrets {
+  _MemorySecrets(this.values);
+
+  final Map<String, String> values;
+
+  @override
+  ProfileSecretBackend get backend =>
+      const ProfileSecretBackend(id: 'file', writable: true);
+
+  @override
+  Future<List<String>> names() async => values.keys.toList();
+
+  @override
+  Future<bool> isSet(String name) async => values.containsKey(name);
+
+  @override
+  Future<String?> read(String name) async => values[name];
+
+  @override
+  Future<ProfileSecretWrite> store(String name, SecretText value) async =>
+      const Stored();
+
+  @override
+  Future<ProfileSecretDelete> delete(String name) async => const Deleted();
+}
+
+void secretTokenTests() {
+  test('a secret: WebSocket profile of test-scenario takes the token from '
+      'the stored secrets (ревью итерации 1, add-provider-setup-ui)', () async {
+    final agent = ScenarioAgent(
+      WebSocketProfile(
+        id: 'devbox',
+        label: 'Devbox',
+        uri: Uri.parse('ws://127.0.0.1:1/acp'),
+        tokenRef: 'secret:codelab/profiles/devbox/token',
+      ),
+      environment: const {},
+      profileSecrets: _MemorySecrets({
+        'codelab/profiles/devbox/token': 'fake-token-value',
+      }),
+    );
+
+    final connection = await agent.connector(fixturePath: 'x.json')(
+      AgentFixtureSetup(
+        fixture: _fixture('acp/prompt-text-end-turn'),
+        cwd: Directory.systemTemp.path,
+      ),
+    );
+
+    expect(
+      (connection.client as WebSocketAcpTransport).config.token,
+      'fake-token-value',
+    );
+    await connection.agent.stop();
   });
 }

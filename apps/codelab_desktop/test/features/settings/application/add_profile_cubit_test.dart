@@ -20,6 +20,7 @@ import 'package:codelab_desktop/features/settings/application/add_profile_cubit.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../support/fake_profile_secrets.dart';
 import '../../../support/recording_logger.dart';
 
 const _defaultKey = 'codelab.connection.default_profile';
@@ -105,6 +106,7 @@ final class _FailingDefaultPreferences implements ConnectionPreferences {
 
 void main() {
   late _Store store;
+  late FakeProfileSecrets secrets;
   late RecordingLogger logger;
   late List<FakeAcpTransport> stdioTransports;
   late List<StdioAcpTransportConfig> stdioConfigs;
@@ -116,6 +118,9 @@ void main() {
   /// Сколько раз probe открыл WebSocket-транспорт: до подтверждения токен не
   /// должен уйти, то есть транспорт не открывается.
   var wsOpened = 0;
+
+  /// Токены, с которыми probe открывал WebSocket (в памяти теста).
+  late List<String?> wsTokens;
 
   AddProfileCubit build({
     Map<String, String> environment = const {},
@@ -134,15 +139,17 @@ void main() {
           },
           webSocket: (config) {
             wsOpened++;
+            wsTokens.add(config.token);
             return wsFactoryFails ? throw StateError('ws failed') : wsTransport;
           },
-          secrets: ProfileSecretSource(environment),
+          secrets: ProfileSecretSource(environment, stored: secrets),
         ),
       ],
       classifier: classifier,
     );
     final cubit = AddProfileCubit(
       store: store,
+      openSecrets: () async => secrets,
       preferences: preferences,
       probe: probe,
       kinds: kinds,
@@ -188,6 +195,7 @@ void main() {
 
   AddProfileForm formOf(AddProfileCubit cubit) => switch (cubit.state) {
     AddProfileInProgress(:final form) => form,
+    OpeningSecrets() => throw StateError('the store is still opening'),
     Saved() => throw StateError('the form is already saved'),
   };
 
@@ -211,6 +219,7 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     store = _Store([_dev]);
+    secrets = FakeProfileSecrets();
     logger = RecordingLogger();
     stdioTransports = [];
     stdioConfigs = [];
@@ -218,6 +227,7 @@ void main() {
     classifier = null;
     wsFactoryFails = false;
     wsOpened = 0;
+    wsTokens = [];
     wsTransport = FakeAcpTransport();
   });
 
@@ -345,6 +355,7 @@ void main() {
     AddProfileCubit withPath(String? path, Map<String, String> env) {
       final cubit = AddProfileCubit(
         store: store,
+        openSecrets: () async => secrets,
         preferences: const SharedPreferencesConnectionPreferences(),
         probe: ProfileProbe(resolvers: const []),
         kinds: const [ProfileKind.stdio],
@@ -1209,6 +1220,572 @@ void main() {
     });
   });
 
+  group('token in the secret store (1.6, D13, D14)', () {
+    const ownName = 'codelab/profiles/devbox/token';
+    const readOnlyHint =
+        "Secret store env is read-only. Add 'secrets.backend: file' to "
+        '/home/u/.codelab/config.yaml to store secrets in '
+        '/home/u/.codelab/secrets.yaml (plaintext, 0600), or set '
+        'CODELAB_SECRET_X in the environment.';
+
+    /// WebSocket-черновик `devbox` с токеном «Store a new token».
+    Future<AddProfileCubit> newTokenForm({
+      String url = 'wss://devbox:7420',
+      String value = _leak,
+      Map<String, String> environment = const {},
+    }) async {
+      final cubit = await started(environment: environment);
+      fillWebSocket(cubit, label: 'devbox', url: url);
+      cubit
+        ..selectTokenNew()
+        ..setNewToken(value);
+      return cubit;
+    }
+
+    test('four variants: the stored secrets and the target of a new token '
+        'come from the store', () async {
+      secrets = FakeProfileSecrets(values: {'codelab/profiles/ci/token': 'x'});
+      final cubit = await started();
+      fillWebSocket(cubit, label: 'devbox');
+
+      final form = formOf(cubit);
+      expect(form.secretNames, ['codelab/profiles/ci/token']);
+      expect(form.storedSecretsHint, isNull);
+      expect(form.newTokenAvailable, isTrue);
+      expect(
+        form.newTokenHint,
+        'Saved as codelab/profiles/devbox/token in file. The value is never '
+        'shown again or written to profiles.json.',
+      );
+      expect(form.tokenKind, AddProfileTokenKind.none);
+    });
+
+    test('a read-only store disables "Store a new token" and says why; '
+        '"From environment variable" stays', () async {
+      secrets = FakeProfileSecrets(
+        backend: const ProfileSecretBackend(
+          id: 'env',
+          writable: false,
+          unavailableReason: readOnlyHint,
+        ),
+      );
+      final cubit = await started();
+      fillWebSocket(cubit);
+
+      final form = formOf(cubit);
+      expect(form.newTokenAvailable, isFalse);
+      expect(form.newTokenHint, readOnlyHint);
+      cubit.selectTokenNew();
+      expect(formOf(cubit).tokenKind, AddProfileTokenKind.none);
+      cubit.selectTokenEnv();
+      expect(formOf(cubit).tokenKind, AddProfileTokenKind.env);
+    });
+
+    test('no stored secrets, or an unreadable store, disables "Use stored '
+        'secret" with the reason', () async {
+      final cubit = await started();
+      fillWebSocket(cubit);
+      expect(formOf(cubit).storedSecretsHint, 'No stored secrets in file.');
+      cubit.selectTokenStored();
+      expect(formOf(cubit).tokenKind, AddProfileTokenKind.none);
+
+      secrets = FakeProfileSecrets()..namesFailure = StateError(_leak);
+      final failing = await started();
+      fillWebSocket(failing);
+      expect(formOf(failing).storedSecretsHint, 'No stored secrets in file.');
+      expect(logger.entries.toString(), isNot(contains(_leak)));
+    });
+
+    test('"Store a new token" is written before the profile; the profile '
+        'holds only the reference', () async {
+      final cubit = await newTokenForm();
+      await cubit.testConnection();
+      // Проверка не пишет в хранилище: токен идёт транспорту из памяти.
+      expect(secrets.values, isEmpty);
+      expect(store.saves, 0);
+      expect(wsTokens, [_leak]);
+
+      await cubit.save();
+
+      expect(cubit.state, isA<Saved>());
+      expect(secrets.values, {ownName: _leak});
+      expect(
+        (store.profiles.firstWhere((p) => p.id == 'devbox') as WebSocketProfile)
+            .tokenRef,
+        'secret:$ownName',
+      );
+      expect(
+        eventOf('connection_profile.token_stored'),
+        containsPair('backend', 'file'),
+      );
+      expect(
+        eventOf('connection_profile.token_stored'),
+        containsPair('profile_id', 'devbox'),
+      );
+      expect(
+        eventOf('connection_profile.saved'),
+        containsPair('token', 'secret'),
+      );
+      expect(logger.entries.toString(), isNot(contains(_leak)));
+      expect(store.profiles.toString(), isNot(contains(_leak)));
+    });
+
+    test('the form never prints the new token', () async {
+      final cubit = await newTokenForm();
+
+      expect(cubit.state.toString(), isNot(contains(_leak)));
+      expect(formOf(cubit).draft.token.toString(), isNot(contains(_leak)));
+      expect(formOf(cubit).tokenKind, AddProfileTokenKind.newToken);
+    });
+
+    test('"Use stored secret" writes only the profile; the probe reads the '
+        'secret the same way a connection does', () async {
+      secrets = FakeProfileSecrets(
+        values: {'codelab/profiles/ci/token': _leak},
+      );
+      classifier = (_) => const Unauthorized();
+      wsFactoryFails = true;
+      final cubit = await started();
+      fillWebSocket(cubit, label: 'ci');
+      cubit
+        ..selectTokenStored()
+        ..setStoredSecret('codelab/profiles/ci/token');
+
+      await cubit.testConnection();
+      expect(
+        formOf(cubit).probeText,
+        'Unauthorized: the agent rejected the token',
+      );
+      secrets.calls.clear();
+
+      await cubit.save();
+
+      expect(cubit.state, isA<Saved>());
+      expect(
+        (store.profiles.firstWhere((p) => p.id == 'ci') as WebSocketProfile)
+            .tokenRef,
+        'secret:codelab/profiles/ci/token',
+      );
+      expect(secrets.calls.where((c) => c.startsWith('store:')), isEmpty);
+      expect(secrets.calls.where((c) => c.startsWith('delete:')), isEmpty);
+      expect(secrets.values, {'codelab/profiles/ci/token': _leak});
+      expect(
+        eventOf('connection_profile.saved'),
+        containsPair('token', 'secret'),
+      );
+      expect(events('connection_profile.token_stored'), isEmpty);
+      expect(logger.entries.toString(), isNot(contains(_leak)));
+    });
+
+    test('a secret that vanished from the store sends no token: the agent '
+        'requires one', () async {
+      secrets = FakeProfileSecrets(
+        values: {'codelab/profiles/ci/token': _leak},
+      );
+      classifier = (_) => const Unauthorized();
+      wsFactoryFails = true;
+      final cubit = await started();
+      fillWebSocket(cubit, label: 'ci');
+      cubit
+        ..selectTokenStored()
+        ..setStoredSecret('codelab/profiles/ci/token');
+      // Другой процесс удалил секрет, пока диалог был открыт.
+      secrets.values.remove('codelab/profiles/ci/token');
+
+      await cubit.testConnection();
+
+      expect(
+        formOf(cubit).probeText,
+        'Unauthorized: the agent requires a token',
+      );
+    });
+
+    test('an empty new token blocks saving; a name that cannot name a secret '
+        'is rejected at the id field', () async {
+      final cubit = await newTokenForm(value: '');
+      expect(formOf(cubit).canSave, isFalse);
+      cubit.setNewToken(_leak);
+      expect(formOf(cubit).canSave, isTrue);
+      cubit.setId('a..b');
+      expect(formOf(cubit).canSave, isFalse);
+      expect(formOf(cubit).errors, contains(ProfileDraftField.id));
+    });
+
+    test('an existing secret of the same name stops the save: nothing is '
+        'written and the field says what to do', () async {
+      secrets = FakeProfileSecrets(values: {ownName: 'older-value'});
+      final cubit = await newTokenForm();
+
+      await cubit.save();
+
+      expect(cubit.state, isA<Editing>());
+      expect(
+        formOf(cubit).errors[ProfileDraftField.token],
+        'A stored token codelab/profiles/devbox/token already exists in '
+        'file. Choose it with "Use stored secret" or remove it with codelab '
+        'secret delete.',
+      );
+      expect(secrets.values, {ownName: 'older-value'});
+      expect(store.saves, 0);
+      expect(logger.entries.toString(), isNot(contains(_leak)));
+
+      // Любая правка снимает ошибку.
+      cubit.selectTokenNone();
+      expect(formOf(cubit).errors[ProfileDraftField.token], isNull);
+    });
+
+    test(
+      'a refused profile write rolls the new secret back and logs it',
+      () async {
+        store.failSave = _LeakyException();
+        final cubit = await newTokenForm();
+
+        await cubit.save();
+
+        expect(cubit.state, isA<SaveFailed>());
+        expect(
+          (cubit.state as SaveFailed).message,
+          'Could not save the profile. Try again.',
+        );
+        expect(secrets.values, isEmpty);
+        expect(
+          eventOf('connection_profile.token_rollback'),
+          containsPair('profile_id', 'devbox'),
+        );
+        expect(events('connection_profile.token_stored'), isEmpty);
+        expect(events('connection_profile.save_failed'), ['warning']);
+        expect(logger.entries.toString(), isNot(contains(_leak)));
+        expect((cubit.state as SaveFailed).message, isNot(contains(_leak)));
+      },
+    );
+
+    test('a failed rollback tells where the token stays', () async {
+      store.failSave = _LeakyException();
+      secrets.nextDelete = const Failed('cannot delete');
+      final cubit = await newTokenForm();
+
+      await cubit.save();
+
+      expect(
+        (cubit.state as SaveFailed).message,
+        'The profile was not saved; the token stays in file as $ownName. '
+        'Remove it with codelab secret delete $ownName.',
+      );
+      expect(
+        eventOf('connection_profile.token_rollback_failed'),
+        allOf(
+          containsPair('profile_id', 'devbox'),
+          containsPair('backend', 'file'),
+        ),
+      );
+      expect(events('connection_profile.token_rollback'), isEmpty);
+      expect(logger.entries.toString(), isNot(contains(_leak)));
+    });
+
+    test(
+      'a store that refuses the write is reported without the value',
+      () async {
+        secrets.nextWrite = const ReadOnly('Secret store env is read-only.');
+        final cubit = await newTokenForm();
+
+        await cubit.save();
+
+        expect(cubit.state, isA<SaveFailed>());
+        expect(
+          (cubit.state as SaveFailed).message,
+          'Secret store env is read-only.',
+        );
+        expect(store.saves, 0);
+        expect(logger.entries.toString(), isNot(contains(_leak)));
+      },
+    );
+
+    test(
+      'Saving holds the form: no second write, no edit of the token',
+      () async {
+        secrets.storeGate = Completer<void>();
+        final cubit = await newTokenForm();
+
+        final first = cubit.save();
+        await pumpEventQueue();
+        expect(cubit.state, isA<Saving>());
+        final second = cubit.save();
+        cubit.setNewToken('another');
+        secrets.storeGate!.complete();
+        await Future.wait([first, second]);
+
+        expect(cubit.state, isA<Saved>());
+        expect(
+          secrets.calls.where((c) => c.startsWith('store:')),
+          hasLength(1),
+        );
+        expect(secrets.values, {ownName: _leak});
+      },
+    );
+
+    group('ws:// to another machine', () {
+      const remote = 'ws://10.0.0.5:8765/acp?t=x';
+
+      test('a new token and a stored secret are confirmed before the probe '
+          'and before the save, like a variable', () async {
+        secrets = FakeProfileSecrets(
+          values: {'codelab/profiles/ci/token': 'x'},
+        );
+        final cubit = await newTokenForm(url: remote);
+        expect(
+          formOf(cubit).warning,
+          'ws:// to another machine: the token is sent unencrypted.',
+        );
+
+        await cubit.testConnection();
+        expect(cubit.state, isA<ConfirmingPlaintextProbe>());
+        expect(wsOpened, 0);
+        expect(
+          (cubit.state as ConfirmingPlaintextProbe).message,
+          'The token for ws://10.0.0.5:8765 will travel in clear text. Use '
+          'wss:// if the host supports it.',
+        );
+        await cubit.confirmPlaintextProbe();
+        expect(wsOpened, 1);
+
+        // Одно подтверждение на пару «URL, токен»: «Save» не спрашивает.
+        await cubit.save();
+        expect(cubit.state, isA<Saved>());
+
+        cubit.addAnother();
+        fillWebSocket(cubit, label: 'ci', url: remote);
+        cubit
+          ..selectTokenStored()
+          ..setStoredSecret('codelab/profiles/ci/token');
+        await cubit.testConnection();
+        expect(cubit.state, isA<ConfirmingPlaintextProbe>());
+        expect(wsOpened, 1);
+      });
+
+      test(
+        'a new secret name or a new token value resets the confirmation',
+        () async {
+          secrets = FakeProfileSecrets(
+            values: {
+              'codelab/profiles/ci/token': 'x',
+              'codelab/profiles/dev/token': 'y',
+            },
+          );
+          final cubit = await started();
+          fillWebSocket(cubit, label: 'ci', url: remote);
+          cubit
+            ..selectTokenStored()
+            ..setStoredSecret('codelab/profiles/ci/token');
+          await cubit.testConnection();
+          await cubit.confirmPlaintextProbe();
+          expect(wsOpened, 1);
+
+          cubit.setStoredSecret('codelab/profiles/dev/token');
+          await cubit.testConnection();
+          expect(cubit.state, isA<ConfirmingPlaintextProbe>());
+          await cubit.confirmPlaintextProbe();
+          expect(wsOpened, 2);
+
+          cubit
+            ..selectTokenNew()
+            ..setNewToken('first');
+          await cubit.testConnection();
+          expect(cubit.state, isA<ConfirmingPlaintextProbe>());
+          await cubit.confirmPlaintextProbe();
+          expect(wsOpened, 3);
+
+          cubit
+            ..setNewToken('second')
+            ..setNewToken('first');
+          await cubit.testConnection();
+          // Возврат к прежнему значению подтверждение не восстанавливает.
+          expect(cubit.state, isA<ConfirmingPlaintextProbe>());
+        },
+      );
+
+      test('"Save anyway" for a new token writes the secret after the '
+          'confirmation only', () async {
+        final cubit = await newTokenForm(url: remote);
+
+        await cubit.save();
+
+        expect(cubit.state, isA<ConfirmingPlaintext>());
+        expect(secrets.values, isEmpty);
+        expect(store.saves, 0);
+        expect(
+          (cubit.state as ConfirmingPlaintext).message,
+          'The token for ws://10.0.0.5:8765 will travel in clear text. Use '
+          'wss:// if the host supports it.',
+        );
+
+        await cubit.confirmPlaintext();
+
+        expect(cubit.state, isA<Saved>());
+        expect(secrets.values, {ownName: _leak});
+      });
+    });
+
+    test('the store is opened by the dialog itself: OpeningSecrets first, a '
+        'late open after close is dropped', () async {
+      final gate = Completer<void>();
+      final cubit = AddProfileCubit(
+        store: store,
+        openSecrets: () async {
+          await gate.future;
+          return secrets;
+        },
+        preferences: const SharedPreferencesConnectionPreferences(),
+        probe: ProfileProbe(resolvers: const []),
+        kinds: const [ProfileKind.webSocket],
+        environment: const {},
+        projectDirectory: () => '/work',
+      );
+      expect(cubit.state, isA<OpeningSecrets>());
+
+      final started = cubit.start();
+      await pumpEventQueue();
+      expect(cubit.state, isA<OpeningSecrets>());
+      await cubit.close();
+      gate.complete();
+      await started;
+
+      expect(cubit.state, isA<OpeningSecrets>());
+    });
+
+    test('every dialog reopens the store: a config edited from env to file '
+        'makes "Store a new token" available at the next opening', () async {
+      var edited = false;
+      Future<ProfileSecrets> reopen() async => FakeProfileSecrets(
+        backend: edited
+            ? const ProfileSecretBackend(id: 'file', writable: true)
+            : const ProfileSecretBackend(
+                id: 'env',
+                writable: false,
+                unavailableReason: 'Secret store env is read-only.',
+              ),
+      );
+      AddProfileCubit dialog() {
+        final cubit = AddProfileCubit(
+          store: store,
+          openSecrets: reopen,
+          preferences: const SharedPreferencesConnectionPreferences(),
+          probe: ProfileProbe(resolvers: const []),
+          kinds: const [ProfileKind.webSocket],
+          environment: const {},
+          projectDirectory: () => '/work',
+        );
+        addTearDown(cubit.close);
+        return cubit;
+      }
+
+      final first = dialog();
+      await first.start();
+      expect(formOf(first).newTokenAvailable, isFalse);
+
+      edited = true;
+      final second = dialog();
+      await second.start();
+      expect(formOf(second).newTokenAvailable, isTrue);
+    });
+
+    test('"Use stored secret" offers only codelab/profiles/*: a provider key '
+        'and an MCP secret are not listed', () async {
+      secrets = FakeProfileSecrets(
+        values: {
+          'codelab/openai': 'a',
+          'codelab/mcp/git/token': 'b',
+          'codelab/ws-ci': 'c',
+          'codelab/profiles/ci/token': 'd',
+        },
+      );
+      final cubit = await started();
+      fillWebSocket(cubit);
+
+      expect(formOf(cubit).secretNames, ['codelab/profiles/ci/token']);
+      cubit.setStoredSecret('codelab/openai');
+      expect(formOf(cubit).tokenKind, AddProfileTokenKind.none);
+    });
+
+    test('switching to stdio drops the new token from the draft and no '
+        'token_stored is logged for the saved stdio profile', () async {
+      final cubit = await newTokenForm();
+
+      cubit.selectKind(ProfileKind.stdio);
+      expect(formOf(cubit).draft.token, isA<NoToken>());
+      cubit.setLabel('Build box');
+      await cubit.save();
+
+      expect(cubit.state, isA<Saved>());
+      expect(events('connection_profile.token_stored'), isEmpty);
+      expect(
+        eventOf('connection_profile.saved'),
+        containsPair('token', 'none'),
+      );
+      expect(secrets.values, isEmpty);
+    });
+
+    test(
+      'closing during the write forgets the new token in Saving too',
+      () async {
+        secrets.storeGate = Completer<void>();
+        final cubit = await newTokenForm();
+
+        final saving = cubit.save();
+        await pumpEventQueue();
+        expect(cubit.state, isA<Saving>());
+        await cubit.close();
+
+        final token = formOf(cubit).draft.token;
+        expect(token, isA<NewSecretToken>());
+        expect((token as NewSecretToken).value.reveal(), isEmpty);
+        secrets.storeGate!.complete();
+        await saving;
+      },
+    );
+
+    test('closing the dialog forgets the new token', () async {
+      final cubit = await newTokenForm();
+
+      await cubit.close();
+
+      final token = formOf(cubit).draft.token;
+      expect(token, isA<NewSecretToken>());
+      expect((token as NewSecretToken).value.reveal(), isEmpty);
+    });
+
+    test('the marker stays out of every text of a whole session with a new '
+        'token', () async {
+      store.failSave = _LeakyException();
+      final cubit = await started();
+      final texts = <String>[];
+      final subscription = cubit.stream.listen((state) {
+        texts.add(state.toString());
+        if (state case AddProfileInProgress(:final form)) {
+          texts
+            ..addAll(form.errors.values)
+            ..add(form.warning ?? '')
+            ..add(form.newTokenHint)
+            ..add(form.probeText ?? '');
+        }
+        if (state case SaveFailed(:final message)) {
+          texts.add(message);
+        }
+      });
+      addTearDown(subscription.cancel);
+      fillWebSocket(cubit, label: 'devbox', url: 'wss://host:1/acp?t=$_leak');
+      cubit
+        ..selectTokenNew()
+        ..setNewToken(_leak);
+      await cubit.testConnection();
+      await cubit.save();
+      await pumpEventQueue();
+
+      final everything = '${texts.join('\n')}\n${logger.entries}';
+      expect(everything, isNot(contains(_leak)));
+      expect(everything, isNot(contains('/acp')));
+    });
+  });
+
   test('the marker does not leak into events or texts through a whole '
       'session of the dialog (3.4)', () async {
     store.failSave = _LeakyException();
@@ -1224,7 +1801,7 @@ void main() {
             ..add(form.tokenNotice ?? '')
             ..add(form.saveLabel);
           texts.add(form.probeText ?? '');
-        case Saved():
+        case Saved() || OpeningSecrets():
           break;
       }
       switch (state) {

@@ -13,7 +13,11 @@ import 'package:cherrypick/cherrypick.dart' show Scope;
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ConnectionProfile;
+    show
+        ConnectionProfile,
+        ProfileSecretBackend,
+        ProfileSecrets,
+        secretMissingWarning;
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
@@ -26,6 +30,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
+import 'package:codelab_desktop/app/client_profile_secrets.dart';
+import 'package:codelab_desktop/app/connection_environment.dart';
+import 'package:codelab_desktop/app/embedded_logger.dart';
+import 'package:codelab_desktop/app/reopenable_profile_secrets.dart';
+import '../support/fake_profile_secrets.dart';
 import '../support/test_app_scope.dart';
 
 const _marker = 'sk-test-leak-0123456789';
@@ -51,6 +60,8 @@ void main() {
   Scope scopeWith({
     required Map<String, String> environment,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
+    ProfileSecrets? profileSecrets,
+    Future<ProfileSecrets> Function()? profileSecretsOpener,
   }) {
     final scope = createCodeLabRootScope(
       transportFactory: FakeAcpTransport.new,
@@ -59,6 +70,8 @@ void main() {
       directoryExists: (_) async => true,
       logDirectoryPath: home.path,
       settingsPages: const SettingsPages(available: {SettingsPage.connection}),
+      profileSecrets: profileSecrets,
+      profileSecretsOpener: profileSecretsOpener,
     );
     addTearDown(closeCodeLabRootScopeInTest);
     return scope;
@@ -172,6 +185,148 @@ void main() {
         expect(configs.single.token, isNull);
       },
     );
+  });
+
+  group('secret: token from the secret store (1.12, D13, D18)', () {
+    final profile = ConnectionProfile.webSocket(
+      id: 'ci',
+      label: 'CI',
+      uri: Uri.parse('wss://ci:7420/acp'),
+      tokenRef: 'secret:codelab/ws-ci',
+    );
+
+    test('the token of secret:NAME is read from the store when the '
+        'transport opens, with no cache', () async {
+      final configs = <WebSocketAcpTransportConfig>[];
+      final secrets = FakeProfileSecrets(values: {'codelab/ws-ci': _marker});
+      final scope = scopeWith(
+        environment: {'CODELAB_HOME': home.path},
+        profileSecrets: secrets,
+        webSocketTransportFactory: (config) {
+          configs.add(config);
+          return FakeAcpTransport();
+        },
+      );
+      final shell = scope.resolve<CodeLabShellCubit>();
+
+      await shell.connect(profile);
+      expect(configs.last.token, _marker);
+
+      // Замена секрета другим процессом видна при следующем подключении.
+      secrets.values['codelab/ws-ci'] = 'replaced';
+      await shell.connect(profile);
+      expect(configs.last.token, 'replaced');
+    });
+
+    test('a missing secret means a connection without a token', () async {
+      final configs = <WebSocketAcpTransportConfig>[];
+      final scope = scopeWith(
+        environment: {'CODELAB_HOME': home.path},
+        profileSecrets: FakeProfileSecrets(),
+        webSocketTransportFactory: (config) {
+          configs.add(config);
+          return FakeAcpTransport();
+        },
+      );
+
+      await scope.resolve<CodeLabShellCubit>().connect(profile);
+
+      expect(configs.single.token, isNull);
+      // D13: предупреждение диагностики и событие, только `profile_id`.
+      final all = events(scope);
+      expect(
+        all.where((e) => e['event'] == secretMissingWarning('ci')),
+        hasLength(1),
+      );
+      final event = all.singleWhere(
+        (e) => e['event'] == 'connection_profile.token_secret_missing',
+      );
+      expect(event['profile_id'], 'ci');
+      expect(all.toString(), isNot(contains('codelab/ws-ci')));
+    });
+
+    test('a broken config.yaml: the scope logs secrets.client.backend with '
+        'the reason', () async {
+      final dir = await Directory.systemTemp.createTemp('codelab_scope_cfg_');
+      addTearDown(() => dir.delete(recursive: true));
+      await File('${dir.path}/config.yaml').writeAsString('secrets: [x\n');
+      final env = {'CODELAB_HOME': dir.path};
+      final secrets = await openProfileSecrets(
+        environment: ConnectionEnvironment.of(env),
+        logger: CodeLabEmbeddedLogger(),
+      );
+      final scope = scopeWith(environment: env, profileSecrets: secrets);
+
+      final event = events(
+        scope,
+      ).singleWhere((e) => e['event'] == 'secrets.client.backend');
+
+      expect(event['backend'], 'env');
+      expect(event['writable'], isFalse);
+      expect(
+        event['reason'],
+        'the user config file cannot be read, so secrets are read-only until '
+        'it is fixed',
+      );
+    });
+
+    test(
+      'the opener reopens the store: a config edited env -> file is '
+      'picked up without a restart, the connection reads the new store',
+      () async {
+        final dir = await Directory.systemTemp.createTemp('codelab_scope_cfg_');
+        addTearDown(() => dir.delete(recursive: true));
+        await Process.run('/bin/chmod', ['700', dir.path]);
+        final env = {'CODELAB_HOME': dir.path};
+        Future<ProfileSecrets> open() => openProfileSecrets(
+          environment: ConnectionEnvironment.of(env),
+          logger: CodeLabEmbeddedLogger(),
+        );
+        final scope = scopeWith(
+          environment: env,
+          profileSecrets: await open(),
+          profileSecretsOpener: open,
+        );
+        final held = scope.resolve<ProfileSecrets>();
+        expect(held.backend.writable, isFalse);
+
+        await File(
+          '${dir.path}/config.yaml',
+        ).writeAsString('secrets:\n  backend: file\n');
+        final fresh = await scope.resolve<ReopenableProfileSecrets>().reopen();
+
+        expect(fresh.backend.id, 'file');
+        expect(fresh.backend.writable, isTrue);
+        // Источник токена подключения видит то же новое хранилище.
+        expect(held.backend.id, 'file');
+      },
+    );
+
+    test('the store backend is logged once as secrets.client.backend, '
+        'without values', () async {
+      final scope = scopeWith(
+        environment: {'CODELAB_HOME': home.path},
+        profileSecrets: FakeProfileSecrets(
+          values: {'codelab/ws-ci': _marker},
+          backend: const ProfileSecretBackend(id: 'file', writable: true),
+        ),
+      );
+
+      final event = events(
+        scope,
+      ).singleWhere((e) => e['event'] == 'secrets.client.backend');
+
+      expect(event['backend'], 'file');
+      expect(event['writable'], isTrue);
+      expect(events(scope).toString(), isNot(contains(_marker)));
+    });
+
+    test('without a store opened by the host the backend is read-only with '
+        'a reason', () async {
+      final scope = scopeWith(environment: {'CODELAB_HOME': home.path});
+
+      expect(scope.resolve<ProfileSecrets>().backend.writable, isFalse);
+    });
   });
 
   group('events without values (D17)', () {
