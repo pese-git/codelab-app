@@ -15,7 +15,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 ///
 /// Для чего: хранит черновик ([draft], правила — `ProfileDraft` kit) и то,
 /// что вычислил Cubit: тексты ошибок и подсказок ([errors], [warning],
-/// [tokenNotice], [probeNote]) и доступность действий ([canTest],
+/// [tokenNotice]) и доступность действий ([canTest],
 /// [canSave]). Виджет только показывает их и не решает, что допустимо
 /// (AGENTS.md §7, §10).
 ///
@@ -34,7 +34,6 @@ final class AddProfileForm {
     required this.errors,
     required this.warning,
     required this.tokenNotice,
-    required this.probeNote,
     required this.canTest,
     required this.canSave,
   });
@@ -78,9 +77,6 @@ final class AddProfileForm {
   /// задана; сохранение остаётся доступным (spec, сценарий «Переменная не
   /// задана»).
   final String? tokenNotice;
-
-  /// Заметка рядом с проверкой при незаданной переменной (D12).
-  final String? probeNote;
 
   /// «Test connection» доступна: заполнены поля, нужные для проверки
   /// (имя и id для неё не нужны).

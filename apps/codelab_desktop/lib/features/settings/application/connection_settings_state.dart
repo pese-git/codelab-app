@@ -188,6 +188,13 @@ final class ConnectionProfileRow {
   /// встроенный агент не из файла, а текущий связан с живым соединением
   /// («Disconnect first», spec app-settings).
   bool get canRemove => hasFileActions && !isCurrent;
+
+  /// «Connect» не показывается у строки «Current»: «Current» ставится только
+  /// при живом соединении (`Connected` или `Reconnecting`, решение
+  /// пользователя 2026-11-05), а переподключение — «Restart agent» блока
+  /// Behavior. `Connecting…` и `Failed` «Current» не дают, поэтому там
+  /// «Connect» остаётся.
+  bool get canConnect => !isCurrent;
 }
 
 /// Состояние страницы «Connection» — явный автомат (`state-management.md`,
