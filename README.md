@@ -60,6 +60,7 @@ flowchart TD
   cli --> client_io
   cli --> setup
   desktop --> embedded
+  desktop --> setup
   cli --> embedded
   embedded --> agent_acp
   embedded --> agent_io
@@ -94,7 +95,7 @@ flowchart TD
 
 Цвета: серый — приложения, инфраструктура и мосты между сторонами, сиреневый — `codelab_acp_*`, зелёный — `codelab_client_*` и `codelab_ui`, терракотовый — `codelab_agent_*`. Точечная рамка — пакет только для тестов. Мосты между сторонами (ADR-0002, без префикса `codelab_agent_`):
 
-- `codelab_cli` → `codelab_setup` — мост настроек (change `add-agent-configuration`, D14): клиенты получают типы и подкоманды `config` агента через него, а не импортом `codelab_agent_*`;
+- `codelab_cli` → `codelab_setup` и `codelab_desktop` → `codelab_setup` — мост настроек (change `add-agent-configuration`, D14; ребро app — change `add-provider-setup-ui`, D20): клиенты получают типы и подкоманды `config` и хранилище секретов агента через него, а не импортом `codelab_agent_*`. В app его IO-барель `codelab_setup/io.dart` импортирует только composition root `lib/app/`, а `dart:io` и этот барель запрещены в `lib/features/settings/presentation/` (SETUP-9);
 - `codelab_desktop` → `codelab_embedded` и `codelab_cli` → `codelab_embedded` — мост встроенного агента (change `add-embedded-agent-mode`, D1–D3). Рёбра `codelab_embedded` к `codelab_agent_core`, `codelab_acp_protocol` и `codelab_acp_transports` транзитивны (через `codelab_agent_acp` и `codelab_agent_io`) и не рисуются.
 
 Кроме показанного, dev-зависимости: `codelab_agent_acp` берёт `codelab_client_acp`, `codelab_agent_io` и `codelab_agent_mcp` — conformance-тест агента гоняет настоящий клиент против настоящего сервера; `codelab_embedded` берёт `codelab_client_acp` и `codelab_client_core` для замера 7.8 (`benchmark/`).
