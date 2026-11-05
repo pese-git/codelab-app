@@ -10,7 +10,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ProfileProbeOutcome,
         Reconnecting,
         StdioProfile,
-        WebSocketProfile;
+        WebSocketProfile,
+        ownTokenSecretName;
 
 import 'probe_outcome_view.dart';
 import 'profile_view.dart';
@@ -132,6 +133,20 @@ final class ConnectionProfileRow {
 
   final bool isDefault;
   final bool isCurrent;
+
+  /// Имя собственного секрета профиля `codelab/profiles/<id>/token`, если
+  /// профиль ссылается именно на него; иначе `null` (design.md change
+  /// `add-provider-setup-ui`, D14). Страница по нему решает, предлагать ли
+  /// флажок «Also delete the stored token»: чужой секрет («Use stored
+  /// secret») удалять нельзя никогда.
+  String? get ownTokenSecret {
+    final profile = this.profile;
+    if (profile is! WebSocketProfile) {
+      return null;
+    }
+    final own = ownTokenSecretName(profile.id);
+    return profile.tokenRef == 'secret:$own' ? own : null;
+  }
 
   /// Профиль окна, которого нет в `profiles.json`.
   final bool isUnsaved;

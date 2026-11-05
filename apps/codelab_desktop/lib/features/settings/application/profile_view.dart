@@ -4,6 +4,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         EmbeddedProfile,
         EnvTokenRef,
         ProfileTokenRef,
+        SecretTokenRef,
         StdioProfile,
         UnsupportedTokenRef,
         WebSocketProfile;
@@ -44,8 +45,8 @@ String profileSummary(ConnectionProfile profile) => switch (profile) {
 
 /// Источник токена WebSocket-профиля для строки: только имя, не значение.
 ///
-/// Почему закрытая иерархия: у токена четыре видимых исхода (D13), и виджет
-/// обязан разобрать каждый.
+/// Почему закрытая иерархия: у токена четыре видимых исхода (D13, D14), и
+/// виджет обязан разобрать каждый.
 sealed class ProfileTokenView {
   const ProfileTokenView();
 }
@@ -80,6 +81,37 @@ final class EnvTokenView extends ProfileTokenView {
   String toString() => 'EnvTokenView($name, isSet: $isSet)';
 }
 
+/// Токен лежит в хранилище секретов агента под именем [name] (`secret:<имя>`,
+/// design.md change `add-provider-setup-ui`, D14).
+///
+/// [backend] — идентификатор бэкенда для тега `<backend> · set|missing`;
+/// [isSet] — есть ли секрет (`ProfileSecrets.isSet`, значение не читается).
+/// Имя секрета — не секрет и показывается текстом.
+final class SecretTokenView extends ProfileTokenView {
+  const SecretTokenView(
+    this.name, {
+    required this.backend,
+    required this.isSet,
+  });
+
+  final String name;
+  final String backend;
+  final bool isSet;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SecretTokenView &&
+      other.name == name &&
+      other.backend == backend &&
+      other.isSet == isSet;
+
+  @override
+  int get hashCode => Object.hash(SecretTokenView, name, backend, isSet);
+
+  @override
+  String toString() => 'SecretTokenView($name, $backend, isSet: $isSet)';
+}
+
 /// Ссылка, которую эта версия не разрешает.
 ///
 /// Саму ссылку тип не хранит: в поле имени переменной могли вставить значение
@@ -97,10 +129,15 @@ final class UnsupportedTokenView extends ProfileTokenView {
 /// Источник токена [profile] по правилу kit (`ProfileTokenRef`, D15).
 ///
 /// [environment] — окружение app; читается только факт «задана и непуста».
+/// [secretBackend] и [secretIsSet] — бэкенд хранилища и признак «секрет
+/// задан» для ссылки `secret:`; Cubit получает их заранее (`isSet`) и
+/// значение секрета не читает.
 ProfileTokenView tokenViewOf(
   WebSocketProfile profile,
-  Map<String, String> environment,
-) {
+  Map<String, String> environment, {
+  String secretBackend = 'env',
+  bool Function(String name)? secretIsSet,
+}) {
   final ref = profile.tokenRef;
   if (ref == null) {
     return const NoTokenView();
@@ -109,6 +146,11 @@ ProfileTokenView tokenViewOf(
     EnvTokenRef(:final name) => EnvTokenView(
       name,
       isSet: (environment[name] ?? '').isNotEmpty,
+    ),
+    SecretTokenRef(:final name) => SecretTokenView(
+      name,
+      backend: secretBackend,
+      isSet: secretIsSet?.call(name) ?? false,
     ),
     UnsupportedTokenRef() => const UnsupportedTokenView(),
   };

@@ -26,6 +26,20 @@ abstract interface class TransportResolver {
   });
 }
 
+/// Резолвер, который можно пересобрать с другим источником секретов.
+///
+/// Почему: проверка профиля с новым токеном (`ProfileProbe.probe(token:)`,
+/// design.md change `add-provider-setup-ui`, D13) должна открыть тот же
+/// транспорт теми же фабриками хоста, но с токеном из памяти формы, который
+/// ещё нигде не сохранён. Подменить источник у резолвера «на месте» нельзя —
+/// он общий с рабочим подключением.
+///
+/// Как использовать: [withSecrets] возвращает новый резолвер с теми же
+/// фабриками и источником [secrets]; исходный резолвер не меняется.
+abstract interface class SecretRebindableResolver implements TransportResolver {
+  TransportResolver withSecrets(SecretSource secrets);
+}
+
 /// Фабрика stdio-транспорта по его конфигурации.
 typedef StdioTransportFactory =
     AcpTransport Function(StdioAcpTransportConfig config);
@@ -48,12 +62,20 @@ typedef WebSocketTransportFactory =
 /// Как использовать: `ConfigTransportResolver(stdio: StdioAcpTransport.new,
 /// webSocket: WebSocketAcpTransport.new, secrets: ...)`; вид профиля без
 /// фабрики не поддерживается.
-final class ConfigTransportResolver implements TransportResolver {
+final class ConfigTransportResolver implements SecretRebindableResolver {
   const ConfigTransportResolver({this.stdio, this.webSocket, this.secrets});
 
   final StdioTransportFactory? stdio;
   final WebSocketTransportFactory? webSocket;
   final SecretSource? secrets;
+
+  @override
+  TransportResolver withSecrets(SecretSource secrets) =>
+      ConfigTransportResolver(
+        stdio: stdio,
+        webSocket: webSocket,
+        secrets: secrets,
+      );
 
   @override
   bool supports(ConnectionProfile profile) => switch (profile) {

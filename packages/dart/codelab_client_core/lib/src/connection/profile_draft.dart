@@ -1,6 +1,7 @@
 import 'connection_profile.dart';
 import 'profile_ids.dart';
 import 'profile_parsing.dart';
+import 'profile_secrets.dart';
 import 'transport_resolver.dart';
 
 /// Тип профиля, который можно создать в форме.
@@ -12,9 +13,10 @@ enum ProfileKind { stdio, webSocket }
 /// Выбор токена WebSocket-профиля в черновике (design.md change
 /// `add-app-settings-shell`, D13).
 ///
-/// Почему: значение токена приложение не принимает и не хранит — только
-/// ссылку (`AGENTS.md` §10); значения вводит «Store a new token» в change
-/// `add-provider-setup-ui`.
+/// Почему: профиль хранит только ссылку (`AGENTS.md` §10). Значение нового
+/// токена живёт в черновике лишь как [SecretText] до записи в хранилище
+/// секретов (`NewSecretToken`, design.md change `add-provider-setup-ui`,
+/// D13, D14).
 ///
 /// Как использовать: `switch (choice)` по трём формам; форма «Add
 /// connection profile» предлагает [NoToken] и [EnvToken], а [KeepTokenRef]
@@ -52,6 +54,45 @@ final class EnvToken extends ProfileTokenChoice {
 
   @override
   String toString() => 'EnvToken($name)';
+}
+
+/// «Use stored secret»: ссылка `secret:<name>` на секрет, уже лежащий в
+/// хранилище. Секрет не создаётся и не удаляется (D13).
+final class StoredSecretToken extends ProfileTokenChoice {
+  const StoredSecretToken(this.name);
+
+  final String name;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StoredSecretToken && other.name == name;
+
+  @override
+  int get hashCode => Object.hash(StoredSecretToken, name);
+
+  @override
+  String toString() => 'StoredSecretToken($name)';
+}
+
+/// «Store a new token»: новое значение, которое `ProfileCommitter.save`
+/// запишет в хранилище под `codelab/profiles/<id>/token` до записи профиля.
+///
+/// Значение — [SecretText]: `toString()` черновика и состояния формы его не
+/// печатают. Хост обязан забыть экземпляр при закрытии формы.
+final class NewSecretToken extends ProfileTokenChoice {
+  const NewSecretToken(this.value);
+
+  final SecretText value;
+
+  @override
+  bool operator ==(Object other) =>
+      other is NewSecretToken && other.value == value;
+
+  @override
+  int get hashCode => Object.hash(NewSecretToken, value);
+
+  @override
+  String toString() => 'NewSecretToken(***)';
 }
 
 /// Оставить ссылку существующего профиля как есть.
@@ -94,6 +135,18 @@ enum ProfileDraftIssueCode {
   /// Basic-авторизацией (`AGENTS.md` §10). Токен задаётся полем Token.
   urlUserInfo,
   tokenEnvNameInvalid,
+
+  /// Имя секрета «Use stored secret» не проходит правило имени секрета, либо
+  /// id профиля не даёт допустимого имени `codelab/profiles/<id>/token`
+  /// (например `a..b`).
+  tokenSecretNameInvalid,
+
+  /// «Store a new token» без значения.
+  tokenSecretEmpty,
+
+  /// Секрет `codelab/profiles/<id>/token` уже есть в хранилище: его значение
+  /// не перезаписывается (SETUP-5). Выдаёт `ProfileCommitter`, не `validate`.
+  tokenSecretExists,
 
   /// Предупреждение: `ws://` к нелокальному хосту. Не блокирует сохранение,
   /// но требует подтверждения «Save anyway» (SETUP-10).
@@ -280,6 +333,8 @@ final class ProfileDraft {
         tokenRef: switch (token) {
           NoToken() => null,
           EnvToken(:final name) => 'env:$name',
+          StoredSecretToken(:final name) => 'secret:$name',
+          NewSecretToken() => 'secret:${ownTokenSecretName(id)}',
           KeepTokenRef(:final ref) => ref,
         },
       ),
@@ -386,6 +441,39 @@ final class ProfileDraft {
       );
     }
     final choice = token;
+    if (choice is StoredSecretToken && !isValidSecretName(choice.name)) {
+      out.add(
+        const ProfileDraftIssue(
+          code: ProfileDraftIssueCode.tokenSecretNameInvalid,
+          field: ProfileDraftField.token,
+          message:
+              'Secret name: lowercase letters, digits and . _ / -, '
+              'up to 128 characters.',
+        ),
+      );
+    }
+    if (choice is NewSecretToken) {
+      if (choice.value.isEmpty) {
+        out.add(
+          const ProfileDraftIssue(
+            code: ProfileDraftIssueCode.tokenSecretEmpty,
+            field: ProfileDraftField.token,
+            message: 'Enter the token.',
+          ),
+        );
+      }
+      // Имя секрета строится из id; id вроде `a..b` допустим для профиля, но
+      // не для имени секрета.
+      if (isValidProfileId(id) && !isValidSecretName(ownTokenSecretName(id))) {
+        out.add(
+          const ProfileDraftIssue(
+            code: ProfileDraftIssueCode.tokenSecretNameInvalid,
+            field: ProfileDraftField.id,
+            message: 'This id cannot name a stored token; avoid "..".',
+          ),
+        );
+      }
+    }
     if (choice is EnvToken && !_variableName.hasMatch(choice.name)) {
       out.add(
         const ProfileDraftIssue(

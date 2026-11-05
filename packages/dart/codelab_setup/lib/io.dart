@@ -29,13 +29,19 @@
 /// SecretMigrateOptions(…))` либо движок `SecretMigrator` с
 /// `SecretMigrationOptions`, отчёт `SecretMigrationReport` и его пункты; флаги
 /// `--header-stdin`, `--env-stdin`, `--header-scheme` — поля `McpAddOptions`.
-/// Строка о 1.0 для справок — `before1Note` (R8-7, D13). Остальное из §12.4.2
-/// (`FileAgentConfigStore`) придёт со своими потребителями.
+/// Строка о 1.0 для справок — `before1Note` (R8-7, D13). Клиентский доступ к
+/// секретам (change `add-provider-setup-ui`, D3, D4): `ClientSecretAccess.open(
+/// codelabHome: …, environment: …, logger: …)` — выбор бэкенда по
+/// `secrets.backend`, `backend`, `admin`, `isSet`, `read` без кэша — и
+/// `secretReadOnlyHint(SecretReadOnly, home)` — одна подсказка про бэкенд только
+/// для чтения для `codelab secret set`, мастера и app. Остальное из §12.4.2
+/// (`FileAgentConfigStore`, `ioProviderCheck`) придёт со своими потребителями.
 library;
 
 export 'package:codelab_agent_io/codelab_agent_io.dart'
     show
         CheckOptions,
+        ClientSecretAccess,
         ConfigCommandResult,
         ConfigCommands,
         ConfigGetLayer,
@@ -90,7 +96,8 @@ export 'package:codelab_agent_io/codelab_agent_io.dart'
         configInvalidExit,
         configUsageExit,
         configValidExit,
-        openSecretStore;
+        openSecretStore,
+        secretReadOnlyHint;
 
 // Типы ядра, которые нужны клиенту, чтобы вызвать `openSecretStore` и получить
 // `SecretAdmin` (ревью итерации 4 change `add-agent-secret-store`): результат
@@ -101,4 +108,5 @@ export 'package:codelab_agent_core/codelab_agent_core.dart'
         DescribedSecretStore,
         LogLevel,
         Logger,
+        SecretBackendInfo,
         SecretStoreUnavailableException;

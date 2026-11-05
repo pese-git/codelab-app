@@ -70,6 +70,7 @@ export 'src/env/local_execution_env.dart';
 export 'src/mcp/stdio_process_transport.dart'
     show StdioMcpTransportFactory, StdioProcessTransport;
 export 'src/project/project_files_loader.dart';
+export 'src/secrets/client_secret_access.dart';
 export 'src/secrets/env_secret_store.dart';
 export 'src/secrets/file_secret_store.dart';
 export 'src/secrets/host_secrets.dart';
@@ -88,6 +89,7 @@ export 'src/secrets/secret_migrator.dart'
         SecretPlanItem,
         SecretReplacedItem,
         SecretReusedItem;
+export 'src/secrets/secret_read_only_hint.dart';
 export 'src/secrets/secret_process_runner.dart' hide chmodExecutablePath;
 export 'src/secrets/secrets_backend_problem.dart';
 export 'src/session/host_sessions.dart' show openHostSessions;

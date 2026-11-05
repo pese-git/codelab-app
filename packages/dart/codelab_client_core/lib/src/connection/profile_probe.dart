@@ -5,6 +5,8 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 
 import '../diagnostics/diagnostics.dart';
 import 'connection_profile.dart';
+import 'profile_secrets.dart';
+import 'secret_source.dart';
 import 'transport_resolver.dart';
 
 /// Исход проверки профиля (design.md change `add-app-settings-shell`, D12).
@@ -195,11 +197,22 @@ final class ProfileProbe {
   ///
   /// [projectDirectory] нужен резолверу stdio-профиля, который запускается в
   /// папке проекта. Не бросает исключений: любой сбой — исход.
+  ///
+  /// [token] — значение нового токена из памяти формы («Store a new token»,
+  /// design.md change `add-provider-setup-ui`, D13): оно уходит транспорту
+  /// WebSocket-профиля через одноразовый источник и нигде не записывается.
+  /// Без [token] токен читает тот же `ProfileSecretSource`, что и
+  /// подключение (в том числе для «Use stored secret»). Если [token] задан,
+  /// а подходящий резолвер не умеет принять одноразовый источник
+  /// ([SecretRebindableResolver]), а также если [token] пуст, исход —
+  /// [Unsupported]: проверка без токена дала бы ложный `Unauthorized`, а
+  /// пустое значение не должно подменяться секретом из хранилища.
   Future<ProfileProbeOutcome?> probe(
     ConnectionProfile profile, {
     String projectDirectory = '',
     Duration? timeout,
     ProbeCancellation? cancellation,
+    SecretText? token,
   }) async {
     TransportResolver? resolver;
     for (final candidate in _resolvers) {
@@ -210,6 +223,19 @@ final class ProfileProbe {
     }
     if (resolver == null) {
       return const Unsupported();
+    }
+    if (token != null && profile is WebSocketProfile) {
+      // «Store a new token» без значения: открывать транспорт нечем, а
+      // читать из хранилища `secret:codelab/profiles/<id>/token` нельзя —
+      // там может лежать чужой токен (ревью итерации 1).
+      if (token.isEmpty || resolver is! SecretRebindableResolver) {
+        return const Unsupported();
+      }
+      // Одноразовая ссылка: источник отдаёт значение на любую ссылку, а
+      // профиль не хранится и наружу не выходит.
+      const ref = 'secret:probe-token';
+      resolver = resolver.withSecrets(_OneOffSecretSource(token));
+      profile = profile.copyWith(tokenRef: ref);
     }
     if (cancellation?.isCancelled ?? false) {
       return null;
@@ -339,6 +365,16 @@ final class ProfileProbe {
       };
     }
   }
+}
+
+/// Источник одного значения для проверки профиля с новым токеном.
+final class _OneOffSecretSource implements SecretSource {
+  const _OneOffSecretSource(this._token);
+
+  final SecretText _token;
+
+  @override
+  Future<String?> read(String ref) async => _token.reveal();
 }
 
 /// Пустой транспорт-заглушка для конструктора `AcpClientApplication`: тот

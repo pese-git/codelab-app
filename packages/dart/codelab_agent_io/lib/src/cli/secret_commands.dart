@@ -11,6 +11,7 @@ import '../secrets/open_secret_store.dart';
 import '../secrets/secret_admin.dart';
 import '../secrets/secret_migrator.dart';
 import '../secrets/secret_process_runner.dart';
+import '../secrets/secret_read_only_hint.dart';
 import 'exit_codes.dart';
 import 'secret_input.dart';
 import '../util/silent_logger.dart';
@@ -300,7 +301,7 @@ final class SecretCommands {
       SecretInvalidName(:final reason) => _usage(reason),
       final SecretReadOnly readOnly => session.finish(
         configInvalidExit,
-        stderr: [_readOnlyHint(readOnly, session.home)],
+        stderr: [secretReadOnlyHint(readOnly, session.home)],
       ),
       SecretFailed(:final reason) => session.finish(
         configInvalidExit,
@@ -425,24 +426,13 @@ final class SecretCommands {
     ),
     final SecretReadOnly readOnly => session.finish(
       configInvalidExit,
-      stderr: [_readOnlyHint(readOnly, session.home)],
+      stderr: [secretReadOnlyHint(readOnly, session.home)],
     ),
     SecretFailed(:final reason) => session.finish(
       configInvalidExit,
       stderr: ['cannot store secret $name: $reason'],
     ),
   };
-
-  /// Подсказка бэкенда только для чтения (D8, п. 3) с настоящим путём
-  /// `$CODELAB_HOME`; на Windows `file` не предлагается (D7, D14).
-  String _readOnlyHint(SecretReadOnly readOnly, String home) {
-    final head = 'secret store ${readOnly.backend} is read-only.';
-    return readOnly.fileBackendOffered
-        ? "$head Add 'secrets.backend: file' to $home/config.yaml to store "
-              'secrets in $home/secrets.yaml (plaintext, 0600), or set '
-              '${readOnly.variable} in the environment'
-        : '$head Set ${readOnly.variable} in the environment';
-  }
 
   /// Отбрасывает один завершающий `\n` или `\r\n` (D8, шаг 5): второй перевод
   /// строки остаётся в значении и отвергается проверкой «одна строка».

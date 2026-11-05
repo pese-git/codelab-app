@@ -21,11 +21,19 @@ import 'profile_arg.dart';
 /// печатает встроенный профиль, обе команды пишут в [stderr] одно
 /// предупреждение [ignoredDefaultProfileWarning]; удаление `default`
 /// работает как у любого профиля. Файл автоматически не меняется.
+///
+/// [openSecrets] открывает хранилище секретов лениво и только для `show`
+/// профиля со ссылкой `secret:<имя>`: остальные подкоманды хранилища не
+/// касаются. `show` печатает `token: secret <имя> (set|missing)` по
+/// `ProfileSecrets.isSet` — значение не читается (design.md change
+/// `add-provider-setup-ui`, D13). Без [openSecrets] или при сбое хранилища
+/// секрет считается отсутствующим.
 Future<int> runProfilesCommand(
   List<String> args, {
   required ProfileStore store,
   required StringSink stdout,
   required StringSink stderr,
+  Future<ProfileSecrets> Function()? openSecrets,
 }) async {
   switch (args) {
     case ['list']:
@@ -59,7 +67,7 @@ Future<int> runProfilesCommand(
         if (ignoredDefault) {
           stderr.writeln(ignoredDefaultProfileWarning);
         }
-        _show(embeddedCliProfile, stdout);
+        await _show(embeddedCliProfile, stdout, openSecrets);
         return okExit;
       }
       final profile = usable.where((p) => p.id == id).firstOrNull;
@@ -67,7 +75,7 @@ Future<int> runProfilesCommand(
         stderr.writeln('codelab: Unknown agent profile "$id".');
         return failureExit;
       }
-      _show(profile, stdout);
+      await _show(profile, stdout, openSecrets);
       return okExit;
     case ['add', final id, final value]:
       // `embedded` и `default` встроены и в `profiles.json` не пишутся (D7,
@@ -129,7 +137,11 @@ String _summary(ConnectionProfile profile) => switch (profile) {
 
 /// Аргументы печатаются JSON-массивом: так видно границы слов с пробелами.
 /// Значение токена не печатается никогда — только откуда оно берётся.
-void _show(ConnectionProfile profile, StringSink out) {
+Future<void> _show(
+  ConnectionProfile profile,
+  StringSink out,
+  Future<ProfileSecrets> Function()? openSecrets,
+) async {
   out.writeln('id: ${profile.id}');
   switch (profile) {
     case StdioProfile():
@@ -145,12 +157,15 @@ void _show(ConnectionProfile profile, StringSink out) {
         ..writeln('type: webSocket')
         ..writeln('uri: ${profile.uri}');
       if (profile.tokenRef case final ref?) {
-        // Только имя переменной; значение токена не читается. Ссылка не вида
-        // `env:` не печатается совсем: в поле, рассчитанное на имя, мог быть
-        // вписан сам секрет (решение по безопасности итерации 2 change
-        // `add-app-settings-shell`, приоритет 1 AGENTS.md §2).
+        // Только имя переменной или секрета; значение токена не читается.
+        // Ссылка иного вида не печатается совсем: в поле, рассчитанное на
+        // имя, мог быть вписан сам секрет (решение по безопасности итерации 2
+        // change `add-app-settings-shell`, приоритет 1 AGENTS.md §2).
         out.writeln(switch (ProfileTokenRef.parse(ref)) {
-          EnvTokenRef(:final name) => 'token: \$$name',
+          EnvTokenRef(:final name) => 'token: env $name',
+          SecretTokenRef(:final name) =>
+            'token: secret $name '
+                '(${await _isSecretSet(name, openSecrets) ? 'set' : 'missing'})',
           UnsupportedTokenRef() =>
             'token: unrecognized token reference (not supported in this '
                 'version)',
@@ -160,5 +175,25 @@ void _show(ConnectionProfile profile, StringSink out) {
       out
         ..writeln('type: embedded')
         ..writeln('hostProfile: ${profile.hostProfile}');
+  }
+}
+
+/// Есть ли секрет [name]: без чтения значения; сбой хранилища — «нет».
+///
+/// Почему не ошибка: `show` — диагностическая команда, и недоступное
+/// хранилище должно читаться как `missing`, а не ронять вывод остальных
+/// полей профиля. Текст ошибки хранилища не печатается (мог бы цитировать
+/// путь или значение).
+Future<bool> _isSecretSet(
+  String name,
+  Future<ProfileSecrets> Function()? openSecrets,
+) async {
+  if (openSecrets == null) {
+    return false;
+  }
+  try {
+    return await (await openSecrets()).isSet(name);
+  } on Object catch (_) {
+    return false;
   }
 }
