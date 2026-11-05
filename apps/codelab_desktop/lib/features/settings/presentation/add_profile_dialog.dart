@@ -92,7 +92,7 @@ class _FormDialog extends StatelessWidget {
       canPop: !saving,
       child: ContentDialog(
         constraints: const BoxConstraints(maxWidth: _dialogMaxWidth),
-        title: const _DialogTitle('Add connection profile'),
+        title: const CodeLabDialogTitle('Add connection profile'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -205,7 +205,6 @@ class _Fields extends StatelessWidget {
     final draft = form.draft;
     final errors = form.errors;
     final isStdio = draft.kind == ProfileKind.stdio;
-    final probing = state is Probing;
 
     CodeLabFormNote? error(ProfileDraftField field) => errors[field] == null
         ? null
@@ -267,9 +266,6 @@ class _Fields extends StatelessWidget {
         CodeLabFormRow(
           label: 'Check',
           notes: [
-            if (form.probeNote case final note?
-                when probing || form.probe != null)
-              CodeLabFormNote(note, tone: CodeLabFormNoteTone.warning),
             const CodeLabFormNote(
               'Sends initialize only: no session is created, the process or '
               'socket closes right after.',
@@ -578,7 +574,7 @@ class _SavedDialog extends StatelessWidget {
 
     return ContentDialog(
       constraints: const BoxConstraints(maxWidth: _dialogMaxWidth),
-      title: const _DialogTitle('Profile saved'),
+      title: const CodeLabDialogTitle('Profile saved'),
       content: Column(
         key: const ValueKey('add-profile-saved'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -688,20 +684,6 @@ class _FormTextBoxState extends State<_FormTextBox> {
       onChanged: widget.onChanged,
     );
   }
-}
-
-/// Заголовок диалога по артборду: `h2.t-sub` — 20 px / 28 / 600.
-///
-/// Почему: `ContentDialog` по умолчанию ставит крупный заголовок (~28 px), а
-/// артборд `AddProfile` задаёт `typography.subtitle` (fluent.css `.t-sub`).
-class _DialogTitle extends StatelessWidget {
-  const _DialogTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) =>
-      Text(text, style: CodeLabText.styleOf(context, CodeLabTextRole.subtitle));
 }
 
 /// InfoBar артборда (`.f-ib`): одна строка — значок, текст `t-cap` 12/16 с

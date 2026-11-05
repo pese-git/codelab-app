@@ -714,10 +714,6 @@ AddProfileForm _composeForm({
     tokenNotice: unset
         ? "$tokenName is not set in CodeLab's environment."
         : null,
-    probeNote: unset
-        ? "$tokenName is not set in CodeLab's environment; the agent may "
-              'reject the connection.'
-        : null,
     canTest: !testIssues.any((issue) => !issue.isWarning),
     canSave: blocking.isEmpty,
   );

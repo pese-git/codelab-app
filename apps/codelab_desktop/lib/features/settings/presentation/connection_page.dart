@@ -373,7 +373,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => ContentDialog(
-        title: Text(title),
+        title: CodeLabDialogTitle(title),
         content: Text(details),
         actions: [
           Button(
@@ -567,12 +567,15 @@ class _ProfileRowCard extends StatelessWidget {
                     isLoading: row.isProbing,
                     onPressed: editable && !row.isProbing ? onTest : null,
                   ),
-                CodeLabButton(
-                  key: ValueKey('connection-profile-connect-$id'),
-                  label: 'Connect',
-                  emphasis: CodeLabButtonEmphasis.primary,
-                  onPressed: onConnect,
-                ),
+                // У текущего профиля с живым соединением «Connect» нет:
+                // переподключение — «Restart agent» блока Behavior.
+                if (row.canConnect)
+                  CodeLabButton(
+                    key: ValueKey('connection-profile-connect-$id'),
+                    label: 'Connect',
+                    emphasis: CodeLabButtonEmphasis.primary,
+                    onPressed: onConnect,
+                  ),
                 if (row.hasFileActions)
                   CodeLabButton(
                     key: ValueKey('connection-profile-rename-$id'),
