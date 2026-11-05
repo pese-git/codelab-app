@@ -16,8 +16,14 @@ import 'fake_terminal.dart';
 /// [line] вводит строку с Enter, [waitText] ждёт вывод, [exit] — Ctrl+D и
 /// код выхода. В `tearDown` — [dispose].
 final class ReplHarness {
-  ReplHarness({FakeAgent? agent, this.profiles = const {}})
-    : agent = agent ?? FakeAgent();
+  ReplHarness({
+    FakeAgent? agent,
+    this.profiles = const {},
+    this.profile = FakeAgent.profile,
+  }) : agent = agent ?? FakeAgent();
+
+  /// Профиль, с которым REPL стартует (по умолчанию stdio-профиль `agent`).
+  final ConnectionProfile profile;
 
   FakeAgent agent;
   final terminal = FakeTerminal();
@@ -45,7 +51,8 @@ final class ReplHarness {
     _exit = Repl(
       workspace: agent.workspace,
       terminal: terminal,
-      profile: FakeAgent.profile,
+      profile: profile,
+      tokenSource: fakeTokenSource,
       cwd: '/work',
       history: _NoHistory(),
       escapeTimeout: const Duration(milliseconds: 10),

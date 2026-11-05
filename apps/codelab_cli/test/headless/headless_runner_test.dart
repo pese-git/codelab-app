@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_cli/codelab_cli.dart';
+import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:test/test.dart';
 
 import '../support/fake_agent.dart';
@@ -27,6 +28,7 @@ void main() {
     stdout: stdout,
     stderr: stderr,
     verbose: verbose,
+    tokenSource: fakeTokenSource,
   );
 
   Future<HeadlessOutcome> start(HeadlessRunner runner) =>
@@ -144,6 +146,64 @@ void main() {
     expect(exitCodeOf(result), 1);
     expect(stderr.toString(), contains('agent not found'));
     expect(stderr.toString(), contains('"agent"'));
+  });
+
+  group('a handshake rejected because of the token', () {
+    Future<HeadlessOutcome> startWith(
+      int status,
+      WebSocketProfile profile,
+    ) async {
+      await agent.dispose();
+      agent = FakeAgent(openError: handshakeRejected(status));
+      return runner().run(profile: profile, cwd: '/work', prompt: 'hello');
+    }
+
+    test('with a token the message says the agent rejected it', () async {
+      final result = await startWith(401, wsProfile());
+
+      expect(result, isA<ConnectFailed>());
+      expect(exitCodeOf(result), 1);
+      expect(
+        stderr.toString(),
+        'codelab: cannot start the agent ws://127.0.0.1:9: '
+        'the agent rejected the token (HTTP 401).\n',
+      );
+      expect(stderr.toString(), isNot(contains(fakeTokenMarker)));
+      for (final leak in fakeUrlLeaks) {
+        expect(stderr.toString(), isNot(contains(leak)));
+      }
+    });
+
+    test('without a token the message says the agent requires one', () async {
+      await startWith(403, wsProfile(withToken: false));
+
+      expect(
+        stderr.toString(),
+        'codelab: cannot start the agent ws://127.0.0.1:9: '
+        'the agent requires a token (HTTP 403).\n',
+      );
+    });
+
+    test('a reference that gives no value counts as no token', () async {
+      await startWith(
+        401,
+        WebSocketProfile(
+          id: 'devbox',
+          label: 'Devbox',
+          uri: Uri.parse('ws://127.0.0.1:9/acp'),
+          tokenRef: 'env:UNSET',
+        ),
+      );
+
+      expect(stderr.toString(), contains('the agent requires a token'));
+    });
+
+    test('other handshake statuses keep the previous text', () async {
+      await startWith(404, wsProfile());
+
+      expect(stderr.toString(), contains('Failed to connect ACP transport.'));
+      expect(stderr.toString(), isNot(contains('token')));
+    });
   });
 
   test('--verbose adds the connection diagnostics to stderr', () async {

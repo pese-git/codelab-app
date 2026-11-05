@@ -78,4 +78,55 @@ void main() {
     await repl.agent.acceptNewSession('s2');
     await repl.waitText('new session');
   });
+
+  // Тот же текст отказа по токену, что при старте (spec codelab-cli «Отказ
+  // подключения из-за токена»).
+  group('a handshake rejected because of the token', () {
+    test('/profile <id> says the agent rejected the token', () async {
+      repl = ReplHarness(profiles: {'devbox': wsProfile()});
+      await repl.start();
+      repl.agent.openError = handshakeRejected(401);
+
+      repl.line('/profile devbox');
+
+      await repl.waitText('the agent rejected the token (HTTP 401).');
+      expect(
+        repl.lastOutput,
+        contains(
+          'codelab: cannot connect to ws://127.0.0.1:9: '
+          'the agent rejected the token (HTTP 401).',
+        ),
+      );
+      expect(repl.output, isNot(contains(fakeTokenMarker)));
+      for (final leak in fakeUrlLeaks) {
+        expect(repl.output, isNot(contains(leak)));
+      }
+    });
+
+    test('/reconnect says the agent requires a token when none was '
+        'sent', () async {
+      repl = ReplHarness(profile: wsProfile(withToken: false));
+      await repl.start();
+      repl.agent.openError = handshakeRejected(403);
+
+      repl.line('/reconnect');
+
+      await repl.waitText('codelab: cannot reconnect: ');
+      expect(
+        repl.lastOutput,
+        contains('the agent requires a token (HTTP 403).'),
+      );
+    });
+
+    test('other failures keep the previous text', () async {
+      repl = ReplHarness(profile: wsProfile());
+      await repl.start();
+      repl.agent.openError = handshakeRejected(500);
+
+      repl.line('/reconnect');
+
+      await repl.waitText('codelab: cannot reconnect: ');
+      expect(repl.lastOutput, isNot(contains('token')));
+    });
+  });
 }

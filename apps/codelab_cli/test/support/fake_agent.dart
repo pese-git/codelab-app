@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 
@@ -31,7 +32,9 @@ final class FakeAgent {
     }
   }
 
-  final Object? openError;
+  /// Ошибка открытия транспорта; тест может задать её после первого
+  /// подключения, чтобы `/profile` и `/reconnect` получили отказ.
+  Object? openError;
 
   /// Транспорт текущего «процесса» агента; [restartAgent] заменяет его.
   var transport = FakeAcpTransport();
@@ -40,13 +43,18 @@ final class FakeAgent {
     backend: AcpClientBackend(application),
     resolvers: [
       ConfigTransportResolver(
-        stdio: (_) => switch (openError) {
-          final error? => throw error,
-          null => transport,
-        },
+        stdio: (_) => _open(),
+        // WebSocket-профиль тоже получает этот «агент»: тесты отказа по
+        // токену бросают отказ рукопожатия через [openError].
+        webSocket: (_) => _open(),
       ),
     ],
   );
+
+  AcpTransport _open() => switch (openError) {
+    final error? => throw error,
+    null => transport,
+  };
 
   static const profile = StdioProfile(
     id: 'agent',
@@ -197,3 +205,46 @@ final class FakeAgent {
     await application.dispose();
   }
 }
+
+/// Ошибка так, как её бросает `connect` при отказе рукопожатия WebSocket
+/// со статусом [status]: приложение, транспорт, отказ (кроме статуса, в
+/// ней нет ни адреса, ни токена).
+AcpClientApplicationException handshakeRejected(int status) =>
+    AcpClientApplicationException(
+      'Failed to connect ACP transport.',
+      cause: AcpTransportException(
+        code: AcpTransportErrorCode.startFailed,
+        message: 'Failed to connect ACP transport.',
+        cause: AcpWebSocketHandshakeRejected(status),
+      ),
+    );
+
+/// WebSocket-профиль с токеном из переменной `TOK` (источник
+/// [fakeTokenSource] её задаёт) или без токена.
+WebSocketProfile wsProfile({bool withToken = true}) => WebSocketProfile(
+  id: 'devbox',
+  label: 'Devbox',
+  uri: Uri.parse(fakeUrlWithSecrets),
+  tokenRef: withToken ? 'env:TOK' : null,
+);
+
+/// Источник значения для [wsProfile]; значение фиктивное — маркер утечки.
+const fakeTokenSource = ProfileSecretSource({'TOK': fakeTokenMarker});
+
+const fakeTokenMarker = 'sk-test-leak-123';
+
+/// Адрес профиля с userinfo и query-токеном: в вывод CLI попадает только
+/// origin (`ws://127.0.0.1:9`), эти части — никогда.
+const fakeUrlWithSecrets =
+    'ws://user:$fakeUrlPassword@127.0.0.1:9/acp?t=$fakeUrlQueryMarker';
+const fakeUrlPassword = 'sk-test-leak-pass';
+const fakeUrlQueryMarker = 'sk-test-leak-query';
+
+/// Подстроки адреса, которых в выводе быть не должно.
+const fakeUrlLeaks = [
+  fakeUrlPassword,
+  fakeUrlQueryMarker,
+  'user:',
+  '/acp',
+  '?t=',
+];

@@ -3786,6 +3786,44 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
+    // Отказ по токену (spec agent-workbench-ui «Отказ подключения из-за
+    // токена в workbench», D25): текст причины виден в баннере main pane и на
+    // экране подключения, а не общий «Failed to start ACP transport.».
+    testWidgets('a rejected token shows its reason in the banner and on the '
+        'connection screen', (tester) async {
+      final harness = await createSessionCubit(tester: tester);
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      const reason = 'The agent rejected the token (HTTP 401).';
+      final failed = harness.shellCubit.state.copyWith(
+        connectionStatus: CodeLabConnectionStatus.failed,
+        connectionMessage: reason,
+      );
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(
+            state: failed.copyWith(
+              transcriptRows: const [CodeLabUserRow(id: 'u', text: 'hi')],
+            ),
+            cubit: harness.shellCubit,
+          ),
+        ),
+      );
+      expect(find.text('Could not connect to the agent'), findsOneWidget);
+      expect(find.text(reason), findsOneWidget);
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(state: failed, cubit: harness.shellCubit),
+        ),
+      );
+      expect(find.byType(CodeLabConnectionScreen), findsOneWidget);
+      expect(find.text(reason), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('an empty transcript keeps the connection screen instead of '
         'the banner', (tester) async {
       final harness = await createSessionCubit(tester: tester);

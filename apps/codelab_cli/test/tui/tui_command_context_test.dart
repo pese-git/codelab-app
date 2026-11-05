@@ -99,4 +99,64 @@ void main() {
     expect(exits, [0]);
     expect(context.keys, same(KeyBindings.tui));
   });
+
+  // Тот же текст отказа по токену, что при старте (spec codelab-cli «Отказ
+  // подключения из-за токена»).
+  group('a handshake rejected because of the token', () {
+    Future<TuiCommandContext> wsContext(WebSocketProfile profile) async {
+      // Новый «процесс» агента: транспорт setUp уже запущен.
+      agent.restartAgent();
+      await agent.workspace.connect(profile, projectDirectory: '/w');
+      return TuiCommandContext(
+        workspace: agent.workspace,
+        profile: profile,
+        tokenSource: fakeTokenSource,
+        cwd: '/w',
+        send: sent.add,
+        onExit: exits.add,
+      );
+    }
+
+    String lastNote() => sent.whereType<NoteMsg>().last.text;
+
+    test('switchProfile says the agent rejected the token', () async {
+      final ws = wsProfile();
+      final ctx = await wsContext(ws);
+      agent.openError = handshakeRejected(401);
+
+      await ctx.switchProfile(ws);
+
+      expect(
+        lastNote(),
+        'codelab: cannot connect to ws://127.0.0.1:9: '
+        'the agent rejected the token (HTTP 401).',
+      );
+      expect(lastNote(), isNot(contains(fakeTokenMarker)));
+      for (final leak in fakeUrlLeaks) {
+        expect(lastNote(), isNot(contains(leak)));
+      }
+    });
+
+    test('reconnect says the agent requires a token when none was '
+        'sent', () async {
+      final ctx = await wsContext(wsProfile(withToken: false));
+      agent.openError = handshakeRejected(403);
+
+      await ctx.reconnect();
+
+      expect(
+        lastNote(),
+        'codelab: cannot reconnect: the agent requires a token (HTTP 403).',
+      );
+    });
+
+    test('other failures keep the previous text', () async {
+      final ctx = await wsContext(wsProfile());
+      agent.openError = handshakeRejected(500);
+
+      await ctx.reconnect();
+
+      expect(lastNote(), contains('Failed to connect ACP transport.'));
+    });
+  });
 }
