@@ -653,7 +653,12 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
 
 Иерархия вводится двумя OpenSpec changes. `add-app-settings-shell` вводит `NavigationCubit`,
 `WorkbenchDestination`, `SettingsDestination` (с `returnTo` — сессией, к которой ведут Esc и «Back»),
-сочетание Cmd/Ctrl+, и кнопку «Settings» сайдбара (design.md этого change, D1, D2).
+сочетание Cmd/Ctrl+, и кнопку «Settings» сайдбара (design.md этого change, D1, D2). В этом change
+`WorkbenchDestination` без полей — поля из листинга выше появляются вместе со своими экранами, —
+а `SettingsDestination(page, {returnTo})` несёт страницу и id сессии возврата (`String?`).
+Переходы — `NavigationCubit.openSettings({page, required source})`, `selectSettingsPage(page)` и
+`back({toSession})`; последняя страница хранится slug-ом в `codelab.settings.last_page`
+(`apps/codelab_desktop/lib/app/navigation/`).
 `add-app-navigation-shell` добавляет остальные ветки (`Boot`, `Onboarding`, `ProjectPicker`, оверлеи
 workbench) и сочетания шага 3 вместе с их экранами. Пустых веток «на вырост» нет (AGENTS.md §13).
 

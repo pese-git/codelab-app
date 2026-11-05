@@ -470,7 +470,7 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 | 17 | usage | — | — | — | D-09, L-29, C-15 (после `add-usage-extension`) |
 | 18 | инспектор протокола | R-23, E-16 | — | — | — |
 | 19 | соединение и ошибки | L-04, C-02, C-13, K-01, K-02, переподключение (§9.10) | L-08 | L-32, S-09 | C-14, U-26 |
-| 20 | Settings › Connection | — | U-06, D-04, R-12 | — | D-10, U-26 |
+| 20 | Settings › Connection | — | U-06, D-04, R-12 — закрыты change `add-app-settings-shell` в части без хранилища секретов (R-12 в app — частично: токен только из переменной окружения) | — | D-10, U-26 |
 | 21 | Settings › Agents & modes | — | P-05, R-15 | P-06, U-27 | C-04, U-31, L-10, U-30, E-22 |
 | 22 | Settings › Permissions & tools | — | T-26, `permissions.*` | — | T-35 |
 | 23 | Settings › Redaction | — | — | — | D-24, P-18, P-19 |
@@ -486,7 +486,11 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 MCP servers встраиваются в ту же оболочку change `add-provider-setup-ui`. Он же добавляет к «Add
 connection profile» хранение токена в хранилище секретов агента: «Use stored secret», «Store a new
 token», порядок «секрет → профиль» с откатом и удаление `codelab/profiles/<id>/token` при «Remove».
-В `add-app-settings-shell` токен профиля — только ссылка `env:<NAME>` (решение 2026-11-04).
+В `add-app-settings-shell` токен профиля — только ссылка `env:<NAME>` (решение 2026-11-04). Строка 20 в
+части M3 закрыта этим change: профили `profiles.json`, «Add connection profile», «Test connection»,
+«Rename», «Remove», «Connect on start» и «Restart agent» (переподключение до `ClientWorkspace.restart`);
+статусы U-06, D-04 и R-12 — в `agent-parity-goals.md`. Хранилище секретов для токена остаётся за
+`add-provider-setup-ui`, D-10 и U-26 (M5) — справка и переподключение без lease и `restart()`.
 
 На смартфоне и планшете (этап 10, M5) те же экраны получают раскладку по ширине окна и теряют
 действия, которых нет в профиле `mobile`: строки Run, `stdio`-MCP, skills, хуки, языковые серверы —
@@ -537,6 +541,7 @@ token», порядок «секрет → профиль» с откатом и
 | Задача | Исполнитель | Откуда | Суть |
 |---|---|---|---|
 | Запрет редиректов WebSocket-транспорта | `[protocol]` | ревью итерации 3 `add-app-settings-shell` (design.md, Risks; решение пользователя 2026-11-05) | `WebSocket.connect` следует редиректу, в том числе `wss://` → `http://` другого origin, и через `IOWebSocketChannel` это не отключается. Токен SDK не переносит (`shouldCopyHeaderOnRedirect`), но промпты и файлы пошли бы открытым текстом без подтверждения SETUP-10. Нужно: `WebSocketAcpTransport` не следует редиректам (ответ 3xx — отказ рукопожатия со статусом), тест на loopback. Поведение то же в `develop` |
+| Таймаут открытия транспорта / отмена переподключения | `[protocol]` | финальное ревью итерации 4 `add-app-settings-shell` (design.md, Risks, safety LOW) | У открытия WebSocket-транспорта нет своего таймаута (`IOWebSocketChannel.connect`/`channel.ready`): зависшее рукопожатие держит `reconnecting` до таймаута ОС, а у строки «Current» в это время нет ни «Connect», ни «Restart agent» (обход — «Connect» другой строки). Нужно: таймаут открытия в `codelab_acp_transports` с типизированной ошибкой и отмена идущего переподключения в kit (`ClientWorkspace`), тест на loopback-сервере, который не отвечает на upgrade |
 
 ---
 

@@ -9,7 +9,9 @@
 * `IoTextFileIo` и `IoTerminalProcessRunner` — порты `fs/*` и `terminal/*` из `codelab_client_acp`;
 * `WorkingDirectoryProvider` / `IoWorkingDirectoryProvider` — рабочая папка процесса клиента;
 * `ioTransportResolver` — `ConfigTransportResolver` kit с фабриками `StdioAcpTransport` и `WebSocketAcpTransport`;
-* `JsonFileProfileStore` (`~/.codelab/profiles.json` у CLI) и `JsonFileRecentProjectsStore` — порты хранилищ kit.
+* `resolveCodelabHome` (`platform/codelab_home.dart`) — единственное правило `$CODELAB_HOME` для CLI и app (`~`, `~/…`, ошибка `CodelabHomeException`; design.md change `add-app-settings-shell`, D7);
+* `classifyProbeFailure` — классификатор для `ProfileProbe`: исход и `UnreachableReason` по типам и errno (`SocketException`, TLS, статус рукопожатия), а не по тексту исключения (D12);
+* `JsonFileProfileStore` (`$CODELAB_HOME/profiles.json`, общий у CLI и app) и `JsonFileRecentProjectsStore` — порты хранилищ kit.
 
 Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) остаются в app.
 
@@ -19,6 +21,8 @@
 * `dependencies` — только подмножество `{codelab_client_core, codelab_client_acp, codelab_acp_protocol, codelab_acp_transports, path, meta}` (`pubspec_allowlist_test.dart`). Расширение — через OpenSpec change.
 * Политики здесь нет: правила очереди, проекции, недавних проектов и профилей — в kit; пакет только переносит их на файлы, процессы и сокеты.
 * Секреты в файлы не пишутся: профиль хранит `tokenRef`, значение даёт `SecretSource` при открытии транспорта.
+* Запись JSON-файлов (`stores/json_file.dart`) — во временный файл в том же каталоге с `flush: true` до `rename`: после сбоя питания остаётся целый старый или целый новый файл.
+* Тестовые маркеры секретов не должны попадать в вывод тестов, в том числе в сообщения `expect`.
 * Импортируют пакет только composition root и тесты.
 
 ## 3. Тесты

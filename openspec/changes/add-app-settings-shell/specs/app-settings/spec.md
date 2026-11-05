@@ -137,6 +137,8 @@ InfoBar SHALL исчезать, когда ожидающих запросов �
 
 Строка SHALL предлагать действия «Test connection», «Connect», «Rename» и «Remove». У встроенного агента НЕ SHALL быть «Test connection», «Rename» и «Remove». «Remove» SHALL быть недоступна у профиля текущего подключения, с подсказкой «Disconnect first».
 
+У строки с меткой «Current» (принятое соединение в `Connected` или `Reconnecting`) кнопки «Connect» НЕ SHALL быть: переподключение вручную — «Restart agent» блока «Behavior» (решение пользователя 2026-11-05; design.md, D5, D9). Это касается и встроенного агента. У остальных строк «Connect» SHALL оставаться; во время попытки (`Connecting…`) и после сбоя (`Failed`) «Current» нет, и «Connect» SHALL быть во всех строках.
+
 Радиокнопка строки SHALL выбирать профиль по умолчанию (`shared_preferences` `codelab.connection.default_profile`). Профиль по умолчанию используется при старте и кнопкой «Connect» до первого подключения окна. «Connect» SHALL подключать текущее окно к профилю строки и НЕ SHALL менять профиль по умолчанию.
 
 Без сохранённого выбора профилем по умолчанию SHALL быть встроенный агент. `default` — второе имя встроенного агента (design.md, D21): запись с id `default` в `profiles.json` SHALL игнорироваться и НЕ SHALL показываться строкой профиля.
@@ -182,6 +184,14 @@ InfoBar SHALL исчезать, когда ожидающих запросов �
 #### Scenario: Заголовок строки
 - **WHEN** `profiles.json` содержит профиль `py` с `label` `stdio:python -m "codelab agent" --stdio`, профиль `ws` с пустым `label` и профиль `dev` с `label` длиннее строки
 - **THEN** заголовки — `py`, `ws` и `label` профиля `dev` с многоточием и полным текстом в подсказке; вторая строка `py` — `python`, без аргументов
+
+#### Scenario: Connect скрыт у текущего профиля
+- **WHEN** `profiles.json` содержит профили `dev` и `plain`, пользователь нажимает «Connect» в строке `dev`, и подключение принято
+- **THEN** у `dev` «Current» и `Connected`, кнопки `connection-profile-connect-dev` нет, а у `plain` и встроенного агента «Connect» есть
+
+#### Scenario: Connect при переподключении и после сбоя
+- **WHEN** окно подключено к `dev`, соединение переходит в `Reconnecting`, затем переподключение не удаётся
+- **THEN** в `Reconnecting` у `dev` «Current» и бейдж `Connecting…`, кнопки `connection-profile-connect-dev` нет, а у других строк «Connect» есть; после сбоя «Current» нет ни у кого, у `dev` бейдж `Failed`, а «Connect» есть во всех строках
 
 #### Scenario: Бейдж состояния текущего профиля
 - **WHEN** окно ещё ни к чему не подключалось, пользователь нажимает «Connect» в строке `dev`, и подключение сначала идёт, потом завершается ошибкой
@@ -295,7 +305,7 @@ Connect к другому профилю SHALL разрывать текущее
   - «From environment variable» — поле имени переменной, по умолчанию `CODELAB_AGENT_TOKEN`, в профиль идёт `tokenRef: env:<NAME>`.
 - Значение токена диалог НЕ SHALL принимать, читать при сохранении и показывать.
 - Под полем SHALL показываться подсказка `CodeLab reads the token from this environment variable when it connects. Token values are not saved in profiles.json.` и строка `Apps opened from Finder do not see variables set in your shell profile.`.
-- Если переменная не задана в окружении app, диалог SHALL показывать `<NAME> is not set in CodeLab's environment.`.
+- Если переменная не задана в окружении app, диалог SHALL показывать `<NAME> is not set in CodeLab's environment.` один раз — подсказкой под полем имени переменной. Других предупреждений о незаданной переменной, в том числе в блоке проверки до и после «Test connection», диалог НЕ SHALL показывать (решение пользователя 2026-11-05; design.md, D12, D13). Проверка с незаданной переменной SHALL выполняться.
 - Вариантов хранилища секретов и обещаний о них диалог НЕ SHALL показывать.
 
 **Проверка.** «Test connection» SHALL выполнять `ProfileProbe` и показывать исход (решение пользователя 2026-11-05, design.md D12):
@@ -348,7 +358,7 @@ Connect к другому профилю SHALL разрывать текущее
 
 #### Scenario: Переменная не задана
 - **WHEN** пользователь вводит имя переменной `MISSING_TOKEN`, которой нет в окружении app
-- **THEN** диалог показывает `MISSING_TOKEN is not set in CodeLab's environment.`, а сохранение остаётся доступным
+- **THEN** диалог показывает `MISSING_TOKEN is not set in CodeLab's environment.` ровно один раз, под полем имени переменной, и сохранение остаётся доступным; после «Test connection» второго предупреждения о переменной нет
 
 #### Scenario: Отмена
 - **WHEN** пользователь заполнил диалог и нажал Esc
@@ -449,7 +459,7 @@ Connect к другому профилю SHALL разрывать текущее
 ### Requirement: «Rename» и «Remove» профиля
 «Rename» SHALL менять только `label` профиля; id SHALL оставаться прежним. «Rename» SHALL открывать встроенный редактор `label` прямо в строке профиля (design.md, D14): контейнер редактора `connection-profile-rename-editor-<id>`, поле `connection-profile-rename-field-<id>`, кнопки `connection-profile-rename-save-<id>` и `connection-profile-rename-cancel-<id>`. Отмена SHALL закрывать редактор без записи в `profiles.json`.
 
-«Remove» SHALL спрашивать подтверждение «Remove profile <title>?» (`title` — по правилу заголовка строки) и удалять только запись из `profiles.json`; переменные окружения и другие хранилища app НЕ SHALL трогать. Удаление профиля по умолчанию SHALL сбрасывать `codelab.connection.default_profile`. Запрет удаления встроенного профиля и профиля текущего подключения SHALL проверяться перед вызовом `ProfileStore.remove`, а не только недоступностью кнопки.
+«Remove» SHALL спрашивать подтверждение «Remove profile <title>?» (`title` — по правилу заголовка строки; заголовок диалога — 20 px semibold, как у «Add connection profile», design.md D14, D16) и удалять только запись из `profiles.json`; переменные окружения и другие хранилища app НЕ SHALL трогать. Удаление профиля по умолчанию SHALL сбрасывать `codelab.connection.default_profile`. Запрет удаления встроенного профиля и профиля текущего подключения SHALL проверяться перед вызовом `ProfileStore.remove`, а не только недоступностью кнопки.
 
 #### Scenario: Переименование
 - **WHEN** пользователь переименовывает `devbox` в «Build box»

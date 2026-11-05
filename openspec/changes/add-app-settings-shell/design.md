@@ -168,6 +168,16 @@ App:   general, appearance, keyboard
 
 **«Connect»** переключает текущее окно на этот профиль (`ConnectionCommands.connect(profile)`) и профиль по умолчанию не меняет.
 
+**«Connect» у текущего профиля** (решение пользователя 2026-11-05, ручной прогон итерации 3). У строки с меткой «Current» кнопки «Connect» нет. «Current» стоит только при принятом соединении — `Connected` или `Reconnecting` (D4): подключаться к профилю, к которому окно уже подключено, бессмысленно, а переподключение вручную — «Restart agent» блока «Behavior» (D9), рядом с объяснением последствий. Скрытие и в `Reconnecting` — уточнение оркестратора 2026-11-05 к решению пользователя «скрыть у подключённого», а не новое решение. В остальных строках и состояниях «Connect» остаётся, как в итерации 3:
+- `Connecting…` — «Current» нет ни у кого (D4), «Connect» есть во всех строках; нажатие начинает новую попытку, а прежняя вытесняется номером попытки (D6);
+- `Failed` (`ConnectionFailed`, `ConnectionLost`) — «Current» нет, «Connect» есть во всех строках, в том числе у строки неудачной попытки: это повтор;
+- `Reconnecting` — «Current» и бейдж `Connecting…` у принятого профиля, «Connect» у этой строки **нет**: соединение принято, kit переподключается сам, и новая попытка из «Connect» шла бы поверх его переподключения; у остальных строк «Connect» есть;
+- отказ до обращения к workspace при живом соединении — «Current» и `Connected` остаются у живого профиля, «Connect» у него нет.
+
+Решение о видимости — признак строки, который считает application (`ConnectionProfileRow`), а не виджет (AGENTS.md §6): «Connect» скрыта ровно у строки «Current» (`canConnect => !isCurrent`). Встроенного агента правило касается так же.
+
+*Альтернатива:* недоступная кнопка «Connect» с подсказкой — пользователь решил убрать её совсем: в строке и так стоят «Current» и `Connected`.
+
 Без ключа (новая установка) профиль по умолчанию — встроенный агент (решение Q1). Правило совпадает с CLI: `codelab` без `--agent` тоже всегда запускает встроенный агент.
 
 `default` — не профиль из файла, а второе имя встроенного агента: `-a default` и `-a embedded` означают одно и то же, а id `default` зарезервирован (D21, D11). Запись с id `default`, уже лежащая в `profiles.json` от прежней версии, игнорируется. Страница «Connection» не показывает её строкой. Вместо этого над списком выводится InfoBar `warning` (ключ `connection-profiles-ignored-default`) с текстом `Profile "default" in profiles.json is ignored: default is the built-in agent. Remove it with codelab profiles remove default.` и кнопкой «Remove». Кнопка вызывает `ProfileStore.remove('default')` после подтверждения. Команду, аргументы, URL и `env` записи InfoBar не показывает. Файл автоматически не перезаписывается.
@@ -263,6 +273,8 @@ App:   general, appearance, keyboard
 
 Текст строки честный, называет цель и не обещает `session/cancel`: `Reconnects <title> and reloads open sessions. A running turn is interrupted; queued prompts stay.`, где `<title>` — заголовок профиля цели по правилу D4. Для WebSocket подпись кнопки — «Reconnect». Обрыв хода и сохранность очереди — уже существующее поведение `reconnect` (spec acp-client-kit «Сессии после переподключения»). Подпись и доступность считаются по `restartTarget`: кнопка недоступна без цели и во время `connecting`/`reconnecting`. Блок «Behavior» виден и в `ConnectionSettingsUnreadable` (D4).
 
+У строки текущего профиля в `Connected` и `Reconnecting` нет кнопки «Connect» (D5): переподключение живого соединения — только эта строка.
+
 В CommandBar страницы остаётся только «Add profile», дублирующая кнопка «Restart agent» с холста убрана: у одного действия одно место, рядом с объяснением последствий. Когда появится `restart()`, кнопка переключится на него без изменения UI (`12-6` §12.6.7, `agent-parity-goals.md` U-26).
 
 ### D10. InfoBar «только чтение» и справка D-10
@@ -353,7 +365,7 @@ Id неизменяем после сохранения; «Rename» меняет
 
 Почему не текст исключения: `describeFailure` убирает известные секреты, но в сообщении транспорта остаются путь и query URL, аргументы команды и произвольный текст сервера (D17, `observability.md` §44–§46). Причина в enum и статус в `int` безопасны по построению. Текст считает одна функция `probeOutcomeText` слоя application app (`features/settings/application/probe_outcome_view.dart`, L2 ревью итерации 3). Её вызывают Cubit-ы — `AddProfileCubit` для диалога и `ConnectionSettingsCubit`/его состояние для строки профиля (`connection-profile-probe-<id>`), — а виджеты получают готовую строку. Функции нужны исход, профиль (команда, ссылка на токен) и признак «переменная задана» из порта окружения Cubit-а; в presentation ни исхода, ни окружения нет. Текст `Unauthorized` описывает то, что реально ушло на сервер (решение оркестратора 2026-11-05): без значения переменной токен не отправляется, и «rejected the token» было бы неправдой.
 
-Если у `EnvToken` переменная не задана в окружении app, перед проверкой показывается заметка «CODELAB_AGENT_TOKEN is not set in CodeLab's environment; the agent may reject the connection.» с настоящим именем переменной. Проверка всё равно выполняется.
+Если у `EnvToken` переменная не задана в окружении app, проверка всё равно выполняется, а предупреждение одно — подсказка под полем токена `<NAME> is not set in CodeLab's environment.` (D13). Отдельной заметки в блоке «Check» нет (решение пользователя 2026-11-05, ручной прогон итерации 3): итерация 3 показывала там вторую фразу `…; the agent may reject the connection.`, и пользователь видел одно и то же предупреждение дважды. Что токен не ушёл, говорит и сам исход: `Unauthorized: the agent requires a token` (таблица выше).
 
 Классифицировать ошибки IO-транспортов kit не может: `ProcessException`, `SocketException`, `HandshakeException` и `WebSocketException` — типы `dart:io`. Поэтому composition root передаёт классификатор `ProbeFailureClassifier` из `codelab_client_io` (`classifyProbeFailure`). Он смотрит на `AcpTransportException.code` и `cause`, только на типы и коды:
 - отсутствующая команда (`ProcessException` с errno `ENOENT`) → `CommandNotFound`;
@@ -407,7 +419,7 @@ Id неизменяем после сохранения; «Rename» меняет
 Как UI показывает ограничение (без обещаний сверх A):
 - в «Add connection profile» под полем токена — подсказка «CodeLab reads the token from this environment variable when it connects. Token values are not saved in profiles.json.»;
 - вторая строка подсказки — «Apps opened from Finder do not see variables set in your shell profile.» (macOS; `apps/codelab_desktop/AGENTS.md`) — это честно описывает, почему токен может не дойти;
-- если переменная не задана в окружении app, строка профиля и проверка показывают «<NAME> is not set in CodeLab's environment.»;
+- если переменная не задана в окружении app, «<NAME> is not set in CodeLab's environment.» показывают строка профиля на странице «Connection» (`connection-profile-token-<id>`) и диалог — один раз, подсказкой под полем имени переменной. Других предупреждений о незаданной переменной в диалоге нет, в том числе в блоке «Check» после «Test connection» (решение пользователя 2026-11-05, D12);
 - профиль со ссылкой не вида `env:` (вручную правленый файл или будущий change B) показывается строкой `unrecognized token reference (not supported in this version)`; так же печатает `codelab profiles show`.
 
 **Значение такой ссылки нигде не выводится** (решение оркестратора по безопасности, ревью итерации 2; AGENTS.md §2, §10, §16). Вместо имени секрета в файле мог оказаться сам токен, вписанный вручную. Поэтому:
@@ -449,7 +461,7 @@ Id неизменяем после сохранения; «Rename» меняет
 
 **Сохранение и «Use by default».** Если профиль записан, а ключ `codelab.connection.default_profile` записать не удалось, профиль остаётся сохранённым, диалог переходит в «Profile saved» без обещания профиля по умолчанию (`Saved.useByDefault == false`), а событие `connection_profile.save_failed` получает `stage: default`. Откатывать запись профиля не нужно: профиль корректен и без отметки по умолчанию, а повторное «Save» невозможно — id уже занят.
 
-**«Remove»** недоступна у встроенного профиля и у профиля текущего подключения, с подсказкой «Disconnect first». Disconnect появится отдельным change; до него нужно подключиться к другому профилю. Подтверждение — «Remove profile <label>?». Удаляется только запись в `profiles.json`: секретов профиль в этом change не создаёт, и переменные окружения app не трогает. Эти проверки (SETUP-21) — application policy `ConnectionSettingsCubit`, они повторяются перед вызовом `ProfileStore.remove`, а не только в виде недоступной кнопки.
+**«Remove»** недоступна у встроенного профиля и у профиля текущего подключения, с подсказкой «Disconnect first». Disconnect появится отдельным change; до него нужно подключиться к другому профилю. Подтверждение — «Remove profile <title>?» (`title` — по правилу заголовка строки, D4). Заголовок подтверждения — 20 px semibold (`typography.subtitle`, атом `CodeLabDialogTitle`, D16), как у «Add connection profile» и в артборде (`.t-sub`); то же у подтверждения старой записи `default` (решение пользователя 2026-11-05, D20). Удаляется только запись в `profiles.json`: секретов профиль в этом change не создаёт, и переменные окружения app не трогает. Эти проверки (SETUP-21) — application policy `ConnectionSettingsCubit`, они повторяются перед вызовом `ProfileStore.remove`, а не только в виде недоступной кнопки.
 
 ### D15. Ссылка на токен — одно правило для app и CLI
 
@@ -483,7 +495,9 @@ Id неизменяем после сохранения; «Rename» меняет
 - **`CodeLabFormNote`** — заметка под полем с тоном (`CodeLabFormNoteTone`): подсказка, предупреждение, ошибка;
 - **`CodeLabSegmentedControl<T>`** — переключатель вариантов (`CodeLabSegment<T>`): тип «Local stdio» / «WebSocket», источник токена.
 
-Превью **обязательны** для каждого нового виджета `codelab_ui` (и итерации 1, и итерации 3) — в `codelab_molecule_previews.dart` и `codelab_organism_previews.dart`, по образцу существующих. Виджет без превью считается незавершённым (задачи 1.5 и 3.8a).
+Итерация 4 добавляет атом **`CodeLabDialogTitle`** (`atomics/codelab_dialog_title.dart`) — заголовок `ContentDialog` в размере `typography.subtitle` (20 px, w600, `.t-sub` артборда). `ContentDialog` по умолчанию ставит заголовок около 28 px, а артборды задают подзаголовок; без общего атома каждый диалог задавал бы размер сам. Его используют «Add connection profile», «Profile saved» и подтверждения «Remove» (решение пользователя 2026-11-05). Атомы превью не получают — как существующие `CodeLabBadge` и `CodeLabButton`; атом проверяет `codelab_atomics_test.dart`.
+
+Превью **обязательны** для каждой новой молекулы и каждого нового организма `codelab_ui` (и итерации 1, и итерации 3) — в `codelab_molecule_previews.dart` и `codelab_organism_previews.dart`, по образцу существующих. Виджет без превью считается незавершённым (задачи 1.5 и 3.8a).
 
 ### D17. Наблюдаемость
 
@@ -577,6 +591,9 @@ Id неизменяем после сохранения; «Rename» меняет
 | Предупреждение под URL (`AddProfile`) | `ws:// to another machine: the token is sent unencrypted.` | с токеном (`EnvToken`) — текст артборда; без токена — `ws:// to another machine: traffic is sent unencrypted.` (D11) | решение оркестратора 2026-11-05: без токена фраза о токене неверна |
 | Тип по умолчанию в диалоге | выбран «WebSocket» | «Local stdio» — первый доступный тип; без stdio-резолвера — «WebSocket» (D11) | решение пользователя 2026-11-05: в артборде выбор WebSocket — демо-состояние |
 | id в диалоге | id показан текстом под именем | поле id редактируемо до сохранения, подпись «cannot change after saving» (spec app-settings, §12.4.9 шаг 2) | решение оркестратора 2026-11-05: spec уже требует правки id |
+| Подтверждение «Remove» | нет в артборде | заголовок «Remove profile <title>?» 20 px semibold (`CodeLabDialogTitle`, `.t-sub`), как у «Add connection profile» (D14, D16) | решение пользователя 2026-11-05: заголовок по умолчанию `ContentDialog` (~28 px) выбивался из остальных диалогов |
+| «Connect» у текущего профиля | «Connect» нет в строке (строка — Test, Rename, Remove) | «Connect» во всех строках, кроме строки «Current» (`Connected` или `Reconnecting`); в `Connecting…` и `Failed` — во всех строках (D5) | решение пользователя 2026-11-05: переподключение живого соединения — «Restart agent» (D9) |
+| Незаданная переменная токена (`AddProfile`) | — | одно предупреждение — подсказка под полем токена `<NAME> is not set in CodeLab's environment.`; заметки в блоке «Check» нет (D12, D13) | решение пользователя 2026-11-05: одно и то же предупреждение дважды |
 | «Rename» | кнопка без вида редактора | встроенный редактор `label` в строке профиля; ключи `connection-profile-rename-editor-<id>` (контейнер), `connection-profile-rename-field-<id>`, `connection-profile-rename-save-<id>`, `connection-profile-rename-cancel-<id>` (D14) | решение оркестратора 2026-11-05: одно поле не требует диалога |
 
 ### D21. CLI: без `--agent` и с `-a default` — встроенный агент
@@ -638,6 +655,7 @@ Id неизменяем после сохранения; «Rename» меняет
 - **[Секрет в логах и ошибках]** → События только с id и типами (D17), `describeFailure` для сообщений. Тест подставляет маркер `sk-test-leak-…` в значение переменной токена, в `env` stdio, в URL и в текст исключения.
 - **[Утечка токена и данных по `ws://`]** → Предупреждение и подтверждение при сохранении для любого `ws://` к нелокальному хосту, с токеном и без; подтверждение перед «Test connection», если выбран токен из переменной (D11). Подтверждение привязано к паре URL + токен и сбрасывается при их правке. Userinfo в URL отклоняется, поэтому секрет не уходит заголовком Basic auth и не пишется в `profiles.json`. «Test connection» и «Connect» в строке сохранённого профиля подтверждения не спрашивают (решение пользователя 2026-11-05, D11). Остаточный риск: профиль `ws://` к удалённому хосту, созданный `codelab profiles add` или ручной правкой `profiles.json`, никогда не проходил подтверждения; его токен и промпты уйдут открытым текстом по первому «Connect». Предупреждение под URL видно только в диалоге.
 - **[Редирект `wss://` → `http://` другого origin]** (решение пользователя 2026-11-05). `WebSocket.connect` следует редиректу, и через `IOWebSocketChannel` это не отключается. Токен не переносится (`shouldCopyHeaderOnRedirect`), но промпты и файлы пошли бы открытым текстом без подтверждения SETUP-10. Так же ведёт себя `develop`, этот change риск не вводит. Запрет редиректов WebSocket-транспорта — задача backlog `[protocol]` (`delivery-roadmap.md` §10.4).
+- **[Зависшее переподключение WebSocket]** (safety LOW, финальное ревью итерации 4). У открытия WebSocket-транспорта нет своего таймаута (`IOWebSocketChannel.connect`/`channel.ready`): если переподключение висит, у строки «Current» нет ни «Connect» (D5), ни «Restart agent» (недоступна в `reconnecting`, D9) до таймаута ОС. → Обход — «Connect» другой строки (например, встроенного агента); таймаут открытия и отмена переподключения — задача backlog `[protocol]` (`delivery-roadmap.md` §10.4).
 - **[Права `profiles.json` при перезаписи]** Запись через временный файл и `rename` не сохраняет права прежнего файла: в `dart:io` нет API для смены прав без запуска процесса (`chmod`). Новый файл получает права по umask. Секретов в файле нет (токен — только ссылка `env:`, D13), но `env` stdio-профиля может содержать чувствительные значения с ключом, не похожим на секрет (SETUP-19 ловит только ключи). Риск принят; сохранение прав — вместе с блокировкой файла, если понадобится.
 - **[Двойная запись и закрытие во время записи]** → `Saving` до чтения id, блокировка «Cancel»/Esc в `Saving`, перечитывание id перед «Save anyway» (D12, D14).
 - **[Containment]** Профиль stdio запускает произвольную команду пользователя — так же, как сегодняшняя форма и `codelab -a stdio:…`. Агентских действий без одобрения не появляется. `fs/*` и `terminal/*` ограничены папкой сессии, как раньше (AGENTS.md §10).
