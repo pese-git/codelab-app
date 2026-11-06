@@ -22,9 +22,9 @@ Composition root SHALL делать видимыми страницы «Connecti
 - **WHEN** окно подключено к профилю `wss://devbox:7420/acp`, а в локальном `~/.codelab/config.yaml` есть провайдер `local`
 - **THEN** «Providers» показывает InfoBar с `wss://devbox:7420` без `/acp`, строки `local` нет, кнопок «Add provider», «Edit», «Remove» нет; локальный файл не читался
 
-#### Scenario: Сторонний stdio-агент
-- **WHEN** окно подключено к stdio-профилю `python -m other_agent`, который назвался в `initialize` `other-agent`
-- **THEN** обе страницы показывают `Provider settings are managed by other-agent.` и не пишут файлы
+#### Scenario: Сторонний stdio-агент (согласовано пользователем 2026-11-06)
+- **WHEN** окно подключено к stdio-профилю с командой `python` и аргументами `-m other_agent`
+- **THEN** обе страницы показывают `Provider settings are managed by python.` (решение по базовому имени команды: самоназвания агента из `initialize` клиенту в этой версии не доступно; design.md change `add-provider-setup-ui`, D5) и не пишут файлы
 
 ### Requirement: Страница «Providers»
 Страница «Providers» для `EditableSettings` SHALL показывать по артборду `Providers` (design.md, D10):
@@ -34,7 +34,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 - «Configured providers» — Expander на провайдера: id, метка «Default», подпись `<id> · <вид> · [<base_url> ·] <ключ> · <n> model(s)`, источник `defined in <file>` для слоя 3, файла `--config` и переменных окружения, тег последней проверки;
 - `Config file: <path>`.
 
-Статус ключа SHALL вычисляться без чтения значения: `Key: in <backend>`, `Key: missing in <backend>`, `Key: env <VAR> (set)` / `(not set)`, `No key`. Провайдеры слоя 3, `--config` и окружения SHALL показываться без «Edit» и «Remove».
+Статус ключа SHALL вычисляться без чтения значения: `Key: in <backend>`, `Key: missing in <backend>`, `Key: env <VAR> (set)` / `(not set)`, `No key`, `Key: in config file (plain text)` (литеральный `api_key` в файле). У провайдера с литеральным ключом «Check» SHALL быть неактивна с подсказкой `The key is written in config.yaml. Move it to the secret store: codelab secret migrate.`: app не читает литеральное значение из конфига, а проверка без ключа дала бы ложный `unauthorized` (design.md change `add-provider-setup-ui`, D10). Провайдеры слоя 3, `--config` и окружения SHALL показываться без «Edit» и «Remove».
 
 Действия:
 - **Check** SHALL читать ключ в адаптере composition root и передавать его прямо в `ProviderCheck`; в состоянии страницы остаётся только итог (`ok, <n> models`, вид отказа, время и длительность). Повторный Check и закрытие страницы SHALL отменять прежнюю проверку, поздний итог НЕ SHALL менять строку;
@@ -44,11 +44,38 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 Без провайдеров страница SHALL показывать `No providers yet. The embedded agent needs one to run a turn.` и «Add provider» (ключ `providers-empty`).
 
+Дополнительно для «Check» (design.md change `add-provider-setup-ui`, D8, D10):
+- для `http://` к хосту вне `localhost`, `127.0.0.0/8` и `::1` рядом с «Check» SHALL показываться предупреждение `The key is sent unencrypted to <host>.`; «Check» остаётся доступной без диалога, потому что адрес уже записан в конфиге (трактовка SETUP-10 для страницы, решение пользователя 2026-11-06). Подтверждение адреса остаётся в мастере;
+- для вида без проверки (`gemini` и неизвестные) «Check» SHALL быть неактивна с подсказкой `Check is not available for <kind> providers yet.`; список проверяемых видов и адреса по умолчанию даёт мост;
+- смена подключения окна SHALL отменять идущие проверки страницы (D21).
+
+Подпись строки SHALL показывать `base_url` без userinfo, query и fragment.
+
 Значение ключа НЕ SHALL попадать в состояние Cubit, на экран и в журнал (SETUP-1).
 
 #### Scenario: Статус ключа без чтения значения
 - **WHEN** конфиг задаёт провайдеров `anthropic` (`api_key_secret: codelab/anthropic`, секрет есть в `file`), `openai` (`api_key_env: OPENAI_API_KEY`, переменная задана) и `team` (`api_key_secret: codelab/team`, секрета нет)
 - **THEN** строки показывают `Key: in file`, `Key: env OPENAI_API_KEY (set)` и `Key: missing in file`; ни один секрет не читался
+
+#### Scenario: http:// к удалённому хосту
+- **WHEN** провайдер `lan` задан с `base_url: http://10.0.0.5:8000/v1`
+- **THEN** рядом с «Check» строки `lan` показано `The key is sent unencrypted to 10.0.0.5.`, «Check» доступна и выполняется без диалога; у `http://localhost:11434/v1` предупреждения нет
+
+#### Scenario: Вид без проверки
+- **WHEN** провайдер `g` задан с `kind: gemini`
+- **THEN** «Check» строки `g` неактивна с подсказкой `Check is not available for gemini providers yet.`, запроса нет
+
+#### Scenario: base_url без секретов в подписи
+- **WHEN** провайдер задан с `base_url: https://u:sk-test-leak-0123456789@llm.example/v1?k=x#f`
+- **THEN** подпись строки содержит `https://llm.example/v1` и не содержит `u:`, маркера, `k=x` и `#f`
+
+#### Scenario: Смена подключения отменяет Check
+- **WHEN** «Check» строки ждёт ответа, а окно переключается на другой профиль
+- **THEN** проверка отменена, соединение закрыто, итог не записан в строку
+
+#### Scenario: Литеральный ключ в config.yaml (согласовано пользователем 2026-11-06)
+- **WHEN** провайдер `old` задан в `config.yaml` с `api_key: sk-test-leak-0123456789`
+- **THEN** строка показывает `Key: in config file (plain text)`, «Check» неактивна с подсказкой про `codelab secret migrate`, запроса к `/models` нет, маркер не появляется на экране и в журнале
 
 #### Scenario: Check с неверным ключом
 - **WHEN** тестовый сервер `/models` отвечает `401`, и пользователь нажимает «Check» в строке `anthropic`
@@ -56,7 +83,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 #### Scenario: Закрытие страницы во время Check
 - **WHEN** «Check» ждёт ответа, и пользователь уходит со страницы
-- **THEN** запрос закрыт, итог не записан, журнал содержит `provider_settings.check_discarded`
+- **THEN** отмена передана в `ProviderCheck.listModels`, соединение закрыто (сервер видит разрыв), итог не записан, журнал содержит `provider_settings.check_discarded`
 
 #### Scenario: Удаление провайдера модели по умолчанию
 - **WHEN** провайдеры `anthropic` (модель по умолчанию) и `local`, пользователь удаляет `anthropic`, выбирает новую модель `local/qwen` и оставляет флажок удаления ключа
@@ -71,11 +98,13 @@ Composition root SHALL делать видимыми страницы «Connecti
 - **THEN** страница показывает баннер конфликта, файл не перезаписан, страница перечитала снимок
 
 ### Requirement: Мастер провайдера в app
-«Add provider» и «Edit» SHALL открывать `ProviderWizardDialog` (`ContentDialog`, ключ `provider-wizard`) поверх автомата `ProviderSetupFlow` (spec client-agent-setup «Мастер провайдера»): строка шагов `API type › Base URL › Key › Check › Model › Review`, по шагу на экран, «Back»/«Next»/«Cancel», на шаге ключа — скрытый ввод, на шаге проверки — индикатор и адрес запроса (`scheme://host:port` и путь `/models`), на шаге «Review» — сводка, «Make default» и «This project only» (последний — только при папке проекта). Тексты и варианты отказа проверки SHALL следовать артборду `Wizard`: для `notFound` — варианты «Use <url>/v1» и «Enter the model manually».
+«Add provider» и «Edit» SHALL открывать `ProviderWizardDialog` (`ContentDialog`, ключ `provider-wizard`) поверх автомата `ProviderSetupFlow` (spec client-agent-setup «Мастер провайдера»): строка шагов `API type › Base URL › Key › Check › Model › Review`, по шагу на экран, «Back»/«Next»/«Cancel», на шаге ключа — скрытый ввод, на шаге проверки — индикатор и адрес запроса (`scheme://host:port` и путь `/models`), на шаге «Review» — сводка, «Make default» и «This project only» (последний — только при папке проекта). Тексты и варианты отказа проверки SHALL следовать артборду `Wizard`: для `notFound` — заголовок `Model list not found (404)` и варианты «Use <url>/v1» и «Enter the model manually»; для остальных отказов — заголовки `Key rejected (<код>)`, `Server unreachable`, `Timed out after 10 s`, `TLS error`, `Unexpected response (<код>)` и строка запроса `GET <url>/models → <код> · <n> ms`. Подписи шагов SHALL совпадать с артбордом `CliSetup`: `API type`, `Base URL`, `API key source` (`Store in <backend> as "codelab/<id>"`, `Read from environment variable (<VAR>)`, `No key`), `API key`, `Model (type to filter)`, `Enter model id manually` (design.md, D7).
+
+«Edit» SHALL открывать мастер в слое провайдера без переключателя «This project only» и SHALL быть неактивна с подсказкой по тем же отказам, что «Remove»: провайдер не только в слоях `user`/`projectLocal`, в нескольких слоях или в нечитаемом файле (design.md, D7).
 
 Пока идёт запись, «Cancel», Esc и закрытие диалога SHALL быть заблокированы, а повторное «Save» НЕ SHALL давать второй записи. Закрытие диалога SHALL отменять идущую проверку и сбрасывать введённый ключ.
 
-После `ConfigSaved` страница SHALL перечитывать снимок и показывать баннер `saved`. Если ключ заменён под тем же именем, баннер SHALL добавлять `The new key is used after Restart agent (Settings › Connection).`; если агент не подключён — `Saved. Connect to start the agent with the new provider.` с кнопкой «Connect» (design.md, D9). После `ConfigConflict` мастер SHALL возвращаться в «Review» с тем же планом и баннером `Config changed on disk — review and save again`.
+После `ConfigSaved` страница SHALL перечитывать снимок и показывать баннер `saved`. Если ключ заменён под тем же именем, баннер SHALL добавлять `The new key is used after Restart agent (Settings › Connection).`; если агент не подключён — `Saved. Connect to start the agent with the new provider.` с кнопкой «Connect» (design.md, D9). После `ConfigConflict` мастер SHALL возвращаться в «Review» с тем же черновиком (включая введённый ключ) и баннером `Config changed on disk — review and save again`; план SHALL пересобираться по перечитанному снимку (design.md, D9 «Конфликт и `reload`»), чтобы повторный «Save» не конфликтовал вечно.
 
 #### Scenario: Провайдер с ключом в хранилище
 - **WHEN** при `secrets.backend: file` и пустом конфиге пользователь проходит мастер «Custom OpenAI-compatible» с адресом тестового сервера, ключом `sk-test-leak-0123456789` и моделью из списка
@@ -84,6 +113,10 @@ Composition root SHALL делать видимыми страницы «Connecti
 #### Scenario: Только переменная при read-only бэкенде
 - **WHEN** бэкенд по умолчанию `env`, и пользователь доходит до шага ключа
 - **THEN** вариант «Store in …» отсутствует, показана причина бэкенда, доступны «Read from environment variable» и «No key»
+
+#### Scenario: Отказ проверки по ключу
+- **WHEN** проверка мастера получает `401`
+- **THEN** шаг «Check» показывает заголовок `Key rejected (401)` и строку `GET <url>/models → 401 · <n> ms`, доступны «Retry» и «Back», «Save without check» нет
 
 #### Scenario: Esc во время проверки
 - **WHEN** мастер на шаге проверки ждёт ответа, и пользователь нажимает Esc

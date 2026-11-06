@@ -435,6 +435,48 @@ void main() {
     );
   });
 
+  // Сценарий workspace-architecture «http в мосте настроек» (change
+  // `add-provider-setup-ui`, D8, D20): `package:http/http.dart` web-безопасен и
+  // разрешён основному бареле, а клиент для `dart:io` — только `io.dart` и
+  // `lib/src/io/`.
+  test('allows package:http in the setup bridge but not its IO or browser '
+      'clients outside io.dart', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_setup_http_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    void write(String path, String text) => File(p.join(tmp.path, path))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+    write('lib/codelab_setup.dart', "import 'package:http/http.dart';\n");
+    write(
+      'lib/src/provider/provider_check.dart',
+      "import 'package:http/http.dart';\n"
+          "import 'package:http/io_client.dart';\n"
+          "import 'package:http/browser_client.dart';\n",
+    );
+    write('lib/io.dart', "import 'package:http/io_client.dart';\n");
+    write(
+      'lib/src/io/io_provider_check.dart',
+      "import 'package:http/io_client.dart';\n",
+    );
+
+    final violations = scanSetupBridge(tmp);
+
+    expect(violations, hasLength(2));
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/src/provider/provider_check.dart:2 -> '
+          'package:http/io_client.dart',
+        ),
+        endsWith(
+          'lib/src/provider/provider_check.dart:3 -> '
+          'package:http/browser_client.dart',
+        ),
+      ]),
+    );
+  });
+
   test('allows the IO barrel of the setup bridge only in run.dart of the '
       'terminal client', () {
     final tmp = Directory.systemTemp.createTempSync('guard_cli_setup_');

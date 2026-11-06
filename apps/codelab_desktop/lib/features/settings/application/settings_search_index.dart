@@ -25,6 +25,13 @@ final class SettingsSearchIndex {
       'connect on start',
       'restart',
     ],
+    SettingsPage.providers: [
+      'provider',
+      'model',
+      'api key',
+      'key storage',
+      'base url',
+    ],
   };
 
   static List<SettingsPage> search(

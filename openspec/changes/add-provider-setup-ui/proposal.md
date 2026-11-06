@@ -83,7 +83,7 @@ Change `add-app-settings-shell` (A, архив `2026-11-05-add-app-settings-shel
 - `agent-mcp-client`: ADDED — поток состояний серверов сессии.
 - `embedded-agent`: ADDED — состояние MCP-серверов встроенного агента для хоста.
 - `codelab-tui`: MODIFIED — кадр TUI (модальный экран мастера и `/settings`, маска секрета) и одобрение в TUI (клавиши зоны одобрения не работают под модальным экраном).
-- `agent-workbench-ui`: ADDED — понятная причина отказа подключения из-за токена в баннере и диагностике (D25).
+- `agent-workbench-ui`: ADDED — понятная причина отказа подключения из-за токена в баннере и диагностике (D25); баннер «встроенный агент без провайдера» с «Add provider» и переподключением после записи (D26).
 - `workspace-architecture`: MODIFIED — сторож: `http` у `codelab_setup`, `codelab_setup` у app, границы `codelab_setup/io.dart` и `dart:io` в app.
 
 ## Impact

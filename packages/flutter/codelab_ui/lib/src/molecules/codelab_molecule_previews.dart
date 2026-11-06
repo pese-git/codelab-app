@@ -5,9 +5,11 @@ import 'codelab_approval_option_group.dart';
 import 'codelab_connection_banner.dart';
 import 'codelab_connection_status_row.dart';
 import 'codelab_form.dart';
+import 'codelab_key_value_list.dart';
 import 'codelab_prompt_composer.dart';
 import 'codelab_settings_row.dart';
 import 'codelab_settings_section.dart';
+import 'codelab_step_breadcrumb.dart';
 import 'codelab_tool_call_summary.dart';
 import 'codelab_view_mode.dart';
 import '../atomics/atomics.dart';
@@ -241,6 +243,82 @@ Widget codelabFormPreview() {
 )
 Widget codelabFormDarkPreview() {
   return _AcpPreviewSurface(brightness: Brightness.dark, child: _formSample());
+}
+
+@Preview(
+  name: 'Key-value list',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 160),
+)
+Widget codelabKeyValueListPreview() {
+  return _AcpPreviewSurface(child: _keyValueSample());
+}
+
+@Preview(
+  name: 'Key-value list (dark)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 160),
+  brightness: Brightness.dark,
+)
+Widget codelabKeyValueListDarkPreview() {
+  return _AcpPreviewSurface(
+    brightness: Brightness.dark,
+    child: _keyValueSample(),
+  );
+}
+
+Widget _keyValueSample() {
+  return const CodeLabKeyValueList(
+    entries: [
+      CodeLabKeyValueEntry(
+        label: 'Key',
+        value: 'In keychain-macos as ',
+        monoValue: 'codelab/anthropic',
+      ),
+      CodeLabKeyValueEntry(
+        label: 'Last check',
+        value: '14:01 · 12 models · 184 ms',
+      ),
+      CodeLabKeyValueEntry(
+        label: 'Source',
+        monoValue: '~/.codelab/config.yaml',
+      ),
+    ],
+  );
+}
+
+@Preview(
+  name: 'Step breadcrumb',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 60),
+)
+Widget codelabStepBreadcrumbPreview() {
+  return const _AcpPreviewSurface(child: _BreadcrumbSample());
+}
+
+@Preview(
+  name: 'Step breadcrumb (dark)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 60),
+  brightness: Brightness.dark,
+)
+Widget codelabStepBreadcrumbDarkPreview() {
+  return const _AcpPreviewSurface(
+    brightness: Brightness.dark,
+    child: _BreadcrumbSample(),
+  );
+}
+
+class _BreadcrumbSample extends StatelessWidget {
+  const _BreadcrumbSample();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CodeLabStepBreadcrumb(
+      steps: ['API type', 'Base URL', 'Key', 'Check', 'Model', 'Review'],
+      current: 3,
+    );
+  }
 }
 
 class _AcpPreviewSurface extends StatelessWidget {

@@ -3,7 +3,13 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'codelab_icon.dart';
 import 'codelab_tone.dart';
 
-enum CodeLabButtonEmphasis { primary, secondary }
+/// Акцент кнопки.
+///
+/// [subtle] и [danger] — кнопки без рамки для действий строки (`Check`,
+/// `Edit`, `Remove` артборда `Providers`, класс `f-btn subtle`; [danger] —
+/// `subtle danger`): внутри заголовка карточки рамка каждой кнопки перегружала
+/// бы строку (design.md change `add-provider-setup-ui`, D19).
+enum CodeLabButtonEmphasis { primary, secondary, subtle, danger }
 
 class CodeLabButton extends StatelessWidget {
   const CodeLabButton({
@@ -46,8 +52,45 @@ class CodeLabButton extends StatelessWidget {
         onPressed: onPressed,
         child: child,
       ),
+      CodeLabButtonEmphasis.subtle => Button(
+        onPressed: onPressed,
+        style: _subtleStyle(context, null),
+        child: child,
+      ),
+      CodeLabButtonEmphasis.danger => Button(
+        onPressed: onPressed,
+        style: _subtleStyle(context, Colors.red),
+        child: child,
+      ),
     };
   }
+}
+
+/// Стиль кнопки без рамки и без заливки в покое; [foreground] — цвет текста
+/// (`null` — цвет темы).
+ButtonStyle _subtleStyle(BuildContext context, Color? foreground) {
+  final resources = FluentTheme.of(context).resources;
+  return ButtonStyle(
+    backgroundColor: WidgetStateProperty.resolveWith(
+      (states) => states.isDisabled
+          ? const Color(0x00000000)
+          : states.isPressed
+          ? resources.subtleFillColorTertiary
+          : states.isHovered
+          ? resources.subtleFillColorSecondary
+          : const Color(0x00000000),
+    ),
+    foregroundColor: foreground == null
+        ? null
+        : WidgetStateProperty.resolveWith(
+            (states) => states.isDisabled
+                ? resources.textFillColorDisabled
+                : foreground,
+          ),
+    shape: WidgetStatePropertyAll(
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+    ),
+  );
 }
 
 class CodeLabIconButton extends StatelessWidget {

@@ -1329,6 +1329,66 @@ void main() {
       lessThan(tester.getTopLeft(find.text('/new')).dy),
     );
   });
+
+  testWidgets('CodeLabConnectionScreen shows the extra action of the host', (
+    tester,
+  ) async {
+    var pressed = 0;
+    await tester.pumpWidget(
+      FluentApp(
+        home: CodeLabConnectionScreen(
+          status: CodeLabConnectionStatus.failed,
+          transportLabel: 'Embedded agent',
+          profileLabel: 'Embedded agent',
+          description: 'No model provider is configured.',
+          onReconnect: () {},
+          extraAction: CodeLabButton(
+            key: const ValueKey('extra'),
+            label: 'Add provider',
+            onPressed: () => pressed++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('extra')));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(pressed, 1);
+  });
+
+  testWidgets('with an extra action it is the only primary button', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 520,
+          child: CodeLabConnectionScreen(
+            status: CodeLabConnectionStatus.failed,
+            transportLabel: 'Embedded agent',
+            profileLabel: 'Embedded agent',
+            onConnect: () {},
+            onConfigureConnection: () {},
+            extraAction: CodeLabButton(
+              key: const ValueKey('extra'),
+              label: 'Add provider',
+              emphasis: CodeLabButtonEmphasis.primary,
+              onPressed: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final primaries = tester
+        .widgetList<CodeLabButton>(find.byType(CodeLabButton))
+        .where((b) => b.emphasis == CodeLabButtonEmphasis.primary);
+    expect(primaries.map((b) => b.label), ['Add provider']);
+    // Ширину ряда в тесте не проверить: шрифт Ahem шире настоящего. Ряд без
+    // переноса на ширине карточки — ручная проверка macOS.
+    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Configure connection'), findsOneWidget);
+  });
 }
 
 void acpTestSessionSelected(String sessionId) {}

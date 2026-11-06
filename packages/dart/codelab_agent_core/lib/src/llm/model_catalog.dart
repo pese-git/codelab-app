@@ -265,7 +265,7 @@ final class StaticModelCatalog implements ModelCatalog {
   }
 
   _Fields _resolveFields(ModelId id, ModelInfo override) {
-    final builtIn = _lookupBuiltIn(id.model);
+    final builtIn = lookupModelInfo(_builtIn, id.model);
     final provenance = <String, ModelInfoSource>{};
     T pick<T>(String field, T? Function(ModelInfo info) read, T fallback) {
       for (final (source, info) in [
@@ -286,7 +286,11 @@ final class StaticModelCatalog implements ModelCatalog {
     }
 
     return _Fields(
-      contextWindow: pick('contextWindow', (i) => i.contextWindow, 32000),
+      contextWindow: pick(
+        'contextWindow',
+        (i) => i.contextWindow,
+        safeDefaultContextWindow,
+      ),
       maxOutputTokens: pick('maxOutputTokens', (i) => i.maxOutputTokens, 4096),
       cost: pick<ModelCost?>('cost', (i) => i.cost, null),
       supportsImages: pick('supportsImages', (i) => i.supportsImages, false),
@@ -303,33 +307,6 @@ final class StaticModelCatalog implements ModelCatalog {
       ),
       provenance: provenance,
     );
-  }
-
-  /// Exact id; then the longest key that is a prefix of the id followed by
-  /// `-` or the end (`claude-opus-5-5` finds `claude-opus-5-5-20260101`);
-  /// then the same for the part after the last `/`.
-  ModelInfo? _lookupBuiltIn(String model) {
-    for (final candidate in {
-      model,
-      model.substring(model.lastIndexOf('/') + 1),
-    }) {
-      if (_builtIn[candidate] case final info?) {
-        return info;
-      }
-      String? best;
-      for (final key in _builtIn.keys) {
-        final fits =
-            candidate.startsWith(key) &&
-            (candidate.length == key.length || candidate[key.length] == '-');
-        if (fits && (best == null || key.length > best.length)) {
-          best = key;
-        }
-      }
-      if (best != null) {
-        return _builtIn[best];
-      }
-    }
-    return null;
   }
 }
 

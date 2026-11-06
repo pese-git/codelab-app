@@ -5,6 +5,7 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgent, EmbeddedAgentConfigException, EmbeddedAgentOpener;
 
+import 'provider_setup_offer.dart';
 import 'secret_migration_offer.dart';
 
 /// Подключение отменено, пока встроенный агент открывался (или резолвер уже
@@ -50,6 +51,12 @@ final class EmbeddedOpenCancelledException implements Exception {
 ///   журнал без владельца. Кнопки Disconnect и метода `disconnect` у
 ///   `ClientWorkspace` нет (решение L4): закрытие клиентского конца агент
 ///   замечает сам (D6, «Закрытие клиентом»);
+/// * **признак «нужен провайдер»**: при `EmbeddedAgentConfigException`
+///   резолвер спрашивает функцию composition root (снимок конфига и признак
+///   моста) и записывает ответ в [ProviderSetupOffer] ДО исключения;
+///   `ConnectionCubit` читает порт в обработчике сбоя своей попытки. Начало
+///   каждого открытия и успех сбрасывают значение; сбой снимка — «не нужен»
+///   (design.md change `add-provider-setup-ui`, D26);
 /// * **предложение переноса секретов**: после успешного открытия резолвер
 ///   передаёт `EmbeddedAgent.secretsInConfig` в [SecretMigrationOffer] и
 ///   сбрасывает его, когда агент закрыт; вместе с признаком передаётся `cwd`
@@ -59,11 +66,22 @@ final class EmbeddedOpenCancelledException implements Exception {
 ///   открытие в полёте и `dispose` текущего агента, поэтому журнал дописан до
 ///   завершения закрытия.
 final class EmbeddedTransportResolver implements TransportResolver {
-  EmbeddedTransportResolver(this._opener, {SecretMigrationOffer? offer})
-    : _offer = offer;
+  EmbeddedTransportResolver(
+    this._opener, {
+    SecretMigrationOffer? offer,
+    ProviderSetupOffer? setupOffer,
+    Future<bool> Function(String cwd)? providerSetupNeeded,
+  }) : _offer = offer,
+       _setupOffer = setupOffer,
+       _providerSetupNeeded = providerSetupNeeded;
 
   final EmbeddedAgentOpener _opener;
   final SecretMigrationOffer? _offer;
+  final ProviderSetupOffer? _setupOffer;
+
+  /// Признак по снимку конфига с теми же `CODELAB_HOME` и окружением, что у
+  /// открывателя; `null` — приложение без мастера провайдера.
+  final Future<bool> Function(String cwd)? _providerSetupNeeded;
 
   /// Агент текущего соединения; `null` — ещё не открыт или уже освобождён.
   EmbeddedAgent? _running;
@@ -114,11 +132,17 @@ final class EmbeddedTransportResolver implements TransportResolver {
     // сбрасывается, а новое открытие даст цикл `false → true` (закрытое
     // крестиком предупреждение вернётся, D8).
     _offer?.set(null);
+    _setupOffer?.set(null);
     await previous?.dispose();
     final EmbeddedAgent agent;
     try {
       agent = await _opener(cwd: projectDirectory, hostProfile: hostProfile);
     } on EmbeddedAgentConfigException catch (error) {
+      // Признак выставляется до исключения и только для текущего открытия:
+      // вытесненное открытие не должно оставить метку новой попытке (D26).
+      if (await _setupNeededAt(projectDirectory) && generation == _generation) {
+        _setupOffer?.set(ProviderSetupNeeded(projectDirectory));
+      }
       // Баннер соединения показывает `message` у `ClientWorkspaceException`
       // без префикса типа: голый текст проблем и подсказка, как в CLI и по
       // контракту `EmbeddedAgentConfigException.message` (agent-workbench-ui
@@ -131,6 +155,7 @@ final class EmbeddedTransportResolver implements TransportResolver {
       throw const EmbeddedOpenCancelledException();
     }
     _running = agent;
+    _setupOffer?.set(null);
     // Признак вычислил мост при открытии и после переноса не пересчитывает:
     // предупреждение держится до переподключения (D8, п. 1).
     _offer?.set(agent.secretsInConfig ? projectDirectory : null);
@@ -141,6 +166,20 @@ final class EmbeddedTransportResolver implements TransportResolver {
       ),
     );
     return agent.clientTransport;
+  }
+
+  /// Признак «нужен провайдер»: сбой чтения снимка — «нет», баннер тогда
+  /// показывает прежний текст проблем (D26).
+  Future<bool> _setupNeededAt(String cwd) async {
+    final probe = _providerSetupNeeded;
+    if (probe == null) {
+      return false;
+    }
+    try {
+      return await probe(cwd);
+    } on Object {
+      return false;
+    }
   }
 
   /// Агент закрылся сам (клиентский конец закрыт): признак сбрасывается, если
@@ -163,6 +202,7 @@ final class EmbeddedTransportResolver implements TransportResolver {
     final agent = _running;
     _running = null;
     _offer?.set(null);
+    _setupOffer?.set(null);
     await agent?.dispose();
   }
 }

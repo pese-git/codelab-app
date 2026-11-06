@@ -8,6 +8,8 @@ import 'package:codelab_acp_transports/codelab_acp_transports.dart'
     show codelabAgentStdioProfile;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show ProfileSecrets, ProfileStore;
+import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart'
+    show ProviderSettingsOpener;
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:cherrypick/cherrypick.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
@@ -55,6 +57,8 @@ final class CodeLabTestBinding {
     SettingsPages? settingsPages,
     ProfileStore? profileStore,
     ProfileSecrets? profileSecrets,
+    ProviderSettingsOpener? providerSettingsOpener,
+    Future<bool> Function(String cwd)? providerSetupProbe,
     bool stdioDefault = true,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
@@ -99,6 +103,15 @@ final class CodeLabTestBinding {
       // передают двойник (`FakeProfileSecrets`) либо остаются с хранилищем
       // «не открыто».
       profileSecrets: profileSecrets,
+      // Настоящая сессия читала бы `$CODELAB_HOME` разработчика: тесты
+      // страницы «Providers» передают двойник, остальные не открывают её.
+      providerSettingsOpener:
+          providerSettingsOpener ??
+          (access, env) async =>
+              throw StateError('provider settings are not part of this test'),
+      // Настоящая функция читала бы `$CODELAB_HOME` разработчика: по
+      // умолчанию «провайдер не нужен» (прежнее поведение баннера).
+      providerSetupProbe: providerSetupProbe ?? (cwd) async => false,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

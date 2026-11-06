@@ -51,6 +51,36 @@ void main() {
     );
   });
 
+  testWidgets('key-value list previews render in both themes', (tester) async {
+    await tester.pumpWidget(codelabKeyValueListPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabKeyValueList), findsOneWidget);
+
+    await tester.pumpWidget(codelabKeyValueListDarkPreview());
+    expect(tester.takeException(), isNull);
+    expect(
+      FluentTheme.of(
+        tester.element(find.byType(CodeLabKeyValueList)),
+      ).brightness,
+      Brightness.dark,
+    );
+  });
+
+  testWidgets('step breadcrumb previews render in both themes', (tester) async {
+    await tester.pumpWidget(codelabStepBreadcrumbPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabStepBreadcrumb), findsOneWidget);
+
+    await tester.pumpWidget(codelabStepBreadcrumbDarkPreview());
+    expect(tester.takeException(), isNull);
+    expect(
+      FluentTheme.of(
+        tester.element(find.byType(CodeLabStepBreadcrumb)),
+      ).brightness,
+      Brightness.dark,
+    );
+  });
+
   testWidgets('organism previews render in bounded preview surfaces', (
     tester,
   ) async {

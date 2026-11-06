@@ -48,6 +48,34 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // Задача 3.15 change `add-provider-setup-ui` (D24, артборды `Connection`,
+  // `Providers`: `padding: 28px 40px 40px`). Короткая страница не должна
+  // центрироваться по вертикали: верх заголовка — на 28 px ниже верха области
+  // содержимого при любой высоте окна.
+  for (final height in const [900.0, 1600.0]) {
+    testWidgets('page title sits 28 px below the top of the content area at '
+        '1280x${height.toInt()}', (tester) async {
+      await pumpShell(
+        tester,
+        available: {SettingsPage.connection, SettingsPage.providers},
+        size: Size(1280, height),
+      );
+
+      // Область содержимого — под строкой заголовка окна до низа окна;
+      // страница не должна ни сжиматься по высоте, ни центрироваться в ней.
+      final scroll = tester.getRect(find.byType(SingleChildScrollView).first);
+      final area = Rect.fromLTRB(
+        scroll.left,
+        tester.getRect(find.byType(TitleBar)).bottom,
+        scroll.right,
+        height,
+      );
+      expect(scroll.bottom, height);
+      final title = tester.getTopLeft(find.text('body of connection'));
+      expect(title.dy - area.top, 28);
+    });
+  }
+
   testWidgets('orders pages by section 12.4.9 whatever the registration '
       'order', (tester) async {
     await pumpShell(
@@ -271,6 +299,41 @@ void main() {
     expect(backs, 2);
   });
 
+  test('the production set shows Connection and Providers in the Agent '
+      'group (SETUP-17)', () {
+    expect(defaultSettingsPages.visible, [
+      SettingsPage.connection,
+      SettingsPage.providers,
+    ]);
+  });
+
+  testWidgets('Three pages of the Agent group: Connection and Providers in '
+      'this order, no App title', (tester) async {
+    await pumpShell(tester, available: defaultSettingsPages.available);
+
+    final connection = tester.getTopLeft(_nav(SettingsPage.connection));
+    final providers = tester.getTopLeft(_nav(SettingsPage.providers));
+    expect(connection.dy, lessThan(providers.dy));
+    expect(find.text('Agent'), findsOneWidget);
+    expect(find.text('App'), findsNothing);
+  });
+
+  testWidgets('search "api key" keeps Providers', (tester) async {
+    await pumpShell(
+      tester,
+      available: {SettingsPage.connection, SettingsPage.providers},
+    );
+
+    await tester.enterText(
+      find.byKey(CodeLabSettingsNavigation.searchKey),
+      'api key',
+    );
+    await tester.pumpAndSettle();
+
+    expect(_nav(SettingsPage.providers), findsOneWidget);
+    expect(_nav(SettingsPage.connection), findsNothing);
+  });
+
   test('the production builder table is immutable', () {
     expect(
       () =>
@@ -316,6 +379,21 @@ void main() {
       ]) {
         expect(SettingsSearchIndex.search(visible, word), [
           SettingsPage.connection,
+        ], reason: word);
+      }
+    });
+
+    test('matches Providers keywords', () {
+      const pages = [SettingsPage.connection, SettingsPage.providers];
+      for (final word in const [
+        'provider',
+        'model',
+        'api key',
+        'key storage',
+        'base url',
+      ]) {
+        expect(SettingsSearchIndex.search(pages, word), [
+          SettingsPage.providers,
         ], reason: word);
       }
     });
