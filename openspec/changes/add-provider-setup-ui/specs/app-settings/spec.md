@@ -98,11 +98,13 @@ Composition root SHALL делать видимыми страницы «Connecti
 - **THEN** страница показывает баннер конфликта, файл не перезаписан, страница перечитала снимок
 
 ### Requirement: Мастер провайдера в app
-«Add provider» и «Edit» SHALL открывать `ProviderWizardDialog` (`ContentDialog`, ключ `provider-wizard`) поверх автомата `ProviderSetupFlow` (spec client-agent-setup «Мастер провайдера»): строка шагов `API type › Base URL › Key › Check › Model › Review`, по шагу на экран, «Back»/«Next»/«Cancel», на шаге ключа — скрытый ввод, на шаге проверки — индикатор и адрес запроса (`scheme://host:port` и путь `/models`), на шаге «Review» — сводка, «Make default» и «This project only» (последний — только при папке проекта). Тексты и варианты отказа проверки SHALL следовать артборду `Wizard`: для `notFound` — варианты «Use <url>/v1» и «Enter the model manually».
+«Add provider» и «Edit» SHALL открывать `ProviderWizardDialog` (`ContentDialog`, ключ `provider-wizard`) поверх автомата `ProviderSetupFlow` (spec client-agent-setup «Мастер провайдера»): строка шагов `API type › Base URL › Key › Check › Model › Review`, по шагу на экран, «Back»/«Next»/«Cancel», на шаге ключа — скрытый ввод, на шаге проверки — индикатор и адрес запроса (`scheme://host:port` и путь `/models`), на шаге «Review» — сводка, «Make default» и «This project only» (последний — только при папке проекта). Тексты и варианты отказа проверки SHALL следовать артборду `Wizard`: для `notFound` — заголовок `Model list not found (404)` и варианты «Use <url>/v1» и «Enter the model manually»; для остальных отказов — заголовки `Key rejected (<код>)`, `Server unreachable`, `Timed out after 10 s`, `TLS error`, `Unexpected response (<код>)` и строка запроса `GET <url>/models → <код> · <n> ms`. Подписи шагов SHALL совпадать с артбордом `CliSetup`: `API type`, `Base URL`, `API key source` (`Store in <backend> as "codelab/<id>"`, `Read from environment variable (<VAR>)`, `No key`), `API key`, `Model (type to filter)`, `Enter model id manually` (design.md, D7).
+
+«Edit» SHALL открывать мастер в слое провайдера без переключателя «This project only» и SHALL быть неактивна с подсказкой по тем же отказам, что «Remove»: провайдер не только в слоях `user`/`projectLocal`, в нескольких слоях или в нечитаемом файле (design.md, D7).
 
 Пока идёт запись, «Cancel», Esc и закрытие диалога SHALL быть заблокированы, а повторное «Save» НЕ SHALL давать второй записи. Закрытие диалога SHALL отменять идущую проверку и сбрасывать введённый ключ.
 
-После `ConfigSaved` страница SHALL перечитывать снимок и показывать баннер `saved`. Если ключ заменён под тем же именем, баннер SHALL добавлять `The new key is used after Restart agent (Settings › Connection).`; если агент не подключён — `Saved. Connect to start the agent with the new provider.` с кнопкой «Connect» (design.md, D9). После `ConfigConflict` мастер SHALL возвращаться в «Review» с тем же планом и баннером `Config changed on disk — review and save again`.
+После `ConfigSaved` страница SHALL перечитывать снимок и показывать баннер `saved`. Если ключ заменён под тем же именем, баннер SHALL добавлять `The new key is used after Restart agent (Settings › Connection).`; если агент не подключён — `Saved. Connect to start the agent with the new provider.` с кнопкой «Connect» (design.md, D9). После `ConfigConflict` мастер SHALL возвращаться в «Review» с тем же черновиком (включая введённый ключ) и баннером `Config changed on disk — review and save again`; план SHALL пересобираться по перечитанному снимку (design.md, D9 «Конфликт и `reload`»), чтобы повторный «Save» не конфликтовал вечно.
 
 #### Scenario: Провайдер с ключом в хранилище
 - **WHEN** при `secrets.backend: file` и пустом конфиге пользователь проходит мастер «Custom OpenAI-compatible» с адресом тестового сервера, ключом `sk-test-leak-0123456789` и моделью из списка
@@ -111,6 +113,10 @@ Composition root SHALL делать видимыми страницы «Connecti
 #### Scenario: Только переменная при read-only бэкенде
 - **WHEN** бэкенд по умолчанию `env`, и пользователь доходит до шага ключа
 - **THEN** вариант «Store in …» отсутствует, показана причина бэкенда, доступны «Read from environment variable» и «No key»
+
+#### Scenario: Отказ проверки по ключу
+- **WHEN** проверка мастера получает `401`
+- **THEN** шаг «Check» показывает заголовок `Key rejected (401)` и строку `GET <url>/models → 401 · <n> ms`, доступны «Retry» и «Back», «Save without check» нет
 
 #### Scenario: Esc во время проверки
 - **WHEN** мастер на шаге проверки ждёт ответа, и пользователь нажимает Esc
