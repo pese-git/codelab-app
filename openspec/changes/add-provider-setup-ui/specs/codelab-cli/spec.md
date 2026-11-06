@@ -66,6 +66,7 @@
   - значение по умолчанию записывается в слой, где ключ определён, если он редактируемый, иначе в `user`; `ctrl+u` записывает в `user`;
   - ключ, заданный проектным `<cwd>/.codelab/config.yaml`, SHALL записываться в `.codelab/config.local.yaml` с подсказкой об этом;
   - `r` удаляет ключ из редактируемого слоя;
+  - ключи-карты (`map`, `mapList`) SHALL быть только для чтения: Enter показывает `Edit with codelab mcp add` для `mcp.servers` и `Edit <key> in the config file or with codelab config set` для прочих, `r` удаляет ключ из редактируемого слоя; списки (`stringList`, `pathList`) SHALL правиться в поле с разбором как у `codelab config set`;
 - **в обоих режимах:**
   - ключи `secret: true` и типа `secretName` НЕ SHALL редактироваться: `Use codelab secret set <name>`;
   - после записи ключа `restartRequired` — пометка `(applies after restart)`; в REPL — в конце строки `Updated …`/`Removed …`.
@@ -107,6 +108,10 @@
 #### Scenario: Экран настроек в TUI
 - **WHEN** в `--ui tui` выполняется `/settings`, пользователь выбирает `permissions.mode`, стрелками меняет значение на `ask` и нажимает Enter
 - **THEN** экран показывает разделы реестра без Display, Input и Updates, `~/.codelab/config.yaml` содержит `permissions.mode: ask`, строка показывает `user` и пометку `(applies after restart)`
+
+#### Scenario: Карта на экране настроек TUI
+- **WHEN** в `--ui tui` на экране `/settings` пользователь выбирает строку `mcp.servers` и нажимает Enter
+- **THEN** поле правки не открывается, строка-подсказка показывает `Edit with codelab mcp add`, `config.yaml` не изменён
 
 #### Scenario: Ключ проектного слоя в TUI
 - **WHEN** `budget.max_steps` задан в `<cwd>/.codelab/config.yaml` доверенного проекта, и пользователь меняет его на экране `/settings` в TUI
