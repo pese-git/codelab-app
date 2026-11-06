@@ -58,6 +58,10 @@ final class ServerHarness {
   /// `initial`, каталог моделей — по `providers` снимка, а `modelsFor`
   /// строит такой же каталог при каждой применённой перезагрузке.
   ///
+  /// [lastModel] и [defaultModelSource] — память последней модели и источник
+  /// модели по умолчанию (design.md change `optional-default-model`, D5, D6,
+  /// D11): без конфига-источника `CoreConfig` собирается из них.
+  ///
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
   static Future<ServerHarness> start({
@@ -74,6 +78,8 @@ final class ServerHarness {
     McpConnector Function(Clock clock)? mcp,
     ProjectFilesSource? projectFiles,
     ConfigSource? configSource,
+    LastModelStore? lastModel,
+    DefaultModelSource defaultModelSource = DefaultModelSource.config,
   }) async {
     final clock = FakeClock();
     final logger = RecordingLogger();
@@ -106,9 +112,15 @@ final class ServerHarness {
         config: configSource,
         mcp: mcp?.call(clock),
         projectFiles: projectFiles,
+        lastModel: lastModel,
       ),
       config:
-          initial ?? CoreConfig(defaultModel: scriptedModel, budget: budget),
+          initial ??
+          CoreConfig(
+            defaultModel: scriptedModel,
+            defaultModelSource: defaultModelSource,
+            budget: budget,
+          ),
       modelsFor: configSource == null
           ? null
           : (config) => (

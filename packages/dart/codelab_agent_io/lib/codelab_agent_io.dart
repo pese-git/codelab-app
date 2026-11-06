@@ -94,3 +94,4 @@ export 'src/secrets/secret_process_runner.dart' hide chmodExecutablePath;
 export 'src/secrets/secrets_backend_problem.dart';
 export 'src/session/host_sessions.dart' show openHostSessions;
 export 'src/session/jsonl_session_store.dart';
+export 'src/state/last_model_file.dart';

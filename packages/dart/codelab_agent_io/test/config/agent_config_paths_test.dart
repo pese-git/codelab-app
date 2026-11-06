@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:codelab_agent_core/codelab_agent_core.dart' show ModelId;
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:test/test.dart';
 
@@ -54,11 +55,84 @@ void main() {
       '$base/root/.codelab/config.local.yaml',
       '$base/state/secrets.yaml',
     ]);
+    // Файл последней модели — под PERM-11, но не в наблюдателе (design.md
+    // change `optional-default-model`, D7): порядок — после файлов
+    // конфигурации, до каталогов `agents` и `prompts`.
     expect(paths.paths, [
       ...watched,
+      '$base/state/state/last-model.json',
+      '$base/state/state',
       '$base/state/agents',
       '$base/state/prompts',
     ]);
+  });
+
+  test('last-model.json is protected by PERM-11 and is not watched '
+      '(scenario "Файл под защитой PERM-11")', () {
+    Directory('$base/root').createSync();
+    final environment = env(codelabHome: '$base/state');
+
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root',
+      environment: environment,
+    );
+    final watched = watchedConfigFiles(
+      cwd: '$base/root',
+      environment: environment,
+      secretsFile: true,
+    );
+
+    expect(paths.paths, contains('$base/state/state/last-model.json'));
+    // Это не конфиг: перезагрузки по нему нет.
+    expect(watched, isNot(contains('$base/state/state/last-model.json')));
+    expect(watched.where((path) => path.endsWith('last-model.json')), isEmpty);
+  });
+
+  test('a symlink to last-model.json is protected by its real path', () {
+    Directory('$base/root').createSync();
+    Directory('$base/real').createSync();
+    Directory('$base/state/state').createSync(recursive: true);
+    Link('$base/state/state/last-model.json').createSync('$base/real/m.json');
+    File('$base/real/m.json').writeAsStringSync('{}');
+
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root',
+      environment: env(codelabHome: '$base/state'),
+    );
+
+    expect(paths.paths, contains('$base/real/m.json'));
+    // Лексический путь тоже под защитой: запись `FileLastModelStore`
+    // (`rename` поверх ссылки) заменяет ссылку обычным файлом, и по
+    // канонической цели защита больше не сработала бы.
+    expect(paths.paths, contains('$base/state/state/last-model.json'));
+    expect(paths.paths, contains('$base/state/state'));
+  });
+
+  test('after FileLastModelStore.write replaced the link, the lexical path '
+      'is still protected', () async {
+    Directory('$base/root').createSync();
+    Directory('$base/real').createSync();
+    Directory('$base/state/state').createSync(recursive: true);
+    Link('$base/state/state/last-model.json').createSync('$base/real/m.json');
+    File('$base/real/m.json').writeAsStringSync('{}');
+    final environment = env(codelabHome: '$base/state');
+
+    await FileLastModelStore(
+      codelabHome: '$base/state',
+    ).write(const ModelId('a/x'));
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root',
+      environment: environment,
+    );
+
+    expect(
+      FileSystemEntity.typeSync(
+        '$base/state/state/last-model.json',
+        followLinks: false,
+      ),
+      FileSystemEntityType.file,
+    );
+    expect(paths.paths, contains('$base/state/state/last-model.json'));
   });
 
   test('secrets.yaml is protected with any backend', () {

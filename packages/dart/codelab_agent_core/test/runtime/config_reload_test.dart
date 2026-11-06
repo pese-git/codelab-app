@@ -1636,6 +1636,86 @@ void main() {
       expect(rig.logger.eventsOf('config.reload.failed'), hasLength(1));
     });
   });
+
+  // ---- неявная модель при перезагрузке (optional-default-model, D10) --------
+
+  group('an implicit default model on reload (D10)', () {
+    Map<String, Object?> provider(String model, {String? secret}) => {
+      'kind': 'openai-compatible',
+      'base_url': 'https://$model.test/v1',
+      'api_key_secret': ?secret,
+      'models': {model: <String, Object?>{}},
+    };
+
+    test('a deferred new provider does not become the model (scenario '
+        '"Отложенный новый провайдер не становится моделью")', () async {
+      final rig = await _Rig.create(
+        user: {
+          'providers': {'b': provider('y')},
+        },
+      );
+      expect(rig.runtime.config.defaultModel.id, 'y');
+      expect(
+        rig.runtime.config.defaultModelSource,
+        DefaultModelSource.firstProvider,
+      );
+      // `a` стоит перед `b` и откладывается до перезапуска (новый
+      // провайдер с ключом): неявной моделью он стать не должен.
+      _put(rig.user, 'providers', {
+        'a': provider('x', secret: 'codelab/a'),
+        'b': provider('y'),
+      });
+
+      final report = await rig.runtime.reloadConfig();
+
+      expect(report.outcome, ConfigReloadOutcome.applied);
+      expect(report.issues, isEmpty);
+      expect(rig.runtime.config.defaultModel.provider, 'b');
+      expect(rig.runtime.config.defaultModel.id, 'y');
+      expect(
+        rig.runtime.config.defaultModelSource,
+        DefaultModelSource.firstProvider,
+      );
+      final pending = rig.runtime.configStatus().pendingRestartKeys;
+      expect(pending, contains('providers.a'));
+      expect(pending, isNot(contains('agent.default_model')));
+      expect(
+        report.restartRequiredKeys,
+        isNot(contains('agent.default_model')),
+      );
+      expect(rig.runtime.config.validateSnapshot(), isEmpty);
+    });
+
+    test('removing the explicit key moves new sessions to the first '
+        'provider; a live session keeps its model (CFG-16)', () async {
+      final rig = await _Rig.create(
+        user: {
+          'providers': {'b': provider('y'), 'a': provider('x')},
+          'agent': {'default_model': 'a/x'},
+        },
+      );
+      final old = await rig.session();
+      expect(old.model.id, 'x');
+      _drop(rig.user, 'agent.default_model');
+      // Пустой раздел `agent` стал бы отдельным изменившимся ключом `agent`
+      // (пустой узел дерева): тест проверяет именно ключ модели.
+      rig.user.remove('agent');
+
+      final report = await rig.runtime.reloadConfig();
+
+      expect(report.outcome, ConfigReloadOutcome.applied);
+      expect(report.changedKeys, ['agent.default_model']);
+      expect(report.restartRequiredKeys, isEmpty);
+      expect(
+        rig.runtime.config.defaultModelSource,
+        DefaultModelSource.firstProvider,
+      );
+      expect(old.model.id, 'x');
+      final fresh = await rig.session();
+      expect(fresh.model.provider, 'b');
+      expect(fresh.model.id, 'y');
+    });
+  });
 }
 
 // ---- данные --------------------------------------------------------------

@@ -229,10 +229,7 @@ providers:
         find.text('No model provider is configured for the embedded agent.'),
         findsOneWidget,
       );
-      expect(
-        find.textContaining('agent.default_model: required'),
-        findsNothing,
-      );
+      expect(find.textContaining('no model is configured'), findsNothing);
       expect(find.textContaining('codelab config check'), findsNothing);
 
       await tester.tap(_key('connection-banner-add-provider'));

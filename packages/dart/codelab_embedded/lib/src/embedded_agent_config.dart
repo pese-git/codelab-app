@@ -55,6 +55,7 @@ final class EmbeddedHostServices {
     this.mcp,
     this.projectFiles,
     this.agentConfigPaths,
+    this.lastModel,
     this.configSource,
     this.closeConfigSource,
   });
@@ -95,6 +96,13 @@ final class EmbeddedHostServices {
   /// `null` — у сценарных открывателей `$CODELAB_HOME` не читается, защищает
   /// только список §7.6.1.
   final AgentConfigPaths? agentConfigPaths;
+
+  /// Память последней явно выбранной модели (design.md change
+  /// `optional-default-model`, D6, D8): настольный открыватель передаёт
+  /// файловую реализацию над `$CODELAB_HOME`. `null` — у сценарного
+  /// открывателя и web-хоста: сценарий детерминирован, а `dart:io` в
+  /// основном барели недоступен.
+  final LastModelStore? lastModel;
 
   /// Источник перезагрузки конфига (change `add-config-writer-and-reload`,
   /// D7, D13): открыватель настольных хостов создаёт `FileConfigSource` после

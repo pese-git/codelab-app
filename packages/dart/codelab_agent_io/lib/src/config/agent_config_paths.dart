@@ -91,16 +91,32 @@ AgentConfigPaths agentConfigPathsFor({
       // 2026-11-03); наблюдение (`watchedConfigFiles`) зависит от бэкенда.
       secretsFile: true,
     ),
+    // PERM-11 (design.md change `optional-default-model`, D7): память
+    // последней модели влияет на выбор модели следующих сессий, поэтому
+    // инструмент записи не должен её править. В наблюдатель путь не входит:
+    // это не конфиг, перезагрузки по нему нет.
+    '$home/state/last-model.json',
+    // Весь каталог `state/`: производное состояние агента, как `agents` и
+    // `prompts`, защищается поддеревом.
+    '$home/state',
     '$home/agents',
     '$home/prompts',
   ];
   final windows = Platform.isWindows;
   final userHome = userHomeOf(environment);
-  return AgentConfigPaths(
-    paths: [
-      for (final file in files)
-        toCorePath(_canonicalPath(file), windows: windows),
+  // Для файлов состояния кладутся и лексический, и канонический путь:
+  // `FileLastModelStore.write` заменяет ссылку обычным файлом (`rename`), и
+  // защита только по канонической цели перестала бы действовать (PERM-11).
+  final lexical = {'$home/state/last-model.json', '$home/state'};
+  final paths = <String>{
+    for (final file in files) ...[
+      toCorePath(_canonicalPath(file), windows: windows),
+      if (lexical.contains(file))
+        toCorePath(File(file).absolute.path, windows: windows),
     ],
+  };
+  return AgentConfigPaths(
+    paths: paths,
     expansions: {
       if (userHome != null) 'HOME': toCorePath(userHome, windows: windows),
       'CODELAB_HOME': toCorePath(home, windows: windows),

@@ -1207,6 +1207,196 @@ mcp:
       expectUnavailable(result, 'larger than 1 MiB');
     });
   });
+
+  // ---- строка Default model (optional-default-model, D9; задача 3.4) --------
+
+  group('Default model: <p>/<m> (<source>)', () {
+    const gwOnly = '''
+providers:
+  gw:
+    kind: openai-compatible
+    base_url: https://x/v1
+    models:
+      m: {}
+      m2: {}
+''';
+
+    String lastModelPath() => '$home/state/last-model.json';
+
+    test('a provider without agent.default_model: gw/m (first-provider), '
+        'no "required", valid (scenario "Модель первого провайдера в '
+        'config check")', () async {
+      write('$home/config.yaml', gwOnly);
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(result.stdout.last, 'Config: valid');
+      expect(result.stdout.join('\n'), isNot(contains('required')));
+      // Строка стоит перед последней.
+      expect(
+        result.stdout.indexOf('Default model: gw/m (first-provider)'),
+        result.stdout.length - 2,
+      );
+    });
+
+    test('an explicit key: the source is config (scenario "Источник модели '
+        'в config check", variant 1)', () async {
+      write('$home/config.yaml', '${gwOnly}agent:\n  default_model: gw/m\n');
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m (config)'));
+    });
+
+    test('the explicit key wins over the state file, which is not even '
+        'needed', () async {
+      write('$home/config.yaml', '${gwOnly}agent:\n  default_model: gw/m\n');
+      write(lastModelPath(), '{"v": 1, "model": "gw/m2"}');
+
+      final result = await check();
+
+      expect(result.stdout, contains('Default model: gw/m (config)'));
+    });
+
+    test('a last model of the catalog: last-used (variant 2); the file is '
+        'only read', () async {
+      write('$home/config.yaml', gwOnly);
+      write(lastModelPath(), '{"v": 1, "model": "gw/m2"}');
+      final before = File(lastModelPath()).readAsBytesSync();
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m2 (last-used)'));
+      expect(File(lastModelPath()).readAsBytesSync(), before);
+    });
+
+    test('a last model outside the catalog gives first-provider without a '
+        'warning', () async {
+      write('$home/config.yaml', gwOnly);
+      write(lastModelPath(), '{"v": 1, "model": "gone/z"}');
+
+      final result = await check();
+
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(
+        result.stdout.where((l) => l.contains('last model state ignored')),
+        isEmpty,
+      );
+    });
+
+    test('an unreadable state file: a warning with the path and the reason, '
+        'then the next step; the file is untouched (variant 3)', () async {
+      write('$home/config.yaml', gwOnly);
+      write(lastModelPath(), 'not json sk-test-leak-0123456789');
+      final before = File(lastModelPath()).readAsBytesSync();
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(
+        result.stdout,
+        contains(
+          allOf(
+            startsWith(
+              'warning: ${lastModelPath()}: last model state ignored: ',
+            ),
+          ),
+        ),
+      );
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(result.stdout.last, 'Config: valid');
+      expect(result.stdout.join('\n'), isNot(contains('sk-test-leak')));
+      expect(File(lastModelPath()).readAsBytesSync(), before);
+    });
+
+    test('an invalid config has no Default model line', () async {
+      write('$cwd/.codelab/config.yaml', 'budget:\n  max_stepz: 3\n');
+
+      final result = await check();
+
+      expect(result.exitCode, 1);
+      expect(
+        result.stdout.where((l) => l.startsWith('Default model:')),
+        isEmpty,
+      );
+    });
+
+    test('an empty CODELAB_HOME: one problem with the new text, no Default '
+        'model, code 1', () async {
+      final result = await check();
+
+      expect(result.exitCode, 1);
+      expect(
+        result.stdout,
+        contains(
+          endsWith(
+            'agent.default_model: no model is configured; add a provider '
+            'with at least one model',
+          ),
+        ),
+      );
+      expect(result.stdout.join('\n'), isNot(contains('required')));
+      expect(result.stdout.last, 'Config: invalid (issues: 1)');
+    });
+
+    test('the choice of the model adds no store reads: the same reads as with '
+        'an explicit agent.default_model (CFG-10)', () async {
+      // `ConfigLoader` хранилища не принимает вовсе (структурная гарантия
+      // загрузки). `config check` сам спрашивает хранилище о состоянии
+      // секретов (прежнее поведение), поэтому выбор модели проверяется
+      // сравнением: чтений ровно столько же, сколько при явной модели.
+      final withRef = gwOnly.replaceFirst(
+        '    models:',
+        '    api_key_secret: codelab/gw\n    models:',
+      );
+      ConfigCommands commandsOver(_CountingSecretStore store) => ConfigCommands(
+        openStore: ({required choice, required environment, required home}) =>
+            store,
+      );
+
+      write('$home/config.yaml', '${withRef}agent:\n  default_model: gw/m\n');
+      final explicit = _CountingSecretStore({
+        'codelab/gw': 'sk-test-leak-0123',
+      });
+      await check(commands: commandsOver(explicit));
+
+      write('$home/config.yaml', withRef);
+      final implicit = _CountingSecretStore({
+        'codelab/gw': 'sk-test-leak-0123',
+      });
+      final result = await check(commands: commandsOver(implicit));
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(implicit.reads, explicit.reads);
+      expect(result.stdout.join('\n'), isNot(contains('sk-test-leak')));
+    });
+
+    test('no secret reaches the line when the provider has a secret '
+        'reference', () async {
+      write(
+        '$home/config.yaml',
+        gwOnly.replaceFirst(
+          '    models:',
+          '    api_key_secret: codelab/gw\n    models:',
+        ),
+      );
+
+      final result = await check();
+
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      // Имя секрета названо прежним предупреждением `secretLines` (не
+      // значение); строка модели его не несёт.
+      final line = result.stdout.singleWhere(
+        (l) => l.startsWith('Default model:'),
+      );
+      expect(line, isNot(contains('codelab/gw')));
+    });
+  });
 }
 
 /// Источник, бросающий исключение с «секретным» текстом: в вывод попадает
@@ -1278,4 +1468,32 @@ final class _UnavailableStore implements DescribedSecretStore {
 
   @override
   Future<List<String>> names() async => const [];
+}
+
+/// Хранилище, считающее чтения значений: `config check` смотрит имена, но не
+/// значения секретов.
+final class _CountingSecretStore implements DescribedSecretStore {
+  _CountingSecretStore(Map<String, String> initial)
+    : _inner = MemorySecretStore(initial);
+
+  final MemorySecretStore _inner;
+  final reads = <String>[];
+
+  @override
+  SecretBackendInfo get backend => _inner.backend;
+
+  @override
+  Future<String?> read(String name) {
+    reads.add(name);
+    return _inner.read(name);
+  }
+
+  @override
+  Future<void> write(String name, String value) => _inner.write(name, value);
+
+  @override
+  Future<void> delete(String name) => _inner.delete(name);
+
+  @override
+  Future<List<String>> names() => _inner.names();
 }

@@ -11,6 +11,7 @@ import '../env/local_execution_env.dart';
 import '../project/project_files_loader.dart';
 import '../secrets/open_secret_store.dart';
 import '../secrets/secret_process_runner.dart';
+import '../state/last_model_file.dart';
 import 'config_edit_runner.dart';
 import 'config_output.dart';
 import 'exit_codes.dart';
@@ -569,11 +570,53 @@ final class ConfigCommands {
         for (final warning in loaded.warnings) 'warning: $warning',
         ...fileLines,
         ...secretLines,
+        if (issues.isEmpty && config != null)
+          ...await _modelLines(options, config),
         issues.isEmpty
             ? 'Config: valid'
             : 'Config: invalid (issues: ${issues.length})',
       ],
     );
+  }
+
+  /// Строка `Default model: <p>/<m> (<source>)` и предупреждение о
+  /// нечитаемом файле последней модели (design.md change
+  /// `optional-default-model`, D9).
+  ///
+  /// Почему здесь: после того как `agent.default_model` стал необязательным,
+  /// пользователь должен видеть, какую модель получит новая сессия, и почему.
+  /// Модель считает та же чистая функция ядра [selectSessionModel], что и
+  /// рантайм, поэтому вывод `codelab-agent` и `codelab` совпадает с поведением.
+  /// Файл [FileLastModelStore] только читается и только если модель конфига
+  /// неявная; запись и создание каталога `state/` — не здесь. Нечитаемый файл
+  /// даёт `warning: <path>: last model state ignored: <reason>` (причина —
+  /// категория без содержимого) и переход к следующему шагу выбора.
+  Future<List<String>> _modelLines(
+    CheckOptions options,
+    CoreConfig config,
+  ) async {
+    final capture = _CaptureLogger();
+    ModelId? last;
+    String? path;
+    if (config.defaultModelSource != DefaultModelSource.config) {
+      final store = FileLastModelStore(
+        codelabHome: codelabHomeOf(options.environment),
+        logger: capture,
+      );
+      path = store.path;
+      last = await store.read();
+    }
+    final (model, source) = selectSessionModel(
+      config,
+      last,
+      StaticModelCatalog(config.providers, logger: const SilentLogger()),
+      effort: config.effort,
+    );
+    return [
+      for (final reason in capture.reasons)
+        'warning: $path: last model state ignored: $reason',
+      'Default model: ${model.provider}/${model.id} (${source.wireName})',
+    ];
   }
 
   /// Строки диагностики файлов проекта (D13): `warning:` для уровней `error`
@@ -881,4 +924,27 @@ final class _SecretReference {
   final String name;
   final String key;
   final String location;
+}
+
+/// Собирает причины `model.last_used.ignored` для строки `warning:` команды
+/// `config check`: журнала у команды нет, а причина (категория без
+/// содержимого файла) нужна в выводе.
+final class _CaptureLogger implements Logger {
+  final reasons = <String>[];
+
+  @override
+  bool isEnabled(LogLevel level) => true;
+
+  @override
+  void log(
+    LogLevel level,
+    String event, {
+    Map<String, Object?> fields = const {},
+    Object? error,
+    StackTrace? stack,
+  }) {
+    if (event == 'model.last_used.ignored') {
+      reasons.add('${fields['reason']}');
+    }
+  }
 }

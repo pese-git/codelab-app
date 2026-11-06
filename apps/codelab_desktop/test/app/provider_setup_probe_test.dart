@@ -35,7 +35,9 @@ void main() {
     expect(await probe(), isTrue);
   });
 
-  test('a provider without a default model needs one', () async {
+  // Change `optional-default-model` (D3, D12): `agent.default_model`
+  // необязателен, агент стартует на первом провайдере, мастер не нужен.
+  test('a provider without a default model does not need the wizard', () async {
     config('''
 providers:
   gw:
@@ -45,7 +47,7 @@ providers:
       m:
         context_window: 8000
 ''');
-    expect(await probe(), isTrue);
+    expect(await probe(), isFalse);
   });
 
   test(

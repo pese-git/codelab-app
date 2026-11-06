@@ -527,9 +527,17 @@ final class ProviderCommands {
     );
     return switch (outcome) {
       EditFinished(:final result, :final issues) =>
-        // Подсказка — по ключу проблемы, а не по подстроке текста: путь файла
-        // с " agent." в имени каталога не должен её вызывать.
-        issues.any((issue) => issue.key.startsWith('agent.'))
+        // Подсказка — по ключу и событию проблемы, а не по подстроке текста:
+        // путь файла с " agent." в имени каталога не должен её вызывать.
+        // Проблема `config.model.none` (удалён последний провайдер с моделью,
+        // явной ссылки нет) подсказку «change the model first» не получает:
+        // она вводила бы в заблуждение (design.md change
+        // `optional-default-model`, D9).
+        issues.any(
+              (issue) =>
+                  issue.key.startsWith('agent.') &&
+                  issue.event != modelNoneEvent,
+            )
             ? ConfigCommandResult(
                 exitCode: result.exitCode,
                 stdout: result.stdout,

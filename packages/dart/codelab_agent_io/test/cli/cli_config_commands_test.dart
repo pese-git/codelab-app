@@ -181,7 +181,16 @@ agent:
 
         expect(set.exitCode, 0, reason: allOutput(set));
         expect(set.stdout.first, 'Updated budget.max_steps in $userPath');
-        expect(set.stdout, contains('warning: agent.default_model: required'));
+        // Проблема прежняя (ключ и вид, R3-1), текст новый: `required` больше
+        // неправда, ключ необязателен (design.md `optional-default-model`, D4).
+        expect(
+          set.stdout,
+          contains(
+            'warning: agent.default_model: no model is configured; add a '
+            'provider with at least one model',
+          ),
+        );
+        expect(set.stdout.join('\n'), isNot(contains('required')));
         expect(read(userPath), contains('max_steps: 40'));
 
         final get = await getKey('budget.max_steps');
@@ -516,10 +525,11 @@ providers:
       bool stdin = false,
       bool makeDefault = false,
       ConfigFileLayer layer = ConfigFileLayer.user,
+      Map<String, String> extraEnv = const {},
     }) => ProviderAddOptions(
       id: id,
       cwd: cwd,
-      environment: env(),
+      environment: env(extraEnv),
       kind: kind,
       baseUrl: baseUrl,
       model: model,
@@ -567,13 +577,60 @@ providers:
       },
     );
 
-    test('без --default в пустом CODELAB_HOME: warning о прежней проблеме, '
-        'код 0', () async {
+    test('без --default в пустом CODELAB_HOME: код 0, нет строк warning:, '
+        'в файле нет default_model (сценарий «provider add в пустом '
+        'CODELAB_HOME без --default»)', () async {
       final result = await providerCommands().add(addOf(), FakeSecretInput(''));
 
       expect(result.exitCode, 0, reason: allOutput(result));
-      expect(result.stdout, contains('warning: agent.default_model: required'));
+      expect(result.stdout.first, 'Updated providers.gw in $userPath');
+      expect(
+        result.stdout.where((l) => l.startsWith('warning:')),
+        isEmpty,
+        reason: allOutput(result),
+      );
+      expect(read(userPath), isNot(contains('default_model')));
+
+      final check = await configCommands().check(
+        CheckOptions(cwd: cwd, environment: env()),
+      );
+
+      expect(check.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(check.stdout.last, 'Config: valid');
     });
+
+    test(
+      'без --default с --api-key-env при заданной переменной: код 0, нет '
+      'строк warning:, затем config check — gw/m (first-provider) '
+      '(сценарий «provider add в пустом CODELAB_HOME без --default»)',
+      () async {
+        // Переменная ключа задана, поэтому предупреждения
+        // `config.provider.key_missing` нет; прежний `agent.default_model:
+        // required` исчез вместе с обязательностью ключа.
+        final result = await providerCommands().add(
+          addOf(apiKeyEnv: 'GW_KEY', extraEnv: {'GW_KEY': 'sk-test-leak-0123'}),
+          FakeSecretInput(''),
+        );
+
+        expect(result.exitCode, 0, reason: allOutput(result));
+        expect(
+          result.stdout.where((l) => l.startsWith('warning:')),
+          isEmpty,
+          reason: allOutput(result),
+        );
+        expect(read(userPath), isNot(contains('default_model')));
+
+        final check = await configCommands().check(
+          CheckOptions(
+            cwd: cwd,
+            environment: env({'GW_KEY': 'sk-test-leak-0123'}),
+          ),
+        );
+
+        expect(check.stdout, contains('Default model: gw/m (first-provider)'));
+        expect(check.stdout.last, 'Config: valid');
+      },
+    );
 
     test('идентификатор модели с точкой пишется одним ключом', () async {
       final result = await providerCommands().add(
@@ -1036,6 +1093,71 @@ agent:
       expect(err, contains('agent.default_model'));
       expect(err, contains('config set agent.default_model'));
       expect(read(userPath), before);
+    });
+
+    test('remove единственного провайдера без ключа модели: код 1, проблема '
+        'config.model.none без подсказки «change the model first», файл цел '
+        '(сценарий «provider remove единственного провайдера без ключа '
+        'модели»)', () async {
+      write(userPath, '''
+providers:
+  gw:
+    kind: openai-compatible
+    base_url: https://x/v1
+    models:
+      m: {}
+''');
+      final before = read(userPath);
+
+      final result = await commandsOver(
+        MemorySecretStore(),
+      ).remove(ProviderRemoveOptions(id: 'gw', cwd: cwd, environment: env()));
+
+      expect(result.exitCode, 1, reason: allOutput(result));
+      final err = result.stderr.join('\n');
+      expect(
+        err,
+        contains(
+          'agent.default_model: no model is configured; add a provider with '
+          'at least one model',
+        ),
+      );
+      expect(err, isNot(contains('change the model first')));
+      expect(read(userPath), before);
+    });
+
+    test('remove провайдера последней модели: код 0, файл состояния не '
+        'меняется, следующая модель — первый провайдер (сценарий «provider '
+        'remove провайдера последней модели»)', () async {
+      write(userPath, '''
+providers:
+  a:
+    kind: openai-compatible
+    base_url: https://a.test/v1
+    models:
+      x: {}
+  b:
+    kind: openai-compatible
+    base_url: https://b.test/v1
+    models:
+      y: {}
+''');
+      final statePath = '$home/state/last-model.json';
+      write(statePath, '{"v": 1, "model": "b/y"}');
+      final stateBefore = read(statePath);
+
+      final result = await commandsOver(
+        MemorySecretStore(),
+      ).remove(ProviderRemoveOptions(id: 'b', cwd: cwd, environment: env()));
+
+      expect(result.exitCode, 0, reason: allOutput(result));
+      final map = (loadYaml(read(userPath)) as YamlMap)['providers'] as YamlMap;
+      expect(map.keys, ['a']);
+      expect(read(statePath), stateBefore);
+      final check = await configCommands().check(
+        CheckOptions(cwd: cwd, environment: env()),
+      );
+      expect(check.stdout, contains('Default model: a/x (first-provider)'));
     });
 
     test('remove провайдера без ссылки удаляет таблицу', () async {

@@ -264,8 +264,10 @@ void main() {
 
     // Правка характеризационного теста в фазе реализации 9.3: запуск без
     // модели больше не ошибка разбора флагов, а проблема конфига
-    // `agent.default_model: required` (agent-binary «Конфиг бинаря…»,
-    // требование «Минимальный конфиг из флагов» удалено).
+    // `agent.default_model: no model is configured; add a provider with at
+    // least one model` с событием `config.model.none` (agent-binary «Конфиг
+    // бинаря…», сценарий «Нет ни одной модели»; change
+    // `optional-default-model`, D4; раньше текст был `required`).
     test('--provider without a model is a usage error; no model source is '
         'left to the config', () {
       expect(

@@ -18,6 +18,31 @@ import 'schema.dart' show defaultProjectContextMaxBytes;
 export 'schema.dart'
     show defaultProjectContextMaxBytes, maxProjectContextMaxBytes;
 
+/// Откуда взялась модель по умолчанию (design.md change
+/// `optional-default-model`, D1).
+///
+/// Почему enum ядра: источник нужен логам (`session.model.selected`, §16),
+/// `config check` и правилу выбора модели сессии ([selectSessionModel]), а
+/// рантайм и хосты не должны разбирать строки.
+///
+/// Значения: [config] — явная `agent.default_model` любого слоя (побеждает
+/// всё и проверяется строго); [lastUsed] — последняя явно выбранная
+/// пользователем модель (даёт только рантайм, в `CoreConfig` её не бывает);
+/// [firstProvider] — первая модель первого доступного провайдера. Проводные
+/// имена в логах и `config check`: `config`, `last-used`, `first-provider`
+/// ([wireName]). Идея порядка выбора — поведение OpenCode в описании
+/// пользователя (код не изучался и не воспроизводится, design.md, Context).
+enum DefaultModelSource {
+  config('config'),
+  lastUsed('last-used'),
+  firstProvider('first-provider');
+
+  const DefaultModelSource(this.wireName);
+
+  /// Имя в логах, событиях и выводе `config check`.
+  final String wireName;
+}
+
 /// Часть конфигурации, относящаяся к разрешениям (`agent-core-architecture`
 /// §7, §15.3, §15.4).
 ///
@@ -144,6 +169,7 @@ final class DeferredConfigParts {
 final class CoreConfig {
   const CoreConfig({
     required this.defaultModel,
+    this.defaultModelSource = DefaultModelSource.config,
     this.permissions = const PermissionsConfig(),
     this.budget = const TurnBudget(),
     this.compaction = const CompactionOverrides(),
@@ -227,7 +253,14 @@ final class CoreConfig {
   /// [next]. Следующая перезагрузка сравнивает с ними (R0-1).
   ///
   /// Как использовать: рантайм вызывает после `planConfigReload` и затем
-  /// проверяет итог [validateSnapshot]. Снимок без проекта подставляется
+  /// проверяет итог [validateSnapshot].
+  ///
+  /// Неявная модель (`defaultModelSource == firstProvider`, design.md change
+  /// `optional-default-model`, D10) не откладывается отдельно: она
+  /// пересчитывается заново по итоговым провайдерам, из которых уже
+  /// исключены отложенные новые. Иначе провайдер, вставленный перед прежним,
+  /// стал бы моделью до перезапуска, а [validateSnapshot] отклонил бы всю
+  /// перезагрузку. Снимок без проекта подставляется
   /// тем же способом относительно `previous.withoutProject` (или `previous`,
   /// если у прежнего снимка проектных слоёв не было).
   static CoreConfig withDeferred(
@@ -256,8 +289,32 @@ final class CoreConfig {
       }
     }
     final bare = next.withoutProject;
+    final finalProviders = [
+      for (final provider in next.providers)
+        if (!providers.contains(provider.config.name))
+          provider
+        else if (oldProviders[provider.config.name] case final old?)
+          CatalogProvider(
+            old.config,
+            models: provider.models,
+            key: old.key,
+            headerTemplates: old.headerTemplates,
+          ),
+    ];
+    // D10: неявная модель считается заново по итоговым провайдерам, иначе
+    // отложенный новый провайдер, вставленный перед прежним, стал бы моделью
+    // и `validateSnapshot` отклонил бы всю перезагрузку. Явная модель — по
+    // прежним правилам (`deferred.defaultModel`).
+    final implicit =
+        !deferred.defaultModel &&
+            next.defaultModelSource == DefaultModelSource.firstProvider
+        ? implicitDefaultModel(finalProviders, problems, next.effort)
+        : null;
     return next._copyWith(
-      defaultModel: deferred.defaultModel ? previous.defaultModel : null,
+      defaultModel: deferred.defaultModel ? previous.defaultModel : implicit,
+      defaultModelSource: deferred.defaultModel
+          ? previous.defaultModelSource
+          : null,
       permissions: deferred.permissions ? previous.permissions : null,
       mcpServers: [
         for (final server in next.mcpServers)
@@ -268,18 +325,7 @@ final class CoreConfig {
           else
             ?oldServers[server.name],
       ],
-      providers: [
-        for (final provider in next.providers)
-          if (!providers.contains(provider.config.name))
-            provider
-          else if (oldProviders[provider.config.name] case final old?)
-            CatalogProvider(
-              old.config,
-              models: provider.models,
-              key: old.key,
-              headerTemplates: old.headerTemplates,
-            ),
-      ],
+      providers: finalProviders,
       providerProblems: problems,
       withoutProject: bare == null
           ? null
@@ -298,6 +344,7 @@ final class CoreConfig {
   /// «снимка нет»).
   CoreConfig _copyWith({
     ModelRef? defaultModel,
+    DefaultModelSource? defaultModelSource,
     PermissionsConfig? permissions,
     List<McpServerConfig>? mcpServers,
     List<CatalogProvider>? providers,
@@ -306,6 +353,7 @@ final class CoreConfig {
     Map<String, Object?>? withoutProjectValues,
   }) => CoreConfig(
     defaultModel: defaultModel ?? this.defaultModel,
+    defaultModelSource: defaultModelSource ?? this.defaultModelSource,
     permissions: permissions ?? this.permissions,
     budget: budget,
     compaction: compaction,
@@ -358,6 +406,10 @@ final class CoreConfig {
   }
 
   final ModelRef defaultModel;
+
+  /// Источник [defaultModel]: `config` или `firstProvider` (D1). По умолчанию
+  /// `config` — хосты и тесты, задающие модель напрямую, считают её явной.
+  final DefaultModelSource defaultModelSource;
 
   /// Уровень рассуждения новой сессии (`agent.effort`, §2.12.3, §15.4);
   /// доходит до запроса только у модели с рассуждением.

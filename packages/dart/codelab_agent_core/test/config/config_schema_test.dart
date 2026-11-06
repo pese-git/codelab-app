@@ -283,13 +283,26 @@ void main() {
   });
 
   group('semantics (§15.5, step 8)', () {
-    test('agent.default_model is required', () {
+    test('a provider without agent.default_model gives gw/m with the '
+        'source firstProvider (scenario "Провайдер без agent.default_model"; '
+        'D1 optional-default-model)', () {
       final result = load([
-        layer({'providers': baseValues()['providers']}),
+        layer({
+          'providers': {
+            'gw': {
+              'kind': 'openai-compatible',
+              'base_url': 'https://llm.test/v1',
+              'models': {'m': <String, Object?>{}},
+            },
+          },
+        }),
       ]);
 
-      final issue = issuesAt(result, 'agent.default_model').single;
-      expect(issue.message, 'required');
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      final config = result.config!;
+      expect(config.defaultModel.provider, 'gw');
+      expect(config.defaultModel.id, 'm');
+      expect(config.defaultModelSource, DefaultModelSource.firstProvider);
     });
 
     test('agent.default_model must be in the provider catalog', () {

@@ -169,6 +169,10 @@ AgentConfigPaths _hostConfig({
     '$_codelabHome/secrets.yaml',
     '$_codelabHome/agents',
     '$_codelabHome/prompts',
+    // Память последней модели и весь каталог `state/` (change
+    // `optional-default-model`, D7): так их перечисляет `agentConfigPathsFor`.
+    '$_codelabHome/state/last-model.json',
+    '$_codelabHome/state',
     '/launch/.codelab/config.yaml',
     '/launch/.codelab/config.local.yaml',
     '/etc/codelab/agent.yaml',
@@ -214,6 +218,8 @@ void _hostPathsTests() {
     '$_codelabHome/secrets.yaml',
     '$_codelabHome/agents/x.md',
     '$_codelabHome/prompts/sub/p.md',
+    '$_codelabHome/state/last-model.json',
+    '$_codelabHome/state/other.json',
     '/etc/codelab/agent.yaml',
     '/launch/.codelab/config.local.yaml',
     '../launch/.codelab/config.yaml',
@@ -403,6 +409,8 @@ void _hostPathsTests() {
       'echo x > ~/.codelab/config.yaml',
       r'echo x >> $HOME/.codelab/config.yaml',
       r'echo x > ${HOME}/.codelab/secrets.yaml',
+      'echo x > ~/.codelab/state/last-model.json',
+      r'tee $CODELAB_HOME/state/other.json',
       r'echo x | tee $CODELAB_HOME/secrets.yaml',
       r'echo x | tee ${CODELAB_HOME}/secrets.yaml',
       'cp /tmp/c.yaml ~/.codelab/config.yaml',

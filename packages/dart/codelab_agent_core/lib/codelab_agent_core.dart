@@ -41,6 +41,7 @@ export 'src/env/memory_env.dart'
     show MemoryExecutionEnv, decodeUtf8Strict, sliceLines;
 export 'src/host/build_agent_core.dart';
 export 'src/host/host_profile.dart';
+export 'src/host/last_model_store.dart';
 export 'src/host/services.dart';
 export 'src/llm/decorators/fallback.dart';
 export 'src/llm/decorators/retry.dart' show RetryPolicy, withTransientRetry;
@@ -86,6 +87,7 @@ export 'src/project/project_files.dart';
 export 'src/runtime/agent_runtime.dart' show AgentRuntime, coreAgentVersion;
 export 'src/runtime/agent_session.dart';
 export 'src/runtime/config_reload.dart';
+export 'src/runtime/select_session_model.dart';
 export 'src/secrets/before_1_note.dart';
 export 'src/secrets/memory_secret_store.dart';
 export 'src/secrets/secret_lookup.dart';

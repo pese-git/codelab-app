@@ -114,12 +114,20 @@ agent:
     expect(agent.stderrText, contains('config.yaml:'));
   }, timeout: const Timeout(Duration(seconds: 60)));
 
-  test('no model anywhere: agent.default_model is required, code 64', () async {
+  test('no model anywhere: agent.default_model says no model is configured, '
+      'code 64 (scenario "Нет ни одной модели")', () async {
     final agent = await start(const []);
 
     expect(await agent.exitCode.timeout(const Duration(seconds: 20)), 64);
     expect(agent.stderrText, contains('agent.default_model'));
-    expect(agent.stderrText, contains('required'));
+    expect(
+      agent.stderrText,
+      contains(
+        'agent.default_model: no model is configured; add a provider with at '
+        'least one model',
+      ),
+    );
+    expect(agent.stderrText, isNot(contains('required')));
   }, timeout: const Timeout(Duration(seconds: 60)));
 
   test('--config with .toml is a usage error', () async {

@@ -55,9 +55,11 @@ import '../tools/registry.dart';
 import '../util/logger.dart';
 import '../util/result.dart';
 import '../host/host_profile.dart';
+import '../host/last_model_store.dart';
 import '../host/services.dart';
 import 'agent_session.dart';
 import 'config_reload.dart';
+import 'select_session_model.dart';
 
 /// Кто пишет журналы этого ядра (поле `agent` заголовка, §8.2.1).
 /// Предел фазы чтения файлов проекта в `session/new` (D6).
@@ -255,11 +257,10 @@ final class AgentRuntimeImpl implements AgentRuntime {
       canonicalCwd,
       spec.ports.logger ?? services.logger,
     );
-    final model = _resolve(
-      start,
-      spec.model ?? settings.defaultModel,
-      settings.effort,
-    );
+    final sessionLogger = spec.ports.logger ?? services.logger;
+    final model = spec.model != null
+        ? _resolve(start, spec.model!, settings.effort)
+        : await _selectModel(start, settings, header.id, sessionLogger);
     final session = await _open(
       snapshot: SessionSnapshot.empty(header),
       cwd: spec.cwd,
@@ -289,10 +290,78 @@ final class AgentRuntimeImpl implements AgentRuntime {
       await _abandon(session);
       rethrow;
     }
+    // Явная модель вызывающего — выбор пользователя: запоминается после
+    // записи в журнал (D6). Автоматический выбор память не трогает.
+    if (spec.model != null) {
+      await rememberLastModel(
+        services.lastModel,
+        model,
+        sessionLogger,
+        header.id,
+      );
+    }
     // «Живая» для перезагрузки — возвращённая вызывающему (ACP-8: до ответа
     // `session/new` уведомлений нет).
     session._handedOut = true;
     return session;
+  }
+
+  /// Модель новой сессии без `spec.model` (D5): цепочка «явная → последняя →
+  /// первый провайдер» через [selectSessionModel]; порт читается только когда
+  /// модель конфига неявная. Сбой чтения не ломает сессию: событие
+  /// `model.last_used.ignored {reason: <runtimeType>}` (без текста ошибки, в
+  /// нём могут быть пути), шаг 3. Итог пишется событием
+  /// `session.model.selected` с источником (§16).
+  Future<ModelRef> _selectModel(
+    _Applied start,
+    CoreConfig settings,
+    SessionId sessionId,
+    Logger logger,
+  ) async {
+    ModelId? last;
+    final port = services.lastModel;
+    if (port != null &&
+        settings.defaultModelSource != DefaultModelSource.config) {
+      try {
+        last = await port.read();
+      } on Object catch (error) {
+        logger.log(
+          LogLevel.warning,
+          'model.last_used.ignored',
+          fields: {
+            'session_id': sessionId.value,
+            'reason': error.runtimeType.toString(),
+          },
+        );
+      }
+    }
+    final (picked, source) = selectSessionModel(
+      settings,
+      last,
+      start.catalog,
+      effort: settings.effort,
+    );
+    final model = _resolve(start, picked, settings.effort);
+    if (last != null && source != DefaultModelSource.lastUsed) {
+      // Память есть, но модели в каталоге сессии нет (провайдер удалён или
+      // сессия вне корня запуска): причину видно в логе, содержимого файла
+      // состояния в записи нет (§16).
+      logger.log(
+        LogLevel.info,
+        'model.last_used.ignored',
+        fields: {'session_id': sessionId.value, 'reason': 'not in catalog'},
+      );
+    }
+    logger.log(
+      LogLevel.info,
+      'session.model.selected',
+      fields: {
+        'session_id': sessionId.value,
+        'model': '${model.provider}/${model.id}',
+        'source': source.wireName,
+      },
+    );
+    return model;
   }
 
   /// Сессия не вернулась вызывающему: серверы MCP, подключённые в `_open`,
@@ -387,6 +456,17 @@ final class AgentRuntimeImpl implements AgentRuntime {
         );
         await session._writer.append(
           (id, parent, at) => _modelChange(id, parent, at, chosen),
+        );
+      }
+      // Явная модель вызывающего запоминается после `model_change` (как у
+      // `setModel`, D6); восстановленная из журнала и модель конфигурации —
+      // нет.
+      if (model != null) {
+        await rememberLastModel(
+          services.lastModel,
+          chosen,
+          session._logger,
+          id,
         );
       }
       session._restoreHistory();
@@ -2036,6 +2116,9 @@ final class _Session implements AgentSession {
         _catalog.resolve(id, effort: _effort) ??
         (throw ArgumentError.value(id.value, 'id', 'not in the model catalog'));
     await _changeModel(model);
+    // После `model_change` внутри той же `_serial`: две быстрые смены пишут
+    // память в порядке операций (D6, «Гонки»).
+    await rememberLastModel(_services.lastModel, model, _logger, this.id);
     return ConfigChangeResult(changeId: changeId, model: model);
   });
 
@@ -3065,4 +3148,39 @@ final class _Session implements AgentSession {
   static bool _hasTitle(SessionSnapshot snapshot) => pathToLeaf(
     snapshot,
   ).any((r) => r is SessionInfoRecord && (r.title?.isNotEmpty ?? false));
+}
+
+/// Запись явного выбора в порт последней модели (design.md change
+/// `optional-default-model`, D6).
+///
+/// Почему отдельная функция: три точки (`createSession(spec.model)`,
+/// `loadSession(model:)`, `setModel`) пишут одинаково, и сбой памяти не должен
+/// ломать ни одну из них (приоритет 4: модель сессии уже в журнале).
+///
+/// Как использовать: вызывать после записи `model_change` в журнал; [port]
+/// `null` — память не подключена, вызов ничего не делает. Сбой перехватывается
+/// и логируется `model.last_used.write_failed {session_id, reason}` с именем
+/// типа ошибки, без её текста (путь или секрет в сообщении); наружу ничего не
+/// бросается.
+Future<void> rememberLastModel(
+  LastModelStore? port,
+  ModelRef model,
+  Logger logger,
+  SessionId sessionId,
+) async {
+  if (port == null) {
+    return;
+  }
+  try {
+    await port.write(ModelId('${model.provider}/${model.id}'));
+  } on Object catch (error) {
+    logger.log(
+      LogLevel.warning,
+      'model.last_used.write_failed',
+      fields: {
+        'session_id': sessionId.value,
+        'reason': error.runtimeType.toString(),
+      },
+    );
+  }
 }
