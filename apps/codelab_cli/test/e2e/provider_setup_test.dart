@@ -123,12 +123,13 @@ void main() async {
     List<String> args, {
     CliEntry entry = CliEntry.production,
     Map<String, String> environment = const {},
-  }) async => PtyProcess.start(dartExecutable(), [
-    await CliProcess.kernelOf(entry),
-    '-C',
-    project,
-    ...args,
-  ], environment: baseEnv(environment));
+    String? workingDirectory,
+  }) async => PtyProcess.start(
+    dartExecutable(),
+    [await CliProcess.kernelOf(entry), '-C', project, ...args],
+    environment: baseEnv(environment),
+    workingDirectory: workingDirectory,
+  );
 
   /// Выбор пункта списка стрелками.
   void pick(PtyProcess pty, int index) {
@@ -197,7 +198,7 @@ void main() async {
       final p = await pty(['provider', 'add']);
       await walkWizard(p, server.baseUrl);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(p.text, contains('Saved provider "local-${server.port}"'));
       expect(
         p.text,
@@ -218,7 +219,7 @@ void main() async {
       await p.waitFor('? API type');
       p.write(_ctrlC);
 
-      expect(await p.exitCode, 130, reason: p.text);
+      expect(await p.exitCode, 130, reason: 'провайдер удалён');
       expect(p.text, contains('provider_wizard.started mode=add entry=cli'));
       expect(config(), _emptyConfig);
     }, skip: skip);
@@ -231,7 +232,7 @@ void main() async {
       final p = await pty(['provider', 'add', '--verbose']);
       await walkWizard(p, server.baseUrl, key: leakMarker);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(p.text, contains('*' * leakMarker.length));
       expectNoLeak(p);
       expect(
@@ -265,7 +266,7 @@ void main() async {
       await waitForAny(p, ['401', 'unauthorized', 'rejected']);
       p.write(_ctrlC);
 
-      expect(await p.exitCode, 130, reason: p.text);
+      expect(await p.exitCode, 130, reason: 'провайдер удалён');
       expect(config(), _emptyConfig);
       expect(File('$home/secrets.yaml').existsSync(), isFalse);
       expectNoLeak(p);
@@ -284,7 +285,7 @@ void main() async {
           'openai-compatible',
         ]);
 
-        expect(await p.exitCode, 64, reason: p.text);
+        expect(await p.exitCode, 64, reason: 'провайдер удалён');
         expect(
           p.text,
           contains('missing required options: --model, --context-window'),
@@ -331,8 +332,39 @@ void main() async {
       await p.waitFor('? Save? [Y/n]');
       p.write('n\r');
 
-      expect(await p.exitCode, 130, reason: p.text);
+      expect(await p.exitCode, 130, reason: 'провайдер удалён');
       expect(config(), _emptyConfig);
+    }, skip: skip);
+
+    test('--api-key-stdin без --yes на терминале: скрытое поле, сводка, '
+        'Enter → 0', () async {
+      final server = await FakeModelsServer.start();
+      writeConfig(_emptyConfig);
+
+      final p = await pty([
+        'provider',
+        'add',
+        'gw',
+        '--preset',
+        'custom-openai',
+        '--base-url',
+        server.baseUrl,
+        '--model',
+        'm1',
+        '--context-window',
+        '8000',
+        '--api-key-stdin',
+      ]);
+      await p.waitFor('? API key ›');
+      p.write('$leakMarker\r');
+      await p.waitFor('? Save? [Y/n]');
+      p.write('\r');
+
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(p.text, contains('*' * leakMarker.length));
+      expectNoLeak(p);
+      expect(config(), contains('api_key_secret: codelab/gw'));
+      expect(server.requests.first.authorization, 'Bearer $leakMarker');
     }, skip: skip);
 
     test('флаги без --yes на терминале: Enter записывает', () async {
@@ -355,7 +387,7 @@ void main() async {
       await p.waitFor('? Save? [Y/n]');
       p.write('\r');
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(
         p.text,
         contains('Saved provider "gw". Models are available in /model.'),
@@ -419,6 +451,35 @@ void main() async {
       expect(File('$home/secrets.yaml').existsSync(), isTrue);
     });
 
+    test('cli/provider-add-noninteractive: секрет codelab/gw уже есть — код '
+        '1, конфиг не изменён (SETUP-5)', () async {
+      final server = await FakeModelsServer.start();
+      writeConfig(_emptyConfig);
+      final args = [
+        'gw',
+        '--preset',
+        'custom-openai',
+        '--base-url',
+        server.baseUrl,
+        '--model',
+        'm1',
+        '--context-window',
+        '8000',
+        '--api-key-stdin',
+        '--yes',
+      ];
+      final first = await run(args, stdin: '$leakMarker\n');
+      expect(first.exitCode, 0, reason: '$first');
+      writeConfig(_emptyConfig);
+
+      final second = await run(args, stdin: '$leakMarker\n');
+
+      expect(second.exitCode, 1, reason: '$second');
+      expect(second.stderr, startsWith('codelab: provider add failed: '));
+      expect('${second.stdout}${second.stderr}', isNot(contains(leakMarker)));
+      expect(config(), _emptyConfig);
+    });
+
     test('cli/provider-add-noninteractive: --api-key-stdin при бэкенде '
         'только для чтения — код 1 «provider add failed»', () async {
       final server = await FakeModelsServer.start();
@@ -478,7 +539,7 @@ void main() async {
       await p.waitFor(_answer, from: from);
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(
         p.text,
         contains('provider_wizard.started mode=add entry=first_run'),
@@ -515,8 +576,36 @@ void main() async {
       await p.waitFor(_answer, from: from);
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(p.text, contains('\x1b[?1049l'), reason: 'терминал восстановлен');
+    }, skip: skip);
+
+    test('cli/onboarding-first-run-explicit-model: явная модель без '
+        'провайдеров — мастер делает нового провайдера default '
+        '(forceDefault, D7/D16)', () async {
+      final server = await FakeModelsServer.start();
+      writeConfig(
+        '$_emptyConfig'
+        'agent:\n  default_model: ghost/old\n',
+      );
+
+      final p = await pty(
+        const [],
+        entry: CliEntry.scriptedEmbedded,
+        environment: scriptEnv(),
+      );
+      await walkWizard(p, server.baseUrl);
+      await p.waitFor('Starting the embedded agent…');
+      final from = p.text.length;
+      await p.waitFor('> ', from: from);
+      p.write('hello\r');
+      await p.waitFor(_answer, from: from);
+      p.write(_ctrlD);
+
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      final written = config();
+      expect(written, contains('default_model: local-${server.port}/m1'));
+      expect(written, isNot(contains('ghost/old')));
     }, skip: skip);
 
     test('cli/onboarding-first-run: Ctrl+C в мастере → 130, файлы не '
@@ -531,7 +620,7 @@ void main() async {
       await p.waitFor('? API type');
       p.write(_ctrlC);
 
-      expect(await p.exitCode, 130, reason: p.text);
+      expect(await p.exitCode, 130, reason: 'провайдер удалён');
       expect(config(), _emptyConfig);
     }, skip: skip);
 
@@ -572,7 +661,7 @@ agent:
       await p.waitFor(_answer, from: from);
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(config(), gw);
       expect(File('$home/secrets.yaml').existsSync(), isTrue);
       expect(p.text, isNot(contains('? API type')), reason: 'мастера нет');
@@ -610,7 +699,7 @@ agent:
       await p.waitFor('> ');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(config(), gw);
       expect(File('$home/secrets.yaml').existsSync(), isFalse);
     }, skip: skip);
@@ -645,7 +734,7 @@ agent:
       await p.waitFor('> ');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(p.text, isNot(contains('Store a key')));
       expect(config(), gw);
     }, skip: skip);
@@ -654,7 +743,7 @@ agent:
         'терминале — прежний код 64, мастера нет', () async {
       final p = await pty(['-p', 'hi']);
 
-      expect(await p.exitCode, 64, reason: p.text);
+      expect(await p.exitCode, 64, reason: 'провайдер удалён');
       expect(p.text, contains('codelab config check'));
       expect(p.text, isNot(contains("Let's set one up")));
       expect(p.text, isNot(contains('? API type')));
@@ -667,7 +756,7 @@ agent:
 
       final p = await pty(const []);
 
-      expect(await p.exitCode, 64, reason: p.text);
+      expect(await p.exitCode, 64, reason: 'провайдер удалён');
       expect(p.text, contains('budget.max_steps'));
       expect(p.text, isNot(contains("Let's set one up")));
       expect(p.text, isNot(contains('? API type')));
@@ -681,7 +770,7 @@ agent:
       await p.waitFor('> ');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(p.text, isNot(contains("Let's set one up")));
       expect(File('$home/config.yaml').existsSync(), isFalse);
     }, skip: skip);
@@ -716,7 +805,7 @@ agent:
       await p.waitFor('Use codelab secret set <name>');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(config(), written, reason: 'секретный ключ конфиг не менял');
     }, skip: skip);
 
@@ -743,7 +832,7 @@ agent:
       await p.waitFor('> ');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
       expect(config(), _readyConfig);
     }, skip: skip);
 
@@ -783,10 +872,229 @@ secrets:
         await Future<void>.delayed(const Duration(milliseconds: 400));
         shown = p.text.substring(from).contains('local-${server.port}/m1');
       }
-      expect(shown, isTrue, reason: p.text);
+      expect(shown, isTrue, reason: 'провайдер удалён');
       p.write(_ctrlD);
-      expect(await p.exitCode, 0, reason: p.text);
+      expect(await p.exitCode, 0, reason: 'провайдер удалён');
     }, skip: skip);
+
+    test(
+      'cli/settings-profile-home: запись идёт в CODELAB_HOME профиля '
+      'codelab-agent, а не клиента (D5, SETUP-2)',
+      () async {
+        // A — дом клиента, B — дом агента из `env` профиля.
+        const aText = '# client home\nsecrets:\n  backend: file\n';
+        writeConfig(aText);
+        final b = Directory('${dir.path}/agent-home')..createSync();
+        Process.runSync('/bin/chmod', ['700', b.path]);
+        File('${b.path}/config.yaml').writeAsStringSync(
+          _readyConfig.replaceFirst(
+            'agent:',
+            '  spare:\n'
+                '    kind: openai-compatible\n'
+                '    base_url: http://127.0.0.1:9/v1\n'
+                '    models:\n'
+                '      m:\n'
+                '        context_window: 8000\n'
+                'agent:',
+          ),
+        );
+        // Профиль должен называться командой `codelab-agent` (D5): обёртка
+        // запускает собранный Dart-агент.
+        final wrapper = File('${dir.path}/codelab-agent')
+          ..writeAsStringSync(
+            '#!/bin/sh\nexec "${dartExecutable()}" '
+            '"${await E2eCliAgent.agentKernel()}" "\$@"\n',
+          );
+        Process.runSync('/bin/chmod', ['755', wrapper.path]);
+        final script = File('${dir.path}/agent-script.json')
+          ..writeAsStringSync(
+            jsonEncode({
+              'llm': {
+                'model': {
+                  'provider': 'scripted',
+                  'modelId': 'scripted-1',
+                  'contextWindow': 32768,
+                },
+                'steps': [
+                  {
+                    'reply': [
+                      {'text': 'hi'},
+                    ],
+                    'stopReason': 'stop',
+                  },
+                ],
+              },
+            }),
+          );
+        File('$home/profiles.json').writeAsStringSync(
+          jsonEncode({
+            'version': 1,
+            'profiles': [
+              {
+                'type': 'stdio',
+                'id': 'agent-b',
+                'label': 'Agent B',
+                'command': wrapper.path,
+                'args': ['serve', '--stdio', '--llm-script', script.path],
+                'env': {'CODELAB_HOME': b.path},
+                'runInProjectDirectory': false,
+              },
+            ],
+          }),
+        );
+
+        final p = await pty(['--agent', 'agent-b']);
+        await p.waitFor('> ');
+        p.write('/settings agent.effort high\r');
+        await p.waitFor('Updated agent.effort in ${b.path}/config.yaml');
+        final from = p.text.length;
+        p.write('/provider remove spare\r');
+        await p.waitFor('providers.spare', from: from);
+        p.write(_ctrlD);
+
+        expect(await p.exitCode, 0, reason: 'провайдер удалён');
+        expect(config(), aText, reason: 'дом клиента не тронут');
+        final changed = File('${b.path}/config.yaml').readAsStringSync();
+        expect(changed, contains('effort: high'));
+        expect(changed, isNot(contains('spare:')), reason: 'провайдер удалён');
+        expect(changed, contains('gw:'));
+      },
+      skip: skip,
+      tags: scriptedOnly,
+    );
+
+    /// REPL с профилем `codelab-agent` из `profiles.json`, чей `env` — [env];
+    /// `HOME` процесса CLI — [fakeHome].
+    Future<PtyProcess> profileRepl(
+      Map<String, String> env, {
+      required String fakeHome,
+    }) async {
+      final wrapper = File('${dir.path}/codelab-agent')
+        ..writeAsStringSync(
+          '#!/bin/sh\nexec "${dartExecutable()}" '
+          '"${await E2eCliAgent.agentKernel()}" "\$@"\n',
+        );
+      Process.runSync('/bin/chmod', ['755', wrapper.path]);
+      final script = File('${dir.path}/agent-script.json')
+        ..writeAsStringSync(
+          jsonEncode({
+            'llm': {
+              'model': {
+                'provider': 'scripted',
+                'modelId': 'scripted-1',
+                'contextWindow': 32768,
+              },
+              'steps': [
+                {
+                  'reply': [
+                    {'text': 'hi'},
+                  ],
+                  'stopReason': 'stop',
+                },
+              ],
+            },
+          }),
+        );
+      File('$home/profiles.json').writeAsStringSync(
+        jsonEncode({
+          'version': 1,
+          'profiles': [
+            {
+              'type': 'stdio',
+              'id': 'agent-b',
+              'label': 'Agent B',
+              'command': wrapper.path,
+              'args': ['serve', '--stdio', '--llm-script', script.path],
+              'env': env,
+              'runInProjectDirectory': false,
+            },
+          ],
+        }),
+      );
+      final p = await pty(
+        ['--agent', 'agent-b'],
+        environment: {'HOME': fakeHome},
+        workingDirectory: dir.path,
+      );
+      await p.waitFor('> ');
+      return p;
+    }
+
+    test(
+      'cli/provider-profile-home-tilde: CODELAB_HOME профиля с «~» — один '
+      'дом для конфига и хранилища секретов (D5)',
+      () async {
+        final server = await FakeModelsServer.start();
+        writeConfig('secrets:\n  backend: file\n');
+        final fakeHome = Directory('${dir.path}/fh')..createSync();
+        final agentHome = Directory('${fakeHome.path}/agent-home')
+          ..createSync();
+        Process.runSync('/bin/chmod', ['700', agentHome.path]);
+        File('${agentHome.path}/config.yaml').writeAsStringSync(_emptyConfig);
+
+        final p = await profileRepl({
+          'CODELAB_HOME': '~/agent-home',
+        }, fakeHome: fakeHome.path);
+        p.write('/provider add\r');
+        await walkWizard(p, server.baseUrl, key: leakMarker);
+        await p.waitFor('Saved provider "local-${server.port}"');
+        p.write(_ctrlD);
+
+        expect(await p.exitCode, 0, reason: p.text);
+        // Конфиг и секрет — в одном доме агента, а не в `./~/agent-home`.
+        expect(
+          File('${agentHome.path}/config.yaml').readAsStringSync(),
+          contains('api_key_secret: codelab/local-${server.port}'),
+        );
+        expect(File('${agentHome.path}/secrets.yaml').existsSync(), isTrue);
+        expect(Directory('${dir.path}/~').existsSync(), isFalse);
+        expect(config(), 'secrets:\n  backend: file\n');
+        expect(p.text, isNot(contains(leakMarker)));
+      },
+      skip: skip,
+      tags: scriptedOnly,
+    );
+
+    test(
+      'cli/provider-profile-env: весь env профиля виден мастеру '
+      '(api_key_env из env профиля)',
+      () async {
+        final server = await FakeModelsServer.start();
+        writeConfig(_emptyConfig);
+        final agentHome = Directory('${dir.path}/agent-home')..createSync();
+        Process.runSync('/bin/chmod', ['700', agentHome.path]);
+        File('${agentHome.path}/config.yaml').writeAsStringSync(_emptyConfig);
+
+        final p = await profileRepl({
+          'CODELAB_HOME': agentHome.path,
+          'GW_KEY': 'env-key-value',
+        }, fakeHome: '${dir.path}/fh');
+        p.write('/provider add\r');
+        await p.waitFor('? API type');
+        pick(p, 4);
+        await p.waitFor('? Base URL ›');
+        p.write('${server.baseUrl}\r');
+        await p.waitFor('? API key source');
+        pick(p, 1); // Read from an environment variable
+        await p.waitFor('? Environment variable ›');
+        p.write('GW_KEY\r');
+        await p.waitFor('? Model (type to filter) ›');
+        p.write('\r');
+        await p.waitFor('? Save? [Y/n]');
+        p.write('\r');
+        await p.waitFor('Saved provider');
+        p.write(_ctrlD);
+
+        expect(await p.exitCode, 0, reason: p.text);
+        expect(server.requests.first.authorization, 'Bearer env-key-value');
+        expect(
+          File('${agentHome.path}/config.yaml').readAsStringSync(),
+          contains('api_key_env: GW_KEY'),
+        );
+      },
+      skip: skip,
+      tags: scriptedOnly,
+    );
 
     test(
       'cli/settings-remote-read-only: удалённый агент — только чтение, '
@@ -811,7 +1119,7 @@ secrets:
         await p.waitFor(readOnly, from: from);
         p.write(_ctrlD);
 
-        expect(await p.exitCode, 0, reason: p.text);
+        expect(await p.exitCode, 0, reason: 'провайдер удалён');
         expect(p.text, isNot(contains('? API type')));
         expect(config(), marker);
       },

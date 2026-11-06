@@ -12,7 +12,6 @@
 // не должны краснеть по компиляции.
 
 import 'package:codelab_cli/codelab_cli.dart';
-import 'package:codelab_cli/src/setup/setup_commands.dart';
 import 'package:test/test.dart';
 
 import '../support/fake_agent.dart';

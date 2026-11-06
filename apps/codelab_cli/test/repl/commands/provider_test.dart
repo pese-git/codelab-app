@@ -282,6 +282,96 @@ void main() {
     });
   });
 
+  group('--local и цели доступа (D5, D17)', () {
+    const noLocal =
+        'This agent has no project-local config; run without --local.';
+
+    test('агент без проектного слоя: add, remove и settings --local '
+        'отказывают, порт не вызван', () async {
+      await open(profile: editableNoProjectProfile);
+
+      repl.line('/provider add --local');
+      await repl.waitText(noLocal);
+      repl.line('/provider remove gw --local');
+      await repl.waitText(noLocal);
+
+      expect(repl.setup.flowRequests, 0);
+      expect(repl.setup.removeCalls, isEmpty);
+    });
+
+    test('/provider add --local пишет в projectLocal', () async {
+      await open();
+      repl.store.snapshotValue = snapshotOf(projectLocal: const {});
+      repl.line('/provider add --local');
+      await repl.waitAny('? API type');
+      for (var i = 0; i < 4; i++) {
+        repl.press(keyDown);
+      }
+      repl.press(keyEnter);
+      await repl.waitAny('? Base URL ›');
+      repl.type('https://gw.example/v1');
+      repl.press(keyEnter);
+      await repl.waitAny('? API key source');
+      repl.press(keyDown);
+      repl.press(keyDown);
+      repl.press(keyEnter);
+      await eventually(() => repl.check.calls.isNotEmpty);
+      repl.check.respond(modelsOk(['m1']));
+      await repl.waitAny('? Model (type to filter) ›');
+      repl.press(keyEnter);
+      await repl.waitAny('? Save? [Y/n]');
+      repl.press(keyEnter);
+
+      await repl.waitAny('Saved provider');
+      expect(
+        repl.store.applied.single.base.target,
+        const ConfigTarget.projectLocal('/work'),
+      );
+    });
+  });
+
+  group('гонки мастера (Q14, D21)', () {
+    test(
+      'ход начался, пока команда открывала мастер: мастер не открыт',
+      () async {
+        await open();
+        repl.setup.flowGate = Completer<void>();
+        repl.line('/provider add');
+        await eventually(() => repl.setup.flowRequests == 1);
+
+        repl.line('hello');
+        final prompt = await repl.agent.next(sessionPromptMethod);
+        repl.setup.flowGate!.complete();
+
+        await repl.waitAny(
+          'Finish or cancel the current turn first (Ctrl+C), then run '
+          '/provider add.',
+        );
+        expect(repl.output, isNot(contains('? API type')));
+        repl.agent
+          ..chunk('s1', 'done')
+          ..respond(prompt, {'stopReason': 'end_turn'});
+      },
+    );
+
+    test('конец ввода во время записи: запись доводится до конца, REPL '
+        'выходит после неё', () async {
+      await open();
+      await toReview();
+      repl.store.applyGate = Completer<void>();
+      repl.press(keyEnter);
+      await eventually(() => repl.store.applied.isNotEmpty);
+
+      await repl.terminal.closeInput();
+      await pumpEventQueue();
+      expect(repl.exited, isFalse, reason: 'запись ещё идёт');
+
+      repl.store.applyGate!.complete();
+      expect(await repl.exitCode, 0);
+      expect(repl.store.applied, hasLength(1));
+    });
+  });
+
   group('/provider add отказывается, когда мастер невозможен (Q14)', () {
     test('во время хода: строка отказа, мастер не открыт, ход идёт', () async {
       await open();

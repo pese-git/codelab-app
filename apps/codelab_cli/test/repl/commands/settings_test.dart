@@ -11,9 +11,8 @@
 // Значения настроек выдуманные, настоящий `~/.codelab` не читается.
 
 import 'package:codelab_cli/codelab_cli.dart';
-import 'package:codelab_cli/src/setup/setup_commands.dart';
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ConnectionProfile;
+    show ConnectionProfile, StdioProfile;
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:test/test.dart';
 
@@ -32,6 +31,7 @@ String expectedFormat(String key, String raw) {
 }
 
 void main() {
+  group('доступ', accessTests);
   late SetupReplHarness repl;
   var opened = false;
 
@@ -93,7 +93,10 @@ void main() {
       expect(out, contains(RegExp(r'compaction\.enabled\s+true\s+project')));
       expect(out, contains(RegExp(r'logging\.level\s+debug\s+env')));
       expect(out, contains(RegExp(r'permissions\.mode\s+ask\s+config')));
-      expect(out, contains(RegExp(r'agent\.default_model\s+\S*\s*default')));
+      expect(
+        out,
+        contains(RegExp(r'agent\.default_model\s+\(not set\)\s+default')),
+      );
     });
 
     test('PickerSpec: по строке на ключ scope shared, пункт запускает '
@@ -125,6 +128,11 @@ void main() {
       );
       expect(effort.label, contains(RegExp(r'agent\.effort\s+high\s+user')));
       expect(spec.action, PickerAction.run);
+      expect(
+        spec.items.any((i) => i.line == '/settings trusted_projects'),
+        isTrue,
+        reason: 'trusted_projects показывается',
+      );
       expect(
         spec.items.any((i) => i.label.contains('agent.fallback')),
         isFalse,
@@ -431,7 +439,11 @@ void main() {
           '${expectedFormat('budget.max_steps', 'x')}',
         ),
       );
-      expect(repl.lastOutput, isNot(contains(leakMarker)));
+      // Эхо введённой строки — вывод самого REPL; ошибка значения не цитирует.
+      expect(
+        _errorLine(repl.lastOutput, 'expected'),
+        isNot(contains(leakMarker)),
+      );
       expect(repl.store.applied, isEmpty);
     });
 
@@ -443,7 +455,7 @@ void main() {
         'agent.effort: expected ${expectedFormat('agent.effort', 'turbo')}',
       );
 
-      expect(repl.lastOutput, isNot(contains('turbo')));
+      expect(_errorLine(repl.lastOutput, 'expected'), isNot(contains('turbo')));
       expect(repl.store.applied, isEmpty);
     });
 
@@ -548,6 +560,104 @@ void main() {
     });
   });
 }
+
+void accessTests() {
+  late SetupReplHarness repl;
+  var opened = false;
+
+  Future<void> open(ConnectionProfile profile) async {
+    repl = SetupReplHarness(profile: profile);
+    opened = true;
+    await repl.start();
+  }
+
+  tearDown(() async {
+    if (opened) {
+      await repl.dispose();
+    }
+    opened = false;
+  });
+
+  group('trusted_projects: граница доверия', () {
+    test('показывается в списке, но запись и сброс отказываются', () async {
+      await open(editableProfile);
+      const refusal =
+          'trusted_projects is a trust boundary; it cannot be changed here.';
+
+      repl.line('/settings trusted_projects');
+      await repl.waitText(refusal);
+      expect(repl.lastOutput, isNot(contains('Set it with')));
+      repl.line('/settings trusted_projects /x');
+      await repl.waitText(refusal);
+      repl.line('/settings trusted_projects --reset');
+      await repl.waitText(refusal);
+      repl.line('/settings trusted_projects /x --local');
+      await repl.waitText(refusal);
+
+      expect(repl.store.applied, isEmpty);
+    });
+  });
+
+  group('чьи настройки: пути из EditableSettings профиля (D5, SETUP-2)', () {
+    test('CODELAB_HOME из env профиля и --config из его аргументов идут в '
+        'порт', () async {
+      await open(
+        const StdioProfile(
+          id: 'p',
+          label: 'P',
+          command: '/opt/bin/codelab-agent',
+          args: ['serve', '--stdio', '--config', '/x/extra.yaml'],
+          env: {'CODELAB_HOME': '/other', 'GW_KEY': 'value'},
+        ),
+      );
+
+      repl.line('/settings agent.effort high');
+      await repl.waitText('Updated agent.effort');
+
+      final access = repl.setup.accessSeen.first;
+      expect(access.paths.codelabHome, '/other');
+      // Весь `env` профиля идёт в порт (api_key_env, источник env).
+      expect(repl.setup.scopeSeen.first.env['GW_KEY'], 'value');
+      expect(repl.setup.scopeSeen.first.cwd, '/work');
+      expect(access.paths.extraConfig, '/x/extra.yaml');
+      expect(
+        access.paths.projectDir,
+        isNull,
+        reason: 'нет runInProjectDirectory',
+      );
+    });
+
+    test('runInProjectDirectory даёт папку проекта', () async {
+      await open(editableProfile);
+
+      repl.line('/settings agent.effort high');
+      await repl.waitText('Updated agent.effort');
+
+      expect(repl.setup.accessSeen.first.paths.projectDir, '/work');
+    });
+
+    test(
+      '--local без цели projectLocal: строка отказа, запись не идёт',
+      () async {
+        await open(editableNoProjectProfile);
+        const line =
+            'This agent has no project-local config; run without --local.';
+
+        repl.line('/settings agent.effort high --local');
+        await repl.waitText(line);
+        repl.line('/settings agent.effort --reset --local');
+        await repl.waitText(line);
+
+        expect(repl.store.applied, isEmpty);
+      },
+    );
+  });
+}
+
+/// Строка вывода с [needle], без эха введённой команды.
+String _errorLine(String output, String needle) => output
+    .split('\n')
+    .firstWhere((l) => l.contains(needle) && !l.contains('> /settings'));
 
 ReplCommand _command(String name) =>
     replCommands.singleWhere((c) => c.name == name);

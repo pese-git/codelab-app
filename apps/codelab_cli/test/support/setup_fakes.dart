@@ -111,9 +111,16 @@ final class FakeProviderKeys implements ProviderKeys {
   /// Что вернёт `write`; по умолчанию создание.
   ProviderKeyWrite Function(String name, SecretValue value)? onWrite;
 
+  /// Ответы `stored` по очереди (потом — по `storedNames`): секрет мог
+  /// появиться между шагом ключа и записью.
+  final storedAnswers = <bool>[];
+
   @override
   Future<bool> stored(String name) async {
     journal.add('stored $name');
+    if (storedAnswers.isNotEmpty) {
+      return storedAnswers.removeAt(0);
+    }
     return storedNames.contains(name);
   }
 

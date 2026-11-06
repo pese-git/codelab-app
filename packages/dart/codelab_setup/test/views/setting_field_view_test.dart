@@ -250,5 +250,84 @@ mcp:
         isNot(contains(leak)),
       );
     });
+
+    test('base_url с токеном в query и userinfo маскируется (R0-2)', () async {
+      home.writeConfig('''
+providers:
+  q:
+    kind: openai-compatible
+    base_url: https://u:$leak@gw.test/v1?api_key=$leak&x=1
+  v:
+    kind: openai-compatible
+    base_url: https://gw.test/v1?token=$leak
+''');
+      final rows = settingFieldsOf(await home.load());
+
+      for (final id in ['q', 'v']) {
+        final url = row(rows, 'providers.$id.base_url');
+        expect(url.displayValue, isNot(contains(leak)));
+        expect(url.toString(), isNot(contains(leak)));
+        expect(url.displayValue, contains('gw.test'));
+      }
+      expect(
+        row(rows, 'providers.v.base_url').displayValue,
+        'https://gw.test/v1?token=<redacted>',
+      );
+    });
+
+    test('литерал по шаблону секрета в строковом значении скрыт', () async {
+      home.writeConfig('''
+providers:
+  gw:
+    kind: openai-compatible
+    models:
+      m:
+        name: $leak
+''');
+      final name = row(
+        settingFieldsOf(await home.load()),
+        'providers.gw.models.m.name',
+      );
+
+      expect(name.displayValue, isNot(contains(leak)));
+      expect(name.toString(), isNot(contains(leak)));
+    });
+
+    test(
+      'токен в пути с percent-кодированием скрыт (общее правило ядра)',
+      () async {
+        home.writeConfig('''
+providers:
+  gw:
+    kind: openai-compatible
+    base_url: https://gw.test/sk%2Dtest%2Dleak%2D0123456789/v1
+''');
+        final url = row(
+          settingFieldsOf(await home.load()),
+          'providers.gw.base_url',
+        );
+
+        expect(url.displayValue, '<redacted>');
+        expect(url.value, '<redacted>');
+      },
+    );
+
+    test(
+      'api_key_secret с именем вида sk-… внутри слова не скрывается',
+      () async {
+        home.writeConfig('''
+providers:
+  gw:
+    kind: openai-compatible
+    api_key_secret: codelab/sk-anthropic-production-key
+''');
+        final secret = row(
+          settingFieldsOf(await home.load()),
+          'providers.gw.api_key_secret',
+        );
+
+        expect(secret.displayValue, 'codelab/sk-anthropic-production-key');
+      },
+    );
   });
 }

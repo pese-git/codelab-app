@@ -9,6 +9,7 @@
 //       required ProviderSetupFlow flow,
 //       required Terminal terminal,
 //       String? providerId,
+//       String Function(ConfigTarget target)? pathOf,
 //     });
 //     sealed class ProviderWizardResult;
 //     final class ProviderWizardSaved { String providerId; }
@@ -21,8 +22,11 @@
 // Порты — фейки (`test/support/setup_fakes.dart`); синхронизация — ожидание
 // текста в выводе (`eventually`), без таймеров теста.
 
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:codelab_cli/src/setup/prompt_line.dart';
 import 'package:codelab_cli/src/setup/provider_wizard.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:test/test.dart';
@@ -56,6 +60,7 @@ void main() {
       ),
       terminal: terminal,
       providerId: providerId,
+      pathOf: (_) => '/h/config.yaml',
     );
     return result;
   }
@@ -233,8 +238,9 @@ void main() {
 
   group('скрытый ввод ключа (U-17)', () {
     /// Доводит мастер до `? API key ›` на Custom OpenAI-compatible.
-    Future<ProviderWizardResult> toKeyField() async {
-      final result = start();
+    late Future<ProviderWizardResult> running;
+    Future<void> toKeyField() async {
+      running = start();
       await see('? API type');
       pick(customOpenai);
       await see('? Base URL ›');
@@ -243,11 +249,10 @@ void main() {
       await see('? API key source');
       terminal.press(keyEnter); // Store in file as "codelab/gw-example"
       await see('? API key ›');
-      return result;
     }
 
     test('эхо — «*» по числу рун, значение не печатается', () async {
-      final result = await toKeyField();
+      await toKeyField();
 
       terminal.type(leakMarker);
       await see('*' * leakMarker.length);
@@ -255,23 +260,23 @@ void main() {
       expect(terminal.errorText, isNot(contains(leakMarker)));
 
       terminal.press(keyCtrlC);
-      await result;
+      await running;
       expect(terminal.text, isNot(contains(leakMarker)));
     });
 
     test('руны, а не байты: «*» по числу символов', () async {
-      final result = await toKeyField();
+      await toKeyField();
 
       terminal.type('ключ🙂');
       await see('****');
 
       terminal.press(keyCtrlC);
-      await result;
+      await running;
       expect(terminal.text, isNot(contains('ключ')));
     });
 
     test('Ctrl+R показывает значение и снова прячет его', () async {
-      final result = await toKeyField();
+      await toKeyField();
       terminal.type(leakMarker);
       await see('*' * leakMarker.length);
 
@@ -289,13 +294,13 @@ void main() {
       expect(terminal.text.substring(mark), isNot(contains(leakMarker)));
 
       terminal.press(keyCtrlC);
-      await result;
+      await running;
     });
 
     test(
       'Ctrl+U очищает поле: проверка получает только новое значение',
       () async {
-        final result = await toKeyField();
+        await toKeyField();
         terminal.type('wrong-value');
         await see('*' * 'wrong-value'.length);
 
@@ -309,12 +314,12 @@ void main() {
         expect(terminal.text, isNot(contains(leakMarker)));
 
         terminal.press(keyCtrlC);
-        await result;
+        await running;
       },
     );
 
     test('пустой ключ — «Enter the API key.», поле остаётся', () async {
-      final result = await toKeyField();
+      await toKeyField();
 
       terminal.press(keyEnter);
 
@@ -322,7 +327,7 @@ void main() {
       expect(check.calls, isEmpty);
 
       terminal.press(keyCtrlC);
-      await result;
+      await running;
     });
   });
 
@@ -387,6 +392,166 @@ void main() {
       terminal.press(keyCtrlC);
 
       await expectCancelled(result);
+    });
+  });
+
+  group('ревью 4a: вывод и ввод мастера', () {
+    /// Доводит мастер до проверки на Custom OpenAI-compatible без ключа.
+    Future<void> toCheck({String url = 'https://gw.example/v1'}) async {
+      await see('? API type');
+      pick(customOpenai);
+      await see('? Base URL ›');
+      terminal.type(url);
+      terminal.press(keyEnter);
+      await see('? API key source');
+      pick(2);
+      await eventually(() => check.calls.isNotEmpty);
+    }
+
+    test('управляющие последовательности из id модели не доходят до '
+        'терминала', () async {
+      final result = start();
+      await toCheck();
+
+      check.respond(modelsOk(['m\x1b]52;c;AAAA\x07']));
+
+      await see('ok, 1 models');
+      expect(terminal.text, isNot(contains('\x1b]')));
+      expect(terminal.text, isNot(contains('\x07')));
+      terminal.press(keyCtrlC);
+      await result;
+    });
+
+    test('404: «Model list not found (404)»', () async {
+      final result = start();
+      await toCheck();
+
+      check.respond(
+        const CheckFailure(
+          ProviderCheckFailure(
+            kind: ProviderCheckFailureKind.notFound,
+            statusCode: 404,
+            message: 'nf',
+          ),
+        ),
+      );
+
+      await see('Model list not found (404)');
+      terminal.press(keyCtrlC);
+      await result;
+    });
+
+    test('окно контекста проверяет автомат: неверное значение — тот же шаг '
+        'снова', () async {
+      final result = start();
+      await toCheck();
+      check.respond(const CheckOk([RemoteModel('m1')]));
+      await see('? Model (type to filter) ›');
+      terminal.press(keyEnter);
+      await see('? Context window for m1 (tokens) ›');
+
+      terminal.press(keyCtrlU);
+      terminal.type('abc');
+      terminal.press(keyEnter);
+
+      await eventually(
+        () => '? Context window for m1'.allMatches(terminal.text).length >= 2,
+        reason: terminal.text,
+      );
+      expect(terminal.text, isNot(contains('Enter a whole number')));
+      terminal.press(keyCtrlC);
+      await result;
+    });
+
+    test('сводка без query и userinfo адреса', () async {
+      final result = start();
+      await toCheck(url: 'https://gw.example/v1?token=$leakMarker');
+      check.respond(modelsOk(['m1']));
+      await see('? Model (type to filter) ›');
+      terminal.press(keyEnter);
+      await see('? Save? [Y/n]');
+
+      // Поле адреса показывает набранное человеком; сводка и проверка — нет.
+      final afterTyping = terminal.text.substring(
+        terminal.text.indexOf('Checking'),
+      );
+      expect(afterTyping, contains('Provider "gw-example"'));
+      expect(afterTyping, isNot(contains(leakMarker)));
+      expect(afterTyping, isNot(contains('token=')));
+      terminal.press(keyCtrlC);
+      await result;
+    });
+
+    test('вставка нескольких строк в поле ключа отклоняется без цитирования '
+        'и спрашивается снова (D14)', () async {
+      final result = start();
+      await see('? API type');
+      pick(customOpenai);
+      await see('? Base URL ›');
+      terminal.type('https://gw.example/v1');
+      terminal.press(keyEnter);
+      await see('? API key source');
+      terminal.press(keyEnter);
+      await see('? API key ›');
+
+      terminal.press(utf8.encode('${leakMarker}A\r${leakMarker}B\r'));
+      await see(keyRejectedLine);
+
+      expect(terminal.text, isNot(contains(leakMarker)));
+      expect(check.calls, isEmpty);
+      terminal.type(leakMarker);
+      terminal.press(keyEnter);
+      await eventually(() => check.calls.isNotEmpty);
+      expect(check.calls.single.key, leakMarker);
+      terminal.press(keyCtrlC);
+      await result;
+    });
+
+    test('Ctrl+R у длинного ключа стирает все перенесённые строки', () async {
+      final result = start();
+      await see('? API type');
+      pick(customOpenai);
+      await see('? Base URL ›');
+      terminal.type('https://gw.example/v1');
+      terminal.press(keyEnter);
+      await see('? API key source');
+      terminal.press(keyEnter);
+      await see('? API key ›');
+      terminal.type('a' * 200);
+      await see('*' * 200);
+
+      terminal.press(keyCtrlR);
+      await eventually(() => terminal.text.contains('a' * 200));
+      final mark = terminal.text.length;
+      terminal.press(keyCtrlR);
+      await eventually(() => terminal.text.length > mark);
+
+      // Префикс 12 + 200 символов при ширине 80 — три экранные строки.
+      expect(terminal.text.substring(mark), startsWith('\x1b[2A\r\x1b[J'));
+      terminal.press(keyCtrlC);
+      await result;
+    });
+
+    test('конец ввода во время записи не бросает запись', () async {
+      config.applyGate = Completer<void>();
+      final result = start();
+      await toCheck();
+      check.respond(modelsOk(['m1']));
+      await see('? Model (type to filter) ›');
+      terminal.press(keyEnter);
+      await see('? Save? [Y/n]');
+      terminal.press(keyEnter);
+      await eventually(() => config.applied.isNotEmpty);
+
+      await terminal.closeInput();
+      await pumpEventQueue();
+      var done = false;
+      unawaited(result.whenComplete(() => done = true));
+      await pumpEventQueue();
+      expect(done, isFalse, reason: 'мастер ждёт итога записи');
+
+      config.applyGate!.complete();
+      expect(await result, isA<ProviderWizardSaved>());
     });
   });
 

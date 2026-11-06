@@ -369,10 +369,16 @@ void main() {
 
     test('--local пишет слой projectLocal, пользовательский файл не '
         'меняется', () async {
+      // Слой projectLocal пишется только в доверенном проекте.
+      final trusted =
+          '$_initialConfig'
+          'trusted_projects:\n  - $project\n';
+      File('$home/config.yaml').writeAsStringSync(trusted);
+
       final (code, io) = await run([...fullFlags(), '--local', '--yes']);
 
       expect(code, 0, reason: io.stderrText);
-      expect(config(), _initialConfig);
+      expect(config(), trusted);
       expect(
         File('$project/.codelab/config.local.yaml').readAsStringSync(),
         contains('gw:'),
