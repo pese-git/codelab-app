@@ -6,6 +6,7 @@ import '../input/key_decoder.dart';
 import '../input/terminal.dart';
 import '../render/sanitize.dart';
 import 'prompt_line.dart';
+import 'wizard_steps.dart';
 
 /// Итог построчного мастера провайдера.
 ///
@@ -193,284 +194,95 @@ final class LineWizard {
     if (_result.isCompleted) {
       return;
     }
-    switch (state) {
-      case ChoosingPreset(:final presets):
-        _mode = _Pick(
-          title: 'API type',
-          labels: [for (final p in presets) p.label],
-          onPick: (i) => _flow.dispatch(PresetChosen(presets[i].id)),
-        );
-        _drawPick();
-      case EnteringBaseUrl(:final draft, :final error, :final insecureHost):
-        if (error != null) {
-          _say('  $error');
-        }
-        if (insecureHost != null) {
-          _mode = _LineMode(
-            prompt: '? Send the key unencrypted to $insecureHost? [y/N] ',
-            onSubmit: (text) {
-              if (text.trim().toLowerCase() == 'y') {
-                _flow.dispatch(InsecureAddressConfirmed(draft.baseUrl ?? ''));
-              } else {
-                // Автомат остаётся на шаге адреса: спросить его заново.
-                _render(EnteringBaseUrl(draft));
-              }
-            },
-          );
-        } else {
-          _mode = _LineMode(
-            prompt: '? Base URL › ',
-            initial: draft.baseUrl ?? '',
-            onSubmit: (text) => _flow.dispatch(BaseUrlSubmitted(text)),
-          );
-        }
-        _drawLine();
-      case final ChoosingKey key:
-        _renderKey(key);
-      case Checking(:final probeUrl):
-        _mode = const _Idle();
-        _out.write('Checking $probeUrl … ');
-      case final CheckFailed failed:
-        _renderCheckFailed(failed);
-      case final ChoosingModel model:
-        _renderModels(model);
-      case EnteringModelDetails(
-        :final modelId,
-        :final suggestedContextWindow,
-        :final error,
-      ):
-        if (error != null) {
-          _say('  $error');
-        }
-        _mode = _LineMode(
-          prompt: '? Context window for $modelId (tokens) › ',
-          initial: '$suggestedContextWindow',
-          // Проверка значения — у автомата (его ошибка покажется на шаге).
-          onSubmit: (text) => _flow.dispatch(
-            ModelDetailsSubmitted(
-              contextWindow: int.tryParse(text.trim()) ?? 0,
-            ),
-          ),
-        );
-        _drawLine();
-      case final Reviewing review:
-        _renderReview(review);
-      case Saving():
-        _mode = const _Saving();
-        _say('Saving…');
-      case SaveFailed(:final failure):
-        _say(_saveFailure(failure));
-        _finish(ProviderWizardFailed(_saveFailure(failure)));
-      case Done(:final plan):
-        _mode = const _Idle();
-        _finish(ProviderWizardSaved(plan.providerId));
-      case Cancelled():
-        _mode = const _Idle();
-        _finish(const ProviderWizardCancelled());
-    }
-  }
-
-  void _renderKey(ChoosingKey state) {
-    if (!state.ready) {
-      _mode = const _Idle();
-      return;
-    }
-    _backend = state.backend.id;
-    final id = state.draft.providerId;
-    final secret = 'codelab/$id';
-    if (state.notice case final notice?) {
-      _say(notice);
-    }
-    if (state.error case final error?) {
-      _say('  $error');
-    }
-    final labels = <String>[];
-    final actions = <void Function()>[];
-    if (state.canStoreSecret) {
-      if (state.existingSecret case final existing?) {
-        _say('A stored key $existing already exists in ${state.backend.id}.');
-        if (state.canKeepStored) {
-          labels.add('Use the stored key');
-          actions.add(() => _submitKey(const KeepStoredSecret()));
-        }
-        labels.add('Replace it');
-        actions.add(() => _askSecret(replace: true));
-      } else {
-        labels.add('Store in ${state.backend.id} as "$secret"');
-        actions.add(() => _askSecret(replace: false));
-      }
-    } else {
-      // Причина read-only бэкенда (D3) вместо варианта «Store…».
-      _say(
-        state.readOnlyHint ??
-            state.backend.unavailableReason ??
-            'The secret store is read-only.',
-      );
-    }
-    final env = state.suggestedEnvVar;
-    labels.add(
-      env == null
-          ? 'Read from an environment variable'
-          : 'Read from environment variable ($env)',
-    );
-    actions.add(env == null ? _askEnvName : () => _submitKey(UseEnvVar(env)));
-    labels.add('No key');
-    actions.add(() => _submitKey(const NoKey()));
-    _mode = _Pick(
-      title: 'API key source',
-      labels: labels,
-      onPick: (i) => actions[i](),
-    );
-    _drawPick();
-  }
-
-  void _submitKey(KeyChoice choice, {bool replace = false}) {
-    _flow.dispatch(KeySubmitted(choice, replaceExisting: replace));
-  }
-
-  void _askEnvName() {
-    _mode = _LineMode(
-      prompt: '? Environment variable › ',
-      onSubmit: (text) => _submitKey(UseEnvVar(text.trim())),
-    );
-    _drawLine();
-  }
-
-  void _askSecret({required bool replace}) {
-    _mode = _LineMode(
-      prompt: '? API key › ',
-      hidden: true,
-      onReject: () {
-        _say(keyRejectedLine);
-        _askSecret(replace: replace);
-      },
-      onSubmit: (text) {
-        if (text.isEmpty) {
-          _say('Enter the API key.');
-          _askSecret(replace: replace);
-          return;
-        }
-        _submitKey(StoreSecret(SecretValue(text)), replace: replace);
-      },
-    );
-    _drawLine();
-  }
-
-  void _renderCheckFailed(CheckFailed state) {
-    final failure = state.failure;
-    final title = switch (failure.kind) {
-      ProviderCheckFailureKind.unauthorized =>
-        'Key rejected (${failure.statusCode ?? 401})',
-      ProviderCheckFailureKind.unreachable => 'Server unreachable',
-      ProviderCheckFailureKind.timeout => 'Timed out after 10 s',
-      ProviderCheckFailureKind.tlsError => 'TLS error',
-      ProviderCheckFailureKind.notFound =>
-        'Model list not found (${failure.statusCode ?? 404})',
-      ProviderCheckFailureKind.badResponse =>
-        'Unexpected response (${failure.statusCode ?? '?'})',
-    };
-    _say('failed: $title');
-    final labels = <String>['Retry'];
-    final actions = <void Function()>[() => _flow.dispatch(const RetryCheck())];
-    if (state.canUseV1) {
-      labels.add('Use the address with /v1');
-      actions.add(() => _flow.dispatch(const UseV1Address()));
-    }
-    if (failure.kind == ProviderCheckFailureKind.notFound) {
-      labels.add('Enter model id manually');
-      actions.add(_askModelId);
-    }
-    if (state.canSkip) {
-      labels.add('Continue without checking');
-      actions.add(() => _flow.dispatch(const SkipCheck(confirmed: true)));
-    }
-    labels.add('Back');
-    actions.add(() => _flow.dispatch(const Back()));
-    _mode = _Pick(
-      title: 'The check failed',
-      labels: labels,
-      onPick: (i) => actions[i](),
-    );
-    _drawPick();
-  }
-
-  void _askModelId() {
-    _mode = _LineMode(
-      prompt: '? Model id › ',
-      onSubmit: (text) {
-        if (text.trim().isEmpty) {
-          _askModelId();
-          return;
-        }
-        _flow.dispatch(ModelEnteredManually(text.trim()));
-      },
-    );
-    _drawLine();
-  }
-
-  void _renderModels(ChoosingModel state) {
-    _say(
-      state.checked
-          ? 'ok, ${state.models.length} models'
-          : 'not verified; the model list is unknown',
-    );
-    if (state.models.isEmpty) {
-      _askModelId();
-      return;
-    }
-    final ids = [for (final m in state.models) m.id];
-    _mode = _Filter(
-      ids: ids,
-      onModel: (id) => _flow.dispatch(ModelChosen(id)),
-      onManual: _askModelId,
-      selected: state.currentModel == null
-          ? 0
-          : ids.indexOf(state.currentModel!).clamp(0, ids.length - 1),
-    );
-    _drawFilter();
-  }
-
-  void _renderReview(Reviewing state) {
-    if ((_pendingId != null || _pendingTarget != null) && state.error == null) {
+    if (state is Reviewing &&
+        (_pendingId != null || _pendingTarget != null) &&
+        state.error == null) {
       // Позиционный id и `--local` подкоманды применяются один раз (D15).
       final (id, target) = (_pendingId, _pendingTarget);
       _pendingId = _pendingTarget = null;
       _flow.dispatch(ReviewEdited(providerId: id, target: target));
       return;
     }
-    reviewSummary(
-      state.plan,
-      backend: _backend,
-      path: _pathOf?.call(state.plan.target),
-    ).forEach(_say);
-    for (final warning in state.warnings) {
-      _say('  $warning');
+    final step = wizardStepOf(state, backend: _backend, pathOf: _pathOf);
+    if (step.backend case final backend?) {
+      _backend = backend;
     }
-    if (state.error case final error?) {
-      _say('  $error');
-      if (state.refusal != null) {
-        _finish(ProviderWizardFailed(error));
-        return;
-      }
+    if (step.cancelled) {
+      _mode = const _Idle();
+      _finish(const ProviderWizardCancelled());
+      return;
     }
-    _mode = _LineMode(
-      prompt: '? Save? [Y/n] ',
-      onSubmit: (text) {
-        switch (text.trim().toLowerCase()) {
-          case '' || 'y' || 'yes':
-            _flow.dispatch(const ConfirmSave());
-          case 'n' || 'no':
-            _flow.dispatch(const Cancel());
-          default:
-            _drawLine();
+    if (step.savedProviderId case final id?) {
+      _mode = const _Idle();
+      _finish(ProviderWizardSaved(id));
+      return;
+    }
+    step.notes.forEach(_say);
+    if (step.failure case final failure?) {
+      _finish(ProviderWizardFailed(failure));
+      return;
+    }
+    if (step.saving) {
+      _mode = const _Saving();
+    } else if (step.waiting || step.progress != null) {
+      _mode = const _Idle();
+    }
+    if (step.progress case final progress?) {
+      _out.write(progress);
+    } else if (step.options.isNotEmpty) {
+      _mode = _Pick(
+        title: step.title ?? '',
+        labels: [for (final o in step.options) o.label],
+        onPick: (i) => _perform(step.options[i].action),
+      );
+      _drawPick();
+    } else if (step.models case final ids?) {
+      _mode = _Filter(
+        ids: ids,
+        onModel: (id) => _flow.dispatch(ModelChosen(id)),
+        onManual: () => _perform(const AskModelId()),
+        selected: step.currentModel == null
+            ? 0
+            : ids.indexOf(step.currentModel!).clamp(0, ids.length - 1),
+      );
+      _drawFilter();
+    } else if (step.field case final field?) {
+      _openField(field);
+    }
+  }
+
+  /// Исполняет действие шага: событие автомату или открытие поля.
+  void _perform(WizardAction action) {
+    switch (action) {
+      case SendEvent(:final event):
+        _flow.dispatch(event);
+      case Reask(:final message):
+        if (message != null) {
+          _say(message);
         }
-      },
+        if (_mode is _LineMode) {
+          _drawLine();
+        }
+      case AskSecret() || AskEnvName() || AskModelId() || AskField():
+        _openField(fieldOfAction(action)!);
+    }
+  }
+
+  void _openField(WizardField field) {
+    _mode = _LineMode(
+      prompt: field.prompt,
+      initial: field.initial,
+      hidden: field.hidden,
+      onSubmit: (text) => _perform(field.submit(text)),
+      onReject: field.hidden
+          ? () {
+              _say(keyRejectedLine);
+              _openField(field);
+            }
+          : null,
     );
     _drawLine();
   }
-
-  String _saveFailure(ProviderConfigNotSaved failure) =>
-      saveFailureText(failure);
 
   // --- ввод ----------------------------------------------------------------
 
@@ -741,37 +553,3 @@ final class _Filter extends _Mode {
     }
   }
 }
-
-/// Сводка плана перед записью (артборд `CliSetup`): провайдер, источник
-/// ключа, модель и файл. [backend] — хранилище секретов, [path] — файл слоя.
-/// Значение ключа в сводку не попадает (SETUP-1).
-List<String> reviewSummary(
-  ProviderSetupPlan plan, {
-  required String backend,
-  String? path,
-}) {
-  final keyText = switch (plan.key) {
-    StoreSecret() ||
-    KeepStoredSecret() => 'secret "${plan.secretName}" ($backend)',
-    UseEnvVar(:final name) => 'env $name',
-    NoKey() => 'none',
-  };
-  return [
-    'Provider "${plan.providerId}"',
-    '  (${plan.kind}${plan.baseUrl == null ? '' : ', ${(displayBaseUrl(plan.baseUrl) ?? '')}'})',
-    '  key    $keyText',
-    '  model  ${plan.providerId}/${plan.model.id}'
-        '${plan.makeDefault ? ' (default)' : ''}',
-    if (path != null) '  file   $path',
-  ];
-}
-
-/// Строка об отказе записи без значений секретов (D9).
-String saveFailureText(ProviderConfigNotSaved failure) =>
-    switch (failure.outcome) {
-      ConfigConflict() => 'The config file changed; run the command again.',
-      ConfigRejected(:final issues) =>
-        'The config was rejected: ${issues.map((i) => i.message).join('; ')}',
-      ConfigInlineSecret() => 'The config does not accept a literal key.',
-      _ => 'Could not save the provider (${failure.errorType ?? 'error'}).',
-    };

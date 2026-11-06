@@ -6,7 +6,7 @@ import '../cli_args.dart';
 import '../exit_codes.dart';
 import '../input/terminal.dart';
 import 'prompt_reader.dart';
-import 'provider_wizard.dart';
+import 'wizard_steps.dart';
 import 'setup_commands.dart';
 
 /// Значения флагов `codelab provider add`, с которыми работает автомат

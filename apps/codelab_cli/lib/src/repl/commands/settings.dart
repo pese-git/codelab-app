@@ -64,77 +64,31 @@ final class SettingsCommand implements ReplCommand {
       return;
     }
     final key = words.first;
-    final descriptor = editableDescriptorOf(key);
-    if (descriptor == null) {
-      context.say('Unknown setting $key. Run /settings to list them.');
+    // Единственное место проверок записи — `applySetting` (D17); пикер
+    // значений тоже не открывается для отказных ключей.
+    if (settingKeyRefusal(key) case final refusal?) {
+      context.say(refusal);
       return;
     }
-    if (isTrustBoundary(key)) {
-      context.say(trustBoundaryLine);
-      return;
-    }
-    if (isSecretKey(descriptor)) {
-      context.say('Use codelab secret set <name>');
-      return;
-    }
-    final row = settingRowsOf(snapshot).where((r) => r.key == key).firstOrNull;
+    final descriptor = editableDescriptorOf(key)!;
     if (words.length == 1 && !reset) {
+      final row = settingRowsOf(
+        snapshot,
+      ).where((r) => r.key == key).firstOrNull;
       _values(context, key, descriptor, row);
-      return;
-    }
-    if (isExternalSource(row)) {
-      context.say(
-        '$key is set by ${row!.sourceName}; it cannot be changed here.',
-      );
       return;
     }
     // Слой 3 (проектный `config.yaml`) не пишется (SETUP-3).
     final layer = local ? ConfigLayer.projectLocal : ConfigLayer.user;
-    final base = snapshot.layers[layer];
-    if (base == null) {
-      context.say(
-        'Cannot read the ${local ? 'local' : 'user'} config file; run '
-        '"codelab config check".',
-      );
-      return;
-    }
-    final ConfigEdit edit;
-    if (reset) {
-      if (base.get(key) == null) {
-        context.say('$key is not set in ${base.path}');
-        return;
-      }
-      edit = UnsetValue(key);
-    } else {
-      try {
-        edit = SetValue(
-          key,
-          SettingsRegistry.parseCliValue(descriptor, words.skip(1).join(' ')),
-        );
-      } on ConfigValueException catch (error) {
-        // Значение в текст не попадает: оно могло быть секретом (CFG-10).
-        context.say('$key: expected ${error.expected}');
-        return;
-      }
-    }
-    final outcome = await store.apply(base, [edit]);
-    switch (outcome) {
-      case ConfigSaved(:final restartRequiredKeys):
-        final restart = restartRequiredKeys.contains(key)
-            ? ' (applies after restart)'
-            : '';
-        context.say(
-          reset
-              ? 'Removed $key from ${base.path}$restart'
-              : 'Updated $key in ${base.path}$restart',
-        );
-      case ConfigConflict():
-        context.say('The config file changed; run the command again.');
-      case ConfigRejected(:final issues):
-        context.say('codelab: $key: ${issues.first.message}');
-      case ConfigInlineSecret(:final suggestedSecretName):
-        context.say('Use codelab secret set $suggestedSecretName');
-    }
+    context.say(
+      await applySetting(
+        store,
+        snapshot,
+        key,
+        raw: reset ? null : words.skip(1).join(' '),
+        layer: layer,
+      ),
+    );
   }
 
   void _list(ReplContext context, AgentConfigSnapshot snapshot) {

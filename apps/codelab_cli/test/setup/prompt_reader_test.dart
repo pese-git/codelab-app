@@ -8,7 +8,6 @@
 import 'dart:convert';
 
 import 'package:codelab_cli/codelab_cli.dart';
-import 'package:codelab_cli/src/setup/prompt_line.dart';
 import 'package:test/test.dart';
 
 import '../support/fake_terminal.dart';
