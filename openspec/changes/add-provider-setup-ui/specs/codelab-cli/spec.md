@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Мастер первого запуска CLI
-Когда CLI запускает встроенного агента (без `--agent`, `-a embedded`, `-a default`) в интерактивном режиме (REPL или `--ui tui`), а stdin и stdout — терминал, `composition_root.dart` SHALL до запуска агента вычислять `checkProviderReadiness` (spec client-agent-setup «Готовность провайдера»; design.md change `add-provider-setup-ui`, D16):
+Когда CLI запускает встроенного агента (без `--agent`, `-a embedded`, `-a default`) в интерактивном режиме (REPL или `--ui tui`), а stdin и stdout — терминал, точка сборки режимов `run.dart` SHALL до запуска агента вычислять `checkProviderReadiness` (spec client-agent-setup «Готовность провайдера»; design.md change `add-provider-setup-ui`, D16):
 - `ProviderReady` — обычный старт;
 - `ConfigBroken` — мастер НЕ SHALL запускаться и файл НЕ SHALL переписываться; старт идёт прежним путём (код `64` и проблемы конфига в stderr);
 - `NoProviderConfigured` — текст `No model provider is configured for the embedded agent.` и `Let's set one up. Press Ctrl+C to quit; run "codelab provider add" later to change it.`, затем мастер с целью `user` и `makeDefault: true`. После записи — `Saved provider "<id>". Starting the embedded agent…` и обычный старт; Ctrl+C или отмена — код `130`, файлы не изменены;
-- `ProviderKeyMissing` — при записываемом бэкенде вопрос `Store a key for "<id>" in <backend>? [Y/n]` и шаг ключа мастера в режиме правки; при ответе «нет» или бэкенде только для чтения — подсказка `No writable secret store (<reason>). Set <CODELAB_SECRET_…> or the provider's api_key_env variable.` и обычный старт.
+- `ProviderKeyMissing` — мастер НЕ SHALL запускаться и конфиг НЕ SHALL меняться (решение Q12 design.md, D16):
+  - ссылка `secret <имя>` и записываемый бэкенд — вопрос `Store a key for "<id>" in <backend>? [Y/n]`; при «да» — скрытый ввод `? API key ›` (пустое значение — `Enter the API key.` и ввод снова) и запись только секрета `<имя>`: успех — `Saved the key as "<имя>" in <backend>. Starting the embedded agent…`, отказ хранилища — `Could not store the key: <reason>`; при «нет» — `Starting without a key for "<id>". Store it later with: codelab secret set <имя>`;
+  - ссылка `secret <имя>` и бэкенд только для чтения — `No writable secret store (<reason>). Set <CODELAB_SECRET_…> or the provider's api_key_env variable.`;
+  - ссылка `env <VAR>` — `The key for "<id>" is read from <VAR>, which is not set. Set it and restart codelab.`;
+  - после любой из этих строк — обычный старт; Ctrl+C на вопросе или в поле — код `130`, ничего не записано.
 
 Без TTY, в `-p` и для внешних агентов (`-a stdio:…`, `-a ws://…`, `-a <id>`) мастер НЕ SHALL запускаться, и поведение SHALL оставаться прежним (решение Q4 design.md).
 
@@ -21,12 +25,20 @@
 - **WHEN** в PTY запускается `codelab`, а `config.yaml` содержит `budget.max_steps: 0`
 - **THEN** мастер не запускается, код `64`, stderr называет `budget.max_steps`, файл не изменён
 
+#### Scenario: Ключ провайдера отсутствует
+- **WHEN** в PTY при `secrets.backend: file` конфиг задаёт провайдера `gw` с моделью и `api_key_secret: codelab/gw`, секрета нет, запускается `codelab`, пользователь отвечает Enter и вводит `sk-test-leak-0123456789`
+- **THEN** stdout содержит `Saved the key as "codelab/gw" in file. Starting the embedded agent…`, секрет `codelab/gw` сохранён, `config.yaml` побайтово не изменён, REPL стартует; ни экран, ни `cli_history` не содержат маркера
+
+#### Scenario: Ключ из незаданной переменной
+- **WHEN** в PTY конфиг задаёт провайдера `gw` с моделью и `api_key_env: GW_KEY`, переменная не задана, и запускается `codelab`
+- **THEN** stdout содержит `The key for "gw" is read from GW_KEY, which is not set. Set it and restart codelab.`, вопроса нет, REPL стартует, конфиг не изменён
+
 #### Scenario: Внешний агент
 - **WHEN** в PTY запускается `codelab -a 'stdio:<scripted-агент>'` с пустым `CODELAB_HOME`
 - **THEN** мастер не запускается, REPL подключается к внешнему агенту
 
 ### Requirement: Команды /provider и /settings в REPL и TUI
-Клиентские команды `/provider add|list|remove [<id>]` SHALL вызывать те же обработчики, что `codelab provider add|list|remove`. Порт команд собирает `run.dart`; правило «`codelab_setup/io.dart` только из `run.dart`» не меняется (design.md change `add-provider-setup-ui`, D17). После записи встроенный агент сам перечитывает конфиг, и `/model` показывает новую модель без перезапуска.
+Клиентские команды `/provider add|list|remove [<id>]` SHALL вызывать те же обработчики, что `codelab provider add|list|remove`. В построчном REPL `/provider add`, пока идёт ход, SHALL печатать `Finish or cancel the current turn first (Ctrl+C), then run /provider add.` и не открывать мастер; без терминала — `/provider add needs a terminal; run "codelab provider add" with flags instead.` Ctrl+C и Esc в мастере REPL SHALL закрывать только мастер (`Provider setup cancelled.`), не завершая REPL; во время записи они игнорируются (решение Q14 design.md, D17). Порт команд собирает `run.dart`; правило «`codelab_setup/io.dart` только из `run.dart`» не меняется (design.md change `add-provider-setup-ui`, D17). После записи встроенный агент сам перечитывает конфиг, и `/model` показывает новую модель без перезапуска.
 
 **Мастер `/provider add`** SHALL идти на автомате `ProviderSetupFlow`, что и `codelab provider add`:
 - в построчном REPL — вопросами терминала;
@@ -41,10 +53,11 @@
 
 **`/settings`** (U-19) SHALL работать по ключам `SettingsRegistry` со `scope: shared` (решение пользователя Q6):
 - **в REPL:**
-  - `/settings` — список `key value source` по секциям реестра (`source`: `default`, `user`, `project`, `local`);
+  - `/settings` — список `key value source` по секциям реестра (`source`: `default`, `user`, `project`, `local`, `config` — файл `CODELAB_CONFIG`/`--config`, `env` — переменная окружения); ключ с источником `config` или `env` НЕ SHALL редактироваться: `<key> is set by <config|env>; it cannot be changed here.` (решение Q15 design.md, D17);
   - `/settings <key>` — пикер значений для `enumeration` и `bool`, для остальных типов — подсказка формата;
-  - `/settings <key> <value>` — запись в слой `user`, с `--local` — в `projectLocal` текущей папки; разбор — как у `codelab config set`;
-  - `/settings <key> --reset` — удаление ключа из этого слоя;
+  - `/settings <key> <value>` — запись в слой `user`, с `--local` — в `projectLocal` текущей папки; разбор — как у `codelab config set`; после записи — `Updated <key> in <path>`, ошибка разбора — `<key>: expected <expected>` без значения;
+  - `/settings <key> --reset` — удаление ключа из этого слоя: `Removed <key> from <path>`, ключа в слое нет — `<key> is not set in <path>`;
+  - неизвестный ключ или ключ не `scope: shared` — `Unknown setting <key>. Run /settings to list them.`; конфликт записи — `The config file changed; run the command again.`;
 - **в `--ui tui`** — полноэкранный экран по артборду `CliSettings`:
   - шапка с путями слоёв, столбец разделов, таблица `key · value · source`, строка-подсказка, полоса клавиш `↑↓ move · enter edit · ←→ choose · tab section · r reset · esc close`;
   - разделы — секции реестра, строки — только ключи реестра со `scope: shared` (разделов артборда без ключей реестра нет, design.md D17, D24);
@@ -53,13 +66,17 @@
   - `r` удаляет ключ из редактируемого слоя;
 - **в обоих режимах:**
   - ключи `secret: true` и типа `secretName` НЕ SHALL редактироваться: `Use codelab secret set <name>`;
-  - после записи ключа `restartRequired` — пометка `(applies after restart)`.
+  - после записи ключа `restartRequired` — пометка `(applies after restart)`; в REPL — в конце строки `Updated …`/`Removed …`.
 
 Для удалённого и стороннего агента `/provider add|remove` и запись `/settings` SHALL печатать `Provider settings are read-only for a remote agent. Run "codelab provider add" on the agent host.` (для стороннего — `… are managed by <agentName>.`) и НЕ SHALL писать конфиг (SETUP-2). Экран `/settings` TUI в этом случае открывается только для чтения. Слой 3 `/settings` и `/provider` НЕ SHALL писать (SETUP-3).
 
 #### Scenario: Изменение настройки
 - **WHEN** в REPL встроенного агента выполняется `/settings agent.effort high`, затем `/settings`
-- **THEN** `~/.codelab/config.yaml` содержит `agent.effort: high` с сохранёнными комментариями, список показывает `agent.effort high user`
+- **THEN** печатается `Updated agent.effort in <home>/config.yaml`, `~/.codelab/config.yaml` содержит `agent.effort: high` с сохранёнными комментариями, список показывает `agent.effort high user`
+
+#### Scenario: /provider add во время хода
+- **WHEN** в REPL идёт ход, и пользователь вводит `/provider add`
+- **THEN** печатается `Finish or cancel the current turn first (Ctrl+C), then run /provider add.`, вопросов мастера нет, ход продолжается
 
 #### Scenario: Секретный ключ не редактируется
 - **WHEN** выполняется `/settings providers.openai.api_key_secret x`
@@ -227,9 +244,16 @@ Id `embedded` и `default` зарезервированы (`reservedProfileIds` 
 - ошибка разбора аргументов (неизвестный флаг, флаг без значения) — `codelab: invalid arguments for provider` (`… mcp`).
 
 `codelab provider add` без клиентских флагов и с полным набором флагов ядра SHALL вести себя как `codelab-agent provider add`. Клиент добавляет (design.md change `add-provider-setup-ui`, D15; spec client-agent-setup «Мастер провайдера»):
-- **мастер на TTY.** Без обязательных флагов (`--kind`, `--model`, `--context-window`), когда stdin и stdout — терминал, SHALL запускаться интерактивный мастер `ProviderSetupFlow`: выбор пресета, адрес, ключ (скрытый ввод, как `codelab secret set`), проверка `/models`, модель, сводка `Provider "<id>" … ? Save? [Y/n]` (артборд `CliSetup`). Вариант «Store in <backend> as "codelab/<id>"» SHALL предлагаться только при записываемом бэкенде, иначе SHALL печататься причина бэкенда. Ctrl+C — код `130`, файлы не изменены. После записи — `Saved provider "<id>". Models are available in /model.`;
-- **клиентские флаги** `--preset <id>`, `--skip-check`, `--yes` SHALL проводить тот же автомат без вопросов, событиями из флагов ядра. Проверка `/models` SHALL выполняться до записи; без `--skip-check` отказ проверки — код `1` и `codelab: provider check failed: <kind> (<scheme://host:port>)`, файлы не изменены (SETUP-4). Недостающее значение при `--yes` — код `64` с именем флага;
-- без обязательных флагов и без TTY — ошибка использования `64`, как раньше. Ключ `--api-key-stdin` SHALL читаться скрытым вводом `StdinSecretInput`, как у `codelab secret set`. Значение ключа НЕ SHALL попадать в stdout, `profiles.json`, `cli_history` и лог CLI.
+- **мастер на TTY.** Без клиентских флагов и без единого флага ядра (`--kind`, `--base-url`, `--model`, `--context-window`, `--api-key-secret`, `--api-key-env`, `--api-key-stdin`, `--default`; `--local`, `--project` и id к ним не относятся), когда stdin и stdout — терминал, SHALL запускаться интерактивный мастер `ProviderSetupFlow`: выбор пресета, адрес, ключ (скрытый ввод, как `codelab secret set`), проверка `/models`, модель, сводка `Provider "<id>" … ? Save? [Y/n]` (артборд `CliSetup`). Вариант «Store in <backend> as "codelab/<id>"» SHALL предлагаться только при записываемом бэкенде, иначе SHALL печататься причина бэкенда. Ctrl+C — код `130`, файлы не изменены. После записи — `Saved provider "<id>". Models are available in /model.`;
+- **клиентские флаги** `--preset <id>`, `--skip-check`, `--yes` SHALL проводить тот же автомат без вопросов, событиями из флагов ядра (design.md D15, решение Q13). Без `--preset` пресет SHALL выбираться по `--kind`: `openai-compatible` → `custom-openai`, `anthropic` → `custom-anthropic`. Проверка `/models` SHALL выполняться до записи всегда; `--skip-check` разрешает запись только при отказе `unreachable` или `timeout`, прочие отказы и отказ без `--skip-check` — код `1` и `codelab: provider check failed: <kind> (<scheme://host:port>)`, файлы не изменены (SETUP-4). Ошибки использования (код `64`, справка `provider`, значения не цитируются):
+  - недостающее значение — `codelab: missing required options: <флаги>`;
+  - неизвестный `--preset` — `codelab: unknown --preset; use openai, anthropic, openrouter, ollama, custom-openai or custom-anthropic`; `--kind` другого вида, чем пресет, — `codelab: --kind does not match --preset`;
+  - `--kind gemini` — `codelab: --kind gemini is not supported with --preset, --yes or --skip-check; use the core flags only`; `--api-key-secret` — `codelab: --api-key-secret is not supported with --preset, --yes or --skip-check; use --api-key-stdin or --api-key-env`; `--project` — `codelab: --project is not supported with --preset, --yes or --skip-check; use --local or the user config`;
+  - `http://` к нелокальному хосту (в том числе с `--yes`, SETUP-10) — `codelab: --base-url sends the key unencrypted to <host>; use https, or run "codelab provider add" on a terminal to confirm`;
+  - без `--yes` и без терминала — `codelab: provider add needs --yes without a terminal`; без `--yes` на терминале — сводка и `? Save? [Y/n]`.
+
+  Успех — `Saved provider "<id>". Models are available in /model.`, код `0`. Ключ не принят или запись не удалась — `codelab: provider add failed: <причина без значений>`, код `1`, файлы не изменены (созданный секрет откатан, D9);
+- с флагами ядра без клиентских флагов (полный или неполный набор, на TTY или нет) и без флагов без TTY — `ProviderCommands.add` ядра без изменений, неполный набор — ошибка использования `64`, как раньше. Ключ `--api-key-stdin` SHALL читаться скрытым вводом `StdinSecretInput`, как у `codelab secret set`. Значение ключа НЕ SHALL попадать в stdout, `profiles.json`, `cli_history` и лог CLI.
 
 Справка `codelab --help` SHALL содержать строки `codelab provider add|list|remove` и `codelab mcp add|list|remove`. Агентская команда `/mcp` в REPL доступна по своему имени, а агентская `/config` — как `/agent:config`, потому что клиентская `/config` имеет приоритет (требование «Slash-меню и клиентские команды»).
 
@@ -252,6 +276,14 @@ Id `embedded` и `default` зарезервированы (`reservedProfileIds` 
 #### Scenario: Флаги без пропуска проверки
 - **WHEN** запускается `codelab provider add gw --preset openai --base-url http://127.0.0.1:<закрытый порт>/v1 --model m --context-window 8000 --api-key-env GW_KEY --yes`
 - **THEN** код `1`, stderr содержит `provider check failed: unreachable (http://127.0.0.1:<порт>)`, `config.yaml` не изменён
+
+#### Scenario: Неполный набор флагов ядра на TTY
+- **WHEN** в PTY запускается `codelab provider add gw --kind openai-compatible`
+- **THEN** вопросов нет, код, stdout и stderr побайтово совпадают с `codelab-agent provider add gw --kind openai-compatible`, файлы не изменены
+
+#### Scenario: --yes не подтверждает http к нелокальному хосту
+- **WHEN** запускается `codelab provider add gw --preset custom-openai --base-url http://gw.example:8080/v1 --model m --context-window 8000 --yes`
+- **THEN** код `64`, stderr содержит `codelab: --base-url sends the key unencrypted to gw.example`, запроса к `/models` нет, `config.yaml` не изменён
 
 #### Scenario: Ключ мастера не утекает
 - **WHEN** в мастере на TTY при `secrets.backend: file` вводится ключ `sk-test-leak-0123456789`

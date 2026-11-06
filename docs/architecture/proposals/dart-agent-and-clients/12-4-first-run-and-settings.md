@@ -451,7 +451,7 @@ final class BootWatchdog {
 него CLI всегда запускает встроенный агент, §9.11; change `add-app-settings-shell`, D21) и в
 `embedded`-профиле нет готового провайдера.
 
-1. До запуска агента `composition_root.dart` читает `AgentConfigStore.snapshot(cwd)` и вызывает
+1. До запуска агента `run.dart` CLI (единственное место `codelab_setup/io.dart`; change `add-provider-setup-ui`, D16) читает `AgentConfigStore.snapshot(cwd)` и вызывает
    `checkProviderReadiness` — только в интерактивном режиме (REPL или `--ui tui`), когда stdin и
    stdout — TTY. `ProviderReady` → обычный старт. В `--ui tui` мастер построчный и идёт до старта
    экрана TUI (§12.2.7).
@@ -461,13 +461,21 @@ final class BootWatchdog {
 3. Нет TTY на stdin или stdout или режим `-p` (pipe, CI) → мастер не запускается, поведение прежнее:
    без конфига — код `64` и проблема конфига в stderr (§9.11), без ключа — ошибка первого хода
    (решение Q4 change `add-provider-setup-ui`, D16; SETUP-7).
-4. `ProviderKeyMissing` (провайдер есть, ключа нет). Если `backend.writable`, CLI предлагает
-   `Store a key for "<id>" in <backend.id>? [Y/n]`. «Да» → шаг ключа мастера в режиме правки
-   этого провайдера (`editing`, старт с `ChoosingKey`); «нет» → подсказка и обычный старт.
-   Бэкенд только для чтения → вопроса нет: CLI печатает
-   `No writable secret store (<backend.unavailableReason>). Set <SecretNames.envOverride(name)> or the provider's api_key_env variable.`
-   и стартует обычным путём: первый ход даст прежнюю ошибку ключа, а в REPL можно выбрать модель
-   другого провайдера (D16).
+4. `ProviderKeyMissing` (провайдер есть, ключа нет) — мастер не запускается, конфиг не меняется
+   (решение Q12 (а) change `add-provider-setup-ui`, D16): конфиг уже ссылается на ключ, не хватает
+   только значения.
+   - Ссылка `secret <имя>`, `backend.writable` → `Store a key for "<id>" in <backend.id>? [Y/n]`.
+     «Да» → скрытый ввод `? API key ›` и `ProviderKeys.write(<имя>, …)`: успех —
+     `Saved the key as "<имя>" in <backend.id>. Starting the embedded agent…`, отказ —
+     `Could not store the key: <reason>`. «Нет» →
+     `Starting without a key for "<id>". Store it later with: codelab secret set <имя>`.
+   - Ссылка `secret <имя>`, бэкенд только для чтения →
+     `No writable secret store (<backend.unavailableReason>). Set <SecretNames.envOverride(name)> or the provider's api_key_env variable.`
+   - Ссылка `env <VAR>` →
+     `The key for "<id>" is read from <VAR>, which is not set. Set it and restart codelab.`
+
+   После любой строки CLI стартует обычным путём: первый ход без ключа даст прежнюю ошибку ключа, а в
+   REPL можно выбрать модель другого провайдера (D16). Ctrl+C → `130`, ничего не записано.
 5. `NoProviderConfigured` → полный мастер `ProviderSetupFlow` (§12.4.4) с целью
    `ConfigTarget.user()` и `makeDefault: true`.
 6. `Done` → CLI продолжает старт обычным путём. Встроенный агент читает уже записанный конфиг,
