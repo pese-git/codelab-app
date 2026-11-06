@@ -106,6 +106,31 @@ void main() {
     );
   });
 
+  group('page position (task 3.15, D24)', () {
+    for (final height in const [900.0, 1600.0]) {
+      testWidgets('the Providers body starts 28 px below the top of the '
+          'content area at 1280x${height.toInt()}', (tester) async {
+        final view = TestWidgetsFlutterBinding.ensureInitialized()
+            .platformDispatcher
+            .views
+            .single;
+        view.physicalSize = Size(1280, height);
+        await openPage(tester);
+
+        // Область содержимого — под строкой заголовка окна до низа окна.
+        final area = Rect.fromLTRB(
+          0,
+          tester.getRect(find.byType(TitleBar)).bottom,
+          1280,
+          height,
+        );
+        final body = tester.getTopLeft(_key('settings-providers'));
+        expect(body.dy - area.top, 28);
+        await tearDownApp(tester);
+      });
+    }
+  });
+
   group('layout', () {
     testWidgets('has the header, default model, key storage, rows and the '
         'config path with the D10 keys', (tester) async {
@@ -290,27 +315,123 @@ void main() {
     });
   });
 
-  group('wizard placeholders and unencrypted keys', () {
-    testWidgets('Add provider and Edit are inert with the D10 hint', (
-      tester,
-    ) async {
+  group('wizard entry points and unencrypted keys', () {
+    testWidgets('Add provider opens the wizard on the page session, without '
+        'forcing the default model', (tester) async {
       await openPage(tester);
 
-      expect(
-        tester.widget<CodeLabButton>(_key('providers-add')).onPressed,
-        isNull,
-      );
+      await tester.tap(_key('providers-add'));
+      await tester.pumpAndSettle();
+
+      expect(_key('provider-wizard'), findsOneWidget);
+      expect(find.text('Add provider'), findsWidgets);
+      expect(session.wizards.single.editing, isNull);
+      expect(session.wizards.single.forceDefault, isFalse);
+      await tester.tap(_key('provider-wizard-cancel'));
+      await tester.pumpAndSettle();
+      expect(_key('provider-wizard'), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('the empty state opens the wizard too', (tester) async {
+      store.user = {};
+      await openPage(tester);
+
+      await tester.tap(_key('providers-empty-add'));
+      await tester.pumpAndSettle();
+
+      expect(_key('provider-wizard'), findsOneWidget);
+      await tester.tap(_key('provider-wizard-cancel'));
+      await tester.pumpAndSettle();
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Edit opens the wizard for the row: title and the row as '
+        'the editing entry', (tester) async {
+      await openPage(tester);
+
+      await tester.tap(_key('providers-edit-local'));
+      await tester.pumpAndSettle();
+
+      expect(_key('provider-wizard'), findsOneWidget);
+      expect(find.text('Edit provider local'), findsOneWidget);
+      expect(session.wizards.single.editing!.id, 'local');
+      await tester.tap(_key('provider-wizard-cancel'));
+      await tester.pumpAndSettle();
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Edit is inactive with the Remove hint when the provider '
+        'lives in several layers', (tester) async {
+      store.projectLocal = {
+        'providers': {
+          'local': {'base_url': 'http://localhost:9999/v1'},
+        },
+      };
+      await openPage(tester);
+
       expect(
         tester.widget<CodeLabButton>(_key('providers-edit-local')).onPressed,
         isNull,
       );
       expect(
         find.byTooltip(
-          'Use codelab provider add in a terminal; the wizard comes in a '
-          'later version.',
+          'This provider is defined in several config files. Change it there.',
         ),
         findsWidgets,
       );
+      await tearDownApp(tester);
+    });
+
+    testWidgets('a saved provider: the page reloads and shows the saved '
+        'banner', (tester) async {
+      await openPage(tester);
+      final before = store.snapshots;
+
+      await tester.tap(_key('providers-add'));
+      await tester.pumpAndSettle();
+      await tester.tap(_key('provider-wizard-preset-custom-openai'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(_key('provider-wizard-next'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        _key('provider-wizard-base-url-field'),
+        'https://llm.example/v1',
+      );
+      await tester.tap(_key('provider-wizard-next'));
+      await tester.pumpAndSettle();
+      await tester.tap(_key('provider-wizard-key-none'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(_key('provider-wizard-next'));
+      await tester.pump(const Duration(milliseconds: 100));
+      session.wizardCheck.respond(
+        const CheckOk([RemoteModel('m1', contextWindow: 8000)]),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(_key('provider-wizard-model-m1'));
+      await tester.pumpAndSettle();
+      await tester.tap(_key('provider-wizard-save'));
+      await tester.pumpAndSettle();
+      // Перечитывание снимка после закрытия диалога идёт через
+      // `SharedPreferences` (профиль по умолчанию): нужны реальные тики.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(_key('provider-wizard'), findsNothing);
+      expect(store.snapshots, greaterThan(before));
+      expect(_key('providers-banner'), findsOneWidget);
+      // Агент в этом тесте не подключён: баннер предлагает «Connect» (D9).
+      expect(
+        find.text('Saved. Connect to start the agent with the new provider.'),
+        findsOneWidget,
+      );
+      expect(_key('providers-banner-connect'), findsOneWidget);
+      expect(_key('providers-row-llm-example'), findsOneWidget);
       await tearDownApp(tester);
     });
 

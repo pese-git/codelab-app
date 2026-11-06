@@ -17,6 +17,7 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_client_io/codelab_client_io.dart'
     show DirectoryExists, WorkingDirectoryProvider;
 import 'package:codelab_desktop/app/embedded_transport_resolver.dart';
+import 'package:codelab_desktop/app/provider_setup_offer.dart';
 import 'package:codelab_desktop/core/platform/connection_preferences.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/features/settings/application/connection_commands.dart';
@@ -140,6 +141,8 @@ void main() {
     DirectoryExists? directoryExists,
     List<ConnectionProfile> stored = const [],
     ProfileSecretSource? tokenSecrets,
+    ProviderSetupOffer? providerSetupOffer,
+    bool alsoRecording = false,
   }) {
     resolver = _RecordingResolver();
     shellLog = RecordingLogger();
@@ -147,7 +150,7 @@ void main() {
     final application = AcpClientApplication(transport: FakeAcpTransport());
     workspace = ClientWorkspace(
       backend: AcpClientBackend(application),
-      resolvers: [realResolver ?? resolver],
+      resolvers: [realResolver ?? resolver, if (alsoRecording) resolver],
     );
     const preferences = SharedPreferencesConnectionPreferences();
     parts = CodeLabShellParts.build(
@@ -166,6 +169,7 @@ void main() {
       logger: shellLog,
       eventLogger: eventLog,
       tokenSecrets: tokenSecrets,
+      providerSetupOffer: providerSetupOffer,
     );
     addTearDown(parts.close);
     return parts;
@@ -994,6 +998,188 @@ void main() {
         CodeLabConnectionStatus.connected,
       );
       expect(parts.connection.state.connectionMessage, isNull);
+    });
+  });
+
+  // Метка «нужен провайдер» (задача 3.12 change `add-provider-setup-ui`;
+  // agent-workbench-ui «Встроенный агент без провайдера»; design.md D21,
+  // D26): метка принадлежит попытке встроенного агента, любая новая попытка
+  // её сбрасывает, переподключение после мастера — только при той же метке.
+  group('provider setup notice (D26)', () {
+    late ProviderSetupOffer offer;
+    late bool needed;
+    late bool embeddedBroken;
+    Future<void>? openerGate;
+
+    void buildWithOffer({DirectoryExists? directoryExists}) {
+      offer = ProviderSetupOffer();
+      build(
+        directoryExists: directoryExists,
+        realResolver: EmbeddedTransportResolver(
+          ({required cwd, required hostProfile}) async {
+            await openerGate;
+            return embeddedBroken
+                ? throw EmbeddedAgentConfigException(
+                    const [],
+                    home: '/home/u/.codelab',
+                  )
+                : throw StateError('not reached in this group');
+          },
+          setupOffer: offer,
+          providerSetupNeeded: (cwd) async => needed,
+        ),
+        providerSetupOffer: offer,
+        alsoRecording: true,
+      );
+    }
+
+    setUp(() {
+      needed = true;
+      embeddedBroken = true;
+      openerGate = null;
+    });
+
+    test('a failed embedded attempt with the flag publishes the notice with '
+        'the folder; the raw message stays for the diagnostics', () async {
+      buildWithOffer();
+
+      await parts.connection.connect(embeddedConnectionProfile);
+
+      final state = parts.connection.state;
+      expect(state.connectionStatus, CodeLabConnectionStatus.failed);
+      expect(state.providerSetupNotice, isNotNull);
+      expect(state.providerSetupNotice!.cwd, '/work/app');
+    });
+
+    test('no flag: no notice, the message is the same as before', () async {
+      needed = false;
+      buildWithOffer();
+
+      await parts.connection.connect(embeddedConnectionProfile);
+
+      expect(parts.connection.state.providerSetupNotice, isNull);
+      expect(
+        parts.connection.state.connectionMessage,
+        contains('codelab config check'),
+      );
+    });
+
+    test(
+      'any new attempt resets the notice, even to another profile',
+      () async {
+        buildWithOffer();
+        await parts.connection.connect(embeddedConnectionProfile);
+        expect(parts.connection.state.providerSetupNotice, isNotNull);
+
+        await parts.connection.connect(_stdio);
+
+        expect(parts.connection.state.providerSetupNotice, isNull);
+      },
+    );
+
+    test('a reconnect also resets it', () async {
+      buildWithOffer();
+      await parts.connection.connect(embeddedConnectionProfile);
+      final first = parts.connection.state.providerSetupNotice;
+      expect(first, isNotNull);
+
+      await parts.connection.reconnect();
+
+      // Новая попытка встроенного агента снова не удалась: метка новая.
+      final second = parts.connection.state.providerSetupNotice;
+      expect(second, isNotNull);
+      expect(identical(first, second), isFalse);
+    });
+
+    test('a failure of attempt A during the preliminary awaits of attempt B '
+        'leaves no notice'
+        '', () async {
+      final openerRelease = Completer<void>();
+      final dirRelease = Completer<void>();
+      openerGate = openerRelease.future;
+      var dirChecks = 0;
+      buildWithOffer(
+        directoryExists: (_) async {
+          if (++dirChecks == 2) {
+            await dirRelease.future;
+          }
+          return true;
+        },
+      );
+
+      final a = parts.connection.connect(embeddedConnectionProfile);
+      await pumpEventQueue();
+      // B стартует и застревает в проверке папки, до своего номера попытки.
+      final b = parts.connection.connect(_stdio);
+      await pumpEventQueue();
+      openerRelease.complete();
+      await a;
+      await pumpEventQueue();
+
+      expect(parts.connection.state.providerSetupNotice, isNull);
+
+      dirRelease.complete();
+      await b;
+    });
+
+    test('providerSetupGuard runs one action at a time; the second call '
+        'is ignored while the first is open', () async {
+      buildWithOffer();
+      final release = Completer<void>();
+      var runs = 0;
+
+      final first = parts.connection.runProviderSetup(() async {
+        runs++;
+        await release.future;
+      });
+      final second = parts.connection.runProviderSetup(() async => runs++);
+      await second;
+      expect(runs, 1);
+
+      release.complete();
+      await first;
+      await parts.connection.runProviderSetup(() async => runs++);
+      expect(runs, 2);
+    });
+
+    int embeddedStarts() => shellLog.entries
+        .where((e) => '${e['event']}'.startsWith('Starting embedded ACP agent'))
+        .length;
+
+    test('connectAfterProviderSetup connects the embedded profile when the '
+        'notice is still the same, and logs the reconnect', () async {
+      buildWithOffer();
+      await parts.connection.connect(embeddedConnectionProfile);
+      final notice = parts.connection.state.providerSetupNotice!;
+      expect(embeddedStarts(), 1);
+
+      await parts.connection.connectAfterProviderSetup(notice);
+
+      expect(embeddedStarts(), 2);
+      expect(
+        eventLog.entries.map((e) => e['event']),
+        contains('provider_wizard.reconnect'),
+      );
+    });
+
+    test('connectAfterProviderSetup does nothing when another attempt started '
+        'meanwhile, and logs the skip', () async {
+      buildWithOffer();
+      await parts.connection.connect(embeddedConnectionProfile);
+      final notice = parts.connection.state.providerSetupNotice!;
+
+      await parts.connection.connect(_stdio);
+      await parts.connection.connectAfterProviderSetup(notice);
+
+      expect(embeddedStarts(), 1);
+      expect(
+        eventLog.entries.map((e) => e['event']),
+        contains('provider_wizard.reconnect_skipped'),
+      );
+      expect(
+        eventLog.entries.map((e) => e['event']),
+        isNot(contains('provider_wizard.reconnect')),
+      );
     });
   });
 }

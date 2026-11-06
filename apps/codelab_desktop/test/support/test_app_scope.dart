@@ -58,6 +58,7 @@ final class CodeLabTestBinding {
     ProfileStore? profileStore,
     ProfileSecrets? profileSecrets,
     ProviderSettingsOpener? providerSettingsOpener,
+    Future<bool> Function(String cwd)? providerSetupProbe,
     bool stdioDefault = true,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
@@ -108,6 +109,9 @@ final class CodeLabTestBinding {
           providerSettingsOpener ??
           (access, env) async =>
               throw StateError('provider settings are not part of this test'),
+      // Настоящая функция читала бы `$CODELAB_HOME` разработчика: по
+      // умолчанию «провайдер не нужен» (прежнее поведение баннера).
+      providerSetupProbe: providerSetupProbe ?? (cwd) async => false,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own
