@@ -1356,7 +1356,12 @@ providers:
       final result = await check();
 
       expect(result.stdout, contains('Default model: gw/m (first-provider)'));
-      expect(result.stdout.join('\n'), isNot(contains('codelab/gw')));
+      // Имя секрета названо прежним предупреждением `secretLines` (не
+      // значение); строка модели его не несёт.
+      final line = result.stdout.singleWhere(
+        (l) => l.startsWith('Default model:'),
+      );
+      expect(line, isNot(contains('codelab/gw')));
     });
   });
 }

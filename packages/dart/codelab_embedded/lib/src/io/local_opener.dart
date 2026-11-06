@@ -149,6 +149,11 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
           random: Random.secure(),
         ),
         projectFiles: ProjectFilesLoader(home: home, local: env),
+        // Память последней явно выбранной модели над тем же `$CODELAB_HOME`,
+        // что у бинаря `codelab-agent`: один пользователь и один конфиг, выбор
+        // модели в CLI виден app со следующей сессии (design.md change
+        // `optional-default-model`, D8). Сценарный открыватель памяти не имеет.
+        lastModel: FileLastModelStore(codelabHome: home, logger: logger),
         // PERM-11 (D8): что агент перечитывает на лету, модель не правит без
         // человека; те же входы, что у загрузки конфига выше.
         agentConfigPaths: agentConfigPathsFor(

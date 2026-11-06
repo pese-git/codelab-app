@@ -318,6 +318,16 @@ final class AgentHost {
                   environment: options.environment,
                   extraConfig: options.configPath,
                 ),
+          // Память последней явно выбранной модели (design.md change
+          // `optional-default-model`, D8): файл под `$CODELAB_HOME`. Сценарий
+          // `--llm-script` детерминирован и от файла пользователя не зависит,
+          // поэтому памяти не имеет и `state/` не создаёт.
+          lastModel: options.llmScript != null
+              ? null
+              : FileLastModelStore(
+                  codelabHome: options.codelabHome,
+                  logger: logger,
+                ),
           // Файлы проекта сессии: `AGENTS.md`/`CLAUDE.md` в системный промпт.
           // Читаются с локальной ФС процесса только по stdio: по WebSocket
           // загрузчик не передаётся (D2). Сценарий `--llm-script` не трогает `$CODELAB_HOME`

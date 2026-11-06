@@ -18,13 +18,30 @@ import 'schema.dart' show defaultProjectContextMaxBytes;
 export 'schema.dart'
     show defaultProjectContextMaxBytes, maxProjectContextMaxBytes;
 
-/// ЗАГЛУШКА красных тестов change `optional-default-model` (D1): только
-/// значения enum; doc-комментарий и логика — задача 1.2.
+/// Откуда взялась модель по умолчанию (design.md change
+/// `optional-default-model`, D1).
 ///
-/// Источник модели: `config` — явная `agent.default_model`, `lastUsed` —
-/// последняя выбранная (только рантайм), `firstProvider` — первый провайдер.
-/// Проводные имена: `config`, `last-used`, `first-provider`.
-enum DefaultModelSource { config, lastUsed, firstProvider }
+/// Почему enum ядра: источник нужен логам (`session.model.selected`, §16),
+/// `config check` и правилу выбора модели сессии ([selectSessionModel]), а
+/// рантайм и хосты не должны разбирать строки.
+///
+/// Значения: [config] — явная `agent.default_model` любого слоя (побеждает
+/// всё и проверяется строго); [lastUsed] — последняя явно выбранная
+/// пользователем модель (даёт только рантайм, в `CoreConfig` её не бывает);
+/// [firstProvider] — первая модель первого доступного провайдера. Проводные
+/// имена в логах и `config check`: `config`, `last-used`, `first-provider`
+/// ([wireName]). Идея порядка выбора — поведение OpenCode в описании
+/// пользователя (код не изучался и не воспроизводится, design.md, Context).
+enum DefaultModelSource {
+  config('config'),
+  lastUsed('last-used'),
+  firstProvider('first-provider');
+
+  const DefaultModelSource(this.wireName);
+
+  /// Имя в логах, событиях и выводе `config check`.
+  final String wireName;
+}
 
 /// Часть конфигурации, относящаяся к разрешениям (`agent-core-architecture`
 /// §7, §15.3, §15.4).
@@ -265,8 +282,32 @@ final class CoreConfig {
       }
     }
     final bare = next.withoutProject;
+    final finalProviders = [
+      for (final provider in next.providers)
+        if (!providers.contains(provider.config.name))
+          provider
+        else if (oldProviders[provider.config.name] case final old?)
+          CatalogProvider(
+            old.config,
+            models: provider.models,
+            key: old.key,
+            headerTemplates: old.headerTemplates,
+          ),
+    ];
+    // D10: неявная модель считается заново по итоговым провайдерам, иначе
+    // отложенный новый провайдер, вставленный перед прежним, стал бы моделью
+    // и `validateSnapshot` отклонил бы всю перезагрузку. Явная модель — по
+    // прежним правилам (`deferred.defaultModel`).
+    final implicit =
+        !deferred.defaultModel &&
+            next.defaultModelSource == DefaultModelSource.firstProvider
+        ? implicitDefaultModel(finalProviders, problems, next.effort)
+        : null;
     return next._copyWith(
-      defaultModel: deferred.defaultModel ? previous.defaultModel : null,
+      defaultModel: deferred.defaultModel ? previous.defaultModel : implicit,
+      defaultModelSource: deferred.defaultModel
+          ? previous.defaultModelSource
+          : null,
       permissions: deferred.permissions ? previous.permissions : null,
       mcpServers: [
         for (final server in next.mcpServers)
@@ -277,18 +318,7 @@ final class CoreConfig {
           else
             ?oldServers[server.name],
       ],
-      providers: [
-        for (final provider in next.providers)
-          if (!providers.contains(provider.config.name))
-            provider
-          else if (oldProviders[provider.config.name] case final old?)
-            CatalogProvider(
-              old.config,
-              models: provider.models,
-              key: old.key,
-              headerTemplates: old.headerTemplates,
-            ),
-      ],
+      providers: finalProviders,
       providerProblems: problems,
       withoutProject: bare == null
           ? null
@@ -307,6 +337,7 @@ final class CoreConfig {
   /// «снимка нет»).
   CoreConfig _copyWith({
     ModelRef? defaultModel,
+    DefaultModelSource? defaultModelSource,
     PermissionsConfig? permissions,
     List<McpServerConfig>? mcpServers,
     List<CatalogProvider>? providers,
@@ -315,6 +346,7 @@ final class CoreConfig {
     Map<String, Object?>? withoutProjectValues,
   }) => CoreConfig(
     defaultModel: defaultModel ?? this.defaultModel,
+    defaultModelSource: defaultModelSource ?? this.defaultModelSource,
     permissions: permissions ?? this.permissions,
     budget: budget,
     compaction: compaction,
@@ -368,8 +400,8 @@ final class CoreConfig {
 
   final ModelRef defaultModel;
 
-  /// ЗАГЛУШКА (задача 1.2, D1): источник [defaultModel]. Пока всегда
-  /// `config` — резолвер его не вычисляет.
+  /// Источник [defaultModel]: `config` или `firstProvider` (D1). По умолчанию
+  /// `config` — хосты и тесты, задающие модель напрямую, считают её явной.
   final DefaultModelSource defaultModelSource;
 
   /// Уровень рассуждения новой сессии (`agent.effort`, §2.12.3, §15.4);

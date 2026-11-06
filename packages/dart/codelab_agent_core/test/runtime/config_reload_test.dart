@@ -1697,6 +1697,9 @@ void main() {
       final old = await rig.session();
       expect(old.model.id, 'x');
       _drop(rig.user, 'agent.default_model');
+      // Пустой раздел `agent` стал бы отдельным изменившимся ключом `agent`
+      // (пустой узел дерева): тест проверяет именно ключ модели.
+      rig.user.remove('agent');
 
       final report = await rig.runtime.reloadConfig();
 

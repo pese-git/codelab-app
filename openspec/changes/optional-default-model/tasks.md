@@ -15,7 +15,7 @@
 
 ## 1. Ядро: схема и модель уровня конфига
 
-- [ ] 1.1 `[agent]` Красные тесты `packages/dart/codelab_agent_core/test/config/config_schema_test.dart` и соседние:
+- [x] 1.1 `[agent]` Красные тесты `packages/dart/codelab_agent_core/test/config/config_schema_test.dart` и соседние:
   - заменить тест `agent.default_model is required` на «провайдер без ключа модели → `gw/m`, `firstProvider`» (agent-configuration «Схема и строгая проверка», сценарий «Провайдер без agent.default_model»);
   - сценарии требования «Модель по умолчанию без agent.default_model»:
     - «Первая модель первого провайдера»;
@@ -26,17 +26,17 @@
     - «Явная модель на несуществующую модель»;
     - «CODELAB_MODEL — явная модель» (через слой окружения в тесте `codelab_agent_io`);
   - снимок без проекта: модель и источник полного снимка (D1).
-- [ ] 1.2 `[agent]` Реализация в `codelab_agent_core/lib/src/config/`:
+- [x] 1.2 `[agent]` Реализация в `codelab_agent_core/lib/src/config/`:
   - `DefaultModelSource` (enum с проводными именами `config`, `last-used`, `first-provider`);
   - `CoreConfig.defaultModelSource` (в конструкторе, `_copyWith`, `withDeferred`, сборке в `resolve.dart`);
   - `_defaultModel` по D1–D4, событие `config.model.none` — константа рядом с `validationIncompleteEvent`;
   - экспорт из публичного бареля, doc-комментарии на русском (почему, для чего, как; ссылки D1–D4; источник идеи — OpenCode, D-контекст).
-- [ ] 1.3 `[agent]` Красные тесты перезагрузки `codelab_agent_core/test/runtime/config_reload_test.dart` и `test/config/config_reload_plan_test.dart` — сценарий «Отложенный новый провайдер не становится моделью» (D10); удаление явного ключа — переход на `firstProvider` для новых сессий.
-- [ ] 1.4 `[agent]` Реализация D10 в `CoreConfig.withDeferred` (пересчёт неявной модели по итоговым провайдерам) и `config_reload_plan.dart` (неявная модель не выставляет `deferred.defaultModel`).
+- [x] 1.3 `[agent]` Красные тесты перезагрузки `codelab_agent_core/test/runtime/config_reload_test.dart` и `test/config/config_reload_plan_test.dart` — сценарий «Отложенный новый провайдер не становится моделью» (D10); удаление явного ключа — переход на `firstProvider` для новых сессий.
+- [x] 1.4 `[agent]` Реализация D10 в `CoreConfig.withDeferred` (пересчёт неявной модели по итоговым провайдерам) и `config_reload_plan.dart` (неявная модель не выставляет `deferred.defaultModel`).
 
 ## 2. Ядро: выбор модели сессии и порт последней модели
 
-- [ ] 2.1 `[agent]` Красные тесты `codelab_agent_core/test/runtime/` (новый `session_model_selection_test.dart`) с фейком `LastModelStore`:
+- [x] 2.1 `[agent]` Красные тесты `codelab_agent_core/test/runtime/` (новый `session_model_selection_test.dart`) с фейком `LastModelStore`:
   - agent-runtime «Модель новой сессии»:
     - «Явная модель конфига побеждает последнюю»;
     - «Последняя модель побеждает первого провайдера» — `model_change`, `configOptions` через `AgentRuntime.models`;
@@ -50,16 +50,16 @@
     - восстановление из журнала и смена агента не вызывают;
     - «Сбой записи не ломает смену модели»;
   - `loadSession` без модели журнала по-прежнему берёт `CoreConfig.defaultModel` без шага 2 (D5).
-- [ ] 2.2 `[agent]` Реализация:
+- [x] 2.2 `[agent]` Реализация:
   - порт `LastModelStore` (`codelab_agent_core/lib/src/host/` или `session/`, рядом с портами сервисов) и `AgentCoreServices.lastModel`;
   - чистая функция `selectSessionModel` (D5);
   - `AgentRuntimeImpl.createSession`/`loadSession`/`_Session.setModel` по D5–D6, события `session.model.selected`, `model.last_used.ignored`, `model.last_used.write_failed`;
   - doc-комментарии на русском.
-- [ ] 2.3 `[agent]` ACP-проекция без правки кода: прогнать `codelab_agent_acp` тесты `config_options`/`set_config_option` и добавить красный, затем зелёный тест «`session/new` без ключа модели → `currentValue` неявной модели; `set_config_option model` → `write`» на фейке порта (D11).
+- [x] 2.3 `[agent]` ACP-проекция без правки кода: прогнать `codelab_agent_acp` тесты `config_options`/`set_config_option` и добавить красный, затем зелёный тест «`session/new` без ключа модели → `currentValue` неявной модели; `set_config_option model` → `write`» на фейке порта (D11).
 
 ## 3. `codelab_agent_io`: файл состояния, PERM-11, подкоманды
 
-- [ ] 3.1 `[agent]` Красные тесты `packages/dart/codelab_agent_io/test/state/last_model_file_test.dart`:
+- [x] 3.1 `[agent]` Красные тесты `packages/dart/codelab_agent_io/test/state/last_model_file_test.dart`:
   - запись и чтение `{"v":1,"model":"b/y"}`;
   - создание `state/`;
   - уникальный tmp и `rename` — нет `*.tmp-*` после записи;
@@ -67,30 +67,30 @@
   - «Повреждённый файл состояния» (не строка, обрезанный JSON, `v: 9`, больше 4 KiB) — `null`, событие `model.last_used.ignored` с категорией без содержимого, файл не изменён;
   - нет файла — `null` без события;
   - «Секретов нет в файле и логе».
-- [ ] 3.2 `[agent]` Реализация `FileLastModelStore` (`lib/src/state/last_model_file.dart`, экспорт из бареля; D7) и обновление `packages/dart/codelab_agent_io/AGENTS.md` §1.
-- [ ] 3.3 `[agent]` Красный тест `test/config/agent_config_paths_test.dart`: путь `last-model.json` в `agentConfigPathsFor` и его нет в `watchedConfigFiles` (сценарий «Файл под защитой PERM-11»). Затем реализация в `agent_config_paths.dart`.
-- [ ] 3.4 `[agent]` Красные тесты `test/cli/cli_config_commands_test.dart` и `test/cli/provider_commands_test.dart`:
+- [x] 3.2 `[agent]` Реализация `FileLastModelStore` (`lib/src/state/last_model_file.dart`, экспорт из бареля; D7) и обновление `packages/dart/codelab_agent_io/AGENTS.md` §1.
+- [x] 3.3 `[agent]` Красный тест `test/config/agent_config_paths_test.dart`: путь `last-model.json` в `agentConfigPathsFor` и его нет в `watchedConfigFiles` (сценарий «Файл под защитой PERM-11»). Затем реализация в `agent_config_paths.dart`.
+- [x] 3.4 `[agent]` Красные тесты `test/cli/cli_config_commands_test.dart` и `test/cli/provider_commands_test.dart`:
   - тест «без --default в пустом CODELAB_HOME: warning о прежней проблеме, код 0» → нет строк `warning:` (сценарий «provider add в пустом CODELAB_HOME без --default»);
   - строка 184 (`config set` → `warning: agent.default_model: required`) → новый текст («config set и get»);
   - `config check`: «Модель первого провайдера в config check», «Источник модели в config check»;
   - «provider remove единственного провайдера без ключа модели» — нет `change the model first`;
   - «provider remove провайдера последней модели»;
   - `config_writer_test.dart`: «Первая запись в пустой конфиг» (событие), «Первый провайдер без модели по умолчанию».
-- [ ] 3.5 `[agent]` Реализация:
+- [x] 3.5 `[agent]` Реализация:
   - `ConfigCommands.check` — строка `Default model:` через `selectSessionModel` и `FileLastModelStore.read()`, строка `warning:` о нечитаемом файле (D9);
   - `ProviderCommands.remove` — подсказка по `issue.event` (D9);
   - doc-комментарии.
 
 ## 4. Хосты
 
-- [ ] 4.1 `[agent]` Красные тесты:
+- [x] 4.1 `[agent]` Красные тесты:
   - `apps/codelab_agent/test/config_invalid_process_test.dart` — «no model anywhere» ожидает новый текст и `agent.default_model` (agent-binary «Нет ни одной модели»);
   - новый процессный тест «Провайдер без модели по умолчанию» (`session/new` → `currentValue gw/m`);
   - сценарий agent-runtime «Пустой CODELAB_HOME и provider add» — процессный, `provider add` затем `serve --stdio`;
   - комментарий в `serve_flags_test.dart:267` — текст проблемы;
   - `--llm-script` не создаёт `state/` (D8).
-- [ ] 4.2 `[agent]` Реализация в `apps/codelab_agent/lib/src/host/agent_host.dart` — `FileLastModelStore` без `--llm-script` (D8).
-- [ ] 4.3 `[agent]` Красные тесты `packages/dart/codelab_embedded/test/`: `localEmbeddedAgentOpener` передаёт файловую память над `CODELAB_HOME`; сценарный открыватель — без неё, `state/` не создаётся. Затем реализация в `lib/src/io/local_opener.dart` (D8).
+- [x] 4.2 `[agent]` Реализация в `apps/codelab_agent/lib/src/host/agent_host.dart` — `FileLastModelStore` без `--llm-script` (D8).
+- [x] 4.3 `[agent]` Красные тесты `packages/dart/codelab_embedded/test/`: `localEmbeddedAgentOpener` передаёт файловую память над `CODELAB_HOME`; сценарный открыватель — без неё, `state/` не создаётся. Затем реализация в `lib/src/io/local_opener.dart` (D8).
 
 ## 5. Совместимость клиентов (только проверка, без правки кода)
 
@@ -106,8 +106,9 @@
 ## 7. После слияния итерации 3 `add-provider-setup-ui` (D12, п. 4)
 
 - [ ] 7.1 Обновить ветку от `develop` (через `sync_with_base_branch`), найти в коде, тестах и спеках итерации 3 опору на `agent.default_model: required` и лист `agent.default_model` (`provider_readiness.dart`, `provider_setup_needed_test.dart`, `checkProviderReadiness`, спеки `client-agent-setup`/`agent-workbench-ui`, D26), показать пользователю список до правок.
-- [ ] 7.2 Красные тесты: `providerSetupNeeded` на настоящем загрузчике — пустой `CODELAB_HOME` → `true` с новым текстом; «провайдеры есть, ключа модели нет» → `false`; `checkProviderReadiness` берёт модель `CoreConfig.defaultModel` (явная или первый провайдер), а не `NoProviderConfigured`.
-- [ ] 7.3 Реализация и правки текстов; delta спек итерации 3 — в этом change (MODIFIED), если её спеки к этому моменту архивированы, иначе согласовать с её сессией.
+- [x] 7.2 Красные тесты: `providerSetupNeeded` на настоящем загрузчике — пустой `CODELAB_HOME` → `true` с новым текстом; «провайдеры есть, ключа модели нет» → `false`; `checkProviderReadiness` берёт модель `CoreConfig.defaultModel` (явная или первый провайдер), а не `NoProviderConfigured`.
+- [x] 7.3a Формулировки спек и design.md change `add-provider-setup-ui` (client-agent-setup «Готовность провайдера», agent-workbench-ui «Встроенный агент без провайдера», D16, D26) поправлены прямо в его каталоге этим change — по согласованию с его сессией 2026-11-06: тот change не архивирован, текст и поведение меняются в одном PR.
+- [ ] 7.3 Реализация: `providerSetupNeeded` — все проблемы `value` ключа `agent.default_model` и (есть `event == config.model.none` или нет листов `providers.*`), ветка «нет листа» удалена; `checkProviderReadiness` — модель как у ядра (`CoreConfig.defaultModel`), а не из листа.
 
 ## 6. Проверки (AGENTS.md §21, только затронутое)
 

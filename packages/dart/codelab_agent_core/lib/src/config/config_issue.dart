@@ -44,6 +44,17 @@ const unsetVariableEvent = 'config.variable.unset';
 /// проблемой кандидата (fail-closed); значений ключей в ней нет.
 const validationIncompleteEvent = 'config.validation.incomplete';
 
+/// Событие проблемы «нет ни одной модели» (`ConfigIssue.event`) для ключа
+/// `agent.default_model` вида `value` (design.md change
+/// `optional-default-model`, D4): провайдеров нет или у них нет моделей.
+/// Структурный признак: клиент и `provider remove` отличают его от «явная
+/// модель не в каталоге» (тот же ключ и вид) без разбора текста.
+const modelNoneEvent = 'config.model.none';
+
+/// Текст проблемы [modelNoneEvent]: говорит, что сделать (D4).
+const modelNoneMessage =
+    'no model is configured; add a provider with at least one model';
+
 /// Класс проблемы конфигурации (`agent-core-architecture` §15.1, §17.5.2).
 ///
 /// Почему отдельный enum: тестам и `ConfigInlineSecretException` нужен класс

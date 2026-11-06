@@ -48,9 +48,51 @@ ConfigLoadResult resolveConfig(
   environment: environment,
   projectRoot: projectRoot,
   fallbackModel: null,
+  fallbackSource: DefaultModelSource.config,
   collectAll: collectAll,
   pinnedTrustedProjects: pinnedTrustedProjects,
 );
+
+/// Неявная модель уровня конфига: первая модель первого доступного провайдера
+/// (design.md change `optional-default-model`, D2, D3).
+///
+/// Почему здесь: правило нужно и загрузке ([_Builder]), и пересчёту после
+/// подстановки отложенных частей (`CoreConfig.withDeferred`, D10); одна
+/// функция исключает расхождение.
+///
+/// «Доступный» провайдер определяется только данными загрузки, хранилище
+/// секретов не читается (приоритет 1, CFG-10): у провайдера есть модель, нет
+/// записи в [problems] (переменная `api_key_env` задана) и ключ не
+/// [UnusableKeyRef]; ссылка на секрет считается доступной. Если доступных нет
+/// (D3), берётся первый провайдер с моделями: неявная модель не строже
+/// явной. Порядок — как в [providers] (порядок слияния слоёв), модели —
+/// как в `providers.<id>.models`. `null` — моделей нет ни у кого (D4).
+ModelRef? implicitDefaultModel(
+  List<CatalogProvider> providers,
+  Map<String, String> problems,
+  ReasoningEffort effort,
+) {
+  final withModels = [
+    for (final p in providers)
+      if (p.models.isNotEmpty) p,
+  ];
+  final picked =
+      withModels
+          .where(
+            (p) =>
+                !problems.containsKey(p.config.name) &&
+                p.key is! UnusableKeyRef,
+          )
+          .firstOrNull ??
+      withModels.firstOrNull;
+  if (picked == null) {
+    return null;
+  }
+  return StaticModelCatalog(providers, logger: const _SilentLogger()).resolve(
+    ModelId('${picked.config.name}/${picked.models.keys.first}'),
+    effort: effort,
+  );
+}
 
 /// Предупреждения без повторов (событие, ключ, источник): доверие считается и
 /// по исходным слоям, и по вырезанным.
@@ -124,6 +166,7 @@ ConfigLoadResult resolveCollectAllForTesting(
   environment: environment,
   projectRoot: projectRoot,
   fallbackModel: null,
+  fallbackSource: DefaultModelSource.config,
   collectAll: true,
   rounds: rounds,
 );
@@ -146,6 +189,7 @@ ConfigLoadResult _resolve(
   required Map<String, String> environment,
   required String? projectRoot,
   required ModelRef? fallbackModel,
+  required DefaultModelSource fallbackSource,
   bool collectAll = false,
   int rounds = 8,
   List<String>? pinnedTrustedProjects,
@@ -235,6 +279,7 @@ ConfigLoadResult _resolve(
       environment: environment,
       projectRoot: projectRoot,
       fallbackModel: fallbackModel,
+      fallbackSource: fallbackSource,
       collectAll: true,
       rounds: rounds - 1,
       pinnedTrustedProjects: pinnedTrustedProjects,
@@ -272,6 +317,7 @@ ConfigLoadResult _resolve(
     effective,
     environment: environment,
     fallbackModel: fallbackModel,
+    fallbackSource: fallbackSource,
     warnings: trustWarnings,
     pinnedTrustedProjects: pinnedTrustedProjects,
   )..build();
@@ -305,6 +351,7 @@ ConfigLoadResult _resolve(
       environment: environment,
       projectRoot: null,
       fallbackModel: full.defaultModel,
+      fallbackSource: full.defaultModelSource,
       pinnedTrustedProjects: pinnedTrustedProjects,
     );
     if (second.issues.isNotEmpty) {
@@ -323,6 +370,7 @@ ConfigLoadResult _resolve(
         ? full
         : CoreConfig(
             defaultModel: full.defaultModel,
+            defaultModelSource: full.defaultModelSource,
             permissions: full.permissions,
             budget: full.budget,
             compaction: full.compaction,
@@ -461,6 +509,7 @@ final class _Builder {
     this.layers, {
     required this.environment,
     required this.fallbackModel,
+    required this.fallbackSource,
     List<ConfigIssue> warnings = const [],
     this.pinnedTrustedProjects,
   }) : warnings = [...warnings];
@@ -468,6 +517,9 @@ final class _Builder {
   final List<ConfigTree> layers;
   final Map<String, String> environment;
   final ModelRef? fallbackModel;
+
+  /// Источник [fallbackModel] в полном снимке (D1 `optional-default-model`).
+  final DefaultModelSource fallbackSource;
 
   /// Закреплённый список доверия (`CoreConfig.fromLayers`); `null` — доверие
   /// по пользовательскому слою.
@@ -495,7 +547,8 @@ final class _Builder {
     final problems = <String, String>{};
     final providers = _providers(problems);
     final effort = _effort();
-    final model = _defaultModel(providers, effort);
+    final picked = _defaultModel(providers, problems, effort);
+    final model = picked?.$1;
     final permissions = _permissions();
     final budget = _budget();
     final compaction = _compaction();
@@ -512,6 +565,7 @@ final class _Builder {
     }
     config = CoreConfig(
       defaultModel: model,
+      defaultModelSource: picked!.$2,
       permissions: permissions,
       budget: budget,
       compaction: compaction,
@@ -641,7 +695,8 @@ final class _Builder {
     List<String> segments,
     String message, {
     ConfigIssueKind kind = ConfigIssueKind.semantic,
-  }) => _issue(kind, _kp(segments), message, segments: segments);
+    String? event,
+  }) => _issue(kind, _kp(segments), message, segments: segments, event: event);
 
   void _warn(
     String event,
@@ -1486,17 +1541,40 @@ final class _Builder {
     null => ReasoningEffort.medium,
   };
 
-  ModelRef? _defaultModel(
+  /// Модель уровня конфига и её источник (design.md change
+  /// `optional-default-model`, D1–D4).
+  ///
+  /// Ключ задан — прежняя строгая проверка, источник `config`, без отката на
+  /// другую модель. Ключа нет — первая модель первого доступного провайдера
+  /// ([implicitDefaultModel]), источник `firstProvider`; моделей нет совсем —
+  /// проблема `agent.default_model` вида `value` с событием
+  /// [modelNoneEvent]. Снимок без проекта (D9) при отсутствии ключа берёт
+  /// модель полного снимка, если тот выбрал её явно; неявную пересчитывает по
+  /// своим провайдерам и лишь потом берёт модель полного.
+  (ModelRef, DefaultModelSource)? _defaultModel(
     List<CatalogProvider> providers,
+    Map<String, String> problems,
     ReasoningEffort effort,
   ) {
     final name = _str(['agent', 'default_model']);
     final key = ['agent', 'default_model'];
     if (name == null) {
-      if (fallbackModel != null) {
-        return fallbackModel;
+      final fallback = fallbackModel;
+      if (fallback != null && fallbackSource == DefaultModelSource.config) {
+        return (fallback, DefaultModelSource.config);
       }
-      _bad(key, 'required', kind: ConfigIssueKind.value);
+      if (implicitDefaultModel(providers, problems, effort) case final m?) {
+        return (m, DefaultModelSource.firstProvider);
+      }
+      if (fallback != null) {
+        return (fallback, fallbackSource);
+      }
+      _bad(
+        key,
+        modelNoneMessage,
+        kind: ConfigIssueKind.value,
+        event: modelNoneEvent,
+      );
       return null;
     }
     final slash = name.indexOf('/');
@@ -1508,10 +1586,10 @@ final class _Builder {
         ? null
         : catalog.resolve(ModelId(name), effort: effort);
     if (model != null) {
-      return model;
+      return (model, DefaultModelSource.config);
     }
     if (fallbackModel != null) {
-      return fallbackModel;
+      return (fallbackModel!, fallbackSource);
     }
     _bad(
       key,
