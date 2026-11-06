@@ -46,37 +46,42 @@ void main() {
     await closeCodeLabRootScope();
   });
 
-  testWidgets('connects to a codelab-compatible stdio agent', (tester) async {
-    await tester.pumpWidget(E2eAgent.current.bootstrap());
-    await tester.pumpAndSettle();
+  testWidgets(
+    'connects to a codelab-compatible stdio agent'
+    '${E2eAgent.current.skipStdioProcessNote}',
+    skip: E2eAgent.current.skipStdioProcess,
+    (tester) async {
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
+      await tester.pumpAndSettle();
 
-    final agentDirectory = await Directory.systemTemp.createTemp(
-      'codelab_app_stdio_e2e_',
-    );
-    addTearDown(() async {
-      if (await agentDirectory.exists()) {
-        await agentDirectory.delete(recursive: true);
-      }
-    });
-    final launch = await E2eAgent.current.launch(agentDirectory);
+      final agentDirectory = await Directory.systemTemp.createTemp(
+        'codelab_app_stdio_e2e_',
+      );
+      addTearDown(() async {
+        if (await agentDirectory.exists()) {
+          await agentDirectory.delete(recursive: true);
+        }
+      });
+      final launch = await E2eAgent.current.launch(agentDirectory);
 
-    final shellCubit = codeLabDependenciesOf(
-      tester.element(find.byType(CodeLabApp)),
-    ).shellCubit;
+      final shellCubit = codeLabDependenciesOf(
+        tester.element(find.byType(CodeLabApp)),
+      ).shellCubit;
 
-    await launch.connect(tester, shellCubit);
+      await launch.connect(tester, shellCubit);
 
-    expect(find.text('Connected'), findsWidgets);
-    final diagnostics = codeLabDependenciesOf(
-      tester.element(find.byType(CodeLabApp)),
-    ).logBuffer.entries.value.map((entry) => entry['event'] as String? ?? '');
-    expect(diagnostics, contains(contains('Starting stdio ACP agent:')));
-    expect(diagnostics, contains(contains('Stdio ACP agent started:')));
+      expect(find.text('Connected'), findsWidgets);
+      final diagnostics = codeLabDependenciesOf(
+        tester.element(find.byType(CodeLabApp)),
+      ).logBuffer.entries.value.map((entry) => entry['event'] as String? ?? '');
+      expect(diagnostics, contains(contains('Starting stdio ACP agent:')));
+      expect(diagnostics, contains(contains('Stdio ACP agent started:')));
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpAndSettle();
-    await closeCodeLabRootScope();
-  });
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await closeCodeLabRootScope();
+    },
+  );
 
   testWidgets(
     'creates a session and completes a prompt turn against a real stdio '
