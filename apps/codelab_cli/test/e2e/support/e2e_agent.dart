@@ -234,11 +234,28 @@ final class E2eCliAgent {
       File('${dir.path}/README.md').writeAsStringSync('# e2e\n');
     }
     final sessions = '${dir.path}/agent-sessions';
+    // Первый запуск CLI (U-17) не должен встречать пустой дом: PTY-тесты
+    // идут с пустым `CODELAB_HOME`, а мастер провайдера на терминале спросил
+    // бы настройку вместо REPL. Готового провайдера даёт дополнительный
+    // конфиг `CODELAB_CONFIG` (источник `config`): дом остаётся пустым, а
+    // `checkProviderReadiness` видит провайдера с моделью (design.md change
+    // `add-provider-setup-ui`, D16).
+    final readyConfig = File('${dir.path}/e2e-ready-config.yaml')
+      ..writeAsStringSync(
+        'providers:\n'
+        '  e2e:\n'
+        '    kind: openai-compatible\n'
+        '    base_url: http://127.0.0.1:9/v1\n'
+        '    models:\n'
+        '      m:\n'
+        '        context_window: 8000\n',
+      );
     return _llmLaunch(
       dir,
       agent: 'embedded',
       sessions: sessions,
       environment: {
+        'CODELAB_CONFIG': readyConfig.path,
         'CODELAB_E2E_LLM_SCRIPT':
             '$appDirectory/test/e2e/llm_scripts/${mode.wireName}.json',
         'CODELAB_E2E_PERMISSION_MODE': ?permissionMode,

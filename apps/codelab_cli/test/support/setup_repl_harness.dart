@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_cli/codelab_cli.dart';
-import 'package:codelab_cli/src/setup/setup_commands.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 
@@ -15,6 +14,16 @@ import 'setup_fakes.dart';
 /// `add-provider-setup-ui`, D5, D17).
 const editableProfile = StdioProfile(
   id: 'local',
+  label: 'Local',
+  command: '/opt/bin/codelab-agent',
+  args: ['serve', '--stdio'],
+  runInProjectDirectory: true,
+);
+
+/// То же, но агент не работает в папке проекта: слой `projectLocal`
+/// недоступен (D5).
+const editableNoProjectProfile = StdioProfile(
+  id: 'local-no-project',
   label: 'Local',
   command: '/opt/bin/codelab-agent',
   args: ['serve', '--stdio'],
@@ -42,20 +51,28 @@ const remoteReadOnlyText =
 /// (D17, «Сверка с кодом»).
 final class FakeSetupCommands implements SetupCommands {
   FakeSetupCommands({
-    required this.configStore,
+    required FakeConfigStore configStore,
     required this.check,
     required this.keys,
     this.codelabHome = '/h',
-  });
+  }) : store = configStore;
 
-  @override
-  final FakeConfigStore configStore;
+  /// Хранилище, которое порт отдаёт любому доступу.
+  final FakeConfigStore store;
 
   @override
   final String codelabHome;
 
   final FakeProviderCheck check;
   final FakeProviderKeys keys;
+
+  /// Области, с которыми команды обращались к порту (по порядку).
+  final scopeSeen = <SetupScope>[];
+
+  /// Доступы тех же обращений.
+  List<EditableSettings> get accessSeen => [
+    for (final scope in scopeSeen) scope.access,
+  ];
 
   /// Каталоги, с которыми вызвали `listProviders`.
   final listCalls = <String>[];
@@ -65,6 +82,10 @@ final class FakeSetupCommands implements SetupCommands {
 
   /// Сколько раз команда просила автомат мастера.
   var flowRequests = 0;
+
+  /// Если задан, `newProviderFlow` ждёт его: команда «в пути», мастер ещё не
+  /// открыт.
+  Completer<void>? flowGate;
 
   SetupCommandResult listResult = const SetupCommandResult(
     exitCode: 0,
@@ -77,30 +98,40 @@ final class FakeSetupCommands implements SetupCommands {
   );
 
   @override
-  Future<SetupCommandResult> listProviders({required String cwd}) async {
-    listCalls.add(cwd);
+  Future<AgentConfigStore> configStore(SetupScope scope) async {
+    scopeSeen.add(scope);
+    return store;
+  }
+
+  @override
+  Future<SetupCommandResult> listProviders(SetupScope scope) async {
+    scopeSeen.add(scope);
+    listCalls.add(scope.cwd);
     return listResult;
   }
 
   @override
   Future<SetupCommandResult> removeProvider(
-    String id, {
-    required String cwd,
+    String id,
+    SetupScope scope, {
     required bool local,
   }) async {
-    removeCalls.add((id: id, cwd: cwd, local: local));
+    scopeSeen.add(scope);
+    removeCalls.add((id: id, cwd: scope.cwd, local: local));
     return removeResult;
   }
 
   @override
-  Future<ProviderSetupFlow> newProviderFlow({required String cwd}) async {
+  Future<ProviderSetupFlow> newProviderFlow(SetupScope scope) async {
+    scopeSeen.add(scope);
     flowRequests++;
+    await flowGate?.future;
     return buildWizardFlow(
       check: check,
       keys: keys,
-      config: configStore,
+      config: store,
       entry: ProviderWizardEntry.cli,
-      cwd: cwd,
+      cwd: scope.cwd,
     );
   }
 }
@@ -245,6 +276,8 @@ final class SetupReplHarness {
     for (final message in agent.transport.sentMessages)
       if (message is JsonRpcRequest) message.method,
   ];
+
+  Future<int> get exitCode => _exit;
 
   Future<int> exit() {
     terminal.press(const [0x04]);

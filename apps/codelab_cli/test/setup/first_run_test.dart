@@ -26,10 +26,12 @@
 // REPL проверяют PTY-e2e `test/e2e/provider_setup_test.dart`: single-
 // subscription `FakeTerminal.input` этого не показывает.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_cli/codelab_cli.dart' show runCodelab;
 import 'package:codelab_cli/src/setup/first_run.dart';
+import 'package:codelab_cli/src/setup/prompt_line.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:codelab_setup/io.dart'
     show ClientSecretAccess, FileAgentConfigStore;
@@ -349,6 +351,23 @@ agent:
       expect(keys.written, {'codelab/gw': leakMarker});
     });
 
+    test('вставка нескольких строк в поле ключа отклоняется, поле '
+        'спрашивается снова (D14)', () async {
+      final result = start();
+      await see('Store a key for "gw" in file? [Y/n]');
+      terminal.press(keyEnter);
+      await see('? API key ›');
+
+      terminal.press(utf8.encode('${leakMarker}A\r${leakMarker}B\r'));
+      await see(keyRejectedLine);
+      expect(terminal.text, isNot(contains(leakMarker)));
+      terminal.type('good');
+      terminal.press(keyEnter);
+
+      expect(await result, FirstRunResult.proceed);
+      expect(keys.written, {'codelab/gw': 'good'});
+    });
+
     test('ProviderKeyReplaced даёт ту же строку «Saved the key»', () async {
       keys.onWrite = (name, value) => const ProviderKeyReplaced();
       final result = start();
@@ -507,8 +526,9 @@ agent:
       },
     );
 
-    test('lib/src/run.dart вызывает первый запуск из _runRepl и _runTui до '
-        'buildCliRuntime и не вызывает его из _runHeadless', () {
+    test('lib/src/run.dart вызывает первый запуск (_firstRun → runFirstRun) '
+        'из _runRepl и _runTui до buildCliRuntime и не вызывает его из '
+        '_runHeadless', () {
       final source = File('$appDirectory/lib/src/run.dart').readAsStringSync();
       // Тело функции — до следующей функции режима.
       const next = {
@@ -524,12 +544,13 @@ agent:
 
       for (final name in ['_runRepl', '_runTui']) {
         final text = body(name);
-        final first = text.indexOf('runFirstRun');
+        final first = text.indexOf('_firstRun(');
         final build = text.indexOf('buildCliRuntime');
-        expect(first, isNonNegative, reason: '$name вызывает runFirstRun');
+        expect(first, isNonNegative, reason: '$name вызывает _firstRun');
         expect(first, lessThan(build), reason: '$name: до buildCliRuntime');
       }
-      expect(body('_runHeadless'), isNot(contains('runFirstRun')));
+      expect(body('_runHeadless'), isNot(contains('_firstRun(')));
+      expect(source, contains('await runFirstRun('));
     });
   });
 }
