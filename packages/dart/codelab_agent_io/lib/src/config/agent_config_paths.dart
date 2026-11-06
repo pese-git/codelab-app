@@ -91,6 +91,11 @@ AgentConfigPaths agentConfigPathsFor({
       // 2026-11-03); наблюдение (`watchedConfigFiles`) зависит от бэкенда.
       secretsFile: true,
     ),
+    // PERM-11 (design.md change `optional-default-model`, D7): память
+    // последней модели влияет на выбор модели следующих сессий, поэтому
+    // инструмент записи не должен её править. В наблюдатель путь не входит:
+    // это не конфиг, перезагрузки по нему нет.
+    '$home/state/last-model.json',
     '$home/agents',
     '$home/prompts',
   ];

@@ -117,7 +117,10 @@ final class AgentCoreServices {
   /// корня сессии.
   final AgentConfigPaths? agentConfigPaths;
 
-  /// ЗАГЛУШКА (задача 2.2, D6): память последней явно выбранной модели.
-  /// `null` — памяти нет: шаг 2 выбора пропускается, запись не выполняется.
+  /// Память последней явно выбранной модели (design.md change
+  /// `optional-default-model`, D6, D8). `null` — памяти нет: шаг 2 выбора
+  /// модели пропускается, запись не выполняется. Хосты с `dart:io` дают
+  /// `FileLastModelStore`; `--llm-script`, сценарные открыватели, web и
+  /// тесты оставляют `null`.
   final LastModelStore? lastModel;
 }

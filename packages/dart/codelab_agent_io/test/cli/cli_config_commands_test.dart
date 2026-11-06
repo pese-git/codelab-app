@@ -525,10 +525,11 @@ providers:
       bool stdin = false,
       bool makeDefault = false,
       ConfigFileLayer layer = ConfigFileLayer.user,
+      Map<String, String> extraEnv = const {},
     }) => ProviderAddOptions(
       id: id,
       cwd: cwd,
-      environment: env(),
+      environment: env(extraEnv),
       kind: kind,
       baseUrl: baseUrl,
       model: model,
@@ -598,21 +599,38 @@ providers:
       expect(check.stdout.last, 'Config: valid');
     });
 
-    test('без --default с --api-key-env: нет предупреждения о '
-        'agent.default_model; предупреждение о незаданной переменной ключа '
-        'прежнее (расхождение со сценарием спеки, см. отчёт)', () async {
-      final result = await providerCommands().add(
-        addOf(apiKeyEnv: 'GW_KEY'),
-        FakeSecretInput(''),
-      );
+    test(
+      'без --default с --api-key-env при заданной переменной: код 0, нет '
+      'строк warning:, затем config check — gw/m (first-provider) '
+      '(сценарий «provider add в пустом CODELAB_HOME без --default»)',
+      () async {
+        // Переменная ключа задана, поэтому предупреждения
+        // `config.provider.key_missing` нет; прежний `agent.default_model:
+        // required` исчез вместе с обязательностью ключа.
+        final result = await providerCommands().add(
+          addOf(apiKeyEnv: 'GW_KEY', extraEnv: {'GW_KEY': 'sk-test-leak-0123'}),
+          FakeSecretInput(''),
+        );
 
-      expect(result.exitCode, 0, reason: allOutput(result));
-      expect(
-        result.stdout.where((l) => l.contains('agent.default_model')),
-        isEmpty,
-        reason: allOutput(result),
-      );
-    });
+        expect(result.exitCode, 0, reason: allOutput(result));
+        expect(
+          result.stdout.where((l) => l.startsWith('warning:')),
+          isEmpty,
+          reason: allOutput(result),
+        );
+        expect(read(userPath), isNot(contains('default_model')));
+
+        final check = await configCommands().check(
+          CheckOptions(
+            cwd: cwd,
+            environment: env({'GW_KEY': 'sk-test-leak-0123'}),
+          ),
+        );
+
+        expect(check.stdout, contains('Default model: gw/m (first-provider)'));
+        expect(check.stdout.last, 'Config: valid');
+      },
+    );
 
     test('идентификатор модели с точкой пишется одним ключом', () async {
       final result = await providerCommands().add(
