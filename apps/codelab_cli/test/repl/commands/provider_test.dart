@@ -197,6 +197,34 @@ void main() {
       expect(repl.exited, isFalse);
     });
 
+    test('провайдер с ключом: «Restart codelab to use its models.»', () async {
+      repl.line('/provider add');
+      await repl.waitAny('? API type');
+      for (var i = 0; i < 4; i++) {
+        repl.press(keyDown);
+      }
+      repl.press(keyEnter);
+      await repl.waitAny('? Base URL ›');
+      repl.type('https://gw.example/v1');
+      repl.press(keyEnter);
+      await repl.waitAny('? API key source');
+      repl.press(keyEnter); // Store in file
+      await repl.waitAny('? API key ›');
+      repl.type(leakMarker);
+      repl.press(keyEnter);
+      await eventually(() => repl.check.calls.isNotEmpty);
+      repl.check.respond(modelsOk(['m1']));
+      await repl.waitAny('? Model (type to filter) ›');
+      repl.press(keyEnter);
+      await repl.waitAny('? Save? [Y/n]');
+      repl.press(keyEnter);
+
+      await repl.waitAny(
+        'Saved provider "gw-example". Restart codelab to use its models.',
+      );
+      expect(repl.output, isNot(contains('Models are available in /model.')));
+    });
+
     test('значение ключа в выводе REPL — только маска', () async {
       repl.line('/provider add');
       await repl.waitAny('? API type');

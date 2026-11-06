@@ -11,6 +11,7 @@
 // Значения настроек выдуманные, настоящий `~/.codelab` не читается.
 
 import 'package:codelab_cli/codelab_cli.dart';
+import 'package:codelab_cli/src/setup/settings_screen.dart';
 import 'package:codelab_client_core/codelab_client_core.dart'
     show ConnectionProfile, StdioProfile;
 import 'package:codelab_setup/codelab_setup.dart';
@@ -637,6 +638,26 @@ void accessTests() {
     });
 
     test(
+      'ключ слоя local, а цели projectLocal нет: в user не пишем молча',
+      () async {
+        await open(editableNoProjectProfile);
+        repl.store.snapshotValue = snapshotOf(
+          projectLocal: {
+            'budget': {'max_steps': 7},
+          },
+          values: const {'budget.max_steps': 7},
+        );
+
+        repl.line('/settings budget.max_steps 3');
+        await repl.waitText(
+          'budget.max_steps is set by local; it cannot be changed here.',
+        );
+
+        expect(repl.store.applied, isEmpty);
+      },
+    );
+
+    test(
       '--local без цели projectLocal: строка отказа, запись не идёт',
       () async {
         await open(editableNoProjectProfile);
@@ -684,6 +705,12 @@ final class _Context implements ReplContext {
 
   @override
   void pick(PickerSpec spec) => picked.add(spec);
+
+  /// Как `Repl.showSettings`: список строк `key value source` пикером
+  /// (в TUI вместо него открывается экран).
+  @override
+  void showSettings(SettingsScreen screen) =>
+      pick(settingsPickerOf(screen.snapshot!));
 
   @override
   Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

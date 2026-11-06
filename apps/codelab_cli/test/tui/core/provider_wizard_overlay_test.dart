@@ -274,6 +274,32 @@ void main() {
       expect(next.composer.history.join(), isNot(contains(leakMarker)));
     });
 
+    test('после Enter в той же reduce в модели нет значения: поле пусто или '
+        'заменено, маркера нет ни в одном поле оверлея', () {
+      final model = reduce(keyField(), text(leakMarker)).$1;
+
+      final (next, cmds) = reduce(model, key(Key.enter));
+
+      expect(eventOf<KeySubmitted>(cmds).choice, isA<StoreSecret>());
+      final overlay = next.overlay! as ProviderWizardOverlay;
+      final mode = overlay.mode;
+      if (mode is WizardInput) {
+        expect(mode.field.isEmpty, isTrue);
+        expect(mode.field.text, isNot(contains(leakMarker)));
+      }
+      // Обход всех строковых полей оверлея: значения нет нигде.
+      final visible = [
+        overlay.message,
+        overlay.step.notes.join(),
+        overlay.step.progress,
+        if (mode is WizardInput) mode.field.shown,
+        if (mode is WizardInput) mode.field.text,
+        if (mode is WizardFilter) mode.filter.text,
+      ].join('|');
+      expect(visible, isNot(contains(leakMarker)));
+      expect(next.composer.text, isNot(contains(leakMarker)));
+    });
+
     test('Cancel (Esc) очищает буфер', () {
       final model = reduce(keyField(), text(leakMarker)).$1;
 

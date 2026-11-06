@@ -76,7 +76,8 @@ KeyMsg key_(Key k) => key(k);
 ApplySettingCmd _apply(List<TuiCmd> cmds) =>
     cmds.whereType<ApplySettingCmd>().single;
 
-String _hint(TuiModel model) => screenOf(model);
+/// Экран одним текстом: длинная подсказка переносится по ширине кадра.
+String _hint(TuiModel model) => screenOf(model).replaceAll('\n', ' ');
 
 void main() {
   group('разметка CliSettings', () {
@@ -121,7 +122,7 @@ void main() {
         for (final section in [
           'Models',
           'Agent',
-          'Providers',
+          // Раздел Providers есть, только когда в снимке есть провайдер.
           'Permissions',
           'Budget',
           'MCP',
@@ -359,13 +360,25 @@ void main() {
       expect(_apply(cmds).raw, '3');
     });
 
-    test('без цели projectLocal ключ проектного слоя пишется в user', () {
+    test('без цели projectLocal ключ проектного слоя: отказ строкой, в user '
+        'молча не пишем (ревью 4b); явный ctrl+u — в user', () {
       var model = _at(project, 'budget.max_steps', access: _accessNoProject);
       model = reduce(model, key(Key.enter)).$1;
       model = reduce(model, key(Key.backspace)).$1;
       model = reduce(model, text('3')).$1;
 
-      expect(_apply(reduce(model, key(Key.enter)).$2).layer, ConfigLayer.user);
+      final (refused, cmds) = reduce(model, key(Key.enter));
+      expect(cmds.whereType<ApplySettingCmd>(), isEmpty);
+      expect(
+        _hint(refused),
+        contains(
+          'budget.max_steps is set by project; it cannot be changed here.',
+        ),
+      );
+
+      final explicit = _apply(reduce(model, key(Key.ctrlU)).$2);
+      expect(explicit.layer, ConfigLayer.user);
+      expect(explicit.explicitLayer, isTrue);
     });
 
     test('источники config и env не редактируются', () {
@@ -473,6 +486,164 @@ void main() {
         ),
       );
       expect(cmds, isEmpty);
+    });
+  });
+
+  group('ревью 4b: маска, запись, прокрутка, слой local', () {
+    test('замаскированный элемент списка: правка запрещена, поля нет, маркера '
+        'в кадре нет', () {
+      final secretList = snapshotOf(
+        user: {
+          'permissions': {
+            'deny': ['bash:curl -H "Authorization: Bearer $leakMarker"'],
+          },
+        },
+        values: {
+          'permissions.deny': [
+            'bash:curl -H "Authorization: Bearer $leakMarker"',
+          ],
+        },
+      );
+      final model = _at(secretList, 'permissions.deny');
+      expect(screenOf(model), isNot(contains(leakMarker)));
+
+      final (next, cmds) = reduce(model, key(Key.enter));
+
+      expect(_hint(next), contains('Use codelab secret set <name>'));
+      expect((next.overlay! as SettingsOverlay).mode, isA<SettingsTable>());
+      expect(screenOf(next), isNot(contains(leakMarker)));
+      expect(cmds, isEmpty);
+    });
+
+    test('после Enter экран в режиме записи: клавиши и Esc игнорируются до '
+        'исхода (D21)', () {
+      var model = _at(snapshotOf(), 'agent.effort');
+      model = reduce(model, key(Key.enter)).$1;
+      final (saving, cmds) = reduce(model, key(Key.enter));
+      expect(cmds.whereType<ApplySettingCmd>(), hasLength(1));
+      expect((saving.overlay! as SettingsOverlay).mode, isA<SettingsSaving>());
+
+      for (final msg in [
+        key(Key.enter),
+        key(Key.escape),
+        key(Key.down),
+        text('r'),
+      ]) {
+        final (next, more) = reduce(saving, msg);
+        expect(more, isEmpty);
+        expect(next.overlay, isA<SettingsOverlay>());
+      }
+
+      final (done, _) = reduce(
+        saving,
+        SettingsAppliedMsg(
+          7,
+          line: 'Updated agent.effort in /h/config.yaml',
+          snapshot: snapshotOf(),
+        ),
+      );
+      expect((done.overlay! as SettingsOverlay).mode, isA<SettingsTable>());
+    });
+
+    test('Esc и Ctrl+C в режиме записи не меняют режим и не закрывают экран '
+        '(D21); исход возвращает к таблице', () {
+      var model = _at(snapshotOf(), 'agent.effort');
+      model = reduce(model, key(Key.enter)).$1;
+      final saving = reduce(model, key(Key.enter)).$1;
+
+      for (final k in [Key.escape, Key.ctrlC]) {
+        final (next, cmds) = reduce(saving, key(k));
+
+        expect(cmds, isEmpty, reason: '$k');
+        expect(next.overlay, isA<SettingsOverlay>(), reason: '$k');
+        expect(
+          (next.overlay! as SettingsOverlay).mode,
+          isA<SettingsSaving>(),
+          reason: '$k',
+        );
+      }
+
+      final (done, _) = reduce(
+        saving,
+        SettingsAppliedMsg(
+          7,
+          line: 'Updated agent.effort in /h/config.yaml',
+          snapshot: snapshotOf(),
+        ),
+      );
+      expect((done.overlay! as SettingsOverlay).mode, isA<SettingsTable>());
+    });
+
+    test('исход без снимка (перечитать не удалось): экран выходит из режима '
+        'записи на прежнем снимке', () {
+      var model = _at(snapshotOf(), 'agent.effort');
+      model = reduce(model, key(Key.enter)).$1;
+      model = reduce(model, key(Key.enter)).$1;
+
+      final (next, _) = reduce(
+        model,
+        const SettingsAppliedMsg(
+          7,
+          line: 'Updated x (could not reload the config)',
+        ),
+      );
+
+      expect((next.overlay! as SettingsOverlay).mode, isA<SettingsTable>());
+      expect(_hint(next), contains('could not reload'));
+    });
+
+    test(
+      'ключ слоя local без цели projectLocal: отказ строкой, команды нет',
+      () {
+        final local = snapshotOf(
+          projectLocal: {
+            'budget': {'max_steps': 7},
+          },
+          values: const {'budget.max_steps': 7},
+        );
+        var model = _at(local, 'budget.max_steps', access: _accessNoProject);
+        model = reduce(model, key(Key.enter)).$1;
+        model = reduce(model, key(Key.backspace)).$1;
+        model = reduce(model, text('3')).$1;
+
+        final (next, cmds) = reduce(model, key(Key.enter));
+
+        expect(cmds.whereType<ApplySettingCmd>(), isEmpty);
+        expect(
+          _hint(next),
+          contains(
+            'budget.max_steps is set by local; it cannot be changed here.',
+          ),
+        );
+      },
+    );
+
+    test('малое окно: таблица прокручивается вокруг выбранной строки, шапка, '
+        'подсказка и полоса клавиш на месте', () {
+      final snapshot = snapshotOf(values: const {'agent.effort': 'high'});
+      // Раздел Agent/Models — мало строк; берём Providers-свободный снимок и
+      // раздел Budget (4 строки) в окне на 12 строк.
+      var model = _open(snapshot, model: newModel(rows: 12));
+      final (tabs, downs) = _path(snapshot, 'budget.max_duration');
+      for (var i = 0; i < tabs; i++) {
+        model = reduce(model, key(Key.tab)).$1;
+      }
+      for (var i = 0; i < downs; i++) {
+        model = reduce(model, key(Key.down)).$1;
+      }
+
+      final frame = frameOf(model);
+
+      expect(frame, hasLength(12));
+      expect(frame.any((l) => l.startsWith('Settings · /settings')), isTrue);
+      expect(frame.any((l) => l.contains('› budget.max_duration')), isTrue);
+      expect(
+        frame,
+        contains(
+          '↑↓ move · enter edit · ←→ choose · tab section · r reset · esc close',
+        ),
+      );
+      expect(frame.last, 'default');
     });
   });
 

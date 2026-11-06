@@ -106,8 +106,8 @@ $extra''');
   }
 
   test(
-    'cli/tui-provider-wizard: «Мастер в TUI» — маска, ключ только в '
-    'хранилище, новая модель в /model',
+    'cli/tui-provider-wizard: «Мастер в TUI» — маска, Ctrl+R, ключ только в '
+    'хранилище',
     () async {
       final server = await FakeModelsServer.start();
       writeConfig(server.baseUrl);
@@ -126,9 +126,17 @@ $extra''');
       p.write(leakMarker);
       await p.waitFor('*' * leakMarker.length);
       expectNoLeak(p, step: 'ввод ключа');
+      var hiddenAt = 0;
       p.write('\x12'); // Ctrl+R показывает значение
       await p.waitFor(leakMarker);
+      final beforeHide = p.text.length;
       p.write('\x12'); // и снова прячет
+      // Ждём маску на экране вместо паузы: перерисовка пришла.
+      await p.waitFor(
+        '? API key › ${'*' * leakMarker.length}',
+        from: beforeHide,
+      );
+      hiddenAt = p.text.length;
       p.write('\r');
       await p.waitFor('Checking ${server.origin}/v1/models');
       await p.waitFor('? Model (type to filter) ›');
@@ -136,31 +144,18 @@ $extra''');
       await p.waitFor('? Save? [Y/n]');
       p.write('\r');
       await p.waitFor(
-        'Saved provider "local-${server.port}". Models are available in /model.',
+        'Saved provider "local-${server.port}". Restart codelab to use its '
+        'models.',
       );
 
-      // Агент перечитывает конфиг сам: ждём, пока `/model` покажет модель.
-      final deadline = DateTime.now().add(const Duration(seconds: 20));
-      var shown = false;
-      while (!shown && DateTime.now().isBefore(deadline)) {
-        final from = p.text.length;
-        p.write('/model\r');
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-        shown = p.text.substring(from).contains('local-${server.port}/m1');
-        if (!shown) {
-          p.write(_esc);
-        }
-      }
-      expect(shown, isTrue, reason: p.text);
-      p.write(_esc);
       p.write(_ctrlD);
 
       expect(await p.exitCode, 0, reason: p.text);
-      // Значение видно только между двумя Ctrl+R; маркер — единственный раз.
+      // Значение видно только между двумя Ctrl+R: после второго — маска.
       expect(
-        leakMarker.allMatches(p.text).length,
-        lessThanOrEqualTo(1),
-        reason: 'показ по Ctrl+R — единственное разрешённое место',
+        p.text.substring(hiddenAt),
+        isNot(contains(leakMarker)),
+        reason: 'после повторного Ctrl+R и до конца экрана только маска',
       );
       expect(
         config(),
@@ -173,6 +168,49 @@ $extra''');
         expect(history.readAsStringSync(), isNot(contains(leakMarker)));
       }
       expect(server.requests.first.authorization, 'Bearer $leakMarker');
+    },
+    skip: skip,
+    tags: scriptedOnly,
+  );
+
+  test(
+    'cli/tui-provider-wizard-model: новая модель провайдера появляется в '
+    'списке моделей без перезапуска',
+    () async {
+      final server = await FakeModelsServer.start();
+      writeConfig(server.baseUrl);
+
+      final p = await tui(const []);
+      await p.waitFor(_altScreen);
+      p.write('/provider add\r');
+      await p.waitFor('? API type');
+      pick(p, 4);
+      await p.waitFor('? Base URL ›');
+      p.write('${server.baseUrl}\r');
+      await p.waitFor('? API key source');
+      pick(p, 2); // No key
+      await p.waitFor('? Model (type to filter) ›');
+      p.write('\r');
+      await p.waitFor('? Save? [Y/n]');
+      p.write('\r');
+      await p.waitFor(
+        'Saved provider "local-${server.port}". Models are available in /model.',
+      );
+
+      // Агент перечитывает конфиг сам: ждём, пока `/config` (без пикера, в
+      // транскрипт) назовёт новую модель среди значений опции `model`.
+      final deadline = DateTime.now().add(const Duration(seconds: 20));
+      var shown = false;
+      while (!shown && DateTime.now().isBefore(deadline)) {
+        final from = p.text.length;
+        p.write('/config\r');
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        shown = p.text.substring(from).contains('local-${server.port}/m1');
+      }
+      expect(shown, isTrue, reason: p.text);
+      p.write(_ctrlD);
+
+      expect(await p.exitCode, 0, reason: p.text);
     },
     skip: skip,
     tags: scriptedOnly,
@@ -215,7 +253,8 @@ $extra''');
       await p.waitFor(_altScreen);
       p.write('/settings\r');
       await p.waitFor('Settings · /settings');
-      expect(p.text, contains('user $home/config.yaml'));
+      // Заголовок режется по ширине экрана (длинный временный путь).
+      await p.waitFor('user $home/config');
       for (var i = 0; i < tabs; i++) {
         p.write('\t');
       }
@@ -227,10 +266,13 @@ $extra''');
       p.write('\r'); // выбор ←→
       p.write(_left); // standard → ask
       p.write('\r');
-      await p.waitFor('Updated permissions.mode in $home/config.yaml');
+      // Строка исхода переносится по ширине экрана: ждём её части.
+      await p.waitFor('Updated permissions.mode in');
       await p.waitFor('(applies after restart)');
 
       p.write(_esc);
+      // Одиночный Esc терминал отличает от начала последовательности по паузе.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
       p.write(_ctrlD);
       expect(await p.exitCode, 0, reason: p.text);
       expect(config(), contains('mode: ask'));

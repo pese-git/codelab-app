@@ -329,5 +329,35 @@ providers:
         expect(secret.displayValue, 'codelab/sk-anthropic-production-key');
       },
     );
+
+    test(
+      'masked: строка с токеном, список с токеном и обычные значения',
+      () async {
+        home.writeConfig('''
+permissions:
+  deny:
+    - "Bash(curl -H 'x: $leak')"
+    - "Read(.env)"
+providers:
+  gw:
+    kind: openai-compatible
+    base_url: https://u:$leak@gw.test/v1
+  ok:
+    kind: openai-compatible
+    base_url: https://gw.test/v1
+''');
+        final rows = settingFieldsOf(await home.load());
+
+        final deny = row(rows, 'permissions.deny');
+        expect(deny.masked, isTrue);
+        for (final text in ['${deny.value}', deny.displayValue, '$deny']) {
+          expect(text, isNot(contains(leak)));
+        }
+        expect(row(rows, 'providers.gw.base_url').masked, isTrue);
+        expect(row(rows, 'providers.ok.base_url').masked, isFalse);
+        expect(row(rows, 'providers.ok.kind').masked, isFalse);
+        expect(row(rows, 'agent.effort').masked, isFalse);
+      },
+    );
   });
 }

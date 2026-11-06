@@ -168,9 +168,19 @@ final class FakeConfigStore implements AgentConfigStore {
   /// содержит ключи правок, у которых дескриптор требует перезапуска.
   ConfigSaveOutcome? outcome;
 
+  /// Если задан, `snapshot` бросает его (сбой перечитывания).
+  Object? snapshotError;
+
+  /// Если задан, `apply` бросает его.
+  Object? applyError;
+
   @override
-  Future<AgentConfigSnapshot> snapshot({required String cwd}) async =>
-      snapshotValue;
+  Future<AgentConfigSnapshot> snapshot({required String cwd}) async {
+    if (snapshotError case final error?) {
+      throw error;
+    }
+    return snapshotValue;
+  }
 
   @override
   Future<ConfigSaveOutcome> apply(
@@ -178,6 +188,9 @@ final class FakeConfigStore implements AgentConfigStore {
     List<ConfigEdit> edits,
   ) async {
     applied.add((base: base, edits: edits));
+    if (applyError case final error?) {
+      throw error;
+    }
     if (applyGate case final gate?) {
       await gate.future;
     }

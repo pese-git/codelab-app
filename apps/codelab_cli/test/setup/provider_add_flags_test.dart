@@ -363,6 +363,11 @@ void main() {
       ]);
 
       expect(code, 0, reason: io.stderrText);
+      // С ключом (api_key_env) провайдер доступен после перезапуска (R0-4).
+      expect(
+        io.stdoutText,
+        'Saved provider "gw". Restart codelab to use its models.\n',
+      );
       expect(config(), contains('api_key_env: GW_KEY'));
       expect(config(), contains('default_model: gw/m1'));
     });
