@@ -3,6 +3,7 @@ import 'package:codelab_setup/codelab_setup.dart' show EditableSettings;
 import '../../cli_args.dart';
 import '../../setup/provider_wizard.dart';
 import '../../setup/settings_access.dart';
+import '../../setup/wizard_steps.dart' show savedProviderLine;
 import '../../setup/setup_commands.dart';
 import '../repl_command.dart';
 
@@ -108,10 +109,8 @@ final class ProviderCommand implements ReplCommand {
       pathOf: (target) => snapshot.layers[target.layer]?.path ?? '',
     );
     switch (result) {
-      case ProviderWizardSaved(:final providerId):
-        context.say(
-          'Saved provider "$providerId". Models are available in /model.',
-        );
+      case ProviderWizardSaved(:final providerId, :final hasKey):
+        context.say(savedProviderLine(providerId, hasKey: hasKey));
       case ProviderWizardCancelled():
         context.say('Provider setup cancelled.');
       case ProviderWizardRefused(:final message):

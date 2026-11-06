@@ -20,9 +20,12 @@ sealed class ProviderWizardResult {
 
 /// Провайдер записан в конфиг; [providerId] — id, под которым он сохранён.
 final class ProviderWizardSaved extends ProviderWizardResult {
-  const ProviderWizardSaved(this.providerId);
+  const ProviderWizardSaved(this.providerId, {required this.hasKey});
 
   final String providerId;
+
+  /// У провайдера есть ключ: его модели видны после перезапуска (R0-4).
+  final bool hasKey;
 }
 
 /// Пользователь отменил мастер (Ctrl+C, Esc, `n`, конец ввода): файлы не
@@ -214,7 +217,7 @@ final class LineWizard {
     }
     if (step.savedProviderId case final id?) {
       _mode = const _Idle();
-      _finish(ProviderWizardSaved(id));
+      _finish(ProviderWizardSaved(id, hasKey: step.savedHasKey));
       return;
     }
     step.notes.forEach(_say);

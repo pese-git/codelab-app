@@ -44,6 +44,7 @@ final class SettingFieldView {
     required this.value,
     required this.source,
     this.entryCount,
+    this.masked = false,
   });
 
   /// Конкретный путь ключа в формате `KeyPath`: `*` дескриптора заменён на
@@ -65,6 +66,12 @@ final class SettingFieldView {
   /// недоверенного проекта (CFG-3) источником не считается: загрузчик его не
   /// применил.
   final ConfigSourceView? source;
+
+  /// Значение (или элемент списка) изменено маскированием секретов: [value]
+  /// не равно сырому из снимка. Клиент по этому признаку не открывает поле
+  /// правки с [value] и берёт сырое из `AgentConfigSnapshot.leaves` либо
+  /// запрещает правку; сравнивать значение со строкой `<redacted>` не нужно.
+  final bool masked;
 
   /// Число записей у ключей `map`/`mapList`; `null` у остальных. Содержимое
   /// записей не раскрывается: в заголовках и `env` могут быть токены.
@@ -158,11 +165,14 @@ SettingFieldView _rowOf(
       descriptor.type == SettingType.map ||
       descriptor.type == SettingType.mapList;
   if (!collection) {
+    final raw = snapshot.leaves[key];
+    final shown = _safe(key, raw);
     return SettingFieldView(
       key: key,
       descriptor: descriptor,
-      value: _safe(key, snapshot.leaves[key]),
+      value: shown,
       source: snapshot.origins[key],
+      masked: !_same(raw, shown),
     );
   }
   // `map` раскрывается в листья `key.<имя>…`, `mapList` — один лист-список.
@@ -228,3 +238,19 @@ Object? _safe(String key, Object? value) => switch (value) {
   final List<Object?> items => [for (final item in items) _safe(key, item)],
   _ => displaySafeConfigValue(key, value),
 };
+
+/// Различаются ли сырое и показанное значения (скаляры и списки скаляров).
+bool _same(Object? raw, Object? shown) {
+  if (raw is List<Object?> && shown is List<Object?>) {
+    if (raw.length != shown.length) {
+      return false;
+    }
+    for (var i = 0; i < raw.length; i++) {
+      if (!_same(raw[i], shown[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return raw == shown;
+}

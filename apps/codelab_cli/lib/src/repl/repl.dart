@@ -19,7 +19,10 @@ import '../render/sanitize.dart';
 import '../render/terminal_renderer.dart';
 import '../session_setup.dart';
 import '../setup/provider_wizard.dart';
+import '../setup/settings_rows.dart';
+import '../setup/settings_screen.dart';
 import '../setup/setup_commands.dart';
+import '../setup/settings_access.dart';
 import '../strings.dart';
 import 'command_router.dart';
 import 'commands/commands.dart';
@@ -268,6 +271,16 @@ final class Repl implements ReplContext {
     final indent = title == null ? '' : '  ';
     for (final (i, item) in spec.items.indexed) {
       say('$indent${i == spec.current ? '*' : ' '} ${item.label}');
+    }
+  }
+
+  @override
+  void showSettings(SettingsScreen screen) {
+    final snapshot = screen.snapshot;
+    if (snapshot == null) {
+      say(readOnlyLineOf(screen.access) ?? '');
+    } else {
+      pick(settingsPickerOf(snapshot));
     }
   }
 

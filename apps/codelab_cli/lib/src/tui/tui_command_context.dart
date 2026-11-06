@@ -2,7 +2,17 @@ import 'dart:async';
 
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_setup/codelab_setup.dart'
-    show ConfigTarget, ProviderSetupFlow;
+    show
+        AgentConfigSnapshot,
+        ConfigLayer,
+        ConfigTarget,
+        ProviderSetupEvent,
+        ProviderSetupFlow,
+        ProviderSetupState,
+        Saving,
+        EditableSettings,
+        Reviewing,
+        ReviewEdited;
 
 import '../cli_args.dart';
 import '../input/key_bindings.dart';
@@ -13,6 +23,9 @@ import '../repl/picker_spec.dart';
 import '../repl/repl_command.dart';
 import '../session_setup.dart';
 import '../setup/provider_wizard.dart';
+import '../setup/settings_rows.dart';
+import '../setup/settings_screen.dart';
+import '../setup/wizard_steps.dart';
 import '../setup/setup_commands.dart';
 import '../strings.dart';
 import 'core/transcript_lines.dart';
@@ -44,7 +57,7 @@ final class TuiCommandContext implements ReplContext {
     required void Function(TuiMsg msg) send,
     required void Function(int code) onExit,
     Future<ConnectionProfile> Function(String id)? resolveProfile,
-    List<ReplCommand> commands = mvpReplCommands,
+    List<ReplCommand> commands = replCommands,
     DateTime Function()? clock,
     SecretSource? tokenSource,
     SetupCommands? setup,
@@ -74,27 +87,202 @@ final class TuiCommandContext implements ReplContext {
 
   final SetupCommands? _setup;
 
-  /// Порт настройки агента: в 4a только проброс, без оверлеев (D17).
+  /// Порт настройки агента для `/provider` и `/settings` (D17): TUI получает
+  /// его так же, как построчный REPL, а мастер и экран настроек открывает
+  /// оверлеями ([runWizard], [showSettings]).
   @override
   SetupCommands? get setup => _setup;
 
-  /// Команд `/provider` и `/settings` в TUI 4a нет (они не в `mvpReplCommands`),
-  /// поэтому мастер здесь никогда не открывается; оверлеи — задача 4b.
+  /// `false` намеренно (D17): отказ Q14 («Finish or cancel the current
+  /// turn…») относится только к построчному REPL, где вопросы мастера
+  /// смешались бы с выводом хода. В TUI мастер модальный, а запрос разрешения
+  /// ждёт его закрытия.
   @override
   bool get turnRunning => false;
 
   @override
   bool get hasTerminal => true;
 
+  /// Номера оверлеев: поздние ответы прошлого экрана отбрасывает `reduce`.
+  var _overlaySeq = 0;
+
+  /// Автомат открытого мастера: сюда идут `WizardEventCmd` (одна подписка на
+  /// его `states` — в [runWizard], D17, D21).
+  ProviderSetupFlow? _wizardFlow;
+  int? _wizardId;
+  void Function()? _abortWizard;
+
+  /// Мастер сейчас в `Saving` и ожидание его итога ([close] ждёт `Done` или
+  /// `SaveFailed` не дольше 10 с, D21).
+  var _wizardSaving = false;
+  Future<ProviderWizardResult>? _wizardResult;
+
+  /// Экран `/settings`, открытый последним, и его свежий снимок.
+  SettingsScreen? _settings;
+  int? _settingsId;
+  AgentConfigSnapshot? _settingsSnapshot;
+
+  /// Событие мастера от эффекта экрана.
+  ///
+  /// [overlayId] — номер оверлея-отправителя: событие чужого (прошлого)
+  /// мастера игнорируется (D21).
+  void wizardEvent(ProviderSetupEvent event, {required int overlayId}) {
+    if (overlayId != _wizardId) {
+      return;
+    }
+    _wizardFlow?.dispatch(event);
+  }
+
+  /// Мастер как модальный экран: единственный владелец подписки на
+  /// `flow.states`. Каждое состояние уходит экрану сообщением
+  /// `WizardStateMsg`; итог совпадает с построчным мастером (`Done`,
+  /// `Cancelled`, отказ записи). Подписка и [flow] освобождаются на любом
+  /// выходе, в том числе при закрытии контекста (D21, AGENTS.md §9).
   @override
   Future<ProviderWizardResult> runWizard(
     ProviderSetupFlow flow, {
     String? providerId,
     ConfigTarget? target,
     String Function(ConfigTarget target)? pathOf,
-  }) => throw UnimplementedError(
-    'the provider wizard overlay is task 4.15 (iteration 4b)',
-  );
+  }) async {
+    final id = ++_overlaySeq;
+    final done = Completer<ProviderWizardResult>();
+    var pendingId = providerId;
+    var pendingTarget = target;
+
+    void onState(ProviderSetupState state) {
+      if (done.isCompleted) {
+        return;
+      }
+      if (state is Reviewing &&
+          (pendingId != null || pendingTarget != null) &&
+          state.error == null) {
+        // Позиционный id и `--local` применяются один раз (D15).
+        final (idValue, targetValue) = (pendingId, pendingTarget);
+        pendingId = pendingTarget = null;
+        flow.dispatch(ReviewEdited(providerId: idValue, target: targetValue));
+        return;
+      }
+      _wizardSaving = state is Saving;
+      _send(WizardStateMsg(id, state));
+      final step = wizardStepOf(state);
+      if (step.cancelled) {
+        done.complete(const ProviderWizardCancelled());
+      } else if (step.savedProviderId case final saved?) {
+        done.complete(ProviderWizardSaved(saved, hasKey: step.savedHasKey));
+      } else if (step.failure case final failure?) {
+        done.complete(ProviderWizardFailed(failure));
+      }
+    }
+
+    final subscription = flow.states.listen(onState);
+    _wizardFlow = flow;
+    _wizardId = id;
+    _wizardResult = done.future;
+    _abortWizard = () {
+      if (!done.isCompleted) {
+        done.complete(const ProviderWizardCancelled());
+      }
+    };
+    _send(OpenWizardMsg(id, flow.current, pathOf: pathOf));
+    try {
+      return await done.future;
+    } finally {
+      await subscription.cancel();
+      if (identical(_wizardFlow, flow)) {
+        _wizardFlow = null;
+        _wizardId = null;
+        _wizardSaving = false;
+        _wizardResult = null;
+        _abortWizard = null;
+      }
+      await flow.dispose();
+    }
+  }
+
+  @override
+  void showSettings(SettingsScreen screen) {
+    _settings = screen;
+    _settingsSnapshot = screen.snapshot;
+    _settingsId = ++_overlaySeq;
+    _send(
+      OpenSettingsMsg(
+        _settingsId!,
+        access: screen.access,
+        snapshot: screen.snapshot,
+      ),
+    );
+  }
+
+  /// Запись экрана настроек: `applySetting` (все проверки и тексты — там),
+  /// затем новый снимок; конфликт — тот же путь, снимок перечитан (D21).
+  Future<void> applySettingFor(
+    int overlayId,
+    String key,
+    String? raw,
+    ConfigLayer layer, {
+    bool explicitLayer = false,
+  }) async {
+    final screen = _settings;
+    final store = screen?.store;
+    final scope = screen?.scope;
+    final snapshot = _settingsSnapshot;
+    if (overlayId != _settingsId ||
+        screen == null ||
+        store == null ||
+        scope == null ||
+        snapshot == null) {
+      if (overlayId == _settingsId) {
+        // Текущий экран остался бы в режиме записи: отвечаем отказом (D21).
+        _send(
+          SettingsAppliedMsg(
+            overlayId,
+            line: 'Settings cannot be changed from this screen.',
+          ),
+        );
+      }
+      // Ответ чужого (прошлого) экрана не пишет ничего.
+      return;
+    }
+    String line;
+    try {
+      line = await applySetting(
+        store,
+        snapshot,
+        key,
+        raw: raw,
+        layer: layer,
+        explicitLayer: explicitLayer,
+        access: screen.access is EditableSettings
+            ? screen.access as EditableSettings
+            : null,
+      );
+    } on Object catch (error) {
+      // Экран не должен залипнуть в режиме записи: исход — строкой, без
+      // текста исключения (оно могло цитировать значение, CFG-10).
+      _send(
+        SettingsAppliedMsg(
+          overlayId,
+          line: 'codelab: $key: write failed (${error.runtimeType})',
+        ),
+      );
+      return;
+    }
+    try {
+      final next = await store.snapshot(cwd: scope.cwd);
+      _settingsSnapshot = next;
+      _send(SettingsAppliedMsg(overlayId, line: line, snapshot: next));
+    } on Object {
+      // Запись прошла, снимок перечитать не удалось: исход виден, экран на
+      // прежнем снимке.
+      _send(
+        SettingsAppliedMsg(
+          overlayId,
+          line: '$line (could not reload the config)',
+        ),
+      );
+    }
+  }
 
   SessionHandle? _session;
   StreamSubscription<SessionView>? _views;
@@ -112,7 +300,19 @@ final class TuiCommandContext implements ReplContext {
   }
 
   /// Отменяет подписку на ревизии; после выхода из цикла экрана.
-  Future<void> close() async => _views?.cancel();
+  Future<void> close() async {
+    // Выход из TUI при открытом мастере: подписка и автомат освобождаются. Во
+    // время записи ждём её итога (не дольше 10 с), чтобы не бросить запись на
+    // середине (D21).
+    if (_wizardSaving) {
+      await _wizardResult?.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => const ProviderWizardCancelled(),
+      );
+    }
+    _abortWizard?.call();
+    await _views?.cancel();
+  }
 
   @override
   ClientWorkspace get workspace => _workspace;

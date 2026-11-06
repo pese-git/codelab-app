@@ -7,6 +7,7 @@ import 'core/tui_chrome.dart';
 import 'core/tui_cmd.dart';
 import 'core/tui_model.dart';
 import 'core/tui_msg.dart';
+import 'core/tui_overlay.dart';
 import 'core/tui_update.dart' as core;
 import 'core/tui_view.dart';
 import 'registry_key_map.dart';
@@ -197,7 +198,9 @@ final class TuiApp implements tea.Model {
         ticking: _ticking || startTick,
         list: identical(overlay, model.overlay)
             ? null
-            : () => overlay == null ? null : _picker(overlay, next.size.rows),
+            : () => overlay is PickerOverlay
+                  ? _picker(overlay.spec, next.size.rows)
+                  : null,
       ),
       startTick ? tea.batch([cmd, _tick()]) : cmd,
     );

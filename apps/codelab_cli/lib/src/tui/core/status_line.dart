@@ -15,6 +15,7 @@ final class StatusInfo {
     this.mode,
     this.model,
     this.queued = 0,
+    this.approvalPending = false,
     this.spinner,
     this.elapsed,
   });
@@ -23,6 +24,11 @@ final class StatusInfo {
   final String? mode;
   final String? model;
   final int queued;
+
+  /// Запрос разрешения ждёт ответа, но под модальным экраном его зона
+  /// скрыта: об этом говорит статус-строка (design.md change
+  /// `add-provider-setup-ui`, D17).
+  final bool approvalPending;
   final String? spinner;
   final Duration? elapsed;
 }
@@ -55,6 +61,7 @@ String statusLine(StatusInfo info, int width) {
     ?info.mode,
     ?model,
     ?queue,
+    if (info.approvalPending) 'approval pending · esc to answer',
   ].join(_separator);
 
   for (final candidate in [
