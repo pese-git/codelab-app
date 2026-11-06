@@ -98,6 +98,15 @@ void main() {
     ]);
   });
 
+  // Ctrl+R показывает и прячет ключ в скрытом поле мастера провайдера
+  // (design.md change `add-provider-setup-ui`, D15; задача 4.1, U-17).
+  test('0x12 is Ctrl+R, between text it keeps the order', () {
+    decoder.add([0x61, 0x12, 0x62]);
+
+    expect(keys, const [TextKey('a'), SpecialKey(Key.ctrlR), TextKey('b')]);
+    expect(Key.ctrlR.label, 'Ctrl+R');
+  });
+
   test('arrows, Home, End and Delete in CSI and SS3 form', () {
     decoder.add(ascii.encode('\x1b[A\x1b[B\x1b[C\x1b[D'));
     decoder.add(ascii.encode('\x1b[H\x1b[F\x1b[1~\x1b[4~\x1b[3~'));

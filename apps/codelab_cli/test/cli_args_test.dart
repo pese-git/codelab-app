@@ -268,4 +268,83 @@ void main() {
   test('an unknown --ui value is a usage error', () {
     expect(() => parseCliArgs(['--ui', 'full']), throwsA(isA<UsageError>()));
   });
+
+  // Клиентские флаги и необязательный id `provider add` (design.md change
+  // `add-provider-setup-ui`, D15, Q13; задача 4.1).
+  group('provider add: мастер и клиентские флаги', () {
+    test('--preset, --skip-check и --yes разбираются', () {
+      final sub = parseCliArgs([
+        'provider',
+        'add',
+        'gw',
+        '--preset',
+        'custom-openai',
+        '--skip-check',
+        '--yes',
+      ]).subcommand!;
+
+      expect(sub.name, 'add');
+      expect(sub.rest, ['gw']);
+      expect(sub.option('preset'), 'custom-openai');
+      expect(sub.flag('skip-check'), isTrue);
+      expect(sub.flag('yes'), isTrue);
+    });
+
+    test('без клиентских флагов они выключены', () {
+      final sub = parseCliArgs(['provider', 'add', 'gw']).subcommand!;
+
+      expect(sub.option('preset'), isNull);
+      expect(sub.flag('skip-check'), isFalse);
+      expect(sub.flag('yes'), isFalse);
+    });
+
+    test('provider add без id разбирается: мастеру на TTY id не нужен', () {
+      final options = parseCliArgs(['provider', 'add']);
+
+      expect(options.command, CliCommand.provider);
+      expect(options.subcommand!.name, 'add');
+      expect(options.subcommand!.rest, isEmpty);
+    });
+
+    test('provider add без id, но с --preset, тоже разбирается', () {
+      final sub = parseCliArgs([
+        'provider',
+        'add',
+        '--preset',
+        'openai',
+      ]).subcommand!;
+
+      expect(sub.rest, isEmpty);
+      expect(sub.option('preset'), 'openai');
+    });
+
+    test('два слова после add — прежняя ошибка 64 без цитирования', () {
+      expect(
+        () => parseCliArgs(['provider', 'add', 'a', 'sk-test-leak-0123456789']),
+        throwsA(
+          isA<UsageError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              'unknown provider arguments (1)',
+              isNot(contains('sk-test-leak')),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('remove по-прежнему требует id', () {
+      expect(
+        () => parseCliArgs(['provider', 'remove']),
+        throwsA(
+          isA<UsageError>().having(
+            (e) => e.message,
+            'message',
+            'provider remove needs the provider id',
+          ),
+        ),
+      );
+    });
+  });
 }

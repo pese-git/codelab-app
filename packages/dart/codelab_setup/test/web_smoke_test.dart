@@ -19,5 +19,13 @@ void main() {
       'SetValue(providers.openrouter.models.m.context_window)',
       'SetValue(agent.default_model)',
     ]);
+    expect(report.settings, [
+      'providers.a.kind:user',
+      'providers.b.kind:user',
+      'providers.a.api_key_env:user',
+      'type:true',
+      'scope:true',
+      'bad:true',
+    ]);
   });
 }
