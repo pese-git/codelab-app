@@ -206,6 +206,222 @@ void main() {
     });
   });
 
+  group('ключ слоя local без цели projectLocal (ревью 4b)', () {
+    const noTarget = EditableSettings(ConfigPaths(codelabHome: '/h'));
+    const withTarget = EditableSettings(
+      ConfigPaths(codelabHome: '/h', projectDir: '/work'),
+    );
+
+    AgentConfigSnapshot localKey() => snapshot(
+      projectLocal: {
+        'budget': {'max_steps': 7},
+      },
+      values: const {'budget.max_steps': 7},
+    );
+
+    test('applySetting не пишет в user молча', () async {
+      final snap = localKey();
+
+      expect(
+        await applySetting(
+          store,
+          snap,
+          'budget.max_steps',
+          raw: '3',
+          layer: ConfigLayer.user,
+          access: noTarget,
+        ),
+        'budget.max_steps is set by local; it cannot be changed here.',
+      );
+      expect(store.applied, isEmpty);
+    });
+
+    test('с целью projectLocal или явным слоем local запись идёт', () async {
+      final snap = localKey();
+
+      expect(
+        await applySetting(
+          store,
+          snap,
+          'budget.max_steps',
+          raw: '3',
+          layer: ConfigLayer.user,
+          access: withTarget,
+        ),
+        startsWith('Updated budget.max_steps'),
+      );
+    });
+
+    test('settingWriteLayerOf: null; Ctrl+U (toUser) — явный выбор user', () {
+      final snap = localKey();
+      final row = settingRowsOf(
+        snap,
+      ).singleWhere((r) => r.key == 'budget.max_steps');
+
+      expect(settingWriteLayerOf(row, noTarget, toUser: false), isNull);
+      expect(
+        settingWriteLayerOf(row, noTarget, toUser: true),
+        ConfigLayer.user,
+      );
+      expect(
+        settingWriteLayerOf(row, withTarget, toUser: false),
+        ConfigLayer.projectLocal,
+      );
+    });
+  });
+
+  group('замаскированное значение не перезаписывается (ревью 4b)', () {
+    const access = EditableSettings(
+      ConfigPaths(codelabHome: '/h', projectDir: '/work'),
+    );
+    const secretValue = 'bash:curl -H "Authorization: Bearer $leakMarker"';
+
+    AgentConfigSnapshot masked() => snapshot(
+      user: {
+        'permissions': {
+          'deny': [secretValue],
+        },
+      },
+      values: const {
+        'permissions.deny': [secretValue],
+      },
+    );
+
+    test(
+      'запись и сброс: Use codelab secret set <name>, apply не вызван',
+      () async {
+        final snap = masked();
+        expect(
+          settingRowsOf(
+            snap,
+          ).singleWhere((r) => r.key == 'permissions.deny').masked,
+          isTrue,
+        );
+
+        for (final raw in <String?>['["a:b"]', null]) {
+          expect(
+            await applySetting(
+              store,
+              snap,
+              'permissions.deny',
+              raw: raw,
+              layer: ConfigLayer.user,
+              access: access,
+            ),
+            'Use codelab secret set <name>',
+            reason: '$raw',
+          );
+        }
+        expect(store.applied, isEmpty);
+      },
+    );
+
+    test('settingRowRefusal — общая функция отказа по строке', () {
+      final snap = masked();
+      final row = settingRowsOf(
+        snap,
+      ).singleWhere((r) => r.key == 'permissions.deny');
+
+      expect(settingRowRefusal(row), 'Use codelab secret set <name>');
+    });
+  });
+
+  group('явный выбор слоя user (ctrl+u) пишет всегда (D17)', () {
+    const noTarget = EditableSettings(ConfigPaths(codelabHome: '/h'));
+
+    test('local и project без цели: explicitLayer → Updated', () async {
+      final snaps = {
+        'local': snapshot(
+          projectLocal: {
+            'budget': {'max_steps': 7},
+          },
+          values: const {'budget.max_steps': 7},
+        ),
+        'project': snapshot(
+          project: {
+            'budget': {'max_steps': 9},
+          },
+          values: const {'budget.max_steps': 9},
+        ),
+      };
+
+      for (final entry in snaps.entries) {
+        expect(
+          await applySetting(
+            store,
+            entry.value,
+            'budget.max_steps',
+            raw: '3',
+            layer: ConfigLayer.user,
+            access: noTarget,
+            explicitLayer: true,
+          ),
+          'Updated budget.max_steps in /h/config.yaml',
+          reason: entry.key,
+        );
+      }
+      expect(store.applied, hasLength(2));
+    });
+
+    test('внешний источник явным слоем не обходится', () async {
+      final snap = snapshot(
+        values: const {'budget.max_steps': 9},
+        external: const {'budget.max_steps': ConfigSourceKind.environment},
+      );
+
+      expect(
+        await applySetting(
+          store,
+          snap,
+          'budget.max_steps',
+          raw: '3',
+          layer: ConfigLayer.user,
+          access: noTarget,
+          explicitLayer: true,
+        ),
+        'budget.max_steps is set by env; it cannot be changed here.',
+      );
+    });
+  });
+
+  group('ключ слоя project без цели projectLocal (ревью 4b)', () {
+    const noTarget = EditableSettings(ConfigPaths(codelabHome: '/h'));
+
+    AgentConfigSnapshot projectKey() => snapshot(
+      project: {
+        'budget': {'max_steps': 9},
+      },
+      values: const {'budget.max_steps': 9},
+    );
+
+    test('applySetting не пишет в user молча', () async {
+      expect(
+        await applySetting(
+          store,
+          projectKey(),
+          'budget.max_steps',
+          raw: '3',
+          layer: ConfigLayer.user,
+          access: noTarget,
+        ),
+        'budget.max_steps is set by project; it cannot be changed here.',
+      );
+      expect(store.applied, isEmpty);
+    });
+
+    test('settingWriteLayerOf: null; Ctrl+U — явный user', () {
+      final row = settingRowsOf(
+        projectKey(),
+      ).singleWhere((r) => r.key == 'budget.max_steps');
+
+      expect(settingWriteLayerOf(row, noTarget, toUser: false), isNull);
+      expect(
+        settingWriteLayerOf(row, noTarget, toUser: true),
+        ConfigLayer.user,
+      );
+    });
+  });
+
   group('applySetting: исходы apply', () {
     test('конфликт — без автоповтора', () async {
       final snap = snapshot();
@@ -295,7 +511,7 @@ void main() {
     });
 
     test('project → projectLocal, хотя editable у строки false; без цели — '
-        'user', () {
+        'отказ (null)', () {
       final snap = snapshot(
         project: {
           'budget': {'max_steps': 9},
@@ -310,7 +526,8 @@ void main() {
       );
       expect(
         settingWriteLayerOf(row, access(withLocal: false), toUser: false),
-        ConfigLayer.user,
+        isNull,
+        reason: 'слой 3 без цели projectLocal: молча в user не пишем',
       );
     });
 

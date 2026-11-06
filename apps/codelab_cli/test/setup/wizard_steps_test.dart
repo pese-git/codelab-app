@@ -439,6 +439,36 @@ void main() {
       expect(wizardStepOf(const Cancelled()).cancelled, isTrue);
     });
 
+    test('savedProviderLine: с ключом — перезапуск, без — /model (R0-4)', () {
+      expect(
+        savedProviderLine('gw', hasKey: false),
+        'Saved provider "gw". Models are available in /model.',
+      );
+      expect(
+        savedProviderLine('gw', hasKey: true),
+        'Saved provider "gw". Restart codelab to use its models.',
+      );
+      ProviderCommitted committed() => const ProviderCommitted(
+        saved: ConfigSaved(
+          fingerprint: 'f',
+          warnings: [],
+          restartRequiredKeys: [],
+        ),
+        keyReplaced: false,
+      );
+      for (final (key, expected) in [
+        (const NoKey(), false),
+        (const UseEnvVar('GW_KEY'), true),
+        (const KeepStoredSecret(), true),
+      ]) {
+        expect(
+          wizardStepOf(Done(_plan(key: key), committed())).savedHasKey,
+          expected,
+          reason: '$key',
+        );
+      }
+    });
+
     test('тексты отказов записи без значений', () {
       expect(
         saveFailureText(

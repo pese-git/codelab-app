@@ -1,15 +1,8 @@
-// В итерации 4a `/provider` и `/settings` в `--ui tui` не исполняются и не
-// показываются в slash-меню (задача 4.3 change `add-provider-setup-ui`;
-// design.md D17, «Сверка с кодом»): TUI берёт список `mvpReplCommands`, а
-// построчный мастер внутри кадра TUI невозможен. Команды появятся в TUI в 4b
-// вместе с оверлеями (4.15).
-//
-// Здесь же — `TuiCommandContext` пробрасывает порт `SetupCommands`
-// (`TuiCommandContext(setup:)`, `ReplContext.setup`), без оверлеев 4a.
-//
-// Это отдельный файл, а не добавление в `tui_command_context_test.dart`:
-// новый параметр `setup:` ещё не собирается, и существующие тесты контекста
-// не должны краснеть по компиляции.
+// В итерации 4b `/provider` и `/settings` исполняются и в `--ui tui` (задача
+// 4.15 change `add-provider-setup-ui`; design.md D17): TUI переходит с
+// `mvpReplCommands` на `replCommands`, а мастер и экран настроек — модальные
+// оверлеи. До 4b (итерация 4a) команд в TUI не было, и этот файл проверял
+// обратное; ожидание заменено по tasks.md 4.15.
 
 import 'package:codelab_cli/codelab_cli.dart';
 import 'package:test/test.dart';
@@ -20,55 +13,50 @@ import '../support/setup_repl_harness.dart';
 
 void main() {
   group('список команд TUI', () {
-    final names = [for (final c in mvpReplCommands) c.name];
+    final names = [for (final c in replCommands) c.name];
 
-    test('/provider и /settings в нём нет', () {
-      expect(names, isNot(contains('provider')));
-      expect(names, isNot(contains('settings')));
+    test('/provider и /settings в нём есть', () {
+      expect(names, containsAll(['provider', 'settings']));
     });
 
-    test('команды не исполняются: маршрут неизвестной команды', () {
-      final router = CommandRouter(mvpReplCommands);
+    test('команды исполняются: маршрут клиентской команды', () {
+      final router = CommandRouter(replCommands);
 
-      for (final line in [
-        '/provider add',
-        '/provider list',
-        '/settings',
-        '/settings agent.effort high',
-      ]) {
+      for (final line in ['/provider add', '/provider list', '/settings']) {
         expect(
           router.route(line, agentCommands: const []),
-          isA<UnknownCommandRoute>(),
+          isA<ClientCommandRoute>(),
           reason: line,
         );
       }
     });
 
-    test('slash-меню не предлагает их по префиксу', () {
-      final router = CommandRouter(mvpReplCommands);
-
-      final provider = router.complete('/prov', agentCommands: const []);
-      final settings = router.complete('/set', agentCommands: const []);
+    test('slash-меню предлагает их по префиксу', () {
+      final router = CommandRouter(replCommands);
 
       expect(
-        provider.candidates.map((c) => c.label),
-        isNot(contains('/provider')),
+        router
+            .complete('/pro', agentCommands: const [])
+            .candidates
+            .map((c) => c.label),
+        contains('/provider'),
       );
-      expect(settings.candidates, isEmpty);
-      expect(settings.replacement, isNull);
+      expect(
+        router.complete('/set', agentCommands: const []).replacement,
+        '/settings ',
+      );
     });
 
-    test('/help не называет их', () {
-      expect([
-        for (final c in mvpReplCommands) c.usage,
-      ], isNot(anyElement(contains('/provider'))));
-      expect([
-        for (final c in mvpReplCommands) c.usage,
-      ], isNot(anyElement(contains('/settings'))));
+    test('/help (usage команд) называет их', () {
+      final usage = [for (final c in replCommands) c.usage].join('\n');
+
+      expect(usage, contains('/provider'));
+      expect(usage, contains('/settings'));
     });
   });
 
-  test('TuiCommandContext пробрасывает порт setup без оверлеев', () async {
+  test('TuiCommandContext: список команд по умолчанию — replCommands, порт '
+      'setup пробрасывается', () async {
     final agent = FakeAgent();
     addTearDown(agent.dispose);
     await agent.workspace.connect(FakeAgent.profile, projectDirectory: '/w');
@@ -91,7 +79,10 @@ void main() {
     final ReplContext asContext = context;
 
     expect(asContext.setup, same(setup));
-    expect(setup.flowRequests, 0);
+    expect(
+      asContext.commands.map((c) => c.name),
+      containsAll(['provider', 'settings']),
+    );
     expect(sent, isEmpty);
   });
 }

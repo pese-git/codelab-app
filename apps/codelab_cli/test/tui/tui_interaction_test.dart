@@ -206,7 +206,10 @@ void main() {
     test('a picker message opens the overlay', () {
       final (model, cmds) = _run(_model(), [const OpenPickerMsg(_models)]);
 
-      expect(model.overlay, _models);
+      expect(
+        model.overlay,
+        isA<PickerOverlay>().having((o) => o.spec, 'spec', _models),
+      );
       expect(cmds, isEmpty);
     });
 
@@ -263,7 +266,7 @@ void main() {
     test('several candidates open a picker that inserts the choice', () {
       var (model, _) = _run(_model(), [_text('/mo'), _key(Key.tab)]);
 
-      final overlay = model.overlay!;
+      final overlay = (model.overlay! as PickerOverlay).spec;
       expect(overlay.action, PickerAction.insert);
       expect([for (final i in overlay.items) i.line], ['/mode ', '/model ']);
 
@@ -289,7 +292,9 @@ void main() {
         _key(Key.tab),
       ]);
 
-      final labels = [for (final i in model.overlay!.items) i.label];
+      final labels = [
+        for (final i in (model.overlay! as PickerOverlay).spec.items) i.label,
+      ];
       expect(labels.where((l) => l.contains('(agent)')), hasLength(2));
     });
   });

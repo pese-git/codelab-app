@@ -198,7 +198,7 @@ void main() async {
       final p = await pty(['provider', 'add']);
       await walkWizard(p, server.baseUrl);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(p.text, contains('Saved provider "local-${server.port}"'));
       expect(
         p.text,
@@ -219,7 +219,7 @@ void main() async {
       await p.waitFor('? API type');
       p.write(_ctrlC);
 
-      expect(await p.exitCode, 130, reason: 'провайдер удалён');
+      expect(await p.exitCode, 130, reason: p.text);
       expect(p.text, contains('provider_wizard.started mode=add entry=cli'));
       expect(config(), _emptyConfig);
     }, skip: skip);
@@ -232,7 +232,7 @@ void main() async {
       final p = await pty(['provider', 'add', '--verbose']);
       await walkWizard(p, server.baseUrl, key: leakMarker);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(p.text, contains('*' * leakMarker.length));
       expectNoLeak(p);
       expect(
@@ -266,7 +266,7 @@ void main() async {
       await waitForAny(p, ['401', 'unauthorized', 'rejected']);
       p.write(_ctrlC);
 
-      expect(await p.exitCode, 130, reason: 'провайдер удалён');
+      expect(await p.exitCode, 130, reason: p.text);
       expect(config(), _emptyConfig);
       expect(File('$home/secrets.yaml').existsSync(), isFalse);
       expectNoLeak(p);
@@ -285,7 +285,7 @@ void main() async {
           'openai-compatible',
         ]);
 
-        expect(await p.exitCode, 64, reason: 'провайдер удалён');
+        expect(await p.exitCode, 64, reason: p.text);
         expect(
           p.text,
           contains('missing required options: --model, --context-window'),
@@ -332,7 +332,7 @@ void main() async {
       await p.waitFor('? Save? [Y/n]');
       p.write('n\r');
 
-      expect(await p.exitCode, 130, reason: 'провайдер удалён');
+      expect(await p.exitCode, 130, reason: p.text);
       expect(config(), _emptyConfig);
     }, skip: skip);
 
@@ -360,7 +360,7 @@ void main() async {
       await p.waitFor('? Save? [Y/n]');
       p.write('\r');
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(p.text, contains('*' * leakMarker.length));
       expectNoLeak(p);
       expect(config(), contains('api_key_secret: codelab/gw'));
@@ -387,7 +387,7 @@ void main() async {
       await p.waitFor('? Save? [Y/n]');
       p.write('\r');
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(
         p.text,
         contains('Saved provider "gw". Models are available in /model.'),
@@ -442,7 +442,8 @@ void main() async {
       expect(result.exitCode, 0, reason: '$result');
       expect(
         result.stdout,
-        'Saved provider "gw". Models are available in /model.\n',
+        // Провайдер с ключом агент подхватывает после перезапуска (R0-4).
+        'Saved provider "gw". Restart codelab to use its models.\n',
       );
       expect('${result.stdout}${result.stderr}', isNot(contains(leakMarker)));
       expect(server.requests.single.authorization, 'Bearer $leakMarker');
@@ -539,7 +540,7 @@ void main() async {
       await p.waitFor(_answer, from: from);
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(
         p.text,
         contains('provider_wizard.started mode=add entry=first_run'),
@@ -576,7 +577,7 @@ void main() async {
       await p.waitFor(_answer, from: from);
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(p.text, contains('\x1b[?1049l'), reason: 'терминал восстановлен');
     }, skip: skip);
 
@@ -602,7 +603,7 @@ void main() async {
       await p.waitFor(_answer, from: from);
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       final written = config();
       expect(written, contains('default_model: local-${server.port}/m1'));
       expect(written, isNot(contains('ghost/old')));
@@ -620,7 +621,7 @@ void main() async {
       await p.waitFor('? API type');
       p.write(_ctrlC);
 
-      expect(await p.exitCode, 130, reason: 'провайдер удалён');
+      expect(await p.exitCode, 130, reason: p.text);
       expect(config(), _emptyConfig);
     }, skip: skip);
 
@@ -661,7 +662,7 @@ agent:
       await p.waitFor(_answer, from: from);
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(config(), gw);
       expect(File('$home/secrets.yaml').existsSync(), isTrue);
       expect(p.text, isNot(contains('? API type')), reason: 'мастера нет');
@@ -699,7 +700,7 @@ agent:
       await p.waitFor('> ');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(config(), gw);
       expect(File('$home/secrets.yaml').existsSync(), isFalse);
     }, skip: skip);
@@ -734,7 +735,7 @@ agent:
       await p.waitFor('> ');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(p.text, isNot(contains('Store a key')));
       expect(config(), gw);
     }, skip: skip);
@@ -743,7 +744,7 @@ agent:
         'терминале — прежний код 64, мастера нет', () async {
       final p = await pty(['-p', 'hi']);
 
-      expect(await p.exitCode, 64, reason: 'провайдер удалён');
+      expect(await p.exitCode, 64, reason: p.text);
       expect(p.text, contains('codelab config check'));
       expect(p.text, isNot(contains("Let's set one up")));
       expect(p.text, isNot(contains('? API type')));
@@ -756,7 +757,7 @@ agent:
 
       final p = await pty(const []);
 
-      expect(await p.exitCode, 64, reason: 'провайдер удалён');
+      expect(await p.exitCode, 64, reason: p.text);
       expect(p.text, contains('budget.max_steps'));
       expect(p.text, isNot(contains("Let's set one up")));
       expect(p.text, isNot(contains('? API type')));
@@ -770,7 +771,7 @@ agent:
       await p.waitFor('> ');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(p.text, isNot(contains("Let's set one up")));
       expect(File('$home/config.yaml').existsSync(), isFalse);
     }, skip: skip);
@@ -805,7 +806,7 @@ agent:
       await p.waitFor('Use codelab secret set <name>');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(config(), written, reason: 'секретный ключ конфиг не менял');
     }, skip: skip);
 
@@ -832,7 +833,7 @@ agent:
       await p.waitFor('> ');
       p.write(_ctrlD);
 
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
       expect(config(), _readyConfig);
     }, skip: skip);
 
@@ -872,9 +873,9 @@ secrets:
         await Future<void>.delayed(const Duration(milliseconds: 400));
         shown = p.text.substring(from).contains('local-${server.port}/m1');
       }
-      expect(shown, isTrue, reason: 'провайдер удалён');
+      expect(shown, isTrue, reason: p.text);
       p.write(_ctrlD);
-      expect(await p.exitCode, 0, reason: 'провайдер удалён');
+      expect(await p.exitCode, 0, reason: p.text);
     }, skip: skip);
 
     test(
@@ -952,7 +953,7 @@ secrets:
         await p.waitFor('providers.spare', from: from);
         p.write(_ctrlD);
 
-        expect(await p.exitCode, 0, reason: 'провайдер удалён');
+        expect(await p.exitCode, 0, reason: p.text);
         expect(config(), aText, reason: 'дом клиента не тронут');
         final changed = File('${b.path}/config.yaml').readAsStringSync();
         expect(changed, contains('effort: high'));
@@ -1119,7 +1120,7 @@ secrets:
         await p.waitFor(readOnly, from: from);
         p.write(_ctrlD);
 
-        expect(await p.exitCode, 0, reason: 'провайдер удалён');
+        expect(await p.exitCode, 0, reason: p.text);
         expect(p.text, isNot(contains('? API type')));
         expect(config(), marker);
       },
