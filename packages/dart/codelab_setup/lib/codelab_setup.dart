@@ -22,6 +22,10 @@
 /// - модели представления: `providerEntriesOf` строит `ProviderEntryView` со
 ///   статусом ключа `KeyStatusView` и источником `ConfigSourceView` без чтения
 ///   значений;
+/// - `settingFieldsOf` строит `SettingFieldView` — строки `/settings`
+///   (`key value source`, источники `default|user|project|local|config|env`)
+///   по реестру `SettingsRegistry` ядра; значения карт и секретов не
+///   раскрываются;
 /// - `ProviderCheck`/`HttpProviderCheck` — проверка `/models`; IO-фабрика —
 ///   `ioProviderCheck()` в `io.dart`;
 /// - `ProviderRemover` — удаление провайдера одним `apply` и секрета после
@@ -44,10 +48,15 @@ export 'package:codelab_agent_core/codelab_agent_core.dart'
         ConfigLoadResult,
         ConfigSnapshot,
         ConfigTarget,
+        ConfigValueException,
         RemoveTable,
         SecretBackendInfo,
         SecretNames,
         SetValue,
+        SettingDescriptor,
+        SettingScope,
+        SettingType,
+        SettingsRegistry,
         UnsetValue,
         before1Note;
 export 'src/access/settings_access.dart';
@@ -66,3 +75,4 @@ export 'src/secret/secret_value.dart';
 export 'src/views/key_status_view.dart';
 export 'src/views/provider_entry_view.dart'
     show ProviderEntryView, providerEntriesOf;
+export 'src/views/setting_field_view.dart';
