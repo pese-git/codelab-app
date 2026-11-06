@@ -261,8 +261,9 @@ providers:
         environment: {...Platform.environment, 'CODELAB_HOME': home},
         logger: CodeLabEmbeddedLogger(),
       );
-      // Имя секрета выводится из адреса: `127.0.0.1:<порт>` → `127-0-0-1-<порт>`.
-      expect(await access.isSet('codelab/127-0-0-1-${server.port}'), isTrue);
+      // Имя секрета выводится из адреса: у локального хоста — `local-<порт>`
+      // (`127.0.0.1:<порт>` → `local-<порт>`, design.md D7; адрес в id не попадает).
+      expect(await access.isSet('codelab/local-${server.port}'), isTrue);
 
       // Переподключение без перезапуска: баннера нет, модель — в композере.
       for (
@@ -406,7 +407,7 @@ providers:
       );
       expect(_key('provider-wizard-save'), findsOneWidget);
       expect(file.readAsStringSync(), contains('# edited elsewhere'));
-      expect(file.readAsStringSync(), isNot(contains('127-0-0-1')));
+      expect(file.readAsStringSync(), isNot(contains('local-${server.port}')));
 
       // «Save» ещё раз: автомат перечитал снимок, запись идёт поверх свежего
       // файла, а внешняя правка цела (D9).
@@ -419,7 +420,7 @@ providers:
         await tester.pump(const Duration(milliseconds: 100));
       }
       expect(file.readAsStringSync(), contains('# edited elsewhere'));
-      expect(file.readAsStringSync(), contains('127-0-0-1'));
+      expect(file.readAsStringSync(), contains('local-${server.port}'));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
