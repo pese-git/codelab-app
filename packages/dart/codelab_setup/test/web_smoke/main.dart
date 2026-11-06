@@ -5,6 +5,8 @@
 // `web_smoke_test.dart` (design.md change `add-provider-setup-ui`, D20).
 import 'dart:convert';
 
+import 'package:codelab_agent_core/codelab_agent_core.dart'
+    show LogLevel, Logger;
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:http/http.dart' as http;
 
@@ -15,12 +17,16 @@ final class SetupWebSmokeReport {
     required this.models,
     required this.entries,
     required this.removal,
+    required this.wizard,
   });
 
   final String access;
   final List<String> models;
   final List<String> entries;
   final String removal;
+
+  /// Правки плана мастера, прошедшего от пресета до обзора.
+  final List<String> wizard;
 }
 
 /// Клиент, который отвечает списком моделей без сети.
@@ -55,6 +61,77 @@ final class _MemoryStore implements AgentConfigStore {
   @override
   Future<AgentConfigSnapshot> snapshot({required String cwd}) =>
       throw UnimplementedError('smoke работает по готовому снимку');
+}
+
+/// Журнал, который молчит: smoke не проверяет записи.
+final class _SilentLogger implements Logger {
+  const _SilentLogger();
+
+  @override
+  bool isEnabled(LogLevel level) => false;
+
+  @override
+  void log(
+    LogLevel level,
+    String event, {
+    Map<String, Object?> fields = const {},
+    Object? error,
+    StackTrace? stack,
+  }) {}
+}
+
+/// Порт ключей в памяти: бэкенд только для чтения, секретов нет.
+final class _NoKeys implements ProviderKeys {
+  @override
+  SecretBackendInfo get backend =>
+      const SecretBackendInfo(id: 'env', writable: false);
+
+  @override
+  String? get readOnlyHint => 'read-only';
+
+  @override
+  Future<bool> stored(String name) async => false;
+
+  @override
+  Future<SecretValue?> read(String name) async => null;
+
+  @override
+  Future<ProviderKeyWrite> write(String name, SecretValue value) async =>
+      const ProviderKeyRefused('read-only');
+
+  @override
+  Future<SecretDeletion> delete(String name) async => SecretDeletion.notSet;
+}
+
+/// Прогоняет мастер провайдера от пресета до обзора на портах в памяти.
+Future<List<String>> _runWizard(AgentConfigSnapshot snapshot) async {
+  final keys = _NoKeys();
+  final store = _MemoryStore();
+  final flow = ProviderSetupFlow(
+    check: HttpProviderCheck(_FakeModelsClient.new),
+    committer: ProviderSetupCommitter(config: store, keys: keys),
+    keys: keys,
+    snapshot: snapshot,
+    access: const EditableSettings(ConfigPaths(codelabHome: '/home')),
+    environment: const {},
+    isLocalHost: (host) => host == 'localhost',
+    logger: const _SilentLogger(),
+    entry: ProviderWizardEntry.app,
+  );
+  // Подписка раньше, чем автомат дойдёт до нужного состояния.
+  flow
+    ..dispatch(const PresetChosen('openrouter'))
+    ..dispatch(const BaseUrlSubmitted('https://openrouter.ai/api/v1'));
+  await flow.states.firstWhere((s) => s is ChoosingKey && s.ready);
+  flow.dispatch(const KeySubmitted(NoKey()));
+  await flow.states.firstWhere((s) => s is ChoosingModel);
+  flow.dispatch(const ModelChosen('m'));
+  final edits = [
+    for (final edit in (flow.current as Reviewing).plan.toEdits())
+      edit.toString(),
+  ];
+  await flow.dispose();
+  return edits;
 }
 
 /// Прогоняет доступ, проверку `/models`, список провайдеров и удаление.
@@ -105,6 +182,7 @@ Future<SetupWebSmokeReport> runSetupWebSmoke() async {
     ],
     entries: [for (final entry in entries) '${entry.id}:${entry.key.label}'],
     removal: removal.runtimeType.toString(),
+    wizard: await _runWizard(snapshot),
   );
 }
 

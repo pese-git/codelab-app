@@ -13,5 +13,11 @@ void main() {
     expect(report.models, ['m']);
     expect(report.entries, ['a:Key: env SMOKE_KEY (not set)', 'b:No key']);
     expect(report.removal, 'ProviderRemoved');
+    expect(report.wizard, [
+      'SetValue(providers.openrouter.kind)',
+      'SetValue(providers.openrouter.base_url)',
+      'SetValue(providers.openrouter.models.m.context_window)',
+      'SetValue(agent.default_model)',
+    ]);
   });
 }

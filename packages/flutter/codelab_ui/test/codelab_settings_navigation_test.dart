@@ -184,4 +184,40 @@ void main() {
     );
     expect(find.byTooltip('Back'), findsOneWidget);
   });
+
+  // Задача 3.15/3.16 change `add-provider-setup-ui` (D24): тело страницы
+  // получает всю высоту области содержимого, а не высоту по содержимому
+  // с центрированием внутри `NavigationView`.
+  for (final mode in CodeLabSettingsNavMode.values) {
+    testWidgets('the page body fills the content area in $mode mode', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1000, 900));
+      await tester.pumpWidget(
+        FluentApp(
+          home: CodeLabSettingsNavigation(
+            items: _items,
+            selectedId: 'connection',
+            mode: mode,
+            onSelected: (_) {},
+            onQueryChanged: (_) {},
+            onBack: () {},
+            // Прокручиваемая страница: она сжимается до высоты содержимого, если
+            // получает неограниченно-свободные ограничения (причина D24).
+            child: const SingleChildScrollView(
+              key: ValueKey('page-fill'),
+              child: SizedBox(height: 100),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final title = tester.getRect(find.byType(TitleBar));
+      final page = tester.getRect(find.byKey(const ValueKey('page-fill')));
+      expect(page.bottom, 900);
+      expect(page.top, greaterThanOrEqualTo(title.bottom));
+      expect(page.top, lessThan(title.bottom + 60));
+    });
+  }
 }

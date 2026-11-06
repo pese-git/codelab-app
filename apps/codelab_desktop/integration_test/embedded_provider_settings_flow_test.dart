@@ -9,8 +9,16 @@
 // временный `CODELAB_HOME`, бэкенд секретов `file` в нём, `/models` отдаёт
 // локальный `HttpServer`. Шаг 6 (WebSocket) нужен процесс
 // `codelab-agent serve --ws` (`CODELAB_E2E_AGENT=dart`), иначе пропускается.
-// Шаги 1, 3 и 4 §12.4.13 относятся к мастеру провайдера (итерация 3).
+//
+// Мастер провайдера (задачи 3.9 и 3.14; шаги 1, 3 и 4 §12.4.13; spec
+// app-settings «Мастер провайдера в app», agent-workbench-ui «Встроенный агент
+// без провайдера»; design.md D7, D26): пустой дом → баннер → «Add provider» →
+// мастер → переподключение; «Edit» с `KeepStoredSecret`; конфликт записи.
+// Им нужен настоящий открыватель встроенного агента на временном
+// `CODELAB_HOME`, поэтому в режиме `CODELAB_E2E_AGENT=embedded` (сценарий
+// модели вместо конфига) они пропускаются.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_desktop/app/app_scope.dart';
@@ -62,6 +70,53 @@ Future<(HttpServer, int Function())> _modelsServer(int status) async {
   });
   addTearDown(() => server.close(force: true));
   return (server, () => requests);
+}
+
+/// Сервер `/models`: `200` со списком из модели `m1` без окна контекста
+/// (мастер спросит его); считает запросы.
+Future<(HttpServer, int Function())> _modelsOkServer() async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  var requests = 0;
+  server.listen((request) async {
+    requests++;
+    request.response
+      ..statusCode = 200
+      ..headers.contentType = ContentType.json
+      ..write('{"data":[{"id":"m1"}]}');
+    await request.response.close();
+  });
+  addTearDown(() => server.close(force: true));
+  return (server, () => requests);
+}
+
+Future<void> _tapKey(WidgetTester tester, String key) async {
+  await _pumpUntil(tester, _key(key));
+  await tester.tap(_key(key));
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+/// Проходит мастер от пресета до «Review»: custom-пресет с адресом [url],
+/// ключ — `provider-wizard-key-<keyKind>` (для `store` — [marker] в поле).
+Future<void> _walkToReview(
+  WidgetTester tester, {
+  required String url,
+  required String keyKind,
+  String? marker,
+}) async {
+  await _tapKey(tester, 'provider-wizard-preset-custom-openai');
+  await _tapKey(tester, 'provider-wizard-next');
+  await _pumpUntil(tester, _key('provider-wizard-base-url-field'));
+  await tester.enterText(_key('provider-wizard-base-url-field'), url);
+  await _tapKey(tester, 'provider-wizard-next');
+  await _tapKey(tester, 'provider-wizard-key-$keyKind');
+  if (marker != null) {
+    await tester.enterText(_key('provider-wizard-key-field'), marker);
+  }
+  await _tapKey(tester, 'provider-wizard-next');
+  await _tapKey(tester, 'provider-wizard-model-m1');
+  // `/models` без окна контекста: мастер спрашивает его (подсказка 32000).
+  await _tapKey(tester, 'provider-wizard-next');
+  await _pumpUntil(tester, _key('provider-wizard-review'));
 }
 
 void main() {
@@ -143,6 +198,231 @@ providers:
       );
       expect(await fresh.isSet('codelab/local'), isFalse);
       expect(await fresh.isSet('codelab/anthropic'), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await closeCodeLabRootScope();
+    },
+  );
+
+  testWidgets(
+    'an empty home: the banner offers Add provider, the wizard saves the '
+    'provider with the key in the store, the embedded agent is reconnected '
+    'and the model is in the composer',
+    (tester) async {
+      final (server, requests) = await _modelsOkServer();
+      final secrets = await E2eAgent.current.openFileSecrets();
+      final home = File(E2eAgent.current.profilesPath).parent.path;
+
+      await tester.pumpWidget(
+        E2eAgent.current.bootstrap(profileSecrets: secrets),
+      );
+      await tester.pumpAndSettle();
+      final shellCubit = codeLabDependenciesOf(
+        tester.element(find.byType(CodeLabApp)),
+      ).shellCubit;
+      unawaited(shellCubit.connect());
+
+      // Новая установка: понятный текст вместо сырых проблем конфига.
+      await _pumpUntil(tester, _key('connection-banner-add-provider'));
+      expect(
+        find.text('No model provider is configured for the embedded agent.'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('agent.default_model: required'),
+        findsNothing,
+      );
+      expect(find.textContaining('codelab config check'), findsNothing);
+
+      await tester.tap(_key('connection-banner-add-provider'));
+      await _pumpUntil(tester, _key('provider-wizard'));
+      await _walkToReview(
+        tester,
+        url: 'http://127.0.0.1:${server.port}/v1',
+        keyKind: 'store',
+        marker: _marker,
+      );
+      expect(requests(), 1);
+      expect(find.textContaining(_marker), findsNothing);
+      await tester.tap(_key('provider-wizard-save'));
+      for (
+        var i = 0;
+        i < 100 && _key('provider-wizard').evaluate().isNotEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      // Ключ — только в хранилище, ссылка и модель по умолчанию — в конфиге.
+      final config = File('$home/config.yaml').readAsStringSync();
+      expect(config, contains('api_key_secret: codelab/'));
+      expect(config, contains('default_model:'));
+      expect(config, isNot(contains(_marker)));
+      final access = await ClientSecretAccess.open(
+        codelabHome: home,
+        environment: {...Platform.environment, 'CODELAB_HOME': home},
+        logger: CodeLabEmbeddedLogger(),
+      );
+      // Имя секрета выводится из адреса: `127.0.0.1:<порт>` → `127-0-0-1-<порт>`.
+      expect(await access.isSet('codelab/127-0-0-1-${server.port}'), isTrue);
+
+      // Переподключение без перезапуска: баннера нет, модель — в композере.
+      for (
+        var i = 0;
+        i < 200 &&
+            shellCubit.state.connectionStatus !=
+                CodeLabConnectionStatus.connected;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        shellCubit.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      expect(_key('connection-banner-add-provider'), findsNothing);
+      await shellCubit.createSession();
+      for (
+        var i = 0;
+        i < 100 && !shellCubit.state.configOptions.any((o) => o.id == 'model');
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      final model = shellCubit.state.configOptions.firstWhere(
+        (o) => o.id == 'model',
+      );
+      expect(model.values.any((v) => v.value.endsWith('/m1')), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await closeCodeLabRootScope();
+    },
+    skip: E2eAgent.current.kind == E2eAgentKind.embedded,
+  );
+
+  testWidgets(
+    'Edit with the stored key kept: the address changes, the secret stays',
+    (tester) async {
+      final (server, _) = await _modelsOkServer();
+      final home = File(E2eAgent.current.profilesPath).parent.path;
+      File('$home/config.yaml').writeAsStringSync('''
+secrets:
+  backend: file
+agent:
+  default_model: team/m1
+providers:
+  team:
+    kind: openai-compatible
+    base_url: http://127.0.0.1:${server.port}/v1
+    api_key_secret: codelab/team
+    models:
+      m1:
+        context_window: 32000
+''');
+      final secrets = await E2eAgent.current.openFileSecrets();
+      final access = await ClientSecretAccess.open(
+        codelabHome: home,
+        environment: {...Platform.environment, 'CODELAB_HOME': home},
+        logger: CodeLabEmbeddedLogger(),
+      );
+      await access.admin.store('codelab/team', _marker);
+
+      await tester.pumpWidget(
+        E2eAgent.current.bootstrap(profileSecrets: secrets),
+      );
+      await tester.pumpAndSettle();
+      await _openProviders(tester);
+
+      await tester.tap(_key('providers-edit-team'));
+      await _pumpUntil(tester, _key('provider-wizard-base-url-field'));
+      await tester.enterText(
+        _key('provider-wizard-base-url-field'),
+        'http://127.0.0.1:${server.port}/alt',
+      );
+      await _tapKey(tester, 'provider-wizard-next');
+      await _tapKey(tester, 'provider-wizard-key-keep');
+      await _tapKey(tester, 'provider-wizard-next');
+      await _tapKey(tester, 'provider-wizard-model-m1');
+      await _tapKey(tester, 'provider-wizard-next');
+      await _pumpUntil(tester, _key('provider-wizard-review'));
+      await tester.tap(_key('provider-wizard-save'));
+      for (
+        var i = 0;
+        i < 100 && _key('provider-wizard').evaluate().isNotEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      final config = File('$home/config.yaml').readAsStringSync();
+      expect(config, contains('/alt'));
+      expect(config, contains('api_key_secret: codelab/team'));
+      expect(config, isNot(contains(_marker)));
+      expect(await access.read('codelab/team'), _marker);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await closeCodeLabRootScope();
+    },
+  );
+
+  testWidgets(
+    'a config changed on disk during the wizard: the conflict banner, the '
+    'draft stays, Save again writes over the fresh file',
+    (tester) async {
+      final (server, _) = await _modelsOkServer();
+      final home = File(E2eAgent.current.profilesPath).parent.path;
+      final file = File('$home/config.yaml')
+        ..writeAsStringSync('''
+agent:
+  default_model: team/m1
+providers:
+  team:
+    kind: openai-compatible
+    base_url: http://127.0.0.1:${server.port}/v1
+    models:
+      m1:
+        context_window: 32000
+''');
+
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
+      await tester.pumpAndSettle();
+      await _openProviders(tester);
+
+      await tester.tap(_key('providers-add'));
+      await _pumpUntil(tester, _key('provider-wizard'));
+      await _walkToReview(
+        tester,
+        url: 'http://127.0.0.1:${server.port}/v1',
+        keyKind: 'none',
+      );
+      // Файл меняет другой процесс между чтением и записью.
+      file.writeAsStringSync('${file.readAsStringSync()}# edited elsewhere\n');
+      await tester.tap(_key('provider-wizard-save'));
+      await _pumpUntil(tester, _key('provider-wizard-review-notice'));
+
+      expect(
+        find.text('Config changed on disk — review and save again'),
+        findsOneWidget,
+      );
+      expect(_key('provider-wizard-save'), findsOneWidget);
+      expect(file.readAsStringSync(), contains('# edited elsewhere'));
+      expect(file.readAsStringSync(), isNot(contains('127-0-0-1')));
+
+      // «Save» ещё раз: автомат перечитал снимок, запись идёт поверх свежего
+      // файла, а внешняя правка цела (D9).
+      await tester.tap(_key('provider-wizard-save'));
+      for (
+        var i = 0;
+        i < 100 && _key('provider-wizard').evaluate().isNotEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(file.readAsStringSync(), contains('# edited elsewhere'));
+      expect(file.readAsStringSync(), contains('127-0-0-1'));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
