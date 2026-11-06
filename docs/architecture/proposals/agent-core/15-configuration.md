@@ -293,10 +293,28 @@ api_key_secret are mutually exclusive`: конфликт источников (�
 
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `default_model` | string `"provider/model"` | обязателен | модель новой сессии; должна быть в каталоге |
+| `default_model` | string `"provider/model"` | нет | явная модель новой сессии; если задана — должна быть в каталоге, иначе ошибка без отката. Без ключа модель выбирается правилом ниже (change `optional-default-model`) |
 | `fallback` | string[] | `[]` | цепочка `withFallback` (§2.10.3) после `default_model` |
 | `summary_model` | string? | `null` | модель суммаризатора (§9.7): `null` → роль `smol` (§17.10.5), иначе модель сессии; порядок — переопределение роли `smol` на сессию, `agent.summary_model`, `llm.roles.smol.models`, модель сессии |
 | `effort` | `"low"` \| `"medium"` \| `"high"` | `"medium"` | начальное значение опции сессии `effort` (§2.12.3, §13.6) |
+
+**Модель новой сессии без `agent.default_model`** (change `optional-default-model`, D1–D7; идея
+порядка — поведение OpenCode в описании пользователя, https://opencode.ai/docs/models/, код не
+изучался и не копировался):
+
+1. явная `agent.default_model` любого слоя (файлы, `CODELAB_CONFIG`, `CODELAB_MODEL`,
+   `CODELAB_PROVIDER_*`, флаги `serve`) — источник `config`;
+2. последняя модель, явно выбранная пользователем (`$CODELAB_HOME/state/last-model.json`, порт
+   ядра `LastModelStore`), если она есть в каталоге сессии — источник `last-used`; только для
+   `createSession` без модели;
+3. первая модель первого доступного провайдера в порядке `providers` — источник `first-provider`.
+   Доступен провайдер с моделью, без `providerProblems` (переменная `api_key_env` задана) и без
+   `UnusableKeyRef`; `api_key_secret` хранилище при выборе не читает. Нет доступных — первая
+   модель первого провайдера с моделями.
+
+Нет ни одной модели — проблема `agent.default_model` (вид `value`, событие `config.model.none`,
+`no model is configured; add a provider with at least one model`). `CoreConfig.defaultModel` —
+модель шагов 1 или 3, `CoreConfig.defaultModelSource` — её источник; шаг 2 выполняет рантайм.
 
 **`llm.roles.<role>`** (после MVP, цель L-10) — `<role>`: `default` (основная), `smol` (сжатие,
 заголовок сессии, исследование), `slow` (ревью), `plan`, `subagent`, `vision` (разбор изображений,
@@ -649,7 +667,9 @@ loadConfig(cwd, env, flags):
      с той же строгой проверкой шагов 3 и 6, без правил доверия
    applyEnv(merged, env); applyFlags(merged, flags)       // §15.6
 8. семантическая проверка:
-     default_model, fallback, summary_model (если задан) и после MVP llm.roles.*.models существуют в каталоге моделей
+     default_model (если задан), fallback, summary_model (если задан) и после MVP llm.roles.*.models существуют в каталоге моделей
+     default_model не задан → модель первого доступного провайдера (§15.4, `agent`); ни одной модели → проблема
+       agent.default_model с событием config.model.none
      у каждого openai-compatible провайдера есть base_url
      providers.<id>.kind — известный вид, иначе ошибка со списком видов (подмены mock нет, DF-15)
      api_key_env указывает на существующую переменную → иначе предупреждение (не ошибка:
@@ -895,7 +915,7 @@ warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Mo
 ```
 
 Код выхода от предупреждения не меняется, в счётчик `Config: invalid (issues: <n>)` оно не входит. Агент без `config.yaml` и без флагов провайдера
-стартует с ошибкой `agent.default_model: required` (код `64`), и предупреждение стоит рядом в stderr.
+стартует с ошибкой `agent.default_model: no model is configured; …` (код `64`, событие `config.model.none`), и предупреждение стоит рядом в stderr.
 
 **Как переносить.** Ключ из столбца «Новый ключ» записывается в `config.yaml` по схеме §15.4;
 строки с прочерком не переносятся. Отдельных правил для старых ключей нет: файл `config.yaml`

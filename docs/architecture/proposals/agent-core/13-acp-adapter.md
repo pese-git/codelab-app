@@ -145,7 +145,7 @@ design.md change `add-embedded-agent-mode`, D4.
 
    Пропуск не ошибка запроса: сессия создаётся. Серверы из конфига (§15) добавляются к серверам
    клиента; при совпадении `name` побеждает сервер клиента.
-3. `runtime.createSession(SessionSpec(cwd, mode: config.permissions.mode ?? profile.defaultMode (§10.5), model: config.defaultModel,
+3. `runtime.createSession(SessionSpec(cwd, mode: config.permissions.mode ?? profile.defaultMode (§10.5), model: не передаётся — модель выбирает рантайм по §15.4 `agent`,
    env: из clientCapabilities, gate: AcpPermissionGate(connection)))`. Сессия пишет заголовок и
    `model_change`.
 4. MCP-серверы подключаются параллельно, не дольше `mcpConnectTimeout` (10 с) каждый; ответ
@@ -378,7 +378,7 @@ design.md change `add-embedded-agent-mode`, D4.
 | `id` | `category` | Значения | Когда есть в списке | Текущее значение |
 |---|---|---|---|---|
 | `mode` | `mode` | режимы таблицы выше | всегда | последний `mode_change` ветки или режим профиля |
-| `model` | `model` | `ModelCatalog.models` (§2.12.2): `value` — `provider/model`, `name` — имя модели | всегда | последний `model_change` ветки или `agent.default_model` |
+| `model` | `model` | `ModelCatalog.models` (§2.12.2): `value` — `provider/model`, `name` — имя модели | всегда | последний `model_change` ветки или модель новой сессии по §15.4 (`agent.default_model`, последняя выбранная, первый доступный провайдер) |
 | `effort` | `thought_level` | `low`, `medium`, `high` (имена `Low`, `Medium`, `High`) | только если у текущей модели `supportsReasoning` (§2.12.3) | последний `config_change` с `optionId: "effort"` на ветке или `agent.effort` |
 | `agent` | нет (категории без `_` зарезервированы ACP, D12) | `default` (имя `Default`), затем `AgentSession.agents` по имени с `description` определения | только если у сессии есть хотя бы одно определение со `scope` `session` или `both` (§15.8, этап 8.8) | `AgentSession.agent`: последний `config_change` с `optionId: "agent"` на ветке, если определение есть, иначе `default` |
 
