@@ -13,6 +13,7 @@ class CodeLabConnectionScreen extends StatelessWidget {
     this.onConnect,
     this.onReconnect,
     this.onConfigureConnection,
+    this.extraAction,
     this.isBusy = false,
     super.key,
   });
@@ -25,6 +26,11 @@ class CodeLabConnectionScreen extends StatelessWidget {
   final VoidCallback? onConnect;
   final VoidCallback? onReconnect;
   final VoidCallback? onConfigureConnection;
+
+  /// Действие хоста без знания о его смысле (например, «Add provider»,
+  /// change `add-provider-setup-ui`, D26); ставится перед стандартными
+  /// кнопками.
+  final Widget? extraAction;
   final bool isBusy;
 
   @override
@@ -83,6 +89,7 @@ class CodeLabConnectionScreen extends StatelessWidget {
                   runSpacing: 8,
                   alignment: WrapAlignment.end,
                   children: [
+                    ?extraAction,
                     if (onConfigureConnection != null)
                       CodeLabButton(
                         label: 'Configure connection',
@@ -99,7 +106,11 @@ class CodeLabConnectionScreen extends StatelessWidget {
                       CodeLabButton(
                         label: 'Connect',
                         icon: FluentIcons.plug_connected,
-                        emphasis: CodeLabButtonEmphasis.primary,
+                        // Основная кнопка одна: с действием хоста оно и есть
+                        // основное, «Connect» — обычная.
+                        emphasis: extraAction == null
+                            ? CodeLabButtonEmphasis.primary
+                            : CodeLabButtonEmphasis.secondary,
                         isLoading: isBusy,
                         onPressed: isBusy ? null : onConnect,
                       ),

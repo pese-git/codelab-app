@@ -46,6 +46,8 @@ export 'src/host/services.dart';
 export 'src/llm/decorators/fallback.dart';
 export 'src/llm/decorators/retry.dart' show RetryPolicy, withTransientRetry;
 export 'src/llm/decorators/watchdog.dart';
+export 'src/llm/builtin_models.dart'
+    show builtinModelInfo, safeDefaultContextWindow;
 export 'src/llm/errors.dart';
 export 'src/llm/event_stream.dart';
 export 'src/llm/events.dart';

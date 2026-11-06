@@ -31,6 +31,22 @@ abstract interface class ProviderSettingsSession {
   /// Удаляет секрет [name]; вызывается только после `ConfigSaved` (SETUP-24).
   Future<SecretDeletion> deleteSecret(String name);
 
+  /// Строит автомат мастера провайдера (`ProviderSetupFlow`) на этой сессии:
+  /// проверка `/models`, порт ключей, запись конфига и `isLocalHost` kit
+  /// собирает composition root, а Cubit мастера получает готовый автомат.
+  ///
+  /// Почему в сессии, а не в Cubit: порт `ProviderKeys` (значения ключей) и
+  /// IO-барель моста нельзя пускать в `features/` (SETUP-1, SETUP-9, D7).
+  /// [editing] — строка правки («Edit»), [forceDefault] — «Make default»
+  /// нельзя снять (баннер D26). [entry] — откуда открыт мастер для события
+  /// `provider_wizard.started` (D18). Снимок конфига читается заново на каждый
+  /// вызов, чтобы мастер видел свежие слои.
+  Future<ProviderSetupFlow> openWizard({
+    ProviderEntryView? editing,
+    bool forceDefault = false,
+    ProviderWizardEntry entry = ProviderWizardEntry.app,
+  });
+
   /// Запрашивает список моделей провайдера. Ключ по ссылке [key] читает сам
   /// адаптер и сразу передаёт проверке; в Cubit значение не попадает.
   ///

@@ -29,13 +29,18 @@ enum CodeLabConnectionBannerStatus {
 ///
 /// Как использовать: хост кладёт виджет над непустой лентой, пока
 /// соединение `lost`, `failed` или `reconnecting`, и убирает, когда оно
-/// снова установлено. [message] — причина от ядра клиента.
+/// снова установлено. [message] — причина от ядра клиента. [extraAction] —
+/// действие хоста, которое виджет не интерпретирует (например, «Add provider»
+/// для встроенного агента без провайдера, change `add-provider-setup-ui`,
+/// D26): ставится перед стандартными кнопками, пока соединение не
+/// переподключается.
 class CodeLabConnectionBanner extends StatelessWidget {
   const CodeLabConnectionBanner({
     required this.status,
     this.message,
     this.onReconnect,
     this.onConfigureConnection,
+    this.extraAction,
     super.key,
   });
 
@@ -43,6 +48,7 @@ class CodeLabConnectionBanner extends StatelessWidget {
   final String? message;
   final VoidCallback? onReconnect;
   final VoidCallback? onConfigureConnection;
+  final Widget? extraAction;
 
   @override
   Widget build(BuildContext context) {
@@ -73,11 +79,16 @@ class CodeLabConnectionBanner extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
+                ?extraAction,
                 if (onReconnect != null)
                   CodeLabButton(
                     label: 'Reconnect',
                     icon: FluentIcons.refresh,
-                    emphasis: CodeLabButtonEmphasis.primary,
+                    // Основная кнопка одна: с действием хоста оно и есть
+                    // основное, «Reconnect» — обычная.
+                    emphasis: extraAction == null
+                        ? CodeLabButtonEmphasis.primary
+                        : CodeLabButtonEmphasis.secondary,
                     onPressed: onReconnect,
                   ),
                 if (onConfigureConnection != null)

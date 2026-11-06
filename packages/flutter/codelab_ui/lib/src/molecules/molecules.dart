@@ -11,6 +11,7 @@ export 'codelab_key_value_list.dart';
 export 'codelab_prompt_composer.dart';
 export 'codelab_settings_row.dart';
 export 'codelab_settings_section.dart';
+export 'codelab_step_breadcrumb.dart';
 export 'codelab_text_disclosure.dart';
 export 'codelab_thought_block.dart';
 export 'codelab_tool_call_summary.dart';

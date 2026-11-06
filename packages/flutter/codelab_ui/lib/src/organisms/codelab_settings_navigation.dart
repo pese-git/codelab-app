@@ -170,7 +170,20 @@ class _CodeLabSettingsNavigationState extends State<CodeLabSettingsNavigation> {
         ),
         items: paneItems,
       ),
-      paneBodyBuilder: (item, body) => widget.child,
+      // `NavigationView` отдаёт телу страницы свободные по высоте ограничения
+      // (`0 <= h <= H`: страница лежит в `AnimatedSwitcher`-стеке, который
+      // центрирует детей). Прокручиваемая страница тогда сжимается до высоты
+      // содержимого и оказывается по центру области, а не у верхнего края
+      // (D24, задача 3.16). Растягиваем тело на всю область сами.
+      paneBodyBuilder: (item, body) => LayoutBuilder(
+        builder: (context, constraints) => ConstrainedBox(
+          constraints: BoxConstraints.tightFor(
+            width: constraints.hasBoundedWidth ? constraints.maxWidth : null,
+            height: constraints.hasBoundedHeight ? constraints.maxHeight : null,
+          ),
+          child: widget.child,
+        ),
+      ),
     );
   }
 

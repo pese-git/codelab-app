@@ -2,6 +2,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show CommandCatalog;
 import 'package:codelab_ui/codelab_ui.dart';
 
+import 'connection_cubit.dart' show ProviderSetupNotice;
 import 'ui_mappers.dart';
 
 /// Состояние рабочего места в прежней форме — то, что читают виджеты,
@@ -23,6 +24,7 @@ final class CodeLabShellState {
     required this.profileLabel,
     required this.connectionDetail,
     this.connectionMessage,
+    this.providerSetupNotice,
     required this.currentSessionLabel,
     required this.currentSessionDetail,
     required this.sessions,
@@ -67,6 +69,11 @@ final class CodeLabShellState {
   /// Причина потери соединения или неудачного подключения для баннера над
   /// лентой (design D6 change `add-connection-and-error-states`).
   final String? connectionMessage;
+
+  /// Метка сбоя встроенного агента «не настроен провайдер»: баннер с «Add
+  /// provider» вместо сырого текста проблем (change `add-provider-setup-ui`,
+  /// D26); `null` — сбой другой.
+  final ProviderSetupNotice? providerSetupNotice;
 
   // Список и выбор сессий — `SessionsCubit`.
   final String currentSessionLabel;
@@ -148,6 +155,7 @@ final class CodeLabShellState {
     String? profileLabel,
     String? connectionDetail,
     Object? connectionMessage = _unset,
+    Object? providerSetupNotice = _unset,
     String? currentSessionLabel,
     String? currentSessionDetail,
     List<CodeLabSessionListItem>? sessions,
@@ -190,6 +198,9 @@ final class CodeLabShellState {
       connectionMessage: identical(connectionMessage, _unset)
           ? this.connectionMessage
           : connectionMessage as String?,
+      providerSetupNotice: identical(providerSetupNotice, _unset)
+          ? this.providerSetupNotice
+          : providerSetupNotice as ProviderSetupNotice?,
       currentSessionLabel: currentSessionLabel ?? this.currentSessionLabel,
       currentSessionDetail: currentSessionDetail ?? this.currentSessionDetail,
       sessions: sessions ?? this.sessions,

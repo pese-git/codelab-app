@@ -14,6 +14,9 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 
+import 'fake_provider_wizard.dart';
+import 'recording_logger.dart';
+
 /// Значение ключа, которое не должно выйти за пределы двойника.
 const leakMarker = 'sk-test-leak-0123456789';
 
@@ -45,6 +48,10 @@ final class FakeAgentConfigStore implements AgentConfigStore {
 
   /// Исход следующего `apply`; по умолчанию `ConfigSaved`.
   ConfigSaveOutcome? nextOutcome;
+
+  /// Исход только первого `apply`, затем `nextOutcome`/`ConfigSaved`
+  /// (конфликт один раз: «Save again» после перечитывания, D9).
+  ConfigSaveOutcome? firstOutcome;
 
   /// Действие внутри `apply` (журнал порядка вызовов, ожидание, правка
   /// слоёв после сохранения).
@@ -92,7 +99,10 @@ final class FakeAgentConfigStore implements AgentConfigStore {
   ) async {
     applied.add((base: base, edits: edits));
     await onApply?.call();
+    final first = firstOutcome;
+    firstOutcome = null;
     final outcome =
+        first ??
         nextOutcome ??
         const ConfigSaved(
           fingerprint: 'fp-new',
@@ -187,6 +197,36 @@ final class FakeProviderSettingsSession implements ProviderSettingsSession {
   Future<ProviderCheckResult> Function() checkResult = () async =>
       const CheckOk([RemoteModel('m')]);
 
+  /// Проверка мастера: ответы даёт тест.
+  final wizardCheck = FakeWizardCheck();
+
+  /// Подсказка read-only бэкенда для мастера (`ProviderKeys.readOnlyHint`).
+  String? readOnlyHint;
+
+  /// Порт ключей последнего открытого мастера (журнал вызовов).
+  FakeWizardKeys? lastKeys;
+
+  /// Журнал автомата мастера (события `provider_wizard.*` моста).
+  final wizardLog = RecordingLogger();
+
+  /// Доступ, с которым открывается мастер; по умолчанию — пользователь и
+  /// папка проекта `/work/app`.
+  EditableSettings access = const EditableSettings(
+    ConfigPaths(codelabHome: '/home/u/.codelab', projectDir: '/work/app'),
+  );
+
+  /// Окружение агента для `UseEnvVar` и `api_key_env` мастера.
+  Map<String, String> wizardEnvironment = const {};
+
+  final wizards =
+      <
+        ({
+          ProviderEntryView? editing,
+          bool forceDefault,
+          ProviderWizardEntry entry,
+        })
+      >[];
+
   final deleted = <String>[];
   SecretDeletion deletion = SecretDeletion.deleted;
   FutureOr<void> Function(String name)? onDelete;
@@ -209,6 +249,31 @@ final class FakeProviderSettingsSession implements ProviderSettingsSession {
     deleted.add(name);
     secrets.remove(name);
     return deletion;
+  }
+
+  @override
+  Future<ProviderSetupFlow> openWizard({
+    ProviderEntryView? editing,
+    bool forceDefault = false,
+    ProviderWizardEntry entry = ProviderWizardEntry.app,
+  }) {
+    wizards.add((editing: editing, forceDefault: forceDefault, entry: entry));
+    final keys = lastKeys = FakeWizardKeys(
+      secrets,
+      backend: store.backend,
+      readOnlyHint: readOnlyHint,
+    );
+    return buildWizardFlow(
+      store: store,
+      keys: keys,
+      check: wizardCheck,
+      access: access,
+      log: wizardLog,
+      environment: wizardEnvironment,
+      editing: editing,
+      forceDefault: forceDefault,
+      entry: entry,
+    );
   }
 
   @override

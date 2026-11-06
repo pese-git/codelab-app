@@ -1,5 +1,6 @@
 // IO-барель моста настроек разрешён сторожем только в `lib/app/`
 // (design.md change `add-provider-setup-ui`, D20).
+import 'package:codelab_client_core/codelab_client_core.dart' show isLocalHost;
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:codelab_setup/io.dart' as setup;
 
@@ -35,6 +36,8 @@ Future<ProviderSettingsSession> openProviderSettingsSession(
     logger: logger,
   );
   return _IoProviderSettingsSession(
+    access: access,
+    logger: logger,
     secrets: secrets,
     config: setup.FileAgentConfigStore(
       paths: access.paths,
@@ -49,15 +52,21 @@ Future<ProviderSettingsSession> openProviderSettingsSession(
 
 final class _IoProviderSettingsSession implements ProviderSettingsSession {
   _IoProviderSettingsSession({
+    required EditableSettings access,
+    required setup.Logger logger,
     required setup.ClientSecretAccess secrets,
     required this.config,
     required ProviderCheck check,
     required Map<String, String> environment,
-  }) : _secrets = secrets,
+  }) : _access = access,
+       _logger = logger,
+       _secrets = secrets,
        _check = check,
        _environment = environment,
        _delete = setup.secretDeleterOf(secrets);
 
+  final EditableSettings _access;
+  final setup.Logger _logger;
   final setup.ClientSecretAccess _secrets;
   final ProviderCheck _check;
   final Map<String, String> _environment;
@@ -74,6 +83,37 @@ final class _IoProviderSettingsSession implements ProviderSettingsSession {
 
   @override
   Future<SecretDeletion> deleteSecret(String name) => _delete(name);
+
+  /// Собирает автомат мастера (D7): порт ключей — `providerKeysOf` поверх того
+  /// же `ClientSecretAccess`, что у страницы; значение ключа остаётся в
+  /// `SecretValue` внутри автомата и этого порта и в `features/` не попадает
+  /// (SETUP-1, SETUP-9). `isLocalHost` — правило kit, второй копии нет (D8).
+  @override
+  Future<ProviderSetupFlow> openWizard({
+    ProviderEntryView? editing,
+    bool forceDefault = false,
+    ProviderWizardEntry entry = ProviderWizardEntry.app,
+  }) async {
+    final keys = setup.providerKeysOf(
+      _secrets,
+      home: _access.paths.codelabHome,
+    );
+    return ProviderSetupFlow(
+      check: _check,
+      committer: ProviderSetupCommitter(config: config, keys: keys),
+      keys: keys,
+      snapshot: await config.snapshot(
+        cwd: _access.cwd ?? _access.paths.codelabHome,
+      ),
+      access: _access,
+      environment: _environment,
+      isLocalHost: isLocalHost,
+      logger: _logger,
+      editing: editing,
+      forceDefault: forceDefault,
+      entry: entry,
+    );
+  }
 
   @override
   Future<ProviderCheckResult> checkProvider({

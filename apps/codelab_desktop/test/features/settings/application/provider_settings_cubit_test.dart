@@ -992,6 +992,63 @@ void main() {
       );
     });
 
+    test('Edit follows the Remove refusals: several layers make it inactive '
+        'with the same hint (task 3.4)', () async {
+      store.projectLocal = {
+        'providers': {
+          'local': {'base_url': 'http://localhost:9999/v1'},
+        },
+      };
+      final state = await ready(make());
+
+      final local = row(state, 'local');
+      expect(local.canEdit, isFalse);
+      expect(
+        local.editHint,
+        'This provider is defined in several config files. Change it there.',
+      );
+      expect(row(state, 'anthropic').canEdit, isTrue);
+      expect(row(state, 'anthropic').editHint, isNull);
+    });
+
+    test(
+      'Edit is absent for a project-layer provider (not editable)',
+      () async {
+        store.project = {
+          'providers': {
+            'team': providerMap(models: ['big']),
+          },
+        };
+        final state = await ready(make());
+
+        expect(row(state, 'team').editable, isFalse);
+        expect(row(state, 'team').canEdit, isFalse);
+      },
+    );
+
+    test('the wizard opens on the session of the page with the row as the '
+        'entry; the Cubit never touches the key port (SETUP-1)', () async {
+      final cubit = make();
+      await ready(cubit);
+
+      final wizard = await cubit.openWizard(editId: 'anthropic');
+
+      expect(wizard, isNotNull);
+      expect(session.wizards.single.editing!.id, 'anthropic');
+      expect(wizard!.editing, isTrue);
+      expect(session.lastKeys!.journal, isEmpty);
+      await wizard.close();
+    });
+
+    test('the wizard is not opened without a writable session', () async {
+      defaultProfile = _remote;
+      final cubit = make();
+      await cubit.reload();
+
+      expect(await cubit.openWizard(), isNull);
+      expect(session.wizards, isEmpty);
+    });
+
     test('the last provider cannot be removed', () async {
       store.user = {
         'providers': {'only': providerMap()},
