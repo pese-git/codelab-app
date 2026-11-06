@@ -266,10 +266,12 @@ sealed class ProviderSetupEvent {}
 // ReviewEdited(providerId?, makeDefault?, target?) · ConfirmSave · Back · Cancel
 
 final class ProviderSetupFlow {
+  // Полный набор входов — design.md change `add-provider-setup-ui`, D7 («Порты и входы автомата»):
+  // плюс ProviderKeys, EditableSettings, окружение агента, isLocalHost kit, Logger, forceDefault.
   ProviderSetupFlow({
     required ProviderCheck check,
     required ProviderSetupCommitter committer,
-    required AgentConfigSnapshot snapshot,        // занятые id, текущий default_model, существующие ключи
+    required AgentConfigSnapshot snapshot,        // занятые id, текущий default_model
     List<ProviderPreset> presets = ProviderPresets.all,
     ProviderEntryView? editing,                   // правка существующего: id зафиксирован, старт с EnteringBaseUrl
     Duration checkTimeout = const Duration(seconds: 10),
@@ -298,9 +300,13 @@ final class CheckFailure extends ProviderCheckResult { final ProviderCheckFailur
 enum ProviderCheckFailureKind { unauthorized, notFound, unreachable, timeout, tlsError, badResponse }
 
 /// Порядок записи и откат — один на оба клиента.
+// Основной барель не видит SecretAdmin (codelab_agent_io): секреты — через порт ProviderKeys,
+// реализация providerKeysOf(ClientSecretAccess) в io.dart; исход — ProviderCommitOutcome
+// (записан | секрет появился | секрет не записан | конфиг не записан с видом отката)
+// (design.md change `add-provider-setup-ui`, D9).
 final class ProviderSetupCommitter {
-  ProviderSetupCommitter({required AgentConfigStore config, required DescribedSecretStore secrets});
-  Future<ConfigSaveOutcome> commit(ProviderSetupPlan plan, ConfigSnapshot base);   // base — слой plan.target
+  ProviderSetupCommitter({required AgentConfigStore config, required ProviderKeys keys});
+  Future<ProviderCommitOutcome> commit(ProviderSetupPlan plan, ConfigSnapshot base);   // base — слой plan.target
 }
 
 // .../provider/provider_readiness.dart — для мастера первого запуска
@@ -312,8 +318,14 @@ final class ProviderKeyMissing extends ProviderReadiness {
   final SecretBackendInfo backend;                                           // куда предлагать сохранить ключ
 }
 final class ConfigBroken extends ProviderReadiness { final List<ConfigIssue> issues; }
-/// Наличие секрета — по names() и переопределению SecretNames.envOverride; значение не читается.
-Future<ProviderReadiness> checkProviderReadiness(AgentConfigSnapshot snapshot, DescribedSecretStore secrets, Map<String, String> env);
+/// «Нет провайдера» — по снимку: все проблемы — `value` ключа agent.default_model, и ключа нет
+/// в слоях либо нет ни одного провайдера (design.md change `add-provider-setup-ui`, D26).
+bool providerSetupNeeded(AgentConfigSnapshot snapshot);
+/// Наличие секрета — ProviderKeys.stored (names() бэкенда) и переопределение SecretNames.envOverride
+/// в env; значение не читается. Порт ProviderKeys, а не DescribedSecretStore: у клиентов есть только
+/// ClientSecretAccess (через providerKeysOf в io.dart), а stored отвечает без чтения значения
+/// (design.md change `add-provider-setup-ui`, D7, D9).
+Future<ProviderReadiness> checkProviderReadiness(AgentConfigSnapshot snapshot, ProviderKeys keys, Map<String, String> env);
 ```
 
 **Модели представления настроек** (чистый Dart, общие для app и CLI):
