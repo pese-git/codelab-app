@@ -7,6 +7,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart'
 
 import '../config/agent_config_store.dart';
 import '../config/config_source_view.dart';
+import '../config/display_base_url.dart';
 import 'key_status_view.dart';
 
 /// Провайдер в списке «Configured providers».
@@ -100,7 +101,7 @@ Future<List<ProviderEntryView>> providerEntriesOf(
         id: id,
         kind: _string(snapshot, id, 'kind'),
         baseUrl: _string(snapshot, id, 'base_url'),
-        displayBaseUrl: _displayUrl(_string(snapshot, id, 'base_url')),
+        displayBaseUrl: displayBaseUrl(_string(snapshot, id, 'base_url')),
         key: await _keyStatus(
           snapshot,
           id,
@@ -115,20 +116,6 @@ Future<List<ProviderEntryView>> providerEntriesOf(
     );
   }
   return out;
-}
-
-/// Адрес без userinfo, query и fragment; путь остаётся.
-String? _displayUrl(String? raw) {
-  final uri = raw == null ? null : Uri.tryParse(raw);
-  if (uri == null || uri.host.isEmpty || uri.scheme.isEmpty) {
-    return null;
-  }
-  return Uri(
-    scheme: uri.scheme,
-    host: uri.host,
-    port: uri.hasPort ? uri.port : null,
-    path: uri.path,
-  ).toString();
 }
 
 /// Идентификаторы провайдеров снимка по алфавиту.

@@ -212,7 +212,7 @@ String? _literalMessage(_Leaf leaf) {
     // самом деле секретное (`X-Api-Key`), а не счётчик (`X-Max-Tokens`).
     final secretName = value is String
         ? isSecretLikeName(name)
-        : _isSecretScalarName(name);
+        : isSecretScalarName(name);
     if (secretName && (value is! String || !hasSecretReference(value))) {
       return 'a literal value in a secret ${inHeaders ? 'header' : 'variable'}; '
           'run: codelab secret set $suggested, ${reference.replaceAll('NAME', suggested)}';
@@ -235,7 +235,7 @@ String? _literalMessage(_Leaf leaf) {
       value is! Map &&
       value is! List &&
       _isOpaque(leaf.path) &&
-      _isSecretScalarName(name)) {
+      isSecretScalarName(name)) {
     return 'a literal value in a secret field; run: codelab secret set '
         '$suggested, ${reference.replaceAll('NAME', suggested)}';
   }
@@ -275,44 +275,3 @@ bool _isOpaque(String path) {
   final type = SettingsRegistry.lookup(path)?.type;
   return type == SettingType.map || type == SettingType.mapList;
 }
-
-/// Секретное ли имя для нестрокового значения (число, булево) — то же
-/// правило, что у писателя, для маскирования вывода (`cli/config_output.dart`,
-/// design.md change `add-config-writer-and-reload`, D6, R0-2): запись и
-/// вывод не расходятся в том, что считать секретным числом.
-bool isSecretScalarName(String name) => _isSecretScalarName(name);
-
-/// Секретное ли имя для нестрокового значения (число, булево).
-///
-/// Подстрока `token`/`key` дала бы ложные срабатывания на счётчиках
-/// (`max_tokens`, `X-Max-Tokens`), поэтому смотрится последнее слово имени
-/// (по `-`, `_`, пробелу и границе camelCase) и имя целиком для
-/// множественного числа (`keys`, `tokens`).
-bool _isSecretScalarName(String name) {
-  final words = name
-      .split(RegExp(r'[-_\s]+|(?<=[a-z0-9])(?=[A-Z])'))
-      .where((w) => w.isNotEmpty)
-      .map((w) => w.toLowerCase())
-      .toList();
-  if (words.isEmpty) {
-    return false;
-  }
-  final normalized = _normalize(name);
-  return _scalarSecretWords.contains(words.last) ||
-      _scalarSecretWords.contains(normalized) ||
-      _pluralSecretNames.contains(normalized);
-}
-
-const _scalarSecretWords = {
-  'token',
-  'key',
-  'apikey',
-  'auth',
-  'cookie',
-  'secret',
-  'password',
-  'privatetoken',
-  'accesstoken',
-};
-
-const _pluralSecretNames = {'keys', 'tokens', 'secrets', 'passwords'};

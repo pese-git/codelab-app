@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
         Deleted,
+        isLocalHost,
         Exists,
         Failed,
         NotSet,
@@ -11,6 +12,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ProfileSecretDelete,
         ProfileSecretWrite,
         ConnectionProfile,
+        EmbeddedProfile,
         ProfileSecretSource,
         ProfileSecrets,
         ReadOnly,
@@ -19,6 +21,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_client_io/codelab_client_io.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgentConfigException, EmbeddedAgentOpener;
+import 'package:codelab_setup/codelab_setup.dart';
 import 'package:codelab_setup/io.dart';
 import 'package:path/path.dart' as p;
 
@@ -33,8 +36,15 @@ import 'headless/outcome.dart';
 import 'headless/prompt_source.dart';
 import 'home.dart';
 import 'input/io_terminal.dart';
+import 'input/shared_stdin.dart';
 import 'profiles/profile_arg.dart';
 import 'profiles/profiles_command.dart';
+import 'setup/first_run.dart';
+import 'setup/provider_add_flags.dart';
+import 'setup/prompt_line.dart';
+import 'setup/prompt_reader.dart';
+import 'setup/provider_wizard.dart';
+import 'setup/setup_commands.dart';
 import 'render/output_surface.dart';
 import 'render/sanitize.dart';
 import 'repl/repl.dart';
@@ -282,6 +292,12 @@ Future<int> _runProvider(
   final commands = ProviderCommands();
   final cwd = _projectDir(options);
   try {
+    if (sub.name == 'add') {
+      final code = await _providerAdd(options, environment, io);
+      if (code != null) {
+        return code;
+      }
+    }
     return _printResult(switch (sub.name) {
       'list' => await commands.list(
         ProviderListOptions(cwd: cwd, environment: environment),
@@ -314,9 +330,151 @@ Future<int> _runProvider(
         StdinSecretInput(),
       ),
     }, io);
+  } on UsageError {
+    rethrow;
   } on Object catch (error) {
     io.stderr.writeln('codelab: provider failed: ${error.runtimeType}');
     return failureExit;
+  }
+}
+
+/// `codelab provider add`: мастер, флаги или ядро (design.md change
+/// `add-provider-setup-ui`, D15, Q13).
+///
+/// Почему выбор здесь: только `run.dart` знает `codelab_setup/io.dart`, а
+/// выбор зависит от флагов и терминала:
+/// - есть клиентский флаг (`--preset`, `--yes`, `--skip-check`) — автомат по
+///   флагам без вопросов (`entry: flags`);
+/// - клиентских флагов и флагов ядра нет, stdin и stdout — терминал —
+///   построчный мастер (`entry: cli`);
+/// - иначе — `ProviderCommands.add` ядра без изменений: вывод, коды и байты
+///   как у `codelab-agent provider add`.
+/// Возвращает `null`, когда дальше работает ядро.
+Future<int?> _providerAdd(
+  CliOptions options,
+  Map<String, String> environment,
+  CliIo io,
+) async {
+  final sub = options.subcommand!;
+  final clientFlags =
+      sub.option('preset') != null || sub.flag('skip-check') || sub.flag('yes');
+  final coreFlags =
+      sub.option('kind') != null ||
+      sub.option('base-url') != null ||
+      sub.option('model') != null ||
+      sub.option('context-window') != null ||
+      sub.option('api-key-secret') != null ||
+      sub.option('api-key-env') != null ||
+      sub.flag('api-key-stdin') ||
+      sub.flag('default');
+  final terminal = io.stdinIsTerminal && io.stdoutIsTerminal;
+  final cwd = _projectDir(options);
+  final id = sub.rest.isEmpty ? null : sub.rest.first;
+  if (!clientFlags && !(terminal && !coreFlags)) {
+    if (id == null) {
+      throw UsageError(
+        'provider add needs the provider id',
+        usage: providerUsage(),
+      );
+    }
+    return null;
+  }
+  final kit = _SetupKit(
+    environment: environment,
+    access: EditableSettings(
+      ConfigPaths(
+        codelabHome: CodelabHome.resolve(environment).path,
+        projectDir: cwd,
+      ),
+    ),
+    cwd: cwd,
+    logger: options.verbose
+        ? CliEmbeddedLogger(io.stderr)
+        : const CliEmbeddedLogger.silent(),
+  );
+  // Один поток stdin на ключ, сводку и мастер (D15, D16).
+  final ioTerminal = IoTerminal(input: SharedStdin().stream);
+  if (clientFlags) {
+    final input = StdinSecretInput();
+    final result = await runProviderAddByFlags(
+      flags: ProviderAddFlags(
+        id: id,
+        preset: sub.option('preset'),
+        kind: sub.option('kind'),
+        baseUrl: sub.option('base-url'),
+        model: sub.option('model'),
+        contextWindow: sub.option('context-window'),
+        apiKeySecret: sub.option('api-key-secret'),
+        apiKeyEnv: sub.option('api-key-env'),
+        apiKeyStdin: sub.flag('api-key-stdin'),
+        makeDefault: sub.flag('default'),
+        project: sub.flag('project'),
+        local: sub.flag('local'),
+        skipCheck: sub.flag('skip-check'),
+        yes: sub.flag('yes'),
+      ),
+      openKit: () async {
+        return kit.flow(entry: ProviderWizardEntry.flags);
+      },
+      readKey: () async {
+        if (terminal) {
+          // На терминале ключ вводится скрытым полем поверх общего stdin:
+          // `StdinSecretInput` закрыл бы fd 0, и сводка уже не читалась бы.
+          final reader = PromptReader(ioTerminal);
+          try {
+            while (true) {
+              try {
+                return await reader.read('? API key › ', hidden: true);
+              } on KeyInputRejected {
+                // Вставка нескольких строк или слишком длинное значение: не
+                // принимается и не цитируется (D14).
+                ioTerminal.output.writeln(keyRejectedLine);
+              }
+            }
+          } finally {
+            await reader.close();
+          }
+        }
+        final value = input.hasTerminal
+            ? await input.readHidden('API key: ')
+            : await input.readAll();
+        return value?.replaceAll(RegExp(r'[\r\n]+$'), '');
+      },
+      interactive: terminal,
+      terminal: ioTerminal,
+      cwd: cwd,
+    );
+    result.stdout.forEach(io.stdout.writeln);
+    result.stderr.forEach(io.stderr.writeln);
+    return result.exitCode;
+  }
+  if (sub.flag('project')) {
+    throw UsageError(
+      '--project is not supported by the provider wizard; use --local or the '
+      'user config',
+      usage: providerUsage(),
+    );
+  }
+  final built = await kit.flow(entry: ProviderWizardEntry.cli);
+  final result = await runProviderWizard(
+    flow: built.flow,
+    terminal: ioTerminal,
+    providerId: id,
+    target: sub.flag('local') ? ConfigTarget.projectLocal(cwd) : null,
+    pathOf: built.pathOf,
+  );
+  switch (result) {
+    case ProviderWizardSaved(:final providerId):
+      io.stdout.writeln(
+        'Saved provider "$providerId". Models are available in /model.',
+      );
+      return okExit;
+    case ProviderWizardCancelled():
+      return sigintExit;
+    case ProviderWizardFailed(:final message) ||
+        ProviderWizardRefused(:final message):
+      io.stderr.writeln('codelab: provider add failed: $message');
+      return failureExit;
   }
 }
 
@@ -463,7 +621,13 @@ Future<int> _runRepl(
   );
   await home.ensureExists();
 
-  final terminal = IoTerminal();
+  // Один поток stdin на мастер первого запуска и следующий за ним REPL
+  // (design.md change `add-provider-setup-ui`, D16).
+  final terminal = IoTerminal(input: SharedStdin().stream);
+  if (await _firstRun(options, profile, environment, io, home, cwd, terminal)
+      case final code?) {
+    return code;
+  }
   final profileSecrets = await _openProfileSecrets(
     environment,
     io,
@@ -485,6 +649,7 @@ Future<int> _runRepl(
     profileSecrets: profileSecrets,
   );
   final repl = Repl(
+    setup: _setupCommands(options, environment, io, home),
     tokenSource: ProfileSecretSource(environment, stored: profileSecrets),
     workspace: runtime.workspace,
     terminal: terminal,
@@ -555,6 +720,21 @@ Future<int> _runTui(
   );
   await home.ensureExists();
 
+  // Первый запуск в `--ui tui` построчный и идёт до экрана; тот же поток
+  // stdin затем получает `Program` (D16, D17).
+  final stdinStream = SharedStdin().stream;
+  if (await _firstRun(
+        options,
+        profile,
+        environment,
+        io,
+        home,
+        cwd,
+        IoTerminal(input: stdinStream),
+      )
+      case final code?) {
+    return code;
+  }
   final profileSecrets = await _openProfileSecrets(
     environment,
     io,
@@ -576,6 +756,10 @@ Future<int> _runTui(
     profileSecrets: profileSecrets,
   );
   final tui = TuiRunner(
+    input: stdinStream,
+    // Порт пробрасывается в контекст; команд `/provider` и `/settings` в
+    // TUI 4a нет, оверлеи — 4b (D17).
+    setup: _setupCommands(options, environment, io, home),
     tokenSource: ProfileSecretSource(environment, stored: profileSecrets),
     workspace: runtime.workspace,
     profile: profile,
@@ -892,3 +1076,256 @@ ProfileSecretWrite profileSecretWriteOf(
     'Another stored secret uses the same environment variable $variable.',
   ),
 };
+
+/// Первый запуск встроенного агента (U-17, design.md change
+/// `add-provider-setup-ui`, D16).
+///
+/// Почему в `run.dart`: снимок, порт ключей и проверка `/models` строятся из
+/// `codelab_setup/io.dart`, а он разрешён только здесь (сторож).
+/// `composition_root.dart` и `-p` готовность не вычисляют (SETUP-7).
+///
+/// Возвращает код выхода, если запуск надо прервать (`130`), иначе `null`.
+/// Работает только для встроенного агента и только когда stdin и stdout —
+/// терминал.
+Future<int?> _firstRun(
+  CliOptions options,
+  ConnectionProfile profile,
+  Map<String, String> environment,
+  CliIo io,
+  CodelabHome home,
+  String cwd,
+  IoTerminal terminal,
+) async {
+  if (profile is! EmbeddedProfile ||
+      !io.stdinIsTerminal ||
+      !io.stdoutIsTerminal) {
+    return null;
+  }
+  final kit = _SetupKit(
+    environment: environment,
+    access: EditableSettings(
+      ConfigPaths(codelabHome: home.path, projectDir: cwd),
+    ),
+    cwd: cwd,
+    logger: options.verbose
+        ? CliEmbeddedLogger(io.stderr)
+        : const CliEmbeddedLogger.silent(),
+  );
+  AgentConfigSnapshot? loaded;
+  final result = await runFirstRun(
+    loadSnapshot: () async => loaded = await kit.snapshot(),
+    openKeys: kit.keys,
+    environment: environment,
+    terminal: terminal,
+    newWizard: () => kit
+        .buildFlow(
+          loaded!,
+          entry: ProviderWizardEntry.firstRun,
+          forceDefault: true,
+        )
+        .flow,
+  );
+  return result == FirstRunResult.cancelled ? sigintExit : null;
+}
+
+/// Порты настройки агента, собранные из `codelab_setup/io.dart`: хранилище
+/// секретов, файловый конфиг и проверка `/models` (D15, D16, D17).
+///
+/// Почему класс: первый запуск, подкоманда `provider add` и `/provider`,
+/// `/settings` в REPL строят одни и те же порты; открытие
+/// `ClientSecretAccess` ленивое и одно на экземпляр.
+///
+/// Для чего: пути берутся из [access] (`EditableSettings`, результат
+/// `resolveSettingsAccess`), а не из окружения клиента: запись идёт в конфиг
+/// того агента, к которому подключены (SETUP-2, D5).
+final class _SetupKit {
+  _SetupKit({
+    required Map<String, String> environment,
+    required EditableSettings access,
+    required this.cwd,
+    required this.logger,
+    Map<String, String> profileEnv = const {},
+  }) : environment = {
+         ...environment,
+         // `env` stdio-профиля, как при запуске агента: `api_key_env`,
+         // источник `env`, `CODELAB_HOME` с `~`.
+         ...profileEnv,
+         'CODELAB_HOME': access.paths.codelabHome,
+         'CODELAB_CONFIG': ?access.paths.extraConfig,
+       } {
+    // Дом считается один раз (`~`, ошибка `~user`) и одинаково идёт во все
+    // порты: конфиг, хранилище секретов, пути (иначе ключ уехал бы в другое
+    // хранилище, чем конфиг).
+    homePath = CodelabHome.resolve(this.environment).path;
+    this.environment['CODELAB_HOME'] = homePath;
+    this.access = EditableSettings(
+      ConfigPaths(
+        codelabHome: homePath,
+        projectDir: access.paths.projectDir,
+        extraConfig: access.paths.extraConfig,
+      ),
+    );
+  }
+
+  /// Окружение процесса, `env` профиля и разобранный `CODELAB_HOME`.
+  final Map<String, String> environment;
+  late final EditableSettings access;
+  late final String homePath;
+
+  /// Папка снимка: `access.cwd ?? cwd сессии` (решает вызывающий).
+  final String cwd;
+  final Logger logger;
+
+  FileAgentConfigStore? _store;
+  ProviderKeys? _keys;
+
+  Future<void> _open() async {
+    if (_store != null) {
+      return;
+    }
+    final secrets = await ClientSecretAccess.open(
+      codelabHome: homePath,
+      environment: environment,
+      logger: logger,
+    );
+    _keys = providerKeysOf(secrets, home: homePath);
+    _store = FileAgentConfigStore(
+      paths: access.paths,
+      environment: environment,
+      secrets: secrets,
+      logger: logger,
+    );
+  }
+
+  Future<FileAgentConfigStore> store() async {
+    await _open();
+    return _store!;
+  }
+
+  Future<ProviderKeys> keys() async {
+    await _open();
+    return _keys!;
+  }
+
+  Future<AgentConfigSnapshot> snapshot() async =>
+      (await store()).snapshot(cwd: cwd);
+
+  /// Автомат мастера; порты должны быть открыты ([snapshot] или [keys]).
+  ProviderAddKit buildFlow(
+    AgentConfigSnapshot snapshot, {
+    required ProviderWizardEntry entry,
+    bool forceDefault = false,
+  }) {
+    final keys = _keys!;
+    return ProviderAddKit(
+      flow: ProviderSetupFlow(
+        check: ioProviderCheck(),
+        committer: ProviderSetupCommitter(config: _store!, keys: keys),
+        keys: keys,
+        snapshot: snapshot,
+        access: access,
+        environment: environment,
+        // Правило kit: своей копии в CLI нет (D8).
+        isLocalHost: isLocalHost,
+        logger: logger,
+        forceDefault: forceDefault,
+        entry: entry,
+      ),
+      backend: keys.backend.id,
+      pathOf: (target) => snapshot.layers[target.layer]?.path ?? '',
+    );
+  }
+
+  Future<ProviderAddKit> flow({required ProviderWizardEntry entry}) async =>
+      buildFlow(await snapshot(), entry: entry);
+}
+
+/// Порт `SetupCommands` REPL и TUI: `ProviderCommands` для `list` и
+/// `remove`, автомат мастера и файловое хранилище для `/settings` (D17).
+///
+/// Для каждого доступа ([EditableSettings]) строится свой [_SetupKit]:
+/// профиль с другим `CODELAB_HOME` пишет в свой конфиг.
+final class _RunSetupCommands implements SetupCommands {
+  _RunSetupCommands({
+    required this.environment,
+    required this.codelabHome,
+    required this.logger,
+  });
+
+  final Map<String, String> environment;
+  final Logger logger;
+
+  @override
+  final String codelabHome;
+
+  final _kits = <String, _SetupKit>{};
+
+  _SetupKit _kit(SetupScope scope) {
+    final paths = scope.access.paths;
+    final envKey = (scope.env.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key)));
+    return _kits.putIfAbsent(
+      '${paths.codelabHome}\u0000${paths.projectDir}\u0000'
+      '${paths.extraConfig}\u0000${scope.cwd}\u0000'
+      '${envKey.map((e) => '${e.key}=${e.value}').join('\u0001')}',
+      () => _SetupKit(
+        environment: environment,
+        access: scope.access,
+        cwd: scope.cwd,
+        logger: logger,
+        profileEnv: scope.env,
+      ),
+    );
+  }
+
+  SetupCommandResult _of(ConfigCommandResult result) => SetupCommandResult(
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  );
+
+  @override
+  Future<AgentConfigStore> configStore(SetupScope scope) => _kit(scope).store();
+
+  @override
+  Future<SetupCommandResult> listProviders(SetupScope scope) async => _of(
+    await ProviderCommands().list(
+      ProviderListOptions(cwd: scope.cwd, environment: _kit(scope).environment),
+    ),
+  );
+
+  @override
+  Future<SetupCommandResult> removeProvider(
+    String id,
+    SetupScope scope, {
+    required bool local,
+  }) async => _of(
+    await ProviderCommands().remove(
+      ProviderRemoveOptions(
+        id: id,
+        cwd: scope.cwd,
+        environment: _kit(scope).environment,
+        project: false,
+        local: local,
+      ),
+    ),
+  );
+
+  @override
+  Future<ProviderSetupFlow> newProviderFlow(SetupScope scope) async =>
+      (await _kit(scope).flow(entry: ProviderWizardEntry.cli)).flow;
+}
+
+/// Порт `SetupCommands` для REPL и TUI (D17).
+SetupCommands _setupCommands(
+  CliOptions options,
+  Map<String, String> environment,
+  CliIo io,
+  CodelabHome home,
+) => _RunSetupCommands(
+  environment: environment,
+  codelabHome: home.path,
+  logger: options.verbose
+      ? CliEmbeddedLogger(io.stderr)
+      : const CliEmbeddedLogger.silent(),
+);

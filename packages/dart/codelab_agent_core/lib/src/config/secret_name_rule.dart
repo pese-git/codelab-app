@@ -45,3 +45,40 @@ final _reference = RegExp(r'\$\{[^}]+\}');
 /// `Bearer sk-… ${X}` содержит ссылку и поэтому проходит; пункты 2–3 CFG-9
 /// по шаблонам §12.4 остаются за 8.11.
 bool hasSecretReference(String value) => _reference.hasMatch(value);
+
+/// Секретное ли имя для нестрокового значения (число, булево) — то же
+/// правило, что у писателя конфига и у вывода (R0-2): запись и показ не
+/// расходятся в том, что считать секретным числом.
+///
+/// Подстрока `token`/`key` дала бы ложные срабатывания на счётчиках
+/// (`max_tokens`, `X-Max-Tokens`), поэтому смотрится последнее слово имени
+/// (по `-`, `_`, пробелу и границе camelCase) и имя целиком для
+/// множественного числа (`keys`, `tokens`).
+bool isSecretScalarName(String name) {
+  final words = name
+      .split(RegExp(r'[-_\s]+|(?<=[a-z0-9])(?=[A-Z])'))
+      .where((w) => w.isNotEmpty)
+      .map((w) => w.toLowerCase())
+      .toList();
+  if (words.isEmpty) {
+    return false;
+  }
+  final normalized = name.toLowerCase().replaceAll(RegExp('[-_]'), '');
+  return _scalarSecretWords.contains(words.last) ||
+      _scalarSecretWords.contains(normalized) ||
+      _pluralSecretNames.contains(normalized);
+}
+
+const _scalarSecretWords = {
+  'token',
+  'key',
+  'apikey',
+  'auth',
+  'cookie',
+  'secret',
+  'password',
+  'privatetoken',
+  'accesstoken',
+};
+
+const _pluralSecretNames = {'keys', 'tokens', 'secrets', 'passwords'};

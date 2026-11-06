@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_setup/codelab_setup.dart'
+    show ConfigTarget, ProviderSetupFlow;
 
 import '../cli_args.dart';
 import '../input/key_bindings.dart';
@@ -10,6 +12,8 @@ import '../repl/commands/commands.dart';
 import '../repl/picker_spec.dart';
 import '../repl/repl_command.dart';
 import '../session_setup.dart';
+import '../setup/provider_wizard.dart';
+import '../setup/setup_commands.dart';
 import '../strings.dart';
 import 'core/transcript_lines.dart';
 import 'core/tui_msg.dart';
@@ -43,6 +47,7 @@ final class TuiCommandContext implements ReplContext {
     List<ReplCommand> commands = mvpReplCommands,
     DateTime Function()? clock,
     SecretSource? tokenSource,
+    SetupCommands? setup,
   }) : _workspace = workspace,
        _profile = profile,
        _cwd = cwd,
@@ -51,7 +56,8 @@ final class TuiCommandContext implements ReplContext {
        _resolveProfile = resolveProfile,
        _commands = commands,
        _clock = clock ?? DateTime.now,
-       _tokenSource = tokenSource;
+       _tokenSource = tokenSource,
+       _setup = setup;
 
   final ClientWorkspace _workspace;
   ConnectionProfile _profile;
@@ -65,6 +71,30 @@ final class TuiCommandContext implements ReplContext {
   /// Источник токена профиля для текста отказа по токену
   /// (`describeStartFailure`).
   final SecretSource? _tokenSource;
+
+  final SetupCommands? _setup;
+
+  /// Порт настройки агента: в 4a только проброс, без оверлеев (D17).
+  @override
+  SetupCommands? get setup => _setup;
+
+  /// Команд `/provider` и `/settings` в TUI 4a нет (они не в `mvpReplCommands`),
+  /// поэтому мастер здесь никогда не открывается; оверлеи — задача 4b.
+  @override
+  bool get turnRunning => false;
+
+  @override
+  bool get hasTerminal => true;
+
+  @override
+  Future<ProviderWizardResult> runWizard(
+    ProviderSetupFlow flow, {
+    String? providerId,
+    ConfigTarget? target,
+    String Function(ConfigTarget target)? pathOf,
+  }) => throw UnimplementedError(
+    'the provider wizard overlay is task 4.15 (iteration 4b)',
+  );
 
   SessionHandle? _session;
   StreamSubscription<SessionView>? _views;

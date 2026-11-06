@@ -31,6 +31,8 @@ export 'src/config/inline_secrets.dart'
         literalSecretTag;
 export 'src/config/key_path.dart'
     show KeyPath, KeyPathSegment, nearestKey, splitKeyPath;
+export 'src/config/mask_url.dart'
+    show displaySafeConfigValue, maskUrl, redactedMask;
 export 'src/config/redact_settings.dart';
 export 'src/config/secret_name_rule.dart';
 export 'src/config/settings_registry.dart' hide coveringDescriptors;

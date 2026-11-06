@@ -3,10 +3,6 @@ import 'dart:convert';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import '../config/environment_layer.dart' show environmentLayerVariables;
-import '../config/literal_secret_rule.dart';
-
-/// Замена значения секретного листа без ссылки (R0-2).
-const redactedMask = '<redacted>';
 
 /// Замена непрозрачного поддерева схемы (R0-2): схемы его листьев в этой
 /// сборке нет, и правило имён не гарантирует, что секрет не лежит под
@@ -126,7 +122,6 @@ String configLayerName(ConfigLayerKind kind) => switch (kind) {
 
 final _plainName = RegExp(r'^[A-Za-z0-9_\-]+$');
 final _reference = RegExp(r'\$\{[^}]+\}');
-final _refToken = RegExp(r'refx(\d+)x');
 
 /// Путь списка `args` сервера MCP: `mcp.servers[gh].args`, `mcp.servers[0].args`.
 final _argsPath = RegExp(r'^mcp\.servers\[[^\]]+\]\.args$');
@@ -180,7 +175,7 @@ final class _Masker {
             mask(node[i], _element(path, names, i), name),
         ];
       default:
-        return _leaf(node, path, name);
+        return _leaf(node, path);
     }
   }
 
@@ -305,66 +300,16 @@ final class _Masker {
     return _hidesLiteral(value) ? redactedMask : value;
   }
 
-  Object? _leaf(Object? value, String path, String name) {
+  Object? _leaf(Object? value, String path) {
     if (value == null) {
       return null;
     }
     if (_foreignLabel(path) case final label?) {
       return label;
     }
-    // Любой лист со значением по шаблону секрета скрывается независимо от
-    // имени и от реестра: `api_key_env: ghp_…`, `X-Team: Bearer sk-…`,
-    // `${secret:<токен>}`. Адреса исключены — их печатает [maskUrl] без
-    // userinfo (R4-5). Имена переменной и секрета проверяются как имена
-    // (`sk-` внутри слова не секрет, L3). Ссылки `${VAR}` и `${secret:x}`
-    // шаблонов не дают и печатаются как есть (R8-8).
-    if (value is String && name != 'base_url' && name != 'url') {
-      final isName = name == 'api_key_env' || name == 'api_key_secret';
-      final hidden = isName
-          ? literalSecretTag(value, asName: true) != null
-          : hasInlineSecret(value);
-      if (hidden) {
-        return redactedMask;
-      }
-    }
-    final shown = value is String && (name == 'base_url' || name == 'url')
-        ? maskUrl(value)
-        : value;
-    // Адрес после `maskUrl` (без userinfo) тоже может нести токен — в пути
-    // или в query под несекретным именем: скрывается целиком.
-    if (shown is String &&
-        (name == 'base_url' || name == 'url') &&
-        _urlCarriesSecret(shown)) {
-      return redactedMask;
-    }
-    // Лист, описанный схемой, хранит имя секрета или переменной, число или
-    // перечисление: имя «api_key_secret» не делает значение секретом.
-    final d = SettingsRegistry.lookup(path);
-    if (d != null &&
-        d.type != SettingType.map &&
-        d.type != SettingType.mapList) {
-      // Исключение — `providers.*.api_key`: лист реестра, но его значение —
-      // сам ключ (литерал файла, R8-4; design.md change
-      // `add-config-literal-secrets-and-migrate`, D4). Ссылка `${…}` без
-      // литеральных частей печатается как есть (R8-8).
-      if (inlineSecretKeys.contains(name) &&
-          value is String &&
-          value.isNotEmpty &&
-          (!hasSecretReference(value) || literalSecretTag(value) != null)) {
-        return redactedMask;
-      }
-      return shown;
-    }
-    final secretName =
-        inlineSecretKeys.contains(name) ||
-        (value is String ? isSecretLikeName(name) : isSecretScalarName(name));
-    final empty = value is String && value.isEmpty;
-    if (secretName &&
-        !empty &&
-        !(value is String && hasSecretReference(value))) {
-      return redactedMask;
-    }
-    return shown;
+    // Правила листа общие с `/settings` клиентов — в ядре
+    // (`displaySafeConfigValue`, R0-2): вывод не расходится с мостом.
+    return displaySafeConfigValue(path, value);
   }
 
   String? _foreignLabel(String path) {
@@ -482,148 +427,4 @@ LayerValue? findLayerValue(
     }
   }
   return null;
-}
-
-/// Адрес для вывода: без userinfo, со скрытыми значениями секретных
-/// query-параметров (R4-5; design.md change `add-config-writer-and-reload`,
-/// D6).
-///
-/// Почему разбор `Uri`, а не регулярное выражение: userinfo с `@`, `%40` или
-/// `/` в пароле обходит шаблон «до первого `@`» и оставляет часть секрета в
-/// выводе. Правила: адрес, который `Uri.tryParse` не разбирает, или в
-/// котором после удаления userinfo в авторитете остался `@`, →
-/// [redactedMask] (fail closed), как и адрес с `@` без авторитета
-/// (`user:pass@host`); значение параметра query, фрагмента (`#a=b`) и
-/// matrix-параметра пути (`;a=b`), чьё имя секретное по общему правилу
-/// ([isSecretLikeName], как у листьев), → [redactedMask];
-/// ссылки `${…}` остаются как есть (они не значения), поэтому адрес целиком
-/// из ссылки не меняется. Адрес без userinfo и секретных параметров
-/// возвращается байт в байт.
-///
-/// Как использовать: значение `base_url`/`url` из слоя; результат безопасен
-/// для печати. Исходный адрес в исключения и логи не попадает.
-String maskUrl(String raw) {
-  // Ссылки заменяются безопасными токенами, чтобы `Uri` разобрал адрес
-  // вроде `https://${U}:${P}@h/${PATH}`; после сборки они возвращаются.
-  final refs = <String>[];
-  final guarded = raw.replaceAllMapped(_reference, (match) {
-    refs.add(match.group(0)!);
-    return 'refx${refs.length - 1}x';
-  });
-  final uri = Uri.tryParse(guarded);
-  if (uri == null) {
-    return redactedMask;
-  }
-  // `@` без авторитета: `Uri` принял `user:pass@host` за схему `user`, и
-  // userinfo остался бы в пути. Fail closed.
-  if (!uri.hasAuthority && guarded.contains('@')) {
-    return redactedMask;
-  }
-  var changed = uri.userInfo.isNotEmpty;
-  String maskPairs(String text, String separator) {
-    final parts = text.split(separator);
-    final masked = <String>[];
-    for (final part in parts) {
-      final eq = part.indexOf('=');
-      final value = eq < 0 ? '' : part.substring(eq + 1);
-      var name = eq < 0 ? part : part.substring(0, eq);
-      try {
-        name = Uri.decodeQueryComponent(name);
-      } on Object {
-        // Имя с неверным процентным кодированием проверяется как есть.
-      }
-      if (eq >= 0 &&
-          value.isNotEmpty &&
-          isSecretLikeName(name) &&
-          !_hasRefToken(value, refs.length)) {
-        masked.add('${part.substring(0, eq)}=$redactedMask');
-        changed = true;
-      } else {
-        masked.add(part);
-      }
-    }
-    return masked.join(separator);
-  }
-
-  final maskedQuery = uri.hasQuery ? maskPairs(uri.query, '&') : '';
-  final maskedFragment = uri.hasFragment ? maskPairs(uri.fragment, '&') : '';
-  // Matrix-параметры `;имя=значение` внутри сегментов пути.
-  final maskedPath = uri.path
-      .split('/')
-      .map((segment) {
-        final semi = segment.indexOf(';');
-        if (semi < 0) {
-          return segment;
-        }
-        return '${segment.substring(0, semi + 1)}'
-            '${maskPairs(segment.substring(semi + 1), ';')}';
-      })
-      .join('/');
-  if (!changed) {
-    return raw;
-  }
-  final authority = StringBuffer();
-  if (uri.hasAuthority) {
-    authority
-      ..write('//')
-      ..write(uri.host.contains(':') ? '[${uri.host}]' : uri.host);
-    if (uri.hasPort) {
-      authority.write(':${uri.port}');
-    }
-  }
-  if (authority.toString().contains('@')) {
-    return redactedMask;
-  }
-  final rebuilt = StringBuffer()
-    ..write(uri.scheme.isEmpty ? '' : '${uri.scheme}:')
-    ..write(authority)
-    ..write(maskedPath);
-  if (uri.hasQuery) {
-    rebuilt.write('?$maskedQuery');
-  }
-  if (uri.hasFragment) {
-    rebuilt.write('#$maskedFragment');
-  }
-  return _restore(rebuilt.toString(), refs);
-}
-
-/// В [value] есть токен-заменитель реально существующей ссылки (номер меньше
-/// [count]); литерал вида `refx7x` без ссылки с таким номером ссылкой не
-/// считается, иначе им прикрывался бы секрет.
-bool _hasRefToken(String value, int count) => _refToken
-    .allMatches(value)
-    .any((match) => int.parse(match.group(1)!) < count);
-
-/// Возвращает на место ссылки `${…}`, заменённые токенами `refxNx`.
-String _restore(String text, List<String> refs) =>
-    text.replaceAllMapped(_refToken, (match) {
-      final index = int.parse(match.group(1)!);
-      // Литерал, похожий на токен, но без ссылки с таким номером, остаётся.
-      return index < refs.length ? refs[index] : match.group(0)!;
-    });
-
-String _decoded(String part) {
-  try {
-    return Uri.decodeComponent(part);
-  } on ArgumentError {
-    return part;
-  }
-}
-
-/// Несёт ли адрес (уже после [maskUrl]) токен в пути, значении параметра
-/// запроса или фрагменте. Части проверяются порознь: строка запроса целиком
-/// (`a=1&b=2`) совпала бы с «присваиванием секрета» без всякого секрета.
-bool _urlCarriesSecret(String url) {
-  final uri = Uri.tryParse(url);
-  if (uri == null) {
-    return false;
-  }
-  final parts = [
-    _decoded(uri.path),
-    _decoded(uri.fragment),
-    for (final values in uri.queryParametersAll.values) ...values,
-  ];
-  // Участки, уже скрытые `maskUrl`, не считаются (`token=<redacted>` иначе
-  // совпало бы с «присваиванием секрета»).
-  return parts.any((p) => hasInlineSecret(p.replaceAll(redactedMask, '')));
 }

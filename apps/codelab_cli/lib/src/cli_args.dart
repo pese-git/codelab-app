@@ -384,6 +384,24 @@ ArgParser _providerParser() => ArgParser()
           'default',
           negatable: false,
           help: 'Make <id>/<model> the default model.',
+        )
+        // Клиентские флаги: переводят команду в автомат мастера провайдера
+        // (design.md change `add-provider-setup-ui`, D15).
+        ..addOption(
+          'preset',
+          help:
+              'openai, anthropic, openrouter, ollama, custom-openai or '
+              'custom-anthropic.',
+        )
+        ..addFlag(
+          'skip-check',
+          negatable: false,
+          help: 'Save even if the /models check is unreachable or times out.',
+        )
+        ..addFlag(
+          'yes',
+          negatable: false,
+          help: 'Do not ask to confirm the summary.',
         ),
     ),
   )
@@ -458,6 +476,7 @@ Usage:
   codelab config check [--cwd <dir>]
   codelab config path|get|set|unset ...   read and edit config files
   codelab provider add|list|remove ...    manage LLM providers in config
+  codelab provider add                    on a terminal: guided setup (or --preset <id> --yes ...)
   codelab mcp add|list|remove ...         manage MCP servers in config
   codelab secret set|delete|list|migrate   manage secrets (set reads the value on stdin)
   codelab test-scenario <file-or-dir>... --agent <profile> [--filter <glob>] [--timeout <d>]
@@ -751,7 +770,11 @@ CliOptions _writeCommandOptions(ArgResults results, ArgResults command) {
       usage: usage,
     );
   }
-  _checkArgumentCount(sub, sub.name == 'list' ? 0 : 1, name, usage);
+  // `provider add` без id разбирается: id необязателен мастеру на TTY (D15);
+  // без терминала `run.dart` отвечает прежним «needs the provider id».
+  if (!(name == 'provider' && sub.name == 'add' && sub.rest.isEmpty)) {
+    _checkArgumentCount(sub, sub.name == 'list' ? 0 : 1, name, usage);
+  }
   return _options(
     name == 'provider' ? CliCommand.provider : CliCommand.mcp,
     results,
